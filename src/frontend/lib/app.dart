@@ -55,6 +55,7 @@ import 'ui/settings/settings_sheet.dart';
 import 'ui/shell/desktop_shell_rail.dart';
 import 'ui/shell/mobile_shell_drawer.dart';
 import 'ui/shell/mobile_shell_tab_bar.dart';
+import 'ui/shell/mobile_shell_visibility.dart';
 import 'ui/shell/mobile_chat_strip.dart';
 import 'ui/shell/navigation_panel.dart';
 import 'ui/shell/side_panel.dart';
@@ -325,7 +326,11 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
     );
 
     final narrowShell = VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width);
-    final showMobileTabs = narrowShell && selectedChatId == null;
+    final showMobileTabs = shouldShowMobileShellTabs(
+      narrow: narrowShell,
+      chatOpen: selectedChatId != null,
+      keyboardInsetBottom: MediaQuery.viewInsetsOf(context).bottom,
+    );
 
     return VoiceShortcuts(
       child: OnboardingOverlay(

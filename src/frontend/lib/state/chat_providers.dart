@@ -16,6 +16,7 @@ import '../e2e/e2e_exceptions.dart';
 import '../e2e/e2e_file_crypto.dart';
 import '../e2e/e2e_image_thumb.dart';
 import 'auth_providers.dart';
+import 'folder_pin_providers.dart';
 import 'bot_deferred_providers.dart';
 import 'connectivity_providers.dart';
 import 'gateway_providers.dart';
@@ -427,6 +428,67 @@ class ChatListController extends StateNotifier<ChatListState> {
     };
   }
 
+  Future<String?> setChatPinnedInFolder({
+    required String folderId,
+    required String chatId,
+    required bool pinned,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final client = _ref.read(voiceChatsClientProvider);
+    final result = pinned
+        ? await client.pinChatInFolder(
+            authorization: auth,
+            folderId: folderId,
+            chatId: chatId,
+          )
+        : await client.unpinChatInFolder(
+            authorization: auth,
+            folderId: folderId,
+            chatId: chatId,
+          );
+    return switch (result) {
+      ChatsApiOk<void>() => await _afterFolderPinAction(folderId, chatId, pinned),
+      ChatsApiFailure(:final message) => message,
+    };
+  }
+
+  Future<String?> reorderFolderChats(List<String> chatIds) async {
+    final folderId = _ref.read(selectedChatFolderIdProvider);
+    if (folderId == null) return 'no_folder';
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final previous = state.items;
+    state = state.copyWith(
+      items: [
+        for (final id in chatIds)
+          previous.firstWhere((item) => item.chatId == id),
+      ],
+    );
+    final result = await _ref.read(voiceChatsClientProvider).reorderFolderChats(
+          authorization: auth,
+          folderId: folderId,
+          chatIds: chatIds,
+        );
+    return switch (result) {
+      ChatsApiOk<void>() => null,
+      ChatsApiFailure(:final message) => () {
+          state = state.copyWith(items: previous);
+          return message;
+        }(),
+    };
+  }
+
+  Future<String?> _afterFolderPinAction(
+    String folderId,
+    String chatId,
+    bool pinned,
+  ) async {
+    markChatPinnedInFolder(_ref, folderId, chatId, pinned);
+    await loadInitial();
+    return null;
+  }
+
   Future<String?> _afterRequestAction() async {
     await loadInitial();
     _invalidateChatLists(_ref);
@@ -439,14 +501,7 @@ class ChatListController extends StateNotifier<ChatListState> {
     final index = state.items.indexWhere((item) => item.chatId == chatId);
     if (index < 0) return;
     final item = state.items[index];
-    final updated = ChatListItem(
-      chat: item.chat,
-      lastMessagePreview: item.lastMessagePreview,
-      unreadCount: item.unreadCount + delta,
-      inbox: item.inbox,
-      isStranger: item.isStranger,
-      dmPeerProfileId: item.dmPeerProfileId,
-    );
+    final updated = item.copyWith(unreadCount: item.unreadCount + delta);
     final items = [...state.items];
     items[index] = updated;
     state = state.copyWith(items: items);

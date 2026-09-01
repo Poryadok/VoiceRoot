@@ -554,6 +554,36 @@ abstract class AppLocalizations {
   /// **'No favorites yet'**
   String get chatQuickAccessEmpty;
 
+  /// No description provided for @chatQuickAccessReplaceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose what to replace'**
+  String get chatQuickAccessReplaceTitle;
+
+  /// No description provided for @chatQuickAccessReplaceHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Quick Access is full (15/15). Select a chat to replace.'**
+  String get chatQuickAccessReplaceHint;
+
+  /// No description provided for @chatListPin.
+  ///
+  /// In en, this message translates to:
+  /// **'Pin'**
+  String get chatListPin;
+
+  /// No description provided for @chatListUnpin.
+  ///
+  /// In en, this message translates to:
+  /// **'Unpin'**
+  String get chatListUnpin;
+
+  /// No description provided for @chatListAddQuickAccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to Quick Access'**
+  String get chatListAddQuickAccess;
+
   /// No description provided for @chatNavigationMenu.
   ///
   /// In en, this message translates to:

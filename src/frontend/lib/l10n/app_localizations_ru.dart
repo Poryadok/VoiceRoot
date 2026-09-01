@@ -262,6 +262,22 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatQuickAccessEmpty => 'No favorites yet';
 
   @override
+  String get chatQuickAccessReplaceTitle => 'Choose what to replace';
+
+  @override
+  String get chatQuickAccessReplaceHint =>
+      'Quick Access is full (15/15). Select a chat to replace.';
+
+  @override
+  String get chatListPin => 'Pin';
+
+  @override
+  String get chatListUnpin => 'Unpin';
+
+  @override
+  String get chatListAddQuickAccess => 'Add to Quick Access';
+
+  @override
   String get chatNavigationMenu => 'Navigation menu';
 
   @override

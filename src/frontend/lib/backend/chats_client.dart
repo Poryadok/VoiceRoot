@@ -84,6 +84,7 @@ class ChatListItem {
     this.inbox,
     this.isStranger = false,
     this.dmPeerProfileId,
+    this.isPinned = false,
   });
 
   final VoiceChat chat;
@@ -92,8 +93,29 @@ class ChatListItem {
   final String? inbox;
   final bool isStranger;
   final String? dmPeerProfileId;
+  final bool isPinned;
 
   String get chatId => chat.id;
+
+  ChatListItem copyWith({
+    VoiceChat? chat,
+    String? lastMessagePreview,
+    int? unreadCount,
+    String? inbox,
+    bool? isStranger,
+    String? dmPeerProfileId,
+    bool? isPinned,
+  }) {
+    return ChatListItem(
+      chat: chat ?? this.chat,
+      lastMessagePreview: lastMessagePreview ?? this.lastMessagePreview,
+      unreadCount: unreadCount ?? this.unreadCount,
+      inbox: inbox ?? this.inbox,
+      isStranger: isStranger ?? this.isStranger,
+      dmPeerProfileId: dmPeerProfileId ?? this.dmPeerProfileId,
+      isPinned: isPinned ?? this.isPinned,
+    );
+  }
 }
 
 class ChatListData {
@@ -383,6 +405,47 @@ class VoiceChatsClient {
   }) async {
     final result = await _gateway.putJson(
       uri: _gateway.resolve('/api/v1/chats/quick-access/order'),
+      authorization: authorization,
+      body: {'chat_ids': chatIds},
+      allowNoContent: true,
+    );
+    return _mapJsonEmpty(result);
+  }
+
+  Future<ChatsApiResult<void>> pinChatInFolder({
+    required String authorization,
+    required String folderId,
+    required String chatId,
+    int? pinOrder,
+  }) {
+    final body = pinOrder == null
+        ? null
+        : <String, dynamic>{'pin_order': pinOrder};
+    return _postEmpty(
+      '/api/v1/chats/folders/$folderId/chats/$chatId/pin',
+      authorization,
+      jsonBody: body,
+    );
+  }
+
+  Future<ChatsApiResult<void>> unpinChatInFolder({
+    required String authorization,
+    required String folderId,
+    required String chatId,
+  }) {
+    return _deleteEmpty(
+      '/api/v1/chats/folders/$folderId/chats/$chatId/pin',
+      authorization,
+    );
+  }
+
+  Future<ChatsApiResult<void>> reorderFolderChats({
+    required String authorization,
+    required String folderId,
+    required List<String> chatIds,
+  }) async {
+    final result = await _gateway.putJson(
+      uri: _gateway.resolve('/api/v1/chats/folders/$folderId/chats/order'),
       authorization: authorization,
       body: {'chat_ids': chatIds},
       allowNoContent: true,
