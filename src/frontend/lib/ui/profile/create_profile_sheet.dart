@@ -7,6 +7,7 @@ import '../../state/auth_providers.dart';
 import '../../state/social_providers.dart';
 import '../../state/subscription_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../../theme/voice_theme_providers.dart';
 import '../core/voice_bottom_sheet.dart';
 import '../settings/privacy_presets.dart';
 import '../settings/subscription_settings_screen.dart';
@@ -17,6 +18,7 @@ class CreateProfileSheet extends ConsumerStatefulWidget {
   static const Key sheetKey = Key('create_profile_sheet');
   static const Key displayNameFieldKey = Key('create_profile_display_name');
   static const Key presetKey = Key('create_profile_preset');
+  static const Key accentPickerKey = Key('create_profile_accent_picker');
   static const Key submitKey = Key('create_profile_submit');
 
   @override
@@ -26,6 +28,7 @@ class CreateProfileSheet extends ConsumerStatefulWidget {
 class _CreateProfileSheetState extends ConsumerState<CreateProfileSheet> {
   final _displayNameController = TextEditingController();
   String _preset = PrivacyPresetDefaults.presets.first;
+  int _selectedAccentIndex = 0;
   var _submitting = false;
   String? _error;
 
@@ -59,6 +62,7 @@ class _CreateProfileSheetState extends ConsumerState<CreateProfileSheet> {
       authorization: auth,
       displayName: name,
       preset: _preset,
+      accentColor: _accentHexForSubmit(context),
     );
 
     if (!mounted) return;
@@ -87,6 +91,17 @@ class _CreateProfileSheetState extends ConsumerState<CreateProfileSheet> {
     }
   }
 
+  String? _accentHexForSubmit(BuildContext context) {
+    final catalog = ref.read(voiceTokenCatalogProvider).value;
+    if (catalog == null || catalog.profileAccentDefaults.isEmpty) {
+      return null;
+    }
+    final color = catalog.profileAccentDefaults[
+      _selectedAccentIndex % catalog.profileAccentDefaults.length
+    ];
+    return '#${(color.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -94,6 +109,7 @@ class _CreateProfileSheetState extends ConsumerState<CreateProfileSheet> {
     final profilesAsync = ref.watch(myProfilesProvider);
     final tier = ref.watch(subscriptionTierProvider);
     final maxProfiles = tier == 'premium' ? 5 : 2;
+    final catalogAsync = ref.watch(voiceTokenCatalogProvider);
 
     return SafeArea(
       child: Padding(
@@ -177,6 +193,43 @@ class _CreateProfileSheetState extends ConsumerState<CreateProfileSheet> {
                   onSelectionChanged: _submitting
                       ? null
                       : (next) => setState(() => _preset = next.first),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  l10n.settingsAccent,
+                  style: TextStyle(color: voice.textSecondary),
+                ),
+                const SizedBox(height: 8),
+                catalogAsync.when(
+                  data: (catalog) => Wrap(
+                    key: CreateProfileSheet.accentPickerKey,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (var i = 0; i < catalog.profileAccentDefaults.length; i++)
+                        GestureDetector(
+                          onTap: _submitting
+                              ? null
+                              : () => setState(() => _selectedAccentIndex = i),
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: catalog.profileAccentDefaults[i],
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: _selectedAccentIndex == i
+                                    ? voice.textPrimary
+                                    : voice.borderDefault,
+                                width: _selectedAccentIndex == i ? 2 : 1,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  loading: () => const LinearProgressIndicator(minHeight: 2),
+                  error: (_, _) => const SizedBox.shrink(),
                 ),
                 if (_error != null) ...[
                   const SizedBox(height: 12),

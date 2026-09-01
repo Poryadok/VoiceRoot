@@ -540,6 +540,110 @@ const GetChatRequest$json = {
 final $typed_data.Uint8List getChatRequestDescriptor = $convert
     .base64Decode('Cg5HZXRDaGF0UmVxdWVzdBIXCgdjaGF0X2lkGAEgASgJUgZjaGF0SWQ=');
 
+@$core.Deprecated('Use quickAccessItemDescriptor instead')
+const QuickAccessItem$json = {
+  '1': 'QuickAccessItem',
+  '2': [
+    {'1': 'chat_id', '3': 1, '4': 1, '5': 9, '10': 'chatId'},
+    {'1': 'sort_order', '3': 2, '4': 1, '5': 5, '10': 'sortOrder'},
+    {
+      '1': 'chat',
+      '3': 3,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.chat.v1.Chat',
+      '10': 'chat'
+    },
+  ],
+};
+
+/// Descriptor for `QuickAccessItem`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List quickAccessItemDescriptor = $convert.base64Decode(
+    'Cg9RdWlja0FjY2Vzc0l0ZW0SFwoHY2hhdF9pZBgBIAEoCVIGY2hhdElkEh0KCnNvcnRfb3JkZX'
+    'IYAiABKAVSCXNvcnRPcmRlchInCgRjaGF0GAMgASgLMhMudm9pY2UuY2hhdC52MS5DaGF0UgRj'
+    'aGF0');
+
+@$core.Deprecated('Use listQuickAccessRequestDescriptor instead')
+const ListQuickAccessRequest$json = {
+  '1': 'ListQuickAccessRequest',
+};
+
+/// Descriptor for `ListQuickAccessRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List listQuickAccessRequestDescriptor =
+    $convert.base64Decode('ChZMaXN0UXVpY2tBY2Nlc3NSZXF1ZXN0');
+
+@$core.Deprecated('Use listQuickAccessResponseDescriptor instead')
+const ListQuickAccessResponse$json = {
+  '1': 'ListQuickAccessResponse',
+  '2': [
+    {
+      '1': 'items',
+      '3': 1,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.chat.v1.QuickAccessItem',
+      '10': 'items'
+    },
+  ],
+};
+
+/// Descriptor for `ListQuickAccessResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List listQuickAccessResponseDescriptor =
+    $convert.base64Decode(
+        'ChdMaXN0UXVpY2tBY2Nlc3NSZXNwb25zZRI0CgVpdGVtcxgBIAMoCzIeLnZvaWNlLmNoYXQudj'
+        'EuUXVpY2tBY2Nlc3NJdGVtUgVpdGVtcw==');
+
+@$core.Deprecated('Use addQuickAccessRequestDescriptor instead')
+const AddQuickAccessRequest$json = {
+  '1': 'AddQuickAccessRequest',
+  '2': [
+    {'1': 'chat_id', '3': 1, '4': 1, '5': 9, '10': 'chatId'},
+    {
+      '1': 'sort_order',
+      '3': 2,
+      '4': 1,
+      '5': 5,
+      '9': 0,
+      '10': 'sortOrder',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_sort_order'},
+  ],
+};
+
+/// Descriptor for `AddQuickAccessRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List addQuickAccessRequestDescriptor = $convert.base64Decode(
+    'ChVBZGRRdWlja0FjY2Vzc1JlcXVlc3QSFwoHY2hhdF9pZBgBIAEoCVIGY2hhdElkEiIKCnNvcn'
+    'Rfb3JkZXIYAiABKAVIAFIJc29ydE9yZGVyiAEBQg0KC19zb3J0X29yZGVy');
+
+@$core.Deprecated('Use removeQuickAccessRequestDescriptor instead')
+const RemoveQuickAccessRequest$json = {
+  '1': 'RemoveQuickAccessRequest',
+  '2': [
+    {'1': 'chat_id', '3': 1, '4': 1, '5': 9, '10': 'chatId'},
+  ],
+};
+
+/// Descriptor for `RemoveQuickAccessRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List removeQuickAccessRequestDescriptor =
+    $convert.base64Decode(
+        'ChhSZW1vdmVRdWlja0FjY2Vzc1JlcXVlc3QSFwoHY2hhdF9pZBgBIAEoCVIGY2hhdElk');
+
+@$core.Deprecated('Use reorderQuickAccessRequestDescriptor instead')
+const ReorderQuickAccessRequest$json = {
+  '1': 'ReorderQuickAccessRequest',
+  '2': [
+    {'1': 'chat_ids', '3': 1, '4': 3, '5': 9, '10': 'chatIds'},
+  ],
+};
+
+/// Descriptor for `ReorderQuickAccessRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List reorderQuickAccessRequestDescriptor =
+    $convert.base64Decode(
+        'ChlSZW9yZGVyUXVpY2tBY2Nlc3NSZXF1ZXN0EhkKCGNoYXRfaWRzGAEgAygJUgdjaGF0SWRz');
+
 @$core.Deprecated('Use listFoldersRequestDescriptor instead')
 const ListFoldersRequest$json = {
   '1': 'ListFoldersRequest',
@@ -959,6 +1063,33 @@ const GetChatResponse$json = {
 final $typed_data.Uint8List getChatResponseDescriptor = $convert.base64Decode(
     'Cg9HZXRDaGF0UmVzcG9uc2USJwoEY2hhdBgBIAEoCzITLnZvaWNlLmNoYXQudjEuQ2hhdFIEY2'
     'hhdA==');
+
+@$core.Deprecated('Use addQuickAccessResponseDescriptor instead')
+const AddQuickAccessResponse$json = {
+  '1': 'AddQuickAccessResponse',
+};
+
+/// Descriptor for `AddQuickAccessResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List addQuickAccessResponseDescriptor =
+    $convert.base64Decode('ChZBZGRRdWlja0FjY2Vzc1Jlc3BvbnNl');
+
+@$core.Deprecated('Use removeQuickAccessResponseDescriptor instead')
+const RemoveQuickAccessResponse$json = {
+  '1': 'RemoveQuickAccessResponse',
+};
+
+/// Descriptor for `RemoveQuickAccessResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List removeQuickAccessResponseDescriptor =
+    $convert.base64Decode('ChlSZW1vdmVRdWlja0FjY2Vzc1Jlc3BvbnNl');
+
+@$core.Deprecated('Use reorderQuickAccessResponseDescriptor instead')
+const ReorderQuickAccessResponse$json = {
+  '1': 'ReorderQuickAccessResponse',
+};
+
+/// Descriptor for `ReorderQuickAccessResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List reorderQuickAccessResponseDescriptor =
+    $convert.base64Decode('ChpSZW9yZGVyUXVpY2tBY2Nlc3NSZXNwb25zZQ==');
 
 @$core.Deprecated('Use listFoldersResponseDescriptor instead')
 const ListFoldersResponse$json = {

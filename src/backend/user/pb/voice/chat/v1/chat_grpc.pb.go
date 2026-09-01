@@ -31,6 +31,10 @@ const (
 	ChatService_ListMembers_FullMethodName            = "/voice.chat.v1.ChatService/ListMembers"
 	ChatService_ListChats_FullMethodName              = "/voice.chat.v1.ChatService/ListChats"
 	ChatService_GetChat_FullMethodName                = "/voice.chat.v1.ChatService/GetChat"
+	ChatService_ListQuickAccess_FullMethodName        = "/voice.chat.v1.ChatService/ListQuickAccess"
+	ChatService_AddQuickAccess_FullMethodName         = "/voice.chat.v1.ChatService/AddQuickAccess"
+	ChatService_RemoveQuickAccess_FullMethodName      = "/voice.chat.v1.ChatService/RemoveQuickAccess"
+	ChatService_ReorderQuickAccess_FullMethodName     = "/voice.chat.v1.ChatService/ReorderQuickAccess"
 	ChatService_ListFolders_FullMethodName            = "/voice.chat.v1.ChatService/ListFolders"
 	ChatService_CreateFolder_FullMethodName           = "/voice.chat.v1.ChatService/CreateFolder"
 	ChatService_UpdateFolder_FullMethodName           = "/voice.chat.v1.ChatService/UpdateFolder"
@@ -61,6 +65,10 @@ type ChatServiceClient interface {
 	ListMembers(ctx context.Context, in *ListMembersRequest, opts ...grpc.CallOption) (*ListMembersResponse, error)
 	ListChats(ctx context.Context, in *ListChatsRequest, opts ...grpc.CallOption) (*ListChatsResponse, error)
 	GetChat(ctx context.Context, in *GetChatRequest, opts ...grpc.CallOption) (*GetChatResponse, error)
+	ListQuickAccess(ctx context.Context, in *ListQuickAccessRequest, opts ...grpc.CallOption) (*ListQuickAccessResponse, error)
+	AddQuickAccess(ctx context.Context, in *AddQuickAccessRequest, opts ...grpc.CallOption) (*AddQuickAccessResponse, error)
+	RemoveQuickAccess(ctx context.Context, in *RemoveQuickAccessRequest, opts ...grpc.CallOption) (*RemoveQuickAccessResponse, error)
+	ReorderQuickAccess(ctx context.Context, in *ReorderQuickAccessRequest, opts ...grpc.CallOption) (*ReorderQuickAccessResponse, error)
 	ListFolders(ctx context.Context, in *ListFoldersRequest, opts ...grpc.CallOption) (*ListFoldersResponse, error)
 	CreateFolder(ctx context.Context, in *CreateFolderRequest, opts ...grpc.CallOption) (*CreateFolderResponse, error)
 	UpdateFolder(ctx context.Context, in *UpdateFolderRequest, opts ...grpc.CallOption) (*UpdateFolderResponse, error)
@@ -202,6 +210,46 @@ func (c *chatServiceClient) GetChat(ctx context.Context, in *GetChatRequest, opt
 	return out, nil
 }
 
+func (c *chatServiceClient) ListQuickAccess(ctx context.Context, in *ListQuickAccessRequest, opts ...grpc.CallOption) (*ListQuickAccessResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListQuickAccessResponse)
+	err := c.cc.Invoke(ctx, ChatService_ListQuickAccess_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) AddQuickAccess(ctx context.Context, in *AddQuickAccessRequest, opts ...grpc.CallOption) (*AddQuickAccessResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AddQuickAccessResponse)
+	err := c.cc.Invoke(ctx, ChatService_AddQuickAccess_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) RemoveQuickAccess(ctx context.Context, in *RemoveQuickAccessRequest, opts ...grpc.CallOption) (*RemoveQuickAccessResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RemoveQuickAccessResponse)
+	err := c.cc.Invoke(ctx, ChatService_RemoveQuickAccess_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) ReorderQuickAccess(ctx context.Context, in *ReorderQuickAccessRequest, opts ...grpc.CallOption) (*ReorderQuickAccessResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReorderQuickAccessResponse)
+	err := c.cc.Invoke(ctx, ChatService_ReorderQuickAccess_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *chatServiceClient) ListFolders(ctx context.Context, in *ListFoldersRequest, opts ...grpc.CallOption) (*ListFoldersResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListFoldersResponse)
@@ -320,6 +368,10 @@ type ChatServiceServer interface {
 	ListMembers(context.Context, *ListMembersRequest) (*ListMembersResponse, error)
 	ListChats(context.Context, *ListChatsRequest) (*ListChatsResponse, error)
 	GetChat(context.Context, *GetChatRequest) (*GetChatResponse, error)
+	ListQuickAccess(context.Context, *ListQuickAccessRequest) (*ListQuickAccessResponse, error)
+	AddQuickAccess(context.Context, *AddQuickAccessRequest) (*AddQuickAccessResponse, error)
+	RemoveQuickAccess(context.Context, *RemoveQuickAccessRequest) (*RemoveQuickAccessResponse, error)
+	ReorderQuickAccess(context.Context, *ReorderQuickAccessRequest) (*ReorderQuickAccessResponse, error)
 	ListFolders(context.Context, *ListFoldersRequest) (*ListFoldersResponse, error)
 	CreateFolder(context.Context, *CreateFolderRequest) (*CreateFolderResponse, error)
 	UpdateFolder(context.Context, *UpdateFolderRequest) (*UpdateFolderResponse, error)
@@ -376,6 +428,18 @@ func (UnimplementedChatServiceServer) ListChats(context.Context, *ListChatsReque
 }
 func (UnimplementedChatServiceServer) GetChat(context.Context, *GetChatRequest) (*GetChatResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetChat not implemented")
+}
+func (UnimplementedChatServiceServer) ListQuickAccess(context.Context, *ListQuickAccessRequest) (*ListQuickAccessResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListQuickAccess not implemented")
+}
+func (UnimplementedChatServiceServer) AddQuickAccess(context.Context, *AddQuickAccessRequest) (*AddQuickAccessResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AddQuickAccess not implemented")
+}
+func (UnimplementedChatServiceServer) RemoveQuickAccess(context.Context, *RemoveQuickAccessRequest) (*RemoveQuickAccessResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveQuickAccess not implemented")
+}
+func (UnimplementedChatServiceServer) ReorderQuickAccess(context.Context, *ReorderQuickAccessRequest) (*ReorderQuickAccessResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReorderQuickAccess not implemented")
 }
 func (UnimplementedChatServiceServer) ListFolders(context.Context, *ListFoldersRequest) (*ListFoldersResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListFolders not implemented")
@@ -644,6 +708,78 @@ func _ChatService_GetChat_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChatService_ListQuickAccess_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListQuickAccessRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).ListQuickAccess(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_ListQuickAccess_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).ListQuickAccess(ctx, req.(*ListQuickAccessRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_AddQuickAccess_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddQuickAccessRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).AddQuickAccess(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_AddQuickAccess_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).AddQuickAccess(ctx, req.(*AddQuickAccessRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_RemoveQuickAccess_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveQuickAccessRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).RemoveQuickAccess(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_RemoveQuickAccess_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).RemoveQuickAccess(ctx, req.(*RemoveQuickAccessRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_ReorderQuickAccess_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReorderQuickAccessRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).ReorderQuickAccess(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_ReorderQuickAccess_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).ReorderQuickAccess(ctx, req.(*ReorderQuickAccessRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ChatService_ListFolders_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListFoldersRequest)
 	if err := dec(in); err != nil {
@@ -878,6 +1014,22 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetChat",
 			Handler:    _ChatService_GetChat_Handler,
+		},
+		{
+			MethodName: "ListQuickAccess",
+			Handler:    _ChatService_ListQuickAccess_Handler,
+		},
+		{
+			MethodName: "AddQuickAccess",
+			Handler:    _ChatService_AddQuickAccess_Handler,
+		},
+		{
+			MethodName: "RemoveQuickAccess",
+			Handler:    _ChatService_RemoveQuickAccess_Handler,
+		},
+		{
+			MethodName: "ReorderQuickAccess",
+			Handler:    _ChatService_ReorderQuickAccess_Handler,
 		},
 		{
 			MethodName: "ListFolders",

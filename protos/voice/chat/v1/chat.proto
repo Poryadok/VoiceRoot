@@ -25,6 +25,11 @@ service ChatService {
   rpc ListChats(ListChatsRequest) returns (ListChatsResponse);
   rpc GetChat(GetChatRequest) returns (GetChatResponse);
 
+  rpc ListQuickAccess(ListQuickAccessRequest) returns (ListQuickAccessResponse);
+  rpc AddQuickAccess(AddQuickAccessRequest) returns (AddQuickAccessResponse);
+  rpc RemoveQuickAccess(RemoveQuickAccessRequest) returns (RemoveQuickAccessResponse);
+  rpc ReorderQuickAccess(ReorderQuickAccessRequest) returns (ReorderQuickAccessResponse);
+
   rpc ListFolders(ListFoldersRequest) returns (ListFoldersResponse);
   rpc CreateFolder(CreateFolderRequest) returns (CreateFolderResponse);
   rpc UpdateFolder(UpdateFolderRequest) returns (UpdateFolderResponse);
@@ -159,6 +164,31 @@ message GetChatRequest {
   string chat_id = 1;
 }
 
+message QuickAccessItem {
+  string chat_id = 1;
+  int32 sort_order = 2;
+  Chat chat = 3;
+}
+
+message ListQuickAccessRequest {}
+
+message ListQuickAccessResponse {
+  repeated QuickAccessItem items = 1;
+}
+
+message AddQuickAccessRequest {
+  string chat_id = 1;
+  optional int32 sort_order = 2;
+}
+
+message RemoveQuickAccessRequest {
+  string chat_id = 1;
+}
+
+message ReorderQuickAccessRequest {
+  repeated string chat_ids = 1; // full ordered list, max 15
+}
+
 message ListFoldersRequest {}
 
 message FolderList {
@@ -246,6 +276,9 @@ message ListChatsResponse {
 message GetChatResponse {
   Chat chat = 1;
 }
+message AddQuickAccessResponse {}
+message RemoveQuickAccessResponse {}
+message ReorderQuickAccessResponse {}
 message ListFoldersResponse {
   FolderList folder_list = 1;
 }

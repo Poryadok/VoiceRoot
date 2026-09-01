@@ -1452,6 +1452,346 @@ class GetChatRequest extends $pb.GeneratedMessage {
   void clearChatId() => $_clearField(1);
 }
 
+class QuickAccessItem extends $pb.GeneratedMessage {
+  factory QuickAccessItem({
+    $core.String? chatId,
+    $core.int? sortOrder,
+    Chat? chat,
+  }) {
+    final result = create();
+    if (chatId != null) result.chatId = chatId;
+    if (sortOrder != null) result.sortOrder = sortOrder;
+    if (chat != null) result.chat = chat;
+    return result;
+  }
+
+  QuickAccessItem._();
+
+  factory QuickAccessItem.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory QuickAccessItem.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'QuickAccessItem',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'chatId')
+    ..aI(2, _omitFieldNames ? '' : 'sortOrder')
+    ..aOM<Chat>(3, _omitFieldNames ? '' : 'chat', subBuilder: Chat.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  QuickAccessItem clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  QuickAccessItem copyWith(void Function(QuickAccessItem) updates) =>
+      super.copyWith((message) => updates(message as QuickAccessItem))
+          as QuickAccessItem;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static QuickAccessItem create() => QuickAccessItem._();
+  @$core.override
+  QuickAccessItem createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static QuickAccessItem getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<QuickAccessItem>(create);
+  static QuickAccessItem? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get chatId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set chatId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasChatId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearChatId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.int get sortOrder => $_getIZ(1);
+  @$pb.TagNumber(2)
+  set sortOrder($core.int value) => $_setSignedInt32(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasSortOrder() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSortOrder() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  Chat get chat => $_getN(2);
+  @$pb.TagNumber(3)
+  set chat(Chat value) => $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasChat() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearChat() => $_clearField(3);
+  @$pb.TagNumber(3)
+  Chat ensureChat() => $_ensure(2);
+}
+
+class ListQuickAccessRequest extends $pb.GeneratedMessage {
+  factory ListQuickAccessRequest() => create();
+
+  ListQuickAccessRequest._();
+
+  factory ListQuickAccessRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ListQuickAccessRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ListQuickAccessRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListQuickAccessRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListQuickAccessRequest copyWith(
+          void Function(ListQuickAccessRequest) updates) =>
+      super.copyWith((message) => updates(message as ListQuickAccessRequest))
+          as ListQuickAccessRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ListQuickAccessRequest create() => ListQuickAccessRequest._();
+  @$core.override
+  ListQuickAccessRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ListQuickAccessRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ListQuickAccessRequest>(create);
+  static ListQuickAccessRequest? _defaultInstance;
+}
+
+class ListQuickAccessResponse extends $pb.GeneratedMessage {
+  factory ListQuickAccessResponse({
+    $core.Iterable<QuickAccessItem>? items,
+  }) {
+    final result = create();
+    if (items != null) result.items.addAll(items);
+    return result;
+  }
+
+  ListQuickAccessResponse._();
+
+  factory ListQuickAccessResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ListQuickAccessResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ListQuickAccessResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..pPM<QuickAccessItem>(1, _omitFieldNames ? '' : 'items',
+        subBuilder: QuickAccessItem.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListQuickAccessResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListQuickAccessResponse copyWith(
+          void Function(ListQuickAccessResponse) updates) =>
+      super.copyWith((message) => updates(message as ListQuickAccessResponse))
+          as ListQuickAccessResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ListQuickAccessResponse create() => ListQuickAccessResponse._();
+  @$core.override
+  ListQuickAccessResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ListQuickAccessResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ListQuickAccessResponse>(create);
+  static ListQuickAccessResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $pb.PbList<QuickAccessItem> get items => $_getList(0);
+}
+
+class AddQuickAccessRequest extends $pb.GeneratedMessage {
+  factory AddQuickAccessRequest({
+    $core.String? chatId,
+    $core.int? sortOrder,
+  }) {
+    final result = create();
+    if (chatId != null) result.chatId = chatId;
+    if (sortOrder != null) result.sortOrder = sortOrder;
+    return result;
+  }
+
+  AddQuickAccessRequest._();
+
+  factory AddQuickAccessRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory AddQuickAccessRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'AddQuickAccessRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'chatId')
+    ..aI(2, _omitFieldNames ? '' : 'sortOrder')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AddQuickAccessRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AddQuickAccessRequest copyWith(
+          void Function(AddQuickAccessRequest) updates) =>
+      super.copyWith((message) => updates(message as AddQuickAccessRequest))
+          as AddQuickAccessRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static AddQuickAccessRequest create() => AddQuickAccessRequest._();
+  @$core.override
+  AddQuickAccessRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static AddQuickAccessRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<AddQuickAccessRequest>(create);
+  static AddQuickAccessRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get chatId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set chatId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasChatId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearChatId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.int get sortOrder => $_getIZ(1);
+  @$pb.TagNumber(2)
+  set sortOrder($core.int value) => $_setSignedInt32(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasSortOrder() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSortOrder() => $_clearField(2);
+}
+
+class RemoveQuickAccessRequest extends $pb.GeneratedMessage {
+  factory RemoveQuickAccessRequest({
+    $core.String? chatId,
+  }) {
+    final result = create();
+    if (chatId != null) result.chatId = chatId;
+    return result;
+  }
+
+  RemoveQuickAccessRequest._();
+
+  factory RemoveQuickAccessRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory RemoveQuickAccessRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'RemoveQuickAccessRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'chatId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RemoveQuickAccessRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RemoveQuickAccessRequest copyWith(
+          void Function(RemoveQuickAccessRequest) updates) =>
+      super.copyWith((message) => updates(message as RemoveQuickAccessRequest))
+          as RemoveQuickAccessRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static RemoveQuickAccessRequest create() => RemoveQuickAccessRequest._();
+  @$core.override
+  RemoveQuickAccessRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static RemoveQuickAccessRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<RemoveQuickAccessRequest>(create);
+  static RemoveQuickAccessRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get chatId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set chatId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasChatId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearChatId() => $_clearField(1);
+}
+
+class ReorderQuickAccessRequest extends $pb.GeneratedMessage {
+  factory ReorderQuickAccessRequest({
+    $core.Iterable<$core.String>? chatIds,
+  }) {
+    final result = create();
+    if (chatIds != null) result.chatIds.addAll(chatIds);
+    return result;
+  }
+
+  ReorderQuickAccessRequest._();
+
+  factory ReorderQuickAccessRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ReorderQuickAccessRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ReorderQuickAccessRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..pPS(1, _omitFieldNames ? '' : 'chatIds')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ReorderQuickAccessRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ReorderQuickAccessRequest copyWith(
+          void Function(ReorderQuickAccessRequest) updates) =>
+      super.copyWith((message) => updates(message as ReorderQuickAccessRequest))
+          as ReorderQuickAccessRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ReorderQuickAccessRequest create() => ReorderQuickAccessRequest._();
+  @$core.override
+  ReorderQuickAccessRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ReorderQuickAccessRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ReorderQuickAccessRequest>(create);
+  static ReorderQuickAccessRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $pb.PbList<$core.String> get chatIds => $_getList(0);
+}
+
 class ListFoldersRequest extends $pb.GeneratedMessage {
   factory ListFoldersRequest() => create();
 
@@ -2814,6 +3154,124 @@ class GetChatResponse extends $pb.GeneratedMessage {
   void clearChat() => $_clearField(1);
   @$pb.TagNumber(1)
   Chat ensureChat() => $_ensure(0);
+}
+
+class AddQuickAccessResponse extends $pb.GeneratedMessage {
+  factory AddQuickAccessResponse() => create();
+
+  AddQuickAccessResponse._();
+
+  factory AddQuickAccessResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory AddQuickAccessResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'AddQuickAccessResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AddQuickAccessResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AddQuickAccessResponse copyWith(
+          void Function(AddQuickAccessResponse) updates) =>
+      super.copyWith((message) => updates(message as AddQuickAccessResponse))
+          as AddQuickAccessResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static AddQuickAccessResponse create() => AddQuickAccessResponse._();
+  @$core.override
+  AddQuickAccessResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static AddQuickAccessResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<AddQuickAccessResponse>(create);
+  static AddQuickAccessResponse? _defaultInstance;
+}
+
+class RemoveQuickAccessResponse extends $pb.GeneratedMessage {
+  factory RemoveQuickAccessResponse() => create();
+
+  RemoveQuickAccessResponse._();
+
+  factory RemoveQuickAccessResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory RemoveQuickAccessResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'RemoveQuickAccessResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RemoveQuickAccessResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RemoveQuickAccessResponse copyWith(
+          void Function(RemoveQuickAccessResponse) updates) =>
+      super.copyWith((message) => updates(message as RemoveQuickAccessResponse))
+          as RemoveQuickAccessResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static RemoveQuickAccessResponse create() => RemoveQuickAccessResponse._();
+  @$core.override
+  RemoveQuickAccessResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static RemoveQuickAccessResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<RemoveQuickAccessResponse>(create);
+  static RemoveQuickAccessResponse? _defaultInstance;
+}
+
+class ReorderQuickAccessResponse extends $pb.GeneratedMessage {
+  factory ReorderQuickAccessResponse() => create();
+
+  ReorderQuickAccessResponse._();
+
+  factory ReorderQuickAccessResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ReorderQuickAccessResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ReorderQuickAccessResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ReorderQuickAccessResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ReorderQuickAccessResponse copyWith(
+          void Function(ReorderQuickAccessResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as ReorderQuickAccessResponse))
+          as ReorderQuickAccessResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ReorderQuickAccessResponse create() => ReorderQuickAccessResponse._();
+  @$core.override
+  ReorderQuickAccessResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ReorderQuickAccessResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ReorderQuickAccessResponse>(create);
+  static ReorderQuickAccessResponse? _defaultInstance;
 }
 
 class ListFoldersResponse extends $pb.GeneratedMessage {
