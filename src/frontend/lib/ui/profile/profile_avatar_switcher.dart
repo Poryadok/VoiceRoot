@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../backend/users_client.dart';
 import '../../state/auth_providers.dart';
-import '../../state/social_providers.dart';
 import '../../state/subscription_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../../theme/voice_theme_providers.dart';

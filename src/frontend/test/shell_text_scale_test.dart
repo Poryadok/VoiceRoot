@@ -9,7 +9,6 @@ import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/push_notifications_controller.dart';
 import 'package:voice_frontend/backend/notification_settings_models.dart';
 import 'package:voice_frontend/settings/notification_quiet_hours_storage.dart';
-import 'package:voice_frontend/state/push_notifications_controller.dart';
 import 'package:voice_frontend/ui/matchmaking/game_catalog_screen.dart';
 import 'package:voice_frontend/ui/settings/notification_settings_screen.dart';
 import 'package:voice_frontend/ui/settings/settings_sheet.dart';

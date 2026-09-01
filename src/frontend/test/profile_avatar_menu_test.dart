@@ -11,7 +11,6 @@ import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/users_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
-import 'package:voice_frontend/state/social_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/subscription_providers.dart';
 import 'package:voice_frontend/ui/profile/profile_avatar_menu.dart';

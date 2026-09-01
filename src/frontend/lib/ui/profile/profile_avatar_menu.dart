@@ -7,7 +7,6 @@ import '../../state/auth_providers.dart';
 import '../../state/social_providers.dart';
 import '../../state/subscription_providers.dart';
 import '../core/voice_avatar.dart';
-import '../core/voice_bottom_sheet.dart';
 import 'create_profile_sheet.dart';
 
 /// Profile avatar context menu per [screen-controls.md] §1.1a.
