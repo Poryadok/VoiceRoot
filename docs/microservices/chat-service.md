@@ -12,8 +12,8 @@
 - Создание и управление DM-чатами
 - Создание и управление **текстовыми групповыми чатами** (`type = group` \| `channel`, до 500 участников на чат вне спейса по продукту; одна модель API); `space_id` опционален; в спейсе узел **`space_tree_nodes`** — совместно с Space
 - Участники: для чатов **без** `space_id` — `chat_members`; для чатов **в** спейсе — наследование от `space_members` + роли/оверрайды (см. [DATA_MODEL.md](../DATA_MODEL.md))
-- Папки чатов (All / DM / Groups / Channels / Spaces / пользовательские) — [navigation.md](../features/navigation.md); **not yet in proto/code** — см. [todo/backend.md](../todo/backend.md)
-- Quick Access (до 15 чатов на профиль); таблица `quick_access_chats` + RPC — **shipped (Batch 17)**; archive side-effect on `ArchiveChat` — backlog
+- Папки чатов (All / DM / Groups / Channels / Spaces / пользовательские) — [navigation.md](../features/navigation.md); **foundation slice (Batch 18):** migrations `000008`/`000009`, `ListFolders`/`CreateFolder`; membership/pin/`ListChats.folder_id` — backlog ([todo/backend.md](../todo/backend.md))
+- Quick Access (до 15 чатов на профиль); таблица `quick_access_chats` + RPC — **shipped (Batch 17)**; archive removes Quick Access on `ArchiveChat` — **shipped (Batch 18)**
 - Список активных чатов (mobile strip; desktop — quick access + pin)
 - Мьют / архивация чатов
 - Slow mode (таймер между сообщениями)
@@ -52,11 +52,11 @@ service ChatService {
   rpc EnableChatE2E(EnableChatE2ERequest) returns (...);   // ✓ (pre-key gate when Messaging wired)
   rpc DisableChatE2E(DisableChatE2ERequest) returns (...); // ✓
 
-  // Папки — proto ✓; handlers → Unimplemented
-  rpc ListFolders(ListFoldersRequest) returns (ListFoldersResponse);
-  rpc CreateFolder(CreateFolderRequest) returns (CreateFolderResponse);
-  rpc UpdateFolder(UpdateFolderRequest) returns (UpdateFolderResponse);
-  rpc DeleteFolder(DeleteFolderRequest) returns (DeleteFolderResponse);
+  // Папки — migrations + ListFolders/CreateFolder shipped (Batch 18); Update/Delete → Unimplemented
+  rpc ListFolders(ListFoldersRequest) returns (ListFoldersResponse);       // ✓ lazy system seed + custom create
+  rpc CreateFolder(CreateFolderRequest) returns (CreateFolderResponse);     // ✓ custom only
+  rpc UpdateFolder(UpdateFolderRequest) returns (UpdateFolderResponse);     // proto ✓; handler Unimplemented
+  rpc DeleteFolder(DeleteFolderRequest) returns (DeleteFolderResponse);       // proto ✓; handler Unimplemented
 
   // Quick Access — shipped (Batch 17)
   rpc ListQuickAccess(ListQuickAccessRequest) returns (ListQuickAccessResponse);
@@ -197,7 +197,7 @@ CREATE INDEX quick_access_profile_order_idx ON quick_access_chats (profile_id, s
 
 ### Deployed schema (migrations `000001`–`000007`) vs full spec
 
-**Shipped today** (`chat_db` migrations): DM + group + channel types; `chat_members.inbox_bucket`; `threads_enabled` / `allow_user_main_feed`; `e2e_enabled`; slow mode; guest-DM flag; **`quick_access_chats` (Batch 17)**. **Not shipped:** `folders`, `folder_chats` — см. [todo/backend.md](../todo/backend.md).
+**Shipped today** (`chat_db` migrations): DM + group + channel types; `chat_members.inbox_bucket`; `threads_enabled` / `allow_user_main_feed`; `e2e_enabled`; slow mode; guest-DM flag; **`quick_access_chats` (Batch 17)**; **`folders` + `folder_chats` DDL (Batch 18)**. **Not shipped:** folder membership/pin handlers, `ListChats.folder_id` filter — см. [todo/backend.md](../todo/backend.md).
 
 **Full spec** (folders + quick access) — [navigation.md](../features/navigation.md); DDL-скетчи ниже в § Migration sketches.
 
@@ -244,7 +244,7 @@ CREATE INDEX quick_access_profile_order_idx ON quick_access_chats (profile_id, s
 
 ## Folders
 
-**Folder CRUD** (`ListFolders`, `CreateFolder`, `UpdateFolder`, `DeleteFolder`): объявлены в `chat.proto`, handlers → **Unimplemented** (proto-only).
+**Folder CRUD** (`ListFolders`, `CreateFolder`, `UpdateFolder`, `DeleteFolder`): **`ListFolders`/`CreateFolder` shipped (Batch 18)** — lazy system seed + custom create; `UpdateFolder`/`DeleteFolder` → **Unimplemented**.
 
 **System folders** (seed per profile): All, DM, Groups, Channels, Spaces — `folder_type=system`, immutable name/delete; `filter_config_json` задаёт predicate (см. [navigation.md](../features/navigation.md)).
 
@@ -348,7 +348,7 @@ message ReorderQuickAccessRequest {
 | `ArchiveChat(chat_id, archived)` | **Implemented** — sets `chat_members.is_archived` |
 | `ListChats` main inbox | **Implemented** — excludes `is_archived=true` |
 | `ListChats` with `inbox=archive` | **Not implemented** — contract above |
-| Side-effect: remove Quick Access on archive | **Not implemented** — required now that Quick Access is shipped (Batch 17) |
+| Side-effect: remove Quick Access on archive | **Implemented (Batch 18)** — `ArchiveChat(archived=true)` calls `RemoveQuickAccess` |
 | Auto-unarchive on incoming DM message | **Not implemented** — Chat or Messaging consumer |
 
 **Spec:** DM **archive write** (`ArchiveChat`) — **implemented**. **Archive list** (`inbox=archive`), Quick Access side-effect, auto-unarchive — **not implemented**. Group/channel use same `is_archived` column; broader inbox UX — partial ([todo/backend.md](../todo/backend.md)).
