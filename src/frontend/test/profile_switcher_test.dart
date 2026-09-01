@@ -305,7 +305,99 @@ void main() {
     container.dispose();
   });
 
-  testWidgets('ProfileAvatarSwitcher swipe cycles profiles', (tester) async {
+  testWidgets('ProfileSwitcher disables frozen profiles in dropdown', (tester) async {
+    final storage = _MemoryAuthStorage();
+    const session = AuthSession(
+      accessToken: 'token',
+      refreshToken: 'refresh',
+      expiresInSeconds: 900,
+      accountId: 'account-1',
+      activeProfileId: 'profile-primary',
+    );
+    await storage.write(session);
+
+    final mock = MockClient((req) async {
+      if (req.url.path == '/api/v1/users/profiles') {
+        return http.Response(
+          jsonEncode({
+            'profile_list': {
+              'profiles': [
+                {
+                  'id': 'profile-primary',
+                  'account_id': 'account-1',
+                  'username': 'alice',
+                  'discriminator': '0001',
+                  'display_name': 'Alice',
+                  'locale': 'en',
+                  'theme': 'dark',
+                  'is_primary': true,
+                  'verification_type': 'none',
+                },
+                {
+                  'id': 'profile-frozen',
+                  'account_id': 'account-1',
+                  'username': 'gaming',
+                  'discriminator': '0002',
+                  'display_name': 'Gaming',
+                  'locale': 'en',
+                  'theme': 'dark',
+                  'is_primary': false,
+                  'verification_type': 'none',
+                  'frozen_at': '2026-01-15T12:00:00Z',
+                },
+              ],
+            },
+          }),
+          200,
+        );
+      }
+      if (req.url.path == '/api/v1/auth/switch-profile') {
+        return http.Response('forbidden', 403);
+      }
+      return http.Response('not found', 404);
+    });
+
+    final container = ProviderContainer(
+      overrides: [
+        gatewayConfigProvider.overrideWithValue(
+          const GatewayConfig(baseUrl: 'http://api.test'),
+        ),
+        httpClientProvider.overrideWithValue(mock),
+        authSessionStorageProvider.overrideWithValue(storage),
+      ],
+    );
+    addTearDown(container.dispose);
+    await container.read(authControllerProvider.notifier).applySession(session);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: ProfileSwitcher()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(ProfileSwitcher.switcherKey));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Gaming (Frozen)'), findsOneWidget);
+    await tester.tap(find.textContaining('Gaming (Frozen)').last);
+    await tester.pumpAndSettle();
+
+    expect(
+      container.read(authControllerProvider).activeProfileId,
+      'profile-primary',
+    );
+    container.dispose();
+  });
+
+  testWidgets('ProfileAvatarSwitcher swipe skips frozen profiles', (tester) async {
     final storage = _MemoryAuthStorage();
     await storage.write(
       const AuthSession(
@@ -350,6 +442,15 @@ void main() {
                   'discriminator': '0002',
                   'display_name': 'Alt',
                   'is_primary': false,
+                },
+                {
+                  'id': 'profile-frozen',
+                  'account_id': 'account-1',
+                  'username': 'frozen',
+                  'discriminator': '0003',
+                  'display_name': 'Frozen',
+                  'is_primary': false,
+                  'frozen_at': '2026-01-15T12:00:00Z',
                 },
               ],
             },

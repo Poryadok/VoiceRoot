@@ -8,8 +8,9 @@ import '../../state/subscription_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../../theme/voice_theme_providers.dart';
 import '../core/profile_accent_dot.dart';
+import 'profile_avatar_menu.dart';
 
-/// Mobile profile switcher: swipe avatar left/right to cycle profiles.
+/// Mobile profile switcher: tap avatar for §1.1a menu; swipe to cycle profiles.
 class ProfileAvatarSwitcher extends ConsumerWidget {
   const ProfileAvatarSwitcher({
     super.key,
@@ -29,6 +30,7 @@ class ProfileAvatarSwitcher extends ConsumerWidget {
     final profile = profiles[nextIndex];
     final auth = ref.read(authControllerProvider);
     if (auth.activeProfileId == profile.id) return;
+    if (profile.isFrozen) return;
 
     ref.read(profileSwitchInProgressProvider.notifier).state = true;
     try {
@@ -50,6 +52,22 @@ class ProfileAvatarSwitcher extends ConsumerWidget {
     } finally {
       ref.read(profileSwitchInProgressProvider.notifier).state = false;
     }
+  }
+
+  int? _nextSwitchableIndex(
+    List<VoiceProfile> profiles,
+    int currentIndex,
+    bool forward,
+  ) {
+    if (profiles.isEmpty) return null;
+    final len = profiles.length;
+    for (var step = 1; step < len; step++) {
+      final idx = forward
+          ? (currentIndex + step) % len
+          : (currentIndex - step + len) % len;
+      if (!profiles[idx].isFrozen) return idx;
+    }
+    return null;
   }
 
   @override
@@ -85,39 +103,53 @@ class ProfileAvatarSwitcher extends ConsumerWidget {
         final currentIndex = profiles.indexWhere((p) => p.id == activeId);
         final safeIndex = currentIndex >= 0 ? currentIndex : 0;
 
-        return GestureDetector(
-          key: switcherKey,
-          onHorizontalDragEnd: switching
-              ? null
-              : (details) {
-                  final velocity = details.primaryVelocity ?? 0;
-                  if (velocity.abs() < 80) return;
-                  final next = velocity < 0
-                      ? (safeIndex + 1) % profiles.length
-                      : (safeIndex - 1 + profiles.length) % profiles.length;
-                  _switchTo(ref, context, profiles, next);
-                },
-          child: Row(
-            children: [
-              if (switching)
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              else
-                _ProfileAccentFor(profiles[safeIndex]),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  profiles[safeIndex].displayName,
-                  key: const Key('auth_session_profile'),
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: voice.textPrimary),
-                ),
+        return Builder(
+          builder: (anchorContext) {
+            return GestureDetector(
+              key: switcherKey,
+              onTap: switching
+                  ? null
+                  : () => showProfileAvatarMenu(
+                        context: context,
+                        ref: ref,
+                        anchorContext: anchorContext,
+                      ),
+              onHorizontalDragEnd: switching
+                  ? null
+                  : (details) {
+                      final velocity = details.primaryVelocity ?? 0;
+                      if (velocity.abs() < 80) return;
+                      final next = _nextSwitchableIndex(
+                        profiles,
+                        safeIndex,
+                        velocity < 0,
+                      );
+                      if (next == null || next == safeIndex) return;
+                      _switchTo(ref, context, profiles, next);
+                    },
+              child: Row(
+                children: [
+                  if (switching)
+                    const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  else
+                    _ProfileAccentFor(profiles[safeIndex]),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      profiles[safeIndex].displayName,
+                      key: const Key('auth_session_profile'),
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: voice.textPrimary),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         );
       },
     );

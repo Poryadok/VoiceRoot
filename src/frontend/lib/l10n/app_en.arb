@@ -106,6 +106,9 @@
   "socialPresenceIdle": "Idle",
   "socialPresenceDnd": "Do not disturb",
   "socialPresenceOffline": "Offline",
+  "socialPresenceInvisible": "Invisible",
+  "profileMenuPresence": "Presence",
+  "profileMenuArchiveUnavailable": "Chat archive is not available yet.",
   "socialPresenceLastSeen": "Last seen {dateTime}",
   "@socialPresenceLastSeen": {
     "placeholders": {
@@ -773,6 +776,8 @@
   "downgradeProfilePickerHint": "Other profiles will be frozen until you renew Premium.",
   "downgradeProfilePickerConfirm": "Keep selected profiles",
   "downgradeProfilePrimary": "Primary profile",
+  "profileFrozenLabel": "Frozen",
+  "profileFrozenHint": "Renew Premium to switch to this profile",
   "premiumBadgeLabel": "Premium",
   "settingsSecurity": "Security & trust",
   "securitySettingsTitle": "Security",

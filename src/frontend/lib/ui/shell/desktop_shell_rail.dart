@@ -8,12 +8,9 @@ import '../../state/social_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../../theme/voice_layout.dart';
 import '../../theme/voice_metrics.dart';
-import '../core/voice_avatar.dart';
-import '../core/voice_bottom_sheet.dart';
 import '../core/voice_shell_icons.dart';
 import '../matchmaking/game_catalog_screen.dart';
-import '../profile/create_profile_sheet.dart';
-import '../profile/profile_edit_sheet.dart';
+import '../profile/profile_avatar_menu.dart';
 
 enum ShellRailDestination { chats, friends, matchmaking, settings }
 
@@ -106,17 +103,7 @@ class DesktopShellRail extends ConsumerWidget {
               selected: false,
               onPressed: onOpenSettings,
             ),
-            _ProfileRailButton(
-              profile: activeProfile,
-              tooltip: l10n.profileEditTooltip,
-              onOpenEdit: activeProfile == null
-                  ? null
-                  : () => showVoiceBottomSheet<void>(
-                        context: context,
-                        child: ProfileEditSheet(profile: activeProfile),
-                      ),
-              onCreateProfile: () => showCreateProfileSheet(context),
-            ),
+            _ProfileRailButton(profile: activeProfile),
             const SizedBox(height: 8),
           ],
         ),
@@ -205,51 +192,17 @@ class _RailIconButton extends StatelessWidget {
 }
 
 class _ProfileRailButton extends StatelessWidget {
-  const _ProfileRailButton({
-    required this.profile,
-    required this.tooltip,
-    required this.onOpenEdit,
-    required this.onCreateProfile,
-  });
+  const _ProfileRailButton({required this.profile});
 
   final VoiceProfile? profile;
-  final String tooltip;
-  final VoidCallback? onOpenEdit;
-  final VoidCallback onCreateProfile;
 
   @override
   Widget build(BuildContext context) {
-    final label = profile?.displayName ?? '?';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: PopupMenuButton<String>(
-        key: const Key('shell_rail_profile'),
-        tooltip: tooltip,
-        offset: const Offset(56, 0),
-        itemBuilder: (context) => [
-          if (onOpenEdit != null)
-            PopupMenuItem(
-              value: 'edit',
-              child: Text(AppLocalizations.of(context)!.profileEditTooltip),
-            ),
-          PopupMenuItem(
-            value: 'create',
-            child: Text(AppLocalizations.of(context)!.createProfileSubmit),
-          ),
-        ],
-        onSelected: (value) {
-          switch (value) {
-            case 'edit':
-              onOpenEdit?.call();
-            case 'create':
-              onCreateProfile();
-          }
-        },
-        child: VoiceAvatar(
-          imageUrl: profile?.avatarUrl,
-          label: label,
-          radius: 16,
-        ),
+      child: ProfileAvatarMenuButton(
+        key: ProfileAvatarMenuButton.railKey,
+        profile: profile,
       ),
     );
   }

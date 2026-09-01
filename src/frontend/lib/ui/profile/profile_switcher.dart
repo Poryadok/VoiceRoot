@@ -96,17 +96,26 @@ class ProfileSwitcher extends ConsumerWidget {
               for (final profile in profiles)
                 DropdownMenuItem<String>(
                   value: profile.id,
-                  child: Row(
-                    children: [
-                      _ProfileAccentFor(profile),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _profileMenuLabel(profile, l10n),
-                          overflow: TextOverflow.ellipsis,
+                  enabled: _canSelectProfile(profile, activeId),
+                  child: Tooltip(
+                    message: profile.isFrozen && profile.id != activeId
+                        ? l10n.profileFrozenHint
+                        : '',
+                    child: Row(
+                      children: [
+                        _ProfileAccentFor(profile),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _profileMenuLabel(profile, l10n),
+                            overflow: TextOverflow.ellipsis,
+                            style: profile.isFrozen && profile.id != activeId
+                                ? TextStyle(color: voice.textSecondary)
+                                : null,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
             ],
@@ -114,12 +123,19 @@ class ProfileSwitcher extends ConsumerWidget {
                 ? null
                 : (nextId) {
                     if (nextId == null || nextId == activeId) return;
+                    final target = profiles.firstWhere((p) => p.id == nextId);
+                    if (!_canSelectProfile(target, activeId)) return;
                     _switchProfile(ref, nextId);
                   },
           ),
         );
       },
     );
+  }
+
+  bool _canSelectProfile(VoiceProfile profile, String? activeId) {
+    if (!profile.isFrozen) return true;
+    return profile.id == activeId;
   }
 
   String _labelFor(
@@ -150,10 +166,13 @@ class ProfileSwitcher extends ConsumerWidget {
   }
 
   String _profileMenuLabel(VoiceProfile profile, AppLocalizations l10n) {
-    if (profile.isPrimary) {
-      return '${profile.displayName} (${l10n.downgradeProfilePrimary})';
+    final name = profile.isPrimary
+        ? '${profile.displayName} (${l10n.downgradeProfilePrimary})'
+        : profile.displayName;
+    if (profile.isFrozen) {
+      return '$name (${l10n.profileFrozenLabel})';
     }
-    return profile.displayName;
+    return name;
   }
 }
 

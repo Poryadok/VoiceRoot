@@ -225,6 +225,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get socialPresenceOffline => 'Offline';
 
   @override
+  String get socialPresenceInvisible => 'Invisible';
+
+  @override
+  String get profileMenuPresence => 'Presence';
+
+  @override
+  String get profileMenuArchiveUnavailable =>
+      'Chat archive is not available yet.';
+
+  @override
   String socialPresenceLastSeen(String dateTime) {
     return 'Last seen $dateTime';
   }
@@ -1499,6 +1509,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get downgradeProfilePrimary => 'Primary profile';
+
+  @override
+  String get profileFrozenLabel => 'Frozen';
+
+  @override
+  String get profileFrozenHint => 'Renew Premium to switch to this profile';
 
   @override
   String get premiumBadgeLabel => 'Premium';

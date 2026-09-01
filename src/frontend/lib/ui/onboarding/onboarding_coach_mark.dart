@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../../theme/voice_colors.dart';
 import '../../theme/voice_metrics.dart';
+import '../a11y/focus_trap.dart';
+import '../a11y/voice_focus_return.dart';
 import '../call/call_modal_overlay.dart';
 
 /// Non-blocking coach-mark tooltip anchored to [anchorKey] (docs/features/onboarding.md).
-class OnboardingCoachMark extends StatelessWidget {
+class OnboardingCoachMark extends StatefulWidget {
   const OnboardingCoachMark({
     super.key,
     required this.anchorKey,
@@ -69,8 +71,20 @@ class OnboardingCoachMark extends StatelessWidget {
   }
 
   @override
+  State<OnboardingCoachMark> createState() => _OnboardingCoachMarkState();
+}
+
+class _OnboardingCoachMarkState extends State<OnboardingCoachMark> {
+  late final VoiceFocusReturn _focusReturn = VoiceFocusReturn.capture();
+
+  void _dismiss(VoidCallback action) {
+    _focusReturn.restore();
+    action();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final anchorContext = anchorKey.currentContext;
+    final anchorContext = widget.anchorKey.currentContext;
     if (anchorContext == null) {
       return const SizedBox.shrink();
     }
@@ -103,40 +117,53 @@ class OnboardingCoachMark extends StatelessWidget {
           left: left,
           top: top,
           width: bubbleWidth,
-          child: Material(
-            elevation: 0,
-            borderRadius: BorderRadius.circular(radius),
-            color: voice.elevated,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: bubbleMinHeight),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(title, style: Theme.of(context).textTheme.titleSmall),
-                    const SizedBox(height: 8),
-                    Text(body, style: Theme.of(context).textTheme.bodyMedium),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      alignment: WrapAlignment.end,
-                      spacing: 4,
-                      runSpacing: 4,
-                      children: [
-                        TextButton(onPressed: onSkip, child: Text(skipLabel)),
-                        if (secondaryLabel != null && onSecondary != null)
+          child: VoiceFocusTrap(
+            child: Material(
+              elevation: 0,
+              borderRadius: BorderRadius.circular(radius),
+              color: voice.elevated,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: bubbleMinHeight),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        widget.title,
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        widget.body,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        alignment: WrapAlignment.end,
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: [
                           TextButton(
-                            onPressed: onSecondary,
-                            child: Text(secondaryLabel!),
+                            onPressed: () => _dismiss(widget.onSkip),
+                            child: Text(widget.skipLabel),
                           ),
-                        FilledButton(
-                          onPressed: onContinue,
-                          child: Text(continueLabel),
-                        ),
-                      ],
-                    ),
-                  ],
+                          if (widget.secondaryLabel != null &&
+                              widget.onSecondary != null)
+                            TextButton(
+                              onPressed: () =>
+                                  _dismiss(widget.onSecondary!),
+                              child: Text(widget.secondaryLabel!),
+                            ),
+                          FilledButton(
+                            onPressed: () => _dismiss(widget.onContinue),
+                            child: Text(widget.continueLabel),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
