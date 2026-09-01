@@ -52,9 +52,9 @@ CI/CD + выкат: GitHub Actions, promote/deploy, k8s secrets, observability �
 
 ### Pipeline & promote
 
-- [ ] **Tier 2 не блокирует PR** — `compose-e2e`, platform Flutter smokes только master / `full`; регрессии после merge ([`branch-protection-checklist.md`](../../.github/ci/branch-protection-checklist.md)).
+- [x] **Tier 2 не блокирует PR** — `compose-e2e`, platform Flutter smokes только master / `full`; регрессии после merge ([`branch-protection-checklist.md`](../../.github/ci/branch-protection-checklist.md)). Док drift закрыт: `compose-e2e` без `run_go`, триггеры admin/developer-portal (parallel/admin-ci-polish).
 - [ ] **Двойная сборка Flutter web на master** — tier 1 `flutter` (analyze+test) + job `web` (`flutter build web` + Docker); дедуп только для `flutter-windows` ([`ci.yml`](../../.github/workflows/ci.yml)).
-- [ ] **`compose-e2e` без Go-only триггера** — ускорение master CI; cross-service регрессии только nightly / `full` / compose-path changes (связано с Tier 2 не блокирует PR). *Note:* `run_go` в [`ci.yml`](../../.github/workflows/ci.yml) для tier-2 `compose-e2e` сохранён; Go-only master push гоняет compose-e2e.
+- [x] **`compose-e2e` без Go-only триггера** — master CI: cross-service smoke только при compose/frontend/global/admin/developer-portal; Go-only push не гоняет compose-e2e (parallel/admin-ci-polish). Full/nightly — schedule / `workflow_dispatch`.
 
 
 ## Common

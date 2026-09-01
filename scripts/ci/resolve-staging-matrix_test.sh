@@ -37,6 +37,7 @@ run_matrix() {
   needs_full_rollout="$(grep '^needs_full_rollout=' "${out}" | head -1 | cut -d= -f2-)"
   needs_user_space_rollout="$(grep '^needs_user_space_rollout=' "${out}" | head -1 | cut -d= -f2-)"
   promote_from_sha="$(grep '^promote_from_sha=' "${out}" | head -1 | cut -d= -f2-)"
+  run_admin="$(grep '^run_admin=' "${out}" | head -1 | cut -d= -f2-)"
   rm -f "${out}"
 }
 
@@ -67,6 +68,24 @@ echo "== auth path only =="
 FILTER_JSON='{"code":"true","auth":"true"}' GO_SERVICES_JSON='[]' run_matrix
 assert_contains "${build_services}" auth
 assert_not_contains "${build_services}" gateway
+
+echo "== admin path sets run_admin =="
+FILTER_JSON='{"code":"true","admin":"true"}' GO_SERVICES_JSON='[]' run_matrix
+assert_contains "${build_services}" admin
+[[ "${run_admin}" == "true" ]] || fail "expected run_admin for admin path"
+
+echo "== resolve-staging-matrix is idempotent =="
+export FILTER_JSON='{"code":"true","svc_user":"true"}'
+export GO_SERVICES_JSON='["user","social","space"]'
+run_matrix
+first_build="${build_services}"
+first_promote="${promote_services}"
+first_rollout="${needs_user_space_rollout}"
+run_matrix
+[[ "${build_services}" == "${first_build}" ]] || fail "idempotent build_services mismatch"
+[[ "${promote_services}" == "${first_promote}" ]] || fail "idempotent promote_services mismatch"
+[[ "${needs_user_space_rollout}" == "${first_rollout}" ]] || fail "idempotent rollout mismatch"
+unset FILTER_JSON GO_SERVICES_JSON
 
 echo "== FORCE_FULL builds all =="
 FORCE_FULL=true GO_SERVICES_JSON='[]' run_matrix

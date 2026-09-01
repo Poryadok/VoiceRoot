@@ -24,7 +24,7 @@ Require **`ci-gate`** on all PRs with code changes. Path-filtered jobs may still
 
 ## Tier 2 — master push (not PR merge gates)
 
-`staging-images-push` (may be **skipped** when no Go services changed), `staging-images-promote`, `staging-stack-lock`, `deploy-staging`, `flutter-android-smoke`, `flutter-windows`, `flutter-ios`, `flutter-web-integration`, `compose-e2e` — run on push to `master` after merge.
+`staging-images-push` (may be **skipped** when no Go services changed), `staging-images-promote`, `staging-stack-lock`, `deploy-staging`, `flutter-android-smoke`, `flutter-windows`, `flutter-ios`, `flutter-web-integration`, `compose-e2e` — run on push to `master` after merge. **`compose-e2e`** fires on compose/frontend/global/admin/developer-portal path changes, not on Go-only backend diffs.
 
 ## Tier 3 — do NOT require on PR / master
 
