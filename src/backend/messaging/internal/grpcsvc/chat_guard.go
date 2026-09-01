@@ -17,6 +17,8 @@ type ChatGuard interface {
 	EnsureMember(ctx context.Context, chatID, profileID uuid.UUID) error
 	DMOtherProfileID(ctx context.Context, chatID, profileID uuid.UUID) (uuid.UUID, error)
 	OtherMemberProfileIDs(ctx context.Context, chatID, profileID uuid.UUID) ([]uuid.UUID, error)
+	// MemberRole returns owner | admin | member for chat_members, or "" when unknown.
+	MemberRole(ctx context.Context, chatID, profileID uuid.UUID) (string, error)
 }
 
 // ProfileAccountLookup resolves profile_id → account_id (User Service).

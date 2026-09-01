@@ -180,6 +180,8 @@ message MessageSent {
   bool has_mentions = 4;
   optional string thread_parent_id = 5;
   bool is_e2e = 6;
+  // snake_case store value: text | photo | video | … (docs/microservices/messaging-service.md)
+  optional string content_type = 7;
 }
 
 message MentionAdded {

@@ -5,6 +5,14 @@ import (
 	"strings"
 )
 
+// EffectiveContentType prefers the durable column; falls back to attachment/body inference.
+func EffectiveContentType(storedType, content, attachmentsJSON string) string {
+	if t := strings.TrimSpace(storedType); t != "" {
+		return t
+	}
+	return inferLastMessageContentType(content, attachmentsJSON)
+}
+
 // inferLastMessageContentType derives list-preview content type from message body and attachments.
 // Until messages.content_type column ships, attachments[].type is the primary signal.
 func inferLastMessageContentType(content, attachmentsJSON string) string {

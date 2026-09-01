@@ -41,6 +41,9 @@ func (s stubChatGuard) OtherMemberProfileIDs(context.Context, uuid.UUID, uuid.UU
 	}
 	return []uuid.UUID{s.peer}, nil
 }
+func (s stubChatGuard) MemberRole(context.Context, uuid.UUID, uuid.UUID) (string, error) {
+	return "owner", nil
+}
 
 type stubProfiles struct {
 	acct uuid.UUID
@@ -201,61 +204,68 @@ func TestValidateAttachments(t *testing.T) {
 		},
 	}}}
 
-	n, err := s.validateAttachments(context.Background(), chatID, "[]")
+	n, err := s.validateAttachments(context.Background(), chatID, "[]", "")
 	require.NoError(t, err)
 	require.Equal(t, 0, n)
 
-	_, err = s.validateAttachments(context.Background(), chatID, "not-json")
+	_, err = s.validateAttachments(context.Background(), chatID, "not-json", "")
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 
 	sNoFiles := &MessagingGRPC{}
-	_, err = sNoFiles.validateAttachments(context.Background(), chatID, `[{"file_id":"`+fileID+`","type":"image"}]`)
+	_, err = sNoFiles.validateAttachments(context.Background(), chatID, `[{"file_id":"`+fileID+`","type":"image"}]`, "")
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))
 
-	_, err = s.validateAttachments(context.Background(), chatID, `[{"file_id":"bad","type":"image"}]`)
+	_, err = s.validateAttachments(context.Background(), chatID, `[{"file_id":"bad","type":"image"}]`, "")
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 
-	_, err = s.validateAttachments(context.Background(), chatID, `[{"file_id":"`+fileID+`","type":""}]`)
+	_, err = s.validateAttachments(context.Background(), chatID, `[{"file_id":"`+fileID+`","type":""}]`, "")
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 
-	_, err = s.validateAttachments(context.Background(), chatID, `[{"file_id":"`+uuid.New().String()+`","type":"image"}]`)
+	_, err = s.validateAttachments(context.Background(), chatID, `[{"file_id":"`+uuid.New().String()+`","type":"image"}]`, "")
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))
 
 	wrongChat := uuid.New().String()
 	sWrong := &MessagingGRPC{Files: stubFiles{byID: map[string]*filev1.FileMetadata{
 		fileID: {Id: fileID, Status: "ready", FileType: "image", ScanResult: "clean", Chat: &chatv1.ChatRef{Id: wrongChat, Type: &dm}},
 	}}}
-	_, err = sWrong.validateAttachments(context.Background(), chatID, `[{"file_id":"`+fileID+`","type":"image"}]`)
+	_, err = sWrong.validateAttachments(context.Background(), chatID, `[{"file_id":"`+fileID+`","type":"image"}]`, "")
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))
 
 	sDirty := &MessagingGRPC{Files: stubFiles{byID: map[string]*filev1.FileMetadata{
 		fileID: {Id: fileID, Status: "ready", FileType: "image", ScanResult: "infected", Chat: chatRef},
 	}}}
-	_, err = sDirty.validateAttachments(context.Background(), chatID, `[{"file_id":"`+fileID+`","type":"image"}]`)
+	_, err = sDirty.validateAttachments(context.Background(), chatID, `[{"file_id":"`+fileID+`","type":"image"}]`, "")
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))
 
 	sSkipped := &MessagingGRPC{Files: stubFiles{byID: map[string]*filev1.FileMetadata{
 		fileID: {Id: fileID, Status: "ready", FileType: "image", ScanResult: "skipped", Chat: chatRef},
 	}}}
-	n, err = sSkipped.validateAttachments(context.Background(), chatID, `[{"file_id":"`+fileID+`","type":"image"}]`)
+	n, err = sSkipped.validateAttachments(context.Background(), chatID, `[{"file_id":"`+fileID+`","type":"image"}]`, "")
 	require.NoError(t, err)
 	require.Equal(t, 1, n)
 
 	sMismatch := &MessagingGRPC{Files: stubFiles{byID: map[string]*filev1.FileMetadata{
 		fileID: {Id: fileID, Status: "ready", FileType: "video", ScanResult: "clean", Chat: chatRef},
 	}}}
-	_, err = sMismatch.validateAttachments(context.Background(), chatID, `[{"file_id":"`+fileID+`","type":"image"}]`)
+	_, err = sMismatch.validateAttachments(context.Background(), chatID, `[{"file_id":"`+fileID+`","type":"image"}]`, "")
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 
 	sDown := &MessagingGRPC{Files: stubFiles{err: errors.New("file svc")}}
-	_, err = sDown.validateAttachments(context.Background(), chatID, `[{"file_id":"`+fileID+`","type":"image"}]`)
+	_, err = sDown.validateAttachments(context.Background(), chatID, `[{"file_id":"`+fileID+`","type":"image"}]`, "")
 	require.Equal(t, codes.Internal, status.Code(err))
 
 	audioID := uuid.New().String()
 	sVoice := &MessagingGRPC{Files: stubFiles{byID: map[string]*filev1.FileMetadata{
 		audioID: {Id: audioID, Status: "ready", FileType: "audio", ScanResult: "clean", Chat: chatRef},
 	}}}
-	n, err = sVoice.validateAttachments(context.Background(), chatID, `[{"file_id":"`+audioID+`","type":"voice_message"}]`)
+	n, err = sVoice.validateAttachments(context.Background(), chatID, `[{"file_id":"`+audioID+`","type":"voice_message"}]`, "")
 	require.NoError(t, err)
 	require.Equal(t, 1, n)
+
+	sRich := &MessagingGRPC{}
+	n, err = sRich.validateAttachments(context.Background(), chatID, `[{"type":"location","lat":55.75,"lon":37.61}]`, "location")
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
+	_, err = sRich.validateAttachments(context.Background(), chatID, `[{"type":"article","url":"https://example.com"}]`, "article")
+	require.NoError(t, err)
 }

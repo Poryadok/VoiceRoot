@@ -5,7 +5,7 @@ import "context"
 // MessageEventsPublisher publishes Messaging domain events to JetStream stream message_events
 // (subjects message.sent, message.edited, message.deleted; logical stream message.events in CONTRACT_MATRIX).
 type MessageEventsPublisher interface {
-	PublishMessageSent(ctx context.Context, messageID, chatID, senderProfileID string, hasMentions bool, threadParentID string, isE2E bool) error
+	PublishMessageSent(ctx context.Context, messageID, chatID, senderProfileID string, hasMentions bool, threadParentID string, isE2E bool, contentType string) error
 	PublishMentionAdded(ctx context.Context, messageID, chatID, senderProfileID string, mentionedProfileIDs []string) error
 	PublishMessageEdited(ctx context.Context, messageID, chatID string, isE2E bool) error
 	PublishMessageDeleted(ctx context.Context, messageID, chatID string) error

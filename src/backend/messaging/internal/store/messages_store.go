@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -35,6 +36,7 @@ type MessageRow struct {
 	DeletedAt         *time.Time
 	GhostOnly         bool
 	IsE2E             bool
+	ContentType       string // text | photo | …; empty → infer from attachments on read
 	CreatedAt         time.Time
 }
 
@@ -118,15 +120,20 @@ func (s *MessagesStore) InsertMessage(ctx context.Context, row MessageRow) (*Mes
 	if row.DisplayChatID != nil {
 		displayAny = *row.DisplayChatID
 	}
+	contentType := strings.TrimSpace(row.ContentType)
+	var contentTypeAny any
+	if contentType != "" {
+		contentTypeAny = contentType
+	}
 
 	q := `
 INSERT INTO messages (
   id, chat_id, chat_type, sender_profile_id, posted_as_chat, display_chat_id,
   content, type, thread_parent_id, forward_from_id, forward_from_sender,
-  attachments, mentions, client_message_id, ghost_only, is_e2e
+  attachments, mentions, client_message_id, ghost_only, is_e2e, content_type
 ) VALUES (
   $1, $2, $3, $4, $5, $6,
-  $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14, $15, $16
+  $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14, $15, $16, $17
 )
 ON CONFLICT (chat_id, sender_profile_id, client_message_id)
   WHERE client_message_id IS NOT NULL
@@ -135,7 +142,7 @@ ON CONFLICT (chat_id, sender_profile_id, client_message_id)
 	ct, err := s.Pool.Exec(ctx, q,
 		row.ID, row.ChatID, chatType, row.SenderProfileID, row.PostedAsChat, displayAny,
 		row.Content, row.Type, threadAny, forwardFromAny, forwardSenderAny,
-		row.AttachmentsJSON, row.MentionsJSON, clientAny, row.GhostOnly, row.IsE2E,
+		row.AttachmentsJSON, row.MentionsJSON, clientAny, row.GhostOnly, row.IsE2E, contentTypeAny,
 	)
 	if err != nil {
 		return nil, err
@@ -157,13 +164,15 @@ const messageSelectSQL = `
 SELECT id, chat_id, chat_type, sender_profile_id, posted_as_chat, display_chat_id,
        content, type, thread_parent_id,
        forward_from_id, forward_from_sender,
-       attachments::text, mentions::text, client_message_id, edited_at, deleted_at, created_at, is_e2e
+       attachments::text, mentions::text, client_message_id, edited_at, deleted_at, created_at, is_e2e,
+       COALESCE(content_type, '')
 `
 
 const messageReturningCols = `id, chat_id, chat_type, sender_profile_id, posted_as_chat, display_chat_id,
        content, type, thread_parent_id,
        forward_from_id, forward_from_sender,
-       attachments::text, mentions::text, client_message_id, edited_at, deleted_at, created_at, is_e2e`
+       attachments::text, mentions::text, client_message_id, edited_at, deleted_at, created_at, is_e2e,
+       COALESCE(content_type, '')`
 
 func scanMessageRow(row pgx.Row) (*MessageRow, error) {
 	var m MessageRow
@@ -177,6 +186,7 @@ func scanMessageRow(row pgx.Row) (*MessageRow, error) {
 		&m.Content, &m.Type, &threadID,
 		&forwardFromID, &forwardSender,
 		&m.AttachmentsJSON, &m.MentionsJSON, &clientID, &m.EditedAt, &m.DeletedAt, &m.CreatedAt, &m.IsE2E,
+		&m.ContentType,
 	)
 	if err != nil {
 		return nil, err
@@ -420,6 +430,7 @@ LIMIT $`+itoa(argN+1)+`
 			&m.Content, &m.Type, &threadID,
 			&forwardFromID, &forwardSender,
 			&m.AttachmentsJSON, &m.MentionsJSON, &clientID, &m.EditedAt, &m.DeletedAt, &m.CreatedAt, &m.IsE2E,
+			&m.ContentType,
 		); err != nil {
 			return nil, err
 		}
@@ -542,11 +553,12 @@ func (s *MessagesStore) GetChatListMetadata(ctx context.Context, viewerProfileID
 		var lastMsgID uuid.UUID
 		var lastSender uuid.UUID
 		var lastAttachments sql.NullString
+		var lastContentType sql.NullString
 		var peerRead *uuid.UUID
 		var peerDelivered *uuid.UUID
 		err := s.Pool.QueryRow(ctx, `
 WITH latest AS (
-  SELECT id, content, created_at, sender_profile_id, attachments
+  SELECT id, content, created_at, sender_profile_id, attachments, content_type
   FROM messages
   WHERE chat_id = $1 AND deleted_at IS NULL
   ORDER BY id DESC
@@ -570,13 +582,13 @@ WITH latest AS (
     AND m.sender_profile_id <> $2
     AND (rr.last_read_message_id IS NULL OR m.id > rr.last_read_message_id)
 )
-SELECT latest.content, latest.created_at, latest.id, latest.sender_profile_id, latest.attachments,
+SELECT latest.content, latest.created_at, latest.id, latest.sender_profile_id, latest.attachments, latest.content_type,
        peer_rr.last_read_message_id, peer_rr.last_delivered_message_id,
        unread.unread_count
 FROM unread
 LEFT JOIN latest ON true
 LEFT JOIN peer_rr ON true
-`, chatID, viewerProfileID).Scan(&preview, &lastAt, &lastMsgID, &lastSender, &lastAttachments, &peerRead, &peerDelivered, &unread)
+`, chatID, viewerProfileID).Scan(&preview, &lastAt, &lastMsgID, &lastSender, &lastAttachments, &lastContentType, &peerRead, &peerDelivered, &unread)
 		if err != nil {
 			return nil, err
 		}
@@ -592,7 +604,11 @@ LEFT JOIN peer_rr ON true
 		if preview.Valid {
 			content = preview.String
 		}
-		row.LastMessageContentType = inferLastMessageContentType(content, attJSON)
+		storedType := ""
+		if lastContentType.Valid {
+			storedType = strings.TrimSpace(lastContentType.String)
+		}
+		row.LastMessageContentType = EffectiveContentType(storedType, content, attJSON)
 		if lastAt.Valid {
 			t := lastAt.Time.UTC()
 			row.LastMessageAt = &t

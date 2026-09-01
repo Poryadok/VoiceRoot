@@ -36,6 +36,7 @@ class SendMessageRequest extends $pb.GeneratedMessage {
     MessageKind? messageKind,
     $core.bool? postedAsChat,
     $core.bool? isE2e,
+    MessageContentType? contentType,
   }) {
     final result = create();
     if (chat != null) result.chat = chat;
@@ -47,6 +48,7 @@ class SendMessageRequest extends $pb.GeneratedMessage {
     if (messageKind != null) result.messageKind = messageKind;
     if (postedAsChat != null) result.postedAsChat = postedAsChat;
     if (isE2e != null) result.isE2e = isE2e;
+    if (contentType != null) result.contentType = contentType;
     return result;
   }
 
@@ -75,6 +77,8 @@ class SendMessageRequest extends $pb.GeneratedMessage {
         enumValues: MessageKind.values)
     ..aOB(8, _omitFieldNames ? '' : 'postedAsChat')
     ..aOB(9, _omitFieldNames ? '' : 'isE2e')
+    ..aE<MessageContentType>(10, _omitFieldNames ? '' : 'contentType',
+        enumValues: MessageContentType.values)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -179,6 +183,15 @@ class SendMessageRequest extends $pb.GeneratedMessage {
   $core.bool hasIsE2e() => $_has(8);
   @$pb.TagNumber(9)
   void clearIsE2e() => $_clearField(9);
+
+  @$pb.TagNumber(10)
+  MessageContentType get contentType => $_getN(9);
+  @$pb.TagNumber(10)
+  set contentType(MessageContentType value) => $_setField(10, value);
+  @$pb.TagNumber(10)
+  $core.bool hasContentType() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearContentType() => $_clearField(10);
 }
 
 class EditMessageRequest extends $pb.GeneratedMessage {
@@ -591,6 +604,7 @@ class Message extends $pb.GeneratedMessage {
     $core.String? reactionsJson,
     $core.bool? isPinned,
     $core.bool? isE2e,
+    MessageContentType? contentType,
   }) {
     final result = create();
     if (id != null) result.id = id;
@@ -612,6 +626,7 @@ class Message extends $pb.GeneratedMessage {
     if (reactionsJson != null) result.reactionsJson = reactionsJson;
     if (isPinned != null) result.isPinned = isPinned;
     if (isE2e != null) result.isE2e = isE2e;
+    if (contentType != null) result.contentType = contentType;
     return result;
   }
 
@@ -653,6 +668,8 @@ class Message extends $pb.GeneratedMessage {
     ..aOS(18, _omitFieldNames ? '' : 'reactionsJson')
     ..aOB(19, _omitFieldNames ? '' : 'isPinned')
     ..aOB(20, _omitFieldNames ? '' : 'isE2e')
+    ..aE<MessageContentType>(21, _omitFieldNames ? '' : 'contentType',
+        enumValues: MessageContentType.values)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -851,6 +868,15 @@ class Message extends $pb.GeneratedMessage {
   $core.bool hasIsE2e() => $_has(18);
   @$pb.TagNumber(20)
   void clearIsE2e() => $_clearField(20);
+
+  @$pb.TagNumber(21)
+  MessageContentType get contentType => $_getN(19);
+  @$pb.TagNumber(21)
+  set contentType(MessageContentType value) => $_setField(21, value);
+  @$pb.TagNumber(21)
+  $core.bool hasContentType() => $_has(19);
+  @$pb.TagNumber(21)
+  void clearContentType() => $_clearField(21);
 }
 
 class GetThreadMessagesRequest extends $pb.GeneratedMessage {
