@@ -186,4 +186,119 @@ void main() {
       expect(jsonDecode(bodies[2]), isEmpty);
     });
   });
+
+  group('VoiceChatsClient.quickAccess', () {
+    test('GET/POST/DELETE/PUT quick-access routes', () async {
+      final paths = <String>[];
+      final methods = <String>[];
+      final client = VoiceChatsClient(
+        gateway: gatewayHttpForTest(
+          MockClient((req) async {
+            paths.add(req.url.path);
+            methods.add(req.method);
+            if (req.method == 'GET') {
+              return http.Response(
+                jsonEncode({
+                  'items': [
+                    {
+                      'chat_id': 'chat-qa',
+                      'sort_order': 1,
+                      'chat': {
+                        'id': 'chat-qa',
+                        'type': 'CHAT_TYPE_DM',
+                        'creator_profile_id': 'profile-a',
+                        'name': 'QA Chat',
+                      },
+                    },
+                  ],
+                }),
+                200,
+              );
+            }
+            return http.Response('', 204);
+          }),
+          config: config,
+        ),
+      );
+
+      final list = await client.listQuickAccess(authorization: auth);
+      expect(list, isA<ChatsApiOk<QuickAccessListData>>());
+      expect((list as ChatsApiOk<QuickAccessListData>).data.items, hasLength(1));
+      expect(
+        await client.addQuickAccess(authorization: auth, chatId: 'chat-qa'),
+        isA<ChatsApiOk<void>>(),
+      );
+      expect(
+        await client.removeQuickAccess(authorization: auth, chatId: 'chat-qa'),
+        isA<ChatsApiOk<void>>(),
+      );
+      expect(
+        await client.reorderQuickAccess(
+          authorization: auth,
+          chatIds: ['c2', 'c1'],
+        ),
+        isA<ChatsApiOk<void>>(),
+      );
+      expect(methods, ['GET', 'POST', 'DELETE', 'PUT']);
+      expect(paths, [
+        '/api/v1/chats/quick-access',
+        '/api/v1/chats/quick-access',
+        '/api/v1/chats/quick-access/chat-qa',
+        '/api/v1/chats/quick-access/order',
+      ]);
+    });
+  });
+
+  group('VoiceChatsClient.folders', () {
+    test('GET /api/v1/chats/folders parses folder_list', () async {
+      final client = VoiceChatsClient(
+        gateway: gatewayHttpForTest(
+          MockClient((req) async {
+            expect(req.url.path, '/api/v1/chats/folders');
+            return http.Response(
+              jsonEncode({
+                'folder_list': {
+                  'folders': [
+                    {
+                      'id': 'folder-all',
+                      'name': 'All',
+                      'folder_type': 'system',
+                      'sort_order': 0,
+                    },
+                  ],
+                },
+              }),
+              200,
+            );
+          }),
+          config: config,
+        ),
+      );
+      final result = await client.listFolders(authorization: auth);
+      expect(result, isA<ChatsApiOk<FolderListData>>());
+      final data = (result as ChatsApiOk<FolderListData>).data;
+      expect(data.folders.single.id, 'folder-all');
+      expect(data.folders.single.isSystem, isTrue);
+    });
+
+    test('GET /api/v1/chats passes folder_id filter', () async {
+      final client = VoiceChatsClient(
+        gateway: gatewayHttpForTest(
+          MockClient((req) async {
+            expect(req.url.queryParameters['folder_id'], 'folder-dm');
+            return http.Response(
+              jsonEncode({'chat_list': {'items': []}}),
+              200,
+            );
+          }),
+          config: config,
+        ),
+      );
+      final result = await client.listChats(
+        authorization: auth,
+        folderId: 'folder-dm',
+      );
+      expect(result, isA<ChatsApiOk<ChatListData>>());
+    });
+  });
 }

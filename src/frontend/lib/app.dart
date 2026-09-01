@@ -53,6 +53,7 @@ import 'ui/profile/profile_avatar_switcher.dart';
 import 'ui/profile/profile_edit_sheet.dart';
 import 'ui/settings/settings_sheet.dart';
 import 'ui/shell/desktop_shell_rail.dart';
+import 'ui/shell/mobile_shell_drawer.dart';
 import 'ui/shell/mobile_shell_tab_bar.dart';
 import 'ui/shell/mobile_chat_strip.dart';
 import 'ui/shell/navigation_panel.dart';
@@ -332,6 +333,9 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
           child: CallErrorListener(
             child: Scaffold(
               backgroundColor: voice.canvas,
+              drawer: showMobileTabs
+                  ? MobileShellDrawer(onOpenSettings: _openSettingsSheet)
+                  : null,
               bottomNavigationBar: showMobileTabs
                   ? const MobileShellTabBar()
                   : null,
@@ -395,6 +399,9 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
                                 ),
                               _SessionBar(
                                 narrow: narrow,
+                                onOpenDrawer: showMobileTabs
+                                    ? () => Scaffold.of(context).openDrawer()
+                                    : null,
                                 onLogout: () => ref
                                     .read(authControllerProvider.notifier)
                                     .logout(),
@@ -435,6 +442,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
 class _SessionBar extends StatelessWidget {
   const _SessionBar({
     required this.narrow,
+    this.onOpenDrawer,
     required this.onLogout,
     required this.onEditProfile,
     required this.onOpenSettings,
@@ -445,6 +453,7 @@ class _SessionBar extends StatelessWidget {
   });
 
   final bool narrow;
+  final VoidCallback? onOpenDrawer;
   final VoidCallback onLogout;
   final VoidCallback? onEditProfile;
   final VoidCallback onOpenSettings;
@@ -466,6 +475,13 @@ class _SessionBar extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(
             children: [
+              if (narrow && onOpenDrawer != null)
+                IconButton(
+                  key: const Key('mobile_shell_drawer_open'),
+                  tooltip: AppLocalizations.of(context)!.chatNavigationMenu,
+                  onPressed: onOpenDrawer,
+                  icon: Icon(Icons.menu, color: voice.textSecondary),
+                ),
               const ProfileAccentDot(),
               const SizedBox(width: 8),
               Expanded(

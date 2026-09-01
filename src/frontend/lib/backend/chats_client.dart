@@ -130,6 +130,46 @@ class MemberListData {
   final String? nextCursor;
 }
 
+class VoiceQuickAccessItem {
+  const VoiceQuickAccessItem({
+    required this.chatId,
+    this.sortOrder = 0,
+    this.chat,
+  });
+
+  final String chatId;
+  final int sortOrder;
+  final VoiceChat? chat;
+}
+
+class QuickAccessListData {
+  const QuickAccessListData({required this.items});
+
+  final List<VoiceQuickAccessItem> items;
+}
+
+class VoiceFolder {
+  const VoiceFolder({
+    required this.id,
+    required this.name,
+    required this.folderType,
+    this.sortOrder = 0,
+  });
+
+  final String id;
+  final String name;
+  final String folderType;
+  final int sortOrder;
+
+  bool get isSystem => folderType == 'system';
+}
+
+class FolderListData {
+  const FolderListData({required this.folders});
+
+  final List<VoiceFolder> folders;
+}
+
 /// HTTP client for Chat routes (`/api/v1/chats/**`).
 class VoiceChatsClient {
   VoiceChatsClient({required GatewayHttpClient gateway}) : _gateway = gateway;
@@ -141,11 +181,15 @@ class VoiceChatsClient {
     String? cursor,
     int? pageSize,
     String? inbox,
+    String? folderId,
   }) async {
     final params = <String, String>{};
     if (cursor != null && cursor.isNotEmpty) params['cursor'] = cursor;
     if (pageSize != null) params['page_size'] = '$pageSize';
     if (inbox != null && inbox.isNotEmpty) params['inbox'] = inbox;
+    if (folderId != null && folderId.isNotEmpty) {
+      params['folder_id'] = folderId;
+    }
     final uri = _gateway.replace(
       path: '/api/v1/chats',
       queryParameters: params.isEmpty ? null : params,
@@ -298,6 +342,68 @@ class VoiceChatsClient {
     );
   }
 
+  Future<ChatsApiResult<QuickAccessListData>> listQuickAccess({
+    required String authorization,
+  }) async {
+    final result = await _gateway.getProto(
+      _gateway.resolve('/api/v1/chats/quick-access'),
+      authorization: authorization,
+      createEmpty: chat_pb.ListQuickAccessResponse.create,
+    );
+    return _map(
+      result,
+      (data) => quickAccessListFromProto(data as chat_pb.ListQuickAccessResponse),
+    );
+  }
+
+  Future<ChatsApiResult<void>> addQuickAccess({
+    required String authorization,
+    required String chatId,
+    int? sortOrder,
+  }) {
+    final body = <String, dynamic>{'chat_id': chatId};
+    if (sortOrder != null) body['sort_order'] = sortOrder;
+    return _postEmpty(
+      '/api/v1/chats/quick-access',
+      authorization,
+      jsonBody: body,
+    );
+  }
+
+  Future<ChatsApiResult<void>> removeQuickAccess({
+    required String authorization,
+    required String chatId,
+  }) {
+    return _deleteEmpty('/api/v1/chats/quick-access/$chatId', authorization);
+  }
+
+  Future<ChatsApiResult<void>> reorderQuickAccess({
+    required String authorization,
+    required List<String> chatIds,
+  }) async {
+    final result = await _gateway.putJson(
+      uri: _gateway.resolve('/api/v1/chats/quick-access/order'),
+      authorization: authorization,
+      body: {'chat_ids': chatIds},
+      allowNoContent: true,
+    );
+    return _mapJsonEmpty(result);
+  }
+
+  Future<ChatsApiResult<FolderListData>> listFolders({
+    required String authorization,
+  }) async {
+    final result = await _gateway.getProto(
+      _gateway.resolve('/api/v1/chats/folders'),
+      authorization: authorization,
+      createEmpty: chat_pb.ListFoldersResponse.create,
+    );
+    return _map(
+      result,
+      (data) => folderListFromProto(data as chat_pb.ListFoldersResponse),
+    );
+  }
+
   Future<ChatsApiResult<VoiceChat>> updateGroup({
     required String authorization,
     required String chatId,
@@ -373,6 +479,17 @@ class VoiceChatsClient {
   }
 
   ChatsApiResult<void> _mapEmpty(GatewayHttpResult<dynamic> result) {
+    return switch (result) {
+      GatewayHttpOk() => const ChatsApiOk(null),
+      GatewayHttpFailure(:final error) => ChatsApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+
+  ChatsApiResult<void> _mapJsonEmpty(GatewayHttpResult<Map<String, dynamic>> result) {
     return switch (result) {
       GatewayHttpOk() => const ChatsApiOk(null),
       GatewayHttpFailure(:final error) => ChatsApiFailure(

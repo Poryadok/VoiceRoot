@@ -253,6 +253,18 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatListTitle => 'Личные сообщения';
 
   @override
+  String get chatFoldersTitle => 'Folders';
+
+  @override
+  String get chatQuickAccessTitle => 'Quick Access';
+
+  @override
+  String get chatQuickAccessEmpty => 'No favorites yet';
+
+  @override
+  String get chatNavigationMenu => 'Navigation menu';
+
+  @override
   String get chatListEmpty => 'Пока нет диалогов';
 
   @override
