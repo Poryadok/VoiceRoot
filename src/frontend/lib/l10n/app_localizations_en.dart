@@ -105,6 +105,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get socialTabFriends => 'Friends';
 
   @override
+  String get socialTabContacts => 'Contacts';
+
+  @override
+  String get socialTabFavorites => 'Favorites';
+
+  @override
   String get socialTabRequests => 'Requests';
 
   @override
@@ -186,6 +192,26 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get socialFriendsEmpty => 'No friends yet';
+
+  @override
+  String get socialContactsEmpty => 'No contacts yet';
+
+  @override
+  String get socialContactsEmptyHint =>
+      'People you add or sync from your phone book appear here.';
+
+  @override
+  String get socialFavoritesEmpty => 'No favorite people yet';
+
+  @override
+  String get socialFavoritesEmptyHint =>
+      'Star a friend or contact to pin them here.';
+
+  @override
+  String get socialAddFavorite => 'Add to favorites';
+
+  @override
+  String get socialRemoveFavorite => 'Remove from favorites';
 
   @override
   String get socialRequestsEmpty => 'No friend requests';

@@ -71,6 +71,8 @@ void main() {
     expect(find.byKey(SocialPanel.panelKey), findsOneWidget);
     expect(find.byKey(SocialPanel.tabSearchKey), findsOneWidget);
     expect(find.byKey(SocialPanel.tabFriendsKey), findsOneWidget);
+    expect(find.byKey(SocialPanel.tabContactsKey), findsOneWidget);
+    expect(find.byKey(SocialPanel.tabFavoritesKey), findsOneWidget);
     expect(find.byKey(SocialPanel.tabRequestsKey), findsOneWidget);
   });
 
@@ -453,7 +455,7 @@ void main() {
   testWidgets('requests tab shows empty state when no requests', (tester) async {
     await tester.pumpWidget(
       socialTestApp(
-        home: const SocialPanel(initialTabIndex: 2),
+        home: const SocialPanel(initialTabIndex: 4),
         client: MockClient((req) async {
           if (req.url.path == '/api/v1/friends/requests') {
             return http.Response(
@@ -514,11 +516,55 @@ void main() {
     expect(find.textContaining(_backendUnavailableSnippet), findsOneWidget);
   });
 
+  testWidgets('contacts tab shows empty state when no contacts', (tester) async {
+    await tester.pumpWidget(
+      socialTestApp(
+        home: const SocialPanel(initialTabIndex: 2),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/friends/contacts') {
+            return http.Response(
+              jsonEncode({'contact_list': {'contacts': []}}),
+              200,
+            );
+          }
+          return http.Response('{}', 200);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('No contacts yet'), findsOneWidget);
+    expect(find.byKey(SocialPanel.contactsUnavailableKey), findsNothing);
+  });
+
+  testWidgets('favorites tab shows empty state when no favorites', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      socialTestApp(
+        home: const SocialPanel(initialTabIndex: 3),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/friends/favorites') {
+            return http.Response(
+              jsonEncode({'friend_list': {'friends': []}}),
+              200,
+            );
+          }
+          return http.Response('{}', 200);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('No favorite people yet'), findsOneWidget);
+    expect(find.byKey(SocialPanel.favoritesUnavailableKey), findsNothing);
+  });
+
   testWidgets('incoming request accept calls gateway', (tester) async {
     var accepted = false;
     await tester.pumpWidget(
       socialTestApp(
-        home: const SocialPanel(initialTabIndex: 2),
+        home: const SocialPanel(initialTabIndex: 4),
         client: MockClient((req) async {
           if (req.url.path == '/api/v1/friends/requests') {
             return http.Response(

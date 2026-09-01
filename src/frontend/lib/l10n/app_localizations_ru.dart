@@ -105,6 +105,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get socialTabFriends => 'Друзья';
 
   @override
+  String get socialTabContacts => 'Контакты';
+
+  @override
+  String get socialTabFavorites => 'Избранные';
+
+  @override
   String get socialTabRequests => 'Заявки';
 
   @override
@@ -186,6 +192,26 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get socialFriendsEmpty => 'Пока нет друзей';
+
+  @override
+  String get socialContactsEmpty => 'Пока нет контактов';
+
+  @override
+  String get socialContactsEmptyHint =>
+      'Здесь появятся люди, которых вы добавите или синхронизируете из телефонной книги.';
+
+  @override
+  String get socialFavoritesEmpty => 'Пока нет избранных';
+
+  @override
+  String get socialFavoritesEmptyHint =>
+      'Отметьте друга или контакт звёздочкой, чтобы закрепить здесь.';
+
+  @override
+  String get socialAddFavorite => 'В избранное';
+
+  @override
+  String get socialRemoveFavorite => 'Убрать из избранного';
 
   @override
   String get socialRequestsEmpty => 'Нет заявок в друзья';
