@@ -47,31 +47,20 @@ CI/CD + выкат: GitHub Actions, promote/deploy, k8s secrets, observability �
 
 ### Deploy workflow
 
-- [ ] **Sanity selective CI** — `workflow_dispatch` CI → `full`; первый master push с selective promote — проверить GHCR bootstrap; при необходимости `STAGING_FORCE_FULL_ROLLOUT=true` + manual deploy `deploy_mode=full`.
+- [ ] **Sanity selective CI** — `workflow_dispatch` CI → `full`; первый master push с selective promote — проверить GHCR bootstrap; при необходимости `STAGING_FORCE_FULL_ROLLOUT=true` + manual deploy `deploy_mode=full`. — **отложено: нужен live GHCR/staging**
 - [ ] **`PROD_SMOKE_ENABLED` / `PROD_STAFF_TOKEN`** — GitHub Variables/Secrets для prod smoke.
 
 ### Pipeline & promote
 
-- [ ] **`staging-stack-lock` не требует success `staging-images-push` / `staging-images-promote`** — `if: always()` + `changes.success`; при partial failed promote lock artifact и deploy всё равно стартуют (verify на deploy ловит missing, но run красный поздно).
-- [ ] **`deploy-staging` не гейтит failed image jobs** — `if` проверяет только `staging-stack-lock.result == 'success'`; failed `backend-auth` / `web` / promote не блокируют workflow_call явно (частично спасает `needs:` + verify).
-- [ ] **`rollout-user-space-tier`: JSON patch `add` `SPACE_GRPC_ADDR`** — повторный rollout может упасть, если env уже в pod template ([`rollout-user-space-tier.sh`](../../scripts/staging/rollout-user-space-tier.sh)); idempotent patch или `set env` + restart.
-- [ ] **Migrate Jobs: skip после первого success** — новые SQL в `src/backend/migrations/**` не применятся без ручного `kubectl delete job voice-migrate-*` ([`apply-migrate-jobs.sh`](../../scripts/staging/apply-migrate-jobs.sh)); стратегия version/bump или force re-run.
-- [ ] **Drift check только `staging-go-services.txt`** — в `staging-stack-lock` нет проверки [`staging-image-catalog.json`](../../scripts/ci/staging-image-catalog.json) vs `deploy/staging/` / CI jobs.
-- [ ] **Док-дрифт `compose-e2e` триггера** — [`TESTING.md`](../TESTING.md) tier 2: «backend/frontend/compose»; в [`ci.yml`](../../.github/workflows/ci.yml) убран `run_go` — Go-only push на `master` **не** гоняет `compose-e2e` (только `compose` / `frontend` / `global`).
 - [ ] **Tier 2 не блокирует PR** — `compose-e2e`, platform Flutter smokes только master / `full`; регрессии после merge ([`branch-protection-checklist.md`](../../.github/ci/branch-protection-checklist.md)).
 - [ ] **Двойная сборка Flutter web на master** — tier 1 `flutter` (analyze+test) + job `web` (`flutter build web` + Docker); дедуп только для `flutter-windows` ([`ci.yml`](../../.github/workflows/ci.yml)).
-- [ ] **`compose-e2e` без Go-only триггера** — ускорение master CI; cross-service регрессии только nightly / `full` / compose-path changes (связано с Tier 2 не блокирует PR).
-- [ ] **`ci-gate` GLOBAL → required jobs без unit-теста** — #60 лочит `path-filters.yml` + `run_go` / `needs_full_rollout` при `global=true`; ветки `GLOBAL` в [`verify-required-jobs.sh`](../../.github/ci/verify-required-jobs.sh) (flutter/web/auth/portal/…) не покрыты — регресс снятия GLOBAL-check снова даст hollow `ci-gate` на script-only PR.
+- [ ] **`compose-e2e` без Go-only триггера** — ускорение master CI; cross-service регрессии только nightly / `full` / compose-path changes (связано с Tier 2 не блокирует PR). *Note:* `run_go` в [`ci.yml`](../../.github/workflows/ci.yml) для tier-2 `compose-e2e` сохранён; Go-only master push гоняет compose-e2e.
 
 
 ## Common
 
 ### Manifests & rollout
 
-- [ ] **[Deploy/Infra] `scripts/ci/staging-image-catalog.json` points all `k8s_manifest` entries at `deploy/staging/`** — prod drift vs `deploy/prod/` is not catalog-checked (Batch 11 covers `staging-go-services.txt` drift only). Paths: `scripts/ci/staging-image-catalog.json`, `scripts/prod/verify-prod-images.sh`.
-- [ ] **`rollout-user-space-tier`: JSON patch `add` `SPACE_GRPC_ADDR`** — повторный rollout может упасть, если env уже в pod template ([`rollout-user-space-tier.sh`](../../scripts/staging/rollout-user-space-tier.sh)); idempotent patch или `set env` + restart.
-- [ ] **Migrate Jobs: skip после первого success** — новые SQL в `src/backend/migrations/**` не применятся без ручного `kubectl delete job voice-migrate-*` ([`apply-migrate-jobs.sh`](../../scripts/staging/apply-migrate-jobs.sh)); стратегия version/bump или force re-run.
-- [ ] **`apply-app-manifests` всегда scale auth 0→1** — даже selective deploy; downtime Auth на каждый app apply ([`apply-app-manifests.sh`](../../scripts/staging/apply-app-manifests.sh)).
 - [ ] **Prod reuse staging ops scripts** — [`render-and-apply-prod.sh`](../../scripts/prod/render-and-apply-prod.sh) → `rollout-app-tier.sh`, `deploy-changed.sh`, `apply-observability.sh`, `ensure-app-secrets.sh` (алиасы `PROD_*` → `STAGING_*`).
 - [ ] **Prod placeholders** — [`deploy/prod/domains.defaults`](../../deploy/prod/domains.defaults) `*.voice.example.com`; secrets checklist только в README, не в ops TODO Critical.
 - [ ] **`rollout-user-space-tier` downtime `voice-space`** — scale 0→1 на каждый user/space deploy; альтернатива — полный `rollout-app-tier`.
@@ -87,7 +76,6 @@ CI/CD + выкат: GitHub Actions, promote/deploy, k8s secrets, observability �
 ### Tech debt
 
 - [x] **Promote bootstrap** — пустой GHCR / squash-merge / force-push: `find_promote_base_sha` больше не abort'ит `changes` (`set -e`); missing manifests → rebuild. Ручной `full` / `STAGING_FORCE_FULL_ROLLOUT=true` остаётся опцией.
-- [ ] **`apply-app-manifests` всегда scale auth 0→1** — даже selective deploy; downtime Auth на каждый app apply ([`apply-app-manifests.sh`](../../scripts/staging/apply-app-manifests.sh)).
 - [ ] **Дедуп frontend Docker build** — отложено (admin/developer-portal: npm build + docker build).
 - [ ] **Prod reuse staging ops scripts** — [`render-and-apply-prod.sh`](../../scripts/prod/render-and-apply-prod.sh) → `rollout-app-tier.sh`, `deploy-changed.sh`, `apply-observability.sh`, `ensure-app-secrets.sh` (алиасы `PROD_*` → `STAGING_*`).
 - [ ] **Prod placeholders** — [`deploy/prod/domains.defaults`](../../deploy/prod/domains.defaults) `*.voice.example.com`; secrets checklist только в README, не в ops TODO Critical.

@@ -38,7 +38,7 @@ export function OAuthCallback() {
   return (
     <main className="page">
       <h1>Signing in…</h1>
-      {error && <p className="status error">{error}</p>}
+      {error ? <p className="status error" role="alert">{error}</p> : null}
     </main>
   );
 }

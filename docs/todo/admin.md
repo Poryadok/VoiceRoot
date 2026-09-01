@@ -17,9 +17,7 @@ Admin panel (`src/admin/`) и Developer Portal (`src/developer-portal/`).
 ### Developer Portal
 
 
-- [ ] **[Developer Portal] No JWT expiry handling — `isLoggedIn()` checks token presence only; `expires_in` from token exchange ignored; no refresh or re-auth on 401.** — `src/developer-portal/src/oauth/session.ts`, `src/developer-portal/src/oauth/api.ts`, `src/developer-portal/src/App.tsx`
-- [ ] **[Developer Portal] No manifest round-trip — backend stores manifest fields/commands but no REST to export YAML; `GetCommands` not transcoded in Gateway. Portal always shows `defaultManifest`, cannot load applied config.** — `src/developer-portal/src/App.tsx`, `src/developer-portal/src/manifestDefaults.ts`, `src/backend/gateway/transcode_bots.go`, `protos/voice/bot/v1/bot.proto`
-- [ ] **[Developer Portal] No E2E / live smoke for portal OAuth or bot registration — only static `GET /` in staging smoke; no compose live test, nothing in `.github/ci/e2e-features.yml`.** — `scripts/staging/smoke-staging.sh`, `.github/ci/e2e-features.yml`
+- [ ] **[Developer Portal] No E2E / live smoke for portal OAuth or bot registration — only static ingress checks in staging smoke; no compose live test, nothing in `.github/ci/e2e-features.yml`.** — `scripts/staging/smoke-staging.sh`, `.github/ci/e2e-features.yml`
 
 
 ## Common
@@ -28,10 +26,9 @@ Admin panel (`src/admin/`) и Developer Portal (`src/developer-portal/`).
 
 
 - [ ] **[Admin] No admin E2E / browser tests** — `docs/TESTING.md` lists analytics live tests as backend-only; no Playwright/Cypress for Admin. Paths: `docs/TESTING.md`, `src/admin/src/test/`
-- [ ] **[Admin] Thin unit coverage** — queue/report workflow tests added; still no OAuth callback component tests, login, audit, analytics pages. Paths: `src/admin/src/test/`
-- [ ] **[Admin] Duplicate HTTP helpers** — `apiFetch` in both `src/admin/src/oauth/api.ts` and `src/admin/src/api/client.ts`
-- [ ] **[Admin] No lint step in CI** — no ESLint/Prettier for `src/admin/`. Path: `.github/workflows/ci.yml` (job `admin`)
-- [ ] **[Admin] Staging smoke does not exercise Admin APIs** — only `GET /health`; analytics smoke uses direct Gateway + `STAGING_STAFF_TOKEN`, not Admin UI. Path: `scripts/staging/smoke-staging.sh`
+- [ ] **[Admin] Thin unit coverage (partial)** — OAuth callback, login (`AppLogin`), audit page, canonical `api/client` tests added (batch 5); analytics pages covered in batch 4. Remaining gaps: full App shell routing smoke in vitest only. Paths: `src/admin/src/test/`
+- [ ] **[Admin] No lint step in CI** — no ESLint/Prettier for `src/admin/`. Path: `.github/workflows/ci.yml` (job `admin`); deferred batch 5 (ESLint bootstrap)
+- [ ] **[Admin] Staging smoke: Admin UI routes only** — batch 5 adds SPA root + `/callback` when `VOICE_ADMIN_INGRESS_HOST` set; Gateway admin moderation/analytics still via `STAGING_STAFF_TOKEN` (not Admin UI bundle). Path: `scripts/staging/smoke-staging.sh`
 
 ### Developer Portal
 
@@ -44,9 +41,6 @@ Admin panel (`src/admin/`) и Developer Portal (`src/developer-portal/`).
 - [ ] **[Developer Portal] Not in implementation map — `docs/PLAN.md` lists bots as partial but omits `src/developer-portal/` from “Размещение кода”.** — `docs/PLAN.md`
 - [ ] **[Developer Portal] DEPLOYMENT.md stale on prod — says prod portal Ingress “not in-repo yet” but manifest exists.** — `docs/DEPLOYMENT.md`, `deploy/prod/developer-portal.yaml`
 - [ ] **[Developer Portal] README points to missing local `.env.example` — refers to `src/developer-portal/.env.example`; vars live in repo root `.env.example`.** — `src/developer-portal/README.md`, `.env.example`
-- [ ] **[Developer Portal] Test coverage is helper-only — no component tests for `App` / `OAuthCallback`; `webhook_secret.test.ts` mirrors parsing inline, not real UI.** — `src/developer-portal/src/test/`
-- [ ] **[Developer Portal] Staging smoke incomplete vs TODO intent — HTTP 200 on `/` only; no `/callback` SPA route, no check that baked `VITE_VOICE_API_BASE` matches gateway FQDN.** — `scripts/staging/smoke-staging.sh`, `src/developer-portal/Dockerfile`
-- [ ] **[Developer Portal] No `vite-env.d.ts` — unlike admin, no typed `import.meta.env`.** — `src/developer-portal/` (missing; compare `src/admin/src/vite-env.d.ts`)
 
 
 ## Low
