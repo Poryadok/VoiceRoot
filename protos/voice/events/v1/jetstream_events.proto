@@ -169,7 +169,14 @@ message MessageStreamEvent {
     MessagePinned message_pinned = 17;
     MessageUnpinned message_unpinned = 18;
     MessageForwarded message_forwarded = 19;
+    MessageDeliveryAck delivery_ack = 20;
   }
+}
+
+message MessageDeliveryAck {
+  string message_id = 1;
+  string chat_id = 2;
+  string profile_id = 3; // recipient profile that sent WS delivery_ack
 }
 
 message MessageSent {

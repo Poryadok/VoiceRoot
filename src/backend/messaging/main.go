@@ -219,6 +219,15 @@ func main() {
 			}
 			jsPub.Logger = logger
 			msgEvents = jsPub
+			instanceID := strings.TrimSpace(os.Getenv("HOSTNAME"))
+			if instanceID == "" {
+				instanceID = "messaging"
+			}
+			go func() {
+				if err := runDeliveryAckConsumer(context.Background(), natsURL, instanceID, &store.MessagesStore{Pool: pool}, logger); err != nil {
+					logger.Error("delivery ack consumer exited", slog.String("error", err.Error()))
+				}
+			}()
 		}
 
 		var platformMod grpcsvc.PlatformModerationChecker

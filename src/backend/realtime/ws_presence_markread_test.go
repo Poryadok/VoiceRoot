@@ -239,6 +239,7 @@ func TestWSPresenceLifecyclePersistsViaUpdater(t *testing.T) {
 		nil,
 		"test-instance",
 		updater,
+		nil,
 		readinessDeps{},
 	))
 	t.Cleanup(srv.Close)
@@ -308,6 +309,7 @@ func TestWSPresenceDisconnectKeepsOnlineWithSecondConnection(t *testing.T) {
 		nil,
 		"test-instance",
 		updater,
+		nil,
 		readinessDeps{},
 	))
 	t.Cleanup(srv.Close)
@@ -367,6 +369,7 @@ func TestWSPresenceUpdatePersistsSubmittedStatus(t *testing.T) {
 		nil,
 		"test-instance",
 		updater,
+		nil,
 		readinessDeps{},
 	))
 	t.Cleanup(srv.Close)

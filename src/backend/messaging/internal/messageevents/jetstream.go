@@ -30,6 +30,7 @@ const (
 	subjectMessagePinned     = "message.pinned"
 	subjectMessageUnpinned   = "message.unpinned"
 	subjectMessageForwarded  = "message.forwarded"
+	subjectMessageDeliveryAck = "message.delivery_ack"
 	natsHeaderThreadParentID = "X-Voice-Thread-Parent-Id"
 )
 
@@ -85,6 +86,7 @@ func messageEventStreamSubjects() []string {
 		subjectMessagePinned,
 		subjectMessageUnpinned,
 		subjectMessageForwarded,
+		subjectMessageDeliveryAck,
 	}
 }
 
@@ -198,6 +200,10 @@ func messageEventLogAttrs(env *eventsv1.MessageStreamEvent) []slog.Attr {
 	case *eventsv1.MessageStreamEvent_MessageForwarded:
 		if m := p.MessageForwarded; m != nil {
 			attrs = append(attrs, slog.String("message_id", m.GetMessageId()), slog.String("source_chat_id", m.GetSourceChatId()), slog.String("target_chat_id", m.GetTargetChatId()))
+		}
+	case *eventsv1.MessageStreamEvent_DeliveryAck:
+		if d := p.DeliveryAck; d != nil {
+			attrs = append(attrs, slog.String("message_id", d.GetMessageId()), slog.String("chat_id", d.GetChatId()), slog.String("profile_id", d.GetProfileId()))
 		}
 	}
 	return attrs
@@ -385,6 +391,22 @@ func (p *JetStreamPublisher) PublishMessageForwarded(ctx context.Context, messag
 		},
 	}
 	return p.publishProto(ctx, subjectMessageForwarded, env)
+}
+
+// PublishMessageDeliveryAck publishes durable delivery cursor updates (consumer: Messaging).
+func (p *JetStreamPublisher) PublishMessageDeliveryAck(ctx context.Context, messageID, chatID, profileID string) error {
+	env := &eventsv1.MessageStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.MessageStreamEvent_DeliveryAck{
+			DeliveryAck: &eventsv1.MessageDeliveryAck{
+				MessageId: messageID,
+				ChatId:    chatID,
+				ProfileId: profileID,
+			},
+		},
+	}
+	return p.publishProto(ctx, subjectMessageDeliveryAck, env)
 }
 
 // Close drains the underlying NATS connection.

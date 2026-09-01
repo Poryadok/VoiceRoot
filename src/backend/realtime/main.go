@@ -140,8 +140,18 @@ func main() {
 		}()
 	}
 
+	var deliveryPub deliveryAckPublisher
+	if natsURL != "" {
+		pub, err := newDeliveryAckPublisher(natsURL)
+		if err != nil {
+			log.Fatalf("delivery ack publisher: %v", err)
+		}
+		defer func() { _ = pub.Close() }()
+		deliveryPub = pub
+	}
+
 	handler := voiceprom.MountMetricsOnHealth(
-		newServiceHandlerWithPresence(serviceName, tv, chatLister, hub, rf, instanceID, presenceUpdater, ready),
+		newServiceHandlerWithPresence(serviceName, tv, chatLister, hub, rf, instanceID, presenceUpdater, deliveryPub, ready),
 		metricsReg,
 	)
 	server := &http.Server{

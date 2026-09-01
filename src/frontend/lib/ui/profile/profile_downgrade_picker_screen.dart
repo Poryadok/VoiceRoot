@@ -42,6 +42,7 @@ class _ProfileDowngradePickerScreenState
     if (!mounted) return;
     switch (result) {
       case SubscriptionApiOk():
+        ref.invalidate(myProfilesProvider);
         Navigator.of(context).maybePop();
       case SubscriptionApiFailure(:final message):
         setState(() {

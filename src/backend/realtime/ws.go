@@ -25,10 +25,10 @@ type presenceUpdater interface {
 }
 
 func newServiceHandler(service string, tv tokenValidator, lister chatBootstrapLister, hub *wsHub, rf *redisFanout, instanceID string, ready readinessDeps) http.Handler {
-	return newServiceHandlerWithPresence(service, tv, lister, hub, rf, instanceID, nil, ready)
+	return newServiceHandlerWithPresence(service, tv, lister, hub, rf, instanceID, nil, nil, ready)
 }
 
-func newServiceHandlerWithPresence(service string, tv tokenValidator, lister chatBootstrapLister, hub *wsHub, rf *redisFanout, instanceID string, presence presenceUpdater, ready readinessDeps) http.Handler {
+func newServiceHandlerWithPresence(service string, tv tokenValidator, lister chatBootstrapLister, hub *wsHub, rf *redisFanout, instanceID string, presence presenceUpdater, deliveryPub deliveryAckPublisher, ready readinessDeps) http.Handler {
 	if hub == nil {
 		hub = newWSHub()
 	}
@@ -38,11 +38,11 @@ func newServiceHandlerWithPresence(service string, tv tokenValidator, lister cha
 	mux := http.NewServeMux()
 	mux.Handle("/health", healthOnly(service))
 	mux.Handle("/ready", readinessHandler(service, ready))
-	mux.Handle("/ws", newWSHandler(tv, lister, hub, rf, instanceID, presence))
+	mux.Handle("/ws", newWSHandler(tv, lister, hub, rf, instanceID, presence, deliveryPub))
 	return mux
 }
 
-func newWSHandler(tv tokenValidator, lister chatBootstrapLister, hub *wsHub, rf *redisFanout, instanceID string, presence presenceUpdater) http.Handler {
+func newWSHandler(tv tokenValidator, lister chatBootstrapLister, hub *wsHub, rf *redisFanout, instanceID string, presence presenceUpdater, deliveryPub deliveryAckPublisher) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if tv == nil {
 			observeWSConnectFail()
@@ -99,7 +99,7 @@ func newWSHandler(tv tokenValidator, lister chatBootstrapLister, hub *wsHub, rf 
 		}
 		requestID := strings.TrimSpace(r.Header.Get("X-Request-Id"))
 		upgradeAt := time.Now()
-		go runWSConn(conn, claims, lister, hub, rf, instanceID, presence, requestID, upgradeAt)
+		go runWSConn(conn, claims, lister, hub, rf, instanceID, presence, deliveryPub, requestID, upgradeAt)
 	})
 }
 
@@ -177,7 +177,7 @@ type readResult struct {
 	err error
 }
 
-func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLister, hub *wsHub, rf *redisFanout, instanceID string, presence presenceUpdater, requestID string, upgradeAt time.Time) {
+func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLister, hub *wsHub, rf *redisFanout, instanceID string, presence presenceUpdater, deliveryPub deliveryAckPublisher, requestID string, upgradeAt time.Time) {
 	connID := uuid.NewString()
 	observeWSConnectSuccess()
 	svcLogger.Info("ws connected",
@@ -520,6 +520,13 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 					if err := rf.PublishDeliveryAck(ctx, senderID, cid, mid, claims.ProfileID, connID); err != nil {
 						svcLogger.Warn("ws redis publish delivery_ack failed", slog.String("error", err.Error()))
+					}
+					cancel()
+				}
+				if deliveryPub != nil {
+					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+					if err := deliveryPub.PublishDeliveryAck(ctx, cid, mid, claims.ProfileID); err != nil {
+						svcLogger.Warn("ws jetstream publish delivery_ack failed", slog.String("error", err.Error()))
 					}
 					cancel()
 				}

@@ -43,10 +43,12 @@ type MessagesStore struct {
 }
 
 type ChatListMetadataRow struct {
-	ChatID             uuid.UUID
-	LastMessagePreview string
-	LastMessageAt      *time.Time
-	UnreadCount        int64
+	ChatID                   uuid.UUID
+	LastMessagePreview       string
+	LastMessageAt            *time.Time
+	UnreadCount              int64
+	LastMessageIsOutgoing    bool
+	LastMessageDeliveryState string // none | sent | delivered | read
 }
 
 func (s *MessagesStore) MessageExists(ctx context.Context, chatID, messageID uuid.UUID) (bool, error) {
@@ -443,12 +445,16 @@ func (s *MessagesStore) UpsertReadReceipt(ctx context.Context, chatID, profileID
 		return errors.New("messages store: pool not configured")
 	}
 	_, err := s.Pool.Exec(ctx, `
-INSERT INTO read_receipts (chat_id, profile_id, last_read_message_id, updated_at)
-VALUES ($1, $2, $3, now())
+INSERT INTO read_receipts (chat_id, profile_id, last_read_message_id, last_delivered_message_id, updated_at)
+VALUES ($1, $2, $3, $3, now())
 ON CONFLICT (chat_id, profile_id) DO UPDATE SET
   last_read_message_id = CASE
     WHEN read_receipts.last_read_message_id < EXCLUDED.last_read_message_id THEN EXCLUDED.last_read_message_id
     ELSE read_receipts.last_read_message_id
+  END,
+  last_delivered_message_id = CASE
+    WHEN read_receipts.last_delivered_message_id IS NULL OR read_receipts.last_delivered_message_id < EXCLUDED.last_read_message_id THEN EXCLUDED.last_read_message_id
+    ELSE read_receipts.last_delivered_message_id
   END,
   updated_at = CASE
     WHEN read_receipts.last_read_message_id < EXCLUDED.last_read_message_id THEN now()
@@ -478,6 +484,51 @@ WHERE chat_id = $1 AND profile_id = $2
 	return &lid, &u, nil
 }
 
+func (s *MessagesStore) UpsertDeliveredCursor(ctx context.Context, chatID, profileID, messageID uuid.UUID) error {
+	if s == nil || s.Pool == nil {
+		return errors.New("messages store: pool not configured")
+	}
+	_, err := s.Pool.Exec(ctx, `
+INSERT INTO read_receipts (chat_id, profile_id, last_read_message_id, last_delivered_message_id, updated_at)
+VALUES ($1, $2, $3, $4, now())
+ON CONFLICT (chat_id, profile_id) DO UPDATE SET
+  last_delivered_message_id = CASE
+    WHEN read_receipts.last_delivered_message_id IS NULL OR read_receipts.last_delivered_message_id < EXCLUDED.last_delivered_message_id THEN EXCLUDED.last_delivered_message_id
+    ELSE read_receipts.last_delivered_message_id
+  END,
+  updated_at = CASE
+    WHEN read_receipts.last_delivered_message_id IS NULL OR read_receipts.last_delivered_message_id < EXCLUDED.last_delivered_message_id THEN now()
+    ELSE read_receipts.updated_at
+  END
+`, chatID, profileID, uuid.Nil, messageID)
+	return err
+}
+
+func uuidAtLeast(a, b uuid.UUID) bool {
+	for i := 0; i < len(a); i++ {
+		if a[i] > b[i] {
+			return true
+		}
+		if a[i] < b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func deriveLastMessageDeliveryState(isOutgoing bool, lastMsgID uuid.UUID, peerRead, peerDelivered *uuid.UUID) string {
+	if !isOutgoing {
+		return "none"
+	}
+	if peerRead != nil && *peerRead != uuid.Nil && uuidAtLeast(*peerRead, lastMsgID) {
+		return "read"
+	}
+	if peerDelivered != nil && uuidAtLeast(*peerDelivered, lastMsgID) {
+		return "delivered"
+	}
+	return "sent"
+}
+
 func (s *MessagesStore) GetChatListMetadata(ctx context.Context, viewerProfileID uuid.UUID, chatIDs []uuid.UUID) (map[uuid.UUID]ChatListMetadataRow, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("messages store: pool not configured")
@@ -487,13 +538,26 @@ func (s *MessagesStore) GetChatListMetadata(ctx context.Context, viewerProfileID
 		var preview sql.NullString
 		var lastAt sql.NullTime
 		var unread int64
+		var lastMsgID uuid.UUID
+		var lastSender uuid.UUID
+		var peerRead *uuid.UUID
+		var peerDelivered *uuid.UUID
 		err := s.Pool.QueryRow(ctx, `
 WITH latest AS (
-  SELECT content, created_at
+  SELECT id, content, created_at, sender_profile_id
   FROM messages
   WHERE chat_id = $1 AND deleted_at IS NULL
   ORDER BY id DESC
   LIMIT 1
+), peer AS (
+  SELECT sender_profile_id AS peer_id
+  FROM messages
+  WHERE chat_id = $1 AND deleted_at IS NULL AND sender_profile_id <> $2
+  LIMIT 1
+), peer_rr AS (
+  SELECT rr.last_read_message_id, rr.last_delivered_message_id
+  FROM read_receipts rr
+  INNER JOIN peer ON rr.chat_id = $1 AND rr.profile_id = peer.peer_id
 ), unread AS (
   SELECT count(*)::bigint AS unread_count
   FROM messages m
@@ -504,10 +568,13 @@ WITH latest AS (
     AND m.sender_profile_id <> $2
     AND (rr.last_read_message_id IS NULL OR m.id > rr.last_read_message_id)
 )
-SELECT latest.content, latest.created_at, unread.unread_count
+SELECT latest.content, latest.created_at, latest.id, latest.sender_profile_id,
+       peer_rr.last_read_message_id, peer_rr.last_delivered_message_id,
+       unread.unread_count
 FROM unread
 LEFT JOIN latest ON true
-`, chatID, viewerProfileID).Scan(&preview, &lastAt, &unread)
+LEFT JOIN peer_rr ON true
+`, chatID, viewerProfileID).Scan(&preview, &lastAt, &lastMsgID, &lastSender, &peerRead, &peerDelivered, &unread)
 		if err != nil {
 			return nil, err
 		}
@@ -518,6 +585,14 @@ LEFT JOIN latest ON true
 		if lastAt.Valid {
 			t := lastAt.Time.UTC()
 			row.LastMessageAt = &t
+		}
+		if lastMsgID != uuid.Nil {
+			row.LastMessageIsOutgoing = lastSender == viewerProfileID
+			row.LastMessageDeliveryState = deriveLastMessageDeliveryState(
+				row.LastMessageIsOutgoing, lastMsgID, peerRead, peerDelivered,
+			)
+		} else {
+			row.LastMessageDeliveryState = "none"
 		}
 		out[chatID] = row
 	}

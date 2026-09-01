@@ -47,7 +47,8 @@ import 'ui/core/profile_accent_dot.dart';
 import 'ui/core/voice_bottom_sheet.dart';
 import 'ui/core/voice_compact_banner.dart';
 import 'ui/core/voice_state_panel.dart';
-import 'ui/profile/profile_avatar_switcher.dart';
+import 'ui/profile/profile_downgrade_picker_screen.dart';
+import 'state/subscription_providers.dart';
 import 'ui/profile/profile_switcher.dart';
 import 'ui/profile/profile_edit_sheet.dart';
 import 'ui/settings/settings_sheet.dart';
@@ -127,18 +128,18 @@ class VoiceApp extends ConsumerWidget {
   }
 }
 
-class _AuthenticatedRouterApp extends StatefulWidget {
+class _AuthenticatedRouterApp extends ConsumerStatefulWidget {
   const _AuthenticatedRouterApp({required this.locale, required this.theme});
 
   final Locale? locale;
   final ThemeData theme;
 
   @override
-  State<_AuthenticatedRouterApp> createState() =>
+  ConsumerState<_AuthenticatedRouterApp> createState() =>
       _AuthenticatedRouterAppState();
 }
 
-class _AuthenticatedRouterAppState extends State<_AuthenticatedRouterApp> {
+class _AuthenticatedRouterAppState extends ConsumerState<_AuthenticatedRouterApp> {
   late final GoRouter _router = createVoiceGoRouter(
     shellBuilder: (context, state) => MatchSquadNavigator(
       child: _AuthenticatedShell(locale: widget.locale, routeState: state),
@@ -152,6 +153,17 @@ class _AuthenticatedRouterAppState extends State<_AuthenticatedRouterApp> {
 
   @override
   Widget build(BuildContext context) {
+    final needsDowngrade = ref.watch(profileDowngradeRequiredProvider);
+    if (needsDowngrade) {
+      return MaterialApp(
+        locale: widget.locale,
+        theme: widget.theme,
+        onGenerateTitle: (ctx) => AppLocalizations.of(ctx)!.appTitle,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const Scaffold(body: ProfileDowngradePickerScreen()),
+      );
+    }
     return MaterialApp.router(
       locale: widget.locale,
       theme: widget.theme,
