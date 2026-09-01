@@ -30,7 +30,7 @@ func TestMessageActivityFromEvent_MessageSent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	gotChat, gotAt, ok := messageActivityFromEvent(data, func() time.Time {
+	gotChat, gotSender, gotAt, ok := messageActivityFromEvent(data, func() time.Time {
 		return at.Add(time.Hour)
 	})
 	if !ok {
@@ -39,13 +39,37 @@ func TestMessageActivityFromEvent_MessageSent(t *testing.T) {
 	if gotChat != chatID {
 		t.Fatalf("chat = %s, want %s", gotChat, chatID)
 	}
+	if gotSender.String() != env.GetMessageSent().GetSenderProfileId() {
+		t.Fatalf("sender = %s", gotSender)
+	}
 	if !gotAt.Equal(at) {
 		t.Fatalf("at = %s, want %s", gotAt, at)
 	}
 }
 
+func TestMessageActivityFromEvent_RequiresSenderProfileID(t *testing.T) {
+	chatID := uuid.New()
+	env := &eventsv1.MessageStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.MessageStreamEvent_MessageSent{
+			MessageSent: &eventsv1.MessageSent{
+				MessageId: uuid.NewString(),
+				ChatId:    chatID.String(),
+			},
+		},
+	}
+	data, err := proto.Marshal(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, ok := messageActivityFromEvent(data, time.Now); ok {
+		t.Fatal("message.sent without sender_profile_id must be skipped")
+	}
+}
+
 func TestMessageActivityFromEvent_SkipsInvalidPayloads(t *testing.T) {
-	if _, _, ok := messageActivityFromEvent([]byte{0x1, 0x2}, time.Now); ok {
+	if _, _, _, ok := messageActivityFromEvent([]byte{0x1, 0x2}, time.Now); ok {
 		t.Fatal("invalid protobuf must be skipped")
 	}
 	env := &eventsv1.MessageStreamEvent{
@@ -59,7 +83,7 @@ func TestMessageActivityFromEvent_SkipsInvalidPayloads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, ok := messageActivityFromEvent(data, time.Now); ok {
+	if _, _, _, ok := messageActivityFromEvent(data, time.Now); ok {
 		t.Fatal("non-sent events must be skipped for activity updates")
 	}
 }

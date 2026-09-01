@@ -36,6 +36,32 @@ func (t *transcoder) serveChatFolderRoutes(w http.ResponseWriter, r *http.Reques
 		writeProtoJSON(w, http.StatusOK, resp)
 		return true
 
+	case (r.Method == http.MethodPatch || r.Method == http.MethodPut) && rest != "" && !strings.Contains(rest, "/"):
+		req := &chatv1.UpdateFolderRequest{FolderId: rest}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		if req.FolderId == "" {
+			req.FolderId = rest
+		}
+		resp, err := t.clients.chat.UpdateFolder(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case r.Method == http.MethodDelete && rest != "" && !strings.Contains(rest, "/"):
+		_, err := t.clients.chat.DeleteFolder(ctx, &chatv1.DeleteFolderRequest{FolderId: rest})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return true
+
 	case r.Method == http.MethodPut && strings.HasSuffix(rest, "/chats/order"):
 		folderID := strings.TrimSuffix(rest, "/chats/order")
 		folderID = strings.Trim(folderID, "/")
