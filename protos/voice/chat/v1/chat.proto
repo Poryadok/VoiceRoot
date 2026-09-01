@@ -134,7 +134,7 @@ message ChatMember {
 
 message ListChatsRequest {
   voice.common.v1.CursorPageRequest page = 1;
-  optional string inbox = 2; // main | requests
+  optional string inbox = 2; // main | requests | archive
 }
 
 // One row in the inbox: chat metadata plus list fields sourced from Messaging (S2S) when configured.

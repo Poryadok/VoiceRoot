@@ -87,3 +87,28 @@ UPDATE chat_members SET is_archived = true WHERE chat_id = $1 AND profile_id = $
 		require.NotEqual(t, channelID, row.ID, "archived channel must not appear in main inbox")
 	}
 }
+
+// TestListChatsPage_archiveInbox lists only archived membership chats (text-chat.md §Архивирование).
+func TestListChatsPage_archiveInbox(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatDBForStoreTest(t, ctx)
+	applyChatMigrationsForStoreTest(t, ctx, pool)
+	s := &DMStore{Pool: pool}
+
+	owner := uuid.New()
+	activeID := seedMembershipChannel(t, ctx, s, owner, "Active channel")
+	archivedID := seedMembershipChannel(t, ctx, s, owner, "Archived channel")
+	_, err := pool.Exec(ctx, `
+UPDATE chat_members SET is_archived = true WHERE chat_id = $1 AND profile_id = $2
+`, archivedID, owner)
+	require.NoError(t, err)
+
+	page, err := s.ListChatsPage(ctx, owner, "", 10, "archive")
+	require.NoError(t, err)
+	require.Len(t, page.Rows, 1)
+	require.Equal(t, archivedID, page.Rows[0].ID)
+	require.NotEqual(t, activeID, page.Rows[0].ID)
+}

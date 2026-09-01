@@ -36,6 +36,9 @@ func TestComposeDMArchiveMute_live(t *testing.T) {
 	listA = listComposeChats(t, client, base, a.AccessToken, "")
 	require.False(t, composeChatListContains(listA, dmID), "archived DM must leave caller's main list")
 
+	listArchive := listComposeChats(t, client, base, a.AccessToken, "archive")
+	require.True(t, composeChatListContains(listArchive, dmID), "archived DM must appear in archive inbox")
+
 	listB := listComposeChats(t, client, base, b.AccessToken, "")
 	require.True(t, composeChatListContains(listB, dmID), "peer must still see the DM")
 

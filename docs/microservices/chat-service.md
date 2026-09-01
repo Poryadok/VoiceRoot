@@ -67,7 +67,7 @@ service ChatService {
 
   // Действия
   rpc MuteChat(MuteChatRequest) returns (MuteChatResponse);       // ✓
-  rpc ArchiveChat(ArchiveChatRequest) returns (ArchiveChatResponse); // ✓ write; list archive ✗
+  rpc ArchiveChat(ArchiveChatRequest) returns (ArchiveChatResponse); // ✓ write + list archive inbox
 }
 ```
 
@@ -76,7 +76,7 @@ service ChatService {
 ```protobuf
 message ListChatsRequest {
   voice.common.v1.CursorPageRequest page = 1;
-  optional string inbox = 2; // main | requests — ✓ shipped; archive — spec only
+  optional string inbox = 2; // main | requests | archive — ✓ shipped
   optional string folder_id = 3; // not yet in proto
 }
 

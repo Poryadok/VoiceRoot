@@ -270,10 +270,9 @@
 - [ ] **[Chat] Proto: Quick Access RPCs** — `ListQuickAccess`, `AddQuickAccess`, `RemoveQuickAccess`, `ReorderQuickAccess` (**chat_id only**, max 15/profile). — **P0**
 - [ ] **[Chat] Migration: `quick_access_chats`** — `000010_quick_access_chats.up.sql` per chat-service.md sketch. — **P0**
 - [ ] **[Chat] Handlers: Quick Access** — enforce limit 15; `AddQuickAccess` idempotent; integration test reorder. — **P0**
-- [ ] **[Chat] Archive list API** — extend `ListChatsRequest.inbox` with `archive` **or** add `ListArchivedChats`; today `list_chats.go` hardcodes `is_archived=false`. — **P0**
 - [ ] **[Chat] Archive side-effects** — on `ArchiveChat(archived=true)`: `RemoveQuickAccess` for same `chat_id`; on incoming DM message to archived membership: auto-unarchive (consumer in Chat or Messaging — pick owner). Ref: [GLOSSARY.md](../GLOSSARY.md), [text-chat.md](../features/text-chat.md). — **P0**
-- [ ] **[Chat] Archive integration test** — archive write + `ListChats` main inbox exclusion regression; unarchive state machine when message arrives. — **P0**
-- [ ] **[Chat] Gateway REST** — transcoding for new folder/quick-access/archive-list RPCs when protos land.
+- [ ] **[Chat] Archive integration test** — auto-unarchive when incoming DM message arrives (side-effect above). Main/archive inbox list regression — **done (Batch 15):** store + gRPC + compose `inbox=archive`.
+- [ ] **[Chat] Gateway REST** — transcoding for new folder/quick-access RPCs when protos land (`inbox=archive` on existing `GET /chats` — **done Batch 15**).
 
 ### Telegram-parity audit — open CODE (2026-08-28)
 

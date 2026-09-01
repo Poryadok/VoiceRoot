@@ -16,7 +16,7 @@ import (
 // ErrInvalidListCursor is returned when ListChatsPage receives a non-empty cursor that cannot be decoded.
 var ErrInvalidListCursor = errors.New("invalid list chats cursor")
 
-// ListChatsPage holds one page of the caller's non-archived dm/group/channel chats.
+// ListChatsPage holds one page of dm/group/channel chats for the caller's inbox filter.
 type ListChatsPage struct {
 	Rows       []*ChatRow
 	NextCursor string
@@ -59,7 +59,8 @@ func decodeListChatCursor(raw string) (time.Time, uuid.UUID, error) {
 	return ts.UTC(), id, nil
 }
 
-// ListChatsPage returns chats the profile is a member of (dm, group, channel; non-archived), ordered by recent activity.
+// ListChatsPage returns chats the profile is a member of (dm, group, channel), ordered by recent activity.
+// inbox: main | requests (non-archived, filtered by inbox_bucket) | archive (is_archived only).
 // sort key: COALESCE(last_message_at, created_at) DESC, id DESC. Cursor is opaque (see encodeListChatCursor).
 func (s *DMStore) ListChatsPage(ctx context.Context, viewerProfileID uuid.UUID, cursor string, limit int, inbox string) (*ListChatsPage, error) {
 	if s == nil || s.Pool == nil {
@@ -72,6 +73,7 @@ func (s *DMStore) ListChatsPage(ctx context.Context, viewerProfileID uuid.UUID, 
 	if inbox == "" {
 		inbox = "main"
 	}
+	archivedOnly := inbox == "archive"
 
 	sortTS, chatID, err := decodeListChatCursor(cursor)
 	if err != nil {
@@ -80,7 +82,19 @@ func (s *DMStore) ListChatsPage(ctx context.Context, viewerProfileID uuid.UUID, 
 
 	var rows pgx.Rows
 	if cursor == "" {
-		rows, err = s.Pool.Query(ctx, `
+		if archivedOnly {
+			rows, err = s.Pool.Query(ctx, `
+SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
+       c.slow_mode_seconds, c.threads_enabled, c.allow_user_main_feed, c.e2e_enabled, m.inbox_bucket,
+       COALESCE(c.last_message_at, c.created_at) AS sort_at
+FROM chats c
+INNER JOIN chat_members m ON m.chat_id = c.id AND m.profile_id = $1
+WHERE c.type IN ('dm', 'group', 'channel') AND m.is_archived = true
+ORDER BY sort_at DESC, c.id DESC
+LIMIT $2
+`, viewerProfileID, fetch)
+		} else {
+			rows, err = s.Pool.Query(ctx, `
 SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
        c.slow_mode_seconds, c.threads_enabled, c.allow_user_main_feed, c.e2e_enabled, m.inbox_bucket,
        COALESCE(c.last_message_at, c.created_at) AS sort_at
@@ -90,6 +104,25 @@ WHERE c.type IN ('dm', 'group', 'channel') AND m.is_archived = false AND m.inbox
 ORDER BY sort_at DESC, c.id DESC
 LIMIT $2
 `, viewerProfileID, fetch, inbox)
+		}
+	} else if archivedOnly {
+		rows, err = s.Pool.Query(ctx, `
+SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
+       c.slow_mode_seconds, c.threads_enabled, c.allow_user_main_feed, c.e2e_enabled, m.inbox_bucket,
+       COALESCE(c.last_message_at, c.created_at) AS sort_at
+FROM chats c
+INNER JOIN chat_members m ON m.chat_id = c.id AND m.profile_id = $1
+WHERE c.type IN ('dm', 'group', 'channel') AND m.is_archived = true
+  AND (
+    COALESCE(c.last_message_at, c.created_at) < $2::timestamptz
+    OR (
+      COALESCE(c.last_message_at, c.created_at) = $2::timestamptz
+      AND c.id < $3::uuid
+    )
+  )
+ORDER BY sort_at DESC, c.id DESC
+LIMIT $4
+`, viewerProfileID, sortTS, chatID, fetch)
 	} else {
 		rows, err = s.Pool.Query(ctx, `
 SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
