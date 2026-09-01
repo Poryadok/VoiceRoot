@@ -19,6 +19,7 @@ const messageEventsStreamName = "message_events"
 
 type messageActivityStore interface {
 	TouchLastMessageAt(ctx context.Context, chatID uuid.UUID, at time.Time) error
+	AutoUnarchiveDMRecipients(ctx context.Context, chatID, senderProfileID uuid.UUID) error
 }
 
 func chatActivityDurableName(instanceID string) string {
@@ -29,24 +30,28 @@ func chatActivityDurableName(instanceID string) string {
 	return "chat_" + strings.ReplaceAll(id, "-", "") + "_msg_activity"
 }
 
-func messageActivityFromEvent(data []byte, now func() time.Time) (uuid.UUID, time.Time, bool) {
+func messageActivityFromEvent(data []byte, now func() time.Time) (uuid.UUID, uuid.UUID, time.Time, bool) {
 	var env eventsv1.MessageStreamEvent
 	if err := proto.Unmarshal(data, &env); err != nil {
-		return uuid.Nil, time.Time{}, false
+		return uuid.Nil, uuid.Nil, time.Time{}, false
 	}
 	sent := env.GetMessageSent()
-	if sent == nil || sent.GetChatId() == "" {
-		return uuid.Nil, time.Time{}, false
+	if sent == nil || sent.GetChatId() == "" || sent.GetSenderProfileId() == "" {
+		return uuid.Nil, uuid.Nil, time.Time{}, false
 	}
 	chatID, err := uuid.Parse(sent.GetChatId())
 	if err != nil {
-		return uuid.Nil, time.Time{}, false
+		return uuid.Nil, uuid.Nil, time.Time{}, false
+	}
+	senderID, err := uuid.Parse(sent.GetSenderProfileId())
+	if err != nil {
+		return uuid.Nil, uuid.Nil, time.Time{}, false
 	}
 	at := now().UTC()
 	if ts := env.GetOccurredAt(); ts != nil && ts.IsValid() {
 		at = ts.AsTime().UTC()
 	}
-	return chatID, at, true
+	return chatID, senderID, at, true
 }
 
 func subscribeMessageActivity(ctx context.Context, js nats.JetStreamContext, store messageActivityStore, instanceID string, logger *slog.Logger) (*nats.Subscription, error) {
@@ -54,7 +59,7 @@ func subscribeMessageActivity(ctx context.Context, js nats.JetStreamContext, sto
 		return nil, fmt.Errorf("message activity store not configured")
 	}
 	handler := func(msg *nats.Msg) {
-		chatID, at, ok := messageActivityFromEvent(msg.Data, time.Now)
+		chatID, senderID, at, ok := messageActivityFromEvent(msg.Data, time.Now)
 		if !ok {
 			natslog.LogConsume(logger, msg, slog.LevelWarn, "unknown message activity payload")
 			return
@@ -63,6 +68,11 @@ func subscribeMessageActivity(ctx context.Context, js nats.JetStreamContext, sto
 		if err := store.TouchLastMessageAt(ctx, chatID, at); err != nil {
 			attrs = append(attrs, slog.String("error", err.Error()))
 			natslog.LogConsume(logger, msg, slog.LevelWarn, "message activity touch failed", attrs...)
+			return
+		}
+		if err := store.AutoUnarchiveDMRecipients(ctx, chatID, senderID); err != nil {
+			attrs = append(attrs, slog.String("error", err.Error()))
+			natslog.LogConsume(logger, msg, slog.LevelWarn, "message activity unarchive failed", attrs...)
 			return
 		}
 		natslog.LogConsume(logger, msg, slog.LevelInfo, "message activity touched", attrs...)
