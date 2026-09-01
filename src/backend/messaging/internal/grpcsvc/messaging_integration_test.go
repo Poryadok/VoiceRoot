@@ -462,20 +462,40 @@ func TestMessagingGetChatListMetadata_ContentTypeFromAttachments(t *testing.T) {
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000003_attachment_only_messages.up.sql"))
 
 	chatID := uuid.New()
 	profA := uuid.New()
 	profB := uuid.New()
 	acctA := uuid.New()
 	acctB := uuid.New()
+	fileID := uuid.New().String()
 	seedDMChat(t, ctx, pool, chatID, profA, profB)
 
-	client, _ := startMessagingServer(t, pool)
+	client, _ := startMessagingServerWired(t, pool, messagingWire{
+		Files: fileMetadataMap{
+			fileID: {
+				Id:                fileID,
+				UploaderProfileId: profB.String(),
+				OriginalName:      "photo.png",
+				MimeType:          "image/png",
+				SizeBytes:         1024,
+				Status:            "ready",
+				FileType:          "image",
+				ScanResult:        "clean",
+				Chat:              chatDMRef(chatID),
+			},
+		},
+	})
 	mk := messagingv1.MessageKind_MESSAGE_KIND_REGULAR
+	attachments := mustAttachmentJSON(t, []map[string]any{{
+		"file_id": fileID,
+		"type":    "image",
+	}})
 	_, err := client.SendMessage(withProfileCtx(ctx, acctB, profB), &messagingv1.SendMessageRequest{
 		Chat:            chatDMRef(chatID),
 		Content:         "caption",
-		AttachmentsJson: mustAttachmentJSON(t, []map[string]string{{"type": "image", "file_id": uuid.New().String()}}),
+		AttachmentsJson: attachments,
 		MentionsJson:    "[]",
 		MessageKind:     &mk,
 	})
@@ -490,7 +510,6 @@ func TestMessagingGetChatListMetadata_ContentTypeFromAttachments(t *testing.T) {
 	require.NotNil(t, item.LastMessageContentType)
 	require.Equal(t, messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_PHOTO, item.GetLastMessageContentType())
 }
-
 func TestMessagingMarkdownPreview_stripInChatListMetadata(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForTest(t, ctx)

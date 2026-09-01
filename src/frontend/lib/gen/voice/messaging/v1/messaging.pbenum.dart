@@ -92,6 +92,67 @@ class SharedMediaKind extends $pb.ProtobufEnum {
   const SharedMediaKind._(super.value, super.name);
 }
 
+/// Payload type for list preview labels (docs/microservices/messaging-service.md § Content types).
+class MessageContentType extends $pb.ProtobufEnum {
+  static const MessageContentType MESSAGE_CONTENT_TYPE_UNSPECIFIED =
+      MessageContentType._(
+          0, _omitEnumNames ? '' : 'MESSAGE_CONTENT_TYPE_UNSPECIFIED');
+  static const MessageContentType MESSAGE_CONTENT_TYPE_TEXT =
+      MessageContentType._(
+          1, _omitEnumNames ? '' : 'MESSAGE_CONTENT_TYPE_TEXT');
+  static const MessageContentType MESSAGE_CONTENT_TYPE_PHOTO =
+      MessageContentType._(
+          2, _omitEnumNames ? '' : 'MESSAGE_CONTENT_TYPE_PHOTO');
+  static const MessageContentType MESSAGE_CONTENT_TYPE_VIDEO =
+      MessageContentType._(
+          3, _omitEnumNames ? '' : 'MESSAGE_CONTENT_TYPE_VIDEO');
+  static const MessageContentType MESSAGE_CONTENT_TYPE_DOCUMENT =
+      MessageContentType._(
+          4, _omitEnumNames ? '' : 'MESSAGE_CONTENT_TYPE_DOCUMENT');
+  static const MessageContentType MESSAGE_CONTENT_TYPE_VOICE =
+      MessageContentType._(
+          5, _omitEnumNames ? '' : 'MESSAGE_CONTENT_TYPE_VOICE');
+  static const MessageContentType MESSAGE_CONTENT_TYPE_STICKER =
+      MessageContentType._(
+          6, _omitEnumNames ? '' : 'MESSAGE_CONTENT_TYPE_STICKER');
+  static const MessageContentType MESSAGE_CONTENT_TYPE_GIF =
+      MessageContentType._(7, _omitEnumNames ? '' : 'MESSAGE_CONTENT_TYPE_GIF');
+  static const MessageContentType MESSAGE_CONTENT_TYPE_ARTICLE =
+      MessageContentType._(
+          8, _omitEnumNames ? '' : 'MESSAGE_CONTENT_TYPE_ARTICLE');
+  static const MessageContentType MESSAGE_CONTENT_TYPE_LOCATION =
+      MessageContentType._(
+          9, _omitEnumNames ? '' : 'MESSAGE_CONTENT_TYPE_LOCATION');
+  static const MessageContentType MESSAGE_CONTENT_TYPE_VIDEO_NOTE =
+      MessageContentType._(
+          10, _omitEnumNames ? '' : 'MESSAGE_CONTENT_TYPE_VIDEO_NOTE');
+  static const MessageContentType MESSAGE_CONTENT_TYPE_MUSIC =
+      MessageContentType._(
+          11, _omitEnumNames ? '' : 'MESSAGE_CONTENT_TYPE_MUSIC');
+
+  static const $core.List<MessageContentType> values = <MessageContentType>[
+    MESSAGE_CONTENT_TYPE_UNSPECIFIED,
+    MESSAGE_CONTENT_TYPE_TEXT,
+    MESSAGE_CONTENT_TYPE_PHOTO,
+    MESSAGE_CONTENT_TYPE_VIDEO,
+    MESSAGE_CONTENT_TYPE_DOCUMENT,
+    MESSAGE_CONTENT_TYPE_VOICE,
+    MESSAGE_CONTENT_TYPE_STICKER,
+    MESSAGE_CONTENT_TYPE_GIF,
+    MESSAGE_CONTENT_TYPE_ARTICLE,
+    MESSAGE_CONTENT_TYPE_LOCATION,
+    MESSAGE_CONTENT_TYPE_VIDEO_NOTE,
+    MESSAGE_CONTENT_TYPE_MUSIC,
+  ];
+
+  static final $core.List<MessageContentType?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 11);
+  static MessageContentType? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const MessageContentType._(super.value, super.name);
+}
+
 /// DM list preview ticks for outgoing last message (docs/microservices/messaging-service.md).
 class LastMessageDeliveryState extends $pb.ProtobufEnum {
   static const LastMessageDeliveryState

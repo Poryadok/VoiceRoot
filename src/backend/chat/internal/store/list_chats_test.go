@@ -13,10 +13,11 @@ func TestMergeListChatRows_dedupesAndSortsByActivity(t *testing.T) {
 	now := time.Now().UTC()
 	older := now.Add(-time.Hour)
 	newer := now.Add(-time.Minute)
+	spaceActivity := now.Add(-30 * time.Second)
 
 	idShared := uuid.New()
 	dm := &ChatRow{ID: uuid.New(), Type: "dm", CreatedAt: older, LastMessageAt: &older}
-	space := &ChatRow{ID: uuid.New(), Type: "channel", CreatedAt: newer, LastMessageAt: &newer}
+	space := &ChatRow{ID: uuid.New(), Type: "channel", CreatedAt: spaceActivity, LastMessageAt: &spaceActivity}
 	dup := &ChatRow{ID: idShared, Type: "group", CreatedAt: newer, LastMessageAt: &newer}
 
 	merged := MergeListChatRows([]*ChatRow{dm, dup}, []*ChatRow{dup, space}, 0)
