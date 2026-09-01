@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/message_requests_providers.dart';
-import 'package:voice_frontend/state/shell_providers.dart';
 import 'package:voice_frontend/ui/shell/message_requests_folder.dart';
 
 void main() {
