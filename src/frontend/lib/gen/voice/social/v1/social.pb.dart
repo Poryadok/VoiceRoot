@@ -1807,6 +1807,128 @@ class AreFriendsOfFriendsResponse extends $pb.GeneratedMessage {
   void clearFriends() => $_clearField(1);
 }
 
+class HasContactRequest extends $pb.GeneratedMessage {
+  factory HasContactRequest({
+    $core.String? ownerProfileId,
+    $core.String? contactProfileId,
+  }) {
+    final result = create();
+    if (ownerProfileId != null) result.ownerProfileId = ownerProfileId;
+    if (contactProfileId != null) result.contactProfileId = contactProfileId;
+    return result;
+  }
+
+  HasContactRequest._();
+
+  factory HasContactRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory HasContactRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'HasContactRequest',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.social.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'ownerProfileId')
+    ..aOS(2, _omitFieldNames ? '' : 'contactProfileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  HasContactRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  HasContactRequest copyWith(void Function(HasContactRequest) updates) =>
+      super.copyWith((message) => updates(message as HasContactRequest))
+          as HasContactRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static HasContactRequest create() => HasContactRequest._();
+  @$core.override
+  HasContactRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static HasContactRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<HasContactRequest>(create);
+  static HasContactRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get ownerProfileId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set ownerProfileId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasOwnerProfileId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearOwnerProfileId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get contactProfileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set contactProfileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasContactProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearContactProfileId() => $_clearField(2);
+}
+
+class HasContactResponse extends $pb.GeneratedMessage {
+  factory HasContactResponse({
+    $core.bool? contact,
+  }) {
+    final result = create();
+    if (contact != null) result.contact = contact;
+    return result;
+  }
+
+  HasContactResponse._();
+
+  factory HasContactResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory HasContactResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'HasContactResponse',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.social.v1'),
+      createEmptyInstance: create)
+    ..aOB(1, _omitFieldNames ? '' : 'contact')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  HasContactResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  HasContactResponse copyWith(void Function(HasContactResponse) updates) =>
+      super.copyWith((message) => updates(message as HasContactResponse))
+          as HasContactResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static HasContactResponse create() => HasContactResponse._();
+  @$core.override
+  HasContactResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static HasContactResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<HasContactResponse>(create);
+  static HasContactResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.bool get contact => $_getBF(0);
+  @$pb.TagNumber(1)
+  set contact($core.bool value) => $_setBool(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasContact() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearContact() => $_clearField(1);
+}
+
 class GetFriendsOfFriendsRequest extends $pb.GeneratedMessage {
   factory GetFriendsOfFriendsRequest({
     $core.String? profileId,
