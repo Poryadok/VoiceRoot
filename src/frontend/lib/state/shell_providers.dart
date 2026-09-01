@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'chat_providers.dart';
+import 'mobile_opened_chat_strip.dart';
 import 'space_providers.dart';
 
 enum ShellSidePanel { none, members, emoji, chatInfo }
@@ -63,10 +64,15 @@ class ShellNavigation {
     _ref.read(realtimeHubProvider).ensureSubscribed(chatId);
     _ref.read(chatActionsProvider).rememberDmPeerForChat(chatId);
     _ref.read(shellSidePanelProvider.notifier).state = ShellSidePanel.none;
+    _ref.read(mobileOpenedChatStripProvider.notifier).openChat(chatId);
   }
 
   /// Mobile back: close open chat and restore chat-list scroll position.
   void backToChatList() {
+    final chatId = _ref.read(selectedChatIdProvider);
+    if (chatId != null) {
+      _ref.read(mobileOpenedChatStripProvider.notifier).removeChat(chatId);
+    }
     _ref.read(shellSidePanelProvider.notifier).state = ShellSidePanel.none;
     _ref.read(chatListScrollRestoreProvider.notifier).state = true;
     _ref.read(selectedChatIdProvider.notifier).state = null;

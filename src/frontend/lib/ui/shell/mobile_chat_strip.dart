@@ -5,15 +5,15 @@ import '../../backend/chats_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
+import '../../state/mobile_opened_chat_strip.dart';
 import '../../state/shell_providers.dart';
-import '../../state/space_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../../theme/voice_layout.dart';
 import '../core/voice_avatar.dart';
 import '../core/voice_badge.dart';
 
-/// Horizontal mini-icon strip with unread badges when a chat is open on mobile
-/// ([docs/features/navigation.md]).
+/// Horizontal mini-icon strip of **opened** chats (LRU) when a chat is open on
+/// mobile ([docs/features/navigation.md] § Active strip).
 class MobileChatStrip extends ConsumerWidget {
   const MobileChatStrip({super.key});
 
@@ -24,22 +24,17 @@ class MobileChatStrip extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
+    final openedIds = ref.watch(mobileOpenedChatStripProvider);
     final chats = ref.watch(chatListControllerProvider);
-    final inbox = ref.watch(chatInboxProvider);
     final selectedId = ref.watch(selectedChatIdProvider);
-    final selectedSpaceId = ref.watch(selectedSpaceIdProvider);
     final activeProfileId = ref.watch(authControllerProvider).activeProfileId;
     final shellNav = ref.read(shellNavigationProvider);
-    final inSpace = selectedSpaceId != null;
 
-    final items = chats.items
-        .where((item) {
-          if (inSpace) {
-            return item.chat.spaceId == selectedSpaceId;
-          }
-          return (item.inbox ?? 'main') == inbox;
-        })
-        .take(30)
+    final byId = {for (final item in chats.items) item.chatId: item};
+    final items = openedIds
+        .map((id) => byId[id])
+        .whereType<ChatListItem>()
+        .take(kMobileOpenedChatStripVisibleCap)
         .toList();
 
     if (items.isEmpty) {
@@ -75,7 +70,8 @@ class MobileChatStrip extends ConsumerWidget {
               selected: selected,
               onTap: () => shellNav.selectStripChat(
                 item.chatId,
-                inSpace: inSpace,
+                inSpace: item.chat.spaceId != null &&
+                    item.chat.spaceId!.isNotEmpty,
               ),
               activeProfileId: activeProfileId,
             ),

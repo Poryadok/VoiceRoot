@@ -12,7 +12,7 @@ final notificationQuietHoursStorageProvider =
   return NotificationQuietHoursStorage();
 });
 
-/// Local cache until Notification service exposes GET quiet-hours.
+/// Offline cache for quiet hours; server is source of truth via GET/SET API.
 class NotificationQuietHoursStorage {
   Future<VoiceQuietHours> read(String profileId) async {
     final prefs = await SharedPreferences.getInstance();

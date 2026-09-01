@@ -52,6 +52,19 @@ service AuthService {
 }
 ```
 
+### ConvertGuest (guest → regular)
+
+REST: `POST /api/v1/auth/convert-guest` (Gateway transcoding). Спека UX: [auth-and-contacts.md](../features/auth-and-contacts.md) § «Регистрация гостевого аккаунта».
+
+| Поле | Семантика |
+|------|-----------|
+| `email` / `phone` | Идентификатор постоянного аккаунта (хотя бы один) |
+| `password` | **Новый пароль**, который пользователь задаёт в форме convert-guest для `regular`-аккаунта |
+
+- Авторизация: **JWT гостя** (Bearer); transport-пароль, сгенерированный при guest bootstrap, **не проверяется** в `ConvertGuest`.
+- После успеха: `accounts.type` → `regular`, тот же `account_id` / primary `profile_id`; публикуется NATS `user.guest_converted`.
+- Негативные кейсы (duplicate email, password &lt; 8, non-guest token): `ConvertGuestIntegrationTest` (Auth Maven).
+
 ### E2E key backup ([encryption.md](../features/encryption.md), REST via Gateway)
 
 Клиент хранит парольно-зашифрованный бэкап ключей Signal на сервере; сервер видит только opaque blob ([encryption.md](../features/encryption.md)).

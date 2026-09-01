@@ -21,6 +21,7 @@ import 'connectivity_providers.dart';
 import 'gateway_providers.dart';
 import 'message_cache_providers.dart';
 import 'e2e_providers.dart';
+import 'mobile_opened_chat_strip.dart';
 import 'space_providers.dart';
 
 /// Returned by [ChatRoomController.sendMessage] when offline send is blocked.
@@ -1638,6 +1639,7 @@ class ChatActions {
     _ref.read(selectedChatIdProvider.notifier).state = chatId;
     _ref.read(realtimeHubProvider).ensureSubscribed(chatId);
     _rememberDmPeerForChat(chatId);
+    _ref.read(mobileOpenedChatStripProvider.notifier).openChat(chatId);
   }
 
   void rememberDmPeerForChat(String chatId) => _rememberDmPeerForChat(chatId);

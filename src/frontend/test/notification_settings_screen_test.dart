@@ -132,4 +132,87 @@ void main() {
     expect(quietStorage.value.enabled, isTrue);
     expect(quietStorage.value.startTime, '22:00');
   });
+
+  testWidgets('quiet hours load prefers API over local cache', (tester) async {
+    final quietStorage = _InMemoryQuietHoursStorage()
+      ..value = const VoiceQuietHours(
+        enabled: false,
+        startTime: '09:00',
+        endTime: '17:00',
+        timezone: 'UTC',
+        overrideMentions: false,
+      );
+    final client = MockClient((req) async {
+      if (req.url.path == '/api/v1/notifications/settings' && req.method == 'GET') {
+        return http.Response(
+          jsonEncode({
+            'notification_settings': {
+              'profile_id': 'prof-test',
+              'scope_type': 'global',
+              'enabled': true,
+              'suppress_types_json': '[]',
+            },
+          }),
+          200,
+        );
+      }
+      if (req.url.path == '/api/v1/notifications/quiet-hours' &&
+          req.method == 'GET') {
+        return http.Response(
+          jsonEncode({
+            'quiet_hours': {
+              'enabled': true,
+              'start_time': '22:00',
+              'end_time': '07:00',
+              'timezone': 'UTC',
+              'override_mentions': true,
+            },
+          }),
+          200,
+        );
+      }
+      if (req.url.path == '/api/v1/subscription/me' && req.method == 'GET') {
+        return http.Response(
+          jsonEncode({
+            'subscription': {
+              'plan': 'free',
+              'status': 'cancelled',
+              'billing_period': 'monthly',
+            },
+          }),
+          200,
+        );
+      }
+      return http.Response('Not Found', 404);
+    });
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceAppTestOverrides(client: client),
+          notificationQuietHoursStorageProvider.overrideWithValue(quietStorage),
+          pushNotificationsControllerProvider.overrideWith(
+            (ref) => _FakePushNotificationsController(ref),
+          ),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: NotificationSettingsScreen()),
+        ),
+      ),
+    );
+
+    for (var i = 0; i < 20; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+      if (find.text('Quiet hours').evaluate().isNotEmpty) break;
+    }
+
+    expect(find.text('Quiet hours'), findsOneWidget);
+    expect(quietStorage.value.enabled, isTrue);
+    expect(quietStorage.value.startTime, '22:00');
+    expect(quietStorage.writeCount, greaterThan(0));
+  });
 }

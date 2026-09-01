@@ -7,36 +7,45 @@ import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/backend/realtime_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
+import 'package:voice_frontend/state/mobile_opened_chat_strip.dart';
 import 'package:voice_frontend/ui/core/voice_badge.dart';
 import 'package:voice_frontend/ui/shell/mobile_chat_strip.dart';
 
 import 'support/auth_test_overrides.dart';
 import 'support/voice_test_theme.dart';
 
-const _stripItems = [
-  ChatListItem(
-    chat: VoiceChat(
-      id: 'chat-a',
-      type: 'CHAT_TYPE_DM',
-      creatorProfileId: 'peer-1',
-      name: 'Alice',
-    ),
-    unreadCount: 3,
+const _chatA = ChatListItem(
+  chat: VoiceChat(
+    id: 'chat-a',
+    type: 'CHAT_TYPE_DM',
+    creatorProfileId: 'peer-1',
+    name: 'Alice',
   ),
-  ChatListItem(
-    chat: VoiceChat(
-      id: 'chat-b',
-      type: 'CHAT_TYPE_GROUP',
-      creatorProfileId: 'prof-test',
-      name: 'Squad',
-    ),
+  unreadCount: 3,
+);
+
+const _chatB = ChatListItem(
+  chat: VoiceChat(
+    id: 'chat-b',
+    type: 'CHAT_TYPE_GROUP',
+    creatorProfileId: 'prof-test',
+    name: 'Squad',
   ),
-];
+);
+
+const _chatC = ChatListItem(
+  chat: VoiceChat(
+    id: 'chat-c',
+    type: 'CHAT_TYPE_DM',
+    creatorProfileId: 'peer-2',
+    name: 'Bob',
+  ),
+);
 
 class _PresetChatListController extends ChatListController {
   _PresetChatListController(super.ref, {List<ChatListItem>? items})
     : super() {
-    state = ChatListState(items: items ?? _stripItems);
+    state = ChatListState(items: items ?? const [_chatA, _chatB, _chatC]);
   }
 
   @override
@@ -44,10 +53,6 @@ class _PresetChatListController extends ChatListController {
 
   @override
   Future<void> loadMore() async {}
-}
-
-class _EmptyChatListController extends _PresetChatListController {
-  _EmptyChatListController(super.ref) : super(items: const []);
 }
 
 class _FakeRealtimeHub extends RealtimeHub {
@@ -63,20 +68,20 @@ class _FakeRealtimeHub extends RealtimeHub {
   void ensureSubscribed(String chatId) {}
 }
 
-List<Override> _stripOverrides() => [
-  ...voiceAppTestOverrides(client: MockClient((_) async => http.Response('{}', 404))),
-  chatListControllerProvider.overrideWith(_PresetChatListController.new),
-  realtimeHubProvider.overrideWith(_FakeRealtimeHub.new),
-];
+List<Override> _stripOverrides({List<String> openedIds = const ['chat-a', 'chat-b']}) {
+  final opened = MobileOpenedChatStripController()..state = openedIds;
+  return [
+    ...voiceAppTestOverrides(client: MockClient((_) async => http.Response('{}', 404))),
+    chatListControllerProvider.overrideWith(_PresetChatListController.new),
+    realtimeHubProvider.overrideWith(_FakeRealtimeHub.new),
+    mobileOpenedChatStripProvider.overrideWith((ref) => opened),
+  ];
+}
 
 void main() {
-  testWidgets('strip shows empty placeholder when no chats', (tester) async {
+  testWidgets('strip shows empty placeholder when no opened chats', (tester) async {
     final container = ProviderContainer(
-      overrides: [
-        ...voiceAppTestOverrides(client: MockClient((_) async => http.Response('{}', 404))),
-        chatListControllerProvider.overrideWith(_EmptyChatListController.new),
-        realtimeHubProvider.overrideWith(_FakeRealtimeHub.new),
-      ],
+      overrides: _stripOverrides(openedIds: const []),
     );
     addTearDown(container.dispose);
 
@@ -98,7 +103,32 @@ void main() {
     expect(find.byType(VoiceBadge), findsNothing);
   });
 
-  testWidgets('strip renders chat icons with unread badges', (tester) async {
+  testWidgets('strip renders opened chats only, not full inbox', (tester) async {
+    final container = ProviderContainer(
+      overrides: _stripOverrides(openedIds: const ['chat-a']),
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: MobileChatStrip()),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(MobileChatStrip.tileKey('chat-a')), findsOneWidget);
+    expect(find.byKey(MobileChatStrip.tileKey('chat-b')), findsNothing);
+    expect(find.byKey(MobileChatStrip.tileKey('chat-c')), findsNothing);
+  });
+
+  testWidgets('strip renders opened chat icons with unread badges', (tester) async {
     final container = ProviderContainer(overrides: _stripOverrides());
     addTearDown(container.dispose);
 

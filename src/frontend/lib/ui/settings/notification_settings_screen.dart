@@ -67,10 +67,6 @@ class _NotificationSettingsScreenState
 
     VoiceQuietHours quietHours = VoiceQuietHours.defaults;
     if (!widget.isChatScope) {
-      final localQuiet = await ref
-          .read(notificationQuietHoursStorageProvider)
-          .read(profileId);
-      quietHours = localQuiet;
       final quietResult = await ref
           .read(voiceNotificationsClientProvider)
           .getQuietHours(authorization: auth);
@@ -79,6 +75,10 @@ class _NotificationSettingsScreenState
         await ref
             .read(notificationQuietHoursStorageProvider)
             .write(profileId, quietHours);
+      } else {
+        quietHours = await ref
+            .read(notificationQuietHoursStorageProvider)
+            .read(profileId);
       }
       final push = ref.read(pushNotificationsControllerProvider);
       _pushPermission = await push.getPermissionStatus();

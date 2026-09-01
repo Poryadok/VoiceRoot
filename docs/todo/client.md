@@ -45,8 +45,8 @@ _Пока пусто — критичные клиентские блокеры 
 
 - [ ] **R2-A03 — Profile switcher vs rail contract** — normative: ProfileStack §1.1a in rail + profile RC (archive, switch/create); Flutter uses combobox/menu diverging from [multi-profile.md](../features/multi-profile.md) / [screen-controls.md](../design/screen-controls.md).
 - [ ] **R2-A04 — Mobile shell IA** — bottom tab bar + hamburger drawer (folders, QA, Settings); absent in `app.dart` / mobile layout — [navigation.md](../features/navigation.md), §1.6a.
-- [ ] **R2-A05 — Active strip LRU semantics** — strip must track **opened** chats (≤100 LRU), not inbox list rows; fix `MobileChatStrip` + state — [screen-controls.md](../design/screen-controls.md) §1.6.
-- [ ] **R3-A08 — Strip widget test wrong contract** — `mobile_chat_strip_test.dart` asserts inbox rows; rewrite for opened-chat LRU §1.6.
+- [ ] **R2-A05 — Active strip LRU semantics** — strip tracks **opened** chats (≤100 LRU); `MobileChatStrip` + `mobile_opened_chat_strip.dart` shipped; long-press remove + 100-cap feedback still open.
+- [x] **R3-A08 — Strip widget test wrong contract** — `mobile_chat_strip_test.dart` asserts opened-chat LRU, not inbox rows (§1.6).
 - [ ] **R3-A11 — Composer a11y parity** — emoji via transient §3.6b panel (not SideHost/reaction picker); attach → §3.6a popup + §3.6e focus trap/return; click-not-hover on desktop — [accessibility.md](../features/accessibility.md).
 - [ ] **Archive list screen** — `Screen / Chat / Archive` (desktop + mobile); entry via profile RC only — [navigation.md](../features/navigation.md); blocked on Chat archive list RPC ([backend.md](backend.md)).
 - [ ] **Mobile stacked chrome** — active strip + app bar + pinned bar + composer + bottom tabs overflow rules §1.6a — Penpot · v3 + Flutter layout.
@@ -63,7 +63,7 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 **Flutter UX waves A–J (2026-07-15):** закрыто в рабочей копии; остаток — commit PR + серверные хвосты ниже.
 
 
-- [ ] **Quiet hours: client dual-write** — backend `Get/SetQuietHours` **пишут в БД** (`notification/internal/store/settings.go`, live `TestComposeQuietHours_live`). Flutter всё ещё `notification_quiet_hours_storage.dart` (SharedPreferences) как source of truth — второе устройство не синхронизируется. Читать/писать API, local только cache.
+- [x] **Quiet hours: client dual-write** — `notification_settings_screen` reads/writes `Get/SetQuietHours` API; `notification_quiet_hours_storage.dart` is offline cache only (API-first load, local fallback on failure). Live: `quiet_hours_e2e_live_test` (NT-04).
 
 - [ ] **A11y: message list keyboard nav** — [accessibility.md](../features/accessibility.md) §«Навигация по списку сообщений»: `↑`/`↓`, `R`, `E` в `chat_room_panel` — не реализовано.
 
@@ -118,8 +118,8 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 Baseline (2026-06) закрыт; хвосты UX/E2E ниже. Спека: [auth-and-contacts.md](../features/auth-and-contacts.md).
 
 - [ ] **Convert-guest: recovery для аккаунтов после бага transport-пароля** — аккаунты, сконвертированные до фикса (2026-07), остались с неизвестным паролем; нужен self-service reset password или support-runbook. Backend `POST /api/v1/auth/password/reset` **есть**; Flutter UI нет.
-- [ ] **Convert-guest: док auth-service.md** — явно описать, что `password` в `ConvertGuest` = новый пароль regular-аккаунта (JWT гостя достаточен), не проверка transport-пароля.
-- [ ] **Convert-guest live в compose-e2e** — `TestComposeConvertGuest_live` (новый пароль + login) в CI workflow; сейчас только opt-in локально.
+- [x] **Convert-guest: док auth-service.md** — `ConvertGuest` §: `password` = новый пароль regular-аккаунта (JWT гостя достаточен), не transport-пароль.
+- [x] **Convert-guest live в compose-e2e** — `TestComposeConvertGuest_live` in `.github/ci/e2e-features.yml` smoke_gateway (CI tier 2).
 - [ ] **Convert-guest: negative Auth integration tests** — duplicate email, password <8, non-guest token, missing email/phone; дополнить `ConvertGuestIntegrationTest`.
 - [x] **Convert-guest: NATS `user.guest_converted`** — `TestComposeConvertGuestNATS_live` shipped (P1.1).
 - [ ] **Guest save-account reminder: server last-shown** — в спеке «локальный или серверный timestamp»; сейчас только `SharedPreferences` (кросс-устройство не синхронизируется).
