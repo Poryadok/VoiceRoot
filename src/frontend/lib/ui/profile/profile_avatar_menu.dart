@@ -170,7 +170,6 @@ Future<void> _handleSelection(
   WidgetRef ref,
   String value,
 ) async {
-  final l10n = AppLocalizations.of(context)!;
   if (value.startsWith('profile:')) {
     final profileId = value.substring('profile:'.length);
     await _switchProfile(ref, profileId);
