@@ -6,6 +6,7 @@ import '../../backend/chats_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
+import '../../state/message_requests_providers.dart';
 import '../../state/in_app_notifications.dart';
 import '../../state/presence_providers.dart';
 import '../../state/shell_providers.dart';
@@ -161,23 +162,6 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
             ),
           ),
         const _MySpacesStrip(),
-        if (chats.errorMessage == null || chats.items.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            child: SegmentedButton<String>(
-              segments: [
-                ButtonSegment(value: 'main', label: Text(l10n.chatInboxDm)),
-                ButtonSegment(
-                  value: 'requests',
-                  label: Text(l10n.chatInboxRequests),
-                ),
-              ],
-              selected: {inbox},
-              onSelectionChanged: (next) => ref
-                  .read(chatListControllerProvider.notifier)
-                  .setInbox(next.single),
-            ),
-          ),
         Expanded(
           child: Builder(
             builder: (context) {
@@ -204,9 +188,15 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
               }
               if (items.isEmpty) {
                 return VoiceStatePanel(
-                  title: l10n.chatListEmpty,
-                  message: l10n.chatListEmptyHint,
-                  icon: Icons.forum_outlined,
+                  title: inbox == 'requests'
+                      ? l10n.chatInboxRequests
+                      : l10n.chatListEmpty,
+                  message: inbox == 'requests'
+                      ? l10n.chatMessageRequestsEmptyHint
+                      : l10n.chatListEmptyHint,
+                  icon: inbox == 'requests'
+                      ? Icons.mark_email_unread_outlined
+                      : Icons.forum_outlined,
                 );
               }
               final hasFooter = chats.hasMore || chats.isLoadingMore;

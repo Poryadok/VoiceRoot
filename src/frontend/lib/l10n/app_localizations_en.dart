@@ -778,6 +778,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatInboxRequests => 'Requests';
 
   @override
+  String get chatMessageRequestsEmpty => 'No message requests';
+
+  @override
+  String get chatMessageRequestsEmptyHint =>
+      'When someone you do not know messages you, their chat appears here.';
+
+  @override
   String get chatTyping => 'Typing…';
 
   @override
@@ -1686,6 +1693,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get notificationTypeNewMessage => 'Direct messages';
+
+  @override
+  String get notificationTypeMessageRequest => 'Message requests';
 
   @override
   String get notificationTypeMention => 'Mentions';

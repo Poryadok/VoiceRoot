@@ -780,6 +780,13 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatInboxRequests => 'Запросы';
 
   @override
+  String get chatMessageRequestsEmpty => 'Нет запросов сообщений';
+
+  @override
+  String get chatMessageRequestsEmptyHint =>
+      'Сообщения от незнакомцев появятся здесь.';
+
+  @override
   String get chatTyping => 'Печатает…';
 
   @override
@@ -1695,6 +1702,9 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get notificationTypeNewMessage => 'Личные сообщения';
+
+  @override
+  String get notificationTypeMessageRequest => 'Запросы сообщений';
 
   @override
   String get notificationTypeMention => 'Упоминания';
