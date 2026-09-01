@@ -11,6 +11,7 @@ import (
 	"voice/backend/chat/internal/store"
 
 	chatv1 "voice.app/voice/chat/v1"
+	commonv1 "voice.app/voice/common/v1"
 )
 
 // TestListChats_SpaceChannel_ArchivedHidden documents R3-A16: archived space chats must not
@@ -82,4 +83,54 @@ UPDATE chats SET threads_enabled = true, e2e_enabled = true WHERE id = $1
 	require.Equal(t, spaceID.String(), item.GetSpaceId())
 	require.True(t, item.GetThreadsEnabled())
 	require.True(t, item.GetE2EEnabled())
+}
+
+// TestListChats_SpaceChannel_PaginationPage2 documents R3-A16: space channels appear on page 2+ via unified SQL pagination.
+func TestListChats_SpaceChannel_PaginationPage2(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	chatPool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, chatPool)
+	spacePool := integrationtest.StartPostgres(t, ctx, "spacedb_list_page2", "")
+	applySpaceMigration(t, ctx, spacePool)
+
+	spaceChatID := uuid.New()
+	spaceID := uuid.New()
+	owner := uuid.New()
+	member := uuid.New()
+	accMember := uuid.New()
+	other := uuid.New()
+	seedSpaceChannelChat(t, ctx, chatPool, spacePool, spaceChatID, spaceID, owner, member, "general")
+
+	spaceMembers := &store.SpaceMembersStore{Pool: spacePool}
+	client, cleanup := startChatGRPCTestServer(t, chatPool, nil, nil, nil, WithSpaceMembers(spaceMembers))
+	t.Cleanup(cleanup)
+	ctxMember := withAccountProfileCtx(ctx, accMember, member)
+
+	dm, err := client.CreateDM(ctxMember, &chatv1.CreateDMRequest{OtherProfileId: other.String()})
+	require.NoError(t, err)
+	dmChatID := dm.GetChat().GetId()
+
+	_, err = chatPool.Exec(ctx, `UPDATE chats SET last_message_at = now() + interval '2 hours' WHERE id = $1::uuid`, dmChatID)
+	require.NoError(t, err)
+	_, err = chatPool.Exec(ctx, `UPDATE chats SET last_message_at = now() + interval '1 hour' WHERE id = $1::uuid`, spaceChatID)
+	require.NoError(t, err)
+
+	page1, err := client.ListChats(ctxMember, &chatv1.ListChatsRequest{
+		Page: &commonv1.CursorPageRequest{PageSize: 1},
+	})
+	require.NoError(t, err)
+	require.Len(t, page1.GetChatList().GetItems(), 1)
+	require.Equal(t, dmChatID, page1.GetChatList().GetItems()[0].GetChat().GetId())
+	cur := page1.GetChatList().GetNextCursor()
+	require.NotEmpty(t, cur)
+
+	page2, err := client.ListChats(ctxMember, &chatv1.ListChatsRequest{
+		Page: &commonv1.CursorPageRequest{Cursor: cur, PageSize: 1},
+	})
+	require.NoError(t, err)
+	require.Len(t, page2.GetChatList().GetItems(), 1)
+	require.Equal(t, spaceChatID.String(), page2.GetChatList().GetItems()[0].GetChat().GetId())
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../backend/users_client.dart';
 import '../../l10n/app_localizations.dart';
@@ -199,9 +200,7 @@ Future<void> _handleSelection(
     return;
   }
   if (value == 'archive') {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(l10n.profileMenuArchiveUnavailable)),
-    );
+    context.push('/chats/archive');
   }
 }
 

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/auth_session.dart';
@@ -10,9 +11,11 @@ import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/users_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
+import 'package:voice_frontend/routing/app_router.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/subscription_providers.dart';
+import 'package:voice_frontend/ui/chat/chat_archive_screen.dart';
 import 'package:voice_frontend/ui/profile/profile_avatar_menu.dart';
 
 import 'support/test_voice_token_catalog.dart';
@@ -145,9 +148,19 @@ void main() {
     container.dispose();
   });
 
-  testWidgets('ProfileAvatarMenuButton archive entry shows unavailable snackbar', (
+  testWidgets('ProfileAvatarMenuButton archive opens archive screen', (
     tester,
   ) async {
+    final storage = _MemoryAuthStorage();
+    const session = AuthSession(
+      accessToken: 'token',
+      refreshToken: 'refresh',
+      expiresInSeconds: 900,
+      accountId: 'account-1',
+      activeProfileId: 'profile-primary',
+    );
+    await storage.write(session);
+
     final mock = MockClient((req) async {
       if (req.url.path == '/api/v1/users/profiles') {
         return http.Response(
@@ -168,6 +181,13 @@ void main() {
           200,
         );
       }
+      if (req.url.path == '/api/v1/chats' &&
+          req.url.queryParameters['inbox'] == 'archive') {
+        return http.Response(
+          jsonEncode({'chat_list': {'items': []}}),
+          200,
+        );
+      }
       return http.Response('not found', 404);
     });
 
@@ -178,31 +198,37 @@ void main() {
           const GatewayConfig(baseUrl: 'http://api.test'),
         ),
         httpClientProvider.overrideWithValue(mock),
-        authSessionStorageProvider.overrideWithValue(_MemoryAuthStorage()),
+        authSessionStorageProvider.overrideWithValue(storage),
       ],
     );
     addTearDown(container.dispose);
+    await container.read(authControllerProvider.notifier).applySession(session);
+    await container.read(myProfilesProvider.future);
+
+    final router = createVoiceGoRouter(
+      shellBuilder: (context, state) => Scaffold(
+        body: ProfileAvatarMenuButton(
+          profile: const VoiceProfile(
+            id: 'profile-primary',
+            accountId: 'account-1',
+            username: 'alice',
+            discriminator: '0001',
+            displayName: 'Alice',
+            isPrimary: true,
+          ),
+        ),
+      ),
+    );
 
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: MaterialApp(
+        child: MaterialApp.router(
           theme: voiceTestTheme(),
           locale: const Locale('en'),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(
-            body: ProfileAvatarMenuButton(
-              profile: const VoiceProfile(
-                id: 'profile-primary',
-                accountId: 'account-1',
-                username: 'alice',
-                discriminator: '0001',
-                displayName: 'Alice',
-                isPrimary: true,
-              ),
-            ),
-          ),
+          routerConfig: router,
         ),
       ),
     );
@@ -213,7 +239,7 @@ void main() {
     await tester.tap(find.text('Archive'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Chat archive is not available yet.'), findsOneWidget);
+    expect(find.byKey(ChatArchiveScreen.screenKey), findsOneWidget);
     container.dispose();
   });
 }

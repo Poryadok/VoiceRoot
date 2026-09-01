@@ -461,6 +461,90 @@ List<ChatListItem> _mergeChatItems(
   return byId.values.toList();
 }
 
+class ChatArchiveListController extends StateNotifier<ChatListState> {
+  ChatArchiveListController(this._ref) : super(const ChatListState());
+
+  final Ref _ref;
+
+  Future<void> loadInitial() async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return;
+    state = state.copyWith(isLoading: true, clearError: true);
+    final result = await _ref
+        .read(voiceChatsClientProvider)
+        .listChats(authorization: auth, inbox: 'archive');
+    if (!mounted) return;
+    switch (result) {
+      case ChatsApiOk(:final data):
+        state = ChatListState(items: data.items, nextCursor: data.nextCursor);
+      case ChatsApiFailure(:final message, :final statusCode):
+        state = state.copyWith(
+          isLoading: false,
+          errorMessage: message,
+          errorStatusCode: statusCode,
+          clearNextCursor: true,
+        );
+    }
+  }
+
+  Future<void> loadMore() async {
+    final cursor = state.nextCursor;
+    if (cursor == null || cursor.isEmpty || state.isLoadingMore) return;
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return;
+    state = state.copyWith(isLoadingMore: true, clearError: true);
+    final result = await _ref
+        .read(voiceChatsClientProvider)
+        .listChats(
+          authorization: auth,
+          cursor: cursor,
+          inbox: 'archive',
+        );
+    if (!mounted) return;
+    switch (result) {
+      case ChatsApiOk(:final data):
+        state = state.copyWith(
+          items: _mergeChatItems(state.items, data.items),
+          nextCursor: data.nextCursor,
+          clearNextCursor: data.nextCursor == null,
+          isLoadingMore: false,
+          clearError: true,
+        );
+      case ChatsApiFailure(:final message, :final statusCode):
+        state = state.copyWith(
+          isLoadingMore: false,
+          errorMessage: message,
+          errorStatusCode: statusCode,
+        );
+    }
+  }
+
+  Future<String?> unarchiveChat(String chatId) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final result = await _ref.read(voiceChatsClientProvider).archiveChat(
+          authorization: auth,
+          chatId: chatId,
+          archived: false,
+        );
+    switch (result) {
+      case ChatsApiOk<void>():
+        state = state.copyWith(
+          items: state.items.where((item) => item.chatId != chatId).toList(),
+        );
+        await _ref.read(chatListControllerProvider.notifier).loadInitial();
+        return null;
+      case ChatsApiFailure(:final message):
+        return message;
+    }
+  }
+}
+
+final chatArchiveListControllerProvider =
+    StateNotifierProvider.autoDispose<ChatArchiveListController, ChatListState>(
+  (ref) => ChatArchiveListController(ref),
+);
+
 final chatListControllerProvider =
     StateNotifierProvider<ChatListController, ChatListState>((ref) {
       ref.watch(_chatListRefreshTokenProvider);
