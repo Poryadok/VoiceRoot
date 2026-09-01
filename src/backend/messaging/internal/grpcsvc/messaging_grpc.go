@@ -152,14 +152,15 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 	if attachments == "" {
 		attachments = "[]"
 	}
-	attachmentCount, err := s.validateAttachments(ctx, chatID, attachments)
+	content := strings.TrimSpace(req.GetContent())
+	contentType := resolveSendContentType(req, content, attachments)
+	attachmentCount, err := s.validateAttachments(ctx, chatID, attachments, contentType)
 	if err != nil {
 		return nil, err
 	}
 	if err := s.checkAttachmentPrivacyForSend(ctx, chatID, profileID, attachments); err != nil {
 		return nil, err
 	}
-	content := strings.TrimSpace(req.GetContent())
 	if content == "" && attachmentCount == 0 {
 		return nil, status.Error(codes.InvalidArgument, "content or attachments is required")
 	}
@@ -256,6 +257,7 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 		ClientMessageID: clientID,
 		GhostOnly:       ghostOnly,
 		IsE2E:           isE2E,
+		ContentType:     contentType,
 	}
 	saved, err := s.Messages.InsertMessage(ctx, row)
 	if err != nil {
@@ -270,7 +272,7 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 		if saved.ThreadParentID != nil {
 			threadParentID = saved.ThreadParentID.String()
 		}
-		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), hasMentions, threadParentID, saved.IsE2E); err != nil {
+		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), hasMentions, threadParentID, saved.IsE2E, store.EffectiveContentType(saved.ContentType, saved.Content, saved.AttachmentsJSON)); err != nil {
 			s.logPublishError(ctx, "message.sent", err, slog.String("message_id", saved.ID.String()), slog.String("chat_id", saved.ChatID.String()))
 		}
 		if hasMentions {
@@ -294,10 +296,12 @@ func (s *MessagingGRPC) loadChatMeta(ctx context.Context, chatID uuid.UUID) (men
 }
 
 type messageAttachment struct {
-	FileID     string `json:"file_id"`
-	Type       string `json:"type"`
-	URL        string `json:"url,omitempty"`
-	PreviewURL string `json:"preview_url,omitempty"`
+	FileID     string   `json:"file_id"`
+	Type       string   `json:"type"`
+	URL        string   `json:"url,omitempty"`
+	PreviewURL string   `json:"preview_url,omitempty"`
+	Lat        *float64 `json:"lat,omitempty"`
+	Lon        *float64 `json:"lon,omitempty"`
 }
 
 // attachmentTypeMatchesFileMeta allows voice_message attachments to reference audio file metadata.
@@ -313,13 +317,20 @@ func attachmentTypeMatchesFileMeta(attType, fileType string) bool {
 	return attType == "voice_message" && fileType == "audio"
 }
 
-func (s *MessagingGRPC) validateAttachments(ctx context.Context, chatID uuid.UUID, raw string) (int, error) {
+func (s *MessagingGRPC) validateAttachments(ctx context.Context, chatID uuid.UUID, raw, contentType string) (int, error) {
 	var attachments []messageAttachment
 	if err := json.Unmarshal([]byte(raw), &attachments); err != nil {
 		return 0, status.Error(codes.InvalidArgument, "attachments_json must be a JSON array")
 	}
 	if len(attachments) == 0 {
 		return 0, nil
+	}
+	switch strings.TrimSpace(contentType) {
+	case "location", "article":
+		if err := validateRichPayloadAttachments(contentType, attachments); err != nil {
+			return 0, err
+		}
+		return len(attachments), nil
 	}
 	if s.Files == nil {
 		return 0, status.Error(codes.FailedPrecondition, "file metadata lookup is not configured")
@@ -1137,6 +1148,7 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 		AttachmentsJSON: attachments,
 		MentionsJSON:    "[]",
 		IsE2E:           source.IsE2E,
+		ContentType:     store.EffectiveContentType(source.ContentType, source.Content, attachments),
 	}
 	kind := messagingv1.MessageKind_MESSAGE_KIND_FORWARD
 	if withoutAttribution {
@@ -1155,7 +1167,7 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if s.MessageEvents != nil {
-		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), false, "", saved.IsE2E); err != nil {
+		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), false, "", saved.IsE2E, store.EffectiveContentType(saved.ContentType, saved.Content, saved.AttachmentsJSON)); err != nil {
 			s.logPublishError(ctx, "message.sent", err, slog.String("message_id", saved.ID.String()), slog.String("chat_id", saved.ChatID.String()))
 		}
 		if !withoutAttribution {
@@ -1181,12 +1193,13 @@ func (s *MessagingGRPC) insertForwardCommentary(ctx context.Context, chatID, pro
 		Type:            "regular",
 		AttachmentsJSON: "[]",
 		MentionsJSON:    "[]",
+		ContentType:     "text",
 	})
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
 	}
 	if s.MessageEvents != nil {
-		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), false, "", false); err != nil {
+		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), false, "", false, "text"); err != nil {
 			s.logPublishError(ctx, "message.sent", err, slog.String("message_id", saved.ID.String()), slog.String("chat_id", saved.ChatID.String()))
 		}
 	}
@@ -1407,23 +1420,42 @@ func (s *MessagingGRPC) checkCanPinMessage(ctx context.Context, chatID, profileI
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
 	}
-	if meta.SpaceID == nil {
+	if meta.SpaceID != nil {
+		if s.RolePermissions == nil {
+			return status.Error(codes.FailedPrecondition, "role permissions not configured")
+		}
+		allowed, err := s.RolePermissions.HasChatPermission(ctx, *meta.SpaceID, profileID, chatID, permissions.TextChatPinMessages)
+		if err != nil {
+			if st, ok := status.FromError(err); ok {
+				return st.Err()
+			}
+			return status.Error(codes.Internal, err.Error())
+		}
+		if !allowed {
+			return status.Error(codes.PermissionDenied, "missing TEXT_CHAT_PIN_MESSAGES")
+		}
 		return nil
 	}
-	if s.RolePermissions == nil {
-		return status.Error(codes.FailedPrecondition, "role permissions not configured")
+	chatType := strings.TrimSpace(meta.ChatType)
+	if chatType != "group" && chatType != "channel" {
+		return nil
 	}
-	allowed, err := s.RolePermissions.HasChatPermission(ctx, *meta.SpaceID, profileID, chatID, permissions.TextChatPinMessages)
+	if s.ChatGuard == nil {
+		return status.Error(codes.FailedPrecondition, "chat guard not configured")
+	}
+	role, err := s.ChatGuard.MemberRole(ctx, chatID, profileID)
 	if err != nil {
-		if st, ok := status.FromError(err); ok {
-			return st.Err()
+		if errors.Is(err, store.ErrNotChatMember) {
+			return status.Error(codes.PermissionDenied, "not a chat member")
 		}
 		return status.Error(codes.Internal, err.Error())
 	}
-	if !allowed {
+	switch role {
+	case "owner", "admin":
+		return nil
+	default:
 		return status.Error(codes.PermissionDenied, "missing TEXT_CHAT_PIN_MESSAGES")
 	}
-	return nil
 }
 
 func forwardAttribution(source *store.MessageRow) (uuid.UUID, string) {
@@ -1787,6 +1819,9 @@ func messageRowToProto(m *store.MessageRow, kind messagingv1.MessageKind, reacti
 			out.MessageKind = &k
 		}
 	}
+	if ct := mapLastMessageContentType(store.EffectiveContentType(m.ContentType, m.Content, m.AttachmentsJSON)); ct != messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_UNSPECIFIED {
+		out.ContentType = &ct
+	}
 	return out
 }
 
@@ -1943,6 +1978,76 @@ func mapLastMessageDeliveryState(state string) messagingv1.LastMessageDeliverySt
 	default:
 		return messagingv1.LastMessageDeliveryState_LAST_MESSAGE_DELIVERY_STATE_UNSPECIFIED
 	}
+}
+
+func resolveSendContentType(req *messagingv1.SendMessageRequest, content, attachmentsJSON string) string {
+	if req != nil && req.ContentType != nil {
+		if stored := contentTypeProtoToStore(req.GetContentType()); stored != "" {
+			return stored
+		}
+	}
+	return store.EffectiveContentType("", content, attachmentsJSON)
+}
+
+func contentTypeProtoToStore(ct messagingv1.MessageContentType) string {
+	switch ct {
+	case messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_TEXT:
+		return "text"
+	case messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_PHOTO:
+		return "photo"
+	case messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_VIDEO:
+		return "video"
+	case messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_DOCUMENT:
+		return "document"
+	case messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_VOICE:
+		return "voice"
+	case messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_STICKER:
+		return "sticker"
+	case messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_GIF:
+		return "gif"
+	case messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_ARTICLE:
+		return "article"
+	case messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_LOCATION:
+		return "location"
+	case messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_VIDEO_NOTE:
+		return "video_note"
+	case messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_MUSIC:
+		return "music"
+	default:
+		return ""
+	}
+}
+
+func validateRichPayloadAttachments(contentType string, attachments []messageAttachment) error {
+	for _, att := range attachments {
+		typ := strings.ToLower(strings.TrimSpace(att.Type))
+		switch strings.TrimSpace(contentType) {
+		case "location":
+			if typ != "location" {
+				return status.Error(codes.InvalidArgument, "attachments.type must be location")
+			}
+			if att.Lat == nil || att.Lon == nil {
+				return status.Error(codes.InvalidArgument, "location attachments require lat and lon")
+			}
+			if *att.Lat < -90 || *att.Lat > 90 || *att.Lon < -180 || *att.Lon > 180 {
+				return status.Error(codes.InvalidArgument, "location coordinates out of range")
+			}
+		case "article":
+			if typ != "article" && typ != "link" {
+				return status.Error(codes.InvalidArgument, "attachments.type must be article")
+			}
+			u := strings.TrimSpace(att.URL)
+			if u == "" {
+				return status.Error(codes.InvalidArgument, "article attachments require url")
+			}
+			if !strings.HasPrefix(strings.ToLower(u), "https://") {
+				return status.Error(codes.InvalidArgument, "article url must be https")
+			}
+		default:
+			return status.Error(codes.InvalidArgument, "unsupported rich content_type")
+		}
+	}
+	return nil
 }
 
 func mapLastMessageContentType(state string) messagingv1.MessageContentType {

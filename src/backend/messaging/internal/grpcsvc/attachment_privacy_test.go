@@ -59,6 +59,10 @@ func (g dmOtherProfileGuard) OtherMemberProfileIDs(_ context.Context, _ uuid.UUI
 	return []uuid.UUID{g.other}, nil
 }
 
+func (g dmOtherProfileGuard) MemberRole(context.Context, uuid.UUID, uuid.UUID) (string, error) {
+	return "owner", nil
+}
+
 func TestCheckAttachmentPrivacyForSend_NilPrivacySkips(t *testing.T) {
 	t.Parallel()
 	s := &MessagingGRPC{Privacy: nil, ChatGuard: dmOtherProfileGuard{other: uuid.New()}}

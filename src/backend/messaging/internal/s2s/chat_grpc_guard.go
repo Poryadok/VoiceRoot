@@ -105,6 +105,19 @@ func (g *GRPCChatGuard) OtherMemberProfileIDs(ctx context.Context, chatID, profi
 	return out, nil
 }
 
+func (g *GRPCChatGuard) MemberRole(ctx context.Context, chatID, profileID uuid.UUID) (string, error) {
+	members, err := g.dmMembers(ctx, chatID)
+	if err != nil {
+		return "", grpcMemberErr(err)
+	}
+	for _, m := range members {
+		if strings.EqualFold(m.GetProfileId(), profileID.String()) {
+			return strings.TrimSpace(m.GetRole()), nil
+		}
+	}
+	return "", store.ErrNotChatMember
+}
+
 func grpcMemberErr(err error) error {
 	st, ok := status.FromError(err)
 	if !ok {

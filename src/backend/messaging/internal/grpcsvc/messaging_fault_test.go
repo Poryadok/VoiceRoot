@@ -44,14 +44,15 @@ func (g faultGuard) OtherMemberProfileIDs(context.Context, uuid.UUID, uuid.UUID)
 	}
 	return []uuid.UUID{g.peer}, nil
 }
+func (g faultGuard) MemberRole(context.Context, uuid.UUID, uuid.UUID) (string, error) {
+	return "owner", nil
+}
 
 func closedPoolSvc(t *testing.T) (*MessagingGRPC, context.Context, uuid.UUID, uuid.UUID) {
 	t.Helper()
 	ctx := context.Background()
 	pool := startPostgresForTest(t, ctx)
-	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
-	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
-	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
+	applyBaseMessagingMigrations(t, ctx, pool)
 	pool.Close()
 	acct := uuid.New()
 	prof := uuid.New()
@@ -144,9 +145,7 @@ func TestMessagingGRPC_chatGuardInternalErrors(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForTest(t, ctx)
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
-	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
-	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
-	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
+	applyBaseMessagingMigrations(t, ctx, pool)
 
 	chatID := uuid.New()
 	profA := uuid.New()
@@ -172,9 +171,7 @@ func TestMessagingGRPC_editDeleteValidation(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForTest(t, ctx)
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
-	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
-	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
-	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
+	applyBaseMessagingMigrations(t, ctx, pool)
 
 	chatID := uuid.New()
 	profA := uuid.New()

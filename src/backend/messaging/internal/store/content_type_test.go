@@ -33,3 +33,9 @@ func TestInferLastMessageContentType_textFallback(t *testing.T) {
 	require.Equal(t, "text", inferLastMessageContentType("plain", "[]"))
 	require.Equal(t, "", inferLastMessageContentType("", "[]"))
 }
+
+func TestEffectiveContentType_prefersColumn(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "photo", EffectiveContentType("photo", "ignored", `[{"type":"video"}]`))
+	require.Equal(t, "video", EffectiveContentType("", "", `[{"type":"video"}]`))
+}

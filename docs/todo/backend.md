@@ -239,14 +239,14 @@
 - [ ] **[Messaging] Group/channel view counts absent** — `text-chat.md` requires per-message view counter; no model/RPC beyond DM-style `read_receipts`.
 - [ ] **[Messaging] `ForwardMessage` skips SendMessage guards** — **partial:** now runs DM block/privacy, send-perm, E2E, and channel policy; still skips moderation/slow-mode, attachment privacy/validate, and some SendMessage-only guards (`messaging_grpc.go` `ForwardMessage`).
 - [ ] **[Messaging] Read-state APIs DM-typed only** — `MarkRead` / `GetReadState` / `GetBulkReadState` / `GetChatListMetadata` use `validateChatRefDM`; explicit `group`/`channel` refs rejected while `GetMessages` accepts all types.
-- [ ] **[Messaging] `content_type`: article, location, video_note, music** — **doc contract in** [messaging-service.md](../microservices/messaging-service.md) (`MessageContentType` + payloads). Not yet in proto/code. — **P0**
+- [ ] **[Messaging] `content_type`: article, location, video_note, music** — **partial (parallel track):** `messages.content_type` column + `SendMessage`/`Message.content_type` proto; location/article send without `file_id`; `video_note`/`music` payload validation still open — [messaging-service.md](../microservices/messaging-service.md) — **P0**
 - [ ] **[Messaging] `schedule_message`, `send_when_online`, `send_silent`** — **doc contract in** [messaging-service.md](../microservices/messaging-service.md) (`SendMessageRequest`, `scheduled_messages`, worker). Not yet in proto/code. — **P0**
-- [ ] **[Messaging] `GetChatListMetadata` preview DTO** — **done (Batch 13):** `last_message_content_type` inferred from attachments until `messages.content_type` column; `is_outgoing` + `delivery_state` shipped (Batch 12).
+- [x] **[Messaging] `GetChatListMetadata` preview DTO** — **done (Batch 13 + parallel track):** `last_message_content_type` from durable `messages.content_type` with attachment inference fallback; `is_outgoing` + `delivery_state` shipped (Batch 12).
 - [x] **[Messaging] Durable `last_message_delivery_state`** — `read_receipts.last_delivered_message_id`, consumer on `message.delivery_ack`, derivation in `GetChatListMetadata` (Batch 12).
 - [ ] **[Messaging] `UpdateScheduledMessage` RPC + handler** — edit pending scheduled row; proto + integration test — [messaging-service.md](../microservices/messaging-service.md) — **P0**
 - [ ] **[Messaging] File processed → preview refresh consumer** — NATS handler on `file.processed` to update list metadata / invalidate cache — [messaging-service.md](../microservices/messaging-service.md)
 - [ ] **[Messaging/Subscription] Premium multi-reaction limit enforcement** — after subscription entitlement doc lands
-- [ ] **[Messaging] `message.sent` event** — extend JetStream proto: `send_silent`, `content_type`, scheduled metadata.
+- [ ] **[Messaging] `message.sent` event** — **partial (parallel track):** JetStream `MessageSent.content_type` shipped; `send_silent` + scheduled metadata still open.
 
 ### Search
 
@@ -279,9 +279,9 @@
 
 Источник: `tmp/telegram-ux-audit/AUDIT.md` (DOC closed). ID — для трассировки с audit tracker.
 
-- [ ] **[Chat] R3-A04 — Message requests bucketing** — `EnsureDM` always sets recipient `inbox_bucket=requests`; no friend/contact lookup; `SendMessage` does not re-open `declined` → `requests`. Spec: [text-chat.md](../features/text-chat.md) § «Запросы сообщений», [friends.md](../features/friends.md). — **P0**
-- [ ] **[Messaging] R3-A05 — `PinMessage` permission gap** — when `space_id` nil, any member can pin; must enforce `TEXT_CHAT_PIN_MESSAGES` via Role Service — [messaging-service.md](../microservices/messaging-service.md).
-- [ ] **[Messaging] R3-A06 — `validateAttachments` blocks rich payloads** — requires `file_id` on all attachments; blocks normative Location/Article payloads without File row — relax validation per `MessageContentType` — [messaging-service.md](../microservices/messaging-service.md).
+- [ ] **[Chat] R3-A04 — Message requests bucketing** — **deferred (Batch 20 owns `chat/**`)** — `EnsureDM` inbox_bucket + `SendMessage` declined→requests live in Chat; parallel track did not touch chat store.
+- [x] **[Messaging] R3-A05 — `PinMessage` permission gap** — standalone `group`/`channel` without `space_id`: deny pin for `member` role (owner/admin allowed); space chats still use Role `TEXT_CHAT_PIN_MESSAGES` — [messaging-service.md](../microservices/messaging-service.md).
+- [ ] **[Messaging] R3-A06 — `validateAttachments` blocks rich payloads** — **partial (parallel track):** location/article payloads skip File `file_id` when `content_type` set; sticker/gif/music/video_note still require file row — [messaging-service.md](../microservices/messaging-service.md).
 - [ ] **[Chat] R3-A12 — Standalone `channel` chats** — `CreateChat` rejects channel type without `space_id`; breaks «Каналы» system folder until standalone create ships — [navigation.md](../features/navigation.md) § Partial shipment. **Batch 14:** membership `channel` rows now appear in `ListChats` main inbox SQL.
 - [ ] **[Chat] R3-A14 — `CreateChat`/`UpdateChat` proto fields ignored** — `topic`, `threads_enabled`, `allow_user_main_feed` not persisted; channels not updatable via Chat API — `group.go`. (Partial overlap with § Chat — other `UpdateChat` bullets.)
 - [ ] **[Chat] R3-A15 — `chats.allow_guests` dead column** — migration column unused; no proto field or handler — align or drop in migration follow-up.

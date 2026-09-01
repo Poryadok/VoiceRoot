@@ -210,19 +210,23 @@ func messageEventLogAttrs(env *eventsv1.MessageStreamEvent) []slog.Attr {
 }
 
 // PublishMessageSent implements MessageEventsPublisher.
-func (p *JetStreamPublisher) PublishMessageSent(ctx context.Context, messageID, chatID, senderProfileID string, hasMentions bool, threadParentID string, isE2E bool) error {
+func (p *JetStreamPublisher) PublishMessageSent(ctx context.Context, messageID, chatID, senderProfileID string, hasMentions bool, threadParentID string, isE2E bool, contentType string) error {
+	sent := &eventsv1.MessageSent{
+		MessageId:       messageID,
+		ChatId:          chatID,
+		SenderProfileId: senderProfileID,
+		HasMentions:     hasMentions,
+		ThreadParentId:  ptrIfNonEmpty(threadParentID),
+		IsE2E:           isE2E,
+	}
+	if ct := strings.TrimSpace(contentType); ct != "" {
+		sent.ContentType = &ct
+	}
 	env := &eventsv1.MessageStreamEvent{
 		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.New(time.Now().UTC()),
 		Payload: &eventsv1.MessageStreamEvent_MessageSent{
-			MessageSent: &eventsv1.MessageSent{
-				MessageId:       messageID,
-				ChatId:          chatID,
-				SenderProfileId: senderProfileID,
-				HasMentions:     hasMentions,
-				ThreadParentId:  ptrIfNonEmpty(threadParentID),
-				IsE2E:           isE2E,
-			},
+			MessageSent: sent,
 		},
 	}
 	return p.publishProtoWithHeaders(ctx, subjectMessageSent, env, messageSentPublishHeaders(threadParentID))

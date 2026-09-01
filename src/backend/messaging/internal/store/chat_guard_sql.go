@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -98,4 +99,23 @@ WHERE chat_id = $1 AND profile_id <> $2
 		out = append(out, pid)
 	}
 	return out, rows.Err()
+}
+
+func (g *SQLChatGuard) MemberRole(ctx context.Context, chatID, profileID uuid.UUID) (string, error) {
+	if g == nil || g.Pool == nil {
+		return "", errors.New("chat guard: pool not configured")
+	}
+	var role string
+	err := g.Pool.QueryRow(ctx, `
+SELECT role FROM chat_members
+WHERE chat_id = $1 AND profile_id = $2
+LIMIT 1
+`, chatID, profileID).Scan(&role)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotChatMember
+	}
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(role), nil
 }
