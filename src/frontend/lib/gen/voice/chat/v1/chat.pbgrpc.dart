@@ -119,6 +119,34 @@ class ChatServiceClient extends $grpc.Client {
     return $createUnaryCall(_$getChat, request, options: options);
   }
 
+  $grpc.ResponseFuture<$0.ListQuickAccessResponse> listQuickAccess(
+    $0.ListQuickAccessRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$listQuickAccess, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.AddQuickAccessResponse> addQuickAccess(
+    $0.AddQuickAccessRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$addQuickAccess, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.RemoveQuickAccessResponse> removeQuickAccess(
+    $0.RemoveQuickAccessRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$removeQuickAccess, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.ReorderQuickAccessResponse> reorderQuickAccess(
+    $0.ReorderQuickAccessRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$reorderQuickAccess, request, options: options);
+  }
+
   $grpc.ResponseFuture<$0.ListFoldersResponse> listFolders(
     $0.ListFoldersRequest request, {
     $grpc.CallOptions? options,
@@ -251,6 +279,26 @@ class ChatServiceClient extends $grpc.Client {
           '/voice.chat.v1.ChatService/GetChat',
           ($0.GetChatRequest value) => value.writeToBuffer(),
           $0.GetChatResponse.fromBuffer);
+  static final _$listQuickAccess =
+      $grpc.ClientMethod<$0.ListQuickAccessRequest, $0.ListQuickAccessResponse>(
+          '/voice.chat.v1.ChatService/ListQuickAccess',
+          ($0.ListQuickAccessRequest value) => value.writeToBuffer(),
+          $0.ListQuickAccessResponse.fromBuffer);
+  static final _$addQuickAccess =
+      $grpc.ClientMethod<$0.AddQuickAccessRequest, $0.AddQuickAccessResponse>(
+          '/voice.chat.v1.ChatService/AddQuickAccess',
+          ($0.AddQuickAccessRequest value) => value.writeToBuffer(),
+          $0.AddQuickAccessResponse.fromBuffer);
+  static final _$removeQuickAccess = $grpc.ClientMethod<
+          $0.RemoveQuickAccessRequest, $0.RemoveQuickAccessResponse>(
+      '/voice.chat.v1.ChatService/RemoveQuickAccess',
+      ($0.RemoveQuickAccessRequest value) => value.writeToBuffer(),
+      $0.RemoveQuickAccessResponse.fromBuffer);
+  static final _$reorderQuickAccess = $grpc.ClientMethod<
+          $0.ReorderQuickAccessRequest, $0.ReorderQuickAccessResponse>(
+      '/voice.chat.v1.ChatService/ReorderQuickAccess',
+      ($0.ReorderQuickAccessRequest value) => value.writeToBuffer(),
+      $0.ReorderQuickAccessResponse.fromBuffer);
   static final _$listFolders =
       $grpc.ClientMethod<$0.ListFoldersRequest, $0.ListFoldersResponse>(
           '/voice.chat.v1.ChatService/ListFolders',
@@ -398,6 +446,42 @@ abstract class ChatServiceBase extends $grpc.Service {
         false,
         ($core.List<$core.int> value) => $0.GetChatRequest.fromBuffer(value),
         ($0.GetChatResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ListQuickAccessRequest,
+            $0.ListQuickAccessResponse>(
+        'ListQuickAccess',
+        listQuickAccess_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ListQuickAccessRequest.fromBuffer(value),
+        ($0.ListQuickAccessResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.AddQuickAccessRequest,
+            $0.AddQuickAccessResponse>(
+        'AddQuickAccess',
+        addQuickAccess_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.AddQuickAccessRequest.fromBuffer(value),
+        ($0.AddQuickAccessResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.RemoveQuickAccessRequest,
+            $0.RemoveQuickAccessResponse>(
+        'RemoveQuickAccess',
+        removeQuickAccess_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.RemoveQuickAccessRequest.fromBuffer(value),
+        ($0.RemoveQuickAccessResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ReorderQuickAccessRequest,
+            $0.ReorderQuickAccessResponse>(
+        'ReorderQuickAccess',
+        reorderQuickAccess_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ReorderQuickAccessRequest.fromBuffer(value),
+        ($0.ReorderQuickAccessResponse value) => value.writeToBuffer()));
     $addMethod(
         $grpc.ServiceMethod<$0.ListFoldersRequest, $0.ListFoldersResponse>(
             'ListFolders',
@@ -585,6 +669,42 @@ abstract class ChatServiceBase extends $grpc.Service {
 
   $async.Future<$0.GetChatResponse> getChat(
       $grpc.ServiceCall call, $0.GetChatRequest request);
+
+  $async.Future<$0.ListQuickAccessResponse> listQuickAccess_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ListQuickAccessRequest> $request) async {
+    return listQuickAccess($call, await $request);
+  }
+
+  $async.Future<$0.ListQuickAccessResponse> listQuickAccess(
+      $grpc.ServiceCall call, $0.ListQuickAccessRequest request);
+
+  $async.Future<$0.AddQuickAccessResponse> addQuickAccess_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.AddQuickAccessRequest> $request) async {
+    return addQuickAccess($call, await $request);
+  }
+
+  $async.Future<$0.AddQuickAccessResponse> addQuickAccess(
+      $grpc.ServiceCall call, $0.AddQuickAccessRequest request);
+
+  $async.Future<$0.RemoveQuickAccessResponse> removeQuickAccess_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.RemoveQuickAccessRequest> $request) async {
+    return removeQuickAccess($call, await $request);
+  }
+
+  $async.Future<$0.RemoveQuickAccessResponse> removeQuickAccess(
+      $grpc.ServiceCall call, $0.RemoveQuickAccessRequest request);
+
+  $async.Future<$0.ReorderQuickAccessResponse> reorderQuickAccess_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ReorderQuickAccessRequest> $request) async {
+    return reorderQuickAccess($call, await $request);
+  }
+
+  $async.Future<$0.ReorderQuickAccessResponse> reorderQuickAccess(
+      $grpc.ServiceCall call, $0.ReorderQuickAccessRequest request);
 
   $async.Future<$0.ListFoldersResponse> listFolders_Pre($grpc.ServiceCall $call,
       $async.Future<$0.ListFoldersRequest> $request) async {
