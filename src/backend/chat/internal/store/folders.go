@@ -127,3 +127,90 @@ RETURNING id, profile_id, name, folder_type, filter_config_json::text, sort_orde
 	}
 	return &row, nil
 }
+
+// ErrSystemFolderImmutable is returned when update/delete is attempted on a system folder.
+var ErrSystemFolderImmutable = errors.New("system folders cannot be modified")
+
+// ErrFolderNoUpdates is returned when UpdateFolder is called without any mutable fields.
+var ErrFolderNoUpdates = errors.New("no folder fields to update")
+
+// FolderUpdate holds optional mutable fields for a custom folder.
+type FolderUpdate struct {
+	Name             *string
+	FilterConfigJSON *string
+	SortOrder        *int32
+}
+
+// UpdateFolder updates a custom folder owned by profileID.
+func (s *DMStore) UpdateFolder(ctx context.Context, profileID, folderID uuid.UUID, upd FolderUpdate) (*FolderRow, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("dm store: pool not configured")
+	}
+	folder, err := s.GetFolder(ctx, profileID, folderID)
+	if err != nil {
+		return nil, err
+	}
+	if folder.FolderType == "system" {
+		return nil, ErrSystemFolderImmutable
+	}
+	if upd.Name == nil && upd.FilterConfigJSON == nil && upd.SortOrder == nil {
+		return nil, ErrFolderNoUpdates
+	}
+
+	name := folder.Name
+	if upd.Name != nil {
+		name = strings.TrimSpace(*upd.Name)
+		if name == "" {
+			return nil, fmt.Errorf("folder name is required")
+		}
+	}
+	filterJSON := folder.FilterConfigJSON
+	if upd.FilterConfigJSON != nil {
+		filterJSON = *upd.FilterConfigJSON
+		if filterJSON == "" {
+			filterJSON = "{}"
+		}
+	}
+	sortOrder := folder.SortOrder
+	if upd.SortOrder != nil {
+		sortOrder = *upd.SortOrder
+	}
+
+	var row FolderRow
+	err = s.Pool.QueryRow(ctx, `
+UPDATE folders
+SET name = $3, filter_config_json = $4::jsonb, sort_order = $5, updated_at = now()
+WHERE id = $1 AND profile_id = $2 AND folder_type = 'custom'
+RETURNING id, profile_id, name, folder_type, filter_config_json::text, sort_order, created_at, updated_at
+`, folderID, profileID, name, filterJSON, sortOrder).Scan(
+		&row.ID, &row.ProfileID, &row.Name, &row.FolderType, &row.FilterConfigJSON, &row.SortOrder, &row.CreatedAt, &row.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+// DeleteFolder removes a custom folder and its folder_chats rows (ON DELETE CASCADE).
+func (s *DMStore) DeleteFolder(ctx context.Context, profileID, folderID uuid.UUID) error {
+	if s == nil || s.Pool == nil {
+		return errors.New("dm store: pool not configured")
+	}
+	folder, err := s.GetFolder(ctx, profileID, folderID)
+	if err != nil {
+		return err
+	}
+	if folder.FolderType == "system" {
+		return ErrSystemFolderImmutable
+	}
+	ct, err := s.Pool.Exec(ctx, `
+DELETE FROM folders WHERE id = $1 AND profile_id = $2 AND folder_type = 'custom'
+`, folderID, profileID)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrFolderNotFound
+	}
+	return nil
+}

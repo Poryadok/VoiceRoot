@@ -73,6 +73,8 @@ type DMStore interface {
 	ReorderQuickAccess(ctx context.Context, profileID uuid.UUID, chatIDs []uuid.UUID) error
 	ListFolders(ctx context.Context, profileID uuid.UUID) ([]store.FolderRow, error)
 	CreateFolder(ctx context.Context, profileID uuid.UUID, name, filterConfigJSON string) (*store.FolderRow, error)
+	UpdateFolder(ctx context.Context, profileID, folderID uuid.UUID, upd store.FolderUpdate) (*store.FolderRow, error)
+	DeleteFolder(ctx context.Context, profileID, folderID uuid.UUID) error
 	GetFolder(ctx context.Context, profileID, folderID uuid.UUID) (*store.FolderRow, error)
 	AddChatToFolder(ctx context.Context, profileID, folderID, chatID uuid.UUID, sortOrder *int32) error
 	RemoveChatFromFolder(ctx context.Context, profileID, folderID, chatID uuid.UUID) error

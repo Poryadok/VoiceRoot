@@ -266,14 +266,14 @@
 - [x] **[Chat] Migration: `folder_chats`** — `000009_folder_chats.up.sql` with `(profile_id, folder_id, chat_id, sort_order, is_pinned, pin_order)` (**Batch 18** DDL; membership/pin handlers **Batch 19**).
 - [x] **[Chat] Handlers: folder membership + pin** — store + gRPC add/remove/reorder/pin/unpin; archived reject; system pin overlay vs custom explicit membership (**Batch 19**).
 - [x] **[Chat] `ListChats` folder filter** — `folder_chats` join / system `filter_config_json`; sort pinned → sort_order → activity (**Batch 19**).
-- [ ] **[Chat] Folder CRUD handlers** — `ListFolders`/`CreateFolder` **done (Batch 18)**; `UpdateFolder`/`DeleteFolder` still Unimplemented.
+- [x] **[Chat] Folder CRUD handlers** — `ListFolders`/`CreateFolder` **done (Batch 18)**; `UpdateFolder`/`DeleteFolder` **done (Batch 20)**.
 - [x] **[Chat] Proto: Quick Access RPCs** — `ListQuickAccess`, `AddQuickAccess`, `RemoveQuickAccess`, `ReorderQuickAccess` in `chat.proto` (**Batch 17**).
 - [x] **[Chat] Migration: `quick_access_chats`** — `000010_quick_access_chats.up.sql` per chat-service.md sketch (**Batch 17**).
 - [x] **[Chat] Handlers: Quick Access** — enforce limit 15; `AddQuickAccess` idempotent; integration test reorder (**Batch 17**: `quick_access.go`, store + gRPC tests).
 - [x] **[Chat] Archive removes Quick Access** — `ArchiveChat(archived=true)` calls `RemoveQuickAccess` (**Batch 18**).
-- [ ] **[Chat] Archive side-effects** — auto-unarchive on incoming DM message to archived membership (consumer in Chat or Messaging — pick owner). Ref: [GLOSSARY.md](../GLOSSARY.md), [text-chat.md](../features/text-chat.md). — **P0**
-- [ ] **[Chat] Archive integration test** — auto-unarchive when incoming DM message arrives (side-effect above). Main/archive inbox list regression — **done (Batch 15):** store + gRPC + compose `inbox=archive`.
-- [x] **[Chat] Gateway REST** — folder RPCs + `GET /chats?folder_id=` (**Batch 19**): `GET/POST /api/v1/chats/folders`, `POST/DELETE …/folders/{id}/chats`, `PUT …/chats/order`, `POST/DELETE …/chats/{chatId}/pin`; Quick Access REST — **done (Batch 17)**; `inbox=archive` on `GET /chats` — **done Batch 15**.
+- [x] **[Chat] Archive side-effects** — auto-unarchive on incoming DM message to archived membership (Chat `message.sent` consumer → `AutoUnarchiveDMRecipients`) — **done (Batch 20)**.
+- [x] **[Chat] Archive integration test** — auto-unarchive when incoming DM message arrives — **done (Batch 20)**; main/archive inbox list regression — **done (Batch 15)**.
+- [x] **[Chat] Gateway REST** — folder RPCs + `GET /chats?folder_id=` (**Batch 19**): `GET/POST /api/v1/chats/folders`, `PATCH/DELETE …/folders/{id}`, `POST/DELETE …/folders/{id}/chats`, `PUT …/chats/order`, `POST/DELETE …/chats/{chatId}/pin`; Quick Access REST — **done (Batch 17)**; `inbox=archive` on `GET /chats` — **done Batch 15**.
 
 ### Telegram-parity audit — open CODE (2026-08-28)
 
@@ -295,7 +295,7 @@
 ### Chat — other
 
 
-- [ ] **[Chat] Folders API entirely unimplemented** — superseded checklist above; membership/pin/`ListChats.folder_id` + Gateway REST shipped (**Batch 19**); `UpdateFolder`/`DeleteFolder` still Unimplemented.
+- [ ] **[Chat] Folders API entirely unimplemented** — superseded checklist above; membership/pin/`ListChats.folder_id` + Gateway REST shipped (**Batch 19**); `UpdateFolder`/`DeleteFolder` **done (Batch 20)**.
 - [ ] **[Chat] `quick_access_chats` table + RPC** — superseded checklist above.
 - [ ] **[Chat/Messaging/File] Stickers + GIF** — **P0**, 0 code: `[Chat]` pack store + provider search RPC; `[Messaging]` `STICKER`/`GIF` send payload + composer contract; `[File]` animated asset processing — superseded single-line below
 - [ ] **[Chat] Стикер-паки / GIF / voice-note first-class — 0 кода** — see `[Chat/Messaging/File] Stickers + GIF` above; voice-note via `[File]` upload category

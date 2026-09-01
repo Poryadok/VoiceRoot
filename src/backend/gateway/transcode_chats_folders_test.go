@@ -10,8 +10,10 @@ import (
 
 type recordingFolderChat struct {
 	chatv1.UnimplementedChatServiceServer
-	listFoldersLast bool
+	listFoldersLast  bool
 	createFolderLast *chatv1.CreateFolderRequest
+	updateFolderLast *chatv1.UpdateFolderRequest
+	deleteFolderLast *chatv1.DeleteFolderRequest
 	addLast          *chatv1.AddChatToFolderRequest
 	removeLast       *chatv1.RemoveChatFromFolderRequest
 	reorderLast      *chatv1.ReorderFolderChatsRequest
@@ -28,6 +30,16 @@ func (s *recordingFolderChat) ListFolders(context.Context, *chatv1.ListFoldersRe
 func (s *recordingFolderChat) CreateFolder(_ context.Context, req *chatv1.CreateFolderRequest) (*chatv1.CreateFolderResponse, error) {
 	s.createFolderLast = req
 	return &chatv1.CreateFolderResponse{}, nil
+}
+
+func (s *recordingFolderChat) UpdateFolder(_ context.Context, req *chatv1.UpdateFolderRequest) (*chatv1.UpdateFolderResponse, error) {
+	s.updateFolderLast = req
+	return &chatv1.UpdateFolderResponse{}, nil
+}
+
+func (s *recordingFolderChat) DeleteFolder(_ context.Context, req *chatv1.DeleteFolderRequest) (*chatv1.DeleteFolderResponse, error) {
+	s.deleteFolderLast = req
+	return &chatv1.DeleteFolderResponse{}, nil
 }
 
 func (s *recordingFolderChat) AddChatToFolder(_ context.Context, req *chatv1.AddChatToFolderRequest) (*chatv1.AddChatToFolderResponse, error) {
@@ -86,6 +98,20 @@ func TestTranscodeChatsFolders(t *testing.T) {
 	})
 	if createFolder.Code != http.StatusOK || grpcRec.createFolderLast == nil || grpcRec.createFolderLast.GetName() != "Work" {
 		t.Fatalf("CreateFolder status=%d req=%+v", createFolder.Code, grpcRec.createFolderLast)
+	}
+
+	updateFolder := performRequest(h, http.MethodPatch, "/api/v1/chats/folders/f1", `{"name":"Renamed","sort_order":7}`, map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	if updateFolder.Code != http.StatusOK || grpcRec.updateFolderLast == nil || grpcRec.updateFolderLast.GetFolderId() != "f1" || grpcRec.updateFolderLast.GetName() != "Renamed" {
+		t.Fatalf("UpdateFolder status=%d req=%+v", updateFolder.Code, grpcRec.updateFolderLast)
+	}
+
+	deleteFolder := performRequest(h, http.MethodDelete, "/api/v1/chats/folders/f2", "", map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	if deleteFolder.Code != http.StatusNoContent || grpcRec.deleteFolderLast == nil || grpcRec.deleteFolderLast.GetFolderId() != "f2" {
+		t.Fatalf("DeleteFolder status=%d req=%+v", deleteFolder.Code, grpcRec.deleteFolderLast)
 	}
 
 	add := performRequest(h, http.MethodPost, "/api/v1/chats/folders/f1/chats", `{"chat_id":"c1"}`, map[string]string{
