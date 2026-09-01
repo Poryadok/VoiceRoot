@@ -282,7 +282,7 @@
 - [ ] **[Chat] R3-A04 — Message requests bucketing** — `EnsureDM` always sets recipient `inbox_bucket=requests`; no friend/contact lookup; `SendMessage` does not re-open `declined` → `requests`. Spec: [text-chat.md](../features/text-chat.md) § «Запросы сообщений», [friends.md](../features/friends.md). — **P0**
 - [ ] **[Messaging] R3-A05 — `PinMessage` permission gap** — when `space_id` nil, any member can pin; must enforce `TEXT_CHAT_PIN_MESSAGES` via Role Service — [messaging-service.md](../microservices/messaging-service.md).
 - [ ] **[Messaging] R3-A06 — `validateAttachments` blocks rich payloads** — requires `file_id` on all attachments; blocks normative Location/Article payloads without File row — relax validation per `MessageContentType` — [messaging-service.md](../microservices/messaging-service.md).
-- [ ] **[Chat] R3-A12 — Standalone `channel` chats** — `CreateChat` rejects channel type; breaks «Каналы» system folder — [navigation.md](../features/navigation.md) § Partial shipment. Related: ListChats SQL below.
+- [ ] **[Chat] R3-A12 — Standalone `channel` chats** — `CreateChat` rejects channel type without `space_id`; breaks «Каналы» system folder until standalone create ships — [navigation.md](../features/navigation.md) § Partial shipment. **Batch 14:** membership `channel` rows now appear in `ListChats` main inbox SQL.
 - [ ] **[Chat] R3-A14 — `CreateChat`/`UpdateChat` proto fields ignored** — `topic`, `threads_enabled`, `allow_user_main_feed` not persisted; channels not updatable via Chat API — `group.go`. (Partial overlap with § Chat — other `UpdateChat` bullets.)
 - [ ] **[Chat] R3-A15 — `chats.allow_guests` dead column** — migration column unused; no proto field or handler — align or drop in migration follow-up.
 - [ ] **[Chat] R3-A16 — `ListChats` space merge bugs** — **partial fix (Batch 13):** archived space chats filtered via `chat_members`; DM/group list rows hydrate `space_id`/thread/E2E fields; page-1 merge cursor recomputed after space union. **Deferred:** unified SQL pagination for space chats on page 2+ (still page-1 merge only).
@@ -302,8 +302,6 @@
 - [ ] **[File] Upload intent/category: video vs video_note** — proto field + processing branch in `ConfirmUpload` — composer video-note flow — **P0**
 - [x] **[Chat] `MuteChat` / `ArchiveChat`** — `mute_archive.go`. `DeleteChat` всё ещё нет handler.
 - [ ] **[Chat] `DeleteChat` unimplemented** — proto + gRPC handler exist; no `ChatGRPC.DeleteChat` (`src/backend/chat/internal/grpcsvc/`).
-- [ ] **[Chat] `ListChats` omits channels** — SQL filters `c.type IN ('dm', 'group')` (`src/backend/chat/internal/store/list_chats.go:87,97`). Space channels are invisible in the main inbox despite `chat-service.md` listing Channels as a folder dimension. — **P0**
-- [ ] **[Chat] ListChats channels in inbox** — extend SQL beyond `dm|group`; wire Channels system-folder predicate — `list_chats.go:87` — **P0**
 - [x] **[Chat] Group `last_message_at` never updated from message stream** — **done:** `TouchLastMessageAt` updates `type IN ('dm','group','channel')` (`dm.go`); store IT `last_message_at_integration_test.go`.
 - [x] **[Chat] Group last_message_at from message stream** — **done:** same as above.
 - [ ] **[Chat] `ListChats` partial `Chat` objects** — link UI gap for `e2e_enabled`, `space_id`, thread flags in list rows — [chat-service.md](../microservices/chat-service.md)
