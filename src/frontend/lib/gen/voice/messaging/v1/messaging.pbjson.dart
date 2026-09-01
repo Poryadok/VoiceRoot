@@ -66,6 +66,36 @@ final $typed_data.Uint8List sharedMediaKindDescriptor = $convert.base64Decode(
     'GwoXU0hBUkVEX01FRElBX0tJTkRfTElOS1MQAxIbChdTSEFSRURfTUVESUFfS0lORF9WT0lDRR'
     'AE');
 
+@$core.Deprecated('Use messageContentTypeDescriptor instead')
+const MessageContentType$json = {
+  '1': 'MessageContentType',
+  '2': [
+    {'1': 'MESSAGE_CONTENT_TYPE_UNSPECIFIED', '2': 0},
+    {'1': 'MESSAGE_CONTENT_TYPE_TEXT', '2': 1},
+    {'1': 'MESSAGE_CONTENT_TYPE_PHOTO', '2': 2},
+    {'1': 'MESSAGE_CONTENT_TYPE_VIDEO', '2': 3},
+    {'1': 'MESSAGE_CONTENT_TYPE_DOCUMENT', '2': 4},
+    {'1': 'MESSAGE_CONTENT_TYPE_VOICE', '2': 5},
+    {'1': 'MESSAGE_CONTENT_TYPE_STICKER', '2': 6},
+    {'1': 'MESSAGE_CONTENT_TYPE_GIF', '2': 7},
+    {'1': 'MESSAGE_CONTENT_TYPE_ARTICLE', '2': 8},
+    {'1': 'MESSAGE_CONTENT_TYPE_LOCATION', '2': 9},
+    {'1': 'MESSAGE_CONTENT_TYPE_VIDEO_NOTE', '2': 10},
+    {'1': 'MESSAGE_CONTENT_TYPE_MUSIC', '2': 11},
+  ],
+};
+
+/// Descriptor for `MessageContentType`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List messageContentTypeDescriptor = $convert.base64Decode(
+    'ChJNZXNzYWdlQ29udGVudFR5cGUSJAogTUVTU0FHRV9DT05URU5UX1RZUEVfVU5TUEVDSUZJRU'
+    'QQABIdChlNRVNTQUdFX0NPTlRFTlRfVFlQRV9URVhUEAESHgoaTUVTU0FHRV9DT05URU5UX1RZ'
+    'UEVfUEhPVE8QAhIeChpNRVNTQUdFX0NPTlRFTlRfVFlQRV9WSURFTxADEiEKHU1FU1NBR0VfQ0'
+    '9OVEVOVF9UWVBFX0RPQ1VNRU5UEAQSHgoaTUVTU0FHRV9DT05URU5UX1RZUEVfVk9JQ0UQBRIg'
+    'ChxNRVNTQUdFX0NPTlRFTlRfVFlQRV9TVElDS0VSEAYSHAoYTUVTU0FHRV9DT05URU5UX1RZUE'
+    'VfR0lGEAcSIAocTUVTU0FHRV9DT05URU5UX1RZUEVfQVJUSUNMRRAIEiEKHU1FU1NBR0VfQ09O'
+    'VEVOVF9UWVBFX0xPQ0FUSU9OEAkSIwofTUVTU0FHRV9DT05URU5UX1RZUEVfVklERU9fTk9URR'
+    'AKEh4KGk1FU1NBR0VfQ09OVEVOVF9UWVBFX01VU0lDEAs=');
+
 @$core.Deprecated('Use lastMessageDeliveryStateDescriptor instead')
 const LastMessageDeliveryState$json = {
   '1': 'LastMessageDeliveryState',
@@ -894,12 +924,23 @@ const ChatListMetadata$json = {
       '10': 'lastMessageDeliveryState',
       '17': true
     },
+    {
+      '1': 'last_message_content_type',
+      '3': 7,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.messaging.v1.MessageContentType',
+      '9': 4,
+      '10': 'lastMessageContentType',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_last_message_preview'},
     {'1': '_last_message_at'},
     {'1': '_last_message_is_outgoing'},
     {'1': '_last_message_delivery_state'},
+    {'1': '_last_message_content_type'},
   ],
 };
 
@@ -912,9 +953,11 @@ final $typed_data.Uint8List chatListMetadataDescriptor = $convert.base64Decode(
     'iAEBEjwKGGxhc3RfbWVzc2FnZV9pc19vdXRnb2luZxgFIAEoCEgCUhVsYXN0TWVzc2FnZUlzT3'
     'V0Z29pbmeIAQEScAobbGFzdF9tZXNzYWdlX2RlbGl2ZXJ5X3N0YXRlGAYgASgOMiwudm9pY2Uu'
     'bWVzc2FnaW5nLnYxLkxhc3RNZXNzYWdlRGVsaXZlcnlTdGF0ZUgDUhhsYXN0TWVzc2FnZURlbG'
-    'l2ZXJ5U3RhdGWIAQFCFwoVX2xhc3RfbWVzc2FnZV9wcmV2aWV3QhIKEF9sYXN0X21lc3NhZ2Vf'
-    'YXRCGwoZX2xhc3RfbWVzc2FnZV9pc19vdXRnb2luZ0IeChxfbGFzdF9tZXNzYWdlX2RlbGl2ZX'
-    'J5X3N0YXRl');
+    'l2ZXJ5U3RhdGWIAQESZgoZbGFzdF9tZXNzYWdlX2NvbnRlbnRfdHlwZRgHIAEoDjImLnZvaWNl'
+    'Lm1lc3NhZ2luZy52MS5NZXNzYWdlQ29udGVudFR5cGVIBFIWbGFzdE1lc3NhZ2VDb250ZW50VH'
+    'lwZYgBAUIXChVfbGFzdF9tZXNzYWdlX3ByZXZpZXdCEgoQX2xhc3RfbWVzc2FnZV9hdEIbChlf'
+    'bGFzdF9tZXNzYWdlX2lzX291dGdvaW5nQh4KHF9sYXN0X21lc3NhZ2VfZGVsaXZlcnlfc3RhdG'
+    'VCHAoaX2xhc3RfbWVzc2FnZV9jb250ZW50X3R5cGU=');
 
 @$core.Deprecated('Use sendMessageResponseDescriptor instead')
 const SendMessageResponse$json = {

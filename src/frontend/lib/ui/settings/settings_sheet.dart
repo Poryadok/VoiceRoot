@@ -11,6 +11,7 @@ import '../../settings/theme_preference.dart';
 import '../../theme/voice_theme_providers.dart';
 import '../core/voice_bottom_sheet.dart';
 import '../profile/create_profile_sheet.dart';
+import '../profile/manage_profiles_sheet.dart';
 import 'privacy_settings_screen.dart';
 import 'notification_settings_screen.dart';
 import 'security_settings_screen.dart';
@@ -95,6 +96,16 @@ class SettingsSheet extends ConsumerWidget {
                 onTap: () async {
                   Navigator.of(context).pop();
                   await showCreateProfileSheet(context);
+                },
+              ),
+              ListTile(
+                key: const Key('settings_manage_profiles'),
+                contentPadding: EdgeInsets.zero,
+                title: Text(l10n.manageProfilesTitle),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () async {
+                  Navigator.of(context).pop();
+                  await showManageProfilesSheet(context);
                 },
               ),
               ListTile(

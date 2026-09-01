@@ -359,6 +359,13 @@
   "createProfileLimitReached": "Profile limit reached. Premium allows up to 5 profiles.",
   "createProfileOpenSubscription": "View Premium",
   "createProfileAddAction": "Add profile",
+  "manageProfilesTitle": "Manage profiles",
+  "manageProfilesPrimaryBadge": "Primary",
+  "manageProfilesDeleteAction": "Remove profile",
+  "manageProfilesDeleteConfirmTitle": "Remove profile?",
+  "manageProfilesDeleteConfirmMessage": "This profile will be removed from your account. You can create a new one later if your plan allows.",
+  "manageProfilesDeleteActiveBlocked": "Switch to another profile before removing this one.",
+  "manageProfilesDeletePrimaryBlocked": "The primary profile cannot be removed.",
   "profileSwitchVoiceBound": "Voice: {profileName}",
   "@profileSwitchVoiceBound": {
     "placeholders": {

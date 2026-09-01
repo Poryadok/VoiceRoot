@@ -1934,6 +1934,7 @@ class ChatListMetadata extends $pb.GeneratedMessage {
     $3.Timestamp? lastMessageAt,
     $core.bool? lastMessageIsOutgoing,
     LastMessageDeliveryState? lastMessageDeliveryState,
+    MessageContentType? lastMessageContentType,
   }) {
     final result = create();
     if (chat != null) result.chat = chat;
@@ -1945,6 +1946,8 @@ class ChatListMetadata extends $pb.GeneratedMessage {
       result.lastMessageIsOutgoing = lastMessageIsOutgoing;
     if (lastMessageDeliveryState != null)
       result.lastMessageDeliveryState = lastMessageDeliveryState;
+    if (lastMessageContentType != null)
+      result.lastMessageContentType = lastMessageContentType;
     return result;
   }
 
@@ -1972,6 +1975,8 @@ class ChatListMetadata extends $pb.GeneratedMessage {
     ..aE<LastMessageDeliveryState>(
         6, _omitFieldNames ? '' : 'lastMessageDeliveryState',
         enumValues: LastMessageDeliveryState.values)
+    ..aE<MessageContentType>(7, _omitFieldNames ? '' : 'lastMessageContentType',
+        enumValues: MessageContentType.values)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2051,6 +2056,15 @@ class ChatListMetadata extends $pb.GeneratedMessage {
   $core.bool hasLastMessageDeliveryState() => $_has(5);
   @$pb.TagNumber(6)
   void clearLastMessageDeliveryState() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  MessageContentType get lastMessageContentType => $_getN(6);
+  @$pb.TagNumber(7)
+  set lastMessageContentType(MessageContentType value) => $_setField(7, value);
+  @$pb.TagNumber(7)
+  $core.bool hasLastMessageContentType() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearLastMessageContentType() => $_clearField(7);
 }
 
 class SendMessageResponse extends $pb.GeneratedMessage {

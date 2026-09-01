@@ -1631,6 +1631,9 @@ func (s *MessagingGRPC) GetChatListMetadata(ctx context.Context, req *messagingv
 			state := mapLastMessageDeliveryState(row.LastMessageDeliveryState)
 			item.LastMessageDeliveryState = &state
 		}
+		if ct := mapLastMessageContentType(row.LastMessageContentType); ct != messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_UNSPECIFIED {
+			item.LastMessageContentType = &ct
+		}
 		out[chatID.String()] = item
 	}
 	return &messagingv1.GetChatListMetadataResponse{ByChatId: out}, nil
@@ -1939,6 +1942,35 @@ func mapLastMessageDeliveryState(state string) messagingv1.LastMessageDeliverySt
 		return messagingv1.LastMessageDeliveryState_LAST_MESSAGE_DELIVERY_STATE_READ
 	default:
 		return messagingv1.LastMessageDeliveryState_LAST_MESSAGE_DELIVERY_STATE_UNSPECIFIED
+	}
+}
+
+func mapLastMessageContentType(state string) messagingv1.MessageContentType {
+	switch strings.ToLower(strings.TrimSpace(state)) {
+	case "text":
+		return messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_TEXT
+	case "photo":
+		return messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_PHOTO
+	case "video":
+		return messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_VIDEO
+	case "document":
+		return messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_DOCUMENT
+	case "voice":
+		return messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_VOICE
+	case "sticker":
+		return messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_STICKER
+	case "gif":
+		return messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_GIF
+	case "article":
+		return messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_ARTICLE
+	case "location":
+		return messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_LOCATION
+	case "video_note":
+		return messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_VIDEO_NOTE
+	case "music":
+		return messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_MUSIC
+	default:
+		return messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_UNSPECIFIED
 	}
 }
 

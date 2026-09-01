@@ -1292,6 +1292,48 @@ abstract class AppLocalizations {
   /// **'Add profile'**
   String get createProfileAddAction;
 
+  /// No description provided for @manageProfilesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage profiles'**
+  String get manageProfilesTitle;
+
+  /// No description provided for @manageProfilesPrimaryBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'Primary'**
+  String get manageProfilesPrimaryBadge;
+
+  /// No description provided for @manageProfilesDeleteAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove profile'**
+  String get manageProfilesDeleteAction;
+
+  /// No description provided for @manageProfilesDeleteConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove profile?'**
+  String get manageProfilesDeleteConfirmTitle;
+
+  /// No description provided for @manageProfilesDeleteConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'This profile will be removed from your account. You can create a new one later if your plan allows.'**
+  String get manageProfilesDeleteConfirmMessage;
+
+  /// No description provided for @manageProfilesDeleteActiveBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to another profile before removing this one.'**
+  String get manageProfilesDeleteActiveBlocked;
+
+  /// No description provided for @manageProfilesDeletePrimaryBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'The primary profile cannot be removed.'**
+  String get manageProfilesDeletePrimaryBlocked;
+
   /// No description provided for @profileSwitchVoiceBound.
   ///
   /// In en, this message translates to:

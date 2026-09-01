@@ -81,7 +81,8 @@ func (s *DMStore) ListChatsPage(ctx context.Context, viewerProfileID uuid.UUID, 
 	var rows pgx.Rows
 	if cursor == "" {
 		rows, err = s.Pool.Query(ctx, `
-SELECT c.id, c.type, c.name, c.avatar_url, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at, m.inbox_bucket,
+SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
+       c.slow_mode_seconds, c.threads_enabled, c.allow_user_main_feed, c.e2e_enabled, m.inbox_bucket,
        COALESCE(c.last_message_at, c.created_at) AS sort_at
 FROM chats c
 INNER JOIN chat_members m ON m.chat_id = c.id AND m.profile_id = $1
@@ -91,7 +92,8 @@ LIMIT $2
 `, viewerProfileID, fetch, inbox)
 	} else {
 		rows, err = s.Pool.Query(ctx, `
-SELECT c.id, c.type, c.name, c.avatar_url, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at, m.inbox_bucket,
+SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
+       c.slow_mode_seconds, c.threads_enabled, c.allow_user_main_feed, c.e2e_enabled, m.inbox_bucket,
        COALESCE(c.last_message_at, c.created_at) AS sort_at
 FROM chats c
 INNER JOIN chat_members m ON m.chat_id = c.id AND m.profile_id = $1
@@ -116,12 +118,16 @@ LIMIT $4
 	for rows.Next() {
 		var id, creator uuid.UUID
 		var chatType string
+		var spaceID *uuid.UUID
 		var name, avatarURL sql.NullString
 		var lastMsg sql.NullTime
 		var createdAt, updatedAt time.Time
+		var slowMode int32
+		var threadsEnabled, allowMainFeed, e2eEnabled bool
 		var inboxBucket string
 		var sortAt time.Time
-		if err := rows.Scan(&id, &chatType, &name, &avatarURL, &creator, &lastMsg, &createdAt, &updatedAt, &inboxBucket, &sortAt); err != nil {
+		if err := rows.Scan(&id, &chatType, &spaceID, &name, &avatarURL, &creator, &lastMsg, &createdAt, &updatedAt,
+			&slowMode, &threadsEnabled, &allowMainFeed, &e2eEnabled, &inboxBucket, &sortAt); err != nil {
 			return nil, err
 		}
 		var lm *time.Time
@@ -130,13 +136,18 @@ LIMIT $4
 			lm = &t
 		}
 		row := &ChatRow{
-			ID:               id,
-			Type:             chatType,
-			CreatorProfileID: creator,
-			CreatedAt:        createdAt.UTC(),
-			UpdatedAt:        updatedAt.UTC(),
-			LastMessageAt:    lm,
-			InboxBucket:      inboxBucket,
+			ID:                id,
+			Type:              chatType,
+			SpaceID:           spaceID,
+			CreatorProfileID:  creator,
+			CreatedAt:         createdAt.UTC(),
+			UpdatedAt:         updatedAt.UTC(),
+			LastMessageAt:     lm,
+			InboxBucket:       inboxBucket,
+			SlowModeSeconds:   slowMode,
+			ThreadsEnabled:    threadsEnabled,
+			AllowUserMainFeed: allowMainFeed,
+			E2EEnabled:        e2eEnabled,
 		}
 		if name.Valid {
 			n := name.String
@@ -168,7 +179,8 @@ LIMIT $4
 }
 
 // ListSpaceChatsForProfile returns space-bound group and channel chats visible via space membership.
-func (s *DMStore) ListSpaceChatsForProfile(ctx context.Context, spaceIDs []uuid.UUID) ([]*ChatRow, error) {
+// Chats archived by the viewer in chat_members are excluded.
+func (s *DMStore) ListSpaceChatsForProfile(ctx context.Context, viewerProfileID uuid.UUID, spaceIDs []uuid.UUID) ([]*ChatRow, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("dm store: pool not configured")
 	}
@@ -177,12 +189,16 @@ func (s *DMStore) ListSpaceChatsForProfile(ctx context.Context, spaceIDs []uuid.
 	}
 	rows, err := s.Pool.Query(ctx, `
 SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
-       c.threads_enabled, c.allow_user_main_feed, c.e2e_enabled,
+       c.threads_enabled, c.allow_user_main_feed, c.e2e_enabled, c.slow_mode_seconds,
        COALESCE(c.last_message_at, c.created_at) AS sort_at
 FROM chats c
 WHERE c.space_id = ANY($1) AND c.type IN ('group', 'channel')
+  AND NOT EXISTS (
+    SELECT 1 FROM chat_members m
+    WHERE m.chat_id = c.id AND m.profile_id = $2 AND m.is_archived = true
+  )
 ORDER BY sort_at DESC, c.id DESC
-`, spaceIDs)
+`, spaceIDs, viewerProfileID)
 	if err != nil {
 		return nil, err
 	}
@@ -197,9 +213,10 @@ ORDER BY sort_at DESC, c.id DESC
 		var lastMsg sql.NullTime
 		var createdAt, updatedAt time.Time
 		var threadsEnabled, allowMainFeed, e2eEnabled bool
+		var slowMode int32
 		var sortAt time.Time
 		if err := rows.Scan(&id, &chatType, &spaceID, &name, &avatarURL, &creator, &lastMsg, &createdAt, &updatedAt,
-			&threadsEnabled, &allowMainFeed, &e2eEnabled, &sortAt); err != nil {
+			&threadsEnabled, &allowMainFeed, &e2eEnabled, &slowMode, &sortAt); err != nil {
 			return nil, err
 		}
 		var lm *time.Time
@@ -219,6 +236,7 @@ ORDER BY sort_at DESC, c.id DESC
 			ThreadsEnabled:    threadsEnabled,
 			AllowUserMainFeed: allowMainFeed,
 			E2EEnabled:        e2eEnabled,
+			SlowModeSeconds:   slowMode,
 		}
 		if name.Valid {
 			n := name.String
@@ -270,4 +288,17 @@ func MergeListChatRows(primary, extra []*ChatRow, limit int) []*ChatRow {
 		merged = merged[:limit]
 	}
 	return merged
+}
+
+// ListChatsPageCursorFromRows truncates rows to limit and returns the opaque cursor for the next page.
+func ListChatsPageCursorFromRows(rows []*ChatRow, limit int) ([]*ChatRow, string) {
+	if limit < 1 || len(rows) <= limit {
+		return rows, ""
+	}
+	last := rows[limit-1]
+	sk := last.CreatedAt
+	if last.LastMessageAt != nil {
+		sk = *last.LastMessageAt
+	}
+	return rows[:limit], encodeListChatCursor(sk, last.ID)
 }

@@ -42,6 +42,8 @@ void main() {
     expect(find.byKey(SettingsSheet.pttModeKey), findsOneWidget);
     expect(find.byKey(SettingsSheet.pttKeybindKey), findsOneWidget);
 
+    await tester.ensureVisible(find.byKey(SettingsSheet.pttModeKey));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(SettingsSheet.pttModeKey));
     await tester.pumpAndSettle();
 
