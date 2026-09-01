@@ -75,7 +75,9 @@ assert_contains "${build_services}" admin
 [[ "${run_admin}" == "true" ]] || fail "expected run_admin for admin path"
 
 echo "== resolve-staging-matrix is idempotent =="
-FILTER_JSON='{"code":"true","svc_user":"true"}' GO_SERVICES_JSON='["user","social","space"]' run_matrix
+export FILTER_JSON='{"code":"true","svc_user":"true"}'
+export GO_SERVICES_JSON='["user","social","space"]'
+run_matrix
 first_build="${build_services}"
 first_promote="${promote_services}"
 first_rollout="${needs_user_space_rollout}"
@@ -83,6 +85,7 @@ run_matrix
 [[ "${build_services}" == "${first_build}" ]] || fail "idempotent build_services mismatch"
 [[ "${promote_services}" == "${first_promote}" ]] || fail "idempotent promote_services mismatch"
 [[ "${needs_user_space_rollout}" == "${first_rollout}" ]] || fail "idempotent rollout mismatch"
+unset FILTER_JSON GO_SERVICES_JSON
 
 echo "== FORCE_FULL builds all =="
 FORCE_FULL=true GO_SERVICES_JSON='[]' run_matrix
