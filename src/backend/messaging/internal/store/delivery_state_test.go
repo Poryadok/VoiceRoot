@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 
 	"github.com/google/uuid"
@@ -27,7 +26,6 @@ func TestMessagesStore_UpsertDeliveredCursor_andMetadata(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForStoreTest(t, ctx)
 	seedMessagingSchema(t, ctx, pool)
-	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
 	s := &MessagesStore{Pool: pool}
 
 	chatID := uuid.New()
