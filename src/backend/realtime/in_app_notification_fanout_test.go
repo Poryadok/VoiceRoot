@@ -144,7 +144,7 @@ func TestInAppNotificationFanouts_ReactionNotifiesAuthor(t *testing.T) {
 
 	d := notificationPayload(t, fanouts[0].Envelope)
 	if fanouts[0].ProfileID != authorID {
-		t.Fatalf("profile=%q want %q", fanouts[0].ProfileID, authorID, nil)
+		t.Fatalf("profile=%q want %q", fanouts[0].ProfileID, authorID)
 	}
 	if d["type"] != "reaction" || d["chat_id"] != chatID || d["message_id"] != msgID || d["reactor_profile_id"] != reactorID || d["emoji"] != "👍" {
 		t.Fatalf("payload=%v", d)
@@ -245,7 +245,7 @@ func TestInAppNotificationFanouts_ReactionDegradesTwoMemberDM(t *testing.T) {
 		t.Fatalf("fanouts=%d want 1", len(fanouts))
 	}
 	if fanouts[0].ProfileID != authorID {
-		t.Fatalf("profile=%q want author %q", fanouts[0].ProfileID, authorID, nil)
+		t.Fatalf("profile=%q want author %q", fanouts[0].ProfileID, authorID)
 	}
 }
 
