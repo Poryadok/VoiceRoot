@@ -33,6 +33,11 @@ func (s *ChatGRPC) ArchiveChat(ctx context.Context, req *chatv1.ArchiveChatReque
 		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	if req.GetArchived() {
+		if err := s.DM.RemoveQuickAccess(ctx, profileID, chatID); err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
 	return &chatv1.ArchiveChatResponse{}, nil
 }
 

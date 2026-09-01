@@ -70,6 +70,8 @@ type DMStore interface {
 	AddQuickAccess(ctx context.Context, profileID, chatID uuid.UUID, sortOrder *int32) error
 	RemoveQuickAccess(ctx context.Context, profileID, chatID uuid.UUID) error
 	ReorderQuickAccess(ctx context.Context, profileID uuid.UUID, chatIDs []uuid.UUID) error
+	ListFolders(ctx context.Context, profileID uuid.UUID) ([]store.FolderRow, error)
+	CreateFolder(ctx context.Context, profileID uuid.UUID, name, filterConfigJSON string) (*store.FolderRow, error)
 	CreateGroupChat(ctx context.Context, creatorProfileID uuid.UUID, name string) (*store.ChatRow, error)
 	CreateSpaceGroupChat(ctx context.Context, creatorProfileID, spaceID uuid.UUID, name string) (*store.ChatRow, error)
 	CreateSpaceChannelChat(ctx context.Context, creatorProfileID, spaceID uuid.UUID, name string) (*store.ChatRow, error)
