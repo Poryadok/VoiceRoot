@@ -3,10 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../state/chat_navigation_providers.dart';
-import '../../state/chat_providers.dart';
+import '../../state/message_requests_providers.dart';
 import '../../state/shell_providers.dart';
 import '../../theme/voice_colors.dart';
 import 'chat_rail_sections.dart';
+import 'message_requests_folder.dart';
 
 /// Mobile drawer stub (R2-A04 incremental): folders, Quick Access, settings entry.
 class MobileShellDrawer extends ConsumerWidget {
@@ -54,12 +55,27 @@ class MobileShellDrawer extends ConsumerWidget {
                       selected: selectedFolderId == folder.id,
                       onTap: () {
                         final current = ref.read(selectedChatFolderIdProvider);
-                        ref.read(selectedChatFolderIdProvider.notifier).state =
-                            current == folder.id ? null : folder.id;
-                        ref.read(chatListControllerProvider.notifier).loadInitial();
+                        selectChatFolder(
+                          ref,
+                          current == folder.id ? null : folder.id,
+                        );
                         Navigator.of(context).pop();
                       },
                     ),
+                  MessageRequestsFolderDrawerTile(
+                    selected:
+                        isMessageRequestsFolderSelected(selectedFolderId),
+                    onTap: () {
+                      final current = ref.read(selectedChatFolderIdProvider);
+                      selectChatFolder(
+                        ref,
+                        isMessageRequestsFolderSelected(current)
+                            ? null
+                            : kVirtualMessageRequestsFolderId,
+                      );
+                      Navigator.of(context).pop();
+                    },
+                  ),
                 ],
               ),
               loading: () => const LinearProgressIndicator(minHeight: 2),

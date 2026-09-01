@@ -22,6 +22,7 @@ import 'connectivity_providers.dart';
 import 'gateway_providers.dart';
 import 'message_cache_providers.dart';
 import 'e2e_providers.dart';
+import 'message_requests_providers.dart';
 import 'mobile_opened_chat_strip.dart';
 import 'space_providers.dart';
 import 'shell_providers.dart';
@@ -301,7 +302,9 @@ class ChatListController extends StateNotifier<ChatListState> {
         .listChats(
           authorization: auth,
           inbox: _ref.read(chatInboxProvider),
-          folderId: _ref.read(selectedChatFolderIdProvider),
+          folderId: _ref.read(chatInboxProvider) == 'requests'
+              ? null
+              : _ref.read(selectedChatFolderIdProvider),
         );
     if (!mounted) return;
     switch (result) {
@@ -330,7 +333,9 @@ class ChatListController extends StateNotifier<ChatListState> {
           authorization: auth,
           cursor: cursor,
           inbox: _ref.read(chatInboxProvider),
-          folderId: _ref.read(selectedChatFolderIdProvider),
+          folderId: _ref.read(chatInboxProvider) == 'requests'
+              ? null
+              : _ref.read(selectedChatFolderIdProvider),
         );
     if (!mounted) return;
     switch (result) {
@@ -490,6 +495,7 @@ class ChatListController extends StateNotifier<ChatListState> {
   }
 
   Future<String?> _afterRequestAction() async {
+    _ref.invalidate(messageRequestsSummaryProvider);
     await loadInitial();
     _invalidateChatLists(_ref);
     return null;

@@ -1472,6 +1472,18 @@ abstract class AppLocalizations {
   /// **'Requests'**
   String get chatInboxRequests;
 
+  /// No description provided for @chatMessageRequestsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No message requests'**
+  String get chatMessageRequestsEmpty;
+
+  /// No description provided for @chatMessageRequestsEmptyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'When someone you do not know messages you, their chat appears here.'**
+  String get chatMessageRequestsEmptyHint;
+
   /// No description provided for @chatTyping.
   ///
   /// In en, this message translates to:
@@ -3103,6 +3115,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Direct messages'**
   String get notificationTypeNewMessage;
+
+  /// No description provided for @notificationTypeMessageRequest.
+  ///
+  /// In en, this message translates to:
+  /// **'Message requests'**
+  String get notificationTypeMessageRequest;
 
   /// No description provided for @notificationTypeMention.
   ///

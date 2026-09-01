@@ -93,6 +93,7 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 - [ ] **Локальные черновики** — Hive/SQLite, один на chat; multi-device sync отказано в спеке.
 - [ ] **OG link preview** — unfurl на клиенте; сервер не обязан.
 - [ ] **Stickers / GIF / voice-note composer** — нет UI (и нет backend packs). См. [backend.md](backend.md) § High Chat; решение спеки — [product-roadmap.md](product-roadmap.md).
+- [x] **Message requests inbox UI** — virtual «Запросы» folder in rail/drawer (visible when pending > 0, unread badge); removed middle-column segmented toggle (§1.3 tombstone); accept/decline on list rows; `notificationTypeMessageRequest` settings toggle — **Batch 22b** (backend bucketing Batch 21a).
 - [ ] **Кастомные папки чатов** — All/DMs/Groups + custom; REST folders + rail/drawer UI shipped (parallel/client); **pin/reorder UI** in list ctx + custom-folder drag reorder shipped (Batch 21b); edit-folders management UI deferred.
 - [ ] **In-chat search: next/prev highlight** — [search.md](../features/search.md).
 - [ ] **Favorites / QR add friend / phone-book sync UI** — gRPC contacts есть, REST list нет; QR в продукте отсутствует. [friends.md](../features/friends.md).

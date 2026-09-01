@@ -4,6 +4,7 @@ import 'dart:convert';
 abstract final class NotificationEventTypes {
   static const all = <String>[
     newMessage,
+    messageRequest,
     mention,
     reply,
     reaction,
@@ -13,6 +14,7 @@ abstract final class NotificationEventTypes {
   ];
 
   static const newMessage = 'new_message';
+  static const messageRequest = 'message_request';
   static const mention = 'mention';
   static const reply = 'reply';
   static const reaction = 'reaction';

@@ -207,6 +207,7 @@ class _NotificationSettingsScreenState
   String _eventLabel(AppLocalizations l10n, String type) {
     return switch (type) {
       NotificationEventTypes.newMessage => l10n.notificationTypeNewMessage,
+      NotificationEventTypes.messageRequest => l10n.notificationTypeMessageRequest,
       NotificationEventTypes.mention => l10n.notificationTypeMention,
       NotificationEventTypes.reply => l10n.notificationTypeReply,
       NotificationEventTypes.reaction => l10n.notificationTypeReaction,

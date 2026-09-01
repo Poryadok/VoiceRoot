@@ -6,8 +6,10 @@ import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/chat_navigation_providers.dart';
 import '../../state/chat_providers.dart';
+import '../../state/message_requests_providers.dart';
 import '../../state/shell_providers.dart';
 import '../../theme/voice_colors.dart';
+import 'message_requests_folder.dart';
 
 /// Folder icons in desktop rail (§1.1b) — functional, icon + tooltip.
 class ChatRailFoldersSection extends ConsumerWidget {
@@ -37,6 +39,10 @@ class ChatRailFoldersSection extends ConsumerWidget {
                 selected: selectedId == folder.id,
                 onPressed: () => _selectFolder(ref, folder.id),
               ),
+            MessageRequestsFolderRailButton(
+              selected: isMessageRequestsFolderSelected(selectedId),
+              onPressed: () => _selectMessageRequests(ref),
+            ),
             const Divider(height: 1),
           ],
         );
@@ -58,9 +64,17 @@ class ChatRailFoldersSection extends ConsumerWidget {
 
   void _selectFolder(WidgetRef ref, String folderId) {
     final current = ref.read(selectedChatFolderIdProvider);
-    ref.read(selectedChatFolderIdProvider.notifier).state =
-        current == folderId ? null : folderId;
-    ref.read(chatListControllerProvider.notifier).loadInitial();
+    selectChatFolder(ref, current == folderId ? null : folderId);
+  }
+
+  void _selectMessageRequests(WidgetRef ref) {
+    final current = ref.read(selectedChatFolderIdProvider);
+    selectChatFolder(
+      ref,
+      isMessageRequestsFolderSelected(current)
+          ? null
+          : kVirtualMessageRequestsFolderId,
+    );
   }
 }
 
