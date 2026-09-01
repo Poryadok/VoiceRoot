@@ -101,11 +101,13 @@ func TestListChats_SpaceChannel_PaginationPage2(t *testing.T) {
 	owner := uuid.New()
 	member := uuid.New()
 	accMember := uuid.New()
+	accOther := uuid.New()
 	other := uuid.New()
+	profiles := mapProfileAccounts{member: accMember, other: accOther}
 	seedSpaceChannelChat(t, ctx, chatPool, spacePool, spaceChatID, spaceID, owner, member, "general")
 
 	spaceMembers := &store.SpaceMembersStore{Pool: spacePool}
-	client, cleanup := startChatGRPCTestServer(t, chatPool, nil, nil, nil, WithSpaceMembers(spaceMembers))
+	client, cleanup := startChatGRPCTestServer(t, chatPool, profiles, nil, nil, WithSpaceMembers(spaceMembers))
 	t.Cleanup(cleanup)
 	ctxMember := withAccountProfileCtx(ctx, accMember, member)
 
