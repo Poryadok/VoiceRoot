@@ -725,6 +725,25 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatAttachFile => 'Прикрепить файл';
 
   @override
+  String get composerEmojiPanelTitle => 'Эмодзи';
+
+  @override
+  String get composerAttachPhotoOrVideo => 'Фото или видео';
+
+  @override
+  String get composerAttachDocument => 'Документ';
+
+  @override
+  String get mobileStripRemoved => 'Убрано из активных чатов';
+
+  @override
+  String get mobileStripRemoveFromStrip => 'Убрать из активных чатов';
+
+  @override
+  String get mobileStripLimitReached =>
+      'Достигнут лимит активных чатов. Самый старый чат убран из полоски.';
+
+  @override
   String get chatMessageEdit => 'Изменить';
 
   @override

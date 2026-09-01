@@ -69,12 +69,15 @@ class _FakeRealtimeHub extends RealtimeHub {
 }
 
 List<Override> _stripOverrides({List<String> openedIds = const ['chat-a', 'chat-b']}) {
-  final opened = MobileOpenedChatStripController()..state = openedIds;
   return [
     ...voiceAppTestOverrides(client: MockClient((_) async => http.Response('{}', 404))),
     chatListControllerProvider.overrideWith(_PresetChatListController.new),
     realtimeHubProvider.overrideWith(_FakeRealtimeHub.new),
-    mobileOpenedChatStripProvider.overrideWith((ref) => opened),
+    mobileOpenedChatStripProvider.overrideWith((ref) {
+      final ctrl = MobileOpenedChatStripController(ref);
+      ctrl.state = openedIds;
+      return ctrl;
+    }),
   ];
 }
 
@@ -222,5 +225,59 @@ void main() {
     await tester.pump();
 
     expect(container.read(selectedChatIdProvider), 'chat-b');
+  });
+
+  testWidgets('long-press strip icon shows remove overlay', (tester) async {
+    final container = ProviderContainer(overrides: _stripOverrides());
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: MobileChatStrip()),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.longPress(find.byKey(MobileChatStrip.tileKey('chat-a')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(MobileChatStrip.removeOverlayKey('chat-a')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('remove overlay drops chat from strip', (tester) async {
+    final container = ProviderContainer(overrides: _stripOverrides());
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: MobileChatStrip()),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.longPress(find.byKey(MobileChatStrip.tileKey('chat-a')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(MobileChatStrip.removeOverlayKey('chat-a')));
+    await tester.pumpAndSettle();
+
+    expect(container.read(mobileOpenedChatStripProvider), ['chat-b']);
+    expect(find.text('Removed from active chats'), findsOneWidget);
   });
 }

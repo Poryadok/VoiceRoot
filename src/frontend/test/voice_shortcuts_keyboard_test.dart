@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
+import 'package:voice_frontend/backend/messages_client.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/shell_providers.dart';
 import 'package:voice_frontend/ui/a11y/voice_shortcuts.dart';
@@ -166,6 +167,94 @@ void main() {
 
     expect(
       container.read(chatMessageContextMenuRequestProvider('chat-a')),
+      'msg-1',
+    );
+  });
+
+  test('arrow keys move keyboard selection across messages', () {
+    final container = ProviderContainer(
+      overrides: [
+        ...voiceAppTestOverrides(
+          client: MockClient((_) async => throw UnimplementedError()),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    container.read(selectedChatIdProvider.notifier).state = 'chat-a';
+    container
+        .read(chatRoomControllerProvider('chat-a').notifier)
+        .state = ChatRoomState(
+      messages: const [
+        VoiceMessage(id: 'msg-1', chatId: 'chat-a', senderProfileId: 'p1', content: 'a'),
+        VoiceMessage(id: 'msg-2', chatId: 'chat-a', senderProfileId: 'p1', content: 'b'),
+      ],
+    );
+
+    final keyboard = container.read(chatMessageKeyboardProvider.notifier);
+    keyboard.selectNext();
+    expect(container.read(chatMessageKeyboardProvider), 'msg-1');
+    keyboard.selectNext();
+    expect(container.read(chatMessageKeyboardProvider), 'msg-2');
+    keyboard.selectPrevious();
+    expect(container.read(chatMessageKeyboardProvider), 'msg-1');
+  });
+
+  test('R sets reply target for keyboard-selected message', () {
+    final container = ProviderContainer(
+      overrides: [
+        ...voiceAppTestOverrides(
+          client: MockClient((_) async => throw UnimplementedError()),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    const message = VoiceMessage(
+      id: 'msg-1',
+      chatId: 'chat-a',
+      senderProfileId: 'peer',
+      content: 'hello',
+    );
+    container.read(selectedChatIdProvider.notifier).state = 'chat-a';
+    container.read(chatRoomControllerProvider('chat-a').notifier).state =
+        ChatRoomState(messages: const [message]);
+    container.read(chatMessageKeyboardProvider.notifier).state = 'msg-1';
+
+    container.read(chatMessageKeyboardProvider.notifier).replyToSelected();
+
+    expect(container.read(chatReplyTargetProvider('chat-a')), message);
+    expect(container.read(composerFocusRequestProvider), greaterThan(0));
+  });
+
+  test('E requests reaction picker for keyboard-selected message', () {
+    final container = ProviderContainer(
+      overrides: [
+        ...voiceAppTestOverrides(
+          client: MockClient((_) async => throw UnimplementedError()),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    container.read(selectedChatIdProvider.notifier).state = 'chat-a';
+    container.read(chatRoomControllerProvider('chat-a').notifier).state =
+        const ChatRoomState(
+      messages: [
+        VoiceMessage(
+          id: 'msg-1',
+          chatId: 'chat-a',
+          senderProfileId: 'peer',
+          content: 'hello',
+        ),
+      ],
+    );
+    container.read(chatMessageKeyboardProvider.notifier).state = 'msg-1';
+
+    container.read(chatMessageKeyboardProvider.notifier).reactToSelected();
+
+    expect(
+      container.read(chatMessageReactionRequestProvider('chat-a')),
       'msg-1',
     );
   });

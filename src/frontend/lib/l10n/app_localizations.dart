@@ -1370,6 +1370,42 @@ abstract class AppLocalizations {
   /// **'Attach file'**
   String get chatAttachFile;
 
+  /// No description provided for @composerEmojiPanelTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Emoji'**
+  String get composerEmojiPanelTitle;
+
+  /// No description provided for @composerAttachPhotoOrVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo or video'**
+  String get composerAttachPhotoOrVideo;
+
+  /// No description provided for @composerAttachDocument.
+  ///
+  /// In en, this message translates to:
+  /// **'Document'**
+  String get composerAttachDocument;
+
+  /// No description provided for @mobileStripRemoved.
+  ///
+  /// In en, this message translates to:
+  /// **'Removed from active chats'**
+  String get mobileStripRemoved;
+
+  /// No description provided for @mobileStripRemoveFromStrip.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from active chats'**
+  String get mobileStripRemoveFromStrip;
+
+  /// No description provided for @mobileStripLimitReached.
+  ///
+  /// In en, this message translates to:
+  /// **'Active chat limit reached. Oldest chat removed from strip.'**
+  String get mobileStripLimitReached;
+
   /// No description provided for @chatMessageEdit.
   ///
   /// In en, this message translates to:

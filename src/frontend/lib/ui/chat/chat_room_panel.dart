@@ -45,6 +45,7 @@ import 'e2e_attachment_actions.dart';
 import 'e2e_chat_settings.dart';
 import 'e2e_identity_change_banner.dart';
 import 'chat_composer_text_field.dart';
+import 'composer_panels.dart';
 import '../shell/side_panel.dart';
 import '../space/space_chat_slow_mode_sheet.dart';
 import '../search/in_chat_search.dart';
@@ -118,6 +119,8 @@ class ChatAttachmentFile {
 class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   final _composer = TextEditingController();
   final _composerFocus = FocusNode();
+  final _attachFocus = FocusNode();
+  final _emojiFocus = FocusNode();
   final _scrollController = ScrollController();
   var _uploadingAttachment = false;
   var _initialUnreadCount = 0;
@@ -141,6 +144,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   void dispose() {
     _composer.dispose();
     _composerFocus.dispose();
+    _attachFocus.dispose();
+    _emojiFocus.dispose();
     _scrollController.dispose();
     _inChatSearchController.dispose();
     super.dispose();
@@ -725,21 +730,25 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
             child: Row(
               children: [
-                IconButton(
-                  key: ChatRoomPanel.emojiPickerKey,
-                  tooltip: l10n.chatMessageAddReaction,
-                  onPressed: room.isSending || composerBlocked
-                      ? null
-                      : () => openEmojiPanel(
-                          context,
-                          ref,
-                          onSelected: (emoji) {
-                            ref
-                                .read(pendingComposerEmojiProvider.notifier)
-                                .state = emoji;
-                          },
-                        ),
-                  icon: const Icon(Icons.emoji_emotions_outlined),
+                Focus(
+                  focusNode: _emojiFocus,
+                  child: IconButton(
+                    key: ChatRoomPanel.emojiPickerKey,
+                    tooltip: l10n.composerEmojiPanelTitle,
+                    onPressed: room.isSending || composerBlocked
+                        ? null
+                        : () => openEmojiPanel(
+                            context,
+                            ref,
+                            onSelected: (emoji) {
+                              ref
+                                  .read(pendingComposerEmojiProvider.notifier)
+                                  .state = emoji;
+                            },
+                            onDismiss: () => _emojiFocus.requestFocus(),
+                          ),
+                    icon: const Icon(Icons.emoji_emotions_outlined),
+                  ),
                 ),
                 Expanded(
                   child: ChatComposerTextField(
@@ -778,19 +787,22 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                IconButton(
-                  key: ChatRoomPanel.attachKey,
-                  tooltip: l10n.chatAttachFile,
-                  onPressed: room.isSending || _uploadingAttachment || composerBlocked
-                      ? null
-                      : _attachAndSend,
-                  icon: _uploadingAttachment
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.attach_file),
+                Focus(
+                  focusNode: _attachFocus,
+                  child: IconButton(
+                    key: ChatRoomPanel.attachKey,
+                    tooltip: l10n.chatAttachFile,
+                    onPressed: room.isSending || _uploadingAttachment || composerBlocked
+                        ? null
+                        : _openAttachMenu,
+                    icon: _uploadingAttachment
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.attach_file),
+                  ),
                 ),
                 const SizedBox(width: 4),
                 VoiceSendButton(
@@ -968,8 +980,18 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     _refocusComposer();
   }
 
-  Future<void> _attachAndSend() async {
-    final picker = widget.attachmentPicker ?? _defaultPickChatAttachment;
+  Future<void> _openAttachMenu() async {
+    final action = await showComposerAttachMenu(
+      context,
+      onDismiss: () => _attachFocus.requestFocus(),
+    );
+    if (!mounted || action == null) return;
+    await _attachAndSend(imagesOnly: action == ComposerAttachAction.photoOrVideo);
+  }
+
+  Future<void> _attachAndSend({bool imagesOnly = false}) async {
+    final picker = widget.attachmentPicker ??
+        () => _defaultPickChatAttachment(imagesOnly: imagesOnly);
     final picked = await picker();
     if (picked == null || !mounted) return;
     final auth = ref.read(authorizationHeaderProvider);
@@ -1503,8 +1525,22 @@ class _DeliveryTick extends StatelessWidget {
   }
 }
 
-Future<ChatAttachmentFile?> _defaultPickChatAttachment() async {
-  final file = await openFile();
+Future<ChatAttachmentFile?> _defaultPickChatAttachment({
+  bool imagesOnly = false,
+}) async {
+  final XFile? file;
+  if (imagesOnly) {
+    file = await openFile(
+      acceptedTypeGroups: const [
+        XTypeGroup(
+          label: 'images',
+          extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'mp4', 'mov'],
+        ),
+      ],
+    );
+  } else {
+    file = await openFile();
+  }
   if (file == null) return null;
   final bytes = await file.readAsBytes();
   return ChatAttachmentFile(

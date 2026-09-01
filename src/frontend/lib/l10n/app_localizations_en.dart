@@ -722,6 +722,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatAttachFile => 'Attach file';
 
   @override
+  String get composerEmojiPanelTitle => 'Emoji';
+
+  @override
+  String get composerAttachPhotoOrVideo => 'Photo or video';
+
+  @override
+  String get composerAttachDocument => 'Document';
+
+  @override
+  String get mobileStripRemoved => 'Removed from active chats';
+
+  @override
+  String get mobileStripRemoveFromStrip => 'Remove from active chats';
+
+  @override
+  String get mobileStripLimitReached =>
+      'Active chat limit reached. Oldest chat removed from strip.';
+
+  @override
   String get chatMessageEdit => 'Edit';
 
   @override

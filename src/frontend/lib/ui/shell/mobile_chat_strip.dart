@@ -14,14 +14,23 @@ import '../core/voice_badge.dart';
 
 /// Horizontal mini-icon strip of **opened** chats (LRU) when a chat is open on
 /// mobile ([docs/features/navigation.md] § Active strip).
-class MobileChatStrip extends ConsumerWidget {
+class MobileChatStrip extends ConsumerStatefulWidget {
   const MobileChatStrip({super.key});
 
   static const stripKey = Key('mobile_chat_strip');
   static Key tileKey(String chatId) => Key('mobile_chat_strip_tile_$chatId');
+  static Key removeOverlayKey(String chatId) =>
+      Key('mobile_chat_strip_remove_$chatId');
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MobileChatStrip> createState() => _MobileChatStripState();
+}
+
+class _MobileChatStripState extends ConsumerState<MobileChatStrip> {
+  String? _removeOverlayChatId;
+
+  @override
+  Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
     final openedIds = ref.watch(mobileOpenedChatStripProvider);
@@ -29,6 +38,15 @@ class MobileChatStrip extends ConsumerWidget {
     final selectedId = ref.watch(selectedChatIdProvider);
     final activeProfileId = ref.watch(authControllerProvider).activeProfileId;
     final shellNav = ref.read(shellNavigationProvider);
+
+    ref.listen(mobileStripEvictionNoticeProvider, (prev, next) {
+      if (next == (prev ?? 0)) return;
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      if (messenger == null) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.mobileStripLimitReached)),
+      );
+    });
 
     final byId = {for (final item in chats.items) item.chatId: item};
     final items = openedIds
@@ -39,14 +57,14 @@ class MobileChatStrip extends ConsumerWidget {
 
     if (items.isEmpty) {
       return ColoredBox(
-        key: stripKey,
+        key: MobileChatStrip.stripKey,
         color: voice.muted,
         child: const SizedBox.expand(),
       );
     }
 
     return Material(
-      key: stripKey,
+      key: MobileChatStrip.stripKey,
       color: voice.muted,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
@@ -57,6 +75,7 @@ class MobileChatStrip extends ConsumerWidget {
           final item = items[index];
           final title = _stripTitle(l10n, item);
           final selected = item.chatId == selectedId;
+          final showRemove = _removeOverlayChatId == item.chatId;
           return Semantics(
             button: true,
             selected: selected,
@@ -64,15 +83,33 @@ class MobileChatStrip extends ConsumerWidget {
                 ? '$title, ${l10n.chatListUnreadCount(item.unreadCount)}'
                 : title,
             child: _StripChatIcon(
-              key: tileKey(item.chatId),
+              key: MobileChatStrip.tileKey(item.chatId),
               item: item,
               title: title,
               selected: selected,
-              onTap: () => shellNav.selectStripChat(
-                item.chatId,
-                inSpace: item.chat.spaceId != null &&
-                    item.chat.spaceId!.isNotEmpty,
-              ),
+              showRemoveOverlay: showRemove,
+              onTap: () {
+                if (showRemove) {
+                  setState(() => _removeOverlayChatId = null);
+                  return;
+                }
+                shellNav.selectStripChat(
+                  item.chatId,
+                  inSpace: item.chat.spaceId != null &&
+                      item.chat.spaceId!.isNotEmpty,
+                );
+              },
+              onLongPress: () =>
+                  setState(() => _removeOverlayChatId = item.chatId),
+              onRemove: () {
+                ref
+                    .read(mobileOpenedChatStripProvider.notifier)
+                    .removeChat(item.chatId);
+                setState(() => _removeOverlayChatId = null);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(l10n.mobileStripRemoved)),
+                );
+              },
               activeProfileId: activeProfileId,
             ),
           );
@@ -98,23 +135,31 @@ class _StripChatIcon extends StatelessWidget {
     required this.title,
     required this.selected,
     required this.onTap,
+    required this.onLongPress,
+    required this.onRemove,
     required this.activeProfileId,
+    this.showRemoveOverlay = false,
   });
 
   final ChatListItem item;
   final String title;
   final bool selected;
+  final bool showRemoveOverlay;
   final VoidCallback onTap;
+  final VoidCallback onLongPress;
+  final VoidCallback onRemove;
   final String? activeProfileId;
 
   @override
   Widget build(BuildContext context) {
     final voice = VoiceColors.of(context);
     final touchSize = VoiceLayout.minTouchTarget;
+    final l10n = AppLocalizations.of(context)!;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: InkWell(
         onTap: onTap,
+        onLongPress: onLongPress,
         customBorder: const CircleBorder(),
         child: SizedBox(
           width: touchSize,
@@ -136,15 +181,26 @@ class _StripChatIcon extends StatelessWidget {
                   radius: 16,
                 ),
               ),
-              if (item.unreadCount > 0)
+              if (item.unreadCount > 0 && !showRemoveOverlay)
                 Positioned(
                   top: -2,
                   right: -2,
                   child: VoiceBadge(
                     count: item.unreadCount,
-                    semanticLabel: AppLocalizations.of(
-                      context,
-                    )!.chatListUnreadCount(item.unreadCount),
+                    semanticLabel: l10n.chatListUnreadCount(item.unreadCount),
+                  ),
+                ),
+              if (showRemoveOverlay)
+                Positioned.fill(
+                  child: Material(
+                    key: MobileChatStrip.removeOverlayKey(item.chatId),
+                    color: Colors.black54,
+                    shape: const CircleBorder(),
+                    child: IconButton(
+                      tooltip: l10n.mobileStripRemoveFromStrip,
+                      onPressed: onRemove,
+                      icon: const Icon(Icons.close, color: Colors.white, size: 20),
+                    ),
                   ),
                 ),
             ],

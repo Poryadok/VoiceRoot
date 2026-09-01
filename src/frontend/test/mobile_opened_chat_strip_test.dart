@@ -29,11 +29,13 @@ void main() {
       expect(container.read(mobileOpenedChatStripProvider).length,
           kMobileOpenedChatStripLimit);
 
-      ctrl.openChat('chat-new');
+      final result = ctrl.openChat('chat-new');
       final ids = container.read(mobileOpenedChatStripProvider);
+      expect(result.evictedChatId, 'chat-0');
       expect(ids.first, 'chat-new');
       expect(ids.length, kMobileOpenedChatStripLimit);
       expect(ids, isNot(contains('chat-0')));
+      expect(container.read(mobileStripEvictionNoticeProvider), 1);
     });
 
     test('removeChat drops id from strip', () {
