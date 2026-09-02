@@ -212,6 +212,90 @@ abstract class AppLocalizations {
   /// **'Continue as guest'**
   String get authContinueGuest;
 
+  /// No description provided for @authForgotPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Forgot password?'**
+  String get authForgotPassword;
+
+  /// No description provided for @authErrorEmailRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your email.'**
+  String get authErrorEmailRequired;
+
+  /// No description provided for @authErrorPasswordMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Passwords don\'t match.'**
+  String get authErrorPasswordMismatch;
+
+  /// No description provided for @authErrorInvalidOtp.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid or expired code.'**
+  String get authErrorInvalidOtp;
+
+  /// No description provided for @passwordResetTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset password'**
+  String get passwordResetTitle;
+
+  /// No description provided for @passwordResetRequestSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your email and we\'ll send a reset code.'**
+  String get passwordResetRequestSubtitle;
+
+  /// No description provided for @passwordResetSendLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Send reset link'**
+  String get passwordResetSendLink;
+
+  /// No description provided for @passwordResetBackToLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to login'**
+  String get passwordResetBackToLogin;
+
+  /// No description provided for @passwordResetCodeSent.
+  ///
+  /// In en, this message translates to:
+  /// **'We sent a code to {email}. Enter it below with your new password.'**
+  String passwordResetCodeSent(String email);
+
+  /// No description provided for @passwordResetCodeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset code'**
+  String get passwordResetCodeLabel;
+
+  /// No description provided for @passwordResetNewPasswordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'New password'**
+  String get passwordResetNewPasswordLabel;
+
+  /// No description provided for @passwordResetConfirmPasswordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm password'**
+  String get passwordResetConfirmPasswordLabel;
+
+  /// No description provided for @passwordResetSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset password'**
+  String get passwordResetSubmit;
+
+  /// No description provided for @passwordResetSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Password reset. You can sign in with your new password.'**
+  String get passwordResetSuccess;
+
   /// No description provided for @authLogout.
   ///
   /// In en, this message translates to:

@@ -107,6 +107,8 @@ replace voice/backend/chat => ../chat
 
 replace voice.app/voice/chat => ../chat/pb/voice/chat
 
+replace voice.app/voice/auth => ../voice/pb/voice/auth
+
 replace voice.app/voice/role => ../role/pb/voice/role
 
 replace voice.app/voice/common => ../user/pb/voice/common

@@ -674,6 +674,40 @@ final $typed_data.Uint8List resolvePhoneHashesResponseDescriptor =
         'ChpSZXNvbHZlUGhvbmVIYXNoZXNSZXNwb25zZRI+CgdtYXRjaGVzGAEgAygLMiQudm9pY2UuYX'
         'V0aC52MS5QaG9uZUhhc2hQcm9maWxlTWF0Y2hSB21hdGNoZXM=');
 
+@$core.Deprecated('Use filterDeletedAccountIDsRequestDescriptor instead')
+const FilterDeletedAccountIDsRequest$json = {
+  '1': 'FilterDeletedAccountIDsRequest',
+  '2': [
+    {'1': 'account_ids', '3': 1, '4': 3, '5': 9, '10': 'accountIds'},
+  ],
+};
+
+/// Descriptor for `FilterDeletedAccountIDsRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List filterDeletedAccountIDsRequestDescriptor =
+    $convert.base64Decode(
+        'Ch5GaWx0ZXJEZWxldGVkQWNjb3VudElEc1JlcXVlc3QSHwoLYWNjb3VudF9pZHMYASADKAlSCm'
+        'FjY291bnRJZHM=');
+
+@$core.Deprecated('Use filterDeletedAccountIDsResponseDescriptor instead')
+const FilterDeletedAccountIDsResponse$json = {
+  '1': 'FilterDeletedAccountIDsResponse',
+  '2': [
+    {
+      '1': 'deleted_account_ids',
+      '3': 1,
+      '4': 3,
+      '5': 9,
+      '10': 'deletedAccountIds'
+    },
+  ],
+};
+
+/// Descriptor for `FilterDeletedAccountIDsResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List filterDeletedAccountIDsResponseDescriptor =
+    $convert.base64Decode(
+        'Ch9GaWx0ZXJEZWxldGVkQWNjb3VudElEc1Jlc3BvbnNlEi4KE2RlbGV0ZWRfYWNjb3VudF9pZH'
+        'MYASADKAlSEWRlbGV0ZWRBY2NvdW50SWRz');
+
 @$core.Deprecated('Use getGuestReminderRequestDescriptor instead')
 const GetGuestReminderRequest$json = {
   '1': 'GetGuestReminderRequest',

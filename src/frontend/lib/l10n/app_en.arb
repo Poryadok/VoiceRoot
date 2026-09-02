@@ -32,6 +32,27 @@
   "authLogin": "Log in",
   "authRegister": "Register",
   "authContinueGuest": "Continue as guest",
+  "authForgotPassword": "Forgot password?",
+  "authErrorEmailRequired": "Enter your email.",
+  "authErrorPasswordMismatch": "Passwords don't match.",
+  "authErrorInvalidOtp": "Invalid or expired code.",
+  "passwordResetTitle": "Reset password",
+  "passwordResetRequestSubtitle": "Enter your email and we'll send a reset code.",
+  "passwordResetSendLink": "Send reset link",
+  "passwordResetBackToLogin": "Back to login",
+  "passwordResetCodeSent": "We sent a code to {email}. Enter it below with your new password.",
+  "@passwordResetCodeSent": {
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "passwordResetCodeLabel": "Reset code",
+  "passwordResetNewPasswordLabel": "New password",
+  "passwordResetConfirmPasswordLabel": "Confirm password",
+  "passwordResetSubmit": "Reset password",
+  "passwordResetSuccess": "Password reset. You can sign in with your new password.",
   "authLogout": "Log out",
   "authError": "Auth error: {message}",
   "@authError": {

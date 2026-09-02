@@ -237,6 +237,69 @@ void main() {
     });
   });
 
+  group('VoiceAuthClient.passwordReset', () {
+    test('POST /api/v1/auth/otp/send for password_reset', () async {
+      var sendCalled = false;
+      final mock = MockClient((req) async {
+        expect(req.method, 'POST');
+        expect(req.url.path, '/api/v1/auth/otp/send');
+        final body = jsonDecode(req.body) as Map<String, dynamic>;
+        expect(body['email'], 'user@example.com');
+        expect(body['otp_type'], 'password_reset');
+        sendCalled = true;
+        return http.Response('', 204);
+      });
+      final client = VoiceAuthClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
+      final result = await client.sendPasswordResetOtp(
+        email: 'user@example.com',
+      );
+      expect(sendCalled, isTrue);
+      expect(result, isA<AuthApiOk<void>>());
+    });
+
+    test('POST /api/v1/auth/password/reset', () async {
+      var resetCalled = false;
+      final mock = MockClient((req) async {
+        expect(req.method, 'POST');
+        expect(req.url.path, '/api/v1/auth/password/reset');
+        final body = jsonDecode(req.body) as Map<String, dynamic>;
+        expect(body['email'], 'user@example.com');
+        expect(body['code'], '123456');
+        expect(body['new_password'], 'newpass99');
+        resetCalled = true;
+        return http.Response('', 204);
+      });
+      final client = VoiceAuthClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
+      final result = await client.resetPassword(
+        email: 'user@example.com',
+        code: '123456',
+        newPassword: 'newpass99',
+      );
+      expect(resetCalled, isTrue);
+      expect(result, isA<AuthApiOk<void>>());
+    });
+
+    test('maps invalid_otp on reset failure', () async {
+      final mock = MockClient((_) async {
+        return http.Response(jsonEncode({'error': 'invalid_otp'}), 401);
+      });
+      final client = VoiceAuthClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
+      final result = await client.resetPassword(
+        email: 'user@example.com',
+        code: '000000',
+        newPassword: 'newpass99',
+      );
+      expect(result, isA<AuthApiFailure>());
+      expect((result as AuthApiFailure).errorCode, 'invalid_otp');
+    });
+  });
+
   group('VoiceAuthClient.revokeSession', () {
     test('POST /api/v1/auth/sessions/{id}/revoke', () async {
       var revokeCalled = false;

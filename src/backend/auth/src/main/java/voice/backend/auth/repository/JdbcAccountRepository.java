@@ -265,4 +265,23 @@ public class JdbcAccountRepository implements AccountRepository {
             .addValue("id", accountId)
             .addValue("shownAt", java.sql.Timestamp.from(shownAt)));
   }
+
+  @Override
+  public java.util.Set<UUID> findDeletedAmong(java.util.Collection<UUID> accountIds) {
+    if (accountIds == null || accountIds.isEmpty()) {
+      return java.util.Set.of();
+    }
+    java.util.List<UUID> ids = accountIds.stream().filter(java.util.Objects::nonNull).distinct().toList();
+    if (ids.isEmpty()) {
+      return java.util.Set.of();
+    }
+    return new java.util.HashSet<>(
+        jdbc.query(
+            """
+            SELECT id FROM accounts
+            WHERE id IN (:ids) AND deleted_at IS NOT NULL
+            """,
+            new MapSqlParameterSource("ids", ids),
+            (rs, rowNum) -> rs.getObject("id", UUID.class)));
+  }
 }

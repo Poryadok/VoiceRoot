@@ -458,6 +458,51 @@ class VoiceAuthClient {
     };
   }
 
+  /// Sends a password-reset OTP to [email]. Returns null on success (204).
+  Future<AuthApiResult<void>> sendPasswordResetOtp({
+    required String email,
+  }) async {
+    final result = await _gateway.postEmpty(
+      uri: _gateway.resolve('/api/v1/auth/otp/send'),
+      jsonBody: {
+        'email': email,
+        'otp_type': 'password_reset',
+      },
+    );
+    return switch (result) {
+      GatewayHttpOk<void>() => const AuthApiOk(null),
+      GatewayHttpFailure(:final error) => AuthApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+
+  /// Resets password using email OTP [code]. Returns null on success (204).
+  Future<AuthApiResult<void>> resetPassword({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    final result = await _gateway.postEmpty(
+      uri: _gateway.resolve('/api/v1/auth/password/reset'),
+      jsonBody: {
+        'email': email,
+        'code': code,
+        'new_password': newPassword,
+      },
+    );
+    return switch (result) {
+      GatewayHttpOk<void>() => const AuthApiOk(null),
+      GatewayHttpFailure(:final error) => AuthApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+
   Future<AuthSessionResult> _postSession<T extends GeneratedMessage>(
     String path,
     GeneratedMessage body,

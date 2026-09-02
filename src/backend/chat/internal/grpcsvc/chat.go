@@ -26,6 +26,7 @@ type ChatGRPC struct {
 	Contacts   ProfileContactChecker
 	SpaceCoMembership SpaceCoMembershipChecker
 	ListEnrich ListChatsEnrichment // optional; Messaging S2S for preview + unread
+	DeletedAccounts AccountDeletedChecker // optional; Auth S2S hides DMs with deleted peer accounts
 	E2EPreKeyGate E2EPreKeyGate     // required for EnableChatE2E; Messaging S2S pre-key check (fail-closed)
 	// ChatEvents is optional; when set, new DM creation publishes to NATS JetStream (stream chat_events, subjects chat.*).
 	ChatEvents chatevents.Publisher
