@@ -187,8 +187,8 @@ func TestCreateGroupChat_persistsTopic(t *testing.T) {
 		t.Skip()
 	}
 	ctx := context.Background()
-	pool := startChatPostgresForTest(t, ctx)
-	applyChatMigration(t, ctx, pool)
+	pool := startChatDBForStoreTest(t, ctx)
+	applyChatMigrationsForStoreTest(t, ctx, pool)
 	store := &DMStore{Pool: pool}
 	owner := uuid.New()
 	topic := "Weekly sync"

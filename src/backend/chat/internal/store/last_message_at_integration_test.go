@@ -79,7 +79,7 @@ func TestTouchLastMessageAt_UpdatesChannel(t *testing.T) {
 
 	creator := uuid.New()
 	spaceID := uuid.New()
-	row, err := s.CreateSpaceChannelChat(ctx, creator, spaceID, "general")
+	row, err := s.CreateSpaceChannelChat(ctx, creator, spaceID, "general", nil)
 	require.NoError(t, err)
 	require.Equal(t, "channel", row.Type)
 	require.Nil(t, readLastMessageAt(t, ctx, s, row.ID))
