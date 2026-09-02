@@ -494,9 +494,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatRoomLoadOlder => 'Загрузить старые сообщения';
 
   @override
-  String get chatRoomLoadError => 'Не удалось загрузить сообщения';
-
-  @override
   String get chatRoomInputHint => 'Сообщение';
 
   @override

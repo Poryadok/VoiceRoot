@@ -212,7 +212,6 @@
   "chatRoomEmpty": "Сообщений пока нет",
   "chatRoomEmptyHint": "Отправьте первое сообщение, когда будете готовы.",
   "chatRoomLoadOlder": "Загрузить старые сообщения",
-  "chatRoomLoadError": "Не удалось загрузить сообщения",
   "chatRoomInputHint": "Сообщение",
   "chatSendMessage": "Отправить сообщение",
   "chatMentionInsert": "Вставить упоминание",

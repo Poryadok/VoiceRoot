@@ -956,12 +956,6 @@ abstract class AppLocalizations {
   /// **'Load older messages'**
   String get chatRoomLoadOlder;
 
-  /// No description provided for @chatRoomLoadError.
-  ///
-  /// In en, this message translates to:
-  /// **'Could not load messages'**
-  String get chatRoomLoadError;
-
   /// No description provided for @chatRoomInputHint.
   ///
   /// In en, this message translates to:

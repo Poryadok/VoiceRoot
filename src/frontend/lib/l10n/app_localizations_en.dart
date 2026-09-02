@@ -493,9 +493,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatRoomLoadOlder => 'Load older messages';
 
   @override
-  String get chatRoomLoadError => 'Could not load messages';
-
-  @override
   String get chatRoomInputHint => 'Message';
 
   @override

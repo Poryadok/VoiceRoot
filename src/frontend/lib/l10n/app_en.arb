@@ -240,7 +240,6 @@
   "chatRoomEmpty": "No messages yet",
   "chatRoomEmptyHint": "Send the first message when you are ready.",
   "chatRoomLoadOlder": "Load older messages",
-  "chatRoomLoadError": "Could not load messages",
   "chatRoomInputHint": "Message",
   "chatSendMessage": "Send message",
   "chatMentionInsert": "Insert mention",
