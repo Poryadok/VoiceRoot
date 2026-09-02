@@ -128,6 +128,38 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get socialQrAddFriendTitle => 'Добавить по QR';
+
+  @override
+  String get socialQrTabMyCode => 'Мой код';
+
+  @override
+  String get socialQrTabScan => 'Сканировать';
+
+  @override
+  String get socialQrCopyLink => 'Скопировать ссылку';
+
+  @override
+  String get socialQrLinkCopied => 'Ссылка на профиль скопирована';
+
+  @override
+  String get socialQrProfileUnavailable =>
+      'Укажите ник, чтобы поделиться QR-кодом.';
+
+  @override
+  String get socialQrScanHint =>
+      'Вставьте ссылку на профиль или отсканируйте QR камерой.';
+
+  @override
+  String get socialQrScanPlaceholder => 'https://voice.gg/u/username';
+
+  @override
+  String get socialQrScanSubmit => 'Открыть профиль';
+
+  @override
+  String get socialQrScanInvalid => 'Некорректная ссылка на профиль';
+
+  @override
   String get socialTabFavorites => 'Избранные';
 
   @override

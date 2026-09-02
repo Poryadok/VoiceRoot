@@ -284,6 +284,66 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{Found 1 contact on Voice} other{Found {count} contacts on Voice}}'**
   String socialPhoneSyncMatched(int count);
 
+  /// No description provided for @socialQrAddFriendTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add friend by QR'**
+  String get socialQrAddFriendTitle;
+
+  /// No description provided for @socialQrTabMyCode.
+  ///
+  /// In en, this message translates to:
+  /// **'My code'**
+  String get socialQrTabMyCode;
+
+  /// No description provided for @socialQrTabScan.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan'**
+  String get socialQrTabScan;
+
+  /// No description provided for @socialQrCopyLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy link'**
+  String get socialQrCopyLink;
+
+  /// No description provided for @socialQrLinkCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile link copied'**
+  String get socialQrLinkCopied;
+
+  /// No description provided for @socialQrProfileUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Set a username to share your QR code.'**
+  String get socialQrProfileUnavailable;
+
+  /// No description provided for @socialQrScanHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste a profile link or scan a QR code with your camera.'**
+  String get socialQrScanHint;
+
+  /// No description provided for @socialQrScanPlaceholder.
+  ///
+  /// In en, this message translates to:
+  /// **'https://voice.gg/u/username'**
+  String get socialQrScanPlaceholder;
+
+  /// No description provided for @socialQrScanSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Open profile'**
+  String get socialQrScanSubmit;
+
+  /// No description provided for @socialQrScanInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Not a valid profile link'**
+  String get socialQrScanInvalid;
+
   /// No description provided for @socialTabFavorites.
   ///
   /// In en, this message translates to:

@@ -16,6 +16,7 @@ import '../stories/story_ring_avatar.dart';
 import '../../routing/stories_routes.dart';
 import 'presence_indicator.dart';
 import 'profile_detail_sheet.dart';
+import 'qr_add_friend_sheet.dart';
 
 /// Friends, search, and friend-requests UI (app stack social column).
 class SocialPanel extends ConsumerStatefulWidget {
@@ -58,6 +59,7 @@ class SocialPanel extends ConsumerStatefulWidget {
       Key('social_unblock_$accountId');
 
   static const Key syncPhoneContactsKey = Key('social_sync_phone_contacts');
+  static const Key qrAddFriendKey = Key('social_qr_add_friend');
 
   final int initialTabIndex;
 
@@ -239,6 +241,12 @@ class _SearchTab extends ConsumerWidget {
                     : () => ref
                           .read(searchProfilesControllerProvider.notifier)
                           .search(controller.text),
+              ),
+              IconButton(
+                key: SocialPanel.qrAddFriendKey,
+                tooltip: l10n.socialQrAddFriendTitle,
+                icon: const Icon(Icons.qr_code_scanner_outlined),
+                onPressed: () => QrAddFriendSheet.show(context),
               ),
             ],
           ),

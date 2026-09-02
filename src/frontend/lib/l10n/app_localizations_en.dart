@@ -126,6 +126,38 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get socialQrAddFriendTitle => 'Add friend by QR';
+
+  @override
+  String get socialQrTabMyCode => 'My code';
+
+  @override
+  String get socialQrTabScan => 'Scan';
+
+  @override
+  String get socialQrCopyLink => 'Copy link';
+
+  @override
+  String get socialQrLinkCopied => 'Profile link copied';
+
+  @override
+  String get socialQrProfileUnavailable =>
+      'Set a username to share your QR code.';
+
+  @override
+  String get socialQrScanHint =>
+      'Paste a profile link or scan a QR code with your camera.';
+
+  @override
+  String get socialQrScanPlaceholder => 'https://voice.gg/u/username';
+
+  @override
+  String get socialQrScanSubmit => 'Open profile';
+
+  @override
+  String get socialQrScanInvalid => 'Not a valid profile link';
+
+  @override
   String get socialTabFavorites => 'Favorites';
 
   @override
