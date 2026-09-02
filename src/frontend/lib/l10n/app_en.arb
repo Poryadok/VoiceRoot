@@ -72,6 +72,16 @@
       }
     }
   },
+  "socialQrAddFriendTitle": "Add friend by QR",
+  "socialQrTabMyCode": "My code",
+  "socialQrTabScan": "Scan",
+  "socialQrCopyLink": "Copy link",
+  "socialQrLinkCopied": "Profile link copied",
+  "socialQrProfileUnavailable": "Set a username to share your QR code.",
+  "socialQrScanHint": "Paste a profile link or scan a QR code with your camera.",
+  "socialQrScanPlaceholder": "https://voice.gg/u/username",
+  "socialQrScanSubmit": "Open profile",
+  "socialQrScanInvalid": "Not a valid profile link",
   "socialTabFavorites": "Favorites",
   "socialTabRequests": "Requests",
   "socialTabBlocked": "Blocked",
