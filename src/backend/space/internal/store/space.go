@@ -14,8 +14,14 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// ErrInvalidListCursor is returned when ListMySpacesPage receives a non-empty cursor that cannot be decoded.
-var ErrInvalidListCursor = errors.New("invalid list spaces cursor")
+var (
+	// ErrInvalidListCursor is returned when ListMySpacesPage receives a non-empty cursor that cannot be decoded.
+	ErrInvalidListCursor = errors.New("invalid list spaces cursor")
+	// ErrTransferToSelf is returned when TransferOwnership targets the current owner.
+	ErrTransferToSelf = errors.New("cannot transfer ownership to current owner")
+	// ErrNotSpaceOwner is returned when the caller is not spaces.owner_profile_id.
+	ErrNotSpaceOwner = errors.New("space owner required")
+)
 
 // SpaceRow is a row from spaces.
 type SpaceRow struct {
@@ -147,6 +153,75 @@ func (s *SpaceStore) IsSpaceMember(ctx context.Context, spaceID, profileID uuid.
 SELECT COUNT(*)::int FROM space_members WHERE space_id = $1 AND profile_id = $2
 `, spaceID, profileID).Scan(&n)
 	return n > 0, err
+}
+
+// DeleteSpace removes a space row; child tables cascade via FK ON DELETE CASCADE.
+func (s *SpaceStore) DeleteSpace(ctx context.Context, spaceID uuid.UUID) error {
+	if s == nil || s.Pool == nil {
+		return errors.New("space store: pool not configured")
+	}
+	tag, err := s.Pool.Exec(ctx, `DELETE FROM spaces WHERE id = $1`, spaceID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
+}
+
+// TransferOwnership moves spaces.owner_profile_id to an existing member.
+func (s *SpaceStore) TransferOwnership(ctx context.Context, spaceID, currentOwner, newOwner uuid.UUID) error {
+	if s == nil || s.Pool == nil {
+		return errors.New("space store: pool not configured")
+	}
+	if currentOwner == newOwner {
+		return ErrTransferToSelf
+	}
+
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var ownerProfile uuid.UUID
+	err = tx.QueryRow(ctx, `SELECT owner_profile_id FROM spaces WHERE id = $1 FOR UPDATE`, spaceID).Scan(&ownerProfile)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return pgx.ErrNoRows
+	}
+	if err != nil {
+		return err
+	}
+	if ownerProfile != currentOwner {
+		return ErrNotSpaceOwner
+	}
+
+	var memberExists int
+	err = tx.QueryRow(ctx, `
+SELECT 1 FROM space_members WHERE space_id = $1 AND profile_id = $2
+`, spaceID, newOwner).Scan(&memberExists)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrMemberNotFound
+	}
+	if err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec(ctx, `
+UPDATE spaces SET owner_profile_id = $2, updated_at = now() WHERE id = $1
+`, spaceID, newOwner); err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec(ctx, `
+INSERT INTO audit_log (space_id, actor_profile_id, action, target_type, target_id, details)
+VALUES ($1, $2, 'ownership_transferred', 'profile', $3, '{}')
+`, spaceID, currentOwner, newOwner); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
 }
 
 // UpdateSpace updates mutable space fields.

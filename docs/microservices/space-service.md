@@ -33,7 +33,7 @@ service SpaceService {
   rpc CreateSpace(CreateSpaceRequest) returns (Space);
   rpc UpdateSpace(UpdateSpaceRequest) returns (Space);
   rpc UpdateSpaceMmConfig(UpdateSpaceMmConfigRequest) returns (Space); // ✓ shipped
-  rpc DeleteSpace(DeleteSpaceRequest) returns (Empty);               // ✗ unimplemented
+  rpc DeleteSpace(DeleteSpaceRequest) returns (Empty);               // ✓ shipped
   rpc GetSpace(GetSpaceRequest) returns (Space);
   rpc ListMySpaces(ListMySpacesRequest) returns (SpaceList);
   rpc SearchPublicSpaces(SearchRequest) returns (SpaceList);         // ✗ unimplemented
@@ -69,7 +69,7 @@ service SpaceService {
   rpc ListBans(ListBansRequest) returns (BanList);
   rpc TimeoutMember(TimeoutMemberRequest) returns (Empty);           // ✓ shipped
   rpc RemoveMemberTimeout(RemoveMemberTimeoutRequest) returns (Empty); // ✓ shipped
-  rpc TransferOwnership(TransferRequest) returns (Empty);            // ✗ unimplemented
+  rpc TransferOwnership(TransferRequest) returns (Empty);            // ✓ shipped (Role Owner reassign fail-closed when ROLE_GRPC_ADDR set)
   rpc AddBotMember(AddBotMemberRequest) returns (SpaceMembership);   // ✓ shipped
   rpc RemoveBotMember(RemoveBotMemberRequest) returns (Empty);       // ✓ shipped
 
@@ -94,7 +94,7 @@ service SpaceService {
 |-----|-------|---------|-------|
 | CreateSpace, UpdateSpace, GetSpace, ListMySpaces | ✓ | ✓ | |
 | UpdateSpaceMmConfig | ✓ | ✓ | MM config on space |
-| DeleteSpace | ✓ | ✗ | Returns Unimplemented |
+| DeleteSpace | ✓ | ✓ | Owner-only hard delete + `space.deleted` |
 | SearchPublicSpaces | ✓ | ✗ | Catalog search backlog |
 | Create/Update/Delete VoiceRoom | ✓ | ✓ | |
 | UpsertTreeNode, RemoveTreeNode, ReorderSpaceTree | ✓ | ✓ | No `is_pinned` in migration yet |
@@ -106,7 +106,7 @@ service SpaceService {
 | JoinSpace, LeaveSpace | ✓ | ✓ | Entry verification may be bypassed on invite join — [todo/backend.md](../todo/backend.md) |
 | KickMember, BanMember, UnbanMember, ListMembers, ListBans | ✓ | ✓ | |
 | TimeoutMember, RemoveMemberTimeout | ✓ | ✓ | |
-| TransferOwnership | ✓ | ✗ | |
+| TransferOwnership | ✓ | ✓ | Owner→member; Owner role Assign/Revoke fail-closed when Roles wired (ownership rolled back on role failure) |
 | AddBotMember, RemoveBotMember | ✓ | ✓ | |
 | ListTemplates, CreateFromTemplate | ✓ | ✗ | |
 | GetAuditLog | ✓ | ✗ | |

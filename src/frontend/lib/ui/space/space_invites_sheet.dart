@@ -4,8 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../state/space_providers.dart';
+import '../api_error_messages.dart';
 import '../core/voice_bottom_sheet.dart';
 import '../core/voice_list_row.dart';
+import '../core/voice_skeleton.dart';
 import '../core/voice_state_panel.dart';
 
 /// Bottom sheet: create, list, copy, and revoke space invite links.
@@ -149,10 +151,10 @@ class _SpaceInvitesSheetState extends ConsumerState<SpaceInvitesSheet> {
             ),
             const SizedBox(height: 16),
             invitesAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
+              loading: () => const VoiceListSkeleton(rowCount: 4),
               error: (e, _) => VoiceStatePanel(
                 title: l10n.spaceInvitesLoadError,
-                message: e.toString(),
+                message: spaceInvitesErrorMessage(l10n, e),
                 actionLabel: l10n.spaceInvitesRetry,
                 onAction: () =>
                     ref.invalidate(spaceInvitesProvider(widget.spaceId)),

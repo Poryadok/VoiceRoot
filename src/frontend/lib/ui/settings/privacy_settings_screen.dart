@@ -6,7 +6,10 @@ import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/trust_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../api_error_messages.dart';
 import '../core/voice_primary_button.dart';
+import '../core/voice_skeleton.dart';
+import '../core/voice_state_panel.dart';
 import 'privacy_audience_picker.dart';
 import 'privacy_presets.dart';
 
@@ -132,9 +135,19 @@ class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
       ),
       body: SafeArea(
         child: _loading
-            ? const Center(child: CircularProgressIndicator())
+            ? const VoiceListSkeleton(rowCount: 6)
             : settings == null
-            ? Center(child: Text(_error ?? l10n.privacyLoadError))
+            ? VoiceStatePanel(
+                title: l10n.privacyLoadError,
+                message: settingsLoadErrorMessage(
+                  l10n,
+                  _error,
+                  fallback: l10n.privacyLoadError,
+                ),
+                icon: Icons.cloud_off_outlined,
+                actionLabel: l10n.commonRetry,
+                onAction: _load,
+              )
             : SingleChildScrollView(
                 padding: const EdgeInsets.all(24),
                 child: Column(
