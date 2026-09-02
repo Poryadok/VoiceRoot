@@ -116,7 +116,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       key: AuthScreen.screenKey,
       backgroundColor: voice.canvas,
       body: SafeArea(
-        child: Semantics(
+        child: SingleChildScrollView(
+          child: Semantics(
           label: 'Sign in to Voice',
           container: true,
           child: Center(
@@ -275,6 +276,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               ),
             ),
           ),
+        ),
         ),
         ),
       ),
