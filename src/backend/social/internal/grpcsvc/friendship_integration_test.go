@@ -64,7 +64,7 @@ func startSocialGRPCTestServer(t *testing.T, pool *pgxpool.Pool, opts ...socialS
 		Friends:         &store.FriendshipStore{Pool: pool},
 		Blocks:          &store.BlockStore{Pool: pool},
 		Contacts:        &store.ContactStore{Pool: pool},
-		Privacy:         friendRequestPrivacyStub{}, // default: everyone (compose User S2S wired)
+		Privacy:         allowFriendRequestsPrivacyStub{}, // default: everyone (compose User S2S wired)
 		ProfileAccounts: deterministicProfileAccounts{},
 	}
 	for _, o := range opts {

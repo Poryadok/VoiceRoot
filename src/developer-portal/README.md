@@ -12,7 +12,7 @@ Production flow uses **OAuth 2.0 authorization code + PKCE** against Voice Auth 
 4. Portal exchanges the code at `POST /api/v1/auth/oauth2/token` and stores `access_token` in `sessionStorage`
 5. All API calls use `Authorization: Bearer …`
 
-Configure in `.env` (see `.env.example`):
+Configure in `.env` (see repo root [`.env.example`](../../.env.example) — `DEVELOPER_PORTAL_*` vars):
 
 - `DEVELOPER_PORTAL_OAUTH_CLIENT_ID`
 - `DEVELOPER_PORTAL_OAUTH_REDIRECT_URIS` (must include `http://localhost:9082/callback` for compose)

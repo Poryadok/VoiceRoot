@@ -76,11 +76,13 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 
 - [x] **A11y: Axe / web accessibility CI** — landmark contract `make a11y-web-axe` (Axe analog) in flutter CI; full CanvasKit Axe deferred.
 
-- [ ] **VoiceListSkeleton / VoiceStatePanel — остаточные loaders** — wave A не покрыла: `chat_room_panel` (pagination), space members/bots/invites, `player_profile_sheet`, `story_viewer_screen` — всё ещё `CircularProgressIndicator` вместо skeleton/state panel.
+- [x] **VoiceListSkeleton / VoiceStatePanel — wave A residual loaders** — PR #128: `chat_room_panel` pagination, space members/bots/invites, `player_profile_sheet`, `story_viewer_screen`, settings/search/subscription list loads → skeleton/state panel; `VoiceListSkeleton` uses `shrinkWrap: true` + `primary: false` (sheet CI).
 
-- [ ] **VoiceListSkeleton + VoiceStatePanel widget tests** — dedicated tests отсутствуют (reconnect/onboarding/focus trap покрыты).
+- [ ] **VoiceListSkeleton / VoiceStatePanel — остаточные loaders** — list loads still CPI: `group_members_sheet`, `chat_info_panel`, `space_roles_sheet`, `manage_profiles_sheet` / `create_profile_sheet`, `active_sessions_screen`, `manage_folders_sheet`, `bot_install_page`, `profile_downgrade_picker_screen` (button-level CPI OK).
 
-- [ ] **api_error_messages — расширить покрытие** — helpers есть для wave A доменов; `chat_room_panel`, search, subscription/billing, settings screens могут показывать сырые API strings / hardcoded `not authenticated`.
+- [ ] **VoiceListSkeleton + VoiceStatePanel widget tests** — dedicated tests отсутствуют (reconnect/onboarding/focus trap покрыты; `social_panel_test` only asserts `find.byType(VoiceListSkeleton)`).
+
+- [ ] **api_error_messages — расширить покрытие** — PR #128 helpers for chat/search/settings/subscription/space bots|members|invites/player profile; residual surfaces may still show raw API strings.
 
 - [ ] **VoiceDisabledAction — расширить покрытие** — wave H: space tree / roles / slow mode; остальные permission-gated действия (chat moderation, voice room create, MM guest restrictions) без reason tooltip.
 
@@ -102,7 +104,6 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 - [ ] **QR add-friend — live camera scanner** — Batch 26a ships paste field; l10n implies camera scan. Add `mobile_scanner` (or similar) or narrow copy to paste-only.
 - [x] **Blocked accounts UI** — Social panel Blocked tab; `VoiceFriendsClient` `listBlocked`/`unblockAccount`; gateway `GET/DELETE /api/v1/friends/blocks` — **Batch 24a**.
 - [x] **Outgoing friend request declined label** — `PendingFriendRequest.status` from API; Requests tab shows «Declined» vs «Request pending» for outgoing rows — **Batch 24b**.
-- [ ] **Idle 5 мин → `UpdatePresence idle`** — сейчас idle только если клиент сам пришлёт. [presence.md](../features/presence.md).
 - [ ] **Windows: автоопределение игры** — process list → `game_title` + toggle; 0 кода. Post-MVP рядом с П.17.
 - [ ] **E2E fingerprint + key-change banner** — [encryption.md](../features/encryption.md); П.13.
 - [ ] **Shorebird OTA или явный defer** — [updates.md](../features/updates.md).

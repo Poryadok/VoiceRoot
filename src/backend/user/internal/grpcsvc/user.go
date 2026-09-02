@@ -387,6 +387,9 @@ func rowToProto(p *store.ProfileRow) *userv1.Profile {
 	if p.AvatarURL != nil {
 		out.AvatarUrl = proto.String(*p.AvatarURL)
 	}
+	if p.BannerURL != nil {
+		out.BannerUrl = proto.String(*p.BannerURL)
+	}
 	if p.Bio != nil {
 		out.Bio = proto.String(*p.Bio)
 	}

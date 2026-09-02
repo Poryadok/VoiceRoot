@@ -26,6 +26,7 @@ import (
 	"voice/backend/notification/internal/grouping"
 	"voice/backend/notification/internal/presence"
 	"voice/backend/notification/internal/pushenrich"
+	"voice/backend/notification/internal/s2s"
 	"voice/backend/notification/internal/store"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/analyticsevents"
@@ -106,6 +107,7 @@ func main() {
 		}
 
 		presenceChecker := presence.Checker(presence.OfflineChecker{})
+		var accountProfiles s2s.AccountProfiles
 		recordPushes := strings.EqualFold(strings.TrimSpace(os.Getenv("NOTIFICATION_RECORD_PUSHES")), "true")
 		if recordPushes {
 			logger.Info("push recording mode: routing as offline (NOTIFICATION_RECORD_PUSHES)")
@@ -115,6 +117,14 @@ func main() {
 			} else {
 				presenceChecker = pc
 				logger.Info("user presence checker enabled", slog.String("addr", userAddr))
+			}
+		}
+		if userAddr := strings.TrimSpace(os.Getenv("USER_GRPC_ADDR")); userAddr != "" {
+			if ap, err := s2s.NewGRPCAccountProfiles(userAddr); err != nil {
+				logger.Warn("account→profile resolver unavailable; sanction notify skipped", slog.Any("error", err))
+			} else {
+				accountProfiles = ap
+				logger.Info("account→profile resolver enabled", slog.String("addr", userAddr))
 			}
 		}
 
@@ -194,7 +204,7 @@ func main() {
 			go func() {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
-				if err := runModerationEventsConsumer(ctx, natsURL, logger); err != nil && logger != nil {
+				if err := runModerationEventsConsumer(ctx, natsURL, tokenStore, pusher, presenceChecker, policyLoader, accountProfiles, logger); err != nil && logger != nil {
 					logger.Error("moderation.events consumer exited", slog.Any("error", err))
 				}
 			}()

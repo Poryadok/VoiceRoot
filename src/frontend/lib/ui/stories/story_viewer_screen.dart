@@ -362,7 +362,12 @@ class _StoryContent extends ConsumerWidget {
                 ),
               );
             },
-            loading: () => const CircularProgressIndicator(),
+            loading: () => Center(
+              child: SizedBox(
+                width: 280,
+                child: VoiceListSkeleton(rowCount: 3),
+              ),
+            ),
             error: (_, _) => Text(
               l10n.storyViewerNoMedia,
               style: TextStyle(color: voice.textPrimary),
@@ -577,7 +582,12 @@ class _StoryVideoPlayerState extends State<_StoryVideoPlayer> {
   @override
   Widget build(BuildContext context) {
     if (!_initialized) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(
+        child: SizedBox(
+          width: 280,
+          child: VoiceListSkeleton(rowCount: 3),
+        ),
+      );
     }
     return AspectRatio(
       aspectRatio: _controller.value.aspectRatio,

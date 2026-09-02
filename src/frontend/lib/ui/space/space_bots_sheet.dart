@@ -9,6 +9,8 @@ import '../../state/auth_providers.dart';
 import '../../state/bot_providers.dart';
 import '../../state/space_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../api_error_messages.dart';
+import '../core/voice_skeleton.dart';
 import '../core/voice_state_panel.dart';
 
 /// Install / uninstall bots in a space — docs/features/bots.md.
@@ -86,8 +88,8 @@ class _SpaceBotsSheetState extends ConsumerState<SpaceBotsSheet> {
               ),
               const SizedBox(height: 8),
               discoverAsync.when(
-                loading: () => const LinearProgressIndicator(),
-                error: (e, _) => Text(l10n.chatRoomError('$e')),
+                loading: () => const VoiceListSkeleton(rowCount: 2),
+                error: (e, _) => Text(spaceBotsErrorMessage(l10n, e)),
                 data: (bots) {
                   if (bots.isEmpty) {
                     return Text(l10n.chatBotsEmpty);
@@ -138,8 +140,8 @@ class _SpaceBotsSheetState extends ConsumerState<SpaceBotsSheet> {
                   style: Theme.of(context).textTheme.titleSmall,
                 ),
                 treeAsync.when(
-                  loading: () => const LinearProgressIndicator(),
-                  error: (e, _) => Text(l10n.chatRoomError('$e')),
+                  loading: () => const VoiceListSkeleton(rowCount: 3),
+                  error: (e, _) => Text(spaceBotsErrorMessage(l10n, e)),
                   data: (tree) {
                     final textChats = tree.nodes
                         .where((n) => n.isTextChat && n.linkedChatId != null)
@@ -191,8 +193,8 @@ class _SpaceBotsSheetState extends ConsumerState<SpaceBotsSheet> {
               ),
               const SizedBox(height: 8),
               installedAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => Text(l10n.chatRoomError('$e')),
+                loading: () => const VoiceListSkeleton(rowCount: 3),
+                error: (e, _) => Text(spaceBotsErrorMessage(l10n, e)),
                 data: (installed) {
                   if (installed.isEmpty) {
                     return Text(l10n.chatBotsEmpty);
@@ -282,7 +284,7 @@ class _SpaceBotsSheetState extends ConsumerState<SpaceBotsSheet> {
         });
       case BotsApiFailure(:final message):
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.chatRoomError(message))),
+          SnackBar(content: Text(chatRoomErrorMessage(l10n, message))),
         );
     }
   }
@@ -310,7 +312,7 @@ class _SpaceBotsSheetState extends ConsumerState<SpaceBotsSheet> {
         );
       case BotsApiFailure(:final message):
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.chatRoomError(message))),
+          SnackBar(content: Text(chatRoomErrorMessage(l10n, message))),
         );
     }
   }

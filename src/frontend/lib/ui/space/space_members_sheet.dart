@@ -8,8 +8,10 @@ import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/space_providers.dart';
 import '../../state/social_providers.dart';
+import '../api_error_messages.dart';
 import '../core/voice_avatar.dart';
 import '../core/voice_bottom_sheet.dart';
+import '../core/voice_skeleton.dart';
 import '../core/voice_state_panel.dart';
 
 /// Space members list (embedded in side panel or bottom sheet).
@@ -47,10 +49,10 @@ class SpaceMembersContent extends ConsumerWidget {
         ],
         Expanded(
           child: membersAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
+            loading: () => const VoiceListSkeleton(rowCount: 5),
             error: (error, _) => VoiceStatePanel(
               title: l10n.spaceMembersLoadError,
-              message: '$error',
+              message: spaceMembersErrorMessage(l10n, error),
               icon: Icons.cloud_off_outlined,
               actionLabel: l10n.commonRetry,
               onAction: () => ref.invalidate(spaceMembersProvider(spaceId)),

@@ -5,6 +5,7 @@ export type BotSummary = {
   name?: string;
   description?: string;
   slug?: string;
+  scopes_json?: string;
 };
 
 export type BotUpdateFields = {
@@ -36,8 +37,28 @@ export function buildUpdateBotBody(fields: BotUpdateFields): Record<string, stri
   return body;
 }
 
-export function parseUpdatedBot(body: Record<string, unknown>): BotSummary | undefined {
+export function parseBotDetail(body: Record<string, unknown>): BotSummary | undefined {
   return (body.bot as BotSummary | undefined) ?? undefined;
+}
+
+export function parseUpdatedBot(body: Record<string, unknown>): BotSummary | undefined {
+  return parseBotDetail(body);
+}
+
+export async function fetchBot(
+  botId: string,
+  fetchFn: typeof apiFetch = apiFetch,
+): Promise<{ ok: true; bot: BotSummary } | { ok: false; error: string }> {
+  const res = await fetchFn(botResourcePath(botId));
+  const body = (await res.json()) as Record<string, unknown>;
+  if (!res.ok) {
+    return { ok: false, error: JSON.stringify(body) };
+  }
+  const bot = parseBotDetail(body);
+  if (!bot?.id) {
+    return { ok: false, error: 'missing bot in response' };
+  }
+  return { ok: true, bot };
 }
 
 export async function updateBot(
