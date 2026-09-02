@@ -53,7 +53,7 @@ func TestTouchLastMessageAt_UpdatesGroup(t *testing.T) {
 	s := &DMStore{Pool: pool}
 
 	owner := uuid.New()
-	row, err := s.CreateGroupChat(ctx, owner, "Activity group")
+	row, err := s.CreateGroupChat(ctx, owner, "Activity group", nil)
 	require.NoError(t, err)
 	require.Equal(t, "group", row.Type)
 	require.Nil(t, readLastMessageAt(t, ctx, s, row.ID))
@@ -79,7 +79,7 @@ func TestTouchLastMessageAt_UpdatesChannel(t *testing.T) {
 
 	creator := uuid.New()
 	spaceID := uuid.New()
-	row, err := s.CreateSpaceChannelChat(ctx, creator, spaceID, "general")
+	row, err := s.CreateSpaceChannelChat(ctx, creator, spaceID, "general", nil)
 	require.NoError(t, err)
 	require.Equal(t, "channel", row.Type)
 	require.Nil(t, readLastMessageAt(t, ctx, s, row.ID))
@@ -103,7 +103,7 @@ func TestTouchLastMessageAt_Monotonic(t *testing.T) {
 	s := &DMStore{Pool: pool}
 
 	owner := uuid.New()
-	row, err := s.CreateGroupChat(ctx, owner, "Monotonic")
+	row, err := s.CreateGroupChat(ctx, owner, "Monotonic", nil)
 	require.NoError(t, err)
 
 	newer := time.Date(2026, 8, 29, 16, 0, 0, 0, time.UTC)

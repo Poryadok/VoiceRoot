@@ -20,7 +20,7 @@ func TestRemoveGroupMember_OwnerForbidden(t *testing.T) {
 
 	owner := uuid.New()
 	memberA, memberB := uuid.New(), uuid.New()
-	row, err := s.CreateGroupChat(ctx, owner, "Owner protected")
+	row, err := s.CreateGroupChat(ctx, owner, "Owner protected", nil)
 	require.NoError(t, err)
 	_, err = s.AddGroupMembers(ctx, row.ID, []uuid.UUID{memberA, memberB})
 	require.NoError(t, err)
@@ -45,7 +45,7 @@ func TestAddGroupMembers_AssignsMemberRole(t *testing.T) {
 
 	owner := uuid.New()
 	memberA, memberB := uuid.New(), uuid.New()
-	row, err := s.CreateGroupChat(ctx, owner, "Roles")
+	row, err := s.CreateGroupChat(ctx, owner, "Roles", nil)
 	require.NoError(t, err)
 	_, err = s.AddGroupMembers(ctx, row.ID, []uuid.UUID{memberA, memberB})
 	require.NoError(t, err)
@@ -69,7 +69,7 @@ func TestLeaveGroupChat_MemberLeaves(t *testing.T) {
 
 	owner := uuid.New()
 	memberA, memberB, leaver := uuid.New(), uuid.New(), uuid.New()
-	row, err := s.CreateGroupChat(ctx, owner, "Leave")
+	row, err := s.CreateGroupChat(ctx, owner, "Leave", nil)
 	require.NoError(t, err)
 	_, err = s.AddGroupMembers(ctx, row.ID, []uuid.UUID{memberA, memberB, leaver})
 	require.NoError(t, err)
@@ -92,7 +92,7 @@ func TestLeaveGroupChat_OwnerForbidden(t *testing.T) {
 
 	owner := uuid.New()
 	memberA, memberB := uuid.New(), uuid.New()
-	row, err := s.CreateGroupChat(ctx, owner, "Owner leave")
+	row, err := s.CreateGroupChat(ctx, owner, "Owner leave", nil)
 	require.NoError(t, err)
 	_, err = s.AddGroupMembers(ctx, row.ID, []uuid.UUID{memberA, memberB})
 	require.NoError(t, err)

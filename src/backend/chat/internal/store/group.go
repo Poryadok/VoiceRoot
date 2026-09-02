@@ -37,7 +37,7 @@ func groupAddMinMembers(ctx context.Context) int {
 }
 
 // CreateSpaceChannelChat inserts a channel chat bound to a space; members inherit from space_members.
-func (s *DMStore) CreateSpaceChannelChat(ctx context.Context, creatorProfileID, spaceID uuid.UUID, name string) (*ChatRow, error) {
+func (s *DMStore) CreateSpaceChannelChat(ctx context.Context, creatorProfileID, spaceID uuid.UUID, name string, topic *string) (*ChatRow, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("dm store: pool not configured")
 	}
@@ -48,10 +48,10 @@ func (s *DMStore) CreateSpaceChannelChat(ctx context.Context, creatorProfileID, 
 	var chatID uuid.UUID
 	var createdAt, updatedAt time.Time
 	err := s.Pool.QueryRow(ctx, `
-INSERT INTO chats (type, space_id, name, creator_profile_id, slow_mode_seconds, threads_enabled, allow_user_main_feed)
-VALUES ('channel', $1, $2, $3, 0, true, false)
+INSERT INTO chats (type, space_id, name, creator_profile_id, slow_mode_seconds, threads_enabled, allow_user_main_feed, topic)
+VALUES ('channel', $1, $2, $3, 0, true, false, $4)
 RETURNING id, created_at, updated_at
-`, spaceID, name, creatorProfileID).Scan(&chatID, &createdAt, &updatedAt)
+`, spaceID, name, creatorProfileID, optionalTopicArg(topic)).Scan(&chatID, &createdAt, &updatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -62,6 +62,7 @@ RETURNING id, created_at, updated_at
 		Type:              "channel",
 		SpaceID:           &sid,
 		Name:              &n,
+		Topic:             optionalTopicPtr(topic),
 		CreatorProfileID:  creatorProfileID,
 		ThreadsEnabled:    true,
 		AllowUserMainFeed: false,
@@ -71,7 +72,7 @@ RETURNING id, created_at, updated_at
 }
 
 // CreateSpaceGroupChat inserts a group chat bound to a space; members inherit from space_members.
-func (s *DMStore) CreateSpaceGroupChat(ctx context.Context, creatorProfileID, spaceID uuid.UUID, name string) (*ChatRow, error) {
+func (s *DMStore) CreateSpaceGroupChat(ctx context.Context, creatorProfileID, spaceID uuid.UUID, name string, topic *string) (*ChatRow, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("dm store: pool not configured")
 	}
@@ -82,10 +83,10 @@ func (s *DMStore) CreateSpaceGroupChat(ctx context.Context, creatorProfileID, sp
 	var chatID uuid.UUID
 	var createdAt, updatedAt time.Time
 	err := s.Pool.QueryRow(ctx, `
-INSERT INTO chats (type, space_id, name, creator_profile_id, slow_mode_seconds)
-VALUES ('group', $1, $2, $3, 0)
+INSERT INTO chats (type, space_id, name, creator_profile_id, slow_mode_seconds, topic)
+VALUES ('group', $1, $2, $3, 0, $4)
 RETURNING id, created_at, updated_at
-`, spaceID, name, creatorProfileID).Scan(&chatID, &createdAt, &updatedAt)
+`, spaceID, name, creatorProfileID, optionalTopicArg(topic)).Scan(&chatID, &createdAt, &updatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -96,6 +97,7 @@ RETURNING id, created_at, updated_at
 		Type:             "group",
 		SpaceID:          &sid,
 		Name:             &n,
+		Topic:            optionalTopicPtr(topic),
 		CreatorProfileID: creatorProfileID,
 		CreatedAt:        createdAt.UTC(),
 		UpdatedAt:        updatedAt.UTC(),
@@ -103,7 +105,7 @@ RETURNING id, created_at, updated_at
 }
 
 // CreateChannelChat inserts a standalone channel (no space_id) with the creator as owner.
-func (s *DMStore) CreateChannelChat(ctx context.Context, creatorProfileID uuid.UUID, name string) (*ChatRow, error) {
+func (s *DMStore) CreateChannelChat(ctx context.Context, creatorProfileID uuid.UUID, name string, topic *string) (*ChatRow, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("dm store: pool not configured")
 	}
@@ -120,10 +122,10 @@ func (s *DMStore) CreateChannelChat(ctx context.Context, creatorProfileID uuid.U
 	var chatID uuid.UUID
 	var createdAt, updatedAt time.Time
 	err = tx.QueryRow(ctx, `
-INSERT INTO chats (type, name, creator_profile_id, slow_mode_seconds, threads_enabled, allow_user_main_feed)
-VALUES ('channel', $1, $2, 0, true, false)
+INSERT INTO chats (type, name, creator_profile_id, slow_mode_seconds, threads_enabled, allow_user_main_feed, topic)
+VALUES ('channel', $1, $2, 0, true, false, $3)
 RETURNING id, created_at, updated_at
-`, name, creatorProfileID).Scan(&chatID, &createdAt, &updatedAt)
+`, name, creatorProfileID, optionalTopicArg(topic)).Scan(&chatID, &createdAt, &updatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -141,6 +143,7 @@ VALUES ($1, $2, 'owner', 'main')
 		ID:                chatID,
 		Type:              "channel",
 		Name:              &n,
+		Topic:             optionalTopicPtr(topic),
 		CreatorProfileID:  creatorProfileID,
 		ThreadsEnabled:    true,
 		AllowUserMainFeed: false,
@@ -151,7 +154,7 @@ VALUES ($1, $2, 'owner', 'main')
 }
 
 // CreateGroupChat inserts a standalone group (no space_id) with the creator as owner.
-func (s *DMStore) CreateGroupChat(ctx context.Context, creatorProfileID uuid.UUID, name string) (*ChatRow, error) {
+func (s *DMStore) CreateGroupChat(ctx context.Context, creatorProfileID uuid.UUID, name string, topic *string) (*ChatRow, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("dm store: pool not configured")
 	}
@@ -168,10 +171,10 @@ func (s *DMStore) CreateGroupChat(ctx context.Context, creatorProfileID uuid.UUI
 	var chatID uuid.UUID
 	var createdAt, updatedAt time.Time
 	err = tx.QueryRow(ctx, `
-INSERT INTO chats (type, name, creator_profile_id, slow_mode_seconds)
-VALUES ('group', $1, $2, 0)
+INSERT INTO chats (type, name, creator_profile_id, slow_mode_seconds, topic)
+VALUES ('group', $1, $2, 0, $3)
 RETURNING id, created_at, updated_at
-`, name, creatorProfileID).Scan(&chatID, &createdAt, &updatedAt)
+`, name, creatorProfileID, optionalTopicArg(topic)).Scan(&chatID, &createdAt, &updatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -189,6 +192,7 @@ VALUES ($1, $2, 'owner', 'main')
 		ID:               chatID,
 		Type:             "group",
 		Name:             &n,
+		Topic:            optionalTopicPtr(topic),
 		CreatorProfileID: creatorProfileID,
 		CreatedAt:        createdAt.UTC(),
 		UpdatedAt:        updatedAt.UTC(),
@@ -494,16 +498,16 @@ WHERE chat_id = $1 AND profile_id = $2
 	return tx.Commit(ctx)
 }
 
-// UpdateGroupChat updates mutable group fields (name, avatar_url, slow_mode_seconds).
-func (s *DMStore) UpdateGroupChat(ctx context.Context, chatID uuid.UUID, name, avatarURL *string, slowModeSeconds *int32) (*ChatRow, error) {
+// UpdateGroupChat updates mutable group/channel fields.
+func (s *DMStore) UpdateGroupChat(ctx context.Context, chatID uuid.UUID, name, avatarURL, topic *string, slowModeSeconds *int32, threadsEnabled, allowUserMainFeed *bool) (*ChatRow, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("dm store: pool not configured")
 	}
-	if name == nil && avatarURL == nil && slowModeSeconds == nil {
+	if name == nil && avatarURL == nil && topic == nil && slowModeSeconds == nil && threadsEnabled == nil && allowUserMainFeed == nil {
 		return s.FindChatByID(ctx, chatID)
 	}
-	sets := make([]string, 0, 4)
-	args := make([]any, 0, 5)
+	sets := make([]string, 0, 8)
+	args := make([]any, 0, 9)
 	argN := 1
 	if name != nil {
 		sets = append(sets, fmt.Sprintf("name = $%d", argN))
@@ -515,9 +519,24 @@ func (s *DMStore) UpdateGroupChat(ctx context.Context, chatID uuid.UUID, name, a
 		args = append(args, *avatarURL)
 		argN++
 	}
+	if topic != nil {
+		sets = append(sets, fmt.Sprintf("topic = $%d", argN))
+		args = append(args, optionalTopicArg(topic))
+		argN++
+	}
 	if slowModeSeconds != nil {
 		sets = append(sets, fmt.Sprintf("slow_mode_seconds = $%d", argN))
 		args = append(args, *slowModeSeconds)
+		argN++
+	}
+	if threadsEnabled != nil {
+		sets = append(sets, fmt.Sprintf("threads_enabled = $%d", argN))
+		args = append(args, *threadsEnabled)
+		argN++
+	}
+	if allowUserMainFeed != nil {
+		sets = append(sets, fmt.Sprintf("allow_user_main_feed = $%d", argN))
+		args = append(args, *allowUserMainFeed)
 		argN++
 	}
 	sets = append(sets, "updated_at = now()")
@@ -525,11 +544,33 @@ func (s *DMStore) UpdateGroupChat(ctx context.Context, chatID uuid.UUID, name, a
 	q := fmt.Sprintf(`
 UPDATE chats
 SET %s
-WHERE id = $%d AND type = 'group'
+WHERE id = $%d AND type IN ('group', 'channel')
 RETURNING id, type, space_id, name, avatar_url, topic, creator_profile_id, slow_mode_seconds,
           last_message_at, created_at, updated_at, threads_enabled, allow_user_main_feed, e2e_enabled
 `, strings.Join(sets, ", "), argN)
 	return scanChatRow(s.Pool.QueryRow(ctx, q, args...))
+}
+
+func optionalTopicArg(topic *string) any {
+	if topic == nil {
+		return nil
+	}
+	t := strings.TrimSpace(*topic)
+	if t == "" {
+		return nil
+	}
+	return t
+}
+
+func optionalTopicPtr(topic *string) *string {
+	if topic == nil {
+		return nil
+	}
+	t := strings.TrimSpace(*topic)
+	if t == "" {
+		return nil
+	}
+	return &t
 }
 
 var (

@@ -33,28 +33,33 @@ func (s *ChatGRPC) CreateChat(ctx context.Context, req *chatv1.CreateChatRequest
 	if name == "" {
 		return nil, status.Error(codes.InvalidArgument, "name is required")
 	}
+	var topic *string
+	if req.Topic != nil {
+		t := strings.TrimSpace(req.GetTopic())
+		topic = &t
+	}
 
 	var row *store.ChatRow
 	var err error
 	spaceIDRaw := strings.TrimSpace(req.GetSpaceId())
 	if chatType == chatv1.ChatType_CHAT_TYPE_CHANNEL {
 		if spaceIDRaw == "" {
-			row, err = s.DM.CreateChannelChat(ctx, caller, name)
+			row, err = s.DM.CreateChannelChat(ctx, caller, name, topic)
 		} else {
 			spaceID, parseErr := parseUUIDField("space_id", spaceIDRaw)
 			if parseErr != nil {
 				return nil, parseErr
 			}
-			row, err = s.DM.CreateSpaceChannelChat(ctx, caller, spaceID, name)
+			row, err = s.DM.CreateSpaceChannelChat(ctx, caller, spaceID, name, topic)
 		}
 	} else if spaceIDRaw != "" {
 		spaceID, parseErr := parseUUIDField("space_id", spaceIDRaw)
 		if parseErr != nil {
 			return nil, parseErr
 		}
-		row, err = s.DM.CreateSpaceGroupChat(ctx, caller, spaceID, name)
+		row, err = s.DM.CreateSpaceGroupChat(ctx, caller, spaceID, name, topic)
 	} else {
-		row, err = s.DM.CreateGroupChat(ctx, caller, name)
+		row, err = s.DM.CreateGroupChat(ctx, caller, name, topic)
 	}
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -95,16 +100,17 @@ func (s *ChatGRPC) UpdateChat(ctx context.Context, req *chatv1.UpdateChatRequest
 	if row == nil {
 		return nil, status.Error(codes.NotFound, "chat not found")
 	}
-	if row.Type != "group" {
-		return nil, status.Error(codes.InvalidArgument, "only group chats can be updated")
+	if row.Type != "group" && row.Type != "channel" {
+		return nil, status.Error(codes.InvalidArgument, "only group and channel chats can be updated")
 	}
 	role, err := s.DM.GetMemberRole(ctx, chatID, caller)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	var name, avatar *string
+	var name, avatar, topic *string
 	var slowMode *int32
+	var threadsEnabled, allowUserMainFeed *bool
 	if req.Name != nil {
 		n := strings.TrimSpace(req.GetName())
 		name = &n
@@ -113,21 +119,33 @@ func (s *ChatGRPC) UpdateChat(ctx context.Context, req *chatv1.UpdateChatRequest
 		a := strings.TrimSpace(req.GetAvatarUrl())
 		avatar = &a
 	}
+	if req.Topic != nil {
+		t := strings.TrimSpace(req.GetTopic())
+		topic = &t
+	}
 	if req.SlowModeSeconds != nil {
 		slow := req.GetSlowModeSeconds()
 		slowMode = &slow
 	}
+	if req.ThreadsEnabled != nil {
+		v := req.GetThreadsEnabled()
+		threadsEnabled = &v
+	}
+	if req.AllowUserMainFeed != nil {
+		v := req.GetAllowUserMainFeed()
+		allowUserMainFeed = &v
+	}
 
-	slowModeOnly := slowMode != nil && name == nil && avatar == nil
+	slowModeOnly := slowMode != nil && name == nil && avatar == nil && topic == nil && threadsEnabled == nil && allowUserMainFeed == nil
 	if row.SpaceID != nil && slowModeOnly && s.Roles != nil {
 		if err := canSetSpaceChatSlowMode(ctx, s.Roles, *row.SpaceID, caller); err != nil {
 			return nil, err
 		}
 	} else if role != "owner" {
-		return nil, status.Error(codes.PermissionDenied, "only the group owner can update the chat")
+		return nil, status.Error(codes.PermissionDenied, "only the chat owner can update the chat")
 	}
 
-	updated, err := s.DM.UpdateGroupChat(ctx, chatID, name, avatar, slowMode)
+	updated, err := s.DM.UpdateGroupChat(ctx, chatID, name, avatar, topic, slowMode, threadsEnabled, allowUserMainFeed)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

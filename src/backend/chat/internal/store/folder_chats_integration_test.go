@@ -78,7 +78,7 @@ func TestFolderMembership_SystemFolderFilterAndPinOverlay(t *testing.T) {
 	peer := uuid.New()
 	dm, _, err := store.EnsureDM(ctx, profileID, peer, InboxMain)
 	require.NoError(t, err)
-	group, err := store.CreateGroupChat(ctx, profileID, "g")
+	group, err := store.CreateGroupChat(ctx, profileID, "g", nil)
 	require.NoError(t, err)
 
 	folders, err := store.ListFolders(ctx, profileID)
