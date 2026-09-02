@@ -34,7 +34,7 @@
 
 
 - [ ] **[Moderation] Shadow-ban forward bypass** — `SendMessage` sets `ghost_only` and suppresses `message.sent` when banned (`messaging_grpc.go`; IT `TestPlatformModeration_ShadowBannedSenderMessageHiddenFromPeer`). **`ForwardMessage` / `insertForwardCommentary` skip `IsShadowBanned`** and always publish → shadow-banned users bypass ghost delivery via forward. Audience threshold still `MODERATION_PLATFORM_AUDIENCE_SIZE`, not live object. — `src/backend/moderation/internal/grpcsvc/reports.go`; `src/backend/messaging/internal/grpcsvc/messaging_grpc.go`
-- [ ] **[Moderation] Sanction notifications: consumer stub** — JetStream consumer on `moderation.events` exists (`notification/moderation_events_consumer.go`), but `routeModerationNotification` passes empty `recipientProfileID` → `HandleSanctionApplied` no-ops; push/in-app deferred until account→profile resolution.
+- [x] **[Moderation] Sanction notifications: consumer stub** — **done (T-013):** `routeModerationNotification` resolves `target_account_id` → profile ids via User `ListProfileIDsForAccount` (`notification/internal/s2s/account_profiles.go`); `HandleSanctionApplied` routes `system` push; shadow_ban stays silent (`reports.md`).
 - [x] **[Moderation] Appeals not exposed to users** — Gateway `POST /api/v1/moderation/appeals` (201 Created → `SubmitAppeal`); Flutter `VoiceModerationClient.submitAppeal` + settings appeal sheet (`docs/features/reports.md` § Апелляция). **Batch 27a**.
 
 ### Social
@@ -151,7 +151,7 @@
 - [ ] **[Moderation] Report threshold audience is static env, not object audience** — `MODERATION_PLATFORM_AUDIENCE_SIZE` (default 1000) drives 1% calc; spec calls for relative threshold vs target’s audience.
 - [ ] **[Moderation] Admin audit export пуст только если store пуст** — Gateway `writeModerationAuditExportJSON` мапит `ExportAuditLog` (`transcode_moderation_admin.go`). Не hardcoded `[]`.
 - [ ] **[Moderation] Temp ban expiry does not restore Auth** — `expires_at` respected in SQL for active lookup, but no job/handler calls `Auth.SetAccountStatus(active)` on expiry; only explicit revoke/approved appeal clears suspension.
-- [ ] **[Moderation] Sanction notification delivery** — same as Critical: consumer acks without profile resolution / push copy (`moderation_events_consumer.go`).
+- [x] **[Moderation] Sanction notification delivery** — **done (T-013):** consumer resolves profiles, enriches policy/presence, sends `system` push copy (`moderation_events_consumer.go`).
 
 ### Social
 

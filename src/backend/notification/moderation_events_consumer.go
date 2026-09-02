@@ -7,10 +7,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/proto"
 
 	"voice/backend/notification/internal/consumer"
+	"voice/backend/notification/internal/delivery"
+	"voice/backend/notification/internal/dispatch"
+	"voice/backend/notification/internal/presence"
+	"voice/backend/notification/internal/push"
+	"voice/backend/notification/internal/s2s"
+	"voice/backend/notification/internal/store"
 	"voice/backend/pkg/natslog"
 	eventsv1 "voice.app/voice/events/v1"
 )
@@ -20,10 +27,15 @@ const jsStreamModerationEvents = "moderation_events"
 func runModerationEventsConsumer(
 	ctx context.Context,
 	natsURL string,
+	tokens *store.DeviceTokenStore,
+	pusher *dispatch.PushDispatcher,
+	presenceChecker presence.Checker,
+	policy delivery.DeliveryPolicyLoader,
+	profiles s2s.AccountProfiles,
 	logger *slog.Logger,
 ) error {
-	if strings.TrimSpace(natsURL) == "" {
-		return fmt.Errorf("moderation notification consumer: missing NATS_URL")
+	if tokens == nil || pusher == nil || strings.TrimSpace(natsURL) == "" {
+		return fmt.Errorf("moderation notification consumer: missing deps")
 	}
 	nc, err := nats.Connect(natsURL,
 		nats.Name("voice-notification-moderation"),
@@ -42,7 +54,8 @@ func runModerationEventsConsumer(
 		return fmt.Errorf("jetstream: %w", err)
 	}
 
-	handler := &consumer.ModerationEventHandler{}
+	handler := &consumer.ModerationEventHandler{Router: delivery.DecideRouting}
+	modPusher := &dispatch.MatchmakingPusher{Tokens: tokens, Pusher: pusher}
 	durable := consumer.SharedDurable("moderation")
 
 	msgHandler := func(msg *nats.Msg) {
@@ -52,10 +65,28 @@ func runModerationEventsConsumer(
 			consumer.JetStreamTermAck(msg)
 			return
 		}
-		if routeModerationNotification(handler, &env) {
-			natslog.LogConsume(logger, msg, slog.LevelInfo, "moderation notification event consumed")
+		decisions, payload, ok, err := routeModerationNotification(ctx, handler, profiles, &env)
+		if err != nil {
+			natslog.LogConsume(logger, msg, slog.LevelWarn, "moderation notification route failed")
+			consumer.JetStreamConsumeAck(msg, err)
+			return
 		}
-		consumer.JetStreamConsumeAck(msg, nil)
+		if !ok {
+			consumer.JetStreamConsumeAck(msg, nil)
+			return
+		}
+		enriched, err := dispatch.EnrichDecisions(ctx, presenceChecker, policy, decisions, uuid.Nil, "", delivery.TypeSystem)
+		if err != nil {
+			natslog.LogConsume(logger, msg, slog.LevelWarn, "moderation notification enrich failed")
+			consumer.JetStreamConsumeAck(msg, err)
+			return
+		}
+		natslog.LogConsume(logger, msg, slog.LevelInfo, "moderation notification event consumed")
+		err = modPusher.SendPush(context.Background(), enriched, payload)
+		consumer.JetStreamConsumeAck(msg, err)
+		if err != nil && logger != nil {
+			logger.Warn("moderation push failed", slog.Any("error", err))
+		}
 	}
 
 	sub, err := js.Subscribe("moderation.>", msgHandler,
@@ -79,19 +110,79 @@ func runModerationEventsConsumer(
 	return ctx.Err()
 }
 
-// routeModerationNotification acknowledges handled events. Push delivery deferred until account→profile resolution exists.
-func routeModerationNotification(handler *consumer.ModerationEventHandler, env *eventsv1.ModerationStreamEvent) bool {
+// routeModerationNotification resolves account→profile and builds system push decisions.
+func routeModerationNotification(
+	ctx context.Context,
+	handler *consumer.ModerationEventHandler,
+	profiles s2s.AccountProfiles,
+	env *eventsv1.ModerationStreamEvent,
+) (map[string]delivery.DeliveryDecision, push.Payload, bool, error) {
 	if handler == nil || env == nil {
-		return false
+		return nil, push.Payload{}, false, nil
 	}
 	switch p := env.GetPayload().(type) {
 	case *eventsv1.ModerationStreamEvent_SanctionApplied:
-		if p.SanctionApplied == nil {
-			return false
+		ev := p.SanctionApplied
+		if ev == nil {
+			return nil, push.Payload{}, false, nil
 		}
-		_ = handler.HandleSanctionApplied(context.Background(), p.SanctionApplied, "")
-		return true
+		if !consumer.NotifySanctionType(ev.GetType()) {
+			return nil, push.Payload{}, false, nil
+		}
+		accountID, err := uuid.Parse(strings.TrimSpace(ev.GetTargetAccountId()))
+		if err != nil || accountID == uuid.Nil {
+			return nil, push.Payload{}, false, nil
+		}
+		if profiles == nil {
+			return nil, push.Payload{}, false, nil
+		}
+		ids, err := profiles.ProfileIDsForAccount(ctx, accountID)
+		if err != nil {
+			return nil, push.Payload{}, false, err
+		}
+		profileStrs := make([]string, 0, len(ids))
+		for _, id := range ids {
+			if id == uuid.Nil {
+				continue
+			}
+			profileStrs = append(profileStrs, id.String())
+		}
+		decisions := handler.HandleSanctionApplied(ctx, ev, profileStrs)
+		if len(decisions) == 0 {
+			return nil, push.Payload{}, false, nil
+		}
+		return decisions, sanctionPushPayload(ev), true, nil
 	default:
-		return false
+		return nil, push.Payload{}, false, nil
+	}
+}
+
+func sanctionPushPayload(ev *eventsv1.SanctionApplied) push.Payload {
+	if ev == nil {
+		return push.Payload{}
+	}
+	return push.Payload{
+		Title: "Moderation notice",
+		Body:  sanctionPushBody(ev.GetType()),
+		Data: map[string]string{
+			"type":          string(delivery.TypeSystem),
+			"sanction_id":   ev.GetSanctionId(),
+			"sanction_type": ev.GetType(),
+		},
+	}
+}
+
+func sanctionPushBody(sanctionType string) string {
+	switch strings.ToLower(strings.TrimSpace(sanctionType)) {
+	case "warning":
+		return "You received a warning from moderation"
+	case "temp_ban":
+		return "Your account has been temporarily suspended"
+	case "perm_ban":
+		return "Your account has been permanently banned"
+	case "mm_ban":
+		return "You have been banned from matchmaking"
+	default:
+		return "A moderation action was applied to your account"
 	}
 }
