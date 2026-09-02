@@ -47,6 +47,7 @@ CI/CD + выкат: GitHub Actions, promote/deploy, k8s secrets, observability �
 
 ### Deploy workflow
 
+- [ ] **`MODERATION_GRPC_ADDR` on staging/prod k8s** — `docker-compose.yml` sets `MODERATION_GRPC_ADDR: moderation:9090` for messaging; `deploy/staging/configmap-app.yaml` omits it → shadow-ban/spam-mute checks silently disabled (`messaging/main.go` `PlatformMod` nil). Add `MODERATION_GRPC_ADDR: voice-moderation:9090` to shared configmap + prod mirror; verify in smoke.
 - [ ] **Sanity selective CI** — `workflow_dispatch` CI → `full`; первый master push с selective promote — проверить GHCR bootstrap; при необходимости `STAGING_FORCE_FULL_ROLLOUT=true` + manual deploy `deploy_mode=full`. — **отложено: нужен live GHCR/staging**
 - [ ] **`PROD_SMOKE_ENABLED` / `PROD_STAFF_TOKEN`** — GitHub Variables/Secrets для prod smoke.
 

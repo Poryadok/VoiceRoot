@@ -21,8 +21,6 @@
 
 
 - [ ] **[Protos/Pkg] Split NATS wire format vs `jetstream_events.proto`** — `protos/voice/events/v1/jetstream_events.proto` defines protobuf envelopes, but publishers diverge:
-- [ ] **[Protos/Pkg] Social stream proto with zero publisher** — `SocialStreamEvent` in `protos/voice/events/v1/jetstream_events.proto`, but `src/backend/social/` has no JetStream publisher. `docs/MICROSERVICES.md` lists Social as publisher of `social.events` → Analytics/Notification/Chat/Federation.
-
 ### Space
 
 
@@ -35,8 +33,8 @@
 ### Moderation
 
 
-- [ ] **[Moderation] Shadow-ban не режет fanout** — `maybeAutoShadowBan` вставляет `shadow_ban` (`InsertSanction`); Messaging/Realtime не вызывают `IsShadowBanned` на send/fanout. Audience threshold всё ещё `MODERATION_PLATFORM_AUDIENCE_SIZE`, не live object. — `src/backend/moderation/internal/grpcsvc/reports.go`; `src/backend/messaging/`
-- [ ] **[Moderation] Notification не consumит `moderation.events`** — publisher есть (`moderationevents/jetstream.go`: `report_created` / `sanction_applied` / `appeal_submitted`); push/in-app санкций нет.
+- [ ] **[Moderation] Shadow-ban forward bypass** — `SendMessage` sets `ghost_only` and suppresses `message.sent` when banned (`messaging_grpc.go`; IT `TestPlatformModeration_ShadowBannedSenderMessageHiddenFromPeer`). **`ForwardMessage` / `insertForwardCommentary` skip `IsShadowBanned`** and always publish → shadow-banned users bypass ghost delivery via forward. Audience threshold still `MODERATION_PLATFORM_AUDIENCE_SIZE`, not live object. — `src/backend/moderation/internal/grpcsvc/reports.go`; `src/backend/messaging/internal/grpcsvc/messaging_grpc.go`
+- [ ] **[Moderation] Sanction notifications: consumer stub** — JetStream consumer on `moderation.events` exists (`notification/moderation_events_consumer.go`), but `routeModerationNotification` passes empty `recipientProfileID` → `HandleSanctionApplied` no-ops; push/in-app deferred until account→profile resolution.
 - [x] **[Moderation] Appeals not exposed to users** — Gateway `POST /api/v1/moderation/appeals` (201 Created → `SubmitAppeal`); Flutter `VoiceModerationClient.submitAppeal` + settings appeal sheet (`docs/features/reports.md` § Апелляция). **Batch 27a**.
 
 ### Social
@@ -59,6 +57,7 @@
 
 
 - [ ] **[Matchmaking] Party snapshot из voice roster отсутствует** — `PartyStore` stub; `StartSearch` валидирует `partySize=1`. Нет сброса очереди при leave/join войса (`docs/features/matchmaking.md`). Pairwise `rolesCompatible` уже требует **distinct** roles (`criteria/criteria.go`); live 10-stack matcher + `RolesDistinct` на полном лобби — тонко (нет compose на seeded 10-slot).
+- [x] **[Matchmaking] Platform MM ban fail-closed + S2S** — `StartSearch` / matcher fail-closed when `BanStore` nil (`platform_ban_degradation_test.go`, `worker_ban_degradation_test.go`, **#73**); Moderation `mm_ban` → `ApplyPlatformMMBan` / revoke (`sanctions.go`).
 ### Role
 
 
@@ -72,11 +71,12 @@
 - [x] **[Cross-cutting] Space Pro entitlement duplicated, not synced — webhook writes `subscription_db.space_subscriptions` (`subscription/internal/grpcsvc/subscription.go`); Space enforces caps from `space_db.space_subscriptions` (`space/internal/store/entitlement.go`). No S2S/event sync on `subscription.activated` / `space_pro`. Live Space Pro billing does not raise member cap.** — **done (sync):** webhook → S2S `SyncSpaceProSubscription` and/or NATS `subscription.space_pro_*` → Space entitlement cache. Compose live member-cap: `TestComposeSpaceProMemberCap_live` (#14).
 - [ ] **[Cross-cutting] `subscription.events` bus missing — `docs/CONTRACT_MATRIX.md` / `docs/MICROSERVICES.md` list stream with subscribers Analytics, User, Space, File; code only publishes `analytics.subscription.*` from Subscription. Blocks cross-service tier/limit propagation.** — `src/backend/subscription/internal/grpcsvc/subscription.go` (`publishPaymentEvent`), `docs/CONTRACT_MATRIX.md`
 - [x] **[Cross-cutting] Web JWT in WS query string** — web uses `POST /api/v1/realtime/ws-ticket` + `/ws?ticket=`; legacy `access_token` query retained for compat. — `docs/ARCHITECTURE_REQUIREMENTS.md`, Gateway, Flutter `RealtimeHub`
-- [ ] **[Cross-cutting] Flutter shell parity (audit R2-A03–A05, H14)** — rail: folders + Quick Access + profile order; profile RC menu (switch/create profile; **archive screen — Batch 16**); mobile bottom tabs + drawer; active strip LRU (≤100 opened chats). Track client work in [client.md](client.md); folder/quick-access RPCs still open — **P0**
+- [ ] **[Cross-cutting] Flutter shell parity (audit R2-A03–A05, H14)** — folders + Quick Access + archive RPCs/UI shipped (batches 15–21). **Remaining:** mobile drawer IA (stub), stacked chrome polish, R2-A04 defer — [client.md](client.md).
 
 ### Messaging
 
 
+- [ ] **[Messaging] Staging/prod: `MODERATION_GRPC_ADDR` unset disables PlatformMod** — compose sets `MODERATION_GRPC_ADDR: moderation:9090` (`docker-compose.yml`); `deploy/staging/configmap-app.yaml` omits it → shadow-ban/spam-mute checks silently off on k8s. **Fix:** add to shared configmap + prod; smoke messaging pod env — [ci.md](ci.md) § High Deploy.
 - [x] **[Messaging] `ForwardMessage` bypasses channel/thread send policy** — **done:** `ForwardMessage` calls `checkSpaceSendPermission`, `threadPolicyDeps().validateSend`, and sets `posted_as_chat` when channel forbids main-feed (`messaging_grpc.go`; `messaging_forward_integration_test.go`). `GetMessage` **есть** (`messaging_grpc.go` ~792).
 - [x] **[Messaging] E2E forward policy gap** — **done:** `validateE2ESend` on forward target; E2E→plain `FailedPrecondition`, E2E→E2E preserves `is_e2e` (Messaging ITs).
 
@@ -146,13 +146,12 @@
 ### Moderation
 
 
-- [ ] **[Moderation] `mm_ban` sanction is local-only** — type allowed in DB/handlers but `ApplySanction` never calls Matchmaking `BanFromMM` / `GetMMBanStatus`; MM bans remain peer-scoped in Matchmaking, not platform moderation.
+- [x] **[Moderation] `mm_ban` S2S to Matchmaking** — `ApplySanction` type `mm_ban` → `Matchmaking.ApplyPlatformMMBan`; revoke → `RevokePlatformMMBan` (`sanctions.go`). Peer-scoped `BanFromMM` remains separate API.
 - [ ] **[Moderation] Auto-moderation diverges from spec** — `CheckMessage` only detects ≥3 links; no repeated-message detection; no 1h timed mute (second spam hit → permanent block for that pattern only, no window); no “first 10 messages after mute” pass.
 - [ ] **[Moderation] Report threshold audience is static env, not object audience** — `MODERATION_PLATFORM_AUDIENCE_SIZE` (default 1000) drives 1% calc; spec calls for relative threshold vs target’s audience.
 - [ ] **[Moderation] Admin audit export пуст только если store пуст** — Gateway `writeModerationAuditExportJSON` мапит `ExportAuditLog` (`transcode_moderation_admin.go`). Не hardcoded `[]`.
-- [ ] **[Moderation] Appeals lack business rules** — no validation that appellant owns sanction; no 7-day submission window; no duplicate-appeal error mapping (DB `UNIQUE(sanction_id)` → 500).
 - [ ] **[Moderation] Temp ban expiry does not restore Auth** — `expires_at` respected in SQL for active lookup, but no job/handler calls `Auth.SetAccountStatus(active)` on expiry; only explicit revoke/approved appeal clears suspension.
-- [ ] **[Moderation] No sanction notifications** — Notification service has zero moderation integration despite `moderation.events` → Notification in contract matrix.
+- [ ] **[Moderation] Sanction notification delivery** — same as Critical: consumer acks without profile resolution / push copy (`moderation_events_consumer.go`).
 
 ### Social
 
@@ -224,7 +223,7 @@
 - [ ] **[Cross-cutting] `CheckLimit` unused outside Subscription — no runtime gRPC callers in Chat/Space/User/File for documented caps (profiles, space/chat counts, etc.). Enforcement is ad hoc: File via Gateway live `GetSubscription`, User via JWT tier, Chat has no subscription client.** — `src/backend/subscription/internal/grpcsvc/subscription.go`, `src/backend/gateway/subscription_tier.go`, `src/backend/user/internal/grpcsvc/user.go`
 - [ ] **[Cross-cutting] Resilience claims vs code — `MICROSERVICES.md` promises circuit breakers + NATS DLQ; no `gobreaker`/DLQ in `src/backend/`. Tier-0 degradation is partial (Gateway file tier fallback only).** — `docs/MICROSERVICES.md`, `src/backend/` (absence)
 - [x] **[Cross-cutting] No E2E for Space Pro billing path — smoke/full cover personal premium + file limits (`compose_billing_live_test.go`, `billing_e2e_live_test.dart`); zero `space_pro` webhook → invite/member-cap tests.** — **done (member-cap live):** `TestComposeSpaceProMemberCap_live` (webhook join + cap, #14). Remaining product: Flutter Space Pro checkout / real Paddle (Critical Subscription; Common Flutter Space Pro).
-- [ ] **[Cross-cutting] E2E smoke skips core messaging cross-cut — tier-2 smoke omits `ws_resume`, `message_delivery`, `in_app_notifications` (full/nightly only). Two-layer delivery not gated on every master push.** — `.github/ci/e2e-features.yml`, `docs/TESTING.md`
+- [ ] **[Cross-cutting] Tier-2 E2E not PR-gated** — `ws_resume`, `message_delivery`, `in_app_notifications` run on master/full (`e2e-features.yml`); regressions can land before nightly. Policy: [ci.md](ci.md) § High Pipeline.
 - [x] **[Cross-cutting] Device `integration_test` driver suite — partial:** host matrix `device_driver_smoke_test.dart` + CI `flutter-device-driver`; Gateway well-known Team ID/SHA/package env-driven; Android emulator driver skips without device. Still open: NT-05, prod App Links/AASA, CallKit/PushKit/LiveKit media. — `src/frontend/integration_test/README.md`, `docs/TESTING.md`
 - [x] **[Cross-cutting] Federation: staging/CI vs local compose** — `federation` added to `docker-compose.yml` app profile (health/metrics scaffold); still omitted from `GATEWAY_GRPC_UPSTREAMS_JSON` by design (S2S-only).
 - [ ] **[Cross-cutting] Admin vs PLAN — `PLAN.md` lists Admin as “зарезервировано”; `src/admin/` ships moderation queue + product analytics pages with CI job. Cross-cutting staff product surface undocumented in PLAN.** — `docs/PLAN.md`, `src/admin/`
@@ -232,12 +231,12 @@
 ### Messaging
 
 
-- [ ] **[Messaging] `message.forwarded` NATS event missing** — spec lists it; publisher/stream only has `message.sent` on forward.
+- [x] **[Messaging] `message.forwarded` NATS event** — `PublishMessageForwarded` on forward path (`messaging_grpc.go`; `messageevents/jetstream.go`).
 - [x] **[Messaging] `ForwardMessageRequest.commentary` ignored** — **done:** commentary inserts a separate message via `insertForwardCommentary` (`messaging_grpc.go`; Messaging forward ITs).
 - [x] **[Messaging] “Copy as new message” / forward without attribution** — **done:** `ForwardMessageRequest.without_attribution` → regular message, no Forwarded-from; skips `allow_forward` deny (FW-03).
 - [x] **[Messaging] Forward-author privacy block not enforced** — spec says user can forbid forwarding their messages; Messaging `ForwardMessage` checks User `allow_forward` via S2S (`PermissionDenied`).
 - [ ] **[Messaging] Group/channel view counts absent** — `text-chat.md` requires per-message view counter; no model/RPC beyond DM-style `read_receipts`.
-- [ ] **[Messaging] `ForwardMessage` skips SendMessage guards** — **partial:** now runs DM block/privacy, send-perm, E2E, and channel policy; still skips moderation/slow-mode, attachment privacy/validate, and some SendMessage-only guards (`messaging_grpc.go` `ForwardMessage`).
+- [ ] **[Messaging] `ForwardMessage` skips shadow-ban + some send guards** — runs DM block/privacy, send-perm, E2E, channel/thread policy, slow-mode (`Moderation.EnsureCanSend`), attachment privacy, `CheckMessageAllowed`; **still skips** `IsShadowBanned` / `ghost_only` on insert + `insertForwardCommentary`; attachment `validateRichPayload` gaps vs `SendMessage` (`messaging_grpc.go` `ForwardMessage`).
 - [ ] **[Messaging] Read-state APIs DM-typed only** — `MarkRead` / `GetReadState` / `GetBulkReadState` / `GetChatListMetadata` use `validateChatRefDM`; explicit `group`/`channel` refs rejected while `GetMessages` accepts all types.
 - [ ] **[Messaging] `content_type`: article, location, video_note, music** — **partial (parallel track):** `messages.content_type` column + `SendMessage`/`Message.content_type` proto; location/article send without `file_id`; `video_note`/`music` payload validation still open — [messaging-service.md](../microservices/messaging-service.md) — **P0**
 - [ ] **[Messaging] `schedule_message`, `send_when_online`, `send_silent`** — **doc contract in** [messaging-service.md](../microservices/messaging-service.md) (`SendMessageRequest`, `scheduled_messages`, worker). Not yet in proto/code. — **P0**
@@ -369,7 +368,7 @@
 - [ ] **[Realtime] Live friend presence over WS is incomplete** — `presence_update` is fan-out to same-profile tabs and chat subscribers (`ws.go`, `ws_hub.go`). Friends not in a shared chat subscription do not receive live updates while WS is up (Flutter stops REST polling when connected — `src/frontend/lib/state/presence_providers.dart`). Proto has `PresenceChange` (`protos/voice/events/v1/jetstream_events.proto`) but User publisher has no presence subject (`user/internal/userevents/jetstream.go`) and Realtime has no `user_events` consumer.
 - [ ] **[Realtime] In-app `notification` targets WS-subscribed profiles, not chat membership** — `in_app_notification_fanout.go` uses `hub.profileIDsSubscribedToChat(chatID)` as the recipient set. Connected group members who have not subscribed to that chat miss `notification` (and may miss `message_create` too).
 - [x] **[Realtime] `delivery_ack` Redis cross-instance fanout** — **done:** `redis_fanout.go` publishes/consumes `fanoutMsgDeliveryAck`; `ws.go` publishes on client `delivery_ack`; compose live `TestComposeDeliveryReceipts_live`. Residual: dedicated cross-instance integration test — см. test-gaps ниже.
-- [x] **[Realtime] JetStream `message.delivery_ack` publisher** — client `delivery_ack` → `message.delivery_ack` on `message.events` via `delivery_ack_publisher.go` (Batch 11); Messaging durable consumer still open.
+- [x] **[Realtime] JetStream `message.delivery_ack` publisher** — client `delivery_ack` → `message.delivery_ack` on `message.events` via `delivery_ack_publisher.go` (Batch 11); Messaging durable consumer **done (Batch 12)** → `last_delivered_message_id`.
 - [ ] **[Realtime] Redis connection registry is write-only** — `redis_registry.go` `Register`/`Unregister` are called from `ws.go` but never read for routing. Doc describes `{profile_id → [instance_id, conn_id]}` registry for multi-instance fanout (`realtime-service.md`); actual cross-instance path is Redis Pub/Sub + per-instance NATS durables only.
 - [ ] **[Realtime] `role_events` consumer lacks JetStream boot retry** — `role_events_consumer.go` subscribes directly; other consumers use `subscribeJetStreamWithRetry` (`jetstream_subscribe.go`). Cold-start before `role_events` stream exists → goroutine exits permanently (`main.go` logs error, no restart).
 - [ ] **[Realtime] Blocking send on call fanout can stall NATS handlers** — `ws_hub.go` `profileFanoutBlocks` uses blocking `reg.fanout <- env` (no timeout/drop) for `call_*` / screen-share ops; a full fanout buffer (32) can block the NATS consumer goroutine.
@@ -750,7 +749,6 @@
 
 - [ ] **[Auth] IP logging for audit not implemented** — `docs/microservices/auth-service.md` § “IP logging”; `HttpAccessLogFilter` logs method/path/status only, no client IP. Files: `src/backend/auth/src/main/java/voice/backend/auth/web/HttpAccessLogFilter.java`, `docs/microservices/auth-service.md`.
 - [ ] **[Auth] Internal gRPC has no caller authorization** — `ResolvePhoneHashes`, `SetAccountStatus` callable by any mesh peer without S2S auth. Files: `src/backend/auth/src/main/java/voice/backend/auth/grpc/AuthGrpcService.java`, `src/backend/moderation/internal/authclient/authclient.go`.
-- [ ] **[Auth] `GuestConvertNatsEventIntegrationTest` is a false positive** — Asserts `user.guest_converted` without calling convert; `RecordingAuthEventPublisherImpl.publishedSubjects()` always includes subject. File: `src/backend/auth/src/test/java/voice/backend/auth/GuestConvertNatsEventIntegrationTest.java`. *(Likely duplicate of TODO.md Batch 6 “NATS user.guest_converted”.)*
 - [ ] **[Auth] Compose dev 2FA bypass enabled** — `AUTH_TOTP_TEST_BYPASS: "true"` in `docker-compose.yml`; acceptable for local E2E but must not leak to staging/prod manifests (staging yaml omits it — OK).
 
 ### Realtime

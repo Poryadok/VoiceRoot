@@ -37,16 +37,16 @@ _Пока пусто — критичные клиентские блокеры 
 ### Auth UI (REST есть, экранов нет)
 
 - [ ] **AuthScreen: телефон + OTP** — спека [auth-and-contacts.md](../features/auth-and-contacts.md): телефон default; `auth_screen.dart` только email.
-- [ ] **Auth UI: sessions / revoke, password-reset** — REST есть (`GET /api/v1/auth/sessions`, revoke, `POST /api/v1/auth/password/reset`); **sessions/revoke UI shipped** (`ActiveSessionsScreen` in Security settings, **Batch 29b**); password-reset экран нет.
+- [ ] **Auth UI: password-reset** — REST есть (`POST /api/v1/auth/password/reset`); экран нет. **Sessions/revoke UI shipped** (`ActiveSessionsScreen`, Security settings, **Batch 29b**).
 - [x] **Auth UI: delete-account** — `SecuritySettingsScreen` confirm+password → `POST /api/v1/auth/delete-account`; guest blocked; logout on success (**Batch 28b**). Restore-account UI deferred.
 
 ### Telegram-parity UX audit — Flutter (2026-08-28)
 
 Источник: `tmp/telegram-ux-audit/AUDIT.md` (R2-A03–A05, R3-A08, R3-A11). Backend RPC-хвосты — [backend.md](backend.md) § Telegram-parity audit / § Chat navigation.
 
-- [x] **R2-A03 — Profile switcher vs rail contract** — `ProfileAvatarMenuButton` §1.1a in rail (`profile_avatar_menu.dart`); desktop session bar is label-only (no combobox); mobile tap opens menu + swipe switch (`ProfileAvatarSwitcher`). Archive entry shows unavailable snackbar until Archive list screen ships (Batch 10; list RPC Batch 15).
+- [x] **R2-A03 — Profile switcher vs rail contract** — `ProfileAvatarMenuButton` §1.1a in rail (`profile_avatar_menu.dart`); desktop session bar is label-only (no combobox); mobile tap opens menu + swipe switch (`ProfileAvatarSwitcher`). Archive via profile RC → `/chats/archive` (`ChatArchiveScreen`, Batch 16).
 - [ ] **R2-A04 — Mobile shell IA** — `MobileShellTabBar` (Chats/Social/Match) on `Scaffold.bottomNavigationBar` when narrow + no open chat (Batch 10 incremental); **incremental:** `MobileShellDrawer` hamburger stub (folders, QA, settings) shipped (parallel/client); **keyboard-hide tab bar** on narrow + open keyboard shipped (Batch 21b); **keyboard-hide active strip** on open chat shipped (Batch 28a); **incremental (Batch 29a):** pinned bar single-line collapse when >1 pin, text-scale ×1.5 smoke, strip hidden on full-screen shell overlays (MM/settings routes via `MobileShellOverlayObserver`); **deferred:** remaining stacked chrome polish.
-- [ ] **R2-A05 — Active strip LRU semantics** — strip tracks **opened** chats (≤100 LRU); `MobileChatStrip` + `mobile_opened_chat_strip.dart` shipped; long-press remove + 100-cap LRU eviction snackbar shipped (Batch 9).
+- [x] **R2-A05 — Active strip LRU semantics** — strip tracks **opened** chats (≤100 LRU); `MobileChatStrip` + `mobile_opened_chat_strip.dart` shipped; long-press remove + 100-cap LRU eviction snackbar shipped (Batch 9).
 - [x] **R3-A08 — Strip widget test wrong contract** — `mobile_chat_strip_test.dart` asserts opened-chat LRU, not inbox rows (§1.6).
 - [x] **R3-A11 — Composer a11y parity** — transient §3.6b emoji panel + §3.6a attach popup with §3.6e focus trap/return (`composer_panels.dart`); click/tap activation on desktop (Batch 9).
 - [x] **Archive list screen** — `Screen / Chat / Archive` via profile RC → `/chats/archive`; `ChatArchiveScreen` + `inbox=archive` list/unarchive (Batch 16).
@@ -97,7 +97,9 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 - [x] **Message requests inbox UI** — virtual «Запросы» folder in rail/drawer (visible when pending > 0, unread badge); removed middle-column segmented toggle (§1.3 tombstone); accept/decline on list rows; `notificationTypeMessageRequest` settings toggle — **Batch 22b** (backend bucketing Batch 21a).
 - [x] **Кастомные папки чатов** — All/DMs/Groups + custom; REST folders + rail/drawer UI shipped (parallel/client); **pin/reorder UI** in list ctx + custom-folder drag reorder shipped (Batch 21b); edit-folders management UI shipped (**Batch 25b**).
 - [ ] **In-chat search: next/prev highlight** — [search.md](../features/search.md).
-- [x] **Favorites / contacts UI** — Social panel Contacts + Favorites tabs; `VoiceFriendsClient` list/add/set favorite; star toggle on friends/contacts (`social_panel.dart`, `friends_client.dart`) — **Batch 23b**. **QR add friend UI** — my-code + scan/paste profile link (`qr_add_friend_sheet.dart`) — **Batch 26a**; phone-book sync stub shipped (**Batch 25a**).
+- [x] **Favorites / contacts UI** — Social panel Contacts + Favorites tabs; `VoiceFriendsClient` list/add/set favorite; star toggle on friends/contacts (`social_panel.dart`, `friends_client.dart`) — **Batch 23b**. **QR add friend UI** — my-code + paste profile link (`qr_add_friend_sheet.dart`) — **Batch 26a**; phone-book API stub wired (**Batch 25a**).
+- [ ] **Phone contacts sync — real pipeline** — UI calls `syncPhoneContacts(const [])` → stub snackbar only (`social_panel.dart`); backend + Gateway + `TestComposePhoneSync_live` exist; needs platform contact permission + hash picker (replace empty stub).
+- [ ] **QR add-friend — live camera scanner** — Batch 26a ships paste field; l10n implies camera scan. Add `mobile_scanner` (or similar) or narrow copy to paste-only.
 - [x] **Blocked accounts UI** — Social panel Blocked tab; `VoiceFriendsClient` `listBlocked`/`unblockAccount`; gateway `GET/DELETE /api/v1/friends/blocks` — **Batch 24a**.
 - [x] **Outgoing friend request declined label** — `PendingFriendRequest.status` from API; Requests tab shows «Declined» vs «Request pending» for outgoing rows — **Batch 24b**.
 - [ ] **Idle 5 мин → `UpdatePresence idle`** — сейчас idle только если клиент сам пришлёт. [presence.md](../features/presence.md).
