@@ -1826,6 +1826,37 @@ class AppLocalizationsEn extends AppLocalizations {
       'Register your guest account before deleting it.';
 
   @override
+  String get securitySessionsTitle => 'Active sessions';
+
+  @override
+  String get securitySessionsHint =>
+      'Devices where you are signed in. Revoke access for devices you no longer use.';
+
+  @override
+  String get securitySessionsManage => 'Manage sessions';
+
+  @override
+  String get securitySessionsCurrentDevice => 'This device';
+
+  @override
+  String get securitySessionsOtherDevice => 'Other device';
+
+  @override
+  String get securitySessionsCurrentBadge => 'Current';
+
+  @override
+  String get securitySessionsRevoke => 'Revoke';
+
+  @override
+  String get securitySessionsRevoked => 'Session revoked';
+
+  @override
+  String get securitySessionsLoadError => 'Could not load sessions';
+
+  @override
+  String get securitySessionsEmpty => 'No other active sessions';
+
+  @override
   String get privacySettingsTitle => 'Privacy';
 
   @override

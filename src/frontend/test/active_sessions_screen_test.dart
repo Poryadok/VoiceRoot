@@ -14,7 +14,7 @@ import 'package:voice_frontend/backend/guest_credentials_storage.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
-import 'package:voice_frontend/ui/settings/security_settings_screen.dart';
+import 'package:voice_frontend/ui/settings/active_sessions_screen.dart';
 
 import 'support/test_voice_token_catalog.dart';
 
@@ -30,18 +30,31 @@ class _MemoryAuthStorage implements AuthSessionStorage {
 }
 
 void main() {
-  testWidgets('security settings deletes account after password confirm', (
-    tester,
-  ) async {
-    var deleteCalled = false;
+  testWidgets('active sessions screen revokes other device', (tester) async {
+    var revokeCalled = false;
     final mock = MockClient((req) async {
-      if (req.method == 'POST' && req.url.path == '/api/v1/auth/delete-account') {
-        deleteCalled = true;
-        final body = jsonDecode(req.body) as Map<String, dynamic>;
-        expect(body['password'], 'secret');
-        return http.Response('', 204);
+      if (req.method == 'GET' && req.url.path == '/api/v1/auth/sessions') {
+        return http.Response(
+          jsonEncode({
+            'sessions': [
+              {
+                'id': 'sess-current',
+                'device_info_json': '{"platform":"flutter"}',
+                'current': true,
+              },
+              {
+                'id': 'sess-other',
+                'device_info_json': '{"platform":"web"}',
+                'current': false,
+              },
+            ],
+          }),
+          200,
+        );
       }
-      if (req.method == 'POST' && req.url.path == '/api/v1/auth/logout') {
+      if (req.method == 'POST' &&
+          req.url.path == '/api/v1/auth/sessions/sess-other/revoke') {
+        revokeCalled = true;
         return http.Response('', 204);
       }
       return http.Response('not found', 404);
@@ -91,39 +104,28 @@ void main() {
         child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: const SecuritySettingsScreen(),
+          home: const ActiveSessionsScreen(),
         ),
       ),
     );
     await tester.pumpAndSettle();
 
-    await tester.scrollUntilVisible(
-      find.byKey(SecuritySettingsScreen.deleteAccountButtonKey),
-      120,
-      scrollable: find
-          .descendant(
-            of: find.byKey(SecuritySettingsScreen.screenKey),
-            matching: find.byType(Scrollable),
-          )
-          .first,
+    expect(find.byKey(ActiveSessionsScreen.sessionRowKey('sess-other')), findsOneWidget);
+    expect(
+      find.byKey(ActiveSessionsScreen.revokeButtonKey('sess-other')),
+      findsOneWidget,
     );
-    await tester.tap(find.byKey(SecuritySettingsScreen.deleteAccountButtonKey));
-    await tester.pumpAndSettle();
+    expect(
+      find.byKey(ActiveSessionsScreen.revokeButtonKey('sess-current')),
+      findsNothing,
+    );
 
-    expect(find.byKey(SecuritySettingsScreen.deleteAccountDialogKey), findsOneWidget);
-    await tester.enterText(
-      find.byKey(SecuritySettingsScreen.deleteAccountPasswordKey),
-      'secret',
-    );
     await tester.tap(
-      find.descendant(
-        of: find.byKey(SecuritySettingsScreen.deleteAccountDialogKey),
-        matching: find.text('Delete'),
-      ),
+      find.byKey(ActiveSessionsScreen.revokeButtonKey('sess-other')),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
-    expect(deleteCalled, isTrue);
+    expect(revokeCalled, isTrue);
   });
 }
