@@ -1716,6 +1716,35 @@ class AppLocalizationsEn extends AppLocalizations {
   String get securitySettingsTitle => 'Security';
 
   @override
+  String get appealSettingsTitle => 'Appeal a sanction';
+
+  @override
+  String get appealTitle => 'Submit an appeal';
+
+  @override
+  String get appealDescription =>
+      'You may appeal a sanction once within 7 days. Enter the sanction ID from your notification and explain why you believe the decision was wrong.';
+
+  @override
+  String get appealSanctionIdLabel => 'Sanction ID';
+
+  @override
+  String get appealReasonLabel => 'Reason';
+
+  @override
+  String get appealSubmit => 'Submit appeal';
+
+  @override
+  String get appealSubmitting => 'Submitting…';
+
+  @override
+  String get appealSubmittedMessage =>
+      'Appeal submitted. We will review it within 7 business days.';
+
+  @override
+  String get appealValidationError => 'Sanction ID and reason are required.';
+
+  @override
   String get verificationSettingsTitle => 'Verification';
 
   @override

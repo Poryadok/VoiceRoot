@@ -17,6 +17,20 @@ import (
 type recordingModerationReports struct {
 	moderationv1.UnimplementedModerationServiceServer
 	lastCreate *moderationv1.CreateReportRequest
+	lastAppeal *moderationv1.SubmitAppealRequest
+}
+
+func (s *recordingModerationReports) SubmitAppeal(_ context.Context, req *moderationv1.SubmitAppealRequest) (*moderationv1.SubmitAppealResponse, error) {
+	s.lastAppeal = req
+	return &moderationv1.SubmitAppealResponse{
+		Appeal: &moderationv1.Appeal{
+			Id:                 "appeal-created",
+			SanctionId:         req.GetSanctionId(),
+			AppellantAccountId: "account-1",
+			Reason:             req.GetReason(),
+			Status:             "pending",
+		},
+	}, nil
 }
 
 func (s *recordingModerationReports) CreateReport(_ context.Context, req *moderationv1.CreateReportRequest) (*moderationv1.CreateReportResponse, error) {
@@ -100,6 +114,22 @@ func TestTranscodeModeration_MMToxicAliasMapsToCheating(t *testing.T) {
 	require.Equal(t, http.StatusAccepted, resp.Code)
 	require.NotNil(t, rec.lastCreate)
 	require.Equal(t, "cheating", rec.lastCreate.GetCategory())
+}
+
+// TestTranscodeModeration_SubmitAppeal documents POST /api/v1/moderation/appeals → 201 Created.
+func TestTranscodeModeration_SubmitAppeal(t *testing.T) {
+	t.Parallel()
+	rec := &recordingModerationReports{}
+	h := newReportsContractGateway(t, rec)
+
+	body := `{"sanction_id":"sanction-1","reason":"I believe this was a mistake"}`
+	resp := performRequest(h, http.MethodPost, "/api/v1/moderation/appeals", body, map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusCreated, resp.Code)
+	require.NotNil(t, rec.lastAppeal)
+	require.Equal(t, "sanction-1", rec.lastAppeal.GetSanctionId())
+	require.Equal(t, "I believe this was a mistake", rec.lastAppeal.GetReason())
 }
 
 // TestTranscodeModeration_ListReports_NotPublic documents moderator queue is not exposed on public REST.

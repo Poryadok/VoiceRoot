@@ -3134,6 +3134,60 @@ abstract class AppLocalizations {
   /// **'Security'**
   String get securitySettingsTitle;
 
+  /// No description provided for @appealSettingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Appeal a sanction'**
+  String get appealSettingsTitle;
+
+  /// No description provided for @appealTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Submit an appeal'**
+  String get appealTitle;
+
+  /// No description provided for @appealDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'You may appeal a sanction once within 7 days. Enter the sanction ID from your notification and explain why you believe the decision was wrong.'**
+  String get appealDescription;
+
+  /// No description provided for @appealSanctionIdLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Sanction ID'**
+  String get appealSanctionIdLabel;
+
+  /// No description provided for @appealReasonLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Reason'**
+  String get appealReasonLabel;
+
+  /// No description provided for @appealSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Submit appeal'**
+  String get appealSubmit;
+
+  /// No description provided for @appealSubmitting.
+  ///
+  /// In en, this message translates to:
+  /// **'Submitting…'**
+  String get appealSubmitting;
+
+  /// No description provided for @appealSubmittedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Appeal submitted. We will review it within 7 business days.'**
+  String get appealSubmittedMessage;
+
+  /// No description provided for @appealValidationError.
+  ///
+  /// In en, this message translates to:
+  /// **'Sanction ID and reason are required.'**
+  String get appealValidationError;
+
   /// No description provided for @verificationSettingsTitle.
   ///
   /// In en, this message translates to:

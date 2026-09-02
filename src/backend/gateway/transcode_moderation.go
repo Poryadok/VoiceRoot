@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -10,9 +11,17 @@ import (
 func (t *transcoder) serveModeration(w http.ResponseWriter, r *http.Request, rest string) bool {
 	ctx := withGRPCMetadata(r.Context(), r)
 
-	if rest != "reports" {
+	switch rest {
+	case "reports":
+		return t.serveModerationReports(w, r, ctx)
+	case "appeals":
+		return t.serveModerationAppeals(w, r, ctx)
+	default:
 		return false
 	}
+}
+
+func (t *transcoder) serveModerationReports(w http.ResponseWriter, r *http.Request, ctx context.Context) bool {
 	switch r.Method {
 	case http.MethodPost:
 		req := &moderationv1.CreateReportRequest{}
@@ -32,6 +41,28 @@ func (t *transcoder) serveModeration(w http.ResponseWriter, r *http.Request, res
 		return true
 	case http.MethodGet:
 		http.NotFound(w, r)
+		return true
+	default:
+		w.Header().Set("Allow", http.MethodPost)
+		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		return true
+	}
+}
+
+func (t *transcoder) serveModerationAppeals(w http.ResponseWriter, r *http.Request, ctx context.Context) bool {
+	switch r.Method {
+	case http.MethodPost:
+		req := &moderationv1.SubmitAppealRequest{}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.moderation.SubmitAppeal(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusCreated, resp)
 		return true
 	default:
 		w.Header().Set("Allow", http.MethodPost)
