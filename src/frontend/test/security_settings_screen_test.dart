@@ -97,6 +97,16 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.scrollUntilVisible(
+      find.byKey(SecuritySettingsScreen.deleteAccountButtonKey),
+      120,
+      scrollable: find
+          .descendant(
+            of: find.byKey(SecuritySettingsScreen.screenKey),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
     await tester.tap(find.byKey(SecuritySettingsScreen.deleteAccountButtonKey));
     await tester.pumpAndSettle();
 
