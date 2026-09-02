@@ -47,6 +47,7 @@ void main() {
     expect(find.byKey(MobileShellDrawer.drawerKey), findsOneWidget);
     expect(find.text('All'), findsOneWidget);
     expect(find.text('No favorites yet'), findsOneWidget);
+    expect(find.byKey(const Key('mobile_drawer_manage_folders')), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('mobile_drawer_settings')));
     await tester.pumpAndSettle();

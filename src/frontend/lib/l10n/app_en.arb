@@ -141,6 +141,20 @@
   "socialRailTooltip": "Friends and search",
   "chatListTitle": "Direct messages",
   "chatFoldersTitle": "Folders",
+  "chatFoldersManageTitle": "Manage folders",
+  "chatFoldersManageAction": "Manage folders",
+  "chatFolderCreateLabel": "New folder name",
+  "chatFolderCreateAction": "Create folder",
+  "chatFoldersCustomEmpty": "No custom folders yet. Create one above.",
+  "chatFolderDeleteTitle": "Delete folder?",
+  "chatFolderDeleteMessage": "Delete \"{name}\"? Chats stay in your inbox.",
+  "@chatFolderDeleteMessage": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "chatQuickAccessTitle": "Quick Access",
   "chatQuickAccessEmpty": "No favorites yet",
   "chatQuickAccessReplaceTitle": "Choose what to replace",

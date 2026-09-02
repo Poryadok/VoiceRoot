@@ -295,6 +295,30 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatFoldersTitle => 'Folders';
 
   @override
+  String get chatFoldersManageTitle => 'Manage folders';
+
+  @override
+  String get chatFoldersManageAction => 'Manage folders';
+
+  @override
+  String get chatFolderCreateLabel => 'New folder name';
+
+  @override
+  String get chatFolderCreateAction => 'Create folder';
+
+  @override
+  String get chatFoldersCustomEmpty =>
+      'No custom folders yet. Create one above.';
+
+  @override
+  String get chatFolderDeleteTitle => 'Delete folder?';
+
+  @override
+  String chatFolderDeleteMessage(String name) {
+    return 'Delete \"$name\"? Chats stay in your inbox.';
+  }
+
+  @override
   String get chatQuickAccessTitle => 'Quick Access';
 
   @override

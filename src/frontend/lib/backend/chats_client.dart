@@ -467,6 +467,50 @@ class VoiceChatsClient {
     );
   }
 
+  Future<ChatsApiResult<VoiceFolder>> createFolder({
+    required String authorization,
+    required String name,
+    String? filterConfigJson,
+  }) async {
+    final result = await _gateway.postProto(
+      uri: _gateway.resolve('/api/v1/chats/folders'),
+      authorization: authorization,
+      body: chat_pb.CreateFolderRequest(
+        name: name,
+        filterConfigJson: filterConfigJson ?? '',
+      ),
+      createEmpty: chat_pb.CreateFolderResponse.create,
+    );
+    return _map(result, (data) => voiceFolderFromProto(data.folder));
+  }
+
+  Future<ChatsApiResult<VoiceFolder>> updateFolder({
+    required String authorization,
+    required String folderId,
+    String? name,
+    int? sortOrder,
+    String? filterConfigJson,
+  }) async {
+    final body = chat_pb.UpdateFolderRequest(folderId: folderId);
+    if (name != null) body.name = name;
+    if (sortOrder != null) body.sortOrder = sortOrder;
+    if (filterConfigJson != null) body.filterConfigJson = filterConfigJson;
+    final result = await _gateway.patchProto(
+      uri: _gateway.resolve('/api/v1/chats/folders/$folderId'),
+      authorization: authorization,
+      body: body,
+      createEmpty: chat_pb.UpdateFolderResponse.create,
+    );
+    return _map(result, (data) => voiceFolderFromProto(data.folder));
+  }
+
+  Future<ChatsApiResult<void>> deleteFolder({
+    required String authorization,
+    required String folderId,
+  }) {
+    return _deleteEmpty('/api/v1/chats/folders/$folderId', authorization);
+  }
+
   Future<ChatsApiResult<VoiceChat>> updateGroup({
     required String authorization,
     required String chatId,

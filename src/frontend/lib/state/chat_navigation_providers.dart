@@ -32,6 +32,67 @@ final chatFoldersProvider = FutureProvider<FolderListData>((ref) async {
   };
 });
 
+class FolderActions {
+  FolderActions(this._ref);
+
+  final Ref _ref;
+
+  Future<String?> createFolder(String name) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final result = await _ref.read(voiceChatsClientProvider).createFolder(
+          authorization: auth,
+          name: name,
+        );
+    return switch (result) {
+      ChatsApiOk() => _invalidate(),
+      ChatsApiFailure(:final message) => message,
+    };
+  }
+
+  Future<String?> updateFolder({
+    required String folderId,
+    String? name,
+    int? sortOrder,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final result = await _ref.read(voiceChatsClientProvider).updateFolder(
+          authorization: auth,
+          folderId: folderId,
+          name: name,
+          sortOrder: sortOrder,
+        );
+    return switch (result) {
+      ChatsApiOk() => _invalidate(),
+      ChatsApiFailure(:final message) => message,
+    };
+  }
+
+  Future<String?> deleteFolder(String folderId) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final result = await _ref.read(voiceChatsClientProvider).deleteFolder(
+          authorization: auth,
+          folderId: folderId,
+        );
+    return switch (result) {
+      ChatsApiOk() => _invalidate(),
+      ChatsApiFailure(:final message) => message,
+    };
+  }
+
+  String? _invalidate() {
+    _ref.invalidate(quickAccessListProvider);
+    _ref.invalidate(chatFoldersProvider);
+    return null;
+  }
+}
+
+final folderActionsProvider = Provider<FolderActions>((ref) {
+  return FolderActions(ref);
+});
+
 void invalidateChatNavigationData(WidgetRef ref) {
   ref.invalidate(quickAccessListProvider);
   ref.invalidate(chatFoldersProvider);

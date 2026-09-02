@@ -614,6 +614,48 @@ abstract class AppLocalizations {
   /// **'Folders'**
   String get chatFoldersTitle;
 
+  /// No description provided for @chatFoldersManageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage folders'**
+  String get chatFoldersManageTitle;
+
+  /// No description provided for @chatFoldersManageAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage folders'**
+  String get chatFoldersManageAction;
+
+  /// No description provided for @chatFolderCreateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'New folder name'**
+  String get chatFolderCreateLabel;
+
+  /// No description provided for @chatFolderCreateAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Create folder'**
+  String get chatFolderCreateAction;
+
+  /// No description provided for @chatFoldersCustomEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No custom folders yet. Create one above.'**
+  String get chatFoldersCustomEmpty;
+
+  /// No description provided for @chatFolderDeleteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete folder?'**
+  String get chatFolderDeleteTitle;
+
+  /// No description provided for @chatFolderDeleteMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete \"{name}\"? Chats stay in your inbox.'**
+  String chatFolderDeleteMessage(String name);
+
   /// No description provided for @chatQuickAccessTitle.
   ///
   /// In en, this message translates to:
