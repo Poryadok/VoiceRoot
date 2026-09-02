@@ -114,4 +114,100 @@ void main() {
       expect(r, isA<FriendsApiEmpty>());
     });
   });
+
+  group('VoiceFriendsClient.listContacts', () {
+    test('GET /api/v1/friends/contacts', () async {
+      final mock = MockClient((req) async {
+        expect(req.method, 'GET');
+        expect(req.url.path, '/api/v1/friends/contacts');
+        return http.Response(
+          jsonEncode({
+            'contact_list': {
+              'contacts': [
+                {
+                  'profile_id': 'contact-1',
+                  'source': 'manual',
+                  'is_favorite': true,
+                },
+              ],
+              'next_cursor': 'c2',
+            },
+          }),
+          200,
+        );
+      });
+      final client = VoiceFriendsClient(gateway: gatewayHttpForTest(mock, config: config));
+      final r = await client.listContacts(authorization: auth);
+      expect(r, isA<FriendsApiOk<ContactsListData>>());
+      final data = (r as FriendsApiOk<ContactsListData>).data;
+      expect(data.contacts.single.profileId, 'contact-1');
+      expect(data.contacts.single.isFavorite, isTrue);
+      expect(data.nextCursor, 'c2');
+    });
+  });
+
+  group('VoiceFriendsClient.addContact', () {
+    test('POST /api/v1/friends/contacts', () async {
+      String? capturedBody;
+      final mock = MockClient((req) async {
+        expect(req.method, 'POST');
+        expect(req.url.path, '/api/v1/friends/contacts');
+        capturedBody = req.body;
+        return http.Response('{}', 200);
+      });
+      final client = VoiceFriendsClient(gateway: gatewayHttpForTest(mock, config: config));
+      final r = await client.addContact(
+        authorization: auth,
+        targetProfileId: 'p-1',
+      );
+      expect(r, isA<FriendsApiEmpty>());
+      final body = jsonDecode(capturedBody!) as Map<String, dynamic>;
+      expect(body['target_profile_id'], 'p-1');
+      expect(body['source'], 'manual');
+    });
+  });
+
+  group('VoiceFriendsClient.listFavorites', () {
+    test('GET /api/v1/friends/favorites', () async {
+      final mock = MockClient((req) async {
+        expect(req.url.path, '/api/v1/friends/favorites');
+        return http.Response(
+          jsonEncode({
+            'friend_list': {
+              'friends': [
+                {'profile_id': 'fav-1'},
+              ],
+            },
+          }),
+          200,
+        );
+      });
+      final client = VoiceFriendsClient(gateway: gatewayHttpForTest(mock, config: config));
+      final r = await client.listFavorites(authorization: auth);
+      expect(r, isA<FriendsApiOk<FavoritesListData>>());
+      expect((r as FriendsApiOk<FavoritesListData>).data.favorites, ['fav-1']);
+    });
+  });
+
+  group('VoiceFriendsClient.setFavorite', () {
+    test('POST /api/v1/friends/favorites', () async {
+      String? capturedBody;
+      final mock = MockClient((req) async {
+        expect(req.method, 'POST');
+        expect(req.url.path, '/api/v1/friends/favorites');
+        capturedBody = req.body;
+        return http.Response('{}', 200);
+      });
+      final client = VoiceFriendsClient(gateway: gatewayHttpForTest(mock, config: config));
+      final r = await client.setFavorite(
+        authorization: auth,
+        friendProfileId: 'p-fav',
+        favorite: true,
+      );
+      expect(r, isA<FriendsApiEmpty>());
+      final body = jsonDecode(capturedBody!) as Map<String, dynamic>;
+      expect(body['friend_profile_id'], 'p-fav');
+      expect(body['favorite'], isTrue);
+    });
+  });
 }

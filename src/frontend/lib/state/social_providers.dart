@@ -196,6 +196,45 @@ final friendRequestsProvider = FutureProvider<FriendRequestsData>((ref) async {
   };
 });
 
+final contactsListProvider = FutureProvider<ContactsListData>((ref) async {
+  final auth = ref.watch(authorizationHeaderProvider);
+  if (auth == null) {
+    throw StateError('not_authenticated');
+  }
+  final result = await ref
+      .watch(voiceFriendsClientProvider)
+      .listContacts(authorization: auth);
+  return switch (result) {
+    FriendsApiOk(:final data) => data,
+    FriendsApiFailure(:final statusCode)
+        when isBackendUnavailable(statusCode) =>
+      throw const BackendUnavailableException(),
+    FriendsApiFailure(:final message) => throw Exception(message),
+  };
+});
+
+final favoritesListProvider = FutureProvider<FavoritesListData>((ref) async {
+  final auth = ref.watch(authorizationHeaderProvider);
+  if (auth == null) {
+    throw StateError('not_authenticated');
+  }
+  final result = await ref
+      .watch(voiceFriendsClientProvider)
+      .listFavorites(authorization: auth);
+  return switch (result) {
+    FriendsApiOk(:final data) => data,
+    FriendsApiFailure(:final statusCode)
+        when isBackendUnavailable(statusCode) =>
+      throw const BackendUnavailableException(),
+    FriendsApiFailure(:final message) => throw Exception(message),
+  };
+});
+
+final isFavoriteProvider = Provider.family<bool, String>((ref, profileId) {
+  final favorites = ref.watch(favoritesListProvider).valueOrNull;
+  return favorites?.favorites.contains(profileId) ?? false;
+});
+
 class SocialActions {
   SocialActions(this._ref);
 
@@ -282,9 +321,41 @@ class SocialActions {
     };
   }
 
+  Future<String?> addContact(String targetProfileId) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final result = await _ref
+        .read(voiceFriendsClientProvider)
+        .addContact(authorization: auth, targetProfileId: targetProfileId);
+    _invalidateSocialLists();
+    return switch (result) {
+      FriendsApiEmpty() => null,
+      FriendsApiFailure(:final message) => message,
+      FriendsApiOk() => null,
+    };
+  }
+
+  Future<String?> setFavorite(String friendProfileId, bool favorite) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final result = await _ref.read(voiceFriendsClientProvider).setFavorite(
+      authorization: auth,
+      friendProfileId: friendProfileId,
+      favorite: favorite,
+    );
+    _invalidateSocialLists();
+    return switch (result) {
+      FriendsApiEmpty() => null,
+      FriendsApiFailure(:final message) => message,
+      FriendsApiOk() => null,
+    };
+  }
+
   void _invalidateSocialLists() {
     _ref.invalidate(friendsListProvider);
     _ref.invalidate(friendRequestsProvider);
+    _ref.invalidate(contactsListProvider);
+    _ref.invalidate(favoritesListProvider);
   }
 }
 

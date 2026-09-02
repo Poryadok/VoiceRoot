@@ -452,7 +452,7 @@
 - [ ] **[Social] No store-layer unit tests** — `src/backend/social/internal/store/friendships.go`, `blocks.go` only exercised via grpc integration tests; coverage artifact shows 0 hits on store paths (`src/backend/social/coverage`, `$prof`).
 - [ ] **[Social] No `s2s` privacy tests** — `src/backend/social/internal/s2s/privacy.go` (`GRPCUserPrivacy`, `GRPCSpaceCoMembership`) untested; only `auth_phone_hash_test.go` in `s2s/`.
 - [ ] **[Social] Test helper ≠ production wiring** — `src/backend/social/testsocial/bufconn_server.go` omits `Privacy`, `PhoneHashes`, `SpaceCoMembership` wired in `main.go`.
-- [ ] **[Social] Flutter client surface incomplete** — `src/frontend/lib/backend/friends_client.dart` has `blockAccount` only; no `listBlocked`, `unblockAccount`, `syncPhoneContacts`, favorites. Gateway exposes blocks list + phone sync (`src/backend/gateway/transcode_friends.go`).
+- [ ] **[Social] Flutter client surface incomplete** — `friends_client.dart` now has contacts/favorites (**Batch 23b**); still missing `listBlocked`, `unblockAccount`, `syncPhoneContacts`. Gateway exposes blocks list + phone sync (`transcode_friends.go`).
 - [ ] **[Social] No live/E2E for friend-request privacy denial** — `privacy_actions_e2e_live_test` / `compose_privacy_actions_live_test.go` exercise DM/calls/files, not `POST /api/v1/friends/invitations`.
 - [ ] **[Social] Stale service README** — `src/backend/social/README.md` still claims health-only scaffold; contradicts implemented gRPC + migrations.
 

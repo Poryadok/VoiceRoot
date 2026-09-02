@@ -260,6 +260,18 @@ abstract class AppLocalizations {
   /// **'Friends'**
   String get socialTabFriends;
 
+  /// No description provided for @socialTabContacts.
+  ///
+  /// In en, this message translates to:
+  /// **'Contacts'**
+  String get socialTabContacts;
+
+  /// No description provided for @socialTabFavorites.
+  ///
+  /// In en, this message translates to:
+  /// **'Favorites'**
+  String get socialTabFavorites;
+
   /// No description provided for @socialTabRequests.
   ///
   /// In en, this message translates to:
@@ -415,6 +427,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No friends yet'**
   String get socialFriendsEmpty;
+
+  /// No description provided for @socialContactsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No contacts yet'**
+  String get socialContactsEmpty;
+
+  /// No description provided for @socialContactsEmptyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'People you add or sync from your phone book appear here.'**
+  String get socialContactsEmptyHint;
+
+  /// No description provided for @socialFavoritesEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No favorite people yet'**
+  String get socialFavoritesEmpty;
+
+  /// No description provided for @socialFavoritesEmptyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Star a friend or contact to pin them here.'**
+  String get socialFavoritesEmptyHint;
+
+  /// No description provided for @socialAddFavorite.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to favorites'**
+  String get socialAddFavorite;
+
+  /// No description provided for @socialRemoveFavorite.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from favorites'**
+  String get socialRemoveFavorite;
 
   /// No description provided for @socialRequestsEmpty.
   ///

@@ -24,11 +24,17 @@ class SocialPanel extends ConsumerStatefulWidget {
   static const Key panelKey = Key('social_panel');
   static const Key tabSearchKey = Key('social_tab_search');
   static const Key tabFriendsKey = Key('social_tab_friends');
+  static const Key tabContactsKey = Key('social_tab_contacts');
+  static const Key tabFavoritesKey = Key('social_tab_favorites');
   static const Key tabRequestsKey = Key('social_tab_requests');
   static const Key searchFieldKey = Key('social_search_field');
   static const Key searchSubmitKey = Key('social_search_submit');
   static const Key friendsListKey = Key('social_friends_list');
+  static const Key contactsListKey = Key('social_contacts_list');
+  static const Key favoritesListKey = Key('social_favorites_list');
   static const Key friendsUnavailableKey = Key('social_friends_unavailable');
+  static const Key contactsUnavailableKey = Key('social_contacts_unavailable');
+  static const Key favoritesUnavailableKey = Key('social_favorites_unavailable');
   static const Key requestsUnavailableKey = Key('social_requests_unavailable');
   static const Key searchUnavailableKey = Key('social_search_unavailable');
   static const Key searchLoadingKey = Key('social_search_loading');
@@ -41,6 +47,9 @@ class SocialPanel extends ConsumerStatefulWidget {
 
   static Key profileTileKey(String profileId) =>
       Key('social_profile_tile_$profileId');
+
+  static Key favoriteToggleKey(String profileId) =>
+      Key('social_favorite_toggle_$profileId');
 
   final int initialTabIndex;
 
@@ -57,7 +66,7 @@ class _SocialPanelState extends ConsumerState<SocialPanel>
   void initState() {
     super.initState();
     _tabs = TabController(
-      length: 3,
+      length: 5,
       vsync: this,
       initialIndex: widget.initialTabIndex,
     );
@@ -128,9 +137,18 @@ class _SocialPanelState extends ConsumerState<SocialPanel>
             ),
             TabBar(
               controller: _tabs,
+              isScrollable: true,
               tabs: [
                 Tab(key: SocialPanel.tabSearchKey, text: l10n.socialTabSearch),
                 Tab(key: SocialPanel.tabFriendsKey, text: l10n.socialTabFriends),
+                Tab(
+                  key: SocialPanel.tabContactsKey,
+                  text: l10n.socialTabContacts,
+                ),
+                Tab(
+                  key: SocialPanel.tabFavoritesKey,
+                  text: l10n.socialTabFavorites,
+                ),
                 Tab(
                   key: SocialPanel.tabRequestsKey,
                   text: l10n.socialTabRequests,
@@ -146,6 +164,8 @@ class _SocialPanelState extends ConsumerState<SocialPanel>
                     onOpenProfile: _openProfile,
                   ),
                   _FriendsTab(onOpenProfile: _openProfile),
+                  _ContactsTab(onOpenProfile: _openProfile),
+                  _FavoritesTab(onOpenProfile: _openProfile),
                   _RequestsTab(onOpenProfile: _openProfile),
                 ],
               ),
@@ -293,6 +313,7 @@ class _FriendsTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final friendsAsync = ref.watch(friendsListProvider);
+    final actions = ref.read(socialActionsProvider);
 
     return friendsAsync.when(
       loading: () => const VoiceListSkeleton(),
@@ -317,12 +338,177 @@ class _FriendsTab extends ConsumerWidget {
           key: SocialPanel.friendsListKey,
           itemCount: ids.length,
           itemBuilder: (context, index) {
+            final profileId = ids[index];
             return _ProfileIdTile(
-              profileId: ids[index],
-              onTap: () => onOpenProfile(ids[index]),
+              profileId: profileId,
+              onTap: () => onOpenProfile(profileId),
+              trailing: _FavoriteToggleButton(
+                profileId: profileId,
+                onToggle: (favorite) =>
+                    actions.setFavorite(profileId, favorite),
+              ),
             );
           },
         );
+      },
+    );
+  }
+}
+
+class _ContactsTab extends ConsumerWidget {
+  const _ContactsTab({required this.onOpenProfile});
+
+  final void Function(String profileId) onOpenProfile;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context)!;
+    final contactsAsync = ref.watch(contactsListProvider);
+    final actions = ref.read(socialActionsProvider);
+
+    return contactsAsync.when(
+      loading: () => const VoiceListSkeleton(),
+      error: (e, st) => Center(
+        child: VoiceStatePanel(
+          key: SocialPanel.contactsUnavailableKey,
+          title: socialListErrorMessage(l10n, e),
+          icon: Icons.cloud_off_outlined,
+          actionLabel: l10n.commonRetry,
+          onAction: () => ref.invalidate(contactsListProvider),
+        ),
+      ),
+      data: (data) {
+        if (data.contacts.isEmpty) {
+          return VoiceStatePanel(
+            title: l10n.socialContactsEmpty,
+            message: l10n.socialContactsEmptyHint,
+            icon: Icons.contacts_outlined,
+          );
+        }
+        return ListView.builder(
+          key: SocialPanel.contactsListKey,
+          itemCount: data.contacts.length,
+          itemBuilder: (context, index) {
+            final contact = data.contacts[index];
+            return _ProfileIdTile(
+              profileId: contact.profileId,
+              subtitle: contact.source.isEmpty ? null : contact.source,
+              onTap: () => onOpenProfile(contact.profileId),
+              trailing: _FavoriteToggleButton(
+                profileId: contact.profileId,
+                initialFavorite: contact.isFavorite,
+                onToggle: (favorite) =>
+                    actions.setFavorite(contact.profileId, favorite),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _FavoritesTab extends ConsumerWidget {
+  const _FavoritesTab({required this.onOpenProfile});
+
+  final void Function(String profileId) onOpenProfile;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context)!;
+    final favoritesAsync = ref.watch(favoritesListProvider);
+    final actions = ref.read(socialActionsProvider);
+
+    return favoritesAsync.when(
+      loading: () => const VoiceListSkeleton(),
+      error: (e, st) => Center(
+        child: VoiceStatePanel(
+          key: SocialPanel.favoritesUnavailableKey,
+          title: socialListErrorMessage(l10n, e),
+          icon: Icons.cloud_off_outlined,
+          actionLabel: l10n.commonRetry,
+          onAction: () => ref.invalidate(favoritesListProvider),
+        ),
+      ),
+      data: (data) {
+        final ids = data.favorites;
+        if (ids.isEmpty) {
+          return VoiceStatePanel(
+            title: l10n.socialFavoritesEmpty,
+            message: l10n.socialFavoritesEmptyHint,
+            icon: Icons.star_outline,
+          );
+        }
+        return ListView.builder(
+          key: SocialPanel.favoritesListKey,
+          itemCount: ids.length,
+          itemBuilder: (context, index) {
+            final profileId = ids[index];
+            return _ProfileIdTile(
+              profileId: profileId,
+              onTap: () => onOpenProfile(profileId),
+              trailing: _FavoriteToggleButton(
+                profileId: profileId,
+                initialFavorite: true,
+                onToggle: (favorite) =>
+                    actions.setFavorite(profileId, favorite),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _FavoriteToggleButton extends ConsumerStatefulWidget {
+  const _FavoriteToggleButton({
+    required this.profileId,
+    required this.onToggle,
+    this.initialFavorite,
+  });
+
+  final String profileId;
+  final bool? initialFavorite;
+  final Future<String?> Function(bool favorite) onToggle;
+
+  @override
+  ConsumerState<_FavoriteToggleButton> createState() =>
+      _FavoriteToggleButtonState();
+}
+
+class _FavoriteToggleButtonState extends ConsumerState<_FavoriteToggleButton> {
+  bool? _overrideFavorite;
+
+  bool get _isFavorite {
+    if (_overrideFavorite != null) return _overrideFavorite!;
+    if (widget.initialFavorite != null) return widget.initialFavorite!;
+    return ref.watch(isFavoriteProvider(widget.profileId));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return IconButton(
+      key: SocialPanel.favoriteToggleKey(widget.profileId),
+      tooltip: _isFavorite
+          ? l10n.socialRemoveFavorite
+          : l10n.socialAddFavorite,
+      icon: Icon(_isFavorite ? Icons.star : Icons.star_border),
+      onPressed: () async {
+        final next = !_isFavorite;
+        setState(() => _overrideFavorite = next);
+        final err = await widget.onToggle(next);
+        if (!mounted) return;
+        if (err != null) {
+          setState(() => _overrideFavorite = !next);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(err)),
+          );
+        } else {
+          ref.invalidate(favoritesListProvider);
+          ref.invalidate(contactsListProvider);
+        }
       },
     );
   }
@@ -464,11 +650,13 @@ class _ProfileIdTile extends ConsumerWidget {
     required this.profileId,
     required this.onTap,
     this.subtitle,
+    this.trailing,
   });
 
   final String profileId;
   final VoidCallback onTap;
   final String? subtitle;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -488,6 +676,7 @@ class _ProfileIdTile extends ConsumerWidget {
           presence: presence,
           subtitle: subtitle,
           onTap: onTap,
+          trailing: trailing,
         );
       },
     );
@@ -501,12 +690,14 @@ class _ProfileListTile extends ConsumerWidget {
     required this.onTap,
     this.presence,
     this.subtitle,
+    this.trailing,
   });
 
   final VoiceProfile profile;
   final VoicePresence? presence;
   final VoidCallback onTap;
   final String? subtitle;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -554,6 +745,7 @@ class _ProfileListTile extends ConsumerWidget {
       title: Text(profile.displayName),
       subtitle: Text(subtitle ?? profile.handle),
       onTap: onTap,
+      trailing: trailing,
     );
   }
 }
