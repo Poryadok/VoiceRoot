@@ -33,6 +33,13 @@ class ReportSubmission {
   final String reportId;
 }
 
+class AppealSubmission {
+  const AppealSubmission({required this.appealId, required this.status});
+
+  final String appealId;
+  final String status;
+}
+
 /// HTTP client for Moderation routes via API Gateway (`/api/v1/moderation/**`).
 class VoiceModerationClient {
   VoiceModerationClient({required GatewayHttpClient gateway}) : _gateway = gateway;
@@ -59,7 +66,7 @@ class VoiceModerationClient {
       ),
       createEmpty: moderation_pb.CreateReportResponse.create,
     );
-    return _map(
+    return _mapReport(
       result,
       (data) => ReportSubmission(
         reportId: data.hasReport() ? data.report.id : '',
@@ -67,7 +74,36 @@ class VoiceModerationClient {
     );
   }
 
-  ModerationApiResult<T> _map<T>(
+  Future<ModerationApiResult<AppealSubmission>> submitAppeal({
+    required String authorization,
+    required String sanctionId,
+    required String reason,
+  }) async {
+    final result = await _gateway.postProto(
+      uri: _gateway.resolve('/api/v1/moderation/appeals'),
+      authorization: authorization,
+      body: moderation_pb.SubmitAppealRequest(
+        sanctionId: sanctionId,
+        reason: reason,
+      ),
+      createEmpty: moderation_pb.SubmitAppealResponse.create,
+    );
+    return switch (result) {
+      GatewayHttpOk(:final data) => ModerationApiOk(
+        AppealSubmission(
+          appealId: data.hasAppeal() ? data.appeal.id : '',
+          status: data.hasAppeal() ? data.appeal.status : '',
+        ),
+      ),
+      GatewayHttpFailure(:final error) => ModerationApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+
+  ModerationApiResult<T> _mapReport<T>(
     GatewayHttpResult<dynamic> result,
     T Function(moderation_pb.CreateReportResponse data) parse,
   ) {

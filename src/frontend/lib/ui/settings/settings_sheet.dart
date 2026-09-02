@@ -19,6 +19,7 @@ import 'subscription_settings_screen.dart';
 import '../../settings/reduced_motion.dart';
 import '../../settings/voice_input_settings.dart';
 import 'help_sheet.dart';
+import 'appeal_sheet.dart';
 import 'verification_settings_sheet.dart';
 
 class SettingsSheet extends ConsumerWidget {
@@ -73,6 +74,16 @@ class SettingsSheet extends ConsumerWidget {
                       builder: (_) => const SecuritySettingsScreen(),
                     ),
                   );
+                },
+              ),
+              ListTile(
+                key: const Key('settings_appeal'),
+                contentPadding: EdgeInsets.zero,
+                title: Text(l10n.appealSettingsTitle),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  showAppealSheet(context);
                 },
               ),
               ListTile(

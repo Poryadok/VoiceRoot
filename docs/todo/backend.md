@@ -37,7 +37,7 @@
 
 - [ ] **[Moderation] Shadow-ban не режет fanout** — `maybeAutoShadowBan` вставляет `shadow_ban` (`InsertSanction`); Messaging/Realtime не вызывают `IsShadowBanned` на send/fanout. Audience threshold всё ещё `MODERATION_PLATFORM_AUDIENCE_SIZE`, не live object. — `src/backend/moderation/internal/grpcsvc/reports.go`; `src/backend/messaging/`
 - [ ] **[Moderation] Notification не consumит `moderation.events`** — publisher есть (`moderationevents/jetstream.go`: `report_created` / `sanction_applied` / `appeal_submitted`); push/in-app санкций нет.
-- [ ] **[Moderation] Appeals not exposed to users** — gRPC `SubmitAppeal` есть; нет Gateway HTTP `POST /api/v1/moderation/appeals`; Flutter `VoiceModerationClient` only has `createReport`; no appeal UI. Product: profile “Account” appeal (`docs/features/reports.md`).
+- [x] **[Moderation] Appeals not exposed to users** — Gateway `POST /api/v1/moderation/appeals` (201 Created → `SubmitAppeal`); Flutter `VoiceModerationClient.submitAppeal` + settings appeal sheet (`docs/features/reports.md` § Апелляция). **Batch 27a**.
 
 ### Social
 
