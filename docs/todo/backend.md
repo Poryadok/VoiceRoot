@@ -24,7 +24,7 @@
 ### Space
 
 
-- [ ] **[Space] Owner locked: `DeleteSpace`, `TransferOwnership`, `GetAuditLog`, `SearchPublicSpaces`, `ListTemplates`, `CreateFromTemplate` — runtime `Unimplemented` (embed). `JoinSpace`/`LeaveSpace` живые (`join.go`). Owner не может leave без transfer** — `protos/voice/space/v1/space.proto`; `src/backend/space/internal/grpcsvc/join.go`
+- [ ] **[Space] Owner locked: `GetAuditLog`, `SearchPublicSpaces`, `ListTemplates`, `CreateFromTemplate` — runtime `Unimplemented` (embed). `DeleteSpace`/`TransferOwnership` shipped (T-011); `JoinSpace`/`LeaveSpace` живые; owner не может leave без transfer** — `protos/voice/space/v1/space.proto`; `src/backend/space/internal/grpcsvc/`
 - [x] **[Space] Space Pro cache never synced — `space_db.space_subscriptions` comment says “synced from Subscription”; only test seed `UpsertSpaceSubscription` writes; Subscription writes `subscription_db` only** — **done:** NATS consumer `space/internal/subscriptionconsume` + S2S `SyncSpaceProSubscription` write entitlement cache; `SeedSpaceProActive` remains test helper only.
 - [ ] **[Space] `entry_requirement` не исполняется — JoinSpace отвергает любой requirement ≠ `none` (`FailedPrecondition`), нет captcha/questions/mod-approval queue** — `src/backend/space/internal/grpcsvc/join.go`, `invites.go`
 - [x] **[Space] Social block на join fail-open — `ensureJoinNotBlocked` no-op если `Blocks`/`ProfileAccounts` nil** — **done:** fail-closed `FailedPrecondition` when Social/User S2S unwired; IT `join_block_degradation_test.go`.
