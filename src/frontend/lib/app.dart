@@ -326,10 +326,17 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
     );
 
     final narrowShell = VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width);
+    final keyboardInsetBottom = MediaQuery.viewInsetsOf(context).bottom;
+    final chatOpen = selectedChatId != null;
     final showMobileTabs = shouldShowMobileShellTabs(
       narrow: narrowShell,
-      chatOpen: selectedChatId != null,
-      keyboardInsetBottom: MediaQuery.viewInsetsOf(context).bottom,
+      chatOpen: chatOpen,
+      keyboardInsetBottom: keyboardInsetBottom,
+    );
+    final showMobileChatStrip = shouldShowMobileChatStrip(
+      narrow: narrowShell,
+      chatOpen: chatOpen,
+      keyboardInsetBottom: keyboardInsetBottom,
     );
 
     return VoiceShortcuts(
@@ -386,7 +393,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
                           sidePanelChild: sidePanelChild,
                           showMainOnlyOnNarrow:
                               narrow && selectedChatId != null,
-                          mobileRailChild: narrow && selectedChatId != null
+                          mobileRailChild: showMobileChatStrip
                               ? const MobileChatStrip()
                               : null,
                           header: Column(
