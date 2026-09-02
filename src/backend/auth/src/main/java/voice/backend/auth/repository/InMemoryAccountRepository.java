@@ -193,6 +193,23 @@ public class InMemoryAccountRepository implements AccountRepository {
     }
   }
 
+  @Override
+  public synchronized java.util.Set<UUID> findDeletedAmong(java.util.Collection<UUID> accountIds) {
+    if (accountIds == null || accountIds.isEmpty()) {
+      return java.util.Set.of();
+    }
+    java.util.Set<UUID> out = new java.util.HashSet<>();
+    for (UUID id : accountIds) {
+      if (id == null) {
+        continue;
+      }
+      Account account = byId.get(id);
+      if (account != null && account.deletedAt() != null) {
+        out.add(id);
+      }
+    }
+    return out;
+  }
   private static Account copy(
       Account existing, String status, byte[] totpSecret, boolean totpEnabled, Instant deletedAt) {
     return new Account(

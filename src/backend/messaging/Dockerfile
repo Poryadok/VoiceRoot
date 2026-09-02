@@ -1,4 +1,4 @@
-﻿# Build context must be `src/backend` (pb, replace on ../chat and user pb).
+# Build context must be `src/backend` (pb, replace on ../chat and user pb).
 
 FROM golang:1.26-alpine AS build
 WORKDIR /src
@@ -19,6 +19,7 @@ COPY role/pb/voice/role/go.mod ./role/pb/voice/role/
 COPY voice/pb/voice/moderation/go.mod ./voice/pb/voice/moderation/
 COPY voice/pb/voice/space/go.mod ./voice/pb/voice/space/
 COPY voice/pb/voice/story/go.mod ./voice/pb/voice/story/
+COPY voice/pb/voice/auth/go.mod ./voice/pb/voice/auth/
 RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked sh /usr/local/bin/docker-go-mod-download.sh messaging
 COPY pkg ./pkg
 COPY user/pb ./user/pb
@@ -27,6 +28,7 @@ COPY role/pb ./role/pb
 COPY voice/pb/voice/moderation ./voice/pb/voice/moderation
 COPY voice/pb/voice/space ./voice/pb/voice/space
 COPY voice/pb/voice/story ./voice/pb/voice/story
+COPY voice/pb/voice/auth ./voice/pb/voice/auth
 COPY role/permissions ./role/permissions
 COPY role ./role
 COPY messaging/pb ./messaging/pb

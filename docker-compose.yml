@@ -329,6 +329,7 @@ services:
       CHAT_GRPC_LISTEN: :9090
       SOCIAL_GRPC_ADDR: social:9090
       USER_GRPC_ADDR: user:9090
+      AUTH_GRPC_ADDR: auth:9090
       MESSAGING_GRPC_ADDR: messaging:9090
       ROLE_GRPC_ADDR: role:9090
       NATS_URL: nats://nats:4222
@@ -344,6 +345,8 @@ services:
       user:
         condition: service_healthy
       role:
+        condition: service_healthy
+      auth:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
