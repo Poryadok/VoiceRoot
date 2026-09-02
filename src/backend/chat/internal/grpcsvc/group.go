@@ -39,13 +39,14 @@ func (s *ChatGRPC) CreateChat(ctx context.Context, req *chatv1.CreateChatRequest
 	spaceIDRaw := strings.TrimSpace(req.GetSpaceId())
 	if chatType == chatv1.ChatType_CHAT_TYPE_CHANNEL {
 		if spaceIDRaw == "" {
-			return nil, status.Error(codes.InvalidArgument, "space_id is required for channels")
+			row, err = s.DM.CreateChannelChat(ctx, caller, name)
+		} else {
+			spaceID, parseErr := parseUUIDField("space_id", spaceIDRaw)
+			if parseErr != nil {
+				return nil, parseErr
+			}
+			row, err = s.DM.CreateSpaceChannelChat(ctx, caller, spaceID, name)
 		}
-		spaceID, parseErr := parseUUIDField("space_id", spaceIDRaw)
-		if parseErr != nil {
-			return nil, parseErr
-		}
-		row, err = s.DM.CreateSpaceChannelChat(ctx, caller, spaceID, name)
 	} else if spaceIDRaw != "" {
 		spaceID, parseErr := parseUUIDField("space_id", spaceIDRaw)
 		if parseErr != nil {
