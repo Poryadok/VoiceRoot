@@ -86,6 +86,11 @@ func (s *ChatGRPC) ensureDM(ctx context.Context, otherProfileRaw string) (*store
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	if !created {
+		if err := s.DM.ClearDeletedForSelf(ctx, row.ID, callerProfile); err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
 	if created && s.ChatEvents != nil {
 		if err := s.ChatEvents.PublishChatCreated(ctx, row.ID.String(), "dm"); err != nil {
 			s.logPublishError(ctx, "chat.created", err, slog.String("chat_id", row.ID.String()))
