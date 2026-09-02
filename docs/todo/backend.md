@@ -94,7 +94,7 @@
 ### Auth
 
 
-- [ ] **[Auth] DeleteAccount tombstone неполный** — RPC/REST `DeleteAccount`/`RestoreAccount` **есть** (`AuthService.deleteAccount`, IT `DeleteAccountRestoreIntegrationTest`). Нет системного «Пользователь удалён» в DM и hide из `ListChats`; `email_verify` OTP не ставит verified-flag на аккаунте. UI — [client.md](client.md).
+- [ ] **[Auth] DeleteAccount tombstone неполный** — RPC/REST `DeleteAccount`/`RestoreAccount` **есть**. **ListChats** скрывает DM с удалённым peer (Chat → Auth `ListDeletedAccountIds`, Batch 31d). Остаётся: системное «Пользователь удалён» в DM-треде; `email_verify` OTP; UI — [client.md](client.md).
 
 
 ## High
@@ -319,7 +319,7 @@
 - [ ] **[Notification] `reply` marked ✓ but not implemented — no `reply` type in message consumer or Realtime in-app fanout; thread replies are treated as `new_message`.** — `docs/features/notifications.md`, `src/backend/notification/message_events_consumer.go`, `src/backend/realtime/in_app_notification_fanout.go`
 - [ ] **[Notification] Matchmaking/voice push ignores presence — handlers hardcode `IsOnline: false`; no `EnrichDecision` / User gRPC check → online users still get push (messages path does check).** — `src/backend/notification/internal/consumer/matchmaking_events.go`, `src/backend/notification/matchmaking_events_consumer.go`, `src/backend/notification/voice_events_consumer.go`
 - [ ] **[Notification] `system` notifications have no producer — `SendNotification` gRPC exists but no other service calls it; no NATS consumer; not exposed on Gateway REST.** — `src/backend/notification/internal/grpcsvc/server.go`, `src/backend/gateway/transcode_notifications.go`
-- [ ] **[Notification] Multi-replica duplicate push risk — per-pod durable consumer name (`notif_<hostname>_msg** — mm
+- [x] **[Notification] Multi-replica duplicate push risk � per-pod durable consumer name (`notif_<hostname>_mod`) on moderation stream caused duplicate delivery across replicas; all notification JetStream consumers now use cluster-wide SharedDurable names (moderation ? `notif_mod`).** � **done (Batch 31c):** `src/backend/notification/internal/consumer/durable.go`, `moderation_events_consumer.go`, `main.go`
 
 ### Federation
 

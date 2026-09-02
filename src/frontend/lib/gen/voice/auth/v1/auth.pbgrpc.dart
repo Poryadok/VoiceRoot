@@ -158,6 +158,16 @@ class AuthServiceClient extends $grpc.Client {
     return $createUnaryCall(_$resolvePhoneHashes, request, options: options);
   }
 
+  /// Internal — Chat ListChats hides DMs whose peer account is soft-deleted (auth-and-contacts.md).
+  $grpc.ResponseFuture<$0.FilterDeletedAccountIDsResponse>
+      filterDeletedAccountIDs(
+    $0.FilterDeletedAccountIDsRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$filterDeletedAccountIDs, request,
+        options: options);
+  }
+
   /// Guest save-account reminder cadence (docs/features/auth-and-contacts.md).
   $grpc.ResponseFuture<$0.GetGuestReminderResponse> getGuestReminder(
     $0.GetGuestReminderRequest request, {
@@ -276,6 +286,12 @@ class AuthServiceClient extends $grpc.Client {
       '/voice.auth.v1.AuthService/ResolvePhoneHashes',
       ($0.ResolvePhoneHashesRequest value) => value.writeToBuffer(),
       $0.ResolvePhoneHashesResponse.fromBuffer);
+  static final _$filterDeletedAccountIDs = $grpc.ClientMethod<
+          $0.FilterDeletedAccountIDsRequest,
+          $0.FilterDeletedAccountIDsResponse>(
+      '/voice.auth.v1.AuthService/FilterDeletedAccountIDs',
+      ($0.FilterDeletedAccountIDsRequest value) => value.writeToBuffer(),
+      $0.FilterDeletedAccountIDsResponse.fromBuffer);
   static final _$getGuestReminder = $grpc.ClientMethod<
           $0.GetGuestReminderRequest, $0.GetGuestReminderResponse>(
       '/voice.auth.v1.AuthService/GetGuestReminder',
@@ -442,6 +458,15 @@ abstract class AuthServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.ResolvePhoneHashesRequest.fromBuffer(value),
         ($0.ResolvePhoneHashesResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.FilterDeletedAccountIDsRequest,
+            $0.FilterDeletedAccountIDsResponse>(
+        'FilterDeletedAccountIDs',
+        filterDeletedAccountIDs_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.FilterDeletedAccountIDsRequest.fromBuffer(value),
+        ($0.FilterDeletedAccountIDsResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.GetGuestReminderRequest,
             $0.GetGuestReminderResponse>(
         'GetGuestReminder',
@@ -625,6 +650,15 @@ abstract class AuthServiceBase extends $grpc.Service {
 
   $async.Future<$0.ResolvePhoneHashesResponse> resolvePhoneHashes(
       $grpc.ServiceCall call, $0.ResolvePhoneHashesRequest request);
+
+  $async.Future<$0.FilterDeletedAccountIDsResponse> filterDeletedAccountIDs_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.FilterDeletedAccountIDsRequest> $request) async {
+    return filterDeletedAccountIDs($call, await $request);
+  }
+
+  $async.Future<$0.FilterDeletedAccountIDsResponse> filterDeletedAccountIDs(
+      $grpc.ServiceCall call, $0.FilterDeletedAccountIDsRequest request);
 
   $async.Future<$0.GetGuestReminderResponse> getGuestReminder_Pre(
       $grpc.ServiceCall $call,

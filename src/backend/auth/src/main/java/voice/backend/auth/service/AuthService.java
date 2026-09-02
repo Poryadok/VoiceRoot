@@ -4,6 +4,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -234,6 +235,28 @@ public class AuthService {
       return Map.of();
     }
     return phoneHashResolver.resolvePrimaryProfileIdsByPhoneHashes(phoneHashes);
+  }
+
+  /** Internal S2S: return account ids that are soft-deleted (deleted_at set). */
+  public List<String> filterDeletedAccountIds(Collection<String> accountIds) {
+    if (accountIds == null || accountIds.isEmpty()) {
+      return List.of();
+    }
+    List<UUID> parsed = new ArrayList<>();
+    for (String raw : accountIds) {
+      if (raw == null || raw.isBlank()) {
+        continue;
+      }
+      try {
+        parsed.add(UUID.fromString(raw.trim()));
+      } catch (IllegalArgumentException ignored) {
+        // skip invalid ids
+      }
+    }
+    if (parsed.isEmpty()) {
+      return List.of();
+    }
+    return accounts.findDeletedAmong(parsed).stream().map(UUID::toString).toList();
   }
 
   public TotpEnrollment enable2FA(String accessToken, String password) {

@@ -16,6 +16,8 @@ import app.voice.auth.v1.ListSessionsRequest;
 import app.voice.auth.v1.ListSessionsResponse;
 import app.voice.auth.v1.MarkGuestReminderShownRequest;
 import app.voice.auth.v1.MarkGuestReminderShownResponse;
+import app.voice.auth.v1.FilterDeletedAccountIDsRequest;
+import app.voice.auth.v1.FilterDeletedAccountIDsResponse;
 import app.voice.auth.v1.ResolvePhoneHashesRequest;
 import app.voice.auth.v1.ResolvePhoneHashesResponse;
 import app.voice.auth.v1.PhoneHashProfileMatch;
@@ -208,6 +210,18 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
                           .build()));
       return builder.build();
     });
+  }
+
+  @Override
+  public void filterDeletedAccountIDs(
+      FilterDeletedAccountIDsRequest request,
+      StreamObserver<FilterDeletedAccountIDsResponse> responseObserver) {
+    run(
+        responseObserver,
+        () ->
+            FilterDeletedAccountIDsResponse.newBuilder()
+                .addAllDeletedAccountIds(authService.filterDeletedAccountIds(request.getAccountIdsList()))
+                .build());
   }
 
   @Override

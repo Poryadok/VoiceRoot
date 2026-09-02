@@ -21,6 +21,8 @@ Optional: `VOICE_APPLY_OBSERVABILITY=true` runs [`scripts/staging/apply-observab
 
 ## Apply
 
+Copy [env.example](env.example) and set `VOICE_IMAGE_TAG` to a green CI git SHA (required; no `:latest`).
+
 ```bash
 # From repo root (bash):
 export VOICE_IMAGE_REGISTRY=ghcr.io/your-org/voiceroot
@@ -41,6 +43,7 @@ scripts/staging/smoke-staging.sh
 
 | File | Purpose |
 |------|---------|
+| `env.example` | Required `VOICE_IMAGE_*` env for local/manual apply |
 | `namespace.yaml` | `voice-staging` namespace |
 | `domains.defaults` | Staging public FQDNs (single file to edit on domain rotation) |
 | `configmap-app.yaml` | Shared env (GRPC upstreams, NATS, Redis); OAuth URLs templated at apply |

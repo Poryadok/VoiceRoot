@@ -4,12 +4,12 @@
 #
 # Usage:
 #   export KUBECONFIG=/path/to/fixed-config
-#   export GATEWAY_IMAGE=ghcr.io/owner/voice/gateway:sha
+#   export GATEWAY_IMAGE=ghcr.io/owner/voice/gateway:<git-sha>
 #   ./scripts/staging/kubectl-apply-dry-run.sh
 #
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
-: "${GATEWAY_IMAGE:?set GATEWAY_IMAGE e.g. ghcr.io/org/voice/gateway:latest}"
+: "${GATEWAY_IMAGE:?set GATEWAY_IMAGE e.g. ghcr.io/org/voice/gateway:<git-sha>}"
 kubectl apply --dry-run=server -f deploy/staging/namespace.yaml
 sed "s|IMAGE_PLACEHOLDER|${GATEWAY_IMAGE}|g" deploy/staging/gateway-deployment.yaml | kubectl apply --dry-run=server -f -

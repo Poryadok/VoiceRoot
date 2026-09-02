@@ -27,6 +27,7 @@ import (
 	"voice/backend/pkg/runtimeconfig"
 	voiceprom "voice/backend/pkg/promhttp"
 
+	authv1 "voice.app/voice/auth/v1"
 	chatv1 "voice.app/voice/chat/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
 	rolev1 "voice.app/voice/role/v1"
@@ -146,6 +147,15 @@ func main() {
 
 		var listEnrich grpcsvc.ListChatsEnrichment
 		var e2ePreKeyGate grpcsvc.E2EPreKeyGate
+		var deletedAccounts grpcsvc.AccountDeletedChecker
+		if authAddr := strings.TrimSpace(os.Getenv("AUTH_GRPC_ADDR")); authAddr != "" {
+			aconn, err := grpc.NewClient(grpcclient.DialTarget(authAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				log.Fatalf("auth grpc: %v", err)
+			}
+			defer func() { _ = aconn.Close() }()
+			deletedAccounts = grpcsvc.NewAuthGRPCDeletedAccounts(authv1.NewAuthServiceClient(aconn))
+		}
 		if msgAddr := strings.TrimSpace(os.Getenv("MESSAGING_GRPC_ADDR")); msgAddr != "" {
 			mconn, err := grpc.NewClient(grpcclient.DialTarget(msgAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
@@ -199,8 +209,9 @@ func main() {
 			Friends:           friends,
 			Contacts:          contacts,
 			SpaceCoMembership: spaceCoMembership,
-			ListEnrich:    listEnrich,
-			E2EPreKeyGate: e2ePreKeyGate,
+			ListEnrich:        listEnrich,
+			DeletedAccounts:   deletedAccounts,
+			E2EPreKeyGate:     e2ePreKeyGate,
 			ChatEvents:    chatEvents,
 			Roles:         roleClient,
 			SpaceMembers:  spaceMembers,

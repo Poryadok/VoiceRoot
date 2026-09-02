@@ -79,7 +79,7 @@ DOC-аудит закрыт (0 open DOC). Невыполненное разне�
 | [backend.md](todo/backend.md) § High Chat | Стикеры/GIF **в v1** (0 Flutter); view-count; `DeleteChat` |
 | [ci.md](todo/ci.md) § Critical | FCM/APNs, Alertmanager, staging DoD, TOTP/Resend/Paddle secrets |
 | [admin.md](todo/admin.md) § High | Analytics search/voice dashboard types (backend first) |
-| [client.md](todo/client.md) § High | Телефон/OTP, password-reset UI; черновики; mobile shell R2-A04 remainder |
+| [client.md](todo/client.md) § High | Телефон/OTP; черновики; mobile shell R2-A04 remainder (password-reset UI **Batch 30a**) |
 
 ---
 

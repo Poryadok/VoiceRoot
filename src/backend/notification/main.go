@@ -156,10 +156,6 @@ func main() {
 		_ = emailSender
 
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
-			instanceID := strings.TrimSpace(os.Getenv("HOSTNAME"))
-			if instanceID == "" {
-				instanceID = "local"
-			}
 			go func() {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
@@ -198,7 +194,7 @@ func main() {
 			go func() {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
-				if err := runModerationEventsConsumer(ctx, natsURL, instanceID, logger); err != nil && logger != nil {
+				if err := runModerationEventsConsumer(ctx, natsURL, logger); err != nil && logger != nil {
 					logger.Error("moderation.events consumer exited", slog.Any("error", err))
 				}
 			}()

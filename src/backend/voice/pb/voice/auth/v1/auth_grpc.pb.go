@@ -19,27 +19,28 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AuthService_Register_FullMethodName               = "/voice.auth.v1.AuthService/Register"
-	AuthService_Login_FullMethodName                  = "/voice.auth.v1.AuthService/Login"
-	AuthService_Logout_FullMethodName                 = "/voice.auth.v1.AuthService/Logout"
-	AuthService_RefreshToken_FullMethodName           = "/voice.auth.v1.AuthService/RefreshToken"
-	AuthService_Enable2FA_FullMethodName              = "/voice.auth.v1.AuthService/Enable2FA"
-	AuthService_Verify2FA_FullMethodName              = "/voice.auth.v1.AuthService/Verify2FA"
-	AuthService_VerifyOTP_FullMethodName              = "/voice.auth.v1.AuthService/VerifyOTP"
-	AuthService_ConvertGuest_FullMethodName           = "/voice.auth.v1.AuthService/ConvertGuest"
-	AuthService_DeleteAccount_FullMethodName          = "/voice.auth.v1.AuthService/DeleteAccount"
-	AuthService_RestoreAccount_FullMethodName         = "/voice.auth.v1.AuthService/RestoreAccount"
-	AuthService_ValidateToken_FullMethodName          = "/voice.auth.v1.AuthService/ValidateToken"
-	AuthService_GetJWKS_FullMethodName                = "/voice.auth.v1.AuthService/GetJWKS"
-	AuthService_SwitchActiveProfile_FullMethodName    = "/voice.auth.v1.AuthService/SwitchActiveProfile"
-	AuthService_SetAccountStatus_FullMethodName       = "/voice.auth.v1.AuthService/SetAccountStatus"
-	AuthService_PutE2EKeyBackup_FullMethodName        = "/voice.auth.v1.AuthService/PutE2EKeyBackup"
-	AuthService_GetE2EKeyBackup_FullMethodName        = "/voice.auth.v1.AuthService/GetE2EKeyBackup"
-	AuthService_ResolvePhoneHashes_FullMethodName     = "/voice.auth.v1.AuthService/ResolvePhoneHashes"
-	AuthService_GetGuestReminder_FullMethodName       = "/voice.auth.v1.AuthService/GetGuestReminder"
-	AuthService_MarkGuestReminderShown_FullMethodName = "/voice.auth.v1.AuthService/MarkGuestReminderShown"
-	AuthService_ListSessions_FullMethodName           = "/voice.auth.v1.AuthService/ListSessions"
-	AuthService_RevokeSession_FullMethodName          = "/voice.auth.v1.AuthService/RevokeSession"
+	AuthService_Register_FullMethodName                = "/voice.auth.v1.AuthService/Register"
+	AuthService_Login_FullMethodName                   = "/voice.auth.v1.AuthService/Login"
+	AuthService_Logout_FullMethodName                  = "/voice.auth.v1.AuthService/Logout"
+	AuthService_RefreshToken_FullMethodName            = "/voice.auth.v1.AuthService/RefreshToken"
+	AuthService_Enable2FA_FullMethodName               = "/voice.auth.v1.AuthService/Enable2FA"
+	AuthService_Verify2FA_FullMethodName               = "/voice.auth.v1.AuthService/Verify2FA"
+	AuthService_VerifyOTP_FullMethodName               = "/voice.auth.v1.AuthService/VerifyOTP"
+	AuthService_ConvertGuest_FullMethodName            = "/voice.auth.v1.AuthService/ConvertGuest"
+	AuthService_DeleteAccount_FullMethodName           = "/voice.auth.v1.AuthService/DeleteAccount"
+	AuthService_RestoreAccount_FullMethodName          = "/voice.auth.v1.AuthService/RestoreAccount"
+	AuthService_ValidateToken_FullMethodName           = "/voice.auth.v1.AuthService/ValidateToken"
+	AuthService_GetJWKS_FullMethodName                 = "/voice.auth.v1.AuthService/GetJWKS"
+	AuthService_SwitchActiveProfile_FullMethodName     = "/voice.auth.v1.AuthService/SwitchActiveProfile"
+	AuthService_SetAccountStatus_FullMethodName        = "/voice.auth.v1.AuthService/SetAccountStatus"
+	AuthService_PutE2EKeyBackup_FullMethodName         = "/voice.auth.v1.AuthService/PutE2EKeyBackup"
+	AuthService_GetE2EKeyBackup_FullMethodName         = "/voice.auth.v1.AuthService/GetE2EKeyBackup"
+	AuthService_ResolvePhoneHashes_FullMethodName      = "/voice.auth.v1.AuthService/ResolvePhoneHashes"
+	AuthService_FilterDeletedAccountIDs_FullMethodName = "/voice.auth.v1.AuthService/FilterDeletedAccountIDs"
+	AuthService_GetGuestReminder_FullMethodName        = "/voice.auth.v1.AuthService/GetGuestReminder"
+	AuthService_MarkGuestReminderShown_FullMethodName  = "/voice.auth.v1.AuthService/MarkGuestReminderShown"
+	AuthService_ListSessions_FullMethodName            = "/voice.auth.v1.AuthService/ListSessions"
+	AuthService_RevokeSession_FullMethodName           = "/voice.auth.v1.AuthService/RevokeSession"
 )
 
 // AuthServiceClient is the client API for AuthService service.
@@ -71,6 +72,8 @@ type AuthServiceClient interface {
 	GetE2EKeyBackup(ctx context.Context, in *GetE2EKeyBackupRequest, opts ...grpc.CallOption) (*GetE2EKeyBackupResponse, error)
 	// Internal — Social SyncPhoneContacts: hashed phone → primary profile_id (accounts.phone).
 	ResolvePhoneHashes(ctx context.Context, in *ResolvePhoneHashesRequest, opts ...grpc.CallOption) (*ResolvePhoneHashesResponse, error)
+	// Internal — Chat ListChats hides DMs whose peer account is soft-deleted (auth-and-contacts.md).
+	FilterDeletedAccountIDs(ctx context.Context, in *FilterDeletedAccountIDsRequest, opts ...grpc.CallOption) (*FilterDeletedAccountIDsResponse, error)
 	// Guest save-account reminder cadence (docs/features/auth-and-contacts.md).
 	GetGuestReminder(ctx context.Context, in *GetGuestReminderRequest, opts ...grpc.CallOption) (*GetGuestReminderResponse, error)
 	MarkGuestReminderShown(ctx context.Context, in *MarkGuestReminderShownRequest, opts ...grpc.CallOption) (*MarkGuestReminderShownResponse, error)
@@ -257,6 +260,16 @@ func (c *authServiceClient) ResolvePhoneHashes(ctx context.Context, in *ResolveP
 	return out, nil
 }
 
+func (c *authServiceClient) FilterDeletedAccountIDs(ctx context.Context, in *FilterDeletedAccountIDsRequest, opts ...grpc.CallOption) (*FilterDeletedAccountIDsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FilterDeletedAccountIDsResponse)
+	err := c.cc.Invoke(ctx, AuthService_FilterDeletedAccountIDs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *authServiceClient) GetGuestReminder(ctx context.Context, in *GetGuestReminderRequest, opts ...grpc.CallOption) (*GetGuestReminderResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetGuestReminderResponse)
@@ -326,6 +339,8 @@ type AuthServiceServer interface {
 	GetE2EKeyBackup(context.Context, *GetE2EKeyBackupRequest) (*GetE2EKeyBackupResponse, error)
 	// Internal — Social SyncPhoneContacts: hashed phone → primary profile_id (accounts.phone).
 	ResolvePhoneHashes(context.Context, *ResolvePhoneHashesRequest) (*ResolvePhoneHashesResponse, error)
+	// Internal — Chat ListChats hides DMs whose peer account is soft-deleted (auth-and-contacts.md).
+	FilterDeletedAccountIDs(context.Context, *FilterDeletedAccountIDsRequest) (*FilterDeletedAccountIDsResponse, error)
 	// Guest save-account reminder cadence (docs/features/auth-and-contacts.md).
 	GetGuestReminder(context.Context, *GetGuestReminderRequest) (*GetGuestReminderResponse, error)
 	MarkGuestReminderShown(context.Context, *MarkGuestReminderShownRequest) (*MarkGuestReminderShownResponse, error)
@@ -392,6 +407,9 @@ func (UnimplementedAuthServiceServer) GetE2EKeyBackup(context.Context, *GetE2EKe
 }
 func (UnimplementedAuthServiceServer) ResolvePhoneHashes(context.Context, *ResolvePhoneHashesRequest) (*ResolvePhoneHashesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResolvePhoneHashes not implemented")
+}
+func (UnimplementedAuthServiceServer) FilterDeletedAccountIDs(context.Context, *FilterDeletedAccountIDsRequest) (*FilterDeletedAccountIDsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method FilterDeletedAccountIDs not implemented")
 }
 func (UnimplementedAuthServiceServer) GetGuestReminder(context.Context, *GetGuestReminderRequest) (*GetGuestReminderResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetGuestReminder not implemented")
@@ -732,6 +750,24 @@ func _AuthService_ResolvePhoneHashes_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthService_FilterDeletedAccountIDs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FilterDeletedAccountIDsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).FilterDeletedAccountIDs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_FilterDeletedAccountIDs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).FilterDeletedAccountIDs(ctx, req.(*FilterDeletedAccountIDsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AuthService_GetGuestReminder_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetGuestReminderRequest)
 	if err := dec(in); err != nil {
@@ -878,6 +914,10 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ResolvePhoneHashes",
 			Handler:    _AuthService_ResolvePhoneHashes_Handler,
+		},
+		{
+			MethodName: "FilterDeletedAccountIDs",
+			Handler:    _AuthService_FilterDeletedAccountIDs_Handler,
 		},
 		{
 			MethodName: "GetGuestReminder",

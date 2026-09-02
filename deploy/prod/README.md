@@ -19,6 +19,8 @@ Optional: `VOICE_PROD_APPLY_OBSERVABILITY=true` runs observability apply after a
 
 ## Apply
 
+Copy [env.example](env.example) and set `VOICE_IMAGE_TAG` (required).
+
 ```bash
 # From repo root (bash):
 export VOICE_IMAGE_REGISTRY=ghcr.io/your-org/voiceroot
@@ -35,6 +37,7 @@ Domain defaults live in [domains.defaults](domains.defaults); override via env o
 
 | File | Purpose |
 |------|---------|
+| `env.example` | Required `VOICE_IMAGE_*` env for local/manual apply |
 | `namespace.yaml` | `voice-prod` namespace |
 | `domains.defaults` | Production public FQDNs (placeholder `*.voice.example.com`) |
 | `configmap-app.yaml` | Shared env (GRPC upstreams, NATS, Redis); OAuth URLs templated at apply |

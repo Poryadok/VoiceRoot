@@ -2309,6 +2309,110 @@ class ResolvePhoneHashesResponse extends $pb.GeneratedMessage {
   $pb.PbList<PhoneHashProfileMatch> get matches => $_getList(0);
 }
 
+class FilterDeletedAccountIDsRequest extends $pb.GeneratedMessage {
+  factory FilterDeletedAccountIDsRequest({
+    $core.Iterable<$core.String>? accountIds,
+  }) {
+    final result = create();
+    if (accountIds != null) result.accountIds.addAll(accountIds);
+    return result;
+  }
+
+  FilterDeletedAccountIDsRequest._();
+
+  factory FilterDeletedAccountIDsRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory FilterDeletedAccountIDsRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'FilterDeletedAccountIDsRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..pPS(1, _omitFieldNames ? '' : 'accountIds')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  FilterDeletedAccountIDsRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  FilterDeletedAccountIDsRequest copyWith(
+          void Function(FilterDeletedAccountIDsRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as FilterDeletedAccountIDsRequest))
+          as FilterDeletedAccountIDsRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static FilterDeletedAccountIDsRequest create() =>
+      FilterDeletedAccountIDsRequest._();
+  @$core.override
+  FilterDeletedAccountIDsRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static FilterDeletedAccountIDsRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<FilterDeletedAccountIDsRequest>(create);
+  static FilterDeletedAccountIDsRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $pb.PbList<$core.String> get accountIds => $_getList(0);
+}
+
+class FilterDeletedAccountIDsResponse extends $pb.GeneratedMessage {
+  factory FilterDeletedAccountIDsResponse({
+    $core.Iterable<$core.String>? deletedAccountIds,
+  }) {
+    final result = create();
+    if (deletedAccountIds != null)
+      result.deletedAccountIds.addAll(deletedAccountIds);
+    return result;
+  }
+
+  FilterDeletedAccountIDsResponse._();
+
+  factory FilterDeletedAccountIDsResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory FilterDeletedAccountIDsResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'FilterDeletedAccountIDsResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..pPS(1, _omitFieldNames ? '' : 'deletedAccountIds')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  FilterDeletedAccountIDsResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  FilterDeletedAccountIDsResponse copyWith(
+          void Function(FilterDeletedAccountIDsResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as FilterDeletedAccountIDsResponse))
+          as FilterDeletedAccountIDsResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static FilterDeletedAccountIDsResponse create() =>
+      FilterDeletedAccountIDsResponse._();
+  @$core.override
+  FilterDeletedAccountIDsResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static FilterDeletedAccountIDsResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<FilterDeletedAccountIDsResponse>(
+          create);
+  static FilterDeletedAccountIDsResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $pb.PbList<$core.String> get deletedAccountIds => $_getList(0);
+}
+
 class GetGuestReminderRequest extends $pb.GeneratedMessage {
   factory GetGuestReminderRequest() => create();
 

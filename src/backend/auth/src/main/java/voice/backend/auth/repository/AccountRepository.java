@@ -34,4 +34,7 @@ public interface AccountRepository {
   Optional<Instant> getGuestReminderLastShownAt(UUID accountId);
 
   void markGuestReminderShown(UUID accountId, Instant shownAt);
+
+  /** Returns account ids among the given set that are soft-deleted (deleted_at IS NOT NULL). */
+  java.util.Set<UUID> findDeletedAmong(java.util.Collection<UUID> accountIds);
 }

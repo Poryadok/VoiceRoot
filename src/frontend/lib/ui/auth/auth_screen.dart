@@ -8,6 +8,7 @@ import '../../theme/voice_layout.dart';
 import '../core/voice_primary_button.dart';
 import '../core/voice_secondary_button.dart';
 import 'auth_errors.dart';
+import 'password_reset_screen.dart';
 
 /// Register / login form; persists tokens and active [profile_id] via [AuthController].
 class AuthScreen extends ConsumerStatefulWidget {
@@ -19,6 +20,7 @@ class AuthScreen extends ConsumerStatefulWidget {
   static const Key loginButtonKey = Key('auth_login');
   static const Key registerButtonKey = Key('auth_register');
   static const Key continueGuestButtonKey = Key('auth_continue_guest');
+  static const Key forgotPasswordButtonKey = Key('auth_forgot_password');
 
   static const int minPasswordLength = 8;
 
@@ -75,6 +77,17 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     await ref.read(authControllerProvider.notifier).registerGuest();
   }
 
+  void _openPasswordReset() {
+    final email = _emailController.text.trim();
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PasswordResetScreen(
+          initialEmail: email.isEmpty ? null : email,
+        ),
+      ),
+    );
+  }
+
   String? _emailValidator(String? value, AppLocalizations l10n) {
     if (value == null || value.trim().isEmpty) {
       return l10n.authErrorEmptyFields;
@@ -103,7 +116,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       key: AuthScreen.screenKey,
       backgroundColor: voice.canvas,
       body: SafeArea(
-        child: Semantics(
+        child: SingleChildScrollView(
+          child: Semantics(
           label: 'Sign in to Voice',
           container: true,
           child: Center(
@@ -172,6 +186,14 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                             ),
                             validator: (v) => _passwordValidator(v, l10n),
                             onFieldSubmitted: (_) => _submit(false),
+                          ),
+                        ),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            key: AuthScreen.forgotPasswordButtonKey,
+                            onPressed: guestBusy ? null : _openPasswordReset,
+                            child: Text(l10n.authForgotPassword),
                           ),
                         ),
                         if (_awaitingTotp) ...[
@@ -254,6 +276,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               ),
             ),
           ),
+        ),
         ),
         ),
       ),
