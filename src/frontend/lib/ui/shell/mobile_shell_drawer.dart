@@ -7,6 +7,7 @@ import '../../state/message_requests_providers.dart';
 import '../../state/shell_providers.dart';
 import '../../theme/voice_colors.dart';
 import 'chat_rail_sections.dart';
+import 'manage_folders_sheet.dart';
 import 'message_requests_folder.dart';
 
 /// Mobile drawer stub (R2-A04 incremental): folders, Quick Access, settings entry.
@@ -74,6 +75,15 @@ class MobileShellDrawer extends ConsumerWidget {
                             : kVirtualMessageRequestsFolderId,
                       );
                       Navigator.of(context).pop();
+                    },
+                  ),
+                  ListTile(
+                    key: const Key('mobile_drawer_manage_folders'),
+                    leading: const Icon(Icons.create_new_folder_outlined),
+                    title: Text(l10n.chatFoldersManageAction),
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      ManageFoldersSheet.show(context);
                     },
                   ),
                 ],

@@ -311,7 +311,31 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatListTitle => 'Личные сообщения';
 
   @override
-  String get chatFoldersTitle => 'Folders';
+  String get chatFoldersTitle => 'Папки';
+
+  @override
+  String get chatFoldersManageTitle => 'Управление папками';
+
+  @override
+  String get chatFoldersManageAction => 'Управление папками';
+
+  @override
+  String get chatFolderCreateLabel => 'Название новой папки';
+
+  @override
+  String get chatFolderCreateAction => 'Создать папку';
+
+  @override
+  String get chatFoldersCustomEmpty =>
+      'Пользовательских папок пока нет. Создайте выше.';
+
+  @override
+  String get chatFolderDeleteTitle => 'Удалить папку?';
+
+  @override
+  String chatFolderDeleteMessage(String name) {
+    return 'Удалить «$name»? Чаты останутся в списке.';
+  }
 
   @override
   String get chatQuickAccessTitle => 'Quick Access';

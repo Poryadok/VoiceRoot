@@ -94,7 +94,7 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 - [ ] **OG link preview** — unfurl на клиенте; сервер не обязан.
 - [ ] **Stickers / GIF / voice-note composer** — нет UI (и нет backend packs). См. [backend.md](backend.md) § High Chat; решение спеки — [product-roadmap.md](product-roadmap.md).
 - [x] **Message requests inbox UI** — virtual «Запросы» folder in rail/drawer (visible when pending > 0, unread badge); removed middle-column segmented toggle (§1.3 tombstone); accept/decline on list rows; `notificationTypeMessageRequest` settings toggle — **Batch 22b** (backend bucketing Batch 21a).
-- [ ] **Кастомные папки чатов** — All/DMs/Groups + custom; REST folders + rail/drawer UI shipped (parallel/client); **pin/reorder UI** in list ctx + custom-folder drag reorder shipped (Batch 21b); edit-folders management UI deferred.
+- [x] **Кастомные папки чатов** — All/DMs/Groups + custom; REST folders + rail/drawer UI shipped (parallel/client); **pin/reorder UI** in list ctx + custom-folder drag reorder shipped (Batch 21b); edit-folders management UI shipped (**Batch 25b**).
 - [ ] **In-chat search: next/prev highlight** — [search.md](../features/search.md).
 - [x] **Favorites / contacts UI** — Social panel Contacts + Favorites tabs; `VoiceFriendsClient` list/add/set favorite; star toggle on friends/contacts (`social_panel.dart`, `friends_client.dart`) — **Batch 23b**. QR add friend UI deferred; phone-book sync stub shipped (**Batch 25a**).
 - [x] **Blocked accounts UI** — Social panel Blocked tab; `VoiceFriendsClient` `listBlocked`/`unblockAccount`; gateway `GET/DELETE /api/v1/friends/blocks` — **Batch 24a**.

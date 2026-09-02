@@ -346,5 +346,69 @@ void main() {
         '/api/v1/chats/folders/f1/chats/order',
       ]);
     });
+
+    test('create/update/delete folder routes', () async {
+      final paths = <String>[];
+      final methods = <String>[];
+      final client = VoiceChatsClient(
+        gateway: gatewayHttpForTest(
+          MockClient((req) async {
+            paths.add(req.url.path);
+            methods.add(req.method);
+            if (req.method == 'POST' && req.url.path == '/api/v1/chats/folders') {
+              return http.Response(
+                jsonEncode({
+                  'folder': {
+                    'id': 'f-new',
+                    'name': 'Work',
+                    'folder_type': 'custom',
+                    'sort_order': 1,
+                  },
+                }),
+                200,
+              );
+            }
+            if (req.method == 'PATCH') {
+              return http.Response(
+                jsonEncode({
+                  'folder': {
+                    'id': 'f-new',
+                    'name': 'Renamed',
+                    'folder_type': 'custom',
+                    'sort_order': 1,
+                  },
+                }),
+                200,
+              );
+            }
+            return http.Response('', 204);
+          }),
+          config: config,
+        ),
+      );
+
+      final created = await client.createFolder(authorization: auth, name: 'Work');
+      expect(created, isA<ChatsApiOk<VoiceFolder>>());
+      expect((created as ChatsApiOk<VoiceFolder>).data.id, 'f-new');
+
+      final updated = await client.updateFolder(
+        authorization: auth,
+        folderId: 'f-new',
+        name: 'Renamed',
+      );
+      expect(updated, isA<ChatsApiOk<VoiceFolder>>());
+
+      expect(
+        await client.deleteFolder(authorization: auth, folderId: 'f-new'),
+        isA<ChatsApiOk<void>>(),
+      );
+
+      expect(methods, ['POST', 'PATCH', 'DELETE']);
+      expect(paths, [
+        '/api/v1/chats/folders',
+        '/api/v1/chats/folders/f-new',
+        '/api/v1/chats/folders/f-new',
+      ]);
+    });
   });
 }
