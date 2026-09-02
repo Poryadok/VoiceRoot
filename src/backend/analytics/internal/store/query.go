@@ -12,6 +12,41 @@ type QueryFilters struct {
 	EventType string
 }
 
+const retentionCohortQuery = `
+WITH cohort AS (
+  SELECT user_id_hashed, toDate(min(timestamp)) AS cohort_date
+  FROM voice.events
+  WHERE event_type = 'user_registered' AND user_id_hashed != ''
+    AND timestamp >= ? AND timestamp < ?
+  GROUP BY user_id_hashed
+),
+activity AS (
+  SELECT c.cohort_date, c.user_id_hashed,
+    maxIf(1, toDate(e.timestamp) = c.cohort_date + 1) AS d1,
+    maxIf(1, toDate(e.timestamp) = c.cohort_date + 7) AS d7,
+    maxIf(1, toDate(e.timestamp) = c.cohort_date + 30) AS d30
+  FROM cohort c
+  LEFT JOIN voice.events e ON e.user_id_hashed = c.user_id_hashed
+  GROUP BY c.cohort_date, c.user_id_hashed
+)
+SELECT cohort_date,
+  count() AS cohort_size,
+  avg(d1) AS d1_rate,
+  avg(d7) AS d7_rate,
+  avg(d30) AS d30_rate
+FROM activity
+GROUP BY cohort_date
+ORDER BY cohort_date
+LIMIT 30`
+
+func resolveHealthEventType(filters QueryFilters) string {
+	eventType := strings.TrimSpace(filters.EventType)
+	if eventType == "" {
+		return "api_request"
+	}
+	return eventType
+}
+
 // DashboardMetrics returns named metrics for a dashboard type in [from, to].
 func (s *CHStore) DashboardMetrics(ctx context.Context, dashboardType string, from, to time.Time, filters QueryFilters) (map[string]float64, error) {
 	out := map[string]float64{}
@@ -91,10 +126,7 @@ WHERE event_type = 'payment_failed' AND timestamp >= ? AND timestamp < ?`, from,
 		out["payment_success"] = paid
 		out["payment_failed"] = failed
 	case "health":
-		eventType := strings.TrimSpace(filters.EventType)
-		if eventType == "" {
-			eventType = "api_request"
-		}
+		eventType := resolveHealthEventType(filters)
 		reqs, err := s.scalar(ctx, `
 SELECT count() FROM voice.events
 WHERE event_type = ? AND timestamp >= ? AND timestamp < ?`, eventType, from, to)
@@ -157,32 +189,7 @@ func (s *CHStore) RetentionCohorts(ctx context.Context, from, to time.Time) ([]R
 	if s == nil || s.conn == nil {
 		return nil, nil
 	}
-	rows, err := s.conn.Query(ctx, `
-WITH cohort AS (
-  SELECT user_id_hashed, toDate(min(timestamp)) AS cohort_date
-  FROM voice.events
-  WHERE event_type = 'user_registered' AND user_id_hashed != ''
-    AND timestamp >= ? AND timestamp < ?
-  GROUP BY user_id_hashed
-),
-activity AS (
-  SELECT c.cohort_date, c.user_id_hashed,
-    maxIf(1, toDate(e.timestamp) = c.cohort_date + 1) AS d1,
-    maxIf(1, toDate(e.timestamp) = c.cohort_date + 7) AS d7,
-    maxIf(1, toDate(e.timestamp) = c.cohort_date + 30) AS d30
-  FROM cohort c
-  LEFT JOIN voice.events e ON e.user_id_hashed = c.user_id_hashed
-  GROUP BY c.cohort_date, c.user_id_hashed
-)
-SELECT cohort_date,
-  count() AS cohort_size,
-  avg(d1) AS d1_rate,
-  avg(d7) AS d7_rate,
-  avg(d30) AS d30_rate
-FROM activity
-GROUP BY cohort_date
-ORDER BY cohort_date
-LIMIT 30`, from, to)
+	rows, err := s.conn.Query(ctx, retentionCohortQuery, from, to)
 	if err != nil {
 		return nil, err
 	}
