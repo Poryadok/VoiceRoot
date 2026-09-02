@@ -46,6 +46,7 @@ void main() {
         narrow: true,
         chatOpen: true,
         keyboardInsetBottom: 0,
+        shellOverlayActive: false,
       ),
       isTrue,
     );
@@ -54,6 +55,7 @@ void main() {
         narrow: true,
         chatOpen: true,
         keyboardInsetBottom: 280,
+        shellOverlayActive: false,
       ),
       isFalse,
     );
@@ -65,6 +67,7 @@ void main() {
         narrow: false,
         chatOpen: true,
         keyboardInsetBottom: 0,
+        shellOverlayActive: false,
       ),
       isFalse,
     );
@@ -73,6 +76,19 @@ void main() {
         narrow: true,
         chatOpen: false,
         keyboardInsetBottom: 0,
+        shellOverlayActive: false,
+      ),
+      isFalse,
+    );
+  });
+
+  test('shouldShowMobileChatStrip hides strip on full-screen shell overlay', () {
+    expect(
+      shouldShowMobileChatStrip(
+        narrow: true,
+        chatOpen: true,
+        keyboardInsetBottom: 0,
+        shellOverlayActive: true,
       ),
       isFalse,
     );

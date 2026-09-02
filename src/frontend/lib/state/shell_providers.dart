@@ -28,6 +28,9 @@ final globalSearchFocusRequestProvider = StateProvider<int>((ref) => 0);
 /// Bumped to request composer focus (Escape).
 final composerFocusRequestProvider = StateProvider<int>((ref) => 0);
 
+/// Full-screen routes pushed above the shell (MM, settings sub-routes, …).
+final mobileShellOverlayDepthProvider = StateProvider<int>((ref) => 0);
+
 /// Last scroll offset of the home/space chat list (mobile back restores this).
 final chatListScrollOffsetProvider = StateProvider<double>((ref) => 0);
 

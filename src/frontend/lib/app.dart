@@ -57,6 +57,7 @@ import 'ui/shell/mobile_shell_drawer.dart';
 import 'ui/shell/mobile_shell_tab_bar.dart';
 import 'ui/shell/mobile_shell_visibility.dart';
 import 'ui/shell/mobile_chat_strip.dart';
+import 'ui/shell/mobile_shell_route_observer.dart';
 import 'ui/shell/navigation_panel.dart';
 import 'ui/shell/side_panel.dart';
 import 'ui/space/space_tree_column.dart';
@@ -143,10 +144,18 @@ class _AuthenticatedRouterApp extends ConsumerStatefulWidget {
 }
 
 class _AuthenticatedRouterAppState extends ConsumerState<_AuthenticatedRouterApp> {
+  late final MobileShellOverlayObserver _overlayObserver =
+      MobileShellOverlayObserver((delta) {
+        if (!mounted) return;
+        final notifier = ref.read(mobileShellOverlayDepthProvider.notifier);
+        notifier.state = (notifier.state + delta).clamp(0, 999);
+      });
+
   late final GoRouter _router = createVoiceGoRouter(
     shellBuilder: (context, state) => MatchSquadNavigator(
       child: _AuthenticatedShell(locale: widget.locale, routeState: state),
     ),
+    observers: [_overlayObserver],
     onDeepLinkPath: _handleRouteDeepLink,
   );
 
@@ -328,6 +337,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
     final narrowShell = VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width);
     final keyboardInsetBottom = MediaQuery.viewInsetsOf(context).bottom;
     final chatOpen = selectedChatId != null;
+    final shellOverlayActive = ref.watch(mobileShellOverlayDepthProvider) > 0;
     final showMobileTabs = shouldShowMobileShellTabs(
       narrow: narrowShell,
       chatOpen: chatOpen,
@@ -337,6 +347,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
       narrow: narrowShell,
       chatOpen: chatOpen,
       keyboardInsetBottom: keyboardInsetBottom,
+      shellOverlayActive: shellOverlayActive,
     );
 
     return VoiceShortcuts(

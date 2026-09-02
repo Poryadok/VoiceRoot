@@ -45,7 +45,7 @@ _Пока пусто — критичные клиентские блокеры 
 Источник: `tmp/telegram-ux-audit/AUDIT.md` (R2-A03–A05, R3-A08, R3-A11). Backend RPC-хвосты — [backend.md](backend.md) § Telegram-parity audit / § Chat navigation.
 
 - [x] **R2-A03 — Profile switcher vs rail contract** — `ProfileAvatarMenuButton` §1.1a in rail (`profile_avatar_menu.dart`); desktop session bar is label-only (no combobox); mobile tap opens menu + swipe switch (`ProfileAvatarSwitcher`). Archive entry shows unavailable snackbar until Archive list screen ships (Batch 10; list RPC Batch 15).
-- [ ] **R2-A04 — Mobile shell IA** — `MobileShellTabBar` (Chats/Social/Match) on `Scaffold.bottomNavigationBar` when narrow + no open chat (Batch 10 incremental); **incremental:** `MobileShellDrawer` hamburger stub (folders, QA, settings) shipped (parallel/client); **keyboard-hide tab bar** on narrow + open keyboard shipped (Batch 21b); **keyboard-hide active strip** on open chat shipped (Batch 28a); **deferred:** remaining stacked chrome overflow (pinned bar collapse, text-scale).
+- [ ] **R2-A04 — Mobile shell IA** — `MobileShellTabBar` (Chats/Social/Match) on `Scaffold.bottomNavigationBar` when narrow + no open chat (Batch 10 incremental); **incremental:** `MobileShellDrawer` hamburger stub (folders, QA, settings) shipped (parallel/client); **keyboard-hide tab bar** on narrow + open keyboard shipped (Batch 21b); **keyboard-hide active strip** on open chat shipped (Batch 28a); **incremental (Batch 29a):** pinned bar single-line collapse when >1 pin, text-scale ×1.5 smoke, strip hidden on full-screen shell overlays (MM/settings routes via `MobileShellOverlayObserver`); **deferred:** remaining stacked chrome polish.
 - [ ] **R2-A05 — Active strip LRU semantics** — strip tracks **opened** chats (≤100 LRU); `MobileChatStrip` + `mobile_opened_chat_strip.dart` shipped; long-press remove + 100-cap LRU eviction snackbar shipped (Batch 9).
 - [x] **R3-A08 — Strip widget test wrong contract** — `mobile_chat_strip_test.dart` asserts opened-chat LRU, not inbox rows (§1.6).
 - [x] **R3-A11 — Composer a11y parity** — transient §3.6b emoji panel + §3.6a attach popup with §3.6e focus trap/return (`composer_panels.dart`); click/tap activation on desktop (Batch 9).
@@ -84,7 +84,7 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 
 - [ ] **VoiceDisabledAction — расширить покрытие** — wave H: space tree / roles / slow mode; остальные permission-gated действия (chat moderation, voice room create, MM guest restrictions) без reason tooltip.
 
-- [ ] **MobileChatStrip — scope на full-screen фичах** — strip только при `narrow && selectedChatId != null` в `app.dart`; matchmaking full-screen (`queue_search_screen`, `game_catalog_screen`) и settings sub-routes без strip — сверить с [platforms.md](../features/platforms.md) / navigation.
+- [x] **MobileChatStrip — scope на full-screen фичах** — strip скрывается при `mobileShellOverlayDepthProvider > 0` (PageRoute поверх shell: MM catalog/search, settings sub-routes); `shouldShowMobileChatStrip` + `MobileShellOverlayObserver` (**Batch 29a**).
 
 - [ ] **chat_info_panel notification tile — narrow E2E** — compact layout; overflow поправлен в widget-тестах; live/compose E2E на узкой ширине (связано с Critical Batch 2 при наличии стека).
 
