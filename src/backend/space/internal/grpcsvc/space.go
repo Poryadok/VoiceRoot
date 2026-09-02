@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -136,6 +137,73 @@ func (s *SpaceGRPC) UpdateSpaceMmConfig(ctx context.Context, req *spacev1.Update
 		}
 	}
 	return &spacev1.UpdateSpaceMmConfigResponse{Space: spaceRowToProto(updated)}, nil
+}
+
+func (s *SpaceGRPC) DeleteSpace(ctx context.Context, req *spacev1.DeleteSpaceRequest) (*spacev1.DeleteSpaceResponse, error) {
+	if s == nil || s.Store == nil {
+		return nil, status.Error(codes.FailedPrecondition, "space persistence not configured")
+	}
+	spaceID, err := parseUUIDField("space_id", req.GetSpaceId())
+	if err != nil {
+		return nil, err
+	}
+	if err := s.requireSpaceOwner(ctx, spaceID); err != nil {
+		return nil, err
+	}
+	if err := s.Store.DeleteSpace(ctx, spaceID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "space not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if s.SpaceEvents != nil {
+		if pubErr := s.SpaceEvents.PublishSpaceDeleted(ctx, spaceID.String()); pubErr != nil {
+			s.logPublishError(ctx, "space.deleted", pubErr, slog.String("space_id", spaceID.String()))
+		}
+	}
+	return &spacev1.DeleteSpaceResponse{}, nil
+}
+
+func (s *SpaceGRPC) TransferOwnership(ctx context.Context, req *spacev1.TransferOwnershipRequest) (*spacev1.TransferOwnershipResponse, error) {
+	if s == nil || s.Store == nil {
+		return nil, status.Error(codes.FailedPrecondition, "space persistence not configured")
+	}
+	spaceID, err := parseUUIDField("space_id", req.GetSpaceId())
+	if err != nil {
+		return nil, err
+	}
+	newOwnerID, err := parseUUIDField("new_owner_profile_id", req.GetNewOwnerProfileId())
+	if err != nil {
+		return nil, err
+	}
+	caller, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
+	if err := s.requireSpaceOwner(ctx, spaceID); err != nil {
+		return nil, err
+	}
+	if err := s.Store.TransferOwnership(ctx, spaceID, caller, newOwnerID); err != nil {
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return nil, status.Error(codes.NotFound, "space not found")
+		case errors.Is(err, store.ErrTransferToSelf):
+			return nil, status.Error(codes.FailedPrecondition, "cannot transfer ownership to current owner")
+		case errors.Is(err, store.ErrMemberNotFound):
+			return nil, status.Error(codes.FailedPrecondition, "new owner must be a space member")
+		case errors.Is(err, store.ErrNotSpaceOwner):
+			return nil, status.Error(codes.PermissionDenied, "space owner required")
+		default:
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
+	s.reassignOwnerRole(ctx, spaceID, caller, newOwnerID)
+	if s.SpaceEvents != nil {
+		if pubErr := s.SpaceEvents.PublishSpaceUpdated(ctx, spaceID.String()); pubErr != nil {
+			s.logPublishError(ctx, "space.updated", pubErr, slog.String("space_id", spaceID.String()))
+		}
+	}
+	return &spacev1.TransferOwnershipResponse{}, nil
 }
 
 func (s *SpaceGRPC) GetSpace(ctx context.Context, req *spacev1.GetSpaceRequest) (*spacev1.GetSpaceResponse, error) {

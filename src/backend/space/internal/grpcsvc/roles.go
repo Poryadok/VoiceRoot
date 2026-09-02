@@ -129,6 +129,38 @@ func (s *SpaceGRPC) revokeAllMemberRoles(ctx context.Context, spaceID, profileID
 	}
 }
 
+// reassignOwnerRole best-effort moves the Owner system role after TransferOwnership.
+func (s *SpaceGRPC) reassignOwnerRole(ctx context.Context, spaceID, previousOwner, newOwner uuid.UUID) {
+	if s == nil || s.Roles == nil {
+		return
+	}
+	list, err := s.Roles.ListRoles(ctx, &rolev1.ListRolesRequest{SpaceId: spaceID.String()})
+	if err != nil {
+		return
+	}
+	var ownerRoleID string
+	for _, r := range list.GetRoleList().GetRoles() {
+		if r.GetName() == permissions.RoleOwner {
+			ownerRoleID = r.GetId()
+			break
+		}
+	}
+	if ownerRoleID == "" {
+		return
+	}
+	ownerCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderProfileID, previousOwner.String())
+	_, _ = s.Roles.AssignRole(ownerCtx, &rolev1.AssignRoleRequest{
+		SpaceId:   spaceID.String(),
+		ProfileId: newOwner.String(),
+		RoleId:    ownerRoleID,
+	})
+	_, _ = s.Roles.RevokeRole(ownerCtx, &rolev1.RevokeRoleRequest{
+		SpaceId:   spaceID.String(),
+		ProfileId: previousOwner.String(),
+		RoleId:    ownerRoleID,
+	})
+}
+
 func (s *SpaceGRPC) memberRoleNames(ctx context.Context, spaceID, profileID uuid.UUID) []string {
 	if s.Roles == nil {
 		return nil
