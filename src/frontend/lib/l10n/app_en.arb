@@ -62,6 +62,16 @@
   "socialTabSearch": "Search",
   "socialTabFriends": "Friends",
   "socialTabContacts": "Contacts",
+  "socialPhoneSyncAction": "Sync phone book",
+  "socialPhoneSyncStub": "Phone book sync is not available on this device yet.",
+  "socialPhoneSyncMatched": "{count, plural, =1{Found 1 contact on Voice} other{Found {count} contacts on Voice}}",
+  "@socialPhoneSyncMatched": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "socialTabFavorites": "Favorites",
   "socialTabRequests": "Requests",
   "socialTabBlocked": "Blocked",

@@ -266,6 +266,24 @@ abstract class AppLocalizations {
   /// **'Contacts'**
   String get socialTabContacts;
 
+  /// No description provided for @socialPhoneSyncAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync phone book'**
+  String get socialPhoneSyncAction;
+
+  /// No description provided for @socialPhoneSyncStub.
+  ///
+  /// In en, this message translates to:
+  /// **'Phone book sync is not available on this device yet.'**
+  String get socialPhoneSyncStub;
+
+  /// No description provided for @socialPhoneSyncMatched.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Found 1 contact on Voice} other{Found {count} contacts on Voice}}'**
+  String socialPhoneSyncMatched(int count);
+
   /// No description provided for @socialTabFavorites.
   ///
   /// In en, this message translates to:

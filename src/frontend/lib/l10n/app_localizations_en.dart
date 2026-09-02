@@ -108,6 +108,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get socialTabContacts => 'Contacts';
 
   @override
+  String get socialPhoneSyncAction => 'Sync phone book';
+
+  @override
+  String get socialPhoneSyncStub =>
+      'Phone book sync is not available on this device yet.';
+
+  @override
+  String socialPhoneSyncMatched(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Found $count contacts on Voice',
+      one: 'Found 1 contact on Voice',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get socialTabFavorites => 'Favorites';
 
   @override

@@ -98,6 +98,12 @@ class BlockedListData {
   final String? nextCursor;
 }
 
+class PhoneSyncData {
+  const PhoneSyncData({required this.matchedProfileIds});
+
+  final List<String> matchedProfileIds;
+}
+
 /// HTTP client for Social friend routes (`/api/v1/friends/**`).
 class VoiceFriendsClient {
   VoiceFriendsClient({required GatewayHttpClient gateway}) : _gateway = gateway;
@@ -397,6 +403,35 @@ class VoiceFriendsClient {
       authorization: authorization,
     );
     return _mapEmpty(result);
+  }
+
+  Future<FriendsApiResult<PhoneSyncData>> syncPhoneContacts({
+    required String authorization,
+    required List<String> hashedPhoneNumbers,
+  }) async {
+    final result = await _gateway.postJson(
+      uri: _gateway.resolve('/api/v1/friends/contacts/sync'),
+      authorization: authorization,
+      body: {'hashed_phone_numbers': hashedPhoneNumbers},
+    );
+    return switch (result) {
+      GatewayHttpOk(:final data) => FriendsApiOk(_phoneSyncFromJson(data)),
+      GatewayHttpFailure(:final error) => FriendsApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+
+  PhoneSyncData _phoneSyncFromJson(Map<String, dynamic> data) {
+    final ids =
+        data['matched_profile_ids'] as List<dynamic>? ??
+        data['matchedProfileIds'] as List<dynamic>? ??
+        const [];
+    return PhoneSyncData(
+      matchedProfileIds: ids.map((id) => id.toString()).toList(growable: false),
+    );
   }
 
   Future<FriendsApiResult<void>> _postInvitation(

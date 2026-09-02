@@ -274,4 +274,29 @@ void main() {
       expect(r, isA<FriendsApiEmpty>());
     });
   });
+
+  group('VoiceFriendsClient.syncPhoneContacts', () {
+    test('POST /api/v1/friends/contacts/sync', () async {
+      String? capturedBody;
+      final mock = MockClient((req) async {
+        expect(req.method, 'POST');
+        expect(req.url.path, '/api/v1/friends/contacts/sync');
+        capturedBody = req.body;
+        return http.Response(
+          jsonEncode({'matched_profile_ids': ['p-match-1']}),
+          200,
+        );
+      });
+      final client = VoiceFriendsClient(gateway: gatewayHttpForTest(mock, config: config));
+      final r = await client.syncPhoneContacts(
+        authorization: auth,
+        hashedPhoneNumbers: ['hash-1', 'hash-2'],
+      );
+      expect(r, isA<FriendsApiOk<PhoneSyncData>>());
+      final data = (r as FriendsApiOk<PhoneSyncData>).data;
+      expect(data.matchedProfileIds, ['p-match-1']);
+      final body = jsonDecode(capturedBody!) as Map<String, dynamic>;
+      expect(body['hashed_phone_numbers'], ['hash-1', 'hash-2']);
+    });
+  });
 }
