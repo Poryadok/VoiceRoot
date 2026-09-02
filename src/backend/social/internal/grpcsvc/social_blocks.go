@@ -75,18 +75,18 @@ func (s *SocialGRPC) BlockAccount(ctx context.Context, req *socialv1.BlockAccoun
 	if s.Blocks == nil {
 		return nil, status.Error(codes.FailedPrecondition, "persistence not configured")
 	}
-	err = s.Blocks.BlockAccount(ctx, blocker, blocked)
+	var blockerProfiles, blockedProfiles []uuid.UUID
+	if s.AccountProfiles != nil {
+		if ids, berr := s.AccountProfiles.ProfileIDsForAccount(ctx, blocker); berr == nil {
+			blockerProfiles = ids
+		}
+		if ids, berr := s.AccountProfiles.ProfileIDsForAccount(ctx, blocked); berr == nil {
+			blockedProfiles = ids
+		}
+	}
+	err = s.Blocks.BlockAccountAndSeverFriendships(ctx, blocker, blocked, blockerProfiles, blockedProfiles)
 	switch {
 	case err == nil:
-		if s.Friends != nil && s.AccountProfiles != nil {
-			blockerProfiles, berr := s.AccountProfiles.ProfileIDsForAccount(ctx, blocker)
-			if berr == nil {
-				blockedProfiles, berr2 := s.AccountProfiles.ProfileIDsForAccount(ctx, blocked)
-				if berr2 == nil {
-					_ = s.Friends.RemoveFriendshipsBetweenProfileSets(ctx, blockerProfiles, blockedProfiles)
-				}
-			}
-		}
 		if s.Events != nil {
 			_ = s.Events.PublishUserBlocked(ctx, blocker.String(), blocked.String())
 		}

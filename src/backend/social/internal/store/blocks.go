@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -15,15 +16,45 @@ type BlockStore struct {
 
 // BlockAccount inserts a block row if absent. Idempotent when the pair already exists.
 func (s *BlockStore) BlockAccount(ctx context.Context, blockerAccountID, blockedAccountID uuid.UUID) error {
+	return s.BlockAccountAndSeverFriendships(ctx, blockerAccountID, blockedAccountID, nil, nil)
+}
+
+// BlockAccountAndSeverFriendships inserts the block row and, when profile sets are provided,
+// deletes all friendship rows (accepted, pending, declined) between any profile in setA and setB.
+// The block insert and friendship cleanup run in one transaction.
+func (s *BlockStore) BlockAccountAndSeverFriendships(ctx context.Context, blockerAccountID, blockedAccountID uuid.UUID, blockerProfiles, blockedProfiles []uuid.UUID) error {
 	if blockerAccountID == blockedAccountID {
 		return ErrSelfBlock
 	}
-	_, err := s.Pool.Exec(ctx, `
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	_, err = tx.Exec(ctx, `
 INSERT INTO blocks (blocker_account_id, blocked_account_id)
 VALUES ($1, $2)
 ON CONFLICT (blocker_account_id, blocked_account_id) DO NOTHING`,
 		blockerAccountID, blockedAccountID)
-	return err
+	if err != nil {
+		return err
+	}
+
+	if len(blockerProfiles) > 0 && len(blockedProfiles) > 0 {
+		_, err = tx.Exec(ctx, `
+DELETE FROM friendships
+WHERE (
+  requester_profile_id = ANY($1::uuid[]) AND target_profile_id = ANY($2::uuid[])
+) OR (
+  requester_profile_id = ANY($2::uuid[]) AND target_profile_id = ANY($1::uuid[])
+)`, blockerProfiles, blockedProfiles)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit(ctx)
 }
 
 // UnblockAccount deletes the block row for the ordered pair.
