@@ -538,6 +538,39 @@ void main() {
     expect(find.byKey(SocialPanel.contactsUnavailableKey), findsNothing);
   });
 
+  testWidgets('contacts tab sync phone book calls gateway', (tester) async {
+    var syncCalled = false;
+    await tester.pumpWidget(
+      socialTestApp(
+        home: const SocialPanel(initialTabIndex: 2),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/friends/contacts') {
+            return http.Response(
+              jsonEncode({'contact_list': {'contacts': []}}),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/friends/contacts/sync' &&
+              req.method == 'POST') {
+            syncCalled = true;
+            return http.Response(
+              jsonEncode({'matched_profile_ids': ['p-1']}),
+              200,
+            );
+          }
+          return http.Response('{}', 200);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(SocialPanel.syncPhoneContactsKey));
+    await tester.pumpAndSettle();
+
+    expect(syncCalled, isTrue);
+    expect(find.text('Found 1 contact on Voice'), findsOneWidget);
+  });
+
   testWidgets('favorites tab shows empty state when no favorites', (
     tester,
   ) async {

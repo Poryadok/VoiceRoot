@@ -383,6 +383,27 @@ class SocialActions {
     };
   }
 
+  Future<({String? error, int matchedCount})> syncPhoneContacts(
+    List<String> hashedPhoneNumbers,
+  ) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return (error: 'not_authenticated', matchedCount: 0);
+    final result = await _ref
+        .read(voiceFriendsClientProvider)
+        .syncPhoneContacts(
+          authorization: auth,
+          hashedPhoneNumbers: hashedPhoneNumbers,
+        );
+    return switch (result) {
+      FriendsApiOk(:final data) => (
+        error: null,
+        matchedCount: data.matchedProfileIds.length,
+      ),
+      FriendsApiFailure(:final message) => (error: message, matchedCount: 0),
+      FriendsApiEmpty() => (error: null, matchedCount: 0),
+    };
+  }
+
   void _invalidateSocialLists() {
     _ref.invalidate(friendsListProvider);
     _ref.invalidate(friendRequestsProvider);

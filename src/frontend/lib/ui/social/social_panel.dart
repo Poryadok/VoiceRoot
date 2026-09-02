@@ -57,6 +57,8 @@ class SocialPanel extends ConsumerStatefulWidget {
   static Key unblockButtonKey(String accountId) =>
       Key('social_unblock_$accountId');
 
+  static const Key syncPhoneContactsKey = Key('social_sync_phone_contacts');
+
   final int initialTabIndex;
 
   @override
@@ -377,44 +379,80 @@ class _ContactsTab extends ConsumerWidget {
     final contactsAsync = ref.watch(contactsListProvider);
     final actions = ref.read(socialActionsProvider);
 
-    return contactsAsync.when(
-      loading: () => const VoiceListSkeleton(),
-      error: (e, st) => Center(
-        child: VoiceStatePanel(
-          key: SocialPanel.contactsUnavailableKey,
-          title: socialListErrorMessage(l10n, e),
-          icon: Icons.cloud_off_outlined,
-          actionLabel: l10n.commonRetry,
-          onAction: () => ref.invalidate(contactsListProvider),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+          child: OutlinedButton.icon(
+            key: SocialPanel.syncPhoneContactsKey,
+            onPressed: () async {
+              final result = await actions.syncPhoneContacts(const []);
+              if (!context.mounted) return;
+              final messenger = ScaffoldMessenger.of(context);
+              if (result.error != null) {
+                messenger.showSnackBar(
+                  SnackBar(content: Text(result.error!)),
+                );
+                return;
+              }
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Text(
+                    result.matchedCount > 0
+                        ? l10n.socialPhoneSyncMatched(result.matchedCount)
+                        : l10n.socialPhoneSyncStub,
+                  ),
+                ),
+              );
+              ref.invalidate(contactsListProvider);
+            },
+            icon: const Icon(Icons.contact_phone_outlined),
+            label: Text(l10n.socialPhoneSyncAction),
+          ),
         ),
-      ),
-      data: (data) {
-        if (data.contacts.isEmpty) {
-          return VoiceStatePanel(
-            title: l10n.socialContactsEmpty,
-            message: l10n.socialContactsEmptyHint,
-            icon: Icons.contacts_outlined,
-          );
-        }
-        return ListView.builder(
-          key: SocialPanel.contactsListKey,
-          itemCount: data.contacts.length,
-          itemBuilder: (context, index) {
-            final contact = data.contacts[index];
-            return _ProfileIdTile(
-              profileId: contact.profileId,
-              subtitle: contact.source.isEmpty ? null : contact.source,
-              onTap: () => onOpenProfile(contact.profileId),
-              trailing: _FavoriteToggleButton(
-                profileId: contact.profileId,
-                initialFavorite: contact.isFavorite,
-                onToggle: (favorite) =>
-                    actions.setFavorite(contact.profileId, favorite),
+        Expanded(
+          child: contactsAsync.when(
+            loading: () => const VoiceListSkeleton(),
+            error: (e, st) => Center(
+              child: VoiceStatePanel(
+                key: SocialPanel.contactsUnavailableKey,
+                title: socialListErrorMessage(l10n, e),
+                icon: Icons.cloud_off_outlined,
+                actionLabel: l10n.commonRetry,
+                onAction: () => ref.invalidate(contactsListProvider),
               ),
-            );
-          },
-        );
-      },
+            ),
+            data: (data) {
+              if (data.contacts.isEmpty) {
+                return VoiceStatePanel(
+                  title: l10n.socialContactsEmpty,
+                  message: l10n.socialContactsEmptyHint,
+                  icon: Icons.contacts_outlined,
+                );
+              }
+              return ListView.builder(
+                key: SocialPanel.contactsListKey,
+                itemCount: data.contacts.length,
+                itemBuilder: (context, index) {
+                  final contact = data.contacts[index];
+                  return _ProfileIdTile(
+                    profileId: contact.profileId,
+                    subtitle: contact.source.isEmpty ? null : contact.source,
+                    onTap: () => onOpenProfile(contact.profileId),
+                    trailing: _FavoriteToggleButton(
+                      profileId: contact.profileId,
+                      initialFavorite: contact.isFavorite,
+                      onToggle: (favorite) =>
+                          actions.setFavorite(contact.profileId, favorite),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }

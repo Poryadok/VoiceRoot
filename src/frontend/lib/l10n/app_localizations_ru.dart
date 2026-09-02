@@ -108,6 +108,26 @@ class AppLocalizationsRu extends AppLocalizations {
   String get socialTabContacts => 'Контакты';
 
   @override
+  String get socialPhoneSyncAction => 'Синхронизировать телефонную книгу';
+
+  @override
+  String get socialPhoneSyncStub =>
+      'Синхронизация телефонной книги на этом устройстве пока недоступна.';
+
+  @override
+  String socialPhoneSyncMatched(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Найдено $count контактов в Voice',
+      many: 'Найдено $count контактов в Voice',
+      few: 'Найдено $count контакта в Voice',
+      one: 'Найден $count контакт в Voice',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get socialTabFavorites => 'Избранные';
 
   @override
