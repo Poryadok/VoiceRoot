@@ -121,6 +121,7 @@ func (s *ChatGRPC) ListChats(ctx context.Context, req *chatv1.ListChatsRequest) 
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 	}
+	rows = s.filterListChatsDeletedPeerDMs(ctx, rows, peers)
 
 	items := make([]*chatv1.ChatListItem, 0, len(rows))
 	for _, row := range rows {

@@ -94,7 +94,7 @@
 ### Auth
 
 
-- [ ] **[Auth] DeleteAccount tombstone неполный** — RPC/REST `DeleteAccount`/`RestoreAccount` **есть** (`AuthService.deleteAccount`, IT `DeleteAccountRestoreIntegrationTest`). Нет системного «Пользователь удалён» в DM и hide из `ListChats`; `email_verify` OTP не ставит verified-flag на аккаунте. UI — [client.md](client.md).
+- [ ] **[Auth] DeleteAccount tombstone неполный** — RPC/REST `DeleteAccount`/`RestoreAccount` **есть**. **ListChats** скрывает DM с удалённым peer (Chat → Auth `ListDeletedAccountIds`, Batch 31d). Остаётся: системное «Пользователь удалён» в DM-треде; `email_verify` OTP; UI — [client.md](client.md).
 
 
 ## High
