@@ -34,6 +34,7 @@ void main() {
         child: const VoiceApp(locale: Locale('en')),
       ),
     );
+    addTearDown(container.dispose);
     await _pumpShellReady(tester);
 
     await container.read(deepLinkNavigatorProvider).apply(

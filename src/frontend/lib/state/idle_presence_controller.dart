@@ -44,6 +44,17 @@ class IdlePresenceController {
     _armTimer();
   }
 
+  /// Cancels the idle [Timer] without permanently disposing the controller.
+  ///
+  /// Called when the shell activity binder leaves the tree so widget tests that
+  /// use [UncontrolledProviderScope] with an external [ProviderContainer] do not
+  /// leave a 5‑minute timer pending after teardown.
+  void stop() {
+    _timer?.cancel();
+    _timer = null;
+    _started = false;
+  }
+
   /// Pointer / keyboard / scroll activity while the authenticated shell is open.
   void onUserActivity() {
     if (_disposed || !_started) return;
@@ -101,8 +112,7 @@ class IdlePresenceController {
 
   void dispose() {
     _disposed = true;
-    _timer?.cancel();
-    _timer = null;
+    stop();
   }
 }
 
@@ -115,6 +125,10 @@ final idlePresenceControllerProvider = Provider<IdlePresenceController>((ref) {
 /// Starts idle tracking once the session is authenticated.
 final idlePresenceLifecycleProvider = Provider<void>((ref) {
   final auth = ref.watch(authControllerProvider);
-  if (!auth.isAuthenticated) return;
-  ref.watch(idlePresenceControllerProvider).start();
+  final controller = ref.watch(idlePresenceControllerProvider);
+  if (!auth.isAuthenticated) {
+    controller.stop();
+    return;
+  }
+  controller.start();
 });

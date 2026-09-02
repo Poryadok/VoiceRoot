@@ -156,5 +156,59 @@ void main() {
         expect(tracker.isManualLocked, isTrue);
       });
     });
+
+    test('stop cancels pending idle timer', () {
+      fakeAsync((async) {
+        final users = _RecordingUsersClient();
+        final container = ProviderContainer(
+          overrides: [
+            authSessionStorageProvider.overrideWithValue(
+              InMemoryAuthSessionStorage(),
+            ),
+            authControllerProvider.overrideWith(authenticatedAuthController),
+            gatewayConfigProvider.overrideWithValue(
+              const GatewayConfig(baseUrl: 'http://api.test'),
+            ),
+            voiceUsersClientProvider.overrideWithValue(users),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final tracker = container.read(idlePresenceControllerProvider);
+        container.read(idlePresenceLifecycleProvider);
+        expect(async.pendingTimers.length, 1);
+
+        tracker.stop();
+        expect(async.pendingTimers, isEmpty);
+
+        async.elapse(kIdlePresenceTimeout);
+        async.flushMicrotasks();
+        expect(users.statuses, isEmpty);
+      });
+    });
+
+    test('container dispose cancels pending idle timer', () {
+      fakeAsync((async) {
+        final users = _RecordingUsersClient();
+        final container = ProviderContainer(
+          overrides: [
+            authSessionStorageProvider.overrideWithValue(
+              InMemoryAuthSessionStorage(),
+            ),
+            authControllerProvider.overrideWith(authenticatedAuthController),
+            gatewayConfigProvider.overrideWithValue(
+              const GatewayConfig(baseUrl: 'http://api.test'),
+            ),
+            voiceUsersClientProvider.overrideWithValue(users),
+          ],
+        );
+
+        container.read(idlePresenceLifecycleProvider);
+        expect(async.pendingTimers.length, 1);
+
+        container.dispose();
+        expect(async.pendingTimers, isEmpty);
+      });
+    });
   });
 }
