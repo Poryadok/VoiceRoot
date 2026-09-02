@@ -1808,6 +1808,33 @@ class AppLocalizationsRu extends AppLocalizations {
   String get security2faEnabled => 'Двухфакторная аутентификация включена.';
 
   @override
+  String get securityDeleteAccountTitle => 'Удаление аккаунта';
+
+  @override
+  String get securityDeleteAccountHint =>
+      'Аккаунт будет помечен на удаление. Восстановить можно в течение 30 дней.';
+
+  @override
+  String get securityDeleteAccountButton => 'Удалить аккаунт';
+
+  @override
+  String get securityDeleteAccountConfirmTitle => 'Удалить аккаунт?';
+
+  @override
+  String get securityDeleteAccountConfirmMessage =>
+      'Введите пароль для подтверждения. Аккаунт будет помечен на удаление.';
+
+  @override
+  String get securityDeleteAccountConfirmAction => 'Удалить';
+
+  @override
+  String get securityDeleteAccountSuccess => 'Аккаунт помечен на удаление';
+
+  @override
+  String get securityDeleteAccountGuestUnavailable =>
+      'Сначала зарегистрируйте гостевой аккаунт.';
+
+  @override
   String get privacySettingsTitle => 'Приватность';
 
   @override

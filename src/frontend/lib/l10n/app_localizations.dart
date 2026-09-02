@@ -3290,6 +3290,54 @@ abstract class AppLocalizations {
   /// **'Two-factor authentication is enabled.'**
   String get security2faEnabled;
 
+  /// No description provided for @securityDeleteAccountTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete account'**
+  String get securityDeleteAccountTitle;
+
+  /// No description provided for @securityDeleteAccountHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Your account will be scheduled for deletion. You can restore it within 30 days.'**
+  String get securityDeleteAccountHint;
+
+  /// No description provided for @securityDeleteAccountButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete account'**
+  String get securityDeleteAccountButton;
+
+  /// No description provided for @securityDeleteAccountConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete account?'**
+  String get securityDeleteAccountConfirmTitle;
+
+  /// No description provided for @securityDeleteAccountConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your password to confirm. This schedules account deletion.'**
+  String get securityDeleteAccountConfirmMessage;
+
+  /// No description provided for @securityDeleteAccountConfirmAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get securityDeleteAccountConfirmAction;
+
+  /// No description provided for @securityDeleteAccountSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Account scheduled for deletion'**
+  String get securityDeleteAccountSuccess;
+
+  /// No description provided for @securityDeleteAccountGuestUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Register your guest account before deleting it.'**
+  String get securityDeleteAccountGuestUnavailable;
+
   /// No description provided for @privacySettingsTitle.
   ///
   /// In en, this message translates to:

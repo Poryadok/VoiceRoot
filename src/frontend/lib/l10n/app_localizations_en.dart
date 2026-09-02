@@ -1799,6 +1799,33 @@ class AppLocalizationsEn extends AppLocalizations {
   String get security2faEnabled => 'Two-factor authentication is enabled.';
 
   @override
+  String get securityDeleteAccountTitle => 'Delete account';
+
+  @override
+  String get securityDeleteAccountHint =>
+      'Your account will be scheduled for deletion. You can restore it within 30 days.';
+
+  @override
+  String get securityDeleteAccountButton => 'Delete account';
+
+  @override
+  String get securityDeleteAccountConfirmTitle => 'Delete account?';
+
+  @override
+  String get securityDeleteAccountConfirmMessage =>
+      'Enter your password to confirm. This schedules account deletion.';
+
+  @override
+  String get securityDeleteAccountConfirmAction => 'Delete';
+
+  @override
+  String get securityDeleteAccountSuccess => 'Account scheduled for deletion';
+
+  @override
+  String get securityDeleteAccountGuestUnavailable =>
+      'Register your guest account before deleting it.';
+
+  @override
   String get privacySettingsTitle => 'Privacy';
 
   @override
