@@ -493,7 +493,14 @@ FriendsListData friendsListFromProto(social_pb.FriendList list) {
 FriendRequestsData friendRequestsFromProto(social_pb.FriendRequestList list) {
   return FriendRequestsData(
     incoming: list.incoming.map((e) => e.profileId).toList(growable: false),
-    outgoing: list.outgoing.map((e) => e.profileId).toList(growable: false),
+    outgoing: list.outgoing
+        .map(
+          (e) => OutgoingFriendRequest(
+            profileId: e.profileId,
+            status: e.status.isEmpty ? 'pending' : e.status,
+          ),
+        )
+        .toList(growable: false),
   );
 }
 

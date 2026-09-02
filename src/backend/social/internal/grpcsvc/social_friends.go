@@ -312,6 +312,7 @@ func (s *SocialGRPC) ListFriendRequests(ctx context.Context, _ *socialv1.ListFri
 		outProto = append(outProto, &socialv1.PendingFriendRequest{
 			ProfileId: r.TargetProfileID.String(),
 			CreatedAt: timestamppb.New(r.CreatedAt.UTC()),
+			Status:    r.Status,
 		})
 	}
 	return &socialv1.ListFriendRequestsResponse{

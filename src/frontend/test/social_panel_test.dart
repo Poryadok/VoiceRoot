@@ -612,6 +612,52 @@ void main() {
 
     expect(accepted, isTrue);
   });
+
+  testWidgets('outgoing declined request shows declined label', (tester) async {
+    await tester.pumpWidget(
+      socialTestApp(
+        home: const SocialPanel(initialTabIndex: 4),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/friends/requests') {
+            return http.Response(
+              jsonEncode({
+                'friend_request_list': {
+                  'incoming': [],
+                  'outgoing': [
+                    {'profile_id': 'p-out', 'status': 'declined'},
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/users/profiles/p-out') {
+            return http.Response(
+              jsonEncode({
+                'profile': {
+                  'id': 'p-out',
+                  'account_id': 'a-out',
+                  'username': 'outgoing',
+                  'discriminator': '0001',
+                  'display_name': 'Outgoing User',
+                  'locale': 'en',
+                  'theme': 'dark',
+                  'is_primary': true,
+                  'verification_type': 'none',
+                },
+              }),
+              200,
+            );
+          }
+          return http.Response('{}', 200);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Declined'), findsOneWidget);
+    expect(find.text('Request pending'), findsNothing);
+  });
 }
 
 class _NoopRealtimeHub extends RealtimeHub {
