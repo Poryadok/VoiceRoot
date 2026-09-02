@@ -39,4 +39,42 @@ void main() {
       isFalse,
     );
   });
+
+  test('shouldShowMobileChatStrip hides strip when keyboard is open', () {
+    expect(
+      shouldShowMobileChatStrip(
+        narrow: true,
+        chatOpen: true,
+        keyboardInsetBottom: 0,
+      ),
+      isTrue,
+    );
+    expect(
+      shouldShowMobileChatStrip(
+        narrow: true,
+        chatOpen: true,
+        keyboardInsetBottom: 280,
+      ),
+      isFalse,
+    );
+  });
+
+  test('shouldShowMobileChatStrip requires narrow open chat', () {
+    expect(
+      shouldShowMobileChatStrip(
+        narrow: false,
+        chatOpen: true,
+        keyboardInsetBottom: 0,
+      ),
+      isFalse,
+    );
+    expect(
+      shouldShowMobileChatStrip(
+        narrow: true,
+        chatOpen: false,
+        keyboardInsetBottom: 0,
+      ),
+      isFalse,
+    );
+  });
 }
