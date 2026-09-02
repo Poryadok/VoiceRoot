@@ -48,7 +48,7 @@ func TestCreateGroupChat_OwnerMembership(t *testing.T) {
 	store := &DMStore{Pool: pool}
 
 	owner := uuid.New()
-	row, err := store.CreateGroupChat(ctx, owner, "Store group")
+	row, err := store.CreateGroupChat(ctx, owner, "Store group", nil)
 	require.NoError(t, err)
 	require.Equal(t, "group", row.Type)
 	require.Equal(t, "Store group", *row.Name)
@@ -73,7 +73,7 @@ func TestCreateChannelChat_OwnerMembership(t *testing.T) {
 	store := &DMStore{Pool: pool}
 
 	owner := uuid.New()
-	row, err := store.CreateChannelChat(ctx, owner, "Store channel")
+	row, err := store.CreateChannelChat(ctx, owner, "Store channel", nil)
 	require.NoError(t, err)
 	require.Equal(t, "channel", row.Type)
 	require.Equal(t, "Store channel", *row.Name)
@@ -101,7 +101,7 @@ func TestAddGroupMembers_MinThreeMembers(t *testing.T) {
 
 	owner := uuid.New()
 	invitee := uuid.New()
-	row, err := store.CreateGroupChat(ctx, owner, "Min members")
+	row, err := store.CreateGroupChat(ctx, owner, "Min members", nil)
 	require.NoError(t, err)
 
 	_, err = store.AddGroupMembers(ctx, row.ID, []uuid.UUID{invitee})
@@ -120,7 +120,7 @@ func TestAddGroupMembers_InternalMinAllowsDuo(t *testing.T) {
 
 	owner := uuid.New()
 	invitee := uuid.New()
-	row, err := store.CreateGroupChat(ctx, owner, "Match squad")
+	row, err := store.CreateGroupChat(ctx, owner, "Match squad", nil)
 	require.NoError(t, err)
 
 	added, err := store.AddGroupMembers(WithGroupMinMembers(ctx, 2), row.ID, []uuid.UUID{invitee})
@@ -139,7 +139,7 @@ func TestAddGroupMembers_MemberLimit(t *testing.T) {
 	store := &DMStore{Pool: pool}
 
 	owner := uuid.New()
-	row, err := store.CreateGroupChat(ctx, owner, "Full")
+	row, err := store.CreateGroupChat(ctx, owner, "Full", nil)
 	require.NoError(t, err)
 
 	ids := make([]uuid.UUID, 0, GroupMemberLimit-1)
@@ -165,7 +165,7 @@ func TestAddGroupMembers_IdempotentSkipExisting(t *testing.T) {
 
 	owner := uuid.New()
 	a, b := uuid.New(), uuid.New()
-	row, err := store.CreateGroupChat(ctx, owner, "Dedup")
+	row, err := store.CreateGroupChat(ctx, owner, "Dedup", nil)
 	require.NoError(t, err)
 
 	added, err := store.AddGroupMembers(ctx, row.ID, []uuid.UUID{a, b})
@@ -181,6 +181,28 @@ func TestAddGroupMembers_IdempotentSkipExisting(t *testing.T) {
 	require.Equal(t, 3, n)
 }
 
+// TestCreateGroupChat_persistsTopic documents topic column on standalone group create.
+func TestCreateGroupChat_persistsTopic(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+	store := &DMStore{Pool: pool}
+	owner := uuid.New()
+	topic := "Weekly sync"
+	row, err := store.CreateGroupChat(ctx, owner, "Topic store group", &topic)
+	require.NoError(t, err)
+	require.NotNil(t, row.Topic)
+	require.Equal(t, topic, *row.Topic)
+
+	var stored string
+	err = pool.QueryRow(ctx, `SELECT topic FROM chats WHERE id = $1`, row.ID).Scan(&stored)
+	require.NoError(t, err)
+	require.Equal(t, topic, stored)
+}
+
 // TestUpdateGroupChat_PersistsAvatar documents avatar_url persistence in chat_db.
 func TestUpdateGroupChat_PersistsAvatar(t *testing.T) {
 	if testing.Short() {
@@ -192,11 +214,11 @@ func TestUpdateGroupChat_PersistsAvatar(t *testing.T) {
 	store := &DMStore{Pool: pool}
 
 	owner := uuid.New()
-	row, err := store.CreateGroupChat(ctx, owner, "Avatar")
+	row, err := store.CreateGroupChat(ctx, owner, "Avatar", nil)
 	require.NoError(t, err)
 
 	avatar := "https://cdn.voice.gg/groups/store.webp"
-	updated, err := store.UpdateGroupChat(ctx, row.ID, nil, &avatar, nil)
+	updated, err := store.UpdateGroupChat(ctx, row.ID, nil, &avatar, nil, nil, nil, nil)
 	require.NoError(t, err)
 	require.NotNil(t, updated.AvatarURL)
 	require.Equal(t, avatar, *updated.AvatarURL)
@@ -219,7 +241,7 @@ func TestRemoveGroupMember_TooFewMembersAfterKick(t *testing.T) {
 	owner := uuid.New()
 	target := uuid.New()
 	extra := uuid.New()
-	row, err := store.CreateGroupChat(ctx, owner, "Kick min")
+	row, err := store.CreateGroupChat(ctx, owner, "Kick min", nil)
 	require.NoError(t, err)
 	_, err = store.AddGroupMembers(ctx, row.ID, []uuid.UUID{target, extra})
 	require.NoError(t, err)
@@ -245,7 +267,7 @@ func TestLeaveGroupChat_TooFewMembersAfterLeave(t *testing.T) {
 	owner := uuid.New()
 	leaver := uuid.New()
 	extra := uuid.New()
-	row, err := store.CreateGroupChat(ctx, owner, "Leave min")
+	row, err := store.CreateGroupChat(ctx, owner, "Leave min", nil)
 	require.NoError(t, err)
 	_, err = store.AddGroupMembers(ctx, row.ID, []uuid.UUID{leaver, extra})
 	require.NoError(t, err)
@@ -272,7 +294,7 @@ func TestRemoveGroupMember_DeletesRow(t *testing.T) {
 	target := uuid.New()
 	extra := uuid.New()
 	spare := uuid.New()
-	row, err := store.CreateGroupChat(ctx, owner, "Kick store")
+	row, err := store.CreateGroupChat(ctx, owner, "Kick store", nil)
 	require.NoError(t, err)
 	_, err = store.AddGroupMembers(ctx, row.ID, []uuid.UUID{target, extra, spare})
 	require.NoError(t, err)

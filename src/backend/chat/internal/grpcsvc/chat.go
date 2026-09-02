@@ -82,15 +82,15 @@ type DMStore interface {
 	ReorderFolderChats(ctx context.Context, profileID, folderID uuid.UUID, chatIDs []uuid.UUID) error
 	PinChatInFolder(ctx context.Context, profileID, folderID, chatID uuid.UUID, pinOrder *int32) error
 	UnpinChatInFolder(ctx context.Context, profileID, folderID, chatID uuid.UUID) error
-	CreateGroupChat(ctx context.Context, creatorProfileID uuid.UUID, name string) (*store.ChatRow, error)
-	CreateChannelChat(ctx context.Context, creatorProfileID uuid.UUID, name string) (*store.ChatRow, error)
-	CreateSpaceGroupChat(ctx context.Context, creatorProfileID, spaceID uuid.UUID, name string) (*store.ChatRow, error)
-	CreateSpaceChannelChat(ctx context.Context, creatorProfileID, spaceID uuid.UUID, name string) (*store.ChatRow, error)
+	CreateGroupChat(ctx context.Context, creatorProfileID uuid.UUID, name string, topic *string) (*store.ChatRow, error)
+	CreateChannelChat(ctx context.Context, creatorProfileID uuid.UUID, name string, topic *string) (*store.ChatRow, error)
+	CreateSpaceGroupChat(ctx context.Context, creatorProfileID, spaceID uuid.UUID, name string, topic *string) (*store.ChatRow, error)
+	CreateSpaceChannelChat(ctx context.Context, creatorProfileID, spaceID uuid.UUID, name string, topic *string) (*store.ChatRow, error)
 	AddGroupMembers(ctx context.Context, chatID uuid.UUID, profileIDs []uuid.UUID) ([]uuid.UUID, error)
 	RemoveGroupMember(ctx context.Context, chatID, profileID uuid.UUID) error
 	LeaveGroupChat(ctx context.Context, chatID, profileID uuid.UUID) error
 	TransferGroupOwnership(ctx context.Context, chatID, ownerID, newOwnerID uuid.UUID) error
-	UpdateGroupChat(ctx context.Context, chatID uuid.UUID, name, avatarURL *string, slowModeSeconds *int32) (*store.ChatRow, error)
+	UpdateGroupChat(ctx context.Context, chatID uuid.UUID, name, avatarURL, topic *string, slowModeSeconds *int32, threadsEnabled, allowUserMainFeed *bool) (*store.ChatRow, error)
 	GetMemberRole(ctx context.Context, chatID, profileID uuid.UUID) (string, error)
 	SetChatE2EEnabled(ctx context.Context, chatID uuid.UUID, enabled bool) error
 }
