@@ -1,0 +1,17 @@
+# Voice fleet task meta — copy to tasks/T-<nnn>.meta
+# One key=value per line. Lines starting with # are ignored when parsing.
+
+id=T-000
+status=queued
+crew=voice-go-messaging
+scope=src/backend/messaging
+service=messaging
+execplan=
+branch=
+worktree=
+treehouse_lease=
+pr=
+created=
+updated=
+brief=
+verification=

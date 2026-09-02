@@ -22,11 +22,13 @@ alwaysApply: true
 | Окружения, выкат, CI → staging/prod | `docs/DEPLOYMENT.md` |
 | Тесты, локальные проверки, состав CI | `docs/TESTING.md` |
 | Git, ветки, PR, процесс | `docs/CONTRIBUTING.md` |
+| Подготовка машины (toolchain, hooks, compose) | `docs/DEV_SETUP.md` |
 | Репозитории, монорепо, protos | `docs/REPOSITORIES.md` |
 | Что уже есть в коде vs план | `docs/PLAN.md` (статус реализации) |
 | Пробелы в доках | `docs/TODO.md` → `docs/todo/` |
 | Design tokens (required), Penpot, brand | `docs/design/`, `design/tokens/` |
 | Designer agent / Penpot skill | `.cursor/agents/voice-designer.md`, `.cursor/skills/penpot-voice/` |
+| Multitask fleet / treehouse / backlog | `.cursor/skills/voice-fleet-captain/SKILL.md`, `.agent/fleet/` |
 | CodeGraph MCP — query tips для Voice | `.cursor/rules/codegraph.mdc` |
 
 ## TDD и источники истины при генерации кода

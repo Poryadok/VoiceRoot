@@ -1,6 +1,13 @@
 .env
 .local/
 /tmp/
+
+# Treehouse worktree pool (in-project; see treehouse.toml)
+/.treehouse/
+
+# Fleet task meta (local operator state; template stays tracked)
+.agent/fleet/tasks/*.meta
+!.agent/fleet/tasks/TEMPLATE.meta
 *.log
 .DS_Store
 Thumbs.db

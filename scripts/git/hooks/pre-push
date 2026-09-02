@@ -1,0 +1,25 @@
+#!/bin/sh
+# Voice: block force-push (non-fast-forward). See docs/CONTRIBUTING.md
+zero="0000000000000000000000000000000000000000"
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -z "$local_ref" ] && continue
+
+  # Delete or new branch — allow
+  if [ "$local_sha" = "$zero" ]; then
+    continue
+  fi
+
+  # New remote ref — allow
+  if [ "$remote_sha" = "$zero" ]; then
+    continue
+  fi
+
+  # Must be fast-forward
+  if ! git merge-base --is-ancestor "$remote_sha" "$local_sha" 2>/dev/null; then
+    echo "Voice: force-push / non-fast-forward push is forbidden (ref: $remote_ref)." >&2
+    exit 1
+  fi
+done
+
+exit 0

@@ -34,6 +34,25 @@
 
 ---
 
+## История Git и хуки
+
+**Не переписывать историю** — ни локально, ни на remote (любая ветка):
+
+- запрещены: force-push (`--force`, `-f`, `--force-with-lease`, `+refspec`), rebase (в т.ч. `git pull --rebase`), `commit --amend`, `reset --hard`, `filter-branch` / `filter-repo`;
+- запрещён обход хуков: `git commit --no-verify` / `-n`, `git push --no-verify` / `-n`.
+
+Если pre-commit / pre-push / Cursor hook упал — **исправить файлы и сделать новый коммит**, не обходить хук.
+
+Установка локальных git-хуков и Cursor `beforeShellExecution` (блок history rewrite):
+
+```powershell
+.\scripts\git\install-hooks.ps1
+```
+
+Полный чеклист подготовки машины: [`docs/DEV_SETUP.md`](DEV_SETUP.md). Подробности хуков: [`scripts/git/README.md`](../scripts/git/README.md). Для агентов: `.cursor/rules/git-safety.mdc`.
+
+---
+
 ## Секреты и конфигурация
 
 - Секреты и ключи **не** коммитить. Локально — `.env` / секреты вне репозитория; в CI — GitHub **Secrets**; в кластере — Kubernetes Secrets (или внешний секрет-стор, когда появится).
@@ -62,6 +81,7 @@
 
 ## Связанные документы
 
+- [DEV_SETUP.md](DEV_SETUP.md) — подготовка машины (toolchain, git hooks, compose)
 - [REPOSITORIES.md](REPOSITORIES.md) — монорепо, protos, имена репозиториев
 - [TESTING.md](TESTING.md) — что гонять перед PR и в CI
 - [DEPLOYMENT.md](DEPLOYMENT.md) — окружения и выкат

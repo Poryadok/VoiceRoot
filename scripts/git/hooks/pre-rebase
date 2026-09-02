@@ -1,0 +1,4 @@
+#!/bin/sh
+# Voice: block rebase (merge instead). See docs/CONTRIBUTING.md
+echo "Voice: git rebase is forbidden. Merge origin/master (or the target branch) instead." >&2
+exit 1

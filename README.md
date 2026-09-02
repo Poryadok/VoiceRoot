@@ -2,6 +2,8 @@
 
 Discord-like messenger with voice and matchmaking. Product and architecture live in [`docs/`](docs/).
 
+**New machine:** [docs/DEV_SETUP.md](docs/DEV_SETUP.md) — toolchain, git hooks, compose, smoke checks.
+
 ## Layout
 
 | Path | Purpose |

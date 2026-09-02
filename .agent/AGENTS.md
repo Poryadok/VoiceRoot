@@ -17,6 +17,7 @@ Voice is a Discord-like messenger with voice chat and built-in matchmaking. Prod
 | Environments, deployment, CI to staging/prod | `docs/DEPLOYMENT.md` |
 | Tests, local checks, CI composition | `docs/TESTING.md` |
 | Git, branches, PR, process | `docs/CONTRIBUTING.md` |
+| Local machine setup (toolchain, hooks, compose) | `docs/DEV_SETUP.md` |
 | Repositories, monorepo, protos | `docs/REPOSITORIES.md` |
 | Existing code vs planned work | `docs/PLAN.md` (implementation status) |
 | Documentation gaps | `docs/TODO.md` |
@@ -26,6 +27,12 @@ Voice is a Discord-like messenger with voice chat and built-in matchmaking. Prod
 - Russian documentation is UTF-8. In PowerShell, read Markdown docs with `Get-Content -Raw -Encoding UTF8 <path>`.
 - This applies to `.agent/*.md`, `docs/**/*.md`, root `README.md`, and service `README.md` files.
 - Avoid plain `Get-Content <path>` for documentation; it may render Cyrillic as mojibake and corrupt understanding.
+
+## Fleet (Multitask / parallel agents)
+
+- Lite fleet workflow: `.agent/fleet/README.md`, backlog `.agent/fleet/backlog.md`, captain skill `.cursor/skills/voice-fleet-captain/SKILL.md`, rule `.cursor/rules/voice-fleet-captain.mdc`.
+- Crew agents: `.cursor/agents/voice-*.md` (gateway, realtime, chat/messaging, go-backend, java-auth, flutter, protos, verify, designer).
+- Parallel **code** isolation: treehouse (`treehouse.toml`, skill `.cursor/skills/treehouse/SKILL.md`) — one crew ↔ one worktree path; not mixed with Cursor `/worktree` on the same task.
 
 ## Development Workflow
 
