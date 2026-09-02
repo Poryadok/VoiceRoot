@@ -33,6 +33,8 @@ service AuthService {
   rpc GetE2EKeyBackup(GetE2EKeyBackupRequest) returns (GetE2EKeyBackupResponse);
   // Internal — Social SyncPhoneContacts: hashed phone → primary profile_id (accounts.phone).
   rpc ResolvePhoneHashes(ResolvePhoneHashesRequest) returns (ResolvePhoneHashesResponse);
+  // Internal — Chat ListChats hides DMs whose peer account is soft-deleted (auth-and-contacts.md).
+  rpc FilterDeletedAccountIDs(FilterDeletedAccountIDsRequest) returns (FilterDeletedAccountIDsResponse);
   // Guest save-account reminder cadence (docs/features/auth-and-contacts.md).
   rpc GetGuestReminder(GetGuestReminderRequest) returns (GetGuestReminderResponse);
   rpc MarkGuestReminderShown(MarkGuestReminderShownRequest) returns (MarkGuestReminderShownResponse);
@@ -215,6 +217,14 @@ message PhoneHashProfileMatch {
 
 message ResolvePhoneHashesResponse {
   repeated PhoneHashProfileMatch matches = 1;
+}
+
+message FilterDeletedAccountIDsRequest {
+  repeated string account_ids = 1;
+}
+
+message FilterDeletedAccountIDsResponse {
+  repeated string deleted_account_ids = 1;
 }
 
 message GetGuestReminderRequest {}
