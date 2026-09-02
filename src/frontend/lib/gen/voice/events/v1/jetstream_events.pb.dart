@@ -3485,11 +3485,21 @@ class SpaceTreeChanged extends $pb.GeneratedMessage {
     $core.String? spaceId,
     $core.String? nodeId,
     $core.String? change,
+    $core.String? kind,
+    $core.String? chatId,
+    $core.String? voiceRoomId,
+    $core.bool? isPinned,
+    $core.int? pinOrder,
   }) {
     final result = create();
     if (spaceId != null) result.spaceId = spaceId;
     if (nodeId != null) result.nodeId = nodeId;
     if (change != null) result.change = change;
+    if (kind != null) result.kind = kind;
+    if (chatId != null) result.chatId = chatId;
+    if (voiceRoomId != null) result.voiceRoomId = voiceRoomId;
+    if (isPinned != null) result.isPinned = isPinned;
+    if (pinOrder != null) result.pinOrder = pinOrder;
     return result;
   }
 
@@ -3510,6 +3520,11 @@ class SpaceTreeChanged extends $pb.GeneratedMessage {
     ..aOS(1, _omitFieldNames ? '' : 'spaceId')
     ..aOS(2, _omitFieldNames ? '' : 'nodeId')
     ..aOS(3, _omitFieldNames ? '' : 'change')
+    ..aOS(4, _omitFieldNames ? '' : 'kind')
+    ..aOS(5, _omitFieldNames ? '' : 'chatId')
+    ..aOS(6, _omitFieldNames ? '' : 'voiceRoomId')
+    ..aOB(7, _omitFieldNames ? '' : 'isPinned')
+    ..aI(8, _omitFieldNames ? '' : 'pinOrder')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3557,6 +3572,51 @@ class SpaceTreeChanged extends $pb.GeneratedMessage {
   $core.bool hasChange() => $_has(2);
   @$pb.TagNumber(3)
   void clearChange() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get kind => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set kind($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasKind() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearKind() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get chatId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set chatId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasChatId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearChatId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get voiceRoomId => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set voiceRoomId($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasVoiceRoomId() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearVoiceRoomId() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.bool get isPinned => $_getBF(6);
+  @$pb.TagNumber(7)
+  set isPinned($core.bool value) => $_setBool(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasIsPinned() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearIsPinned() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $core.int get pinOrder => $_getIZ(7);
+  @$pb.TagNumber(8)
+  set pinOrder($core.int value) => $_setSignedInt32(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasPinOrder() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearPinOrder() => $_clearField(8);
 }
 
 class SpaceCreated extends $pb.GeneratedMessage {

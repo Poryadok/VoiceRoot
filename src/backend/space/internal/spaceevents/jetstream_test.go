@@ -121,6 +121,40 @@ func TestJetStreamPublisher_InviteCreatedRoundTrip(t *testing.T) {
 	require.Nil(t, env.GetSpaceCreated(), "invite_code must not be written into owner_profile_id")
 }
 
+func TestJetStreamPublisher_TreeNodeUpsertedIncludesPinFields(t *testing.T) {
+	ctx := context.Background()
+	s := startJSTestServer(t)
+	url := s.ClientURL()
+
+	nc, err := nats.Connect(url)
+	require.NoError(t, err)
+	t.Cleanup(nc.Close)
+
+	sub, err := nc.SubscribeSync(subjectSpaceTreeChanged)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sub.Unsubscribe() })
+
+	pub, err := NewJetStreamPublisher(url)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = pub.Close() })
+
+	pinOrder := int32(2)
+	require.NoError(t, pub.PublishTreeNodeUpserted(ctx,
+		"space-1", "node-1", "text_chat", "chat-1", "", true, &pinOrder))
+
+	msg, err := sub.NextMsg(10 * time.Second)
+	require.NoError(t, err)
+	var env eventsv1.ChatStreamEvent
+	require.NoError(t, proto.Unmarshal(msg.Data, &env))
+	changed := env.GetSpaceTreeChanged()
+	require.NotNil(t, changed)
+	require.Equal(t, "upserted", changed.GetChange())
+	require.Equal(t, "text_chat", changed.GetKind())
+	require.Equal(t, "chat-1", changed.GetChatId())
+	require.True(t, changed.GetIsPinned())
+	require.Equal(t, int32(2), changed.GetPinOrder())
+}
+
 // TestJetStreamPublisher_EnsureStreamUpdatesExisting documents stream subject migration when chat_events exists without space.created.
 func TestJetStreamPublisher_EnsureStreamUpdatesExisting(t *testing.T) {
 	ctx := context.Background()

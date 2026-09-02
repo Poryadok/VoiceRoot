@@ -149,21 +149,30 @@ func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, e
 }
 
 // PublishTreeNodeUpserted implements Publisher.
-func (p *JetStreamPublisher) PublishTreeNodeUpserted(ctx context.Context, spaceID, nodeID, kind, chatID, voiceRoomID string) error {
+func (p *JetStreamPublisher) PublishTreeNodeUpserted(ctx context.Context, spaceID, nodeID, kind, chatID, voiceRoomID string, isPinned bool, pinOrder *int32) error {
+	changed := &eventsv1.SpaceTreeChanged{
+		SpaceId:  spaceID,
+		NodeId:   nodeID,
+		Change:   "upserted",
+		Kind:     kind,
+		IsPinned: isPinned,
+	}
+	if chatID != "" {
+		changed.ChatId = &chatID
+	}
+	if voiceRoomID != "" {
+		changed.VoiceRoomId = &voiceRoomID
+	}
+	if pinOrder != nil {
+		changed.PinOrder = pinOrder
+	}
 	env := &eventsv1.ChatStreamEvent{
 		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.New(time.Now().UTC()),
 		Payload: &eventsv1.ChatStreamEvent_SpaceTreeChanged{
-			SpaceTreeChanged: &eventsv1.SpaceTreeChanged{
-				SpaceId: spaceID,
-				NodeId:  nodeID,
-				Change:  "upserted",
-			},
+			SpaceTreeChanged: changed,
 		},
 	}
-	_ = kind
-	_ = chatID
-	_ = voiceRoomID
 	return p.publishProto(ctx, subjectSpaceTreeChanged, env)
 }
 

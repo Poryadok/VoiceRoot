@@ -65,7 +65,7 @@ CI/CD + выкат: GitHub Actions, promote/deploy, k8s secrets, observability �
 - [ ] **Prod reuse staging ops scripts** — [`render-and-apply-prod.sh`](../../scripts/prod/render-and-apply-prod.sh) → `rollout-app-tier.sh`, `deploy-changed.sh`, `apply-observability.sh`, `ensure-app-secrets.sh` (алиасы `PROD_*` → `STAGING_*`).
 - [ ] **Prod placeholders** — [`deploy/prod/domains.defaults`](../../deploy/prod/domains.defaults) `*.voice.example.com`; secrets checklist только в README, не в ops TODO Critical.
 - [ ] **`rollout-user-space-tier` downtime `voice-space`** — scale 0→1 на каждый user/space deploy; альтернатива — полный `rollout-app-tier`.
-- [ ] **`VOICE_IMAGE_TAG` required** — убран fallback `:latest` в [`render-and-apply.sh`](../../scripts/staging/render-and-apply.sh) / prod; локальный apply без TAG падает (документировать в DEPLOYMENT или env example).
+- [x] **`VOICE_IMAGE_TAG` required** — fallback `:latest` убран в apply-скриптах; локальный apply без TAG падает; документировано в [`DEPLOYMENT.md`](../DEPLOYMENT.md), [`deploy/staging/env.example`](../../deploy/staging/env.example), [`deploy/prod/env.example`](../../deploy/prod/env.example); аудит [`voice-image-tag-audit.md`](../../.github/ci/voice-image-tag-audit.md) (batch 33a).
 - [ ] **Prod smoke = alias staging** — [`smoke-prod.sh`](../../scripts/prod/smoke-prod.sh) → [`smoke-staging.sh`](../../scripts/staging/smoke-staging.sh), `STAGING_STAFF_TOKEN` из `PROD_STAFF_TOKEN`; нет отдельных prod acceptance checks.
 - [ ] **Prod deploy без selective / stack.lock** — [`prod-deploy.yml`](../../.github/workflows/prod-deploy.yml): нет `changed_services`, `needs_user_space_rollout`, artifact lock; `verify-prod-images` требует **все** образы catalog на TAG; `images-only` → `deploy-changed.sh` без `CHANGED_SERVICES` = no-op.
 - [ ] **Prod `full` mode всегда `rollout-app-tier.sh`** — нет user/space subset rollout как на staging; single-node Recreate strategy остаётся.
@@ -82,7 +82,7 @@ CI/CD + выкат: GitHub Actions, promote/deploy, k8s secrets, observability �
 - [ ] **Prod placeholders** — [`deploy/prod/domains.defaults`](../../deploy/prod/domains.defaults) `*.voice.example.com`; secrets checklist только в README, не в ops TODO Critical.
 - [ ] **`staging-stack-lock` параллельно с auth/web/admin/portal** — lock пишется до push frontend-образов; auto-deploy ждёт эти jobs + verify — ок для happy path, не для отладки artifact mid-pipeline.
 - [ ] **`rollout-user-space-tier` downtime `voice-space`** — scale 0→1 на каждый user/space deploy; альтернатива — полный `rollout-app-tier`.
-- [ ] **`VOICE_IMAGE_TAG` required** — убран fallback `:latest` в [`render-and-apply.sh`](../../scripts/staging/render-and-apply.sh) / prod; локальный apply без TAG падает (документировать в DEPLOYMENT или env example).
+- [x] **`VOICE_IMAGE_TAG` required** — см. Common / Manifests (batch 33a).
 - [ ] **Prod smoke = alias staging** — [`smoke-prod.sh`](../../scripts/prod/smoke-prod.sh) → [`smoke-staging.sh`](../../scripts/staging/smoke-staging.sh), `STAGING_STAFF_TOKEN` из `PROD_STAFF_TOKEN`; нет отдельных prod acceptance checks.
 - [ ] **Prod deploy без selective / stack.lock** — [`prod-deploy.yml`](../../.github/workflows/prod-deploy.yml): нет `changed_services`, `needs_user_space_rollout`, artifact lock; `verify-prod-images` требует **все** образы catalog на TAG; `images-only` → `deploy-changed.sh` без `CHANGED_SERVICES` = no-op.
 - [ ] **Prod `full` mode всегда `rollout-app-tier.sh`** — нет user/space subset rollout как на staging; single-node Recreate strategy остаётся.

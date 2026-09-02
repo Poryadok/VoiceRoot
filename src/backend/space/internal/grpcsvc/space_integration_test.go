@@ -44,7 +44,11 @@ func startSpacePostgresForTest(t *testing.T, ctx context.Context) *pgxpool.Pool 
 
 func applySpaceMigration(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
-	for _, name := range []string{"000001_init.up.sql", "000002_tree.up.sql", "000003_invites.up.sql", "000004_moderation.up.sql", "000005_space_subscriptions.up.sql"} {
+	for _, name := range []string{
+		"000001_init.up.sql", "000002_tree.up.sql", "000003_invites.up.sql",
+		"000004_moderation.up.sql", "000005_space_subscriptions.up.sql",
+		"000006_allow_guests.up.sql", "000007_tree_pin.up.sql",
+	} {
 		migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", name)
 		sqlBytes, err := os.ReadFile(migrationPath)
 		require.NoError(t, err)
@@ -92,7 +96,7 @@ func (s *spySpaceEvents) PublishSpaceCreated(_ context.Context, spaceID, ownerPr
 	return nil
 }
 
-func (*spySpaceEvents) PublishTreeNodeUpserted(context.Context, string, string, string, string, string) error {
+func (*spySpaceEvents) PublishTreeNodeUpserted(context.Context, string, string, string, string, string, bool, *int32) error {
 	return nil
 }
 
@@ -126,7 +130,7 @@ func (errSpaceEvents) PublishSpaceCreated(context.Context, string, string) error
 	return errors.New("nats unavailable")
 }
 
-func (errSpaceEvents) PublishTreeNodeUpserted(context.Context, string, string, string, string, string) error {
+func (errSpaceEvents) PublishTreeNodeUpserted(context.Context, string, string, string, string, string, bool, *int32) error {
 	return nil
 }
 

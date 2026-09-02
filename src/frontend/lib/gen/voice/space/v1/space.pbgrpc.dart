@@ -146,6 +146,20 @@ class SpaceServiceClient extends $grpc.Client {
     return $createUnaryCall(_$reorderSpaceTree, request, options: options);
   }
 
+  $grpc.ResponseFuture<$0.PinTreeNodeResponse> pinTreeNode(
+    $0.PinTreeNodeRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$pinTreeNode, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.UnpinTreeNodeResponse> unpinTreeNode(
+    $0.UnpinTreeNodeRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$unpinTreeNode, request, options: options);
+  }
+
   $grpc.ResponseFuture<$0.ListSpaceTreeResponse> listSpaceTree(
     $0.ListSpaceTreeRequest request, {
     $grpc.CallOptions? options,
@@ -394,6 +408,16 @@ class SpaceServiceClient extends $grpc.Client {
       '/voice.space.v1.SpaceService/ReorderSpaceTree',
       ($0.ReorderSpaceTreeRequest value) => value.writeToBuffer(),
       $0.ReorderSpaceTreeResponse.fromBuffer);
+  static final _$pinTreeNode =
+      $grpc.ClientMethod<$0.PinTreeNodeRequest, $0.PinTreeNodeResponse>(
+          '/voice.space.v1.SpaceService/PinTreeNode',
+          ($0.PinTreeNodeRequest value) => value.writeToBuffer(),
+          $0.PinTreeNodeResponse.fromBuffer);
+  static final _$unpinTreeNode =
+      $grpc.ClientMethod<$0.UnpinTreeNodeRequest, $0.UnpinTreeNodeResponse>(
+          '/voice.space.v1.SpaceService/UnpinTreeNode',
+          ($0.UnpinTreeNodeRequest value) => value.writeToBuffer(),
+          $0.UnpinTreeNodeResponse.fromBuffer);
   static final _$listSpaceTree =
       $grpc.ClientMethod<$0.ListSpaceTreeRequest, $0.ListSpaceTreeResponse>(
           '/voice.space.v1.SpaceService/ListSpaceTree',
@@ -659,6 +683,24 @@ abstract class SpaceServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.ReorderSpaceTreeRequest.fromBuffer(value),
         ($0.ReorderSpaceTreeResponse value) => value.writeToBuffer()));
+    $addMethod(
+        $grpc.ServiceMethod<$0.PinTreeNodeRequest, $0.PinTreeNodeResponse>(
+            'PinTreeNode',
+            pinTreeNode_Pre,
+            false,
+            false,
+            ($core.List<$core.int> value) =>
+                $0.PinTreeNodeRequest.fromBuffer(value),
+            ($0.PinTreeNodeResponse value) => value.writeToBuffer()));
+    $addMethod(
+        $grpc.ServiceMethod<$0.UnpinTreeNodeRequest, $0.UnpinTreeNodeResponse>(
+            'UnpinTreeNode',
+            unpinTreeNode_Pre,
+            false,
+            false,
+            ($core.List<$core.int> value) =>
+                $0.UnpinTreeNodeRequest.fromBuffer(value),
+            ($0.UnpinTreeNodeResponse value) => value.writeToBuffer()));
     $addMethod(
         $grpc.ServiceMethod<$0.ListSpaceTreeRequest, $0.ListSpaceTreeResponse>(
             'ListSpaceTree',
@@ -995,6 +1037,23 @@ abstract class SpaceServiceBase extends $grpc.Service {
 
   $async.Future<$0.ReorderSpaceTreeResponse> reorderSpaceTree(
       $grpc.ServiceCall call, $0.ReorderSpaceTreeRequest request);
+
+  $async.Future<$0.PinTreeNodeResponse> pinTreeNode_Pre($grpc.ServiceCall $call,
+      $async.Future<$0.PinTreeNodeRequest> $request) async {
+    return pinTreeNode($call, await $request);
+  }
+
+  $async.Future<$0.PinTreeNodeResponse> pinTreeNode(
+      $grpc.ServiceCall call, $0.PinTreeNodeRequest request);
+
+  $async.Future<$0.UnpinTreeNodeResponse> unpinTreeNode_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.UnpinTreeNodeRequest> $request) async {
+    return unpinTreeNode($call, await $request);
+  }
+
+  $async.Future<$0.UnpinTreeNodeResponse> unpinTreeNode(
+      $grpc.ServiceCall call, $0.UnpinTreeNodeRequest request);
 
   $async.Future<$0.ListSpaceTreeResponse> listSpaceTree_Pre(
       $grpc.ServiceCall $call,

@@ -15,7 +15,11 @@ import (
 
 func applySpaceMigrations(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
-	for _, name := range []string{"000001_init.up.sql", "000002_tree.up.sql", "000003_invites.up.sql", "000004_moderation.up.sql", "000005_space_subscriptions.up.sql"} {
+	for _, name := range []string{
+		"000001_init.up.sql", "000002_tree.up.sql", "000003_invites.up.sql",
+		"000004_moderation.up.sql", "000005_space_subscriptions.up.sql",
+		"000006_allow_guests.up.sql", "000007_tree_pin.up.sql",
+	} {
 		migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", name)
 		sqlBytes, err := os.ReadFile(migrationPath)
 		require.NoError(t, err)

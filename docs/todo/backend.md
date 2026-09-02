@@ -28,7 +28,7 @@
 - [x] **[Space] Space Pro cache never synced — `space_db.space_subscriptions` comment says “synced from Subscription”; only test seed `UpsertSpaceSubscription` writes; Subscription writes `subscription_db` only** — **done:** NATS consumer `space/internal/subscriptionconsume` + S2S `SyncSpaceProSubscription` write entitlement cache; `SeedSpaceProActive` remains test helper only.
 - [ ] **[Space] `entry_requirement` не исполняется — JoinSpace отвергает любой requirement ≠ `none` (`FailedPrecondition`), нет captcha/questions/mod-approval queue** — `src/backend/space/internal/grpcsvc/join.go`, `invites.go`
 - [x] **[Space] Social block на join fail-open — `ensureJoinNotBlocked` no-op если `Blocks`/`ProfileAccounts` nil** — **done:** fail-closed `FailedPrecondition` when Social/User S2S unwired; IT `join_block_degradation_test.go`.
-- [ ] **[Space] Tree pin — migration `is_pinned`/`pin_order` on `space_tree_nodes`, `PinTreeNode`/`UnpinTreeNode` RPC handlers, `ReorderSpaceTree` pin group, `space.tree_node_upserted` payload** — spec [space-service.md](../microservices/space-service.md); migration `000002_tree` lacks column — **P0**
+- [x] **[Space] Tree pin — migration `is_pinned`/`pin_order` on `space_tree_nodes`, `PinTreeNode`/`UnpinTreeNode` RPC handlers, `ReorderSpaceTree` pin group, `space.tree_node_upserted` payload** — **done:** `000007_tree_pin` migration; store `PinTreeNode`/`UnpinTreeNode`; grpc handlers; `ReorderSpaceTree` pin-group validation; JetStream `SpaceTreeChanged` includes `is_pinned`/`pin_order`.
 
 ### Moderation
 
@@ -319,7 +319,7 @@
 - [ ] **[Notification] `reply` marked ✓ but not implemented — no `reply` type in message consumer or Realtime in-app fanout; thread replies are treated as `new_message`.** — `docs/features/notifications.md`, `src/backend/notification/message_events_consumer.go`, `src/backend/realtime/in_app_notification_fanout.go`
 - [ ] **[Notification] Matchmaking/voice push ignores presence — handlers hardcode `IsOnline: false`; no `EnrichDecision` / User gRPC check → online users still get push (messages path does check).** — `src/backend/notification/internal/consumer/matchmaking_events.go`, `src/backend/notification/matchmaking_events_consumer.go`, `src/backend/notification/voice_events_consumer.go`
 - [ ] **[Notification] `system` notifications have no producer — `SendNotification` gRPC exists but no other service calls it; no NATS consumer; not exposed on Gateway REST.** — `src/backend/notification/internal/grpcsvc/server.go`, `src/backend/gateway/transcode_notifications.go`
-- [ ] **[Notification] Multi-replica duplicate push risk — per-pod durable consumer name (`notif_<hostname>_msg** — mm
+- [x] **[Notification] Multi-replica duplicate push risk � per-pod durable consumer name (`notif_<hostname>_mod`) on moderation stream caused duplicate delivery across replicas; all notification JetStream consumers now use cluster-wide SharedDurable names (moderation ? `notif_mod`).** � **done (Batch 31c):** `src/backend/notification/internal/consumer/durable.go`, `moderation_events_consumer.go`, `main.go`
 
 ### Federation
 
