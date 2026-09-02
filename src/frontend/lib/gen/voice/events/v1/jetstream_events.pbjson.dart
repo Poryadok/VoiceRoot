@@ -1065,13 +1065,51 @@ const SpaceTreeChanged$json = {
     {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
     {'1': 'node_id', '3': 2, '4': 1, '5': 9, '10': 'nodeId'},
     {'1': 'change', '3': 3, '4': 1, '5': 9, '10': 'change'},
+    {'1': 'kind', '3': 4, '4': 1, '5': 9, '10': 'kind'},
+    {
+      '1': 'chat_id',
+      '3': 5,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'chatId',
+      '17': true
+    },
+    {
+      '1': 'voice_room_id',
+      '3': 6,
+      '4': 1,
+      '5': 9,
+      '9': 1,
+      '10': 'voiceRoomId',
+      '17': true
+    },
+    {'1': 'is_pinned', '3': 7, '4': 1, '5': 8, '10': 'isPinned'},
+    {
+      '1': 'pin_order',
+      '3': 8,
+      '4': 1,
+      '5': 5,
+      '9': 2,
+      '10': 'pinOrder',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_chat_id'},
+    {'1': '_voice_room_id'},
+    {'1': '_pin_order'},
   ],
 };
 
 /// Descriptor for `SpaceTreeChanged`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List spaceTreeChangedDescriptor = $convert.base64Decode(
     'ChBTcGFjZVRyZWVDaGFuZ2VkEhkKCHNwYWNlX2lkGAEgASgJUgdzcGFjZUlkEhcKB25vZGVfaW'
-    'QYAiABKAlSBm5vZGVJZBIWCgZjaGFuZ2UYAyABKAlSBmNoYW5nZQ==');
+    'QYAiABKAlSBm5vZGVJZBIWCgZjaGFuZ2UYAyABKAlSBmNoYW5nZRISCgRraW5kGAQgASgJUgRr'
+    'aW5kEhwKB2NoYXRfaWQYBSABKAlIAFIGY2hhdElkiAEBEicKDXZvaWNlX3Jvb21faWQYBiABKA'
+    'lIAVILdm9pY2VSb29tSWSIAQESGwoJaXNfcGlubmVkGAcgASgIUghpc1Bpbm5lZBIgCglwaW5f'
+    'b3JkZXIYCCABKAVIAlIIcGluT3JkZXKIAQFCCgoIX2NoYXRfaWRCEAoOX3ZvaWNlX3Jvb21faW'
+    'RCDAoKX3Bpbl9vcmRlcg==');
 
 @$core.Deprecated('Use spaceCreatedDescriptor instead')
 const SpaceCreated$json = {

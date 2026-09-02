@@ -1191,6 +1191,8 @@ class SpaceTreeNode extends $pb.GeneratedMessage {
     $core.int? sortOrder,
     $core.bool? isSystem,
     $core.String? displayName,
+    $core.bool? isPinned,
+    $core.int? pinOrder,
   }) {
     final result = create();
     if (id != null) result.id = id;
@@ -1202,6 +1204,8 @@ class SpaceTreeNode extends $pb.GeneratedMessage {
     if (sortOrder != null) result.sortOrder = sortOrder;
     if (isSystem != null) result.isSystem = isSystem;
     if (displayName != null) result.displayName = displayName;
+    if (isPinned != null) result.isPinned = isPinned;
+    if (pinOrder != null) result.pinOrder = pinOrder;
     return result;
   }
 
@@ -1228,6 +1232,8 @@ class SpaceTreeNode extends $pb.GeneratedMessage {
     ..aI(7, _omitFieldNames ? '' : 'sortOrder')
     ..aOB(8, _omitFieldNames ? '' : 'isSystem')
     ..aOS(9, _omitFieldNames ? '' : 'displayName')
+    ..aOB(10, _omitFieldNames ? '' : 'isPinned')
+    ..aI(11, _omitFieldNames ? '' : 'pinOrder')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1331,6 +1337,156 @@ class SpaceTreeNode extends $pb.GeneratedMessage {
   $core.bool hasDisplayName() => $_has(8);
   @$pb.TagNumber(9)
   void clearDisplayName() => $_clearField(9);
+
+  @$pb.TagNumber(10)
+  $core.bool get isPinned => $_getBF(9);
+  @$pb.TagNumber(10)
+  set isPinned($core.bool value) => $_setBool(9, value);
+  @$pb.TagNumber(10)
+  $core.bool hasIsPinned() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearIsPinned() => $_clearField(10);
+
+  @$pb.TagNumber(11)
+  $core.int get pinOrder => $_getIZ(10);
+  @$pb.TagNumber(11)
+  set pinOrder($core.int value) => $_setSignedInt32(10, value);
+  @$pb.TagNumber(11)
+  $core.bool hasPinOrder() => $_has(10);
+  @$pb.TagNumber(11)
+  void clearPinOrder() => $_clearField(11);
+}
+
+class PinTreeNodeRequest extends $pb.GeneratedMessage {
+  factory PinTreeNodeRequest({
+    $core.String? spaceId,
+    $core.String? nodeId,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (nodeId != null) result.nodeId = nodeId;
+    return result;
+  }
+
+  PinTreeNodeRequest._();
+
+  factory PinTreeNodeRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory PinTreeNodeRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'PinTreeNodeRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'nodeId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PinTreeNodeRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PinTreeNodeRequest copyWith(void Function(PinTreeNodeRequest) updates) =>
+      super.copyWith((message) => updates(message as PinTreeNodeRequest))
+          as PinTreeNodeRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static PinTreeNodeRequest create() => PinTreeNodeRequest._();
+  @$core.override
+  PinTreeNodeRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static PinTreeNodeRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<PinTreeNodeRequest>(create);
+  static PinTreeNodeRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get nodeId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set nodeId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasNodeId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearNodeId() => $_clearField(2);
+}
+
+class UnpinTreeNodeRequest extends $pb.GeneratedMessage {
+  factory UnpinTreeNodeRequest({
+    $core.String? spaceId,
+    $core.String? nodeId,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (nodeId != null) result.nodeId = nodeId;
+    return result;
+  }
+
+  UnpinTreeNodeRequest._();
+
+  factory UnpinTreeNodeRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory UnpinTreeNodeRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'UnpinTreeNodeRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'nodeId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UnpinTreeNodeRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UnpinTreeNodeRequest copyWith(void Function(UnpinTreeNodeRequest) updates) =>
+      super.copyWith((message) => updates(message as UnpinTreeNodeRequest))
+          as UnpinTreeNodeRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static UnpinTreeNodeRequest create() => UnpinTreeNodeRequest._();
+  @$core.override
+  UnpinTreeNodeRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static UnpinTreeNodeRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<UnpinTreeNodeRequest>(create);
+  static UnpinTreeNodeRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get nodeId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set nodeId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasNodeId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearNodeId() => $_clearField(2);
 }
 
 class UpsertTreeNodeRequest extends $pb.GeneratedMessage {
@@ -4908,6 +5064,121 @@ class ReorderSpaceTreeResponse extends $pb.GeneratedMessage {
   static ReorderSpaceTreeResponse getDefault() => _defaultInstance ??=
       $pb.GeneratedMessage.$_defaultFor<ReorderSpaceTreeResponse>(create);
   static ReorderSpaceTreeResponse? _defaultInstance;
+}
+
+class PinTreeNodeResponse extends $pb.GeneratedMessage {
+  factory PinTreeNodeResponse({
+    SpaceTreeNode? spaceTreeNode,
+  }) {
+    final result = create();
+    if (spaceTreeNode != null) result.spaceTreeNode = spaceTreeNode;
+    return result;
+  }
+
+  PinTreeNodeResponse._();
+
+  factory PinTreeNodeResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory PinTreeNodeResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'PinTreeNodeResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOM<SpaceTreeNode>(1, _omitFieldNames ? '' : 'spaceTreeNode',
+        subBuilder: SpaceTreeNode.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PinTreeNodeResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PinTreeNodeResponse copyWith(void Function(PinTreeNodeResponse) updates) =>
+      super.copyWith((message) => updates(message as PinTreeNodeResponse))
+          as PinTreeNodeResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static PinTreeNodeResponse create() => PinTreeNodeResponse._();
+  @$core.override
+  PinTreeNodeResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static PinTreeNodeResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<PinTreeNodeResponse>(create);
+  static PinTreeNodeResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  SpaceTreeNode get spaceTreeNode => $_getN(0);
+  @$pb.TagNumber(1)
+  set spaceTreeNode(SpaceTreeNode value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceTreeNode() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceTreeNode() => $_clearField(1);
+  @$pb.TagNumber(1)
+  SpaceTreeNode ensureSpaceTreeNode() => $_ensure(0);
+}
+
+class UnpinTreeNodeResponse extends $pb.GeneratedMessage {
+  factory UnpinTreeNodeResponse({
+    SpaceTreeNode? spaceTreeNode,
+  }) {
+    final result = create();
+    if (spaceTreeNode != null) result.spaceTreeNode = spaceTreeNode;
+    return result;
+  }
+
+  UnpinTreeNodeResponse._();
+
+  factory UnpinTreeNodeResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory UnpinTreeNodeResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'UnpinTreeNodeResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOM<SpaceTreeNode>(1, _omitFieldNames ? '' : 'spaceTreeNode',
+        subBuilder: SpaceTreeNode.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UnpinTreeNodeResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UnpinTreeNodeResponse copyWith(
+          void Function(UnpinTreeNodeResponse) updates) =>
+      super.copyWith((message) => updates(message as UnpinTreeNodeResponse))
+          as UnpinTreeNodeResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static UnpinTreeNodeResponse create() => UnpinTreeNodeResponse._();
+  @$core.override
+  UnpinTreeNodeResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static UnpinTreeNodeResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<UnpinTreeNodeResponse>(create);
+  static UnpinTreeNodeResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  SpaceTreeNode get spaceTreeNode => $_getN(0);
+  @$pb.TagNumber(1)
+  set spaceTreeNode(SpaceTreeNode value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceTreeNode() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceTreeNode() => $_clearField(1);
+  @$pb.TagNumber(1)
+  SpaceTreeNode ensureSpaceTreeNode() => $_ensure(0);
 }
 
 class ListSpaceTreeResponse extends $pb.GeneratedMessage {
