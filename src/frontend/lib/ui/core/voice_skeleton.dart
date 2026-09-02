@@ -13,7 +13,11 @@ class VoiceListSkeleton extends StatelessWidget {
   Widget build(BuildContext context) {
     final voice = VoiceColors.of(context);
     final pad = context.voiceMetrics.spacing('12', fallback: 12);
+    // shrinkWrap + primary:false: safe inside sheets/Column(mainAxisSize: min)
+    // and nested scrollables; physics already disable independent scrolling.
     return ListView.builder(
+      shrinkWrap: true,
+      primary: false,
       physics: const NeverScrollableScrollPhysics(),
       itemCount: rowCount,
       itemBuilder: (context, index) {

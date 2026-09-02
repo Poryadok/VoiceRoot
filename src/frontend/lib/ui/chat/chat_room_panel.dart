@@ -22,14 +22,15 @@ import '../../state/connectivity_providers.dart';
 import '../../state/gateway_providers.dart';
 import '../../state/presence_providers.dart';
 import '../../state/social_providers.dart';
-import '../privacy/privacy_action_errors.dart';
 import '../../state/subscription_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../../theme/voice_emoji_style.dart';
+import '../api_error_messages.dart';
 import '../core/chat_author_label.dart';
 import '../core/voice_avatar.dart';
 import '../core/voice_compact_banner.dart';
 import '../core/voice_state_panel.dart';
+import '../core/voice_skeleton.dart';
 import '../core/voice_chat_bubble.dart';
 import '../core/voice_share_link.dart';
 import '../core/voice_send_button.dart';
@@ -152,7 +153,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   }
 
   String _roomErrorText(AppLocalizations l10n, String raw) {
-    return l10n.chatRoomError(privacyActionErrorMessage(l10n, raw));
+    return chatRoomErrorMessage(l10n, raw);
   }
 
   void _refocusComposer() {
@@ -1411,9 +1412,8 @@ class _MessageListView extends ConsumerWidget {
                 ? const Padding(
                     padding: EdgeInsets.all(8),
                     child: SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                      height: 48,
+                      child: VoiceListSkeleton(rowCount: 1),
                     ),
                   )
                 : TextButton.icon(

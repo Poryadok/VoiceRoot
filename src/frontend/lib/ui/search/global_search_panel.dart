@@ -11,6 +11,8 @@ import '../../state/shell_providers.dart';
 import '../../state/social_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../core/voice_avatar.dart';
+import '../core/voice_skeleton.dart';
+import '../api_error_messages.dart';
 
 class GlobalSearchPanel extends ConsumerStatefulWidget {
   const GlobalSearchPanel({super.key, this.compact = false});
@@ -86,7 +88,11 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
       setState(() {
         _results = null;
         _loading = false;
-        _errorMessage = result.error.message;
+        _errorMessage = searchErrorMessage(
+          AppLocalizations.of(context)!,
+          result.error.message,
+          statusCode: result.error.statusCode,
+        );
       });
     } else {
       setState(() {
@@ -214,7 +220,10 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
           ),
         ),
         if (_loading)
-          const LinearProgressIndicator(minHeight: 2),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 12),
+            child: VoiceListSkeleton(rowCount: 3),
+          ),
         if (_errorMessage != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),

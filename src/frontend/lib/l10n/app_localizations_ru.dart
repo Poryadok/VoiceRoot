@@ -259,7 +259,13 @@ class AppLocalizationsRu extends AppLocalizations {
   String get globalSearchEmptyMessages => 'Сообщения не найдены';
 
   @override
+  String get globalSearchLoadError => 'Не удалось выполнить поиск';
+
+  @override
   String get inChatSearchHint => 'Поиск в этом чате';
+
+  @override
+  String get inChatSearchLoadError => 'Не удалось искать в этом чате';
 
   @override
   String get inChatSearchPrevious => 'Предыдущее совпадение';
@@ -674,6 +680,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get spaceBotsUninstallSuccess => 'Бот удалён из спейса.';
 
   @override
+  String get spaceBotsLoadError => 'Не удалось загрузить ботов';
+
+  @override
   String get ephemeralMessageLabel => 'Только для вас';
 
   @override
@@ -928,6 +937,9 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get commonRetry => 'Попробовать снова';
+
+  @override
+  String get settingsNotAuthenticated => 'Войдите, чтобы открыть эти настройки';
 
   @override
   String get commonLoading => '…';
@@ -1736,6 +1748,11 @@ class AppLocalizationsRu extends AppLocalizations {
   String get subscriptionInvalidCheckoutUrl => 'Некорректная ссылка на оплату';
 
   @override
+  String subscriptionActionError(String message) {
+    return 'Ошибка подписки: $message';
+  }
+
+  @override
   String get subscriptionProfilesLoadError => 'Не удалось загрузить профили';
 
   @override
@@ -2388,6 +2405,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get playerProfileSave => 'Сохранить';
+
+  @override
+  String get playerProfileSaveError =>
+      'Не удалось сохранить профиль матчмейкинга';
 
   @override
   String get playerProfileSection => 'Матчмейкинг';
