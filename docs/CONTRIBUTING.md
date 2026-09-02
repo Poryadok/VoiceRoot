@@ -23,7 +23,7 @@
 3. Перед запросом review: локальные проверки из [TESTING.md](TESTING.md) для затронутых пакетов; для новой нетривиальной логики ожидается цикл из раздела «Порядок разработки (TDD)» там же.
 4. **Изменения в `protos/`** — перед review: `make buf-ci` (lint + проверка формата); при правках публичного API относительно `master` — `make buf-breaking` (см. [TESTING.md](TESTING.md)). После регенерации Go stubs: `make buf-generate-all` (или `make buf-generate` + `make sync-pb-from-gen`) и `make buf-generate-dart` / `make buf-dart-check` — см. [REPOSITORIES.md](REPOSITORIES.md). Новые поля и RPC — по buf STANDARD и [DATA_MODEL.md](DATA_MODEL.md) (`account_id` / `profile_id`, время, пары `*Request` / `*Response`).
 5. Merge в `master` после approve (для соло-разработки допускается self-merge после зелёного CI; при команде из двух и более человек — **минимум один чужой approve** на PR в `master`).
-6. В `master` по умолчанию **squash merge**. **Merge commit** — если в ветке нужна сохранённая промежуточная история коммитов.
+6. В `master` — **merge commit** (`gh pr merge --merge`): все коммиты ветки остаются в истории. **Squash merge не использовать** — схлопывание коммитов скрывает промежуточные шаги (TDD, ревью-итерации).
 
 ---
 
