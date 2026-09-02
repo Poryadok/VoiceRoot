@@ -137,8 +137,6 @@
 - [ ] **[Space] `mm_config` / `entry_questions` never loaded — not in `SpaceRow`, not in `spaceRowToProto`** — `src/backend/space/internal/store/space.go`, `src/backend/space/internal/grpcsvc/proto.go`
 - [ ] **[Space] Tree node Pro limit (500) not implemented — hardcoded `MaxTreeNodes = 50`, no entitlement check (unlike member cap)** — `src/backend/space/internal/store/tree.go`
 - [ ] **[Space] Catalog indexing fragile — Search hydrator calls `GetSpace` (member-only); `SearchPublicSpaces` Unimplemented; ranking verified-first нет; нет `space.updated` re-index** — `src/backend/search/internal/deps/deps.go`, `chat_space_indexer.go`
-- [ ] **[Space] `ProfileAccounts` not wired in prod — `BanMember` account→profile eviction scan skipped when nil** — `src/backend/space/main.go`, `src/backend/space/internal/grpcsvc/moderation.go`
-- [ ] **[Space] `ChatLookup` not wired in prod — `ListSpaceTree` text_chat `display_name` enrichment dead** — `src/backend/space/main.go`, `src/backend/space/internal/grpcsvc/chat_lookup.go`, `src/backend/space/internal/grpcsvc/tree.go`
 - [ ] **[Space] NATS events incomplete vs spec — Join/Leave публикуют member_joined/left; всё ещё дыры `space.deleted` / `member_banned` / catalog reindex** — `src/backend/space/internal/spaceevents/publisher.go`
 - [ ] **[Space] Member timeout not enforced downstream — `IsProfileTimedOut` exists, unused outside Space** — `src/backend/space/internal/store/moderation.go`
 - [ ] **[Voice] JoinVoiceRoom: `voice_room_id ∈ space_id` не проверяется** — `voice_room.go`
@@ -423,6 +421,7 @@
 ### Space
 
 
+- [ ] **[Space] ChatLookup S2S hardening (Agent batch)** — set `x-voice-internal-caller=space` on Chat GetChat; Warn on lookup failures instead of silent skip; add unit/mock test for enrichment; optional batch GetChat to avoid N+1 (`chat_lookup.go`, `main.go`). Closed High wiring via PR #129.
 - [ ] **[Space] No audit rows for tree CRUD, invite revoke, space settings, role changes (spec lists these)** — `src/backend/space/internal/store/tree.go`, `src/backend/space/internal/grpcsvc/invites.go`
 - [ ] **[Space] `RevokeInvite` / `ListInvites` owner-only — `CreateInvite` uses `SpaceManageInvites`; revoke/list use `requireSpaceOwner`** — `src/backend/space/internal/grpcsvc/invites.go`
 - [ ] **[Space] `JoinByInvite` does not publish `space.member_joined`** — `src/backend/space/internal/grpcsvc/invites.go`, `src/backend/space/internal/spaceevents/`
