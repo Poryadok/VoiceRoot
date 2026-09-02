@@ -34,7 +34,7 @@
 
 
 - [ ] **[Moderation] Shadow-ban forward bypass** — `SendMessage` sets `ghost_only` and suppresses `message.sent` when banned (`messaging_grpc.go`; IT `TestPlatformModeration_ShadowBannedSenderMessageHiddenFromPeer`). **`ForwardMessage` / `insertForwardCommentary` skip `IsShadowBanned`** and always publish → shadow-banned users bypass ghost delivery via forward. Audience threshold still `MODERATION_PLATFORM_AUDIENCE_SIZE`, not live object. — `src/backend/moderation/internal/grpcsvc/reports.go`; `src/backend/messaging/internal/grpcsvc/messaging_grpc.go`
-- [ ] **[Moderation] Sanction notifications: consumer stub** — JetStream consumer on `moderation.events` exists (`notification/moderation_events_consumer.go`), but `routeModerationNotification` passes empty `recipientProfileID` → `HandleSanctionApplied` no-ops; push/in-app deferred until account→profile resolution.
+- [x] **[Moderation] Sanction notifications: consumer stub** — **done (T-013):** `routeModerationNotification` resolves `target_account_id` → profile ids via User `ListProfileIDsForAccount` (`notification/internal/s2s/account_profiles.go`); `HandleSanctionApplied` routes `system` **push** with presence skipped (no Realtime system in-app yet); shadow_ban stays silent (`reports.md`).
 - [x] **[Moderation] Appeals not exposed to users** — Gateway `POST /api/v1/moderation/appeals` (201 Created → `SubmitAppeal`); Flutter `VoiceModerationClient.submitAppeal` + settings appeal sheet (`docs/features/reports.md` § Апелляция). **Batch 27a**.
 
 ### Social
@@ -151,7 +151,8 @@
 - [ ] **[Moderation] Report threshold audience is static env, not object audience** — `MODERATION_PLATFORM_AUDIENCE_SIZE` (default 1000) drives 1% calc; spec calls for relative threshold vs target’s audience.
 - [ ] **[Moderation] Admin audit export пуст только если store пуст** — Gateway `writeModerationAuditExportJSON` мапит `ExportAuditLog` (`transcode_moderation_admin.go`). Не hardcoded `[]`.
 - [ ] **[Moderation] Temp ban expiry does not restore Auth** — `expires_at` respected in SQL for active lookup, but no job/handler calls `Auth.SetAccountStatus(active)` on expiry; only explicit revoke/approved appeal clears suspension.
-- [ ] **[Moderation] Sanction notification delivery** — same as Critical: consumer acks without profile resolution / push copy (`moderation_events_consumer.go`).
+- [x] **[Moderation] Sanction notification push delivery** — **done (T-013):** consumer resolves profiles, applies policy with **presence skipped**, sends `system` push copy so online recipients are not silent-dropped (`moderation_events_consumer.go`).
+- [ ] **[Moderation] Sanction `system` in-app (Realtime) fan-out** — Notification push path only; no Realtime WS `notification` for moderation/sanction. Online→InApp-only routing must wait until Realtime (or Notification→NATS in-app) exists — [notification-service.md](../microservices/notification-service.md) `system` push+in-app.
 
 ### Social
 
@@ -317,7 +318,7 @@
 - [x] **[Notification] `message_request` / stranger type** — **done (Batch 22a):** `message_request` wire type + per-recipient routing from `chat_members.inbox_bucket` — [notification-service.md](../microservices/notification-service.md)
 - [ ] **[Notification] `reply` marked ✓ but not implemented — no `reply` type in message consumer or Realtime in-app fanout; thread replies are treated as `new_message`.** — `docs/features/notifications.md`, `src/backend/notification/message_events_consumer.go`, `src/backend/realtime/in_app_notification_fanout.go`
 - [ ] **[Notification] Matchmaking/voice push ignores presence — handlers hardcode `IsOnline: false`; no `EnrichDecision` / User gRPC check → online users still get push (messages path does check).** — `src/backend/notification/internal/consumer/matchmaking_events.go`, `src/backend/notification/matchmaking_events_consumer.go`, `src/backend/notification/voice_events_consumer.go`
-- [ ] **[Notification] `system` notifications have no producer — `SendNotification` gRPC exists but no other service calls it; no NATS consumer; not exposed on Gateway REST.** — `src/backend/notification/internal/grpcsvc/server.go`, `src/backend/gateway/transcode_notifications.go`
+- [ ] **[Notification] `system` in-app / Gateway gaps** — Moderation NATS consumer produces `system` **push** for sanctions (T-013, presence-skip). Still missing: Realtime in-app fanout for `system`, other producers calling `SendNotification`, Gateway REST exposure — `src/backend/notification/internal/grpcsvc/server.go`, `src/backend/gateway/transcode_notifications.go`, `src/backend/realtime/`
 - [x] **[Notification] Multi-replica duplicate push risk � per-pod durable consumer name (`notif_<hostname>_mod`) on moderation stream caused duplicate delivery across replicas; all notification JetStream consumers now use cluster-wide SharedDurable names (moderation ? `notif_mod`).** � **done (Batch 31c):** `src/backend/notification/internal/consumer/durable.go`, `moderation_events_consumer.go`, `main.go`
 
 ### Federation
