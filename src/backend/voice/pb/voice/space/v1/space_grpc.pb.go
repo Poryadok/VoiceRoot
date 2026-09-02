@@ -35,6 +35,8 @@ const (
 	SpaceService_UpdateCategory_FullMethodName           = "/voice.space.v1.SpaceService/UpdateCategory"
 	SpaceService_DeleteCategory_FullMethodName           = "/voice.space.v1.SpaceService/DeleteCategory"
 	SpaceService_ReorderSpaceTree_FullMethodName         = "/voice.space.v1.SpaceService/ReorderSpaceTree"
+	SpaceService_PinTreeNode_FullMethodName              = "/voice.space.v1.SpaceService/PinTreeNode"
+	SpaceService_UnpinTreeNode_FullMethodName            = "/voice.space.v1.SpaceService/UnpinTreeNode"
 	SpaceService_ListSpaceTree_FullMethodName            = "/voice.space.v1.SpaceService/ListSpaceTree"
 	SpaceService_CreateInvite_FullMethodName             = "/voice.space.v1.SpaceService/CreateInvite"
 	SpaceService_RevokeInvite_FullMethodName             = "/voice.space.v1.SpaceService/RevokeInvite"
@@ -83,6 +85,8 @@ type SpaceServiceClient interface {
 	UpdateCategory(ctx context.Context, in *UpdateCategoryRequest, opts ...grpc.CallOption) (*UpdateCategoryResponse, error)
 	DeleteCategory(ctx context.Context, in *DeleteCategoryRequest, opts ...grpc.CallOption) (*DeleteCategoryResponse, error)
 	ReorderSpaceTree(ctx context.Context, in *ReorderSpaceTreeRequest, opts ...grpc.CallOption) (*ReorderSpaceTreeResponse, error)
+	PinTreeNode(ctx context.Context, in *PinTreeNodeRequest, opts ...grpc.CallOption) (*PinTreeNodeResponse, error)
+	UnpinTreeNode(ctx context.Context, in *UnpinTreeNodeRequest, opts ...grpc.CallOption) (*UnpinTreeNodeResponse, error)
 	ListSpaceTree(ctx context.Context, in *ListSpaceTreeRequest, opts ...grpc.CallOption) (*ListSpaceTreeResponse, error)
 	CreateInvite(ctx context.Context, in *CreateInviteRequest, opts ...grpc.CallOption) (*CreateInviteResponse, error)
 	RevokeInvite(ctx context.Context, in *RevokeInviteRequest, opts ...grpc.CallOption) (*RevokeInviteResponse, error)
@@ -273,6 +277,26 @@ func (c *spaceServiceClient) ReorderSpaceTree(ctx context.Context, in *ReorderSp
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ReorderSpaceTreeResponse)
 	err := c.cc.Invoke(ctx, SpaceService_ReorderSpaceTree_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *spaceServiceClient) PinTreeNode(ctx context.Context, in *PinTreeNodeRequest, opts ...grpc.CallOption) (*PinTreeNodeResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PinTreeNodeResponse)
+	err := c.cc.Invoke(ctx, SpaceService_PinTreeNode_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *spaceServiceClient) UnpinTreeNode(ctx context.Context, in *UnpinTreeNodeRequest, opts ...grpc.CallOption) (*UnpinTreeNodeResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UnpinTreeNodeResponse)
+	err := c.cc.Invoke(ctx, SpaceService_UnpinTreeNode_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -532,6 +556,8 @@ type SpaceServiceServer interface {
 	UpdateCategory(context.Context, *UpdateCategoryRequest) (*UpdateCategoryResponse, error)
 	DeleteCategory(context.Context, *DeleteCategoryRequest) (*DeleteCategoryResponse, error)
 	ReorderSpaceTree(context.Context, *ReorderSpaceTreeRequest) (*ReorderSpaceTreeResponse, error)
+	PinTreeNode(context.Context, *PinTreeNodeRequest) (*PinTreeNodeResponse, error)
+	UnpinTreeNode(context.Context, *UnpinTreeNodeRequest) (*UnpinTreeNodeResponse, error)
 	ListSpaceTree(context.Context, *ListSpaceTreeRequest) (*ListSpaceTreeResponse, error)
 	CreateInvite(context.Context, *CreateInviteRequest) (*CreateInviteResponse, error)
 	RevokeInvite(context.Context, *RevokeInviteRequest) (*RevokeInviteResponse, error)
@@ -615,6 +641,12 @@ func (UnimplementedSpaceServiceServer) DeleteCategory(context.Context, *DeleteCa
 }
 func (UnimplementedSpaceServiceServer) ReorderSpaceTree(context.Context, *ReorderSpaceTreeRequest) (*ReorderSpaceTreeResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReorderSpaceTree not implemented")
+}
+func (UnimplementedSpaceServiceServer) PinTreeNode(context.Context, *PinTreeNodeRequest) (*PinTreeNodeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PinTreeNode not implemented")
+}
+func (UnimplementedSpaceServiceServer) UnpinTreeNode(context.Context, *UnpinTreeNodeRequest) (*UnpinTreeNodeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UnpinTreeNode not implemented")
 }
 func (UnimplementedSpaceServiceServer) ListSpaceTree(context.Context, *ListSpaceTreeRequest) (*ListSpaceTreeResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListSpaceTree not implemented")
@@ -990,6 +1022,42 @@ func _SpaceService_ReorderSpaceTree_Handler(srv interface{}, ctx context.Context
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(SpaceServiceServer).ReorderSpaceTree(ctx, req.(*ReorderSpaceTreeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SpaceService_PinTreeNode_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PinTreeNodeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).PinTreeNode(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_PinTreeNode_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).PinTreeNode(ctx, req.(*PinTreeNodeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SpaceService_UnpinTreeNode_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnpinTreeNodeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).UnpinTreeNode(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_UnpinTreeNode_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).UnpinTreeNode(ctx, req.(*UnpinTreeNodeRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1478,6 +1546,14 @@ var SpaceService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReorderSpaceTree",
 			Handler:    _SpaceService_ReorderSpaceTree_Handler,
+		},
+		{
+			MethodName: "PinTreeNode",
+			Handler:    _SpaceService_PinTreeNode_Handler,
+		},
+		{
+			MethodName: "UnpinTreeNode",
+			Handler:    _SpaceService_UnpinTreeNode_Handler,
 		},
 		{
 			MethodName: "ListSpaceTree",

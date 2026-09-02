@@ -28,6 +28,8 @@ service SpaceService {
   rpc UpdateCategory(UpdateCategoryRequest) returns (UpdateCategoryResponse);
   rpc DeleteCategory(DeleteCategoryRequest) returns (DeleteCategoryResponse);
   rpc ReorderSpaceTree(ReorderSpaceTreeRequest) returns (ReorderSpaceTreeResponse);
+  rpc PinTreeNode(PinTreeNodeRequest) returns (PinTreeNodeResponse);
+  rpc UnpinTreeNode(UnpinTreeNodeRequest) returns (UnpinTreeNodeResponse);
   rpc ListSpaceTree(ListSpaceTreeRequest) returns (ListSpaceTreeResponse);
 
   rpc CreateInvite(CreateInviteRequest) returns (CreateInviteResponse);
@@ -161,6 +163,18 @@ message SpaceTreeNode {
   int32 sort_order = 7;
   bool is_system = 8;
   optional string display_name = 9; // enriched from Chat for text_chat nodes
+  bool is_pinned = 10;
+  optional int32 pin_order = 11;
+}
+
+message PinTreeNodeRequest {
+  string space_id = 1;
+  string node_id = 2;
+}
+
+message UnpinTreeNodeRequest {
+  string space_id = 1;
+  string node_id = 2;
 }
 
 message UpsertTreeNodeRequest {
@@ -413,6 +427,12 @@ message UpdateCategoryResponse {
 }
 message DeleteCategoryResponse {}
 message ReorderSpaceTreeResponse {}
+message PinTreeNodeResponse {
+  SpaceTreeNode space_tree_node = 1;
+}
+message UnpinTreeNodeResponse {
+  SpaceTreeNode space_tree_node = 1;
+}
 message ListSpaceTreeResponse {
   repeated Category categories = 1;
   repeated SpaceTreeNode nodes = 2;

@@ -127,6 +127,52 @@ func TestReorderSpaceTree_Owner(t *testing.T) {
 	require.Equal(t, vr.GetVoiceRoom().GetId(), tree.GetNodes()[0].GetVoiceRoomId())
 }
 
+func TestPinTreeNode_UnpinTreeNode_Owner(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	_, _, ctx := profileFixture(t)
+	pool := startSpacePostgresForTest(t, context.Background())
+	applySpaceMigration(t, context.Background(), pool)
+	client, cleanup := startSpaceGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	created, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{Name: "PinSpace"})
+	require.NoError(t, err)
+	spaceID := created.GetSpace().GetId()
+
+	chatA, chatB := uuid.New().String(), uuid.New().String()
+	chatType := chatv1.ChatType_CHAT_TYPE_GROUP
+	nodeA, err := client.UpsertTreeNode(ctx, &spacev1.UpsertTreeNodeRequest{
+		SpaceId: spaceID, Kind: "text_chat",
+		LinkedChat: &chatv1.ChatRef{Id: chatA, Type: &chatType},
+	})
+	require.NoError(t, err)
+	_, err = client.UpsertTreeNode(ctx, &spacev1.UpsertTreeNodeRequest{
+		SpaceId: spaceID, Kind: "text_chat",
+		LinkedChat: &chatv1.ChatRef{Id: chatB, Type: &chatType},
+	})
+	require.NoError(t, err)
+
+	pinned, err := client.PinTreeNode(ctx, &spacev1.PinTreeNodeRequest{
+		SpaceId: spaceID,
+		NodeId:  nodeA.GetSpaceTreeNode().GetId(),
+	})
+	require.NoError(t, err)
+	require.True(t, pinned.GetSpaceTreeNode().GetIsPinned())
+
+	tree, err := client.ListSpaceTree(ctx, &spacev1.ListSpaceTreeRequest{SpaceId: spaceID})
+	require.NoError(t, err)
+	require.True(t, tree.GetNodes()[0].GetIsPinned())
+
+	unpinned, err := client.UnpinTreeNode(ctx, &spacev1.UnpinTreeNodeRequest{
+		SpaceId: spaceID,
+		NodeId:  nodeA.GetSpaceTreeNode().GetId(),
+	})
+	require.NoError(t, err)
+	require.False(t, unpinned.GetSpaceTreeNode().GetIsPinned())
+}
+
 func TestCreateCategory_NonOwnerDenied(t *testing.T) {
 	if testing.Short() {
 		t.Skip()

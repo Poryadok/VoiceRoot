@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -58,6 +59,8 @@ type TreeNodeRow struct {
 	VoiceRoomID *uuid.UUID
 	SortOrder   int32
 	IsSystem    bool
+	IsPinned    bool
+	PinOrder    *int32
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
@@ -83,6 +86,31 @@ SELECT EXISTS (
 		return MaxTreeNodesPro, nil
 	}
 	return MaxTreeNodes, nil
+}
+
+const treeNodeSelectColumns = `id, space_id, category_id, kind, chat_id, voice_room_id, sort_order, is_system, is_pinned, pin_order, created_at, updated_at`
+
+func (s *SpaceStore) nextPinOrder(ctx context.Context, tx pgx.Tx, spaceID uuid.UUID, categoryID *uuid.UUID) (int32, error) {
+	var max sql.NullInt32
+	var err error
+	if categoryID != nil {
+		err = tx.QueryRow(ctx, `
+SELECT COALESCE(MAX(pin_order), -1) FROM space_tree_nodes
+WHERE space_id = $1 AND category_id = $2 AND is_pinned = true
+`, spaceID, *categoryID).Scan(&max)
+	} else {
+		err = tx.QueryRow(ctx, `
+SELECT COALESCE(MAX(pin_order), -1) FROM space_tree_nodes
+WHERE space_id = $1 AND category_id IS NULL AND is_pinned = true
+`, spaceID).Scan(&max)
+	}
+	if err != nil {
+		return 0, err
+	}
+	if !max.Valid {
+		return 0, nil
+	}
+	return max.Int32 + 1, nil
 }
 
 func (s *SpaceStore) nextTreeSortOrder(ctx context.Context, tx pgx.Tx, spaceID uuid.UUID, categoryID *uuid.UUID) (int32, error) {
@@ -253,7 +281,7 @@ RETURNING id, space_id, name, created_at, updated_at
 	node, err := scanTreeNodeRow(tx.QueryRow(ctx, `
 INSERT INTO space_tree_nodes (space_id, category_id, kind, voice_room_id, sort_order)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, space_id, category_id, kind, chat_id, voice_room_id, sort_order, is_system, created_at, updated_at
+RETURNING `+treeNodeSelectColumns+`
 `, spaceID, categoryID, TreeKindVoiceRoom, room.ID, sortOrder))
 	if err != nil {
 		return nil, nil, err
@@ -371,13 +399,13 @@ func (s *SpaceStore) insertTreeNode(ctx context.Context, in UpsertTreeNodeInput)
 		node, err = scanTreeNodeRow(tx.QueryRow(ctx, `
 INSERT INTO space_tree_nodes (space_id, category_id, kind, chat_id, sort_order, is_system)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, space_id, category_id, kind, chat_id, voice_room_id, sort_order, is_system, created_at, updated_at
+RETURNING `+treeNodeSelectColumns+`
 `, in.SpaceID, in.CategoryID, TreeKindTextChat, *in.ChatID, sortOrder, isSystem))
 	} else {
 		node, err = scanTreeNodeRow(tx.QueryRow(ctx, `
 INSERT INTO space_tree_nodes (space_id, category_id, kind, voice_room_id, sort_order, is_system)
 VALUES ($1, $2, $3, $4, $5, false)
-RETURNING id, space_id, category_id, kind, chat_id, voice_room_id, sort_order, is_system, created_at, updated_at
+RETURNING `+treeNodeSelectColumns+`
 `, in.SpaceID, in.CategoryID, TreeKindVoiceRoom, *in.VoiceRoomID, sortOrder))
 	}
 	if err != nil {
@@ -413,7 +441,7 @@ func (s *SpaceStore) updateTreeNode(ctx context.Context, in UpsertTreeNodeInput)
 	args = append(args, *in.NodeID, in.SpaceID)
 	q := fmt.Sprintf(`
 UPDATE space_tree_nodes SET %s WHERE id = $%d AND space_id = $%d
-RETURNING id, space_id, category_id, kind, chat_id, voice_room_id, sort_order, is_system, created_at, updated_at
+RETURNING `+treeNodeSelectColumns+`
 `, strings.Join(sets, ", "), argN, argN+1)
 
 	row, err := scanTreeNodeRow(s.Pool.QueryRow(ctx, q, args...))
@@ -446,10 +474,10 @@ func (s *SpaceStore) ListTreeNodes(ctx context.Context, spaceID uuid.UUID) ([]*T
 		return nil, errors.New("space store: pool not configured")
 	}
 	rows, err := s.Pool.Query(ctx, `
-SELECT id, space_id, category_id, kind, chat_id, voice_room_id, sort_order, is_system, created_at, updated_at
+SELECT `+treeNodeSelectColumns+`
 FROM space_tree_nodes
 WHERE space_id = $1
-ORDER BY sort_order ASC, id ASC
+ORDER BY category_id NULLS FIRST, is_pinned DESC, pin_order NULLS LAST, sort_order ASC, id ASC
 `, spaceID)
 	if err != nil {
 		return nil, err
@@ -513,7 +541,101 @@ func (s *SpaceStore) ListSpaceTree(ctx context.Context, spaceID uuid.UUID) (*Spa
 	}, nil
 }
 
-// ReorderSpaceTree assigns sort_order 0..n-1 from ordered node ids.
+// PinTreeNode marks a tree node pinned within its category.
+func (s *SpaceStore) PinTreeNode(ctx context.Context, spaceID, nodeID uuid.UUID) (*TreeNodeRow, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("space store: pool not configured")
+	}
+
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	node, err := scanTreeNodeRow(tx.QueryRow(ctx, `
+SELECT `+treeNodeSelectColumns+`
+FROM space_tree_nodes
+WHERE id = $1 AND space_id = $2
+`, nodeID, spaceID))
+	if err != nil {
+		return nil, err
+	}
+	if node.IsPinned {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, err
+		}
+		return node, nil
+	}
+
+	pinOrder, err := s.nextPinOrder(ctx, tx, spaceID, node.CategoryID)
+	if err != nil {
+		return nil, err
+	}
+
+	pinned, err := scanTreeNodeRow(tx.QueryRow(ctx, `
+UPDATE space_tree_nodes
+SET is_pinned = true, pin_order = $1, updated_at = now()
+WHERE id = $2 AND space_id = $3
+RETURNING `+treeNodeSelectColumns+`
+`, pinOrder, nodeID, spaceID))
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return pinned, nil
+}
+
+// UnpinTreeNode clears pin state and appends the node to the unpinned sort order.
+func (s *SpaceStore) UnpinTreeNode(ctx context.Context, spaceID, nodeID uuid.UUID) (*TreeNodeRow, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("space store: pool not configured")
+	}
+
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	node, err := scanTreeNodeRow(tx.QueryRow(ctx, `
+SELECT `+treeNodeSelectColumns+`
+FROM space_tree_nodes
+WHERE id = $1 AND space_id = $2
+`, nodeID, spaceID))
+	if err != nil {
+		return nil, err
+	}
+	if !node.IsPinned {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, err
+		}
+		return node, nil
+	}
+
+	sortOrder, err := s.nextTreeSortOrder(ctx, tx, spaceID, node.CategoryID)
+	if err != nil {
+		return nil, err
+	}
+
+	unpinned, err := scanTreeNodeRow(tx.QueryRow(ctx, `
+UPDATE space_tree_nodes
+SET is_pinned = false, pin_order = NULL, sort_order = $1, updated_at = now()
+WHERE id = $2 AND space_id = $3
+RETURNING `+treeNodeSelectColumns+`
+`, sortOrder, nodeID, spaceID))
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return unpinned, nil
+}
+
+// ReorderSpaceTree assigns pin_order or sort_order 0..n-1 within one pin group.
 func (s *SpaceStore) ReorderSpaceTree(ctx context.Context, spaceID uuid.UUID, orderedNodeIDs []uuid.UUID) error {
 	if s == nil || s.Pool == nil {
 		return errors.New("space store: pool not configured")
@@ -528,22 +650,71 @@ func (s *SpaceStore) ReorderSpaceTree(ctx context.Context, spaceID uuid.UUID, or
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	var existing int
-	err = tx.QueryRow(ctx, `
-SELECT COUNT(*)::int FROM space_tree_nodes WHERE space_id = $1 AND id = ANY($2)
-`, spaceID, orderedNodeIDs).Scan(&existing)
+	type nodeMeta struct {
+		isPinned   bool
+		categoryID *uuid.UUID
+	}
+	metaByID := make(map[uuid.UUID]nodeMeta, len(orderedNodeIDs))
+	rows, err := tx.Query(ctx, `
+SELECT id, category_id, is_pinned
+FROM space_tree_nodes
+WHERE space_id = $1 AND id = ANY($2)
+`, spaceID, orderedNodeIDs)
 	if err != nil {
 		return err
 	}
-	if existing != len(orderedNodeIDs) {
+	for rows.Next() {
+		var id uuid.UUID
+		var categoryID pgtype.UUID
+		var isPinned bool
+		if err := rows.Scan(&id, &categoryID, &isPinned); err != nil {
+			rows.Close()
+			return err
+		}
+		var cat *uuid.UUID
+		if categoryID.Valid {
+			cid := uuid.UUID(categoryID.Bytes)
+			cat = &cid
+		}
+		metaByID[id] = nodeMeta{isPinned: isPinned, categoryID: cat}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	rows.Close()
+	if len(metaByID) != len(orderedNodeIDs) {
 		return ErrInvalidReorder
 	}
 
+	first := metaByID[orderedNodeIDs[0]]
+	for _, id := range orderedNodeIDs[1:] {
+		cur := metaByID[id]
+		if cur.isPinned != first.isPinned {
+			return ErrInvalidReorder
+		}
+		switch {
+		case first.categoryID == nil && cur.categoryID != nil:
+			return ErrInvalidReorder
+		case first.categoryID != nil && cur.categoryID == nil:
+			return ErrInvalidReorder
+		case first.categoryID != nil && cur.categoryID != nil && *first.categoryID != *cur.categoryID:
+			return ErrInvalidReorder
+		}
+	}
+
 	for i, id := range orderedNodeIDs {
-		tag, err := tx.Exec(ctx, `
+		var tag pgconn.CommandTag
+		if first.isPinned {
+			tag, err = tx.Exec(ctx, `
+UPDATE space_tree_nodes SET pin_order = $1, updated_at = now()
+WHERE id = $2 AND space_id = $3
+`, int32(i), id, spaceID)
+		} else {
+			tag, err = tx.Exec(ctx, `
 UPDATE space_tree_nodes SET sort_order = $1, updated_at = now()
 WHERE id = $2 AND space_id = $3
 `, int32(i), id, spaceID)
+		}
 		if err != nil {
 			return err
 		}
@@ -601,8 +772,10 @@ func scanTreeNodeRow(row pgx.Row) (*TreeNodeRow, error) {
 	var categoryID, chatID, voiceRoomID pgtype.UUID
 	var sortOrder int32
 	var isSystem bool
+	var isPinned bool
+	var pinOrder sql.NullInt32
 	var createdAt, updatedAt time.Time
-	err := row.Scan(&id, &spaceID, &categoryID, &kind, &chatID, &voiceRoomID, &sortOrder, &isSystem, &createdAt, &updatedAt)
+	err := row.Scan(&id, &spaceID, &categoryID, &kind, &chatID, &voiceRoomID, &sortOrder, &isSystem, &isPinned, &pinOrder, &createdAt, &updatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrTreeNodeNotFound
 	}
@@ -615,8 +788,13 @@ func scanTreeNodeRow(row pgx.Row) (*TreeNodeRow, error) {
 		Kind:      kind,
 		SortOrder: sortOrder,
 		IsSystem:  isSystem,
+		IsPinned:  isPinned,
 		CreatedAt: createdAt.UTC(),
 		UpdatedAt: updatedAt.UTC(),
+	}
+	if pinOrder.Valid {
+		po := pinOrder.Int32
+		out.PinOrder = &po
 	}
 	if categoryID.Valid {
 		cid := uuid.UUID(categoryID.Bytes)
