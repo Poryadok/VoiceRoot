@@ -48,6 +48,8 @@ export VOICE_IMAGE_REGISTRY=ghcr.io/<owner>/<repo>
 
 Без `VOICE_IMAGE_TAG` скрипты завершаются с ошибкой.
 
+Шаблон env для локального apply: [`deploy/staging/env.example`](../deploy/staging/env.example), [`deploy/prod/env.example`](../deploy/prod/env.example). Аудит скриптов: [`.github/ci/voice-image-tag-audit.md`](../.github/ci/voice-image-tag-audit.md).
+
 ### Promote bootstrap (пустой GHCR / первый selective push)
 
 Если в registry нет полного набора образов для `BASE_TAG` (первый push в `master`, squash-merge, force-push, пустой GHCR), job `changes` **не падает**: `resolve-staging-matrix.sh` отходит назад по истории (до 20 коммитов) и для отсутствующих манифестов ставит **rebuild** вместо promote.
