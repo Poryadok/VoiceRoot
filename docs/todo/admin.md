@@ -53,7 +53,6 @@ Admin panel (`src/admin/`) и Developer Portal (`src/developer-portal/`).
 - [ ] **[Developer Portal] One-shot secrets UX — token/webhook shown in plain `<code>`; no copy-once modal, no clear-after-navigation.** — `src/developer-portal/src/App.tsx`
 - [ ] **[Developer Portal] K8s manifest minimal — no resources/limits, single replica, HTTP-only Traefik entrypoint (same as web/admin).** — `deploy/staging/developer-portal.yaml`, `deploy/prod/developer-portal.yaml`
 - [ ] **[Developer Portal] No slug / public bot page preview — `slug` exists on Bot proto but unused in portal.** — `src/developer-portal/src/App.tsx`, `protos/voice/bot/v1/bot.proto`
-- [ ] **[Developer Portal] No ESLint/analyze step in CI — only `vitest run`; no static analysis gate.** — `src/developer-portal/package.json`, `.github/workflows/ci.yml`
 
 
 **Промпт-якорь:** `Admin from docs/todo/admin.md` + приоритет.
