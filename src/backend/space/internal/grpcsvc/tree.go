@@ -354,6 +354,58 @@ func (s *SpaceGRPC) ReorderSpaceTree(ctx context.Context, req *spacev1.ReorderSp
 	return &spacev1.ReorderSpaceTreeResponse{}, nil
 }
 
+func (s *SpaceGRPC) PinTreeNode(ctx context.Context, req *spacev1.PinTreeNodeRequest) (*spacev1.PinTreeNodeResponse, error) {
+	if s == nil || s.Store == nil {
+		return nil, status.Error(codes.FailedPrecondition, "space persistence not configured")
+	}
+	spaceID, err := parseUUIDField("space_id", req.GetSpaceId())
+	if err != nil {
+		return nil, err
+	}
+	nodeID, err := parseUUIDField("node_id", req.GetNodeId())
+	if err != nil {
+		return nil, err
+	}
+	if err := s.requireSpaceTreeManage(ctx, spaceID); err != nil {
+		return nil, err
+	}
+	node, err := s.Store.PinTreeNode(ctx, spaceID, nodeID)
+	if errors.Is(err, store.ErrTreeNodeNotFound) {
+		return nil, status.Error(codes.NotFound, err.Error())
+	}
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	s.publishTreeUpserted(ctx, spaceID, node)
+	return &spacev1.PinTreeNodeResponse{SpaceTreeNode: treeNodeRowToProto(node, nil)}, nil
+}
+
+func (s *SpaceGRPC) UnpinTreeNode(ctx context.Context, req *spacev1.UnpinTreeNodeRequest) (*spacev1.UnpinTreeNodeResponse, error) {
+	if s == nil || s.Store == nil {
+		return nil, status.Error(codes.FailedPrecondition, "space persistence not configured")
+	}
+	spaceID, err := parseUUIDField("space_id", req.GetSpaceId())
+	if err != nil {
+		return nil, err
+	}
+	nodeID, err := parseUUIDField("node_id", req.GetNodeId())
+	if err != nil {
+		return nil, err
+	}
+	if err := s.requireSpaceTreeManage(ctx, spaceID); err != nil {
+		return nil, err
+	}
+	node, err := s.Store.UnpinTreeNode(ctx, spaceID, nodeID)
+	if errors.Is(err, store.ErrTreeNodeNotFound) {
+		return nil, status.Error(codes.NotFound, err.Error())
+	}
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	s.publishTreeUpserted(ctx, spaceID, node)
+	return &spacev1.UnpinTreeNodeResponse{SpaceTreeNode: treeNodeRowToProto(node, nil)}, nil
+}
+
 func (s *SpaceGRPC) publishTreeUpserted(ctx context.Context, spaceID uuid.UUID, node *store.TreeNodeRow) {
 	if s.SpaceEvents == nil || node == nil {
 		return
@@ -365,7 +417,7 @@ func (s *SpaceGRPC) publishTreeUpserted(ctx context.Context, spaceID uuid.UUID, 
 	if node.VoiceRoomID != nil {
 		voiceRoomID = node.VoiceRoomID.String()
 	}
-	if err := s.SpaceEvents.PublishTreeNodeUpserted(ctx, spaceID.String(), node.ID.String(), node.Kind, chatID, voiceRoomID); err != nil {
+	if err := s.SpaceEvents.PublishTreeNodeUpserted(ctx, spaceID.String(), node.ID.String(), node.Kind, chatID, voiceRoomID, node.IsPinned, node.PinOrder); err != nil {
 		s.logPublishError(ctx, "space.tree_changed", err,
 			slog.String("space_id", spaceID.String()),
 			slog.String("node_id", node.ID.String()),
@@ -470,6 +522,11 @@ func treeNodeRowToProto(r *store.TreeNodeRow, chatInfo map[uuid.UUID]ChatInfo) *
 		Kind:      r.Kind,
 		SortOrder: r.SortOrder,
 		IsSystem:  r.IsSystem,
+		IsPinned:  r.IsPinned,
+	}
+	if r.PinOrder != nil {
+		po := *r.PinOrder
+		out.PinOrder = &po
 	}
 	if r.CategoryID != nil {
 		cid := r.CategoryID.String()

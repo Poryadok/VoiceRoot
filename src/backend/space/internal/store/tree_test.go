@@ -244,6 +244,97 @@ func TestTree_UpdateCategory_AndUpsertUpdate(t *testing.T) {
 	require.NotNil(t, updatedNode.CategoryID)
 }
 
+func TestTree_PinUnpin_PinnedSortsAbove(t *testing.T) {
+	ctx := context.Background()
+	pool := startSpacePostgresForStoreTest(t, ctx)
+	applySpaceMigrationForStoreTest(t, ctx, pool)
+	st := &SpaceStore{Pool: pool}
+
+	owner := uuid.New()
+	space, err := st.CreateSpace(ctx, owner, "Pin", "", "private")
+	require.NoError(t, err)
+
+	chatA, chatB := uuid.New(), uuid.New()
+	nodeA, err := st.UpsertTreeNode(ctx, UpsertTreeNodeInput{SpaceID: space.ID, Kind: TreeKindTextChat, ChatID: &chatA})
+	require.NoError(t, err)
+	nodeB, err := st.UpsertTreeNode(ctx, UpsertTreeNodeInput{SpaceID: space.ID, Kind: TreeKindTextChat, ChatID: &chatB})
+	require.NoError(t, err)
+
+	pinned, err := st.PinTreeNode(ctx, space.ID, nodeB.ID)
+	require.NoError(t, err)
+	require.True(t, pinned.IsPinned)
+	require.NotNil(t, pinned.PinOrder)
+	require.Equal(t, int32(0), *pinned.PinOrder)
+
+	nodes, err := st.ListTreeNodes(ctx, space.ID)
+	require.NoError(t, err)
+	require.Len(t, nodes, 2)
+	require.Equal(t, nodeB.ID, nodes[0].ID)
+	require.True(t, nodes[0].IsPinned)
+	require.Equal(t, nodeA.ID, nodes[1].ID)
+	require.False(t, nodes[1].IsPinned)
+
+	unpinned, err := st.UnpinTreeNode(ctx, space.ID, nodeB.ID)
+	require.NoError(t, err)
+	require.False(t, unpinned.IsPinned)
+	require.Nil(t, unpinned.PinOrder)
+}
+
+func TestTree_ReorderSpaceTree_PinnedGroupUsesPinOrder(t *testing.T) {
+	ctx := context.Background()
+	pool := startSpacePostgresForStoreTest(t, ctx)
+	applySpaceMigrationForStoreTest(t, ctx, pool)
+	st := &SpaceStore{Pool: pool}
+
+	owner := uuid.New()
+	space, err := st.CreateSpace(ctx, owner, "PinReorder", "", "private")
+	require.NoError(t, err)
+
+	chatA, chatB := uuid.New(), uuid.New()
+	nodeA, err := st.UpsertTreeNode(ctx, UpsertTreeNodeInput{SpaceID: space.ID, Kind: TreeKindTextChat, ChatID: &chatA})
+	require.NoError(t, err)
+	nodeB, err := st.UpsertTreeNode(ctx, UpsertTreeNodeInput{SpaceID: space.ID, Kind: TreeKindTextChat, ChatID: &chatB})
+	require.NoError(t, err)
+
+	_, err = st.PinTreeNode(ctx, space.ID, nodeA.ID)
+	require.NoError(t, err)
+	_, err = st.PinTreeNode(ctx, space.ID, nodeB.ID)
+	require.NoError(t, err)
+
+	err = st.ReorderSpaceTree(ctx, space.ID, []uuid.UUID{nodeB.ID, nodeA.ID})
+	require.NoError(t, err)
+
+	nodes, err := st.ListTreeNodes(ctx, space.ID)
+	require.NoError(t, err)
+	require.Equal(t, nodeB.ID, nodes[0].ID)
+	require.Equal(t, int32(0), *nodes[0].PinOrder)
+	require.Equal(t, nodeA.ID, nodes[1].ID)
+	require.Equal(t, int32(1), *nodes[1].PinOrder)
+}
+
+func TestTree_ReorderSpaceTree_MixedPinGroupRejected(t *testing.T) {
+	ctx := context.Background()
+	pool := startSpacePostgresForStoreTest(t, ctx)
+	applySpaceMigrationForStoreTest(t, ctx, pool)
+	st := &SpaceStore{Pool: pool}
+
+	owner := uuid.New()
+	space, err := st.CreateSpace(ctx, owner, "MixedReorder", "", "private")
+	require.NoError(t, err)
+
+	chatA, chatB := uuid.New(), uuid.New()
+	nodeA, err := st.UpsertTreeNode(ctx, UpsertTreeNodeInput{SpaceID: space.ID, Kind: TreeKindTextChat, ChatID: &chatA})
+	require.NoError(t, err)
+	nodeB, err := st.UpsertTreeNode(ctx, UpsertTreeNodeInput{SpaceID: space.ID, Kind: TreeKindTextChat, ChatID: &chatB})
+	require.NoError(t, err)
+
+	_, err = st.PinTreeNode(ctx, space.ID, nodeA.ID)
+	require.NoError(t, err)
+
+	err = st.ReorderSpaceTree(ctx, space.ID, []uuid.UUID{nodeA.ID, nodeB.ID})
+	require.ErrorIs(t, err, ErrInvalidReorder)
+}
+
 func TestTree_InvalidKind(t *testing.T) {
 	ctx := context.Background()
 	pool := startSpacePostgresForStoreTest(t, ctx)

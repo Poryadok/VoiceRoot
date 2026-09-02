@@ -454,12 +454,23 @@ const SpaceTreeNode$json = {
       '10': 'displayName',
       '17': true
     },
+    {'1': 'is_pinned', '3': 10, '4': 1, '5': 8, '10': 'isPinned'},
+    {
+      '1': 'pin_order',
+      '3': 11,
+      '4': 1,
+      '5': 5,
+      '9': 4,
+      '10': 'pinOrder',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_category_id'},
     {'1': '_linked_chat'},
     {'1': '_voice_room_id'},
     {'1': '_display_name'},
+    {'1': '_pin_order'},
   ],
 };
 
@@ -470,8 +481,38 @@ final $typed_data.Uint8List spaceTreeNodeDescriptor = $convert.base64Decode(
     'BGtpbmQSPAoLbGlua2VkX2NoYXQYBSABKAsyFi52b2ljZS5jaGF0LnYxLkNoYXRSZWZIAVIKbG'
     'lua2VkQ2hhdIgBARInCg12b2ljZV9yb29tX2lkGAYgASgJSAJSC3ZvaWNlUm9vbUlkiAEBEh0K'
     'CnNvcnRfb3JkZXIYByABKAVSCXNvcnRPcmRlchIbCglpc19zeXN0ZW0YCCABKAhSCGlzU3lzdG'
-    'VtEiYKDGRpc3BsYXlfbmFtZRgJIAEoCUgDUgtkaXNwbGF5TmFtZYgBAUIOCgxfY2F0ZWdvcnlf'
-    'aWRCDgoMX2xpbmtlZF9jaGF0QhAKDl92b2ljZV9yb29tX2lkQg8KDV9kaXNwbGF5X25hbWU=');
+    'VtEiYKDGRpc3BsYXlfbmFtZRgJIAEoCUgDUgtkaXNwbGF5TmFtZYgBARIbCglpc19waW5uZWQY'
+    'CiABKAhSCGlzUGlubmVkEiAKCXBpbl9vcmRlchgLIAEoBUgEUghwaW5PcmRlcogBAUIOCgxfY2'
+    'F0ZWdvcnlfaWRCDgoMX2xpbmtlZF9jaGF0QhAKDl92b2ljZV9yb29tX2lkQg8KDV9kaXNwbGF5'
+    'X25hbWVCDAoKX3Bpbl9vcmRlcg==');
+
+@$core.Deprecated('Use pinTreeNodeRequestDescriptor instead')
+const PinTreeNodeRequest$json = {
+  '1': 'PinTreeNodeRequest',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'node_id', '3': 2, '4': 1, '5': 9, '10': 'nodeId'},
+  ],
+};
+
+/// Descriptor for `PinTreeNodeRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List pinTreeNodeRequestDescriptor = $convert.base64Decode(
+    'ChJQaW5UcmVlTm9kZVJlcXVlc3QSGQoIc3BhY2VfaWQYASABKAlSB3NwYWNlSWQSFwoHbm9kZV'
+    '9pZBgCIAEoCVIGbm9kZUlk');
+
+@$core.Deprecated('Use unpinTreeNodeRequestDescriptor instead')
+const UnpinTreeNodeRequest$json = {
+  '1': 'UnpinTreeNodeRequest',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'node_id', '3': 2, '4': 1, '5': 9, '10': 'nodeId'},
+  ],
+};
+
+/// Descriptor for `UnpinTreeNodeRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List unpinTreeNodeRequestDescriptor = $convert.base64Decode(
+    'ChRVbnBpblRyZWVOb2RlUmVxdWVzdBIZCghzcGFjZV9pZBgBIAEoCVIHc3BhY2VJZBIXCgdub2'
+    'RlX2lkGAIgASgJUgZub2RlSWQ=');
 
 @$core.Deprecated('Use upsertTreeNodeRequestDescriptor instead')
 const UpsertTreeNodeRequest$json = {
@@ -1556,6 +1597,46 @@ const ReorderSpaceTreeResponse$json = {
 /// Descriptor for `ReorderSpaceTreeResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List reorderSpaceTreeResponseDescriptor =
     $convert.base64Decode('ChhSZW9yZGVyU3BhY2VUcmVlUmVzcG9uc2U=');
+
+@$core.Deprecated('Use pinTreeNodeResponseDescriptor instead')
+const PinTreeNodeResponse$json = {
+  '1': 'PinTreeNodeResponse',
+  '2': [
+    {
+      '1': 'space_tree_node',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.space.v1.SpaceTreeNode',
+      '10': 'spaceTreeNode'
+    },
+  ],
+};
+
+/// Descriptor for `PinTreeNodeResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List pinTreeNodeResponseDescriptor = $convert.base64Decode(
+    'ChNQaW5UcmVlTm9kZVJlc3BvbnNlEkUKD3NwYWNlX3RyZWVfbm9kZRgBIAEoCzIdLnZvaWNlLn'
+    'NwYWNlLnYxLlNwYWNlVHJlZU5vZGVSDXNwYWNlVHJlZU5vZGU=');
+
+@$core.Deprecated('Use unpinTreeNodeResponseDescriptor instead')
+const UnpinTreeNodeResponse$json = {
+  '1': 'UnpinTreeNodeResponse',
+  '2': [
+    {
+      '1': 'space_tree_node',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.space.v1.SpaceTreeNode',
+      '10': 'spaceTreeNode'
+    },
+  ],
+};
+
+/// Descriptor for `UnpinTreeNodeResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List unpinTreeNodeResponseDescriptor = $convert.base64Decode(
+    'ChVVbnBpblRyZWVOb2RlUmVzcG9uc2USRQoPc3BhY2VfdHJlZV9ub2RlGAEgASgLMh0udm9pY2'
+    'Uuc3BhY2UudjEuU3BhY2VUcmVlTm9kZVINc3BhY2VUcmVlTm9kZQ==');
 
 @$core.Deprecated('Use listSpaceTreeResponseDescriptor instead')
 const ListSpaceTreeResponse$json = {

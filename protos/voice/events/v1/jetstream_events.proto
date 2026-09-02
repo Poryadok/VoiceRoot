@@ -282,6 +282,11 @@ message SpaceTreeChanged {
   string space_id = 1;
   string node_id = 2;
   string change = 3; // upserted | removed
+  string kind = 4; // text_chat | voice_room (upserted only)
+  optional string chat_id = 5;
+  optional string voice_room_id = 6;
+  bool is_pinned = 7;
+  optional int32 pin_order = 8;
 }
 
 message SpaceCreated {
