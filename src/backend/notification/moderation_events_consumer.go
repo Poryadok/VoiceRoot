@@ -29,7 +29,7 @@ func runModerationEventsConsumer(
 	natsURL string,
 	tokens *store.DeviceTokenStore,
 	pusher *dispatch.PushDispatcher,
-	presenceChecker presence.Checker,
+	_ presence.Checker, // reserved: presence-skip until Realtime system in-app exists
 	policy delivery.DeliveryPolicyLoader,
 	profiles s2s.AccountProfiles,
 	logger *slog.Logger,
@@ -75,7 +75,10 @@ func runModerationEventsConsumer(
 			consumer.JetStreamConsumeAck(msg, nil)
 			return
 		}
-		enriched, err := dispatch.EnrichDecisions(ctx, presenceChecker, policy, decisions, uuid.Nil, "", delivery.TypeSystem)
+		// Presence is intentionally skipped: Notification has no Realtime in-app
+		// publisher for system/sanction, and online→InApp-only would drop delivery.
+		// Matchmaking/voice use the same presence-skip pattern until in-app exists.
+		enriched, err := enrichSanctionDecisions(ctx, policy, decisions)
 		if err != nil {
 			natslog.LogConsume(logger, msg, slog.LevelWarn, "moderation notification enrich failed")
 			consumer.JetStreamConsumeAck(msg, err)
@@ -108,6 +111,17 @@ func runModerationEventsConsumer(
 
 	<-ctx.Done()
 	return ctx.Err()
+}
+
+// enrichSanctionDecisions applies mute/quiet-hours policy without presence.
+// Online recipients keep Push=true so sanction notices are not silently dropped
+// while system in-app fan-out via Realtime is still missing.
+func enrichSanctionDecisions(
+	ctx context.Context,
+	policy delivery.DeliveryPolicyLoader,
+	decisions map[string]delivery.DeliveryDecision,
+) (map[string]delivery.DeliveryDecision, error) {
+	return dispatch.EnrichDecisions(ctx, presence.OfflineChecker{}, policy, decisions, uuid.Nil, "", delivery.TypeSystem)
 }
 
 // routeModerationNotification resolves account→profile and builds system push decisions.
