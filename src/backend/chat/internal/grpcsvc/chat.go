@@ -83,6 +83,7 @@ type DMStore interface {
 	PinChatInFolder(ctx context.Context, profileID, folderID, chatID uuid.UUID, pinOrder *int32) error
 	UnpinChatInFolder(ctx context.Context, profileID, folderID, chatID uuid.UUID) error
 	CreateGroupChat(ctx context.Context, creatorProfileID uuid.UUID, name string) (*store.ChatRow, error)
+	CreateChannelChat(ctx context.Context, creatorProfileID uuid.UUID, name string) (*store.ChatRow, error)
 	CreateSpaceGroupChat(ctx context.Context, creatorProfileID, spaceID uuid.UUID, name string) (*store.ChatRow, error)
 	CreateSpaceChannelChat(ctx context.Context, creatorProfileID, spaceID uuid.UUID, name string) (*store.ChatRow, error)
 	AddGroupMembers(ctx context.Context, chatID uuid.UUID, profileIDs []uuid.UUID) ([]uuid.UUID, error)

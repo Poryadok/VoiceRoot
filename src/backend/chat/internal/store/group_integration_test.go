@@ -62,6 +62,33 @@ func TestCreateGroupChat_OwnerMembership(t *testing.T) {
 	require.Equal(t, 1, n)
 }
 
+// TestCreateChannelChat_OwnerMembership documents standalone channel creator is owner.
+func TestCreateChannelChat_OwnerMembership(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatDBForStoreTest(t, ctx)
+	applyChatMigrationsForStoreTest(t, ctx, pool)
+	store := &DMStore{Pool: pool}
+
+	owner := uuid.New()
+	row, err := store.CreateChannelChat(ctx, owner, "Store channel")
+	require.NoError(t, err)
+	require.Equal(t, "channel", row.Type)
+	require.Equal(t, "Store channel", *row.Name)
+	require.True(t, row.ThreadsEnabled)
+	require.False(t, row.AllowUserMainFeed)
+
+	role, err := store.GetMemberRole(ctx, row.ID, owner)
+	require.NoError(t, err)
+	require.Equal(t, "owner", role)
+
+	n, err := store.CountChatMembers(ctx, row.ID)
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
+}
+
 // TestAddGroupMembers_MinThreeMembers documents text-chat.md minimum before commit.
 func TestAddGroupMembers_MinThreeMembers(t *testing.T) {
 	if testing.Short() {

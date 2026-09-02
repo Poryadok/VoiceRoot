@@ -102,6 +102,54 @@ RETURNING id, created_at, updated_at
 	}, nil
 }
 
+// CreateChannelChat inserts a standalone channel (no space_id) with the creator as owner.
+func (s *DMStore) CreateChannelChat(ctx context.Context, creatorProfileID uuid.UUID, name string) (*ChatRow, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("dm store: pool not configured")
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, errors.New("channel name is required")
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var chatID uuid.UUID
+	var createdAt, updatedAt time.Time
+	err = tx.QueryRow(ctx, `
+INSERT INTO chats (type, name, creator_profile_id, slow_mode_seconds, threads_enabled, allow_user_main_feed)
+VALUES ('channel', $1, $2, 0, true, false)
+RETURNING id, created_at, updated_at
+`, name, creatorProfileID).Scan(&chatID, &createdAt, &updatedAt)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(ctx, `
+INSERT INTO chat_members (chat_id, profile_id, role, inbox_bucket)
+VALUES ($1, $2, 'owner', 'main')
+`, chatID, creatorProfileID); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	n := name
+	return &ChatRow{
+		ID:                chatID,
+		Type:              "channel",
+		Name:              &n,
+		CreatorProfileID:  creatorProfileID,
+		ThreadsEnabled:    true,
+		AllowUserMainFeed: false,
+		CreatedAt:         createdAt.UTC(),
+		UpdatedAt:         updatedAt.UTC(),
+		InboxBucket:       "main",
+	}, nil
+}
+
 // CreateGroupChat inserts a standalone group (no space_id) with the creator as owner.
 func (s *DMStore) CreateGroupChat(ctx context.Context, creatorProfileID uuid.UUID, name string) (*ChatRow, error) {
 	if s == nil || s.Pool == nil {
