@@ -197,7 +197,19 @@ func (s *SpaceGRPC) TransferOwnership(ctx context.Context, req *spacev1.Transfer
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 	}
-	s.reassignOwnerRole(ctx, spaceID, caller, newOwnerID)
+	if err := s.reassignOwnerRole(ctx, spaceID, caller, newOwnerID); err != nil {
+		if rbErr := s.Store.TransferOwnership(ctx, spaceID, newOwnerID, caller); rbErr != nil {
+			return nil, status.Errorf(codes.Internal, "owner role reassignment failed (%v); ownership rollback failed: %v", err, rbErr)
+		}
+		switch status.Code(err) {
+		case codes.Unavailable:
+			return nil, status.Error(codes.Unavailable, "role service unavailable")
+		case codes.FailedPrecondition:
+			return nil, err
+		default:
+			return nil, status.Errorf(codes.Internal, "owner role reassignment failed: %v", err)
+		}
+	}
 	if s.SpaceEvents != nil {
 		if pubErr := s.SpaceEvents.PublishSpaceUpdated(ctx, spaceID.String()); pubErr != nil {
 			s.logPublishError(ctx, "space.updated", pubErr, slog.String("space_id", spaceID.String()))

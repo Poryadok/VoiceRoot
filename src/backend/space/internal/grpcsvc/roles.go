@@ -129,14 +129,16 @@ func (s *SpaceGRPC) revokeAllMemberRoles(ctx context.Context, spaceID, profileID
 	}
 }
 
-// reassignOwnerRole best-effort moves the Owner system role after TransferOwnership.
-func (s *SpaceGRPC) reassignOwnerRole(ctx context.Context, spaceID, previousOwner, newOwner uuid.UUID) {
+// reassignOwnerRole moves the Owner system role after TransferOwnership.
+// When Roles is nil (ROLE_GRPC_ADDR unset), skips — spaces.owner_profile_id remains source of truth.
+// When Roles is wired, fail-closed: List/Assign/Revoke errors and a missing Owner role are returned.
+func (s *SpaceGRPC) reassignOwnerRole(ctx context.Context, spaceID, previousOwner, newOwner uuid.UUID) error {
 	if s == nil || s.Roles == nil {
-		return
+		return nil
 	}
 	list, err := s.Roles.ListRoles(ctx, &rolev1.ListRolesRequest{SpaceId: spaceID.String()})
 	if err != nil {
-		return
+		return err
 	}
 	var ownerRoleID string
 	for _, r := range list.GetRoleList().GetRoles() {
@@ -146,19 +148,24 @@ func (s *SpaceGRPC) reassignOwnerRole(ctx context.Context, spaceID, previousOwne
 		}
 	}
 	if ownerRoleID == "" {
-		return
+		return status.Error(codes.FailedPrecondition, "owner system role not found")
 	}
 	ownerCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderProfileID, previousOwner.String())
-	_, _ = s.Roles.AssignRole(ownerCtx, &rolev1.AssignRoleRequest{
+	if _, err := s.Roles.AssignRole(ownerCtx, &rolev1.AssignRoleRequest{
 		SpaceId:   spaceID.String(),
 		ProfileId: newOwner.String(),
 		RoleId:    ownerRoleID,
-	})
-	_, _ = s.Roles.RevokeRole(ownerCtx, &rolev1.RevokeRoleRequest{
+	}); err != nil {
+		return err
+	}
+	if _, err := s.Roles.RevokeRole(ownerCtx, &rolev1.RevokeRoleRequest{
 		SpaceId:   spaceID.String(),
 		ProfileId: previousOwner.String(),
 		RoleId:    ownerRoleID,
-	})
+	}); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *SpaceGRPC) memberRoleNames(ctx context.Context, spaceID, profileID uuid.UUID) []string {
