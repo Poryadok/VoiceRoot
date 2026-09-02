@@ -1724,6 +1724,35 @@ class AppLocalizationsRu extends AppLocalizations {
   String get securitySettingsTitle => 'Безопасность';
 
   @override
+  String get appealSettingsTitle => 'Апелляция на санкцию';
+
+  @override
+  String get appealTitle => 'Подать апелляцию';
+
+  @override
+  String get appealDescription =>
+      'Апелляцию можно подать один раз в течение 7 дней. Укажите ID санкции из уведомления и объясните, почему решение ошибочно.';
+
+  @override
+  String get appealSanctionIdLabel => 'ID санкции';
+
+  @override
+  String get appealReasonLabel => 'Причина';
+
+  @override
+  String get appealSubmit => 'Отправить апелляцию';
+
+  @override
+  String get appealSubmitting => 'Отправка…';
+
+  @override
+  String get appealSubmittedMessage =>
+      'Апелляция принята. Мы рассмотрим её в течение 7 рабочих дней.';
+
+  @override
+  String get appealValidationError => 'Укажите ID санкции и причину.';
+
+  @override
   String get verificationSettingsTitle => 'Верификация';
 
   @override
