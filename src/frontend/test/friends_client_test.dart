@@ -234,4 +234,44 @@ void main() {
       expect(body['favorite'], isTrue);
     });
   });
+
+  group('VoiceFriendsClient.listBlocked', () {
+    test('GET /api/v1/friends/blocks', () async {
+      final mock = MockClient((req) async {
+        expect(req.method, 'GET');
+        expect(req.url.path, '/api/v1/friends/blocks');
+        return http.Response(
+          jsonEncode({
+            'blocked_list': {
+              'blocked': [
+                {'blocked_account_id': 'acc-1'},
+              ],
+            },
+          }),
+          200,
+        );
+      });
+      final client = VoiceFriendsClient(gateway: gatewayHttpForTest(mock, config: config));
+      final r = await client.listBlocked(authorization: auth);
+      expect(r, isA<FriendsApiOk<BlockedListData>>());
+      final data = (r as FriendsApiOk<BlockedListData>).data;
+      expect(data.blocked.single.blockedAccountId, 'acc-1');
+    });
+  });
+
+  group('VoiceFriendsClient.unblockAccount', () {
+    test('DELETE /api/v1/friends/blocks/{id}', () async {
+      final mock = MockClient((req) async {
+        expect(req.method, 'DELETE');
+        expect(req.url.path, '/api/v1/friends/blocks/acc-2');
+        return http.Response('', 204);
+      });
+      final client = VoiceFriendsClient(gateway: gatewayHttpForTest(mock, config: config));
+      final r = await client.unblockAccount(
+        authorization: auth,
+        blockedAccountId: 'acc-2',
+      );
+      expect(r, isA<FriendsApiEmpty>());
+    });
+  });
 }

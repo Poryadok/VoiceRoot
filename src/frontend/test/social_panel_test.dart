@@ -74,6 +74,7 @@ void main() {
     expect(find.byKey(SocialPanel.tabContactsKey), findsOneWidget);
     expect(find.byKey(SocialPanel.tabFavoritesKey), findsOneWidget);
     expect(find.byKey(SocialPanel.tabRequestsKey), findsOneWidget);
+    expect(find.byKey(SocialPanel.tabBlockedKey), findsOneWidget);
   });
 
   testWidgets('search works inside non-scrollable bottom sheet', (tester) async {
@@ -611,6 +612,62 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(accepted, isTrue);
+  });
+
+  testWidgets('blocked tab shows empty state when no blocks', (tester) async {
+    await tester.pumpWidget(
+      socialTestApp(
+        home: const SocialPanel(initialTabIndex: 5),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/friends/blocks') {
+            return http.Response(
+              jsonEncode({'blocked_list': {'blocked': []}}),
+              200,
+            );
+          }
+          return http.Response('{}', 200);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('No blocked accounts'), findsOneWidget);
+    expect(find.byKey(SocialPanel.blockedUnavailableKey), findsNothing);
+  });
+
+  testWidgets('blocked tab unblock calls gateway', (tester) async {
+    var unblocked = false;
+    await tester.pumpWidget(
+      socialTestApp(
+        home: const SocialPanel(initialTabIndex: 5),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/friends/blocks') {
+            return http.Response(
+              jsonEncode({
+                'blocked_list': {
+                  'blocked': [
+                    {'blocked_account_id': 'acc-blocked'},
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/friends/blocks/acc-blocked' &&
+              req.method == 'DELETE') {
+            unblocked = true;
+            return http.Response('', 204);
+          }
+          return http.Response('{}', 200);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(SocialPanel.unblockButtonKey('acc-blocked')));
+    await tester.pumpAndSettle();
+
+    expect(unblocked, isTrue);
   });
 
   testWidgets('outgoing declined request shows declined label', (tester) async {
