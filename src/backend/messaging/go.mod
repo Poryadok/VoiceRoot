@@ -92,6 +92,7 @@ require (
 	golang.org/x/time v0.8.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241202173237-19429a94021a // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	voice.app/voice/auth v0.0.0 // indirect
 	voice.app/voice/story v0.0.0-00010101000000-000000000000 // indirect
 )
 

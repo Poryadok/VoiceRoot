@@ -1128,16 +1128,23 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 			return nil, err
 		}
 	}
+	var ghostOnly bool
 	if s.PlatformMod != nil {
-		_, acctOK := authctx.AccountID(ctx)
+		accountID, acctOK := authctx.AccountID(ctx)
 		if !acctOK && s.UserProfiles != nil {
-			_, lookupErr := s.UserProfiles.AccountIDByProfileID(ctx, profileID)
+			var lookupErr error
+			accountID, lookupErr = s.UserProfiles.AccountIDByProfileID(ctx, profileID)
 			acctOK = lookupErr == nil
 		}
 		if acctOK {
 			if err := s.PlatformMod.CheckMessageAllowed(ctx, profileID, targetChatID, source.Content); err != nil {
 				return nil, status.Error(codes.PermissionDenied, err.Error())
 			}
+			banned, err := s.PlatformMod.IsShadowBanned(ctx, accountID)
+			if err != nil {
+				return nil, status.Error(codes.Unavailable, "moderation_unavailable")
+			}
+			ghostOnly = banned
 		}
 	}
 
@@ -1146,7 +1153,7 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 		if len(commentary) > 4000 {
 			return nil, status.Error(codes.InvalidArgument, "commentary exceeds 4000 characters")
 		}
-		if err := s.insertForwardCommentary(ctx, targetChatID, profileID, chatType, commentary); err != nil {
+		if err := s.insertForwardCommentary(ctx, targetChatID, profileID, chatType, commentary, ghostOnly); err != nil {
 			return nil, err
 		}
 	}
@@ -1171,6 +1178,7 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 		Content:         source.Content,
 		AttachmentsJSON: attachments,
 		MentionsJSON:    "[]",
+		GhostOnly:       ghostOnly,
 		IsE2E:           source.IsE2E,
 		ContentType:     store.EffectiveContentType(source.ContentType, source.Content, attachments),
 	}
@@ -1190,7 +1198,7 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	if s.MessageEvents != nil {
+	if s.MessageEvents != nil && !ghostOnly {
 		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), false, "", saved.IsE2E, store.EffectiveContentType(saved.ContentType, saved.Content, saved.AttachmentsJSON)); err != nil {
 			s.logPublishError(ctx, "message.sent", err, slog.String("message_id", saved.ID.String()), slog.String("chat_id", saved.ChatID.String()))
 		}
@@ -1203,7 +1211,7 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 	return &messagingv1.ForwardMessageResponse{Message: messageRowToProto(saved, kind, "", false)}, nil
 }
 
-func (s *MessagingGRPC) insertForwardCommentary(ctx context.Context, chatID, profileID uuid.UUID, chatType, content string) error {
+func (s *MessagingGRPC) insertForwardCommentary(ctx context.Context, chatID, profileID uuid.UUID, chatType, content string, ghostOnly bool) error {
 	msgID, err := messageid.NewMessageID()
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
@@ -1217,12 +1225,13 @@ func (s *MessagingGRPC) insertForwardCommentary(ctx context.Context, chatID, pro
 		Type:            "regular",
 		AttachmentsJSON: "[]",
 		MentionsJSON:    "[]",
+		GhostOnly:       ghostOnly,
 		ContentType:     "text",
 	})
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
 	}
-	if s.MessageEvents != nil {
+	if s.MessageEvents != nil && !ghostOnly {
 		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), false, "", false, "text"); err != nil {
 			s.logPublishError(ctx, "message.sent", err, slog.String("message_id", saved.ID.String()), slog.String("chat_id", saved.ChatID.String()))
 		}
