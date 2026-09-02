@@ -193,11 +193,12 @@ class ThreeColumnShell extends StatelessWidget {
             key: navMobileStack,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SizedBox(
-                key: navMobileStrip,
-                height: VoiceLayout.mobileStripHeight,
-                child: mobileRailChild ?? navigationColumn(),
-              ),
+              if (mobileRailChild != null)
+                SizedBox(
+                  key: navMobileStrip,
+                  height: VoiceLayout.mobileStripHeight,
+                  child: mobileRailChild,
+                ),
               Expanded(
                 child: Semantics(
                   label: 'Conversation',
@@ -257,11 +258,12 @@ class ThreeColumnShell extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: showMainOnlyOnNarrow
             ? [
-                SizedBox(
-                  key: navMobileStrip,
-                  height: VoiceLayout.mobileStripHeight,
-                  child: mobileRailChild ?? legacyRail(),
-                ),
+                if (mobileRailChild != null)
+                  SizedBox(
+                    key: navMobileStrip,
+                    height: VoiceLayout.mobileStripHeight,
+                    child: mobileRailChild,
+                  ),
                 Expanded(
                   child: Semantics(
                     label: 'Conversation',

@@ -104,4 +104,26 @@ void main() {
     expect(find.byKey(MobileChatStrip.stripKey), findsOneWidget);
     expect(find.byKey(ThreeColumnShell.navOpenChat), findsOneWidget);
   });
+
+  testWidgets('narrow open chat omits strip row when mobileRailChild is null', (
+    tester,
+  ) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.binding.setSurfaceSize(const Size(400, 800));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: voiceTestTheme(),
+        home: const Scaffold(
+          body: ThreeColumnShell(
+            showMainOnlyOnNarrow: true,
+            mainChild: Text('Open chat'),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(ThreeColumnShell.navMobileStrip), findsNothing);
+    expect(find.byKey(ThreeColumnShell.navOpenChat), findsOneWidget);
+    expect(find.text('Open chat'), findsOneWidget);
+  });
 }
