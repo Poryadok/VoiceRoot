@@ -17,17 +17,9 @@ import (
 
 const jsStreamModerationEvents = "moderation_events"
 
-func notificationModerationDurable(instanceID string) string {
-	id := strings.TrimSpace(instanceID)
-	if id == "" {
-		id = "unknown"
-	}
-	return "notif_" + strings.ReplaceAll(id, "-", "") + "_mod"
-}
-
 func runModerationEventsConsumer(
 	ctx context.Context,
-	natsURL, instanceID string,
+	natsURL string,
 	logger *slog.Logger,
 ) error {
 	if strings.TrimSpace(natsURL) == "" {
@@ -51,26 +43,28 @@ func runModerationEventsConsumer(
 	}
 
 	handler := &consumer.ModerationEventHandler{}
-	durable := notificationModerationDurable(instanceID)
+	durable := consumer.SharedDurable("moderation")
 
 	msgHandler := func(msg *nats.Msg) {
 		var env eventsv1.ModerationStreamEvent
 		if err := proto.Unmarshal(msg.Data, &env); err != nil {
 			natslog.LogConsume(logger, msg, slog.LevelWarn, "moderation event unmarshal failed")
+			consumer.JetStreamTermAck(msg)
 			return
 		}
 		if routeModerationNotification(handler, &env) {
 			natslog.LogConsume(logger, msg, slog.LevelInfo, "moderation notification event consumed")
 		}
+		consumer.JetStreamConsumeAck(msg, nil)
 	}
 
 	sub, err := js.Subscribe("moderation.>", msgHandler,
 		nats.Durable(durable),
 		nats.BindStream(jsStreamModerationEvents),
-		nats.DeliverNew(),
+		nats.ManualAck(),
 	)
 	if err != nil {
-		sub, err = js.Subscribe("", msgHandler, nats.Bind(jsStreamModerationEvents, durable))
+		sub, err = js.Subscribe("", msgHandler, nats.Bind(jsStreamModerationEvents, durable), nats.ManualAck())
 		if err != nil {
 			return fmt.Errorf("jetstream subscribe moderation.events: %w", err)
 		}

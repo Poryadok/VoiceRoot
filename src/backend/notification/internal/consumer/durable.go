@@ -10,6 +10,7 @@ const (
 	durableStory        = "notif_story"
 	durableSocial       = "notif_social"
 	durableSubscription = "notif_subscription"
+	durableModeration   = "notif_mod"
 )
 
 // SharedDurable returns the cluster-wide JetStream durable name for notification consumers.
@@ -28,6 +29,8 @@ func SharedDurable(stream string) string {
 		return durableSocial
 	case "subscription":
 		return durableSubscription
+	case "moderation":
+		return durableModeration
 	default:
 		return "notif_" + strings.TrimSpace(stream)
 	}
