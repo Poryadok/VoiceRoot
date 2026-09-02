@@ -134,7 +134,8 @@ class _AppealSheetState extends ConsumerState<AppealSheet> {
             VoicePrimaryButton(
               key: AppealSheet.submitButtonKey,
               onPressed: _busy || _success != null ? null : _submit,
-              label: _busy ? l10n.appealSubmitting : l10n.appealSubmit,
+              isLoading: _busy,
+              child: Text(l10n.appealSubmit),
             ),
           ],
         ),
