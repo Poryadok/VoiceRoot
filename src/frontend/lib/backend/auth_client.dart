@@ -332,6 +332,26 @@ class VoiceAuthClient {
     );
   }
 
+  /// Schedules account deletion (soft delete). Returns null on success (204).
+  Future<AuthApiResult<void>> deleteAccount({
+    required AuthSession session,
+    required String password,
+  }) async {
+    final result = await _gateway.postEmpty(
+      uri: _gateway.resolve('/api/v1/auth/delete-account'),
+      authorization: session.authorizationHeader,
+      jsonBody: {'password': password},
+    );
+    return switch (result) {
+      GatewayHttpOk<void>() => const AuthApiOk(null),
+      GatewayHttpFailure(:final error) => AuthApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+
   /// Returns an error message on failure; null on success (204).
   Future<String?> logout({required AuthSession session}) async {
     final result = await _gateway.postEmpty(

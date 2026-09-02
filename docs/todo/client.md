@@ -37,7 +37,8 @@ _Пока пусто — критичные клиентские блокеры 
 ### Auth UI (REST есть, экранов нет)
 
 - [ ] **AuthScreen: телефон + OTP** — спека [auth-and-contacts.md](../features/auth-and-contacts.md): телефон default; `auth_screen.dart` только email.
-- [ ] **Auth UI: sessions / revoke, delete-account, password-reset** — REST есть (`GET /api/v1/auth/sessions`, delete/restore, `POST /api/v1/auth/password/reset`); экранов нет.
+- [ ] **Auth UI: sessions / revoke, password-reset** — REST есть (`GET /api/v1/auth/sessions`, revoke, `POST /api/v1/auth/password/reset`); sessions/revoke + password-reset экранов нет.
+- [x] **Auth UI: delete-account** — `SecuritySettingsScreen` confirm+password → `POST /api/v1/auth/delete-account`; guest blocked; logout on success (**Batch 28b**). Restore-account UI deferred.
 
 ### Telegram-parity UX audit — Flutter (2026-08-28)
 

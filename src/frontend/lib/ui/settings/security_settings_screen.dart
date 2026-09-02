@@ -23,6 +23,10 @@ class SecuritySettingsScreen extends ConsumerStatefulWidget {
   static const Key totpFieldKey = Key('security_totp');
   static const Key verifyButtonKey = Key('security_verify');
 
+  static const Key deleteAccountButtonKey = Key('security_delete_account');
+  static const Key deleteAccountDialogKey = Key('security_delete_account_dialog');
+  static const Key deleteAccountPasswordKey = Key('security_delete_account_password');
+
   @override
   ConsumerState<SecuritySettingsScreen> createState() =>
       _SecuritySettingsScreenState();
@@ -35,11 +39,13 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
   TotpEnrollmentData? _enrollment;
   var _busy = false;
   String? _error;
+  final _deletePasswordController = TextEditingController();
 
   @override
   void dispose() {
     _passwordController.dispose();
     _totpController.dispose();
+    _deletePasswordController.dispose();
     super.dispose();
   }
 
@@ -114,6 +120,90 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
     }
   }
 
+  Future<void> _confirmDeleteAccount() async {
+    final l10n = AppLocalizations.of(context)!;
+    final isGuest = ref.read(authControllerProvider).isGuest;
+    if (isGuest) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.securityDeleteAccountGuestUnavailable)),
+      );
+      return;
+    }
+
+    _deletePasswordController.clear();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          key: SecuritySettingsScreen.deleteAccountDialogKey,
+          title: Text(l10n.securityDeleteAccountConfirmTitle),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(l10n.securityDeleteAccountConfirmMessage),
+              const SizedBox(height: 16),
+              TextField(
+                key: SecuritySettingsScreen.deleteAccountPasswordKey,
+                controller: _deletePasswordController,
+                obscureText: true,
+                decoration: InputDecoration(labelText: l10n.authPasswordLabel),
+                autofocus: true,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(l10n.commonCancel),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(l10n.securityDeleteAccountConfirmAction),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true || !mounted) return;
+
+    final password = _deletePasswordController.text;
+    if (password.isEmpty) return;
+    final session = ref.read(authControllerProvider).session;
+    if (session == null) return;
+
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+
+    final result = await ref
+        .read(voiceAuthClientProvider)
+        .deleteAccount(session: session, password: password);
+
+    if (!mounted) return;
+    switch (result) {
+      case AuthApiOk<void>():
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.securityDeleteAccountSuccess)),
+        );
+        await ref.read(authControllerProvider.notifier).logout();
+        if (!mounted) return;
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      case AuthApiFailure(:final message, :final errorCode, :final statusCode):
+        setState(() {
+          _busy = false;
+          _error =
+              resolveAuthErrorKey(
+                errorCode: errorCode,
+                statusCode: statusCode,
+                message: message,
+              ) ??
+              message;
+        });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -131,11 +221,41 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
           padding: const EdgeInsets.all(24),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),
-            child: switch (_step) {
-              _SecurityStep.password => _buildPasswordStep(context, l10n, voice),
-              _SecurityStep.enroll => _buildEnrollStep(context, l10n, voice),
-              _SecurityStep.verify => _buildVerifyStep(context, l10n, voice),
-            },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                switch (_step) {
+                  _SecurityStep.password => _buildPasswordStep(
+                    context,
+                    l10n,
+                    voice,
+                  ),
+                  _SecurityStep.enroll => _buildEnrollStep(context, l10n, voice),
+                  _SecurityStep.verify => _buildVerifyStep(context, l10n, voice),
+                },
+                const SizedBox(height: 32),
+                Divider(color: voice.borderDefault),
+                const SizedBox(height: 16),
+                Text(
+                  l10n.securityDeleteAccountTitle,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  l10n.securityDeleteAccountHint,
+                  style: TextStyle(color: voice.textSecondary),
+                ),
+                const SizedBox(height: 16),
+                VoiceSecondaryButton(
+                  key: SecuritySettingsScreen.deleteAccountButtonKey,
+                  onPressed: _busy ? null : _confirmDeleteAccount,
+                  child: Text(
+                    l10n.securityDeleteAccountButton,
+                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
