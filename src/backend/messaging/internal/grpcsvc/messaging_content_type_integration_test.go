@@ -124,6 +124,67 @@ func TestMessagingSendMessage_messageSentIncludesContentType(t *testing.T) {
 	require.Equal(t, "text", sent.GetContentType())
 }
 
+func TestMessagingSendMessage_stickerAndGifWithFileValidation(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applyBaseMessagingMigrations(t, ctx, pool)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000003_attachment_only_messages.up.sql"))
+
+	chatID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+
+	stickerFileID := uuid.New().String()
+	gifFileID := uuid.New().String()
+	packID := uuid.New().String()
+	stickerID := uuid.New().String()
+	client, _ := startMessagingServerWired(t, pool, messagingWire{
+		Files: fileMetadataMap{
+			stickerFileID: {
+				Id: stickerFileID, Status: "ready", FileType: "image", ScanResult: "clean", Chat: chatDMRef(chatID),
+			},
+			gifFileID: {
+				Id: gifFileID, Status: "ready", FileType: "video", ScanResult: "clean", Chat: chatDMRef(chatID),
+			},
+		},
+	})
+
+	stickerCT := messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_STICKER
+	stickerAttachments := mustAttachmentJSON(t, []map[string]any{{
+		"type":       "sticker",
+		"file_id":    stickerFileID,
+		"pack_id":    packID,
+		"sticker_id": stickerID,
+	}})
+	resp, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat:            chatDMRef(chatID),
+		AttachmentsJson: stickerAttachments,
+		MentionsJson:    "[]",
+		ContentType:     &stickerCT,
+	})
+	require.NoError(t, err)
+	require.Equal(t, messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_STICKER, resp.GetMessage().GetContentType())
+
+	gifCT := messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_GIF
+	gifAttachments := mustAttachmentJSON(t, []map[string]any{{
+		"type":        "gif",
+		"file_id":     gifFileID,
+		"provider":    "giphy",
+		"provider_id": "xyz",
+	}})
+	resp, err = client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat:            chatDMRef(chatID),
+		AttachmentsJson: gifAttachments,
+		MentionsJson:    "[]",
+		ContentType:     &gifCT,
+	})
+	require.NoError(t, err)
+	require.Equal(t, messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_GIF, resp.GetMessage().GetContentType())
+}
+
 func TestMessagingPinMessage_standaloneGroupMemberDenied(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForTest(t, ctx)

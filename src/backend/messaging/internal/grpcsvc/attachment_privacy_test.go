@@ -27,6 +27,13 @@ func TestAttachmentTypeMatchesFileMeta(t *testing.T) {
 	require.True(t, attachmentTypeMatchesFileMeta("voice_message", "audio"))
 	require.False(t, attachmentTypeMatchesFileMeta("voice_message", "image"))
 	require.True(t, attachmentTypeMatchesFileMeta("image", ""))
+	require.True(t, attachmentTypeMatchesFileMeta("gif", "video"))
+	require.False(t, attachmentTypeMatchesFileMeta("gif", "image"))
+	require.True(t, attachmentTypeMatchesFileMeta("sticker", "image"))
+	require.True(t, attachmentTypeMatchesFileMeta("sticker", "video"))
+	require.False(t, attachmentTypeMatchesFileMeta("sticker", "audio"))
+	require.True(t, attachmentTypeMatchesFileMeta("music", "audio"))
+	require.True(t, attachmentTypeMatchesFileMeta("video_note", "video"))
 }
 
 type dmOtherProfileGuard struct {

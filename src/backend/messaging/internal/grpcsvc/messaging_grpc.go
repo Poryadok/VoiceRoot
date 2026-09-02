@@ -302,19 +302,34 @@ type messageAttachment struct {
 	PreviewURL string   `json:"preview_url,omitempty"`
 	Lat        *float64 `json:"lat,omitempty"`
 	Lon        *float64 `json:"lon,omitempty"`
+	PackID     string   `json:"pack_id,omitempty"`
+	StickerID  string   `json:"sticker_id,omitempty"`
+	Provider   string   `json:"provider,omitempty"`
+	ProviderID string   `json:"provider_id,omitempty"`
 }
 
-// attachmentTypeMatchesFileMeta allows voice_message attachments to reference audio file metadata.
+// attachmentTypeMatchesFileMeta maps composer attachment types to File Service metadata types.
 func attachmentTypeMatchesFileMeta(attType, fileType string) bool {
-	attType = strings.TrimSpace(attType)
-	fileType = strings.TrimSpace(fileType)
+	attType = strings.ToLower(strings.TrimSpace(attType))
+	fileType = strings.ToLower(strings.TrimSpace(fileType))
 	if fileType == "" {
 		return true
 	}
 	if attType == fileType {
 		return true
 	}
-	return attType == "voice_message" && fileType == "audio"
+	switch attType {
+	case "voice_message":
+		return fileType == "audio"
+	case "gif", "video_note":
+		return fileType == "video"
+	case "sticker":
+		return fileType == "image" || fileType == "video"
+	case "music":
+		return fileType == "audio"
+	default:
+		return false
+	}
 }
 
 func (s *MessagingGRPC) validateAttachments(ctx context.Context, chatID uuid.UUID, raw, contentType string) (int, error) {
@@ -331,7 +346,16 @@ func (s *MessagingGRPC) validateAttachments(ctx context.Context, chatID uuid.UUI
 			return 0, err
 		}
 		return len(attachments), nil
+	case "sticker", "gif", "music", "video_note":
+		if err := validateFileBackedRichAttachments(contentType, attachments); err != nil {
+			return 0, err
+		}
+		return s.validateFileBackedAttachments(ctx, chatID, attachments)
 	}
+	return s.validateFileBackedAttachments(ctx, chatID, attachments)
+}
+
+func (s *MessagingGRPC) validateFileBackedAttachments(ctx context.Context, chatID uuid.UUID, attachments []messageAttachment) (int, error) {
 	if s.Files == nil {
 		return 0, status.Error(codes.FailedPrecondition, "file metadata lookup is not configured")
 	}
@@ -2046,6 +2070,53 @@ func validateRichPayloadAttachments(contentType string, attachments []messageAtt
 		default:
 			return status.Error(codes.InvalidArgument, "unsupported rich content_type")
 		}
+	}
+	return nil
+}
+
+func validateFileBackedRichAttachments(contentType string, attachments []messageAttachment) error {
+	if len(attachments) != 1 {
+		return status.Error(codes.InvalidArgument, "file-backed rich messages require exactly one attachment")
+	}
+	att := attachments[0]
+	typ := strings.ToLower(strings.TrimSpace(att.Type))
+	switch strings.TrimSpace(contentType) {
+	case "sticker":
+		if typ != "sticker" {
+			return status.Error(codes.InvalidArgument, "attachments.type must be sticker")
+		}
+		if _, err := parseUUIDField("attachments.file_id", att.FileID); err != nil {
+			return err
+		}
+		if _, err := parseUUIDField("attachments.pack_id", att.PackID); err != nil {
+			return err
+		}
+		if _, err := parseUUIDField("attachments.sticker_id", att.StickerID); err != nil {
+			return err
+		}
+	case "gif":
+		if typ != "gif" {
+			return status.Error(codes.InvalidArgument, "attachments.type must be gif")
+		}
+		if _, err := parseUUIDField("attachments.file_id", att.FileID); err != nil {
+			return err
+		}
+	case "music":
+		if typ != "music" {
+			return status.Error(codes.InvalidArgument, "attachments.type must be music")
+		}
+		if _, err := parseUUIDField("attachments.file_id", att.FileID); err != nil {
+			return err
+		}
+	case "video_note":
+		if typ != "video_note" {
+			return status.Error(codes.InvalidArgument, "attachments.type must be video_note")
+		}
+		if _, err := parseUUIDField("attachments.file_id", att.FileID); err != nil {
+			return err
+		}
+	default:
+		return status.Error(codes.InvalidArgument, "unsupported file-backed rich content_type")
 	}
 	return nil
 }

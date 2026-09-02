@@ -268,4 +268,63 @@ func TestValidateAttachments(t *testing.T) {
 	require.Equal(t, 1, n)
 	_, err = sRich.validateAttachments(context.Background(), chatID, `[{"type":"article","url":"https://example.com"}]`, "article")
 	require.NoError(t, err)
+
+	packID := uuid.New().String()
+	stickerID := uuid.New().String()
+	stickerFileID := uuid.New().String()
+	sSticker := &MessagingGRPC{Files: stubFiles{byID: map[string]*filev1.FileMetadata{
+		stickerFileID: {
+			Id: stickerFileID, Status: "ready", FileType: "image", ScanResult: "clean", Chat: chatRef,
+		},
+	}}}
+	n, err = sSticker.validateAttachments(context.Background(), chatID,
+		`[{"type":"sticker","file_id":"`+stickerFileID+`","pack_id":"`+packID+`","sticker_id":"`+stickerID+`"}]`, "sticker")
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
+
+	_, err = sSticker.validateAttachments(context.Background(), chatID,
+		`[{"type":"sticker","file_id":"`+stickerFileID+`","pack_id":"`+packID+`"}]`, "sticker")
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	gifFileID := uuid.New().String()
+	sGIF := &MessagingGRPC{Files: stubFiles{byID: map[string]*filev1.FileMetadata{
+		gifFileID: {
+			Id: gifFileID, Status: "ready", FileType: "video", ScanResult: "clean", Chat: chatRef,
+		},
+	}}}
+	n, err = sGIF.validateAttachments(context.Background(), chatID,
+		`[{"type":"gif","file_id":"`+gifFileID+`","provider":"giphy","provider_id":"abc"}]`, "gif")
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
+
+	_, err = sGIF.validateAttachments(context.Background(), chatID,
+		`[{"type":"gif","file_id":"`+gifFileID+`"}]`, "sticker")
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	musicFileID := uuid.New().String()
+	sMusic := &MessagingGRPC{Files: stubFiles{byID: map[string]*filev1.FileMetadata{
+		musicFileID: {
+			Id: musicFileID, Status: "ready", FileType: "audio", ScanResult: "clean", Chat: chatRef,
+		},
+	}}}
+	n, err = sMusic.validateAttachments(context.Background(), chatID,
+		`[{"type":"music","file_id":"`+musicFileID+`"}]`, "music")
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
+
+	videoNoteFileID := uuid.New().String()
+	sVideoNote := &MessagingGRPC{Files: stubFiles{byID: map[string]*filev1.FileMetadata{
+		videoNoteFileID: {
+			Id: videoNoteFileID, Status: "ready", FileType: "video", ScanResult: "clean", Chat: chatRef,
+		},
+	}}}
+	n, err = sVideoNote.validateAttachments(context.Background(), chatID,
+		`[{"type":"video_note","file_id":"`+videoNoteFileID+`"}]`, "video_note")
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
+
+	// Legacy path: gif attachment without explicit content_type still validates via file metadata mapping.
+	n, err = sGIF.validateAttachments(context.Background(), chatID, `[{"file_id":"`+gifFileID+`","type":"gif"}]`, "")
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
 }
