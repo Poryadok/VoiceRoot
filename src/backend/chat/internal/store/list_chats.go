@@ -93,7 +93,7 @@ SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.creator_profile_id, c.l
        COALESCE(c.last_message_at, c.created_at) AS sort_at
 FROM chats c
 INNER JOIN chat_members m ON m.chat_id = c.id AND m.profile_id = $1
-WHERE c.type IN ('dm', 'group', 'channel') AND m.is_archived = true
+WHERE c.type IN ('dm', 'group', 'channel') AND m.is_archived = true AND m.deleted_for_self = false
 ORDER BY sort_at DESC, c.id DESC
 LIMIT $2
 `, viewerProfileID, fetch)
@@ -104,7 +104,7 @@ SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.creator_profile_id, c.l
        COALESCE(c.last_message_at, c.created_at) AS sort_at
 FROM chats c
 INNER JOIN chat_members m ON m.chat_id = c.id AND m.profile_id = $1
-WHERE c.type IN ('dm', 'group', 'channel') AND m.is_archived = false AND m.inbox_bucket = $3
+WHERE c.type IN ('dm', 'group', 'channel') AND m.is_archived = false AND m.deleted_for_self = false AND m.inbox_bucket = $3
 ORDER BY sort_at DESC, c.id DESC
 LIMIT $2
 `, viewerProfileID, fetch, inbox)
@@ -116,7 +116,7 @@ SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.creator_profile_id, c.l
        COALESCE(c.last_message_at, c.created_at) AS sort_at
 FROM chats c
 INNER JOIN chat_members m ON m.chat_id = c.id AND m.profile_id = $1
-WHERE c.type IN ('dm', 'group', 'channel') AND m.is_archived = true
+WHERE c.type IN ('dm', 'group', 'channel') AND m.is_archived = true AND m.deleted_for_self = false
   AND (
     COALESCE(c.last_message_at, c.created_at) < $2::timestamptz
     OR (
@@ -134,7 +134,7 @@ SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.creator_profile_id, c.l
        COALESCE(c.last_message_at, c.created_at) AS sort_at
 FROM chats c
 INNER JOIN chat_members m ON m.chat_id = c.id AND m.profile_id = $1
-WHERE c.type IN ('dm', 'group', 'channel') AND m.is_archived = false AND m.inbox_bucket = $5
+WHERE c.type IN ('dm', 'group', 'channel') AND m.is_archived = false AND m.deleted_for_self = false AND m.inbox_bucket = $5
   AND (
     COALESCE(c.last_message_at, c.created_at) < $2::timestamptz
     OR (
@@ -199,7 +199,7 @@ WITH candidates AS (
   SELECT` + listChatsSelectColumns + `
   FROM chats c
   INNER JOIN chat_members m ON m.chat_id = c.id AND m.profile_id = $1
-  WHERE c.type IN ('dm', 'group', 'channel') AND m.is_archived = false AND m.inbox_bucket = 'main'
+  WHERE c.type IN ('dm', 'group', 'channel') AND m.is_archived = false AND m.deleted_for_self = false AND m.inbox_bucket = 'main'
 
   UNION ALL
 
@@ -210,11 +210,11 @@ WITH candidates AS (
   WHERE c.space_id = ANY($2) AND c.type IN ('group', 'channel')
     AND NOT EXISTS (
       SELECT 1 FROM chat_members m
-      WHERE m.chat_id = c.id AND m.profile_id = $1 AND m.is_archived = true
+      WHERE m.chat_id = c.id AND m.profile_id = $1 AND (m.is_archived = true OR m.deleted_for_self = true)
     )
     AND NOT EXISTS (
       SELECT 1 FROM chat_members m
-      WHERE m.chat_id = c.id AND m.profile_id = $1 AND m.is_archived = false AND m.inbox_bucket = 'main'
+      WHERE m.chat_id = c.id AND m.profile_id = $1 AND m.is_archived = false AND m.deleted_for_self = false AND m.inbox_bucket = 'main'
     )
 ),
 deduped AS (
@@ -323,7 +323,7 @@ FROM chats c
 WHERE c.space_id = ANY($1) AND c.type IN ('group', 'channel')
   AND NOT EXISTS (
     SELECT 1 FROM chat_members m
-    WHERE m.chat_id = c.id AND m.profile_id = $2 AND m.is_archived = true
+    WHERE m.chat_id = c.id AND m.profile_id = $2 AND (m.is_archived = true OR m.deleted_for_self = true)
   )
 ORDER BY sort_at DESC, c.id DESC
 `, spaceIDs, viewerProfileID)
