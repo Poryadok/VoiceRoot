@@ -42,7 +42,7 @@
 ### Social
 
 
-- [ ] **[Social] REST contacts/favorites отсутствуют** — gRPC `AddContact`/`ListContacts`/`SetFavorite`/`ListFavorites` живые (`social_contacts.go`); Gateway только `POST /friends/contacts/sync`. Flutter не может list/add/favorite.
+- [x] **[Social] REST contacts/favorites отсутствуют** — Gateway `GET/POST /api/v1/friends/contacts`, `GET/POST /api/v1/friends/favorites` → gRPC `ListContacts`/`AddContact`/`SetFavorite`/`ListFavorites` (`transcode_friends.go`, `transcode_friends_contacts_test.go`); **Batch 23a**.
 - [x] **[Social] Friend invite block fail-open — `ensureFriendInvitationNotBlocked` no-op if `ProfileAccounts` nil (`USER_GRPC_ADDR` unset) or caller `x-voice-user-id` missing** — **done:** fail-closed `FailedPrecondition` when Blocks/ProfileAccounts nil; `Unauthenticated` when account metadata missing (`social_friends.go`); IT `friend_invite_block_degradation_test.go`. Compose already sets `USER_GRPC_ADDR` on social.
 
 ### User
@@ -157,7 +157,7 @@
 ### Social
 
 
-- [ ] **[Social] Contacts/favorites REST + declined status** — gRPC Add/List/SetFavorite **есть** (`social_contacts.go`, migration `000002_contacts`). Gateway нет GET/POST contacts кроме `contacts/sync`. `PendingFriendRequest` без `status` — клиент не отличит declined. `SyncPhoneContacts` пишет `source=phone_sync`, не создаёт Steam-style contact list UX.
+- [x] **[Social] Contacts/favorites REST + declined status** — Gateway `GET/POST /api/v1/friends/contacts`, `GET/POST /api/v1/friends/favorites` shipped (**Batch 23a**). **Remaining:** `PendingFriendRequest` без `status`; `SyncPhoneContacts` UX; declined distinction.
 - [ ] **[Social] Block does not cascade to graph** — `BlockAccount` in `src/backend/social/internal/store/blocks.go` inserts block row only; accepted friendships and pending/declined rows in `friendships` are untouched.
 - [ ] **[Social] Outgoing request status not exposed** — store tracks `pending` vs `declined` (`src/backend/social/internal/store/friendships.go` `PendingFriendOutgoing.Status`), but `ListFriendRequests` maps only `profile_id` + `created_at` (`social_friends.go`); `protos/voice/social/v1/social.proto` `PendingFriendRequest` has no status field. Clients cannot tell declined from pending despite `friends.md`.
 - [ ] **[Social] No test for `allow_friend_requests` enforcement** — privacy hook exists (`social_friends.go:356`) but no integration test (unlike phone sync in `src/backend/social/internal/grpcsvc/phone_search_privacy_integration_test.go`); no compose live test denying stranger invite.
