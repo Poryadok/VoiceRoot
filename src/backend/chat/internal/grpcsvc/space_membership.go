@@ -29,6 +29,15 @@ func (s *ChatGRPC) isEffectiveChatMember(ctx context.Context, row *store.ChatRow
 	if err != nil || !member {
 		return member, err
 	}
+	if s.DM != nil && row.Type == "dm" {
+		deleted, derr := s.DM.IsMemberDeletedForSelf(ctx, row.ID, profileID)
+		if derr != nil {
+			return false, derr
+		}
+		if deleted {
+			return false, nil
+		}
+	}
 	if row.SpaceID == nil || s.Roles == nil {
 		return true, nil
 	}

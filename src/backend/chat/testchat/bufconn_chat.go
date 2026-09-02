@@ -31,7 +31,8 @@ type ChatDeps struct {
 	ChatEvents chatevents.Publisher
 }
 
-// NewBufconnChatClient returns a ChatService client backed by an in-process server using pool (chat_db migrations applied).
+// NewBufconnChatClient returns a ChatService client backed by an in-process server using pool.
+// Caller must apply chat_db migrations including 000011_deleted_for_self (ListMembers checks soft-delete).
 func NewBufconnChatClient(t *testing.T, pool *pgxpool.Pool) (chatv1.ChatServiceClient, func()) {
 	t.Helper()
 	return NewBufconnChatClientWith(t, pool, ChatDeps{})

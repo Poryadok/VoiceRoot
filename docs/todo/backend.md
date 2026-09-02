@@ -299,8 +299,7 @@
 - [ ] **[Chat/Messaging/File] Stickers + GIF** — **P0**, 0 code: `[Chat]` pack store + provider search RPC; `[Messaging]` `STICKER`/`GIF` send payload + composer contract; `[File]` animated asset processing — superseded single-line below
 - [ ] **[Chat] Стикер-паки / GIF / voice-note first-class — 0 кода** — see `[Chat/Messaging/File] Stickers + GIF` above; voice-note via `[File]` upload category
 - [ ] **[File] Upload intent/category: video vs video_note** — proto field + processing branch in `ConfirmUpload` — composer video-note flow — **P0**
-- [x] **[Chat] `MuteChat` / `ArchiveChat`** — `mute_archive.go`. `DeleteChat` всё ещё нет handler.
-- [ ] **[Chat] `DeleteChat` unimplemented** — proto + gRPC handler exist; no `ChatGRPC.DeleteChat` (`src/backend/chat/internal/grpcsvc/`).
+- [x] **[Chat] `MuteChat` / `ArchiveChat`** — `mute_archive.go`.
 - [x] **[Chat] Group `last_message_at` never updated from message stream** — **done:** `TouchLastMessageAt` updates `type IN ('dm','group','channel')` (`dm.go`); store IT `last_message_at_integration_test.go`.
 - [x] **[Chat] Group last_message_at from message stream** — **done:** same as above.
 - [ ] **[Chat] `ListChats` partial `Chat` objects** — link UI gap for `e2e_enabled`, `space_id`, thread flags in list rows — [chat-service.md](../microservices/chat-service.md)
@@ -553,7 +552,6 @@
 - [ ] **[Chat] `ListChats` returns partial `Chat` objects** — list query omits `e2e_enabled`, `space_id`, `slow_mode_seconds`, thread flags (`src/backend/chat/internal/store/list_chats.go` vs `chatRowToProto` in `src/backend/chat/internal/grpcsvc/chat_dm.go`). List UI can’t show E2E state without `GetChat`.
 - [ ] **[Chat] NATS event surface incomplete vs doc** — published: `chat.created`, `chat.member_changed` (`src/backend/chat/internal/chatevents/jetstream.go`). Not published: `chat.updated`, `chat.deleted`, granular `member_added`/`removed`/`left` (`docs/microservices/chat-service.md` table).
 - [ ] **[Chat] S2S enrichment fails open** — Messaging errors logged and zeroed (`src/backend/chat/internal/grpcsvc/list_chats.go:77-81`). Documented degradation, but no metric/alert on enrichment skip.
-- [ ] **[Chat] No integration tests for folders/`DeleteChat` Unimplemented** — mute/archive **есть** (`mute_archive.go`); нет red-тестов на folders/delete.
 - [ ] **[Chat] README stale** — `src/backend/chat/README.md` still claims “scaffold / health only”; contradicts full gRPC implementation.
 
 ### Notification
