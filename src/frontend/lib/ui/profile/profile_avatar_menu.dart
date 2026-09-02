@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../backend/users_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
+import '../../state/idle_presence_controller.dart';
 import '../../state/social_providers.dart';
 import '../../state/subscription_providers.dart';
 import '../core/voice_avatar.dart';
@@ -80,7 +81,8 @@ List<PopupMenuEntry<String>> buildProfileAvatarMenuItems(
   final l10n = AppLocalizations.of(context)!;
   final auth = ref.watch(authControllerProvider);
   final activeId = auth.activeProfileId;
-  final profiles = ref.watch(myProfilesProvider).valueOrNull ?? const <VoiceProfile>[];
+  final profiles =
+      ref.watch(myProfilesProvider).valueOrNull ?? const <VoiceProfile>[];
   final tier = ref.watch(subscriptionTierProvider);
   final maxProfiles = tier == 'premium' ? 5 : 2;
   final switching = ref.watch(profileSwitchInProgressProvider);
@@ -149,10 +151,7 @@ List<PopupMenuEntry<String>> buildProfileAvatarMenuItems(
 
   items.add(const PopupMenuDivider());
   items.add(
-    PopupMenuItem<String>(
-      value: 'archive',
-      child: Text(l10n.chatListArchive),
-    ),
+    PopupMenuItem<String>(value: 'archive', child: Text(l10n.chatListArchive)),
   );
 
   return items;
@@ -186,16 +185,17 @@ Future<void> _handleSelection(
     final status = value.substring('presence:'.length);
     final auth = ref.read(authorizationHeaderProvider);
     if (auth == null) return;
-    final result = await ref.read(voiceUsersClientProvider).updatePresence(
-      authorization: auth,
-      status: status,
-    );
+    final result = await ref
+        .read(voiceUsersClientProvider)
+        .updatePresence(authorization: auth, status: status);
     if (!context.mounted) return;
     if (result is UsersApiFailure) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(result.message)));
+      return;
     }
+    ref.read(idlePresenceControllerProvider).onManualStatus(status);
     return;
   }
   if (value == 'archive') {

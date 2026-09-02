@@ -104,7 +104,6 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 - [ ] **QR add-friend — live camera scanner** — Batch 26a ships paste field; l10n implies camera scan. Add `mobile_scanner` (or similar) or narrow copy to paste-only.
 - [x] **Blocked accounts UI** — Social panel Blocked tab; `VoiceFriendsClient` `listBlocked`/`unblockAccount`; gateway `GET/DELETE /api/v1/friends/blocks` — **Batch 24a**.
 - [x] **Outgoing friend request declined label** — `PendingFriendRequest.status` from API; Requests tab shows «Declined» vs «Request pending» for outgoing rows — **Batch 24b**.
-- [ ] **Idle 5 мин → `UpdatePresence idle`** — сейчас idle только если клиент сам пришлёт. [presence.md](../features/presence.md).
 - [ ] **Windows: автоопределение игры** — process list → `game_title` + toggle; 0 кода. Post-MVP рядом с П.17.
 - [ ] **E2E fingerprint + key-change banner** — [encryption.md](../features/encryption.md); П.13.
 - [ ] **Shorebird OTA или явный defer** — [updates.md](../features/updates.md).
