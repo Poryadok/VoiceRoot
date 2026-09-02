@@ -11,13 +11,7 @@ import {
   parseCommandCatalog,
   type CatalogCommand,
 } from './commandCatalog';
-
-type BotSummary = {
-  id?: string;
-  name?: string;
-  description?: string;
-  slug?: string;
-};
+import { deleteBot, updateBot, type BotSummary } from './botLifecycle';
 
 function extractBots(body: Record<string, unknown>): BotSummary[] {
   const list = (body.bot_list as { bots?: BotSummary[] } | undefined)?.bots
@@ -45,7 +39,16 @@ function Portal() {
   const [botToken, setBotToken] = useState('');
   const [webhookSecret, setWebhookSecret] = useState('');
   const [catalog, setCatalog] = useState<CatalogCommand[]>([]);
+  const [editName, setEditName] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editScopesJson, setEditScopesJson] = useState('');
   const [status, setStatus] = useState('');
+
+  const applyBotToEditForm = useCallback((bot: BotSummary | undefined) => {
+    setEditName(bot?.name ?? '');
+    setEditDescription(bot?.description ?? '');
+    setEditScopesJson('');
+  }, []);
 
   const loadBotCatalog = useCallback(async (botId: string) => {
     if (!botId) {
@@ -90,13 +93,20 @@ function Portal() {
     const list = extractBots(body);
     setBots(list);
     if (list.length > 0 && list[0].id) {
-      const nextId = selectedBotId && list.some((b) => b.id === selectedBotId)
-        ? selectedBotId
-        : list[0].id;
-      setSelectedBotId(nextId);
-      await loadBotCatalog(nextId);
+      setSelectedBotId((current) => {
+        const nextId =
+          current && list.some((b) => b.id === current) ? current : list[0].id!;
+        const selected = list.find((b) => b.id === nextId);
+        applyBotToEditForm(selected);
+        void loadBotCatalog(nextId);
+        return nextId;
+      });
+    } else {
+      setSelectedBotId('');
+      applyBotToEditForm(undefined);
+      setCatalog([]);
     }
-  }, [loadBotCatalog, selectedBotId]);
+  }, [applyBotToEditForm, loadBotCatalog]);
 
   useEffect(() => {
     if (loggedIn) {
@@ -139,6 +149,9 @@ function Portal() {
     setBotToken('');
     setWebhookSecret('');
     setCatalog([]);
+    setEditName('');
+    setEditDescription('');
+    setEditScopesJson('');
     setManifest(defaultManifest);
     setStatus('Signed out');
   }
@@ -148,7 +161,55 @@ function Portal() {
     setBotToken('');
     setWebhookSecret('');
     setStatus('');
+    const selected = bots.find((b) => b.id === botId);
+    applyBotToEditForm(selected);
     await loadBotCatalog(botId);
+  }
+
+  async function saveBotChanges() {
+    if (!selectedBotId) {
+      setStatus('Select a bot first');
+      return;
+    }
+    setStatus('Updating bot…');
+    const fields: Parameters<typeof updateBot>[1] = {
+      name: editName.trim(),
+      description: editDescription.trim(),
+    };
+    if (editScopesJson.trim()) {
+      fields.scopesJson = editScopesJson.trim();
+    }
+    const result = await updateBot(selectedBotId, fields);
+    if (!result.ok) {
+      setStatus(result.error);
+      return;
+    }
+    setStatus('Bot updated');
+    await refreshBots();
+  }
+
+  async function removeSelectedBot() {
+    if (!selectedBotId) {
+      setStatus('Select a bot first');
+      return;
+    }
+    const botName = editName.trim() || selectedBotId;
+    if (!window.confirm(`Delete bot "${botName}"? This cannot be undone.`)) {
+      return;
+    }
+    setStatus('Deleting bot…');
+    const result = await deleteBot(selectedBotId);
+    if (!result.ok) {
+      setStatus(result.error);
+      return;
+    }
+    setSelectedBotId('');
+    setBotToken('');
+    setWebhookSecret('');
+    setCatalog([]);
+    applyBotToEditForm(undefined);
+    setStatus('Bot deleted');
+    await refreshBots();
   }
 
   async function registerBot() {
@@ -288,6 +349,41 @@ function Portal() {
             <button type="button" onClick={() => void registerBot()}>Register bot</button>
             {selectedBotId && (
               <p>Selected bot: <code>{selectedBotId}</code></p>
+            )}
+            {selectedBotId && (
+              <section className="bot-lifecycle" data-testid="bot-lifecycle">
+                <h3>Bot settings</h3>
+                <label>
+                  Bot name
+                  <input
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                  />
+                </label>
+                <label>
+                  Bot description
+                  <input
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                  />
+                </label>
+                <label>
+                  Scopes JSON (optional)
+                  <input
+                    value={editScopesJson}
+                    onChange={(e) => setEditScopesJson(e.target.value)}
+                    placeholder='["TEXT_CHAT_SEND_MESSAGES"]'
+                  />
+                </label>
+                <div className="actions">
+                  <button type="button" onClick={() => void saveBotChanges()}>
+                    Save bot changes
+                  </button>
+                  <button type="button" className="danger" onClick={() => void removeSelectedBot()}>
+                    Delete bot
+                  </button>
+                </div>
+              </section>
             )}
             {botToken && <p>Bot token (shown once): <code>{botToken}</code></p>}
             {webhookSecret && <p>Webhook secret (shown once): <code>{webhookSecret}</code></p>}

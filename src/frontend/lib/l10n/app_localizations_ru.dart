@@ -74,6 +74,51 @@ class AppLocalizationsRu extends AppLocalizations {
   String get authContinueGuest => 'Продолжить как гость';
 
   @override
+  String get authForgotPassword => 'Забыли пароль?';
+
+  @override
+  String get authErrorEmailRequired => 'Введите email.';
+
+  @override
+  String get authErrorPasswordMismatch => 'Пароли не совпадают.';
+
+  @override
+  String get authErrorInvalidOtp => 'Неверный или просроченный код.';
+
+  @override
+  String get passwordResetTitle => 'Сброс пароля';
+
+  @override
+  String get passwordResetRequestSubtitle =>
+      'Введите email — мы отправим код для сброса.';
+
+  @override
+  String get passwordResetSendLink => 'Отправить код';
+
+  @override
+  String get passwordResetBackToLogin => 'Назад ко входу';
+
+  @override
+  String passwordResetCodeSent(String email) {
+    return 'Код отправлен на $email. Введите его и новый пароль.';
+  }
+
+  @override
+  String get passwordResetCodeLabel => 'Код сброса';
+
+  @override
+  String get passwordResetNewPasswordLabel => 'Новый пароль';
+
+  @override
+  String get passwordResetConfirmPasswordLabel => 'Подтвердите пароль';
+
+  @override
+  String get passwordResetSubmit => 'Сбросить пароль';
+
+  @override
+  String get passwordResetSuccess => 'Пароль сброшен. Войдите с новым паролем.';
+
+  @override
   String get authLogout => 'Выйти';
 
   @override
