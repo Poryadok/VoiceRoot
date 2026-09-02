@@ -165,7 +165,6 @@
 
 
 - [ ] **[User] Premium animated GIF avatar is a dead path** — premium gate in `user_avatar.go` but `image/gif` rejected by `r2avatar/validate.go` (`TestValidateUploadParams_rejectsGifInPhase1`); conflicts with `docs/features/user-profile.md`. `GetSettings`/`UpdateSettings` **есть** (`user_settings.go`). `GetPrivacySettings` ownership check **есть** (non-S2S → `GetOwnedProfile`).
-- [ ] **[User] `banner_url` persisted but not exposed** — DB + `UpdateProfile` write; `rowToProto` omits `BannerUrl`. Нет presign как у аватара (свободный URL). Общие спейсы на профиле — нет S2S Space RPC.
 - [ ] **[User] `SetPrimaryProfile` отсутствует** — `is_primary` только bootstrap; phone search всегда primary.
 - [ ] **[User] Verification V1 incomplete (Auth + User boundary)** — Twitch only in `LinkedAccountsService` (`src/backend/auth/src/main/java/voice/backend/auth/service/LinkedAccountsService.java`); YouTube in DB schema only (`src/backend/auth/src/main/resources/db/migration/V3__linked_identities.sql`); no partner-status recheck cron (`docs/features/verification.md`).
 - [ ] **[User] NATS contract gaps** — `user.presence_changed` **published** but JetStream proto lacks `old_status`/`new_status`; missing `user.game_detected`, `user.settings_changed` ([user-service.md](../microservices/user-service.md)); `PublishProfileUpdated` / `PublishVerified` emit stub `ProfileCreated` without `changed_fields` / `verification_type`; `PublishProfileSwitched` drops `old_profile_id` (`src/backend/user/internal/userevents/jetstream.go`).

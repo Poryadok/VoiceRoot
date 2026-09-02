@@ -201,6 +201,40 @@ func TestUpdateProfile_FreeBannerRejected(t *testing.T) {
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))
 }
 
+// TestUpdateProfile_PremiumBannerExposed documents banner_url write + rowToProto readback.
+func TestUpdateProfile_PremiumBannerExposed(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startUserPostgresForSubscriptionTests(t, ctx)
+	profiles := store.NewProfileStore(pool)
+	cli, _ := startUserGRPCForSubscriptionTests(t, profiles)
+
+	accountID := uuid.New()
+	pid := uuid.New()
+	_, err := pool.Exec(ctx, `
+		INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+		VALUES ($1, $2, 'bannerp', '0001', 'Banner Premium', true)`,
+		pid, accountID)
+	require.NoError(t, err)
+
+	banner := "https://cdn-test.example/banners/" + pid.String() + ".png"
+	authed := withAccountTier(ctx, accountID, "premium")
+	resp, err := cli.UpdateProfile(authed, &userv1.UpdateProfileRequest{
+		ProfileId: pid.String(),
+		BannerUrl: &banner,
+	})
+	require.NoError(t, err)
+	require.Equal(t, banner, resp.GetProfile().GetBannerUrl())
+
+	got, err := cli.GetProfile(ctx, &userv1.GetProfileRequest{
+		By: &userv1.GetProfileRequest_ProfileId{ProfileId: pid.String()},
+	})
+	require.NoError(t, err)
+	require.Equal(t, banner, got.GetProfile().GetBannerUrl())
+}
+
 // TestDowngrade_FreezesExcessProfiles documents downgrade freezes profiles beyond free cap.
 func TestDowngrade_FreezesExcessProfiles(t *testing.T) {
 	if testing.Short() {
