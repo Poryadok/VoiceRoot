@@ -33,14 +33,14 @@ Admin panel (`src/admin/`) и Developer Portal (`src/developer-portal/`).
 ### Developer Portal
 
 
-- [ ] **[Developer Portal] Bot registration UI is hardcoded — fixed name `"DevPortal Bot"`, description, single scope; no form for name/description/scopes per `docs/features/bots.md` manifest model.** — `src/developer-portal/src/App.tsx`
+- [x] **[Developer Portal] Bot registration UI is hardcoded — fixed name `"DevPortal Bot"`, description, single scope; no form for name/description/scopes per `docs/features/bots.md` manifest model.** — `src/developer-portal/src/App.tsx`
 - [x] **[Developer Portal] Missing bot lifecycle UI — Gateway exposes `PATCH`/`DELETE` `/api/v1/bots/{id}` but portal has no update/delete.** — `src/developer-portal/src/App.tsx`, `src/backend/gateway/transcode_bots.go`
-- [ ] **[Developer Portal] No bot detail fetch on selection — never calls `GET /api/v1/bots/{id}`; list shows name/id only.** — `src/developer-portal/src/App.tsx`
-- [ ] **[Developer Portal] Secrets leak across bot selection — `botToken` / `webhookSecret` state not cleared when switching bots.** — `src/developer-portal/src/App.tsx`
-- [ ] **[Developer Portal] Privileged scope warnings absent — `bots.md` requires explicit warning for `TEXT_CHAT_READ_HISTORY` / `SPACE_MANAGE_ROLES`; manifest textarea has no validation UX.** — `src/developer-portal/src/App.tsx`, `docs/features/bots.md`
-- [ ] **[Developer Portal] Not in implementation map — `docs/PLAN.md` lists bots as partial but omits `src/developer-portal/` from “Размещение кода”.** — `docs/PLAN.md`
-- [ ] **[Developer Portal] DEPLOYMENT.md stale on prod — says prod portal Ingress “not in-repo yet” but manifest exists.** — `docs/DEPLOYMENT.md`, `deploy/prod/developer-portal.yaml`
-- [ ] **[Developer Portal] README points to missing local `.env.example` — refers to `src/developer-portal/.env.example`; vars live in repo root `.env.example`.** — `src/developer-portal/README.md`, `.env.example`
+- [x] **[Developer Portal] No bot detail fetch on selection — never calls `GET /api/v1/bots/{id}`; list shows name/id only.** — `src/developer-portal/src/App.tsx`
+- [x] **[Developer Portal] Secrets leak across bot selection — `botToken` / `webhookSecret` state not cleared when switching bots.** — `src/developer-portal/src/App.tsx`
+- [x] **[Developer Portal] Privileged scope warnings absent — `bots.md` requires explicit warning for `TEXT_CHAT_READ_HISTORY` / `SPACE_MANAGE_ROLES`; manifest textarea has no validation UX.** — `src/developer-portal/src/App.tsx`, `docs/features/bots.md`
+- [x] **[Developer Portal] Not in implementation map — `docs/PLAN.md` lists bots as partial but omits `src/developer-portal/` from “Размещение кода”.** — `docs/PLAN.md`
+- [x] **[Developer Portal] DEPLOYMENT.md stale on prod — says prod portal Ingress “not in-repo yet” but manifest exists.** — `docs/DEPLOYMENT.md`, `deploy/prod/developer-portal.yaml`
+- [x] **[Developer Portal] README points to missing local `.env.example` — refers to `src/developer-portal/.env.example`; vars live in repo root `.env.example`.** — `src/developer-portal/README.md`, `.env.example`
 
 
 ## Low
