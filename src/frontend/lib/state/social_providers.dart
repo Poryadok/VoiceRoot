@@ -235,6 +235,23 @@ final isFavoriteProvider = Provider.family<bool, String>((ref, profileId) {
   return favorites?.favorites.contains(profileId) ?? false;
 });
 
+final blockedListProvider = FutureProvider<BlockedListData>((ref) async {
+  final auth = ref.watch(authorizationHeaderProvider);
+  if (auth == null) {
+    throw StateError('not_authenticated');
+  }
+  final result = await ref
+      .watch(voiceFriendsClientProvider)
+      .listBlocked(authorization: auth);
+  return switch (result) {
+    FriendsApiOk(:final data) => data,
+    FriendsApiFailure(:final statusCode)
+        when isBackendUnavailable(statusCode) =>
+      throw const BackendUnavailableException(),
+    FriendsApiFailure(:final message) => throw Exception(message),
+  };
+});
+
 class SocialActions {
   SocialActions(this._ref);
 
@@ -351,11 +368,27 @@ class SocialActions {
     };
   }
 
+  Future<String?> unblockAccount(String blockedAccountId) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final result = await _ref.read(voiceFriendsClientProvider).unblockAccount(
+      authorization: auth,
+      blockedAccountId: blockedAccountId,
+    );
+    _invalidateSocialLists();
+    return switch (result) {
+      FriendsApiEmpty() => null,
+      FriendsApiFailure(:final message) => message,
+      FriendsApiOk() => null,
+    };
+  }
+
   void _invalidateSocialLists() {
     _ref.invalidate(friendsListProvider);
     _ref.invalidate(friendRequestsProvider);
     _ref.invalidate(contactsListProvider);
     _ref.invalidate(favoritesListProvider);
+    _ref.invalidate(blockedListProvider);
   }
 }
 

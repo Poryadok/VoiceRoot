@@ -27,6 +27,7 @@ class SocialPanel extends ConsumerStatefulWidget {
   static const Key tabContactsKey = Key('social_tab_contacts');
   static const Key tabFavoritesKey = Key('social_tab_favorites');
   static const Key tabRequestsKey = Key('social_tab_requests');
+  static const Key tabBlockedKey = Key('social_tab_blocked');
   static const Key searchFieldKey = Key('social_search_field');
   static const Key searchSubmitKey = Key('social_search_submit');
   static const Key friendsListKey = Key('social_friends_list');
@@ -36,6 +37,8 @@ class SocialPanel extends ConsumerStatefulWidget {
   static const Key contactsUnavailableKey = Key('social_contacts_unavailable');
   static const Key favoritesUnavailableKey = Key('social_favorites_unavailable');
   static const Key requestsUnavailableKey = Key('social_requests_unavailable');
+  static const Key blockedListKey = Key('social_blocked_list');
+  static const Key blockedUnavailableKey = Key('social_blocked_unavailable');
   static const Key searchUnavailableKey = Key('social_search_unavailable');
   static const Key searchLoadingKey = Key('social_search_loading');
 
@@ -50,6 +53,9 @@ class SocialPanel extends ConsumerStatefulWidget {
 
   static Key favoriteToggleKey(String profileId) =>
       Key('social_favorite_toggle_$profileId');
+
+  static Key unblockButtonKey(String accountId) =>
+      Key('social_unblock_$accountId');
 
   final int initialTabIndex;
 
@@ -66,7 +72,7 @@ class _SocialPanelState extends ConsumerState<SocialPanel>
   void initState() {
     super.initState();
     _tabs = TabController(
-      length: 5,
+      length: 6,
       vsync: this,
       initialIndex: widget.initialTabIndex,
     );
@@ -153,6 +159,10 @@ class _SocialPanelState extends ConsumerState<SocialPanel>
                   key: SocialPanel.tabRequestsKey,
                   text: l10n.socialTabRequests,
                 ),
+                Tab(
+                  key: SocialPanel.tabBlockedKey,
+                  text: l10n.socialTabBlocked,
+                ),
               ],
             ),
             Expanded(
@@ -167,6 +177,7 @@ class _SocialPanelState extends ConsumerState<SocialPanel>
                   _ContactsTab(onOpenProfile: _openProfile),
                   _FavoritesTab(onOpenProfile: _openProfile),
                   _RequestsTab(onOpenProfile: _openProfile),
+                  _BlockedTab(),
                 ],
               ),
             ),
@@ -581,6 +592,66 @@ class _RequestsTab extends ConsumerWidget {
               ),
             ],
           ],
+        );
+      },
+    );
+  }
+}
+
+class _BlockedTab extends ConsumerWidget {
+  const _BlockedTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context)!;
+    final blockedAsync = ref.watch(blockedListProvider);
+    final actions = ref.read(socialActionsProvider);
+
+    return blockedAsync.when(
+      loading: () => const VoiceListSkeleton(),
+      error: (e, st) => Center(
+        child: VoiceStatePanel(
+          key: SocialPanel.blockedUnavailableKey,
+          title: socialListErrorMessage(l10n, e),
+          icon: Icons.cloud_off_outlined,
+          actionLabel: l10n.commonRetry,
+          onAction: () => ref.invalidate(blockedListProvider),
+        ),
+      ),
+      data: (data) {
+        if (data.blocked.isEmpty) {
+          return VoiceStatePanel(
+            title: l10n.socialBlockedEmpty,
+            icon: Icons.block_outlined,
+          );
+        }
+        return ListView.builder(
+          key: SocialPanel.blockedListKey,
+          itemCount: data.blocked.length,
+          itemBuilder: (context, index) {
+            final entry = data.blocked[index];
+            return ListTile(
+              leading: const Icon(Icons.block),
+              title: Text(entry.blockedAccountId),
+              trailing: TextButton(
+                key: SocialPanel.unblockButtonKey(entry.blockedAccountId),
+                onPressed: () async {
+                  final err = await actions.unblockAccount(
+                    entry.blockedAccountId,
+                  );
+                  if (!context.mounted) return;
+                  if (err != null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(err)),
+                    );
+                  } else {
+                    ref.invalidate(blockedListProvider);
+                  }
+                },
+                child: Text(l10n.socialUnblock),
+              ),
+            );
+          },
         );
       },
     );

@@ -278,6 +278,12 @@ abstract class AppLocalizations {
   /// **'Requests'**
   String get socialTabRequests;
 
+  /// No description provided for @socialTabBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocked'**
+  String get socialTabBlocked;
+
   /// No description provided for @socialSearchHint.
   ///
   /// In en, this message translates to:
@@ -469,6 +475,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No friend requests'**
   String get socialRequestsEmpty;
+
+  /// No description provided for @socialBlockedEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No blocked accounts'**
+  String get socialBlockedEmpty;
+
+  /// No description provided for @socialUnblock.
+  ///
+  /// In en, this message translates to:
+  /// **'Unblock'**
+  String get socialUnblock;
 
   /// No description provided for @socialIncomingRequests.
   ///

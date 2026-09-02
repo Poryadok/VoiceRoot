@@ -114,6 +114,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get socialTabRequests => 'Requests';
 
   @override
+  String get socialTabBlocked => 'Blocked';
+
+  @override
   String get socialSearchHint => 'Search by name or @username';
 
   @override
@@ -215,6 +218,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get socialRequestsEmpty => 'No friend requests';
+
+  @override
+  String get socialBlockedEmpty => 'No blocked accounts';
+
+  @override
+  String get socialUnblock => 'Unblock';
 
   @override
   String get socialIncomingRequests => 'Incoming';

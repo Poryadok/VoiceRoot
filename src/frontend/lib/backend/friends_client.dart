@@ -69,6 +69,19 @@ class FavoritesListData {
   final List<String> favorites;
 }
 
+class BlockedEntry {
+  const BlockedEntry({required this.blockedAccountId});
+
+  final String blockedAccountId;
+}
+
+class BlockedListData {
+  const BlockedListData({required this.blocked, this.nextCursor});
+
+  final List<BlockedEntry> blocked;
+  final String? nextCursor;
+}
+
 /// HTTP client for Social friend routes (`/api/v1/friends/**`).
 class VoiceFriendsClient {
   VoiceFriendsClient({required GatewayHttpClient gateway}) : _gateway = gateway;
@@ -312,6 +325,60 @@ class VoiceFriendsClient {
         'friend_profile_id': friendProfileId,
         'favorite': favorite,
       },
+    );
+    return _mapEmpty(result);
+  }
+
+  Future<FriendsApiResult<BlockedListData>> listBlocked({
+    required String authorization,
+    String? cursor,
+    int? pageSize,
+  }) async {
+    final params = <String, String>{};
+    if (cursor != null && cursor.isNotEmpty) params['cursor'] = cursor;
+    if (pageSize != null) params['page_size'] = '$pageSize';
+    final uri = _gateway.replace(
+      path: '/api/v1/friends/blocks',
+      queryParameters: params.isEmpty ? null : params,
+    );
+    final result = await _gateway.getJson(uri, authorization: authorization);
+    return switch (result) {
+      GatewayHttpOk(:final data) => FriendsApiOk(_blockedListFromJson(data)),
+      GatewayHttpFailure(:final error) => FriendsApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+
+  BlockedListData _blockedListFromJson(Map<String, dynamic> data) {
+    final list = data['blocked_list'] as Map<String, dynamic>? ?? data;
+    final blockedRaw = list['blocked'] as List<dynamic>? ?? const [];
+    final blocked = <BlockedEntry>[
+      for (final item in blockedRaw)
+        if (item is Map<String, dynamic>)
+          BlockedEntry(
+            blockedAccountId:
+                item['blocked_account_id'] as String? ??
+                item['blockedAccountId'] as String? ??
+                '',
+          ),
+    ].where((b) => b.blockedAccountId.isNotEmpty).toList(growable: false);
+    return BlockedListData(
+      blocked: blocked,
+      nextCursor:
+          list['next_cursor'] as String? ?? list['nextCursor'] as String?,
+    );
+  }
+
+  Future<FriendsApiResult<void>> unblockAccount({
+    required String authorization,
+    required String blockedAccountId,
+  }) async {
+    final result = await _gateway.deleteEmpty(
+      uri: _gateway.resolve('/api/v1/friends/blocks/$blockedAccountId'),
+      authorization: authorization,
     );
     return _mapEmpty(result);
   }

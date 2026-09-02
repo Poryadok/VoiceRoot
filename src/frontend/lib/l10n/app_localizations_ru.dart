@@ -114,6 +114,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get socialTabRequests => 'Заявки';
 
   @override
+  String get socialTabBlocked => 'Заблокированные';
+
+  @override
   String get socialSearchHint => 'Поиск по имени или @нику';
 
   @override
@@ -215,6 +218,12 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get socialRequestsEmpty => 'Нет заявок в друзья';
+
+  @override
+  String get socialBlockedEmpty => 'Нет заблокированных аккаунтов';
+
+  @override
+  String get socialUnblock => 'Разблокировать';
 
   @override
   String get socialIncomingRequests => 'Входящие';
