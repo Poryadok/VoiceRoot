@@ -33,7 +33,7 @@
 ### Moderation
 
 
-- [ ] **[Moderation] Shadow-ban forward bypass** — `SendMessage` sets `ghost_only` and suppresses `message.sent` when banned (`messaging_grpc.go`; IT `TestPlatformModeration_ShadowBannedSenderMessageHiddenFromPeer`). **`ForwardMessage` / `insertForwardCommentary` skip `IsShadowBanned`** and always publish → shadow-banned users bypass ghost delivery via forward. Audience threshold still `MODERATION_PLATFORM_AUDIENCE_SIZE`, not live object. — `src/backend/moderation/internal/grpcsvc/reports.go`; `src/backend/messaging/internal/grpcsvc/messaging_grpc.go`
+- [x] **[Moderation] Shadow-ban forward bypass** — **done (PR #132):** `ForwardMessage` / `insertForwardCommentary` apply `IsShadowBanned` + `ghost_only` / suppress `message.sent` like `SendMessage` (`messaging_grpc.go`).
 - [x] **[Moderation] Sanction notifications: consumer stub** — **done (T-013):** `routeModerationNotification` resolves `target_account_id` → profile ids via User `ListProfileIDsForAccount` (`notification/internal/s2s/account_profiles.go`); `HandleSanctionApplied` routes `system` **push** with presence skipped (no Realtime system in-app yet); shadow_ban stays silent (`reports.md`).
 - [x] **[Moderation] Appeals not exposed to users** — Gateway `POST /api/v1/moderation/appeals` (201 Created → `SubmitAppeal`); Flutter `VoiceModerationClient.submitAppeal` + settings appeal sheet (`docs/features/reports.md` § Апелляция). **Batch 27a**.
 
@@ -178,12 +178,10 @@
 ### Analytics
 
 
-- [ ] **[Analytics] Health dashboard always empty for Gateway telemetry** — Query counts `gateway_request` (`d:\Git\Voice\src\backend\analytics\internal\store\query.go`); Gateway publishes `api_request` (`d:\Git\Voice\src\backend\gateway\analytics_telemetry.go`).
-- [ ] **[Analytics] Retention windows wrong** — D1/D7/D30 SQL uses same-day windows (`timestamp < cohort_date + N`) instead of day+N return (`d:\Git\Voice\src\backend\analytics\internal\store\query.go`). Product retention KPIs will be misleading.
+- [ ] **[Analytics] Health dashboard under-spec vs docs** — event type defaults to `api_request` (PR #125 / master); product still under-delivers latency/error/WS KPIs from `docs/features/analytics.md` / analytics-service.md (`query.go`).
 - [ ] **[Analytics] Product dashboard under-spec** — `product` returns `dau` as `uniqExact(user_id_hashed)` over the whole range (default 30d), not daily DAU; missing MAU/WAU/onboarding completion per `docs/features/analytics.md` / `docs/microservices/analytics-service.md` (`d:\Git\Voice\src\backend\analytics\internal\store\query.go`).
 - [ ] **[Analytics] Grafana vs REST registration mismatch** — Grafana panel counts `profile_created` (`d:\Git\Voice\deploy\observability\grafana\dashboards\voice-analytics-product.json`); REST `product` dashboard counts `user_registered` (`d:\Git\Voice\src\backend\analytics\internal\store\query.go`).
 - [ ] **[Analytics] DoD ingest path untested** — Live tests only check RBAC 200/403 and export HTTP 200; no assertion that `message.sent` → ClickHouse row within 60s (`d:\Git\Voice\src\backend\gateway\compose_analytics_live_test.go`, `d:\Git\Voice\src\backend\gateway\compose_analytics_export_live_test.go` vs `docs/features/analytics.md` DoD §1).
-- [ ] **[Analytics] REST date range not wired** — Gateway transcoding never passes `from`/`to` query params to gRPC (`d:\Git\Voice\src\backend\gateway\transcode_analytics.go`); Admin client also omits them (`d:\Git\Voice\src\admin\src\api\analytics.ts`).
 - [ ] **[Analytics] Silent no-op without ClickHouse** — `CLICKHOUSE_DSN` unset → service starts, ingest buffers, nothing persisted (`d:\Git\Voice\src\backend\analytics\main.go`); k8s secret refs are `optional: true` (`d:\Git\Voice\deploy\staging\services.yaml`, `d:\Git\Voice\deploy\prod\services.yaml`).
 - [ ] **[Analytics] Weak prod hash-key guard** — Missing `ANALYTICS_ID_HASH_KEY` falls back to dev default (`d:\Git\Voice\src\backend\analytics\main.go`).
 
@@ -236,7 +234,7 @@
 - [x] **[Messaging] “Copy as new message” / forward without attribution** — **done:** `ForwardMessageRequest.without_attribution` → regular message, no Forwarded-from; skips `allow_forward` deny (FW-03).
 - [x] **[Messaging] Forward-author privacy block not enforced** — spec says user can forbid forwarding their messages; Messaging `ForwardMessage` checks User `allow_forward` via S2S (`PermissionDenied`).
 - [ ] **[Messaging] Group/channel view counts absent** — `text-chat.md` requires per-message view counter; no model/RPC beyond DM-style `read_receipts`.
-- [ ] **[Messaging] `ForwardMessage` skips shadow-ban + some send guards** — runs DM block/privacy, send-perm, E2E, channel/thread policy, slow-mode (`Moderation.EnsureCanSend`), attachment privacy, `CheckMessageAllowed`; **still skips** `IsShadowBanned` / `ghost_only` on insert + `insertForwardCommentary`; attachment `validateRichPayload` gaps vs `SendMessage` (`messaging_grpc.go` `ForwardMessage`).
+- [ ] **[Messaging] `ForwardMessage` attachment `validateRichPayload` gaps vs `SendMessage`** — shadow-ban / ghost_only on forward+commentary closed (PR #126/#131); remaining: attachment `validateRichPayload` parity with SendMessage (`messaging_grpc.go` `ForwardMessage`).
 - [ ] **[Messaging] Read-state APIs DM-typed only** — `MarkRead` / `GetReadState` / `GetBulkReadState` / `GetChatListMetadata` use `validateChatRefDM`; explicit `group`/`channel` refs rejected while `GetMessages` accepts all types.
 - [ ] **[Messaging] `content_type`: article, location, video_note, music** — **partial (parallel track):** `messages.content_type` column + `SendMessage`/`Message.content_type` proto; location/article send without `file_id`; `video_note`/`music` payload validation still open — [messaging-service.md](../microservices/messaging-service.md) — **P0**
 - [ ] **[Messaging] `schedule_message`, `send_when_online`, `send_silent`** — **doc contract in** [messaging-service.md](../microservices/messaging-service.md) (`SendMessageRequest`, `scheduled_messages`, worker). Not yet in proto/code. — **P0**
@@ -299,8 +297,7 @@
 - [ ] **[Chat/Messaging/File] Stickers + GIF** — **P0**, 0 code: `[Chat]` pack store + provider search RPC; `[Messaging]` `STICKER`/`GIF` send payload + composer contract; `[File]` animated asset processing — superseded single-line below
 - [ ] **[Chat] Стикер-паки / GIF / voice-note first-class — 0 кода** — see `[Chat/Messaging/File] Stickers + GIF` above; voice-note via `[File]` upload category
 - [ ] **[File] Upload intent/category: video vs video_note** — proto field + processing branch in `ConfirmUpload` — composer video-note flow — **P0**
-- [x] **[Chat] `MuteChat` / `ArchiveChat`** — `mute_archive.go`. `DeleteChat` всё ещё нет handler.
-- [ ] **[Chat] `DeleteChat` unimplemented** — proto + gRPC handler exist; no `ChatGRPC.DeleteChat` (`src/backend/chat/internal/grpcsvc/`).
+- [x] **[Chat] `MuteChat` / `ArchiveChat`** — `mute_archive.go`.
 - [x] **[Chat] Group `last_message_at` never updated from message stream** — **done:** `TouchLastMessageAt` updates `type IN ('dm','group','channel')` (`dm.go`); store IT `last_message_at_integration_test.go`.
 - [x] **[Chat] Group last_message_at from message stream** — **done:** same as above.
 - [ ] **[Chat] `ListChats` partial `Chat` objects** — link UI gap for `e2e_enabled`, `space_id`, thread flags in list rows — [chat-service.md](../microservices/chat-service.md)
@@ -553,7 +550,6 @@
 - [ ] **[Chat] `ListChats` returns partial `Chat` objects** — list query omits `e2e_enabled`, `space_id`, `slow_mode_seconds`, thread flags (`src/backend/chat/internal/store/list_chats.go` vs `chatRowToProto` in `src/backend/chat/internal/grpcsvc/chat_dm.go`). List UI can’t show E2E state without `GetChat`.
 - [ ] **[Chat] NATS event surface incomplete vs doc** — published: `chat.created`, `chat.member_changed` (`src/backend/chat/internal/chatevents/jetstream.go`). Not published: `chat.updated`, `chat.deleted`, granular `member_added`/`removed`/`left` (`docs/microservices/chat-service.md` table).
 - [ ] **[Chat] S2S enrichment fails open** — Messaging errors logged and zeroed (`src/backend/chat/internal/grpcsvc/list_chats.go:77-81`). Documented degradation, but no metric/alert on enrichment skip.
-- [ ] **[Chat] No integration tests for folders/`DeleteChat` Unimplemented** — mute/archive **есть** (`mute_archive.go`); нет red-тестов на folders/delete.
 - [ ] **[Chat] README stale** — `src/backend/chat/README.md` still claims “scaffold / health only”; contradicts full gRPC implementation.
 
 ### Notification

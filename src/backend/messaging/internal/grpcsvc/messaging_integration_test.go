@@ -63,6 +63,14 @@ func applyBaseMessagingMigrations(t *testing.T, ctx context.Context, pool *pgxpo
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000012_messages_content_type.up.sql"))
 }
 
+// applyChatDBForBufconnChat applies chat_db schema needed when wiring real Chat gRPC
+// (ListMembers → IsMemberDeletedForSelf requires deleted_for_self).
+func applyChatDBForBufconnChat(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000011_deleted_for_self.up.sql"))
+}
+
 func withProfileCtx(ctx context.Context, accountID, profileID uuid.UUID) context.Context {
 	ctx = metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountID.String())
 	return metadata.AppendToOutgoingContext(ctx, authctx.HeaderProfileID, profileID.String())
@@ -729,7 +737,7 @@ func TestMessagingNonMemberDenied(t *testing.T) {
 func TestMessagingChatMembershipViaGRPC(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForTest(t, ctx)
-	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applyChatDBForBufconnChat(t, ctx, pool)
 	applyBaseMessagingMigrations(t, ctx, pool)
 
 	chatID := uuid.New()
@@ -761,7 +769,7 @@ func TestMessagingChatMembershipViaGRPC(t *testing.T) {
 func TestChatMessagingIntegration_CreateDM_SendGetMessagesCursor(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForTest(t, ctx)
-	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applyChatDBForBufconnChat(t, ctx, pool)
 	applyBaseMessagingMigrations(t, ctx, pool)
 
 	acctA := uuid.New()
@@ -831,7 +839,7 @@ func TestChatMessagingIntegration_CreateDM_SendGetMessagesCursor(t *testing.T) {
 func TestChatMessagingIntegration_SendDeniedWhenSocialBlocks(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForTest(t, ctx)
-	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applyChatDBForBufconnChat(t, ctx, pool)
 	applyBaseMessagingMigrations(t, ctx, pool)
 
 	acctA := uuid.New()
