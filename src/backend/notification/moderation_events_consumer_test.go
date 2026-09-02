@@ -16,7 +16,7 @@ func TestRouteModerationNotification_SanctionApplied(t *testing.T) {
 		Payload: &eventsv1.ModerationStreamEvent_SanctionApplied{
 			SanctionApplied: &eventsv1.SanctionApplied{
 				SanctionId: uuid.NewString(),
-				AccountId:  uuid.NewString(),
+				TargetAccountId:  uuid.NewString(),
 			},
 		},
 	}
