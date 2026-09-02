@@ -374,7 +374,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('in_chat_search_error')), findsOneWidget);
-    expect(find.textContaining('search failed'), findsOneWidget);
+    expect(find.textContaining('Could not search this chat'), findsOneWidget);
   });
 }
 

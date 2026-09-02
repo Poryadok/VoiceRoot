@@ -185,7 +185,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('global_search_error')), findsOneWidget);
-    expect(find.textContaining('search unavailable'), findsOneWidget);
+    expect(find.textContaining('Could not complete search'), findsOneWidget);
   });
 
   testWidgets('compact mode search results do not require Expanded parent', (

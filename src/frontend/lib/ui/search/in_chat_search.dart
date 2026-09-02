@@ -9,6 +9,7 @@ import '../../state/chat_providers.dart';
 import '../../state/e2e_providers.dart';
 import '../../state/search_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../api_error_messages.dart';
 
 class InChatSearch extends ConsumerStatefulWidget {
   const InChatSearch({
@@ -133,7 +134,11 @@ class _InChatSearchState extends ConsumerState<InChatSearch> {
       setState(() {
         _hits = const [];
         _activeIndex = 0;
-        _errorMessage = result.error.message;
+        _errorMessage = inChatSearchErrorMessage(
+          AppLocalizations.of(context)!,
+          result.error.message,
+          statusCode: result.error.statusCode,
+        );
       });
     } else {
       setState(() {

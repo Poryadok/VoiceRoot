@@ -8,7 +8,10 @@ import '../../settings/notification_quiet_hours_storage.dart';
 import '../../state/auth_providers.dart';
 import '../../state/push_notifications_controller.dart';
 import '../../theme/voice_colors.dart';
+import '../api_error_messages.dart';
 import '../core/voice_primary_button.dart';
+import '../core/voice_skeleton.dart';
+import '../core/voice_state_panel.dart';
 
 /// Global and per-chat notification preferences (docs/features/notifications.md).
 class NotificationSettingsScreen extends ConsumerStatefulWidget {
@@ -262,9 +265,19 @@ class _NotificationSettingsScreenState
       ),
       body: SafeArea(
         child: _loading
-            ? const Center(child: CircularProgressIndicator())
+            ? const VoiceListSkeleton(rowCount: 6)
             : settings == null
-            ? Center(child: Text(_error ?? l10n.notificationLoadError))
+            ? VoiceStatePanel(
+                title: l10n.notificationLoadError,
+                message: settingsLoadErrorMessage(
+                  l10n,
+                  _error,
+                  fallback: l10n.notificationLoadError,
+                ),
+                icon: Icons.cloud_off_outlined,
+                actionLabel: l10n.commonRetry,
+                onAction: _load,
+              )
             : SingleChildScrollView(
                 padding: const EdgeInsets.all(24),
                 child: Column(
