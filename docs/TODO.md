@@ -74,11 +74,12 @@ DOC-аудит закрыт (0 open DOC). Невыполненное разне�
 | Куда | Что |
 |------|-----|
 | [backend.md](todo/backend.md) § Critical Subscription | Checkout = `checkout.paddle.test`; CloudPayments `Unimplemented`; JWT `subscription_tier` без `AUTH_NATS_URL` |
-| [backend.md](todo/backend.md) § Critical Space | Нет `DeleteSpace` / `TransferOwnership` / `GetAuditLog` / каталога / шаблонов |
-| [backend.md](todo/backend.md) § High Chat | Стикеры/GIF **в v1** (0 кода); folders RPC; view-count; `DeleteChat` |
+| [backend.md](todo/backend.md) § Critical Space | Нет `DeleteSpace` / `TransferOwnership` / tree pin / `GetAuditLog` |
+| [backend.md](todo/backend.md) § Critical Messaging | `ForwardMessage` shadow-ban bypass; `MODERATION_GRPC_ADDR` absent on staging k8s |
+| [backend.md](todo/backend.md) § High Chat | Стикеры/GIF **в v1** (0 Flutter); view-count; `DeleteChat` |
 | [ci.md](todo/ci.md) § Critical | FCM/APNs, Alertmanager, staging DoD, TOTP/Resend/Paddle secrets |
-| [admin.md](todo/admin.md) § High | Analytics search/voice dashboards (backend first); game catalog mode editor |
-| [client.md](todo/client.md) § High | Телефон/OTP/sessions/delete-account UI; черновики |
+| [admin.md](todo/admin.md) § High | Analytics search/voice dashboard types (backend first) |
+| [client.md](todo/client.md) § High | Телефон/OTP, password-reset UI; черновики; mobile shell R2-A04 remainder |
 
 ---
 
