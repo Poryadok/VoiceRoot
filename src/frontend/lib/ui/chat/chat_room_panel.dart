@@ -1895,6 +1895,11 @@ class _PinnedMessagesBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final voice = VoiceColors.of(context);
     final preview = pinned.first;
+    final collapsed = pinned.length > 1;
+    final labelStyle = Theme.of(context).textTheme.labelMedium?.copyWith(
+      color: voice.profileAccent,
+      fontWeight: FontWeight.w600,
+    );
     return Material(
       color: voice.surface,
       child: InkWell(
@@ -1906,24 +1911,25 @@ class _PinnedMessagesBar extends StatelessWidget {
               Icon(Icons.push_pin, size: 18, color: voice.profileAccent),
               const SizedBox(width: 8),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: voice.profileAccent,
-                        fontWeight: FontWeight.w600,
+                child: collapsed
+                    ? Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: labelStyle,
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(label, style: labelStyle),
+                          Text(
+                            preview.content,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: voice.textSecondary),
+                          ),
+                        ],
                       ),
-                    ),
-                    Text(
-                      preview.content,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: voice.textSecondary),
-                    ),
-                  ],
-                ),
               ),
             ],
           ),
