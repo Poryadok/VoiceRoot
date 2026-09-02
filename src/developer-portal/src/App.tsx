@@ -11,7 +11,12 @@ import {
   parseCommandCatalog,
   type CatalogCommand,
 } from './commandCatalog';
-import { deleteBot, updateBot, type BotSummary } from './botLifecycle';
+import { deleteBot, fetchBot, updateBot, type BotSummary } from './botLifecycle';
+import {
+  privilegedScopesInJson,
+  privilegedScopesInManifest,
+  warningsForPrivilegedScopes,
+} from './scopeWarnings';
 
 function extractBots(body: Record<string, unknown>): BotSummary[] {
   const list = (body.bot_list as { bots?: BotSummary[] } | undefined)?.bots
@@ -42,13 +47,30 @@ function Portal() {
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editScopesJson, setEditScopesJson] = useState('');
+  const [regName, setRegName] = useState('');
+  const [regDescription, setRegDescription] = useState('');
+  const [regScopesJson, setRegScopesJson] = useState('["TEXT_CHAT_SEND_MESSAGES"]');
   const [status, setStatus] = useState('');
 
   const applyBotToEditForm = useCallback((bot: BotSummary | undefined) => {
     setEditName(bot?.name ?? '');
     setEditDescription(bot?.description ?? '');
-    setEditScopesJson('');
+    setEditScopesJson(bot?.scopes_json ?? '');
   }, []);
+
+  const loadBotDetail = useCallback(async (botId: string, fallback?: BotSummary) => {
+    if (!botId) {
+      applyBotToEditForm(undefined);
+      return;
+    }
+    const result = await fetchBot(botId);
+    if (result.ok) {
+      applyBotToEditForm(result.bot);
+      return;
+    }
+    applyBotToEditForm(fallback);
+    setStatus(`Load bot failed: ${result.error}`);
+  }, [applyBotToEditForm]);
 
   const loadBotCatalog = useCallback(async (botId: string) => {
     if (!botId) {
@@ -97,7 +119,7 @@ function Portal() {
         const nextId =
           current && list.some((b) => b.id === current) ? current : list[0].id!;
         const selected = list.find((b) => b.id === nextId);
-        applyBotToEditForm(selected);
+        void loadBotDetail(nextId, selected);
         void loadBotCatalog(nextId);
         return nextId;
       });
@@ -106,7 +128,7 @@ function Portal() {
       applyBotToEditForm(undefined);
       setCatalog([]);
     }
-  }, [applyBotToEditForm, loadBotCatalog]);
+  }, [applyBotToEditForm, loadBotCatalog, loadBotDetail]);
 
   useEffect(() => {
     if (loggedIn) {
@@ -152,6 +174,9 @@ function Portal() {
     setEditName('');
     setEditDescription('');
     setEditScopesJson('');
+    setRegName('');
+    setRegDescription('');
+    setRegScopesJson('["TEXT_CHAT_SEND_MESSAGES"]');
     setManifest(defaultManifest);
     setStatus('Signed out');
   }
@@ -161,8 +186,7 @@ function Portal() {
     setBotToken('');
     setWebhookSecret('');
     setStatus('');
-    const selected = bots.find((b) => b.id === botId);
-    applyBotToEditForm(selected);
+    await loadBotDetail(botId);
     await loadBotCatalog(botId);
   }
 
@@ -213,13 +237,22 @@ function Portal() {
   }
 
   async function registerBot() {
+    const name = regName.trim();
+    if (!name) {
+      setStatus('Enter a bot name');
+      return;
+    }
+    let scopesJson = regScopesJson.trim();
+    if (!scopesJson) {
+      scopesJson = '["TEXT_CHAT_SEND_MESSAGES"]';
+    }
     setStatus('Registering…');
     const res = await apiFetch('/api/v1/bots', {
       method: 'POST',
       body: JSON.stringify({
-        name: 'DevPortal Bot',
-        description: 'Created from developer portal',
-        scopes_json: '["TEXT_CHAT_SEND_MESSAGES"]',
+        name,
+        description: regDescription.trim(),
+        scopes_json: scopesJson,
       }),
     });
     const body = await res.json();
@@ -295,6 +328,10 @@ function Portal() {
     await loadBotCatalog(selectedBotId);
   }
 
+  const editScopeWarnings = warningsForPrivilegedScopes(privilegedScopesInJson(editScopesJson));
+  const regScopeWarnings = warningsForPrivilegedScopes(privilegedScopesInJson(regScopesJson));
+  const manifestScopeWarnings = warningsForPrivilegedScopes(privilegedScopesInManifest(manifest));
+
   return (
     <main className="page">
       <header className="topbar">
@@ -346,7 +383,41 @@ function Portal() {
                 ))}
               </ul>
             )}
-            <button type="button" onClick={() => void registerBot()}>Register bot</button>
+            <section className="bot-register" data-testid="bot-register">
+              <h3>Register new bot</h3>
+              <label>
+                Bot name
+                <input
+                  value={regName}
+                  onChange={(e) => setRegName(e.target.value)}
+                  placeholder="MyBot"
+                />
+              </label>
+              <label>
+                Bot description
+                <input
+                  value={regDescription}
+                  onChange={(e) => setRegDescription(e.target.value)}
+                  placeholder="What this bot does"
+                />
+              </label>
+              <label>
+                Scopes JSON
+                <input
+                  value={regScopesJson}
+                  onChange={(e) => setRegScopesJson(e.target.value)}
+                  placeholder='["TEXT_CHAT_SEND_MESSAGES"]'
+                />
+              </label>
+              {regScopeWarnings.length > 0 && (
+                <ul className="scope-warnings" data-testid="reg-scope-warnings">
+                  {regScopeWarnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+              )}
+              <button type="button" onClick={() => void registerBot()}>Register bot</button>
+            </section>
             {selectedBotId && (
               <p>Selected bot: <code>{selectedBotId}</code></p>
             )}
@@ -375,6 +446,13 @@ function Portal() {
                     placeholder='["TEXT_CHAT_SEND_MESSAGES"]'
                   />
                 </label>
+                {editScopeWarnings.length > 0 && (
+                  <ul className="scope-warnings" data-testid="edit-scope-warnings">
+                    {editScopeWarnings.map((warning) => (
+                      <li key={warning}>{warning}</li>
+                    ))}
+                  </ul>
+                )}
                 <div className="actions">
                   <button type="button" onClick={() => void saveBotChanges()}>
                     Save bot changes
@@ -434,6 +512,13 @@ function Portal() {
             Manifest YAML
             <textarea rows={12} value={manifest} onChange={(e) => setManifest(e.target.value)} />
           </label>
+          {manifestScopeWarnings.length > 0 && (
+            <ul className="scope-warnings" data-testid="manifest-scope-warnings">
+              {manifestScopeWarnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          )}
 
           <section className="actions">
             <button type="button" onClick={() => void validateManifest()}>Validate</button>

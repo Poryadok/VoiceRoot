@@ -53,6 +53,7 @@ import 'ui/profile/profile_avatar_switcher.dart';
 import 'ui/profile/profile_edit_sheet.dart';
 import 'ui/settings/settings_sheet.dart';
 import 'ui/shell/desktop_shell_rail.dart';
+import 'ui/shell/idle_presence_activity_binder.dart';
 import 'ui/shell/mobile_shell_drawer.dart';
 import 'ui/shell/mobile_shell_tab_bar.dart';
 import 'ui/shell/mobile_shell_visibility.dart';
@@ -350,11 +351,12 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
       shellOverlayActive: shellOverlayActive,
     );
 
-    return VoiceShortcuts(
-      child: OnboardingOverlay(
-        child: VersionPolicyOverlay(
-          child: CallErrorListener(
-            child: Scaffold(
+    return IdlePresenceActivityBinder(
+      child: VoiceShortcuts(
+        child: OnboardingOverlay(
+          child: VersionPolicyOverlay(
+            child: CallErrorListener(
+              child: Scaffold(
               backgroundColor: voice.canvas,
               drawer: showMobileTabs
                   ? MobileShellDrawer(onOpenSettings: _openSettingsSheet)
@@ -458,6 +460,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
           ),
         ),
       ),
+    ),
     );
   }
 }

@@ -103,3 +103,22 @@ func TestLeaveSpace_RemovesMembership(t *testing.T) {
 	_, err = client.GetSpace(joinerCtx, &spacev1.GetSpaceRequest{SpaceId: spaceID})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
+
+// TestLeaveSpace_OwnerBlockedWithoutTransfer documents owner cannot leave until TransferOwnership.
+func TestLeaveSpace_OwnerBlockedWithoutTransfer(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	_, _, ownerCtx := profileFixture(t)
+	pool := startSpacePostgresForTest(t, context.Background())
+	applySpaceMigration(t, context.Background(), pool)
+	client, cleanup := startSpaceGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Owner stuck"})
+	require.NoError(t, err)
+
+	_, err = client.LeaveSpace(ownerCtx, &spacev1.LeaveSpaceRequest{SpaceId: created.GetSpace().GetId()})
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	require.Contains(t, status.Convert(err).Message(), "transfer ownership")
+}

@@ -258,7 +258,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get globalSearchEmptyMessages => 'No matching messages';
 
   @override
+  String get globalSearchLoadError => 'Could not complete search';
+
+  @override
   String get inChatSearchHint => 'Search in this chat';
+
+  @override
+  String get inChatSearchLoadError => 'Could not search this chat';
 
   @override
   String get inChatSearchPrevious => 'Previous match';
@@ -673,6 +679,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get spaceBotsUninstallSuccess => 'Bot removed from space.';
 
   @override
+  String get spaceBotsLoadError => 'Could not load bots';
+
+  @override
   String get ephemeralMessageLabel => 'Only visible to you';
 
   @override
@@ -925,6 +934,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get commonRetry => 'Try again';
+
+  @override
+  String get settingsNotAuthenticated => 'Sign in to view these settings';
 
   @override
   String get commonLoading => '…';
@@ -1731,6 +1743,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get subscriptionInvalidCheckoutUrl => 'Checkout link is invalid';
 
   @override
+  String subscriptionActionError(String message) {
+    return 'Subscription error: $message';
+  }
+
+  @override
   String get subscriptionProfilesLoadError => 'Could not load profiles';
 
   @override
@@ -2377,6 +2394,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playerProfileSave => 'Save game profile';
+
+  @override
+  String get playerProfileSaveError => 'Could not save matchmaking profile';
 
   @override
   String get playerProfileSection => 'Matchmaking';

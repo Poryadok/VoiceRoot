@@ -244,7 +244,7 @@ docker build -f src/developer-portal/Dockerfile src/developer-portal \
   --build-arg VITE_OAUTH_CLIENT_ID=voice-developer-portal
 ```
 
-`scripts/staging/render-and-apply.sh` applies the portal manifest when present; ingress host from `VOICE_DEVELOPER_PORTAL_INGRESS_HOST` (repo Variable, passed through staging-deploy workflow). Add DNS **A/AAAA** for that host to the staging ingress node. **Prod** portal Ingress is not in-repo yet — reuse the staging template with `voice-prod` namespace and production FQDNs.
+`scripts/staging/render-and-apply.sh` applies the portal manifest when present; ingress host from `VOICE_DEVELOPER_PORTAL_INGRESS_HOST` (repo Variable, passed through staging-deploy workflow). Add DNS **A/AAAA** for that host to the staging ingress node. **Production** portal Deployment + Ingress: [`deploy/prod/developer-portal.yaml`](../deploy/prod/developer-portal.yaml) (`voice-prod` namespace; substitute production FQDNs via `VOICE_DEVELOPER_PORTAL_INGRESS_HOST`).
 
 ### Flutter web staging
 

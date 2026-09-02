@@ -8,8 +8,10 @@ import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/subscription_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../api_error_messages.dart';
 import '../core/voice_primary_button.dart';
 import '../core/voice_secondary_button.dart';
+import '../core/voice_skeleton.dart';
 import '../core/voice_state_panel.dart';
 
 enum _SubscriptionPlanDisplay {
@@ -194,11 +196,7 @@ class _SubscriptionSettingsScreenState
   }
 
   String _checkoutErrorMessage(AppLocalizations l10n, String errorKey) {
-    return switch (errorKey) {
-      'invalid_checkout_url' => l10n.subscriptionInvalidCheckoutUrl,
-      'checkout_launch_failed' => l10n.subscriptionCheckoutLaunchFailed,
-      _ => errorKey,
-    };
+    return subscriptionActionErrorMessage(l10n, errorKey);
   }
 
   @override
@@ -211,7 +209,7 @@ class _SubscriptionSettingsScreenState
       key: SubscriptionSettingsScreen.screenKey,
       appBar: AppBar(title: Text(l10n.subscriptionSettingsTitle)),
       body: subscriptionAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const VoiceListSkeleton(rowCount: 4),
         error: (_, _) => VoiceStatePanel(
           title: l10n.subscriptionLoadError,
           icon: Icons.cloud_off_outlined,
