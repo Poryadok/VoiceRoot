@@ -1,11 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { App } from '../App';
 
 const BOT_ID = '00000000-0000-0000-0000-000000000001';
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status });
+}
+
+function botDetailResponse(id: string, name: string, description: string) {
+  return jsonResponse({
+    bot: { id, name, description, scopes_json: '[]' },
+  });
 }
 
 function empty204() {
@@ -44,6 +50,7 @@ describe('App bot lifecycle UI', () => {
           },
         }),
       )
+      .mockResolvedValueOnce(botDetailResponse(BOT_ID, 'Old Name', 'Old desc'))
       .mockResolvedValueOnce(jsonResponse({ command_list: { commands_json: '[]' } }))
       .mockResolvedValueOnce(jsonResponse({ manifest_yaml: '' }))
       .mockResolvedValueOnce(
@@ -58,6 +65,7 @@ describe('App bot lifecycle UI', () => {
           },
         }),
       )
+      .mockResolvedValueOnce(botDetailResponse(BOT_ID, 'New Name', 'New desc'))
       .mockResolvedValueOnce(jsonResponse({ command_list: { commands_json: '[]' } }))
       .mockResolvedValueOnce(jsonResponse({ manifest_yaml: '' }));
 
@@ -68,10 +76,10 @@ describe('App bot lifecycle UI', () => {
       expect(screen.getByDisplayValue('Old Name')).toBeInTheDocument();
     });
 
-    fireEvent.change(screen.getByLabelText('Bot name'), {
+    fireEvent.change(within(screen.getByTestId('bot-lifecycle')).getByLabelText('Bot name'), {
       target: { value: 'New Name' },
     });
-    fireEvent.change(screen.getByLabelText('Bot description'), {
+    fireEvent.change(within(screen.getByTestId('bot-lifecycle')).getByLabelText('Bot description'), {
       target: { value: 'New desc' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save bot changes' }));
@@ -89,6 +97,7 @@ describe('App bot lifecycle UI', () => {
     expect(JSON.parse((patchCall![1] as RequestInit).body as string)).toEqual({
       name: 'New Name',
       description: 'New desc',
+      scopes_json: '[]',
     });
   });
 
@@ -103,6 +112,7 @@ describe('App bot lifecycle UI', () => {
           },
         }),
       )
+      .mockResolvedValueOnce(botDetailResponse(BOT_ID, 'To Delete', ''))
       .mockResolvedValueOnce(jsonResponse({ command_list: { commands_json: '[]' } }))
       .mockResolvedValueOnce(jsonResponse({ manifest_yaml: '' }))
       .mockResolvedValueOnce(empty204())
@@ -142,6 +152,7 @@ describe('App bot lifecycle UI', () => {
           },
         }),
       )
+      .mockResolvedValueOnce(botDetailResponse(BOT_ID, 'Keep Me', ''))
       .mockResolvedValueOnce(jsonResponse({ command_list: { commands_json: '[]' } }))
       .mockResolvedValueOnce(jsonResponse({ manifest_yaml: '' }));
 

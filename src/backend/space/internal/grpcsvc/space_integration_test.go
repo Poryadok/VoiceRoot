@@ -87,6 +87,8 @@ func (permissiveProfileAccounts) AccountIDByProfileID(_ context.Context, profile
 type spySpaceEvents struct {
 	mu      sync.Mutex
 	created [][2]string // space_id, owner_profile_id
+	deleted []string
+	updated []string
 }
 
 func (s *spySpaceEvents) PublishSpaceCreated(_ context.Context, spaceID, ownerProfileID string) error {
@@ -114,14 +116,36 @@ func (*spySpaceEvents) PublishMemberJoined(context.Context, string, string) erro
 
 func (*spySpaceEvents) PublishMemberLeft(context.Context, string, string) error { return nil }
 
-func (*spySpaceEvents) PublishSpaceUpdated(context.Context, string) error { return nil }
+func (s *spySpaceEvents) PublishSpaceUpdated(_ context.Context, spaceID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.updated = append(s.updated, spaceID)
+	return nil
+}
 
-func (*spySpaceEvents) PublishSpaceDeleted(context.Context, string) error { return nil }
+func (s *spySpaceEvents) PublishSpaceDeleted(_ context.Context, spaceID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.deleted = append(s.deleted, spaceID)
+	return nil
+}
 
 func (s *spySpaceEvents) snapshot() [][2]string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([][2]string(nil), s.created...)
+}
+
+func (s *spySpaceEvents) snapshotDeleted() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.deleted...)
+}
+
+func (s *spySpaceEvents) snapshotUpdated() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.updated...)
 }
 
 type errSpaceEvents struct{}
@@ -849,5 +873,153 @@ func TestJoinByInvite_GuestBlockedWhenAllowGuestsFalse(t *testing.T) {
 
 	_, err = client.JoinByInvite(guestCtx, &spacev1.JoinByInviteRequest{Code: inv.GetInvite().GetCode()})
 	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+// TestDeleteSpace_OwnerDeletesAndEmitsEvent documents DeleteSpace owner-only hard delete + space.deleted.
+func TestDeleteSpace_OwnerDeletesAndEmitsEvent(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	owner, _, ctx := profileFixture(t)
+	pool := startSpacePostgresForTest(t, context.Background())
+	applySpaceMigration(t, context.Background(), pool)
+	spy := &spySpaceEvents{}
+	client, cleanup := startSpaceGRPCTestServer(t, pool, withSpaceEventsPublisher(spy))
+	t.Cleanup(cleanup)
+
+	created, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{Name: "Doomed"})
+	require.NoError(t, err)
+	spaceID := created.GetSpace().GetId()
+	parsedID, err := uuid.Parse(spaceID)
+	require.NoError(t, err)
+
+	_, err = client.DeleteSpace(ctx, &spacev1.DeleteSpaceRequest{SpaceId: spaceID})
+	require.NoError(t, err)
+
+	row, err := (&store.SpaceStore{Pool: pool}).GetSpace(context.Background(), parsedID)
+	require.NoError(t, err)
+	require.Nil(t, row)
+	require.Equal(t, 0, countSpaceMembers(t, context.Background(), pool, parsedID, owner))
+	require.Equal(t, []string{spaceID}, spy.snapshotDeleted())
+}
+
+// TestDeleteSpace_NonOwner_PermissionDenied documents only owner may DeleteSpace.
+func TestDeleteSpace_NonOwner_PermissionDenied(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	_, _, ownerCtx := profileFixture(t)
+	otherAccount, otherProfile := uuid.New(), uuid.New()
+	otherCtx := withAccountProfileCtx(context.Background(), otherAccount, otherProfile)
+
+	pool := startSpacePostgresForTest(t, context.Background())
+	applySpaceMigration(t, context.Background(), pool)
+	client, cleanup := startSpaceGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Keep"})
+	require.NoError(t, err)
+	spaceID := created.GetSpace().GetId()
+
+	inv, err := client.CreateInvite(ownerCtx, &spacev1.CreateInviteRequest{SpaceId: spaceID})
+	require.NoError(t, err)
+	_, err = client.JoinByInvite(otherCtx, &spacev1.JoinByInviteRequest{Code: inv.GetInvite().GetCode()})
+	require.NoError(t, err)
+
+	_, err = client.DeleteSpace(otherCtx, &spacev1.DeleteSpaceRequest{SpaceId: spaceID})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+// TestTransferOwnership_ToMember updates owner and emits space.updated.
+func TestTransferOwnership_ToMember(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	owner, _, ownerCtx := profileFixture(t)
+	memberAccount, memberProfile := uuid.New(), uuid.New()
+	memberCtx := withAccountProfileCtx(context.Background(), memberAccount, memberProfile)
+
+	pool := startSpacePostgresForTest(t, context.Background())
+	applySpaceMigration(t, context.Background(), pool)
+	spy := &spySpaceEvents{}
+	client, cleanup := startSpaceGRPCTestServer(t, pool, withSpaceEventsPublisher(spy))
+	t.Cleanup(cleanup)
+
+	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Hand off"})
+	require.NoError(t, err)
+	spaceID := created.GetSpace().GetId()
+
+	inv, err := client.CreateInvite(ownerCtx, &spacev1.CreateInviteRequest{SpaceId: spaceID})
+	require.NoError(t, err)
+	_, err = client.JoinByInvite(memberCtx, &spacev1.JoinByInviteRequest{Code: inv.GetInvite().GetCode()})
+	require.NoError(t, err)
+
+	_, err = client.TransferOwnership(ownerCtx, &spacev1.TransferOwnershipRequest{
+		SpaceId:           spaceID,
+		NewOwnerProfileId: memberProfile.String(),
+	})
+	require.NoError(t, err)
+
+	got, err := client.GetSpace(memberCtx, &spacev1.GetSpaceRequest{SpaceId: spaceID})
+	require.NoError(t, err)
+	require.Equal(t, memberProfile.String(), got.GetSpace().GetOwnerProfileId())
+	require.NotEqual(t, owner.String(), got.GetSpace().GetOwnerProfileId())
+	require.Contains(t, spy.snapshotUpdated(), spaceID)
+
+	// Previous owner remains a member but cannot leave-as-owner anymore; new owner is blocked from Leave.
+	_, err = client.LeaveSpace(memberCtx, &spacev1.LeaveSpaceRequest{SpaceId: spaceID})
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	_, err = client.LeaveSpace(ownerCtx, &spacev1.LeaveSpaceRequest{SpaceId: spaceID})
+	require.NoError(t, err)
+}
+
+// TestTransferOwnership_NonMember_FailedPrecondition documents new owner must already be a member.
+func TestTransferOwnership_NonMember_FailedPrecondition(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	_, _, ownerCtx := profileFixture(t)
+	pool := startSpacePostgresForTest(t, context.Background())
+	applySpaceMigration(t, context.Background(), pool)
+	client, cleanup := startSpaceGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "No outsider"})
+	require.NoError(t, err)
+
+	_, err = client.TransferOwnership(ownerCtx, &spacev1.TransferOwnershipRequest{
+		SpaceId:           created.GetSpace().GetId(),
+		NewOwnerProfileId: uuid.New().String(),
+	})
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+}
+
+// TestTransferOwnership_NonOwner_PermissionDenied documents only current owner may transfer.
+func TestTransferOwnership_NonOwner_PermissionDenied(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	_, _, ownerCtx := profileFixture(t)
+	memberAccount, memberProfile := uuid.New(), uuid.New()
+	memberCtx := withAccountProfileCtx(context.Background(), memberAccount, memberProfile)
+
+	pool := startSpacePostgresForTest(t, context.Background())
+	applySpaceMigration(t, context.Background(), pool)
+	client, cleanup := startSpaceGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Locked"})
+	require.NoError(t, err)
+	spaceID := created.GetSpace().GetId()
+	inv, err := client.CreateInvite(ownerCtx, &spacev1.CreateInviteRequest{SpaceId: spaceID})
+	require.NoError(t, err)
+	_, err = client.JoinByInvite(memberCtx, &spacev1.JoinByInviteRequest{Code: inv.GetInvite().GetCode()})
+	require.NoError(t, err)
+
+	_, err = client.TransferOwnership(memberCtx, &spacev1.TransferOwnershipRequest{
+		SpaceId:           spaceID,
+		NewOwnerProfileId: memberProfile.String(),
+	})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }

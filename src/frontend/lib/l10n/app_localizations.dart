@@ -530,11 +530,23 @@ abstract class AppLocalizations {
   /// **'No matching messages'**
   String get globalSearchEmptyMessages;
 
+  /// No description provided for @globalSearchLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not complete search'**
+  String get globalSearchLoadError;
+
   /// No description provided for @inChatSearchHint.
   ///
   /// In en, this message translates to:
   /// **'Search in this chat'**
   String get inChatSearchHint;
+
+  /// No description provided for @inChatSearchLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not search this chat'**
+  String get inChatSearchLoadError;
 
   /// No description provided for @inChatSearchPrevious.
   ///
@@ -1268,6 +1280,12 @@ abstract class AppLocalizations {
   /// **'Bot removed from space.'**
   String get spaceBotsUninstallSuccess;
 
+  /// No description provided for @spaceBotsLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load bots'**
+  String get spaceBotsLoadError;
+
   /// No description provided for @ephemeralMessageLabel.
   ///
   /// In en, this message translates to:
@@ -1729,6 +1747,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Try again'**
   String get commonRetry;
+
+  /// No description provided for @settingsNotAuthenticated.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in to view these settings'**
+  String get settingsNotAuthenticated;
 
   /// No description provided for @commonLoading.
   ///
@@ -3158,6 +3182,12 @@ abstract class AppLocalizations {
   /// **'Checkout link is invalid'**
   String get subscriptionInvalidCheckoutUrl;
 
+  /// No description provided for @subscriptionActionError.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscription error: {message}'**
+  String subscriptionActionError(String message);
+
   /// No description provided for @subscriptionProfilesLoadError.
   ///
   /// In en, this message translates to:
@@ -4381,6 +4411,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Save game profile'**
   String get playerProfileSave;
+
+  /// No description provided for @playerProfileSaveError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save matchmaking profile'**
+  String get playerProfileSaveError;
 
   /// No description provided for @playerProfileSection.
   ///

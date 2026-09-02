@@ -33,22 +33,52 @@ export interface RetentionResponse {
   cohorts: RetentionCohort[];
 }
 
-export async function fetchDashboard(type: string): Promise<DashboardResponse> {
-  return apiGet<DashboardResponse>(`/api/v1/analytics/dashboard/${type}`);
+/** Optional RFC3339 UTC bounds forwarded as `from` / `to` query params. */
+export interface AnalyticsTimeRange {
+  from?: string;
+  to?: string;
 }
 
-export async function fetchFunnel(name: string): Promise<FunnelResponse> {
-  return apiGet<FunnelResponse>(`/api/v1/analytics/funnel/${name}`);
+function appendTimeRange(params: URLSearchParams, range?: AnalyticsTimeRange): void {
+  if (range?.from) {
+    params.set("from", range.from);
+  }
+  if (range?.to) {
+    params.set("to", range.to);
+  }
 }
 
-export async function fetchRetention(): Promise<RetentionResponse> {
-  return apiGet<RetentionResponse>("/api/v1/analytics/retention");
+function timeRangeQuery(range?: AnalyticsTimeRange): string {
+  const params = new URLSearchParams();
+  appendTimeRange(params, range);
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
 }
 
-export async function exportAnalytics(format: string, eventType?: string): Promise<Blob> {
+export async function fetchDashboard(
+  type: string,
+  range?: AnalyticsTimeRange,
+): Promise<DashboardResponse> {
+  return apiGet<DashboardResponse>(`/api/v1/analytics/dashboard/${type}${timeRangeQuery(range)}`);
+}
+
+export async function fetchFunnel(name: string, range?: AnalyticsTimeRange): Promise<FunnelResponse> {
+  return apiGet<FunnelResponse>(`/api/v1/analytics/funnel/${name}${timeRangeQuery(range)}`);
+}
+
+export async function fetchRetention(range?: AnalyticsTimeRange): Promise<RetentionResponse> {
+  return apiGet<RetentionResponse>(`/api/v1/analytics/retention${timeRangeQuery(range)}`);
+}
+
+export async function exportAnalytics(
+  format: string,
+  eventType?: string,
+  range?: AnalyticsTimeRange,
+): Promise<Blob> {
   const params = new URLSearchParams({ format });
   if (eventType) {
     params.set("event_type", eventType);
   }
+  appendTimeRange(params, range);
   return apiGetBlob(`/api/v1/analytics/export?${params.toString()}`);
 }

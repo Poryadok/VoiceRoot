@@ -120,7 +120,9 @@
   "globalSearchEmptyContacts": "No matching contacts",
   "globalSearchEmptySpaces": "No matching spaces",
   "globalSearchEmptyMessages": "No matching messages",
+  "globalSearchLoadError": "Could not complete search",
   "inChatSearchHint": "Search in this chat",
+  "inChatSearchLoadError": "Could not search this chat",
   "inChatSearchPrevious": "Previous match",
   "inChatSearchNext": "Next match",
   "inChatSearchResultScore": "Score {score}",
@@ -334,6 +336,7 @@
   "spaceBotsSelectChats": "Allowed text chats",
   "spaceBotsInstallSuccess": "Bot installed.",
   "spaceBotsUninstallSuccess": "Bot removed from space.",
+  "spaceBotsLoadError": "Could not load bots",
   "ephemeralMessageLabel": "Only visible to you",
   "chatRoomError": "Error: {message}",
   "@chatRoomError": {
@@ -467,6 +470,7 @@
   "commonDelete": "Delete",
   "commonSave": "Save",
   "commonRetry": "Try again",
+  "settingsNotAuthenticated": "Sign in to view these settings",
   "commonLoading": "…",
   "chatInboxDm": "DMs",
   "chatInboxRequests": "Requests",
@@ -862,6 +866,14 @@
   "subscriptionBillingPeriodYearly": "Yearly",
   "subscriptionCheckoutLaunchFailed": "Could not open checkout",
   "subscriptionInvalidCheckoutUrl": "Checkout link is invalid",
+  "subscriptionActionError": "Subscription error: {message}",
+  "@subscriptionActionError": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
   "subscriptionProfilesLoadError": "Could not load profiles",
   "downgradeProfilePickerTitle": "Choose 2 profiles to keep",
   "downgradeProfilePickerHint": "Other profiles will be frozen until you renew Premium.",
@@ -1085,6 +1097,7 @@
   "playerProfileEmpty": "No games configured yet",
   "playerProfileAddGame": "Add game",
   "playerProfileSave": "Save game profile",
+  "playerProfileSaveError": "Could not save matchmaking profile",
   "playerProfileSection": "Matchmaking",
   "playerProfileForGame": "My profile for this game",
   "queueSearchStart": "Start queue",

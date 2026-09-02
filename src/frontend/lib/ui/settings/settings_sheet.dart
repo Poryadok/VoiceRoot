@@ -10,6 +10,7 @@ import '../../theme/voice_colors.dart';
 import '../../settings/theme_preference.dart';
 import '../../theme/voice_theme_providers.dart';
 import '../core/voice_bottom_sheet.dart';
+import '../core/voice_skeleton.dart';
 import '../profile/create_profile_sheet.dart';
 import '../profile/manage_profiles_sheet.dart';
 import 'privacy_settings_screen.dart';
@@ -337,7 +338,7 @@ class _AccentPickerState extends ConsumerState<_AccentPicker> {
     if (selected == null) {
       return const SizedBox(
         height: 36,
-        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+        child: VoiceListSkeleton(rowCount: 1),
       );
     }
     return Wrap(

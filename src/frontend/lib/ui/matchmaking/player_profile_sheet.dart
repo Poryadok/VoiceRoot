@@ -5,6 +5,9 @@ import '../../backend/matchmaking_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/matchmaking_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../api_error_messages.dart';
+import '../core/voice_skeleton.dart';
+import '../core/voice_state_panel.dart';
 import 'game_catalog_screen.dart';
 
 /// Edit per-game matchmaking profile (region, role, rank).
@@ -71,8 +74,14 @@ class _PlayerProfileSheetState extends ConsumerState<PlayerProfileSheet> {
             ),
             const SizedBox(height: 12),
             profileAsync.when(
-              loading: () => const LinearProgressIndicator(),
-              error: (error, stackTrace) => Text(l10n.playerProfileLoadError),
+              loading: () => const VoiceListSkeleton(rowCount: 3),
+              error: (error, stackTrace) => VoiceStatePanel(
+                title: l10n.playerProfileLoadError,
+                message: playerProfileErrorMessage(l10n, error),
+                icon: Icons.cloud_off_outlined,
+                actionLabel: l10n.commonRetry,
+                onAction: () => ref.invalidate(myPlayerProfileProvider),
+              ),
               data: (profile) {
                 if (profile.entries.isEmpty) {
                   return Text(
@@ -242,6 +251,7 @@ class _PlayerProfileSheetState extends ConsumerState<PlayerProfileSheet> {
     final game = _selectedGame;
     final region = _region;
     if (game == null || region == null) return;
+    final l10n = AppLocalizations.of(context)!;
     setState(() {
       _saving = true;
       _error = null;
@@ -256,7 +266,7 @@ class _PlayerProfileSheetState extends ConsumerState<PlayerProfileSheet> {
       if (!mounted) return;
       Navigator.of(context).pop();
     } catch (e) {
-      setState(() => _error = '$e');
+      setState(() => _error = playerProfileActionErrorMessage(l10n, e));
     } finally {
       if (mounted) setState(() => _saving = false);
     }

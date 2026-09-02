@@ -24,7 +24,7 @@
 ### Space
 
 
-- [ ] **[Space] Owner locked: `DeleteSpace`, `TransferOwnership`, `GetAuditLog`, `SearchPublicSpaces`, `ListTemplates`, `CreateFromTemplate` — runtime `Unimplemented` (embed). `JoinSpace`/`LeaveSpace` живые (`join.go`). Owner не может leave без transfer** — `protos/voice/space/v1/space.proto`; `src/backend/space/internal/grpcsvc/join.go`
+- [ ] **[Space] Owner locked: `GetAuditLog`, `SearchPublicSpaces`, `ListTemplates`, `CreateFromTemplate` — runtime `Unimplemented` (embed). `DeleteSpace`/`TransferOwnership` shipped (T-011); `JoinSpace`/`LeaveSpace` живые; owner не может leave без transfer** — `protos/voice/space/v1/space.proto`; `src/backend/space/internal/grpcsvc/`
 - [x] **[Space] Space Pro cache never synced — `space_db.space_subscriptions` comment says “synced from Subscription”; only test seed `UpsertSpaceSubscription` writes; Subscription writes `subscription_db` only** — **done:** NATS consumer `space/internal/subscriptionconsume` + S2S `SyncSpaceProSubscription` write entitlement cache; `SeedSpaceProActive` remains test helper only.
 - [ ] **[Space] `entry_requirement` не исполняется — JoinSpace отвергает любой requirement ≠ `none` (`FailedPrecondition`), нет captcha/questions/mod-approval queue** — `src/backend/space/internal/grpcsvc/join.go`, `invites.go`
 - [x] **[Space] Social block на join fail-open — `ensureJoinNotBlocked` no-op если `Blocks`/`ProfileAccounts` nil** — **done:** fail-closed `FailedPrecondition` when Social/User S2S unwired; IT `join_block_degradation_test.go`.
@@ -33,7 +33,8 @@
 ### Moderation
 
 
-- [ ] **[Moderation] Sanction notifications: consumer stub** — JetStream consumer on `moderation.events` exists (`notification/moderation_events_consumer.go`), but `routeModerationNotification` passes empty `recipientProfileID` → `HandleSanctionApplied` no-ops; push/in-app deferred until account→profile resolution.
+- [x] **[Moderation] Shadow-ban forward bypass** — **done (PR #132):** `ForwardMessage` / `insertForwardCommentary` apply `IsShadowBanned` + `ghost_only` / suppress `message.sent` like `SendMessage` (`messaging_grpc.go`).
+- [x] **[Moderation] Sanction notifications: consumer stub** — **done (T-013):** `routeModerationNotification` resolves `target_account_id` → profile ids via User `ListProfileIDsForAccount` (`notification/internal/s2s/account_profiles.go`); `HandleSanctionApplied` routes `system` **push** with presence skipped (no Realtime system in-app yet); shadow_ban stays silent (`reports.md`).
 - [x] **[Moderation] Appeals not exposed to users** — Gateway `POST /api/v1/moderation/appeals` (201 Created → `SubmitAppeal`); Flutter `VoiceModerationClient.submitAppeal` + settings appeal sheet (`docs/features/reports.md` § Апелляция). **Batch 27a**.
 
 ### Social
@@ -150,7 +151,8 @@
 - [ ] **[Moderation] Report threshold audience is static env, not object audience** — `MODERATION_PLATFORM_AUDIENCE_SIZE` (default 1000) drives 1% calc; spec calls for relative threshold vs target’s audience.
 - [ ] **[Moderation] Admin audit export пуст только если store пуст** — Gateway `writeModerationAuditExportJSON` мапит `ExportAuditLog` (`transcode_moderation_admin.go`). Не hardcoded `[]`.
 - [ ] **[Moderation] Temp ban expiry does not restore Auth** — `expires_at` respected in SQL for active lookup, but no job/handler calls `Auth.SetAccountStatus(active)` on expiry; only explicit revoke/approved appeal clears suspension.
-- [ ] **[Moderation] Sanction notification delivery** — same as Critical: consumer acks without profile resolution / push copy (`moderation_events_consumer.go`).
+- [x] **[Moderation] Sanction notification push delivery** — **done (T-013):** consumer resolves profiles, applies policy with **presence skipped**, sends `system` push copy so online recipients are not silent-dropped (`moderation_events_consumer.go`).
+- [ ] **[Moderation] Sanction `system` in-app (Realtime) fan-out** — Notification push path only; no Realtime WS `notification` for moderation/sanction. Online→InApp-only routing must wait until Realtime (or Notification→NATS in-app) exists — [notification-service.md](../microservices/notification-service.md) `system` push+in-app.
 
 ### Social
 
@@ -164,7 +166,6 @@
 
 
 - [ ] **[User] Premium animated GIF avatar is a dead path** — premium gate in `user_avatar.go` but `image/gif` rejected by `r2avatar/validate.go` (`TestValidateUploadParams_rejectsGifInPhase1`); conflicts with `docs/features/user-profile.md`. `GetSettings`/`UpdateSettings` **есть** (`user_settings.go`). `GetPrivacySettings` ownership check **есть** (non-S2S → `GetOwnedProfile`).
-- [ ] **[User] `banner_url` persisted but not exposed** — DB + `UpdateProfile` write; `rowToProto` omits `BannerUrl`. Нет presign как у аватара (свободный URL). Общие спейсы на профиле — нет S2S Space RPC.
 - [ ] **[User] `SetPrimaryProfile` отсутствует** — `is_primary` только bootstrap; phone search всегда primary.
 - [ ] **[User] Verification V1 incomplete (Auth + User boundary)** — Twitch only in `LinkedAccountsService` (`src/backend/auth/src/main/java/voice/backend/auth/service/LinkedAccountsService.java`); YouTube in DB schema only (`src/backend/auth/src/main/resources/db/migration/V3__linked_identities.sql`); no partner-status recheck cron (`docs/features/verification.md`).
 - [ ] **[User] NATS contract gaps** — `user.presence_changed` **published** but JetStream proto lacks `old_status`/`new_status`; missing `user.game_detected`, `user.settings_changed` ([user-service.md](../microservices/user-service.md)); `PublishProfileUpdated` / `PublishVerified` emit stub `ProfileCreated` without `changed_fields` / `verification_type`; `PublishProfileSwitched` drops `old_profile_id` (`src/backend/user/internal/userevents/jetstream.go`).
@@ -315,7 +316,7 @@
 - [x] **[Notification] `message_request` / stranger type** — **done (Batch 22a):** `message_request` wire type + per-recipient routing from `chat_members.inbox_bucket` — [notification-service.md](../microservices/notification-service.md)
 - [ ] **[Notification] `reply` marked ✓ but not implemented — no `reply` type in message consumer or Realtime in-app fanout; thread replies are treated as `new_message`.** — `docs/features/notifications.md`, `src/backend/notification/message_events_consumer.go`, `src/backend/realtime/in_app_notification_fanout.go`
 - [ ] **[Notification] Matchmaking/voice push ignores presence — handlers hardcode `IsOnline: false`; no `EnrichDecision` / User gRPC check → online users still get push (messages path does check).** — `src/backend/notification/internal/consumer/matchmaking_events.go`, `src/backend/notification/matchmaking_events_consumer.go`, `src/backend/notification/voice_events_consumer.go`
-- [ ] **[Notification] `system` notifications have no producer — `SendNotification` gRPC exists but no other service calls it; no NATS consumer; not exposed on Gateway REST.** — `src/backend/notification/internal/grpcsvc/server.go`, `src/backend/gateway/transcode_notifications.go`
+- [ ] **[Notification] `system` in-app / Gateway gaps** — Moderation NATS consumer produces `system` **push** for sanctions (T-013, presence-skip). Still missing: Realtime in-app fanout for `system`, other producers calling `SendNotification`, Gateway REST exposure — `src/backend/notification/internal/grpcsvc/server.go`, `src/backend/gateway/transcode_notifications.go`, `src/backend/realtime/`
 - [x] **[Notification] Multi-replica duplicate push risk � per-pod durable consumer name (`notif_<hostname>_mod`) on moderation stream caused duplicate delivery across replicas; all notification JetStream consumers now use cluster-wide SharedDurable names (moderation ? `notif_mod`).** � **done (Batch 31c):** `src/backend/notification/internal/consumer/durable.go`, `moderation_events_consumer.go`, `main.go`
 
 ### Federation
