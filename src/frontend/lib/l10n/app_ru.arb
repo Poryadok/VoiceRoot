@@ -89,6 +89,7 @@
   "socialAcceptRequest": "Принять",
   "socialDeclineRequest": "Отклонить",
   "socialRequestPending": "Заявка отправлена",
+  "socialRequestDeclined": "Отклонена",
   "socialFriendsEmpty": "Пока нет друзей",
   "socialContactsEmpty": "Пока нет контактов",
   "socialContactsEmptyHint": "Здесь появятся люди, которых вы добавите или синхронизируете из телефонной книги.",

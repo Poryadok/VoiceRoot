@@ -249,6 +249,7 @@ func TestFriendDecline_OutgoingStillVisible(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, out.GetFriendRequestList().GetOutgoing(), 1)
 	require.Equal(t, b.String(), out.GetFriendRequestList().GetOutgoing()[0].GetProfileId())
+	require.Equal(t, "declined", out.GetFriendRequestList().GetOutgoing()[0].GetStatus())
 }
 
 func TestSendFriendInvitation_AfterDecline_ReopensPending(t *testing.T) {

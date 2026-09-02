@@ -97,6 +97,7 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 - [ ] **Кастомные папки чатов** — All/DMs/Groups + custom; REST folders + rail/drawer UI shipped (parallel/client); **pin/reorder UI** in list ctx + custom-folder drag reorder shipped (Batch 21b); edit-folders management UI deferred.
 - [ ] **In-chat search: next/prev highlight** — [search.md](../features/search.md).
 - [x] **Favorites / contacts UI** — Social panel Contacts + Favorites tabs; `VoiceFriendsClient` list/add/set favorite; star toggle on friends/contacts (`social_panel.dart`, `friends_client.dart`) — **Batch 23b**. QR add friend / phone-book sync UI deferred.
+- [x] **Outgoing friend request declined label** — `PendingFriendRequest.status` from API; Requests tab shows «Declined» vs «Request pending» for outgoing rows — **Batch 24b**.
 - [ ] **Idle 5 мин → `UpdatePresence idle`** — сейчас idle только если клиент сам пришлёт. [presence.md](../features/presence.md).
 - [ ] **Windows: автоопределение игры** — process list → `game_title` + toggle; 0 кода. Post-MVP рядом с П.17.
 - [ ] **E2E fingerprint + key-change banner** — [encryption.md](../features/encryption.md); П.13.

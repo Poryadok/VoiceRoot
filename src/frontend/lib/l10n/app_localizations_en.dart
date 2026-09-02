@@ -191,6 +191,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get socialRequestPending => 'Request pending';
 
   @override
+  String get socialRequestDeclined => 'Declined';
+
+  @override
   String get socialFriendsEmpty => 'No friends yet';
 
   @override

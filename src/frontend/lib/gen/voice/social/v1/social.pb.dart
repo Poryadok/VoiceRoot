@@ -540,10 +540,12 @@ class PendingFriendRequest extends $pb.GeneratedMessage {
   factory PendingFriendRequest({
     $core.String? profileId,
     $2.Timestamp? createdAt,
+    $core.String? status,
   }) {
     final result = create();
     if (profileId != null) result.profileId = profileId;
     if (createdAt != null) result.createdAt = createdAt;
+    if (status != null) result.status = status;
     return result;
   }
 
@@ -564,6 +566,7 @@ class PendingFriendRequest extends $pb.GeneratedMessage {
     ..aOS(1, _omitFieldNames ? '' : 'profileId')
     ..aOM<$2.Timestamp>(2, _omitFieldNames ? '' : 'createdAt',
         subBuilder: $2.Timestamp.create)
+    ..aOS(3, _omitFieldNames ? '' : 'status')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -604,6 +607,16 @@ class PendingFriendRequest extends $pb.GeneratedMessage {
   void clearCreatedAt() => $_clearField(2);
   @$pb.TagNumber(2)
   $2.Timestamp ensureCreatedAt() => $_ensure(1);
+
+  /// Outgoing only: pending | declined (friends.md — declined visible to sender).
+  @$pb.TagNumber(3)
+  $core.String get status => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set status($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasStatus() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearStatus() => $_clearField(3);
 }
 
 class AddContactRequest extends $pb.GeneratedMessage {
