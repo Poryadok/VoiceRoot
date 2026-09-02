@@ -56,6 +56,7 @@ data:
   USER_GRPC_ADDR: "voice-user:9090"
   CHAT_GRPC_ADDR: "voice-chat:9090"
   MESSAGING_GRPC_ADDR: "voice-messaging:9090"
+  MODERATION_GRPC_ADDR: "voice-moderation:9090"
   FILE_GRPC_ADDR: "voice-file:9090"
   ROLE_GRPC_ADDR: "voice-role:9090"
   SPACE_GRPC_ADDR: "voice-space:9090"
