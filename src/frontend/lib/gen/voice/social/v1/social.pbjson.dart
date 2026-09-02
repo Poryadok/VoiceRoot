@@ -195,6 +195,7 @@ const PendingFriendRequest$json = {
       '6': '.google.protobuf.Timestamp',
       '10': 'createdAt'
     },
+    {'1': 'status', '3': 3, '4': 1, '5': 9, '10': 'status'},
   ],
 };
 
@@ -202,7 +203,7 @@ const PendingFriendRequest$json = {
 final $typed_data.Uint8List pendingFriendRequestDescriptor = $convert.base64Decode(
     'ChRQZW5kaW5nRnJpZW5kUmVxdWVzdBIdCgpwcm9maWxlX2lkGAEgASgJUglwcm9maWxlSWQSOQ'
     'oKY3JlYXRlZF9hdBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBSCWNyZWF0ZWRB'
-    'dA==');
+    'dBIWCgZzdGF0dXMYAyABKAlSBnN0YXR1cw==');
 
 @$core.Deprecated('Use addContactRequestDescriptor instead')
 const AddContactRequest$json = {

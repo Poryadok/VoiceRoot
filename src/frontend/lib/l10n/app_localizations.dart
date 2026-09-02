@@ -428,6 +428,12 @@ abstract class AppLocalizations {
   /// **'Request pending'**
   String get socialRequestPending;
 
+  /// No description provided for @socialRequestDeclined.
+  ///
+  /// In en, this message translates to:
+  /// **'Declined'**
+  String get socialRequestDeclined;
+
   /// No description provided for @socialFriendsEmpty.
   ///
   /// In en, this message translates to:

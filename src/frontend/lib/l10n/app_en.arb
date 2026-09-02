@@ -96,6 +96,7 @@
   "socialAcceptRequest": "Accept",
   "socialDeclineRequest": "Decline",
   "socialRequestPending": "Request pending",
+  "socialRequestDeclined": "Declined",
   "socialFriendsEmpty": "No friends yet",
   "socialContactsEmpty": "No contacts yet",
   "socialContactsEmptyHint": "People you add or sync from your phone book appear here.",

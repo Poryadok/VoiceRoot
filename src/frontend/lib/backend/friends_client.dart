@@ -38,10 +38,26 @@ class FriendsListData {
 }
 
 class FriendRequestsData {
-  const FriendRequestsData({required this.incoming, required this.outgoing});
+  const FriendRequestsData({
+    required this.incoming,
+    required this.outgoing,
+  });
 
   final List<String> incoming;
-  final List<String> outgoing;
+  final List<OutgoingFriendRequest> outgoing;
+}
+
+class OutgoingFriendRequest {
+  const OutgoingFriendRequest({
+    required this.profileId,
+    required this.status,
+  });
+
+  final String profileId;
+  /// pending | declined
+  final String status;
+
+  bool get isDeclined => status == 'declined';
 }
 
 class ContactEntry {

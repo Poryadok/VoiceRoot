@@ -584,10 +584,12 @@ class _RequestsTab extends ConsumerWidget {
                 ),
               ),
               ...outgoing.map(
-                (id) => _ProfileIdTile(
-                  profileId: id,
-                  subtitle: l10n.socialRequestPending,
-                  onTap: () => onOpenProfile(id),
+                (request) => _ProfileIdTile(
+                  profileId: request.profileId,
+                  subtitle: request.isDeclined
+                      ? l10n.socialRequestDeclined
+                      : l10n.socialRequestPending,
+                  onTap: () => onOpenProfile(request.profileId),
                 ),
               ),
             ],

@@ -60,7 +60,31 @@ void main() {
       expect(r, isA<FriendsApiOk<FriendRequestsData>>());
       final data = (r as FriendsApiOk<FriendRequestsData>).data;
       expect(data.incoming, ['req-in-1']);
-      expect(data.outgoing, ['req-out-1']);
+      expect(data.outgoing.single.profileId, 'req-out-1');
+      expect(data.outgoing.single.status, 'pending');
+    });
+
+    test('parses declined outgoing status', () async {
+      final mock = MockClient((req) async {
+        expect(req.url.path, '/api/v1/friends/requests');
+        return http.Response(
+          jsonEncode({
+            'friend_request_list': {
+              'incoming': [],
+              'outgoing': [
+                {'profile_id': 'req-out-2', 'status': 'declined'},
+              ],
+            },
+          }),
+          200,
+        );
+      });
+      final client = VoiceFriendsClient(gateway: gatewayHttpForTest(mock, config: config));
+      final r = await client.listFriendRequests(authorization: auth);
+      expect(r, isA<FriendsApiOk<FriendRequestsData>>());
+      final data = (r as FriendsApiOk<FriendRequestsData>).data;
+      expect(data.outgoing.single.profileId, 'req-out-2');
+      expect(data.outgoing.single.isDeclined, isTrue);
     });
   });
 

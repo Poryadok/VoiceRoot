@@ -194,6 +194,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get socialRequestPending => 'Заявка отправлена';
 
   @override
+  String get socialRequestDeclined => 'Отклонена';
+
+  @override
   String get socialFriendsEmpty => 'Пока нет друзей';
 
   @override
