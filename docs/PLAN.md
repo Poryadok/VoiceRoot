@@ -53,7 +53,7 @@
 
 | Фича | Статус | Сервисы | Что реально / чего нет |
 |------|--------|---------|------------------------|
-| [auth-and-contacts](features/auth-and-contacts.md) | partial | Auth (Java), Gateway | Email/guest/sessions/reset **REST есть**. Flutter: нет телефона/OTP, sessions, delete-account. Convert-guest ядро shipped. |
+| [auth-and-contacts](features/auth-and-contacts.md) | partial | Auth (Java), Gateway | Email/guest/sessions/reset **REST есть**. Flutter: sessions/revoke UI shipped (Batch 29b); delete-account shipped (Batch 28b); нет телефона/OTP, password-reset. Convert-guest ядро shipped. |
 | [friends](features/friends.md) | shipped | Social, User | Запросы/блок/DM-гейт живые. Нет REST list contacts/favorites, QR, phone-book UI. |
 | [text-chat](features/text-chat.md) | partial | Chat, Messaging, Realtime | DM/группы/треды/markdown/@mentions live. **Пины:** RPC есть, лимит **50** в коде vs **5** в спеке ([todo/backend.md](todo/backend.md)). **Без кода:** folders, Quick Access, list archive, send menu (silent/schedule), стикеры/GIF. Нет `DeleteChat`, view-count. |
 | [forward-messages](features/forward-messages.md) | shipped | Messaging | Attribution / copy-as-new / commentary live. |
@@ -150,7 +150,7 @@ CloudPayments — отдельный трек после Paddle (СНГ), не �
 | **C. Admin queue** | resolve / dismiss (не только `reviewing`); санкции на non-user target не через `target_id` как account | REST статусов из B, если их ещё нет |
 | **D. Social** | REST contacts/favorites (gRPC уже есть); `SendFriendInvitation` чтит block | **done** friend-invite fail-closed (Blocks/ProfileAccounts/account); REST contacts still open |
 | **E. Billing Paddle** | `CreateCheckoutSession` / space checkout → реальный Paddle API; не шипить `checkout.paddle.test`; webhook renew/cancel после первого live payment | секреты Paddle (0 **Вы**). Не ждать CloudPayments |
-| **F. Flutter Auth UI** | телефон+OTP; sessions/revoke; delete-account; password-reset экраны (REST есть) | нет |
+| **F. Flutter Auth UI** | телефон+OTP; password-reset экраны (REST есть) | sessions/revoke + delete-account shipped |
 | **G. Flutter appeals** | экран апелляции профиля | Gateway из B |
 | **H. Auth→User verification** | OAuth Twitch → `SetVerification` + `user.verified`, не прямой JDBC в `user_db` | нет |
 | **I. DeleteAccount хвост** | tombstone в DM / hide из `ListChats` (RPC уже есть) | F UI может идти параллельно |

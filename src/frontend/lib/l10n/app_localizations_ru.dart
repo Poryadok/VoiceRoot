@@ -1835,6 +1835,37 @@ class AppLocalizationsRu extends AppLocalizations {
       'Сначала зарегистрируйте гостевой аккаунт.';
 
   @override
+  String get securitySessionsTitle => 'Активные сессии';
+
+  @override
+  String get securitySessionsHint =>
+      'Устройства, на которых выполнен вход. Отзовите доступ для устройств, которыми вы больше не пользуетесь.';
+
+  @override
+  String get securitySessionsManage => 'Управление сессиями';
+
+  @override
+  String get securitySessionsCurrentDevice => 'Это устройство';
+
+  @override
+  String get securitySessionsOtherDevice => 'Другое устройство';
+
+  @override
+  String get securitySessionsCurrentBadge => 'Текущая';
+
+  @override
+  String get securitySessionsRevoke => 'Отозвать';
+
+  @override
+  String get securitySessionsRevoked => 'Сессия отозвана';
+
+  @override
+  String get securitySessionsLoadError => 'Не удалось загрузить сессии';
+
+  @override
+  String get securitySessionsEmpty => 'Нет других активных сессий';
+
+  @override
   String get privacySettingsTitle => 'Приватность';
 
   @override

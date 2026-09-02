@@ -193,4 +193,75 @@ void main() {
       expect(result, isA<AuthApiOk<void>>());
     });
   });
+
+  group('VoiceAuthClient.listSessions', () {
+    test('GET /api/v1/auth/sessions returns device sessions', () async {
+      final mock = MockClient((req) async {
+        expect(req.method, 'GET');
+        expect(req.url.path, '/api/v1/auth/sessions');
+        return http.Response(
+          jsonEncode({
+            'sessions': [
+              {
+                'id': 'sess-current',
+                'device_info_json': '{"platform":"flutter"}',
+                'current': true,
+              },
+              {
+                'id': 'sess-other',
+                'device_info_json': '{"platform":"web"}',
+                'current': false,
+              },
+            ],
+          }),
+          200,
+        );
+      });
+      final client = VoiceAuthClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
+      final session = AuthSession(
+        accessToken: 'access-abc',
+        refreshToken: 'refresh-xyz',
+        expiresInSeconds: 900,
+        accountId: 'acc-1',
+        activeProfileId: 'prof-1',
+      );
+      final result = await client.listSessions(session: session);
+      expect(result, isA<AuthApiOk<List<AuthDeviceSession>>>());
+      final data = (result as AuthApiOk<List<AuthDeviceSession>>).data;
+      expect(data, hasLength(2));
+      expect(data.first.current, isTrue);
+      expect(data.first.deviceLabel, 'flutter');
+      expect(data.last.id, 'sess-other');
+    });
+  });
+
+  group('VoiceAuthClient.revokeSession', () {
+    test('POST /api/v1/auth/sessions/{id}/revoke', () async {
+      var revokeCalled = false;
+      final mock = MockClient((req) async {
+        expect(req.method, 'POST');
+        expect(req.url.path, '/api/v1/auth/sessions/sess-other/revoke');
+        revokeCalled = true;
+        return http.Response('', 204);
+      });
+      final client = VoiceAuthClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
+      final session = AuthSession(
+        accessToken: 'access-abc',
+        refreshToken: 'refresh-xyz',
+        expiresInSeconds: 900,
+        accountId: 'acc-1',
+        activeProfileId: 'prof-1',
+      );
+      final result = await client.revokeSession(
+        session: session,
+        sessionId: 'sess-other',
+      );
+      expect(revokeCalled, isTrue);
+      expect(result, isA<AuthApiOk<void>>());
+    });
+  });
 }

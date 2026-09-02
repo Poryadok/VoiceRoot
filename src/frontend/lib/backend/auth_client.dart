@@ -1,4 +1,5 @@
 import 'package:protobuf/protobuf.dart';
+import 'dart:convert';
 
 import '../gen/voice/auth/v1/auth.pb.dart' as auth_pb;
 import 'api_result.dart';
@@ -111,6 +112,61 @@ List<LinkedAccount> linkedAccountsFromJson(Map<String, dynamic> json) {
       )
       .where((a) => a.platform.isNotEmpty)
       .toList(growable: false);
+}
+
+class AuthDeviceSession {
+  const AuthDeviceSession({
+    required this.id,
+    required this.deviceLabel,
+    this.createdAt,
+    this.expiresAt,
+    required this.current,
+  });
+
+  final String id;
+  final String deviceLabel;
+  final DateTime? createdAt;
+  final DateTime? expiresAt;
+  final bool current;
+}
+
+List<AuthDeviceSession> authDeviceSessionsFromJson(Map<String, dynamic> json) {
+  final raw = json['sessions'];
+  if (raw is! List<dynamic>) return const [];
+  return raw
+      .whereType<Map<String, dynamic>>()
+      .map(authDeviceSessionFromJson)
+      .where((s) => s.id.isNotEmpty)
+      .toList(growable: false);
+}
+
+AuthDeviceSession authDeviceSessionFromJson(Map<String, dynamic> json) {
+  final deviceInfoRaw = json['device_info_json'] as String? ?? '';
+  var deviceLabel = deviceInfoRaw;
+  try {
+    final parsed = jsonDecode(deviceInfoRaw);
+    if (parsed is Map<String, dynamic>) {
+      final platform = parsed['platform'] as String?;
+      if (platform != null && platform.isNotEmpty) {
+        deviceLabel = platform;
+      }
+    }
+  } catch (_) {}
+
+  return AuthDeviceSession(
+    id: json['id'] as String? ?? '',
+    deviceLabel: deviceLabel.isEmpty ? 'Unknown device' : deviceLabel,
+    createdAt: _parseAuthTimestamp(json['created_at']),
+    expiresAt: _parseAuthTimestamp(json['expires_at']),
+    current: json['current'] as bool? ?? false,
+  );
+}
+
+DateTime? _parseAuthTimestamp(Object? value) {
+  if (value is String && value.isNotEmpty) {
+    return DateTime.tryParse(value);
+  }
+  return null;
 }
 
 /// HTTP client for public Auth routes via API Gateway (`/api/v1/auth/*`).
@@ -363,6 +419,42 @@ class VoiceAuthClient {
       GatewayHttpOk<void>() => null,
       GatewayHttpFailure(:final error) =>
         GatewayApiResultMapper.failureMessage(error),
+    };
+  }
+
+  Future<AuthApiResult<List<AuthDeviceSession>>> listSessions({
+    required AuthSession session,
+  }) async {
+    final result = await _gateway.getJson(
+      _gateway.resolve('/api/v1/auth/sessions'),
+      authorization: session.authorizationHeader,
+    );
+    return switch (result) {
+      GatewayHttpOk(:final data) => AuthApiOk(authDeviceSessionsFromJson(data)),
+      GatewayHttpFailure(:final error) => AuthApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+
+  /// Revokes another device session. Returns null on success (204).
+  Future<AuthApiResult<void>> revokeSession({
+    required AuthSession session,
+    required String sessionId,
+  }) async {
+    final result = await _gateway.postEmpty(
+      uri: _gateway.resolve('/api/v1/auth/sessions/$sessionId/revoke'),
+      authorization: session.authorizationHeader,
+    );
+    return switch (result) {
+      GatewayHttpOk<void>() => const AuthApiOk(null),
+      GatewayHttpFailure(:final error) => AuthApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
     };
   }
 

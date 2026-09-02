@@ -3338,6 +3338,66 @@ abstract class AppLocalizations {
   /// **'Register your guest account before deleting it.'**
   String get securityDeleteAccountGuestUnavailable;
 
+  /// No description provided for @securitySessionsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Active sessions'**
+  String get securitySessionsTitle;
+
+  /// No description provided for @securitySessionsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Devices where you are signed in. Revoke access for devices you no longer use.'**
+  String get securitySessionsHint;
+
+  /// No description provided for @securitySessionsManage.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage sessions'**
+  String get securitySessionsManage;
+
+  /// No description provided for @securitySessionsCurrentDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'This device'**
+  String get securitySessionsCurrentDevice;
+
+  /// No description provided for @securitySessionsOtherDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Other device'**
+  String get securitySessionsOtherDevice;
+
+  /// No description provided for @securitySessionsCurrentBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'Current'**
+  String get securitySessionsCurrentBadge;
+
+  /// No description provided for @securitySessionsRevoke.
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke'**
+  String get securitySessionsRevoke;
+
+  /// No description provided for @securitySessionsRevoked.
+  ///
+  /// In en, this message translates to:
+  /// **'Session revoked'**
+  String get securitySessionsRevoked;
+
+  /// No description provided for @securitySessionsLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load sessions'**
+  String get securitySessionsLoadError;
+
+  /// No description provided for @securitySessionsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No other active sessions'**
+  String get securitySessionsEmpty;
+
   /// No description provided for @privacySettingsTitle.
   ///
   /// In en, this message translates to:

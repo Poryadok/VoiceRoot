@@ -9,6 +9,7 @@ import '../../state/auth_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../core/voice_primary_button.dart';
 import '../core/voice_secondary_button.dart';
+import 'active_sessions_screen.dart';
 
 enum _SecurityStep { password, enroll, verify }
 
@@ -26,6 +27,7 @@ class SecuritySettingsScreen extends ConsumerStatefulWidget {
   static const Key deleteAccountButtonKey = Key('security_delete_account');
   static const Key deleteAccountDialogKey = Key('security_delete_account_dialog');
   static const Key deleteAccountPasswordKey = Key('security_delete_account_password');
+  static const Key activeSessionsButtonKey = Key('security_active_sessions');
 
   @override
   ConsumerState<SecuritySettingsScreen> createState() =>
@@ -233,6 +235,32 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
                   _SecurityStep.enroll => _buildEnrollStep(context, l10n, voice),
                   _SecurityStep.verify => _buildVerifyStep(context, l10n, voice),
                 },
+                const SizedBox(height: 32),
+                Divider(color: voice.borderDefault),
+                const SizedBox(height: 16),
+                Text(
+                  l10n.securitySessionsTitle,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  l10n.securitySessionsHint,
+                  style: TextStyle(color: voice.textSecondary),
+                ),
+                const SizedBox(height: 16),
+                VoiceSecondaryButton(
+                  key: SecuritySettingsScreen.activeSessionsButtonKey,
+                  onPressed: _busy
+                      ? null
+                      : () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const ActiveSessionsScreen(),
+                            ),
+                          );
+                        },
+                  child: Text(l10n.securitySessionsManage),
+                ),
                 const SizedBox(height: 32),
                 Divider(color: voice.borderDefault),
                 const SizedBox(height: 16),
