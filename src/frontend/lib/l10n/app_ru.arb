@@ -33,6 +33,27 @@
   "authLogin": "Войти",
   "authRegister": "Регистрация",
   "authContinueGuest": "Продолжить как гость",
+  "authForgotPassword": "Забыли пароль?",
+  "authErrorEmailRequired": "Введите email.",
+  "authErrorPasswordMismatch": "Пароли не совпадают.",
+  "authErrorInvalidOtp": "Неверный или просроченный код.",
+  "passwordResetTitle": "Сброс пароля",
+  "passwordResetRequestSubtitle": "Введите email — мы отправим код для сброса.",
+  "passwordResetSendLink": "Отправить код",
+  "passwordResetBackToLogin": "Назад ко входу",
+  "passwordResetCodeSent": "Код отправлен на {email}. Введите его и новый пароль.",
+  "@passwordResetCodeSent": {
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "passwordResetCodeLabel": "Код сброса",
+  "passwordResetNewPasswordLabel": "Новый пароль",
+  "passwordResetConfirmPasswordLabel": "Подтвердите пароль",
+  "passwordResetSubmit": "Сбросить пароль",
+  "passwordResetSuccess": "Пароль сброшен. Войдите с новым паролем.",
   "authLogout": "Выйти",
   "authError": "Ошибка входа: {message}",
   "@authError": {
