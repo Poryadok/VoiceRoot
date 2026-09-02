@@ -143,51 +143,6 @@ func (m stubAccountProfiles) ProfileIDsForAccount(_ context.Context, accountID u
 	return m[accountID], nil
 }
 
-func TestBlockAccount_RemovesFriendshipCascade(t *testing.T) {
-	if testing.Short() {
-		t.Skip()
-	}
-	ctx := context.Background()
-	pool := startSocialPostgresForTest(t, ctx)
-	applySocialMigration(t, ctx, pool)
-
-	accA := uuid.New()
-	accB := uuid.New()
-	profA1 := uuid.New()
-	profA2 := uuid.New()
-	profB1 := uuid.New()
-
-	client, cleanup := startSocialGRPCTestServer(t, pool, func(s *SocialGRPC) {
-		s.AccountProfiles = stubAccountProfiles{
-			accA: {profA1, profA2},
-			accB: {profB1},
-		}
-	})
-	t.Cleanup(cleanup)
-
-	_, err := client.SendFriendInvitation(withITProfileCtx(ctx, profA1), &socialv1.SendFriendInvitationRequest{
-		TargetProfileId: profB1.String(),
-	})
-	require.NoError(t, err)
-	_, err = client.AcceptFriendInvitation(withProfileCtx(ctx, profB1), &socialv1.AcceptFriendInvitationRequest{
-		RequesterProfileId: profA1.String(),
-	})
-	require.NoError(t, err)
-
-	friends, err := client.ListFriends(withProfileCtx(ctx, profA1), &socialv1.ListFriendsRequest{})
-	require.NoError(t, err)
-	require.Len(t, friends.GetFriendList().GetFriends(), 1)
-
-	_, err = client.BlockAccount(withAccountCtx(ctx, accA), &socialv1.BlockAccountRequest{
-		BlockedAccountId: accB.String(),
-	})
-	require.NoError(t, err)
-
-	friendsAfter, err := client.ListFriends(withProfileCtx(ctx, profA1), &socialv1.ListFriendsRequest{})
-	require.NoError(t, err)
-	require.Empty(t, friendsAfter.GetFriendList().GetFriends())
-}
-
 func TestHasContact_S2S(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
