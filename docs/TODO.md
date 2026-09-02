@@ -75,7 +75,7 @@ DOC-аудит закрыт (0 open DOC). Невыполненное разне�
 |------|-----|
 | [backend.md](todo/backend.md) § Critical Subscription | Checkout = `checkout.paddle.test`; CloudPayments `Unimplemented`; JWT `subscription_tier` без `AUTH_NATS_URL` |
 | [backend.md](todo/backend.md) § Critical Space | Нет `DeleteSpace` / `TransferOwnership` / `GetAuditLog` (tree pin — done batch/31b) |
-| [backend.md](todo/backend.md) § Critical Messaging | `ForwardMessage` shadow-ban bypass; `MODERATION_GRPC_ADDR` absent on staging k8s |
+| [backend.md](todo/backend.md) § Critical Moderation | Sanction notifications consumer stub (empty recipientProfileID) |
 | [backend.md](todo/backend.md) § High Chat | Стикеры/GIF **в v1** (0 Flutter); view-count; `DeleteChat` |
 | [ci.md](todo/ci.md) § Critical | FCM/APNs, Alertmanager, staging DoD, TOTP/Resend/Paddle secrets |
 | [admin.md](todo/admin.md) § High | Analytics search/voice dashboard types (backend first) |
