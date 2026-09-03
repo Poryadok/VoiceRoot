@@ -31,6 +31,7 @@ _Пока пусто — критичные клиентские блокеры 
 
 - [x] **[Multi-Profile] No delete-profile UI** — `ManageProfilesSheet` in settings (`settings_manage_profiles`); `DELETE /api/v1/users/profiles/{id}` via `VoiceUsersClient.deleteProfile`; blocks primary/active delete (Batch 13).
 - [x] **[Multi-Profile] Frozen profiles invisible in switcher UI** — `VoiceProfile.frozenAt` + `proto_mappers.dart`; `ProfileSwitcher` disabled items + `(Frozen)` label; `ProfileAvatarSwitcher` skips frozen on swipe (Batch 11).
+- [ ] **[Multi-Profile] Local regression: second profile creation causes screen flicker and profile switch appears to fail** — reproduce on local app stack after creating a second profile; expected contract: switch is мгновенный, без перезагрузки ([multi-profile.md](../features/multi-profile.md)). Check `ProfileSwitcher` / `ProfileAvatarSwitcher`, auth `switch-profile` refresh, `profile_context_controller`, and route/state invalidation after create.
 - [x] **[Multi-Profile] `ProfileDowngradePickerScreen` unreachable** — **done (Batch 12):** routed when free tier + >2 profiles (`profileDowngradeRequiredProvider` in `app.dart`); screen + `submitDowngradeProfiles` existed.
 
 
@@ -93,6 +94,7 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 
 ### Chat UX (спека text-chat / navigation)
 
+- [ ] **Chat switch flicker: chat area flashes and a blue line appears when switching chats** — reproduce on local app stack; expected: active chat changes without transient full-area flicker or stray focus/selection/progress line. Check room rebuild path, `MobileChatStrip`/chat list selection, focus indicators, loading placeholders, and any route transition/state invalidation around active `chat_id`.
 - [ ] **Локальные черновики** — Hive/SQLite, один на chat; multi-device sync отказано в спеке.
 - [ ] **OG link preview** — unfurl на клиенте; сервер не обязан.
 - [ ] **Stickers / GIF / voice-note composer** — нет UI (и нет backend packs). См. [backend.md](backend.md) § High Chat; решение спеки — [product-roadmap.md](product-roadmap.md).
