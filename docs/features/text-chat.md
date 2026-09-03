@@ -186,7 +186,7 @@ Ctx на строке чата — [screen-controls.md](../design/screen-control
 |---------|--------------------------|-------------------------|
 | Read ✓✓ | `Messaging.MarkRead` REST/gRPC → `read_receipts` | WS `mark_read` / `message_read` (multi-tab sync) |
 | Delivered ✓ | `GetChatListMetadata.last_message_delivery_state` (peer `last_delivered_message_id`) | WS `delivery_ack` → `message_delivered` |
-| After reconnect | **Обязателен** `ListChats` / metadata refresh | `resume` не восстанавливает ticks |
+| After reconnect | **Обязателен** global paginated `ListChats` snapshot (`main` / `requests` / `archive`) с metadata; сообщения — `GetMessages` только per selected chat | `resume` не восстанавливает ticks или историю |
 
 Контракт derivation — [messaging-service.md](../microservices/messaging-service.md) § Durable delivery derivation, § MarkRead; протокол WS — [realtime-service.md](../microservices/realtime-service.md) § Read / delivery dual path; сводка — [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) § WS vs REST.
 
@@ -405,4 +405,3 @@ Normative inbox classification для DM (`chat_members.inbox_bucket` per `profi
 ## Pin чатов
 
 См. [navigation.md](navigation.md) и [GLOSSARY.md](../GLOSSARY.md). Кратко: pin в папке / спейсе ≠ Quick Access в rail.
-

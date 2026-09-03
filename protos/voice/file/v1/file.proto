@@ -17,6 +17,7 @@ enum FileLifecycleStatus {
   FILE_LIFECYCLE_STATUS_READY = 3;
   FILE_LIFECYCLE_STATUS_FAILED = 4;
   FILE_LIFECYCLE_STATUS_DELETED = 5;
+  FILE_LIFECYCLE_STATUS_EXPIRED = 6;
 }
 
 // Canonical values for FileMetadata.file_type (string).

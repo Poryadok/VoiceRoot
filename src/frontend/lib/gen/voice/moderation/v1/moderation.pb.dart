@@ -1102,6 +1102,8 @@ class Appeal extends $pb.GeneratedMessage {
     $core.String? status,
     $core.String? reviewedByProfileId,
     $1.Timestamp? createdAt,
+    $1.Timestamp? reviewedAt,
+    $core.String? reviewNotes,
   }) {
     final result = create();
     if (id != null) result.id = id;
@@ -1113,6 +1115,8 @@ class Appeal extends $pb.GeneratedMessage {
     if (reviewedByProfileId != null)
       result.reviewedByProfileId = reviewedByProfileId;
     if (createdAt != null) result.createdAt = createdAt;
+    if (reviewedAt != null) result.reviewedAt = reviewedAt;
+    if (reviewNotes != null) result.reviewNotes = reviewNotes;
     return result;
   }
 
@@ -1138,6 +1142,9 @@ class Appeal extends $pb.GeneratedMessage {
     ..aOS(6, _omitFieldNames ? '' : 'reviewedByProfileId')
     ..aOM<$1.Timestamp>(7, _omitFieldNames ? '' : 'createdAt',
         subBuilder: $1.Timestamp.create)
+    ..aOM<$1.Timestamp>(8, _omitFieldNames ? '' : 'reviewedAt',
+        subBuilder: $1.Timestamp.create)
+    ..aOS(9, _omitFieldNames ? '' : 'reviewNotes')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1222,6 +1229,26 @@ class Appeal extends $pb.GeneratedMessage {
   void clearCreatedAt() => $_clearField(7);
   @$pb.TagNumber(7)
   $1.Timestamp ensureCreatedAt() => $_ensure(6);
+
+  @$pb.TagNumber(8)
+  $1.Timestamp get reviewedAt => $_getN(7);
+  @$pb.TagNumber(8)
+  set reviewedAt($1.Timestamp value) => $_setField(8, value);
+  @$pb.TagNumber(8)
+  $core.bool hasReviewedAt() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearReviewedAt() => $_clearField(8);
+  @$pb.TagNumber(8)
+  $1.Timestamp ensureReviewedAt() => $_ensure(7);
+
+  @$pb.TagNumber(9)
+  $core.String get reviewNotes => $_getSZ(8);
+  @$pb.TagNumber(9)
+  set reviewNotes($core.String value) => $_setString(8, value);
+  @$pb.TagNumber(9)
+  $core.bool hasReviewNotes() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearReviewNotes() => $_clearField(9);
 }
 
 class SubmitAppealRequest extends $pb.GeneratedMessage {

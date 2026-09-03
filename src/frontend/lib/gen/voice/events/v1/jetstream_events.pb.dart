@@ -6576,6 +6576,7 @@ enum FileStreamEvent_Payload {
   fileScanResult,
   fileExpired,
   fileProcessed,
+  fileDownloaded,
   notSet
 }
 
@@ -6587,6 +6588,7 @@ class FileStreamEvent extends $pb.GeneratedMessage {
     FileScanResult? fileScanResult,
     FileExpired? fileExpired,
     FileProcessed? fileProcessed,
+    FileDownloaded? fileDownloaded,
   }) {
     final result = create();
     if (eventId != null) result.eventId = eventId;
@@ -6595,6 +6597,7 @@ class FileStreamEvent extends $pb.GeneratedMessage {
     if (fileScanResult != null) result.fileScanResult = fileScanResult;
     if (fileExpired != null) result.fileExpired = fileExpired;
     if (fileProcessed != null) result.fileProcessed = fileProcessed;
+    if (fileDownloaded != null) result.fileDownloaded = fileDownloaded;
     return result;
   }
 
@@ -6613,6 +6616,7 @@ class FileStreamEvent extends $pb.GeneratedMessage {
     11: FileStreamEvent_Payload.fileScanResult,
     12: FileStreamEvent_Payload.fileExpired,
     13: FileStreamEvent_Payload.fileProcessed,
+    14: FileStreamEvent_Payload.fileDownloaded,
     0: FileStreamEvent_Payload.notSet
   };
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
@@ -6620,7 +6624,7 @@ class FileStreamEvent extends $pb.GeneratedMessage {
       package:
           const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
       createEmptyInstance: create)
-    ..oo(0, [10, 11, 12, 13])
+    ..oo(0, [10, 11, 12, 13, 14])
     ..aOS(1, _omitFieldNames ? '' : 'eventId')
     ..aOM<$0.Timestamp>(2, _omitFieldNames ? '' : 'occurredAt',
         subBuilder: $0.Timestamp.create)
@@ -6632,6 +6636,8 @@ class FileStreamEvent extends $pb.GeneratedMessage {
         subBuilder: FileExpired.create)
     ..aOM<FileProcessed>(13, _omitFieldNames ? '' : 'fileProcessed',
         subBuilder: FileProcessed.create)
+    ..aOM<FileDownloaded>(14, _omitFieldNames ? '' : 'fileDownloaded',
+        subBuilder: FileDownloaded.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -6657,12 +6663,14 @@ class FileStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(11)
   @$pb.TagNumber(12)
   @$pb.TagNumber(13)
+  @$pb.TagNumber(14)
   FileStreamEvent_Payload whichPayload() =>
       _FileStreamEvent_PayloadByTag[$_whichOneof(0)]!;
   @$pb.TagNumber(10)
   @$pb.TagNumber(11)
   @$pb.TagNumber(12)
   @$pb.TagNumber(13)
+  @$pb.TagNumber(14)
   void clearPayload() => $_clearField($_whichOneof(0));
 
   @$pb.TagNumber(1)
@@ -6728,6 +6736,17 @@ class FileStreamEvent extends $pb.GeneratedMessage {
   void clearFileProcessed() => $_clearField(13);
   @$pb.TagNumber(13)
   FileProcessed ensureFileProcessed() => $_ensure(5);
+
+  @$pb.TagNumber(14)
+  FileDownloaded get fileDownloaded => $_getN(6);
+  @$pb.TagNumber(14)
+  set fileDownloaded(FileDownloaded value) => $_setField(14, value);
+  @$pb.TagNumber(14)
+  $core.bool hasFileDownloaded() => $_has(6);
+  @$pb.TagNumber(14)
+  void clearFileDownloaded() => $_clearField(14);
+  @$pb.TagNumber(14)
+  FileDownloaded ensureFileDownloaded() => $_ensure(6);
 }
 
 class FileUploaded extends $pb.GeneratedMessage {
@@ -7033,6 +7052,74 @@ class FileExpired extends $pb.GeneratedMessage {
   $core.bool hasChatId() => $_has(1);
   @$pb.TagNumber(2)
   void clearChatId() => $_clearField(2);
+}
+
+class FileDownloaded extends $pb.GeneratedMessage {
+  factory FileDownloaded({
+    $core.String? fileId,
+    $core.String? downloaderProfileId,
+  }) {
+    final result = create();
+    if (fileId != null) result.fileId = fileId;
+    if (downloaderProfileId != null)
+      result.downloaderProfileId = downloaderProfileId;
+    return result;
+  }
+
+  FileDownloaded._();
+
+  factory FileDownloaded.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory FileDownloaded.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'FileDownloaded',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'fileId')
+    ..aOS(2, _omitFieldNames ? '' : 'downloaderProfileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  FileDownloaded clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  FileDownloaded copyWith(void Function(FileDownloaded) updates) =>
+      super.copyWith((message) => updates(message as FileDownloaded))
+          as FileDownloaded;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static FileDownloaded create() => FileDownloaded._();
+  @$core.override
+  FileDownloaded createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static FileDownloaded getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<FileDownloaded>(create);
+  static FileDownloaded? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get fileId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set fileId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasFileId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearFileId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get downloaderProfileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set downloaderProfileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasDownloaderProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearDownloaderProfileId() => $_clearField(2);
 }
 
 enum MatchmakingStreamEvent_Payload {

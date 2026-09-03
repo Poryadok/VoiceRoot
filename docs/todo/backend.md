@@ -114,7 +114,7 @@
 
 
 - [ ] **[File] SHA-256 deduplication missing** — no hash lookup, no reuse of existing R2 key; `file_references` table absent (spec model in `d:\Git\Voice\docs\microservices\file-service.md`; only `files` in `d:\Git\Voice\src\backend\migrations\file_db\000001_init.up.sql`). Acknowledged in `d:\Git\Voice\src\backend\file\README.md`.
-- [ ] **[File] NATS `file.downloaded` отсутствует** — `file.uploaded` / `file.processed` / `file.scan_infected` / `file.expired` публикуются (`fileevents/jetstream.go`). Нет `file.downloaded`; Messaging preview-refresh после conversion — проверить consumer.
+- [x] **[File] NATS `file.downloaded` отсутствует** — File публикует best-effort `file.downloaded` после успешного `GetFileURL` presign; Messaging preview-refresh после conversion остаётся отдельной задачей.
 - [ ] **[File] No async worker / `processing` status** — conversion runs inline in `ConfirmUpload`; `processing` never set (`d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go`; `d:\Git\Voice\docs\microservices\file-service.md` pipeline).
 - [x] **[File] Originals kept after image processing** — processed keys written, source `r2_key` not removed (`d:\Git\Voice\src\backend\file\internal\imgproc\webp.go`; contradicts `d:\Git\Voice\docs\features\file-storage.md`).
 - [ ] **[File] `CheckQuota` ignores premium** — always returns `r2file.MaxFreeFileBytes` as limit (`d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go` L449–454); README says subscription quotas beyond free tier are out of scope.
@@ -229,6 +229,7 @@
 
 
 - [x] **[Messaging] `message.forwarded` NATS event** — `PublishMessageForwarded` on forward path (`messaging_grpc.go`; `messageevents/jetstream.go`).
+- [ ] **[Gateway/Messaging] Raise `MessagesSend` rate limit to 100 messages / 5 sec** — local app stack hits rate limit after ~5 quick messages; desired product behavior: normal chat should allow up to **100 сообщений / 5 сек** while keeping anti-bot protection. Update docs currently saying `5 сообщений / 5 сек` ([ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md), [text-chat.md](../features/text-chat.md)) together with `defaultRateLimitRules` / `GATEWAY_RATE_LIMIT_RULES_JSON` tests when implementing.
 - [x] **[Messaging] `ForwardMessageRequest.commentary` ignored** — **done:** commentary inserts a separate message via `insertForwardCommentary` (`messaging_grpc.go`; Messaging forward ITs).
 - [x] **[Messaging] “Copy as new message” / forward without attribution** — **done:** `ForwardMessageRequest.without_attribution` → regular message, no Forwarded-from; skips `allow_forward` deny (FW-03).
 - [x] **[Messaging] Forward-author privacy block not enforced** — spec says user can forbid forwarding their messages; Messaging `ForwardMessage` checks User `allow_forward` via S2S (`PermissionDenied`).
@@ -640,7 +641,7 @@
 ### File
 
 
-- [ ] **[File] Proto lifecycle enum** — no distinct `expired`; `expired` DB status maps to `FILE_LIFECYCLE_STATUS_DELETED` (`d:\Git\Voice\protos\voice\file\v1\file.proto`, `d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go` L674–675).
+- [x] **[File] Proto lifecycle enum** — additive `FILE_LIFECYCLE_STATUS_EXPIRED = 6`; `expired` DB status maps to `EXPIRED`, while `deleted` remains `DELETED` (`protos/voice/file/v1/file.proto`, `src/backend/file/internal/grpcsvc/file_grpc.go`).
 - [ ] **[File] No `sha256_hash` index/unique** — dedup would need schema work (`d:\Git\Voice\src\backend\migrations\file_db\000001_init.up.sql`).
 - [ ] **[File] `story_id` column unused in access rules** — stored (`d:\Git\Voice\src\backend\migrations\file_db\000003_story_context.up.sql`) but `ensureFileAccess` only checks uploader or chat member (`d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go` L538–554).
 
@@ -669,7 +670,7 @@
 
 - [ ] **[Moderation] `GetAutoModStats` semantics weak** — counts `auto_mod_log` rows, not messages scanned; `CheckMessage` does not increment checked counter.
 - [ ] **[Moderation] Spam mute action taxonomy mismatch** — logs `mute` / `mute_permanent` actions; docs/model use `mute` / `shadow_ban`; Messaging only blocks when pattern re-matches.
-- [ ] **[Moderation] Appeal proto omits `reviewed_at` / `review_notes`** — stored in DB, not returned to clients.
+- [x] **[Moderation] Appeal review metadata in proto** — `reviewed_at` and nullable `review_notes` round-trip through Review/Get/List responses; pending appeals omit both fields. **T-035**.
 - [ ] **[Moderation] Limited unit coverage** — `automod_unit_test.go` only link-flood + threshold math; no unit tests for sanctions/appeals handlers (integration tests only).
 - [ ] **[Moderation] Federation moderation** — documented in `moderation-service.md`, not implemented (federation deferred per PLAN).
 
@@ -692,7 +693,7 @@
 - [ ] **[Analytics] Prometheus names vs spec** — Code: `analytics_ingest_*`, `analytics_clickhouse_insert_latency_seconds` (`d:\Git\Voice\src\backend\analytics\internal\metrics\metrics.go`); docs: `analytics.ingest.events_per_second`, `analytics.ingest.batch_size` (`docs/microservices/analytics-service.md`). No `events_per_second` or `batch_size` histogram.
 - [ ] **[Analytics] gRPC ingest omits lag metric** — `IngestLag` only set on NATS path (`d:\Git\Voice\src\backend\analytics\internal\grpcsvc\ingest.go` vs `d:\Git\Voice\src\backend\analytics\internal\consumer\runner.go`).
 - [ ] **[Analytics] `DeliverNew` only** — New durable consumers skip backlog (`d:\Git\Voice\src\backend\analytics\internal\consumer\runner.go`); acceptable per spec but limits replay/backfill.
-- [ ] **[Analytics] Export CSV omits hashed IDs** — Export columns exclude `user_id_hashed` / `profile_id_hashed` (`d:\Git\Voice\src\backend\analytics\internal\grpcsvc\query.go`).
+- [x] **[Analytics] Export CSV includes hashed IDs** — CSV exports include existing `user_id_hashed` / `profile_id_hashed` columns while JSON remains unchanged (`src/backend/analytics/internal/grpcsvc/query.go`).
 - [ ] **[Analytics] User-level activity gap** — `message_sent` hashes `profile_id` only; `user_id_hashed` empty → DAU/retention undercount messengers (`d:\Git\Voice\src\backend\analytics\internal\adapters\domain.go`).
 - [ ] **[Analytics] Gateway health telemetry off by default** — `GATEWAY_ANALYTICS_SAMPLE_RATE` default 0 (`d:\Git\Voice\src\backend\gateway\analytics_telemetry.go`); health dashboard needs explicit enablement.
 - [ ] **[Analytics] CH schema doc naming** — Docs use `user_id`/`profile_id`; DDL uses `user_id_hashed`/`profile_id_hashed` (`docs/microservices/analytics-service.md` vs `d:\Git\Voice\docker\clickhouse\init\001_events.sql`).
@@ -704,7 +705,7 @@
 - [x] **[Role] README status** — describes the implemented role and permission surface. — `src/backend/role/README.md`
 - [ ] **[Role] `NamesFor` order non-deterministic — map iteration; awkward for UI/tests expecting stable lists.** — `src/backend/role/permissions/permissions.go`
 - [ ] **[Role] No test for dual-scope effective mask — chat + `voice_room_id` together in one `GetEffectiveMask` call.** — `src/backend/role/internal/store/`, `internal/grpcsvc/` tests
-- [ ] **[Role] `CreateRole` position not validated — actor can create custom role at position ≥ own top (hierarchy only on edit/assign, not create).** — `src/backend/role/internal/grpcsvc/roles.go` (`CreateRole`)
+- [x] **[Role] `CreateRole` hierarchy validation — non-owner with `SPACE_MANAGE_ROLES` may create only below their top role; equal/higher denial leaves no role or event, Owner bypass is covered.** — `src/backend/role/internal/grpcsvc/roles.go`, `roles_manage_integration_test.go`
 - [ ] **[Role] Guest role under-exercised — default join falls back to Member; Guest mask (`SPACE_VIEW` only) rarely applies unless `SetDefaultJoinRole` points to Guest.** — `src/backend/role/permissions/permissions.go`, `internal/store/roles.go`
 
 ### Cross-cutting

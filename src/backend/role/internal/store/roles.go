@@ -286,6 +286,25 @@ func (s *RoleStore) CanManageRole(ctx context.Context, spaceID, actorProfileID, 
 	return actorTop > target.Position, nil
 }
 
+// CanCreateRole reports whether actor may create a role at position under their hierarchy.
+// Permission-bit authorization is performed by the gRPC caller.
+func (s *RoleStore) CanCreateRole(ctx context.Context, spaceID, actorProfileID uuid.UUID, position int32) (bool, error) {
+	actorRoles, err := s.GetMemberRoles(ctx, spaceID, actorProfileID)
+	if err != nil {
+		return false, err
+	}
+	var actorTop int32 = -1
+	for _, ar := range actorRoles {
+		if ar.Name == permissions.RoleOwner {
+			return true, nil
+		}
+		if ar.Position > actorTop {
+			actorTop = ar.Position
+		}
+	}
+	return actorTop > position, nil
+}
+
 // SetChatOverride upserts chat_overrides for role_id (all member roles if roleID is Nil — not used).
 func (s *RoleStore) SetChatOverride(ctx context.Context, chatID, roleID uuid.UUID, allow, deny uint64) error {
 	_, err := s.Pool.Exec(ctx, `

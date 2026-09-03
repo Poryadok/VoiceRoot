@@ -161,9 +161,9 @@ func (s *QueryGRPC) ExportData(ctx context.Context, req *analyticsv1.ExportDataR
 	case "csv":
 		var buf bytes.Buffer
 		w := csv.NewWriter(&buf)
-		_ = w.Write([]string{"event_id", "event_type", "source_service", "timestamp", "properties"})
+		_ = w.Write([]string{"event_id", "event_type", "source_service", "timestamp", "user_id_hashed", "profile_id_hashed", "properties"})
 		for _, r := range rows {
-			_ = w.Write([]string{r.EventID, r.EventType, r.SourceService, r.Timestamp.Format(time.RFC3339Nano), r.PropertiesJSON})
+			_ = w.Write([]string{r.EventID, r.EventType, r.SourceService, r.Timestamp.Format(time.RFC3339Nano), r.UserIDHashed, r.ProfileIDHashed, r.PropertiesJSON})
 		}
 		w.Flush()
 		if err := w.Error(); err != nil {
