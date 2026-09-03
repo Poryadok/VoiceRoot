@@ -48,9 +48,13 @@ Get-Content -Raw -Encoding UTF8 .agent\AGENTS.md
 ## Git Safety
 
 - Default branch is `master`.
+- Keep the main checkout on an up-to-date `master`: after remote changes, run
+  `git fetch origin` and `git merge origin/master`, never rebase.
 - Do not rebase, amend, force-push, bypass hooks, run `git reset --hard`, or use
   history rewrite tools unless the user explicitly requests that exact action.
 - Sync with `git fetch origin` and `git merge origin/master`.
+- After creating a commit, push it promptly unless the user explicitly asks to
+  keep it local.
 - Merge PRs with merge commits; do not squash by default.
 
 ## Cursor Migration Notes

@@ -42,6 +42,11 @@ git merge origin/master
 git checkout -b feature/my-task
 ```
 
+Main checkout should stay on current `master`. Before work and after PR merges,
+run `git fetch origin` and `git merge origin/master` in the main checkout. Do
+not leave main `master` ahead/behind unless the user explicitly asks to keep
+local work unpushed.
+
 **Не** gitflow (нет `develop` / release/hotfix по умолчанию). **Не** переименовывать default branch в `main`.
 
 ---
@@ -89,6 +94,8 @@ git merge origin/master
 - Conventional Commits **не обязательны**.
 - Один коммит — одна логическая правка; TDD-итерации могут давать несколько коммитов в одном PR — это нормально и **желательно** (история не схлопывается).
 - **Не** смешивать массовое форматирование с поведенческими изменениями без необходимости.
+- After creating a commit, push it promptly unless the user explicitly asks to
+  keep it local.
 
 ```powershell
 git add <paths>

@@ -37,6 +37,7 @@ Voice is a Discord-like messenger with voice chat and built-in matchmaking. Prod
 ## Development Workflow
 
 - Before coding, read the relevant `docs/` files from the table and the user task.
+- Keep the main checkout on current `master`: `git fetch origin` + `git merge origin/master` (no rebase). After creating a commit, push it promptly unless the user explicitly asks to keep it local.
 - Shared workflows live in `.agent/workflows/`. For full documentation-first TDD workflow, use `.agent/codex/skills/tdd-code-workflow/SKILL.md` (mirrors `.agent/workflows/tdd-code-workflow/SKILL.md` for repo-local portability). Cursor loads a stub from `.cursor/skills/tdd-code-workflow/SKILL.md`.
 - Product design (Penpot mocks, tokens, UX review): Codex profile `.agent/codex/agents/voice-designer.md` and skill `.agent/codex/skills/penpot-voice/SKILL.md`. Visual canon is `docs/design/` + `design/tokens/voice.tokens.json`; do not invent product behavior.
 - If the user **explicitly** asks to use that TDD workflow / skill, follow the canonical `SKILL.md` **strictly** (written plan before production code, delegation where the tool supports it, red–green–refactor, review loops, final checklist) — see «Strict mode» in that file and «Явный запрос скилла» in `docs/TESTING.md`.

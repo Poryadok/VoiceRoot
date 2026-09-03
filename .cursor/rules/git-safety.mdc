@@ -25,6 +25,10 @@ Canonical process: `docs/CONTRIBUTING.md`. Repo hooks: `scripts/git/` (`install-
 
 - Default branch: **`master`** (not `main`).
 - Sync: `git fetch origin` then `git merge origin/master` (not rebase).
+- Main checkout should stay on current `master`; do not leave it ahead/behind
+  unless the user explicitly asks to keep local work unpushed.
+- After creating a commit, push it promptly unless the user explicitly asks to
+  keep it local.
 - PR merge to `master`: **merge commit** (`gh pr merge --merge`); no squash merge — see CONTRIBUTING.
 
 ## Agents
