@@ -131,3 +131,38 @@ func TestJetStreamPublisher_FileProcessedRoundTrip(t *testing.T) {
 	require.Equal(t, converted, processed.GetConvertedR2Key())
 	require.Equal(t, thumb, processed.GetThumbnailR2Key())
 }
+
+func TestJetStreamPublisher_FileDownloadedRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	s := startJSTestServer(t)
+	url := s.ClientURL()
+
+	nc, err := nats.Connect(url)
+	require.NoError(t, err)
+	t.Cleanup(nc.Close)
+
+	sub, err := nc.SubscribeSync(subjectFileDownloaded)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sub.Unsubscribe() })
+	require.NoError(t, nc.Flush())
+
+	pub, err := NewJetStreamPublisher(url)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = pub.Close() })
+
+	const fileID = "66666666-6666-4666-8666-666666666666"
+	const downloaderProfileID = "77777777-7777-4777-8777-777777777777"
+	require.NoError(t, pub.PublishFileDownloaded(ctx, fileID, downloaderProfileID))
+
+	msg, err := sub.NextMsg(3 * time.Second)
+	require.NoError(t, err)
+	require.Equal(t, subjectFileDownloaded, msg.Subject)
+	var env eventsv1.FileStreamEvent
+	require.NoError(t, proto.Unmarshal(msg.Data, &env))
+	require.NotEmpty(t, env.GetEventId())
+	require.NotNil(t, env.GetOccurredAt())
+	downloaded := env.GetFileDownloaded()
+	require.NotNil(t, downloaded)
+	require.Equal(t, fileID, downloaded.GetFileId())
+	require.Equal(t, downloaderProfileID, downloaded.GetDownloaderProfileId())
+}

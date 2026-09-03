@@ -607,11 +607,18 @@ func (p *recordingFilePublisher) PublishFileExpired(_ context.Context, fileID st
 	return nil
 }
 
-func (p *recordingFilePublisher) PublishFileUploaded(context.Context, string, string) error { return nil }
+func (p *recordingFilePublisher) PublishFileUploaded(context.Context, string, string) error {
+	return nil
+}
+func (p *recordingFilePublisher) PublishFileDownloaded(context.Context, string, string) error {
+	return nil
+}
 func (p *recordingFilePublisher) PublishFileProcessed(context.Context, string, string, string, string) error {
 	return nil
 }
-func (p *recordingFilePublisher) PublishFileScanInfected(context.Context, string, string) error { return nil }
+func (p *recordingFilePublisher) PublishFileScanInfected(context.Context, string, string) error {
+	return nil
+}
 
 func (p *recordingFilePublisher) Close() error { return nil }
 
