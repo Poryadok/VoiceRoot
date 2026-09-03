@@ -115,6 +115,24 @@ billing_events
 
 Доменный поток JetStream: **`subscription.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)).
 
+**Фактический статус personal lifecycle:** сервисный sweeper раз в минуту обрабатывает
+личные подписки в `grace_period`: публикует `subscription.grace_reminder` на
+D1/D3/D7, после `grace_period_end` переводит строку в `cancelled` и публикует
+`subscription.plan_expired` +
+`subscription.downgrade`. Тот же sweeper завершает ручную отмену после
+`current_period_end`. Это подтверждает producer/transition, но не downstream-effect:
+Notification пока только распознаёт reminder event без push/email dispatch, а User и
+Flutter не потребляют downgrade для выбора и заморозки excess-профилей.
+
+`grace_reminders_sent` подавляет обычный последовательный повтор за уже отмеченный
+день, но это не гарантия exactly-once: sweeper сначала публикует событие и затем
+помечает день без атомарного claim, а публикация не задаёт `Nats-Msg-Id`. Сбой между
+этими шагами или параллельные реплики могут опубликовать duplicate reminder.
+
+**Отдельный открытый scope Space Pro:** sync активного entitlement и отмена в конце
+оплаченного периода существуют, но payment-failure → 7-day grace/reminders/expiry
+для `space_subscriptions` не реализован как lifecycle, эквивалентный personal.
+
 | Событие                          | Данные                       |
 |----------------------------------|------------------------------|
 | `subscription.plan_started`      | account_id, plan, provider   |
@@ -125,7 +143,8 @@ billing_events
 | `subscription.payment_failed`    | account_id, reason           |
 | `subscription.space_pro_started` | space_id, purchaser_id       |
 | `subscription.space_pro_expired` | space_id                     |
-| `subscription.downgrade`         | account_id, frozen_profiles  |
+| `subscription.downgrade`         | account_id, plan             |
+| `subscription.grace_reminder`    | account_id, plan, day (1/3/7) |
 
 ## Зависимости
 
