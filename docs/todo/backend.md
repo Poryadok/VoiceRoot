@@ -69,14 +69,14 @@
 
 - [ ] **[Cross-cutting] JWT `subscription_tier` never syncs from billing unless `AUTH_NATS_URL` — duplicate of Critical Subscription; User/Chat trust JWT. Staging/prod must bind NATS store + не оставлять InMemory.** — `AuthBeans.java`; [ci.md](ci.md)
 - [x] **[Cross-cutting] Space Pro entitlement duplicated, not synced — webhook writes `subscription_db.space_subscriptions` (`subscription/internal/grpcsvc/subscription.go`); Space enforces caps from `space_db.space_subscriptions` (`space/internal/store/entitlement.go`). No S2S/event sync on `subscription.activated` / `space_pro`. Live Space Pro billing does not raise member cap.** — **done (sync):** webhook → S2S `SyncSpaceProSubscription` and/or NATS `subscription.space_pro_*` → Space entitlement cache. Compose live member-cap: `TestComposeSpaceProMemberCap_live` (#14).
-- [ ] **[Cross-cutting] `subscription.events` bus missing — `docs/CONTRACT_MATRIX.md` / `docs/MICROSERVICES.md` list stream with subscribers Analytics, User, Space, File; code only publishes `analytics.subscription.*` from Subscription. Blocks cross-service tier/limit propagation.** — `src/backend/subscription/internal/grpcsvc/subscription.go` (`publishPaymentEvent`), `docs/CONTRACT_MATRIX.md`
+- [ ] **[Cross-cutting] `subscription.events` downstream consumers incomplete — Subscription publishes the domain stream, including personal `plan_expired`, `downgrade`, and D1/D3/D7 `grace_reminder`; User/File do not consume the required personal downgrade/limit effects, Analytics subscribes but does not map expiry/downgrade, and Notification only recognizes valid grace reminders, logs consumption, and ACKs without push/email dispatch.** — `src/backend/subscription/internal/subscriptionevents/jetstream.go`; `src/backend/subscription/internal/sweeper/sweeper.go`; `src/backend/analytics/internal/adapters/domain.go`; `src/backend/notification/subscription_events_consumer.go`; `docs/CONTRACT_MATRIX.md`
 - [x] **[Cross-cutting] Web JWT in WS query string** — web uses `POST /api/v1/realtime/ws-ticket` + `/ws?ticket=`; legacy `access_token` query retained for compat. — `docs/ARCHITECTURE_REQUIREMENTS.md`, Gateway, Flutter `RealtimeHub`
 - [ ] **[Cross-cutting] Flutter shell parity (audit R2-A03–A05, H14)** — folders + Quick Access + archive RPCs/UI shipped (batches 15–21). **Remaining:** mobile drawer IA (stub), stacked chrome polish, R2-A04 defer — [client.md](client.md).
 
 ### Messaging
 
 
-- [ ] **[Messaging] Staging/prod: `MODERATION_GRPC_ADDR` unset disables PlatformMod** — compose sets `MODERATION_GRPC_ADDR: moderation:9090` (`docker-compose.yml`); `deploy/staging/configmap-app.yaml` omits it → shadow-ban/spam-mute checks silently off on k8s. **Fix:** add to shared configmap + prod; smoke messaging pod env — [ci.md](ci.md) § High Deploy.
+- [x] **[Messaging] Staging/prod `MODERATION_GRPC_ADDR` wiring** — **done:** compose uses `moderation:9090`; staging/prod configmaps use `voice-moderation:9090`, so Messaging wires `PlatformMod` outside local compose too (`docker-compose.yml`, `deploy/staging/configmap-app.yaml`, `deploy/prod/configmap-app.yaml`).
 - [x] **[Messaging] `ForwardMessage` bypasses channel/thread send policy** — **done:** `ForwardMessage` calls `checkSpaceSendPermission`, `threadPolicyDeps().validateSend`, and sets `posted_as_chat` when channel forbids main-feed (`messaging_grpc.go`; `messaging_forward_integration_test.go`). `GetMessage` **есть** (`messaging_grpc.go` ~792).
 - [x] **[Messaging] E2E forward policy gap** — **done:** `validateE2ESend` on forward target; E2E→plain `FailedPrecondition`, E2E→E2E preserves `is_e2e` (Messaging ITs).
 
@@ -103,17 +103,18 @@
 
 
 - [ ] **[Subscription] Cancel / Resume только в `subscription_db` — не зовут Paddle/CloudPayments API; после реального checkout отмена не остановит биллинг у провайдера. Gateway REST cancel/resume **есть**** — `subscription.go` (`CancelSubscriptionByID`); `transcode_subscription.go`
-- [ ] **[Subscription] `subscription.events` NATS stream not published — spec events (`plan_started`, `plan_expired`, `downgrade`, …) absent; only `analytics.subscription.*` telemetry** — `docs/microservices/subscription-service.md`; `docs/CONTRACT_MATRIX.md`; `src/backend/subscription/internal/grpcsvc/subscription.go` (`publishPaymentEvent`); `src/backend/subscription/main.go`
-- [ ] **[Subscription] Grace period never expires — `grace_period_end` set on failed payment; no job/webhook path to `cancelled`/`expired` after 7 days** — `src/backend/subscription/internal/store/store.go` (`MarkPaymentFailed`); no sweeper in `src/backend/subscription/main.go`
+- [x] **[Subscription] `subscription.events` producer — domain JetStream publisher is wired alongside analytics telemetry; personal lifecycle emits `plan_expired`, `downgrade`, and `grace_reminder` in addition to activation/payment events.** — `src/backend/subscription/internal/subscriptionevents/jetstream.go`; `src/backend/subscription/main.go`; `src/backend/subscription/internal/sweeper/sweeper.go`. **Remaining consumers:** Cross-cutting item below.
+- [x] **[Subscription] Personal grace expiry — minute sweeper transitions due `grace_period` rows to `cancelled`; repeated runs do not reselect the transitioned row.** — `src/backend/subscription/main.go` (`runGraceSweeper`); `src/backend/subscription/internal/sweeper/sweeper.go`; `src/backend/subscription/internal/grpcsvc/lifecycle_integration_test.go`
 - [ ] **[Subscription] Paddle webhook lifecycle incomplete — only `subscription.activated` + `subscription.payment_failed`; no renew, cancel, pause, or period-end handling** — `src/backend/subscription/internal/grpcsvc/subscription.go` (`HandlePaddleWebhook`)
-- [ ] **[Subscription] Downgrade not driven by subscription lifecycle — `ApplyDowngradeProfiles` exists but nothing emits `subscription.downgrade` or triggers picker on expiry** — `src/backend/subscription/internal/grpcsvc/subscription.go`; `src/backend/subscription/internal/grpcsvc/user_profile_downgrade.go`; `src/frontend/lib/ui/profile/profile_downgrade_picker_screen.dart`
+- [ ] **[Subscription] Downgrade event has no downstream freeze/picker enforcement — personal grace/period expiry emits `subscription.downgrade`, but User/Flutter do not consume it to select two profiles, freeze excess profiles, or unfreeze on renewal.** — `src/backend/subscription/internal/sweeper/sweeper.go`; `src/backend/subscription/internal/grpcsvc/user_profile_downgrade.go`; `src/frontend/lib/ui/profile/profile_downgrade_picker_screen.dart`
+- [ ] **[Subscription] Space Pro payment-failure grace lifecycle remains separate/open — personal sweeper D1/D3/D7 + grace expiry does not implement equivalent failed-payment grace/reminders/expiry for `space_subscriptions`.** — `src/backend/subscription/internal/sweeper/sweeper.go`; `src/backend/subscription/internal/store/sweeper.go`
 - [ ] **[Subscription] Gateway: no CloudPayments webhook route** — `src/backend/gateway/transcode_subscription.go` (only `webhooks/paddle`)
 
 ### File
 
 
 - [ ] **[File] SHA-256 deduplication missing** — no hash lookup, no reuse of existing R2 key; `file_references` table absent (spec model in `d:\Git\Voice\docs\microservices\file-service.md`; only `files` in `d:\Git\Voice\src\backend\migrations\file_db\000001_init.up.sql`). Acknowledged in `d:\Git\Voice\src\backend\file\README.md`.
-- [ ] **[File] NATS `file.downloaded` отсутствует** — `file.uploaded` / `file.processed` / `file.scan_infected` / `file.expired` публикуются (`fileevents/jetstream.go`). Нет `file.downloaded`; Messaging preview-refresh после conversion — проверить consumer.
+- [x] **[File] NATS `file.downloaded` отсутствует** — File публикует best-effort `file.downloaded` после успешного `GetFileURL` presign; Messaging preview-refresh после conversion остаётся отдельной задачей.
 - [ ] **[File] No async worker / `processing` status** — conversion runs inline in `ConfirmUpload`; `processing` never set (`d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go`; `d:\Git\Voice\docs\microservices\file-service.md` pipeline).
 - [x] **[File] Originals kept after image processing** — processed keys written, source `r2_key` not removed (`d:\Git\Voice\src\backend\file\internal\imgproc\webp.go`; contradicts `d:\Git\Voice\docs\features\file-storage.md`).
 - [ ] **[File] `CheckQuota` ignores premium** — always returns `r2file.MaxFreeFileBytes` as limit (`d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go` L449–454); README says subscription quotas beyond free tier are out of scope.
@@ -123,8 +124,8 @@
 ### Protos/Pkg
 
 
-- [ ] **[Protos/Pkg] Analytics consumer gap vs MICROSERVICES matrix** — `src/backend/analytics/internal/consumer/runner.go` subscribes to 8 domain streams only; missing `social.events`, `role.events`, `file.events`, `subscription.events`, `moderation.events`, `federation.events` despite publisher/subscriber table in `docs/MICROSERVICES.md`.
-- [ ] **[Protos/Pkg] Space event catalog drift** — `docs/microservices/space-service.md` documents `space.member_joined/left`, `space.updated/deleted`, `space.member_banned`, etc.; `jetstream_events.proto` `ChatStreamEvent` has only `ChatCreated`, `ChatMemberChanged`, `SpaceTreeChanged`, `SpaceCreated`; most space subjects are unimplemented in code (grep shows no `space.member_joined` publishers).
+- [ ] **[Protos/Pkg] Analytics subscription mapping remains partial** — runner already subscribes to `social.events`, `role.events`, `file.events`, `subscription.events`, and `moderation.events`; only deferred `federation.events` is absent. The Subscription mapper handles plan-started/payment events, not expiry/downgrade. — `src/backend/analytics/internal/consumer/runner.go`; `src/backend/analytics/internal/adapters/domain.go`; `docs/MICROSERVICES.md`
+- [ ] **[Protos/Pkg] Space event catalog residual drift** — `ChatStreamEvent` now has payloads for invite, member joined/left, updated and deleted events. Remaining gaps vs [space-service.md](../microservices/space-service.md): no `space.member_banned` payload; no voice-room created/deleted payloads; `SpaceUpdated` carries only `space_id`, not `changed_fields`.
 - [ ] **[Protos/Pkg] Go `pb/` codegen sync asymmetry** — `scripts/dev/sync-pb-from-gen.sh` syncs 7 trees (`analytics`, `chat`, `file`, `messaging`, `role`, `user`, `voice`); 10+ packages hub under `src/backend/voice/pb/voice/` and `src/backend/user/pb/voice/`. No CI drift check (unlike `make buf-dart-check` for `src/frontend/lib/gen/`). Stale committed stubs possible after proto edits.
 - [ ] **[Protos/Pkg] `pkg/` resilience gap** — `docs/MICROSERVICES.md` requires circuit breaker on all gRPC calls; `src/backend/pkg/grpcclient/` only provides `dial.go` (`DialTarget`) and `wait.go`. No breaker/retry/mTLS helpers.
 - [ ] **[Protos/Pkg] `pkg/` auth metadata fragmentation** — Gateway contract in `src/backend/gateway/transcode_grpc.go` (`x-voice-user-id`, `x-voice-profile-id`, …), but 12+ per-service `internal/authctx/` copies (`src/backend/*/internal/authctx/`). Only partial shared helpers: `src/backend/pkg/guestguard/`, `src/backend/pkg/correlation/`, `src/backend/pkg/jwt/` (edge validation, not inbound gRPC claim parsing).
@@ -137,7 +138,7 @@
 - [x] **[Space] T-009 stale implementation claim: `mm_config` / `entry_questions` already load and round-trip** through `SpaceRow`, `spaceRowToProto`, `UpdateSpace`, `GetSpace`, `ListMySpaces` and `UpdateSpaceMmConfig`; regression coverage locks this in. **Residual open:** execution of questions/captcha/manual entry requirements remains the Critical item above.
 - [ ] **[Space] Tree node Pro limit (500) not implemented — hardcoded `MaxTreeNodes = 50`, no entitlement check (unlike member cap)** — `src/backend/space/internal/store/tree.go`
 - [ ] **[Space] Catalog indexing fragile — Search hydrator calls `GetSpace` (member-only); `SearchPublicSpaces` Unimplemented; ranking verified-first нет; нет `space.updated` re-index** — `src/backend/search/internal/deps/deps.go`, `chat_space_indexer.go`
-- [ ] **[Space] NATS events incomplete vs spec — Join/Leave публикуют member_joined/left; всё ещё дыры `space.deleted` / `member_banned` / catalog reindex** — `src/backend/space/internal/spaceevents/publisher.go`
+- [ ] **[Space] NATS events incomplete vs spec** — join/leave/kick publish `space.member_joined` / `space.member_left`; update/delete publish `space.updated` / `space.deleted`. Remaining: `space.member_banned` is absent; voice-room created/deleted publisher methods are no-ops; membership/invite publish failures still pass through no-op `logInviteEventFailure`; Search does not reindex `space.updated` — `src/backend/space/internal/spaceevents/`, `src/backend/search/internal/indexer/chat_space_indexer.go`.
 - [ ] **[Space] Member timeout not enforced downstream — `IsProfileTimedOut` exists, unused outside Space** — `src/backend/space/internal/store/moderation.go`
 - [ ] **[Voice] JoinVoiceRoom: `voice_room_id ∈ space_id` не проверяется** — `voice_room.go`
 
@@ -150,15 +151,15 @@
 - [ ] **[Moderation] Admin audit export пуст только если store пуст** — Gateway `writeModerationAuditExportJSON` мапит `ExportAuditLog` (`transcode_moderation_admin.go`). Не hardcoded `[]`.
 - [ ] **[Moderation] Temp ban expiry does not restore Auth** — `expires_at` respected in SQL for active lookup, but no job/handler calls `Auth.SetAccountStatus(active)` on expiry; only explicit revoke/approved appeal clears suspension.
 - [x] **[Moderation] Sanction notification push delivery** — **done (T-013):** consumer resolves profiles, applies policy with **presence skipped**, sends `system` push copy so online recipients are not silent-dropped (`moderation_events_consumer.go`).
-- [ ] **[Moderation] Sanction `system` in-app (Realtime) fan-out** — Notification push path only; no Realtime WS `notification` for moderation/sanction. Online→InApp-only routing must wait until Realtime (or Notification→NATS in-app) exists — [notification-service.md](../microservices/notification-service.md) `system` push+in-app.
+- [ ] **[Moderation/Notification] T-023 — sanction `system` in-app contract and Realtime fan-out** — current moderation consumer resolves `target_account_id` to profiles, intentionally skips presence, and sends push so online users are not silent-dropped. Still undefined/absent: Notification→Realtime transport, system-sanction payload, transport dedupe, final account→profiles semantics, and Flutter `system` presentation. This is a narrow temporary exception, not a presence rule for every system notification — [notification-service.md](../microservices/notification-service.md).
 
 ### Social
 
 
 - [x] **[Social] Contacts/favorites REST** — Gateway `GET/POST /api/v1/friends/contacts`, `GET/POST /api/v1/friends/favorites` shipped (**Batch 23a**). **Remaining:** `SyncPhoneContacts` UX.
-- [ ] **[Social] Block does not cascade to graph** — `BlockAccount` in `src/backend/social/internal/store/blocks.go` inserts block row only; accepted friendships and pending/declined rows in `friendships` are untouched.
+- [ ] **[Social] Block friendship cascade fails open when profile resolution is unavailable** — happy path is implemented: `BlockAccount` resolves both accounts' profile sets and calls transactional `BlockAccountAndSeverFriendships`, which deletes accepted/pending/declined rows between non-empty sets (`block_cascade_integration_test.go`). Residual: when `AccountProfiles` is nil or either `ProfileIDsForAccount` call fails, the handler passes an empty set and the store inserts the block without deleting friendship rows (`social_blocks.go`, `blocks.go`).
 - [x] **[Social] Outgoing request status exposed** — `PendingFriendRequest.status` (`pending` | `declined`) in proto + `ListFriendRequests` mapping; Flutter outgoing requests tab shows declined label — **Batch 24b** (`friends.md`).
-- [ ] **[Social] No test for `allow_friend_requests` enforcement** — privacy hook exists (`social_friends.go:356`) but no integration test (unlike phone sync in `src/backend/social/internal/grpcsvc/phone_search_privacy_integration_test.go`); no compose live test denying stranger invite.
+- [x] **[Social] `allow_friend_requests` service integration test** — **done:** `allow_friend_requests_integration_test.go` covers stranger invite denial. Remaining compose-live coverage is tracked below under Social test gaps.
 
 ### User
 
@@ -215,7 +216,7 @@
 ### Cross-cutting
 
 
-- [ ] **[Cross-cutting] Subscription lifecycle incomplete — `HandleCloudPaymentsWebhook` → `Unimplemented`; Cancel/Resume local-only (не провайдер); `GetBillingHistory` empty; grace notifications не wired. PLAN marks subscription partial.** — `src/backend/subscription/internal/grpcsvc/subscription.go`
+- [ ] **[Cross-cutting] Subscription lifecycle remains incomplete outside shipped personal sweeper core — `HandleCloudPaymentsWebhook` → `Unimplemented`; Cancel/Resume local-only (не провайдер); grace reminder events have no push/email dispatch; downgrade events have no User/Flutter freeze flow; Space Pro failed-payment grace is absent.** — `src/backend/subscription/internal/grpcsvc/subscription.go`; `src/backend/subscription/internal/sweeper/sweeper.go`; `src/backend/notification/subscription_events_consumer.go`
 - [ ] **[Cross-cutting] `CheckLimit` unused outside Subscription — no runtime gRPC callers in Chat/Space/User/File for documented caps (profiles, space/chat counts, etc.). Enforcement is ad hoc: File via Gateway live `GetSubscription`, User via JWT tier, Chat has no subscription client.** — `src/backend/subscription/internal/grpcsvc/subscription.go`, `src/backend/gateway/subscription_tier.go`, `src/backend/user/internal/grpcsvc/user.go`
 - [ ] **[Cross-cutting] Resilience claims vs code — `MICROSERVICES.md` promises circuit breakers + NATS DLQ; no `gobreaker`/DLQ in `src/backend/`. Tier-0 degradation is partial (Gateway file tier fallback only).** — `docs/MICROSERVICES.md`, `src/backend/` (absence)
 - [x] **[Cross-cutting] No E2E for Space Pro billing path — smoke/full cover personal premium + file limits (`compose_billing_live_test.go`, `billing_e2e_live_test.dart`); zero `space_pro` webhook → invite/member-cap tests.** — **done (member-cap live):** `TestComposeSpaceProMemberCap_live` (webhook join + cap, #14). Remaining product: Flutter Space Pro checkout / real Paddle (Critical Subscription; Common Flutter Space Pro).
@@ -228,6 +229,7 @@
 
 
 - [x] **[Messaging] `message.forwarded` NATS event** — `PublishMessageForwarded` on forward path (`messaging_grpc.go`; `messageevents/jetstream.go`).
+- [ ] **[Gateway/Messaging] Raise `MessagesSend` rate limit to 100 messages / 5 sec** — local app stack hits rate limit after ~5 quick messages; desired product behavior: normal chat should allow up to **100 сообщений / 5 сек** while keeping anti-bot protection. Update docs currently saying `5 сообщений / 5 сек` ([ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md), [text-chat.md](../features/text-chat.md)) together with `defaultRateLimitRules` / `GATEWAY_RATE_LIMIT_RULES_JSON` tests when implementing.
 - [x] **[Messaging] `ForwardMessageRequest.commentary` ignored** — **done:** commentary inserts a separate message via `insertForwardCommentary` (`messaging_grpc.go`; Messaging forward ITs).
 - [x] **[Messaging] “Copy as new message” / forward without attribution** — **done:** `ForwardMessageRequest.without_attribution` → regular message, no Forwarded-from; skips `allow_forward` deny (FW-03).
 - [x] **[Messaging] Forward-author privacy block not enforced** — spec says user can forbid forwarding their messages; Messaging `ForwardMessage` checks User `allow_forward` via S2S (`PermissionDenied`).
@@ -279,7 +281,7 @@
 - [x] **[Messaging] R3-A06 — `validateAttachments` blocks rich payloads** — **done (Batch 31a):** `content_type` branches for location/article (no File row) and file-backed rich types (`sticker`, `gif`, `music`, `video_note`) with payload shape + File metadata validation — `messaging_grpc.go`, tests — [messaging-service.md](../microservices/messaging-service.md).
 - [x] **[Chat] R3-A12 — Standalone `channel` chats** — `CreateChat` without `space_id` creates standalone channel with creator as `chat_members` owner (`CreateChannelChat`); space channels unchanged — **Batch 26b**. **Batch 14:** membership `channel` rows appear in `ListChats` main inbox SQL.
 - [x] **[Chat] R3-A14 — `CreateChat`/`UpdateChat` proto fields ignored** — `topic` persisted on create; `topic`/`threads_enabled`/`allow_user_main_feed` on `UpdateChat`; channels updatable — `group.go`, store `UpdateGroupChat` — **Batch 27b**.
-- [ ] **[Chat] R3-A15 — `chats.allow_guests` dead column** — migration column unused; no proto field or handler — align or drop in migration follow-up.
+- [ ] **[Chat] R3-A15 — `chats.allow_guests` behavior not wired** — migration `000007` adds the chat-level guest admission flag required by [auth-and-contacts.md](../features/auth-and-contacts.md), but Chat has no proto field, mutation handler, or admission enforcement for it. Keep the column; define and implement the contract.
 - [x] **[Chat] R3-A16 — `ListChats` space merge bugs** — unified SQL pagination for space chats on page 2+ (`listChatsPageMainWithSpaces` UNION in store; gRPC passes `spaceIDs` on every page). Prior partial fixes: Batch 13 archived filter + hydration; Batch 16 pagination.
 - [ ] **[Chat/Messaging/File] Stickers/GIF wire (R2-A32, R4-04)** — expand checklist: `chat_db` migrations `sticker_packs`/`stickers`/`profile_installed_packs`; Chat RPCs (`ListInstalledStickerPacks`, `InstallStickerPack`, `SearchGifs`, …); Gateway REST ([api-gateway.md](../microservices/api-gateway.md) § Stickers and GIF); ~~Messaging proto `STICKER`/`GIF` + send validation~~ **Messaging send validation done (Batch 31a)**; File `UPLOAD_INTENT_STICKER`/GIF transcode; `ListSharedMedia` `STICKERS` kind extension — **P0**
 - [x] **[Messaging] Durable delivery consumer** — **done (Batch 12):** Realtime JetStream `message.delivery_ack` publish (Batch 11) + Messaging consumer → `last_delivered_message_id`; list ✓✓ via `GetChatListMetadata.last_message_delivery_state`.
@@ -290,15 +292,13 @@
 ### Chat — other
 
 
-- [ ] **[Chat] Folders API entirely unimplemented** — superseded checklist above; membership/pin/`ListChats.folder_id` + Gateway REST shipped (**Batch 19**); `UpdateFolder`/`DeleteFolder` **done (Batch 20)**.
-- [ ] **[Chat] `quick_access_chats` table + RPC** — superseded checklist above.
 - [ ] **[Chat/Messaging/File] Stickers + GIF** — **P0**, 0 code: `[Chat]` pack store + provider search RPC; `[Messaging]` `STICKER`/`GIF` send payload + composer contract; `[File]` animated asset processing — superseded single-line below
 - [ ] **[Chat] Стикер-паки / GIF / voice-note first-class — 0 кода** — see `[Chat/Messaging/File] Stickers + GIF` above; voice-note via `[File]` upload category
 - [ ] **[File] Upload intent/category: video vs video_note** — proto field + processing branch in `ConfirmUpload` — composer video-note flow — **P0**
 - [x] **[Chat] `MuteChat` / `ArchiveChat`** — `mute_archive.go`.
 - [x] **[Chat] Group `last_message_at` never updated from message stream** — **done:** `TouchLastMessageAt` updates `type IN ('dm','group','channel')` (`dm.go`); store IT `last_message_at_integration_test.go`.
 - [x] **[Chat] Group last_message_at from message stream** — **done:** same as above.
-- [ ] **[Chat] `ListChats` partial `Chat` objects** — link UI gap for `e2e_enabled`, `space_id`, thread flags in list rows — [chat-service.md](../microservices/chat-service.md)
+- [ ] **[Chat] `ListChats` omits `Chat.topic`** — list SQL/mapping already includes `e2e_enabled`, `space_id`, `slow_mode_seconds`, `threads_enabled` and `allow_user_main_feed`; only `topic` is absent from the selected `ChatRow` fields — [chat-service.md](../microservices/chat-service.md).
 - [x] **[Chat] `UpdateChat` ignores thread settings** — **done (Batch 27b):** `threads_enabled` / `allow_user_main_feed` persisted via `UpdateGroupChat`.
 - [x] **[Chat] `UpdateChat` rejects channels** — **done (Batch 27b):** `UpdateChat` allows `group` and `channel`; topic/thread flags via Chat API.
 - [ ] **[Chat] Subscription S2S not integrated** — doc dependency (`docs/microservices/chat-service.md`); limit hardcoded `GroupMemberLimit = 500` (`src/backend/chat/internal/store/group.go`). No subscription-tier differentiation.
@@ -313,8 +313,8 @@
 - [x] **[Notification] `message_request` / stranger type** — **done (Batch 22a):** `message_request` wire type + per-recipient routing from `chat_members.inbox_bucket` — [notification-service.md](../microservices/notification-service.md)
 - [ ] **[Notification] `reply` marked ✓ but not implemented — no `reply` type in message consumer or Realtime in-app fanout; thread replies are treated as `new_message`.** — `docs/features/notifications.md`, `src/backend/notification/message_events_consumer.go`, `src/backend/realtime/in_app_notification_fanout.go`
 - [ ] **[Notification] Matchmaking/voice push ignores presence — handlers hardcode `IsOnline: false`; no `EnrichDecision` / User gRPC check → online users still get push (messages path does check).** — `src/backend/notification/internal/consumer/matchmaking_events.go`, `src/backend/notification/matchmaking_events_consumer.go`, `src/backend/notification/voice_events_consumer.go`
-- [ ] **[Notification] `system` in-app / Gateway gaps** — Moderation NATS consumer produces `system` **push** for sanctions (T-013, presence-skip). Still missing: Realtime in-app fanout for `system`, other producers calling `SendNotification`, Gateway REST exposure — `src/backend/notification/internal/grpcsvc/server.go`, `src/backend/gateway/transcode_notifications.go`, `src/backend/realtime/`
-- [x] **[Notification] Multi-replica duplicate push risk � per-pod durable consumer name (`notif_<hostname>_mod`) on moderation stream caused duplicate delivery across replicas; all notification JetStream consumers now use cluster-wide SharedDurable names (moderation ? `notif_mod`).** � **done (Batch 31c):** `src/backend/notification/internal/consumer/durable.go`, `moderation_events_consumer.go`, `main.go`
+- [ ] **[Notification] `system` in-app / Gateway gaps (T-023)** — Moderation NATS consumer produces `system` push for sanctions and narrowly skips presence until an in-app path exists. Still missing/undefined: Notification→Realtime transport + payload + dedupe, final account→profiles semantics, Flutter presentation, other system producers, and Gateway REST exposure — `src/backend/notification/moderation_events_consumer.go`; `src/backend/notification/internal/grpcsvc/server.go`; `src/backend/gateway/transcode_notifications.go`; `src/backend/realtime/`
+- [x] **[Notification] Multi-replica duplicate push risk — per-pod durable consumer name (`notif_<hostname>_mod`) on moderation stream caused duplicate delivery across replicas; all notification JetStream consumers now use cluster-wide `SharedDurable` names (moderation → `notif_mod`).** — **done (Batch 31c):** `src/backend/notification/internal/consumer/durable.go`, `moderation_events_consumer.go`, `main.go`
 
 ### Federation
 
@@ -389,7 +389,7 @@
 - [ ] **[Subscription] `CheckLimit` wrong scope — `space_member_count` uses `HasActiveSpaceProForPurchaser(account_id)` instead of space entitlement** — `src/backend/subscription/internal/grpcsvc/subscription.go`; `src/backend/subscription/internal/store/store.go`
 - [ ] **[Subscription] Space tree node cap not Space-Pro-aware — hardcoded 50, spec 500 for Pro** — `src/backend/space/internal/store/tree.go` (`MaxTreeNodes = 50`)
 - [ ] **[Subscription] `GetBillingHistory` stub — always empty list** — `src/backend/subscription/internal/grpcsvc/subscription.go`
-- [ ] **[Subscription] Grace-period notifications missing — spec: reminders on days 1, 3, 7** — `docs/features/subscription.md`; no code in `src/backend/subscription/` or Notification integration
+- [ ] **[Subscription/Notification] Grace reminder delivery and duplicate safety remain incomplete — Subscription emits `subscription.grace_reminder` on D1/D3/D7 and sent-day bookkeeping suppresses ordinary sequential repeats, but publish-before-mark has no atomic claim or `Nats-Msg-Id`, so crashes/concurrent replicas can duplicate. Notification only validates recognized days, logs consumption, and ACKs; no push/email dispatch or client presentation.** — `src/backend/subscription/internal/sweeper/sweeper.go`; `src/backend/subscription/internal/store/grace_reminders.go`; `src/backend/subscription/internal/subscriptionevents/jetstream.go`; `src/backend/notification/subscription_events_consumer.go`
 - [ ] **[Subscription] Activation ignores billing period / provider metadata — always `monthly`, synthetic `provider_subscription_id`** — `src/backend/subscription/internal/store/store.go` (`ActivatePremium`, `ActivateSpacePro`)
 - [ ] **[Subscription] `billing_events.amount` / `currency` never written** — `src/backend/migrations/subscription_db/000001_init.up.sql`; `src/backend/subscription/internal/store/store.go` (`insertBillingEventTx`)
 - [ ] **[Subscription] No Flutter Space Pro checkout / management** — `src/frontend/lib/backend/subscription_client.dart`; `src/frontend/lib/ui/settings/subscription_settings_screen.dart` (Premium only)
@@ -421,8 +421,8 @@
 - [ ] **[Space] ChatLookup S2S hardening (Agent batch)** — set `x-voice-internal-caller=space` on Chat GetChat; Warn on lookup failures instead of silent skip; add unit/mock test for enrichment; optional batch GetChat to avoid N+1 (`chat_lookup.go`, `main.go`). Closed High wiring via PR #129.
 - [ ] **[Space] No audit rows for tree CRUD, invite revoke, space settings, role changes (spec lists these)** — `src/backend/space/internal/store/tree.go`, `src/backend/space/internal/grpcsvc/invites.go`
 - [ ] **[Space] `RevokeInvite` / `ListInvites` owner-only — `CreateInvite` uses `SpaceManageInvites`; revoke/list use `requireSpaceOwner`** — `src/backend/space/internal/grpcsvc/invites.go`
-- [ ] **[Space] `JoinByInvite` does not publish `space.member_joined`** — `src/backend/space/internal/grpcsvc/invites.go`, `src/backend/space/internal/spaceevents/`
-- [ ] **[Space] Kick/leave do not publish `space.member_left` or decrement path events** — `src/backend/space/internal/grpcsvc/members.go`, `src/backend/space/internal/store/members.go`
+- [x] **[Space] Invite/public join membership event** — both join paths call `finalizeMembership`, which publishes `space.member_joined` after a new membership is created (`invites.go`, `join.go`, `spaceevents/jetstream.go`).
+- [x] **[Space] Kick/leave membership event** — `KickMember` and `LeaveSpace` publish `space.member_left` after removal (`members.go`, `join.go`, `spaceevents/jetstream.go`). Residual Space event gaps remain in the dedicated NATS item above.
 - [ ] **[Space] No gateway REST for leave/join-public/delete/transfer/audit/templates** — `src/backend/gateway/transcode_spaces.go`, `transcode_spaces_members.go`
 - [ ] **[Space] Flutter client gaps — `spaces_client.dart` has no leave/join-public/transfer/audit/delete** — `src/frontend/lib/backend/spaces_client.dart`
 - [ ] **[Space] Test holes — no integration tests for unimplemented RPCs; tree update/delete/category update/voice update/delete/RemoveTreeNode thin coverage** — `src/backend/space/internal/grpcsvc/*_integration_test.go`
@@ -432,7 +432,7 @@
 ### Moderation
 
 
-- [ ] **[Moderation] Stale service README** — still claims “scaffold / out of scope”.
+- [x] **[Moderation] Service README status** — describes the implemented core and keeps residual gaps explicit.
 - [ ] **[Moderation] `ListReports` pagination incomplete** — proto has `next_cursor`; handler never sets it.
 - [ ] **[Moderation] No report dedup / rate limiting** — unlimited reports per reporter/target; no abuse protection.
 - [ ] **[Moderation] Report targets not validated** — no S2S checks that message/space/story/user exists (deps listed in `moderation-service.md` unused beyond profile→account lookup).
@@ -457,7 +457,7 @@
 - [ ] **[User] `SearchProfiles` ignores discoverability privacy** — no `allow_friend_requests` / phone-search enforcement (`src/backend/user/internal/grpcsvc/user_search.go`); comment still references pre-privacy DDL.
 - [ ] **[User] `UpdateProfile.custom_status` ignored** — comment "not persisted in current DDL" (`src/backend/user/internal/grpcsvc/user.go`); only Redis presence path works.
 - [ ] **[User] Org DNS verification lifecycle thin** — unlimited pending rows, no expiry/TTL (`src/backend/user/internal/store/verification.go`).
-- [ ] **[User] `README.md` stale** — claims "other RPCs still unimplemented" (`src/backend/user/README.md`).
+- [x] **[User] `README.md` status** — describes the implemented RPC surface and keeps residual gaps explicit (`src/backend/user/README.md`).
 
 ### Analytics
 
@@ -546,10 +546,9 @@
 ### Chat
 
 
-- [ ] **[Chat] `ListChats` returns partial `Chat` objects** — list query omits `e2e_enabled`, `space_id`, `slow_mode_seconds`, thread flags (`src/backend/chat/internal/store/list_chats.go` vs `chatRowToProto` in `src/backend/chat/internal/grpcsvc/chat_dm.go`). List UI can’t show E2E state without `GetChat`.
 - [ ] **[Chat] NATS event surface incomplete vs doc** — published: `chat.created`, `chat.member_changed` (`src/backend/chat/internal/chatevents/jetstream.go`). Not published: `chat.updated`, `chat.deleted`, granular `member_added`/`removed`/`left` (`docs/microservices/chat-service.md` table).
 - [ ] **[Chat] S2S enrichment fails open** — Messaging errors logged and zeroed (`src/backend/chat/internal/grpcsvc/list_chats.go:77-81`). Documented degradation, but no metric/alert on enrichment skip.
-- [ ] **[Chat] README stale** — `src/backend/chat/README.md` still claims “scaffold / health only”; contradicts full gRPC implementation.
+- [x] **[Chat] README status** — describes the implemented gRPC core and keeps residual gaps explicit (`src/backend/chat/README.md`).
 
 ### Notification
 
@@ -617,7 +616,7 @@
 - [ ] **[Realtime] Test gaps for newer paths** — No tests for `role_events_consumer.go`, `matchmaking_events_consumer.go` (integration), `delivery_ack` / cross-instance `message_delivered`, or `user_presence_updater_grpc.go` (gRPC path untested in this module).
 - [ ] **[Realtime] Presence E2E is REST-only** — `presence_e2e_live_test.dart` checks `getPresence` API, not WS live fanout between friends (PLAN marks presence “shipped”).
 - [ ] **[Realtime] `presence_update` status not validated in Realtime** — `ws.go` accepts any non-empty string; canonical enum normalization happens only in User gRPC (`user/internal/grpcsvc/user_presence.go`).
-- [ ] **[Realtime] Stale module README** — `src/backend/realtime/README.md` still describes a health-only scaffold; contradicts `docs/PLAN.md` and actual code.
+- [x] **[Realtime] Module README status** — describes the implemented WebSocket/fan-out core and keeps residual gaps explicit (`src/backend/realtime/README.md`).
 
 ### Multi-Profile
 
@@ -632,17 +631,17 @@
 ### Subscription
 
 
-- [ ] **[Subscription] README outdated — still describes health-only scaffold** — `src/backend/subscription/README.md`
+- [x] **[Subscription] README status** — describes the implemented core without overstating the product stub (`src/backend/subscription/README.md`).
 - [ ] **[Subscription] Default webhook secret in prod path — `test-webhook-secret` if `PADDLE_WEBHOOK_SECRET` unset** — `src/backend/subscription/internal/billing/paddle.go`
 - [ ] **[Subscription] Duplicate `DELETE` in `ActivatePremium`** — `src/backend/subscription/internal/store/store.go` (lines 95–99)
-- [ ] **[Subscription] E2E / test gaps — no live CloudPayments, cancel, grace expiry, or billing history** (Space Pro webhook→join live is `TestComposeSpaceProMemberCap_live`, #14) — `src/frontend/test/billing_e2e_live_test.dart`; `src/backend/gateway/compose_billing_live_test.go`; `src/backend/subscription/internal/grpcsvc/webhook_integration_test.go`; `src/backend/subscription/internal/grpcsvc/subscription_handlers_test.go`
+- [ ] **[Subscription] E2E / test gaps — no compose/live CloudPayments, provider-side cancel, personal grace→downstream notification/freeze, Space Pro failed-payment grace, or billing history scenario.** Personal grace expiry has service integration coverage; Space Pro webhook→join live is `TestComposeSpaceProMemberCap_live` (#14). — `src/frontend/test/billing_e2e_live_test.dart`; `src/backend/gateway/compose_billing_live_test.go`; `src/backend/subscription/internal/grpcsvc/lifecycle_integration_test.go`
 - [ ] **[Subscription] Premium cosmetic gaps outside Subscription module — e.g. custom status not persisted; anonymous view tracked separately in `docs/todo/backend.md`** — `src/backend/user/internal/grpcsvc/user.go`; `docs/todo/backend.md` (Anonymous view)
 - [ ] **[Subscription] Doc/constant drift — free space join 100 vs 50; free voice 360p vs 480p in different docs; not unified in limits** — `docs/features/subscription.md`; `docs/microservices/subscription-service.md`; `src/backend/subscription/internal/testfixtures/limits.go`
 
 ### File
 
 
-- [ ] **[File] Proto lifecycle enum** — no distinct `expired`; `expired` DB status maps to `FILE_LIFECYCLE_STATUS_DELETED` (`d:\Git\Voice\protos\voice\file\v1\file.proto`, `d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go` L674–675).
+- [x] **[File] Proto lifecycle enum** — additive `FILE_LIFECYCLE_STATUS_EXPIRED = 6`; `expired` DB status maps to `EXPIRED`, while `deleted` remains `DELETED` (`protos/voice/file/v1/file.proto`, `src/backend/file/internal/grpcsvc/file_grpc.go`).
 - [ ] **[File] No `sha256_hash` index/unique** — dedup would need schema work (`d:\Git\Voice\src\backend\migrations\file_db\000001_init.up.sql`).
 - [ ] **[File] `story_id` column unused in access rules** — stored (`d:\Git\Voice\src\backend\migrations\file_db\000003_story_context.up.sql`) but `ensureFileAccess` only checks uploader or chat member (`d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go` L538–554).
 
@@ -671,7 +670,7 @@
 
 - [ ] **[Moderation] `GetAutoModStats` semantics weak** — counts `auto_mod_log` rows, not messages scanned; `CheckMessage` does not increment checked counter.
 - [ ] **[Moderation] Spam mute action taxonomy mismatch** — logs `mute` / `mute_permanent` actions; docs/model use `mute` / `shadow_ban`; Messaging only blocks when pattern re-matches.
-- [ ] **[Moderation] Appeal proto omits `reviewed_at` / `review_notes`** — stored in DB, not returned to clients.
+- [x] **[Moderation] Appeal review metadata in proto** — `reviewed_at` and nullable `review_notes` round-trip through Review/Get/List responses; pending appeals omit both fields. **T-035**.
 - [ ] **[Moderation] Limited unit coverage** — `automod_unit_test.go` only link-flood + threshold math; no unit tests for sanctions/appeals handlers (integration tests only).
 - [ ] **[Moderation] Federation moderation** — documented in `moderation-service.md`, not implemented (federation deferred per PLAN).
 
@@ -694,7 +693,7 @@
 - [ ] **[Analytics] Prometheus names vs spec** — Code: `analytics_ingest_*`, `analytics_clickhouse_insert_latency_seconds` (`d:\Git\Voice\src\backend\analytics\internal\metrics\metrics.go`); docs: `analytics.ingest.events_per_second`, `analytics.ingest.batch_size` (`docs/microservices/analytics-service.md`). No `events_per_second` or `batch_size` histogram.
 - [ ] **[Analytics] gRPC ingest omits lag metric** — `IngestLag` only set on NATS path (`d:\Git\Voice\src\backend\analytics\internal\grpcsvc\ingest.go` vs `d:\Git\Voice\src\backend\analytics\internal\consumer\runner.go`).
 - [ ] **[Analytics] `DeliverNew` only** — New durable consumers skip backlog (`d:\Git\Voice\src\backend\analytics\internal\consumer\runner.go`); acceptable per spec but limits replay/backfill.
-- [ ] **[Analytics] Export CSV omits hashed IDs** — Export columns exclude `user_id_hashed` / `profile_id_hashed` (`d:\Git\Voice\src\backend\analytics\internal\grpcsvc\query.go`).
+- [x] **[Analytics] Export CSV includes hashed IDs** — CSV exports include existing `user_id_hashed` / `profile_id_hashed` columns while JSON remains unchanged (`src/backend/analytics/internal/grpcsvc/query.go`).
 - [ ] **[Analytics] User-level activity gap** — `message_sent` hashes `profile_id` only; `user_id_hashed` empty → DAU/retention undercount messengers (`d:\Git\Voice\src\backend\analytics\internal\adapters\domain.go`).
 - [ ] **[Analytics] Gateway health telemetry off by default** — `GATEWAY_ANALYTICS_SAMPLE_RATE` default 0 (`d:\Git\Voice\src\backend\gateway\analytics_telemetry.go`); health dashboard needs explicit enablement.
 - [ ] **[Analytics] CH schema doc naming** — Docs use `user_id`/`profile_id`; DDL uses `user_id_hashed`/`profile_id_hashed` (`docs/microservices/analytics-service.md` vs `d:\Git\Voice\docker\clickhouse\init\001_events.sql`).
@@ -702,27 +701,27 @@
 ### Role
 
 
-- [ ] **[Role] Stale server comment — `RoleGRPC` still says «red-phase: Unimplemented stubs only».** — `src/backend/role/internal/grpcsvc/server.go`
-- [ ] **[Role] README understates implementation — lists health only; contradicts actual surface.** — `src/backend/role/README.md`
+- [x] **[Role] Server comment** — `RoleGRPC` now identifies the implemented service without stale red-phase wording. — `src/backend/role/internal/grpcsvc/server.go`
+- [x] **[Role] README status** — describes the implemented role and permission surface. — `src/backend/role/README.md`
 - [ ] **[Role] `NamesFor` order non-deterministic — map iteration; awkward for UI/tests expecting stable lists.** — `src/backend/role/permissions/permissions.go`
 - [ ] **[Role] No test for dual-scope effective mask — chat + `voice_room_id` together in one `GetEffectiveMask` call.** — `src/backend/role/internal/store/`, `internal/grpcsvc/` tests
-- [ ] **[Role] `CreateRole` position not validated — actor can create custom role at position ≥ own top (hierarchy only on edit/assign, not create).** — `src/backend/role/internal/grpcsvc/roles.go` (`CreateRole`)
+- [x] **[Role] `CreateRole` hierarchy validation — non-owner with `SPACE_MANAGE_ROLES` may create only below their top role; equal/higher denial leaves no role or event, Owner bypass is covered.** — `src/backend/role/internal/grpcsvc/roles.go`, `roles_manage_integration_test.go`
 - [ ] **[Role] Guest role under-exercised — default join falls back to Member; Guest mask (`SPACE_VIEW` only) rarely applies unless `SetDefaultJoinRole` points to Guest.** — `src/backend/role/permissions/permissions.go`, `internal/store/roles.go`
 
 ### Cross-cutting
 
 
-- [ ] **[Cross-cutting] `subscription/README.md` stale — still says “scaffold”; contradicts PLAN partial + billing E2E.** — `src/backend/subscription/README.md`, `docs/PLAN.md`
+- [x] **[Cross-cutting] `subscription/README.md` status** — implemented billing/limit paths and the remaining product-stub gaps are explicit. — `src/backend/subscription/README.md`, `docs/PLAN.md`
 - [ ] **[Cross-cutting] Analytics “partial” = server-side only by design — client RUM explicitly out of scope (`docs/features/analytics.md`); not a bug, but PLAN “partial” is architectural, not a missing backend slice.** — `docs/features/analytics.md`, `src/backend/analytics/`
 - [ ] **[Cross-cutting] Notifications partial — push device creds / staging FCM already in TODO Critical/High; in-app + Realtime fan-out exist (`realtime/in_app_notification_fanout_test.go`).** — `docs/PLAN.md`, `src/backend/realtime/`
 
 ### Notification
 
 
-- [ ] **[Notification] `platform_enum` in proto ignored — `RegisterDevice` only uses string `platform`.** — `protos/voice/notification/v1/notification.proto`, `src/backend/notification/internal/grpcsvc/server.go`
+- [x] **[Notification] `platform_enum` precedence and fallback** — `RegisterDevice` prefers recognized enum values, uses canonical legacy fallback for present unspecified/unknown enum values, and preserves legacy string-only behavior. — `protos/voice/notification/v1/notification.proto`, `src/backend/notification/internal/grpcsvc/server.go`
 - [ ] **[Notification] Unauthenticated debug push recorder** — `/debug/recorded-pushes` exposes last recorded push by `profile_id` (compose/dev aid). — `src/backend/notification/debug_http.go`
 - [ ] **[Notification] DEPLOYMENT doc drift — references `internal/apns/config.go` (file is `http_sender.go`) and `APNS_PRIVATE_KEY` as canonical env name.** — `docs/DEPLOYMENT.md`, `src/backend/notification/internal/apns/http_sender.go`
-- [ ] **[Notification] gRPC still labeled stub in server comment while substantial logic exists — misleading for reviewers.** — `src/backend/notification/internal/grpcsvc/server.go`
+- [x] **[Notification] gRPC server comment** — identifies the implemented service without stale stub wording. — `src/backend/notification/internal/grpcsvc/server.go`
 
 ### Federation
 
@@ -749,7 +748,7 @@
 ### Realtime
 
 
-- [ ] **[Realtime] Coverage artifacts committed** — `$prof`, `notif_cov`, `notif_cov.out`, `coverage_profile`, `coverage_profile.out`, `coverage` under `src/backend/realtime/` are tracked in git (local profiling noise).
+- [x] **[Realtime] Coverage artifacts committed** — удалены ровно шесть tracked-артефактов (`$prof`, `coverage`, `coverage_profile`, `coverage_profile.out`, `notif_cov`, `notif_cov.out`) из `src/backend/realtime/`; `.gitignore` теперь предотвращает их повторное появление.
 - [ ] **[Realtime] Unknown inbound ops silently dropped** — `ws.go` `default` branch ignores unrecognized client ops (no `error` frame).
 - [ ] **[Realtime] Server does not emit WebSocket ping frames** — liveness is client `heartbeat` + 90s read deadline (`ws.go`); doc mentions “ping-pong” but implementation is app-level heartbeat only.
 - [ ] **[Realtime] `CheckOrigin` always true** — `ws.go` delegates origin policy to Gateway (documented inline); defense-in-depth relies entirely on edge.

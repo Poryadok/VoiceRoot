@@ -86,6 +86,13 @@ func TestRegisterDevice_InvalidArgument(t *testing.T) {
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
+func TestRegisterDevice_NilRequest_InvalidArgument(t *testing.T) {
+	svc := &NotificationGRPC{}
+	_, err := svc.RegisterDevice(incomingProfileCtx(uuid.New()), nil)
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
 func TestRegisterDevice_DatabaseError_Internal(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
@@ -122,6 +129,146 @@ func TestRegisterDevice_Success(t *testing.T) {
 		PushService: "fcm",
 	})
 	require.NoError(t, err)
+}
+
+func TestRegisterDevice_PlatformEnumResolution(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startNotificationPostgresForTest(t, ctx)
+	applyNotificationMigration(t, ctx, pool)
+
+	client, cleanup := startNotificationGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	tests := []struct {
+		name         string
+		platform     string
+		platformEnum *notificationv1.DevicePlatform
+		token        string
+		wantPlatform string
+		wantCode     codes.Code
+	}{
+		{
+			name:         "android enum only persists canonical platform",
+			platformEnum: notificationv1.DevicePlatform_DEVICE_PLATFORM_ANDROID.Enum(),
+			token:        "enum-android-token",
+			wantPlatform: "android",
+			wantCode:     codes.OK,
+		},
+		{
+			name:         "ios enum only persists canonical platform",
+			platformEnum: notificationv1.DevicePlatform_DEVICE_PLATFORM_IOS.Enum(),
+			token:        "enum-ios-token",
+			wantPlatform: "ios",
+			wantCode:     codes.OK,
+		},
+		{
+			name:         "web enum only persists canonical platform",
+			platformEnum: notificationv1.DevicePlatform_DEVICE_PLATFORM_WEB.Enum(),
+			token:        "enum-web-token",
+			wantPlatform: "web",
+			wantCode:     codes.OK,
+		},
+		{
+			name:         "desktop enum only persists canonical platform",
+			platformEnum: notificationv1.DevicePlatform_DEVICE_PLATFORM_DESKTOP.Enum(),
+			token:        "enum-desktop-token",
+			wantPlatform: "desktop",
+			wantCode:     codes.OK,
+		},
+		{
+			name:         "legacy string only remains accepted without new validation",
+			platform:     "ios",
+			token:        "legacy-string-token",
+			wantPlatform: "ios",
+			wantCode:     codes.OK,
+		},
+		{
+			name:     "legacy invalid string preserves database validation",
+			platform: "windows",
+			token:    "legacy-invalid-string-token",
+			wantCode: codes.Internal,
+		},
+		{
+			name:         "valid enum takes priority over conflicting legacy string",
+			platform:     "android",
+			platformEnum: notificationv1.DevicePlatform_DEVICE_PLATFORM_IOS.Enum(),
+			token:        "enum-priority-token",
+			wantPlatform: "ios",
+			wantCode:     codes.OK,
+		},
+		{
+			name:         "unspecified enum falls back to legacy string",
+			platform:     "web",
+			platformEnum: notificationv1.DevicePlatform_DEVICE_PLATFORM_UNSPECIFIED.Enum(),
+			token:        "unspecified-fallback-token",
+			wantPlatform: "web",
+			wantCode:     codes.OK,
+		},
+		{
+			name:         "unknown enum falls back to legacy string",
+			platform:     "desktop",
+			platformEnum: notificationv1.DevicePlatform(99).Enum(),
+			token:        "unknown-fallback-token",
+			wantPlatform: "desktop",
+			wantCode:     codes.OK,
+		},
+		{
+			name:         "unknown enum rejects invalid legacy fallback",
+			platform:     "windows",
+			platformEnum: notificationv1.DevicePlatform(99).Enum(),
+			token:        "unknown-invalid-fallback-token",
+			wantCode:     codes.InvalidArgument,
+		},
+		{
+			name:         "unspecified enum without legacy string is invalid",
+			platformEnum: notificationv1.DevicePlatform_DEVICE_PLATFORM_UNSPECIFIED.Enum(),
+			token:        "unspecified-invalid-token",
+			wantCode:     codes.InvalidArgument,
+		},
+		{
+			name:         "unknown enum without legacy string is invalid",
+			platformEnum: notificationv1.DevicePlatform(99).Enum(),
+			token:        "unknown-invalid-token",
+			wantCode:     codes.InvalidArgument,
+		},
+		{
+			name:     "no platform inputs is invalid",
+			token:    "missing-platform-token",
+			wantCode: codes.InvalidArgument,
+		},
+		{
+			name:         "token remains required when valid enum supplies platform",
+			platformEnum: notificationv1.DevicePlatform_DEVICE_PLATFORM_ANDROID.Enum(),
+			wantCode:     codes.InvalidArgument,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			profileID := uuid.New()
+			_, err := client.RegisterDevice(withProfileCtx(ctx, profileID), &notificationv1.RegisterDeviceRequest{
+				Platform:     tt.platform,
+				PlatformEnum: tt.platformEnum,
+				Token:        tt.token,
+			})
+			require.Equal(t, tt.wantCode, status.Code(err))
+
+			tokens := &store.DeviceTokenStore{Pool: pool}
+			rows, err := tokens.ListByProfile(ctx, profileID)
+			require.NoError(t, err)
+			if tt.wantCode != codes.OK {
+				require.Empty(t, rows)
+				return
+			}
+
+			require.Len(t, rows, 1)
+			require.Equal(t, tt.wantPlatform, rows[0].Platform)
+			require.Equal(t, tt.token, rows[0].Token)
+		})
+	}
 }
 
 func TestUnregisterDevice_TokenStoreUnavailable(t *testing.T) {

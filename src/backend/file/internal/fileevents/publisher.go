@@ -8,6 +8,7 @@ type Publisher interface {
 	PublishFileProcessed(ctx context.Context, fileID, status, convertedR2Key, thumbnailR2Key string) error
 	PublishFileScanInfected(ctx context.Context, fileID, uploaderProfileID string) error
 	PublishFileExpired(ctx context.Context, fileID string, chatID *string) error
+	PublishFileDownloaded(ctx context.Context, fileID, downloaderProfileID string) error
 	Close() error
 }
 
@@ -20,4 +21,5 @@ func (NoopPublisher) PublishFileProcessed(context.Context, string, string, strin
 }
 func (NoopPublisher) PublishFileScanInfected(context.Context, string, string) error { return nil }
 func (NoopPublisher) PublishFileExpired(context.Context, string, *string) error     { return nil }
+func (NoopPublisher) PublishFileDownloaded(context.Context, string, string) error   { return nil }
 func (NoopPublisher) Close() error                                                  { return nil }

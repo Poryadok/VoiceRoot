@@ -44,12 +44,14 @@ func (f *fakeUserClient) CreateProfile(context.Context, *userv1.CreateProfileReq
 type fakeMessagingClient struct {
 	messagingv1.UnimplementedMessagingServiceServer
 	lastContent string
+	lastChat    *chatv1.ChatRef
 	editCalls   int
 	editErr     error
 }
 
 func (f *fakeMessagingClient) SendMessage(_ context.Context, req *messagingv1.SendMessageRequest) (*messagingv1.SendMessageResponse, error) {
 	f.lastContent = req.GetContent()
+	f.lastChat = req.GetChat()
 	return &messagingv1.SendMessageResponse{
 		Message: &messagingv1.Message{
 			Id:      uuid.NewString(),

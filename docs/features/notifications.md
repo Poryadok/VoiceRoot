@@ -54,7 +54,8 @@
 | **Offline** | ✓ | ✓ |
 
 - Sender **никогда** не получает push/in-app на собственное сообщение
-- **Matchmaking / voice join** — presence check **пропускается** (always push when offline policy applies); см. [todo/backend.md](../todo/backend.md)
+- **Matchmaking / voice join** — presence check **пропускается** (always evaluate push policy); см. [todo/backend.md](../todo/backend.md)
+- **Moderation-produced `system` sanctions** — узкое временное исключение в текущем коде: presence enrichment пропускается и push сохраняется, пока нет отдельного Notification→Realtime in-app пути. Это не правило для всех `system` notifications; transport/payload/dedupe/account→profiles/Flutter presentation остаются открыты — [todo/backend.md](../todo/backend.md)
 - Quiet hours и mute применяются **после** base routing (см. ниже)
 
 ## Гранулярность настроек

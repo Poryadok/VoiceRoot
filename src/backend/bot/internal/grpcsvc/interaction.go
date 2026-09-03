@@ -381,6 +381,11 @@ func (s *BotGRPC) ExecuteSlashInteraction(ctx context.Context, req *botv1.Execut
 	if !store.ScopeAllows(botRow.ScopesJSON, "TEXT_CHAT_SEND_MESSAGES") {
 		return nil, status.Error(codes.PermissionDenied, "bot lacks TEXT_CHAT_SEND_MESSAGES")
 	}
+	if chatRefIsDM(req.GetChat()) {
+		if err := s.requireScope(botRow, "DM_SEND"); err != nil {
+			return nil, err
+		}
+	}
 	if !s.isBotOnline(ctx, botID) {
 		code := "bot_unavailable"
 		msg := "Bot is unavailable."
@@ -428,6 +433,7 @@ func (s *BotGRPC) ExecuteSlashInteraction(ctx context.Context, req *botv1.Execut
 		"command_name":       cmdName,
 		"options":            options,
 		"chat_id":            chatID.String(),
+		"chat_type":          req.GetChat().GetType().String(),
 		"invoker_profile_id": invoker.String(),
 	}
 	_, _ = s.Store.EnqueueEvent(ctx, botID, "interaction", eventPayload, token)
@@ -512,15 +518,11 @@ func (s *BotGRPC) CompleteInteraction(ctx context.Context, req *botv1.CompleteIn
 		return &botv1.CompleteInteractionResponse{}, nil
 	}
 	if reply.Content != "" && !reply.Deferred && !reply.Ephemeral {
-		_, _, ref, lerr := s.lookupInteraction(ctx, botRow.ID, token)
+		_, lerr := s.completeDeferredInteraction(ctx, botRow, token, nil, reply.Content)
 		if lerr != nil {
 			return nil, lerr
 		}
-		if _, err := s.postMessage(ctx, botRow, ref, reply.Content); err != nil {
-			return nil, err
-		}
 		s.Hub.FinishDeferred(token)
-		_ = s.Store.MarkInteractionDelivered(ctx, botRow.ID, token)
 		return &botv1.CompleteInteractionResponse{}, nil
 	}
 	return nil, status.Error(codes.NotFound, "unknown interaction token")
@@ -529,7 +531,9 @@ func (s *BotGRPC) CompleteInteraction(ctx context.Context, req *botv1.CompleteIn
 func (s *BotGRPC) lookupInteraction(ctx context.Context, botID uuid.UUID, token string) (uuid.UUID, uuid.UUID, *chatv1.ChatRef, error) {
 	var payload string
 	err := s.Store.Pool.QueryRow(ctx, `
-SELECT payload::text FROM bot_event_log WHERE bot_id = $1 AND interaction_token = $2 ORDER BY created_at DESC LIMIT 1`,
+SELECT payload::text FROM bot_event_log
+WHERE bot_id = $1 AND interaction_token = $2 AND delivery_status = 'deferred'
+ORDER BY created_at DESC LIMIT 1`,
 		botID, token).Scan(&payload)
 	if err != nil {
 		return uuid.Nil, uuid.Nil, nil, status.Error(codes.NotFound, "interaction not found")
@@ -538,7 +542,24 @@ SELECT payload::text FROM bot_event_log WHERE bot_id = $1 AND interaction_token 
 	_ = json.Unmarshal([]byte(payload), &m)
 	chatID, _ := uuid.Parse(stringValue(m["chat_id"]))
 	invoker, _ := uuid.Parse(stringValue(m["invoker_profile_id"]))
-	return chatID, invoker, &chatv1.ChatRef{Id: chatID.String(), Type: chatTypePtr(chatv1.ChatType_CHAT_TYPE_CHANNEL)}, nil
+	chatType := persistedInteractionChatType(m["chat_type"])
+	return chatID, invoker, &chatv1.ChatRef{Id: chatID.String(), Type: chatTypePtr(chatType)}, nil
+}
+
+// persistedInteractionChatType restores the persisted interaction destination.
+// Missing or invalid values are from legacy/malformed rows and retain the
+// historical channel fallback.
+func persistedInteractionChatType(value any) chatv1.ChatType {
+	if name, ok := value.(string); ok {
+		if raw, found := chatv1.ChatType_value[name]; found {
+			chatType := chatv1.ChatType(raw)
+			switch chatType {
+			case chatv1.ChatType_CHAT_TYPE_DM, chatv1.ChatType_CHAT_TYPE_GROUP, chatv1.ChatType_CHAT_TYPE_CHANNEL:
+				return chatType
+			}
+		}
+	}
+	return chatv1.ChatType_CHAT_TYPE_CHANNEL
 }
 
 func stringValue(v any) string {
@@ -570,26 +591,13 @@ func (s *BotGRPC) SendBotMessage(ctx context.Context, req *botv1.SendBotMessageR
 	if req.GetInteractionToken() != "" {
 		token := strings.TrimSpace(req.GetInteractionToken())
 		if s.Hub.IsDeferred(token) {
-			_, _, ref, lerr := s.lookupInteraction(ctx, botRow.ID, token)
-			if lerr != nil {
-				return nil, lerr
-			}
-			content := strings.TrimSpace(req.GetContent())
-			if content == "" {
-				return nil, status.Error(codes.InvalidArgument, "content required")
-			}
-			msg, perr := s.postMessage(ctx, botRow, ref, content)
-			if perr != nil {
-				return nil, perr
-			}
-			s.Hub.FinishDeferred(token)
-			_ = s.Store.MarkInteractionDelivered(ctx, botRow.ID, token)
-			return &botv1.SendBotMessageResponse{Message: msg}, nil
+			return s.sendDeferredInteractionMessage(ctx, botRow, token, req.GetChat(), req.GetContent())
 		}
 		reply := store.InteractionReply{Content: req.GetContent()}
 		if s.Hub.Complete(token, reply) {
 			return &botv1.SendBotMessageResponse{}, nil
 		}
+		return s.sendDeferredInteractionMessage(ctx, botRow, token, req.GetChat(), req.GetContent())
 	}
 	chatID, err := parseUUID("chat.id", req.GetChat().GetId())
 	if err != nil {
@@ -615,6 +623,46 @@ func (s *BotGRPC) SendBotMessage(ctx context.Context, req *botv1.SendBotMessageR
 		return nil, err
 	}
 	return &botv1.SendBotMessageResponse{Message: msg}, nil
+}
+
+func (s *BotGRPC) sendDeferredInteractionMessage(ctx context.Context, botRow *store.BotRow, token string, requested *chatv1.ChatRef, content string) (*botv1.SendBotMessageResponse, error) {
+	msg, err := s.completeDeferredInteraction(ctx, botRow, token, requested, content)
+	if err != nil {
+		return nil, err
+	}
+	s.Hub.FinishDeferred(token)
+	return &botv1.SendBotMessageResponse{Message: msg}, nil
+}
+
+func (s *BotGRPC) completeDeferredInteraction(ctx context.Context, botRow *store.BotRow, token string, requested *chatv1.ChatRef, content string) (*messagingv1.Message, error) {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return nil, status.Error(codes.InvalidArgument, "content required")
+	}
+	_, _, ref, err := s.lookupInteraction(ctx, botRow.ID, token)
+	if err != nil {
+		return nil, err
+	}
+	if requested != nil && (requested.GetId() != ref.GetId() || requested.GetType() != ref.GetType()) {
+		return nil, status.Error(codes.PermissionDenied, "interaction token is bound to a different chat")
+	}
+	if chatRefIsDM(ref) {
+		if err := s.requireScope(botRow, "DM_SEND"); err != nil {
+			return nil, err
+		}
+	}
+	var message *messagingv1.Message
+	completed, err := s.Store.CompleteDeferredInteraction(ctx, botRow.ID, token, func() error {
+		message, err = s.postInteractionMessage(ctx, botRow, ref, token, content)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !completed {
+		return nil, status.Error(codes.NotFound, "interaction not found")
+	}
+	return message, nil
 }
 
 func (s *BotGRPC) SendEphemeral(ctx context.Context, req *botv1.SendEphemeralRequest) (*botv1.SendEphemeralResponse, error) {
@@ -711,6 +759,26 @@ func (s *BotGRPC) postMessage(ctx context.Context, botRow *store.BotRow, chat *c
 	resp, err := s.Messaging.SendMessage(ctx, &messagingv1.SendMessageRequest{
 		Chat:    chat,
 		Content: content,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resp.GetMessage(), nil
+}
+
+func (s *BotGRPC) postInteractionMessage(ctx context.Context, botRow *store.BotRow, chat *chatv1.ChatRef, token, content string) (*messagingv1.Message, error) {
+	if s.Messaging == nil {
+		return nil, status.Error(codes.FailedPrecondition, "messaging client not configured")
+	}
+	clientMessageID := uuid.NewSHA1(uuid.NameSpaceURL, []byte("bot-interaction:"+botRow.ID.String()+":"+token)).String()
+	ctx = metadata.AppendToOutgoingContext(ctx,
+		authctx.HeaderProfileID, botRow.ActorProfileID.String(),
+		authctx.HeaderUserID, botRow.OwnerAccountID.String(),
+	)
+	resp, err := s.Messaging.SendMessage(ctx, &messagingv1.SendMessageRequest{
+		Chat:            chat,
+		Content:         content,
+		ClientMessageId: &clientMessageID,
 	})
 	if err != nil {
 		return nil, err

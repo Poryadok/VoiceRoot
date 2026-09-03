@@ -170,8 +170,19 @@ Event (NATS) ──► Notification Service
 |------|--------|
 | `match_found` | User may be in-app without wanting to miss match alert |
 | `voice_member_joined` | Voice room alerts while user in another voice context |
+| Moderation-produced `system` sanction | **Narrow temporary implementation exception:** moderation resolves `target_account_id` to profiles and keeps push enabled because no system-sanction in-app transport exists yet |
 
-**Code gap:** `GRPCChecker.IsOnline` checks only `PRESENCE_ONLINE_STATUS_ONLINE`; idle/in-call not treated as online — push may fire incorrectly. MM/voice paths still apply presence contrary to skip rule — [todo/backend.md](../todo/backend.md).
+The moderation row does **not** make every `system` notification presence-blind;
+other system producers continue to use the base rule unless their own contract says
+otherwise.
+
+**Code gaps:** `GRPCChecker.IsOnline` checks only
+`PRESENCE_ONLINE_STATUS_ONLINE`; idle/in-call are not treated as online, so push may
+fire incorrectly. MM/voice paths still apply presence contrary to their skip rule.
+For moderation sanctions, T-023 remains open: no Notification→Realtime transport or
+payload, no transport-level dedupe, no settled account→profiles delivery semantics,
+and no Flutter presentation for `system` sanctions —
+[todo/backend.md](../todo/backend.md).
 
 Implemented in `delivery/router.go` → `DecideRouting`; message path enriches via `EnrichDecision` / `EnrichDecisions`.
 

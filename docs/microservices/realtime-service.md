@@ -16,7 +16,7 @@ WebSocket-шлюз для доставки событий в реальном в
 - Typing indicators
 - Reconnection support (exponential backoff на клиенте)
 - Нумерация событий **`s`** в рамках WebSocket-сессии, op **`resume`** с `last_s` после reconnect (см. ниже)
-- **Историю чатов не хранит**; пропущенные сообщения клиент догружает через **Messaging API** (Gateway → REST/gRPC), см. [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) (Reconnect)
+- **Не хранит inbox или историю чатов**; после reconnect клиент делает глобальную REST-сверку inbox через Chat `ListChats`, а сообщения догружает через Messaging API (Gateway → REST/gRPC) только per selected `chat_id`, см. [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) (Reconnect)
 - Heartbeat / ping-pong для детекции разрыва
 - На client **`delivery_ack`**: ephemeral `message_delivered` fan-out **и** publish JetStream **`message.delivery_ack`** на `message.events` (Messaging consumer → durable cursor) — см. § `delivery_ack` op
 
@@ -53,7 +53,7 @@ Headers:
 
 Если клиент не присылал `resume` или это первое подключение — достаточно обычного потока после `hello`.
 
-**`resume` semantics:** новое TCP-соединение → новый поток `s` с `hello`; `resume` с `last_s` **не** воспроизводит пропущенные события из прошлой сессии (Realtime не хранит журнал). Клиент догружает **сообщения** через Messaging API; для list ticks / read state — `ListChats` + `GetChatListMetadata`. Эфемерные `delivery_ack` / `message_delivered` после reconnect не восстанавливаются — только live + durable metadata.
+**`resume` semantics:** новое TCP-соединение → новый поток `s` с `hello`; `resume` с `last_s` **не** воспроизводит пропущенные события из прошлой сессии (Realtime не хранит журнал). Клиент сначала делает глобальную REST-сверку inbox через paginated `ListChats` (включая durable metadata), затем по необходимости догружает **сообщения** через Messaging API per selected `chat_id`. Эфемерные `delivery_ack` / `message_delivered` после reconnect не восстанавливаются — только live + durable metadata.
 
 ### Read / delivery dual path
 
@@ -66,7 +66,7 @@ Headers:
 
 1. **Read** — call REST `MarkRead` when opening/scrolling chat; optional WS `mark_read` for multi-tab sync.
 2. **Delivered** — send WS `delivery_ack` when message rendered on recipient device (DM).
-3. **After reconnect** — refresh `ListChats` / `GetChatListMetadata` for list ticks; WS `message_delivered` / `message_read` from old session are **not replayed** via `resume`.
+3. **After reconnect** — complete global `ListChats` inbox snapshot for list ticks/unread; WS `message_delivered` / `message_read` from old session are **not replayed** via `resume`.
 
 См. матрицу durable vs ephemeral — [messaging-service.md](messaging-service.md) § `GetChatListMetadata`, [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) § Доставка сообщений.
 
@@ -173,8 +173,9 @@ Routing rules (presence, quiet hours, `send_silent`, mute) — [notification-ser
 
 | After WS reconnect | Required action |
 |--------------------|-----------------|
-| Missed messages | REST `GetMessages` per open `chat_id` |
-| List preview ticks / unread | REST `ListChats` + S2S metadata refresh |
+| Inbox state across chats | REST `ListChats` snapshot for `main` / `requests` / `archive`, paginate to completion; failed page retries without clearing cached state |
+| Missed messages | REST `GetMessages` per open, notification-target or otherwise selected `chat_id` |
+| List preview ticks / unread | Included in authoritative `ListChats` snapshot via S2S Messaging metadata |
 | Read cursor | REST `MarkRead` if chat was open; do not rely on WS-only `mark_read` |
 | Ephemeral delivery | Live `delivery_ack` only; list ✓✓ from durable metadata |
 | Live events | New `hello` + optional `resume` (new `s` stream; no event journal replay) |
@@ -230,7 +231,7 @@ Realtime Instance A ──Redis Pub/Sub──► Realtime Instance B
 - **Redis** — Pub/Sub, registry подключений `{profile_id → [instance_id, ws_conn_id]}`
 - **NATS** — получение событий от всех сервисов
 
-Догрузка пропущенных **сообщений** не через Realtime: клиент обращается к **Messaging Service** через API Gateway (без обязательного gRPC Realtime → Messaging для catch-up).
+Ни глобальная сверка inbox, ни догрузка пропущенных **сообщений** не проходят через Realtime: клиент обращается через API Gateway к Chat `ListChats`, затем при необходимости к Messaging Service `GetMessages` (без обязательного gRPC Realtime → Messaging для catch-up).
 
 ## Метрики (→ Analytics)
 
@@ -243,7 +244,7 @@ Realtime Instance A ──Redis Pub/Sub──► Realtime Instance B
 
 - **Балансировка**: клиент подключается по WSS через **L7 load balancer** (или L4 с TLS на LB). Запрос уходит на **любой** инстанс Realtime; **sticky sessions не нужны** — после reconnect клиент может оказаться на другом инстансе.
 - **Несколько инстансов**: каждый подписан на NATS; между инстансами **Redis Pub/Sub** и общий **registry** подключений (см. выше), чтобы fan-out доходил до клиента независимо от того, на каком инстансе открыт сокет.
-- **Падение инстанса**: соединения на нём обрываются; клиент переподключается с exponential backoff ([ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md)). Пропущенные **сообщения** догружаются через **Messaging** и API Gateway, а не через «догон» в Realtime.
+- **Падение инстанса**: соединения на нём обрываются; клиент переподключается с exponential backoff ([ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md)). Глобальное состояние списка сверяется через Chat `ListChats`, а выбранные пропущенные **сообщения** догружаются через Messaging и API Gateway, а не через «догон» в Realtime.
 - **Эфемерные события** (typing, часть presence): гарантии catch-up как у сообщений **нет** — после reconnect состояние восстанавливается из следующих live-событий или снимка из других API.
 
 
