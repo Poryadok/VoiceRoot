@@ -17,23 +17,26 @@ import (
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 
-	grpcsvc "voice/backend/space/internal/grpcsvc"
-	"voice/backend/space/internal/spaceevents"
-	"voice/backend/space/internal/subscriptionconsume"
-	"voice/backend/space/internal/s2s"
-	"voice/backend/space/internal/store"
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
-	"voice/backend/pkg/runtimeconfig"
 	voiceprom "voice/backend/pkg/promhttp"
+	"voice/backend/pkg/runtimeconfig"
+	grpcsvc "voice/backend/space/internal/grpcsvc"
+	"voice/backend/space/internal/s2s"
+	"voice/backend/space/internal/spaceevents"
+	"voice/backend/space/internal/store"
+	"voice/backend/space/internal/subscriptionconsume"
 
 	rolev1 "voice.app/voice/role/v1"
 	spacev1 "voice.app/voice/space/v1"
 	userv1 "voice.app/voice/user/v1"
 )
 
-const serviceName = "space"
+const (
+	serviceName                         = "space"
+	spaceMutationLockPoolMaxConns int32 = 8
+)
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
@@ -54,11 +57,28 @@ func main() {
 	if dbURL != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
 		pool, err := pgxpool.New(ctx, dbURL)
-		cancel()
 		if err != nil {
+			cancel()
 			log.Fatalf("postgres: %v", err)
 		}
 		defer pool.Close()
+
+		lockPoolConfig, err := pgxpool.ParseConfig(dbURL)
+		if err != nil {
+			cancel()
+			log.Fatalf("postgres mutation lock config: %v", err)
+		}
+		// Advisory leases pin sessions, so they use an independently bounded
+		// pool and cannot exhaust connections needed by SpaceStore queries. Its
+		// DSN must use direct PostgreSQL or session pooling, not transaction mode.
+		lockPoolConfig.MinConns = 0
+		lockPoolConfig.MaxConns = spaceMutationLockPoolMaxConns
+		mutationLockPool, err := pgxpool.NewWithConfig(ctx, lockPoolConfig)
+		cancel()
+		if err != nil {
+			log.Fatalf("postgres mutation lock pool: %v", err)
+		}
+		defer mutationLockPool.Close()
 
 		spaceStore := &store.SpaceStore{Pool: pool}
 		natsURL := strings.TrimSpace(os.Getenv("NATS_URL"))
@@ -92,6 +112,7 @@ func main() {
 			Store:             spaceStore,
 			SpaceEvents:       spaceEvents,
 			Roles:             roleClient,
+			MutationLocker:    store.NewSpaceMutationLocker(mutationLockPool),
 			SpaceCoMembership: &grpcsvc.StoreCoMembership{Store: spaceStore},
 			Logger:            logger,
 		}

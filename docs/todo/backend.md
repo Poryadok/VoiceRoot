@@ -24,7 +24,7 @@
 ### Space
 
 
-- [ ] **[Space] Owner locked: `GetAuditLog`, `SearchPublicSpaces`, `ListTemplates`, `CreateFromTemplate` — runtime `Unimplemented` (embed). `DeleteSpace`/`TransferOwnership` shipped (T-011); `JoinSpace`/`LeaveSpace` живые; owner не может leave без transfer** — `protos/voice/space/v1/space.proto`; `src/backend/space/internal/grpcsvc/`
+- [ ] **[Space] Owner lifecycle/product surfaces partial: backend `DeleteSpace`, compensated `TransferOwnership` (T-011) and gRPC `GetAuditLog` shipped; `SearchPublicSpaces`, `ListTemplates`, `CreateFromTemplate` remain runtime `Unimplemented`; Gateway/Flutter leave-as-owner/delete/audit flows remain open** — `protos/voice/space/v1/space.proto`; `src/backend/space/internal/grpcsvc/`; `src/backend/gateway/`; `src/frontend/`
 - [x] **[Space] Space Pro cache never synced — `space_db.space_subscriptions` comment says “synced from Subscription”; only test seed `UpsertSpaceSubscription` writes; Subscription writes `subscription_db` only** — **done:** NATS consumer `space/internal/subscriptionconsume` + S2S `SyncSpaceProSubscription` write entitlement cache; `SeedSpaceProActive` remains test helper only.
 - [ ] **[Space] `entry_requirement` не исполняется — JoinSpace отвергает любой requirement ≠ `none` (`FailedPrecondition`), нет captcha/questions/mod-approval queue** — `src/backend/space/internal/grpcsvc/join.go`, `invites.go`
 - [x] **[Space] Social block на join fail-open — `ensureJoinNotBlocked` no-op если `Blocks`/`ProfileAccounts` nil** — **done:** fail-closed `FailedPrecondition` when Social/User S2S unwired; IT `join_block_degradation_test.go`.
@@ -132,9 +132,9 @@
 ### Space
 
 
-- [ ] **[Space] `GetAuditLog` unimplemented while `audit_log` is written for ban/kick/timeout only** — `src/backend/migrations/space_db/000004_moderation.up.sql`, `src/backend/space/internal/store/{moderation,members}.go`. Gateway **мапит** moderation ExportAuditLog (не hardcoded `[]`).
+- [x] **[Space] Backend gRPC `GetAuditLog`** — newest-first, space-scoped keyset paging (default 50/max 100), full proto mapping, `SPACE_VIEW_AUDIT_LOG` fail-closed permission check. **Residual open:** actor/action filters, Gateway REST, Flutter UI and missing audit writers — see items below. Gateway moderation `ExportAuditLog` is a separate surface.
 - [x] **[Space] `UpdateSpace` writes visibility / entry_requirement / questions / mm_config** — `space.go`; Role `SPACE_MANAGE_SETTINGS` (`requireSpacePermission`). Tree CRUD — `requireSpaceTreeManage`, не owner-only.
-- [ ] **[Space] `mm_config` / `entry_questions` never loaded — not in `SpaceRow`, not in `spaceRowToProto`** — `src/backend/space/internal/store/space.go`, `src/backend/space/internal/grpcsvc/proto.go`
+- [x] **[Space] T-009 stale implementation claim: `mm_config` / `entry_questions` already load and round-trip** through `SpaceRow`, `spaceRowToProto`, `UpdateSpace`, `GetSpace`, `ListMySpaces` and `UpdateSpaceMmConfig`; regression coverage locks this in. **Residual open:** execution of questions/captcha/manual entry requirements remains the Critical item above.
 - [ ] **[Space] Tree node Pro limit (500) not implemented — hardcoded `MaxTreeNodes = 50`, no entitlement check (unlike member cap)** — `src/backend/space/internal/store/tree.go`
 - [ ] **[Space] Catalog indexing fragile — Search hydrator calls `GetSpace` (member-only); `SearchPublicSpaces` Unimplemented; ranking verified-first нет; нет `space.updated` re-index** — `src/backend/search/internal/deps/deps.go`, `chat_space_indexer.go`
 - [ ] **[Space] NATS events incomplete vs spec — Join/Leave публикуют member_joined/left; всё ещё дыры `space.deleted` / `member_banned` / catalog reindex** — `src/backend/space/internal/spaceevents/publisher.go`

@@ -28,10 +28,10 @@ func (s *SpaceGRPC) requireSpacePermission(ctx context.Context, spaceID uuid.UUI
 		PermissionName: permission,
 	})
 	if err != nil {
-		if status.Code(err) == codes.Unavailable {
-			return status.Error(codes.Unavailable, "role service unavailable")
+		if status.Code(err) == codes.PermissionDenied {
+			return status.Error(codes.PermissionDenied, "permission denied")
 		}
-		return status.Error(codes.Internal, err.Error())
+		return status.Error(codes.Unavailable, "role service unavailable")
 	}
 	if !resp.GetAllowed() {
 		return status.Error(codes.PermissionDenied, "permission denied")
@@ -156,16 +156,63 @@ func (s *SpaceGRPC) reassignOwnerRole(ctx context.Context, spaceID, previousOwne
 		ProfileId: newOwner.String(),
 		RoleId:    ownerRoleID,
 	}); err != nil {
-		return err
+		// An Assign response can be lost after it has committed. previousOwner
+		// has not yet been revoked, so it can authoritatively assert the inverse.
+		restoreErr, revokeErr := s.compensateOwnerRole(ctx, spaceID, previousOwner, newOwner, ownerRoleID, previousOwner)
+		return ownerRoleCompensationError("new owner role assign", err, restoreErr, revokeErr)
 	}
 	if _, err := s.Roles.RevokeRole(ownerCtx, &rolev1.RevokeRoleRequest{
 		SpaceId:   spaceID.String(),
 		ProfileId: previousOwner.String(),
 		RoleId:    ownerRoleID,
 	}); err != nil {
-		return err
+		// The new Owner was assigned before the failed revoke. It is the actor
+		// guaranteed to retain Owner when the revoke committed before returning.
+		restoreErr, revokeErr := s.compensateOwnerRole(ctx, spaceID, previousOwner, newOwner, ownerRoleID, newOwner)
+		return ownerRoleCompensationError("previous owner role revoke", err, restoreErr, revokeErr)
 	}
 	return nil
+}
+
+// compensateOwnerRole asserts the full inverse Owner transition. Both calls
+// use fresh detached, bounded contexts, so a Role timeout does not abandon the
+// other mutation. Role Assign/Revoke are idempotent.
+func (s *SpaceGRPC) compensateOwnerRole(ctx context.Context, spaceID, previousOwner, newOwner uuid.UUID, ownerRoleID string, actor uuid.UUID) (error, error) {
+	restoreCtx, restoreCancel := ownershipTransferCleanupContext(ctx)
+	restoreActorCtx := metadata.AppendToOutgoingContext(restoreCtx, authctx.HeaderProfileID, actor.String())
+	_, restoreErr := s.Roles.AssignRole(restoreActorCtx, &rolev1.AssignRoleRequest{
+		SpaceId:   spaceID.String(),
+		ProfileId: previousOwner.String(),
+		RoleId:    ownerRoleID,
+	})
+	restoreCancel()
+
+	revokeCtx, revokeCancel := ownershipTransferCleanupContext(ctx)
+	revokeActorCtx := metadata.AppendToOutgoingContext(revokeCtx, authctx.HeaderProfileID, actor.String())
+	_, revokeErr := s.Roles.RevokeRole(revokeActorCtx, &rolev1.RevokeRoleRequest{
+		SpaceId:   spaceID.String(),
+		ProfileId: newOwner.String(),
+		RoleId:    ownerRoleID,
+	})
+	revokeCancel()
+	return restoreErr, revokeErr
+}
+
+func ownerRoleCompensationError(operation string, originalErr, restoreErr, revokeErr error) error {
+	code := status.Code(originalErr)
+	if code == codes.OK {
+		code = codes.Internal
+	}
+	switch {
+	case restoreErr != nil && revokeErr != nil:
+		return status.Errorf(code, "%s failed (%v); previous owner role compensation assign failed (%v); new owner role compensation revoke failed: %v", operation, originalErr, restoreErr, revokeErr)
+	case restoreErr != nil:
+		return status.Errorf(code, "%s failed (%v); previous owner role compensation assign failed: %v", operation, originalErr, restoreErr)
+	case revokeErr != nil:
+		return status.Errorf(code, "%s failed (%v); new owner role compensation revoke failed: %v", operation, originalErr, revokeErr)
+	default:
+		return originalErr
+	}
 }
 
 func (s *SpaceGRPC) memberRoleNames(ctx context.Context, spaceID, profileID uuid.UUID) []string {

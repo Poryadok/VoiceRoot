@@ -72,6 +72,11 @@ func (s *SpaceGRPC) KickMember(ctx context.Context, req *spacev1.KickMemberReque
 	if err != nil {
 		return nil, err
 	}
+	release, err := s.lockSpaceMutation(ctx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	profileID, err := parseUUIDField("profile_id", req.GetProfileId())
 	if err != nil {
 		return nil, err

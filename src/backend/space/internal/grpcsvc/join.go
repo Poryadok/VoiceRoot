@@ -10,9 +10,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"voice/backend/pkg/guestguard"
 	"voice/backend/space/internal/authctx"
 	"voice/backend/space/internal/store"
-	"voice/backend/pkg/guestguard"
 
 	spacev1 "voice.app/voice/space/v1"
 )
@@ -30,6 +30,11 @@ func (s *SpaceGRPC) JoinSpace(ctx context.Context, req *spacev1.JoinSpaceRequest
 	if err != nil {
 		return nil, err
 	}
+	release, err := s.lockSpaceMutation(ctx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	profileID, ok := authctx.ProfileID(ctx)
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
@@ -84,6 +89,11 @@ func (s *SpaceGRPC) LeaveSpace(ctx context.Context, req *spacev1.LeaveSpaceReque
 	if err != nil {
 		return nil, err
 	}
+	release, err := s.lockSpaceMutation(ctx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	profileID, ok := authctx.ProfileID(ctx)
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
@@ -121,6 +131,11 @@ func (s *SpaceGRPC) SyncSpaceProSubscription(ctx context.Context, req *spacev1.S
 	if err != nil {
 		return nil, err
 	}
+	release, err := s.lockSpaceMutation(ctx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	purchaserID, err := parseUUIDField("purchaser_account_id", req.GetPurchaserAccountId())
 	if err != nil {
 		return nil, err

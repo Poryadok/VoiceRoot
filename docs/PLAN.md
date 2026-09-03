@@ -61,7 +61,7 @@
 | [user-profile](features/user-profile.md) | partial | User, File | Аватар/био/switch live. GIF-аватар отвергается; `banner_url` не в proto. |
 | [voice-chat](features/voice-chat.md) | partial | Voice, Role | 1:1 / group / space join, commander/raise-hand live. `MoveToVoiceRoom` Unimplemented; `VOICE_SPEAK`/`MUTE` не на speak/mute. |
 | [file-storage](features/file-storage.md) | partial | File | Upload/R2/retention/SHA verify live. **Нет** SHA-256 dedup, ffmpeg GIF/video/PDF; «WebP» = JPEG. |
-| [spaces](features/spaces.md) | partial | Space, Role | Create/Join/Leave/tree/инвайты live. **Нет** `DeleteSpace` / `TransferOwnership` / `GetAuditLog` / каталога / шаблонов. Owner не может leave. |
+| [spaces](features/spaces.md) | partial | Space, Role | Create/Join/Leave/tree/инвайты, `DeleteSpace`, backend `TransferOwnership` и gRPC `GetAuditLog` live. Нет подтверждения password/2FA и Gateway/Flutter owner/audit surface, audit filters, части writers, каталога и шаблонов; entry verification не исполняет полный questions/captcha/manual flow. Owner не может leave без transfer. |
 | [roles](features/roles.md) | shipped | Role | Кастомные роли, send-deny, `VOICE_JOIN` deny live. Часть TEXT_CHAT_* / verification roles — High. |
 | Групповые чаты | partial | Chat, Role | Create/kick/min-size/mute/archive live. **Read-state — DM-only** (`read_receipts` per chat); group/channel unread неполный. **Каналы** не в `ListChats` filter. |
 | Треды, shared media | shipped | Chat, Messaging | Live E2E есть. |
@@ -103,7 +103,7 @@
 | Имена env FCM/APNs ≠ код | Push останется noop даже с секретами | [backend.md](todo/backend.md) Notification + [ci.md](todo/ci.md) |
 | Checkout stub `checkout.paddle.test` | Premium GIF/banner, 3-й профиль, File quota, П.12/П.16 | [backend.md](todo/backend.md) Subscription |
 | JWT `subscription_tier=free` без NATS | User/Chat доверяют JWT, не Subscription S2S | Auth Java + ops `AUTH_NATS_URL` |
-| Нет `TransferOwnership` / `DeleteSpace` | Owner не может leave; спейс нельзя закрыть | Space Critical |
+| Нет Gateway/Flutter owner lifecycle | Backend `TransferOwnership` / `DeleteSpace` есть, но пользовательский leave-as-owner/delete flow не завершён | Space Critical |
 | Alertmanager → null receiver | P1 алерты никто не видит | [ci.md](todo/ci.md) (**Вы**) |
 | Стикеры/GIF в чате (0 кода) | Паки + composer | Current scope ([text-chat.md](features/text-chat.md)); пункт **2** ниже |
 
@@ -145,7 +145,7 @@ CloudPayments — отдельный трек после Paddle (СНГ), не �
 
 | Трек | PR-нарезка | Не ждать |
 |------|------------|----------|
-| **A. Space lifecycle** | 1) `TransferOwnership` (+ Gateway + Flutter leave-as-owner). 2) `DeleteSpace`. 3) `GetAuditLog` (чтение уже пишущегося `audit_log`). `entry_requirement`: пока ≠ `none` — явный контракт, не молчаливый hard-fail без UX; captcha/queue — отдельные PR | Paddle, push |
+| **A. Space lifecycle** | Backend `TransferOwnership` / `DeleteSpace` / gRPC `GetAuditLog` shipped. Осталось: password/2FA подтверждение, Gateway + Flutter leave-as-owner/delete/audit, audit filters и недостающие writers. `entry_requirement`: пока ≠ `none` — явный контракт, не молчаливый hard-fail без UX; questions/captcha/manual queue — отдельные PR | Paddle, push |
 | **B. Moderation loop** | `SubmitAppeal` пишет `account_id` (не profile); Gateway `POST /appeals`; shadow-ban → Messaging/Realtime `IsShadowBanned` на send/fanout; Notification consumer `moderation.events` | Space A |
 | **C. Admin queue** | resolve / dismiss (не только `reviewing`); санкции на non-user target не через `target_id` как account | REST статусов из B, если их ещё нет |
 | **D. Social** | REST contacts/favorites (gRPC уже есть); `SendFriendInvitation` чтит block | **done** friend-invite fail-closed (Blocks/ProfileAccounts/account); REST contacts still open |

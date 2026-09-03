@@ -10,10 +10,10 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"voice/backend/pkg/guestguard"
 	"voice/backend/role/permissions"
 	"voice/backend/space/internal/authctx"
 	"voice/backend/space/internal/store"
-	"voice/backend/pkg/guestguard"
 
 	spacev1 "voice.app/voice/space/v1"
 )
@@ -84,6 +84,11 @@ func (s *SpaceGRPC) CreateInvite(ctx context.Context, req *spacev1.CreateInviteR
 	if err != nil {
 		return nil, err
 	}
+	release, err := s.lockSpaceMutation(ctx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	if err := s.requireSpacePermission(ctx, spaceID, permissions.SpaceManageInvites); err != nil {
 		return nil, err
 	}
@@ -136,6 +141,11 @@ func (s *SpaceGRPC) RevokeInvite(ctx context.Context, req *spacev1.RevokeInviteR
 	if inv == nil {
 		return nil, status.Error(codes.NotFound, "invite not found")
 	}
+	release, err := s.lockSpaceMutation(ctx, inv.SpaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	if err := s.requireSpaceOwner(ctx, inv.SpaceID); err != nil {
 		return nil, err
 	}
@@ -180,6 +190,11 @@ func (s *SpaceGRPC) ListInvites(ctx context.Context, req *spacev1.ListInvitesReq
 	if err != nil {
 		return nil, err
 	}
+	release, err := s.lockSpaceMutation(ctx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	if err := s.requireSpaceOwner(ctx, spaceID); err != nil {
 		return nil, err
 	}
@@ -228,6 +243,11 @@ func (s *SpaceGRPC) JoinByInvite(ctx context.Context, req *spacev1.JoinByInviteR
 	if inv == nil || inv.RevokedAt != nil {
 		return nil, status.Error(codes.NotFound, "invite not found")
 	}
+	release, err := s.lockSpaceMutation(ctx, inv.SpaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	if inv.ExpiresAt != nil && !inv.ExpiresAt.After(time.Now().UTC()) {
 		return nil, status.Error(codes.FailedPrecondition, "invite expired")
 	}

@@ -66,6 +66,11 @@ func (s *SpaceGRPC) CreateCategory(ctx context.Context, req *spacev1.CreateCateg
 	if err != nil {
 		return nil, err
 	}
+	release, err := s.lockSpaceMutation(ctx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	if err := s.requireSpaceTreeManage(ctx, spaceID); err != nil {
 		return nil, err
 	}
@@ -88,6 +93,11 @@ func (s *SpaceGRPC) UpdateCategory(ctx context.Context, req *spacev1.UpdateCateg
 	if err != nil {
 		return nil, err
 	}
+	release, err := s.lockSpaceMutation(ctx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	if err := s.requireSpaceTreeManage(ctx, spaceID); err != nil {
 		return nil, err
 	}
@@ -114,6 +124,11 @@ func (s *SpaceGRPC) DeleteCategory(ctx context.Context, req *spacev1.DeleteCateg
 	if err != nil {
 		return nil, err
 	}
+	release, err := s.lockSpaceMutation(ctx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	if err := s.requireSpaceTreeManage(ctx, spaceID); err != nil {
 		return nil, err
 	}
@@ -146,6 +161,11 @@ func (s *SpaceGRPC) CreateVoiceRoom(ctx context.Context, req *spacev1.CreateVoic
 	if err != nil {
 		return nil, err
 	}
+	release, err := s.lockSpaceMutation(ctx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	if err := s.requireSpaceTreeManage(ctx, spaceID); err != nil {
 		return nil, err
 	}
@@ -176,6 +196,11 @@ func (s *SpaceGRPC) UpdateVoiceRoom(ctx context.Context, req *spacev1.UpdateVoic
 	if err != nil {
 		return nil, status.Error(codes.NotFound, "voice room not found")
 	}
+	release, err := s.lockSpaceMutation(ctx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	if err := s.requireSpaceTreeManage(ctx, spaceID); err != nil {
 		return nil, err
 	}
@@ -214,6 +239,11 @@ WHERE vr.id = $1
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	release, err := s.lockSpaceMutation(ctx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	if err := s.requireSpaceTreeManage(ctx, spaceID); err != nil {
 		return nil, err
 	}
@@ -242,6 +272,11 @@ func (s *SpaceGRPC) UpsertTreeNode(ctx context.Context, req *spacev1.UpsertTreeN
 	if err != nil {
 		return nil, err
 	}
+	release, err := s.lockSpaceMutation(ctx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	if err := s.requireSpaceTreeManage(ctx, spaceID); err != nil {
 		return nil, err
 	}
@@ -313,6 +348,11 @@ func (s *SpaceGRPC) RemoveTreeNode(ctx context.Context, req *spacev1.RemoveTreeN
 	if err != nil {
 		return nil, err
 	}
+	release, err := s.lockSpaceMutation(ctx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	if err := s.requireSpaceTreeManage(ctx, spaceID); err != nil {
 		return nil, err
 	}
@@ -334,6 +374,11 @@ func (s *SpaceGRPC) ReorderSpaceTree(ctx context.Context, req *spacev1.ReorderSp
 	if err != nil {
 		return nil, err
 	}
+	release, err := s.lockSpaceMutation(ctx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	if err := s.requireSpaceTreeManage(ctx, spaceID); err != nil {
 		return nil, err
 	}
@@ -366,6 +411,11 @@ func (s *SpaceGRPC) PinTreeNode(ctx context.Context, req *spacev1.PinTreeNodeReq
 	if err != nil {
 		return nil, err
 	}
+	release, err := s.lockSpaceMutation(ctx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	if err := s.requireSpaceTreeManage(ctx, spaceID); err != nil {
 		return nil, err
 	}
@@ -392,6 +442,11 @@ func (s *SpaceGRPC) UnpinTreeNode(ctx context.Context, req *spacev1.UnpinTreeNod
 	if err != nil {
 		return nil, err
 	}
+	release, err := s.lockSpaceMutation(ctx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	if err := s.requireSpaceTreeManage(ctx, spaceID); err != nil {
 		return nil, err
 	}

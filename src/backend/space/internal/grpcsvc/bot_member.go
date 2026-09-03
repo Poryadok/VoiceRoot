@@ -19,6 +19,11 @@ func (s *SpaceGRPC) AddBotMember(ctx context.Context, req *spacev1.AddBotMemberR
 	if err != nil {
 		return nil, err
 	}
+	release, err := s.lockSpaceMutation(ctx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	profileID, err := parseUUIDField("profile_id", req.GetProfileId())
 	if err != nil {
 		return nil, err
@@ -40,6 +45,11 @@ func (s *SpaceGRPC) RemoveBotMember(ctx context.Context, req *spacev1.RemoveBotM
 	if err != nil {
 		return nil, err
 	}
+	release, err := s.lockSpaceMutation(ctx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	profileID, err := parseUUIDField("profile_id", req.GetProfileId())
 	if err != nil {
 		return nil, err
