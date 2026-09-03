@@ -19,7 +19,7 @@ import (
 	notificationv1 "voice.app/voice/notification/v1"
 )
 
-// NotificationGRPC implements NotificationService (Phase-6 stub).
+// NotificationGRPC implements voice.notification.v1.NotificationService.
 type NotificationGRPC struct {
 	notificationv1.UnimplementedNotificationServiceServer
 	Tokens   *store.DeviceTokenStore
