@@ -1,293 +1,325 @@
-﻿# Voice — план исполнения
+# Voice — план продукта и исполнения
 
-> Каталог фич — [FEATURES.md](FEATURES.md). Инвентарь пробелов — [TODO.md](TODO.md) и `docs/todo/`. Здесь — **честный статус кода** и **порядок работ**. Федерация вне плана.
+> Каталог заявленных возможностей — [FEATURES.md](FEATURES.md), канон поведения — `docs/features/*`, архитектуры — [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md). Активный scope, порядок и release gates задаёт этот файл.
 
-Сверка спека↔код: 2026-08-17 (`tmp/feature-audit/synthesis.md`). Мелкие PR в `feature/` / `fix/` от `master` — [CONTRIBUTING.md](CONTRIBUTING.md).
+Срез проверен 2026-09-04 на commit `2c1a908a29e89bcdc077dc590fbb8b4db9ae14c5`. Он описывает состояние этого commit, а не обещание о будущем `master`.
 
----
+## Стратегия
 
-## Продуктовый scope
+Voice сначала должен стать убедительным бесплатным продуктом для небольшой группы: Web → Windows, вход по email или как гость, личные и групповые чаты, invite-only Space, голос и полный цикл поиска команды. Неполные возможности скрываются флагом или не выводятся в основной сценарий.
 
-**Текущий scope:** все фичи из [FEATURES.md](FEATURES.md) — **current**, реализуются **сейчас**. Единственное исключение — [federation.md](features/federation.md) (**deferred**).
+Default admission для внешнего alpha — server-signed одноразовый invite с expiry/revoke и fail-closed configurable cohort cap; email и guest registration требуют invite. Владелец перед `G1` принимает только предложенный размер когорты, а не проектирует механизм.
 
-**Федерация — deferred.** Спека и scaffold `src/backend/federation/` не трогать, пока рынок явно не попросит. Не планировать RPC, `federation_db`, Gateway upstream, Admin UI нод. См. также federated search, federated file storage, federation analytics/moderation в соответствующих feature docs.
+Приоритет задают несколько законченных пользовательских потоков, а не сумма строк в TODO. Главный дифференциатор — матчмейкинг, связанный с голосовым ростером, временным чатом команды и post-match историей. Billing, mobile, публичный каталог, bots и визуальная полировка не должны задерживать проверку этого ядра.
 
-**Спека ≠ shipped.** UX может быть в спеке и макетах, а бэкенд/Flutter — `partial`. Не писать `shipped`, если код не закрывает DoD из `docs/features/*`.
+Работа идёт одновременно по двум независимым веткам:
 
-### Матрица Telegram-parity (спека vs код)
+- `H` — короткие действия и решения владельца, которые нельзя честно заменить кодом агента;
+- `A` — автономные продуктовые этапы. Они должны выполняться без ожидания `H` на local/compose, fake или sandbox окружении.
 
-| Фича | Спека | Код (2026-08-28) | Пробел |
-|------|-------|------------------|--------|
-| Folders (system + custom) | current | proto CRUD only | DDL/handlers, Flutter rail |
-| Quick Access (≤15, per profile) | current | нет RPC/DDL | Chat RPC + Flutter |
-| Archive (`is_archived`) | current | write ✓ | `ListChats` исключает archived |
-| List archived / unarchive UX | current | нет list/filter RPC | Chat RPC + archive screen |
-| Pin messages (≤**5**) | current | RPC ✓, лимит **50** | выровнять — [todo/backend.md](todo/backend.md) |
-| Send silent / schedule / when online | current | нет полей/RPC/таблицы | `scheduled_messages` + composer |
-| List preview ✓/✓✓ | current | preview text only | delivery state в list metadata |
-| Стикеры/GIF | current | 0 кода | паки + composer picker |
+Зависимость от владельца ставится на release gate, а не на весь engineering milestone. Если задача смешанная, агент сначала доводит код, тесты, конфиг и инструкцию до состояния «нужен один конкретный ввод или один acceptance run».
 
-**IA (решено):** Quick Access — shortcuts `chat_id` per profile (≤15), не pin чата и не Social favourites. Folders — в left rail между nav-кнопками и аватарами профилей. Archive — вход через RC меню аватара профиля (не строка списка).
+Текущий WIP плана:
 
----
+| Состояние | Milestone | Правило |
+|---|---|---|
+| Active | `A1` | Основной поток до полного vertical DoD |
+| Active | `A2` | Параллельно на уже существующем chat/identity foundation; не ждёт закрытия всех хвостов `A1` |
+| Next | `A3` | Входит в WIP после готовности roster/session seam и только когда `A1` или `A2` освободил один из двух Active slots |
+| Queued | `A4–A7` | Не получают третий WIP-слот; независимая подготовка допустима только внутри активных PR |
 
-## Как читать и резать работу
+Scope разделён явно:
 
-| Документ | Роль |
-|----------|------|
-| Этот файл | Последовательность и параллельные треки |
-| `docs/todo/*.md` | Полный инвентарь; не копировать сюда |
-| `docs/features/*.md` | Критерии приёмки фичи |
+- `alpha scope` — `A1–A4` и перечисленный в `G1` функциональный slice `A5`;
+- `post-alpha committed scope` — остаток `A5`, `A6–A7`, затем отдельные milestones для mobile, verification, bots и stories по данным `G1`; эти фичи не deferred, но не получают WIP до entry review после alpha;
+- `deferred` — только federation и её производные, пока владелец отдельно не изменит scope.
 
-- Один PR — одна смысловая задача ([CONTRIBUTING.md](CONTRIBUTING.md)). Пункт может закрываться несколькими PR.
-- Независимые сервисы двигаются **параллельно**. Не ждать «весь пункт», если DoD соседнего трека не нужен.
-- Auth — **Java**. Realtime — **WS** (`s` / `resume`). Догрузка истории — **REST Messaging per `chat_id`**, не «догнать всё по WS».
-- Node в CI/фронте — **24**.
-- **Вы** = секреты, DNS, аккаунты провайдеров. Агент не выдумывает продуктовое поведение: дыра в спеке → человек ([product-roadmap.md](todo/product-roadmap.md)).
+## PLAN и TODO
 
----
+| Источник | Назначение |
+|---|---|
+| Этот файл | Глобальный порядок, границы этапов и release gates |
+| [TODO.md](TODO.md), `docs/todo/*.md` | Инвентарь локальных дефектов, рисков и доказательств |
+| [FEATURES.md](FEATURES.md) | Каталог возможностей; scope/status берётся отсюда, из этого PLAN и feature docs, а не из checkbox count |
+| `docs/features/*` | Каноническое продуктовое поведение и feature DoD |
+| [TESTING.md](TESTING.md) | Требуемые уровни проверки |
+
+Датированный аудит на указанном SHA нашёл 545 открытых и 152 оставленных выполненных пункта, хотя [TODO.md](TODO.md) требует выполненное удалять. Все 100 design-пунктов относятся к Penpot/design parity, причём 88 — атомарный missing-buttons audit; также найдены stale-записи и точные дубли. Это разовое доказательство проблемы, не второй живой счётчик: актуальный инвентарь остаётся только в `docs/todo/*`.
+
+Поэтому количество открытых пунктов не является процентом готовности. `Critical` и `High` в TODO означают локальную тяжесть дефекта или риск конкретной фичи, но не место фичи в глобальной очереди.
+
+Правила дальнейшего ведения:
+
+- feature-sized результат живёт здесь; RPC, миграция, кнопка, тест и отдельный дефект — в TODO;
+- пункт TODO должен называть наблюдаемый gap, источник контракта и проверяемый DoD;
+- дубли объединяются, stale-записи удаляются, выполненные записи удаляются после переноса нужного контекста в код или канонический документ;
+- мелкая задача берётся вне активного milestone только при риске security, privacy, data loss, падении обязательной проверки или если она разблокирует вертикальный поток;
+- чистка backlog выполняется небольшими пакетами параллельно и никогда не подменяет создание продукта.
 
 ## Честный статус
 
-`shipped` = ядро ходит в compose/Flutter live. `partial` = ядро есть, Critical/High хвост. `stub` = happy path фейковый. `baseline` = минимум a11y. Не путать live-тест «ручка живая» с полнотой спеки.
+Статусы относятся к текущему заявленному функциональному объёму, но не включают явно future/post-v1 возможности, federation и финальную Penpot-полировку:
 
-| Фича | Статус | Сервисы | Что реально / чего нет |
-|------|--------|---------|------------------------|
-| [auth-and-contacts](features/auth-and-contacts.md) | partial | Auth (Java), Gateway | Email/guest/sessions/reset **REST есть**. Flutter: sessions/revoke UI shipped (Batch 29b); delete-account shipped (Batch 28b); нет телефона/OTP, password-reset. Convert-guest ядро shipped. |
-| [friends](features/friends.md) | shipped | Social, User | Запросы/блок/DM-гейт живые. Нет REST list contacts/favorites, QR, phone-book UI. |
-| [text-chat](features/text-chat.md) | partial | Chat, Messaging, Realtime | DM/группы/треды/markdown/@mentions live. **Пины:** RPC есть, лимит **50** в коде vs **5** в спеке ([todo/backend.md](todo/backend.md)). **Без кода:** folders, Quick Access, list archive, send menu (silent/schedule), стикеры/GIF. Нет `DeleteChat`, view-count. |
-| [forward-messages](features/forward-messages.md) | shipped | Messaging | Attribution / copy-as-new / commentary live. |
-| [presence](features/presence.md) | partial | User, Realtime | REST presence + WS в общем чате. Нет idle 5 мин, game detect, live presence друзьям вне чата. |
-| [user-profile](features/user-profile.md) | partial | User, File | Аватар/био/switch live. GIF-аватар отвергается; `banner_url` не в proto. |
-| [voice-chat](features/voice-chat.md) | partial | Voice, Role | 1:1 / group / space join, commander/raise-hand live. `MoveToVoiceRoom` Unimplemented; `VOICE_SPEAK`/`MUTE` не на speak/mute. |
-| [file-storage](features/file-storage.md) | partial | File | Upload/R2/retention/SHA verify live. **Нет** SHA-256 dedup, ffmpeg GIF/video/PDF; «WebP» = JPEG. |
-| [spaces](features/spaces.md) | partial | Space, Role | Create/Join/Leave/tree/инвайты live. **Нет** `DeleteSpace` / `TransferOwnership` / `GetAuditLog` / каталога / шаблонов. Owner не может leave. |
-| [roles](features/roles.md) | shipped | Role | Кастомные роли, send-deny, `VOICE_JOIN` deny live. Часть TEXT_CHAT_* / verification roles — High. |
-| Групповые чаты | partial | Chat, Role | Create/kick/min-size/mute/archive live. **Read-state — DM-only** (`read_receipts` per chat); group/channel unread неполный. **Каналы** не в `ListChats` filter. |
-| Треды, shared media | shipped | Chat, Messaging | Live E2E есть. |
-| Markdown, @mentions | shipped | Messaging, Chat | Live E2E есть. |
-| Пины сообщений | shipped | Messaging, Chat | Pin/unpin/list live. Лимит **5**/chat (`MaxPinsPerChat`); 6th → `ResourceExhausted`. |
-| [notifications](features/notifications.md) | partial | Notification | Quiet hours в БД; FCM/APNs compose с mock. Прод: noop без секретов + **имена env не совпадают**. |
-| [matchmaking](features/matchmaking.md) | partial | Matchmaking | Поиск/space-queue/LFP live. `PartyStore` stub (`partySize=1`); П.2 постматч открыт; `mm_ban` не S2S в MM. |
-| [game-catalog](features/game-catalog.md) | shipped | Matchmaking | Seed + `SubmitGameRequest` + admin moderation + staff CreateGame UI live. Rich mode/role editor thin. |
-| [search](features/search.md) | shipped | Search | Global/in-chat live, ACL пересечение есть. `ReindexChat` индексирует E2E ciphertext; нет historical backfill. |
-| [screen-share](features/screen-share.md) | shipped | Voice | API/E2E есть. Desktop picker / system audio — Common. |
-| [reports](features/reports.md) | partial | Moderation, Auth | Create report + perm_ban live. Нет user appeals HTTP/UI; Admin не resolve/dismiss; shadow-ban не режет fanout. |
-| [privacy](features/privacy.md) | partial | User, Social | Настройки и DM-гейт live. Social/MM/Voice **fail-open**, если S2S client nil. |
-| [subscription](features/subscription.md) | **stub** | Subscription, Auth | Space Pro sync/member-cap live на seed/webhook. Checkout = `checkout.paddle.test`; CloudPayments Unimplemented; JWT tier=`free` без `AUTH_NATS_URL`. |
-| [multi-profile](features/multi-profile.md) | partial | User, Auth | Create/switch live. Нет delete-profile UI, freeze в switcher, `SetPrimaryProfile`. |
-| [verification](features/verification.md) | partial | User, Auth | Twitch mock-path; YouTube/DNS/cron неполные; OAuth пишет в User DB в обход `SetVerification`. |
-| [encryption](features/encryption.md) | shipped (opt-in) | Messaging, Chat, Auth | E2E DM live. UX fingerprint / key-change — Common (П.13). |
-| [bots](features/bots.md) | partial | Bot, Gateway | Slash live. Нет inbound `message.events` → webhook; Portal CSRF/manifest; `GetChatMessagesForBot` дырявый. |
-| [stories](features/stories.md) | partial | Story | Create/feed/LFP ядро live. Editor v2 / audience JSON / anonymous NATS leak — Common/Low. |
-| [deep-links](features/deep-links.md) | shipped | Gateway | Invite compose live. Prod AASA/assetlinks — placeholders (**Вы**). |
-| [onboarding](features/onboarding.md) | shipped | User, Flutter | Coach-marks / guest flow live. FAQ vs UI — Common. |
-| [accessibility](features/accessibility.md) | baseline | Flutter | Semantics + Axe analog в CI. Message-list keys, TalkBack — Common. |
-| [platforms](features/platforms.md) | partial | Flutter | Web+Windows CI. Mobile push/universal links, Shorebird — High/Low. |
-| [i18n](features/i18n.md) | shipped | Flutter | EN+RU baseline. Language sync — Common. |
-| [navigation](features/navigation.md) | partial | Flutter, Chat | Shell есть (nav + profiles). **IA в спеке (current):** folders rail, **Quick Access (≤15 `chat_id`/profile)**, archive via profile RC — **нет в коде**; Chat RPC + Flutter backlog ([todo/backend.md](todo/backend.md)). См. матрицу Telegram-parity выше. |
-| [updates](features/updates.md) | partial | Flutter, CI | Force-update/version checks частично. Shorebird — явный defer или PR. |
-| [observability](features/observability.md) | partial | ops | Compose метрики есть. Staging DoD (Loki/Grafana/P1) открыт. |
-| [analytics](features/analytics.md) | partial | Analytics, ClickHouse | Ingest + staff dashboards (product/engagement/revenue/health/moderation/retention) in Admin. Search/voice dashboards need backend types. |
-| [federation](features/federation.md) | **deferred** | Federation (scaffold) | Вне плана. |
+- `shipped` — текущий основной scope реализован и проверяется;
+- `core-live` — главный пользовательский поток работает, но остаётся существенное расширение или hardening;
+- `partial` — один или несколько центральных потоков ещё не замкнуты;
+- `stub` — центральный путь фейковый или его нельзя безопасно показать;
+- `deferred` — не входит в текущую очередь.
 
-Группы/каналы в спейсе завязаны на Space+Chat+Role: создание дерева shipped, **каталог публичных спейсов — нет**.
+| Фича | Статус | Состояние и крупнейший остаток |
+|---|---|---|
+| [Текстовый чат](features/text-chat.md) | core-live | DM, группы, каналы, треды, folders, Quick Access, archive и pins ≤5 работают; plain-text list preview есть, но delivery/media labels, group/channel read-модель, send options и rich composer неполны. |
+| [Пересылка сообщений](features/forward-messages.md) | core-live | Attribution, copy-as-new и commentary работают; нужна одинаковая проверка всех rich payload и будущих типов контента. |
+| [Войс-чат](features/voice-chat.md) | partial | Join/call signaling и часть organizer UI есть; actual-media E2E, command/mute/speak enforcement, движение между комнатами, roster/lifecycle и active-session UX не замкнуты. |
+| [Шара экрана](features/screen-share.md) | partial | API/signaling core есть; actual-media E2E, source picker, system audio и staging RTC acceptance не закрыты. |
+| [Сторис](features/stories.md) | partial | Create/feed/LFP ядро есть; нужны audience/privacy, editor и media lifecycle. |
+| [Регистрация и контакты](features/auth-and-contacts.md) | partial | Email, guest, sessions и reset UI работают; delete пока soft/deactivation path, а phone/OTP, erasure/tombstone и часть hardening не закрыты. |
+| [Верификация](features/verification.md) | partial | Backend sync и базовые provider paths в основном есть; UI, remaining provider/cron paths и live-provider acceptance неполны. |
+| [Профиль пользователя](features/user-profile.md) | core-live | Avatar, bio, status, switch и banner field работают; нужны animated media, premium gating и полная persistence. |
+| [Множественные профили](features/multi-profile.md) | core-live | Create/switch/delete/frozen/downgrade picker работают; нужны entitlement lifecycle, primary-profile flow и regression coverage. |
+| [Друзья и контакты](features/friends.md) | core-live | Requests, block, DM gate, contacts/favorites и QR paste работают; нужен phone-book hash pipeline и остаточный fail-closed hardening. |
+| [Статусы присутствия](features/presence.md) | core-live | REST, WS в общем чате и auto-idle работают; нужны friend fan-out, game detection и privacy edges. |
+| [Приватность](features/privacy.md) | partial | Основные visibility и block gates работают, но viewer-aware presence/last-seen fan-out и `show_read_receipts` ещё не обеспечены; discovery и inactive-profile границы тоже неполны. |
+| [Спейсы](features/spaces.md) | core-live | Create/join/tree/invites и backend delete/transfer работают; нужны полная Gateway/Flutter lifecycle-вертикаль, audit, catalog/templates и entry requirements. |
+| [Ролевая модель](features/roles.md) | core-live | Custom roles и основные send/join deny работают; voice organizer и остальные text/voice permissions требуют единой проверки на всех входах. |
+| [Матчмейкинг](features/matchmaking.md) | partial | Solo/space queue и catalog работают; нет voice-roster party, полного post-match цикла и cleanup. |
+| [Каталог игр](features/game-catalog.md) | core-live | Seed, game selection и staff moderation работают; нужна полная current-вертикаль modes/roles и recent/popular UX. |
+| [Репорты / модерация](features/reports.md) | partial | Report/appeal endpoints и admin resolution core есть; sanction enforcement/delivery across transports и полный appeal loop не доказаны end-to-end. |
+| [Шифрование](features/encryption.md) | core-live | Opt-in E2E DM и key backup работают; нужны понятный fingerprint/key-change и recovery UX. |
+| [Онбординг](features/onboarding.md) | partial | Screens/flags и часть coach marks есть; async progression может зависнуть, а обязательный переход к Space discovery не замкнут до готовности каталога. |
+| [Accessibility](features/accessibility.md) | core-live | Semantics, keyboard/focus и text-scale baseline есть; нужны physical screen-reader acceptance и high-contrast polish. |
+| [Локализация](features/i18n.md) | partial | EN/RU UI baseline есть; locale persistence/profile sync и локализация backend messages неполны. |
+| [Боты](features/bots.md) | partial | Registry/install, slash, webhook/polling и runtime core есть; нужны chat-type/scopes/lifecycle hardening и полный live bot flow. |
+| [Навигация](features/navigation.md) | core-live | Folders, Quick Access, archive, requests и desktop shell работают; нужны mobile chrome и остаточные row/state gaps. |
+| [Поиск](features/search.md) | partial | Global/in-chat query, ACL и исключение encrypted payload работают; exact message jump, historical backfill, свежие projections, rich-content mapping и admin gate неполны. |
+| [Deep links / Sharing](features/deep-links.md) | partial | Invite parsing/compose работают; остальные Space/chat/message/profile targets, prod well-known/signing и physical mobile acceptance не закрыты end-to-end. |
+| [Платформы](features/platforms.md) | partial | Web и Windows проверяются в CI; Windows daily-driver и mobile release path ещё не завершены. |
+| [Обновления клиентов](features/updates.md) | partial | Version/force-update paths есть частично; desktop delivery и реализация заданного mobile OTA path открыты. |
+| [Уведомления](features/notifications.md) | partial | In-app, quiet hours и message-request core есть; sanction delivery пока push-oriented, а contracts/presentation, реальные push, типы и grouping неполны. |
+| [Подписка](features/subscription.md) | stub | Внутренние entitlement/grace/events частично есть, но реальный checkout и provider lifecycle нельзя считать готовыми. |
+| [Хранение файлов](features/file-storage.md) | partial | Backend upload, R2, retention и SHA verification работают; основной non-E2E download/expired URL UX, dedup, async processing, transcode и previews неполны. |
+| [Наблюдаемость](features/observability.md) | partial | Код и provisioning baseline есть; live staging, полная telemetry chain, P1 routing и restore evidence не приняты. |
+| [Продуктовая аналитика](features/analytics.md) | partial | ClickHouse ingest и staff dashboards существуют; pod/restart durability, dedup, consumer health и семантика неполны, но analytics не gate бесплатного alpha. |
+| [Федерация](features/federation.md) | deferred | Спека и scaffold сохраняются, реализация не планируется без отдельного решения владельца. |
 
----
+## Технический дизайн сейчас
 
-## Топ-блокеры (не параллелятся «через них»)
+Отсутствующий, устаревший или не утверждённый Penpot frame не блокирует функциональную реализацию. До отдельного visual-approval этапа агент строит технический UI по следующему порядку источников:
 
-| Блокер | Кого стопорит | Куда |
-|--------|---------------|------|
-| Секреты staging (FCM/APNs, TOTP, Resend, ClickHouse, Paddle, `AUTH_NATS_URL`) | Реальный push, почта, JWT tier, биллинг | [ci.md](todo/ci.md) Critical (**Вы**) |
-| Имена env FCM/APNs ≠ код | Push останется noop даже с секретами | [backend.md](todo/backend.md) Notification + [ci.md](todo/ci.md) |
-| Checkout stub `checkout.paddle.test` | Premium GIF/banner, 3-й профиль, File quota, П.12/П.16 | [backend.md](todo/backend.md) Subscription |
-| JWT `subscription_tier=free` без NATS | User/Chat доверяют JWT, не Subscription S2S | Auth Java + ops `AUTH_NATS_URL` |
-| Нет `TransferOwnership` / `DeleteSpace` | Owner не может leave; спейс нельзя закрыть | Space Critical |
-| Alertmanager → null receiver | P1 алерты никто не видит | [ci.md](todo/ci.md) (**Вы**) |
-| Стикеры/GIF в чате (0 кода) | Паки + composer | Current scope ([text-chat.md](features/text-chat.md)); пункт **2** ниже |
+1. `docs/features/*` и сервисные контракты;
+2. [screen-controls.md](design/screen-controls.md);
+3. [brand.md](design/brand.md), tokens, a11y и i18n;
+4. существующие `VoiceTheme`, `src/frontend/lib/ui/core/*` и уже shipped UI;
+5. утверждённый Penpot — как дополнительная ссылка, если он не конфликтует с каноном выше.
 
-CloudPayments — отдельный трек после Paddle (СНГ), не блокер staging rollout, если Paddle живой.
+Технический дизайн — не заглушка. Он обязан закрывать рабочий путь, loading/empty/error/offline/permission/entitlement states, responsive layout, keyboard/focus, semantics, i18n и тесты. Нельзя оставлять fake action, demo data, raw colors, обход backend-контракта или кнопку без честного состояния.
 
----
+Агент сам выбирает обратимые локальные детали: token spacing, существующий component/icon, dialog против sheet по текущим паттернам, нейтральный текст. Документированные data/API, permissions, privacy/security и billing contracts агент реализует автономно. Остановка и решение владельца нужны только для неописанной или противоречивой продуктовой семантики, а также для breaking/необратимого решения о data model, destructive recovery или крупной IA.
 
-## Порядок
+Финальные Penpot registry/GAP/export/pixel-parity и общий визуальный pass находятся в `H5`; до него Flutter может считаться функционально готовым, но не visual-approved.
 
-Каждый пункт: цель → параллельные треки → зависимости → Definition of Done. Инвентарь — в `docs/todo/`, здесь только **нарезка**.
+## H — задачи владельца
 
-### 0 — Staging не врёт
+Эта ветка короткая и не является очередью для агентов. Владелец получает только минимальный пакет: рекомендуемый default, альтернативы, точный вопрос или нужное значение и уже подготовленную проверку.
 
-**Цель:** staging/prod rollout без fail-open privacy, без InMemory tier, без noop push при заполненных секретах, с живыми алертами.
+Каждый decision handoff содержит один ID, один точный вопрос, рекомендуемый default, не более двух альтернатив, затронутый slice/gate и цену задержки. Владелец не разбирает raw TODO и не получает пакет из несвязанных решений.
 
-| Трек | PR-шаги (параллельно) | Зависимости |
-|------|----------------------|-------------|
-| **Ops (Вы)** | `voice-app-secrets`; `AUTH_NATS_URL`; `AUTH_TOTP_ENCRYPTION_KEY` (не `DEFAULT_DEV_KEY`); `RESEND_API_KEY`; FCM/APNs; Paddle live **или** не отдавать test URL наружу; `CLICKHOUSE_DSN` + `ANALYTICS_ID_HASH_KEY`; Alertmanager канал; DNS `app`/`admin`/`livekit` | человек |
-| **Backend Notification** | **done (#62)** — FCM/APNs env names + `services.yaml` mounts; доставка — после **Вы** (secret values) | — |
-| **Backend Auth (Java)** | **done (#62)** TOTP fail-closed без `DEFAULT_DEV_KEY`; NATS tier store при URL | `AUTH_NATS_URL` (**Вы**) |
-| **Backend Social / Voice / Space** | **done** fail-closed (Social friend-invite Blocks/ProfileAccounts; Space join block; Voice SpaceMembers); compose MM addrs | k8s addrs уже есть |
-| **Backend Analytics** | HMAC вместо plaintext `account_id`; ack NATS **после** durable CH | ключ из **Вы** |
-| **Backend Search** | **done (#62)** — `ReindexChat` пропускает `IsE2E` | — |
-| **CI** | **done (#60)** — `scripts/staging/**` / `scripts/prod/**` в `global`; matrix tests lock; `ci-gate` требует full tier-1 при GLOBAL | — |
-| **Observability** | Loki все поды; `smoke-request-id.sh`; Grafana Overview; Prometheus scrape; тестовый P1 в канал | Alertmanager (**Вы**) |
-| **Admin** | OAuth `assign-to-me` из session JWT, не только `VITE_STAFF_TOKEN` | нет |
+### H1 — Продуктовые решения без канона
 
-**DoD:** секреты в кластере; JWT tier не всегда `free`; Notification читает те же имена, что в Secret; privacy/join не обходятся nil-клиентом; P1 алерт не в null; deploy-script PR не проходит `ci-gate` вхолостую (**#60**).
+**Состояние:** по требованию; не блокирует документированные части `A`.
 
-**1** не ждать полного DoD **0**: Space/Admin/Flutter Auth не зависят от Paddle.
+**Действие:** выбрать вариант только для реально конфликтующего или отсутствующего поведения. Ближайшие известные решения: phone/SMS provider и anti-abuse flow, advanced Space entry requirements, спорные permissions/limits, recovery/destructive semantics и крупная mobile IA.
 
----
+**Разблокирует:** конкретную узкую ветку реализации; остальные части milestone продолжаются.
 
-### 1 — Critical продукт
+**Готово / доказательство:** решение записано в соответствующем `docs/features/*` или ADR, после чего у агента есть проверяемый DoD; [product-roadmap.md](todo/product-roadmap.md) может только ссылаться на этот канон.
 
-**Цель:** владелец спейса не залочен; модерация закрывает жалобы; апелляции доходят до пользователя; checkout больше не test-URL.
+### H2 — Внешние аккаунты, legal и credentials
 
-#### Параллельные треки (стартуют сразу)
+**Состояние:** не нужны для local/compose и fake-provider DoD; нужны только перед соответствующим release gate.
 
-| Трек | PR-нарезка | Не ждать |
-|------|------------|----------|
-| **A. Space lifecycle** | 1) `TransferOwnership` (+ Gateway + Flutter leave-as-owner). 2) `DeleteSpace`. 3) `GetAuditLog` (чтение уже пишущегося `audit_log`). `entry_requirement`: пока ≠ `none` — явный контракт, не молчаливый hard-fail без UX; captcha/queue — отдельные PR | Paddle, push |
-| **B. Moderation loop** | `SubmitAppeal` пишет `account_id` (не profile); Gateway `POST /appeals`; shadow-ban → Messaging/Realtime `IsShadowBanned` на send/fanout; Notification consumer `moderation.events` | Space A |
-| **C. Admin queue** | resolve / dismiss (не только `reviewing`); санкции на non-user target не через `target_id` как account | REST статусов из B, если их ещё нет |
-| **D. Social** | REST contacts/favorites (gRPC уже есть); `SendFriendInvitation` чтит block | **done** friend-invite fail-closed (Blocks/ProfileAccounts/account); REST contacts still open |
-| **E. Billing Paddle** | `CreateCheckoutSession` / space checkout → реальный Paddle API; не шипить `checkout.paddle.test`; webhook renew/cancel после первого live payment | секреты Paddle (0 **Вы**). Не ждать CloudPayments |
-| **F. Flutter Auth UI** | телефон+OTP; password-reset экраны (REST есть) | sessions/revoke + delete-account shipped |
-| **G. Flutter appeals** | экран апелляции профиля | Gateway из B |
-| **H. Auth→User verification** | OAuth Twitch → `SetVerification` + `user.verified`, не прямой JDBC в `user_db` | нет |
-| **I. DeleteAccount хвост** | tombstone в DM / hide из `ListChats` (RPC уже есть) | F UI может идти параллельно |
+**Действие:** создать или подтвердить merchant/provider accounts и передать через штатный secret store значения для billing, Resend, Cloudflare R2, encrypted off-cluster backup destination, optional GIF-search provider, Firebase/FCM, APNs, OAuth providers и реального Alertmanager destination. Staging и production получают разные account/key/bucket/endpoint sets; внутри каждого environment отдельно задаются User/File buckets так, как требует deploy manifest. Для R2 и backup target утвердить lifecycle/retention/versioning/immutability policy из подготовленного checklist. Для Windows предоставить code-signing identity/certificate; для mobile — Apple/Google developer distribution и signing assets. Для платежей также подтвердить legal/tax/offer setup, product/price IDs и отдельные sandbox/live webhook secrets и URLs.
 
-**Зависимости внутри 1:** A1 (`Transfer`) **перед** owner-leave. E **перед** любой работой «Premium включает GIF/banner/лимиты» (**2**). G после B.
+**Разблокирует:** production attachments, подписанный Windows build, live email, push, verification, alerts, mobile distribution и paid beta.
 
-**PR-порядок (scope не меняется):** пункт **1** — Critical lifecycle, модерация, billing. Folders, Quick Access (≤15), archive list, стикеры/GIF, pin limit **5** — **current scope** ([FEATURES.md](FEATURES.md)); первые треки пункта **2** (можно параллельно после DoD **0**, не ждать полного **1**). Каталог спейсов, шаблоны, CloudPayments, ffmpeg, party-from-voice, Developer Portal polish — тоже пункт **2**.
+**Готово / доказательство:** secret names и IDs из подготовленного agent checklist существуют в каждом целевом environment; validator отклоняет shared/mismatched staging/production resources и перепутанные User/File buckets, значения не попали в Git или лог.
 
-**DoD:** owner transfer + delete live; Admin закрывает репорт; user appeal REST+UI; checkout URL боевой (или скрыт за флагом, не test); shadow-ban не доходит до аудитории; compose/Flutter live на эти пути зелёные.
+### H3 — Домены, доступы и wiring внешнего окружения
 
----
+**Состояние:** отложено до готового release candidate.
 
-### 2 — High: entitlements, чат, файлы, войс, ММ
+**Действие:** предоставить доступ к staging и `production/voice-prod`, утвердить production DNS/TLS/firewall, persistent storage class/PVC policy для stateful workloads и независимый off-cluster backup target. По [DEPLOYMENT.md](DEPLOYMENT.md) staging используется только для integration/regression/demo: сначала на нём собирается evidence, затем внешний invite alpha выпускается в production. Отдельное долговечное alpha-окружение допустимо только после описания его durability/privacy/backup/lifecycle policy в DEPLOYMENT. Агент заранее готовит manifests, validators, dry-run и точные команды.
 
-**Цель:** оплата даёт обещанное; чат без Unimplemented на delete/folders; файлы по спеке; войс-комнаты можно менять; ММ пати из войса.
+**Разблокирует:** внешний Web/Windows alpha, prod deep links и staging evidence.
 
-| Трек | PR-шаги | Зависимости |
-|------|---------|-------------|
-| **Backend Subscription** | Cancel/Resume **в Paddle**; grace sweeper 7d; `subscription.events` (не только `analytics.*`); `CheckLimit` в Chat/User/File; `GetLimits` ближе к спеке | 1 E + JWT NATS (0) |
-| **Backend User** | GIF-аватар + banner expose; Premium custom status gate; `SetPrimaryProfile` | JWT tier ≠ всегда free |
-| **Backend File** | SHA-256 dedup + `file_references`; ffmpeg GIF→MP4 / video 720p / PDF thumb; `CheckQuota` чтит premium | entitlements; не ждать стикеры |
-| **Backend Chat** | `DeleteChat`; folders RPC+миграция (`folders`, `folder_chats`); Quick Access RPC+миграция (`quick_access_chats`); `ListArchivedChats` / archive filter; `ListChats` каналы; view-count (Messaging) | folders + Quick Access UI — Flutter следом |
-| **Stickers/GIF** | системные паки + upload своих; send/receive first-class; composer picker; GIF как first-class (не только file attach). Lives TC-MSG-09 после контрактов | [text-chat.md](features/text-chat.md); File ffmpeg для GIF; ADR 005 |
-| **Backend Voice** | `MoveToVoiceRoom`; enforce `VOICE_SPEAK` / `VOICE_MUTE_OTHERS`; roster NATS join/leave | Role client уже wired |
-| **Backend Matchmaking** | Party snapshot из voice roster; leave/join сбрасывает очередь; `ApplySanction(mm_ban)` → `BanFromMM`; П.2 `RateTeammates` / history UI | Voice roster events |
-| **Backend Space catalog** | `SearchPublicSpaces` или честный Search hydrator (не member-only `GetSpace`); templates — отдельные PR | не блокер entitlements |
-| **Backend Bot** | inbound `message.events` → webhook/poll; `GetChatMessagesForBot`; ChatRef type | Portal (ниже) независим |
-| **Flutter** | folders rail; Quick Access (≤15); archive screen (profile RC entry); delete chat; quiet hours API (не SharedPreferences SoT); multi-profile delete + frozen switcher; downgrade picker **после** lifecycle events | Subscription downgrade event |
-| **Developer Portal** | OAuth `state`; JWT expiry; REST export manifest / `GetCommands` | нет |
-| **Deep links (Вы + Gateway)** | iOS Team ID, assetlinks SHA; prod AASA на `voice.gg` | **Вы** |
-| **CI High** | `staging-stack-lock` ждёт image jobs; migrate Job re-run; compose-e2e на Go-only master — решение, не молчаливый skip | нет |
+**Готово / доказательство:** evidence разделено по gate. Для `G1` проверены production DNS и end-to-end TLS для API/Web/LiveKit/JWKS: Cloudflare Full (strict) либо явно утверждённый эквивалент, origin certificate/HTTPS и origin allowlist; stateful workloads не используют ephemeral storage, off-cluster encrypted backup достижим по минимальным credentials; staging и production используют раздельные проверенные R2/backup credentials и endpoints; также проверены immutable Windows artifact/update feed и минимальные доступы. AASA/assetlinks, mobile domains и signing относятся только к `G3`.
 
-**DoD:** платный аккаунт проходит GIF/banner/лимит профилей в live; `DeleteChat` + folders + Quick Access не Unimplemented; pin limit = **5**; File dedup/ffmpeg в compose; `MoveToVoiceRoom` live; MM пати >1 из войса; Portal не логинится без CSRF state.
+### H4 — Физическая приёмка и go/no-go
 
----
+**Состояние:** только на release candidate.
 
-### 3 — Common: UX, аналитика, сторис, a11y
+**Действие:** агент или QA выполняет все доступные автоматические и физические проверки и приносит готовый evidence report. Владелец предоставляет только недоступное агенту устройство/account при необходимости, назначает on-call/rollback owner и принимает go/no-go. Проверяются только включаемые платформы и возможности.
 
-**Цель:** дыры, которые не ломают Tier 0 (DM+WS), но видны пользователю.
+| Gate | Минимальная versioned physical matrix |
+|---|---|
+| `G1` | non-empty supported Windows OS/arch и Web browser/version matrix; clean-machine trusted Windows install и old→new update из signed production feed с fallback; cold start; two-client real mic+speaker call; network loss/reconnect; PTT/tray/hotkeys; принятие cohort cap и предложенных alpha RPO/RTO |
+| `G2` | live purchase/cancel scheduling и entitlement visibility; expiry/grace/downgrade остаются sandbox/test-clock проверкой |
+| `G3` | TalkBack/VoiceOver, background voice, App/Universal Links и real push на целевых устройствах |
 
-| Трек | Примеры PR (параллельно) |
-|------|--------------------------|
-| **Flutter Chat UX** | локальные черновики; OG preview; idle → `UpdatePresence`; in-chat search next/prev; E2E fingerprint banner; bones placeholder |
-| **Flutter a11y** | ↑/↓/R/E в списке сообщений; text-scale smoke на settings/MM/stories; focus return; TalkBack (**Вы**) |
-| **Social / contacts** | phone-book UI + REST list (если не закрыто в 1D); Favorites |
-| **Stories** | anonymous NATS не светит viewer; `media_file_id` ownership; GET reactions REST; audience JSON |
-| **Analytics / Admin** | retention SQL; date range на Gateway; дашборды engagement/revenue/health; ingest DoD `message.sent` → CH <60s |
-| **Notification** | grouping 1 push/chat; presence-aware MM/voice push; `reply` type |
-| **Realtime** | bootstrap subscribe groups/spaces; friend presence WS; `REALTIME_INSTANCE_ID` в k8s. ~~`delivery_ack` Redis fanout~~ **shipped** (`redis_fanout.go`, compose `TestComposeDeliveryReceipts_live`) |
-| **Design** | Penpot · v2 missing buttons (composer/header) → Flutter parity после approve |
-| **Product (Вы)** | П.5/П.6 верификация ранга и Twitch/YouTube/DNS; П.13 E2E multi-device |
+**Разблокирует:** соответствующий внешний gate; mobile и paid не блокируют бесплатный Web/Windows alpha.
 
-**DoD:** quiet hours синхронны между устройствами; analytics не врёт retention; stories anonymous не в NATS; a11y чеклист desktop закрыт без TalkBack (mobile — **Вы**).
+**Готово / доказательство:** checklist хранит SHA, OS/device, network profile и pass/fail каждого пункта; владелец получил готовый отчёт и записал решение о выпуске или конкретном дефекте.
 
----
+### H5 — Финальный визуальный дизайн в Penpot
 
-### 4 — Low / post-MVP
+**Состояние:** сознательно отложено; не блокирует `A1–A7`.
 
-Не смешивать с пунктами **0**–**2** (staging-critical path).
+**Действие:** когда продуктовые потоки устраивают владельца, одним пакетом утвердить visual direction, tokens и reference screens для auth/onboarding, chat, Space/voice, matchmaking и settings/profile. Не более двух review rounds на пакет; детальная registry/GAP/export/parity-проверка остаётся агентской.
 
-- Windows: tray, global PTT, game detect, overlay (П.17–18); Shorebird или явный defer.
-- Stories editor v2 (stickers/doodle/trim).
-- Resilience: circuit breaker в `pkg/grpcclient`, NATS DLQ (сейчас док врёт).
-- Compose Postgres/Redis → целевые 18/8.
-- Helm/GitOps — [ADR 004](adr/004-helm-gitops-deferred.md), не планировать.
-- Distributed tracing — [ADR 003](adr/003-distributed-tracing-deferred.md).
-- Federation — **не делать**.
+**Разблокирует:** статус `visual-approved` и финальную brand polish, но не functional alpha.
 
----
+**Готово / доказательство:** владелец утвердил visual direction, tokens и ключевые Penpot screens/states; список утверждённых snapshot зафиксирован для последующего agent parity pass.
 
-## Параллелизация (сводка)
+## A — автономная работа агентов
 
-```
-0:  Ops(Вы) ‖ Analytics HMAC ‖ Admin OAuth assign  (Notification env + Search E2E + CI filters — done #60/#62)
-1:  Space A ‖ Moderation B ‖ Admin C ‖ Social D ‖ Paddle E ‖ Flutter Auth F ‖ User verification H
-         G (appeals UI) ← B
-         Premium GIF/limits ← E + AUTH_NATS_URL
-2:  File ‖ Chat delete/folders ‖ Voice move ‖ MM party ‖ Portal ‖ User GIF  (GIF ← billing)
-3:  почти всё независимо по сервисам
-```
+Milestone — законченный пользовательский результат. Его можно дробить на небольшие PR и параллельные сервисные треки, но нельзя объявлять готовым по числу закрытых TODO. `Dependencies` ниже никогда не требуют незавершённого `H`: live activation вынесена в release gates.
 
-Независимые Go-сервисы (Space vs Notification vs Search vs Analytics) — разные PR в одни и те же дни. Auth Java не отдавать Go-агенту.
+### A1 — Пользователь может ежедневно переписываться
 
----
+**Результат:** два новых пользователя без ручной настройки проходят onboarding, находят друг друга и стабильно общаются в Web.
 
-## Локальный стенд
+**Объём:** email/guest/session/reset, friends/request/block, DM/group/channel/thread, realtime reconnect, history catch-up, unread/read state, archive/folders/Quick Access, delete path и базовые attachments. Auth перестаёт ходить напрямую в `user_db` для profile/verification/phone flows и использует User contract. Исправляются видимые profile/chat switching regressions.
 
-| Команда | Назначение |
-|---------|------------|
-| `make compose-up` | Infra: Postgres, Redis, NATS JetStream |
-| `make compose-app-up` | Полный app stack + Flutter web ([README.md](../README.md)) |
-| `make compose-migrate-all` | golang-migrate для Go-owned БД |
-| `make compose-migrate-e2e` | DDL для E2E encryption (messaging + chat) |
-| `make compose-e2e-smoke` | Smoke E2E по фичам ([e2e-features.yml](../.github/ci/e2e-features.yml)) |
+**Dependencies:** существующие Auth, Chat, Messaging, Realtime, Social, User и File contracts; внешние providers не нужны.
 
-**Staging:** k8s — [`deploy/staging/`](../deploy/staging/), `scripts/staging/render-and-apply.sh` ([DEPLOYMENT.md](DEPLOYMENT.md)).
+**DoD:** новый пользователь проходит путь без CLI и hidden token; Auth не требует credentials к `user_db`, межсервисные profile operations идут через contract и fail closed; DM, group и channel сохраняют per-member unread→read через reconnect и list refresh; attachment переживает service restart и скачивается с тем же hash; missed history приходит через cursor per `chat_id`; block/privacy deny не fail-open; empty/error/offline состояния не маскируют потерю данных.
 
----
+**Verification:** unit/integration по затронутым сервисам, Flutter widget tests и live multi-account compose E2E для login → contact/request → DM/group/channel → per-member unread/read → attachment upload → restart/reconnect → history/list refresh → download/hash → block/delete.
 
-## Размещение кода
+### A2 — Invite-only Space с рабочим голосом
 
-| Сервис | Каталог | БД |
-|--------|---------|-----|
-| Auth | `src/backend/auth/` | `auth_db` (Flyway) |
-| API Gateway | `src/backend/gateway/` | — |
-| Realtime | `src/backend/realtime/` | Redis (WS; не Messaging catch-up) |
-| Messaging | `src/backend/messaging/` | `messaging_db` |
-| Chat | `src/backend/chat/` | `chat_db` |
-| User | `src/backend/user/` | `user_db` |
-| Social | `src/backend/social/` | `social_db` |
-| Space, Role, Voice, File, Search, Matchmaking, Notification, Bot, Story, Subscription, Moderation | `src/backend/<service>/` | [DATA_STORES.md](DATA_STORES.md) |
-| Analytics | `src/backend/analytics/` | ClickHouse; буфер **in-memory** (не Redis) |
-| Flutter client | `src/frontend/` | — |
-| Admin | `src/admin/` | moderation queue + product analytics (не «зарезервировано») |
-| Developer Portal | `src/developer-portal/` | боты / OAuth staff apps |
-| Federation | `src/backend/federation/` | scaffold; **не в работе** |
+**Результат:** группа создаёт закрытый Space, настраивает дерево и роли, входит в голосовые комнаты и безопасно управляет жизненным циклом Space.
 
-Целевая карта — [MICROSERVICES.md](MICROSERVICES.md).
+**Объём:** Gateway/Flutter vertical slice для join/leave/transfer, text/voice tree, invites, role checks на всех входах, roster/session events, движение между комнатами, join/speak/mute permissions и понятные RTC states. Audit log получает доступный owner/admin path. Публичный delete flow не входит в DoD, пока `H1` не зафиксирует recovery window, судьбу сообщений/files, confirmation и event compensation; это узкий последующий slice, не blocker остального `A2`.
 
----
+**Dependencies:** `A1` identity/chat foundation; local LiveKit и test media достаточно.
+
+**DoD:** owner не заперт в Space; invite/member/role transitions согласованы; запрещённое действие не проходит через альтернативный transport; два test-клиента реально передают и получают media track, а не только signaling; пользователь видит connecting/reconnecting/permission/device errors; session cleanup детерминирован. Audit read path сохраняет lifecycle entries и доступен только owner/admin по каноническому ACL.
+
+**Verification:** Space/Role/Voice integration tests, Flutter widget tests и compose E2E create → invite → join → text → test-media exchange → move → role deny → audit read/persistence → transfer/owner leave.
+
+### A3 — Полный цикл поиска команды
+
+**Результат:** Voice демонстрирует своё отличие: solo или текущая voice-party находит команду, общается во временном text+voice контексте и завершает матч с историей.
+
+**Объём:** snapshot party из voice roster, queue reset при изменении состава, search/match events, accept/decline/timeouts, temporary squad chat/voice, cleanup, post-match rating/history и `mm_ban`. Catalog остаётся источником games/modes/roles.
+
+**Dependencies:** `A2` roster/session events; текущий game catalog.
+
+**DoD:** состав party нельзя подменить client payload; одновременные join/leave/cancel идемпотентны; участники найденной команды обмениваются сообщением и test-media во временном text+voice контексте; отказ/timeout/завершение освобождают ресурсы, а после cleanup старый контекст отклоняет доступ; история и санкции видны в следующем поиске.
+
+**Verification:** deterministic service tests, race/idempotency cases и multi-client compose E2E solo + party → match → temporary chat send/receive + test-media exchange → result → history → cleanup → authorization deny/ban.
+
+### A4 — Репозиторий готов к безопасному внешнему alpha
+
+**Результат:** репозиторий содержит staging-compatible harness, с которым оператор после выдачи доступов может развернуть exact SHA, доказать безопасность базовых потоков, восстановить данные и получить сигнал о P1.
+
+**Объём:** fail-closed privacy/S2S, report → resolve/dismiss → sanction → appeal, account deletion, alpha admission guard, versioned release-profile/capability/client-compatibility, operational-tier и durable-store manifests, secret/config validation, repeatable migrations, backup/restore automation, Loki/request-id chain, Prometheus/Grafana, actionable alerts, degraded-mode checks и минимальные runbooks для deploy/canary/rollback, restore, Redis/NATS triage и P1 ack/escalation. Full per-service runbooks и chaos program остаются вне alpha gate. Product Analytics не входит в launch observability gate.
+
+**Dependencies:** `A1–A3` для полного product smoke; инфраструктурный код проверяется раньше на disposable/local environment.
+
+**DoD:** автономный harness закрывает пять доказуемых блоков:
+
+- Capability/admission: exact-SHA manifest и config validator запрещают dev defaults/test checkout; operator/admin mint path аудируется; email и guest проходят invite mint → atomic single-use redeem с expiry/revoke; replay, concurrent redeem и cap race отклоняются. Из каждой disabled-записи генерируется negative UI/REST/WS suite. Federation отсутствует в release images/rollout/readiness.
+- Client compatibility: каждая заявленная OS/arch/browser tuple получает smoke; risk-based sampling применяется только к расширенному regression и записан в matrix. Previous/current Web+Windows проверяются с previous/current backend, version/forced-update/update-URL flow; backend rollback совместим с уже обновлённым клиентом.
+- Deploy/recovery: на disposable environment повторяются deploy/migrate, expand-contract, canary с ненулевым synthetic sample и измеримый rollback trigger. Backup из source восстанавливается только в isolated validation namespace/cluster с synthetic tenant/object и никогда не пишет обратно в source. Manifest покрывает authoritative DB/object/event stores из [DATA_STORES.md](DATA_STORES.md), проверяет cross-domain invariants и rebuild исключённых cache/projections. Drill измеряет RPO/RTO относительно agent-recommended provisional thresholds; владелец принимает их только в `G1/H4`.
+- Operations: Role и Matchmaking имеют Tier 1 SLO/dashboard/alerts/degraded mode; все Tier 0/1 scrape targets и datasources healthy; login/DM даёт request-id chain Gateway → Messaging → NATS → Realtime; P1 проверяется через alert sink.
+- Product smoke: mail sink/fake provider доказывает register/verification/reset и expired/bounce; затем идут A1 DM/group/channel unread/read + attachment restart/hash/delete/restore, report → resolve/dismiss → sanction enforcement + WS/UI delivery → appeal без ручного `sanction_id`, delete account, A2 Space/voice и A3 temporary chat/test-media/history/cleanup/authorization deny.
+
+**Verification:** CI/full на exact SHA, config/render tests, migration rerun, disposable backup→restore, canary observation/rollback-trigger drill, compose/staging-compatible smoke и review [OPERATIONS.md](OPERATIONS.md) / [DEPLOYMENT.md](DEPLOYMENT.md).
+
+### A5 — Web/Windows становится daily driver
+
+**Результат:** в test-signed alpha-like Web/Windows окружении пользователь устанавливает или открывает Voice, восстанавливает session и выполняет ежедневные chat/Space/profile flows; публично доверенный zero-warning путь завершается только в `G1`.
+
+**Объём:** versioned supported Windows OS/arch и Web browser/version matrix; Windows packaging/startup/update и native Realtime path с agent-generated test signature, immutable production-compatible artifact manifest, sandbox update feed и disposable trust setup; system tray, voice while hidden и global PTT/hotkeys; responsive technical shell; folders/Quick Access/archive/requests/search; profile switch/manage; presence/privacy; notification center и read state; безопасный Space catalog/templates. Включается только то, что имеет честные loading/error/permission states. Нерешённые варианты `R3-03-A09`, `R2-13-A02` и `R2-07-U01` из [product-roadmap.md](todo/product-roadmap.md) не входят в DoD до `H1`; субъективная visual polish относится к `H5`.
+
+**Dependencies:** `A1–A4`; live push не требуется для Web/Windows free alpha.
+
+**DoD:** test-signed install/update/cold start/reconnect сохраняют session в disposable trust setup; public trusted signature и clean-machine zero-warning install относятся к `G1`. Closing window to tray не обрывает voice; global PTT/hotkeys работают и не срабатывают в запрещённом состоянии. Keyboard позволяет открыть chat, folder/archive, search, profile и Space; notification center и read state согласованы; invisible/privacy gates не обходятся; catalog не раскрывает private Space/profile; unsupported mobile-only или premium действия скрыты либо объяснены.
+
+**Verification:** Flutter CI, widget tests стабильных technical contracts, Windows install/update/start → tray/background voice → global PTT/hotkey smoke и Web/Windows E2E session restore → navigation/search → notification/read → presence/privacy → profile switch → Space catalog/join.
+
+### A6 — Rich communication и media pipeline
+
+**Результат:** общение поддерживает ожидаемые современные форматы без ручной обработки и не создаёт неконтролируемое хранение.
+
+**Объём:** silent/scheduled/when-online delivery, stickers/GIF, voice notes, rich forward validation, file dedup/references, async processing, safe previews, image/video/GIF/PDF transformations, retention/quota и screen-share source picker/system audio там, где платформа позволяет. Third-party GIF search использует provider-neutral adapter и deterministic local fixture catalog; system/user-upload GIF не зависит от live provider.
+
+**Dependencies:** `A1` messaging/file foundation и `A2` media session foundation; premium quota тестируется seeded entitlement.
+
+**DoD:** каждый тип контента имеет единый validation/ACL path; retry идемпотентен; processing status виден клиенту; orphan cleanup и retention доказаны; forward не обходит attachment rules; unsupported capture явно недоступен. Без выбранного provider/key live GIF search выключен через capability manifest, а adapter полностью проходит fake contract suite.
+
+**Verification:** contract/property/integration tests, deterministic GIF-provider fake, processor failure/retry cases, storage lifecycle tests и Flutter E2E composer → send/forward → preview/download. Live provider activation — отдельный release-capability check после точечного `H1` выбора и `H2` key.
+
+### A7 — Provider-ready monetization
+
+**Результат:** бесплатный продукт не зависит от платежей, а engineering для paid beta полностью готов на fake/sandbox; live-включение отдельно требует `G1`, merchant/legal setup из `H2` и acceptance/go-no-go из `H4`.
+
+**Объём:** provider-independent subscription state machine, versioned paid-offer/capability manifest, checkout adapters, webhook signature/idempotency, cancel/resume/renew/failure, grace/downgrade/freeze/unfreeze, `subscription.events` и Auth JWT tier. При входе milestone в WIP агент сам материализует и version-freeze полную canonical benefit matrix из [subscription.md](features/subscription.md), по умолчанию включая все записанные benefits: User/Flutter cosmetics, banner/status/username/themes/icons; Messaging — до трёх реакций; Chat/Space — лимиты; File — размер/priority; Voice — stream quality и room limit; multi-profile freeze/unfreeze; Space Pro member/channel limits, banner и custom emoji; Notification — grace reminders. Exclusive stickers/emoji, animated media и custom emoji опираются на `A6`. `H1` нужен только при реальном конфликте канона или предложении исключить benefit; такой вопрос не останавливает остальные slices. Исключённый benefit сначала получает явное scope-решение и обновление канона, а не просто исчезает из UI. UI использует технический дизайн и не показывает test URL как продукт.
+
+**Dependencies:** `A1–A6` и стабильные limits/contracts из активных features; fake provider и seeded entitlements достаточны для автономного milestone.
+
+**DoD:** entitlement меняется только из доверенного lifecycle; replay/out-of-order webhook безопасен; downgrade не теряет данные и предлагает выбор; все consumers сходятся после redelivery; каждый benefit в paid-offer manifest имеет server/client E2E и совпадает с checkout/plan management; disabled billing оставляет полностью рабочий free product.
+
+**Verification:** provider contract suite с fake/sandbox, webhook replay/order tests, NATS redelivery E2E, benefit-matrix coverage, grace/downgrade scenarios и Flutter checkout/management tests без реальной карты.
+
+После `A7` новый цикл планирования выбирается по данным alpha: mobile release, расширенная verification, bots ecosystem, полный stories editor и прочие current-scope расширения. Они остаются в feature docs/TODO, но не конкурируют с активными milestone по числу checkbox.
+
+## Release gates
+
+| Gate | Назначение | Требования |
+|---|---|---|
+| `G0 — product proof` | Локальная демонстрация ценности без внешних аккаунтов | `A1–A3`; зелёный multi-client compose E2E |
+| `G1 — free invite alpha` | Ограниченный Web/Windows запуск без billing и mobile push | `A1–A4`; из `A5` — production signed artifact/feed, supported client matrix, old→new update/fallback, tray/background voice/PTT, stable session/reconnect, responsive shell, keyboard critical path и notification/read consistency; из `H2` — Resend, R2 и encrypted off-cluster backup credentials/policies, Windows signing и реальный alert destination; `H3` и соответствующая часть `H4`; staging qualification пройден, затем на `production/voice-prod` для того же exact SHA доказаны persistent storage, invite admission/cap и negative signup, capability/ops/client-compatibility manifests с Role+Matchmaking Tier 1, negative disabled-path и degraded-mode smoke, email register/verification/reset delivery, attachment upload→restart→download/hash→delete/restore, expand-contract deploy/canary с ненулевым synthetic sample и SLO observation window, server rollback after client update, target-generated full-profile backup восстановлен в isolated validation target без записи в production с принятыми alpha RPO/RTO, healthy Tier 0/1 scrape+dashboards, request-id chain, P1 receipt и multi-client smoke A1–A3 из `A4` |
+| `G2 — paid beta` | Включение Premium/Space Pro | `A7`; на том же exact G2 RC SHA повторены G1 regressions/free path с billing on и off, target canary/rollback; ops-manifest повышает Subscription и критические entitlement consumers до Tier 1 и доказывает dashboards/alerts/P1-P2 receipt для provider/signature/payment errors, webhook lag и NATS redelivery/convergence; durable-store manifest/restore повторён с `subscription_db` и provider reconciliation source, сохраняя active/cancel-scheduled/grace entitlements и идемпотентный webhook replay без двойного доступа/списания; offer manifest согласован с [subscription.md](features/subscription.md), каждый продаваемый benefit имеет E2E; provider/market matrix разрешает checkout только для отдельно включённых провайдеров, и для каждого live path доказан `purchase → signed webhook → entitlement → cancel scheduled` с entitlement до period end; sandbox/test clock доказывает period-end и failed-payment grace → downgrade/freeze; sandbox/live используют разные webhook secrets/URLs, а negative cross-environment event test доказывает отказ; merchant/legal часть `H2` и go/no-go из `H4` |
+| `G3 — mobile beta` | Android/iOS distribution, push и universal links | gate не активен до следующего planning cycle: после `G1` сначала создаётся отдельный autonomous mobile milestone с DoD; затем нужны signing/push из `H2`, prod links из `H3` и device acceptance из `H4` |
+| `G4 — visual-approved` | Финальный единый визуальный уровень | `H5`; versioned matrix активных platforms/screens и loading/empty/error/permission states; agent parity pass; exact-SHA visual report, где каждый diff исправлен или имеет явный owner waiver; cross-platform QA |
+
+`G1` не ждёт `G2–G4`. Phone auth, paid tier, mobile push, public discovery и незавершённые rich types должны быть выключены или честно ограничены, а не изображать готовность.
+
+## Как агенты исполняют план
+
+- Одновременно активны максимум два продуктовых milestone; внутри них сервисные и client-треки идут параллельно в изолированных worktree по правилам [CONTRIBUTING.md](CONTRIBUTING.md).
+- Первый приоритет — закрыть пользовательский вертикальный путь и его failure states. Массовая чистка Low/Common не получает fleet раньше milestone DoD.
+- Один PR содержит одну проверяемую смысловую задачу. Большой milestone закрывается серией небольших PR, каждый с тестами своего слоя.
+- Новый Critical/High vertical behavior получает feature/compose E2E в том же PR. Для неизбежной staged contract chain каждый промежуточный PR несёт contract test и выключенную capability; финальный enabling PR добавляет live E2E до включения флага.
+- Смешанный blocker оформляется как handoff package: что уже готово, рекомендуемый default, точное действие владельца, безопасная проверка и какие независимые треки продолжаются.
+- Если спецификация достаточна, агент не ждёт Penpot или дополнительного подтверждения. Если поведения нет в каноне, агент не изобретает его и записывает узкий вопрос в `H1`.
+- Статус строки в матрице обновляется в том же PR, где существенно изменился пользовательский поток. TODO чистится после merge, а не хранит журнал закрытых batch/PR.
+
+## Неподвижные архитектурные границы
+
+- Auth остаётся Java/Spring в `src/backend/auth/`; перенос в Go требует отдельного решения.
+- Realtime в `src/backend/realtime/` владеет WebSocket event flow и протоколом `s` / `resume`.
+- Пропущенная история догружается через Messaging REST/API за Gateway с cursor отдельно для каждого `chat_id`; глобального WS catch-up нет.
+- Сервис владеет своей БД; межсервисные записи идут через контракт или событие, а не прямой JDBC/SQL в чужую схему. Существующие Auth → `user_db` JDBC paths — debt для `A1`, а не исключение из правила.
+- Node.js для frontend/CI — 24.
+- Federation и её производные остаются deferred; scaffold может компилироваться в full-repo CI, но `G0–G4` profiles исключают Federation deployment, DB/migrations, readiness и alerts.
 
 ## Верификация
 
-| Проверка | Команда |
-|----------|---------|
-| Backend | `make build-all` |
-| Flutter | `make flutter-ci` |
-| Compose smoke E2E | `make compose-e2e-smoke` (`VOICE_RUN_LIVE_COMPOSE=true`) |
-| Полный compose E2E | `make compose-e2e-live` |
-| Контракты | `buf lint`, `buf format -d --exit-code` |
+Минимальная проверка определяется затронутым слоем и [TESTING.md](TESTING.md). Для milestone используются:
 
-Каталог E2E — [TESTING.md](TESTING.md#e2e-по-фичам), [`.github/ci/e2e-features.yml`](../.github/ci/e2e-features.yml).
+| Слой | Базовая проверка |
+|---|---|
+| Proto/contracts | `buf lint`, `buf format -d --exit-code` и breaking check по правилам CI |
+| Go/backend | tests изменённых модулей; перед release candidate — `make build-all` и полный service matrix |
+| Auth Java | Maven tests и Flyway validation в `src/backend/auth/` |
+| Flutter | `make flutter-ci`; Web/Windows и нужные widget/integration paths |
+| Интеграция | feature E2E из [`.github/ci/e2e-features.yml`](../.github/ci/e2e-features.yml) |
+| Compose smoke | `make compose-e2e-smoke` |
+| Полный compose | `make compose-e2e-live` |
+| Release | exact-SHA deploy/render, migrations, canary observation, authenticated smoke, backup→restore, observability и rollback-trigger evidence |
 
-Новые Critical/High пути из 1–2 — **live-тест в том же PR**, не «потом в nightly».
-
----
-
-## Миграции
-
-Файлы в `src/backend/migrations/` именуются по домену фичи (`NNNNNN_name.up.sql`), без номеров из этого плана. Staging migrate Jobs сейчас **не** переезжают сами после первого success — см. [ci.md](todo/ci.md) High (2 CI).
+Live provider/device проверки добавляются только в соответствующий gate. Их отсутствие не превращает успешно проверенный fake/sandbox milestone в «заблокированную работу», но запрещает объявлять live gate пройденным.
