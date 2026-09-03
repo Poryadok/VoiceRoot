@@ -9,6 +9,10 @@ function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status });
 }
 
+function hasPath(url: unknown, pathname: string) {
+  return typeof url === 'string' && new URL(url).pathname === pathname;
+}
+
 function setupLoggedIn(fetchMock: ReturnType<typeof vi.fn>) {
   sessionStorage.setItem('voice_access_token', 'test-jwt');
   vi.stubEnv('VITE_OAUTH_DISABLED', 'true');
@@ -80,7 +84,7 @@ describe('App bot registration and selection', () => {
 
     const postCall = fetchMock.mock.calls.find(
       ([url, init]) =>
-        url === 'http://127.0.0.1:18080/api/v1/bots' &&
+        hasPath(url, '/api/v1/bots') &&
         (init as RequestInit)?.method === 'POST',
     );
     expect(postCall).toBeTruthy();
