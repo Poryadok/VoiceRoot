@@ -23,10 +23,11 @@ Default admission для внешнего alpha — server-signed однораз
 
 | Состояние | Milestone | Правило |
 |---|---|---|
-| Active | `A1` | Основной поток до полного vertical DoD |
-| Active | `A2` | Параллельно на уже существующем chat/identity foundation; не ждёт закрытия всех хвостов `A1` |
-| Next | `A3` | Входит в WIP после готовности roster/session seam и только когда `A1` или `A2` освободил один из двух Active slots |
-| Queued | `A4–A7` | Не получают третий WIP-слот; независимая подготовка допустима только внутри активных PR |
+| Active | `A1` | Единственный активный продуктовый milestone. Fleet дробит его на независимые service/client/contract/verification задачи и исполняет их максимально параллельно в отдельных worktree. |
+| Next | `A2` | Входит в WIP только после интеграции и полного vertical DoD `A1`. |
+| Queued | `A3–A7` | Не получают code WIP до закрытия предыдущего milestone; разрешены лишь чтение канона и подготовка, непосредственно разблокирующая Active. |
+
+`H`-задачи не занимают слот `A`: владелец и агенты могут параллельно готовить access, decisions и activation evidence, но это не открывает второй продуктовый milestone.
 
 Scope разделён явно:
 
@@ -188,13 +189,13 @@ Milestone — законченный пользовательский резул
 
 **Результат:** два новых пользователя без ручной настройки проходят onboarding, находят друг друга и стабильно общаются в Web.
 
-**Объём:** email/guest/session/reset, friends/request/block, DM/group/channel/thread, realtime reconnect, history catch-up, unread/read state, archive/folders/Quick Access, delete path и базовые attachments. Auth перестаёт ходить напрямую в `user_db` для profile/verification/phone flows и использует User contract. Исправляются видимые profile/chat switching regressions.
+**Объём:** email/guest/session/reset, friends/request/block, DM/group/channel/thread, realtime reconnect, global inbox catch-up, history catch-up per selected chat, unread/read state, archive/folders/Quick Access, delete path и базовые attachments. Auth перестаёт ходить напрямую в `user_db` для profile/verification/phone flows и использует User contract. Исправляются видимые profile/chat switching regressions.
 
 **Dependencies:** существующие Auth, Chat, Messaging, Realtime, Social, User и File contracts; внешние providers не нужны.
 
-**DoD:** новый пользователь проходит путь без CLI и hidden token; Auth не требует credentials к `user_db`, межсервисные profile operations идут через contract и fail closed; DM, group и channel сохраняют per-member unread→read через reconnect и list refresh; attachment переживает service restart и скачивается с тем же hash; missed history приходит через cursor per `chat_id`; block/privacy deny не fail-open; empty/error/offline состояния не маскируют потерю данных.
+**DoD:** новый пользователь проходит путь без CLI и hidden token; Auth не требует credentials к `user_db`, межсервисные profile operations идут через contract и fail closed; после reconnect клиент завершает global paginated inbox snapshot и не стирает cache при неуспешной странице, DM/group/channel сохраняют per-member unread→read; attachment переживает service restart и скачивается с тем же hash; полная история приходит через cursor только per selected `chat_id`; block/privacy deny не fail-open; empty/error/offline состояния не маскируют потерю данных.
 
-**Verification:** unit/integration по затронутым сервисам, Flutter widget tests и live multi-account compose E2E для login → contact/request → DM/group/channel → per-member unread/read → attachment upload → restart/reconnect → history/list refresh → download/hash → block/delete.
+**Verification:** unit/integration по затронутым сервисам, Flutter widget tests и live multi-account compose E2E для login → contact/request → DM/group/channel → per-member unread/read → attachment upload → restart/reconnect → global inbox snapshot (`main` / `requests` / `archive`) → history for selected chat → download/hash → block/delete.
 
 ### A2 — Invite-only Space с рабочим голосом
 
@@ -290,9 +291,11 @@ Milestone — законченный пользовательский резул
 
 ## Как агенты исполняют план
 
-- Одновременно активны максимум два продуктовых milestone; внутри них сервисные и client-треки идут параллельно в изолированных worktree по правилам [CONTRIBUTING.md](CONTRIBUTING.md).
+- Одновременно активен ровно один `A` milestone. Это один общий outcome и один integration queue, а не один последовательный агент: captain заранее дробит milestone на независимые `T-*` задачи по контрактам, сервисам, Flutter и verification.
+- Все готовые независимые задачи активного milestone запускаются максимально параллельно в изолированных treehouse worktree: один crew — один worktree и непересекающиеся write scopes. Профили/контракты, backend-сервисы, Flutter и verify идут параллельно, когда их входы уже определены; зависимые slices ждут contract seam, а не создают второй milestone.
+- Fleet state ведётся локально в `tmp/fleet/`: у каждой `T-*` есть outcome, scope, канон, worktree, owner profile, verification и integration status. Результаты интегрируются через git/PR, worktree возвращается после merge или отмены.
 - Первый приоритет — закрыть пользовательский вертикальный путь и его failure states. Массовая чистка Low/Common не получает fleet раньше milestone DoD.
-- Один PR содержит одну проверяемую смысловую задачу. Большой milestone закрывается серией небольших PR, каждый с тестами своего слоя.
+- Один PR содержит одну проверяемую смысловую задачу. Большой milestone закрывается серией небольших PR, каждый с тестами своего слоя; следующий `A` milestone не входит в code WIP до интеграции всей серии и зелёного vertical DoD текущего.
 - Новый Critical/High vertical behavior получает feature/compose E2E в том же PR. Для неизбежной staged contract chain каждый промежуточный PR несёт contract test и выключенную capability; финальный enabling PR добавляет live E2E до включения флага.
 - Смешанный blocker оформляется как handoff package: что уже готово, рекомендуемый default, точное действие владельца, безопасная проверка и какие независимые треки продолжаются.
 - Если спецификация достаточна, агент не ждёт Penpot или дополнительного подтверждения. Если поведения нет в каноне, агент не изобретает его и записывает узкий вопрос в `H1`.
@@ -302,7 +305,7 @@ Milestone — законченный пользовательский резул
 
 - Auth остаётся Java/Spring в `src/backend/auth/`; перенос в Go требует отдельного решения.
 - Realtime в `src/backend/realtime/` владеет WebSocket event flow и протоколом `s` / `resume`.
-- Пропущенная история догружается через Messaging REST/API за Gateway с cursor отдельно для каждого `chat_id`; глобального WS catch-up нет.
+- После reconnect global inbox state сверяется через Chat REST `ListChats` и durable Messaging metadata; история сообщений догружается через Messaging REST/API с cursor отдельно для выбранного `chat_id`. Глобального WS replay/event-log catch-up нет.
 - Сервис владеет своей БД; межсервисные записи идут через контракт или событие, а не прямой JDBC/SQL в чужую схему. Существующие Auth → `user_db` JDBC paths — debt для `A1`, а не исключение из правила.
 - Node.js для frontend/CI — 24.
 - Federation и её производные остаются deferred; scaffold может компилироваться в full-repo CI, но `G0–G4` profiles исключают Federation deployment, DB/migrations, readiness и alerts.

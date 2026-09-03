@@ -71,12 +71,15 @@
 **1. Поток событий (Realtime, WebSocket)**  
 Каждое событие в шлюзе несёт монотонный номер **`s`** (sequence) в рамках соединения. После reconnect клиент отправляет **`resume`** с последним известным `last_s` (см. протокол в [microservices/realtime-service.md](microservices/realtime-service.md)). Нумерация привязана к сессии; при новом TCP/WebSocket-подключении сервер выдаёт новый поток `s` с `hello` — клиент не полагается на «глобальный» журнал событий в Realtime.
 
-**2. История сообщений (Messaging, REST через Gateway)**  
-Пропущенные **сообщения** догружаются **с клиента** через публичный API Messaging (`GetMessages` с курсором **per `chat_id`**: `last_message_id` / `after_message_id`). Offline queue на сервере не нужна. Если курсор не найден (сообщение удалено) — запрос последних 50 сообщений чата без курсора. Детали контракта — [microservices/messaging-service.md](microservices/messaging-service.md).
+**2. Глобальная сверка inbox (Chat, REST через Gateway)**
+После reconnect клиент получает авторитетный paginated snapshot своего inbox через `ListChats`: `main`, `requests` и `archive`; `Chat` обогащает строки durable metadata из Messaging. Первую страницу можно показать сразу, остальные страницы догружаются в фоне до конца snapshot. Ошибка страницы оставляет локальный cache и требует retry: отсутствие ответа нельзя трактовать как пустой inbox, удаление строки или `unread_count = 0`. Это **глобальный catch-up состояния списка**, а не журнал WebSocket-событий и не выгрузка истории всех чатов.
+
+**3. История сообщений (Messaging, REST через Gateway)**
+Пропущенные **сообщения** догружаются **с клиента** через публичный API Messaging (`GetMessages` с курсором **per `chat_id`**: `last_message_id` / `after_message_id`) только для открытого чата, явного перехода из notification или другого выбранного пользователем контекста. Offline queue на сервере не нужна. Если курсор не найден (сообщение удалено) — запрос последних 50 сообщений чата без курсора. Детали контракта — [microservices/messaging-service.md](microservices/messaging-service.md).
 
 **Эфемерные события** (typing, часть presence, `delivery_ack` / `message_delivered`): catch-up **не гарантируется** — после reconnect состояние «с нуля» или из следующих live-событий.
 
-**3. Durable read / delivery (Messaging, REST — не WebSocket)**  
+**4. Durable read / delivery (Messaging, REST — не WebSocket)**
 Тики ✓/✓✎ в списке чатов и read cursor — **только** из Messaging (`MarkRead` REST/gRPC → `read_receipts`; `GetChatListMetadata` → `last_message_delivery_state`). После reconnect клиент **обязан** перезапросить `ListChats` / metadata — WS `mark_read` и `message_read` **не** заменяют REST persist. См. [messaging-service.md](microservices/messaging-service.md) § MarkRead, § Durable delivery derivation.
 
 **Shipped scope:** `MarkRead` / durable read cursor validation — **DM today**; group/channel read parity — backlog. List delivery ticks (`last_message_delivery_state`) — spec complete, **not yet in proto/code** (same P0 chain as durable delivery above).
@@ -88,7 +91,7 @@
 | История сообщений | `GetMessages` per `chat_id` | `message_create` / `message_update` / `message_delete` |
 | Read cursor | `Messaging.MarkRead` → `read_receipts` | `mark_read` op + `message_read` (same-profile tabs) |
 | Delivery ticks (list) | `GetChatListMetadata.last_message_delivery_state` | `delivery_ack` → `message_delivered` (live bubble only) |
-| Catch-up после reconnect | **Обязателен** REST для сообщений + metadata | `resume` + `last_s` — только live-поток новой сессии, не журнал |
+| Catch-up после reconnect | `ListChats` global inbox snapshot + `GetMessages` per selected `chat_id` + metadata | `resume` + `last_s` — только live-поток новой сессии, не журнал |
 | In-app `notification` | Notification routing policy (presence, mute, quiet hours, `send_silent`) | WS `notification` op — fan-out only; **не** источник durable read/unread |
 
 **Client rule (read sync):** открытие чата / scroll → **REST** `MarkRead` (durable); WS `mark_read` — опционально для faster same-profile multi-tab sync. Badge на других устройствах — после REST + metadata refresh, не от WS alone.
@@ -252,5 +255,4 @@
 - error model (status code + `error_code`)
 - pagination/курсоры (если применимо)
 - idempotency/повтор запроса (если применимо)
-
 
