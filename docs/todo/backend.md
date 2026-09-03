@@ -747,7 +747,7 @@
 ### Realtime
 
 
-- [ ] **[Realtime] Coverage artifacts committed** — `$prof`, `notif_cov`, `notif_cov.out`, `coverage_profile`, `coverage_profile.out`, `coverage` under `src/backend/realtime/` are tracked in git (local profiling noise).
+- [x] **[Realtime] Coverage artifacts committed** — удалены ровно шесть tracked-артефактов (`$prof`, `coverage`, `coverage_profile`, `coverage_profile.out`, `notif_cov`, `notif_cov.out`) из `src/backend/realtime/`; `.gitignore` теперь предотвращает их повторное появление.
 - [ ] **[Realtime] Unknown inbound ops silently dropped** — `ws.go` `default` branch ignores unrecognized client ops (no `error` frame).
 - [ ] **[Realtime] Server does not emit WebSocket ping frames** — liveness is client `heartbeat` + 90s read deadline (`ws.go`); doc mentions “ping-pong” but implementation is app-level heartbeat only.
 - [ ] **[Realtime] `CheckOrigin` always true** — `ws.go` delegates origin policy to Gateway (documented inline); defense-in-depth relies entirely on edge.
