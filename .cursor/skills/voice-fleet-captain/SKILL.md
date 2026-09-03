@@ -2,14 +2,14 @@
 name: voice-fleet-captain
 description: >-
   Voice fleet captain playbook for Cursor Multitask: parent agent delegates to
-  crew subagents, maintains .agent/fleet backlog, treehouse worktrees for
+  crew subagents, maintains ignored tmp/fleet backlog, treehouse worktrees for
   parallel code, ExecPlans, verification. Use when orchestrating multiple
   parallel tasks, spawning crew agents, or running the Voice lite fleet workflow.
 ---
 
 # Voice fleet captain
 
-Parent agent в **Multitask Mode** = **капитан**. Crew = Cursor subagents из `.cursor/agents/voice-*.md`. Дисковый state = `.agent/fleet/`.
+Parent agent в **Multitask Mode** = **капитан**. Crew = Cursor subagents из `.cursor/agents/voice-*.md`. Дисковый live-state = `tmp/fleet/`; tracked `.agent/fleet/` хранит только README и шаблоны.
 
 **Не** клонировать firstmate. **Не** смешивать treehouse и Cursor `/worktree` на одну задачу.
 
@@ -20,8 +20,9 @@ Parent agent в **Multitask Mode** = **капитан**. Crew = Cursor subagents
 1. **Один вход** — капитан общается с пользователем; crew не «чатят» с капитаном напрямую (результаты приходят в parent чат).
 2. **Делегируй** — работа на 2+ сервисов, отдельный PR, долгий TDD, design + code → **Task** на crew, не монополизируй parent turn.
 3. **Docs-first** — поведение из `docs/`; продукт не выдумывать (`voice-project.mdc`, `.agent/AGENTS.md`).
-4. **Диск > память** — backlog и `tasks/*.meta` обновлять при dispatch, progress, done.
-5. **Git** — `voice-git-workflow`; **worktree** — `treehouse` skill.
+4. **Диск > память** — `tmp/fleet/backlog.md` и `tmp/fleet/tasks/*.meta` обновлять при dispatch, progress, done.
+5. **Live-state не в git** — не создавать и не обновлять tracked backlog со статусами PR/веток/CI; такие снапшоты быстро устаревают.
+6. **Git** — `voice-git-workflow`; **worktree** — `treehouse` skill.
 
 ---
 
@@ -63,9 +64,9 @@ Parent agent в **Multitask Mode** = **капитан**. Crew = Cursor subagents
 
 - Понять outcome для капитана (пользователя).
 - Выбрать crew и scope (путь в monorepo).
-- Назначить `id` — `T-001`, `T-002`, … (следующий свободный в backlog).
-- Создать `tasks/T-<id>.meta` из `tasks/TEMPLATE.meta`.
-- Добавить строку в `backlog.md` (queued или in flight).
+- Назначить `id` — `T-001`, `T-002`, … (следующий свободный в `tmp/fleet/backlog.md`).
+- Создать `tmp/fleet/tasks/T-<id>.meta` из `.agent/fleet/tasks/TEMPLATE.meta`.
+- Добавить строку в `tmp/fleet/backlog.md` (queued или in flight).
 - Для нетривиальной работы — ExecPlan в `.agent/execplans/` (см. `.agent/PLANS.md`); путь в `execplan=` meta.
 
 ### 2. Worktree (если параллельный **код**)
@@ -159,7 +160,7 @@ prompt = brief above
 | Workspace main, shell в treehouse | Один path |
 | `cp` файлов в main checkout | commit → PR → merge |
 | Забытый leased treehouse | `treehouse status` → return |
-| Backlog только в чате | `backlog.md` + meta |
+| Backlog только в чате | `tmp/fleet/backlog.md` + meta |
 | treehouse + Cursor `/worktree` на одну задачу | Один механизм |
 
 ---

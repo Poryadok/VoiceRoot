@@ -11,7 +11,7 @@ alwaysApply: true
 
 - 2+ сервисов, отдельный PR, design+code, долгий TDD → **Task** на `.cursor/agents/voice-*.md`, не держать всё в parent.
 - Полный playbook: `.cursor/skills/voice-fleet-captain/SKILL.md`.
-- Backlog: `.agent/fleet/backlog.md`; мета задач: `.agent/fleet/tasks/T-*.meta`.
+- Backlog: `tmp/fleet/backlog.md`; мета задач: `tmp/fleet/tasks/T-*.meta`. Это live-state агента, не коммитить.
 
 ## Treehouse
 
