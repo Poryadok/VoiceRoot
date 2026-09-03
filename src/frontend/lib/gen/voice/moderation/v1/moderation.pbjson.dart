@@ -410,9 +410,30 @@ const Appeal$json = {
       '6': '.google.protobuf.Timestamp',
       '10': 'createdAt'
     },
+    {
+      '1': 'reviewed_at',
+      '3': 8,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '9': 1,
+      '10': 'reviewedAt',
+      '17': true
+    },
+    {
+      '1': 'review_notes',
+      '3': 9,
+      '4': 1,
+      '5': 9,
+      '9': 2,
+      '10': 'reviewNotes',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_reviewed_by_profile_id'},
+    {'1': '_reviewed_at'},
+    {'1': '_review_notes'},
   ],
 };
 
@@ -422,8 +443,10 @@ final $typed_data.Uint8List appealDescriptor = $convert.base64Decode(
     'lkEjAKFGFwcGVsbGFudF9hY2NvdW50X2lkGAMgASgJUhJhcHBlbGxhbnRBY2NvdW50SWQSFgoG'
     'cmVhc29uGAQgASgJUgZyZWFzb24SFgoGc3RhdHVzGAUgASgJUgZzdGF0dXMSOAoWcmV2aWV3ZW'
     'RfYnlfcHJvZmlsZV9pZBgGIAEoCUgAUhNyZXZpZXdlZEJ5UHJvZmlsZUlkiAEBEjkKCmNyZWF0'
-    'ZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wUgljcmVhdGVkQXRCGQoXX3'
-    'Jldmlld2VkX2J5X3Byb2ZpbGVfaWQ=');
+    'ZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wUgljcmVhdGVkQXQSQAoLcm'
+    'V2aWV3ZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wSAFSCnJldmlld2Vk'
+    'QXSIAQESJgoMcmV2aWV3X25vdGVzGAkgASgJSAJSC3Jldmlld05vdGVziAEBQhkKF19yZXZpZX'
+    'dlZF9ieV9wcm9maWxlX2lkQg4KDF9yZXZpZXdlZF9hdEIPCg1fcmV2aWV3X25vdGVz');
 
 @$core.Deprecated('Use submitAppealRequestDescriptor instead')
 const SubmitAppealRequest$json = {

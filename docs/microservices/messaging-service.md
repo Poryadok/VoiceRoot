@@ -21,7 +21,7 @@ CRUD сообщений для всех типов чатов (DM, тексто�
 - Stickers / GIF — `content_type=STICKER|GIF` + File `file_id`; composer **😊 panel only** (не 📎 attach) — § Stickers and GIF
 - Send options: `send_silent`, `scheduled_at`, `send_when_online` — контракт ниже; **not yet in proto/code** — см. [todo/backend.md](../todo/backend.md)
 - Лимит 4000 символов
-- Догрузка истории после offline / reconnect: **per `chat_id`** через `GetMessages` с курсором (`after_message_id` / `last_message_id`); правила fallback — [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md). Не путать с полем **`s`** в WebSocket Gateway (Realtime) — это нумерация live-событий, не курсор БД
+- Догрузка истории после offline / reconnect: сначала глобальная сверка inbox через Chat `ListChats`, затем **per `chat_id`** через `GetMessages` с курсором (`after_message_id` / `last_message_id`) для выбранного чата; правила fallback — [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md). Не путать с полем **`s`** в WebSocket Gateway (Realtime) — это нумерация live-событий, не курсор БД
 
 ### Идемпотентность отправки
 
@@ -251,11 +251,11 @@ read_receipts (extended)
 | **WS-only** | Client op `mark_read` on Realtime | ✗ | `message_read` to chat subscribers + same-profile tabs via Redis |
 | **Client rule** | Open chat / scroll | **Must** call REST `MarkRead` (or gRPC) for durable read cursor; WS `mark_read` optional for faster multi-tab sync |
 
-List UI **must** refresh metadata after reconnect — not infer ticks from WS alone.
+List UI **must** complete the global `ListChats` inbox snapshot after reconnect — not infer ticks from WS alone.
 
 **Shipped scope:** `MarkRead` / `GetReadState` handlers validate **DM** chat type today; group/channel read parity — backlog. WS `mark_read` never writes `read_receipts`.
 
-После reconnect клиент **перезапрашивает** `ListChats` / `GetChatListMetadata`, а не восстанавливает ticks из WS ([ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) § Reconnect).
+После reconnect клиент завершает paginated `ListChats` snapshot для `main` / `requests` / `archive` с Messaging metadata, а не восстанавливает ticks из WS ([ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) § Reconnect). Полные сообщения остаются `GetMessages` per selected `chat_id`.
 
 ### Message path matrix (REST / NATS / WS)
 
@@ -266,7 +266,8 @@ List UI **must** refresh metadata after reconnect — not infer ticks from WS al
 | Send | `SendMessage` | `message.sent` | — | `message_create` | `messages` | — |
 | Edit | `EditMessage` | `message.edited` | — | `message_update` | `messages` | — |
 | Delete | `DeleteMessage` | `message.deleted` | — | `message_delete` | soft-delete | — |
-| History / reconnect gap | `GetMessages` (per `chat_id`) | — | — | — | `messages` | — |
+| Inbox reconnect catch-up | Chat `ListChats` snapshot + S2S `GetChatListMetadata` | — | — | — | Chat membership + Messaging metadata | — |
+| History / reconnect gap | `GetMessages` (per selected `chat_id`) | — | — | — | `messages` | — |
 | Mark read (persist) | `MarkRead` | `message.read` | — | `message_read` (from NATS) | `read_receipts` | — |
 | Mark read (multi-tab) | — (after REST) | — | `mark_read` | `message_read` | — | fan-out |
 | Delivery ack | — | `message.delivery_ack` (spec) | `delivery_ack` | `message_delivered` | `last_delivered_message_id` (spec) | fan-out + Redis |

@@ -277,15 +277,42 @@ func TestModerationPlatform_SubmitAppeal_ReviewAppeal(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, "pending", submitted.GetAppeal().GetStatus())
+	require.Nil(t, submitted.GetAppeal().GetReviewedAt())
+	require.Nil(t, submitted.GetAppeal().ReviewNotes)
+	require.Empty(t, submitted.GetAppeal().GetReviewNotes())
 
 	reviewed, err := client.ReviewAppeal(modCtx, &moderationv1.ReviewAppealRequest{
 		AppealId:      submitted.GetAppeal().GetId(),
 		Status:        "approved",
-		ModeratorNote: strPtr("reversed on review"),
+		ModeratorNote: strPtr("  reversed on review  "),
 	})
 	require.NoError(t, err)
 	require.Equal(t, "approved", reviewed.GetAppeal().GetStatus())
 	require.Equal(t, modProfile.String(), reviewed.GetAppeal().GetReviewedByProfileId())
+	require.NotNil(t, reviewed.GetAppeal().GetReviewedAt())
+	require.False(t, reviewed.GetAppeal().GetReviewedAt().AsTime().IsZero())
+	require.NotNil(t, reviewed.GetAppeal().ReviewNotes)
+	require.Equal(t, "reversed on review", reviewed.GetAppeal().GetReviewNotes())
+
+	fetched, err := client.GetAppeal(modCtx, &moderationv1.GetAppealRequest{
+		AppealId: submitted.GetAppeal().GetId(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, reviewed.GetAppeal().GetReviewedAt().AsTime(), fetched.GetAppeal().GetReviewedAt().AsTime())
+	require.Equal(t, reviewed.GetAppeal().GetReviewNotes(), fetched.GetAppeal().GetReviewNotes())
+
+	listed, err := client.ListAppeals(modCtx, &moderationv1.ListAppealsRequest{})
+	require.NoError(t, err)
+	var listedAppeal *moderationv1.Appeal
+	for _, appeal := range listed.GetAppealList().GetAppeals() {
+		if appeal.GetId() == submitted.GetAppeal().GetId() {
+			listedAppeal = appeal
+			break
+		}
+	}
+	require.NotNil(t, listedAppeal)
+	require.Equal(t, reviewed.GetAppeal().GetReviewedAt().AsTime(), listedAppeal.GetReviewedAt().AsTime())
+	require.Equal(t, reviewed.GetAppeal().GetReviewNotes(), listedAppeal.GetReviewNotes())
 }
 
 func TestModerationPlatform_ApplySanction_writesAuditLog(t *testing.T) {
