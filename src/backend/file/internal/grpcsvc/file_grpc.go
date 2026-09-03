@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"log/slog"
 	"os"
 	"regexp"
 	"strconv"
@@ -251,6 +252,13 @@ func (s *FileGRPC) GetFileURL(ctx context.Context, req *filev1.GetFileURLRequest
 	getURL, err := s.presigner.PresignGet(ctx, r2file.GetPresignInput{Key: downloadKey(row), TTL: ttl})
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if err := s.events.PublishFileDownloaded(ctx, row.ID.String(), profileID.String()); err != nil {
+		slog.Default().WarnContext(ctx, "file.downloaded publish failed",
+			slog.String("file_id", row.ID.String()),
+			slog.String("downloader_profile_id", profileID.String()),
+			slog.String("error", err.Error()),
+		)
 	}
 	return &filev1.GetFileURLResponse{
 		PresignedGetUrl: getURL,
