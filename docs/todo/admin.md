@@ -12,6 +12,7 @@ Admin panel (`src/admin/`) и Developer Portal (`src/developer-portal/`).
 
 
 - [ ] **[Admin] Analytics UI: search/voice dashboards deferred** — Gateway `GetDashboard` supports product/engagement/revenue/health/moderation + retention REST; Admin pages wired (batch 4). Search/voice dashboard types absent in `src/backend/analytics/internal/store/query.go` — needs backend before UI. Paths: `docs/features/analytics.md`, `src/backend/analytics/internal/store/query.go`
+- [ ] **[Admin] Analytics pages never pass from/to** — API client accepts `AnalyticsTimeRange` (PR #125) but Dashboard/Retention/Funnels/Export pages omit date range — staff UI always uses server default window. Paths: `src/admin/src/pages/`, `src/admin/src/api/analytics.ts`
 - Rich UX backlog (game catalog): genre/platforms presets, rank ladder templates per [game-catalog.md](../features/game-catalog.md) — structured mode/role/rank editor already shipped.
 
 ### Developer Portal
@@ -43,7 +44,6 @@ _(Common Developer Portal batch closed in PR #124 — registration form, bot det
 - [ ] **[Developer Portal] One-shot secrets UX — token/webhook shown in plain `<code>`; no copy-once modal, no clear-after-navigation.** — `src/developer-portal/src/App.tsx`
 - [ ] **[Developer Portal] K8s manifest minimal — no resources/limits, single replica, HTTP-only Traefik entrypoint (same as web/admin).** — `deploy/staging/developer-portal.yaml`, `deploy/prod/developer-portal.yaml`
 - [ ] **[Developer Portal] No slug / public bot page preview — `slug` exists on Bot proto but unused in portal.** — `src/developer-portal/src/App.tsx`, `protos/voice/bot/v1/bot.proto`
-- [ ] **[Developer Portal] No ESLint/analyze step in CI — only `vitest run`; no static analysis gate.** — `src/developer-portal/package.json`, `.github/workflows/ci.yml`
 
 
 **Промпт-якорь:** `Admin from docs/todo/admin.md` + приоритет.
