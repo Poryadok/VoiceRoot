@@ -704,7 +704,7 @@
 - [x] **[Role] README status** — describes the implemented role and permission surface. — `src/backend/role/README.md`
 - [ ] **[Role] `NamesFor` order non-deterministic — map iteration; awkward for UI/tests expecting stable lists.** — `src/backend/role/permissions/permissions.go`
 - [ ] **[Role] No test for dual-scope effective mask — chat + `voice_room_id` together in one `GetEffectiveMask` call.** — `src/backend/role/internal/store/`, `internal/grpcsvc/` tests
-- [ ] **[Role] `CreateRole` position not validated — actor can create custom role at position ≥ own top (hierarchy only on edit/assign, not create).** — `src/backend/role/internal/grpcsvc/roles.go` (`CreateRole`)
+- [x] **[Role] `CreateRole` hierarchy validation — non-owner with `SPACE_MANAGE_ROLES` may create only below their top role; equal/higher denial leaves no role or event, Owner bypass is covered.** — `src/backend/role/internal/grpcsvc/roles.go`, `roles_manage_integration_test.go`
 - [ ] **[Role] Guest role under-exercised — default join falls back to Member; Guest mask (`SPACE_VIEW` only) rarely applies unless `SetDefaultJoinRole` points to Guest.** — `src/backend/role/permissions/permissions.go`, `internal/store/roles.go`
 
 ### Cross-cutting

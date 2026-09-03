@@ -10,8 +10,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"voice/backend/role/internal/authctx"
-	"voice/backend/role/permissions"
 	"voice/backend/role/internal/store"
+	"voice/backend/role/permissions"
 
 	rolev1 "voice.app/voice/role/v1"
 )
@@ -109,6 +109,13 @@ func (s *RoleGRPC) CreateRole(ctx context.Context, req *rolev1.CreateRoleRequest
 	name := strings.TrimSpace(req.GetName())
 	if name == "" {
 		return nil, status.Error(codes.InvalidArgument, "name is required")
+	}
+	can, err := s.Store.CanCreateRole(ctx, spaceID, actor, req.GetPosition())
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if !can {
+		return nil, status.Error(codes.PermissionDenied, "cannot create role at or above your hierarchy")
 	}
 	row, err := s.Store.CreateCustomRole(ctx, spaceID, name, req.GetPermissionsMask(), req.GetPosition(), &actor)
 	if err != nil {
