@@ -183,5 +183,12 @@ func appealRowToProto(row *store.AppealRow) *moderationv1.Appeal {
 		v := row.ReviewedBy.String()
 		out.ReviewedByProfileId = &v
 	}
+	if row.ReviewedAt != nil {
+		out.ReviewedAt = timestamppb.New(row.ReviewedAt.UTC())
+	}
+	if row.ReviewNotes != nil {
+		v := *row.ReviewNotes
+		out.ReviewNotes = &v
+	}
 	return out
 }
