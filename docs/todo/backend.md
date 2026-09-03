@@ -640,7 +640,7 @@
 ### File
 
 
-- [ ] **[File] Proto lifecycle enum** — no distinct `expired`; `expired` DB status maps to `FILE_LIFECYCLE_STATUS_DELETED` (`d:\Git\Voice\protos\voice\file\v1\file.proto`, `d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go` L674–675).
+- [x] **[File] Proto lifecycle enum** — additive `FILE_LIFECYCLE_STATUS_EXPIRED = 6`; `expired` DB status maps to `EXPIRED`, while `deleted` remains `DELETED` (`protos/voice/file/v1/file.proto`, `src/backend/file/internal/grpcsvc/file_grpc.go`).
 - [ ] **[File] No `sha256_hash` index/unique** — dedup would need schema work (`d:\Git\Voice\src\backend\migrations\file_db\000001_init.up.sql`).
 - [ ] **[File] `story_id` column unused in access rules** — stored (`d:\Git\Voice\src\backend\migrations\file_db\000003_story_context.up.sql`) but `ensureFileAccess` only checks uploader or chat member (`d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go` L538–554).
 

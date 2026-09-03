@@ -12,6 +12,15 @@ import (
 	filev1 "voice.app/voice/file/v1"
 )
 
+func TestFileLifecycleStatus_ExpiredUsesNextAdditiveNumber(t *testing.T) {
+	expired := filev1.FileLifecycleStatus_FILE_LIFECYCLE_STATUS_EXPIRED
+	deleted := filev1.FileLifecycleStatus_FILE_LIFECYCLE_STATUS_DELETED
+
+	require.Equal(t, int32(6), int32(expired))
+	require.Equal(t, int32(deleted)+1, int32(expired))
+	require.NotEqual(t, deleted, expired)
+}
+
 func TestLifecycleStatus_MapsExpiredSeparately(t *testing.T) {
 	tests := []struct {
 		name   string
