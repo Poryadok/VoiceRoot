@@ -30,8 +30,8 @@ service ChatService {
 
   // Текстовые групповые чаты (group | channel)
   rpc CreateChat(CreateChatRequest) returns (CreateChatResponse); // ✓
-  rpc UpdateChat(UpdateChatRequest) returns (UpdateChatResponse); // ✓ partial (thread toggles gap)
-  rpc DeleteChat(DeleteChatRequest) returns (DeleteChatResponse); // proto ✓; handler Unimplemented
+  rpc UpdateChat(UpdateChatRequest) returns (UpdateChatResponse); // ✓ name/topic/slow mode/avatar/thread settings
+  rpc DeleteChat(DeleteChatRequest) returns (DeleteChatResponse); // ✓ DM soft-delete for caller; group/channel rejected
 
   // Участники
   rpc AddMembers(AddMembersRequest) returns (AddMembersResponse);       // ✓
@@ -111,6 +111,7 @@ chats
 ├── last_message_at (activity sort — см. § Timestamp ownership)
 ├── threads_enabled (bool, default false; channels default true)
 ├── allow_user_main_feed (bool, default true; channels default false)
+├── allow_guests (bool, default true — chat-level guest admission; contract/enforcement not yet wired)
 ├── e2e_enabled (bool, default false — DM opt-in E2E)
 ├── created_at
 └── updated_at
@@ -158,7 +159,7 @@ quick_access_chats
 - **Custom folders**: explicit rows in `folder_chats` for every included chat; pin scoped to that folder.
 - **Quick Access**: separate table; **chat_id only** (no polymorphic space target).
 
-### Migration sketches (spec — not yet applied)
+### Applied navigation migrations
 
 ```sql
 -- 000008_folders.up.sql
@@ -198,11 +199,11 @@ CREATE TABLE quick_access_chats (
 CREATE INDEX quick_access_profile_order_idx ON quick_access_chats (profile_id, sort_order);
 ```
 
-### Deployed schema (migrations `000001`–`000007`) vs full spec
+### Deployed schema (migrations `000001`–`000011`) vs full spec
 
-**Shipped today** (`chat_db` migrations): DM + group + channel types; `chat_members.inbox_bucket`; `threads_enabled` / `allow_user_main_feed`; `e2e_enabled`; slow mode; guest-DM flag; **`quick_access_chats` (Batch 17)**; **`folders` + `folder_chats` DDL (Batch 18)**; **folder membership/pin handlers + `ListChats.folder_id` filter (Batch 19)**; **`UpdateFolder`/`DeleteFolder` + auto-unarchive on incoming DM (Batch 20)**.
+**Shipped today** (`chat_db` migrations): DM + group + channel types; `chat_members.inbox_bucket`; `threads_enabled` / `allow_user_main_feed`; `e2e_enabled`; slow mode; chat-level `allow_guests` column (`000007`, behavior contract still open); `folders` + `folder_chats`; `quick_access_chats`; per-profile `deleted_for_self` (`000011`). Folder membership/pin, `ListChats.folder_id`, `UpdateFolder`/`DeleteFolder` and auto-unarchive on incoming DM are implemented in handlers.
 
-**Full spec** (folders + quick access) — [navigation.md](../features/navigation.md); DDL-скетчи ниже в § Migration sketches.
+**Navigation contract** (folders + Quick Access) — [navigation.md](../features/navigation.md); applied migration definitions are shown above.
 
 Индексы (deployed):
 - `chat_members_profile_id_idx (profile_id, joined_at DESC)` + `chat_members_profile_inbox_idx (profile_id, inbox_bucket)`
@@ -211,7 +212,7 @@ CREATE INDEX quick_access_profile_order_idx ON quick_access_chats (profile_id, s
 
 ## ListChats (список, превью, unread)
 
-**Контракт**: `ListChatsRequest` с `voice.common.v1.CursorPageRequest` (`cursor`, `page_size`); опционально `inbox` (`main` \| `requests`). Ответ `ListChatsResponse.chat_list` — `ChatList` с `items: ChatListItem[]` и `next_cursor`. Каждый `ChatListItem` содержит `chat`, `last_message_preview`, `unread_count`, `inbox`, `is_stranger`, `dm_peer_profile_id` (см. proto выше).
+**Контракт**: `ListChatsRequest` с `voice.common.v1.CursorPageRequest` (`cursor`, `page_size`); опционально `inbox` (`main` \| `requests` \| `archive`). Ответ `ListChatsResponse.chat_list` — `ChatList` с `items: ChatListItem[]` и `next_cursor`. Каждый `ChatListItem` содержит `chat`, `last_message_preview`, `unread_count`, `inbox`, `is_stranger`, `dm_peer_profile_id` (см. proto выше).
 
 **Порядок и фильтр (shipped code)**:
 - членство в `chat_members`, `is_archived = false`, `inbox_bucket` = значение `inbox` (default `main`);
@@ -219,6 +220,7 @@ CREATE INDEX quick_access_profile_order_idx ON quick_access_chats (profile_id, s
 - для `inbox=main` membership-строки и space-чаты (`group`/`channel` по `space_id`) пагинируются **единым SQL UNION** в store (`listChatsPageMainWithSpaces`); gRPC передаёт `spaceIDs` из S2S Space `ListMemberSpaceIDs` на каждой странице;
 - сортировка: `COALESCE(last_message_at, created_at)` DESC, tie-break `chats.id` DESC;
 - page size default 50, max 100.
+- list SQL and `chatRowToProto` hydrate `space_id`, slow mode, thread flags and `e2e_enabled`; residual partial-object gap: `topic` is not selected by list queries.
 
 **Full inbox spec:** `folder_id` filter — **shipped (Batch 19)**; **`inbox=archive`** + **Quick Access RPC/DDL** — shipped (Batch 15/17).
 
@@ -270,7 +272,7 @@ message ListChatsRequest {
 | omitted + `inbox=main` | non-archived chats for profile (current default) |
 | system folder id | chats matching folder predicate ∩ `is_archived=false` |
 | custom folder id | join `folder_chats` WHERE `folder_id` ∩ `is_archived=false` |
-| `inbox=archive` | `is_archived=true` (ignores `folder_id`; **not implemented**) |
+| `inbox=archive` | `is_archived=true` (ignores `folder_id`; **implemented**) |
 
 Sort within folder: pinned first (`pin_order ASC`), then `sort_order`, then activity (`last_message_at`).
 
@@ -350,11 +352,11 @@ message ReorderQuickAccessRequest {
 |-------------|--------|
 | `ArchiveChat(chat_id, archived)` | **Implemented** — sets `chat_members.is_archived` |
 | `ListChats` main inbox | **Implemented** — excludes `is_archived=true` |
-| `ListChats` with `inbox=archive` | **Not implemented** — contract above |
+| `ListChats` with `inbox=archive` | **Implemented (Batch 15)** — archived `dm` / `group` / `channel`; ignores `folder_id` |
 | Side-effect: remove Quick Access on archive | **Implemented (Batch 18)** — `ArchiveChat(archived=true)` calls `RemoveQuickAccess` |
 | Auto-unarchive on incoming DM message | **Implemented (Batch 20)** — Chat `message.sent` consumer → `AutoUnarchiveDMRecipients` (DM only; outgoing does not unarchive) |
 
-**Spec:** DM **archive write** (`ArchiveChat`) — **implemented**. **Archive list** (`inbox=archive`), Quick Access side-effect, auto-unarchive — **implemented (Batch 15/18/20)**. Group/channel use same `is_archived` column; broader inbox UX — partial ([todo/backend.md](../todo/backend.md)).
+**Spec:** archive write/list, Quick Access side-effect and incoming-DM auto-unarchive are implemented (Batch 15/18/20). Group/channel use the same per-member `is_archived` column and are returned by `inbox=archive`; client UX status is tracked separately in [todo/client.md](../todo/client.md).
 
 Unarchive semantics: [GLOSSARY.md](../GLOSSARY.md) § «Архив чата», [text-chat.md](../features/text-chat.md) § «Архивирование».
 

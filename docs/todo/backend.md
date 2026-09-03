@@ -76,7 +76,7 @@
 ### Messaging
 
 
-- [ ] **[Messaging] Staging/prod: `MODERATION_GRPC_ADDR` unset disables PlatformMod** — compose sets `MODERATION_GRPC_ADDR: moderation:9090` (`docker-compose.yml`); `deploy/staging/configmap-app.yaml` omits it → shadow-ban/spam-mute checks silently off on k8s. **Fix:** add to shared configmap + prod; smoke messaging pod env — [ci.md](ci.md) § High Deploy.
+- [x] **[Messaging] Staging/prod `MODERATION_GRPC_ADDR` wiring** — **done:** compose uses `moderation:9090`; staging/prod configmaps use `voice-moderation:9090`, so Messaging wires `PlatformMod` outside local compose too (`docker-compose.yml`, `deploy/staging/configmap-app.yaml`, `deploy/prod/configmap-app.yaml`).
 - [x] **[Messaging] `ForwardMessage` bypasses channel/thread send policy** — **done:** `ForwardMessage` calls `checkSpaceSendPermission`, `threadPolicyDeps().validateSend`, and sets `posted_as_chat` when channel forbids main-feed (`messaging_grpc.go`; `messaging_forward_integration_test.go`). `GetMessage` **есть** (`messaging_grpc.go` ~792).
 - [x] **[Messaging] E2E forward policy gap** — **done:** `validateE2ESend` on forward target; E2E→plain `FailedPrecondition`, E2E→E2E preserves `is_e2e` (Messaging ITs).
 
@@ -125,7 +125,7 @@
 
 
 - [ ] **[Protos/Pkg] Analytics subscription mapping remains partial** — runner already subscribes to `social.events`, `role.events`, `file.events`, `subscription.events`, and `moderation.events`; only deferred `federation.events` is absent. The Subscription mapper handles plan-started/payment events, not expiry/downgrade. — `src/backend/analytics/internal/consumer/runner.go`; `src/backend/analytics/internal/adapters/domain.go`; `docs/MICROSERVICES.md`
-- [ ] **[Protos/Pkg] Space event catalog drift** — `docs/microservices/space-service.md` documents `space.member_joined/left`, `space.updated/deleted`, `space.member_banned`, etc.; `jetstream_events.proto` `ChatStreamEvent` has only `ChatCreated`, `ChatMemberChanged`, `SpaceTreeChanged`, `SpaceCreated`; most space subjects are unimplemented in code (grep shows no `space.member_joined` publishers).
+- [ ] **[Protos/Pkg] Space event catalog residual drift** — `ChatStreamEvent` now has payloads for invite, member joined/left, updated and deleted events. Remaining gaps vs [space-service.md](../microservices/space-service.md): no `space.member_banned` payload; no voice-room created/deleted payloads; `SpaceUpdated` carries only `space_id`, not `changed_fields`.
 - [ ] **[Protos/Pkg] Go `pb/` codegen sync asymmetry** — `scripts/dev/sync-pb-from-gen.sh` syncs 7 trees (`analytics`, `chat`, `file`, `messaging`, `role`, `user`, `voice`); 10+ packages hub under `src/backend/voice/pb/voice/` and `src/backend/user/pb/voice/`. No CI drift check (unlike `make buf-dart-check` for `src/frontend/lib/gen/`). Stale committed stubs possible after proto edits.
 - [ ] **[Protos/Pkg] `pkg/` resilience gap** — `docs/MICROSERVICES.md` requires circuit breaker on all gRPC calls; `src/backend/pkg/grpcclient/` only provides `dial.go` (`DialTarget`) and `wait.go`. No breaker/retry/mTLS helpers.
 - [ ] **[Protos/Pkg] `pkg/` auth metadata fragmentation** — Gateway contract in `src/backend/gateway/transcode_grpc.go` (`x-voice-user-id`, `x-voice-profile-id`, …), but 12+ per-service `internal/authctx/` copies (`src/backend/*/internal/authctx/`). Only partial shared helpers: `src/backend/pkg/guestguard/`, `src/backend/pkg/correlation/`, `src/backend/pkg/jwt/` (edge validation, not inbound gRPC claim parsing).
@@ -138,7 +138,7 @@
 - [ ] **[Space] `mm_config` / `entry_questions` never loaded — not in `SpaceRow`, not in `spaceRowToProto`** — `src/backend/space/internal/store/space.go`, `src/backend/space/internal/grpcsvc/proto.go`
 - [ ] **[Space] Tree node Pro limit (500) not implemented — hardcoded `MaxTreeNodes = 50`, no entitlement check (unlike member cap)** — `src/backend/space/internal/store/tree.go`
 - [ ] **[Space] Catalog indexing fragile — Search hydrator calls `GetSpace` (member-only); `SearchPublicSpaces` Unimplemented; ranking verified-first нет; нет `space.updated` re-index** — `src/backend/search/internal/deps/deps.go`, `chat_space_indexer.go`
-- [ ] **[Space] NATS events incomplete vs spec — Join/Leave публикуют member_joined/left; всё ещё дыры `space.deleted` / `member_banned` / catalog reindex** — `src/backend/space/internal/spaceevents/publisher.go`
+- [ ] **[Space] NATS events incomplete vs spec** — join/leave/kick publish `space.member_joined` / `space.member_left`; update/delete publish `space.updated` / `space.deleted`. Remaining: `space.member_banned` is absent; voice-room created/deleted publisher methods are no-ops; membership/invite publish failures still pass through no-op `logInviteEventFailure`; Search does not reindex `space.updated` — `src/backend/space/internal/spaceevents/`, `src/backend/search/internal/indexer/chat_space_indexer.go`.
 - [ ] **[Space] Member timeout not enforced downstream — `IsProfileTimedOut` exists, unused outside Space** — `src/backend/space/internal/store/moderation.go`
 - [ ] **[Voice] JoinVoiceRoom: `voice_room_id ∈ space_id` не проверяется** — `voice_room.go`
 
@@ -157,9 +157,9 @@
 
 
 - [x] **[Social] Contacts/favorites REST** — Gateway `GET/POST /api/v1/friends/contacts`, `GET/POST /api/v1/friends/favorites` shipped (**Batch 23a**). **Remaining:** `SyncPhoneContacts` UX.
-- [ ] **[Social] Block does not cascade to graph** — `BlockAccount` in `src/backend/social/internal/store/blocks.go` inserts block row only; accepted friendships and pending/declined rows in `friendships` are untouched.
+- [ ] **[Social] Block friendship cascade fails open when profile resolution is unavailable** — happy path is implemented: `BlockAccount` resolves both accounts' profile sets and calls transactional `BlockAccountAndSeverFriendships`, which deletes accepted/pending/declined rows between non-empty sets (`block_cascade_integration_test.go`). Residual: when `AccountProfiles` is nil or either `ProfileIDsForAccount` call fails, the handler passes an empty set and the store inserts the block without deleting friendship rows (`social_blocks.go`, `blocks.go`).
 - [x] **[Social] Outgoing request status exposed** — `PendingFriendRequest.status` (`pending` | `declined`) in proto + `ListFriendRequests` mapping; Flutter outgoing requests tab shows declined label — **Batch 24b** (`friends.md`).
-- [ ] **[Social] No test for `allow_friend_requests` enforcement** — privacy hook exists (`social_friends.go:356`) but no integration test (unlike phone sync in `src/backend/social/internal/grpcsvc/phone_search_privacy_integration_test.go`); no compose live test denying stranger invite.
+- [x] **[Social] `allow_friend_requests` service integration test** — **done:** `allow_friend_requests_integration_test.go` covers stranger invite denial. Remaining compose-live coverage is tracked below under Social test gaps.
 
 ### User
 
@@ -280,7 +280,7 @@
 - [x] **[Messaging] R3-A06 — `validateAttachments` blocks rich payloads** — **done (Batch 31a):** `content_type` branches for location/article (no File row) and file-backed rich types (`sticker`, `gif`, `music`, `video_note`) with payload shape + File metadata validation — `messaging_grpc.go`, tests — [messaging-service.md](../microservices/messaging-service.md).
 - [x] **[Chat] R3-A12 — Standalone `channel` chats** — `CreateChat` without `space_id` creates standalone channel with creator as `chat_members` owner (`CreateChannelChat`); space channels unchanged — **Batch 26b**. **Batch 14:** membership `channel` rows appear in `ListChats` main inbox SQL.
 - [x] **[Chat] R3-A14 — `CreateChat`/`UpdateChat` proto fields ignored** — `topic` persisted on create; `topic`/`threads_enabled`/`allow_user_main_feed` on `UpdateChat`; channels updatable — `group.go`, store `UpdateGroupChat` — **Batch 27b**.
-- [ ] **[Chat] R3-A15 — `chats.allow_guests` dead column** — migration column unused; no proto field or handler — align or drop in migration follow-up.
+- [ ] **[Chat] R3-A15 — `chats.allow_guests` behavior not wired** — migration `000007` adds the chat-level guest admission flag required by [auth-and-contacts.md](../features/auth-and-contacts.md), but Chat has no proto field, mutation handler, or admission enforcement for it. Keep the column; define and implement the contract.
 - [x] **[Chat] R3-A16 — `ListChats` space merge bugs** — unified SQL pagination for space chats on page 2+ (`listChatsPageMainWithSpaces` UNION in store; gRPC passes `spaceIDs` on every page). Prior partial fixes: Batch 13 archived filter + hydration; Batch 16 pagination.
 - [ ] **[Chat/Messaging/File] Stickers/GIF wire (R2-A32, R4-04)** — expand checklist: `chat_db` migrations `sticker_packs`/`stickers`/`profile_installed_packs`; Chat RPCs (`ListInstalledStickerPacks`, `InstallStickerPack`, `SearchGifs`, …); Gateway REST ([api-gateway.md](../microservices/api-gateway.md) § Stickers and GIF); ~~Messaging proto `STICKER`/`GIF` + send validation~~ **Messaging send validation done (Batch 31a)**; File `UPLOAD_INTENT_STICKER`/GIF transcode; `ListSharedMedia` `STICKERS` kind extension — **P0**
 - [x] **[Messaging] Durable delivery consumer** — **done (Batch 12):** Realtime JetStream `message.delivery_ack` publish (Batch 11) + Messaging consumer → `last_delivered_message_id`; list ✓✓ via `GetChatListMetadata.last_message_delivery_state`.
@@ -291,15 +291,13 @@
 ### Chat — other
 
 
-- [ ] **[Chat] Folders API entirely unimplemented** — superseded checklist above; membership/pin/`ListChats.folder_id` + Gateway REST shipped (**Batch 19**); `UpdateFolder`/`DeleteFolder` **done (Batch 20)**.
-- [ ] **[Chat] `quick_access_chats` table + RPC** — superseded checklist above.
 - [ ] **[Chat/Messaging/File] Stickers + GIF** — **P0**, 0 code: `[Chat]` pack store + provider search RPC; `[Messaging]` `STICKER`/`GIF` send payload + composer contract; `[File]` animated asset processing — superseded single-line below
 - [ ] **[Chat] Стикер-паки / GIF / voice-note first-class — 0 кода** — see `[Chat/Messaging/File] Stickers + GIF` above; voice-note via `[File]` upload category
 - [ ] **[File] Upload intent/category: video vs video_note** — proto field + processing branch in `ConfirmUpload` — composer video-note flow — **P0**
 - [x] **[Chat] `MuteChat` / `ArchiveChat`** — `mute_archive.go`.
 - [x] **[Chat] Group `last_message_at` never updated from message stream** — **done:** `TouchLastMessageAt` updates `type IN ('dm','group','channel')` (`dm.go`); store IT `last_message_at_integration_test.go`.
 - [x] **[Chat] Group last_message_at from message stream** — **done:** same as above.
-- [ ] **[Chat] `ListChats` partial `Chat` objects** — link UI gap for `e2e_enabled`, `space_id`, thread flags in list rows — [chat-service.md](../microservices/chat-service.md)
+- [ ] **[Chat] `ListChats` omits `Chat.topic`** — list SQL/mapping already includes `e2e_enabled`, `space_id`, `slow_mode_seconds`, `threads_enabled` and `allow_user_main_feed`; only `topic` is absent from the selected `ChatRow` fields — [chat-service.md](../microservices/chat-service.md).
 - [x] **[Chat] `UpdateChat` ignores thread settings** — **done (Batch 27b):** `threads_enabled` / `allow_user_main_feed` persisted via `UpdateGroupChat`.
 - [x] **[Chat] `UpdateChat` rejects channels** — **done (Batch 27b):** `UpdateChat` allows `group` and `channel`; topic/thread flags via Chat API.
 - [ ] **[Chat] Subscription S2S not integrated** — doc dependency (`docs/microservices/chat-service.md`); limit hardcoded `GroupMemberLimit = 500` (`src/backend/chat/internal/store/group.go`). No subscription-tier differentiation.
@@ -315,7 +313,7 @@
 - [ ] **[Notification] `reply` marked ✓ but not implemented — no `reply` type in message consumer or Realtime in-app fanout; thread replies are treated as `new_message`.** — `docs/features/notifications.md`, `src/backend/notification/message_events_consumer.go`, `src/backend/realtime/in_app_notification_fanout.go`
 - [ ] **[Notification] Matchmaking/voice push ignores presence — handlers hardcode `IsOnline: false`; no `EnrichDecision` / User gRPC check → online users still get push (messages path does check).** — `src/backend/notification/internal/consumer/matchmaking_events.go`, `src/backend/notification/matchmaking_events_consumer.go`, `src/backend/notification/voice_events_consumer.go`
 - [ ] **[Notification] `system` in-app / Gateway gaps (T-023)** — Moderation NATS consumer produces `system` push for sanctions and narrowly skips presence until an in-app path exists. Still missing/undefined: Notification→Realtime transport + payload + dedupe, final account→profiles semantics, Flutter presentation, other system producers, and Gateway REST exposure — `src/backend/notification/moderation_events_consumer.go`; `src/backend/notification/internal/grpcsvc/server.go`; `src/backend/gateway/transcode_notifications.go`; `src/backend/realtime/`
-- [x] **[Notification] Multi-replica duplicate push risk � per-pod durable consumer name (`notif_<hostname>_mod`) on moderation stream caused duplicate delivery across replicas; all notification JetStream consumers now use cluster-wide SharedDurable names (moderation ? `notif_mod`).** � **done (Batch 31c):** `src/backend/notification/internal/consumer/durable.go`, `moderation_events_consumer.go`, `main.go`
+- [x] **[Notification] Multi-replica duplicate push risk — per-pod durable consumer name (`notif_<hostname>_mod`) on moderation stream caused duplicate delivery across replicas; all notification JetStream consumers now use cluster-wide `SharedDurable` names (moderation → `notif_mod`).** — **done (Batch 31c):** `src/backend/notification/internal/consumer/durable.go`, `moderation_events_consumer.go`, `main.go`
 
 ### Federation
 
@@ -422,8 +420,8 @@
 - [ ] **[Space] ChatLookup S2S hardening (Agent batch)** — set `x-voice-internal-caller=space` on Chat GetChat; Warn on lookup failures instead of silent skip; add unit/mock test for enrichment; optional batch GetChat to avoid N+1 (`chat_lookup.go`, `main.go`). Closed High wiring via PR #129.
 - [ ] **[Space] No audit rows for tree CRUD, invite revoke, space settings, role changes (spec lists these)** — `src/backend/space/internal/store/tree.go`, `src/backend/space/internal/grpcsvc/invites.go`
 - [ ] **[Space] `RevokeInvite` / `ListInvites` owner-only — `CreateInvite` uses `SpaceManageInvites`; revoke/list use `requireSpaceOwner`** — `src/backend/space/internal/grpcsvc/invites.go`
-- [ ] **[Space] `JoinByInvite` does not publish `space.member_joined`** — `src/backend/space/internal/grpcsvc/invites.go`, `src/backend/space/internal/spaceevents/`
-- [ ] **[Space] Kick/leave do not publish `space.member_left` or decrement path events** — `src/backend/space/internal/grpcsvc/members.go`, `src/backend/space/internal/store/members.go`
+- [x] **[Space] Invite/public join membership event** — both join paths call `finalizeMembership`, which publishes `space.member_joined` after a new membership is created (`invites.go`, `join.go`, `spaceevents/jetstream.go`).
+- [x] **[Space] Kick/leave membership event** — `KickMember` and `LeaveSpace` publish `space.member_left` after removal (`members.go`, `join.go`, `spaceevents/jetstream.go`). Residual Space event gaps remain in the dedicated NATS item above.
 - [ ] **[Space] No gateway REST for leave/join-public/delete/transfer/audit/templates** — `src/backend/gateway/transcode_spaces.go`, `transcode_spaces_members.go`
 - [ ] **[Space] Flutter client gaps — `spaces_client.dart` has no leave/join-public/transfer/audit/delete** — `src/frontend/lib/backend/spaces_client.dart`
 - [ ] **[Space] Test holes — no integration tests for unimplemented RPCs; tree update/delete/category update/voice update/delete/RemoveTreeNode thin coverage** — `src/backend/space/internal/grpcsvc/*_integration_test.go`
@@ -547,7 +545,6 @@
 ### Chat
 
 
-- [ ] **[Chat] `ListChats` returns partial `Chat` objects** — list query omits `e2e_enabled`, `space_id`, `slow_mode_seconds`, thread flags (`src/backend/chat/internal/store/list_chats.go` vs `chatRowToProto` in `src/backend/chat/internal/grpcsvc/chat_dm.go`). List UI can’t show E2E state without `GetChat`.
 - [ ] **[Chat] NATS event surface incomplete vs doc** — published: `chat.created`, `chat.member_changed` (`src/backend/chat/internal/chatevents/jetstream.go`). Not published: `chat.updated`, `chat.deleted`, granular `member_added`/`removed`/`left` (`docs/microservices/chat-service.md` table).
 - [ ] **[Chat] S2S enrichment fails open** — Messaging errors logged and zeroed (`src/backend/chat/internal/grpcsvc/list_chats.go:77-81`). Documented degradation, but no metric/alert on enrichment skip.
 - [ ] **[Chat] README stale** — `src/backend/chat/README.md` still claims “scaffold / health only”; contradicts full gRPC implementation.

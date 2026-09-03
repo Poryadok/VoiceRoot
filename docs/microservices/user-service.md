@@ -218,6 +218,7 @@ onboarding_state
 
 - **Auth Service** — account_id валидация
 - **Subscription Service** — проверка лимитов (мульти-профили, кастомный статус)
+- **Space Service** — `AreCoMembers` для проверки privacy-аудитории `space_members` (User подключает S2S-клиент через `SPACE_GRPC_ADDR`)
 - **Redis** — presence кэш (TTL 5 мин, heartbeat)
 - **File Service** — загрузка аватара/баннера; **not yet deployed** as standalone service — минимальный R2/presigned для статичного аватара может жить в User ([user-profile.md](../features/user-profile.md), [PLAN.md](../PLAN.md))
 
