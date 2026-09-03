@@ -7,7 +7,7 @@ import (
 	rolev1 "voice.app/voice/role/v1"
 )
 
-// RoleGRPC implements voice.role.v1.RoleService (red-phase: Unimplemented stubs only).
+// RoleGRPC implements voice.role.v1.RoleService.
 type RoleGRPC struct {
 	rolev1.UnimplementedRoleServiceServer
 	Store  *store.RoleStore

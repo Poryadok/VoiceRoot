@@ -431,7 +431,7 @@
 ### Moderation
 
 
-- [ ] **[Moderation] Stale service README** — still claims “scaffold / out of scope”.
+- [x] **[Moderation] Service README status** — describes the implemented core and keeps residual gaps explicit.
 - [ ] **[Moderation] `ListReports` pagination incomplete** — proto has `next_cursor`; handler never sets it.
 - [ ] **[Moderation] No report dedup / rate limiting** — unlimited reports per reporter/target; no abuse protection.
 - [ ] **[Moderation] Report targets not validated** — no S2S checks that message/space/story/user exists (deps listed in `moderation-service.md` unused beyond profile→account lookup).
@@ -456,7 +456,7 @@
 - [ ] **[User] `SearchProfiles` ignores discoverability privacy** — no `allow_friend_requests` / phone-search enforcement (`src/backend/user/internal/grpcsvc/user_search.go`); comment still references pre-privacy DDL.
 - [ ] **[User] `UpdateProfile.custom_status` ignored** — comment "not persisted in current DDL" (`src/backend/user/internal/grpcsvc/user.go`); only Redis presence path works.
 - [ ] **[User] Org DNS verification lifecycle thin** — unlimited pending rows, no expiry/TTL (`src/backend/user/internal/store/verification.go`).
-- [ ] **[User] `README.md` stale** — claims "other RPCs still unimplemented" (`src/backend/user/README.md`).
+- [x] **[User] `README.md` status** — describes the implemented RPC surface and keeps residual gaps explicit (`src/backend/user/README.md`).
 
 ### Analytics
 
@@ -547,7 +547,7 @@
 
 - [ ] **[Chat] NATS event surface incomplete vs doc** — published: `chat.created`, `chat.member_changed` (`src/backend/chat/internal/chatevents/jetstream.go`). Not published: `chat.updated`, `chat.deleted`, granular `member_added`/`removed`/`left` (`docs/microservices/chat-service.md` table).
 - [ ] **[Chat] S2S enrichment fails open** — Messaging errors logged and zeroed (`src/backend/chat/internal/grpcsvc/list_chats.go:77-81`). Documented degradation, but no metric/alert on enrichment skip.
-- [ ] **[Chat] README stale** — `src/backend/chat/README.md` still claims “scaffold / health only”; contradicts full gRPC implementation.
+- [x] **[Chat] README status** — describes the implemented gRPC core and keeps residual gaps explicit (`src/backend/chat/README.md`).
 
 ### Notification
 
@@ -615,7 +615,7 @@
 - [ ] **[Realtime] Test gaps for newer paths** — No tests for `role_events_consumer.go`, `matchmaking_events_consumer.go` (integration), `delivery_ack` / cross-instance `message_delivered`, or `user_presence_updater_grpc.go` (gRPC path untested in this module).
 - [ ] **[Realtime] Presence E2E is REST-only** — `presence_e2e_live_test.dart` checks `getPresence` API, not WS live fanout between friends (PLAN marks presence “shipped”).
 - [ ] **[Realtime] `presence_update` status not validated in Realtime** — `ws.go` accepts any non-empty string; canonical enum normalization happens only in User gRPC (`user/internal/grpcsvc/user_presence.go`).
-- [ ] **[Realtime] Stale module README** — `src/backend/realtime/README.md` still describes a health-only scaffold; contradicts `docs/PLAN.md` and actual code.
+- [x] **[Realtime] Module README status** — describes the implemented WebSocket/fan-out core and keeps residual gaps explicit (`src/backend/realtime/README.md`).
 
 ### Multi-Profile
 
@@ -630,7 +630,7 @@
 ### Subscription
 
 
-- [ ] **[Subscription] README outdated — still describes health-only scaffold** — `src/backend/subscription/README.md`
+- [x] **[Subscription] README status** — describes the implemented core without overstating the product stub (`src/backend/subscription/README.md`).
 - [ ] **[Subscription] Default webhook secret in prod path — `test-webhook-secret` if `PADDLE_WEBHOOK_SECRET` unset** — `src/backend/subscription/internal/billing/paddle.go`
 - [ ] **[Subscription] Duplicate `DELETE` in `ActivatePremium`** — `src/backend/subscription/internal/store/store.go` (lines 95–99)
 - [ ] **[Subscription] E2E / test gaps — no compose/live CloudPayments, provider-side cancel, personal grace→downstream notification/freeze, Space Pro failed-payment grace, or billing history scenario.** Personal grace expiry has service integration coverage; Space Pro webhook→join live is `TestComposeSpaceProMemberCap_live` (#14). — `src/frontend/test/billing_e2e_live_test.dart`; `src/backend/gateway/compose_billing_live_test.go`; `src/backend/subscription/internal/grpcsvc/lifecycle_integration_test.go`
@@ -700,8 +700,8 @@
 ### Role
 
 
-- [ ] **[Role] Stale server comment — `RoleGRPC` still says «red-phase: Unimplemented stubs only».** — `src/backend/role/internal/grpcsvc/server.go`
-- [ ] **[Role] README understates implementation — lists health only; contradicts actual surface.** — `src/backend/role/README.md`
+- [x] **[Role] Server comment** — `RoleGRPC` now identifies the implemented service without stale red-phase wording. — `src/backend/role/internal/grpcsvc/server.go`
+- [x] **[Role] README status** — describes the implemented role and permission surface. — `src/backend/role/README.md`
 - [ ] **[Role] `NamesFor` order non-deterministic — map iteration; awkward for UI/tests expecting stable lists.** — `src/backend/role/permissions/permissions.go`
 - [ ] **[Role] No test for dual-scope effective mask — chat + `voice_room_id` together in one `GetEffectiveMask` call.** — `src/backend/role/internal/store/`, `internal/grpcsvc/` tests
 - [ ] **[Role] `CreateRole` position not validated — actor can create custom role at position ≥ own top (hierarchy only on edit/assign, not create).** — `src/backend/role/internal/grpcsvc/roles.go` (`CreateRole`)
@@ -710,7 +710,7 @@
 ### Cross-cutting
 
 
-- [ ] **[Cross-cutting] `subscription/README.md` stale — still says “scaffold”; contradicts PLAN partial + billing E2E.** — `src/backend/subscription/README.md`, `docs/PLAN.md`
+- [x] **[Cross-cutting] `subscription/README.md` status** — implemented billing/limit paths and the remaining product-stub gaps are explicit. — `src/backend/subscription/README.md`, `docs/PLAN.md`
 - [ ] **[Cross-cutting] Analytics “partial” = server-side only by design — client RUM explicitly out of scope (`docs/features/analytics.md`); not a bug, but PLAN “partial” is architectural, not a missing backend slice.** — `docs/features/analytics.md`, `src/backend/analytics/`
 - [ ] **[Cross-cutting] Notifications partial — push device creds / staging FCM already in TODO Critical/High; in-app + Realtime fan-out exist (`realtime/in_app_notification_fanout_test.go`).** — `docs/PLAN.md`, `src/backend/realtime/`
 
@@ -720,7 +720,7 @@
 - [ ] **[Notification] `platform_enum` in proto ignored — `RegisterDevice` only uses string `platform`.** — `protos/voice/notification/v1/notification.proto`, `src/backend/notification/internal/grpcsvc/server.go`
 - [ ] **[Notification] Unauthenticated debug push recorder** — `/debug/recorded-pushes` exposes last recorded push by `profile_id` (compose/dev aid). — `src/backend/notification/debug_http.go`
 - [ ] **[Notification] DEPLOYMENT doc drift — references `internal/apns/config.go` (file is `http_sender.go`) and `APNS_PRIVATE_KEY` as canonical env name.** — `docs/DEPLOYMENT.md`, `src/backend/notification/internal/apns/http_sender.go`
-- [ ] **[Notification] gRPC still labeled stub in server comment while substantial logic exists — misleading for reviewers.** — `src/backend/notification/internal/grpcsvc/server.go`
+- [x] **[Notification] gRPC server comment** — identifies the implemented service without stale stub wording. — `src/backend/notification/internal/grpcsvc/server.go`
 
 ### Federation
 
