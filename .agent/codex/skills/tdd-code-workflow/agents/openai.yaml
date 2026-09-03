@@ -1,0 +1,4 @@
+interface:
+  display_name: "TDD Code Workflow"
+  short_description: "Plan, test, review, then implement with TDD"
+  default_prompt: "Use $tdd-code-workflow to implement this coding task through documentation-first planning, test-first development, and review loops."

@@ -29,4 +29,5 @@ Cursor global MCP setup was checked on this machine. The portable facts are:
 ## Secret Handling
 
 Do not commit MCP tokens or URLs containing tokens. Local Codex MCP entries live
-in `C:\Users\Sergey\.codex\config.toml`.
+in `$CODEX_HOME/config.toml` or `~/.codex/config.toml`. Use `mcp.example.toml`
+as the portable template.

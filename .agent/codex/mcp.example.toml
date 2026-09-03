@@ -1,0 +1,17 @@
+# Copy relevant entries into your local $CODEX_HOME/config.toml.
+# Keep real tokens and machine-specific paths out of git.
+
+[mcp_servers.codegraph]
+command = "codegraph"
+args = ["serve", "--mcp", "--path", "D:\\Git\\Voice"]
+
+[mcp_servers.penpot]
+url = "https://design.penpot.app/mcp/stream?userToken=YOUR_PENPOT_MCP_KEY"
+
+# Local Penpot MCP alternative for long/heavy design sessions:
+# 1. Run: npx -y @penpot/mcp@stable
+# 2. In Penpot, load http://localhost:4400/manifest.json and connect the plugin.
+# 3. Use this server entry instead of the remote one.
+#
+# [mcp_servers.penpot]
+# url = "http://localhost:4401/mcp"

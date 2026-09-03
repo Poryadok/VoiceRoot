@@ -1,0 +1,33 @@
+---
+description: Git safety — no history rewrite, no hook bypass; for humans and agents
+alwaysApply: true
+---
+
+# Git safety (Voice)
+
+Canonical process: `docs/CONTRIBUTING.md`. Repo hooks: `scripts/git/` (`install-hooks.ps1` / `install-hooks.sh`).
+
+## Forbidden without explicit user request
+
+- **Remote history rewrite**: `git push --force`, `-f`, `--force-with-lease`, `--force-if-includes`, `+refspec`
+- **Local history rewrite**: `git rebase` (incl. interactive), `git pull --rebase`, `git commit --amend`, `git reset --hard`, `git filter-branch`, `git filter-repo`
+- **Hook bypass**: `git commit --no-verify` / `-n`, `git push --no-verify` / `-n`
+- **Destructive cleanup**: `git reset --hard`, `git clean -fdx`, branch deletion, force-push
+
+## If a git hook fails
+
+1. Fix the underlying files (lint, format, tests the hook runs).
+2. Create a **new commit** with the fixes.
+3. Do **not** use `--no-verify`, amend, or rebase to “get around” the failure.
+4. Tell the user what failed and what was fixed.
+
+## Sync and merge
+
+- Default branch: **`master`** (not `main`).
+- Sync: `git fetch origin` then `git merge origin/master` (not rebase).
+- PR merge to `master`: **merge commit** (`gh pr merge --merge`); no squash merge — see CONTRIBUTING.
+
+## Agents
+
+- Cursor `beforeShellExecution` hook and git `pre-rebase` / `pre-push` enforce these rules locally.
+- When blocked, do not suggest workarounds; ask the user or fix files and commit normally.

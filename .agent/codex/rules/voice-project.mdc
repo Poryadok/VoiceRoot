@@ -1,0 +1,53 @@
+---
+description: Voice — где искать правду в доках и жёсткие архитектурные границы
+alwaysApply: true
+---
+
+# Voice
+
+Продукт: Discord-подобный мессенджер с войсом и встроенным матчмейкингом. Детали продукта и фич — только в репозитории, не выдумывать, при отсутствии описания - спрашивать.
+
+## Где смотреть (источники истины)
+
+| Нужно | Файл |
+|--------|------|
+| Видение, аудитория, матчмейкинг | `docs/PROJECT.md` |
+| Каталог фич → детали | `docs/FEATURES.md`, `docs/features/` |
+| Глоссарий терминов (чат, канал, спейс, аккаунт…) | `docs/GLOSSARY.md` |
+| Сервисы, границы, контракты | `docs/MICROSERVICES.md`, `docs/microservices/*.md` |
+| Инвентарь БД и Redis по сервисам | `docs/DATA_STORES.md` |
+| Правила модели данных (ID, ссылки между сервисами, общие поля) | `docs/DATA_MODEL.md` |
+| Сквозная техника (JWT, rate limit, WS/reconnect, push, голос) | `docs/ARCHITECTURE_REQUIREMENTS.md` |
+| SLO, деградация, релизы, миграции БД | `docs/OPERATIONS.md` |
+| Окружения, выкат, CI → staging/prod | `docs/DEPLOYMENT.md` |
+| Тесты, локальные проверки, состав CI | `docs/TESTING.md` |
+| Git, ветки, PR, процесс | `docs/CONTRIBUTING.md` |
+| Подготовка машины (toolchain, hooks, compose) | `docs/DEV_SETUP.md` |
+| Репозитории, монорепо, protos | `docs/REPOSITORIES.md` |
+| Что уже есть в коде vs план | `docs/PLAN.md` (статус реализации) |
+| Пробелы в доках | `docs/TODO.md` → `docs/todo/` |
+| Design tokens (required), Penpot, brand | `docs/design/`, `design/tokens/` |
+| Designer agent / Penpot skill | `.agent/codex/agents/voice-designer.md`, `.agent/codex/skills/penpot-voice/` |
+| Multitask fleet / treehouse / backlog | `.agent/codex/skills/voice-fleet-captain/SKILL.md`, `.agent/fleet/` |
+| CodeGraph MCP — query tips для Voice | `.agent/codex/rules/codegraph.mdc` |
+
+## TDD и источники истины при генерации кода
+
+- Перед кодом: прочитать релевантные `docs/` из таблицы выше и формулировку задачи.
+- Порядок: тесты на поведение из доков → минимальная реализация → все релевантные тесты зелёные → рефакторинг.
+- Падающий или спорный тест: сначала сверка ожиданий с документацией; не ослаблять тест, чтобы совпасть с ошибочным кодом.
+- Менять ожидания в тесте только если обновлена спецификация в `docs/` или задача явно меняет требование.
+- Дыра в доках — `docs/TODO.md` или вопрос человеку; не дополнять продуктовое поведение без оснований в репозитории.
+- Цикл работы, исключения и приоритет источников — `docs/TESTING.md`, раздел «Порядок разработки (TDD)».
+- Расширенный мульти-ИИ workflow (план, делегирование, ревью-циклы): канон `.agent/codex/skills/tdd-code-workflow/SKILL.md`; Cursor adapter — `.cursor/skills/tdd-code-workflow/SKILL.md` ([документация Skills](https://cursor.com/docs/skills)).
+- Если пользователь **явно** просит использовать этот скилл / TDD workflow — следовать канону **строго** (см. «Strict mode» в `SKILL.md` и «Явный запрос скилла» в `docs/TESTING.md`), без сокращения шагов ради скорости.
+
+## Правила, которые нельзя вывести из кода одним файлом
+
+- **План vs код**: в репозитории часть сервисов — заглушки или старые имена; перед оценкой «готово» и объёмом работы читай `docs/PLAN.md`. Целевая карта сервисов — `docs/MICROSERVICES.md` (например, WebSocket-шлюз в продукте — **Realtime Service**, не смешивать с Messaging).
+- **Два слоя доставки сообщений** (из `docs/ARCHITECTURE_REQUIREMENTS.md`): поток событий по WebSocket с последовательностью `s` и `resume` — только в Realtime; **догрузка пропущенных сообщений** — REST/API Messaging через Gateway с курсором **per `chat_id`**, не через «догнать всё по WS».
+- **Стек по сервисам**: Auth в целевой архитектуре — **Java** (`VoiceAuthService`); большинство остальных сервисов в доке — **Go**; клиент — **Flutter** (в т.ч. веб). Не переносить Auth на Go без явного решения в задаче.
+- **Ветка по умолчанию**: `master` (не `main`). Имена репозиториев на GitHub — PascalCase; монорепо и protos — см. `docs/REPOSITORIES.md`.
+- **Node.js в CI и фронте**: только **24** — Node 20 deprecated на GHA; не вставлять `node-version: '20'`, `node:20`, `upload-artifact@v4` и т.п. Канон — `docs/TESTING.md`, раздел «Node.js в workflow и фронтовых пакетах».
+- **Изменения в документации**: не расширяй `docs/` и не переписывай структуру фич, если пользователь явно не просит — в правилах только навигация и границы, не дублируй длинные спецификации.
+- **Временные файлы агента**: только `tmp/<session>/` (краткое английское имя сессии); после задачи удалить папку, если файлы больше не нужны — канон `docs/CONTRIBUTING.md`, раздел «Временные файлы (`tmp/`)».

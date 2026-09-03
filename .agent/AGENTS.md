@@ -30,15 +30,15 @@ Voice is a Discord-like messenger with voice chat and built-in matchmaking. Prod
 
 ## Fleet (Multitask / parallel agents)
 
-- Lite fleet workflow: `.agent/fleet/README.md`, local backlog `tmp/fleet/backlog.md`, captain skill `.cursor/skills/voice-fleet-captain/SKILL.md`, rule `.cursor/rules/voice-fleet-captain.mdc`.
-- Crew agents: `.cursor/agents/voice-*.md` (gateway, realtime, chat/messaging, go-backend, java-auth, flutter, protos, verify, designer).
-- Parallel **code** isolation: treehouse (`treehouse.toml`, skill `.cursor/skills/treehouse/SKILL.md`) — one crew ↔ one worktree path; not mixed with Cursor `/worktree` on the same task.
+- Lite fleet workflow: `.agent/fleet/README.md`, local backlog `tmp/fleet/backlog.md`, captain skill `.agent/codex/skills/voice-fleet-captain/SKILL.md`, rule `.agent/codex/rules/voice-fleet-captain.mdc`.
+- Crew agents: `.agent/codex/agents/voice-*.md` (gateway, realtime, chat/messaging, go-backend, java-auth, flutter, protos, verify, designer). Cursor mirrors live in `.cursor/agents/`.
+- Parallel **code** isolation: treehouse (`treehouse.toml`, skill `.agent/codex/skills/treehouse/SKILL.md`) — one crew ↔ one worktree path; not mixed with Cursor `/worktree` on the same task.
 
 ## Development Workflow
 
 - Before coding, read the relevant `docs/` files from the table and the user task.
-- Shared workflows live in `.agent/workflows/`. For full documentation-first TDD workflow, use `.agent/workflows/tdd-code-workflow/SKILL.md`. Cursor loads a stub from `.cursor/skills/tdd-code-workflow/SKILL.md` that points to the same canonical file.
-- Product design (Penpot mocks, tokens, UX review): Cursor subagent `.cursor/agents/voice-designer.md` and skill `.cursor/skills/penpot-voice/SKILL.md`. Visual canon is `docs/design/` + `design/tokens/voice.tokens.json`; do not invent product behavior.
+- Shared workflows live in `.agent/workflows/`. For full documentation-first TDD workflow, use `.agent/codex/skills/tdd-code-workflow/SKILL.md` (mirrors `.agent/workflows/tdd-code-workflow/SKILL.md` for repo-local portability). Cursor loads a stub from `.cursor/skills/tdd-code-workflow/SKILL.md`.
+- Product design (Penpot mocks, tokens, UX review): Codex profile `.agent/codex/agents/voice-designer.md` and skill `.agent/codex/skills/penpot-voice/SKILL.md`. Visual canon is `docs/design/` + `design/tokens/voice.tokens.json`; do not invent product behavior.
 - If the user **explicitly** asks to use that TDD workflow / skill, follow the canonical `SKILL.md` **strictly** (written plan before production code, delegation where the tool supports it, red–green–refactor, review loops, final checklist) — see «Strict mode» in that file and «Явный запрос скилла» in `docs/TESTING.md`.
 - For substantial or ambiguous work, write and maintain an ExecPlan following `.agent/PLANS.md`. Plans must be self-contained, tied to repository documentation, and updated as work progresses.
 - Prefer TDD when implementing behavior defined in docs: behavior tests from docs, minimal implementation, relevant tests green, then refactor.

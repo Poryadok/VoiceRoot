@@ -56,5 +56,7 @@ Get-Content -Raw -Encoding UTF8 .agent\AGENTS.md
 ## Cursor Migration Notes
 
 Cursor-specific rules, skills, agents, MCP setup, and hooks were inventoried and
-mapped for Codex in `.agent/codex/`. Treat `.agent/` as the cross-agent canon and
-`.cursor/` as the Cursor adapter layer.
+mapped for Codex in `.agent/codex/`. Project-owned Codex skills live in
+`.agent/codex/skills/`, crew profiles in `.agent/codex/agents/`, and portable
+MCP notes/examples in `.agent/codex/mcp.md`. Treat `.agent/` as the cross-agent
+canon and `.cursor/` as the Cursor adapter layer.
