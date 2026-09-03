@@ -22,9 +22,9 @@ import (
 // NotificationGRPC implements voice.notification.v1.NotificationService.
 type NotificationGRPC struct {
 	notificationv1.UnimplementedNotificationServiceServer
-	Tokens   *store.DeviceTokenStore
-	Settings *store.SettingsStore
-	Pusher   *dispatch.PushDispatcher
+	Tokens    *store.DeviceTokenStore
+	Settings  *store.SettingsStore
+	Pusher    *dispatch.PushDispatcher
 	Analytics interface {
 		Publish(ctx context.Context, subject, sourceService, eventType string, props map[string]any) error
 	}
@@ -49,7 +49,8 @@ func (s *NotificationGRPC) RegisterDevice(ctx context.Context, req *notification
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
 	}
-	if req.GetToken() == "" || req.GetPlatform() == "" {
+	platform := resolveDevicePlatform(req)
+	if req.GetToken() == "" || platform == "" {
 		return nil, status.Error(codes.InvalidArgument, "platform and token required")
 	}
 	pushService := req.GetPushService()
@@ -59,11 +60,38 @@ func (s *NotificationGRPC) RegisterDevice(ctx context.Context, req *notification
 	if s.Tokens == nil {
 		return nil, status.Error(codes.Unavailable, "token store unavailable")
 	}
-	id, err := s.Tokens.Register(ctx, profileID, req.GetPlatform(), req.GetToken(), pushService)
+	id, err := s.Tokens.Register(ctx, profileID, platform, req.GetToken(), pushService)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "register device: %v", err)
 	}
 	return &notificationv1.RegisterDeviceResponse{DeviceTokenId: id.String()}, nil
+}
+
+// resolveDevicePlatform preserves legacy-only strings and prefers a recognized
+// enum. Present unspecified and unknown enum values fall back to canonical
+// legacy strings only.
+func resolveDevicePlatform(req *notificationv1.RegisterDeviceRequest) string {
+	if req == nil || req.PlatformEnum == nil {
+		return req.GetPlatform()
+	}
+
+	switch req.GetPlatformEnum() {
+	case notificationv1.DevicePlatform_DEVICE_PLATFORM_ANDROID:
+		return "android"
+	case notificationv1.DevicePlatform_DEVICE_PLATFORM_IOS:
+		return "ios"
+	case notificationv1.DevicePlatform_DEVICE_PLATFORM_WEB:
+		return "web"
+	case notificationv1.DevicePlatform_DEVICE_PLATFORM_DESKTOP:
+		return "desktop"
+	}
+
+	switch req.GetPlatform() {
+	case "android", "ios", "web", "desktop":
+		return req.GetPlatform()
+	default:
+		return ""
+	}
 }
 
 func (s *NotificationGRPC) UnregisterDevice(ctx context.Context, req *notificationv1.UnregisterDeviceRequest) (*notificationv1.UnregisterDeviceResponse, error) {

@@ -717,7 +717,7 @@
 ### Notification
 
 
-- [ ] **[Notification] `platform_enum` in proto ignored — `RegisterDevice` only uses string `platform`.** — `protos/voice/notification/v1/notification.proto`, `src/backend/notification/internal/grpcsvc/server.go`
+- [x] **[Notification] `platform_enum` precedence and fallback** — `RegisterDevice` prefers recognized enum values, uses canonical legacy fallback for present unspecified/unknown enum values, and preserves legacy string-only behavior. — `protos/voice/notification/v1/notification.proto`, `src/backend/notification/internal/grpcsvc/server.go`
 - [ ] **[Notification] Unauthenticated debug push recorder** — `/debug/recorded-pushes` exposes last recorded push by `profile_id` (compose/dev aid). — `src/backend/notification/debug_http.go`
 - [ ] **[Notification] DEPLOYMENT doc drift — references `internal/apns/config.go` (file is `http_sender.go`) and `APNS_PRIVATE_KEY` as canonical env name.** — `docs/DEPLOYMENT.md`, `src/backend/notification/internal/apns/http_sender.go`
 - [x] **[Notification] gRPC server comment** — identifies the implemented service without stale stub wording. — `src/backend/notification/internal/grpcsvc/server.go`
