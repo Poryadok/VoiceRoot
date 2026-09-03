@@ -640,7 +640,7 @@
 ### File
 
 
-- [ ] **[File] Proto lifecycle enum** — no distinct `expired`; `expired` DB status maps to `FILE_LIFECYCLE_STATUS_DELETED` (`d:\Git\Voice\protos\voice\file\v1\file.proto`, `d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go` L674–675).
+- [x] **[File] Proto lifecycle enum** — additive `FILE_LIFECYCLE_STATUS_EXPIRED = 6`; `expired` DB status maps to `EXPIRED`, while `deleted` remains `DELETED` (`protos/voice/file/v1/file.proto`, `src/backend/file/internal/grpcsvc/file_grpc.go`).
 - [ ] **[File] No `sha256_hash` index/unique** — dedup would need schema work (`d:\Git\Voice\src\backend\migrations\file_db\000001_init.up.sql`).
 - [ ] **[File] `story_id` column unused in access rules** — stored (`d:\Git\Voice\src\backend\migrations\file_db\000003_story_context.up.sql`) but `ensureFileAccess` only checks uploader or chat member (`d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go` L538–554).
 
@@ -669,7 +669,7 @@
 
 - [ ] **[Moderation] `GetAutoModStats` semantics weak** — counts `auto_mod_log` rows, not messages scanned; `CheckMessage` does not increment checked counter.
 - [ ] **[Moderation] Spam mute action taxonomy mismatch** — logs `mute` / `mute_permanent` actions; docs/model use `mute` / `shadow_ban`; Messaging only blocks when pattern re-matches.
-- [ ] **[Moderation] Appeal proto omits `reviewed_at` / `review_notes`** — stored in DB, not returned to clients.
+- [x] **[Moderation] Appeal review metadata in proto** — `reviewed_at` and nullable `review_notes` round-trip through Review/Get/List responses; pending appeals omit both fields. **T-035**.
 - [ ] **[Moderation] Limited unit coverage** — `automod_unit_test.go` only link-flood + threshold math; no unit tests for sanctions/appeals handlers (integration tests only).
 - [ ] **[Moderation] Federation moderation** — documented in `moderation-service.md`, not implemented (federation deferred per PLAN).
 
@@ -704,7 +704,7 @@
 - [x] **[Role] README status** — describes the implemented role and permission surface. — `src/backend/role/README.md`
 - [ ] **[Role] `NamesFor` order non-deterministic — map iteration; awkward for UI/tests expecting stable lists.** — `src/backend/role/permissions/permissions.go`
 - [ ] **[Role] No test for dual-scope effective mask — chat + `voice_room_id` together in one `GetEffectiveMask` call.** — `src/backend/role/internal/store/`, `internal/grpcsvc/` tests
-- [ ] **[Role] `CreateRole` position not validated — actor can create custom role at position ≥ own top (hierarchy only on edit/assign, not create).** — `src/backend/role/internal/grpcsvc/roles.go` (`CreateRole`)
+- [x] **[Role] `CreateRole` hierarchy validation — non-owner with `SPACE_MANAGE_ROLES` may create only below their top role; equal/higher denial leaves no role or event, Owner bypass is covered.** — `src/backend/role/internal/grpcsvc/roles.go`, `roles_manage_integration_test.go`
 - [ ] **[Role] Guest role under-exercised — default join falls back to Member; Guest mask (`SPACE_VIEW` only) rarely applies unless `SetDefaultJoinRole` points to Guest.** — `src/backend/role/permissions/permissions.go`, `internal/store/roles.go`
 
 ### Cross-cutting

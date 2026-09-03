@@ -810,8 +810,10 @@ func lifecycleStatus(status string) filev1.FileLifecycleStatus {
 		return filev1.FileLifecycleStatus_FILE_LIFECYCLE_STATUS_READY
 	case "failed":
 		return filev1.FileLifecycleStatus_FILE_LIFECYCLE_STATUS_FAILED
-	case "deleted", "expired":
+	case "deleted":
 		return filev1.FileLifecycleStatus_FILE_LIFECYCLE_STATUS_DELETED
+	case "expired":
+		return filev1.FileLifecycleStatus_FILE_LIFECYCLE_STATUS_EXPIRED
 	default:
 		return filev1.FileLifecycleStatus_FILE_LIFECYCLE_STATUS_UNSPECIFIED
 	}
