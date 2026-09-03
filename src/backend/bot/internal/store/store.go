@@ -574,6 +574,43 @@ WHERE bot_id = $1 AND interaction_token = $2 AND delivery_status = 'pending'`, b
 	return err
 }
 
+// CompleteDeferredInteraction serializes a deferred follow-up and marks it
+// delivered only after complete succeeds. A failure rolls the row back to
+// deferred so the caller may retry with the same idempotency key.
+func (s *BotStore) CompleteDeferredInteraction(ctx context.Context, botID uuid.UUID, token string, complete func() error) (bool, error) {
+	if strings.TrimSpace(token) == "" {
+		return false, nil
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var eventID uuid.UUID
+	err = tx.QueryRow(ctx, `
+SELECT id FROM bot_event_log
+WHERE bot_id = $1 AND interaction_token = $2 AND delivery_status = 'deferred'
+FOR UPDATE`, botID, token).Scan(&eventID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if err := complete(); err != nil {
+		return true, err
+	}
+	if _, err := tx.Exec(ctx, `
+UPDATE bot_event_log SET delivery_status = 'delivered', delivered_at = now(), attempts = attempts + 1
+WHERE id = $1 AND delivery_status = 'deferred'`, eventID); err != nil {
+		return true, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return true, err
+	}
+	return true, nil
+}
+
 func (s *BotStore) MarkEventFailed(ctx context.Context, botID uuid.UUID, token string) error {
 	if strings.TrimSpace(token) == "" {
 		return nil
