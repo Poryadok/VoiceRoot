@@ -34,6 +34,9 @@ class FileLifecycleStatus extends $pb.ProtobufEnum {
   static const FileLifecycleStatus FILE_LIFECYCLE_STATUS_DELETED =
       FileLifecycleStatus._(
           5, _omitEnumNames ? '' : 'FILE_LIFECYCLE_STATUS_DELETED');
+  static const FileLifecycleStatus FILE_LIFECYCLE_STATUS_EXPIRED =
+      FileLifecycleStatus._(
+          6, _omitEnumNames ? '' : 'FILE_LIFECYCLE_STATUS_EXPIRED');
 
   static const $core.List<FileLifecycleStatus> values = <FileLifecycleStatus>[
     FILE_LIFECYCLE_STATUS_UNSPECIFIED,
@@ -42,10 +45,11 @@ class FileLifecycleStatus extends $pb.ProtobufEnum {
     FILE_LIFECYCLE_STATUS_READY,
     FILE_LIFECYCLE_STATUS_FAILED,
     FILE_LIFECYCLE_STATUS_DELETED,
+    FILE_LIFECYCLE_STATUS_EXPIRED,
   ];
 
   static final $core.List<FileLifecycleStatus?> _byValue =
-      $pb.ProtobufEnum.$_initByValueList(values, 5);
+      $pb.ProtobufEnum.$_initByValueList(values, 6);
   static FileLifecycleStatus? valueOf($core.int value) =>
       value < 0 || value >= _byValue.length ? null : _byValue[value];
 
