@@ -31,6 +31,11 @@ func (s *SpaceGRPC) BanMember(ctx context.Context, req *spacev1.BanMemberRequest
 	if err != nil {
 		return nil, err
 	}
+	release, err := s.lockSpaceMutation(ctx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	accountID, err := parseUUIDField("account_id", req.GetAccountId())
 	if err != nil {
 		return nil, err
@@ -105,6 +110,11 @@ func (s *SpaceGRPC) UnbanMember(ctx context.Context, req *spacev1.UnbanMemberReq
 	if err != nil {
 		return nil, err
 	}
+	release, err := s.lockSpaceMutation(ctx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	accountID, err := parseUUIDField("account_id", req.GetAccountId())
 	if err != nil {
 		return nil, err
@@ -133,6 +143,11 @@ func (s *SpaceGRPC) ListBans(ctx context.Context, req *spacev1.ListBansRequest) 
 	if err != nil {
 		return nil, err
 	}
+	release, err := s.lockSpaceMutation(ctx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	if err := s.requireSpacePermission(ctx, spaceID, permissions.MemberBan); err != nil {
 		return nil, err
 	}
@@ -143,10 +158,10 @@ func (s *SpaceGRPC) ListBans(ctx context.Context, req *spacev1.ListBansRequest) 
 	out := make([]*spacev1.SpaceBan, 0, len(rows))
 	for _, r := range rows {
 		b := &spacev1.SpaceBan{
-			SpaceId:            r.SpaceID.String(),
-			AccountId:          r.AccountID.String(),
-			BannedByProfileId:  r.BannedByProfileID.String(),
-			BannedAt:           timestamppb.New(r.BannedAt),
+			SpaceId:           r.SpaceID.String(),
+			AccountId:         r.AccountID.String(),
+			BannedByProfileId: r.BannedByProfileID.String(),
+			BannedAt:          timestamppb.New(r.BannedAt),
 		}
 		if r.Reason != nil {
 			b.Reason = r.Reason
@@ -164,6 +179,11 @@ func (s *SpaceGRPC) TimeoutMember(ctx context.Context, req *spacev1.TimeoutMembe
 	if err != nil {
 		return nil, err
 	}
+	release, err := s.lockSpaceMutation(ctx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	profileID, err := parseUUIDField("profile_id", req.GetProfileId())
 	if err != nil {
 		return nil, err
@@ -204,6 +224,11 @@ func (s *SpaceGRPC) RemoveMemberTimeout(ctx context.Context, req *spacev1.Remove
 	if err != nil {
 		return nil, err
 	}
+	release, err := s.lockSpaceMutation(ctx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	profileID, err := parseUUIDField("profile_id", req.GetProfileId())
 	if err != nil {
 		return nil, err

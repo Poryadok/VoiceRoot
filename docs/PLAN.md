@@ -81,7 +81,7 @@ Scope разделён явно:
 | [Друзья и контакты](features/friends.md) | core-live | Requests, block, DM gate, contacts/favorites и QR paste работают; нужен phone-book hash pipeline и остаточный fail-closed hardening. |
 | [Статусы присутствия](features/presence.md) | core-live | REST, WS в общем чате и auto-idle работают; нужны friend fan-out, game detection и privacy edges. |
 | [Приватность](features/privacy.md) | partial | Основные visibility и block gates работают, но viewer-aware presence/last-seen fan-out и `show_read_receipts` ещё не обеспечены; discovery и inactive-profile границы тоже неполны. |
-| [Спейсы](features/spaces.md) | core-live | Create/join/tree/invites и backend delete/transfer работают; нужны полная Gateway/Flutter lifecycle-вертикаль, audit, catalog/templates и entry requirements. |
+| [Спейсы](features/spaces.md) | core-live | Create/join/tree/invites, backend delete/transfer и gRPC audit read работают; нужны полная Gateway/Flutter lifecycle/audit-вертикаль, catalog/templates, audit filters/writers и entry requirements. |
 | [Ролевая модель](features/roles.md) | core-live | Custom roles и основные send/join deny работают; voice organizer и остальные text/voice permissions требуют единой проверки на всех входах. |
 | [Матчмейкинг](features/matchmaking.md) | partial | Solo/space queue и catalog работают; нет voice-roster party, полного post-match цикла и cleanup. |
 | [Каталог игр](features/game-catalog.md) | core-live | Seed, game selection и staff moderation работают; нужна полная current-вертикаль modes/roles и recent/popular UX. |

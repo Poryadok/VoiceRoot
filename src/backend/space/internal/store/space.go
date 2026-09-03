@@ -25,21 +25,21 @@ var (
 
 // SpaceRow is a row from spaces.
 type SpaceRow struct {
-	ID               uuid.UUID
-	Name             string
-	Description      string
-	IconURL          *string
-	BannerURL        *string
-	Visibility       string
-	OwnerProfileID   uuid.UUID
-	MemberCount      int32
-	IsVerified       bool
-	VerificationType string
+	ID                 uuid.UUID
+	Name               string
+	Description        string
+	IconURL            *string
+	BannerURL          *string
+	Visibility         string
+	OwnerProfileID     uuid.UUID
+	MemberCount        int32
+	IsVerified         bool
+	VerificationType   string
 	EntryRequirement   string
 	EntryQuestionsJSON *string
 	MMConfigJSON       *string
 	CreatedAt          time.Time
-	UpdatedAt        time.Time
+	UpdatedAt          time.Time
 }
 
 // ListMySpacesPage holds one page of spaces the profile is a member of.
@@ -183,7 +183,11 @@ func (s *SpaceStore) TransferOwnership(ctx context.Context, spaceID, currentOwne
 	if err != nil {
 		return err
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer func() {
+		cleanupCtx, cleanupCancel := BoundedCleanupContext(ctx)
+		defer cleanupCancel()
+		_ = tx.Rollback(cleanupCtx)
+	}()
 
 	var ownerProfile uuid.UUID
 	err = tx.QueryRow(ctx, `SELECT owner_profile_id FROM spaces WHERE id = $1 FOR UPDATE`, spaceID).Scan(&ownerProfile)
@@ -214,14 +218,71 @@ UPDATE spaces SET owner_profile_id = $2, updated_at = now() WHERE id = $1
 		return err
 	}
 
-	if _, err := tx.Exec(ctx, `
-INSERT INTO audit_log (space_id, actor_profile_id, action, target_type, target_id, details)
-VALUES ($1, $2, 'ownership_transferred', 'profile', $3, '{}')
-`, spaceID, currentOwner, newOwner); err != nil {
-		return err
+	// Do not let a client cancellation make a committed owner update appear to
+	// have failed. The handler must either finish the Role/audit transition or
+	// run its compensations from this known database state.
+	commitCtx, commitCancel := BoundedCleanupContext(ctx)
+	commitErr := tx.Commit(commitCtx)
+	commitCancel()
+	if commitErr == nil {
+		return nil
 	}
 
-	return tx.Commit(ctx)
+	// A connection failure can hide a durable COMMIT. Re-read under a row lock
+	// on a fresh connection: FOR UPDATE waits until the original transaction's
+	// server-side outcome is visible before the advisory mutation lease is
+	// released by the handler.
+	outcomeCtx, outcomeCancel := BoundedCleanupContext(ctx)
+	defer outcomeCancel()
+	var actualOwner uuid.UUID
+	readErr := s.Pool.QueryRow(outcomeCtx, `
+SELECT owner_profile_id FROM spaces WHERE id = $1 FOR UPDATE
+`, spaceID).Scan(&actualOwner)
+	if readErr != nil {
+		return fmt.Errorf("transfer ownership commit outcome unresolved: commit failed: %w; locking reread failed: %v", commitErr, readErr)
+	}
+	if actualOwner == newOwner {
+		return nil
+	}
+	if actualOwner == currentOwner {
+		return commitErr
+	}
+	return fmt.Errorf(
+		"transfer ownership commit outcome unresolved: commit failed: %w; owner is %s, expected %s or %s",
+		commitErr,
+		actualOwner,
+		currentOwner,
+		newOwner,
+	)
+}
+
+// RecordOwnershipTransferred records a completed ownership and Owner-role transfer.
+// auditID is supplied by the caller so an ambiguous request cancellation can
+// remove precisely this row during compensation.
+func (s *SpaceStore) RecordOwnershipTransferred(ctx context.Context, auditID, spaceID, previousOwner, newOwner uuid.UUID) error {
+	if s == nil || s.Pool == nil {
+		return errors.New("space store: pool not configured")
+	}
+	_, err := s.Pool.Exec(ctx, `
+INSERT INTO audit_log (id, space_id, actor_profile_id, action, target_type, target_id, details)
+VALUES ($1, $2, $3, 'ownership_transferred', 'profile', $4, '{}')
+`, auditID, spaceID, previousOwner, newOwner)
+	if err != nil {
+		return err
+	}
+	// The command may have committed just as the client context was canceled.
+	// Surface that ambiguity so the handler deletes auditID while compensating.
+	return ctx.Err()
+}
+
+// DeleteAuditLogEntry removes a known audit row after its write outcome was
+// ambiguous. A missing row is already the desired state.
+func (s *SpaceStore) DeleteAuditLogEntry(ctx context.Context, auditID uuid.UUID) error {
+	if s == nil || s.Pool == nil {
+		return errors.New("space store: pool not configured")
+	}
+	_, err := s.Pool.Exec(ctx, `DELETE FROM audit_log WHERE id = $1`, auditID)
+	return err
 }
 
 // UpdateSpace updates mutable space fields.

@@ -7,6 +7,8 @@
 **Язык**: Go
 **БД**: PostgreSQL `space_db`
 
+Пул advisory lease должен подключаться напрямую к PostgreSQL или через session pooling; transaction-mode PgBouncer не поддерживается, потому что lock привязан к сессии.
+
 ## Ответственность
 
 - CRUD пространств
@@ -69,7 +71,7 @@ service SpaceService {
   rpc ListBans(ListBansRequest) returns (BanList);
   rpc TimeoutMember(TimeoutMemberRequest) returns (Empty);           // ✓ shipped
   rpc RemoveMemberTimeout(RemoveMemberTimeoutRequest) returns (Empty); // ✓ shipped
-  rpc TransferOwnership(TransferRequest) returns (Empty);            // ✓ shipped (Role Owner reassign fail-closed when ROLE_GRPC_ADDR set)
+  rpc TransferOwnership(TransferRequest) returns (Empty);            // ✓ backend gRPC (Role Owner reassign fail-closed + compensated)
   rpc AddBotMember(AddBotMemberRequest) returns (SpaceMembership);   // ✓ shipped
   rpc RemoveBotMember(RemoveBotMemberRequest) returns (Empty);       // ✓ shipped
 
@@ -78,7 +80,7 @@ service SpaceService {
   rpc CreateFromTemplate(CreateFromTemplateRequest) returns (Space); // ✗ unimplemented
 
   // Аудит
-  rpc GetAuditLog(GetAuditLogRequest) returns (AuditLogList);        // ✗ unimplemented
+  rpc GetAuditLog(GetAuditLogRequest) returns (AuditLogList);        // ✓ backend gRPC
 
   // S2S / internal
   rpc AreCoMembers(AreCoMembersRequest) returns (AreCoMembersResponse); // ✓ shipped
@@ -106,12 +108,14 @@ service SpaceService {
 | JoinSpace, LeaveSpace | ✓ | ✓ | Entry verification may be bypassed on invite join — [todo/backend.md](../todo/backend.md) |
 | KickMember, BanMember, UnbanMember, ListMembers, ListBans | ✓ | ✓ | |
 | TimeoutMember, RemoveMemberTimeout | ✓ | ✓ | |
-| TransferOwnership | ✓ | ✓ | Owner→member; Owner role Assign/Revoke fail-closed when Roles wired (ownership rolled back on role failure) |
+| TransferOwnership | ✓ | ✓ | Backend owner→member path; Owner role Assign/Revoke fail-closed when Roles wired; failed role or audit step compensates the Owner transition and database owner; audit/event only after success. Password/2FA confirmation and Gateway/Flutter lifecycle UX remain backlog |
 | AddBotMember, RemoveBotMember | ✓ | ✓ | |
 | ListTemplates, CreateFromTemplate | ✓ | ✗ | |
-| GetAuditLog | ✓ | ✗ | |
+| GetAuditLog | ✓ | ✓ | `created_at DESC, id DESC`; opaque timestamp+UUID keyset cursor; default 50/max 100; exact `SPACE_VIEW_AUDIT_LOG` check, owner-only fallback only when Role Service is unwired. Filters and REST/Flutter surfaces remain backlog |
 | AreCoMembers | ✓ | ✓ | S2S co-membership check |
 | SyncSpaceProSubscription | ✓ | ✓ | Subscription sync |
+
+`GetAuditLog` читает только строки запрошенного `space_id` и возвращает все поля `AuditLogEntry`. Ошибка Role Service закрывает доступ (`UNAVAILABLE`), явный deny даёт `PERMISSION_DENIED`, malformed cursor — `INVALID_ARGUMENT`. Наличие RPC не означает полноту аудита: writers для части действий, фильтры по actor/action и клиентские REST/Flutter поверхности остаются в [backend backlog](../todo/backend.md).
 
 **Invite permissions (code vs spec):** shipped handlers gate `RevokeInvite` / `ListInvites` on **space owner** only. Product spec allows admins with invite-management permission — align handlers when Role Service integration lands; until then document owner-only as **partial shipment**.
 
@@ -242,5 +246,3 @@ message UnpinTreeNodeRequest {
 - **Subscription Service** — лимиты узлов дерева (текст + голос) и участников (free vs Pro)
 - **User Service** — профили участников
 - **Social Service** — проверка блокировок при join
-
-
