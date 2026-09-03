@@ -18,11 +18,12 @@ import (
 )
 
 const (
-	streamName            = "file_events"
-	subjectFileUploaded   = "file.uploaded"
-	subjectFileProcessed  = "file.processed"
+	streamName              = "file_events"
+	subjectFileUploaded     = "file.uploaded"
+	subjectFileProcessed    = "file.processed"
 	subjectFileScanInfected = "file.scan_infected"
-	subjectFileExpired    = "file.expired"
+	subjectFileExpired      = "file.expired"
+	subjectFileDownloaded   = "file.downloaded"
 )
 
 // JetStreamPublisher publishes FileStreamEvent payloads to NATS JetStream.
@@ -65,6 +66,7 @@ func fileEventStreamSubjects() []string {
 		subjectFileProcessed,
 		subjectFileScanInfected,
 		subjectFileExpired,
+		subjectFileDownloaded,
 	}
 }
 
@@ -133,6 +135,9 @@ func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, e
 	if expired := env.GetFileExpired(); expired != nil {
 		attrs = append(attrs, slog.String("file_id", expired.GetFileId()))
 	}
+	if downloaded := env.GetFileDownloaded(); downloaded != nil {
+		attrs = append(attrs, slog.String("file_id", downloaded.GetFileId()))
+	}
 	natslog.LogPublish(p.Logger, subject, requestID, "file event published", attrs...)
 	return nil
 }
@@ -149,7 +154,7 @@ func (p *JetStreamPublisher) PublishFileUploaded(ctx context.Context, fileID, up
 	env := newFileEvent()
 	env.Payload = &eventsv1.FileStreamEvent_FileUploaded{
 		FileUploaded: &eventsv1.FileUploaded{
-			FileId:             fileID,
+			FileId:            fileID,
 			UploaderProfileId: uploaderProfileID,
 		},
 	}
@@ -179,8 +184,8 @@ func (p *JetStreamPublisher) PublishFileScanInfected(ctx context.Context, fileID
 	env := newFileEvent()
 	env.Payload = &eventsv1.FileStreamEvent_FileScanResult{
 		FileScanResult: &eventsv1.FileScanResult{
-			FileId:             fileID,
-			Result:             "infected",
+			FileId:            fileID,
+			Result:            "infected",
 			UploaderProfileId: &uploader,
 		},
 	}
@@ -196,6 +201,18 @@ func (p *JetStreamPublisher) PublishFileExpired(ctx context.Context, fileID stri
 	env := newFileEvent()
 	env.Payload = &eventsv1.FileStreamEvent_FileExpired{FileExpired: expired}
 	return p.publishProto(ctx, subjectFileExpired, env)
+}
+
+// PublishFileDownloaded implements Publisher.
+func (p *JetStreamPublisher) PublishFileDownloaded(ctx context.Context, fileID, downloaderProfileID string) error {
+	env := newFileEvent()
+	env.Payload = &eventsv1.FileStreamEvent_FileDownloaded{
+		FileDownloaded: &eventsv1.FileDownloaded{
+			FileId:              fileID,
+			DownloaderProfileId: downloaderProfileID,
+		},
+	}
+	return p.publishProto(ctx, subjectFileDownloaded, env)
 }
 
 // Close drains the underlying NATS connection.

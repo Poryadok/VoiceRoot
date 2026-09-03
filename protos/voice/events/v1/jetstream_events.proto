@@ -527,6 +527,7 @@ message FileStreamEvent {
     FileScanResult file_scan_result = 11;
     FileExpired file_expired = 12;
     FileProcessed file_processed = 13;
+    FileDownloaded file_downloaded = 14;
   }
 }
 
@@ -551,6 +552,11 @@ message FileProcessed {
 message FileExpired {
   string file_id = 1;
   optional string chat_id = 2;
+}
+
+message FileDownloaded {
+  string file_id = 1;
+  string downloader_profile_id = 2;
 }
 
 // --- matchmaking.events ---

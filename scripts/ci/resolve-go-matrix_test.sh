@@ -24,6 +24,17 @@ assert_not_contains() {
   fi
 }
 
+assert_exact_services() {
+  local json="$1"
+  local expected="$2"
+  local count unique
+  count="$(echo "${json}" | jq 'length')"
+  unique="$(echo "${json}" | jq 'unique | length')"
+  [[ "${count}" -eq "${unique}" ]] || fail "expected no duplicate services in ${json}"
+  [[ "$(echo "${json}" | jq -cS 'sort')" == "$(echo "${expected}" | jq -cS 'sort')" ]] \
+    || fail "expected exactly ${expected}, got ${json}"
+}
+
 run_matrix() {
   local out
   out="$(mktemp)"
@@ -33,6 +44,15 @@ run_matrix() {
   run_go="$(grep '^run_go=' "${out}" | head -1 | cut -d= -f2-)"
   rm -f "${out}"
 }
+
+echo "== chat change pulls file, messaging, and gateway only (one-hop) =="
+FILTER_JSON='{"code":"true","svc_chat":"true"}' run_matrix
+assert_contains "${go_services}" chat
+assert_contains "${go_services}" file
+assert_contains "${go_services}" messaging
+assert_contains "${go_services}" gateway
+assert_exact_services "${go_services}" '["chat","file","messaging","gateway"]'
+[[ "${run_go}" == "true" ]] || fail "expected run_go=true for chat"
 
 echo "== file change pulls story (one-hop) =="
 FILTER_JSON='{"code":"true","svc_file":"true"}' run_matrix

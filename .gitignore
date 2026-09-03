@@ -26,6 +26,8 @@ gen/
 /src/backend/*/coverage.html
 /src/backend/*/$prof
 /src/backend/*/coverage
+/src/backend/*/coverage_profile*
+/src/backend/*/notif_cov*
 /src/backend/analytics/analytics
 /src/backend/bot/bot
 /src/backend/chat/chat
