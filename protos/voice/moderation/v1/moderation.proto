@@ -125,6 +125,8 @@ message Appeal {
   string status = 5;
   optional string reviewed_by_profile_id = 6;
   google.protobuf.Timestamp created_at = 7;
+  optional google.protobuf.Timestamp reviewed_at = 8;
+  optional string review_notes = 9;
 }
 
 message SubmitAppealRequest {
