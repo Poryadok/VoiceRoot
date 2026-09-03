@@ -133,6 +133,14 @@ func main() {
 			spaceSvc.Friends = s2s.NewGRPCSocialFriends(sconn)
 			spaceSvc.Blocks = s2s.NewGRPCSocialBlocks(sconn)
 		}
+		if chatAddr := strings.TrimSpace(os.Getenv("CHAT_GRPC_ADDR")); chatAddr != "" {
+			cconn, err := grpc.NewClient(grpcclient.DialTarget(chatAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				log.Fatalf("chat grpc: %v", err)
+			}
+			defer func() { _ = cconn.Close() }()
+			spaceSvc.Chats = grpcsvc.NewGRPCChatLookup(cconn)
+		}
 		if natsURL != "" {
 			entitlements := &subscriptionconsume.SpaceStoreEntitlement{Store: spaceStore}
 			go func() {
