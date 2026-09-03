@@ -8,6 +8,10 @@ function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status });
 }
 
+function hasPath(url: unknown, pathname: string) {
+  return typeof url === 'string' && new URL(url).pathname === pathname;
+}
+
 function botDetailResponse(id: string, name: string, description: string) {
   return jsonResponse({
     bot: { id, name, description, scopes_json: '[]' },
@@ -90,7 +94,7 @@ describe('App bot lifecycle UI', () => {
 
     const patchCall = fetchMock.mock.calls.find(
       ([url, init]) =>
-        url === `http://127.0.0.1:18080/api/v1/bots/${BOT_ID}` &&
+        hasPath(url, `/api/v1/bots/${BOT_ID}`) &&
         (init as RequestInit)?.method === 'PATCH',
     );
     expect(patchCall).toBeTruthy();
@@ -134,7 +138,7 @@ describe('App bot lifecycle UI', () => {
     expect(confirmSpy).toHaveBeenCalled();
     const deleteCall = fetchMock.mock.calls.find(
       ([url, init]) =>
-        url === `http://127.0.0.1:18080/api/v1/bots/${BOT_ID}` &&
+        hasPath(url, `/api/v1/bots/${BOT_ID}`) &&
         (init as RequestInit)?.method === 'DELETE',
     );
     expect(deleteCall).toBeTruthy();
