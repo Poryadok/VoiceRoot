@@ -45,6 +45,7 @@ func TestJetStreamPublisher_FileUploadedRoundTrip(t *testing.T) {
 	sub, err := nc.SubscribeSync(subjectFileUploaded)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = sub.Unsubscribe() })
+	require.NoError(t, nc.Flush())
 
 	pub, err := NewJetStreamPublisher(url)
 	require.NoError(t, err)
@@ -76,6 +77,7 @@ func TestJetStreamPublisher_FileScanInfectedRoundTrip(t *testing.T) {
 	sub, err := nc.SubscribeSync(subjectFileScanInfected)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = sub.Unsubscribe() })
+	require.NoError(t, nc.Flush())
 
 	pub, err := NewJetStreamPublisher(url)
 	require.NoError(t, err)
@@ -107,6 +109,7 @@ func TestJetStreamPublisher_FileProcessedRoundTrip(t *testing.T) {
 	sub, err := nc.SubscribeSync(subjectFileProcessed)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = sub.Unsubscribe() })
+	require.NoError(t, nc.Flush())
 
 	pub, err := NewJetStreamPublisher(url)
 	require.NoError(t, err)
