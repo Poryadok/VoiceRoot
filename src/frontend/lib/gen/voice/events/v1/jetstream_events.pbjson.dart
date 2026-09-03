@@ -2062,6 +2062,15 @@ const FileStreamEvent$json = {
       '9': 0,
       '10': 'fileProcessed'
     },
+    {
+      '1': 'file_downloaded',
+      '3': 14,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.FileDownloaded',
+      '9': 0,
+      '10': 'fileDownloaded'
+    },
   ],
   '8': [
     {'1': 'payload'},
@@ -2077,7 +2086,8 @@ final $typed_data.Uint8List fileStreamEventDescriptor = $convert.base64Decode(
     'bGVTY2FuUmVzdWx0SABSDmZpbGVTY2FuUmVzdWx0EkEKDGZpbGVfZXhwaXJlZBgMIAEoCzIcLn'
     'ZvaWNlLmV2ZW50cy52MS5GaWxlRXhwaXJlZEgAUgtmaWxlRXhwaXJlZBJHCg5maWxlX3Byb2Nl'
     'c3NlZBgNIAEoCzIeLnZvaWNlLmV2ZW50cy52MS5GaWxlUHJvY2Vzc2VkSABSDWZpbGVQcm9jZX'
-    'NzZWRCCQoHcGF5bG9hZA==');
+    'NzZWQSSgoPZmlsZV9kb3dubG9hZGVkGA4gASgLMh8udm9pY2UuZXZlbnRzLnYxLkZpbGVEb3du'
+    'bG9hZGVkSABSDmZpbGVEb3dubG9hZGVkQgkKB3BheWxvYWQ=');
 
 @$core.Deprecated('Use fileUploadedDescriptor instead')
 const FileUploaded$json = {
@@ -2188,6 +2198,26 @@ const FileExpired$json = {
 final $typed_data.Uint8List fileExpiredDescriptor = $convert.base64Decode(
     'CgtGaWxlRXhwaXJlZBIXCgdmaWxlX2lkGAEgASgJUgZmaWxlSWQSHAoHY2hhdF9pZBgCIAEoCU'
     'gAUgZjaGF0SWSIAQFCCgoIX2NoYXRfaWQ=');
+
+@$core.Deprecated('Use fileDownloadedDescriptor instead')
+const FileDownloaded$json = {
+  '1': 'FileDownloaded',
+  '2': [
+    {'1': 'file_id', '3': 1, '4': 1, '5': 9, '10': 'fileId'},
+    {
+      '1': 'downloader_profile_id',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '10': 'downloaderProfileId'
+    },
+  ],
+};
+
+/// Descriptor for `FileDownloaded`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List fileDownloadedDescriptor = $convert.base64Decode(
+    'Cg5GaWxlRG93bmxvYWRlZBIXCgdmaWxlX2lkGAEgASgJUgZmaWxlSWQSMgoVZG93bmxvYWRlcl'
+    '9wcm9maWxlX2lkGAIgASgJUhNkb3dubG9hZGVyUHJvZmlsZUlk');
 
 @$core.Deprecated('Use matchmakingStreamEventDescriptor instead')
 const MatchmakingStreamEvent$json = {

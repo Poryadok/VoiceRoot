@@ -245,7 +245,14 @@ When conversion finishes (`status=ready` or `failed`), File publishes **`file.pr
 | `file.processed`     | file_id, status, converted_url, thumb_url, **width**, **height**, **duration_seconds**, **intent** |
 | `file.scan_infected` | file_id, uploader_id                      |
 | `file.expired`       | file_id, chat_id                          |
-| `file.downloaded`    | file_id, downloader_id                    |
+| `file.downloaded`    | `file_id`, `downloader_profile_id`        |
+
+`file.downloaded` означает не подтверждённую передачу байтов, а успешное
+намерение скачать: авторизованный профиль запросил `GetFileURL` для доступного
+файла в статусе `ready`, и File Service успешно создал presigned GET URL. На
+ошибках авторизации, доступа, статуса файла или presign событие не публикуется.
+Публикация выполняется best-effort: ошибка NATS логируется, но уже успешно
+созданный `GetFileURLResponse` остаётся успешным.
 
 ## Зависимости
 

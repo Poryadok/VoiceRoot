@@ -85,7 +85,7 @@ CI/CD + выкат: GitHub Actions, promote/deploy, k8s secrets, observability �
 - [ ] **Prod smoke = alias staging** — [`smoke-prod.sh`](../../scripts/prod/smoke-prod.sh) → [`smoke-staging.sh`](../../scripts/staging/smoke-staging.sh), `STAGING_STAFF_TOKEN` из `PROD_STAFF_TOKEN`; нет отдельных prod acceptance checks.
 - [ ] **Prod deploy без selective / stack.lock** — [`prod-deploy.yml`](../../.github/workflows/prod-deploy.yml): нет `changed_services`, `needs_user_space_rollout`, artifact lock; `verify-prod-images` требует **все** образы catalog на TAG; `images-only` → `deploy-changed.sh` без `CHANGED_SERVICES` = no-op.
 - [ ] **Prod `full` mode всегда `rollout-app-tier.sh`** — нет user/space subset rollout как на staging; single-node Recreate strategy остаётся.
-- [ ] **S2S deps one-hop в `resolve-go-matrix.sh`** — e.g. `file` change не тянет `story` (story→file); для CI tests ок, для promote/build — только прямой path + gateway ([`resolve-go-matrix.sh`](../../scripts/ci/resolve-go-matrix.sh)).
+- [x] **S2S deps one-hop в `resolve-go-matrix.sh`** — direct `chat`→`file` edge selected; chat-only regression asserts the one-hop closure, without transitive `story`. Promote/build remains only direct paths + gateway ([`resolve-go-matrix.sh`](../../scripts/ci/resolve-go-matrix.sh)).
 
 
 ## Low

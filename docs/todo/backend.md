@@ -114,7 +114,7 @@
 
 
 - [ ] **[File] SHA-256 deduplication missing** — no hash lookup, no reuse of existing R2 key; `file_references` table absent (spec model in `d:\Git\Voice\docs\microservices\file-service.md`; only `files` in `d:\Git\Voice\src\backend\migrations\file_db\000001_init.up.sql`). Acknowledged in `d:\Git\Voice\src\backend\file\README.md`.
-- [ ] **[File] NATS `file.downloaded` отсутствует** — `file.uploaded` / `file.processed` / `file.scan_infected` / `file.expired` публикуются (`fileevents/jetstream.go`). Нет `file.downloaded`; Messaging preview-refresh после conversion — проверить consumer.
+- [x] **[File] NATS `file.downloaded` отсутствует** — File публикует best-effort `file.downloaded` после успешного `GetFileURL` presign; Messaging preview-refresh после conversion остаётся отдельной задачей.
 - [ ] **[File] No async worker / `processing` status** — conversion runs inline in `ConfirmUpload`; `processing` never set (`d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go`; `d:\Git\Voice\docs\microservices\file-service.md` pipeline).
 - [x] **[File] Originals kept after image processing** — processed keys written, source `r2_key` not removed (`d:\Git\Voice\src\backend\file\internal\imgproc\webp.go`; contradicts `d:\Git\Voice\docs\features\file-storage.md`).
 - [ ] **[File] `CheckQuota` ignores premium** — always returns `r2file.MaxFreeFileBytes` as limit (`d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go` L449–454); README says subscription quotas beyond free tier are out of scope.
@@ -747,7 +747,7 @@
 ### Realtime
 
 
-- [ ] **[Realtime] Coverage artifacts committed** — `$prof`, `notif_cov`, `notif_cov.out`, `coverage_profile`, `coverage_profile.out`, `coverage` under `src/backend/realtime/` are tracked in git (local profiling noise).
+- [x] **[Realtime] Coverage artifacts committed** — удалены ровно шесть tracked-артефактов (`$prof`, `coverage`, `coverage_profile`, `coverage_profile.out`, `notif_cov`, `notif_cov.out`) из `src/backend/realtime/`; `.gitignore` теперь предотвращает их повторное появление.
 - [ ] **[Realtime] Unknown inbound ops silently dropped** — `ws.go` `default` branch ignores unrecognized client ops (no `error` frame).
 - [ ] **[Realtime] Server does not emit WebSocket ping frames** — liveness is client `heartbeat` + 90s read deadline (`ws.go`); doc mentions “ping-pong” but implementation is app-level heartbeat only.
 - [ ] **[Realtime] `CheckOrigin` always true** — `ws.go` delegates origin policy to Gateway (documented inline); defense-in-depth relies entirely on edge.
