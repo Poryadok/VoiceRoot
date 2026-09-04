@@ -563,7 +563,20 @@ void main() {
           auth: auth,
           realArchiveController: true,
         );
-        addTearDown(container.dispose);
+        InboxChatCall? staleMainCall;
+        Future<void>? staleReconcile;
+        addTearDown(() async {
+          final pendingCall = staleMainCall;
+          if (pendingCall != null && !pendingCall.completed) {
+            await chats.completeCall(
+              pendingCall,
+              result: const ChatsApiOk(ChatListData(items: [])),
+            );
+          }
+          final pendingReconcile = staleReconcile;
+          if (pendingReconcile != null) await pendingReconcile;
+          container.dispose();
+        });
 
         final reconciler = container.read(inboxReconcilerProvider.notifier);
         await reconciler.reconcile();
@@ -586,8 +599,8 @@ void main() {
                 ],
               );
 
-        final staleReconcile = reconciler.reconcile();
-        final staleMainCall = chats.findCall(
+        staleReconcile = reconciler.reconcile();
+        staleMainCall = chats.findCall(
           inbox: 'main',
           cursor: null,
           profileId: 'profile-a',
