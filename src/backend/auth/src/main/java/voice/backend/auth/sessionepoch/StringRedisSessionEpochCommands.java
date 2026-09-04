@@ -3,11 +3,15 @@ package voice.backend.auth.sessionepoch;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import io.lettuce.core.AbstractRedisClient;
+import io.lettuce.core.ConnectionFuture;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisFuture;
+import io.lettuce.core.RedisURI;
 import io.lettuce.core.TransactionResult;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.api.async.RedisAsyncCommands;
@@ -15,7 +19,8 @@ import io.lettuce.core.codec.ByteArrayCodec;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
-import org.springframework.data.redis.core.RedisCallback;
+import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
+import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 /**
@@ -23,32 +28,37 @@ import org.springframework.data.redis.core.StringRedisTemplate;
  * numbers cannot exactly represent every positive signed 64-bit epoch.
  */
 final class StringRedisSessionEpochCommands implements RedisSessionEpochCommands {
-  private final StringRedisTemplate redis;
   private final RedisClient redisClient;
+  private final RedisUriFactory redisUriFactory;
 
   StringRedisSessionEpochCommands(StringRedisTemplate redis) {
     if (redis == null) {
       throw new IllegalArgumentException("redis template is required");
     }
-    this.redis = redis;
-    this.redisClient = standaloneClient(redis.getRequiredConnectionFactory());
+    LettuceConnectionFactory connectionFactory = standaloneFactory(redis.getRequiredConnectionFactory());
+    this.redisClient = standaloneClient(connectionFactory);
+    this.redisUriFactory = timeout -> redisUri(connectionFactory, timeout);
   }
 
-  StringRedisSessionEpochCommands(StringRedisTemplate redis, RedisClient redisClient) {
+  StringRedisSessionEpochCommands(
+      StringRedisTemplate redis, RedisClient redisClient, RedisURI redisUri) {
     if (redis == null) {
       throw new IllegalArgumentException("redis template is required");
     }
     if (redisClient == null) {
       throw new IllegalArgumentException("Redis client is required");
     }
-    this.redis = redis;
+    if (redisUri == null) {
+      throw new IllegalArgumentException("Redis URI is required");
+    }
     this.redisClient = redisClient;
+    this.redisUriFactory = ignored -> redisUri;
   }
 
   @Override
   public long atomicMaxWithoutExpiry(String key, long candidate, Duration timeout) {
     long deadlineNanos = System.nanoTime() + timeout.toNanos();
-    StatefulRedisConnection<byte[], byte[]> connection = redisClient.connect(ByteArrayCodec.INSTANCE);
+    StatefulRedisConnection<byte[], byte[]> connection = connect(deadlineNanos);
     try {
       connection.setTimeout(timeout);
       RedisAsyncCommands<byte[], byte[]> commands = connection.async();
@@ -92,46 +102,60 @@ final class StringRedisSessionEpochCommands implements RedisSessionEpochCommands
   @Override
   public long readRequiredPositive(String key, Duration timeout) {
     long deadlineNanos = System.nanoTime() + timeout.toNanos();
-    RedisCallback<Long> readFloor =
-        connection -> {
-          RedisAsyncCommands<byte[], byte[]> commands = commandsFor(connection);
-          byte[] raw =
-              await(commands.get(key.getBytes(StandardCharsets.UTF_8)), deadlineNanos, connection::close);
-          if (raw == null) {
-            throw new SessionEpochFloorUnavailableException("session epoch floor missing");
-          }
-          return parsePositive(new String(raw, StandardCharsets.UTF_8));
-        };
-    Long value = redis.execute(readFloor);
-    if (value == null) {
-      throw new SessionEpochFloorUnavailableException("session epoch floor Redis unavailable");
+    StatefulRedisConnection<byte[], byte[]> connection = connect(deadlineNanos);
+    try {
+      connection.setTimeout(timeout);
+      RedisAsyncCommands<byte[], byte[]> commands = connection.async();
+      byte[] raw =
+          await(commands.get(key.getBytes(StandardCharsets.UTF_8)), deadlineNanos, connection::close);
+      if (raw == null) {
+        throw new SessionEpochFloorUnavailableException("session epoch floor missing");
+      }
+      return parsePositive(new String(raw, StandardCharsets.UTF_8));
+    } finally {
+      if (connection.isOpen()) {
+        connection.close();
+      }
     }
-    return value;
   }
 
-  @SuppressWarnings("unchecked")
-  private static RedisAsyncCommands<byte[], byte[]> commandsFor(RedisConnection connection) {
-    Object nativeConnection = connection.getNativeConnection();
-    if (!(nativeConnection instanceof RedisAsyncCommands<?, ?>)) {
-      throw new SessionEpochFloorUnavailableException("session epoch floor Redis unavailable");
+  private StatefulRedisConnection<byte[], byte[]> connect(long deadlineNanos) {
+    long remainingNanos = deadlineNanos - System.nanoTime();
+    if (remainingNanos <= 0) {
+      throw new SessionEpochFloorUnavailableException("session epoch floor command timeout");
     }
-    return (RedisAsyncCommands<byte[], byte[]>) nativeConnection;
+    ConnectionFuture<StatefulRedisConnection<byte[], byte[]>> future =
+        redisClient.connectAsync(ByteArrayCodec.INSTANCE, redisUriFactory.create(Duration.ofNanos(remainingNanos)));
+    AtomicBoolean abandoned = new AtomicBoolean();
+    future.whenComplete(
+        (connection, error) -> {
+          if (abandoned.get() && connection != null) {
+            connection.close();
+          }
+        });
+    try {
+      return await(future, deadlineNanos, () -> abandoned.set(true));
+    } finally {
+      if (!future.isDone() && abandoned.compareAndSet(false, true)) {
+        future.cancel(true);
+      }
+    }
   }
 
   private static <T> T await(
-      RedisFuture<T> future, long deadlineNanos, Runnable closeConnection) {
+      Future<T> future, long deadlineNanos, Runnable abortAction) {
     long remainingNanos = deadlineNanos - System.nanoTime();
     if (remainingNanos <= 0) {
-      abort(future, closeConnection);
+      abort(future, abortAction);
       throw new SessionEpochFloorUnavailableException("session epoch floor command timeout");
     }
     try {
       return future.get(remainingNanos, TimeUnit.NANOSECONDS);
     } catch (TimeoutException ex) {
-      abort(future, closeConnection);
+      abort(future, abortAction);
       throw new SessionEpochFloorUnavailableException("session epoch floor command timeout", ex);
     } catch (InterruptedException ex) {
-      abort(future, closeConnection);
+      abort(future, abortAction);
       Thread.currentThread().interrupt();
       throw new SessionEpochFloorUnavailableException("session epoch floor command interrupted", ex);
     } catch (ExecutionException ex) {
@@ -143,20 +167,55 @@ final class StringRedisSessionEpochCommands implements RedisSessionEpochCommands
     future.cancel(true);
   }
 
-  private static void abort(RedisFuture<?> future, Runnable closeConnection) {
+  private static void abort(Future<?> future, Runnable abortAction) {
+    abortAction.run();
     future.cancel(true);
-    closeConnection.run();
   }
 
-  private static RedisClient standaloneClient(RedisConnectionFactory connectionFactory) {
+  private static LettuceConnectionFactory standaloneFactory(RedisConnectionFactory connectionFactory) {
     if (!(connectionFactory instanceof LettuceConnectionFactory lettuceConnectionFactory)) {
       throw new IllegalArgumentException("session epoch floor requires Lettuce Redis");
     }
+    return lettuceConnectionFactory;
+  }
+
+  private static RedisClient standaloneClient(LettuceConnectionFactory lettuceConnectionFactory) {
     AbstractRedisClient client = lettuceConnectionFactory.getRequiredNativeClient();
     if (!(client instanceof RedisClient redisClient)) {
       throw new IllegalArgumentException("session epoch floor requires standalone Redis");
     }
     return redisClient;
+  }
+
+  private static RedisURI redisUri(LettuceConnectionFactory connectionFactory, Duration timeout) {
+    RedisStandaloneConfiguration standalone = connectionFactory.getStandaloneConfiguration();
+    LettuceClientConfiguration clientConfiguration = connectionFactory.getClientConfiguration();
+    RedisURI.Builder builder =
+        RedisURI.Builder.redis(standalone.getHostName(), standalone.getPort())
+            .withDatabase(standalone.getDatabase())
+            .withTimeout(timeout)
+            .withSsl(clientConfiguration.isUseSsl())
+            .withStartTls(clientConfiguration.isStartTls())
+            .withVerifyPeer(clientConfiguration.getVerifyMode());
+    clientConfiguration.getClientName().ifPresent(builder::withClientName);
+    standalone
+        .getPassword()
+        .toOptional()
+        .ifPresent(
+            password -> {
+              String username = standalone.getUsername();
+              if (username == null || username.isBlank()) {
+                builder.withPassword(password);
+              } else {
+                builder.withAuthentication(username, password);
+              }
+            });
+    return builder.build();
+  }
+
+  @FunctionalInterface
+  private interface RedisUriFactory {
+    RedisURI create(Duration timeout);
   }
 
   private static long parsePositive(String raw) {
