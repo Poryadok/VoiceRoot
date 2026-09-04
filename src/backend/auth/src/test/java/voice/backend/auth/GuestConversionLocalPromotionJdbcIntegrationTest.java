@@ -143,7 +143,9 @@ class GuestConversionLocalPromotionJdbcIntegrationTest {
 
   private GuestConversionOperation leasedOperation(UUID accountId) {
     operations.createOrResume(accountId, UUID.randomUUID(), now());
-    return operations.leaseDue(1, now(), now().plusSeconds(60)).getFirst();
+    return operations
+        .leaseDue(GuestConversionState.PENDING_USER, 1, now(), now().plusSeconds(60))
+        .getFirst();
   }
 
   private static GuestConversionOperation withLease(GuestConversionOperation operation, Instant lease) {

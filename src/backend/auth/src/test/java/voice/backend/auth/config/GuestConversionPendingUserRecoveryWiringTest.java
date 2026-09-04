@@ -24,6 +24,7 @@ import voice.backend.auth.service.GuestConversionPendingUserRecoveryRunner;
 import voice.backend.auth.service.GuestConversionLocalPromotion;
 import voice.backend.auth.service.GuestConversionPendingUserWorker;
 import voice.backend.auth.userdb.PrimaryProfileProvisioner;
+import static org.mockito.Mockito.mock;
 
 class GuestConversionPendingUserRecoveryWiringTest {
   private final ApplicationContextRunner jdbcRuntime =
@@ -188,7 +189,7 @@ class GuestConversionPendingUserRecoveryWiringTest {
 
     @Bean
     StringRedisTemplate redis() {
-      return new StringRedisTemplate();
+      return mock(StringRedisTemplate.class);
     }
 
     @Bean

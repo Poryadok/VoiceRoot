@@ -90,6 +90,54 @@ class GuestConversionPendingEventWorkerTest {
   }
 
   @Test
+  void missingNatsPublisherRecordsTheFencedFailureInsteadOfCompleting() {
+    GuestConversionOperation operation = operation(GuestConversionState.PENDING_EVENT);
+    RecordingOperations operations = new RecordingOperations(operation);
+
+    worker(operations, new UnavailableGuestConversionEventPublisher()).processDue(1, LEASE);
+
+    assertThat(operations.advances).isEmpty();
+    assertThat(operations.failures)
+        .singleElement()
+        .satisfies(
+            failure -> {
+              assertThat(failure.operationId()).isEqualTo(operation.operationId());
+              assertThat(failure.lockedUntil()).isEqualTo(operation.lockedUntil());
+              assertThat(failure.errorCode()).isEqualTo("IllegalStateException");
+              assertThat(failure.nextAttemptAt()).isAfterOrEqualTo(NOW);
+            });
+    assertThat(operations.state).isEqualTo(GuestConversionState.PENDING_EVENT);
+  }
+
+  @Test
+  void slowPublishRefreshesTheClockBeforeTheFencedAdvanceAndFailure() {
+    MutableClock successClock = new MutableClock(NOW);
+    RecordingOperations successfulOperations =
+        new RecordingOperations(operation(GuestConversionState.PENDING_EVENT));
+    RecordingPublisher successfulPublisher = new RecordingPublisher();
+    successfulPublisher.beforeCompletion = () -> successClock.advance(Duration.ofSeconds(20));
+
+    worker(successfulOperations, successfulPublisher, successClock).processDue(1, LEASE);
+
+    assertThat(successfulOperations.advances)
+        .extracting(AdvanceCall::now)
+        .containsExactly(NOW.plusSeconds(20));
+
+    MutableClock failureClock = new MutableClock(NOW);
+    RecordingOperations failingOperations =
+        new RecordingOperations(operation(GuestConversionState.PENDING_EVENT));
+    RecordingPublisher failingPublisher = new RecordingPublisher();
+    failingPublisher.beforeCompletion = () -> failureClock.advance(Duration.ofSeconds(20));
+    failingPublisher.failure = new IllegalStateException("slow publish failure");
+
+    worker(failingOperations, failingPublisher, failureClock).processDue(1, LEASE);
+
+    assertThat(failingOperations.failures)
+        .extracting(FailureCall::now)
+        .containsExactly(NOW.plusSeconds(20));
+  }
+
+  @Test
   void crashAfterPubAckBeforeAdvanceRepublishesTheSameStableIdentity() {
     GuestConversionOperation operation = operation(GuestConversionState.PENDING_EVENT);
     RecordingOperations operations = new RecordingOperations(operation);
@@ -174,12 +222,12 @@ class GuestConversionPendingEventWorkerTest {
   }
 
   private static GuestConversionPendingEventWorker worker(
-      RecordingOperations operations, RecordingPublisher publisher) {
+      RecordingOperations operations, GuestConversionEventPublisher publisher) {
     return worker(operations, publisher, CLOCK);
   }
 
   private static GuestConversionPendingEventWorker worker(
-      RecordingOperations operations, RecordingPublisher publisher, Clock clock) {
+      RecordingOperations operations, GuestConversionEventPublisher publisher, Clock clock) {
     return new GuestConversionPendingEventWorker(
         operations, publisher, clock, (operation, failure, now) -> now.plusSeconds(1));
   }
@@ -279,11 +327,13 @@ class GuestConversionPendingEventWorkerTest {
     private final List<PublishCall> publishes = new ArrayList<>();
     private RuntimeException failure;
     private GuestConversionPublishAck ack = new GuestConversionPublishAck("user.events", 1);
+    private Runnable beforeCompletion = () -> {};
 
     @Override
     public GuestConversionPublishAck publishGuestConverted(
         String subject, UserStreamEvent envelope, String natsMessageId) {
       publishes.add(new PublishCall(subject, envelope, natsMessageId));
+      beforeCompletion.run();
       if (failure != null) {
         throw failure;
       }

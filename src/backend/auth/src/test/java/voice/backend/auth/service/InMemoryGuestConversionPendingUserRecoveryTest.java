@@ -1,6 +1,7 @@
 package voice.backend.auth.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -48,6 +49,34 @@ class InMemoryGuestConversionPendingUserRecoveryTest {
     List<GuestConversionOperation> nextDue =
         operations.leaseDue(1, NOW, NOW.plus(Duration.ofMinutes(2)));
     assertThat(nextDue).extracting(GuestConversionOperation::state).containsExactly(GuestConversionState.PENDING_EVENT);
+  }
+
+  @Test
+  void alreadyAppliedMemoryPromotionNeverCompensatesAnAccountBackToGuest() {
+    InMemoryAccountRepository accounts = new InMemoryAccountRepository();
+    var guest = accounts.create("already-applied@example.com", null, "hash", "guest");
+    InMemoryGuestConversionOperationRepository operations =
+        new InMemoryGuestConversionOperationRepository();
+    operations.createOrResume(guest.id(), UUID.randomUUID(), NOW);
+    GuestConversionOperation leased =
+        operations
+            .leaseDue(GuestConversionState.PENDING_USER, 1, NOW, NOW.plus(Duration.ofMinutes(1)))
+            .getFirst();
+    assertThat(
+            operations.advance(
+                leased.operationId(),
+                GuestConversionState.PENDING_USER,
+                leased.lockedUntil(),
+                NOW))
+        .isEqualTo(voice.backend.auth.repository.GuestConversionAdvanceResult.APPLIED);
+
+    assertThatThrownBy(
+            () ->
+                new InMemoryGuestConversionLocalPromotion(accounts, operations)
+                    .promoteAndAdvance(leased, NOW))
+        .isInstanceOf(IllegalStateException.class);
+
+    assertThat(accounts.findById(guest.id().toString()).orElseThrow().type()).isEqualTo("regular");
   }
 
   private static final class RecordingUser implements PrimaryProfileProvisioner {
