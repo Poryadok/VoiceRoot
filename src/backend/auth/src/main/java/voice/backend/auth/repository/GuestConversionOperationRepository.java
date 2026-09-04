@@ -2,6 +2,7 @@ package voice.backend.auth.repository;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /** Auth-owned durable guest-to-regular conversion operation store. */
@@ -20,4 +21,11 @@ public interface GuestConversionOperationRepository {
    */
   GuestConversionAdvanceResult advance(
       UUID operationId, GuestConversionState expectedState, Instant expectedLockedUntil, Instant now);
+
+  Optional<GuestConversionOperation> recordFailure(
+      UUID operationId,
+      Instant expectedLockedUntil,
+      String errorCode,
+      Instant nextAttemptAt,
+      Instant now);
 }

@@ -244,6 +244,53 @@ public class JdbcGuestConversionOperationRepository implements GuestConversionOp
     };
   }
 
+  @Override
+  public java.util.Optional<GuestConversionOperation> recordFailure(
+      UUID operationId,
+      Instant expectedLockedUntil,
+      String errorCode,
+      Instant nextAttemptAt,
+      Instant now) {
+    Objects.requireNonNull(operationId, "operationId");
+    Objects.requireNonNull(expectedLockedUntil, "expectedLockedUntil");
+    Objects.requireNonNull(errorCode, "errorCode");
+    Objects.requireNonNull(nextAttemptAt, "nextAttemptAt");
+    Objects.requireNonNull(now, "now");
+    if (errorCode.isBlank()) {
+      throw new IllegalArgumentException("errorCode must not be blank");
+    }
+    if (nextAttemptAt.isBefore(now)) {
+      throw new IllegalArgumentException("nextAttemptAt must not be before now");
+    }
+
+    return jdbc
+        .query(
+            """
+            UPDATE guest_conversion_operations
+            SET attempt_count = attempt_count + 1,
+                last_error_code = :errorCode,
+                next_attempt_at = :nextAttemptAt,
+                locked_until = NULL,
+                updated_at = :now
+            WHERE operation_id = :operationId
+              AND state <> 'COMPLETED'
+              AND locked_until = :expectedLockedUntil
+              AND locked_until > :now
+            RETURNING operation_id, account_id, otp_code_id, state, attempt_count,
+                      next_attempt_at, locked_until, last_error_code, user_marked_at,
+                      auth_promoted_at, event_published_at, created_at, updated_at
+            """,
+            new MapSqlParameterSource()
+                .addValue("operationId", operationId)
+                .addValue("expectedLockedUntil", Timestamp.from(expectedLockedUntil))
+                .addValue("errorCode", errorCode)
+                .addValue("nextAttemptAt", Timestamp.from(nextAttemptAt))
+                .addValue("now", Timestamp.from(now)),
+            ROW_MAPPER)
+        .stream()
+        .findFirst();
+  }
+
   private java.util.Optional<GuestConversionOperation> findByAccountId(UUID accountId) {
     return jdbc
         .query(
