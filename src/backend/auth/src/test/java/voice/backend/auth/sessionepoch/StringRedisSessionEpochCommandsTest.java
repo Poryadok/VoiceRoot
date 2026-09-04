@@ -33,6 +33,8 @@ class StringRedisSessionEpochCommandsTest {
     when(factory.getConnection()).thenReturn(firstConnection, secondConnection);
     when(firstConnection.getNativeConnection()).thenReturn(firstCommands);
     when(secondConnection.getNativeConnection()).thenReturn(secondCommands);
+    when(firstConnection.isPipelined()).thenReturn(true);
+    when(secondConnection.isPipelined()).thenReturn(true);
     StringRedisSessionEpochCommands commands = new StringRedisSessionEpochCommands(template, factory);
 
     assertThat(commands.atomicMaxWithoutExpiry("auth:session:min_epoch:" + UUID.randomUUID(), 1L, Duration.ofSeconds(2)))
@@ -57,13 +59,16 @@ class StringRedisSessionEpochCommandsTest {
   private static RedisAsyncCommands<byte[], byte[]> commandsReturning(String storedValue) throws Exception {
     RedisAsyncCommands<byte[], byte[]> commands = mock(RedisAsyncCommands.class);
     TransactionResult result = mock(TransactionResult.class);
+    RedisFuture<String> status = completed("OK");
+    RedisFuture<byte[]> current = completed(storedValue.getBytes(StandardCharsets.UTF_8));
+    RedisFuture<TransactionResult> executed = completed(result);
     when(result.wasDiscarded()).thenReturn(false);
     when(result.isEmpty()).thenReturn(false);
-    when(commands.watch(any(byte[].class))).thenReturn(completed("OK"));
-    when(commands.get(any(byte[].class))).thenReturn(completed(storedValue.getBytes(StandardCharsets.UTF_8)));
-    when(commands.multi()).thenReturn(completed("OK"));
-    when(commands.set(any(byte[].class), any(byte[].class))).thenReturn(completed("OK"));
-    when(commands.exec()).thenReturn(completed(result));
+    when(commands.watch(any(byte[].class))).thenReturn(status);
+    when(commands.get(any(byte[].class))).thenReturn(current);
+    when(commands.multi()).thenReturn(status);
+    when(commands.set(any(byte[].class), any(byte[].class))).thenReturn(status);
+    when(commands.exec()).thenReturn(executed);
     return commands;
   }
 
