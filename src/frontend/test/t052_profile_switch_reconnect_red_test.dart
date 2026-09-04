@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,16 +8,12 @@ import 'package:voice_frontend/backend/auth_client.dart';
 import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
-import 'package:voice_frontend/backend/friends_client.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/guest_credentials_storage.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/inbox_reconciler.dart';
-import 'package:voice_frontend/state/profile_context_controller.dart';
-import 'package:voice_frontend/state/social_providers.dart';
-import 'package:voice_frontend/state/subscription_providers.dart';
 
 import 'support/gateway_test_client.dart';
 import 'support/inbox_reconciler_fakes.dart';
@@ -26,7 +21,7 @@ import 'support/inbox_reconciler_fakes.dart';
 void main() {
   group('T052 profile-switch reconnect ordering (RED)', () {
     test(
-      'does not start B global ListChats until its awaited WS reconnect succeeds',
+      'does not accept a B snapshot from a bare link-status transition',
       () async {
         final auth = _SwitchingAuthHarness();
         final chats = InboxReconcilerChatsFake(
@@ -35,92 +30,43 @@ void main() {
             'Bearer access-b': 'profile-b',
           },
         );
-        // The second three scripts make a duplicate snapshot observable on the
-        // legacy Auth-triggered path. The required handoff accepts only one.
-        for (var snapshot = 0; snapshot < 2; snapshot++) {
-          for (final inbox in ['main', 'requests', 'archive']) {
-            chats.enqueue(
-              InboxChatPageScript(
-                inbox: inbox,
-                cursor: null,
-                profileId: 'profile-b',
-                authorization: 'Bearer access-b',
-                manual: true,
-                result: ChatsApiOk(
-                  ChatListData(items: [inboxChatItem('b-$snapshot-$inbox')]),
-                ),
-              ),
-            );
-          }
+        for (final inbox in ['main', 'requests', 'archive']) {
+          chats.enqueue(
+            InboxChatPageScript(
+              inbox: inbox,
+              cursor: null,
+              profileId: 'profile-b',
+              authorization: 'Bearer access-b',
+              result: const ChatsApiOk(ChatListData(items: [])),
+            ),
+          );
         }
-        final hub = _DeferredProfileSwitchRealtimeHub();
-        final container = _container(chats: chats, auth: auth, hub: hub);
+        final container = _container(chats: chats, auth: auth);
         addTearDown(container.dispose);
-        addTearDown(() async {
-          for (final call in _profileBCalls(chats)) {
-            if (!call.completed) {
-              await chats.completeCall(
-                call,
-                result: const ChatsApiOk(ChatListData(items: [])),
-              );
-            }
-          }
-        });
 
-        // Both listeners must be installed before the A -> B boundary.
-        container.read(profileContextCoordinatorProvider);
+        // Cycle4's real RealtimeHub transport test supplies the matching B
+        // hello. This lifecycle unit protects the negative half: a mutable
+        // link status cannot impersonate that accepted generation signal.
         container.read(inboxReconcilerProvider);
         container.read(realtimeLinkStatusProvider.notifier).state =
             RealtimeLinkStatus.reconnecting;
 
         expect(await auth.controller.switchActiveProfile('profile-b'), isNull);
         await pumpEventQueue();
-        final callsBeforeReconnectSuccess = _profileBCalls(chats).length;
+        expect(_profileBCalls(chats), isEmpty);
 
-        hub.emitReconnectHello(container);
+        container.read(realtimeLinkStatusProvider.notifier).state =
+            RealtimeLinkStatus.connected;
         await pumpEventQueue();
-        final callsAfterReconnectSuccess = _profileBCalls(chats);
 
         expect(
-          [callsBeforeReconnectSuccess, callsAfterReconnectSuccess.length],
-          [0, 3],
+          _profileBCalls(chats),
+          isEmpty,
           reason:
-              'T052 must accept exactly one B main/requests/archive snapshot '
-              'only after the awaited WS reconnect succeeds',
-        );
-        expect(callsAfterReconnectSuccess.map((call) => call.inbox).toSet(), {
-          'main',
-          'requests',
-          'archive',
-        });
-        expect(
-          callsAfterReconnectSuccess.every(
-            (call) =>
-                call.authorization == 'Bearer access-b' &&
-                call.profileId == 'profile-b' &&
-                call.cursor == null,
-          ),
-          isTrue,
+              'a bare reconnecting-to-connected state transition cannot '
+              "replace Cycle3's accepted B hello binding",
         );
         expect(auth.switchRequestCount, 1);
-
-        for (final call in callsAfterReconnectSuccess) {
-          await chats.completeCall(
-            call,
-            result: ChatsApiOk(
-              ChatListData(items: [inboxChatItem('accepted-${call.inbox}')]),
-            ),
-          );
-        }
-        await pumpEventQueue();
-        final snapshot = container
-            .read(inboxReconcilerProvider)
-            .profileSnapshots['profile-b']!;
-        for (final scope in InboxScope.values) {
-          expect(snapshot[scope].items.map((item) => item.chatId), [
-            'accepted-${scope.name}',
-          ]);
-        }
       },
     );
   });
@@ -138,7 +84,6 @@ List<InboxChatCall> _profileBCalls(InboxReconcilerChatsFake chats) => chats
 ProviderContainer _container({
   required InboxReconcilerChatsFake chats,
   required _SwitchingAuthHarness auth,
-  required RealtimeHub hub,
 }) {
   return ProviderContainer(
     overrides: [
@@ -158,14 +103,6 @@ ProviderContainer _container({
       ),
       chatListControllerProvider.overrideWith(_NoAutoChatListController.new),
       realtimeAutoConnectProvider.overrideWithValue(false),
-      realtimeHubProvider.overrideWithValue(hub),
-      activeProfileProvider.overrideWith((ref) async => null),
-      profileProvider('profile-b').overrideWith((ref) async => null),
-      friendsListProvider.overrideWith(
-        (ref) async => const FriendsListData(friends: []),
-      ),
-      subscriptionProvider.overrideWith((ref) async => null),
-      myProfilesProvider.overrideWith((ref) async => const []),
     ],
   );
 }
@@ -216,27 +153,4 @@ class _SwitchingAuthHarness {
 
   late final AuthController controller;
   var switchRequestCount = 0;
-}
-
-class _DeferredProfileSwitchRealtimeHub extends RealtimeHub {
-  _DeferredProfileSwitchRealtimeHub() : super(_UnwiredRef());
-
-  final Completer<void> _reconnect = Completer<void>();
-
-  @override
-  Future<void> reconnectWithNewSession() => _reconnect.future;
-
-  void emitReconnectHello(ProviderContainer container) {
-    container.read(realtimeLinkStatusProvider.notifier).state =
-        RealtimeLinkStatus.connected;
-    if (!_reconnect.isCompleted) _reconnect.complete();
-  }
-
-  @override
-  Future<void> dispose() async {}
-}
-
-class _UnwiredRef implements Ref {
-  @override
-  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
 }
