@@ -21,7 +21,8 @@ public final class InMemoryGuestConversionLocalPromotion implements GuestConvers
   }
 
   @Override
-  public GuestConversionAdvanceResult promoteAndAdvance(GuestConversionOperation operation, Instant now) {
+  public synchronized GuestConversionAdvanceResult promoteAndAdvance(
+      GuestConversionOperation operation, Instant now) {
     Objects.requireNonNull(operation, "operation");
     Objects.requireNonNull(now, "now");
     if (operation.state() != GuestConversionState.PENDING_USER || operation.lockedUntil() == null) {
