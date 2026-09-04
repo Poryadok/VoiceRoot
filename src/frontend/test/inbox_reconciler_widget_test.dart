@@ -398,8 +398,6 @@ void main() {
         tester.element(find.byType(ChatListBody)),
       );
       final callsBeforeProfileB = chats.calls.length;
-      container.read(realtimeLinkStatusProvider.notifier).state =
-          RealtimeLinkStatus.connecting;
       container.read(authControllerProvider.notifier).state = const AuthState(
         session: AuthSession(
           accessToken: 'access-b',
@@ -411,8 +409,7 @@ void main() {
       );
       await tester.pump();
       expect(chats.calls, hasLength(callsBeforeProfileB));
-      container.read(realtimeLinkStatusProvider.notifier).state =
-          RealtimeLinkStatus.connected;
+      _acceptCurrentRealtimeHello(container);
       await tester.pump();
       final profileBCalls = chats.calls.skip(callsBeforeProfileB).toList();
       expect(profileBCalls, hasLength(3));
@@ -818,6 +815,23 @@ Widget _chatListApp({
       home: const Scaffold(body: _ReconcilerDrivenChatListBody()),
     ),
   );
+}
+
+var _nextAcceptedHelloGeneration = 0;
+
+void _acceptCurrentRealtimeHello(ProviderContainer container) {
+  final session = container.read(authControllerProvider).session;
+  if (session == null) {
+    throw StateError('An accepted realtime hello requires an auth session.');
+  }
+  final generation = ++_nextAcceptedHelloGeneration;
+  container.read(realtimeHelloBindingProvider.notifier).state =
+      RealtimeHelloBinding(
+        generation: generation,
+        bindingGeneration: generation,
+        profileId: session.activeProfileId,
+        authorization: session.authorizationHeader,
+      );
 }
 
 class _ReconcilerDrivenChatListBody extends ConsumerStatefulWidget {
