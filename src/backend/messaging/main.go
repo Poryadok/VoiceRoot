@@ -103,6 +103,7 @@ func main() {
 		}
 
 		var chatGuard grpcsvc.ChatGuard
+		var chatTypeResolver grpcsvc.AuthoritativeChatTypeResolver
 		if chatAddr := strings.TrimSpace(os.Getenv("CHAT_GRPC_ADDR")); chatAddr != "" {
 			cconn, err := grpc.NewClient(grpcclient.DialTarget(chatAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
@@ -115,11 +116,15 @@ func main() {
 				log.Fatalf("chat grpc dial: %v", err)
 			}
 			waitCancel()
-			chatGuard = s2s.NewGRPCChatGuard(chatv1.NewChatServiceClient(cconn))
+			chatClient := chatv1.NewChatServiceClient(cconn)
+			chatGuard = s2s.NewGRPCChatGuard(chatClient)
+			chatTypeResolver = s2s.NewGRPCChatTypeResolver(chatClient)
 		} else if chatMetaPool != nil {
 			chatGuard = &store.SQLChatGuard{Pool: chatMetaPool, SpacePool: spaceMetaPool}
+			chatTypeResolver = &store.SQLChatTypeResolver{Pool: chatMetaPool}
 		} else {
 			chatGuard = &store.SQLChatGuard{Pool: pool, SpacePool: spaceMetaPool}
+			chatTypeResolver = &store.SQLChatTypeResolver{Pool: pool}
 		}
 
 		var blocks grpcsvc.AccountPairBlockChecker
@@ -280,6 +285,7 @@ func main() {
 			Pins:              &store.PinsStore{Pool: pool},
 			SharedMedia:       &store.SharedMediaStore{Pool: pool},
 			ChatGuard:         chatGuard,
+			ChatTypeResolver:  chatTypeResolver,
 			Blocks:            blocks,
 			UserProfiles:      profiles,
 			DeletedAccounts:   deletedAccounts,

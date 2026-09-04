@@ -49,7 +49,11 @@ type MessagingGRPC struct {
 	// DeletedAccounts is the Auth S2S gate for DM writes. It is deliberately
 	// separate from other optional S2S policy checks: a missing dependency must
 	// fail closed for DM sends and forwards.
-	DeletedAccounts   AccountDeletedChecker
+	DeletedAccounts AccountDeletedChecker
+	// ChatTypeResolver is required before SendMessage, ForwardMessage, and
+	// GetMessages use DM-specific account lifecycle logic. It prevents an
+	// omitted or forged ChatRef.type from bypassing that policy.
+	ChatTypeResolver  AuthoritativeChatTypeResolver
 	Privacy           PrivacyChecker
 	Friends           ProfileFriendChecker
 	SpaceCoMembership SpaceCoMembershipChecker
@@ -106,9 +110,7 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 		return nil, err
 	}
 	if isNilDependency(s.ChatGuard) {
-		if req.GetChat().GetType() == chatv1.ChatType_CHAT_TYPE_DM {
-			return nil, status.Error(codes.Unavailable, "dm account status unavailable")
-		}
+		return nil, status.Error(codes.Unavailable, "chat membership unavailable")
 	} else {
 		if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
 			if errors.Is(err, store.ErrNotChatMember) {
@@ -117,7 +119,11 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 	}
-	if err := s.checkDeletedDMWrite(ctx, req.GetChat(), chatID, profileID); err != nil {
+	chatType, err := s.resolveAuthoritativeChatType(ctx, chatID, profileID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.checkDeletedDMWrite(ctx, chatType, chatID, profileID); err != nil {
 		return nil, err
 	}
 	if err := s.checkDMBlocksForSend(ctx, chatID, profileID); err != nil {
@@ -222,7 +228,7 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 	}
 	typeStr, kind := messageKindToWire(req.GetMessageKind())
 
-	chatType := "dm"
+	chatTypeName := chatTypeName(chatType)
 	var displayChatID *uuid.UUID
 	if s.ChatThreadPolicy != nil {
 		pol, perr := s.ChatThreadPolicy.Load(ctx, chatID)
@@ -233,7 +239,7 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 			return nil, status.Error(codes.Internal, perr.Error())
 		}
 		if pol != nil {
-			chatType = pol.ChatType
+			chatTypeName = pol.ChatType
 			if postedAsChat {
 				cid := chatID
 				displayChatID = &cid
@@ -257,7 +263,7 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 	row := store.MessageRow{
 		ID:              msgID,
 		ChatID:          chatID,
-		ChatType:        chatType,
+		ChatType:        chatTypeName,
 		SenderProfileID: profileID,
 		PostedAsChat:    postedAsChat,
 		DisplayChatID:   displayChatID,
@@ -449,8 +455,8 @@ func (s *MessagingGRPC) checkDMBlocksForSend(ctx context.Context, chatID, profil
 // Auth account is soft-deleted. Account status is intentionally checked after
 // target membership, but before idempotency/store work and event publication.
 // Group and channel requests never consult Auth through this gate.
-func (s *MessagingGRPC) checkDeletedDMWrite(ctx context.Context, chat *chatv1.ChatRef, chatID, senderProfileID uuid.UUID) error {
-	if chat.GetType() != chatv1.ChatType_CHAT_TYPE_DM {
+func (s *MessagingGRPC) checkDeletedDMWrite(ctx context.Context, chatType chatv1.ChatType, chatID, senderProfileID uuid.UUID) error {
+	if chatType != chatv1.ChatType_CHAT_TYPE_DM {
 		return nil
 	}
 	if s == nil || isNilDependency(s.DeletedAccounts) || isNilDependency(s.UserProfiles) || isNilDependency(s.ChatGuard) {
@@ -488,6 +494,33 @@ func (s *MessagingGRPC) checkDeletedDMWrite(ctx context.Context, chat *chatv1.Ch
 		return status.Error(codes.PermissionDenied, "permission denied")
 	}
 	return nil
+}
+
+func (s *MessagingGRPC) resolveAuthoritativeChatType(ctx context.Context, chatID, profileID uuid.UUID) (chatv1.ChatType, error) {
+	if s == nil || isNilDependency(s.ChatTypeResolver) {
+		return chatv1.ChatType_CHAT_TYPE_UNSPECIFIED, status.Error(codes.Unavailable, "chat type unavailable")
+	}
+	chatType, err := s.ChatTypeResolver.ResolveChatType(ctx, chatID, profileID)
+	if err != nil {
+		return chatv1.ChatType_CHAT_TYPE_UNSPECIFIED, status.Error(codes.Unavailable, "chat type unavailable")
+	}
+	switch chatType {
+	case chatv1.ChatType_CHAT_TYPE_DM, chatv1.ChatType_CHAT_TYPE_GROUP, chatv1.ChatType_CHAT_TYPE_CHANNEL:
+		return chatType, nil
+	default:
+		return chatv1.ChatType_CHAT_TYPE_UNSPECIFIED, status.Error(codes.Unavailable, "chat type unavailable")
+	}
+}
+
+func chatTypeName(chatType chatv1.ChatType) string {
+	switch chatType {
+	case chatv1.ChatType_CHAT_TYPE_GROUP:
+		return "group"
+	case chatv1.ChatType_CHAT_TYPE_CHANNEL:
+		return "channel"
+	default:
+		return "dm"
+	}
 }
 
 func isNilDependency(dependency any) bool {
@@ -744,8 +777,12 @@ func (s *MessagingGRPC) GetMessages(ctx context.Context, req *messagingv1.GetMes
 		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	chatType, err := s.resolveAuthoritativeChatType(ctx, chatID, profileID)
+	if err != nil {
+		return nil, err
+	}
 
-	dmPeerState, err := s.dmPeerStateForHistory(ctx, req.GetChat(), chatID, profileID)
+	dmPeerState, err := s.dmPeerStateForHistory(ctx, chatType, chatID, profileID)
 	if err != nil {
 		return nil, err
 	}
@@ -904,8 +941,8 @@ func (s *MessagingGRPC) GetMessages(ctx context.Context, req *messagingv1.GetMes
 // selected DM. It runs after membership and before history reads, so a failed
 // dependency cannot leak a partial page. Group and channel history intentionally
 // bypasses User and Auth and leaves the optional response field absent.
-func (s *MessagingGRPC) dmPeerStateForHistory(ctx context.Context, chat *chatv1.ChatRef, chatID, senderProfileID uuid.UUID) (*messagingv1.DmPeerState, error) {
-	if chat.GetType() != chatv1.ChatType_CHAT_TYPE_DM {
+func (s *MessagingGRPC) dmPeerStateForHistory(ctx context.Context, chatType chatv1.ChatType, chatID, senderProfileID uuid.UUID) (*messagingv1.DmPeerState, error) {
+	if chatType != chatv1.ChatType_CHAT_TYPE_DM {
 		return nil, nil
 	}
 	if s == nil || isNilDependency(s.ChatGuard) || isNilDependency(s.UserProfiles) || isNilDependency(s.DeletedAccounts) {
@@ -1154,9 +1191,7 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 		return nil, err
 	}
 	if isNilDependency(s.ChatGuard) {
-		if req.GetTargetChat().GetType() == chatv1.ChatType_CHAT_TYPE_DM {
-			return nil, status.Error(codes.Unavailable, "dm account status unavailable")
-		}
+		return nil, status.Error(codes.Unavailable, "chat membership unavailable")
 	} else {
 		if err := s.ChatGuard.EnsureMember(ctx, targetChatID, profileID); err != nil {
 			if errors.Is(err, store.ErrNotChatMember) {
@@ -1165,7 +1200,11 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 	}
-	if err := s.checkDeletedDMWrite(ctx, req.GetTargetChat(), targetChatID, profileID); err != nil {
+	targetChatType, err := s.resolveAuthoritativeChatType(ctx, targetChatID, profileID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.checkDeletedDMWrite(ctx, targetChatType, targetChatID, profileID); err != nil {
 		return nil, err
 	}
 
@@ -1212,7 +1251,7 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 		return nil, err
 	}
 
-	chatType := "dm"
+	chatType := chatTypeName(targetChatType)
 	postedAsChat := false
 	if s.ChatThreadPolicy != nil {
 		pol, perr := s.ChatThreadPolicy.Load(ctx, targetChatID)
