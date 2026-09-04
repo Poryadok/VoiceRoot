@@ -1,6 +1,7 @@
 package voice.backend.auth.sessionepoch;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
 import java.util.List;
@@ -66,6 +67,42 @@ class RedisSessionEpochFloorStoreIntegrationTest {
     } finally {
       workers.shutdownNow();
     }
+  }
+
+  @Test
+  void realRedisAtomicCommandRejectsAStaleLowerWriteAfterTheHigherFloorCommitted() {
+    UUID accountId = UUID.randomUUID();
+    RedisSessionEpochFloorStore store =
+        new RedisSessionEpochFloorStore(new StringRedisSessionEpochCommands(template), Duration.ofSeconds(2));
+
+    assertThat(store.recordAtLeast(accountId, 9L)).isEqualTo(9L);
+    assertThat(store.recordAtLeast(accountId, 4L)).isEqualTo(9L);
+    assertThat(store.requireFloor(accountId)).isEqualTo(9L);
+  }
+
+  @Test
+  void realRedisPreservesExactInt64FloorsAndFailsClosedForMalformedOrOverflowValues() {
+    UUID accountId = UUID.randomUUID();
+    RedisSessionEpochFloorStore store =
+        new RedisSessionEpochFloorStore(new StringRedisSessionEpochCommands(template), Duration.ofSeconds(2));
+    long justAboveDoubleExactRange = 9_007_199_254_740_993L;
+
+    assertThat(store.recordAtLeast(accountId, justAboveDoubleExactRange)).isEqualTo(justAboveDoubleExactRange);
+    assertThat(store.recordAtLeast(accountId, justAboveDoubleExactRange - 1L)).isEqualTo(justAboveDoubleExactRange);
+    assertThat(store.recordAtLeast(accountId, Long.MAX_VALUE)).isEqualTo(Long.MAX_VALUE);
+    assertThat(store.requireFloor(accountId)).isEqualTo(Long.MAX_VALUE);
+
+    UUID malformed = UUID.randomUUID();
+    template.opsForValue().set(store.keyFor(malformed), "not-an-int64");
+    assertThatThrownBy(() -> store.requireFloor(malformed))
+        .isInstanceOf(SessionEpochFloorUnavailableException.class)
+        .hasMessageContaining("invalid");
+
+    UUID overflow = UUID.randomUUID();
+    template.opsForValue().set(store.keyFor(overflow), "9223372036854775808");
+    assertThatThrownBy(() -> store.requireFloor(overflow))
+        .isInstanceOf(SessionEpochFloorUnavailableException.class)
+        .hasMessageContaining("invalid");
   }
 
   private long await(Future<Long> future) {

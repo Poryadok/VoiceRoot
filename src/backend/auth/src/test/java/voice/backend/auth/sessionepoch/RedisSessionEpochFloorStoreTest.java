@@ -54,14 +54,21 @@ class RedisSessionEpochFloorStoreTest {
 
   @Test
   void commandThatIgnoresTheBoundStillFailsClosedWithinTwoSeconds() {
-    RedisSessionEpochFloorStore store = new RedisSessionEpochFloorStore(new BlockingCommands(), COMMAND_TIMEOUT);
-    long startedAtNanos = System.nanoTime();
+    RedisSessionEpochFloorStore writeStore =
+        new RedisSessionEpochFloorStore(BlockingCommands.forWrite(), COMMAND_TIMEOUT);
+    assertFailsClosedWithinTwoSeconds(() -> writeStore.recordAtLeast(UUID.randomUUID(), 1L));
 
-    assertThatThrownBy(() -> store.recordAtLeast(UUID.randomUUID(), 1L))
+    RedisSessionEpochFloorStore readStore =
+        new RedisSessionEpochFloorStore(BlockingCommands.forRead(), COMMAND_TIMEOUT);
+    assertFailsClosedWithinTwoSeconds(() -> readStore.requireFloor(UUID.randomUUID()));
+  }
+
+  private static void assertFailsClosedWithinTwoSeconds(org.assertj.core.api.ThrowableAssert.ThrowingCallable call) {
+    long startedAtNanos = System.nanoTime();
+    assertThatThrownBy(call)
         .isInstanceOf(SessionEpochFloorUnavailableException.class)
         .hasMessageContaining("timeout");
-
-    assertThat(Duration.ofNanos(System.nanoTime() - startedAtNanos)).isLessThanOrEqualTo(Duration.ofMillis(2500));
+    assertThat(Duration.ofNanos(System.nanoTime() - startedAtNanos)).isLessThanOrEqualTo(Duration.ofSeconds(2));
   }
 
   private static final class RecordingCommands implements RedisSessionEpochCommands {
@@ -89,8 +96,37 @@ class RedisSessionEpochFloorStoreTest {
   }
 
   private static final class BlockingCommands implements RedisSessionEpochCommands {
+    private final boolean blockWrite;
+
+    private BlockingCommands(boolean blockWrite) {
+      this.blockWrite = blockWrite;
+    }
+
+    private static BlockingCommands forWrite() {
+      return new BlockingCommands(true);
+    }
+
+    private static BlockingCommands forRead() {
+      return new BlockingCommands(false);
+    }
+
     @Override
     public long atomicMaxWithoutExpiry(String key, long candidate, Duration timeout) {
+      if (!blockWrite) {
+        throw new UnsupportedOperationException("not used");
+      }
+      return block();
+    }
+
+    @Override
+    public long readRequiredPositive(String key, Duration timeout) {
+      if (blockWrite) {
+        throw new UnsupportedOperationException("not used");
+      }
+      return block();
+    }
+
+    private long block() {
       try {
         Thread.sleep(Duration.ofSeconds(10));
       } catch (InterruptedException ex) {
@@ -98,11 +134,6 @@ class RedisSessionEpochFloorStoreTest {
         throw new RuntimeException("interrupted", ex);
       }
       throw new AssertionError("bounded command was not cancelled");
-    }
-
-    @Override
-    public long readRequiredPositive(String key, Duration timeout) {
-      throw new UnsupportedOperationException("not used");
     }
   }
 }
