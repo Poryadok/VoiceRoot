@@ -286,6 +286,7 @@ void main() {
       () async {
         final auth = _MutableAuthController();
         final hub = _TestRealtimeHub();
+        final cache = _RecordingCacheStore();
         final messages = _ScriptedMessagesClient(
           pages: [
             _page(
@@ -297,14 +298,13 @@ void main() {
               ids: const ['profile-b-message'],
               cursor: 'profile-b-cursor',
               hasMore: true,
-              peerState: messaging_pb.DmPeerState.DM_PEER_STATE_DELETED,
             ),
           ],
         );
         final container = _container(
           auth: auth,
           messages: messages,
-          cache: _RecordingCacheStore(),
+          cache: cache,
           realtimeHub: hub,
         );
         addTearDown(container.dispose);
@@ -343,12 +343,33 @@ void main() {
         await pumpEventQueue();
 
         state = container.read(chatRoomControllerProvider('chat-1'));
-        expect(state.isDmPeerDeleted, isTrue);
+        expect(state.isDmPeerDeleted, isFalse);
         expect(state.messages.map((message) => message.id), [
           'profile-b-message',
         ]);
         expect(state.nextCursor, 'profile-b-cursor');
         expect(state.hasMore, isTrue);
+
+        final bHistoryIds = [...state.messages.map((message) => message.id)];
+        final bCursor = state.nextCursor;
+        final bHasMore = state.hasMore;
+        final bCacheIds = await cache.cachedIds();
+        final bWriteCount = cache.replaceCalls.length;
+        hub.addFrame(
+          const RealtimeFrame(
+            op: 'dm_peer_deleted',
+            data: {'chat_id': 'chat-1', 'recipient_profile_id': 'profile-b'},
+          ),
+        );
+        await pumpEventQueue();
+
+        state = container.read(chatRoomControllerProvider('chat-1'));
+        expect(state.isDmPeerDeleted, isTrue);
+        expect(state.messages.map((message) => message.id), bHistoryIds);
+        expect(state.nextCursor, bCursor);
+        expect(state.hasMore, bHasMore);
+        expect(await cache.cachedIds(), bCacheIds);
+        expect(cache.replaceCalls.length, bWriteCount);
       },
     );
 
