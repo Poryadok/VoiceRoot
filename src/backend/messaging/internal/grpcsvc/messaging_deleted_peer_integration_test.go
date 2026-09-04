@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -26,16 +27,22 @@ type testDeletedAccountChecker interface {
 }
 
 type recordingDeletedAccounts struct {
-	mu      sync.Mutex
-	deleted map[uuid.UUID]struct{}
-	err     error
-	calls   int
+	mu         sync.Mutex
+	deleted    map[uuid.UUID]struct{}
+	err        error
+	accountIDs [][]uuid.UUID
+}
+
+type allowDeletedAccounts struct{}
+
+func (allowDeletedAccounts) DeletedAmong(context.Context, []uuid.UUID) (map[uuid.UUID]struct{}, error) {
+	return map[uuid.UUID]struct{}{}, nil
 }
 
 func (c *recordingDeletedAccounts) DeletedAmong(_ context.Context, accountIDs []uuid.UUID) (map[uuid.UUID]struct{}, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.calls++
+	c.accountIDs = append(c.accountIDs, append([]uuid.UUID(nil), accountIDs...))
 	if c.err != nil {
 		return nil, c.err
 	}
@@ -48,10 +55,20 @@ func (c *recordingDeletedAccounts) DeletedAmong(_ context.Context, accountIDs []
 	return out, nil
 }
 
-func (c *recordingDeletedAccounts) callCount() int {
+func (c *recordingDeletedAccounts) calls() [][]uuid.UUID {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.calls
+	out := make([][]uuid.UUID, len(c.accountIDs))
+	for i, accountIDs := range c.accountIDs {
+		out[i] = append([]uuid.UUID(nil), accountIDs...)
+	}
+	return out
+}
+
+type failingProfileAccounts struct{ err error }
+
+func (f failingProfileAccounts) AccountIDByProfileID(context.Context, uuid.UUID) (uuid.UUID, error) {
+	return uuid.Nil, f.err
 }
 
 type nonMemberGuard struct{}
@@ -100,6 +117,24 @@ func sendDeletedPeerTestMessage(t *testing.T, ctx context.Context, client messag
 	return resp.GetMessage()
 }
 
+func requireDeletedPeerPermissionDenied(t *testing.T, err error, accountIDs ...uuid.UUID) {
+	t.Helper()
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	message := status.Convert(err).Message()
+	require.Equal(t, "permission denied", message, "deleted-peer denial must use the generic canonical description")
+	for _, forbidden := range append([]string{"deleted", "account", "profile"}, uuidStrings(accountIDs)...) {
+		require.NotContains(t, strings.ToLower(message), strings.ToLower(forbidden), "PermissionDenied must not disclose deleted-peer identity or state")
+	}
+}
+
+func uuidStrings(ids []uuid.UUID) []string {
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, id.String())
+	}
+	return out
+}
+
 func TestMessagingDeletedPeer_SendMessageDeniedInBothDirectionsWithoutWritesOrEvents(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForTest(t, ctx)
@@ -112,9 +147,10 @@ func TestMessagingDeletedPeer_SendMessageDeniedInBothDirectionsWithoutWritesOrEv
 	deleted := &recordingDeletedAccounts{deleted: map[uuid.UUID]struct{}{acctB: {}}}
 	events := &spyMessageEvents{}
 	client, _ := startMessagingServerWired(t, pool, messagingWire{
-		UserProfiles:    profileAcctMap{profA: acctA, profB: acctB},
-		DeletedAccounts: deleted,
-		MessageEvents:   events,
+		UserProfiles:               profileAcctMap{profA: acctA, profB: acctB},
+		DeletedAccounts:            deleted,
+		RequireDeletedAccountsSeam: true,
+		MessageEvents:              events,
 	})
 
 	for _, sender := range []struct {
@@ -125,12 +161,12 @@ func TestMessagingDeletedPeer_SendMessageDeniedInBothDirectionsWithoutWritesOrEv
 		_, err := client.SendMessage(withProfileCtx(ctx, sender.account, sender.profile), &messagingv1.SendMessageRequest{
 			Chat: chatDMRef(chatID), Content: sender.content, AttachmentsJson: "[]", MentionsJson: "[]",
 		})
-		require.Equal(t, codes.PermissionDenied, status.Code(err), "both DM directions must close after either account is deleted")
+		requireDeletedPeerPermissionDenied(t, err, acctA, acctB)
 	}
 
 	require.Equal(t, 0, messageCountForDeletedPeerTest(t, ctx, pool, chatID))
 	require.Zero(t, events.eventCount(), "denied sends must not publish message events")
-	require.GreaterOrEqual(t, deleted.callCount(), 2, "each valid DM attempt must consult Auth deletion state")
+	require.Equal(t, [][]uuid.UUID{{acctB}, {acctA}}, deleted.calls(), "each valid DM attempt must consult Auth with its peer account only")
 }
 
 func TestMessagingDeletedPeer_ForwardMessageWithCommentaryDeniedBeforeWritesOrEvents(t *testing.T) {
@@ -149,9 +185,10 @@ func TestMessagingDeletedPeer_ForwardMessageWithCommentaryDeniedBeforeWritesOrEv
 	deleted := &recordingDeletedAccounts{deleted: map[uuid.UUID]struct{}{acctB: {}}}
 	events := &spyMessageEvents{}
 	client, _ := startMessagingServerWired(t, pool, messagingWire{
-		UserProfiles:    profileAcctMap{profA: acctA, profB: acctB, profSource: acctSource},
-		DeletedAccounts: deleted,
-		MessageEvents:   events,
+		UserProfiles:               profileAcctMap{profA: acctA, profB: acctB, profSource: acctSource},
+		DeletedAccounts:            deleted,
+		RequireDeletedAccountsSeam: true,
+		MessageEvents:              events,
 	})
 	original := sendDeletedPeerTestMessage(t, ctx, client, acctA, profA, chatGroupRef(sourceChat), "forward source", nil)
 	events.reset()
@@ -164,11 +201,12 @@ func TestMessagingDeletedPeer_ForwardMessageWithCommentaryDeniedBeforeWritesOrEv
 		_, err := client.ForwardMessage(withProfileCtx(ctx, forwarder.account, forwarder.profile), &messagingv1.ForwardMessageRequest{
 			SourceMessageId: original.GetId(), TargetChat: chatDMRef(targetChat), Commentary: &commentary,
 		})
-		require.Equal(t, codes.PermissionDenied, status.Code(err), "both DM directions must be denied before commentary or forwarded-message insertion")
+		requireDeletedPeerPermissionDenied(t, err, acctA, acctB)
 	}
 
 	require.Equal(t, 0, messageCountForDeletedPeerTest(t, ctx, pool, targetChat), "commentary and forwarded message must both be absent")
 	require.Zero(t, events.eventCount(), "denied forwards must not publish message events")
+	require.Equal(t, [][]uuid.UUID{{acctB}, {acctA}}, deleted.calls(), "forward gates must query the target DM peer only")
 }
 
 func TestMessagingDeletedPeer_NonMemberDeniedBeforeDeletedAccountLookup(t *testing.T) {
@@ -179,9 +217,10 @@ func TestMessagingDeletedPeer_NonMemberDeniedBeforeDeletedAccountLookup(t *testi
 	deleted := &recordingDeletedAccounts{deleted: map[uuid.UUID]struct{}{uuid.New(): {}}}
 	events := &spyMessageEvents{}
 	client, _ := startMessagingServerWired(t, pool, messagingWire{
-		ChatGuard:       nonMemberGuard{},
-		DeletedAccounts: deleted,
-		MessageEvents:   events,
+		ChatGuard:                  nonMemberGuard{},
+		DeletedAccounts:            deleted,
+		RequireDeletedAccountsSeam: true,
+		MessageEvents:              events,
 	})
 
 	chatID := uuid.New()
@@ -189,41 +228,74 @@ func TestMessagingDeletedPeer_NonMemberDeniedBeforeDeletedAccountLookup(t *testi
 		Chat: chatDMRef(chatID), Content: "nonmember", AttachmentsJson: "[]", MentionsJson: "[]",
 	})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
-	require.Zero(t, deleted.callCount(), "membership denial must not call the Auth deletion checker")
+	require.Empty(t, deleted.calls(), "membership denial must not call the Auth deletion checker")
 	require.Equal(t, 0, messageCountForDeletedPeerTest(t, ctx, pool, chatID))
 	require.Zero(t, events.eventCount())
 }
 
 func TestMessagingDeletedPeer_MissingOrFailingCheckerFailsClosed(t *testing.T) {
 	for _, tc := range []struct {
-		name    string
-		checker testDeletedAccountChecker
+		name     string
+		checker  *recordingDeletedAccounts
+		profiles ProfileAccountLookup
 	}{
 		{name: "missing checker"},
-		{name: "checker unavailable", checker: &recordingDeletedAccounts{err: errors.New("auth unavailable")}},
+		{
+			name:    "checker unavailable",
+			checker: &recordingDeletedAccounts{err: errors.New("auth unavailable")},
+		},
+		{
+			name:     "profile account mapping unavailable",
+			checker:  &recordingDeletedAccounts{},
+			profiles: failingProfileAccounts{err: errors.New("user unavailable")},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
 			pool := startPostgresForTest(t, ctx)
 			applyDeletedPeerMessagingMigrations(t, ctx, pool)
 
-			chatID := uuid.New()
+			sourceChat, targetChat := uuid.New(), uuid.New()
 			profA, profB := uuid.New(), uuid.New()
 			acctA, acctB := uuid.New(), uuid.New()
-			seedDMChat(t, ctx, pool, chatID, profA, profB)
+			seedDMChat(t, ctx, pool, targetChat, profA, profB)
+			seedGroupChat(t, ctx, pool, sourceChat, profA, profB)
 			events := &spyMessageEvents{}
+			profiles := tc.profiles
+			if profiles == nil {
+				profiles = profileAcctMap{profA: acctA, profB: acctB}
+			}
 			client, _ := startMessagingServerWired(t, pool, messagingWire{
-				UserProfiles:    profileAcctMap{profA: acctA, profB: acctB},
-				DeletedAccounts: tc.checker,
-				MessageEvents:   events,
+				UserProfiles:               profiles,
+				DeletedAccounts:            tc.checker,
+				RequireDeletedAccountsSeam: true,
+				MessageEvents:              events,
 			})
 
 			_, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
-				Chat: chatDMRef(chatID), Content: "must fail closed", AttachmentsJson: "[]", MentionsJson: "[]",
+				Chat: chatDMRef(targetChat), Content: "must fail closed", AttachmentsJson: "[]", MentionsJson: "[]",
 			})
 			require.Equal(t, codes.Unavailable, status.Code(err))
-			require.Equal(t, 0, messageCountForDeletedPeerTest(t, ctx, pool, chatID))
+			require.Equal(t, 0, messageCountForDeletedPeerTest(t, ctx, pool, targetChat))
 			require.Zero(t, events.eventCount())
+
+			original := sendDeletedPeerTestMessage(t, ctx, client, acctA, profA, chatGroupRef(sourceChat), "forward source", nil)
+			events.reset()
+			commentary := "must never be inserted"
+			_, err = client.ForwardMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.ForwardMessageRequest{
+				SourceMessageId: original.GetId(), TargetChat: chatDMRef(targetChat), Commentary: &commentary,
+			})
+			require.Equal(t, codes.Unavailable, status.Code(err))
+			require.Equal(t, 0, messageCountForDeletedPeerTest(t, ctx, pool, targetChat), "unavailable checker must deny before commentary and forward writes")
+			require.Zero(t, events.eventCount())
+
+			if tc.checker != nil {
+				want := [][]uuid.UUID{}
+				if tc.name == "checker unavailable" {
+					want = [][]uuid.UUID{{acctB}, {acctB}}
+				}
+				require.Equal(t, want, tc.checker.calls())
+			}
 		})
 	}
 }
@@ -240,9 +312,10 @@ func TestMessagingDeletedPeer_IdempotentReplayDeniedAfterDeletion(t *testing.T) 
 	deleted := &recordingDeletedAccounts{deleted: map[uuid.UUID]struct{}{}}
 	events := &spyMessageEvents{}
 	client, _ := startMessagingServerWired(t, pool, messagingWire{
-		UserProfiles:    profileAcctMap{profA: acctA, profB: acctB},
-		DeletedAccounts: deleted,
-		MessageEvents:   events,
+		UserProfiles:               profileAcctMap{profA: acctA, profB: acctB},
+		DeletedAccounts:            deleted,
+		RequireDeletedAccountsSeam: true,
+		MessageEvents:              events,
 	})
 
 	clientMessageID := uuid.New().String()
@@ -257,9 +330,10 @@ func TestMessagingDeletedPeer_IdempotentReplayDeniedAfterDeletion(t *testing.T) 
 	_, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
 		Chat: chatDMRef(chatID), Content: "before deletion", AttachmentsJson: "[]", MentionsJson: "[]", ClientMessageId: &clientMessageID,
 	})
-	require.Equal(t, codes.PermissionDenied, status.Code(err), "deletion must win over a prior idempotency success")
+	requireDeletedPeerPermissionDenied(t, err, acctA, acctB)
 	require.Equal(t, 1, messageCountForDeletedPeerTest(t, ctx, pool, chatID), "replay may not create another row")
 	require.Equal(t, 1, events.eventCount(), "replay after deletion may not publish another event")
+	require.Equal(t, [][]uuid.UUID{{acctB}, {acctB}}, deleted.calls(), "both initial send and replay must consult the DM peer before returning")
 }
 
 func TestMessagingDeletedPeer_GroupAndChannelDoNotConsultChecker(t *testing.T) {
@@ -278,14 +352,15 @@ func TestMessagingDeletedPeer_GroupAndChannelDoNotConsultChecker(t *testing.T) {
 	deleted := &recordingDeletedAccounts{deleted: map[uuid.UUID]struct{}{acctB: {}}}
 	events := &spyMessageEvents{}
 	client, _ := startMessagingServerWired(t, pool, messagingWire{
-		UserProfiles:    profileAcctMap{profA: acctA, profB: acctB},
-		DeletedAccounts: deleted,
-		MessageEvents:   events,
+		UserProfiles:               profileAcctMap{profA: acctA, profB: acctB},
+		DeletedAccounts:            deleted,
+		RequireDeletedAccountsSeam: true,
+		MessageEvents:              events,
 	})
 
 	sendDeletedPeerTestMessage(t, ctx, client, acctA, profA, chatGroupRef(groupID), "group remains available", nil)
 	sendDeletedPeerTestMessage(t, ctx, client, acctA, profA, chatChannelRef(channelID), "channel remains available", nil)
-	require.Zero(t, deleted.callCount(), "non-DM sends must not invoke the deleted-account checker")
+	require.Empty(t, deleted.calls(), "non-DM sends must not invoke the deleted-account checker")
 	require.Equal(t, 1, messageCountForDeletedPeerTest(t, ctx, pool, groupID))
 	require.Equal(t, 1, messageCountForDeletedPeerTest(t, ctx, pool, channelID))
 	require.Equal(t, 2, events.eventCount())
