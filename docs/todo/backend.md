@@ -24,9 +24,9 @@
 ### Space
 
 
-- [ ] **[Space] Owner lifecycle/product surfaces partial: backend `DeleteSpace`, compensated `TransferOwnership` (T-011) and gRPC `GetAuditLog` shipped; `SearchPublicSpaces`, `ListTemplates`, `CreateFromTemplate` remain runtime `Unimplemented`; Gateway/Flutter leave-as-owner/delete/audit flows remain open** — `protos/voice/space/v1/space.proto`; `src/backend/space/internal/grpcsvc/`; `src/backend/gateway/`; `src/frontend/`
+- [ ] **[Space] Owner lifecycle/product surfaces partial** — replace current hard `DeleteSpace` with password/2FA-confirmed 7-day hidden/frozen schedule, owner-only `RestoreSpace`, and idempotent cross-service purge/attachment GC; emit scheduled/restored/deleted-at-purge events. Compensated `TransferOwnership` (T-011) and gRPC `GetAuditLog` shipped; Gateway/Flutter leave-as-owner/delete/restore/audit flows remain open. — `protos/voice/space/v1/space.proto`; `src/backend/space/internal/grpcsvc/`; `src/backend/gateway/`; `src/frontend/`; [spaces.md](../features/spaces.md).
 - [x] **[Space] Space Pro cache never synced — `space_db.space_subscriptions` comment says “synced from Subscription”; only test seed `UpsertSpaceSubscription` writes; Subscription writes `subscription_db` only** — **done:** NATS consumer `space/internal/subscriptionconsume` + S2S `SyncSpaceProSubscription` write entitlement cache; `SeedSpaceProActive` remains test helper only.
-- [ ] **[Space] `entry_requirement` не исполняется — JoinSpace отвергает любой requirement ≠ `none` (`FailedPrecondition`), нет captcha/questions/mod-approval queue** — `src/backend/space/internal/grpcsvc/join.go`, `invites.go`
+- [ ] **[Space] Replace single `entry_requirement` with versioned composable AND `entry_policy`** — migrate legacy value, implement phone → captcha → questions → manual approval pipeline, pending join requests, fail-closed verifier errors, and ensure invite is consumed only after all requirements/approval succeed. Guests fail policies requiring phone. — [spaces.md](../features/spaces.md), `src/backend/space/internal/grpcsvc/join.go`, `invites.go`.
 - [x] **[Space] Social block на join fail-open — `ensureJoinNotBlocked` no-op если `Blocks`/`ProfileAccounts` nil** — **done:** fail-closed `FailedPrecondition` when Social/User S2S unwired; IT `join_block_degradation_test.go`.
 - [x] **[Space] Tree pin — migration `is_pinned`/`pin_order` on `space_tree_nodes`, `PinTreeNode`/`UnpinTreeNode` RPC handlers, `ReorderSpaceTree` pin group, `space.tree_node_upserted` payload** — **done:** `000007_tree_pin` migration; store `PinTreeNode`/`UnpinTreeNode`; grpc handlers; `ReorderSpaceTree` pin-group validation; JetStream `SpaceTreeChanged` includes `is_pinned`/`pin_order`.
 
@@ -94,7 +94,9 @@
 ### Auth
 
 
-- [ ] **[Auth] DeleteAccount tombstone неполный** — RPC/REST `DeleteAccount`/`RestoreAccount` **есть**. **ListChats** скрывает DM с удалённым peer (Chat → Auth `ListDeletedAccountIds`, Batch 31d). Остаётся: системное «Пользователь удалён» в DM-треде; `email_verify` OTP; UI — [client.md](client.md).
+- [ ] **[A1/T-056 Auth/Chat] Minimum account soft-delete contract** — revoke all sessions immediately, deny new DM send in both directions, hide deleted peer/DM in fresh snapshots, and keep already loaded history with one terminal «Пользователь удалён» marker. Owner decision recorded; code WIP unblocked. — [PLAN.md](../PLAN.md) A1, [auth-and-contacts.md](../features/auth-and-contacts.md), `tmp/fleet/plans/A1-daily-messaging.md`.
+- [ ] **[A4 Auth/User/Chat/File/Search] Complete account erasure lifecycle** — password+2FA confirmation, 30-day restore, then idempotent PII/credential/profile-media erasure or pseudonymization; retain messages with non-public author tombstone and isolate minimal legal/anti-abuse records by production retention policy. Existing `DeleteAccount`/`RestoreAccount` and ListChats deleted-peer filter are partial. — [auth-and-contacts.md](../features/auth-and-contacts.md), [client.md](client.md).
+- [ ] **[Auth] Email signup and convert-guest verification gate** — pending identity preserves session/history but keeps guest-level restrictions; only successful verification promotes to `regular` and emits `user.guest_converted`; add idempotent resend and negative capability tests. Current code promotes immediately. — [auth-and-contacts.md](../features/auth-and-contacts.md), `src/backend/auth/`.
 
 
 ## High
@@ -268,8 +270,7 @@
 - [x] **[Chat] Migration: `quick_access_chats`** — `000010_quick_access_chats.up.sql` per chat-service.md sketch (**Batch 17**).
 - [x] **[Chat] Handlers: Quick Access** — enforce limit 15; `AddQuickAccess` idempotent; integration test reorder (**Batch 17**: `quick_access.go`, store + gRPC tests).
 - [x] **[Chat] Archive removes Quick Access** — `ArchiveChat(archived=true)` calls `RemoveQuickAccess` (**Batch 18**).
-- [x] **[Chat] Archive side-effects** — auto-unarchive on incoming DM message to archived membership (Chat `message.sent` consumer → `AutoUnarchiveDMRecipients`) — **done (Batch 20)**.
-- [x] **[Chat] Archive integration test** — auto-unarchive when incoming DM message arrives — **done (Batch 20)**; main/archive inbox list regression — **done (Batch 15)**.
+- [ ] **[Chat/Notification] Incoming message for archived chat must be badge-only** — remove obsolete DM `AutoUnarchiveDMRecipients`, keep `is_archived=true` for DM/group/channel, suppress push and notification-center row, update unread badge, and replace the Batch 20 auto-unarchive test with main/archive inbox + routing regressions. Canon: [text-chat.md](../features/text-chat.md) § «Архивирование», [notifications.md](../features/notifications.md) § «Архивированные чаты».
 - [x] **[Chat] Gateway REST** — folder RPCs + `GET /chats?folder_id=` (**Batch 19**): `GET/POST /api/v1/chats/folders`, `PATCH/DELETE …/folders/{id}`, `POST/DELETE …/folders/{id}/chats`, `PUT …/chats/order`, `POST/DELETE …/chats/{chatId}/pin`; Quick Access REST — **done (Batch 17)**; `inbox=archive` on `GET /chats` — **done Batch 15**.
 
 ### Telegram-parity audit — open CODE (2026-08-28)
@@ -281,7 +282,7 @@
 - [x] **[Messaging] R3-A06 — `validateAttachments` blocks rich payloads** — **done (Batch 31a):** `content_type` branches for location/article (no File row) and file-backed rich types (`sticker`, `gif`, `music`, `video_note`) with payload shape + File metadata validation — `messaging_grpc.go`, tests — [messaging-service.md](../microservices/messaging-service.md).
 - [x] **[Chat] R3-A12 — Standalone `channel` chats** — `CreateChat` without `space_id` creates standalone channel with creator as `chat_members` owner (`CreateChannelChat`); space channels unchanged — **Batch 26b**. **Batch 14:** membership `channel` rows appear in `ListChats` main inbox SQL.
 - [x] **[Chat] R3-A14 — `CreateChat`/`UpdateChat` proto fields ignored** — `topic` persisted on create; `topic`/`threads_enabled`/`allow_user_main_feed` on `UpdateChat`; channels updatable — `group.go`, store `UpdateGroupChat` — **Batch 27b**.
-- [ ] **[Chat] R3-A15 — `chats.allow_guests` behavior not wired** — migration `000007` adds the chat-level guest admission flag required by [auth-and-contacts.md](../features/auth-and-contacts.md), but Chat has no proto field, mutation handler, or admission enforcement for it. Keep the column; define and implement the contract.
+- [ ] **[Chat] R3-A15 — `chats.allow_guests` behavior not wired** — migration `000007` currently defaults open, while the canonical contract is fail-closed (`false`), explicit opt-in, invite/membership required, and Space+chat AND enforcement. Add proto field, mutation handler, migration/default correction, admission enforcement, and negative tests. Canon: [chat-service.md](../microservices/chat-service.md) § Guest admission.
 - [x] **[Chat] R3-A16 — `ListChats` space merge bugs** — unified SQL pagination for space chats on page 2+ (`listChatsPageMainWithSpaces` UNION in store; gRPC passes `spaceIDs` on every page). Prior partial fixes: Batch 13 archived filter + hydration; Batch 16 pagination.
 - [ ] **[Chat/Messaging/File] Stickers/GIF wire (R2-A32, R4-04)** — expand checklist: `chat_db` migrations `sticker_packs`/`stickers`/`profile_installed_packs`; Chat RPCs (`ListInstalledStickerPacks`, `InstallStickerPack`, `SearchGifs`, …); Gateway REST ([api-gateway.md](../microservices/api-gateway.md) § Stickers and GIF); ~~Messaging proto `STICKER`/`GIF` + send validation~~ **Messaging send validation done (Batch 31a)**; File `UPLOAD_INTENT_STICKER`/GIF transcode; `ListSharedMedia` `STICKERS` kind extension — **P0**
 - [x] **[Messaging] Durable delivery consumer** — **done (Batch 12):** Realtime JetStream `message.delivery_ack` publish (Batch 11) + Messaging consumer → `last_delivered_message_id`; list ✓✓ via `GetChatListMetadata.last_message_delivery_state`.
@@ -663,7 +664,7 @@
 - [ ] **[Space] Member `nickname` in schema, no update RPC** — `src/backend/migrations/space_db/000001_init.up.sql`, `protos/voice/space/v1/space.proto`
 - [ ] **[Space] QR join — product doc only, no Space API** — `docs/features/spaces.md`
 - [ ] **[Space] Space-level `mm_config` for matchmaking — column exists, unused** — `src/backend/migrations/space_db/000001_init.up.sql`
-- [ ] **[Space] `allow_guests` column (migration 000006) — only checked on invite join; no admin API to toggle** — `src/backend/migrations/space_db/000006_allow_guests.up.sql`, `src/backend/space/internal/store/invite.go`
+- [ ] **[Space] `allow_guests` is incomplete and defaults open in migration `000006`** — change target/default to `false`, add owner/admin API to toggle, require valid invite, and enforce Space+chat fail-closed guest access with negative tests — `src/backend/migrations/space_db/000006_allow_guests.up.sql`, `src/backend/space/internal/store/invite.go`, [spaces.md](../features/spaces.md).
 
 ### Moderation
 

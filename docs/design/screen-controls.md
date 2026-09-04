@@ -149,7 +149,7 @@ Rail slots for pinned-profile chats (≠ folder pin, ≠ Friends favourites):
 
 ### 1.6 Active chats strip (V only)
 
-**Normative:** chat enters strip when user **opens** it on mobile while other chats remain open; max **100** entries (LRU evict oldest when opening 101st). Strip shows **visible cap ~8** avatars; horizontal scroll for overflow. **Back to list removes** chat from strip (even if unread). *Unread retention on back* — product policy **DEFERRED** (`AUDIT` R3-03-A09); do not ship divergent client rules until decided. Keyboard open: strip **collapses** under app bar; pinned bar + composer take priority (§1.6a). Mirror: [navigation.md](../features/navigation.md) § «Active strip».
+**Normative:** chat enters strip when user **opens** it on mobile while other chats remain open; max **100** entries (LRU evict oldest when opening 101st). Strip shows **visible cap ~8** avatars; horizontal scroll for overflow. **Back to list removes** the chat only when it has no unread messages; unread chats remain until read or explicitly removed. Keyboard open: strip **collapses** under app bar; pinned bar + composer take priority (§1.6a). Mirror: [navigation.md](../features/navigation.md) § «Active strip».
 
 | # | Control | Layout | Visible when | Tap action |
 |---|---------|--------|-------------|------------|
@@ -242,7 +242,7 @@ Chrome host for right-side content (desktop). Not a product feature by itself �
 | 4 | Unarchive (ctx) | H+V | ctx on row | Restore to main list |
 | 5 | Unarchive (swipe) | V | Swipe on row | Restore to main list |
 | 6 | Empty archive state | H+V | No archived chats | — (display empty copy) |
-| 7 | Auto-unarchive (behavior) | — | DM: peer sends while chat archived for viewer | Chat returns to `inbox=main` on next refresh; unread per normal rules — [text-chat.md](../features/text-chat.md) § «Архивирование» |
+| 7 | Incoming message (behavior) | — | Archived DM / group / channel receives a message | Keep the chat in `inbox=archive`; update its unread badge only; no push or notification-center row — [text-chat.md](../features/text-chat.md) § «Архивирование» |
 
 **On archive (side-effects):** row disappears from main list, folder filters, and Quick Access (`RemoveQuickAccess`); folder membership and folder pin **persist** in DB.
 
@@ -330,7 +330,7 @@ Persistent strip directly under chat header (above timeline):
 
 | # | Control | Layout | Visible when | Tap action |
 |---|---------|--------|-------------|------------|
-| 1 | Pin thumbnail + label | H+V | ≥1 pinned message | Jump to **currently shown** pin (cycle on bar tap — **target-state**; until cycle ships, jump to latest pin) |
+| 1 | Pin thumbnail + label | H+V | ≥1 pinned message | Jump to the currently shown pin, then advance the bar to the next pin; cycle newest → oldest → newest |
 | 2 | Media type hint | H+V | Pinned message is media | — (visual: Photo / Video / Voice / File / Sticker / GIF / Article / Location / Music / Video message / text snippet — same label set as §1.4 #16) |
 | 3 | Open all pins (chevron) | H+V | Always | Open full pinned list popover / panel (§3.1 #7) — **distinct from hide** |
 | 4 | Hide bar (×) | H+V | Always | Collapse bar for session; pins remain — restore via header #7 |

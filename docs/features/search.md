@@ -51,7 +51,7 @@
 
 | Вкладка   | `SharedMediaKind` (spec) | `MessageContentType` / kind | Что показывает |
 |-----------|--------------------------|----------------------------|----------------|
-| **Медиа** | `SHARED_MEDIA_KIND_MEDIA` | photo, video, video_note, gif | Фото, видео, круглые video notes, GIF |
+| **Медиа** | `SHARED_MEDIA_KIND_MEDIA` | photo, video, video_note, gif, location | Фото, видео, круглые video notes, GIF, локации с map preview |
 | **Стикеры** | `SHARED_MEDIA_KIND_STICKERS` | sticker | Sticker messages |
 | **Файлы** | `SHARED_MEDIA_KIND_FILES` | document, music | Документы, архивы, music attachments |
 | **Ссылки** | `SHARED_MEDIA_KIND_LINKS` | link, article | URL в тексте + article payloads |
@@ -75,6 +75,7 @@ Wire: `ListSharedMediaRequest.kind` = `SharedMediaKind` ([messaging-service.md](
 | Sticker | `STICKER` | `sticker` | Sticker | **Стикеры** | `STICKERS` | — |
 | Inline URL | `TEXT` + link metadata | `link` | text preview or URL snippet | **Ссылки** | `LINKS` | URL substring in body |
 | Article | `ARTICLE` | `article` | Article | **Ссылки** | `LINKS` | title/description in payload |
+| Location | `LOCATION` | `location` | Location | **Медиа** | `MEDIA` | label/address text when present |
 | Plain text | `TEXT` | — | text snippet | — | — | full text index |
 
 **Inline URL vs Article:** inline URL — client OG preview on `TEXT`; Article — attach-menu payload, server metadata worker. См. [text-chat.md](text-chat.md) § «Article vs inline URL».
@@ -108,4 +109,3 @@ Wire: `ListSharedMediaRequest.kind` = `SharedMediaKind` ([messaging-service.md](
 - **Полнотекстовый поиск по содержимому файлов** (текст внутри PDF, DOCX и т.д.) — **не входит в scope**; отдельное решение по индексации и правам доступа. По вложениям доступен поиск по **имени файла** и отображение в **Shared Media** ([text-chat.md](text-chat.md) / вкладки медиа), без индексации тела файла.
 
 **Владельцы:** [Search Service](../microservices/search-service.md); при федерации (deferred) — маршрутизация в [Federation Service](../microservices/federation-service.md); сообщения остаются в **Messaging**, контакты/спейсы — **User** / **Chat** / **Space** (см. [DATA_MODEL.md](../DATA_MODEL.md)).
-

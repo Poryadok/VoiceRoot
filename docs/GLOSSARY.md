@@ -46,8 +46,7 @@
 | Событие | Поведение |
 |---------|-----------|
 | Ctx «Разархивировать» / swipe на экране архива | `is_archived=false`; чат возвращается в folder «Все» и matching system folders; **не** восстанавливается в Quick Access автоматически |
-| **Новое входящее сообщение** (DM) | Auto-unarchive: `is_archived=false`, чат появляется в main inbox с unread; push по обычным правилам |
-| **Новое входящее** (group / channel / space chat) | **Не** auto-unarchive; только ctx «Разархивировать» / swipe на экране архива |
+| **Новое входящее сообщение** (DM / group / channel / space chat) | `is_archived=true`; чат остаётся в архиве, обновляется только unread badge; push и строка notification center не создаются |
 | Исходящее сообщение архиватором | **Не** unarchive (как Telegram) |
 | Folder membership / folder pin | Сохраняются в БД; пока archived — строка не показывается; после unarchive pin order восстанавливается |
 | Quick Access | При archive — **удаление** из `quick_access_chats`; после unarchive — **не** auto-restore |
@@ -72,7 +71,7 @@
 | **Limit** | Max **100** opened chats; при 101-м — evict oldest + feedback (§1.6 #4) |
 | **Visible cap** | ~**8** avatars; horizontal scroll |
 | **Unread badge** | На иконках strip |
-| **Remove** | Long-press icon → × (§1.6 #5); back to list — **remove from strip** (normative, including unread). Unread retention on back — DEFERRED (AUDIT R3-03-A09) |
+| **Remove** | Long-press icon → × (§1.6 #5); back to list удаляет только чат без unread. Чат с unread остаётся до прочтения или явного удаления |
 | **Keyboard** | Strip **скрывается** (§1.6a) |
 
 ### Pin чата

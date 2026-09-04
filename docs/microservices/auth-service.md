@@ -62,7 +62,10 @@ REST: `POST /api/v1/auth/convert-guest` (Gateway transcoding). Спека UX: [a
 | `password` | **Новый пароль**, который пользователь задаёт в форме convert-guest для `regular`-аккаунта |
 
 - Авторизация: **JWT гостя** (Bearer); transport-пароль, сгенерированный при guest bootstrap, **не проверяется** в `ConvertGuest`.
-- После успеха: `accounts.type` → `regular`, тот же `account_id` / primary `profile_id`; публикуется NATS `user.guest_converted`.
+- После submit создаётся pending email identity; тот же `account_id` / primary
+  `profile_id` и session сохраняются, но права остаются guest-level.
+- Только успешный email verification атомарно меняет `accounts.type` → `regular` и
+  публикует NATS `user.guest_converted`; resend идемпотентен и не создаёт новый аккаунт.
 - Негативные кейсы (duplicate email, password &lt; 8, non-guest token): `ConvertGuestIntegrationTest` (Auth Maven).
 
 ### E2E key backup ([encryption.md](../features/encryption.md), REST via Gateway)
@@ -88,6 +91,7 @@ accounts
 ├── password_hash (bcrypt)
 ├── type (regular | guest)
 ├── status (active | suspended | deleted)
+├── email_verified_at (nullable; null = restricted pending identity)
 ├── totp_secret (encrypted, nullable)
 ├── totp_enabled (bool)
 ├── deleted_at (nullable, soft delete)
@@ -129,6 +133,7 @@ accounts
 ├── password_hash TEXT NOT NULL
 ├── type VARCHAR(16) NOT NULL CHECK (type IN ('regular','guest'))
 ├── status VARCHAR(16) NOT NULL CHECK (status IN ('active','suspended','deleted'))
+├── email_verified_at TIMESTAMPTZ NULL
 ├── totp_secret BYTEA NULL
 ├── totp_enabled BOOLEAN NOT NULL DEFAULT false
 ├── deleted_at TIMESTAMPTZ NULL
@@ -167,9 +172,16 @@ e2e_key_backups ([encryption.md](../features/encryption.md), Flyway V4__e2e_key_
 - `INDEX refresh_tokens_token_hash_idx (token_hash)`
 - `INDEX otp_codes_account_type_idx (account_id, type, expires_at DESC)`
 
+`email_verified_at` and verification-gated promotion are target contract gaps in the
+currently deployed schema/code; see [todo/backend.md](../todo/backend.md).
+
 Правило статуса удаления:
 - source of truth для логического удаления — `deleted_at`.
 - `status='deleted'` должен выставляться синхронно с `deleted_at IS NOT NULL` (инвариант уровня приложения/триггера).
+- `deleted_at` открывает 30-дневное recovery window; после него отдельный идемпотентный
+  erasure job удаляет/pseudonymizes PII и credentials, после чего restore невозможен.
+- Message history сохраняет только непривязанный к публичному профилю author tombstone;
+  legal/anti-abuse retention хранится отдельно по production policy.
 
 ## Публикуемые события (→ NATS)
 

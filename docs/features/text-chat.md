@@ -115,7 +115,7 @@ Stickers/GIF — first-class сообщения, но отправка **тол�
 - Лимит: до **5** pins на чат (как Telegram); `PinMessage` отклоняет 6-й; UI — «Максимум 5 закреплённых» + unpin из списка
 - Права: `TEXT_CHAT_PIN_MESSAGES` ([roles.md](roles.md))
 - **Persistent pinned bar** под header комнаты (до **5** pins): thumb + label по `content_type` (Photo / Video / Voice / File / Sticker / GIF / Article / Location / Music / Video message / text snippet — как §1.4 #16)
-  - Tap bar → jump к **текущему** pin (v1: latest; cycle — target-state)
+  - Tap bar → jump к **текущему** pin и переключить bar на следующий; порядок цикла: newest → oldest → newest
   - **Open all** (chevron / §3.1 #7) → список всех pins — §3.1a #3
   - **× или swipe-left (V)** → hide bar на сессию (pins остаются; restore через header #7) — §3.1a #4–5
 - Bar не блокирует composer — [screen-controls.md](../design/screen-controls.md) §3.1a
@@ -330,6 +330,10 @@ Preview labels (`Photo`, `Voice`, `Article`, …), last-seen buckets, message-re
 - Из DM: кнопка "Добавить участников" → выбор из друзей → группа создана
 - Из списка контактов: выбрать нескольких → "Создать группу"
 - Минимум 3 участника (если 2 — это просто DM)
+- `allow_guests=false` по умолчанию для group/channel. Гостей можно разрешить только
+  явной настройкой owner/admin; вступление всё равно требует invite/membership.
+- Для group/channel внутри Спейса доступ гостя разрешён только когда
+  `space.allow_guests && chat.allow_guests`; любой `false` закрывает доступ.
 
 ### Права
 - Создатель группы = владелец; может назначать администраторов
@@ -397,7 +401,7 @@ Normative inbox classification для DM (`chat_members.inbox_bucket` per `profi
 | Trigger | Result |
 |---------|--------|
 | Ctx / swipe на экране архива | `archived=false`; возврат в inbox; Quick Access **не** восстанавливается |
-| **Incoming message** (peer → archiver, DM) | Auto-unarchive + unread по обычным правилам |
+| **Incoming message** (DM / group / channel) | Остаётся archived; обновляется только unread badge, без push и строки в notification center |
 | Outgoing from archiver | Остаётся archived |
 
 Удаление DM у одного пользователя не удаляет переписку у второго (как в Telegram). Контракт API: [chat-service.md](../microservices/chat-service.md) § Archive.

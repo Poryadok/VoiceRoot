@@ -111,7 +111,7 @@ chats
 ├── last_message_at (activity sort — см. § Timestamp ownership)
 ├── threads_enabled (bool, default false; channels default true)
 ├── allow_user_main_feed (bool, default true; channels default false)
-├── allow_guests (bool, default true — chat-level guest admission; contract/enforcement not yet wired)
+├── allow_guests (bool, target default false — explicit chat-level guest admission; enforcement not yet wired)
 ├── e2e_enabled (bool, default false — DM opt-in E2E)
 ├── created_at
 └── updated_at
@@ -201,7 +201,17 @@ CREATE INDEX quick_access_profile_order_idx ON quick_access_chats (profile_id, s
 
 ### Deployed schema (migrations `000001`–`000011`) vs full spec
 
-**Shipped today** (`chat_db` migrations): DM + group + channel types; `chat_members.inbox_bucket`; `threads_enabled` / `allow_user_main_feed`; `e2e_enabled`; slow mode; chat-level `allow_guests` column (`000007`, behavior contract still open); `folders` + `folder_chats`; `quick_access_chats`; per-profile `deleted_for_self` (`000011`). Folder membership/pin, `ListChats.folder_id`, `UpdateFolder`/`DeleteFolder` and auto-unarchive on incoming DM are implemented in handlers.
+**Shipped today** (`chat_db` migrations): DM + group + channel types; `chat_members.inbox_bucket`; `threads_enabled` / `allow_user_main_feed`; `e2e_enabled`; slow mode; chat-level `allow_guests` column (`000007`, deployed default `true` conflicts with the fail-closed target and enforcement is not yet wired); `folders` + `folder_chats`; `quick_access_chats`; per-profile `deleted_for_self` (`000011`). Folder membership/pin, `ListChats.folder_id` and `UpdateFolder`/`DeleteFolder` are implemented. Incoming-DM auto-unarchive is also implemented but now conflicts with the canonical badge-only archive policy and must be removed.
+
+### Guest admission
+
+- Default is `allow_guests=false`; creating a chat must not silently admit guests.
+- `allow_guests=true` permits an invited guest to join/use that chat but does not let
+  a guest initiate a DM/call, self-discover the chat, or bypass an invite.
+- For a Space-attached chat, effective access is fail-closed: both the Space and the
+  chat must allow guests, and ordinary membership/role checks still apply.
+- DM ignores this flag because guests cannot initiate DM; receiving an allowed DM is
+  governed by the guest/privacy rules in [auth-and-contacts.md](../features/auth-and-contacts.md).
 
 **Navigation contract** (folders + Quick Access) — [navigation.md](../features/navigation.md); applied migration definitions are shown above.
 
@@ -358,9 +368,9 @@ message ReorderQuickAccessRequest {
 | `ListChats` main inbox | **Implemented** — excludes `is_archived=true` |
 | `ListChats` with `inbox=archive` | **Implemented (Batch 15)** — archived `dm` / `group` / `channel`; ignores `folder_id` |
 | Side-effect: remove Quick Access on archive | **Implemented (Batch 18)** — `ArchiveChat(archived=true)` calls `RemoveQuickAccess` |
-| Auto-unarchive on incoming DM message | **Implemented (Batch 20)** — Chat `message.sent` consumer → `AutoUnarchiveDMRecipients` (DM only; outgoing does not unarchive) |
+| Incoming message keeps chat archived | **Spec target; code gap** — remove Batch 20 `AutoUnarchiveDMRecipients`; preserve `is_archived=true` and update unread metadata only |
 
-**Spec:** archive write/list, Quick Access side-effect and incoming-DM auto-unarchive are implemented (Batch 15/18/20). Group/channel use the same per-member `is_archived` column and are returned by `inbox=archive`; client UX status is tracked separately in [todo/client.md](../todo/client.md).
+**Spec:** archive write/list and Quick Access side-effect are implemented (Batch 15/18). Group/channel use the same per-member `is_archived` column and are returned by `inbox=archive`. Incoming-DM auto-unarchive from Batch 20 is obsolete against the canonical badge-only policy and remains an implementation gap; client UX status is tracked separately in [todo/client.md](../todo/client.md).
 
 Unarchive semantics: [GLOSSARY.md](../GLOSSARY.md) § «Архив чата», [text-chat.md](../features/text-chat.md) § «Архивирование».
 
@@ -469,5 +479,3 @@ Gateway REST (sketch): `GET /api/v1/sticker-packs`, `POST /api/v1/sticker-packs/
 - **Messaging Service** — для `ListChats`: превью последнего сообщения и `unread_count` по данным `messaging_db` (S2S, см. раздел «ListChats»); без интеграции список возвращается без этих полей
 - **Subscription Service** — лимиты на количество участников группы
 - **Space Service** — при создании текстового чата (`group` \| `channel`) в спейсе: узел **`space_tree_nodes`** (`kind=text_chat`) после создания строки `chats`
-
-

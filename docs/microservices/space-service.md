@@ -35,7 +35,8 @@ service SpaceService {
   rpc CreateSpace(CreateSpaceRequest) returns (Space);
   rpc UpdateSpace(UpdateSpaceRequest) returns (Space);
   rpc UpdateSpaceMmConfig(UpdateSpaceMmConfigRequest) returns (Space); // ✓ shipped
-  rpc DeleteSpace(DeleteSpaceRequest) returns (Empty);               // ✓ shipped
+  rpc DeleteSpace(DeleteSpaceRequest) returns (Empty);               // current hard-delete handler; must become schedule-delete
+  rpc RestoreSpace(RestoreSpaceRequest) returns (Space);             // target: owner restore within 7 days
   rpc GetSpace(GetSpaceRequest) returns (Space);
   rpc ListMySpaces(ListMySpacesRequest) returns (SpaceList);
   rpc SearchPublicSpaces(SearchRequest) returns (SpaceList);         // ✗ unimplemented
@@ -51,8 +52,8 @@ service SpaceService {
   rpc UpdateCategory(UpdateCategoryRequest) returns (Category);
   rpc DeleteCategory(DeleteCategoryRequest) returns (Empty);
   rpc ReorderSpaceTree(ReorderRequest) returns (Empty); // только space_tree_nodes: порядок и категории для текста и голоса
-  rpc PinTreeNode(PinTreeNodeRequest) returns (SpaceTreeNode);   // spec — not yet in proto
-  rpc UnpinTreeNode(UnpinTreeNodeRequest) returns (SpaceTreeNode); // spec — not yet in proto
+  rpc PinTreeNode(PinTreeNodeRequest) returns (SpaceTreeNode);   // ✓ shipped
+  rpc UnpinTreeNode(UnpinTreeNodeRequest) returns (SpaceTreeNode); // ✓ shipped
 
   // Инвайты
   rpc CreateInvite(CreateInviteRequest) returns (Invite);
@@ -96,16 +97,17 @@ service SpaceService {
 |-----|-------|---------|-------|
 | CreateSpace, UpdateSpace, GetSpace, ListMySpaces | ✓ | ✓ | |
 | UpdateSpaceMmConfig | ✓ | ✓ | MM config on space |
-| DeleteSpace | ✓ | ✓ | Owner-only hard delete + `space.deleted` |
+| DeleteSpace | ✓ | ✓ | Current owner-only hard delete is obsolete; target schedules 7-day hidden/frozen recovery window |
+| RestoreSpace | ✗ | ✗ | Target owner-only restore during recovery window |
 | SearchPublicSpaces | ✓ | ✗ | Catalog search backlog |
 | Create/Update/Delete VoiceRoom | ✓ | ✓ | |
-| UpsertTreeNode, RemoveTreeNode, ReorderSpaceTree | ✓ | ✓ | No `is_pinned` in migration yet |
+| UpsertTreeNode, RemoveTreeNode, ReorderSpaceTree | ✓ | ✓ | Tree pin fields shipped in migration `000007_tree_pin` |
 | **ListSpaceTree** | ✓ | ✓ | **Omitted from earlier doc inventory** |
 | Create/Update/Delete Category | ✓ | ✓ | |
-| PinTreeNode, UnpinTreeNode | ✗ | ✗ | Spec sketch below; migration + proto TBD |
+| PinTreeNode, UnpinTreeNode | ✓ | ✓ | Migration `000007_tree_pin`; handlers and event payload shipped |
 | CreateInvite, GetInvite, JoinByInvite | ✓ | ✓ | |
 | **RevokeInvite, ListInvites** | ✓ | ✓ | **Owner-only** today (`requireSpaceOwner`) — normative target: role with `MANAGE_INVITES` |
-| JoinSpace, LeaveSpace | ✓ | ✓ | Entry verification may be bypassed on invite join — [todo/backend.md](../todo/backend.md) |
+| JoinSpace, LeaveSpace | ✓ | ✓ | Composable AND entry policy and invite-safe verifier pipeline remain backlog — [todo/backend.md](../todo/backend.md) |
 | KickMember, BanMember, UnbanMember, ListMembers, ListBans | ✓ | ✓ | |
 | TimeoutMember, RemoveMemberTimeout | ✓ | ✓ | |
 | TransferOwnership | ✓ | ✓ | Backend owner→member path; Owner role Assign/Revoke fail-closed when Roles wired; failed role or audit step compensates the Owner transition and database owner; audit/event only after success. Password/2FA confirmation and Gateway/Flutter lifecycle UX remain backlog |
@@ -133,9 +135,12 @@ spaces
 ├── member_count (denormalized counter)
 ├── is_verified (bool)
 ├── verification_type (none | personal | organization)
-├── entry_requirement (none | phone | captcha | questions | manual)
-├── entry_questions (jsonb, nullable)
+├── allow_guests (bool, default false)
+├── entry_policy_version (int)
+├── entry_policy (jsonb: enabled phone/captcha/questions/manual + versioned config)
 ├── mm_config (jsonb — space-level matchmaking settings)
+├── deletion_scheduled_at (nullable)
+├── purge_after (nullable; deletion_scheduled_at + 7 days)
 ├── created_at
 └── updated_at
 
@@ -206,7 +211,7 @@ audit_log
 
 ### Pin tree node
 
-Закреп узла sidebar — UX [spaces.md](../features/spaces.md) § Pin элемента дерева. **Code gap:** no `is_pinned` in migration `000002_tree`.
+Закреп узла sidebar — UX [spaces.md](../features/spaces.md) § Pin элемента дерева. Поля и handlers shipped в migration `000007_tree_pin`.
 
 ```protobuf
 message PinTreeNodeRequest {
@@ -219,7 +224,7 @@ message UnpinTreeNodeRequest {
 }
 ```
 
-**Rules:** pinned nodes render above unpinned in same `category_id`; `ReorderSpaceTree` respects pin group; audit `space.tree_node_upserted` includes **`is_pinned`**, **`pin_order`** (R2-A15). ≠ Quick Access (profile rail) ≠ folder pin (Chat inbox). **Code gap:** migration `000002_tree` lacks `is_pinned` — [todo/backend.md](../todo/backend.md).
+**Rules:** pinned nodes render above unpinned in same `category_id`; `ReorderSpaceTree` respects pin group; audit `space.tree_node_upserted` includes **`is_pinned`**, **`pin_order`** (R2-A15). ≠ Quick Access (profile rail) ≠ folder pin (Chat inbox).
 
 ## Публикуемые события (→ NATS)
 
@@ -229,7 +234,9 @@ message UnpinTreeNodeRequest {
 |-------------------------|---------------------------------|
 | `space.created`         | space_id, owner_id              |
 | `space.updated`         | space_id, changed_fields        |
-| `space.deleted`         | space_id                        |
+| `space.deletion_scheduled` | space_id, owner_id, purge_after |
+| `space.restored`        | space_id, owner_id              |
+| `space.deleted`         | space_id (only after converged irreversible purge) |
 | `space.member_joined`   | space_id, profile_id            |
 | `space.member_left`     | space_id, profile_id            |
 | `space.member_banned`   | space_id, account_id, banned_by |
