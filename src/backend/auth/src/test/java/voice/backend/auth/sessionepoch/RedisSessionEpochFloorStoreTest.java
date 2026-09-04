@@ -75,7 +75,7 @@ class RedisSessionEpochFloorStoreTest {
     RedisSessionEpochFloorStore store = new RedisSessionEpochFloorStore(commands, COMMAND_TIMEOUT);
     java.util.concurrent.ExecutorService callers = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
     try {
-      java.util.List<java.util.concurrent.Future<?>> blocked =
+      var blocked =
           java.util.stream.IntStream.range(0, RedisSessionEpochFloorStore.MAX_IN_FLIGHT_COMMANDS)
               .mapToObj(
                   ignored ->
@@ -93,7 +93,8 @@ class RedisSessionEpochFloorStoreTest {
       assertThat(Duration.ofNanos(System.nanoTime() - startedAtNanos)).isLessThan(Duration.ofSeconds(1));
       assertThat(commands.started).isEqualTo(RedisSessionEpochFloorStore.MAX_IN_FLIGHT_COMMANDS);
 
-      for (java.util.concurrent.Future<?> future : blocked) {
+      commands.release.countDown();
+      for (var future : blocked) {
         future.get(3, TimeUnit.SECONDS);
       }
     } finally {
