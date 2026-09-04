@@ -7,6 +7,9 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -117,22 +120,60 @@ func TestRealtimeBootstrapRejectsInvalidStrictConfigBeforeServerConstruction(t *
 		t.Run(tc.name, func(t *testing.T) {
 			configureRealtimeSessionEpochEnv(t, &tc.strict, tc.redisAddr, tc.jwksURL, tc.issuer, tc.audience)
 
+			handlerConstructed := 0
 			serverConstructed := 0
-			server, err := newRealtimeServerFromEnv(":8080", func(handler http.Handler) *http.Server {
-				serverConstructed++
-				return &http.Server{Addr: ":8080", Handler: handler}
+			server, err := newRealtimeServerFromEnv(":8080", realtimeStartupDependencies{
+				buildHandler: func(realtimeConfig) (http.Handler, error) {
+					handlerConstructed++
+					return http.NotFoundHandler(), nil
+				},
+				buildServer: func(handler http.Handler) *http.Server {
+					serverConstructed++
+					return &http.Server{Addr: ":8080", Handler: handler}
+				},
 			})
 			require.Error(t, err)
 			require.Nil(t, server)
+			require.Zero(t, handlerConstructed)
 			require.Zero(t, serverConstructed)
 		})
 	}
 }
 
-func TestRealtimeMainUsesCheckedSessionEpochBootstrap(t *testing.T) {
-	mainSource, err := os.ReadFile("main.go")
+func TestRealtimeMainUsesCheckedSessionEpochBootstrapBeforeDependencies(t *testing.T) {
+	fileSet := token.NewFileSet()
+	file, err := parser.ParseFile(fileSet, "main.go", nil, 0)
 	require.NoError(t, err)
-	require.Contains(t, string(mainSource), "newRealtimeServerFromEnv(")
+
+	var mainDecl *ast.FuncDecl
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if ok && fn.Name.Name == "main" {
+			mainDecl = fn
+			break
+		}
+	}
+	require.NotNil(t, mainDecl)
+
+	var bootstrapPos token.Pos
+	dependencyPositions := map[string]token.Pos{}
+	ast.Inspect(mainDecl.Body, func(node ast.Node) bool {
+		call, ok := node.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		switch realtimeCallName(call.Fun) {
+		case "newRealtimeServerFromEnv":
+			bootstrapPos = call.Pos()
+		case "dialChatBootstrapLister", "dialChatMemberInboxLister", "dialPresenceUpdater", "dialFriendLister", "redis.NewClient", "nats.Connect":
+			dependencyPositions[realtimeCallName(call.Fun)] = call.Pos()
+		}
+		return true
+	})
+	require.NotEqual(t, token.NoPos, bootstrapPos, "main must invoke checked Realtime bootstrap")
+	for name, position := range dependencyPositions {
+		require.Greater(t, int(position), int(bootstrapPos), "%s must not be constructed before checked bootstrap", name)
+	}
 }
 
 func TestRealtimeSessionEpochJWKSConfigPreservesCompatibilityAndRejectsMalformedPresentClaim(t *testing.T) {
@@ -321,4 +362,16 @@ func realtimeConfigWSEndpoint(t *testing.T, server *httptest.Server) string {
 	endpoint.Scheme = "ws"
 	endpoint.Path = "/ws"
 	return endpoint.String()
+}
+
+func realtimeCallName(expression ast.Expr) string {
+	switch expression := expression.(type) {
+	case *ast.Ident:
+		return expression.Name
+	case *ast.SelectorExpr:
+		if receiver, ok := expression.X.(*ast.Ident); ok {
+			return receiver.Name + "." + expression.Sel.Name
+		}
+	}
+	return ""
 }

@@ -22,6 +22,9 @@ func TestRedisSessionEpochFloorMinimumReadsOnlyCanonicalPositiveInt64(t *testing
 	require.Error(t, err, "a missing Auth floor must fail closed, never default to epoch one")
 	_, err = floor.Minimum(context.Background(), "")
 	require.Error(t, err, "an empty account id must never read the shared key prefix")
+	require.NoError(t, mr.Set("auth:session:min_epoch: \t", "7"))
+	_, err = floor.Minimum(context.Background(), " \t")
+	require.Error(t, err, "a whitespace account id must never form an Auth floor key")
 
 	for _, tc := range []struct {
 		name    string
