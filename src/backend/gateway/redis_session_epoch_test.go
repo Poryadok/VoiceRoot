@@ -77,13 +77,35 @@ func TestRedisSessionEpochFloor_MinimumFailsClosedOnRedisError(t *testing.T) {
 	<-accepted
 }
 
-func TestRedisSessionEpochFloor_MinimumHonorsCanceledRequestContext(t *testing.T) {
+func TestRedisSessionEpochFloor_MinimumHonorsCanceledRequestContextWhileRedisStalls(t *testing.T) {
 	t.Parallel()
 
-	floor := newRedisSessionEpochFloor("127.0.0.1:1", "")
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = listener.Close() })
+
+	accepted := make(chan net.Conn, 1)
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr == nil {
+			accepted <- conn
+		}
+	}()
+
+	floor := newRedisSessionEpochFloor(listener.Addr().String(), "")
+	floor.timeout = 25 * time.Millisecond
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		_, minimumErr := floor.Minimum(ctx, "account-1")
+		done <- minimumErr
+	}()
+	conn := <-accepted
+	defer func() { _ = conn.Close() }()
 	cancel()
 
-	_, err := floor.Minimum(ctx, "account-1")
+	err = <-done
 	require.ErrorIs(t, err, context.Canceled)
 }

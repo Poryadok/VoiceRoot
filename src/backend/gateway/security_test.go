@@ -108,6 +108,46 @@ func TestSessionEpochFloorRejectsStaleToken(t *testing.T) {
 	}
 }
 
+func TestStrictStaticTokenRejectsMissingOrNonPositiveSessionEpochBeforeFloor(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name   string
+		claims tokenClaims
+	}{
+		{name: "missing", claims: tokenClaims{UserID: "account-1", JTI: "jti-1"}},
+		{name: "zero", claims: tokenClaims{UserID: "account-1", JTI: "jti-1", SessionEpoch: 0}},
+		{name: "negative", claims: tokenClaims{UserID: "account-1", JTI: "jti-1", SessionEpoch: -1}},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			floor := &recordingSessionEpochFloor{minimum: 1}
+			var upstreamCalls int
+			h := newGatewayForContract(t, gatewayTestOptions{
+				tokenClaims:        map[string]tokenClaims{"static-token": tc.claims},
+				sessionEpochStrict: true,
+				sessionEpochFloor:  floor,
+				restUpstreams: map[string]http.Handler{
+					"users": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+						upstreamCalls++
+						w.WriteHeader(http.StatusNoContent)
+					}),
+				},
+			})
+
+			rec := performRequest(h, http.MethodGet, "/api/v1/users/me", "", map[string]string{"Authorization": "Bearer static-token"})
+			if rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Body.String(), "invalid_token") {
+				t.Fatalf("status/body = %d %q", rec.Code, rec.Body.String())
+			}
+			if floor.calls != 0 || upstreamCalls != 0 {
+				t.Fatalf("floor/upstream calls = %d/%d, want 0/0", floor.calls, upstreamCalls)
+			}
+		})
+	}
+}
+
 func TestSessionEpochFloorFailsClosedWhenUnavailable(t *testing.T) {
 	t.Parallel()
 
@@ -187,8 +227,10 @@ func TestSessionEpochFloorChecksTokenWithoutJTI(t *testing.T) {
 	t.Parallel()
 
 	floor := &recordingSessionEpochFloor{minimum: 7}
+	blacklist := &recordingBlacklist{}
 	h := newGatewayForContract(t, gatewayTestOptions{
 		tokenValidator:     fixedValidator{claims: tokenClaims{UserID: "account-1", SessionEpoch: 7}},
+		tokenBlacklist:     blacklist,
 		sessionEpochStrict: true,
 		sessionEpochFloor:  floor,
 		restUpstreams: map[string]http.Handler{
@@ -202,6 +244,9 @@ func TestSessionEpochFloorChecksTokenWithoutJTI(t *testing.T) {
 	}
 	if floor.calls != 1 || floor.accounts[0] != "account-1" {
 		t.Fatalf("floor calls/accounts = %d/%v", floor.calls, floor.accounts)
+	}
+	if blacklist.calls != 0 {
+		t.Fatalf("blacklist calls = %d, want 0", blacklist.calls)
 	}
 }
 
