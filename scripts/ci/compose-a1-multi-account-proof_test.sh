@@ -5,6 +5,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 SCRIPT="${ROOT}/scripts/ci/compose-a1-multi-account-proof.sh"
+T055_REGEX='^TestComposeA1(TwoAccountsFoundation|DailyMessagingREST)_live$'
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 assert_file() { [[ -f "$1" ]] || fail "missing file: $1"; }
@@ -157,6 +158,14 @@ TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/a1-runner-tests.XXXXXXXX")"
 trap 'rm -rf -- "$TEST_TMP"' EXIT
 assert_file "$SCRIPT"
 
+echo '== T055 regex matches exactly the two current tests =='
+for test_name in TestComposeA1TwoAccountsFoundation_live TestComposeA1DailyMessagingREST_live; do
+  printf '%s\n' "$test_name" | grep -Eq -- "$T055_REGEX" || fail "regex did not match ${test_name}"
+done
+if printf '%s\n' TestComposeAuthLifecycle_live | grep -Eq -- "$T055_REGEX"; then
+  fail 'T055 regex matched an unrelated live test'
+fi
+
 echo '== ambient project is rejected before Docker =='
 case_dir="$(new_case ambient)"
 run_runner "$case_dir" COMPOSE_PROJECT_NAME=ambient-project
@@ -204,7 +213,9 @@ assert_contains "${case_dir}/commands.log" 'compose.*<ps> <-q> <gateway>'
 assert_contains "${case_dir}/commands.log" 'compose.*<ps> <-q> <file>'
 assert_contains "${case_dir}/commands.log" 'curl.*<http://127.0.0.1:25012/health>'
 assert_full_port_env "${case_dir}/commands.log"
-assert_contains "${case_dir}/commands.log" 'go cwd=.*/src/backend/gateway.*<-count=1> <-parallel> <1> <-timeout> <20m> <-tags> <live> <-run> <\\^TestComposeA1\\(TwoAccountsFoundation\\|DailyMessagingREST\\)_live\\$> <\\.\\/\\.\\.\\.>'
+assert_contains "${case_dir}/commands.log" 'go cwd=.*/src/backend/gateway.*<-count=1> <-parallel> <1> <-timeout> <20m> <-tags> <live> <-run>'
+go_run_regex="$(sed -n 's/.* <-run> <\([^>]*\)> <.*/\1/p' "${case_dir}/commands.log" | head -1)"
+assert_eq "$go_run_regex" "$T055_REGEX"
 
 echo '== every compose path is absolute and env file is zero-byte =='
 compose_line="$(grep -m1 '^docker <compose ' "${case_dir}/commands.log")"
