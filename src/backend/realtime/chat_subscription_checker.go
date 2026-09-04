@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 
@@ -41,6 +42,10 @@ func (g *grpcChatSubscriptionChecker) AuthorizeChat(ctx context.Context, account
 	if accountID == "" || profileID == "" || chatID == "" {
 		return fmt.Errorf("chat subscription checker requires account_id, profile_id and chat_id")
 	}
+	requestedChatID, err := uuid.Parse(chatID)
+	if err != nil {
+		return fmt.Errorf("chat subscription checker requires a valid chat_id")
+	}
 	ctx, cancel := context.WithTimeout(ctx, chatSubscriptionCheckTimeout)
 	defer cancel()
 	// GetChat validates caller membership from normal user/profile metadata. Do
@@ -58,7 +63,11 @@ func (g *grpcChatSubscriptionChecker) AuthorizeChat(ctx context.Context, account
 	if err != nil {
 		return err
 	}
-	if resp.GetChat() == nil || strings.TrimSpace(resp.GetChat().GetId()) != chatID {
+	if resp.GetChat() == nil {
+		return fmt.Errorf("chat subscription checker received unexpected chat")
+	}
+	returnedChatID, err := uuid.Parse(strings.TrimSpace(resp.GetChat().GetId()))
+	if err != nil || returnedChatID != requestedChatID {
 		return fmt.Errorf("chat subscription checker received unexpected chat")
 	}
 	return nil

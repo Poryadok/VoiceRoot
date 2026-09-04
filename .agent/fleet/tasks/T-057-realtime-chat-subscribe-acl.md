@@ -128,5 +128,8 @@ subscription-gated actions.
   work must preserve their documented degraded behavior while ensuring they do
   not become an alternate authority for post-revocation actions.
 - Hub-level presence fan-out is RED-covered after local revocation. The actual
-  client `presence_update` op needs a separate GREEN regression once the
-  checker fixture can establish an allowed lazy subscription.
+  client `presence_update` op is GREEN-covered with an allowed checker fixture.
+- The subscription checker owns a new Chat gRPC connection but Realtime has no
+  dedicated gRPC-client shutdown lifecycle; this follows the existing dialer
+  pattern. Closing all such connections is a separate lifecycle cleanup, not
+  part of this minimal ACL change.

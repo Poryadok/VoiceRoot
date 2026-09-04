@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -113,6 +114,14 @@ func TestGRPCChatSubscriptionCheckerForwardsCallerMetadataAndFailsClosed(t *test
 				t.Fatalf("GetChat unexpectedly has internal caller metadata: %v", got)
 			}
 		})
+	}
+}
+
+func TestGRPCChatSubscriptionCheckerAcceptsCanonicalResponseForUppercaseRequest(t *testing.T) {
+	accountID, profileID, chatID := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	server := &recordingGetChatServer{chatID: chatID}
+	if err := newBufconnChatSubscriptionChecker(t, server).AuthorizeChat(context.Background(), accountID, profileID, strings.ToUpper(chatID)); err != nil {
+		t.Fatalf("canonical response rejected uppercase UUID request: %v", err)
 	}
 }
 
