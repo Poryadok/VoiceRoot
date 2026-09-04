@@ -449,7 +449,6 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
             _protectedArchiveItems(
               profileId,
               archiveMutationRevisionAtRequest!,
-              acceptedItems,
             ),
           )
         : pending;
@@ -498,15 +497,11 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
   Iterable<ChatListItem> _protectedArchiveItems(
     String profileId,
     int archiveMutationRevisionAtRequest,
-    Iterable<ChatListItem> acceptedItems,
   ) {
     final mutations = _archivedMutations[profileId];
     if (mutations == null) return const [];
-    final returnedIds = acceptedItems.map((item) => item.chatId).toSet();
     mutations.removeWhere(
-      (chatId, mutation) =>
-          mutation.revision <= archiveMutationRevisionAtRequest &&
-          returnedIds.contains(chatId),
+      (_, mutation) => mutation.revision <= archiveMutationRevisionAtRequest,
     );
     if (mutations.isEmpty) {
       _archivedMutations.remove(profileId);
