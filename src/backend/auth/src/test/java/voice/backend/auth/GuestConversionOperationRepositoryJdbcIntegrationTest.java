@@ -219,6 +219,39 @@ class GuestConversionOperationRepositoryJdbcIntegrationTest {
     }
 
     @Test
+    void stateAwarePendingEventClaimLeavesAnActiveLeaseUntouchedThenReclaimsItAfterExpiry() {
+      GuestConversionOperationRepository repository = repository();
+      Instant now = Instant.parse("2026-09-04T15:00:00Z");
+      GuestConversionOperation pendingEvent =
+          seedOperation(
+              operation(
+                  uuid("00000000-0000-0000-0000-000000000009"),
+                  GuestConversionState.PENDING_EVENT,
+                  3,
+                  now.minus(1, ChronoUnit.MINUTES),
+                  now.plus(1, ChronoUnit.MINUTES),
+                  now.minus(10, ChronoUnit.MINUTES)));
+
+      assertThat(
+              repository.leaseDue(
+                  GuestConversionState.PENDING_EVENT,
+                  1,
+                  now,
+                  now.plus(2, ChronoUnit.MINUTES)))
+          .isEmpty();
+      assertThat(operationById(pendingEvent.operationId())).isEqualTo(pendingEvent);
+
+      Instant afterExpiry = now.plus(1, ChronoUnit.MINUTES).plus(1, ChronoUnit.MICROS);
+      Instant renewedLease = afterExpiry.plus(2, ChronoUnit.MINUTES);
+      assertThat(
+              repository.leaseDue(
+                  GuestConversionState.PENDING_EVENT, 1, afterExpiry, renewedLease))
+          .containsExactly(withLease(pendingEvent, renewedLease));
+      assertThat(operationById(pendingEvent.operationId()))
+          .isEqualTo(withLease(pendingEvent, renewedLease));
+    }
+
+    @Test
     void leaseDue_leasesOnlyEligibleRowsInDueCreatedAndOperationOrderAndPreservesAllFields() {
       GuestConversionOperationRepository repository = repository();
       Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);

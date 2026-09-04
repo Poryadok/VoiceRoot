@@ -140,8 +140,15 @@ class GuestConversionPendingEventWorkerTest {
     assertThat(operations.failures).isEmpty();
     assertThat(operations.state).isEqualTo(GuestConversionState.PENDING_EVENT);
     assertThat(operations.operation.lockedUntil()).isEqualTo(NOW.plus(LEASE));
-    clock.advance(LEASE.plusNanos(1));
+    clock.advance(Duration.ofSeconds(1));
     operations.abruptAbort = null;
+
+    worker.processDue(1, LEASE);
+
+    assertThat(publisher.publishes).hasSize(1);
+    assertThat(operations.advances).hasSize(1);
+    assertThat(operations.operation.lockedUntil()).isEqualTo(NOW.plus(LEASE));
+    clock.advance(LEASE);
 
     worker.processDue(1, LEASE);
 
