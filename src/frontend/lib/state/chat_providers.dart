@@ -323,7 +323,11 @@ class ChatListController extends StateNotifier<ChatListState> {
         : ChatListState(isLoading: true, profileId: profileId);
     final result = await _ref
         .read(voiceChatsClientProvider)
-        .listChats(authorization: auth, inbox: inbox, folderId: folderId);
+        .listChats(
+          authorization: auth,
+          inbox: inbox,
+          folderId: folderId,
+        );
     if (!mounted) return;
     if (generation != _loadGeneration ||
         !_matchesSession(profileId, auth) ||
@@ -486,9 +490,7 @@ class ChatListController extends StateNotifier<ChatListState> {
           items: state.items.where((item) => item.chatId != chatId).toList(),
         );
         if (archivedItem != null) {
-          _ref
-              .read(inboxReconcilerProvider.notifier)
-              .archiveChat(
+          _ref.read(inboxReconcilerProvider.notifier).archiveChat(
                 archivedItem,
                 expectedProfileId: profileId,
                 expectedAuthorization: auth,
@@ -532,11 +534,7 @@ class ChatListController extends StateNotifier<ChatListState> {
             chatId: chatId,
           );
     return switch (result) {
-      ChatsApiOk<void>() => await _afterFolderPinAction(
-        folderId,
-        chatId,
-        pinned,
-      ),
+      ChatsApiOk<void>() => await _afterFolderPinAction(folderId, chatId, pinned),
       ChatsApiFailure(:final message) => message,
     };
   }
@@ -553,9 +551,7 @@ class ChatListController extends StateNotifier<ChatListState> {
           previous.firstWhere((item) => item.chatId == id),
       ],
     );
-    final result = await _ref
-        .read(voiceChatsClientProvider)
-        .reorderFolderChats(
+    final result = await _ref.read(voiceChatsClientProvider).reorderFolderChats(
           authorization: auth,
           folderId: folderId,
           chatIds: chatIds,
@@ -563,9 +559,9 @@ class ChatListController extends StateNotifier<ChatListState> {
     return switch (result) {
       ChatsApiOk<void>() => null,
       ChatsApiFailure(:final message) => () {
-        state = state.copyWith(items: previous);
-        return message;
-      }(),
+          state = state.copyWith(items: previous);
+          return message;
+        }(),
     };
   }
 
@@ -693,7 +689,11 @@ class ChatArchiveListController extends StateNotifier<ChatListState> {
     state = state.copyWith(isLoadingMore: true, clearError: true);
     final result = await _ref
         .read(voiceChatsClientProvider)
-        .listChats(authorization: auth, cursor: cursor, inbox: 'archive');
+        .listChats(
+          authorization: auth,
+          cursor: cursor,
+          inbox: 'archive',
+        );
     if (!mounted) return;
     if (generation != _loadGeneration ||
         !_matchesSession(profileId, auth) ||
@@ -724,9 +724,11 @@ class ChatArchiveListController extends StateNotifier<ChatListState> {
     if (session == null) return 'not_authenticated';
     final auth = session.authorizationHeader;
     final profileId = session.activeProfileId;
-    final result = await _ref
-        .read(voiceChatsClientProvider)
-        .archiveChat(authorization: auth, chatId: chatId, archived: false);
+    final result = await _ref.read(voiceChatsClientProvider).archiveChat(
+          authorization: auth,
+          chatId: chatId,
+          archived: false,
+        );
     if (!mounted) return kChatActionStaleContext;
     switch (result) {
       case ChatsApiOk<void>():
@@ -752,8 +754,8 @@ class ChatArchiveListController extends StateNotifier<ChatListState> {
 
 final chatArchiveListControllerProvider =
     StateNotifierProvider.autoDispose<ChatArchiveListController, ChatListState>(
-      (ref) => ChatArchiveListController(ref),
-    );
+  (ref) => ChatArchiveListController(ref),
+);
 
 final chatListControllerProvider =
     StateNotifierProvider<ChatListController, ChatListState>((ref) {
