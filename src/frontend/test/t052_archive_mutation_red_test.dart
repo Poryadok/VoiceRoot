@@ -408,19 +408,74 @@ void main() {
       'unarchive moves the exact authoritative row from archive to main immediately',
       () async {
         final chats = _ArchiveMutationChatsFake();
-        _enqueueSnapshot(chats, archiveItems: ['chat-1']);
+        final authoritative = inboxChatItem(
+          'chat-1',
+          preview: 'authoritative archive preview',
+          creatorProfileId: 'authoritative-peer',
+        );
+        for (final scope in InboxScope.values) {
+          chats.enqueue(
+            InboxChatPageScript(
+              inbox: scope.name,
+              cursor: null,
+              profileId: 'profile-a',
+              authorization: 'Bearer access-a',
+              result: ChatsApiOk(
+                ChatListData(
+                  items: scope == InboxScope.archive
+                      ? [authoritative]
+                      : const [],
+                ),
+              ),
+            ),
+          );
+        }
+        // The real legacy main controller needs one initial response and a
+        // second one only because current unarchive still reloads it. The
+        // call-count assertion below makes that second response a regression,
+        // not an unhandled-future artifact.
+        for (var request = 0; request < 2; request++) {
+          chats.enqueue(
+            const InboxChatPageScript(
+              inbox: 'main',
+              cursor: null,
+              profileId: 'profile-a',
+              authorization: 'Bearer access-a',
+              result: ChatsApiOk(ChatListData(items: [])),
+            ),
+          );
+        }
         final auth = _AuthHarness();
-        final container = _container(chats: chats, auth: auth);
+        final container = _container(
+          chats: chats,
+          auth: auth,
+          realArchiveController: true,
+          realMainController: true,
+        );
         addTearDown(container.dispose);
 
         final reconciler = container.read(inboxReconcilerProvider.notifier);
         await reconciler.reconcile();
+        final archiveSubscription = container.listen<ChatListState>(
+          chatArchiveListControllerProvider,
+          (_, _) {},
+          fireImmediately: true,
+        );
+        addTearDown(archiveSubscription.close);
         final archiveController =
             container.read(chatArchiveListControllerProvider.notifier)
               ..state = ChatListState(
                 profileId: 'profile-a',
-                items: [inboxChatItem('chat-1')],
+                items: [
+                  inboxChatItem(
+                    'chat-1',
+                    preview: 'legacy archive preview',
+                    creatorProfileId: 'legacy-peer',
+                  ),
+                ],
               );
+        container.read(chatListControllerProvider);
+        await pumpEventQueue();
         final listCallsBeforeUnarchive = chats.calls.length;
 
         expect(await archiveController.unarchiveChat('chat-1'), isNull);
@@ -430,11 +485,12 @@ void main() {
             .profileSnapshots['profile-a']!;
         expect(snapshot[InboxScope.archive].items, isEmpty);
         expect(
-          snapshot[InboxScope.main].items.map((item) => item.chatId),
-          ['chat-1'],
+          snapshot[InboxScope.main].items,
+          [same(authoritative)],
           reason:
               'the authoritative main scope must receive the exact confirmed '
-              'unarchived row without waiting for reconnect',
+              'unarchived archive row, not the legacy controller copy, without '
+              'waiting for reconnect',
         );
         expect(
           chats.calls,
@@ -580,6 +636,8 @@ Future<void> _pumpUntilVisible(WidgetTester tester, Finder finder) async {
 ProviderContainer _container({
   required _ArchiveMutationChatsFake chats,
   required _AuthHarness auth,
+  bool realArchiveController = false,
+  bool realMainController = false,
 }) {
   return ProviderContainer(
     overrides: [
@@ -598,10 +656,12 @@ ProviderContainer _container({
       realtimeLinkStatusProvider.overrideWith(
         (ref) => RealtimeLinkStatus.connected,
       ),
-      chatListControllerProvider.overrideWith(_NoAutoChatListController.new),
-      chatArchiveListControllerProvider.overrideWith(
-        _NoAutoArchiveListController.new,
-      ),
+      if (!realMainController)
+        chatListControllerProvider.overrideWith(_NoAutoChatListController.new),
+      if (!realArchiveController)
+        chatArchiveListControllerProvider.overrideWith(
+          _NoAutoArchiveListController.new,
+        ),
     ],
   );
 }
