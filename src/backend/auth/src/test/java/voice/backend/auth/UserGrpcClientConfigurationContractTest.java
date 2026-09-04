@@ -3,6 +3,9 @@ package voice.backend.auth;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import app.voice.user.v1.Profile;
+import com.google.protobuf.Timestamp;
+import io.grpc.Context;
 import io.grpc.Metadata;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
@@ -10,14 +13,18 @@ import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerInterceptors;
-import app.voice.user.v1.Profile;
-import com.google.protobuf.Timestamp;
 import io.grpc.ServerCall.Listener;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -31,6 +38,8 @@ import voice.backend.auth.config.PrimaryProfileBeansConfiguration;
 import voice.backend.auth.config.UserGrpcClientConfiguration;
 import voice.backend.auth.repository.InMemoryAccountRepository;
 import voice.backend.auth.support.RecordingUserGrpcService;
+import voice.backend.auth.service.AuthException;
+import voice.backend.auth.service.ProfileSwitchException;
 import voice.backend.auth.userdb.PhoneHashResolver;
 import voice.backend.auth.userdb.PrimaryProfileProvisioner;
 import voice.backend.auth.userdb.ProfileSwitchValidator;
@@ -100,6 +109,115 @@ class UserGrpcClientConfigurationContractTest {
           });
     } finally {
       server.shutdownNow();
+    }
+  }
+
+  @Test
+  void configuredDeadlineBoundsEveryBlockingAuthToUserRpc() throws Exception {
+    try (TcpFake fake = TcpFake.start()) {
+      Duration configuredDeadline = Duration.ofSeconds(5);
+      invokeEveryAuthUserRpc(fake, "auth.user-grpc.deadline=" + configuredDeadline);
+
+      fake.deadlines.assertEveryAuthUserRpcIsBoundedBy(configuredDeadline);
+    }
+  }
+
+  @ParameterizedTest(name = "deadline={0} falls back to the established 15-second default")
+  @MethodSource("invalidUserGrpcDeadlines")
+  void absentOrInvalidDeadlineFallsBackToEstablishedGrpcDefault(String configuredDeadline)
+      throws Exception {
+    try (TcpFake fake = TcpFake.start()) {
+      invokeEveryAuthUserRpc(fake, configuredDeadline == null
+          ? null
+          : "auth.user-grpc.deadline=" + configuredDeadline);
+
+      fake.deadlines.assertEveryAuthUserRpcIsBoundedBy(Duration.ofSeconds(15));
+    }
+  }
+
+  @ParameterizedTest(name = "EnsurePrimaryProfile {0} maps fail-closed to {1}")
+  @MethodSource("ensurePrimaryProfileFailures")
+  void ensurePrimaryProfileMapsAuditedUserFailuresFailClosed(
+      RecordingUserGrpcService.Outcome failure, String expectedMessage) throws Exception {
+    try (TcpFake fake = TcpFake.start()) {
+      fake.user.setEnsureOutcome(failure);
+      runner(fake).run(context -> {
+        PrimaryProfileProvisioner port = context.getBean(PrimaryProfileProvisioner.class);
+
+        assertThatThrownBy(() -> port.ensurePrimaryProfile(UUID.randomUUID(), "x", false))
+            .isExactlyInstanceOf(AuthException.class)
+            .hasMessage(expectedMessage);
+      });
+    }
+  }
+
+  @ParameterizedTest(name = "SwitchProfile {0} maps to {2}")
+  @MethodSource("switchProfileFailures")
+  void switchProfileMapsAuditedUserFailuresFailClosed(
+      RecordingUserGrpcService.Outcome failure,
+      Class<? extends RuntimeException> expectedType,
+      String expectedMessage,
+      ProfileSwitchException.Kind expectedKind) throws Exception {
+    try (TcpFake fake = TcpFake.start()) {
+      fake.user.setSwitchOutcome(failure);
+      runner(fake).run(context -> {
+        ProfileSwitchValidator port = context.getBean(ProfileSwitchValidator.class);
+
+        assertThatThrownBy(() -> port.validateOwnedSwitchable(UUID.randomUUID(), UUID.randomUUID()))
+            .isExactlyInstanceOf(expectedType)
+            .hasMessage(expectedMessage)
+            .satisfies(error -> {
+              if (expectedKind != null) {
+                assertThat(((ProfileSwitchException) error).kind()).isEqualTo(expectedKind);
+              }
+            });
+      });
+    }
+  }
+
+  @Test
+  void deadlineExceededFailsClosedWithEachExistingAuthUserSemanticMapping() throws Exception {
+    try (TcpFake fake = TcpFake.start()) {
+      runner(fake).run(context -> {
+        UUID accountId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+        InMemoryAccountRepository accounts = context.getBean(InMemoryAccountRepository.class);
+        accounts.create("deadline@example.com", "deadline-hash", "hash", "regular");
+
+        fake.user.setEnsureOutcome(RecordingUserGrpcService.Outcome.DEADLINE_EXCEEDED);
+        assertThatThrownBy(() -> context.getBean(PrimaryProfileProvisioner.class)
+                .ensurePrimaryProfile(accountId, "deadline@example.com", false))
+            .isExactlyInstanceOf(AuthException.class)
+            .hasMessage("auth_unavailable");
+
+        fake.user.setResolveOutcome(RecordingUserGrpcService.Outcome.DEADLINE_EXCEEDED);
+        assertThatThrownBy(() -> context.getBean(PhoneHashResolver.class)
+                .resolvePrimaryProfileIdsByPhoneHashes(List.of("deadline-hash")))
+            .isExactlyInstanceOf(AuthException.class)
+            .hasMessage("auth_unavailable");
+
+        fake.user.setSwitchOutcome(RecordingUserGrpcService.Outcome.DEADLINE_EXCEEDED);
+        assertThatThrownBy(() -> context.getBean(ProfileSwitchValidator.class)
+                .validateOwnedSwitchable(accountId, profileId))
+            .isExactlyInstanceOf(AuthException.class)
+            .hasMessage("auth_unavailable");
+
+        UserVerificationSync verification = context.getBean(UserVerificationSync.class);
+        fake.user.setSetVerificationOutcome(RecordingUserGrpcService.Outcome.DEADLINE_EXCEEDED);
+        assertThatThrownBy(() -> verification.setPersonalVerification(profileId, "verified"))
+            .isExactlyInstanceOf(AuthException.class)
+            .hasMessage("verification_sync_failed");
+        fake.user.setClearVerificationOutcome(RecordingUserGrpcService.Outcome.DEADLINE_EXCEEDED);
+        assertThatThrownBy(() -> verification.clearVerification(profileId))
+            .isExactlyInstanceOf(AuthException.class)
+            .hasMessage("verification_sync_failed");
+
+        fake.user.setMarkRegularOutcome(RecordingUserGrpcService.Outcome.DEADLINE_EXCEEDED);
+        assertThatThrownBy(() -> context.getBean(PrimaryProfileProvisioner.class)
+                .clearGuestAccountFlag(accountId))
+            .isExactlyInstanceOf(AuthException.class)
+            .hasMessage("auth_unavailable");
+      });
     }
   }
 
@@ -284,6 +402,85 @@ class UserGrpcClientConfigurationContractTest {
     }
   }
 
+  private void invokeEveryAuthUserRpc(TcpFake fake, String deadlineProperty) {
+    UUID accountId = UUID.randomUUID();
+    UUID profileId = UUID.randomUUID();
+    fake.user.setEnsuredProfile(profile(accountId, profileId, true, false));
+    fake.user.setSwitchedProfile(profile(accountId, profileId, false, false));
+    String addressProperty = "auth.user-grpc.addr=localhost:" + fake.server.getPort();
+    String[] properties = deadlineProperty == null
+        ? new String[] {addressProperty}
+        : new String[] {addressProperty, deadlineProperty};
+    contextRunner.withPropertyValues(properties).run(context -> {
+          assertThat(context).hasNotFailed();
+          InMemoryAccountRepository accounts = context.getBean(InMemoryAccountRepository.class);
+          var account = accounts.create("deadline@example.com", "deadline-hash", "hash", "regular");
+          fake.user.resolvedPrimaryProfileIds().put(account.id().toString(), profileId.toString());
+
+          context.getBean(PrimaryProfileProvisioner.class)
+              .ensurePrimaryProfile(accountId, "deadline@example.com", false);
+          context.getBean(PhoneHashResolver.class)
+              .resolvePrimaryProfileIdsByPhoneHashes(List.of("deadline-hash"));
+          context.getBean(ProfileSwitchValidator.class)
+              .validateOwnedSwitchable(accountId, profileId);
+          UserVerificationSync verification = context.getBean(UserVerificationSync.class);
+          verification.setPersonalVerification(profileId, "verified");
+          verification.clearVerification(profileId);
+          context.getBean(PrimaryProfileProvisioner.class).clearGuestAccountFlag(accountId);
+        });
+  }
+
+  private static Stream<Arguments> invalidUserGrpcDeadlines() {
+    return Stream.of(
+        Arguments.of((String) null),
+        Arguments.of(""),
+        Arguments.of("not-a-duration"),
+        Arguments.of("PT0S"),
+        Arguments.of("PT-1S"));
+  }
+
+  private static Stream<Arguments> ensurePrimaryProfileFailures() {
+    return Stream.of(
+        Arguments.of(RecordingUserGrpcService.Outcome.INVALID_ARGUMENT, "auth_unavailable"),
+        Arguments.of(RecordingUserGrpcService.Outcome.PERMISSION_DENIED, "auth_unavailable"),
+        Arguments.of(RecordingUserGrpcService.Outcome.DEADLINE_EXCEEDED, "auth_unavailable"),
+        Arguments.of(RecordingUserGrpcService.Outcome.MALFORMED, "malformed_user_response"));
+  }
+
+  private static Stream<Arguments> switchProfileFailures() {
+    return Stream.of(
+        Arguments.of(
+            RecordingUserGrpcService.Outcome.NOT_FOUND,
+            ProfileSwitchException.class,
+            "profile_not_found",
+            ProfileSwitchException.Kind.NOT_FOUND),
+        Arguments.of(
+            RecordingUserGrpcService.Outcome.PERMISSION_DENIED,
+            ProfileSwitchException.class,
+            "profile_forbidden",
+            ProfileSwitchException.Kind.FORBIDDEN),
+        Arguments.of(
+            RecordingUserGrpcService.Outcome.UNAUTHENTICATED,
+            ProfileSwitchException.class,
+            "profile_forbidden",
+            ProfileSwitchException.Kind.FORBIDDEN),
+        Arguments.of(
+            RecordingUserGrpcService.Outcome.FAILED_PRECONDITION,
+            ProfileSwitchException.class,
+            "profile_frozen",
+            ProfileSwitchException.Kind.PRECONDITION),
+        Arguments.of(
+            RecordingUserGrpcService.Outcome.DEADLINE_EXCEEDED,
+            AuthException.class,
+            "auth_unavailable",
+            null),
+        Arguments.of(
+            RecordingUserGrpcService.Outcome.MALFORMED,
+            ProfileSwitchException.class,
+            "malformed_user_response",
+            ProfileSwitchException.Kind.PRECONDITION));
+  }
+
   private ApplicationContextRunner runner(TcpFake fake) {
     return contextRunner.withPropertyValues("auth.user-grpc.addr=localhost:" + fake.server.getPort());
   }
@@ -335,21 +532,64 @@ class UserGrpcClientConfigurationContractTest {
   private static final class TcpFake implements AutoCloseable {
     final RecordingUserGrpcService user;
     final MetadataCapture metadata;
+    final DeadlineCapture deadlines;
     final Server server;
 
-    private TcpFake(RecordingUserGrpcService user, MetadataCapture metadata, Server server) {
+    private TcpFake(
+        RecordingUserGrpcService user, MetadataCapture metadata, DeadlineCapture deadlines, Server server) {
       this.user = user;
       this.metadata = metadata;
+      this.deadlines = deadlines;
       this.server = server;
     }
     static TcpFake start() throws Exception {
       RecordingUserGrpcService user = new RecordingUserGrpcService();
       MetadataCapture metadata = new MetadataCapture();
-      Server server = ServerBuilder.forPort(0).addService(ServerInterceptors.intercept(user, metadata)).build().start();
-      return new TcpFake(user, metadata, server);
+      DeadlineCapture deadlines = new DeadlineCapture();
+      Server server = ServerBuilder.forPort(0)
+          .addService(ServerInterceptors.intercept(user, metadata, deadlines)).build().start();
+      return new TcpFake(user, metadata, deadlines, server);
     }
     @Override public void close() { server.shutdownNow(); }
   }
+
+  private static final class DeadlineCapture implements ServerInterceptor {
+    private static final List<String> AUTH_TO_USER_METHODS = List.of(
+        "EnsurePrimaryProfile",
+        "ResolvePrimaryProfileIDs",
+        "SwitchProfile",
+        "SetVerification",
+        "ClearVerification",
+        "MarkAccountRegular");
+    final List<DeadlineObservation> observations = new ArrayList<>();
+
+    @Override
+    public <ReqT, RespT> Listener<ReqT> interceptCall(
+        ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+      var deadline = Context.current().getDeadline();
+      observations.add(
+          new DeadlineObservation(
+              call.getMethodDescriptor().getBareMethodName(),
+              deadline == null ? null : deadline.timeRemaining(TimeUnit.MILLISECONDS)));
+      return next.startCall(call, headers);
+    }
+
+    void assertEveryAuthUserRpcIsBoundedBy(Duration expected) {
+      assertThat(observations)
+          .extracting(DeadlineObservation::method)
+          .containsExactlyInAnyOrderElementsOf(AUTH_TO_USER_METHODS);
+      assertThat(observations).allSatisfy(observation -> {
+        assertThat(observation.remainingMillis())
+            .as("%s must receive a gRPC deadline", observation.method())
+            .isNotNull()
+            .isPositive()
+            .isLessThanOrEqualTo(expected.toMillis())
+            .isGreaterThan(expected.minusSeconds(1).toMillis());
+      });
+    }
+  }
+
+  private record DeadlineObservation(String method, Long remainingMillis) {}
 
   private static final class MetadataCapture implements ServerInterceptor {
     private static final Metadata.Key<String> INTERNAL_CALLER =
