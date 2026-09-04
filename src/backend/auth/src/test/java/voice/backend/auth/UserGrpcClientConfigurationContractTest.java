@@ -113,7 +113,7 @@ class UserGrpcClientConfigurationContractTest {
   }
 
   @Test
-  void configuredDeadlineBoundsEveryBlockingAuthToUserRpc() throws Exception {
+  void configuredPositiveDeadlineBoundsEveryBlockingAuthToUserRpc() throws Exception {
     try (TcpFake fake = TcpFake.start()) {
       Duration configuredDeadline = Duration.ofSeconds(5);
       invokeEveryAuthUserRpc(fake, "auth.user-grpc.deadline=" + configuredDeadline);
@@ -122,16 +122,23 @@ class UserGrpcClientConfigurationContractTest {
     }
   }
 
-  @ParameterizedTest(name = "deadline={0} falls back to the established 15-second default")
-  @MethodSource("invalidUserGrpcDeadlines")
-  void absentOrInvalidDeadlineFallsBackToEstablishedGrpcDefault(String configuredDeadline)
-      throws Exception {
+  @Test
+  void absentDeadlineUsesTheDocumentedFifteenSecondDefault() throws Exception {
     try (TcpFake fake = TcpFake.start()) {
-      invokeEveryAuthUserRpc(fake, configuredDeadline == null
-          ? null
-          : "auth.user-grpc.deadline=" + configuredDeadline);
+      invokeEveryAuthUserRpc(fake, null);
 
       fake.deadlines.assertEveryAuthUserRpcIsBoundedBy(Duration.ofSeconds(15));
+    }
+  }
+
+  @ParameterizedTest(name = "deadline={0} fails Auth startup")
+  @MethodSource("invalidUserGrpcDeadlines")
+  void explicitInvalidDeadlineFailsStartupInsteadOfFallingBack(String configuredDeadline)
+      throws Exception {
+    try (TcpFake fake = TcpFake.start()) {
+      runner(fake)
+          .withPropertyValues("auth.user-grpc.deadline=" + configuredDeadline)
+          .run(context -> assertThat(context).hasFailed());
     }
   }
 
@@ -432,7 +439,6 @@ class UserGrpcClientConfigurationContractTest {
 
   private static Stream<Arguments> invalidUserGrpcDeadlines() {
     return Stream.of(
-        Arguments.of((String) null),
         Arguments.of(""),
         Arguments.of("not-a-duration"),
         Arguments.of("PT0S"),

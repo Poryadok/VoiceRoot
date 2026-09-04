@@ -201,7 +201,13 @@ currently deployed schema/code; see [todo/backend.md](../todo/backend.md).
 
 - **User Service gRPC** (`USER_GRPC_ADDR`) — provisioning/resolve/switch профилей,
   синхронизация verification и завершения guest conversion. User единолично владеет `user_db`;
-  недоступность или непригодный ответ User блокирует выдачу новой сессии.
+  недоступность, `DEADLINE_EXCEEDED` или непригодный ответ User блокирует выдачу новой сессии.
+  Каждый blocking RPC (`EnsurePrimaryProfile`, `ResolvePrimaryProfileIDs`, `SwitchProfile`,
+  `SetVerification`, `ClearVerification`, `MarkAccountRegular`) получает новый per-call deadline:
+  `auth.user-grpc.deadline` / `AUTH_USER_GRPC_DEADLINE` — положительная ISO-8601 `Duration`.
+  Если переменная **отсутствует**, используется `PT15S`; явные пустое, malformed, zero или negative
+  значения являются ошибкой конфигурации и останавливают startup. Deadline создаётся при создании
+  каждого `ClientCall`, а не один раз при создании Spring singleton stub.
 - **Redis** — JWT blacklist (запись при logout и отзыве access token), OTP throttling. Сквозные HTTP rate limits (в т.ч. лимит попыток входа с одного IP) — на **API Gateway**; те же лимиты вторым слоем в Auth не дублируем. Подробнее: [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) («Redis: API Gateway и Auth Service»).
 - **Resend** — отправка email (верификация, password reset)
 - **NATS** — публикация событий
@@ -213,4 +219,3 @@ currently deployed schema/code; see [todo/backend.md](../todo/backend.md).
 - Refresh token: только хэш в БД, оригинал — только клиенту
 - Нет SMS 2FA (v1) — только TOTP
 - IP logging для аудита
-
