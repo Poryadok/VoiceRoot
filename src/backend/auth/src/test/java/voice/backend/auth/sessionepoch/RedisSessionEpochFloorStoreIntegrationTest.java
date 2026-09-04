@@ -105,6 +105,16 @@ class RedisSessionEpochFloorStoreIntegrationTest {
         .hasMessageContaining("invalid");
   }
 
+  @Test
+  void realRedisMissingFloorFailsClosedInsteadOfUsingADefaultEpoch() {
+    RedisSessionEpochFloorStore store =
+        new RedisSessionEpochFloorStore(new StringRedisSessionEpochCommands(template), Duration.ofSeconds(2));
+
+    assertThatThrownBy(() -> store.requireFloor(UUID.randomUUID()))
+        .isInstanceOf(SessionEpochFloorUnavailableException.class)
+        .hasMessageContaining("missing");
+  }
+
   private long await(Future<Long> future) {
     try {
       return future.get();

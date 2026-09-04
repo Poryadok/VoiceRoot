@@ -49,6 +49,9 @@ class RedisSessionEpochFloorStoreTest {
     assertThatThrownBy(() -> store.recordAtLeast(accountId, 1L))
         .isInstanceOf(SessionEpochFloorUnavailableException.class)
         .hasCauseInstanceOf(RuntimeException.class);
+    assertThatThrownBy(() -> store.requireFloor(accountId))
+        .isInstanceOf(SessionEpochFloorUnavailableException.class)
+        .hasCauseInstanceOf(RuntimeException.class);
     assertThat(commands.timeouts).containsOnly(COMMAND_TIMEOUT);
   }
 
