@@ -60,20 +60,32 @@ class GuestConversionDurabilityJdbcIntegrationTest {
   @Test
   void golangMigrateDownRefusesToDiscardPendingGuestConversionWork() throws Exception {
     migrateGolang(GOLANG_PENDING_DOWN_SCHEMA);
-    UUID accountId = UUID.randomUUID();
+    UUID pendingUserAccountId = UUID.randomUUID();
+    UUID pendingEventAccountId = UUID.randomUUID();
     insertPendingUser(
-        GOLANG_PENDING_DOWN_SCHEMA, UUID.randomUUID(), accountId, UUID.randomUUID());
+        GOLANG_PENDING_DOWN_SCHEMA, UUID.randomUUID(), pendingUserAccountId, UUID.randomUUID());
+    insert(
+        GOLANG_PENDING_DOWN_SCHEMA,
+        UUID.randomUUID(),
+        pendingEventAccountId,
+        UUID.randomUUID(),
+        "PENDING_EVENT");
 
     String downMigration =
         Files.readString(
             GuestConversionDurabilityMigrationContractTest.golangMigration(
                 GuestConversionDurabilityMigrationContractTest.GOLANG_DOWN_MIGRATION));
     assertThatThrownBy(() -> executeSql(GOLANG_PENDING_DOWN_SCHEMA, downMigration))
-        .as("rollback must refuse while a conversion can still require User or event delivery")
+        .as("rollback must refuse while a conversion can still require User marking or event delivery")
         .isInstanceOf(SQLException.class);
 
     assertThat(tableExists(GOLANG_PENDING_DOWN_SCHEMA)).isTrue();
-    assertThat(countOperationsForAccount(GOLANG_PENDING_DOWN_SCHEMA, accountId)).isEqualTo(1);
+    assertThat(countOperationsForAccount(GOLANG_PENDING_DOWN_SCHEMA, pendingUserAccountId)).isEqualTo(1);
+    assertThat(operationStateForAccount(GOLANG_PENDING_DOWN_SCHEMA, pendingUserAccountId))
+        .isEqualTo("PENDING_USER");
+    assertThat(countOperationsForAccount(GOLANG_PENDING_DOWN_SCHEMA, pendingEventAccountId)).isEqualTo(1);
+    assertThat(operationStateForAccount(GOLANG_PENDING_DOWN_SCHEMA, pendingEventAccountId))
+        .isEqualTo("PENDING_EVENT");
   }
 
   @Test
@@ -179,7 +191,7 @@ class GuestConversionDurabilityJdbcIntegrationTest {
     assertWithinDatabaseClock(defaultNextAttemptForAccount(schema, defaultAccountId), beforeInsert, afterInsert);
     assertWithinDatabaseClock(defaultCreatedAtForAccount(schema, defaultAccountId), beforeInsert, afterInsert);
     assertWithinDatabaseClock(defaultUpdatedAtForAccount(schema, defaultAccountId), beforeInsert, afterInsert);
-    assertInitialStepTimestampsAreNull(schema, defaultAccountId);
+    assertInitialNullableFieldsAreNull(schema, defaultAccountId);
   }
 
   private void assertColumn(
@@ -288,6 +300,19 @@ class GuestConversionDurabilityJdbcIntegrationTest {
     }
   }
 
+  private String operationStateForAccount(String schema, UUID accountId) throws SQLException {
+    try (Connection connection = connection();
+        PreparedStatement statement =
+            connection.prepareStatement(
+                "SELECT state FROM %s.%s WHERE account_id = ?".formatted(schema, TABLE))) {
+      statement.setObject(1, accountId);
+      try (ResultSet result = statement.executeQuery()) {
+        result.next();
+        return result.getString(1);
+      }
+    }
+  }
+
   private int defaultAttemptCountForAccount(String schema, UUID accountId) throws SQLException {
     try (Connection connection = connection();
         PreparedStatement statement =
@@ -335,18 +360,21 @@ class GuestConversionDurabilityJdbcIntegrationTest {
     }
   }
 
-  private void assertInitialStepTimestampsAreNull(String schema, UUID accountId) throws SQLException {
+  private void assertInitialNullableFieldsAreNull(String schema, UUID accountId) throws SQLException {
     try (Connection connection = connection();
         PreparedStatement statement =
             connection.prepareStatement(
                 """
-                SELECT user_marked_at, auth_promoted_at, event_published_at
+                SELECT locked_until, last_error_code,
+                    user_marked_at, auth_promoted_at, event_published_at
                 FROM %s.%s
                 WHERE account_id = ?
                 """.formatted(schema, TABLE))) {
       statement.setObject(1, accountId);
       try (ResultSet result = statement.executeQuery()) {
         result.next();
+        assertThat(result.getObject("locked_until")).isNull();
+        assertThat(result.getObject("last_error_code")).isNull();
         assertThat(result.getObject("user_marked_at")).isNull();
         assertThat(result.getObject("auth_promoted_at")).isNull();
         assertThat(result.getObject("event_published_at")).isNull();
