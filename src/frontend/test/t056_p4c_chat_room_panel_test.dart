@@ -182,12 +182,12 @@ void main() {
       final controller = harness.container.read(
         chatRoomControllerProvider('chat-1').notifier,
       );
-      controller.state = controller.state.copyWith(isDmPeerDeleted: true);
-      await tester.pump();
-
       attachCallback();
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('composer_attach_menu')), findsOneWidget);
+
+      controller.state = controller.state.copyWith(isDmPeerDeleted: true);
+      await tester.pump();
       await tester.tap(find.byKey(const Key('composer_attach_document')));
       await tester.pumpAndSettle();
 
