@@ -2,11 +2,13 @@ package voice.backend.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import org.hamcrest.Matchers;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -31,7 +33,8 @@ class GuestPendingIdentityConstructionIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
                     "{\"guest\":true,\"email\":\"guest-email@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}"))
-        .andExpect(status().is4xxClientError());
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.error", Matchers.is("validation_failed")));
 
     mockMvc
         .perform(
@@ -39,7 +42,32 @@ class GuestPendingIdentityConstructionIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
                     "{\"guest\":true,\"phone\":\"+15550123\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}"))
-        .andExpect(status().is4xxClientError());
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.error", Matchers.is("validation_failed")));
+  }
+
+  @Test
+  void convertGuestRejectsPhoneOnlyOrMixedPhoneInput() throws Exception {
+    JsonNode guest =
+        session(
+            postJson(
+                "/api/v1/auth/register",
+                "{\"guest\":true,\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}"));
+
+    for (String identity :
+        new String[] {
+          "{\"phone\":\"+15550124\",\"password\":\"New account password 1\"}",
+          "{\"email\":\"guest-mixed@example.com\",\"phone\":\"+15550125\",\"password\":\"New account password 1\"}"
+        }) {
+      mockMvc
+          .perform(
+              post("/api/v1/auth/convert-guest")
+                  .header("Authorization", "Bearer " + guest.get("access_token").asText())
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(identity))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.error", Matchers.is("validation_failed")));
+    }
   }
 
   @Test
@@ -57,7 +85,8 @@ class GuestPendingIdentityConstructionIntegrationTest {
                 .header("Authorization", "Bearer " + guest.get("access_token").asText())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"otp_type\":\"email_verify\"}"))
-        .andExpect(status().is4xxClientError());
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.error", Matchers.is("validation_failed")));
     assertThat(mailSender.lastCode()).isNull();
 
     mockMvc
