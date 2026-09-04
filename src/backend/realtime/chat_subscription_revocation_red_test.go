@@ -26,6 +26,10 @@ func (p *recordingDeliveryAckPublisher) PublishDeliveryAck(context.Context, stri
 }
 
 func TestChatMemberRemovalRevokesEveryLocalTabAndSubscriptionGatedActions(t *testing.T) {
+	oldTypingIdleTimeout := typingIdleTimeout
+	typingIdleTimeout = 120 * time.Millisecond
+	t.Cleanup(func() { typingIdleTimeout = oldTypingIdleTimeout })
+
 	for _, change := range []string{"removed", "left"} {
 		t.Run(change, func(t *testing.T) {
 			accountID, profileID, peerAccountID, peerProfileID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
@@ -46,6 +50,12 @@ func TestChatMemberRemovalRevokesEveryLocalTabAndSubscriptionGatedActions(t *tes
 				if got := readACLEnvelope(t, c); got.Op != "subscription_sync" || got.S != 2 {
 					t.Fatalf("bootstrap subscription = %+v", got)
 				}
+			}
+			if err := desktop.WriteJSON(map[string]any{"op": "typing_start", "d": map[string]any{"chat_id": chatID}}); err != nil {
+				t.Fatalf("typing_start before %s: %v", change, err)
+			}
+			if got := readACLEnvelope(t, peer); got.Op != "typing" {
+				t.Fatalf("typing start fan-out = %+v", got)
 			}
 
 			jsServer := startRealtimeJSTestServer(t)
@@ -153,9 +163,10 @@ func TestChatMemberRemovalRevokesEveryLocalTabAndSubscriptionGatedActions(t *tes
 			if err := desktop.WriteJSON(map[string]any{"op": "presence_update", "d": map[string]any{"status": "dnd"}}); err != nil {
 				t.Fatalf("presence_update after %s: %v", change, err)
 			}
+			time.Sleep(typingIdleTimeout + 40*time.Millisecond)
 			_ = peer.SetReadDeadline(time.Now().Add(250 * time.Millisecond))
 			if _, _, err := peer.ReadMessage(); err == nil {
-				t.Error("peer received presence_update from a locally revoked profile")
+				t.Error("peer received presence_update or typing idle stop from a locally revoked profile")
 			}
 
 			// Run this last: a Gorilla read timeout makes the connection unreadable

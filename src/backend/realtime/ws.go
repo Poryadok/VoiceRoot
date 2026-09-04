@@ -390,6 +390,9 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 					continue
 				}
 				broadcastTyping := func(k string) {
+					if !hub.hasChat(reg, cid) {
+						return
+					}
 					d, _ := json.Marshal(map[string]any{
 						"chat_id":    cid,
 						"profile_id": claims.ProfileID,
