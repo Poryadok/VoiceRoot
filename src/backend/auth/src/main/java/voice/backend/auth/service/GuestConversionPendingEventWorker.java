@@ -1,5 +1,6 @@
 package voice.backend.auth.service;
 
+import com.google.protobuf.Timestamp;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -9,40 +10,33 @@ import voice.backend.auth.repository.GuestConversionAdvanceResult;
 import voice.backend.auth.repository.GuestConversionOperation;
 import voice.backend.auth.repository.GuestConversionOperationRepository;
 import voice.backend.auth.repository.GuestConversionState;
-import voice.backend.auth.userdb.PrimaryProfileProvisioner;
+import voice.events.v1.JetstreamEvents.UserGuestConverted;
+import voice.events.v1.JetstreamEvents.UserStreamEvent;
 
-/** Executes only the User and Auth-local stages of a durable guest conversion. */
-public final class GuestConversionPendingUserWorker {
+/** Publishes only durable PENDING_EVENT operations after a JetStream PubAck. */
+public final class GuestConversionPendingEventWorker {
+  private static final String SUBJECT = "user.guest_converted";
   private static final Duration DEFAULT_RETRY_DELAY = Duration.ofMinutes(1);
 
   private final GuestConversionOperationRepository operations;
-  private final PrimaryProfileProvisioner primaryProfiles;
-  private final GuestConversionLocalPromotion localPromotion;
+  private final GuestConversionEventPublisher publisher;
   private final Clock clock;
   private final GuestConversionRetrySchedule retrySchedule;
 
-  public GuestConversionPendingUserWorker(
+  public GuestConversionPendingEventWorker(
       GuestConversionOperationRepository operations,
-      PrimaryProfileProvisioner primaryProfiles,
-      GuestConversionLocalPromotion localPromotion,
+      GuestConversionEventPublisher publisher,
       Clock clock) {
-    this(
-        operations,
-        primaryProfiles,
-        localPromotion,
-        clock,
-        (operation, failure, now) -> now.plus(DEFAULT_RETRY_DELAY));
+    this(operations, publisher, clock, (operation, failure, now) -> now.plus(DEFAULT_RETRY_DELAY));
   }
 
-  public GuestConversionPendingUserWorker(
+  public GuestConversionPendingEventWorker(
       GuestConversionOperationRepository operations,
-      PrimaryProfileProvisioner primaryProfiles,
-      GuestConversionLocalPromotion localPromotion,
+      GuestConversionEventPublisher publisher,
       Clock clock,
       GuestConversionRetrySchedule retrySchedule) {
     this.operations = Objects.requireNonNull(operations, "operations");
-    this.primaryProfiles = Objects.requireNonNull(primaryProfiles, "primaryProfiles");
-    this.localPromotion = Objects.requireNonNull(localPromotion, "localPromotion");
+    this.publisher = Objects.requireNonNull(publisher, "publisher");
     this.clock = Objects.requireNonNull(clock, "clock");
     this.retrySchedule = Objects.requireNonNull(retrySchedule, "retrySchedule");
   }
@@ -56,29 +50,33 @@ public final class GuestConversionPendingUserWorker {
       throw new IllegalArgumentException("leaseDuration must be positive");
     }
     Instant now = Instant.now(clock);
-    Instant leaseUntil = now.plus(leaseDuration);
-    List<GuestConversionOperation> leased =
-        operations.leaseDue(GuestConversionState.PENDING_USER, batchSize, now, leaseUntil);
+    List<GuestConversionOperation> leased = operations.leaseDue(
+        GuestConversionState.PENDING_EVENT, batchSize, now, now.plus(leaseDuration));
     for (GuestConversionOperation operation : leased) {
-      if (operation.state() != GuestConversionState.PENDING_USER) {
-        continue;
-      }
       process(operation, Instant.now(clock));
     }
   }
 
   private void process(GuestConversionOperation operation, Instant now) {
     try {
-      primaryProfiles.clearGuestAccountFlag(operation.accountId());
-      GuestConversionAdvanceResult result =
-          localPromotion.promoteAndAdvance(operation, Instant.now(clock));
-      if (result == GuestConversionAdvanceResult.APPLIED
-          || result == GuestConversionAdvanceResult.ALREADY_APPLIED
-          || result == GuestConversionAdvanceResult.LEASE_LOST
-          || result == GuestConversionAdvanceResult.NOT_FOUND) {
-        return;
+      String operationId = operation.operationId().toString();
+      GuestConversionPublishAck acknowledgement = publisher.publishGuestConverted(
+          SUBJECT, envelope(operation, now), operationId);
+      if (acknowledgement == null) {
+        throw new IllegalStateException("JetStream did not return a PubAck");
       }
-      throw new IllegalStateException("unsupported guest conversion advance result");
+      GuestConversionAdvanceResult result =
+          operations.advance(
+              operation.operationId(),
+              GuestConversionState.PENDING_EVENT,
+              operation.lockedUntil(),
+              Instant.now(clock));
+      if (result != GuestConversionAdvanceResult.APPLIED
+          && result != GuestConversionAdvanceResult.ALREADY_APPLIED
+          && result != GuestConversionAdvanceResult.LEASE_LOST
+          && result != GuestConversionAdvanceResult.NOT_FOUND) {
+        throw new IllegalStateException("unsupported guest conversion advance result");
+      }
     } catch (RuntimeException failure) {
       Instant failureNow = Instant.now(clock);
       Instant nextAttemptAt = retrySchedule.nextAttemptAt(operation, failure, failureNow);
@@ -92,6 +90,15 @@ public final class GuestConversionPendingUserWorker {
           nextAttemptAt,
           failureNow);
     }
+  }
+
+  private static UserStreamEvent envelope(GuestConversionOperation operation, Instant now) {
+    return UserStreamEvent.newBuilder()
+        .setEventId(operation.operationId().toString())
+        .setOccurredAt(Timestamp.newBuilder().setSeconds(now.getEpochSecond()).setNanos(now.getNano()))
+        .setUserGuestConverted(
+            UserGuestConverted.newBuilder().setAccountId(operation.accountId().toString()))
+        .build();
   }
 
   private static String failureCode(RuntimeException failure) {

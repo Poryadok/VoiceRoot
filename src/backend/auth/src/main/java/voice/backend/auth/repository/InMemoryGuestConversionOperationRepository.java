@@ -53,6 +53,18 @@ public final class InMemoryGuestConversionOperationRepository
   @Override
   public synchronized List<GuestConversionOperation> leaseDue(
       int batchSize, Instant now, Instant leaseUntil) {
+    return leaseDueInternal(null, batchSize, now, leaseUntil);
+  }
+
+  @Override
+  public synchronized List<GuestConversionOperation> leaseDue(
+      GuestConversionState expectedState, int batchSize, Instant now, Instant leaseUntil) {
+    requireNonNull(expectedState, "expectedState");
+    return leaseDueInternal(expectedState, batchSize, now, leaseUntil);
+  }
+
+  private List<GuestConversionOperation> leaseDueInternal(
+      GuestConversionState expectedState, int batchSize, Instant now, Instant leaseUntil) {
     if (batchSize <= 0) {
       throw new IllegalArgumentException("batchSize must be positive");
     }
@@ -64,6 +76,7 @@ public final class InMemoryGuestConversionOperationRepository
     List<GuestConversionOperation> due =
         byOperationId.values().stream()
             .filter(operation -> operation.state() != GuestConversionState.COMPLETED)
+            .filter(operation -> expectedState == null || operation.state() == expectedState)
             .filter(operation -> !operation.nextAttemptAt().isAfter(now))
             .filter(
                 operation ->
@@ -90,6 +103,9 @@ public final class InMemoryGuestConversionOperationRepository
     requireNonNull(expectedState, "expectedState");
     requireNonNull(expectedLockedUntil, "expectedLockedUntil");
     requireNonNull(now, "now");
+    if (expectedState == GuestConversionState.COMPLETED) {
+      throw new IllegalArgumentException("COMPLETED cannot be advanced");
+    }
     GuestConversionOperation current = byOperationId.get(operationId);
     if (current == null) {
       return GuestConversionAdvanceResult.NOT_FOUND;
@@ -148,10 +164,17 @@ public final class InMemoryGuestConversionOperationRepository
     requireNonNull(errorCode, "errorCode");
     requireNonNull(nextAttemptAt, "nextAttemptAt");
     requireNonNull(now, "now");
+    if (errorCode.isBlank()) {
+      throw new IllegalArgumentException("errorCode must not be blank");
+    }
+    if (nextAttemptAt.isBefore(now)) {
+      throw new IllegalArgumentException("nextAttemptAt must not be before now");
+    }
     GuestConversionOperation current = byOperationId.get(operationId);
     if (current == null
         || current.state() == GuestConversionState.COMPLETED
-        || !expectedLockedUntil.equals(current.lockedUntil())) {
+        || !expectedLockedUntil.equals(current.lockedUntil())
+        || !expectedLockedUntil.isAfter(now)) {
       return Optional.empty();
     }
     GuestConversionOperation updated =
@@ -171,6 +194,13 @@ public final class InMemoryGuestConversionOperationRepository
             now);
     byOperationId.put(operationId, updated);
     return Optional.of(updated);
+  }
+
+  @Override
+  public synchronized Optional<GuestConversionOperation> findByAccountId(UUID accountId) {
+    requireNonNull(accountId, "accountId");
+    UUID operationId = operationIdByAccountId.get(accountId);
+    return operationId == null ? Optional.empty() : Optional.of(byOperationId.get(operationId));
   }
 
   private static GuestConversionOperation withLease(

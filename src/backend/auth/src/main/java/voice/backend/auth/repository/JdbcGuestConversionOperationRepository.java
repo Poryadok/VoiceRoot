@@ -85,6 +85,18 @@ public class JdbcGuestConversionOperationRepository implements GuestConversionOp
   @Override
   public java.util.List<GuestConversionOperation> leaseDue(
       int batchSize, Instant now, Instant leaseUntil) {
+    return leaseDueInternal(null, batchSize, now, leaseUntil);
+  }
+
+  @Override
+  public java.util.List<GuestConversionOperation> leaseDue(
+      GuestConversionState expectedState, int batchSize, Instant now, Instant leaseUntil) {
+    Objects.requireNonNull(expectedState, "expectedState");
+    return leaseDueInternal(expectedState, batchSize, now, leaseUntil);
+  }
+
+  private java.util.List<GuestConversionOperation> leaseDueInternal(
+      GuestConversionState expectedState, int batchSize, Instant now, Instant leaseUntil) {
     if (batchSize <= 0) {
       throw new IllegalArgumentException("batchSize must be positive");
     }
@@ -94,12 +106,14 @@ public class JdbcGuestConversionOperationRepository implements GuestConversionOp
       throw new IllegalArgumentException("leaseUntil must be after now");
     }
 
+    String stateClause = expectedState == null ? "TRUE" : "state = :expectedState";
     return jdbc.query(
         """
         WITH eligible AS (
             SELECT operation_id, next_attempt_at, created_at
             FROM guest_conversion_operations
             WHERE state <> 'COMPLETED'
+              AND %s
               AND next_attempt_at <= :now
               AND (locked_until IS NULL OR locked_until <= :now)
             ORDER BY next_attempt_at, created_at, operation_id
@@ -119,9 +133,10 @@ public class JdbcGuestConversionOperationRepository implements GuestConversionOp
         FROM leased
         JOIN eligible ON eligible.operation_id = leased.operation_id
         ORDER BY eligible.next_attempt_at, eligible.created_at, eligible.operation_id
-        """,
+        """.formatted(stateClause),
         new MapSqlParameterSource()
             .addValue("batchSize", batchSize)
+            .addValue("expectedState", expectedState == null ? null : expectedState.name())
             .addValue("now", Timestamp.from(now))
             .addValue("leaseUntil", Timestamp.from(leaseUntil)),
         ROW_MAPPER);
@@ -291,7 +306,9 @@ public class JdbcGuestConversionOperationRepository implements GuestConversionOp
         .findFirst();
   }
 
-  private java.util.Optional<GuestConversionOperation> findByAccountId(UUID accountId) {
+  @Override
+  public java.util.Optional<GuestConversionOperation> findByAccountId(UUID accountId) {
+    Objects.requireNonNull(accountId, "accountId");
     return jdbc
         .query(
             """

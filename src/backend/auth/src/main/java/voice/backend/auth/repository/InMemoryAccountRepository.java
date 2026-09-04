@@ -154,6 +154,28 @@ public class InMemoryAccountRepository implements AccountRepository {
     return regular;
   }
 
+  /** Restores a local promotion when the matching in-memory durable advance did not apply. */
+  public synchronized Account restoreRegularGuest(UUID accountId) {
+    Account existing = byId.get(accountId);
+    if (existing == null || !"regular".equals(existing.type())) {
+      throw new IllegalArgumentException("not a regular account");
+    }
+    Account guest =
+        new Account(
+            existing.id(),
+            existing.email(),
+            existing.phone(),
+            existing.passwordHash(),
+            "guest",
+            existing.status(),
+            existing.totpSecret(),
+            existing.totpEnabled(),
+            existing.createdAt(),
+            existing.deletedAt());
+    byId.put(accountId, guest);
+    return guest;
+  }
+
   @Override
   public synchronized void updatePasswordHash(UUID accountId, String passwordHash) {
     Account existing = byId.get(accountId);
