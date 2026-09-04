@@ -94,10 +94,12 @@ class GuestConversionPendingEventWorkerTest {
     RecordingOperations operations = new RecordingOperations(operation);
     operations.advanceFailure = new IllegalStateException("crash after puback");
     RecordingPublisher publisher = new RecordingPublisher();
-    GuestConversionPendingEventWorker worker = worker(operations, publisher);
+    MutableClock clock = new MutableClock(NOW);
+    GuestConversionPendingEventWorker worker = worker(operations, publisher, clock);
 
     worker.processDue(1, LEASE);
     operations.advanceFailure = null;
+    clock.advance(Duration.ofSeconds(1));
     worker.processDue(1, LEASE);
 
     assertThat(publisher.publishes)
@@ -124,8 +126,13 @@ class GuestConversionPendingEventWorkerTest {
 
   private static GuestConversionPendingEventWorker worker(
       RecordingOperations operations, RecordingPublisher publisher) {
+    return worker(operations, publisher, CLOCK);
+  }
+
+  private static GuestConversionPendingEventWorker worker(
+      RecordingOperations operations, RecordingPublisher publisher, Clock clock) {
     return new GuestConversionPendingEventWorker(
-        operations, publisher, CLOCK, (operation, failure, now) -> now.plusSeconds(1));
+        operations, publisher, clock, (operation, failure, now) -> now.plusSeconds(1));
   }
 
   private static GuestConversionOperation operation(GuestConversionState state) {
@@ -152,10 +159,12 @@ class GuestConversionPendingEventWorkerTest {
     private final List<AdvanceCall> advances = new ArrayList<>();
     private final List<FailureCall> failures = new ArrayList<>();
     private RuntimeException advanceFailure;
+    private Instant nextAttemptAt;
 
     private RecordingOperations(GuestConversionOperation operation) {
       this.operation = operation;
       state = operation.state();
+      nextAttemptAt = operation.nextAttemptAt();
     }
 
     @Override
@@ -172,7 +181,7 @@ class GuestConversionPendingEventWorkerTest {
     public List<GuestConversionOperation> leaseDue(
         GuestConversionState expectedState, int batchSize, Instant now, Instant leaseUntil) {
       claimedStates.add(expectedState);
-      return state == expectedState ? List.of(operation) : List.of();
+      return state == expectedState && !nextAttemptAt.isAfter(now) ? List.of(operation) : List.of();
     }
 
     @Override
@@ -197,6 +206,7 @@ class GuestConversionPendingEventWorkerTest {
         Instant nextAttemptAt,
         Instant now) {
       failures.add(new FailureCall(operationId, expectedLockedUntil, errorCode, nextAttemptAt, now));
+      this.nextAttemptAt = nextAttemptAt;
       return Optional.of(operation);
     }
   }
@@ -224,4 +234,31 @@ class GuestConversionPendingEventWorkerTest {
 
   private record FailureCall(
       UUID operationId, Instant lockedUntil, String errorCode, Instant nextAttemptAt, Instant now) {}
+
+  private static final class MutableClock extends Clock {
+    private Instant instant;
+
+    private MutableClock(Instant instant) {
+      this.instant = instant;
+    }
+
+    void advance(Duration duration) {
+      instant = instant.plus(duration);
+    }
+
+    @Override
+    public ZoneOffset getZone() {
+      return ZoneOffset.UTC;
+    }
+
+    @Override
+    public Clock withZone(java.time.ZoneId zone) {
+      return this;
+    }
+
+    @Override
+    public Instant instant() {
+      return instant;
+    }
+  }
 }

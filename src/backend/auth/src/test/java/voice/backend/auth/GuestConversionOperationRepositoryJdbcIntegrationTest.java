@@ -194,6 +194,31 @@ class GuestConversionOperationRepositoryJdbcIntegrationTest {
     }
 
     @Test
+    void stateAwarePendingUserClaimDoesNotRewriteADuePendingEventLease() {
+      GuestConversionOperationRepository repository = repository();
+      Instant now = Instant.parse("2026-09-04T15:00:00Z");
+      GuestConversionOperation pendingEvent =
+          seedOperation(
+              operation(
+                  uuid("00000000-0000-0000-0000-000000000008"),
+                  GuestConversionState.PENDING_EVENT,
+                  3,
+                  now.minus(1, ChronoUnit.MINUTES),
+                  now.plus(1, ChronoUnit.MINUTES),
+                  now.minus(10, ChronoUnit.MINUTES)));
+
+      assertThat(
+              repository.leaseDue(
+                  GuestConversionState.PENDING_USER,
+                  1,
+                  now,
+                  now.plus(2, ChronoUnit.MINUTES)))
+          .isEmpty();
+
+      assertThat(operationById(pendingEvent.operationId())).isEqualTo(pendingEvent);
+    }
+
+    @Test
     void leaseDue_leasesOnlyEligibleRowsInDueCreatedAndOperationOrderAndPreservesAllFields() {
       GuestConversionOperationRepository repository = repository();
       Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
