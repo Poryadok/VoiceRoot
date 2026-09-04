@@ -10,6 +10,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
@@ -266,7 +267,7 @@ class GuestConversionDurabilityJdbcIntegrationTest {
       statement.setObject(3, otpId);
       statement.setString(4, state);
       statement.setInt(5, attempt);
-      statement.setObject(6, Instant.now());
+      statement.setTimestamp(6, Timestamp.from(Instant.now()));
       statement.executeUpdate();
     }
   }
