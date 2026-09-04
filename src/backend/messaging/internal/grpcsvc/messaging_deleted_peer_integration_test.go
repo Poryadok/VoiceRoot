@@ -393,7 +393,15 @@ func TestMessagingDeletedPeer_GroupAndChannelDoNotConsultChecker(t *testing.T) {
 	})
 
 	sendDeletedPeerTestMessage(t, ctx, client, acctA, profA, chatGroupRef(groupID), "group remains available", nil)
-	sendDeletedPeerTestMessage(t, ctx, client, acctA, profA, chatChannelRef(channelID), "channel remains available", nil)
+	postedAsChat := true
+	_, err = client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat:            chatChannelRef(channelID),
+		Content:         "channel remains available",
+		AttachmentsJson: "[]",
+		MentionsJson:    "[]",
+		PostedAsChat:    &postedAsChat,
+	})
+	require.NoError(t, err)
 	require.Empty(t, deleted.calls(), "non-DM sends must not invoke the deleted-account checker")
 	require.Equal(t, 1, messageCountForDeletedPeerTest(t, ctx, pool, groupID))
 	require.Equal(t, 1, messageCountForDeletedPeerTest(t, ctx, pool, channelID))
