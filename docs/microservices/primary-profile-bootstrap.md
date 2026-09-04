@@ -40,6 +40,10 @@
 3. Если нет — вставляется новая строка `profiles` с уникальной парой `(username, discriminator)` и человекочитаемым `display_name` (по умолчанию из email/телефона), создаётся строка `onboarding_state` для этого `profile_id`.
 4. В JWT кладутся `user_id` (= `accounts.id`) и `profile_id` (= `profiles.id`).
 
+### Guest → regular
+
+После успешной конвертации guest в regular Auth сохраняет те же `account_id` и `profile_id`, затем internal-only вызывает `UserService.MarkAccountRegular(account_id)`. Операция снимает `is_guest_account` у всех профилей account (включая soft-deleted) и идемпотентна. Она не создаёт primary profile; его provisioning остаётся обязанностью `EnsurePrimaryProfile`.
+
 ## Мульти-профиль (будущее)
 
 Переключение активного профиля (`SwitchProfile`) меняет только **выдачу следующего** access token (claim `profile_id`); первичный профиль остаётся в `profiles` с `is_primary = true`. Детали продукта — [multi-profile.md](../features/multi-profile.md).

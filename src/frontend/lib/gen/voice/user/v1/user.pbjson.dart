@@ -1618,3 +1618,75 @@ final $typed_data.Uint8List applyDowngradeProfilesResponseDescriptor =
     $convert.base64Decode(
         'Ch5BcHBseURvd25ncmFkZVByb2ZpbGVzUmVzcG9uc2USKAoQa2VwdF9wcm9maWxlX2lkcxgBIA'
         'MoCVIOa2VwdFByb2ZpbGVJZHM=');
+
+@$core.Deprecated('Use resolvePrimaryProfileIDsRequestDescriptor instead')
+const ResolvePrimaryProfileIDsRequest$json = {
+  '1': 'ResolvePrimaryProfileIDsRequest',
+  '2': [
+    {'1': 'account_ids', '3': 1, '4': 3, '5': 9, '10': 'accountIds'},
+  ],
+};
+
+/// Descriptor for `ResolvePrimaryProfileIDsRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List resolvePrimaryProfileIDsRequestDescriptor =
+    $convert.base64Decode(
+        'Ch9SZXNvbHZlUHJpbWFyeVByb2ZpbGVJRHNSZXF1ZXN0Eh8KC2FjY291bnRfaWRzGAEgAygJUg'
+        'phY2NvdW50SWRz');
+
+@$core.Deprecated('Use resolvePrimaryProfileIDsResponseDescriptor instead')
+const ResolvePrimaryProfileIDsResponse$json = {
+  '1': 'ResolvePrimaryProfileIDsResponse',
+  '2': [
+    {
+      '1': 'primary_profile_ids',
+      '3': 1,
+      '4': 3,
+      '5': 11,
+      '6':
+          '.voice.user.v1.ResolvePrimaryProfileIDsResponse.PrimaryProfileIdsEntry',
+      '10': 'primaryProfileIds'
+    },
+  ],
+  '3': [ResolvePrimaryProfileIDsResponse_PrimaryProfileIdsEntry$json],
+};
+
+@$core.Deprecated('Use resolvePrimaryProfileIDsResponseDescriptor instead')
+const ResolvePrimaryProfileIDsResponse_PrimaryProfileIdsEntry$json = {
+  '1': 'PrimaryProfileIdsEntry',
+  '2': [
+    {'1': 'key', '3': 1, '4': 1, '5': 9, '10': 'key'},
+    {'1': 'value', '3': 2, '4': 1, '5': 9, '10': 'value'},
+  ],
+  '7': {'7': true},
+};
+
+/// Descriptor for `ResolvePrimaryProfileIDsResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List resolvePrimaryProfileIDsResponseDescriptor = $convert.base64Decode(
+    'CiBSZXNvbHZlUHJpbWFyeVByb2ZpbGVJRHNSZXNwb25zZRJ2ChNwcmltYXJ5X3Byb2ZpbGVfaW'
+    'RzGAEgAygLMkYudm9pY2UudXNlci52MS5SZXNvbHZlUHJpbWFyeVByb2ZpbGVJRHNSZXNwb25z'
+    'ZS5QcmltYXJ5UHJvZmlsZUlkc0VudHJ5UhFwcmltYXJ5UHJvZmlsZUlkcxpEChZQcmltYXJ5UH'
+    'JvZmlsZUlkc0VudHJ5EhAKA2tleRgBIAEoCVIDa2V5EhQKBXZhbHVlGAIgASgJUgV2YWx1ZToC'
+    'OAE=');
+
+@$core.Deprecated('Use markAccountRegularRequestDescriptor instead')
+const MarkAccountRegularRequest$json = {
+  '1': 'MarkAccountRegularRequest',
+  '2': [
+    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+  ],
+};
+
+/// Descriptor for `MarkAccountRegularRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List markAccountRegularRequestDescriptor =
+    $convert.base64Decode(
+        'ChlNYXJrQWNjb3VudFJlZ3VsYXJSZXF1ZXN0Eh0KCmFjY291bnRfaWQYASABKAlSCWFjY291bn'
+        'RJZA==');
+
+@$core.Deprecated('Use markAccountRegularResponseDescriptor instead')
+const MarkAccountRegularResponse$json = {
+  '1': 'MarkAccountRegularResponse',
+};
+
+/// Descriptor for `MarkAccountRegularResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List markAccountRegularResponseDescriptor =
+    $convert.base64Decode('ChpNYXJrQWNjb3VudFJlZ3VsYXJSZXNwb25zZQ==');

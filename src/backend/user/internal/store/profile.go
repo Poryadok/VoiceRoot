@@ -157,6 +157,41 @@ func (s *ProfileStore) GetPrimaryProfileIDForAccount(ctx context.Context, accoun
 	return id, nil
 }
 
+// ResolvePrimaryProfileIDs returns existing, non-deleted primary profiles for account ids.
+// It is a read-only lookup: missing accounts and accounts without a usable primary profile are omitted.
+func (s *ProfileStore) ResolvePrimaryProfileIDs(ctx context.Context, accountIDs []uuid.UUID) (map[uuid.UUID]uuid.UUID, error) {
+	resolved := make(map[uuid.UUID]uuid.UUID)
+	if len(accountIDs) == 0 {
+		return resolved, nil
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT account_id, id
+		FROM profiles
+		WHERE account_id = ANY($1) AND is_primary = true AND deleted_at IS NULL`, accountIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var accountID, profileID uuid.UUID
+		if err := rows.Scan(&accountID, &profileID); err != nil {
+			return nil, err
+		}
+		resolved[accountID] = profileID
+	}
+	return resolved, rows.Err()
+}
+
+// MarkAccountRegular clears the guest marker for every profile owned by an account.
+// It deliberately includes soft-deleted profiles and succeeds unchanged for unknown/already-regular accounts.
+func (s *ProfileStore) MarkAccountRegular(ctx context.Context, accountID uuid.UUID) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE profiles
+		SET is_guest_account = false, updated_at = now()
+		WHERE account_id = $1 AND is_guest_account = true`, accountID)
+	return err
+}
+
 type UpdateProfileInput struct {
 	DisplayName *string
 	AvatarURL   *string
