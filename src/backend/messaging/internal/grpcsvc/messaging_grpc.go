@@ -105,7 +105,11 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 	if err := validateChatRefMessaging(req.GetChat()); err != nil {
 		return nil, err
 	}
-	if s.ChatGuard != nil {
+	if isNilDependency(s.ChatGuard) {
+		if req.GetChat().GetType() == chatv1.ChatType_CHAT_TYPE_DM {
+			return nil, status.Error(codes.Unavailable, "dm account status unavailable")
+		}
+	} else {
 		if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
 			if errors.Is(err, store.ErrNotChatMember) {
 				return nil, status.Error(codes.PermissionDenied, "not a chat member")
@@ -449,7 +453,7 @@ func (s *MessagingGRPC) checkDeletedDMWrite(ctx context.Context, chat *chatv1.Ch
 	if chat.GetType() != chatv1.ChatType_CHAT_TYPE_DM {
 		return nil
 	}
-	if s == nil || isNilAccountDeletedChecker(s.DeletedAccounts) || s.UserProfiles == nil || s.ChatGuard == nil {
+	if s == nil || isNilDependency(s.DeletedAccounts) || isNilDependency(s.UserProfiles) || isNilDependency(s.ChatGuard) {
 		return status.Error(codes.Unavailable, "dm account status unavailable")
 	}
 
@@ -470,6 +474,9 @@ func (s *MessagingGRPC) checkDeletedDMWrite(ctx context.Context, chat *chatv1.Ch
 	if err != nil {
 		return status.Error(codes.Unavailable, "dm account status unavailable")
 	}
+	if deleted == nil {
+		return status.Error(codes.Unavailable, "dm account status unavailable")
+	}
 	for accountID := range deleted {
 		if accountID != senderAccountID && accountID != peerAccountID {
 			return status.Error(codes.Unavailable, "dm account status unavailable")
@@ -483,11 +490,11 @@ func (s *MessagingGRPC) checkDeletedDMWrite(ctx context.Context, chat *chatv1.Ch
 	return nil
 }
 
-func isNilAccountDeletedChecker(checker AccountDeletedChecker) bool {
-	if checker == nil {
+func isNilDependency(dependency any) bool {
+	if dependency == nil {
 		return true
 	}
-	value := reflect.ValueOf(checker)
+	value := reflect.ValueOf(dependency)
 	switch value.Kind() {
 	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice:
 		return value.IsNil()
@@ -1099,7 +1106,11 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 	if err != nil {
 		return nil, err
 	}
-	if s.ChatGuard != nil {
+	if isNilDependency(s.ChatGuard) {
+		if req.GetTargetChat().GetType() == chatv1.ChatType_CHAT_TYPE_DM {
+			return nil, status.Error(codes.Unavailable, "dm account status unavailable")
+		}
+	} else {
 		if err := s.ChatGuard.EnsureMember(ctx, targetChatID, profileID); err != nil {
 			if errors.Is(err, store.ErrNotChatMember) {
 				return nil, status.Error(codes.PermissionDenied, "not a chat member")

@@ -39,6 +39,40 @@ func (allowDeletedAccounts) DeletedAmong(context.Context, []uuid.UUID) (map[uuid
 	return map[uuid.UUID]struct{}{}, nil
 }
 
+type nilMapDeletedAccounts struct{}
+
+func (nilMapDeletedAccounts) DeletedAmong(context.Context, []uuid.UUID) (map[uuid.UUID]struct{}, error) {
+	return nil, nil
+}
+
+type typedNilChatGuard struct {
+	memberErr error
+}
+
+func (g *typedNilChatGuard) EnsureMember(context.Context, uuid.UUID, uuid.UUID) error {
+	return g.memberErr
+}
+
+func (g *typedNilChatGuard) DMOtherProfileID(context.Context, uuid.UUID, uuid.UUID) (uuid.UUID, error) {
+	return uuid.Nil, g.memberErr
+}
+
+func (g *typedNilChatGuard) OtherMemberProfileIDs(context.Context, uuid.UUID, uuid.UUID) ([]uuid.UUID, error) {
+	return nil, g.memberErr
+}
+
+func (g *typedNilChatGuard) MemberRole(context.Context, uuid.UUID, uuid.UUID) (string, error) {
+	return "", g.memberErr
+}
+
+type typedNilProfileAccounts struct {
+	accountID uuid.UUID
+}
+
+func (p *typedNilProfileAccounts) AccountIDByProfileID(context.Context, uuid.UUID) (uuid.UUID, error) {
+	return p.accountID, nil
+}
+
 func (c *recordingDeletedAccounts) DeletedAmong(_ context.Context, accountIDs []uuid.UUID) (map[uuid.UUID]struct{}, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -364,4 +398,90 @@ func TestMessagingDeletedPeer_GroupAndChannelDoNotConsultChecker(t *testing.T) {
 	require.Equal(t, 1, messageCountForDeletedPeerTest(t, ctx, pool, groupID))
 	require.Equal(t, 1, messageCountForDeletedPeerTest(t, ctx, pool, channelID))
 	require.Equal(t, 2, events.eventCount())
+}
+
+func TestMessagingDeletedPeer_NilMapCheckerResponseFailsClosedBeforeSendAndForwardWrites(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applyDeletedPeerMessagingMigrations(t, ctx, pool)
+
+	targetChat, sourceChat := uuid.New(), uuid.New()
+	profA, profB := uuid.New(), uuid.New()
+	acctA, acctB := uuid.New(), uuid.New()
+	seedDMChat(t, ctx, pool, targetChat, profA, profB)
+	seedGroupChat(t, ctx, pool, sourceChat, profA, profB)
+	events := &spyMessageEvents{}
+	client, _ := startMessagingServerWired(t, pool, messagingWire{
+		UserProfiles:               profileAcctMap{profA: acctA, profB: acctB},
+		DeletedAccounts:            nilMapDeletedAccounts{},
+		RequireDeletedAccountsSeam: true,
+		MessageEvents:              events,
+	})
+
+	_, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat: chatDMRef(targetChat), Content: "must not write", AttachmentsJson: "[]", MentionsJson: "[]",
+	})
+	require.Equal(t, codes.Unavailable, status.Code(err))
+	require.Zero(t, messageCountForDeletedPeerTest(t, ctx, pool, targetChat))
+	require.Zero(t, events.eventCount())
+
+	original := sendDeletedPeerTestMessage(t, ctx, client, acctA, profA, chatGroupRef(sourceChat), "source", nil)
+	events.reset()
+	commentary := "must not write"
+	_, err = client.ForwardMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.ForwardMessageRequest{
+		SourceMessageId: original.GetId(), TargetChat: chatDMRef(targetChat), Commentary: &commentary,
+	})
+	require.Equal(t, codes.Unavailable, status.Code(err))
+	require.Zero(t, messageCountForDeletedPeerTest(t, ctx, pool, targetChat))
+	require.Zero(t, events.eventCount())
+}
+
+func TestMessagingDeletedPeer_TypedNilDependenciesFailClosed(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applyDeletedPeerMessagingMigrations(t, ctx, pool)
+
+	targetChat, sourceChat := uuid.New(), uuid.New()
+	profA, profB := uuid.New(), uuid.New()
+	acctA, acctB := uuid.New(), uuid.New()
+	seedDMChat(t, ctx, pool, targetChat, profA, profB)
+	seedGroupChat(t, ctx, pool, sourceChat, profA, profB)
+
+	t.Run("chat guard", func(t *testing.T) {
+		var guard *typedNilChatGuard
+		events := &spyMessageEvents{}
+		client, _ := startMessagingServerWired(t, pool, messagingWire{
+			ChatGuard:                  guard,
+			UserProfiles:               profileAcctMap{profA: acctA, profB: acctB},
+			DeletedAccounts:            allowDeletedAccounts{},
+			RequireDeletedAccountsSeam: true,
+			MessageEvents:              events,
+		})
+		_, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+			Chat: chatDMRef(targetChat), Content: "must fail closed", AttachmentsJson: "[]", MentionsJson: "[]",
+		})
+		require.Equal(t, codes.Unavailable, status.Code(err))
+		require.Zero(t, messageCountForDeletedPeerTest(t, ctx, pool, targetChat))
+		require.Zero(t, events.eventCount())
+	})
+
+	t.Run("profile lookup forward", func(t *testing.T) {
+		var profiles *typedNilProfileAccounts
+		events := &spyMessageEvents{}
+		client, _ := startMessagingServerWired(t, pool, messagingWire{
+			UserProfiles:               profiles,
+			DeletedAccounts:            allowDeletedAccounts{},
+			RequireDeletedAccountsSeam: true,
+			MessageEvents:              events,
+		})
+		original := sendDeletedPeerTestMessage(t, ctx, client, acctA, profA, chatGroupRef(sourceChat), "source", nil)
+		events.reset()
+		commentary := "must not write"
+		_, err := client.ForwardMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.ForwardMessageRequest{
+			SourceMessageId: original.GetId(), TargetChat: chatDMRef(targetChat), Commentary: &commentary,
+		})
+		require.Equal(t, codes.Unavailable, status.Code(err))
+		require.Zero(t, messageCountForDeletedPeerTest(t, ctx, pool, targetChat))
+		require.Zero(t, events.eventCount())
+	})
 }
