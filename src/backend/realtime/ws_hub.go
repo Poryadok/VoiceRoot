@@ -23,10 +23,55 @@ type connReg struct {
 }
 
 type wsHub struct {
-	mu                sync.RWMutex
-	byChat            map[string]map[*connReg]struct{}
-	byProfile         map[string]map[*connReg]struct{}
-	memberInboxLister chatMemberInboxLister
+	mu                  sync.RWMutex
+	byChat              map[string]map[*connReg]struct{}
+	byProfile           map[string]map[*connReg]struct{}
+	memberInboxLister   chatMemberInboxLister
+	subscriptionChecker chatSubscriptionChecker
+}
+
+// hasChat is the sole local authority for subscription-gated client actions.
+func (h *wsHub) hasChat(reg *connReg, chatID string) bool {
+	if h == nil || reg == nil || chatID == "" {
+		return false
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	_, ok := reg.chats[chatID]
+	return ok
+}
+
+func (h *wsHub) chatIDs(reg *connReg) []string {
+	if h == nil || reg == nil {
+		return nil
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	out := make([]string, 0, len(reg.chats))
+	for chatID := range reg.chats {
+		out = append(out, chatID)
+	}
+	return out
+}
+
+// revokeProfileChat removes every local tab of profileID from chatID. Chat
+// membership events are authoritative; a later client operation must not rely
+// on an obsolete connection-local subscription.
+func (h *wsHub) revokeProfileChat(profileID, chatID string) {
+	if h == nil || profileID == "" || chatID == "" {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for reg := range h.byProfile[profileID] {
+		if members := h.byChat[chatID]; members != nil {
+			delete(members, reg)
+			if len(members) == 0 {
+				delete(h.byChat, chatID)
+			}
+		}
+		delete(reg.chats, chatID)
+	}
 }
 
 func newWSHub() *wsHub {

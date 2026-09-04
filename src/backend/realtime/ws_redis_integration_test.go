@@ -23,8 +23,8 @@ func TestWSTypingCrossInstancesViaRedis(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	hub1 := newWSHub()
-	hub2 := newWSHub()
+	hub1 := permitAllTestSubscriptions(newWSHub())
+	hub2 := permitAllTestSubscriptions(newWSHub())
 	rsub1 := redis.NewClient(&redis.Options{Addr: addr})
 	rsub2 := redis.NewClient(&redis.Options{Addr: addr})
 	rchk := redis.NewClient(&redis.Options{Addr: addr})
@@ -162,8 +162,8 @@ func TestWSMarkReadCrossInstancesViaRedis(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	hub1 := newWSHub()
-	hub2 := newWSHub()
+	hub1 := permitAllTestSubscriptions(newWSHub())
+	hub2 := permitAllTestSubscriptions(newWSHub())
 	rsub1 := redis.NewClient(&redis.Options{Addr: addr})
 	rsub2 := redis.NewClient(&redis.Options{Addr: addr})
 	t.Cleanup(func() {
@@ -283,8 +283,8 @@ func TestWSProfilePresenceCrossInstancesViaRedis(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	hub1 := newWSHub()
-	hub2 := newWSHub()
+	hub1 := permitAllTestSubscriptions(newWSHub())
+	hub2 := permitAllTestSubscriptions(newWSHub())
 	rsub1 := redis.NewClient(&redis.Options{Addr: addr})
 	rsub2 := redis.NewClient(&redis.Options{Addr: addr})
 	t.Cleanup(func() {

@@ -91,6 +91,13 @@ func subscribeChatEvents(js nats.JetStreamContext, hub *wsHub, instanceID string
 		natslog.LogConsume(logger, msg, slog.LevelInfo, "chat event consumed", attrs...)
 		reqID := natslog.RequestIDFromMsg(msg)
 		if profileID != "" {
+			var body map[string]string
+			if err := json.Unmarshal(fe.D, &body); err == nil {
+				change := strings.TrimSpace(body["change"])
+				if change == "removed" || change == "left" {
+					hub.revokeProfileChat(profileID, strings.TrimSpace(body["chat_id"]))
+				}
+			}
 			hub.broadcastToProfile(profileID, fe, logger, reqID)
 			return
 		}

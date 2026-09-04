@@ -39,9 +39,9 @@ subscription-gated actions.
 - [x] RED: compile and run the public WS handler against fail-closed
   valid-UUID denial, malformed-input compatibility, profile isolation, and
   local membership-event revocation expectations.
-- [ ] GREEN: add a Chat `GetChat` checker and pass it through the Realtime
+- [x] GREEN: add a Chat `GetChat` checker and pass it through the Realtime
   handler/bootstrap wiring.
-- [ ] GREEN: authorize subscribe before `wsHub.addChat`; use `connReg.chats`
+- [x] GREEN: authorize subscribe before `wsHub.addChat`; use `connReg.chats`
   for every subscription-gated action; revoke matching local registrations on
   member removed/left events.
 - [ ] Verify focused tests, `go test ./...`, lint, and review the wire
@@ -75,6 +75,10 @@ subscription-gated actions.
 - [x] Baseline attempt: containerised `go test ./...` began dependency download;
   host Go module cache is malformed (the Prometheus module is nested one level
   too deep), so host compilation cannot start.
+- [x] `gofmt` and `git diff --check` pass for the GREEN change.
+- [ ] Focused GREEN test execution is externally blocked: a disposable module
+  cache reaches `proxy.golang.org` only to time out DNS, before compiling the
+  package. No source test failure is being represented as a passing result.
 - [ ] RED: focused `go test` must fail only on the missing ACL implementation
   / changed wire behavior, never because a test accepts an unauthorized chat.
 - [ ] GREEN: `cd src/backend/realtime && CGO_ENABLED=0 go test ./...` and
@@ -89,8 +93,12 @@ subscription-gated actions.
   metadata behavior.
 - [x] Add compileable behavioral RED tests and stop for independent review
   before production code.
-- [ ] Add checker fake/status/metadata/timeout/INTERNAL/no-positive-cache and
+- [x] Add checker fake/status/metadata/timeout/INTERNAL/no-positive-cache and
   real `presence_update` fan-out tests with the GREEN dependency seam.
+- [x] Document the lazy-subscribe fail-closed behavior and membership-event
+  revocation in `docs/microservices/realtime-service.md`.
+- [x] Implement the minimal Realtime-only checker, `connReg.chats` authority,
+  and removed/left local-tab revocation.
 
 ## Decisions
 
@@ -100,6 +108,10 @@ subscription-gated actions.
   deliberately limited to public-handler fail-closed behavior; checker-specific
   metadata/status/timeout/INTERNAL/no-positive-cache assertions are mandatory
   GREEN tests, not claimed as RED evidence.
+- `Chat.GetChat` is the minimal verifier because it already applies the caller
+  profile's effective membership/deleted-for-self ACL. Realtime forwards only
+  normal user/profile metadata and collapses every error to the generic WS
+  denial; it does not add a Role or Chat schema dependency.
 - Preserve `invalid_subscribe` only for malformed UUIDs before any checker
   call. Every well-formed denied/unavailable result is intentionally
   indistinguishable on the wire.

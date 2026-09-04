@@ -44,7 +44,7 @@ func TestWSReceivesMessageSentUpdateDeleteFromJetStreamNATS(t *testing.T) {
 		t.Fatalf("add stream: %v", err)
 	}
 
-	hub := newWSHub()
+	hub := permitAllTestSubscriptions(newWSHub())
 	wsInst := "nats-ws-inst"
 	jsInst := "nats-js-consumer"
 	v := staticTokenValidator{"tok": {UserID: "user-1", ProfileID: "profile-1"}}
@@ -189,7 +189,7 @@ func TestWSNoMessageCreateFromNATSWhenNotSubscribedToChat(t *testing.T) {
 		t.Fatalf("add stream: %v", err)
 	}
 
-	hub := newWSHub()
+	hub := permitAllTestSubscriptions(newWSHub())
 	v := staticTokenValidator{"tok": {UserID: "u1", ProfileID: "p1"}}
 	srv := httptest.NewServer(newServiceHandler(serviceName, v, nil, hub, nil, "ws-only", readinessDeps{}))
 	t.Cleanup(srv.Close)
@@ -272,14 +272,14 @@ func TestWSMessageCreateTwoClientsNATSWithRedis(t *testing.T) {
 	chName := "voice:rt:test:nats2redis:" + uuid.NewString()
 	pfx := "voice:rt:test:nats2redis-prof:" + uuid.NewString() + ":"
 
-	hub := newWSHub()
+	hub := permitAllTestSubscriptions(newWSHub())
 	inst := "rt-nats-redis-" + uuid.NewString()[:8]
 	rf := newRedisFanout(redisFanoutConfig{
-		Client:          rdb,
-		Hub:             hub,
-		InstanceID:      inst,
-		FanoutChannel:   chName,
-		KeyPrefix:       pfx,
+		Client:        rdb,
+		Hub:           hub,
+		InstanceID:    inst,
+		FanoutChannel: chName,
+		KeyPrefix:     pfx,
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())

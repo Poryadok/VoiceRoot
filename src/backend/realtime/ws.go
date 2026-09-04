@@ -225,8 +225,6 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 
 	var mu sync.Mutex
 	var seq int64
-	chatSubs := make(map[string]struct{})
-
 	write := func(op string, d json.RawMessage) error {
 		mu.Lock()
 		defer mu.Unlock()
@@ -252,12 +250,9 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 			svcLogger.Warn("ws chat bootstrap list failed", slog.String("error", err.Error()), slog.String("conn_id", connID))
 			ids = nil
 		}
-		mu.Lock()
 		for _, id := range ids {
-			chatSubs[id] = struct{}{}
 			hub.addChat(reg, id)
 		}
-		mu.Unlock()
 		idsCopy := append([]string(nil), ids...)
 		slices.Sort(idsCopy)
 		syncD, _ := json.Marshal(map[string]any{
@@ -320,9 +315,18 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 					continue
 				}
 				cid := strings.TrimSpace(p.ChatID)
-				mu.Lock()
-				chatSubs[cid] = struct{}{}
-				mu.Unlock()
+				checker := hub.subscriptionChecker
+				if checker == nil || checker.AuthorizeChat(context.Background(), claims.UserID, claims.ProfileID, cid) != nil {
+					errD, _ := json.Marshal(map[string]any{
+						"code":    "permission_denied",
+						"message": "chat subscription denied",
+						"chat_id": cid,
+					})
+					if err := write("error", errD); err != nil {
+						return
+					}
+					continue
+				}
 				hub.addChat(reg, cid)
 				svcLogger.Debug("ws subscribe",
 					slog.String("event", "ws_subscribe"),
@@ -347,9 +351,6 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 					continue
 				}
 				cid := strings.TrimSpace(p.ChatID)
-				mu.Lock()
-				delete(chatSubs, cid)
-				mu.Unlock()
 				hub.removeChat(reg, cid)
 				svcLogger.Debug("ws unsubscribe",
 					slog.String("event", "ws_unsubscribe"),
@@ -378,10 +379,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 					continue
 				}
 				cid := strings.TrimSpace(p.ChatID)
-				mu.Lock()
-				_, subscribed := chatSubs[cid]
-				mu.Unlock()
-				if !subscribed {
+				if !hub.hasChat(reg, cid) {
 					errD, _ := json.Marshal(map[string]any{
 						"code":    "invalid_typing",
 						"message": "not subscribed to chat",
@@ -452,10 +450,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 				}
 				cid := strings.TrimSpace(p.ChatID)
 				mid := strings.TrimSpace(p.MessageID)
-				mu.Lock()
-				_, subscribed := chatSubs[cid]
-				mu.Unlock()
-				if !subscribed {
+				if !hub.hasChat(reg, cid) {
 					errD, _ := json.Marshal(map[string]any{
 						"code":    "invalid_mark_read",
 						"message": "not subscribed to chat",
@@ -497,10 +492,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 				cid := strings.TrimSpace(p.ChatID)
 				mid := strings.TrimSpace(p.MessageID)
 				senderID := strings.TrimSpace(p.SenderProfileID)
-				mu.Lock()
-				_, subscribed := chatSubs[cid]
-				mu.Unlock()
-				if !subscribed {
+				if !hub.hasChat(reg, cid) {
 					errD, _ := json.Marshal(map[string]any{
 						"code":    "invalid_delivery_ack",
 						"message": "not subscribed to chat",
@@ -582,12 +574,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 					cancel()
 				}
 				obsStatus, obsCustom := presenceWireForObservers(status, custom)
-				mu.Lock()
-				chatCopy := make([]string, 0, len(chatSubs))
-				for c := range chatSubs {
-					chatCopy = append(chatCopy, c)
-				}
-				mu.Unlock()
+				chatCopy := hub.chatIDs(reg)
 				for _, c := range chatCopy {
 					dChat, _ := json.Marshal(map[string]any{
 						"chat_id":       c,

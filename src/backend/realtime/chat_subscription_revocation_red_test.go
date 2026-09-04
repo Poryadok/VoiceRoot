@@ -28,18 +28,21 @@ func (p *recordingDeliveryAckPublisher) PublishDeliveryAck(context.Context, stri
 func TestChatMemberRemovalRevokesEveryLocalTabAndSubscriptionGatedActions(t *testing.T) {
 	for _, change := range []string{"removed", "left"} {
 		t.Run(change, func(t *testing.T) {
-			accountID, profileID, chatID, messageID, senderID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
+			accountID, profileID, peerAccountID, peerProfileID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
+			chatID, messageID, senderID := uuid.NewString(), uuid.NewString(), uuid.NewString()
 			hub := newWSHub()
 			deliveryPublisher := &recordingDeliveryAckPublisher{calls: make(chan struct{}, 1)}
 			h := newServiceHandlerWithPresence(serviceName, staticTokenValidator{
 				"desktop": {UserID: accountID, ProfileID: profileID},
 				"mobile":  {UserID: accountID, ProfileID: profileID},
-			}, perProfileBootstrapLister{profileID: {chatID}}, hub, nil, "acl-revoke-test", nil, deliveryPublisher, readinessDeps{})
+				"peer":    {UserID: peerAccountID, ProfileID: peerProfileID},
+			}, perProfileBootstrapLister{profileID: {chatID}, peerProfileID: {chatID}}, hub, nil, "acl-revoke-test", nil, deliveryPublisher, readinessDeps{})
 			wsServer := httptest.NewServer(h)
 			t.Cleanup(wsServer.Close)
 			desktop := dialACLTestConn(t, wsServer, "desktop", profileID)
 			mobile := dialACLTestConn(t, wsServer, "mobile", profileID)
-			for _, c := range []*websocket.Conn{desktop, mobile} {
+			peer := dialACLTestConn(t, wsServer, "peer", peerProfileID)
+			for _, c := range []*websocket.Conn{desktop, mobile, peer} {
 				if got := readACLEnvelope(t, c); got.Op != "subscription_sync" || got.S != 2 {
 					t.Fatalf("bootstrap subscription = %+v", got)
 				}
@@ -133,6 +136,17 @@ func TestChatMemberRemovalRevokesEveryLocalTabAndSubscriptionGatedActions(t *tes
 			case <-deliveryPublisher.calls:
 				t.Error("delivery_ack after removal/left published a durable side effect")
 			default:
+			}
+
+			// This is the real client presence_update path, not only a direct hub
+			// call. The peer remains subscribed; it must not observe presence from
+			// a profile whose membership event revoked its local subscription.
+			if err := desktop.WriteJSON(map[string]any{"op": "presence_update", "d": map[string]any{"status": "dnd"}}); err != nil {
+				t.Fatalf("presence_update after %s: %v", change, err)
+			}
+			_ = peer.SetReadDeadline(time.Now().Add(250 * time.Millisecond))
+			if _, _, err := peer.ReadMessage(); err == nil {
+				t.Error("peer received presence_update from a locally revoked profile")
 			}
 
 			// Run this last: a Gorilla read timeout makes the connection unreadable

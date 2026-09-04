@@ -18,7 +18,7 @@ import (
 )
 
 func testRealtimeHandler(tv tokenValidator, lister chatBootstrapLister) http.Handler {
-	return newServiceHandler(serviceName, tv, lister, newWSHub(), nil, "test-instance", readinessDeps{})
+	return newServiceHandler(serviceName, tv, lister, permitAllTestSubscriptions(newWSHub()), nil, "test-instance", readinessDeps{})
 }
 
 func wsEndpoint(t *testing.T, srv *httptest.Server) string {
@@ -37,6 +37,17 @@ func wsEndpoint(t *testing.T, srv *httptest.Server) string {
 }
 
 type staticTokenValidator map[string]voicejwt.Claims
+
+type allowAllChatSubscriptionChecker struct{}
+
+func (allowAllChatSubscriptionChecker) AuthorizeChat(context.Context, string, string, string) error {
+	return nil
+}
+
+func permitAllTestSubscriptions(hub *wsHub) *wsHub {
+	hub.subscriptionChecker = allowAllChatSubscriptionChecker{}
+	return hub
+}
 
 func (v staticTokenValidator) Validate(r *http.Request) (voicejwt.Claims, string) {
 	const prefix = "Bearer "
@@ -519,7 +530,7 @@ func TestWSUnsubscribeACK(t *testing.T) {
 
 func TestWSTypingFanoutTwoConnections(t *testing.T) {
 	t.Parallel()
-	hub := newWSHub()
+	hub := permitAllTestSubscriptions(newWSHub())
 	v := staticTokenValidator{
 		"t1": {UserID: "a", ProfileID: "p1"},
 		"t2": {UserID: "b", ProfileID: "p2"},
