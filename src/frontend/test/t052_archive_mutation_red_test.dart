@@ -33,19 +33,15 @@ void main() {
         _enqueueSnapshot(chats, archiveItems: const [], manualArchive: true);
         final auth = _AuthHarness();
         final container = _container(chats: chats, auth: auth);
-        addTearDown(container.dispose);
+        var containerDisposed = false;
+        void disposeContainer() {
+          if (containerDisposed) return;
+          containerDisposed = true;
+          container.dispose();
+        }
+
         InboxChatCall? staleArchiveCall;
         Future<void>? staleReconcile;
-        addTearDown(() async {
-          final call = staleArchiveCall;
-          if (call != null && !call.completed) {
-            await chats.completeCall(
-              call,
-              result: const ChatsApiOk(ChatListData(items: [])),
-            );
-          }
-          await staleReconcile;
-        });
 
         final reconciler = container.read(inboxReconcilerProvider.notifier);
         await reconciler.reconcile();
@@ -119,6 +115,9 @@ void main() {
           reason:
               'archive reconciliation must stay scoped to the active session',
         );
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+        disposeContainer();
       },
     );
 
@@ -126,25 +125,27 @@ void main() {
       'archives a reconciler-owned visible main row when the legacy list is empty',
       (tester) async {
         await tester.binding.setSurfaceSize(const Size(800, 1200));
-        addTearDown(() => tester.binding.setSurfaceSize(null));
+        var surfaceRestored = false;
+        Future<void> restoreSurface() async {
+          if (surfaceRestored) return;
+          surfaceRestored = true;
+          await tester.binding.setSurfaceSize(null);
+        }
+
         final chats = _ArchiveMutationChatsFake();
         _enqueueSnapshot(chats, archiveItems: const [], mainItems: ['chat-1']);
         _enqueueSnapshot(chats, archiveItems: const [], manualArchive: true);
         final auth = _AuthHarness();
         final container = _container(chats: chats, auth: auth);
-        addTearDown(container.dispose);
+        var containerDisposed = false;
+        void disposeContainer() {
+          if (containerDisposed) return;
+          containerDisposed = true;
+          container.dispose();
+        }
+
         InboxChatCall? staleArchiveCall;
         Future<void>? staleReconcile;
-        addTearDown(() async {
-          final call = staleArchiveCall;
-          if (call != null && !call.completed) {
-            await chats.completeCall(
-              call,
-              result: const ChatsApiOk(ChatListData(items: [])),
-            );
-          }
-          await staleReconcile;
-        });
 
         final reconciler = container.read(inboxReconcilerProvider.notifier);
         await reconciler.reconcile();
@@ -157,16 +158,16 @@ void main() {
         expect(find.byKey(ChatListBody.tileKey('chat-1')), findsOneWidget);
 
         await tester.longPress(find.byKey(ChatListBody.tileKey('chat-1')));
-        await tester.pumpAndSettle();
+        final archiveAction = find.byKey(
+          ChatListBody.archiveActionKey('chat-1'),
+        );
+        await _pumpUntilVisible(tester, archiveAction);
 
         staleReconcile = reconciler.reconcile();
         await tester.pump();
         staleArchiveCall = chats.findCall(inbox: 'archive', cursor: null);
         expect(staleArchiveCall, isNotNull);
 
-        final archiveAction = find.byKey(
-          ChatListBody.archiveActionKey('chat-1'),
-        );
         await tester.ensureVisible(archiveAction);
         await tester.tap(archiveAction);
         await tester.pump();
@@ -196,6 +197,10 @@ void main() {
               .map((item) => item.chatId),
           ['chat-1'],
         );
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+        disposeContainer();
+        await restoreSurface();
       },
     );
 
@@ -432,6 +437,18 @@ Widget _mainTestApp(ProviderContainer container) {
       home: const Scaffold(body: ChatListBody(showHeader: false)),
     ),
   );
+}
+
+Future<void> _pumpUntilVisible(WidgetTester tester, Finder finder) async {
+  const frame = Duration(milliseconds: 16);
+  for (var frameCount = 0; frameCount < 24; frameCount++) {
+    await tester.pump(frame);
+    if (finder.evaluate().isEmpty) continue;
+    final rect = tester.getRect(finder);
+    final viewport = tester.binding.renderView.size;
+    if (rect.top >= 0 && rect.bottom <= viewport.height) return;
+  }
+  throw TestFailure('archive action sheet did not become visible');
 }
 
 ProviderContainer _container({
