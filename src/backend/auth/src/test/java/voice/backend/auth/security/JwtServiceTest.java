@@ -53,6 +53,16 @@ class JwtServiceTest {
   }
 
   @Test
+  void issuesAccessJwtWithInitialSessionEpoch() throws Exception {
+    JwtService jwt = JwtService.forTests("voice-auth", "voice-client", "test-key", Duration.ofMinutes(15), CLOCK);
+
+    String token = jwt.issue("account-1", "profile-1", List.of("user"), "free");
+
+    SignedJWT signedJwt = SignedJWT.parse(token);
+    assertThat(signedJwt.getJWTClaimsSet().getLongClaim("session_epoch")).isEqualTo(1L);
+  }
+
+  @Test
   void stablePkcs8PemProducesJwksWithConfiguredKid() throws Exception {
     String pem;
     try (var in = JwtServiceTest.class.getClassLoader().getResourceAsStream("jwt-test-private.pem")) {
