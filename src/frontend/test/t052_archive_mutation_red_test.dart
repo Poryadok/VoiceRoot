@@ -299,11 +299,7 @@ void main() {
           );
         expect(await main.archiveChat('chat-1', archived: true), isNull);
 
-        _enqueueSnapshot(
-          chats,
-          archiveItems: ['chat-1'],
-          mainItems: const [],
-        );
+        _enqueueSnapshot(chats, archiveItems: ['chat-1'], mainItems: const []);
         await reconciler.reconcile();
         expect(
           container
@@ -386,11 +382,14 @@ void main() {
         await tester.tap(find.text('Unarchive'));
         await tester.pumpAndSettle();
         expect(find.byKey(ChatArchiveScreen.tileKey('chat-1')), findsNothing);
-        expect(chats.archiveCalls.last, const _ArchiveCall(
-          authorization: 'Bearer access-a',
-          chatId: 'chat-1',
-          archived: false,
-        ));
+        expect(
+          chats.archiveCalls.last,
+          const _ArchiveCall(
+            authorization: 'Bearer access-a',
+            chatId: 'chat-1',
+            archived: false,
+          ),
+        );
 
         _enqueueSnapshot(chats, archiveItems: const [], mainItems: const []);
         await reconciler.reconcile();

@@ -325,8 +325,9 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
 
     while (true) {
       final requestedCursor = pageCursor;
-      final archiveMutationRevisionAtRequest =
-          scope == InboxScope.archive ? _archiveMutationRevision : null;
+      final archiveMutationRevisionAtRequest = scope == InboxScope.archive
+          ? _archiveMutationRevision
+          : null;
       final result = await _ref
           .read(voiceChatsClientProvider)
           .listChats(
@@ -435,8 +436,7 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
     if (!_isCurrent(generation, profileId)) return;
     final current =
         state.profileSnapshots[profileId]?[scope] ?? const InboxScopeSnapshot();
-    final removed =
-        _removedChatIds[profileId]?[scope] ?? const <String>{};
+    final removed = _removedChatIds[profileId]?[scope] ?? const <String>{};
     final acceptedItems = items
         .where((item) => !removed.contains(item.chatId))
         .toList(growable: false);

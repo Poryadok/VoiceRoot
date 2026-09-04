@@ -636,14 +636,14 @@ void main() {
           .read(chatListControllerProvider.notifier)
           .loadMore();
       await tester.pump();
-    final lateCall = chats.findCall(
-      inbox: 'main',
-      cursor: 'folder-next',
-      profileId: 'prof-test',
-    )!;
+      final lateCall = chats.findCall(
+        inbox: 'main',
+        cursor: 'folder-next',
+        profileId: 'prof-test',
+      )!;
 
-    _enqueueProfileBFirstPages(chats);
-    container.read(authControllerProvider.notifier).state = const AuthState(
+      _enqueueProfileBFirstPages(chats);
+      container.read(authControllerProvider.notifier).state = const AuthState(
         session: AuthSession(
           accessToken: 'access-b',
           refreshToken: 'refresh-b',

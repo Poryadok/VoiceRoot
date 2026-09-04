@@ -35,9 +35,9 @@ class _ChatArchiveScreenState extends ConsumerState<ChatArchiveScreen> {
       final reconcilerScope = profileId == null
           ? null
           : ref
-              .read(inboxReconcilerProvider)
-              .profileSnapshots[profileId]
-              ?.scopes[InboxScope.archive];
+                .read(inboxReconcilerProvider)
+                .profileSnapshots[profileId]
+                ?.scopes[InboxScope.archive];
       if (reconcilerScope != null) return;
       ref.read(chatArchiveListControllerProvider.notifier).loadInitial();
     });
@@ -50,7 +50,8 @@ class _ChatArchiveScreenState extends ConsumerState<ChatArchiveScreen> {
     final activeProfileId = ref.watch(authControllerProvider).activeProfileId;
     final reconciler = ref.watch(inboxReconcilerProvider);
     final reconcilerScope = activeProfileId != null
-        ? reconciler.profileSnapshots[activeProfileId]?.scopes[InboxScope.archive]
+        ? reconciler.profileSnapshots[activeProfileId]?.scopes[InboxScope
+              .archive]
         : null;
 
     return Scaffold(
@@ -60,23 +61,25 @@ class _ChatArchiveScreenState extends ConsumerState<ChatArchiveScreen> {
         builder: (context) {
           final items = reconcilerScope == null
               ? activeProfileId != null && archive.profileId == activeProfileId
-                  ? archive.items
-                  : const []
+                    ? archive.items
+                    : const []
               : reconcilerScope.isComplete
-                  ? reconcilerScope.items
-                  : archive.profileId == activeProfileId
-                      ? mergeInboxRows(archive.items, reconcilerScope.items)
-                      : reconcilerScope.items;
-          final legacyMatchesProfile = activeProfileId != null &&
-              archive.profileId == activeProfileId;
-          final isLoading = reconcilerScope?.isLoading ??
+              ? reconcilerScope.items
+              : archive.profileId == activeProfileId
+              ? mergeInboxRows(archive.items, reconcilerScope.items)
+              : reconcilerScope.items;
+          final legacyMatchesProfile =
+              activeProfileId != null && archive.profileId == activeProfileId;
+          final isLoading =
+              reconcilerScope?.isLoading ??
               (legacyMatchesProfile
                   ? archive.isLoading
                   : activeProfileId != null);
           final errorMessage =
               reconcilerScope?.errorMessage ??
               (legacyMatchesProfile ? archive.errorMessage : null);
-          final errorStatusCode = reconcilerScope?.errorStatusCode ??
+          final errorStatusCode =
+              reconcilerScope?.errorStatusCode ??
               (legacyMatchesProfile ? archive.errorStatusCode : null);
           final hasReconcilerError = reconcilerScope?.errorMessage != null;
           if (isLoading && items.isEmpty) {
@@ -95,11 +98,11 @@ class _ChatArchiveScreenState extends ConsumerState<ChatArchiveScreen> {
               actionLabel: l10n.commonRetry,
               onAction: reconcilerScope != null
                   ? () => ref
-                      .read(inboxReconcilerProvider.notifier)
-                      .retry(InboxScope.archive)
+                        .read(inboxReconcilerProvider.notifier)
+                        .retry(InboxScope.archive)
                   : () => ref
-                      .read(chatArchiveListControllerProvider.notifier)
-                      .loadInitial(),
+                        .read(chatArchiveListControllerProvider.notifier)
+                        .loadInitial(),
             );
           }
           if (items.isEmpty) {
@@ -111,8 +114,8 @@ class _ChatArchiveScreenState extends ConsumerState<ChatArchiveScreen> {
           }
           final hasFooter = reconcilerScope != null
               ? isLoading ||
-                  reconcilerScope.nextCursor != null ||
-                  hasReconcilerError
+                    reconcilerScope.nextCursor != null ||
+                    hasReconcilerError
               : archive.hasMore || archive.isLoadingMore;
           return ListView.builder(
             itemCount: items.length + (hasFooter ? 1 : 0),
@@ -160,10 +163,12 @@ class _ChatArchiveScreenState extends ConsumerState<ChatArchiveScreen> {
                 knownPeerId: null,
                 activeProfileId: activeProfileId,
               );
-              final profileAsync =
-                  peerId != null ? ref.watch(profileProvider(peerId)) : null;
+              final profileAsync = peerId != null
+                  ? ref.watch(profileProvider(peerId))
+                  : null;
               final profile = profileAsync?.valueOrNull;
-              final title = profile?.displayName ??
+              final title =
+                  profile?.displayName ??
                   item.chat.name ??
                   l10n.chatListDmFallback(_shortChatId(item.chatId));
               return VoiceListRow(
@@ -177,8 +182,8 @@ class _ChatArchiveScreenState extends ConsumerState<ChatArchiveScreen> {
                         premiumBadgeSemanticLabel: l10n.premiumBadgeLabel,
                         verifiedBadgeSemanticLabel:
                             profile?.verificationType == 'organization'
-                                ? l10n.verifiedBadgeOrganization
-                                : l10n.verifiedBadgePersonal,
+                            ? l10n.verifiedBadgeOrganization
+                            : l10n.verifiedBadgePersonal,
                       )
                     : null,
                 subtitle: item.lastMessagePreview ?? '',
@@ -187,7 +192,9 @@ class _ChatArchiveScreenState extends ConsumerState<ChatArchiveScreen> {
                   child: Text(l10n.chatArchiveUnarchive),
                 ),
                 onTap: () {
-                  ref.read(shellNavigationProvider).selectChatFromHome(item.chatId);
+                  ref
+                      .read(shellNavigationProvider)
+                      .selectChatFromHome(item.chatId);
                   Navigator.of(context).pop();
                 },
                 onLongPress: () => _unarchive(context, item.chatId),
@@ -209,9 +216,7 @@ class _ChatArchiveScreenState extends ConsumerState<ChatArchiveScreen> {
     if (!context.mounted) return;
     if (err == kChatActionStaleContext) return;
     if (err != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(err)),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
       return;
     }
     ref
@@ -222,9 +227,9 @@ class _ChatArchiveScreenState extends ConsumerState<ChatArchiveScreen> {
           expectedProfileId: session.activeProfileId,
           expectedAuthorization: session.authorizationHeader,
         );
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(l10n.chatArchiveUnarchived)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(l10n.chatArchiveUnarchived)));
   }
 
   String _shortChatId(String chatId) {

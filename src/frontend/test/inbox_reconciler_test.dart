@@ -517,9 +517,7 @@ void main() {
           expectedAuthorization: 'Bearer test-access',
         );
         expect(
-          container
-              .read(inboxReconcilerProvider)
-              .profileSnapshots['prof-test'],
+          container.read(inboxReconcilerProvider).profileSnapshots['prof-test'],
           isNull,
         );
 
@@ -1066,7 +1064,9 @@ void main() {
       container.read(realtimeLinkStatusProvider.notifier).state =
           RealtimeLinkStatus.connected;
       await pumpEventQueue();
-      final tokenRefreshCalls = chats.calls.skip(callsBeforeTokenRefresh).toList();
+      final tokenRefreshCalls = chats.calls
+          .skip(callsBeforeTokenRefresh)
+          .toList();
       expect(tokenRefreshCalls, hasLength(3));
       expect(tokenRefreshCalls.map((call) => call.inbox).toSet(), {
         'main',
