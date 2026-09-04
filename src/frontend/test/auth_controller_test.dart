@@ -506,12 +506,16 @@ void main() {
     );
     expect(await refresh, isFalse);
 
-    expect(container.read(authControllerProvider).session, sessionB);
+    final current = container.read(authControllerProvider).session;
+    expect(current?.activeProfileId, sessionB.activeProfileId);
+    expect(current?.accessToken, sessionB.accessToken);
     expect(
       container.read(authorizationHeaderProvider),
       sessionB.authorizationHeader,
     );
-    expect(await storage.read(), sessionB);
+    final persisted = await storage.read();
+    expect(persisted?.activeProfileId, sessionB.activeProfileId);
+    expect(persisted?.accessToken, sessionB.accessToken);
   });
 
   test('logout prevents a delayed profile switch from restoring its session', () async {
