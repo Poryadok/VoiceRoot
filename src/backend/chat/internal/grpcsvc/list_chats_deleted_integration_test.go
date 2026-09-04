@@ -2,12 +2,18 @@ package grpcsvc
 
 import (
 	"context"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	commonv1 "voice.app/voice/common/v1"
+	"voice/backend/chat/internal/store"
 
 	chatv1 "voice.app/voice/chat/v1"
 )
@@ -28,6 +34,25 @@ func WithAccountDeletedChecker(c AccountDeletedChecker) chatServerOption {
 	return func(s *ChatGRPC) { s.DeletedAccounts = c }
 }
 
+type unavailableDeletedAccounts struct{}
+
+func (unavailableDeletedAccounts) DeletedAmong(context.Context, []uuid.UUID) (map[uuid.UUID]struct{}, error) {
+	return nil, errors.New("auth deleted-account lookup unavailable")
+}
+
+type unavailableProfileLookup struct{}
+
+func (unavailableProfileLookup) AccountIDByProfileID(context.Context, uuid.UUID) (uuid.UUID, error) {
+	return uuid.Nil, errors.New("profile lookup unavailable")
+}
+
+func seedDMForDeletedPeerTest(t *testing.T, ctx context.Context, pool *pgxpool.Pool, caller, peer uuid.UUID, peerInbox string) *store.ChatRow {
+	t.Helper()
+	row, _, err := (&store.DMStore{Pool: pool}).EnsureDM(ctx, caller, peer, peerInbox)
+	require.NoError(t, err)
+	return row
+}
+
 // TestListChats_HidesDMWhenPeerAccountDeleted documents auth-and-contacts.md: DM with deleted peer is omitted from ListChats.
 func TestListChats_HidesDMWhenPeerAccountDeleted(t *testing.T) {
 	if testing.Short() {
@@ -44,17 +69,15 @@ func TestListChats_HidesDMWhenPeerAccountDeleted(t *testing.T) {
 	profB := uuid.New()
 	profC := uuid.New()
 	profiles := mapProfileAccounts{profA: accA, profB: accB, profC: accC}
+	// Seed the pre-delete inbox before the deleted-account gate is connected.
+	seedDMForDeletedPeerTest(t, ctx, pool, profA, profB, store.InboxMain)
+	seedDMForDeletedPeerTest(t, ctx, pool, profA, profC, store.InboxMain)
 
 	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil,
 		WithAccountDeletedChecker(mapDeletedAccounts{accB: {}}))
 	t.Cleanup(cleanup)
 
 	ctxA := withAccountProfileCtx(ctx, accA, profA)
-	_, err := client.CreateDM(ctxA, &chatv1.CreateDMRequest{OtherProfileId: profB.String()})
-	require.NoError(t, err)
-	_, err = client.CreateDM(ctxA, &chatv1.CreateDMRequest{OtherProfileId: profC.String()})
-	require.NoError(t, err)
-
 	list, err := client.ListChats(ctxA, &chatv1.ListChatsRequest{
 		Page: &commonv1.CursorPageRequest{PageSize: 10},
 	})
@@ -62,4 +85,205 @@ func TestListChats_HidesDMWhenPeerAccountDeleted(t *testing.T) {
 	items := list.GetChatList().GetItems()
 	require.Len(t, items, 1, "deleted-peer DM must be hidden; active DM remains")
 	require.Equal(t, profC.String(), items[0].GetDmPeerProfileId())
+}
+
+// TestListChats_HidesDeletedPeerDMsFromEveryInbox documents PLAN A1: a fresh
+// snapshot must not surface a DM with a deleted peer in main, requests, archive,
+// or a custom folder. Existing group/channel rows and active DMs remain visible.
+func TestListChats_HidesDeletedPeerDMsFromEveryInbox(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	accA, profA := uuid.New(), uuid.New()
+	accMain, profMain := uuid.New(), uuid.New()
+	accRequest, profRequest := uuid.New(), uuid.New()
+	accArchive, profArchive := uuid.New(), uuid.New()
+	accFolder, profFolder := uuid.New(), uuid.New()
+	accActive, profActive := uuid.New(), uuid.New()
+	profiles := mapProfileAccounts{
+		profA: accA, profMain: accMain, profRequest: accRequest, profArchive: accArchive,
+		profFolder: accFolder, profActive: accActive,
+	}
+
+	// Seed the pre-delete state directly. The post-delete Chat instance below must
+	// never be able to recreate these DMs through CreateDM/GetDM.
+	main := seedDMForDeletedPeerTest(t, ctx, pool, profA, profMain, store.InboxMain)
+	seedDMForDeletedPeerTest(t, ctx, pool, profRequest, profA, store.InboxRequests)
+	archive := seedDMForDeletedPeerTest(t, ctx, pool, profA, profArchive, store.InboxMain)
+	folderDM := seedDMForDeletedPeerTest(t, ctx, pool, profA, profFolder, store.InboxMain)
+	active := seedDMForDeletedPeerTest(t, ctx, pool, profA, profActive, store.InboxMain)
+
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil,
+		WithAccountDeletedChecker(mapDeletedAccounts{
+			accMain: {}, accRequest: {}, accArchive: {}, accFolder: {},
+		}),
+	)
+	t.Cleanup(cleanup)
+	ctxA := withAccountProfileCtx(ctx, accA, profA)
+
+	_, err := client.ArchiveChat(ctxA, &chatv1.ArchiveChatRequest{ChatId: archive.ID.String(), Archived: true})
+	require.NoError(t, err)
+	folder, err := client.CreateFolder(ctxA, &chatv1.CreateFolderRequest{Name: "Deleted peer"})
+	require.NoError(t, err)
+	folderID := folder.GetFolder().GetId()
+	_, err = client.AddChatToFolder(ctxA, &chatv1.AddChatToFolderRequest{
+		FolderId: folderID,
+		ChatId:   folderDM.ID.String(),
+	})
+	require.NoError(t, err)
+
+	mainList, err := client.ListChats(ctxA, &chatv1.ListChatsRequest{Page: &commonv1.CursorPageRequest{PageSize: 100}})
+	require.NoError(t, err)
+	require.Len(t, mainList.GetChatList().GetItems(), 1)
+	require.Equal(t, active.ID.String(), mainList.GetChatList().GetItems()[0].GetChat().GetId())
+
+	requests := "requests"
+	requestList, err := client.ListChats(ctxA, &chatv1.ListChatsRequest{Inbox: &requests})
+	require.NoError(t, err)
+	require.Empty(t, requestList.GetChatList().GetItems(), "deleted-peer request must not appear in a fresh snapshot")
+
+	archiveInbox := "archive"
+	archiveList, err := client.ListChats(ctxA, &chatv1.ListChatsRequest{Inbox: &archiveInbox})
+	require.NoError(t, err)
+	require.Empty(t, archiveList.GetChatList().GetItems(), "deleted-peer archive entry must not appear in a fresh snapshot")
+
+	folderList, err := client.ListChats(ctxA, &chatv1.ListChatsRequest{FolderId: &folderID})
+	require.NoError(t, err)
+	require.Empty(t, folderList.GetChatList().GetItems(), "deleted-peer folder entry must not appear in a fresh snapshot")
+
+	// Keep the variables explicit: the test documents which old rows are excluded.
+	require.NotEqual(t, main.ID, active.ID)
+}
+
+func TestListChats_DeletedPeerFilteringPreservesActiveDMGroupAndChannel(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	accA, profA := uuid.New(), uuid.New()
+	accDeleted, profDeleted := uuid.New(), uuid.New()
+	accActive, profActive := uuid.New(), uuid.New()
+	profiles := mapProfileAccounts{profA: accA, profDeleted: accDeleted, profActive: accActive}
+	deletedDM := seedDMForDeletedPeerTest(t, ctx, pool, profA, profDeleted, store.InboxMain)
+	activeDM := seedDMForDeletedPeerTest(t, ctx, pool, profA, profActive, store.InboxMain)
+
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil,
+		WithAccountDeletedChecker(mapDeletedAccounts{accDeleted: {}}),
+	)
+	t.Cleanup(cleanup)
+	ctxA := withAccountProfileCtx(ctx, accA, profA)
+	groupName, channelName := "Still here group", "Still here channel"
+	group, err := client.CreateChat(ctxA, &chatv1.CreateChatRequest{Type: chatv1.ChatType_CHAT_TYPE_GROUP, Name: &groupName})
+	require.NoError(t, err)
+	channel, err := client.CreateChat(ctxA, &chatv1.CreateChatRequest{Type: chatv1.ChatType_CHAT_TYPE_CHANNEL, Name: &channelName})
+	require.NoError(t, err)
+
+	list, err := client.ListChats(ctxA, &chatv1.ListChatsRequest{Page: &commonv1.CursorPageRequest{PageSize: 100}})
+	require.NoError(t, err)
+	gotTypes := map[string]chatv1.ChatType{}
+	for _, item := range list.GetChatList().GetItems() {
+		gotTypes[item.GetChat().GetId()] = item.GetChat().GetType()
+	}
+	require.NotContains(t, gotTypes, deletedDM.ID.String())
+	require.Equal(t, chatv1.ChatType_CHAT_TYPE_DM, gotTypes[activeDM.ID.String()])
+	require.Equal(t, chatv1.ChatType_CHAT_TYPE_GROUP, gotTypes[group.GetChat().GetId()])
+	require.Equal(t, chatv1.ChatType_CHAT_TYPE_CHANNEL, gotTypes[channel.GetChat().GetId()])
+}
+
+// TestListChats_DeletedPeerFilteringPreservesCursorContinuation documents the
+// raw-page cursor contract: a fully filtered page stays empty but its cursor
+// must lead to the next active row instead of terminating the snapshot early.
+func TestListChats_DeletedPeerFilteringPreservesCursorContinuation(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	accA, profA := uuid.New(), uuid.New()
+	accDeletedOne, profDeletedOne := uuid.New(), uuid.New()
+	accDeletedTwo, profDeletedTwo := uuid.New(), uuid.New()
+	accActive, profActive := uuid.New(), uuid.New()
+	profiles := mapProfileAccounts{
+		profA: accA, profDeletedOne: accDeletedOne, profDeletedTwo: accDeletedTwo, profActive: accActive,
+	}
+	deletedOne := seedDMForDeletedPeerTest(t, ctx, pool, profA, profDeletedOne, store.InboxMain)
+	deletedTwo := seedDMForDeletedPeerTest(t, ctx, pool, profA, profDeletedTwo, store.InboxMain)
+	active := seedDMForDeletedPeerTest(t, ctx, pool, profA, profActive, store.InboxMain)
+	chatStore := &store.DMStore{Pool: pool}
+	now := time.Now().UTC()
+	require.NoError(t, chatStore.TouchLastMessageAt(ctx, deletedOne.ID, now.Add(3*time.Second)))
+	require.NoError(t, chatStore.TouchLastMessageAt(ctx, deletedTwo.ID, now.Add(2*time.Second)))
+	require.NoError(t, chatStore.TouchLastMessageAt(ctx, active.ID, now.Add(time.Second)))
+
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil,
+		WithAccountDeletedChecker(mapDeletedAccounts{accDeletedOne: {}, accDeletedTwo: {}}),
+	)
+	t.Cleanup(cleanup)
+	ctxA := withAccountProfileCtx(ctx, accA, profA)
+	first, err := client.ListChats(ctxA, &chatv1.ListChatsRequest{
+		Page: &commonv1.CursorPageRequest{PageSize: 2},
+	})
+	require.NoError(t, err)
+	require.Empty(t, first.GetChatList().GetItems(), "the first raw page contains only deleted-peer DMs")
+	require.NotEmpty(t, first.GetChatList().GetNextCursor(), "the client must be able to continue after a fully filtered raw page")
+
+	second, err := client.ListChats(ctxA, &chatv1.ListChatsRequest{
+		Page: &commonv1.CursorPageRequest{PageSize: 2, Cursor: first.GetChatList().GetNextCursor()},
+	})
+	require.NoError(t, err)
+	require.Len(t, second.GetChatList().GetItems(), 1)
+	require.Equal(t, active.ID.String(), second.GetChatList().GetItems()[0].GetChat().GetId())
+	require.Empty(t, second.GetChatList().GetNextCursor())
+}
+
+// TestListChats_DeletedPeerGateFailuresAreUnavailable prevents freshness errors
+// from becoming an unfiltered snapshot or a deceptive empty one.
+func TestListChats_DeletedPeerGateFailuresAreUnavailable(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	accA, profA := uuid.New(), uuid.New()
+	accB, profB := uuid.New(), uuid.New()
+	profiles := mapProfileAccounts{profA: accA, profB: accB}
+	seedDMForDeletedPeerTest(t, ctx, pool, profA, profB, store.InboxMain)
+	ctxA := withAccountProfileCtx(ctx, accA, profA)
+
+	tests := []struct {
+		name     string
+		profiles UserProfileLookup
+		deleted  AccountDeletedChecker
+	}{
+		{name: "missing_auth_checker", profiles: profiles},
+		{name: "missing_profile_lookup", deleted: mapDeletedAccounts{}},
+		{name: "auth_checker_failure", profiles: profiles, deleted: unavailableDeletedAccounts{}},
+		{name: "profile_lookup_failure", profiles: unavailableProfileLookup{}, deleted: mapDeletedAccounts{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			options := []chatServerOption{}
+			if tt.deleted != nil {
+				options = append(options, WithAccountDeletedChecker(tt.deleted))
+			}
+			client, cleanup := startChatGRPCTestServer(t, pool, tt.profiles, nil, nil, options...)
+			t.Cleanup(cleanup)
+
+			response, err := client.ListChats(ctxA, &chatv1.ListChatsRequest{})
+			require.Error(t, err)
+			require.Nil(t, response, "a dependency failure must not masquerade as an empty snapshot")
+			require.Equal(t, codes.Unavailable, status.Code(err))
+		})
+	}
 }
