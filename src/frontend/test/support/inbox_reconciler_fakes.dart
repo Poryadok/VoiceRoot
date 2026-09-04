@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
-import 'package:voice_frontend/backend/gateway_http.dart';
 import 'package:voice_frontend/backend/messages_client.dart';
 
 import 'gateway_test_client.dart';
@@ -83,8 +82,9 @@ class InboxReconcilerChatsFake extends VoiceChatsClient {
     for (final call in calls.reversed) {
       if (call.inbox != inbox || call.cursor != cursor) continue;
       if (profileId != null && call.profileId != profileId) continue;
-      if (authorization != null && call.authorization != authorization)
+      if (authorization != null && call.authorization != authorization) {
         continue;
+      }
       return call;
     }
     return null;

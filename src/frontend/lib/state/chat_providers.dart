@@ -219,6 +219,7 @@ class ChatListState {
     this.isLoadingMore = false,
     this.errorMessage,
     this.errorStatusCode,
+    this.profileId,
   });
 
   final List<ChatListItem> items;
@@ -227,6 +228,7 @@ class ChatListState {
   final bool isLoadingMore;
   final String? errorMessage;
   final int? errorStatusCode;
+  final String? profileId;
 
   bool get hasMore => nextCursor != null && nextCursor!.isNotEmpty;
 
@@ -238,6 +240,7 @@ class ChatListState {
     bool? isLoadingMore,
     String? errorMessage,
     int? errorStatusCode,
+    String? profileId,
     bool clearError = false,
   }) {
     return ChatListState(
@@ -249,6 +252,7 @@ class ChatListState {
       errorStatusCode: clearError
           ? null
           : (errorStatusCode ?? this.errorStatusCode),
+      profileId: profileId ?? this.profileId,
     );
   }
 }
@@ -296,6 +300,7 @@ class ChatListController extends StateNotifier<ChatListState> {
   Future<void> loadInitial() async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return;
+    final profileId = _ref.read(authControllerProvider).activeProfileId;
     state = state.copyWith(isLoading: true, clearError: true);
     final result = await _ref
         .read(voiceChatsClientProvider)
@@ -310,7 +315,11 @@ class ChatListController extends StateNotifier<ChatListState> {
     switch (result) {
       case ChatsApiOk(:final data):
         _syncDmPeersFromList(data.items);
-        state = ChatListState(items: data.items, nextCursor: data.nextCursor);
+        state = ChatListState(
+          items: data.items,
+          nextCursor: data.nextCursor,
+          profileId: profileId,
+        );
       case ChatsApiFailure(:final message, :final statusCode):
         state = state.copyWith(
           isLoading: false,
@@ -536,6 +545,7 @@ class ChatArchiveListController extends StateNotifier<ChatListState> {
   Future<void> loadInitial() async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return;
+    final profileId = _ref.read(authControllerProvider).activeProfileId;
     state = state.copyWith(isLoading: true, clearError: true);
     final result = await _ref
         .read(voiceChatsClientProvider)
@@ -543,7 +553,11 @@ class ChatArchiveListController extends StateNotifier<ChatListState> {
     if (!mounted) return;
     switch (result) {
       case ChatsApiOk(:final data):
-        state = ChatListState(items: data.items, nextCursor: data.nextCursor);
+        state = ChatListState(
+          items: data.items,
+          nextCursor: data.nextCursor,
+          profileId: profileId,
+        );
       case ChatsApiFailure(:final message, :final statusCode):
         state = state.copyWith(
           isLoading: false,
@@ -716,7 +730,8 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       final prev = state.realtimeStatus;
       state = state.copyWith(realtimeStatus: next);
       if (prev == RealtimeLinkStatus.reconnecting &&
-          next == RealtimeLinkStatus.connected) {
+          next == RealtimeLinkStatus.connected &&
+          _isSelectedForAutomaticHistory()) {
         unawaited(_catchUpAfterReconnect());
       }
     });
@@ -750,7 +765,9 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
                     senderProfileId: senderProfileId,
                   );
             }
-            unawaited(_catchUpAfterEvent());
+            if (_isSelectedForAutomaticHistory()) {
+              unawaited(_catchUpAfterEvent());
+            }
           }
         } else if (frame.op == 'mark_read') {
           final chatId = frame.data?['chat_id'] as String?;
@@ -796,12 +813,16 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
             frame.op == 'message_delete') {
           final chatId = frame.data?['chat_id'] as String?;
           if (chatId == this.chatId) {
-            unawaited(loadInitial());
+            if (_isSelectedForAutomaticHistory()) {
+              unawaited(loadInitial());
+            }
           }
         } else if (frame.op == 'mention') {
           final chatId = frame.data?['chat_id'] as String?;
           if (chatId == this.chatId) {
-            unawaited(_catchUpAfterEvent());
+            if (_isSelectedForAutomaticHistory()) {
+              unawaited(_catchUpAfterEvent());
+            }
           }
         } else if (frame.op == 'reaction_add' ||
             frame.op == 'reaction_remove') {
@@ -841,15 +862,47 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         }
       });
     });
-    unawaited(loadInitial());
-    _ref.read(realtimeHubProvider).ensureSubscribed(chatId);
+    _selectionSub = _ref.listen<String?>(selectedChatIdProvider, (
+      previous,
+      next,
+    ) {
+      if (next == chatId && previous != chatId) {
+        _scheduleAutomaticActivation();
+      }
+    });
+    if (_isSelectedForAutomaticHistory()) {
+      _scheduleAutomaticActivation();
+    }
   }
 
   final Ref _ref;
   final String chatId;
   ProviderSubscription<RealtimeLinkStatus>? _realtimeSub;
   ProviderSubscription<AsyncValue<RealtimeFrame>>? _eventSub;
+  ProviderSubscription<String?>? _selectionSub;
   String? _lastMarkedReadMessageId;
+  bool _automaticActivationStarted = false;
+
+  bool _isSelectedForAutomaticHistory() {
+    final selected = _ref.read(selectedChatIdProvider);
+    // A null selection preserves existing controller-level/test callers. Once
+    // navigation has an explicit selection, mounted background rooms stay
+    // passive and cannot start REST history catch-up.
+    return selected == null || selected == chatId;
+  }
+
+  void _scheduleAutomaticActivation() {
+    if (_automaticActivationStarted) return;
+    _automaticActivationStarted = true;
+    Future<void>(() async {
+      if (!mounted || !_isSelectedForAutomaticHistory()) {
+        _automaticActivationStarted = false;
+        return;
+      }
+      unawaited(loadInitial());
+      _ref.read(realtimeHubProvider).ensureSubscribed(chatId);
+    });
+  }
 
   bool _isE2eChat() => _ref.read(chatE2eEnabledProvider(chatId));
 
@@ -885,6 +938,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
   void dispose() {
     _realtimeSub?.close();
     _eventSub?.close();
+    _selectionSub?.close();
     super.dispose();
   }
 

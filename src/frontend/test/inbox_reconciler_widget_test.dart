@@ -4,11 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
-import 'package:voice_frontend/backend/realtime_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/connectivity_providers.dart';
-import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/inbox_reconciler.dart';
 import 'package:voice_frontend/ui/core/voice_skeleton.dart';
 import 'package:voice_frontend/ui/chat/chat_archive_screen.dart';
@@ -175,18 +173,60 @@ void main() {
     expect(chats.unmatchedCalls, isEmpty);
     expect(chats.pendingScripts, 0);
   });
+
+  testWidgets('main does not merge legacy rows owned by another profile', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _chatListApp(
+        chats: _manualFirstPageScripts(),
+        legacyState: ChatListState(
+          items: [inboxChatItem('old-profile-main')],
+          profileId: 'another-profile',
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(ChatListBody.tileKey('old-profile-main')), findsNothing);
+  });
+
+  testWidgets('archive does not merge legacy rows owned by another profile', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _archiveApp(
+        _manualFirstPageScripts(),
+        legacyState: ChatListState(
+          items: [inboxChatItem('old-profile-archive')],
+          profileId: 'another-profile',
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.byKey(ChatArchiveScreen.tileKey('old-profile-archive')),
+      findsNothing,
+    );
+  });
 }
 
-Widget _archiveApp(InboxReconcilerChatsFake chats) {
+Widget _archiveApp(
+  InboxReconcilerChatsFake chats, {
+  ChatListState? legacyState,
+}) {
   return ProviderScope(
     overrides: [
       ...voiceAppTestOverrides(
         client: MockClient((_) async => http.Response('{}', 404)),
       ),
       voiceChatsClientProvider.overrideWithValue(chats),
-      chatListControllerProvider.overrideWith(_NoAutoChatListController.new),
+      chatListControllerProvider.overrideWith(
+        (ref) => _NoAutoChatListController(ref),
+      ),
       chatArchiveListControllerProvider.overrideWith(
-        _NoAutoArchiveListController.new,
+        (ref) => _NoAutoArchiveListController(ref, legacyState),
       ),
     ],
     child: MaterialApp(
@@ -202,6 +242,7 @@ Widget _archiveApp(InboxReconcilerChatsFake chats) {
 Widget _chatListApp({
   required InboxReconcilerChatsFake chats,
   bool offline = false,
+  ChatListState? legacyState,
 }) {
   return ProviderScope(
     overrides: [
@@ -210,9 +251,11 @@ Widget _chatListApp({
       ),
       voiceChatsClientProvider.overrideWithValue(chats),
       isDeviceOfflineProvider.overrideWith((ref) => offline),
-      chatListControllerProvider.overrideWith(_NoAutoChatListController.new),
+      chatListControllerProvider.overrideWith(
+        (ref) => _NoAutoChatListController(ref, legacyState),
+      ),
       chatArchiveListControllerProvider.overrideWith(
-        _NoAutoArchiveListController.new,
+        (ref) => _NoAutoArchiveListController(ref),
       ),
     ],
     child: MaterialApp(
@@ -234,7 +277,9 @@ class _ReconcilerDrivenChatListBody extends ConsumerStatefulWidget {
 }
 
 class _NoAutoChatListController extends ChatListController {
-  _NoAutoChatListController(super.ref);
+  _NoAutoChatListController(super.ref, [ChatListState? initial]) {
+    if (initial != null) state = initial;
+  }
 
   @override
   Future<void> loadInitial() async {}
@@ -244,7 +289,9 @@ class _NoAutoChatListController extends ChatListController {
 }
 
 class _NoAutoArchiveListController extends ChatArchiveListController {
-  _NoAutoArchiveListController(super.ref);
+  _NoAutoArchiveListController(super.ref, [ChatListState? initial]) {
+    if (initial != null) state = initial;
+  }
 
   @override
   Future<void> loadInitial() async {}
@@ -342,6 +389,21 @@ InboxReconcilerChatsFake _failedFirstPageScripts() {
           message: 'gateway unavailable',
           statusCode: 503,
         ),
+      ),
+    );
+  }
+  return chats;
+}
+
+InboxReconcilerChatsFake _manualFirstPageScripts() {
+  final chats = InboxReconcilerChatsFake();
+  for (final inbox in ['main', 'requests', 'archive']) {
+    chats.enqueue(
+      InboxChatPageScript(
+        inbox: inbox,
+        cursor: null,
+        manual: true,
+        result: const ChatsApiOk(ChatListData(items: [])),
       ),
     );
   }

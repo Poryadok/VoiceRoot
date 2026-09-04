@@ -149,14 +149,16 @@ Out of scope:
   writes to be ignored; selection/subscription cleanup remains T-053.
 - [x] Test review gate: a fresh reviewer checks documentation coverage, assertion
   quality, fixture realism, expected failures, and absence of production edits.
-- [ ] GREEN 1: add a profile-keyed reconnect snapshot state/controller and make
+- [x] GREEN 1: add a profile-keyed reconnect snapshot state/controller and make
   RED 1 pass with the smallest implementation.
-- [ ] GREEN 2: add generation checks at every async commit and make RED 2 pass.
-- [ ] GREEN 3: keep selected-chat cursor catch-up outside the global reconciler
+- [x] GREEN 2: add generation checks at every async commit and make RED 2 pass.
+- [x] GREEN 3: keep selected-chat cursor catch-up outside the global reconciler
   and make RED 3/5 pass without changing ChatRoom ownership.
-- [ ] GREEN 4: bind existing list/archive UI to honest partial/error state and
+- [x] GREEN 4: bind existing list/archive UI to honest partial/error state and
   make RED 4 pass without introducing new copy.
-- [ ] Refactor only after every focused group is green; then run Flutter CI.
+- [x] Refactor only after every focused group is green; targeted Flutter tests
+  and analysis completed. Full `make flutter-ci` is environment-blocked by the
+  hanging Git Bash design-token script.
 
 ## Intended Implementation Shape (after RED approval)
 
@@ -210,7 +212,14 @@ Out of scope:
   exist.
 - [x] Independent test review approved the corrected RED diff with no P1/P2
   findings.
-- [ ] Commit, push, and draft PR attempted.
+- [x] GREEN implementation passes 15 provider, 6 widget, and 50 neighboring
+  tests. Analyzer reports only four pre-existing infos outside T-052 paths.
+- [x] The first production review found four P1 gaps; pending accumulation,
+  profile/token generation invalidation, peer isolation, and the explicit
+  profile-session trigger now have focused regressions. Additional UI guards
+  prevent cross-profile legacy fallback and stale post-mutation rows.
+- [ ] Final committed production review has no P1/P2 findings.
+- [ ] GREEN commit, push, and draft PR attempted.
 
 ## Decisions
 

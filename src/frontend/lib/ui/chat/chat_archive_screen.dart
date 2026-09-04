@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../backend/api_errors.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
+import '../../state/inbox_reconciler.dart';
 import '../../state/shell_providers.dart';
 import '../../state/social_providers.dart';
 import '../api_error_messages.dart';
@@ -29,6 +31,14 @@ class _ChatArchiveScreenState extends ConsumerState<ChatArchiveScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      final profileId = ref.read(authControllerProvider).activeProfileId;
+      final reconcilerScope = profileId == null
+          ? null
+          : ref
+              .read(inboxReconcilerProvider)
+              .profileSnapshots[profileId]
+              ?.scopes[InboxScope.archive];
+      if (reconcilerScope != null) return;
       ref.read(chatArchiveListControllerProvider.notifier).loadInitial();
     });
   }
@@ -38,27 +48,50 @@ class _ChatArchiveScreenState extends ConsumerState<ChatArchiveScreen> {
     final l10n = AppLocalizations.of(context)!;
     final archive = ref.watch(chatArchiveListControllerProvider);
     final activeProfileId = ref.watch(authControllerProvider).activeProfileId;
+    final reconciler = ref.watch(inboxReconcilerProvider);
+    final reconcilerScope = activeProfileId != null
+        ? reconciler.profileSnapshots[activeProfileId]?.scopes[InboxScope.archive]
+        : null;
 
     return Scaffold(
       key: ChatArchiveScreen.screenKey,
       appBar: AppBar(title: Text(l10n.chatArchiveTitle)),
       body: Builder(
         builder: (context) {
-          final items = archive.items;
-          if (archive.isLoading && items.isEmpty) {
+          final items = reconcilerScope == null
+              ? archive.items
+              : reconcilerScope.isComplete
+                  ? reconcilerScope.items
+                  : archive.profileId == activeProfileId
+                      ? mergeInboxRows(archive.items, reconcilerScope.items)
+                      : reconcilerScope.items;
+          final isLoading = reconcilerScope?.isLoading ?? archive.isLoading;
+          final errorMessage =
+              reconcilerScope?.errorMessage ?? archive.errorMessage;
+          final errorStatusCode = reconcilerScope?.errorStatusCode ??
+              archive.errorStatusCode;
+          final hasReconcilerError = reconcilerScope?.errorMessage != null;
+          if (isLoading && items.isEmpty) {
             return const VoiceListSkeleton();
           }
-          if (archive.errorMessage != null && items.isEmpty) {
+          if (errorMessage != null && items.isEmpty) {
             return VoiceStatePanel(
               title: l10n.chatArchiveLoadError,
               message: chatListErrorMessage(
                 l10n,
-                Exception(archive.errorMessage),
+                isBackendUnavailable(errorStatusCode)
+                    ? const BackendUnavailableException()
+                    : Exception(errorMessage),
               ),
               icon: Icons.cloud_off_outlined,
               actionLabel: l10n.commonRetry,
-              onAction: () =>
-                  ref.read(chatArchiveListControllerProvider.notifier).loadInitial(),
+              onAction: reconcilerScope != null
+                  ? () => ref
+                      .read(inboxReconcilerProvider.notifier)
+                      .retry(InboxScope.archive)
+                  : () => ref
+                      .read(chatArchiveListControllerProvider.notifier)
+                      .loadInitial(),
             );
           }
           if (items.isEmpty) {
@@ -68,13 +101,33 @@ class _ChatArchiveScreenState extends ConsumerState<ChatArchiveScreen> {
               icon: Icons.archive_outlined,
             );
           }
-          final hasFooter = archive.hasMore || archive.isLoadingMore;
+          final hasFooter = reconcilerScope != null
+              ? isLoading ||
+                  reconcilerScope.nextCursor != null ||
+                  hasReconcilerError
+              : archive.hasMore || archive.isLoadingMore;
           return ListView.builder(
             itemCount: items.length + (hasFooter ? 1 : 0),
             itemBuilder: (context, index) {
               if (index == items.length) {
+                if (hasReconcilerError) {
+                  return VoiceStatePanel(
+                    title: l10n.chatArchiveLoadError,
+                    message: chatListErrorMessage(
+                      l10n,
+                      isBackendUnavailable(errorStatusCode)
+                          ? const BackendUnavailableException()
+                          : Exception(errorMessage),
+                    ),
+                    icon: Icons.cloud_off_outlined,
+                    actionLabel: l10n.commonRetry,
+                    onAction: () => ref
+                        .read(inboxReconcilerProvider.notifier)
+                        .retry(InboxScope.archive),
+                  );
+                }
                 return Center(
-                  child: archive.isLoadingMore
+                  child: reconcilerScope != null || archive.isLoadingMore
                       ? const Padding(
                           padding: EdgeInsets.all(8),
                           child: SizedBox(
@@ -150,6 +203,9 @@ class _ChatArchiveScreenState extends ConsumerState<ChatArchiveScreen> {
       );
       return;
     }
+    ref
+        .read(inboxReconcilerProvider.notifier)
+        .removeChat(InboxScope.archive, chatId);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(l10n.chatArchiveUnarchived)),
     );

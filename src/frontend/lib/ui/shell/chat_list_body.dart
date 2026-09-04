@@ -7,6 +7,7 @@ import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
 import '../../state/in_app_notifications.dart';
+import '../../state/inbox_reconciler.dart';
 import '../../state/presence_providers.dart';
 import '../../state/shell_providers.dart';
 import '../../state/social_providers.dart';
@@ -111,6 +112,11 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
     final customFolderReorder = foldersAsync.valueOrNull?.folders
             .any((f) => f.id == selectedFolderId && !f.isSystem) ??
         false;
+    final reconciler = ref.watch(inboxReconcilerProvider);
+    final reconcilerScope = selectedFolderId == null && activeProfileId != null
+        ? reconciler.profileSnapshots[activeProfileId]?.scopes[
+            inbox == 'requests' ? InboxScope.requests : InboxScope.main]
+        : null;
 
     void selectChat(String chatId) {
       if (widget.onChatSelected != null) {
@@ -164,14 +170,26 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
         Expanded(
           child: Builder(
             builder: (context) {
-              final items = chats.items;
-              if (chats.isLoading && items.isEmpty) {
+              final items = reconcilerScope == null
+                  ? chats.items
+                  : reconcilerScope.isComplete
+                      ? reconcilerScope.items
+                      : chats.profileId == activeProfileId
+                          ? mergeInboxRows(chats.items, reconcilerScope.items)
+                          : reconcilerScope.items;
+              final isLoading = reconcilerScope?.isLoading ?? chats.isLoading;
+              final errorMessage =
+                  reconcilerScope?.errorMessage ?? chats.errorMessage;
+              final errorStatusCode = reconcilerScope?.errorStatusCode ??
+                  chats.errorStatusCode;
+              final hasReconcilerError = reconcilerScope?.errorMessage != null;
+              if (isLoading && items.isEmpty) {
                 return const VoiceListSkeleton();
               }
-              if (chats.errorMessage != null && items.isEmpty) {
-                final error = isBackendUnavailable(chats.errorStatusCode)
+              if (errorMessage != null && items.isEmpty) {
+                final error = isBackendUnavailable(errorStatusCode)
                     ? const BackendUnavailableException()
-                    : Exception(chats.errorMessage);
+                    : Exception(errorMessage);
                 return KeyedSubtree(
                   key: ChatListBody.unavailableKey,
                   child: VoiceStatePanel(
@@ -179,9 +197,15 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
                     message: chatListErrorMessage(l10n, error),
                     icon: Icons.cloud_off_outlined,
                     actionLabel: l10n.commonRetry,
-                    onAction: () => ref
-                        .read(chatListControllerProvider.notifier)
-                        .loadInitial(),
+                    onAction: reconcilerScope != null
+                        ? () => ref
+                              .read(inboxReconcilerProvider.notifier)
+                              .retry(inbox == 'requests'
+                                  ? InboxScope.requests
+                                  : InboxScope.main)
+                        : () => ref
+                              .read(chatListControllerProvider.notifier)
+                              .loadInitial(),
                   ),
                 );
               }
@@ -198,7 +222,11 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
                       : Icons.forum_outlined,
                 );
               }
-              final hasFooter = chats.hasMore || chats.isLoadingMore;
+              final hasFooter = reconcilerScope != null
+                  ? isLoading ||
+                      reconcilerScope.nextCursor != null ||
+                      hasReconcilerError
+                  : chats.hasMore || chats.isLoadingMore;
               final canReorder =
                   customFolderReorder &&
                   selectedFolderId != null &&
@@ -288,12 +316,26 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
                             null,
                         showDragHandle: reorderIndex != null,
                         dragIndex: reorderIndex,
-                        onAccept: () => ref
-                            .read(chatListControllerProvider.notifier)
-                            .acceptRequest(item.chatId),
-                        onDecline: () => ref
-                            .read(chatListControllerProvider.notifier)
-                            .declineRequest(item.chatId),
+                        onAccept: () async {
+                          final error = await ref
+                              .read(chatListControllerProvider.notifier)
+                              .acceptRequest(item.chatId);
+                          if (error == null) {
+                            ref
+                                .read(inboxReconcilerProvider.notifier)
+                                .removeChat(InboxScope.requests, item.chatId);
+                          }
+                        },
+                        onDecline: () async {
+                          final error = await ref
+                              .read(chatListControllerProvider.notifier)
+                              .declineRequest(item.chatId);
+                          if (error == null) {
+                            ref
+                                .read(inboxReconcilerProvider.notifier)
+                                .removeChat(InboxScope.requests, item.chatId);
+                          }
+                        },
                       ),
                       onTap: () => selectChat(item.chatId),
                       onLongPress: inbox == 'requests'
@@ -347,8 +389,24 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
                 itemCount: items.length + (hasFooter ? 1 : 0),
                 itemBuilder: (context, index) {
                   if (index == items.length) {
+                    if (hasReconcilerError) {
+                      final error = isBackendUnavailable(errorStatusCode)
+                          ? const BackendUnavailableException()
+                          : Exception(errorMessage);
+                      return VoiceStatePanel(
+                        title: l10n.chatListLoadError,
+                        message: chatListErrorMessage(l10n, error),
+                        icon: Icons.cloud_off_outlined,
+                        actionLabel: l10n.commonRetry,
+                        onAction: () => ref
+                            .read(inboxReconcilerProvider.notifier)
+                            .retry(inbox == 'requests'
+                                ? InboxScope.requests
+                                : InboxScope.main),
+                      );
+                    }
                     return Center(
-                      child: chats.isLoadingMore
+                      child: reconcilerScope != null || chats.isLoadingMore
                           ? const Padding(
                               padding: EdgeInsets.all(8),
                               child: SizedBox(
@@ -494,7 +552,12 @@ Future<void> _showChatRowActions(
         });
       }
     case 'archive':
-      await controller.archiveChat(item.chatId, archived: true);
+      final err = await controller.archiveChat(item.chatId, archived: true);
+      if (err == null) {
+        ref
+            .read(inboxReconcilerProvider.notifier)
+            .removeChat(InboxScope.main, item.chatId);
+      }
   }
 }
 

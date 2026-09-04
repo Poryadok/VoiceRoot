@@ -1,0 +1,490 @@
+import 'dart:async';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../backend/chats_client.dart';
+import 'auth_providers.dart';
+import 'chat_providers.dart';
+
+/// The three independent Chat `ListChats` inbox snapshots.
+enum InboxScope { main, requests, archive }
+
+/// The authoritative reconciliation state for one paginated inbox scope.
+class InboxScopeSnapshot {
+  const InboxScopeSnapshot({
+    this.items = const [],
+    this.nextCursor,
+    this.failedCursor,
+    this.errorMessage,
+    this.errorStatusCode,
+    this.isLoading = false,
+    this.isComplete = false,
+  });
+
+  final List<ChatListItem> items;
+  final String? nextCursor;
+
+  /// The opaque cursor which failed. A null value means the first page failed.
+  final String? failedCursor;
+  final String? errorMessage;
+  final int? errorStatusCode;
+  final bool isLoading;
+  final bool isComplete;
+
+  bool get hasError => errorMessage != null;
+
+  InboxScopeSnapshot copyWith({
+    List<ChatListItem>? items,
+    String? nextCursor,
+    bool clearNextCursor = false,
+    String? failedCursor,
+    bool clearFailedCursor = false,
+    String? errorMessage,
+    int? errorStatusCode,
+    bool clearError = false,
+    bool? isLoading,
+    bool? isComplete,
+  }) {
+    return InboxScopeSnapshot(
+      items: items ?? this.items,
+      nextCursor: clearNextCursor ? null : (nextCursor ?? this.nextCursor),
+      failedCursor: clearFailedCursor
+          ? null
+          : (failedCursor ?? this.failedCursor),
+      errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      errorStatusCode: clearError
+          ? null
+          : (errorStatusCode ?? this.errorStatusCode),
+      isLoading: isLoading ?? this.isLoading,
+      isComplete: isComplete ?? this.isComplete,
+    );
+  }
+}
+
+/// All three snapshot scopes for one authenticated profile.
+class ProfileInboxSnapshot {
+  const ProfileInboxSnapshot({Map<InboxScope, InboxScopeSnapshot>? scopes})
+    : scopes =
+          scopes ??
+          const {
+            InboxScope.main: InboxScopeSnapshot(),
+            InboxScope.requests: InboxScopeSnapshot(),
+            InboxScope.archive: InboxScopeSnapshot(),
+          };
+
+  final Map<InboxScope, InboxScopeSnapshot> scopes;
+
+  InboxScopeSnapshot operator [](InboxScope scope) => scopes[scope]!;
+
+  ProfileInboxSnapshot withScope(InboxScope scope, InboxScopeSnapshot value) {
+    return ProfileInboxSnapshot(scopes: {...scopes, scope: value});
+  }
+}
+
+class InboxReconcilerState {
+  const InboxReconcilerState({this.profileSnapshots = const {}});
+
+  final Map<String, ProfileInboxSnapshot> profileSnapshots;
+
+  ProfileInboxSnapshot? snapshotFor(String? profileId) {
+    if (profileId == null) return null;
+    return profileSnapshots[profileId];
+  }
+
+  InboxReconcilerState copyWith({
+    Map<String, ProfileInboxSnapshot>? profileSnapshots,
+  }) {
+    return InboxReconcilerState(
+      profileSnapshots: profileSnapshots ?? this.profileSnapshots,
+    );
+  }
+}
+
+/// Rebuilds Chat-owned inbox metadata after a Realtime reconnect.
+///
+/// This deliberately owns only Chat `ListChats` pagination. Message history is
+/// still owned by the selected [ChatRoomController].
+class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
+  InboxReconcilerController(this._ref) : super(const InboxReconcilerState()) {
+    _realtimeSub = _ref.listen<RealtimeLinkStatus>(realtimeLinkStatusProvider, (
+      previous,
+      next,
+    ) {
+      if (previous == RealtimeLinkStatus.reconnecting &&
+          next == RealtimeLinkStatus.connected) {
+        unawaited(reconcile());
+      }
+    });
+    _authSub = _ref.listen<AuthState>(authControllerProvider, (previous, next) {
+      final previousSession = previous?.session;
+      final nextSession = next.session;
+      final profileChanged =
+          previousSession?.activeProfileId != nextSession?.activeProfileId;
+      final authorizationChanged =
+          previousSession?.accessToken != nextSession?.accessToken;
+      if (!profileChanged && !authorizationChanged) return;
+
+      // Invalidate in-flight work synchronously. This also covers A -> B -> A,
+      // where checking only the active profile id would otherwise accept the
+      // first A response after returning to A.
+      _generation++;
+      _pendingItems.clear();
+      if (profileChanged) {
+        _ref.read(dmPeerProfileByChatIdProvider.notifier).state = const {};
+      }
+      if (nextSession != null) {
+        // This is the narrow profile/session handoff for T-052. Socket/session
+        // ordering remains owned by T-053.
+        final expectedProfileId = nextSession.activeProfileId;
+        final expectedAccessToken = nextSession.accessToken;
+        Future<void>(() async {
+          if (!mounted) return;
+          final current = _ref.read(authControllerProvider).session;
+          if (current?.activeProfileId != expectedProfileId ||
+              current?.accessToken != expectedAccessToken) {
+            return;
+          }
+          await reconcile();
+        });
+      }
+    });
+  }
+
+  final Ref _ref;
+  ProviderSubscription<RealtimeLinkStatus>? _realtimeSub;
+  ProviderSubscription<AuthState>? _authSub;
+  int _generation = 0;
+  final Map<InboxScope, List<ChatListItem>> _pendingItems = {};
+
+  @override
+  void dispose() {
+    _realtimeSub?.close();
+    _authSub?.close();
+    super.dispose();
+  }
+
+  /// Starts a new full, independent snapshot of main, requests and archive.
+  Future<void> reconcile() async {
+    final session = _ref.read(authControllerProvider).session;
+    if (session == null) return;
+    final profileId = session.activeProfileId;
+    final authorization = session.authorizationHeader;
+    final generation = ++_generation;
+    _pendingItems.clear();
+
+    await Future.wait([
+      for (final scope in InboxScope.values)
+        _reconcileScope(
+          generation: generation,
+          profileId: profileId,
+          authorization: authorization,
+          scope: scope,
+          cursor: null,
+          replacesFirstPage: true,
+        ),
+    ]);
+  }
+
+  /// Retries precisely the page which last failed for [scope].
+  Future<void> retry(InboxScope scope) async {
+    final session = _ref.read(authControllerProvider).session;
+    if (session == null) return;
+    final profileId = session.activeProfileId;
+    final current = state.profileSnapshots[profileId]?[scope];
+    if (current == null || !current.hasError || current.isLoading) return;
+
+    // A retry is scope-local: healthy scopes in the same snapshot generation
+    // must continue loading while this exact opaque cursor is retried.
+    final generation = _generation;
+    await _reconcileScope(
+      generation: generation,
+      profileId: profileId,
+      authorization: session.authorizationHeader,
+      scope: scope,
+      cursor: current.failedCursor ?? current.nextCursor,
+      replacesFirstPage: current.failedCursor == null,
+    );
+  }
+
+  /// Applies a successful Chat mutation to the visible authoritative snapshot.
+  /// The mutation itself remains owned by the existing action controller.
+  void removeChat(InboxScope scope, String chatId) {
+    final profileId = _ref.read(authControllerProvider).activeProfileId;
+    if (profileId == null) return;
+    final profile = state.profileSnapshots[profileId];
+    final current = profile?[scope];
+    if (profile == null || current == null) return;
+    final items = current.items
+        .where((item) => item.chatId != chatId)
+        .toList(growable: false);
+    if (items.length == current.items.length) return;
+    state = state.copyWith(
+      profileSnapshots: {
+        ...state.profileSnapshots,
+        profileId: profile.withScope(scope, current.copyWith(items: items)),
+      },
+    );
+    final pending = _pendingItems[scope];
+    if (pending != null) {
+      _pendingItems[scope] = pending
+          .where((item) => item.chatId != chatId)
+          .toList(growable: false);
+    }
+  }
+
+  Future<void> _reconcileScope({
+    required int generation,
+    required String profileId,
+    required String authorization,
+    required InboxScope scope,
+    required String? cursor,
+    required bool replacesFirstPage,
+  }) async {
+    var pageCursor = cursor;
+    var replacesPage = replacesFirstPage;
+
+    if (replacesFirstPage) _pendingItems[scope] = const [];
+    _beginScope(
+      generation: generation,
+      profileId: profileId,
+      scope: scope,
+      resetCursor: replacesFirstPage,
+    );
+    if (!_isCurrent(generation, profileId)) return;
+
+    while (true) {
+      final requestedCursor = pageCursor;
+      final result = await _ref
+          .read(voiceChatsClientProvider)
+          .listChats(
+            authorization: authorization,
+            cursor: requestedCursor,
+            inbox: scope.name,
+          );
+      if (!_isCurrent(generation, profileId)) return;
+
+      switch (result) {
+        case ChatsApiOk(:final data):
+          _commitPage(
+            generation: generation,
+            profileId: profileId,
+            scope: scope,
+            items: data.items,
+            nextCursor: _nonEmptyCursor(data.nextCursor),
+            replacesPage: replacesPage,
+          );
+          if (!_isCurrent(generation, profileId)) return;
+          _syncDmPeers(
+            generation: generation,
+            profileId: profileId,
+            items: data.items,
+          );
+          if (!_isCurrent(generation, profileId)) return;
+
+          pageCursor = _nonEmptyCursor(data.nextCursor);
+          if (pageCursor == null) {
+            _completeScope(
+              generation: generation,
+              profileId: profileId,
+              scope: scope,
+            );
+            return;
+          }
+          replacesPage = false;
+        case ChatsApiFailure(:final message, :final statusCode):
+          _failScope(
+            generation: generation,
+            profileId: profileId,
+            scope: scope,
+            failedCursor: requestedCursor,
+            message: message,
+            statusCode: statusCode,
+          );
+          return;
+      }
+    }
+  }
+
+  String? _nonEmptyCursor(String? cursor) {
+    return cursor == null || cursor.isEmpty ? null : cursor;
+  }
+
+  bool _isCurrent(int generation, String profileId) {
+    return mounted &&
+        generation == _generation &&
+        _ref.read(authControllerProvider).activeProfileId == profileId;
+  }
+
+  void _beginScope({
+    required int generation,
+    required String profileId,
+    required InboxScope scope,
+    required bool resetCursor,
+  }) {
+    if (!_isCurrent(generation, profileId)) return;
+    final current =
+        state.profileSnapshots[profileId]?[scope] ?? const InboxScopeSnapshot();
+    _replaceScope(
+      generation: generation,
+      profileId: profileId,
+      scope: scope,
+      value: current.copyWith(
+        clearNextCursor: resetCursor,
+        clearFailedCursor: true,
+        clearError: true,
+        isLoading: true,
+        isComplete: false,
+      ),
+    );
+  }
+
+  void _commitPage({
+    required int generation,
+    required String profileId,
+    required InboxScope scope,
+    required List<ChatListItem> items,
+    required String? nextCursor,
+    required bool replacesPage,
+  }) {
+    if (!_isCurrent(generation, profileId)) return;
+    final current =
+        state.profileSnapshots[profileId]?[scope] ?? const InboxScopeSnapshot();
+    final pending = replacesPage
+        ? List<ChatListItem>.of(items)
+        : mergeInboxRows(_pendingItems[scope] ?? const [], items);
+    _pendingItems[scope] = pending;
+    _replaceScope(
+      generation: generation,
+      profileId: profileId,
+      scope: scope,
+      value: current.copyWith(
+        // Progressive pages render immediately, but old cached rows remain
+        // until the scope reaches its terminal cursor.
+        items: mergeInboxRows(current.items, pending),
+        nextCursor: nextCursor,
+        clearNextCursor: nextCursor == null,
+        clearFailedCursor: true,
+        clearError: true,
+        isLoading: true,
+        isComplete: false,
+      ),
+    );
+  }
+
+  void _completeScope({
+    required int generation,
+    required String profileId,
+    required InboxScope scope,
+  }) {
+    if (!_isCurrent(generation, profileId)) return;
+    final current = state.profileSnapshots[profileId]![scope];
+    final authoritativeItems = _pendingItems.remove(scope) ?? current.items;
+    _replaceScope(
+      generation: generation,
+      profileId: profileId,
+      scope: scope,
+      value: current.copyWith(
+        items: authoritativeItems,
+        clearNextCursor: true,
+        clearFailedCursor: true,
+        clearError: true,
+        isLoading: false,
+        isComplete: true,
+      ),
+    );
+  }
+
+  void _failScope({
+    required int generation,
+    required String profileId,
+    required InboxScope scope,
+    required String? failedCursor,
+    required String message,
+    required int? statusCode,
+  }) {
+    if (!_isCurrent(generation, profileId)) return;
+    final current =
+        state.profileSnapshots[profileId]?[scope] ?? const InboxScopeSnapshot();
+    _replaceScope(
+      generation: generation,
+      profileId: profileId,
+      scope: scope,
+      value: current.copyWith(
+        nextCursor: failedCursor,
+        clearNextCursor: failedCursor == null,
+        failedCursor: failedCursor,
+        clearFailedCursor: failedCursor == null,
+        errorMessage: message,
+        errorStatusCode: statusCode,
+        isLoading: false,
+        isComplete: false,
+      ),
+    );
+  }
+
+  void _replaceScope({
+    required int generation,
+    required String profileId,
+    required InboxScope scope,
+    required InboxScopeSnapshot value,
+  }) {
+    if (!_isCurrent(generation, profileId)) return;
+    final profile =
+        state.profileSnapshots[profileId] ?? const ProfileInboxSnapshot();
+    // Check again immediately before the state side effect: a profile boundary
+    // must not let an old async generation write another profile's snapshot.
+    if (!_isCurrent(generation, profileId)) return;
+    state = state.copyWith(
+      profileSnapshots: {
+        ...state.profileSnapshots,
+        profileId: profile.withScope(scope, value),
+      },
+    );
+  }
+
+  void _syncDmPeers({
+    required int generation,
+    required String profileId,
+    required Iterable<ChatListItem> items,
+  }) {
+    if (!_isCurrent(generation, profileId)) return;
+    final peers = Map<String, String>.from(
+      _ref.read(dmPeerProfileByChatIdProvider),
+    );
+    var changed = false;
+    for (final item in items) {
+      final peerId = resolveDmPeerProfileId(
+        item: item,
+        // Current-profile server metadata is authoritative. A global cached
+        // value may belong to the previous profile for the same chat id.
+        knownPeerId: null,
+        activeProfileId: profileId,
+      );
+      if (peerId == null || peers[item.chatId] == peerId) continue;
+      peers[item.chatId] = peerId;
+      changed = true;
+    }
+    if (!changed || !_isCurrent(generation, profileId)) return;
+    _ref.read(dmPeerProfileByChatIdProvider.notifier).state = peers;
+  }
+}
+
+/// Merges current rows with newer authoritative metadata while preserving order.
+List<ChatListItem> mergeInboxRows(
+  Iterable<ChatListItem> existing,
+  Iterable<ChatListItem> incoming,
+) {
+  final byChatId = <String, ChatListItem>{
+    for (final item in existing) item.chatId: item,
+  };
+  for (final item in incoming) {
+    // Later pages are authoritative for row metadata but preserve its position.
+    byChatId[item.chatId] = item;
+  }
+  return byChatId.values.toList(growable: false);
+}
+
+final inboxReconcilerProvider =
+    StateNotifierProvider<InboxReconcilerController, InboxReconcilerState>(
+      (ref) => InboxReconcilerController(ref),
+    );
