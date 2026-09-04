@@ -40,6 +40,7 @@ import voice.backend.auth.service.InMemoryAccountRestoreTokenStore;
 import voice.backend.auth.service.InMemorySubscriptionTierStore;
 import voice.backend.auth.service.LoginCommand;
 import voice.backend.auth.service.InMemoryOtpThrottle;
+import voice.backend.auth.service.GuestConversionOtpAcceptance;
 import voice.backend.auth.service.OtpService;
 import voice.backend.auth.service.ProfileSwitchException;
 import voice.backend.auth.service.RefreshCommand;
@@ -172,7 +173,7 @@ class AuthUserGrpcContractTest {
   }
 
   @Test
-  void successfulEmailVerificationPromotesExactlyOnceBeforePublishingGuestConverted() {
+  void successfulEmailVerificationDelegatesToDurableAcceptanceWithoutDirectUserOrEventContinuation() {
     Harness harness = new Harness(UUID.randomUUID().toString());
     AuthSession guest = harness.service.register(
         new RegisterCommand(null, null, "Correct horse battery staple", true, "{}"));
@@ -180,17 +181,19 @@ class AuthUserGrpcContractTest {
         guest.accessToken(), new ConvertGuestCommand("verified@example.com", null, "New account password 1"));
     harness.profiles.clearGuestAccountCalls = 0;
     harness.events.guestConvertedAccountIds.clear();
+    harness.acceptanceCalls.clear();
     harness.order.clear();
 
     harness.verifyEmailOtp("verified@example.com", "123456");
 
-    assertThat(harness.profiles.clearGuestAccountCalls).isEqualTo(1);
-    assertThat(harness.events.guestConvertedAccountIds).hasSize(1);
-    assertThat(harness.order).containsExactly("mark-account-regular", "guest-converted-event");
+    assertThat(harness.acceptanceCalls).containsExactly(UUID.fromString(guest.accountId()));
+    assertThat(harness.profiles.clearGuestAccountCalls).isZero();
+    assertThat(harness.events.guestConvertedAccountIds).isEmpty();
+    assertThat(harness.order).isEmpty();
   }
 
   @Test
-  void emailVerificationUserPromotionFailureKeepsGuestAndPublishesNoEvent() {
+  void emailVerificationDoesNotInvokeUserPromotionOnTheRequestPath() {
     Harness harness = new Harness(UUID.randomUUID().toString());
     AuthSession guest = harness.service.register(
         new RegisterCommand(null, null, "Correct horse battery staple", true, "{}"));
@@ -198,12 +201,15 @@ class AuthUserGrpcContractTest {
         guest.accessToken(), new ConvertGuestCommand("promotion-failure@example.com", null, "New account password 1"));
     harness.profiles.clearGuestAccountCalls = 0;
     harness.events.guestConvertedAccountIds.clear();
+    harness.acceptanceCalls.clear();
     harness.profiles.promotionFailure = new AuthException("auth_unavailable");
     UUID accountId = UUID.fromString(guest.accountId());
     var sessionsBeforeFailure = List.copyOf(harness.refreshTokens.listActiveByAccount(accountId));
 
-    assertThatThrownBy(() -> harness.verifyEmailOtp("promotion-failure@example.com", "123456"))
-        .isInstanceOf(AuthException.class).hasMessage("auth_unavailable");
+    harness.verifyEmailOtp("promotion-failure@example.com", "123456");
+
+    assertThat(harness.acceptanceCalls).containsExactly(accountId);
+    assertThat(harness.profiles.clearGuestAccountCalls).isZero();
     assertThat(harness.events.guestConvertedAccountIds).isEmpty();
     assertThat(harness.refreshTokens.listActiveByAccount(accountId)).isEqualTo(sessionsBeforeFailure);
     assertThat(harness.accounts.findByEmail("promotion-failure@example.com")).get()
@@ -368,6 +374,7 @@ class AuthUserGrpcContractTest {
     final RecordingPhoneResolver phone = new RecordingPhoneResolver();
     final RecordingSwitchValidator switches = new RecordingSwitchValidator();
     final List<String> order = new ArrayList<>();
+    final List<UUID> acceptanceCalls = new ArrayList<>();
     final RecordingEvents events = new RecordingEvents(order);
     final AuthService service;
 
@@ -392,8 +399,10 @@ class AuthUserGrpcContractTest {
       InMemoryOtpCodeRepository codes = new InMemoryOtpCodeRepository();
       UUID accountId = accounts.findByEmail(email).orElseThrow().id();
       codes.create(accountId, codec.hash(code), "email_verify", Instant.now(CLOCK).plus(Duration.ofMinutes(10)), Instant.now(CLOCK));
+      GuestConversionOtpAcceptance acceptance =
+          (acceptedAccountId, ignoredOtp, ignoredNow) -> acceptanceCalls.add(acceptedAccountId);
       OtpService otp = new OtpService(accounts, codes, refreshTokens, codec, new BCryptPasswordHasher(),
-          new NoopMailSender(), new InMemoryOtpThrottle(), CLOCK);
+          new NoopMailSender(), new InMemoryOtpThrottle(), CLOCK, acceptance);
       otp.verifyOtp(new VerifyOtpCommand(email, null, code, "email_verify", null), service);
     }
   }
