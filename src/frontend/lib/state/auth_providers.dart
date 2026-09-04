@@ -113,6 +113,8 @@ class AuthController extends StateNotifier<AuthState> {
   Future<bool>? _refreshInFlight;
   var _profileSwitchGeneration = 0;
   AuthSession? _latestProfileSession;
+  var _latestProfileSessionGeneration = 0;
+  int? _terminatedProfileSessionGeneration;
   var _convertingGuest = false;
   static final _random = Random.secure();
 
@@ -318,6 +320,7 @@ class AuthController extends StateNotifier<AuthState> {
     if (current == null) return 'not_authenticated';
     if (current.activeProfileId == profileId) return null;
     final generation = ++_profileSwitchGeneration;
+    _terminatedProfileSessionGeneration = null;
 
     final result = await _authClient.switchActiveProfile(
       session: current,
@@ -343,6 +346,7 @@ class AuthController extends StateNotifier<AuthState> {
 
   Future<void> logout() async {
     final current = state.session;
+    _terminateProfileSession();
     state = state.copyWith(isSubmitting: true, clearError: true);
     if (current != null) {
       await _authClient.logout(session: current);
@@ -400,6 +404,13 @@ class AuthController extends StateNotifier<AuthState> {
     _scheduleProactiveRefresh();
   }
 
+  void _terminateProfileSession() {
+    _profileSwitchGeneration++;
+    _latestProfileSession = null;
+    _latestProfileSessionGeneration = -1;
+    _terminatedProfileSessionGeneration = _profileSwitchGeneration;
+  }
+
   Future<void> _commitProfileSession({
     required AuthSession session,
     required int generation,
@@ -410,6 +421,7 @@ class AuthController extends StateNotifier<AuthState> {
     }
 
     _latestProfileSession = session;
+    _latestProfileSessionGeneration = generation;
     return _storage.write(session).then((_) async {
       if (generation == _profileSwitchGeneration) {
         state = nextState(state);
@@ -417,9 +429,19 @@ class AuthController extends StateNotifier<AuthState> {
         return;
       }
 
-      final latest = _latestProfileSession;
-      if (latest != null) {
-        await _storage.write(latest);
+      if (_terminatedProfileSessionGeneration ==
+              _profileSwitchGeneration &&
+          generation < _profileSwitchGeneration) {
+        await _storage.clear();
+        return;
+      }
+
+      final repair = _latestProfileSessionGeneration ==
+              _profileSwitchGeneration
+          ? _latestProfileSession
+          : state.session;
+      if (repair != null) {
+        await _storage.write(repair);
       }
     });
   }
@@ -464,6 +486,7 @@ class AuthController extends StateNotifier<AuthState> {
         return true;
       case AuthSessionFailure(:final message, :final errorCode, :final statusCode):
         if (_convertingGuest) return false;
+        if (generation != _profileSwitchGeneration) return false;
         if (_isDefinitiveAuthRejection(
           AuthSessionFailure(
             message: message,
@@ -471,6 +494,7 @@ class AuthController extends StateNotifier<AuthState> {
             statusCode: statusCode,
           ),
         )) {
+          _terminateProfileSession();
           await _storage.clear();
           state = state.copyWith(clearSession: true, clearError: true);
         }
