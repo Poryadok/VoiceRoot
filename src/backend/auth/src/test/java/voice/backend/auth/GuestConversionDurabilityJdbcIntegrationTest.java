@@ -1,36 +1,39 @@
 package voice.backend.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.util.Map;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.time.Instant;
+import java.util.Comparator;
+import java.util.List;
+import java.util.UUID;
+import java.util.stream.Stream;
+import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
-import voice.backend.auth.support.JdbcUserContractTestConfiguration;
 
 /**
- * T-049b RED integration proof that Flyway retains recoverable guest conversion work in Auth.
+ * T-049b RED PostgreSQL contract for the two supported Auth migration paths.
  *
- * <p>The operation is Auth-owned: User changes its guest flag through RPC, but only Auth can
- * atomically retain the account promotion and the pending event/retry state. This runs the actual
- * Flyway path against PostgreSQL; the file-level lockstep test covers the optional golang-migrate
- * path separately.
+ * <p>Each path receives a separate schema. This prevents Flyway from masking a missing
+ * golang-migrate revision (or vice versa) and verifies executable DDL rather than migration text.
  */
-@SpringBootTest
-@ActiveProfiles("integration")
 @Testcontainers(disabledWithoutDocker = true)
-@Import(JdbcUserContractTestConfiguration.class)
 class GuestConversionDurabilityJdbcIntegrationTest {
+  private static final String TABLE = "guest_conversion_operations";
+  private static final String FLYWAY_SCHEMA = "guest_conversion_flyway_contract";
+  private static final String GOLANG_SCHEMA = "guest_conversion_golang_contract";
+
   @Container
   static final PostgreSQLContainer<?> postgres =
       new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
@@ -38,37 +41,257 @@ class GuestConversionDurabilityJdbcIntegrationTest {
           .withUsername("voice")
           .withPassword("voice");
 
-  @Container
-  static final GenericContainer<?> redis =
-      new GenericContainer<>(DockerImageName.parse("redis:7-alpine")).withExposedPorts(6379);
+  @Test
+  void flywayPathEnforcesTheDurableOperationCatalog() throws Exception {
+    migrateFlyway(FLYWAY_SCHEMA);
 
-  @DynamicPropertySource
-  static void registerProps(DynamicPropertyRegistry registry) {
-    registry.add("voice.auth.jdbc.url", postgres::getJdbcUrl);
-    registry.add("spring.datasource.username", postgres::getUsername);
-    registry.add("spring.datasource.password", postgres::getPassword);
-    registry.add("spring.flyway.user", postgres::getUsername);
-    registry.add("spring.flyway.password", postgres::getPassword);
-    registry.add("spring.data.redis.host", redis::getHost);
-    registry.add("spring.data.redis.port", () -> String.valueOf(redis.getMappedPort(6379)));
+    assertDurableOperationCatalog(FLYWAY_SCHEMA);
   }
 
-  @Autowired NamedParameterJdbcTemplate jdbc;
+  @Test
+  void golangMigratePathEnforcesTheSameDurableOperationCatalog() throws Exception {
+    migrateGolang(GOLANG_SCHEMA);
+
+    assertDurableOperationCatalog(GOLANG_SCHEMA);
+  }
 
   @Test
-  void flywayCreatesAnAuthOwnedDurableGuestConversionOperationTable() {
-    Integer tables =
-        jdbc.queryForObject(
-            """
-            SELECT COUNT(*)::int
-            FROM information_schema.tables
-            WHERE table_schema = 'public' AND table_name = 'guest_conversion_operations'
-            """,
-            Map.of(),
-            Integer.class);
+  void golangMigrateDownRefusesToDiscardPendingGuestConversionWork() throws Exception {
+    migrateGolang(GOLANG_SCHEMA);
+    UUID accountId = UUID.randomUUID();
+    insertPendingUser(GOLANG_SCHEMA, UUID.randomUUID(), accountId, UUID.randomUUID());
 
-    assertThat(tables)
-        .as("verified guest conversion must retain retryable work across an Auth restart")
-        .isEqualTo(1);
+    String downMigration =
+        Files.readString(
+            GuestConversionDurabilityMigrationContractTest.golangMigration(
+                GuestConversionDurabilityMigrationContractTest.GOLANG_DOWN_MIGRATION));
+    assertThatThrownBy(() -> executeSql(GOLANG_SCHEMA, downMigration))
+        .as("rollback must refuse while a conversion can still require User or event delivery")
+        .isInstanceOf(SQLException.class);
+
+    assertThat(tableExists(GOLANG_SCHEMA)).isTrue();
+    assertThat(countOperationsForAccount(GOLANG_SCHEMA, accountId)).isEqualTo(1);
+  }
+
+  private void migrateFlyway(String schema) {
+    Flyway.configure()
+        .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
+        .schemas(schema)
+        .defaultSchema(schema)
+        .createSchemas(true)
+        .locations(
+            "filesystem:"
+                + GuestConversionDurabilityMigrationContractTest.authProjectRoot()
+                    .resolve("src/main/resources/db/migration"))
+        .load()
+        .migrate();
+  }
+
+  private void migrateGolang(String schema) throws Exception {
+    createSchema(schema);
+    try (Stream<Path> migrations = Files.list(
+        GuestConversionDurabilityMigrationContractTest.golangMigration(".").getParent())) {
+      List<Path> upMigrations =
+          migrations
+              .filter(path -> path.getFileName().toString().endsWith(".up.sql"))
+              .sorted(Comparator.comparing(path -> path.getFileName().toString()))
+              .toList();
+      for (Path migration : upMigrations) {
+        executeSql(schema, Files.readString(migration));
+      }
+    }
+  }
+
+  private void assertDurableOperationCatalog(String schema) throws Exception {
+    assertThat(tableExists(schema)).isTrue();
+    assertColumn(schema, "operation_id", "uuid", false, false);
+    assertColumn(schema, "account_id", "uuid", false, false);
+    assertColumn(schema, "otp_id", "uuid", false, false);
+    assertColumn(schema, "state", null, false, false);
+    assertColumn(schema, "attempt", "integer", false, true);
+    assertColumn(schema, "next_attempt_at", "timestamp with time zone", false, true);
+    assertColumn(schema, "locked_until", "timestamp with time zone", true, false);
+    assertColumn(schema, "last_error", null, true, false);
+    assertColumn(schema, "created_at", "timestamp with time zone", false, true);
+    assertColumn(schema, "updated_at", "timestamp with time zone", false, true);
+
+    UUID operationId = UUID.randomUUID();
+    UUID accountId = UUID.randomUUID();
+    UUID otpId = UUID.randomUUID();
+    insertPendingUser(schema, operationId, accountId, otpId);
+    insert(schema, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "PENDING_EVENT");
+    insert(schema, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "COMPLETED");
+    assertThatThrownBy(
+            () -> insertPendingUser(schema, operationId, UUID.randomUUID(), UUID.randomUUID()))
+        .as("operation_id is the immutable event identity and primary key")
+        .isInstanceOf(SQLException.class);
+    assertThatThrownBy(() -> insertPendingUser(schema, UUID.randomUUID(), accountId, UUID.randomUUID()))
+        .as("one account must always resume its existing operation")
+        .isInstanceOf(SQLException.class);
+    assertThatThrownBy(() -> insertPendingUser(schema, UUID.randomUUID(), UUID.randomUUID(), otpId))
+        .as("an OTP may not drive two conversion operations")
+        .isInstanceOf(SQLException.class);
+    assertThatThrownBy(
+            () -> insert(schema, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "BROKEN"))
+        .as("only the documented durable states are legal")
+        .isInstanceOf(SQLException.class);
+    assertThatThrownBy(
+            () ->
+                insert(
+                    schema,
+                    UUID.randomUUID(),
+                    UUID.randomUUID(),
+                    UUID.randomUUID(),
+                    "PENDING_USER",
+                    -1))
+        .as("retry attempt cannot be negative")
+        .isInstanceOf(SQLException.class);
+    UUID defaultAccountId = UUID.randomUUID();
+    insertWithRetryDefaults(schema, UUID.randomUUID(), defaultAccountId, UUID.randomUUID());
+    assertThat(defaultAttemptForAccount(schema, defaultAccountId)).isEqualTo(0);
+    assertThat(defaultNextAttemptForAccount(schema, defaultAccountId)).isNotNull();
+  }
+
+  private void assertColumn(
+      String schema, String name, String dataType, boolean nullable, boolean mustHaveDefault)
+      throws SQLException {
+    try (Connection connection = connection();
+        PreparedStatement statement =
+            connection.prepareStatement(
+                """
+                SELECT data_type, is_nullable, column_default
+                FROM information_schema.columns
+                WHERE table_schema = ? AND table_name = ? AND column_name = ?
+                """)) {
+      statement.setString(1, schema);
+      statement.setString(2, TABLE);
+      statement.setString(3, name);
+      try (ResultSet result = statement.executeQuery()) {
+        assertThat(result.next()).as("column %s", name).isTrue();
+        if (dataType != null) {
+          assertThat(result.getString("data_type")).isEqualTo(dataType);
+        }
+        assertThat(result.getString("is_nullable")).isEqualTo(nullable ? "YES" : "NO");
+        if (mustHaveDefault) {
+          assertThat(result.getString("column_default")).as("default for %s", name).isNotBlank();
+        }
+      }
+    }
+  }
+
+  private boolean tableExists(String schema) throws SQLException {
+    try (Connection connection = connection();
+        PreparedStatement statement =
+            connection.prepareStatement("SELECT to_regclass(?) IS NOT NULL")) {
+      statement.setString(1, schema + "." + TABLE);
+      try (ResultSet result = statement.executeQuery()) {
+        result.next();
+        return result.getBoolean(1);
+      }
+    }
+  }
+
+  private void createSchema(String schema) throws SQLException {
+    try (Connection connection = connection(); Statement statement = connection.createStatement()) {
+      statement.execute("DROP SCHEMA IF EXISTS " + schema + " CASCADE");
+      statement.execute("CREATE SCHEMA " + schema);
+    }
+  }
+
+  private void insertPendingUser(String schema, UUID operationId, UUID accountId, UUID otpId)
+      throws SQLException {
+    insert(schema, operationId, accountId, otpId, "PENDING_USER");
+  }
+
+  private void insert(String schema, UUID operationId, UUID accountId, UUID otpId, String state)
+      throws SQLException {
+    insert(schema, operationId, accountId, otpId, state, 0);
+  }
+
+  private void insert(
+      String schema, UUID operationId, UUID accountId, UUID otpId, String state, int attempt)
+      throws SQLException {
+    try (Connection connection = connection();
+        PreparedStatement statement =
+            connection.prepareStatement(
+                """
+                INSERT INTO %s.%s (operation_id, account_id, otp_id, state, attempt, next_attempt_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """.formatted(schema, TABLE))) {
+      statement.setObject(1, operationId);
+      statement.setObject(2, accountId);
+      statement.setObject(3, otpId);
+      statement.setString(4, state);
+      statement.setInt(5, attempt);
+      statement.setObject(6, Instant.now());
+      statement.executeUpdate();
+    }
+  }
+
+  private void insertWithRetryDefaults(String schema, UUID operationId, UUID accountId, UUID otpId)
+      throws SQLException {
+    try (Connection connection = connection();
+        PreparedStatement statement =
+            connection.prepareStatement(
+                """
+                INSERT INTO %s.%s (operation_id, account_id, otp_id, state)
+                VALUES (?, ?, ?, 'PENDING_USER')
+                """.formatted(schema, TABLE))) {
+      statement.setObject(1, operationId);
+      statement.setObject(2, accountId);
+      statement.setObject(3, otpId);
+      statement.executeUpdate();
+    }
+  }
+
+  private int countOperationsForAccount(String schema, UUID accountId) throws SQLException {
+    try (Connection connection = connection();
+        PreparedStatement statement =
+            connection.prepareStatement(
+                "SELECT COUNT(*) FROM %s.%s WHERE account_id = ?".formatted(schema, TABLE))) {
+      statement.setObject(1, accountId);
+      try (ResultSet result = statement.executeQuery()) {
+        result.next();
+        return result.getInt(1);
+      }
+    }
+  }
+
+  private int defaultAttemptForAccount(String schema, UUID accountId) throws SQLException {
+    try (Connection connection = connection();
+        PreparedStatement statement =
+            connection.prepareStatement(
+                "SELECT attempt FROM %s.%s WHERE account_id = ?".formatted(schema, TABLE))) {
+      statement.setObject(1, accountId);
+      try (ResultSet result = statement.executeQuery()) {
+        result.next();
+        return result.getInt(1);
+      }
+    }
+  }
+
+  private Instant defaultNextAttemptForAccount(String schema, UUID accountId) throws SQLException {
+    try (Connection connection = connection();
+        PreparedStatement statement =
+            connection.prepareStatement(
+                "SELECT next_attempt_at FROM %s.%s WHERE account_id = ?".formatted(schema, TABLE))) {
+      statement.setObject(1, accountId);
+      try (ResultSet result = statement.executeQuery()) {
+        result.next();
+        return result.getObject(1, Instant.class);
+      }
+    }
+  }
+
+  private void executeSql(String schema, String sql) throws SQLException {
+    try (Connection connection = connection(); Statement statement = connection.createStatement()) {
+      connection.setSchema(schema);
+      statement.execute(sql);
+    }
+  }
+
+  private Connection connection() throws SQLException {
+    return java.sql.DriverManager.getConnection(
+        postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
   }
 }
