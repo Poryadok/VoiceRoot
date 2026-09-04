@@ -239,6 +239,7 @@ func startMessagingDirect(t *testing.T, pool *pgxpool.Pool) *MessagingGRPC {
 		Pins:             &store.PinsStore{Pool: pool},
 		SharedMedia:      &store.SharedMediaStore{Pool: pool},
 		ChatGuard:        guard,
+		ChatTypeResolver: &store.SQLChatTypeResolver{Pool: pool},
 		Moderation:       &store.SQLModerationGuard{Pool: pool},
 		ChatMentionsMeta: &store.SQLChatMentionsMeta{Pool: pool},
 		ChatThreadPolicy: &store.SQLChatThreadPolicy{Pool: pool},
