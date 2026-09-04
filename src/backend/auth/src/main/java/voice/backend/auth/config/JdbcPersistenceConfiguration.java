@@ -1,6 +1,7 @@
 package voice.backend.auth.config;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -66,11 +67,13 @@ public class JdbcPersistenceConfiguration {
   }
 
   @Bean
+  @ConditionalOnBean(PlatformTransactionManager.class)
   TransactionTemplate guestConversionTransactionTemplate(PlatformTransactionManager transactions) {
     return new TransactionTemplate(transactions);
   }
 
   @Bean
+  @ConditionalOnBean(TransactionTemplate.class)
   GuestConversionOtpAcceptance guestConversionOtpAcceptance(
       TransactionTemplate guestConversionTransactionTemplate,
       OtpCodeRepository otpCodes,
@@ -80,6 +83,7 @@ public class JdbcPersistenceConfiguration {
   }
 
   @Bean
+  @ConditionalOnBean(TransactionTemplate.class)
   GuestConversionLocalPromotion guestConversionLocalPromotion(
       TransactionTemplate guestConversionTransactionTemplate,
       AccountRepository accounts,
@@ -89,6 +93,7 @@ public class JdbcPersistenceConfiguration {
   }
 
   @Bean
+  @ConditionalOnBean(GuestConversionLocalPromotion.class)
   GuestConversionPendingUserWorker guestConversionPendingUserWorker(
       GuestConversionOperationRepository operations,
       PrimaryProfileProvisioner primaryProfiles,
