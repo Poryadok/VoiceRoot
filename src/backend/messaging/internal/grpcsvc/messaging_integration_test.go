@@ -111,6 +111,9 @@ INSERT INTO chat_members (chat_id, profile_id, role) VALUES
 
 func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire) (messagingv1.MessagingServiceClient, func()) {
 	t.Helper()
+	if w.ChatTypeResolver == nil && !w.RequireChatTypeResolver {
+		w.ChatTypeResolver = sqlTestAuthoritativeChatTypeResolver{pool: pool}
+	}
 	if w.DeletedAccounts == nil && !w.RequireDeletedAccountsSeam {
 		w.DeletedAccounts = allowDeletedAccounts{}
 	}
@@ -149,6 +152,7 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 		PlatformMod:         w.PlatformMod,
 		PreKeyBundles:       &store.E2EPreKeyStore{Pool: pool},
 		Logger:              w.Logger,
+		ChatTypeResolver:    w.ChatTypeResolver,
 	}
 	w.wireDeletedAccounts(t, messagingSvc)
 	messagingv1.RegisterMessagingServiceServer(srv, messagingSvc)
@@ -185,6 +189,8 @@ type messagingWire struct {
 	// RequireDeletedAccountsSeam is true only in P3 gate tests. Legacy fixtures
 	// receive an explicit allow checker while production wiring is introduced.
 	RequireDeletedAccountsSeam bool
+	ChatTypeResolver           testAuthoritativeChatTypeResolver
+	RequireChatTypeResolver    bool
 }
 
 // wireDeletedAccounts keeps the P3 fixture isolated from production while the
