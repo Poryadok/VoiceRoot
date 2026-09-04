@@ -92,7 +92,13 @@ func TestRedisSessionEpochFloor_MinimumReturnsTimeoutWhenRedisStalls(t *testing.
 	conn := acceptRedisConnection(t, listener)
 	defer func() { _ = conn.Close() }()
 
-	err = <-done
+	watchdog := time.NewTimer(500 * time.Millisecond)
+	defer watchdog.Stop()
+	select {
+	case err = <-done:
+	case <-watchdog.C:
+		t.Fatal("stalled Redis request did not honor the injected timeout")
+	}
 	if !isDeadlineOrTimeout(err) {
 		t.Fatalf("stalled Redis error = %v, want deadline or timeout", err)
 	}
