@@ -18,6 +18,7 @@ import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/inbox_reconciler.dart';
 import 'package:voice_frontend/ui/chat/chat_archive_screen.dart';
+import 'package:voice_frontend/ui/shell/chat_list_body.dart';
 
 import 'support/gateway_test_client.dart';
 import 'support/inbox_reconciler_fakes.dart';
@@ -122,6 +123,168 @@ void main() {
     );
 
     testWidgets(
+      'archives a reconciler-owned visible main row when the legacy list is empty',
+      (tester) async {
+        final chats = _ArchiveMutationChatsFake();
+        _enqueueSnapshot(chats, archiveItems: const [], mainItems: ['chat-1']);
+        _enqueueSnapshot(chats, archiveItems: const [], manualArchive: true);
+        final auth = _AuthHarness();
+        final container = _container(chats: chats, auth: auth);
+        addTearDown(container.dispose);
+        InboxChatCall? staleArchiveCall;
+        Future<void>? staleReconcile;
+        addTearDown(() async {
+          final call = staleArchiveCall;
+          if (call != null && !call.completed) {
+            await chats.completeCall(
+              call,
+              result: const ChatsApiOk(ChatListData(items: [])),
+            );
+          }
+          await staleReconcile;
+        });
+
+        final reconciler = container.read(inboxReconcilerProvider.notifier);
+        await reconciler.reconcile();
+        final legacy = container.read(chatListControllerProvider.notifier)
+          ..state = const ChatListState(profileId: 'profile-a');
+        expect(legacy.state.items, isEmpty);
+
+        await tester.pumpWidget(_mainTestApp(container));
+        await tester.pump();
+        expect(find.byKey(ChatListBody.tileKey('chat-1')), findsOneWidget);
+
+        await tester.longPress(find.byKey(ChatListBody.tileKey('chat-1')));
+        await tester.pumpAndSettle();
+
+        staleReconcile = reconciler.reconcile();
+        await tester.pump();
+        staleArchiveCall = chats.findCall(inbox: 'archive', cursor: null);
+        expect(staleArchiveCall, isNotNull);
+
+        await tester.tap(find.byKey(ChatListBody.archiveActionKey('chat-1')));
+        await tester.pumpAndSettle();
+
+        final afterArchive = container
+            .read(inboxReconcilerProvider)
+            .profileSnapshots['profile-a']!;
+        expect(afterArchive[InboxScope.main].items, isEmpty);
+        expect(
+          afterArchive[InboxScope.archive].items.map((item) => item.chatId),
+          ['chat-1'],
+          reason:
+              'the visible reconciler row, not legacy controller state, owns '
+              'the ArchiveChat mutation payload',
+        );
+
+        await chats.completeCall(
+          staleArchiveCall!,
+          result: const ChatsApiOk(ChatListData(items: [])),
+        );
+        await staleReconcile;
+        expect(
+          container
+              .read(inboxReconcilerProvider)
+              .profileSnapshots['profile-a']![InboxScope.archive]
+              .items
+              .map((item) => item.chatId),
+          ['chat-1'],
+        );
+      },
+    );
+
+    test(
+      'retires archive protection after a current archive snapshot confirms it',
+      () async {
+        final chats = _ArchiveMutationChatsFake();
+        _enqueueSnapshot(chats, archiveItems: const [], mainItems: ['chat-1']);
+        final auth = _AuthHarness();
+        final container = _container(chats: chats, auth: auth);
+        addTearDown(container.dispose);
+        final reconciler = container.read(inboxReconcilerProvider.notifier);
+        await reconciler.reconcile();
+
+        final main = container.read(chatListControllerProvider.notifier)
+          ..state = ChatListState(
+            profileId: 'profile-a',
+            items: [inboxChatItem('chat-1')],
+          );
+        expect(await main.archiveChat('chat-1', archived: true), isNull);
+
+        _enqueueSnapshot(
+          chats,
+          archiveItems: ['chat-1'],
+          mainItems: const [],
+        );
+        await reconciler.reconcile();
+        expect(
+          container
+              .read(inboxReconcilerProvider)
+              .profileSnapshots['profile-a']![InboxScope.archive]
+              .items
+              .map((item) => item.chatId),
+          ['chat-1'],
+        );
+
+        _enqueueSnapshot(chats, archiveItems: const [], mainItems: const []);
+        await reconciler.reconcile();
+        expect(
+          container
+              .read(inboxReconcilerProvider)
+              .profileSnapshots['profile-a']![InboxScope.archive]
+              .items,
+          isEmpty,
+          reason:
+              'a confirmed archive mutation must not protect rows after its '
+              'current authoritative archive snapshot has succeeded',
+        );
+      },
+    );
+
+    testWidgets(
+      'unarchive clears archive protection before a later empty snapshot',
+      (tester) async {
+        final chats = _ArchiveMutationChatsFake();
+        _enqueueSnapshot(chats, archiveItems: const [], mainItems: ['chat-1']);
+        final auth = _AuthHarness();
+        final container = _container(chats: chats, auth: auth);
+        addTearDown(container.dispose);
+        final reconciler = container.read(inboxReconcilerProvider.notifier);
+        await reconciler.reconcile();
+
+        final main = container.read(chatListControllerProvider.notifier)
+          ..state = ChatListState(
+            profileId: 'profile-a',
+            items: [inboxChatItem('chat-1')],
+          );
+        expect(await main.archiveChat('chat-1', archived: true), isNull);
+        await tester.pumpWidget(_testApp(container));
+        await tester.pumpAndSettle();
+        expect(find.byKey(ChatArchiveScreen.tileKey('chat-1')), findsOneWidget);
+
+        await tester.tap(find.text('Unarchive'));
+        await tester.pumpAndSettle();
+        expect(find.byKey(ChatArchiveScreen.tileKey('chat-1')), findsNothing);
+        expect(chats.archiveCalls.last, const _ArchiveCall(
+          authorization: 'Bearer access-a',
+          chatId: 'chat-1',
+          archived: false,
+        ));
+
+        _enqueueSnapshot(chats, archiveItems: const [], mainItems: const []);
+        await reconciler.reconcile();
+        expect(
+          container
+              .read(inboxReconcilerProvider)
+              .profileSnapshots['profile-a']![InboxScope.archive]
+              .items,
+          isEmpty,
+          reason: 'unarchive must remove the archive mutation protection',
+        );
+      },
+    );
+
+    testWidgets(
       'does not apply a successful stale A archive mutation to B snapshots or archive UI',
       (tester) async {
         final chats = _ArchiveMutationChatsFake(
@@ -217,6 +380,17 @@ Widget _testApp(ProviderContainer container) {
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       home: const ChatArchiveScreen(),
+    ),
+  );
+}
+
+Widget _mainTestApp(ProviderContainer container) {
+  return UncontrolledProviderScope(
+    container: container,
+    child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: const Scaffold(body: ChatListBody(showHeader: false)),
     ),
   );
 }
