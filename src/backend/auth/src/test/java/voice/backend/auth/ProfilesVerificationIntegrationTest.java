@@ -6,20 +6,38 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import app.voice.user.v1.ClearVerificationRequest;
+import app.voice.user.v1.ClearVerificationResponse;
+import app.voice.user.v1.EnsurePrimaryProfileRequest;
+import app.voice.user.v1.EnsurePrimaryProfileResponse;
+import app.voice.user.v1.Profile;
+import app.voice.user.v1.SetVerificationRequest;
+import app.voice.user.v1.SetVerificationResponse;
+import app.voice.user.v1.SwitchProfileRequest;
+import app.voice.user.v1.SwitchProfileResponse;
+import app.voice.user.v1.UserServiceGrpc;
+import app.voice.user.v1.VerificationStatus;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nimbusds.jwt.SignedJWT;
 import com.sun.net.httpserver.HttpServer;
+import io.grpc.Server;
+import io.grpc.ServerBuilder;
+import io.grpc.Status;
+import io.grpc.stub.StreamObserver;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -45,20 +63,15 @@ import voice.backend.auth.service.LinkedAccountsService;
 @ActiveProfiles("integration")
 @Testcontainers(disabledWithoutDocker = true)
 class ProfilesVerificationIntegrationTest {
+  static final TestUserGrpcService userGrpc = new TestUserGrpcService();
+  static final Server userGrpcServer = startUserGrpcServer();
+
   @Container
   static final PostgreSQLContainer<?> postgres =
       new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
           .withDatabaseName("auth_db")
           .withUsername("voice")
           .withPassword("voice");
-
-  @Container
-  static final PostgreSQLContainer<?> userPostgres =
-      new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
-          .withDatabaseName("user_db")
-          .withUsername("voice")
-          .withPassword("voice")
-          .withInitScript("integration-user-schema.sql");
 
   @Container
   static final GenericContainer<?> redis =
@@ -71,19 +84,21 @@ class ProfilesVerificationIntegrationTest {
     registry.add("spring.datasource.password", postgres::getPassword);
     registry.add("spring.flyway.user", postgres::getUsername);
     registry.add("spring.flyway.password", postgres::getPassword);
-    registry.add("auth.user-db.jdbc-url", userPostgres::getJdbcUrl);
-    registry.add("auth.user-db.username", userPostgres::getUsername);
-    registry.add("auth.user-db.password", userPostgres::getPassword);
+    registry.add("auth.user-grpc.addr", () -> "localhost:" + userGrpcServer.getPort());
     registry.add("spring.data.redis.host", redis::getHost);
     registry.add("spring.data.redis.port", () -> String.valueOf(redis.getMappedPort(6379)));
   }
 
   @Autowired MockMvc mockMvc;
   @Autowired ObjectMapper objectMapper;
-  @Autowired @Qualifier("userJdbc") NamedParameterJdbcTemplate userJdbc;
   @Autowired NamedParameterJdbcTemplate jdbc;
   @Autowired LinkedAccountsService linkedAccountsService;
   @Autowired VerificationStatusRefresh verificationStatusRefresh;
+
+  @AfterAll
+  static void stopUserGrpcServer() {
+    userGrpcServer.shutdownNow();
+  }
 
   @Test
   void switchActiveProfileIssuesJwtWithNewProfileIdAndRejectsForeignOrFrozen() throws Exception {
@@ -92,28 +107,13 @@ class ProfilesVerificationIntegrationTest {
     String access = registered.get("access_token").asText();
 
     UUID altProfileId = UUID.randomUUID();
-    userJdbc.update(
-        """
-        INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
-        VALUES (:id, :accountId, 'altwork', '0042', 'Work Alt', false)
-        """,
-        Map.of("id", altProfileId, "accountId", UUID.fromString(accountId)));
+    userGrpc.addSwitchableProfile(altProfileId, UUID.fromString(accountId));
 
     UUID foreignProfileId = UUID.randomUUID();
-    userJdbc.update(
-        """
-        INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
-        VALUES (:id, :accountId, 'foreign', '0099', 'Foreign', true)
-        """,
-        Map.of("id", foreignProfileId, "accountId", UUID.randomUUID()));
+    userGrpc.rejectSwitch(foreignProfileId, Status.PERMISSION_DENIED);
 
     UUID frozenProfileId = UUID.randomUUID();
-    userJdbc.update(
-        """
-        INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary, frozen_at)
-        VALUES (:id, :accountId, 'frozen', '0098', 'Frozen Alt', false, now())
-        """,
-        Map.of("id", frozenProfileId, "accountId", UUID.fromString(accountId)));
+    userGrpc.rejectSwitch(frozenProfileId, Status.FAILED_PRECONDITION);
 
     MvcResult switched =
         mockMvc
@@ -200,12 +200,14 @@ class ProfilesVerificationIntegrationTest {
               Integer.class);
       assertThat(linked).isEqualTo(1);
 
-      String verificationType =
-          userJdbc.queryForObject(
-              "SELECT verification_type FROM profiles WHERE id = :profileId::uuid",
-              Map.of("profileId", profileId),
-              String.class);
-      assertThat(verificationType).isEqualTo("personal");
+      assertThat(userGrpc.verificationType(profileId)).isEqualTo("personal");
+      assertThat(userGrpc.setVerificationRequests())
+          .anySatisfy(
+              request -> {
+                assertThat(request.getProfileId()).isEqualTo(profileId);
+                assertThat(request.getVerificationType()).isEqualTo("personal");
+                assertThat(request.getBadge()).isEqualTo("twitch");
+              });
 
       mockMvc
           .perform(get("/api/v1/auth/linked-accounts").header("Authorization", "Bearer " + access))
@@ -340,12 +342,9 @@ class ProfilesVerificationIntegrationTest {
 
       verificationStatusRefresh.refresh();
 
-      String verificationType =
-          userJdbc.queryForObject(
-              "SELECT verification_type FROM profiles WHERE id = :profileId::uuid",
-              Map.of("profileId", profileId),
-              String.class);
-      assertThat(verificationType).isEqualTo("none");
+      assertThat(userGrpc.verificationType(profileId)).isEqualTo("none");
+      assertThat(userGrpc.clearVerificationRequests())
+          .anySatisfy(request -> assertThat(request.getProfileId()).isEqualTo(profileId));
       assertThat(helixCalls.get()).isGreaterThanOrEqualTo(2);
     } finally {
       mockTwitch.stop(0);
@@ -359,12 +358,7 @@ class ProfilesVerificationIntegrationTest {
     String accountId = registered.get("account_id").asText();
     String access = registered.get("access_token").asText();
 
-    userJdbc.update(
-        """
-        UPDATE profiles SET verification_type = 'personal', verification_badge = 'twitch'
-        WHERE id = :profileId::uuid
-        """,
-        Map.of("profileId", profileId));
+    userGrpc.seedVerification(profileId, "personal", "twitch");
     jdbc.update(
         """
         INSERT INTO linked_identities (account_id, profile_id, platform, external_id, status)
@@ -378,12 +372,9 @@ class ProfilesVerificationIntegrationTest {
                 .header("Authorization", "Bearer " + access))
         .andExpect(status().isNoContent());
 
-    String verificationType =
-        userJdbc.queryForObject(
-            "SELECT verification_type FROM profiles WHERE id = :profileId::uuid",
-            Map.of("profileId", profileId),
-            String.class);
-    assertThat(verificationType).isEqualTo("none");
+    assertThat(userGrpc.verificationType(profileId)).isEqualTo("none");
+    assertThat(userGrpc.clearVerificationRequests())
+        .anySatisfy(request -> assertThat(request.getProfileId()).isEqualTo(profileId));
     String status =
         jdbc.queryForObject(
             """
@@ -409,5 +400,125 @@ class ProfilesVerificationIntegrationTest {
             .andReturn();
     JsonNode root = objectMapper.readTree(result.getResponse().getContentAsString());
     return root.has("session") ? root.get("session") : root;
+  }
+
+  private static Server startUserGrpcServer() {
+    try {
+      return ServerBuilder.forPort(0).directExecutor().addService(userGrpc).build().start();
+    } catch (Exception ex) {
+      throw new ExceptionInInitializerError(ex);
+    }
+  }
+
+  /** Stateful test double for the User-owned profile data exercised over production gRPC ports. */
+  private static final class TestUserGrpcService extends UserServiceGrpc.UserServiceImplBase {
+    private final Map<String, String> primaryProfiles = new ConcurrentHashMap<>();
+    private final Map<String, Profile> switchableProfiles = new ConcurrentHashMap<>();
+    private final Map<String, Status> switchFailures = new ConcurrentHashMap<>();
+    private final Map<String, VerificationStatus> verificationStatuses = new ConcurrentHashMap<>();
+    private final List<SetVerificationRequest> setVerificationRequests =
+        java.util.Collections.synchronizedList(new ArrayList<>());
+    private final List<ClearVerificationRequest> clearVerificationRequests =
+        java.util.Collections.synchronizedList(new ArrayList<>());
+
+    void addSwitchableProfile(UUID profileId, UUID accountId) {
+      switchableProfiles.put(
+          profileId.toString(),
+          Profile.newBuilder()
+              .setId(profileId.toString())
+              .setAccountId(accountId.toString())
+              .build());
+    }
+
+    void rejectSwitch(UUID profileId, Status status) {
+      switchFailures.put(profileId.toString(), status);
+    }
+
+    void seedVerification(String profileId, String verificationType, String badge) {
+      verificationStatuses.put(
+          profileId,
+          VerificationStatus.newBuilder()
+              .setProfileId(profileId)
+              .setVerificationType(verificationType)
+              .setBadge(badge)
+              .build());
+    }
+
+    String verificationType(String profileId) {
+      VerificationStatus status = verificationStatuses.get(profileId);
+      return status == null ? null : status.getVerificationType();
+    }
+
+    List<SetVerificationRequest> setVerificationRequests() {
+      return List.copyOf(setVerificationRequests);
+    }
+
+    List<ClearVerificationRequest> clearVerificationRequests() {
+      return List.copyOf(clearVerificationRequests);
+    }
+
+    @Override
+    public void ensurePrimaryProfile(
+        EnsurePrimaryProfileRequest request,
+        StreamObserver<EnsurePrimaryProfileResponse> observer) {
+      String profileId =
+          primaryProfiles.computeIfAbsent(
+              request.getAccountId(), ignored -> UUID.randomUUID().toString());
+      observer.onNext(
+          EnsurePrimaryProfileResponse.newBuilder()
+              .setProfile(
+                  Profile.newBuilder()
+                      .setId(profileId)
+                      .setAccountId(request.getAccountId())
+                      .setIsPrimary(true))
+              .build());
+      observer.onCompleted();
+    }
+
+    @Override
+    public void switchProfile(
+        SwitchProfileRequest request, StreamObserver<SwitchProfileResponse> observer) {
+      Status failure = switchFailures.get(request.getProfileId());
+      if (failure != null) {
+        observer.onError(failure.asRuntimeException());
+        return;
+      }
+      Profile profile = switchableProfiles.get(request.getProfileId());
+      if (profile == null) {
+        observer.onError(Status.NOT_FOUND.asRuntimeException());
+        return;
+      }
+      observer.onNext(SwitchProfileResponse.newBuilder().setProfile(profile).build());
+      observer.onCompleted();
+    }
+
+    @Override
+    public void setVerification(
+        SetVerificationRequest request, StreamObserver<SetVerificationResponse> observer) {
+      setVerificationRequests.add(request);
+      VerificationStatus status =
+          VerificationStatus.newBuilder()
+              .setProfileId(request.getProfileId())
+              .setVerificationType(request.getVerificationType())
+              .setBadge(request.getBadge())
+              .build();
+      verificationStatuses.put(request.getProfileId(), status);
+      observer.onNext(SetVerificationResponse.newBuilder().setVerificationStatus(status).build());
+      observer.onCompleted();
+    }
+
+    @Override
+    public void clearVerification(
+        ClearVerificationRequest request, StreamObserver<ClearVerificationResponse> observer) {
+      clearVerificationRequests.add(request);
+      VerificationStatus status =
+          VerificationStatus.newBuilder()
+              .setProfileId(request.getProfileId())
+              .setVerificationType("none")
+              .build();
+      verificationStatuses.put(request.getProfileId(), status);
+      observer.onNext(ClearVerificationResponse.newBuilder().setVerificationStatus(status).build());
+      observer.onCompleted();
+    }
   }
 }

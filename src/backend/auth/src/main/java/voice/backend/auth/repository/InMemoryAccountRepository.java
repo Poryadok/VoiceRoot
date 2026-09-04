@@ -117,7 +117,7 @@ public class InMemoryAccountRepository implements AccountRepository {
             email,
             phone,
             passwordHash,
-            "regular",
+            "guest",
             existing.status(),
             existing.totpSecret(),
             existing.totpEnabled(),
@@ -132,6 +132,50 @@ public class InMemoryAccountRepository implements AccountRepository {
       byPhone.put(phone, accountId);
     }
     return converted;
+  }
+
+  @Override
+  public synchronized Account markGuestRegular(UUID accountId) {
+    Account existing = byId.get(accountId);
+    if (existing == null || !"guest".equals(existing.type())) {
+      throw new IllegalArgumentException("not a guest account");
+    }
+    Account regular =
+        new Account(
+            existing.id(),
+            existing.email(),
+            existing.phone(),
+            existing.passwordHash(),
+            "regular",
+            existing.status(),
+            existing.totpSecret(),
+            existing.totpEnabled(),
+            existing.createdAt(),
+            existing.deletedAt());
+    byId.put(accountId, regular);
+    return regular;
+  }
+
+  /** Restores a local promotion when the matching in-memory durable advance did not apply. */
+  public synchronized Account restoreRegularGuest(UUID accountId) {
+    Account existing = byId.get(accountId);
+    if (existing == null || !"regular".equals(existing.type())) {
+      throw new IllegalArgumentException("not a regular account");
+    }
+    Account guest =
+        new Account(
+            existing.id(),
+            existing.email(),
+            existing.phone(),
+            existing.passwordHash(),
+            "guest",
+            existing.status(),
+            existing.totpSecret(),
+            existing.totpEnabled(),
+            existing.createdAt(),
+            existing.deletedAt());
+    byId.put(accountId, guest);
+    return guest;
   }
 
   @Override

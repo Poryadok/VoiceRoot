@@ -21,6 +21,8 @@ public interface AccountRepository {
 
   Account convertGuest(UUID accountId, String email, String phone, String passwordHash);
 
+  Account markGuestRegular(UUID accountId);
+
   void updatePasswordHash(UUID accountId, String passwordHash);
 
   void touchLastOnlineAt(UUID accountId, Instant at);

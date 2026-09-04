@@ -29,9 +29,10 @@
 2. В подписанном **access JWT** claim **`profile_id`** всегда задан и совпадает с этим значением **до** того, как клиент получил ответ (профиль материализован в БД **до** подписи токена).
 3. Нет поддерживаемого сценария, где клиент законно получил новый access token от Auth, а в JWT отсутствует `profile_id` или он не соответствует существующей строке `profiles` для данного `account_id`.
 
-Инвариант обеспечивается тем, что выдача сессии — **одна точка** в Auth: сначала завершается шаг «ensure primary profile» (идемпотентная запись/чтение в `user_db`), затем выпускается access JWT и сохраняется refresh-привязка. Пока шаг ensure не вернул стабильный `profiles.id`, access token клиенту не выдаётся.
+Инвариант обеспечивается тем, что выдача сессии — **одна точка** в Auth: сначала успешно завершается internal gRPC `UserService.EnsurePrimaryProfile`, затем выпускается access JWT и сохраняется refresh-привязка. Пока User не вернул стабильный пригодный `profiles.id`, access token клиенту не выдаётся.
 
-**Скоуп:** речь о выдаче токенов Auth v1 с включённым провижинингом в `user_db` (или эквивалентном вызове **EnsurePrimaryProfile** у User Service). Произвольные старые токены или аварийные обходы не задают контракт продукта.
+**Скоуп:** речь о выдаче токенов Auth v1 через обязательный вызов
+`EnsurePrimaryProfile` у User Service. Произвольные старые токены или аварийные обходы не задают контракт продукта.
 
 ## Поведение v1 ([auth-and-contacts.md](../features/auth-and-contacts.md))
 
@@ -48,6 +49,12 @@
 
 Переключение активного профиля (`SwitchProfile`) меняет только **выдачу следующего** access token (claim `profile_id`); первичный профиль остаётся в `profiles` с `is_primary = true`. Детали продукта — [multi-profile.md](../features/multi-profile.md).
 
-## Техническая отметка (bootstrap в коде)
+## Технический контракт
 
-До выделения User gRPC в проде допускается второй JDBC datasource в Auth только на `user_db` для шага «ensure primary profile»; целевое состояние — **синхронный gRPC `EnsurePrimaryProfile`** в User Service с тем же порядком: RPC успешно завершён → затем подпись access JWT. Инвариант «нет окна без `profile_id`» сохраняется: при ошибке User Auth не возвращает сессию с токеном. Воспроизводимые критерии стыка Auth ↔ `user_db` — [EXEC_PLAN.md](../EXEC_PLAN.md).
+`user_db` доступен только User Service. Auth настраивается адресом `USER_GRPC_ADDR` и синхронно
+вызывает `EnsurePrimaryProfile`: RPC успешно завершён и ответ прошёл проверку account/profile state
+→ затем подпись access JWT. При ошибке, пустом/несогласованном, удалённом или frozen-профиле Auth
+не возвращает новую сессию. Связанные операции используют существующие User RPC
+`ResolvePrimaryProfileIDs`, `SwitchProfile`, `SetVerification`, `ClearVerification` и
+`MarkAccountRegular`; прямой SQL или второй datasource в Auth не допускаются. Воспроизводимые
+критерии стыка Auth ↔ User — [EXEC_PLAN.md](../EXEC_PLAN.md).

@@ -30,9 +30,6 @@ spec:
             - {name: SPRING_DATASOURCE_URL, value: "jdbc:postgresql://voice-postgres:5432/auth_db"}
             - {name: SPRING_DATASOURCE_USERNAME, valueFrom: {configMapKeyRef: {name: voice-app-config, key: POSTGRES_USER}}}
             - {name: SPRING_DATASOURCE_PASSWORD, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: POSTGRES_PASSWORD}}}
-            - {name: AUTH_USER_DB_JDBC_URL, value: "jdbc:postgresql://voice-postgres:5432/user_db"}
-            - {name: AUTH_USER_DB_USERNAME, valueFrom: {configMapKeyRef: {name: voice-app-config, key: POSTGRES_USER}}}
-            - {name: AUTH_USER_DB_PASSWORD, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: POSTGRES_PASSWORD}}}
             - {name: AUTH_FLYWAY_ENABLED, value: "false"}
             - {name: JAVA_TOOL_OPTIONS, value: "-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=25.0"}
             - {name: SPRING_DATA_REDIS_HOST, value: voice-redis}
