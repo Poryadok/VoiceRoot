@@ -397,6 +397,9 @@ void main() {
       final container = ProviderScope.containerOf(
         tester.element(find.byType(ChatListBody)),
       );
+      final callsBeforeProfileB = chats.calls.length;
+      container.read(realtimeLinkStatusProvider.notifier).state =
+          RealtimeLinkStatus.connecting;
       container.read(authControllerProvider.notifier).state = const AuthState(
         session: AuthSession(
           accessToken: 'access-b',
@@ -407,7 +410,17 @@ void main() {
         ),
       );
       await tester.pump();
+      expect(chats.calls, hasLength(callsBeforeProfileB));
+      container.read(realtimeLinkStatusProvider.notifier).state =
+          RealtimeLinkStatus.connected;
       await tester.pump();
+      final profileBCalls = chats.calls.skip(callsBeforeProfileB).toList();
+      expect(profileBCalls, hasLength(3));
+      expect(profileBCalls.map((call) => call.inbox).toSet(), {
+        'main',
+        'requests',
+        'archive',
+      });
       expect(find.text('profile B'), findsOneWidget);
 
       chats.deferredAccept!.complete(const ChatsApiOk(null));

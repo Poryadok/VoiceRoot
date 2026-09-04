@@ -155,15 +155,18 @@ void main() {
         expect(find.byKey(ChatListBody.tileKey('chat-1')), findsOneWidget);
 
         await tester.longPress(find.byKey(ChatListBody.tileKey('chat-1')));
-        await tester.pumpAndSettle();
+        await tester.pump();
 
         staleReconcile = reconciler.reconcile();
         await tester.pump();
         staleArchiveCall = chats.findCall(inbox: 'archive', cursor: null);
         expect(staleArchiveCall, isNotNull);
 
-        await tester.tap(find.byKey(ChatListBody.archiveActionKey('chat-1')));
-        await tester.pumpAndSettle();
+        final archiveAction = find.byKey(
+          ChatListBody.archiveActionKey('chat-1'),
+        );
+        tester.widget<ListTile>(archiveAction).onTap!.call();
+        await tester.pump();
 
         final afterArchive = container
             .read(inboxReconcilerProvider)
@@ -445,6 +448,10 @@ ProviderContainer _container({
         MockClient((_) async => http.Response('{}', 404)),
       ),
       voiceChatsClientProvider.overrideWithValue(chats),
+      realtimeAutoConnectProvider.overrideWithValue(false),
+      realtimeLinkStatusProvider.overrideWith(
+        (ref) => RealtimeLinkStatus.connected,
+      ),
       chatListControllerProvider.overrideWith(_NoAutoChatListController.new),
       chatArchiveListControllerProvider.overrideWith(
         _NoAutoArchiveListController.new,

@@ -764,6 +764,9 @@ void main() {
         }
         container.read(selectedChatIdProvider.notifier).state =
             'profile-b-selection';
+        final callsBeforeProfileB = chats.calls.length;
+        container.read(realtimeLinkStatusProvider.notifier).state =
+            RealtimeLinkStatus.connecting;
         authController.controller.state = const AuthState(
           session: AuthSession(
             accessToken: 'access-b',
@@ -774,6 +777,17 @@ void main() {
           ),
         );
         await pumpEventQueue();
+        expect(chats.calls, hasLength(callsBeforeProfileB));
+        container.read(realtimeLinkStatusProvider.notifier).state =
+            RealtimeLinkStatus.connected;
+        await pumpEventQueue();
+        final profileBCalls = chats.calls.skip(callsBeforeProfileB).toList();
+        expect(profileBCalls, hasLength(3));
+        expect(profileBCalls.map((call) => call.inbox).toSet(), {
+          'main',
+          'requests',
+          'archive',
+        });
 
         for (final inbox in ['main', 'requests', 'archive']) {
           final staleCall = chats.findCall(
@@ -893,6 +907,9 @@ void main() {
             ),
           );
         }
+        final callsBeforeProfileB = chats.calls.length;
+        container.read(realtimeLinkStatusProvider.notifier).state =
+            RealtimeLinkStatus.connecting;
         authController.controller.state = const AuthState(
           session: AuthSession(
             accessToken: 'access-b',
@@ -903,6 +920,17 @@ void main() {
           ),
         );
         await pumpEventQueue();
+        expect(chats.calls, hasLength(callsBeforeProfileB));
+        container.read(realtimeLinkStatusProvider.notifier).state =
+            RealtimeLinkStatus.connected;
+        await pumpEventQueue();
+        final profileBCalls = chats.calls.skip(callsBeforeProfileB).toList();
+        expect(profileBCalls, hasLength(3));
+        expect(profileBCalls.map((call) => call.inbox).toSet(), {
+          'main',
+          'requests',
+          'archive',
+        });
 
         for (final inbox in ['main', 'requests', 'archive']) {
           chats.enqueue(
@@ -917,6 +945,9 @@ void main() {
             ),
           );
         }
+        final callsBeforeProfileA2 = chats.calls.length;
+        container.read(realtimeLinkStatusProvider.notifier).state =
+            RealtimeLinkStatus.connecting;
         authController.controller.state = const AuthState(
           session: AuthSession(
             accessToken: 'access-a2',
@@ -927,6 +958,17 @@ void main() {
           ),
         );
         await pumpEventQueue();
+        expect(chats.calls, hasLength(callsBeforeProfileA2));
+        container.read(realtimeLinkStatusProvider.notifier).state =
+            RealtimeLinkStatus.connected;
+        await pumpEventQueue();
+        final profileA2Calls = chats.calls.skip(callsBeforeProfileA2).toList();
+        expect(profileA2Calls, hasLength(3));
+        expect(profileA2Calls.map((call) => call.inbox).toSet(), {
+          'main',
+          'requests',
+          'archive',
+        });
 
         for (final inbox in ['main', 'requests', 'archive']) {
           final staleCall = chats.findCall(
@@ -1007,6 +1049,9 @@ void main() {
           ),
         );
       }
+      final callsBeforeTokenRefresh = chats.calls.length;
+      container.read(realtimeLinkStatusProvider.notifier).state =
+          RealtimeLinkStatus.connecting;
       authController.controller.state = const AuthState(
         session: AuthSession(
           accessToken: 'access-a2',
@@ -1017,6 +1062,17 @@ void main() {
         ),
       );
       await pumpEventQueue();
+      expect(chats.calls, hasLength(callsBeforeTokenRefresh));
+      container.read(realtimeLinkStatusProvider.notifier).state =
+          RealtimeLinkStatus.connected;
+      await pumpEventQueue();
+      final tokenRefreshCalls = chats.calls.skip(callsBeforeTokenRefresh).toList();
+      expect(tokenRefreshCalls, hasLength(3));
+      expect(tokenRefreshCalls.map((call) => call.inbox).toSet(), {
+        'main',
+        'requests',
+        'archive',
+      });
       for (final inbox in ['main', 'requests', 'archive']) {
         await chats.completeCall(
           chats.findCall(
@@ -1083,6 +1139,9 @@ void main() {
       );
 
       enqueueProfile('profile-b', 'access-b', 'peer-b');
+      final callsBeforeProfileB = chats.calls.length;
+      container.read(realtimeLinkStatusProvider.notifier).state =
+          RealtimeLinkStatus.connecting;
       authController.controller.state = const AuthState(
         session: AuthSession(
           accessToken: 'access-b',
@@ -1093,6 +1152,17 @@ void main() {
         ),
       );
       await pumpEventQueue();
+      expect(chats.calls, hasLength(callsBeforeProfileB));
+      container.read(realtimeLinkStatusProvider.notifier).state =
+          RealtimeLinkStatus.connected;
+      await pumpEventQueue();
+      final profileBCalls = chats.calls.skip(callsBeforeProfileB).toList();
+      expect(profileBCalls, hasLength(3));
+      expect(profileBCalls.map((call) => call.inbox).toSet(), {
+        'main',
+        'requests',
+        'archive',
+      });
 
       expect(container.read(dmPeerProfileByChatIdProvider), {
         'shared-chat': 'peer-b',
