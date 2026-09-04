@@ -80,6 +80,19 @@ class GuestConversionLocalPromotionJdbcIntegrationTest {
   }
 
   @Test
+  void promotionPreservesThePersistedSessionEpochAcrossTheMappedJdbcRow() {
+    Account guest = guest();
+    assertThat(accounts.incrementSessionEpoch(guest.id())).isEqualTo(2L);
+    GuestConversionOperation operation = leasedOperation(guest.id());
+
+    assertThat(
+            new TransactionalGuestConversionLocalPromotion(transactions, accounts, operations)
+                .promoteAndAdvance(operation, now()))
+        .isEqualTo(GuestConversionAdvanceResult.APPLIED);
+    assertThat(accounts.findById(guest.id().toString()).orElseThrow().sessionEpoch()).isEqualTo(2L);
+  }
+
+  @Test
   void leaseLostOrMissingAdvanceRollsBackTheLocalPromotion() {
     Account staleGuest = guest();
     GuestConversionOperation leased = leasedOperation(staleGuest.id());
