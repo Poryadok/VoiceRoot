@@ -4,9 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
@@ -26,6 +23,7 @@ import voice.backend.auth.repository.GuestConversionOperation;
 import voice.backend.auth.repository.GuestConversionOperationRepository;
 import voice.backend.auth.repository.GuestConversionState;
 import voice.backend.auth.repository.JdbcAccountRepository;
+import voice.backend.auth.repository.JdbcGuestConversionOperationRepository;
 import voice.backend.auth.service.TransactionalGuestConversionLocalPromotion;
 
 @Testcontainers(disabledWithoutDocker = true)
@@ -38,6 +36,7 @@ class GuestConversionLocalPromotionJdbcIntegrationTest {
           .withPassword("voice");
 
   private JdbcAccountRepository accounts;
+  private JdbcGuestConversionOperationRepository operations;
   private TransactionTemplate transactions;
 
   @BeforeAll
@@ -56,60 +55,75 @@ class GuestConversionLocalPromotionJdbcIntegrationTest {
   void setUp() {
     DriverManagerDataSource source =
         new DriverManagerDataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
-    accounts = new JdbcAccountRepository(new NamedParameterJdbcTemplate(source));
+    NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(source);
+    accounts = new JdbcAccountRepository(jdbc);
+    operations = new JdbcGuestConversionOperationRepository(jdbc);
     transactions = new TransactionTemplate(new DataSourceTransactionManager(source));
+    jdbc.getJdbcTemplate().update("DELETE FROM guest_conversion_operations");
   }
 
   @Test
   void appliedAdvanceCommitsGuestToRegularUsingTheLeasedOperationExactly() {
     Account guest = guest();
-    GuestConversionOperation operation = operation(guest.id());
-    RecordingAdvances advances = new RecordingAdvances(GuestConversionAdvanceResult.APPLIED);
+    GuestConversionOperation operation = leasedOperation(guest.id());
 
     GuestConversionAdvanceResult result =
-        new TransactionalGuestConversionLocalPromotion(transactions, accounts, advances)
+        new TransactionalGuestConversionLocalPromotion(transactions, accounts, operations)
             .promoteAndAdvance(operation, now());
 
     assertThat(result).isEqualTo(GuestConversionAdvanceResult.APPLIED);
     assertThat(accounts.findById(guest.id().toString()).orElseThrow().type()).isEqualTo("regular");
-    assertThat(advances.calls)
-        .containsExactly(new AdvanceCall(operation.operationId(), GuestConversionState.PENDING_USER, operation.lockedUntil(), now()));
+    assertThat(
+            operations.advance(
+                operation.operationId(), GuestConversionState.PENDING_USER, operation.lockedUntil(), now()))
+        .isEqualTo(GuestConversionAdvanceResult.ALREADY_APPLIED);
   }
 
   @Test
   void leaseLostOrMissingAdvanceRollsBackTheLocalPromotion() {
-    for (GuestConversionAdvanceResult result :
-        List.of(GuestConversionAdvanceResult.LEASE_LOST, GuestConversionAdvanceResult.NOT_FOUND)) {
-      Account guest = guest();
-      GuestConversionOperation operation = operation(guest.id());
-      RecordingAdvances advances = new RecordingAdvances(result);
+    Account staleGuest = guest();
+    GuestConversionOperation leased = leasedOperation(staleGuest.id());
+    GuestConversionOperation staleLease = withLease(leased, leased.lockedUntil().plusSeconds(1));
+    assertThat(
+            new TransactionalGuestConversionLocalPromotion(transactions, accounts, operations)
+                .promoteAndAdvance(staleLease, now()))
+        .isEqualTo(GuestConversionAdvanceResult.LEASE_LOST);
+    assertThat(accounts.findById(staleGuest.id().toString()).orElseThrow().type()).isEqualTo("guest");
 
-      assertThat(
-              new TransactionalGuestConversionLocalPromotion(transactions, accounts, advances)
-                  .promoteAndAdvance(operation, now()))
-          .isEqualTo(result);
-      assertThat(accounts.findById(guest.id().toString()).orElseThrow().type()).isEqualTo("guest");
-      assertThat(advances.calls)
-          .containsExactly(new AdvanceCall(operation.operationId(), GuestConversionState.PENDING_USER, operation.lockedUntil(), now()));
-    }
+    Account missingGuest = guest();
+    GuestConversionOperation missing = operation(missingGuest.id());
+    assertThat(
+            new TransactionalGuestConversionLocalPromotion(transactions, accounts, operations)
+                .promoteAndAdvance(missing, now()))
+        .isEqualTo(GuestConversionAdvanceResult.NOT_FOUND);
+    assertThat(accounts.findById(missingGuest.id().toString()).orElseThrow().type()).isEqualTo("guest");
   }
 
   @Test
   void alreadyAppliedIsRecoveryOnlyWhenAuthIsAlreadyRegular() {
     Account regular = accounts.create("regular-" + UUID.randomUUID() + "@example.com", null, "hash", "regular");
-    RecordingAdvances advances = new RecordingAdvances(GuestConversionAdvanceResult.ALREADY_APPLIED);
+    GuestConversionOperation regularOperation = leasedOperation(regular.id());
+    assertThat(
+            operations.advance(
+                regularOperation.operationId(), GuestConversionState.PENDING_USER, regularOperation.lockedUntil(), now()))
+        .isEqualTo(GuestConversionAdvanceResult.APPLIED);
 
     assertThat(
-            new TransactionalGuestConversionLocalPromotion(transactions, accounts, advances)
-                .promoteAndAdvance(operation(regular.id()), now()))
+            new TransactionalGuestConversionLocalPromotion(transactions, accounts, operations)
+                .promoteAndAdvance(regularOperation, now()))
         .isEqualTo(GuestConversionAdvanceResult.ALREADY_APPLIED);
     assertThat(accounts.findById(regular.id().toString()).orElseThrow().type()).isEqualTo("regular");
 
     Account guest = guest();
+    GuestConversionOperation guestOperation = leasedOperation(guest.id());
+    assertThat(
+            operations.advance(
+                guestOperation.operationId(), GuestConversionState.PENDING_USER, guestOperation.lockedUntil(), now()))
+        .isEqualTo(GuestConversionAdvanceResult.APPLIED);
     assertThatThrownBy(
             () ->
-                new TransactionalGuestConversionLocalPromotion(transactions, accounts, advances)
-                    .promoteAndAdvance(operation(guest.id()), now()))
+                new TransactionalGuestConversionLocalPromotion(transactions, accounts, operations)
+                    .promoteAndAdvance(guestOperation, now()))
         .isInstanceOf(IllegalStateException.class);
     assertThat(accounts.findById(guest.id().toString()).orElseThrow().type()).isEqualTo("guest");
   }
@@ -127,18 +141,16 @@ class GuestConversionLocalPromotionJdbcIntegrationTest {
         now.plusSeconds(60), null, null, null, null, now, now);
   }
 
-  private static final class RecordingAdvances implements GuestConversionOperationRepository {
-    private final GuestConversionAdvanceResult result;
-    private final List<AdvanceCall> calls = new ArrayList<>();
-    private RecordingAdvances(GuestConversionAdvanceResult result) { this.result = result; }
-    @Override public GuestConversionOperation createOrResume(UUID accountId, UUID otpCodeId, Instant now) { throw new UnsupportedOperationException(); }
-    @Override public List<GuestConversionOperation> leaseDue(int batchSize, Instant now, Instant until) { return List.of(); }
-    @Override public GuestConversionAdvanceResult advance(UUID id, GuestConversionState state, Instant lease, Instant now) {
-      calls.add(new AdvanceCall(id, state, lease, now));
-      return result;
-    }
-    @Override public Optional<GuestConversionOperation> recordFailure(UUID id, Instant lease, String error, Instant retry, Instant now) { throw new UnsupportedOperationException(); }
+  private GuestConversionOperation leasedOperation(UUID accountId) {
+    operations.createOrResume(accountId, UUID.randomUUID(), now());
+    return operations.leaseDue(1, now(), now().plusSeconds(60)).getFirst();
   }
 
-  private record AdvanceCall(UUID operationId, GuestConversionState state, Instant lease, Instant now) {}
+  private static GuestConversionOperation withLease(GuestConversionOperation operation, Instant lease) {
+    return new GuestConversionOperation(
+        operation.operationId(), operation.accountId(), operation.otpCodeId(), operation.state(),
+        operation.attemptCount(), operation.nextAttemptAt(), lease, operation.lastErrorCode(),
+        operation.userMarkedAt(), operation.authPromotedAt(), operation.eventPublishedAt(),
+        operation.createdAt(), operation.updatedAt());
+  }
 }

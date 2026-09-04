@@ -52,18 +52,41 @@ class GuestConversionPendingUserWorkerTest {
         new GuestConversionPendingUserWorker(operations, user, local, Clock.fixed(NOW, ZoneOffset.UTC));
 
     worker.processDue(1, LEASE);
+    FailureCall localFailure = operations.failures.getFirst();
     local.failure = null;
-    operations.requeueWithLease(NOW.plus(Duration.ofMinutes(2)));
+    operations.requeueWithLease(NOW.plus(LEASE));
     worker.processDue(1, LEASE);
 
     assertThat(user.accountIds).containsExactly(operations.operation.accountId(), operations.operation.accountId());
     assertThat(operations.failures).hasSize(1);
+    assertThat(localFailure.operationId()).isEqualTo(operations.operation.operationId());
+    assertThat(localFailure.leaseUntil()).isEqualTo(NOW.plus(LEASE));
+    assertThat(localFailure.errorCode()).isNotBlank();
+    assertThat(localFailure.nextAttemptAt()).isAfter(NOW);
     assertThat(local.calls).hasSize(2);
   }
 
+  @Test
+  void pendingEventLeaseIsIgnoredByThePendingUserWorker() {
+    RecordingOperations operations = new RecordingOperations(operation(GuestConversionState.PENDING_EVENT));
+    RecordingUser user = new RecordingUser();
+    RecordingLocalPromotion local = new RecordingLocalPromotion();
+
+    new GuestConversionPendingUserWorker(operations, user, local, Clock.fixed(NOW, ZoneOffset.UTC))
+        .processDue(1, LEASE);
+
+    assertThat(user.accountIds).isEmpty();
+    assertThat(local.calls).isEmpty();
+    assertThat(operations.failures).isEmpty();
+  }
+
   private static GuestConversionOperation operation() {
+    return operation(GuestConversionState.PENDING_USER);
+  }
+
+  private static GuestConversionOperation operation(GuestConversionState state) {
     return new GuestConversionOperation(
-        UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), GuestConversionState.PENDING_USER, 0, NOW,
+        UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), state, 0, NOW,
         NOW.plus(LEASE), null, null, null, null, NOW, NOW);
   }
 

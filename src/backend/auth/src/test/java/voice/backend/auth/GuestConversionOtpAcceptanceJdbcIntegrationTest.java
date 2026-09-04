@@ -77,11 +77,15 @@ class GuestConversionOtpAcceptanceJdbcIntegrationTest {
         new TransactionalGuestConversionOtpAcceptance(transactions, otpCodes, operations);
 
     acceptance.acceptVerifiedGuestEmailOtp(accountId, otp, now);
-    acceptance.acceptVerifiedGuestEmailOtp(accountId, otp, now.plusSeconds(1));
+    GuestConversionOperation original = operationsFor(accountId).getFirst();
+    OtpCodeRecord retryOtp =
+        otpCodes.create(accountId, "a2", "email_verify", now.plusSeconds(601), now.plusSeconds(1));
+    acceptance.acceptVerifiedGuestEmailOtp(accountId, retryOtp, now.plusSeconds(1));
 
     assertThat(otpCodes.findLatestValid(accountId, "email_verify", now)).isEmpty();
     List<GuestConversionOperation> persisted = operationsFor(accountId);
     assertThat(persisted).hasSize(1);
+    assertThat(persisted.getFirst().operationId()).isEqualTo(original.operationId());
     assertThat(persisted.getFirst().otpCodeId()).isEqualTo(otp.id());
     assertThat(persisted.getFirst().state()).isEqualTo(GuestConversionState.PENDING_USER);
   }
