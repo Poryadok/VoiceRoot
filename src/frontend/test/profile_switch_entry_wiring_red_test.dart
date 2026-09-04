@@ -38,7 +38,7 @@ void main() {
       tester,
     ) async {
       final harness = _EntryHarness();
-      addTearDown(harness.dispose);
+      _disposeHarnessAfterWidget(tester, harness);
       await _pumpVoiceApp(tester, harness, const Size(1280, 800));
 
       expect(find.byKey(DesktopShellRail.railKey), findsOneWidget);
@@ -47,6 +47,7 @@ void main() {
       await tester.tap(find.text('Gaming').last);
 
       await _expectOnePausedCoordinatorTransition(tester, harness);
+      await _completeCoordinatorTransition(tester, harness);
       expect(
         harness.container.read(authControllerProvider).activeProfileId,
         'profile-alt',
@@ -57,7 +58,7 @@ void main() {
       'mobile avatar tap menu selection owns one coordinator transition',
       (tester) async {
         final harness = _EntryHarness();
-        addTearDown(harness.dispose);
+        _disposeHarnessAfterWidget(tester, harness);
         await _pumpVoiceApp(tester, harness, const Size(390, 800));
 
         await tester.tap(find.byKey(ProfileAvatarSwitcher.switcherKey));
@@ -65,6 +66,7 @@ void main() {
         await tester.tap(find.text('Gaming').last);
 
         await _expectOnePausedCoordinatorTransition(tester, harness);
+        await _completeCoordinatorTransition(tester, harness);
         expect(
           harness.container.read(authControllerProvider).activeProfileId,
           'profile-alt',
@@ -76,7 +78,7 @@ void main() {
       tester,
     ) async {
       final harness = _EntryHarness();
-      addTearDown(harness.dispose);
+      _disposeHarnessAfterWidget(tester, harness);
       await _pumpVoiceApp(tester, harness, const Size(390, 800));
 
       await tester.fling(
@@ -86,6 +88,7 @@ void main() {
       );
 
       await _expectOnePausedCoordinatorTransition(tester, harness);
+      await _completeCoordinatorTransition(tester, harness);
       expect(
         harness.container.read(authControllerProvider).activeProfileId,
         'profile-alt',
@@ -96,7 +99,7 @@ void main() {
       'successful CreateProfileSheet switches through coordinator before closing',
       (tester) async {
         final harness = _EntryHarness(profiles: const [_primaryProfile]);
-        addTearDown(harness.dispose);
+        _disposeHarnessAfterWidget(tester, harness);
         await tester.pumpWidget(
           UncontrolledProviderScope(
             container: harness.container,
@@ -133,8 +136,7 @@ void main() {
         expect(harness.createRequests, 1);
         expect(find.byKey(CreateProfileSheet.sheetKey), findsOneWidget);
 
-        harness.realtime.complete();
-        await tester.pumpAndSettle();
+        await _completeCoordinatorTransition(tester, harness);
         expect(find.byKey(CreateProfileSheet.sheetKey), findsNothing);
         expect(
           harness.container.read(authControllerProvider).activeProfileId,
@@ -150,7 +152,7 @@ void main() {
           profiles: const [_primaryProfile],
           rejectCreate: true,
         );
-        addTearDown(harness.dispose);
+        _disposeHarnessAfterWidget(tester, harness);
         await tester.pumpWidget(
           UncontrolledProviderScope(
             container: harness.container,
@@ -233,6 +235,16 @@ Future<void> _pumpVoiceApp(
   await tester.pumpAndSettle();
 }
 
+void _disposeHarnessAfterWidget(
+  WidgetTester tester,
+  _EntryHarness harness,
+) {
+  addTearDown(() async {
+    await tester.pumpWidget(const SizedBox.shrink());
+    harness.dispose();
+  });
+}
+
 Future<void> _expectOnePausedCoordinatorTransition(
   WidgetTester tester,
   _EntryHarness harness, {
@@ -247,7 +259,12 @@ Future<void> _expectOnePausedCoordinatorTransition(
     expectedProfileId,
   );
   expect(harness.container.read(profileSwitchInProgressProvider), isTrue);
+}
 
+Future<void> _completeCoordinatorTransition(
+  WidgetTester tester,
+  _EntryHarness harness,
+) async {
   harness.realtime.complete();
   await tester.pumpAndSettle();
   expect(harness.container.read(profileSwitchInProgressProvider), isFalse);
@@ -382,7 +399,9 @@ class _EntryHarness {
     return http.Response('not found', 404);
   }
 
-  Future<void> dispose() async => container.dispose();
+  void dispose() {
+    container.dispose();
+  }
 }
 
 AuthSession _sessionFor(String profileId) => AuthSession(
