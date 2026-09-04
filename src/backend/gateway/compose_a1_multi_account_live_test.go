@@ -132,3 +132,109 @@ func TestComposeA1TwoAccountsFoundation_live(t *testing.T) {
 	require.False(t, mainItemAfterRead.IsStranger)
 	require.Equal(t, 0, mainItemAfterRead.UnreadCount)
 }
+
+// TestComposeA1DailyMessagingREST_live is the REST-only RED proof for the
+// A1 daily messaging path. It intentionally excludes Realtime, File,
+// attachment restart, Flutter UI, and client cache concerns.
+func TestComposeA1DailyMessagingREST_live(t *testing.T) {
+	if !liveComposeEnabled() {
+		t.Skip("set VOICE_RUN_LIVE_COMPOSE=true to run against local compose")
+	}
+	clearLiveComposeAuthRateLimit(t)
+
+	client := &http.Client{Timeout: 45 * time.Second}
+	base := liveGatewayBaseURL()
+	n := time.Now().UnixNano()
+	const password = "VoiceQaTest1!"
+
+	sessA := registerComposeUser(t, client, base, formatComposeEmail("a1-t055-phase2-a", n), password)
+	sessB := registerComposeUser(t, client, base, formatComposeEmail("a1-t055-phase2-b", n), password)
+	sessC := registerComposeUser(t, client, base, formatComposeEmail("a1-t055-phase2-c", n), password)
+	require.NotEqual(t, sessA.AccountID, sessB.AccountID)
+	require.NotEqual(t, sessA.AccountID, sessC.AccountID)
+	require.NotEqual(t, sessB.AccountID, sessC.AccountID)
+	require.NotEqual(t, sessA.ProfileID, sessB.ProfileID)
+	require.NotEqual(t, sessA.ProfileID, sessC.ProfileID)
+	require.NotEqual(t, sessB.ProfileID, sessC.ProfileID)
+
+	// C and B stay strangers. B only opens its DM privacy gate so the first
+	// C→B message must become B's request, not a friend/contact main row.
+	setComposePrivacyAllowDmEveryone(t, client, base, sessB.AccessToken)
+	dmID := createComposeDM(t, client, base, sessC.AccessToken, sessB.ProfileID)
+	dmContent := fmt.Sprintf("a1-t055-phase2-%d-stranger-c-to-b", n)
+	dmMessageID := sendComposeMessage(t, client, base, sessC.AccessToken, dmID, dmContent)
+
+	require.Nil(t, composeA1ChatItem(listComposeChats(t, client, base, sessB.AccessToken, "main"), dmID),
+		"stranger DM must not appear in B main inbox before Accept")
+	requestItem := composeA1ChatItem(listComposeChats(t, client, base, sessB.AccessToken, "requests"), dmID)
+	require.NotNil(t, requestItem, "stranger DM must appear in B requests inbox")
+	require.Equal(t, "requests", requestItem.Inbox)
+	require.True(t, requestItem.IsStranger)
+	require.Equal(t, sessC.ProfileID, requestItem.DMPeerProfileID)
+	getComposeMessagesContains(t, client, base, sessB.AccessToken, dmID, dmMessageID, dmContent)
+
+	acceptComposeDMRequest(t, client, base, sessB.AccessToken, dmID)
+	require.Nil(t, composeA1ChatItem(listComposeChats(t, client, base, sessB.AccessToken, "requests"), dmID),
+		"accepted DM must leave B requests inbox")
+	acceptedItem := composeA1ChatItem(listComposeChats(t, client, base, sessB.AccessToken, "main"), dmID)
+	require.NotNil(t, acceptedItem, "accepted DM must appear in B main inbox")
+	require.Equal(t, "main", acceptedItem.Inbox)
+	require.False(t, acceptedItem.IsStranger)
+	require.Equal(t, sessC.ProfileID, acceptedItem.DMPeerProfileID)
+	require.NotNil(t, composeA1ChatItem(listComposeChats(t, client, base, sessC.AccessToken, "main"), dmID),
+		"DM initiator must remain in C main inbox")
+
+	groupID := createComposeGroup(t, client, base, sessA.AccessToken, fmt.Sprintf("a1-t055-phase2-group-%d", n))
+	addComposeGroupMembersForInvitees(t, client, base, sessA.AccessToken, groupID, sessB, sessC)
+	groupContent := fmt.Sprintf("a1-t055-phase2-%d-group-a-to-bc", n)
+	groupMessageID := sendComposeMessage(t, client, base, sessA.AccessToken, groupID, groupContent)
+	for name, session := range map[string]authSessionResponse{"A": sessA, "B": sessB, "C": sessC} {
+		require.NotNil(t, composeA1ChatItem(listComposeChats(t, client, base, session.AccessToken, "main"), groupID),
+			"group must appear in %s main inbox", name)
+		getComposeMessagesContains(t, client, base, session.AccessToken, groupID, groupMessageID, groupContent)
+	}
+
+	spaceID := createComposeSpace(t, client, base, sessA.AccessToken,
+		fmt.Sprintf("a1-t055-phase2-space-%d", n), "A1 REST daily messaging proof")
+	invite := createComposeSpaceInvite(t, client, base, sessA.AccessToken, spaceID)
+	joinComposeSpaceByInvite(t, client, base, sessB.AccessToken, invite.Code)
+	joinComposeSpaceByInvite(t, client, base, sessC.AccessToken, invite.Code)
+	channelID := createComposeSpaceChannel(t, client, base, sessA.AccessToken, spaceID,
+		fmt.Sprintf("a1-t055-phase2-channel-%d", n))
+	channelContent := fmt.Sprintf("a1-t055-phase2-%d-space-channel-a-to-bc", n)
+	channelMessageID := sendComposeMessage(t, client, base, sessA.AccessToken, channelID, channelContent)
+	for name, session := range map[string]authSessionResponse{"B": sessB, "C": sessC} {
+		require.NotNil(t, composeA1ChatItem(listComposeChats(t, client, base, session.AccessToken, "main"), channelID),
+			"space channel must appear in %s main inbox", name)
+		getComposeMessagesContains(t, client, base, session.AccessToken, channelID, channelMessageID, channelContent)
+	}
+
+	composeArchiveChat(t, client, base, sessB.AccessToken, dmID, true)
+	require.Nil(t, composeA1ChatItem(listComposeChats(t, client, base, sessB.AccessToken, "main"), dmID),
+		"B archived DM must leave main inbox")
+	require.NotNil(t, composeA1ChatItem(listComposeChats(t, client, base, sessB.AccessToken, "archive"), dmID),
+		"B archived DM must appear in archive inbox")
+	require.NotNil(t, composeA1ChatItem(listComposeChats(t, client, base, sessC.AccessToken, "main"), dmID),
+		"B archive action must not move C's DM placement")
+	require.Nil(t, composeA1ChatItem(listComposeChats(t, client, base, sessC.AccessToken, "archive"), dmID),
+		"B archive action must not add C's DM to C archive inbox")
+
+	composeArchiveChat(t, client, base, sessB.AccessToken, dmID, false)
+	require.NotNil(t, composeA1ChatItem(listComposeChats(t, client, base, sessB.AccessToken, "main"), dmID),
+		"B unarchived DM must return to main inbox")
+	require.Nil(t, composeA1ChatItem(listComposeChats(t, client, base, sessB.AccessToken, "archive"), dmID),
+		"B unarchived DM must leave archive inbox")
+	require.NotNil(t, composeA1ChatItem(listComposeChats(t, client, base, sessC.AccessToken, "main"), dmID),
+		"B unarchive action must leave C's DM in C main inbox")
+	require.Nil(t, composeA1ChatItem(listComposeChats(t, client, base, sessC.AccessToken, "archive"), dmID),
+		"B unarchive action must leave C's archive placement unchanged")
+}
+
+func composeA1ChatItem(items []composeChatListItem, chatID string) *composeChatListItem {
+	for i := range items {
+		if items[i].ChatID == chatID {
+			return &items[i]
+		}
+	}
+	return nil
+}
