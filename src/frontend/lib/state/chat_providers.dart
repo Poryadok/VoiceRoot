@@ -1568,6 +1568,13 @@ class RealtimeHub {
     _setStatus(RealtimeLinkStatus.disconnected);
   }
 
+  Set<String> get subscribedChatIds => Set.unmodifiable(_subscribedChats);
+
+  Future<void> retireAndReconnect(Set<String> retiredSubscriptionIds) async {
+    _subscribedChats.removeAll(retiredSubscriptionIds);
+    await reconnectWithNewSession();
+  }
+
   /// Reconnect WebSocket after profile switch (new JWT, same subscriptions).
   Future<void> reconnectWithNewSession() async {
     if (_disposed) return;
