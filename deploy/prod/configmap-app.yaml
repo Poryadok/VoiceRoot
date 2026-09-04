@@ -48,6 +48,7 @@ data:
   REALTIME_SOCIAL_GRPC_ADDR: "voice-social:9090"
   SOCIAL_GRPC_ADDR: "voice-social:9090"
   USER_GRPC_ADDR: "voice-user:9090"
+  AUTH_GRPC_ADDR: "voice-auth:9090"
   CHAT_GRPC_ADDR: "voice-chat:9090"
   MESSAGING_GRPC_ADDR: "voice-messaging:9090"
   MODERATION_GRPC_ADDR: "voice-moderation:9090"

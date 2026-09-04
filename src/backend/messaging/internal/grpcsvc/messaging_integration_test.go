@@ -767,7 +767,9 @@ func TestMessagingChatMembershipViaGRPC(t *testing.T) {
 	acctA := uuid.New()
 	seedDMChat(t, ctx, pool, chatID, profA, profB)
 
-	chatCli, chatCleanup := testchat.NewBufconnChatClient(t, pool)
+	chatCli, chatCleanup := testchat.NewBufconnChatClient(t, pool, testchat.ChatDeps{
+		DeletedAccounts: explicitDeletedAccounts{},
+	})
 	t.Cleanup(chatCleanup)
 
 	client, _ := startMessagingServerWired(t, pool, messagingWire{
