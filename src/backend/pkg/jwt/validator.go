@@ -16,13 +16,14 @@ import (
 
 // Validator validates RS256 JWTs against a JWKS URL (issuer/audience/exp per project rules).
 type Validator struct {
-	jwksURL    string
-	issuer     string
-	audience   string
-	httpClient *http.Client
-	now        func() time.Time
-	mu         sync.Mutex
-	keys       map[string]crypto.PublicKey
+	jwksURL              string
+	issuer               string
+	audience             string
+	httpClient           *http.Client
+	now                  func() time.Time
+	sessionEpochRequired bool
+	mu                   sync.Mutex
+	keys                 map[string]crypto.PublicKey
 }
 
 // Option configures a Validator.
@@ -42,13 +43,23 @@ func WithHTTPClient(c *http.Client) Option {
 	}
 }
 
+// WithSessionEpochRequired controls whether the session_epoch claim is
+// required. When disabled, legacy tokens may omit the claim, but a present
+// claim must still be a positive integer.
+func WithSessionEpochRequired(required bool) Option {
+	return func(v *Validator) {
+		v.sessionEpochRequired = required
+	}
+}
+
 // NewJWKSValidator builds a validator for Bearer JWTs signed with keys from jwksURL.
 // issuer and audience may be empty to skip those checks.
 func NewJWKSValidator(jwksURL, issuer, audience string, opts ...Option) *Validator {
 	v := &Validator{
-		jwksURL:  jwksURL,
-		issuer:   issuer,
-		audience: audience,
+		jwksURL:              jwksURL,
+		issuer:               issuer,
+		audience:             audience,
+		sessionEpochRequired: true,
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
 		},
@@ -126,11 +137,16 @@ func (v *Validator) validateJWT(ctx context.Context, token string) (Claims, erro
 		return Claims{}, err
 	}
 
+	var rawPayload map[string]json.RawMessage
+	if err := json.Unmarshal(payloadBytes, &rawPayload); err != nil {
+		return Claims{}, err
+	}
 	var raw jwtPayload
 	if err := json.Unmarshal(payloadBytes, &raw); err != nil {
 		return Claims{}, err
 	}
-	return raw.toClaims(v.issuer, v.audience, v.now())
+	_, sessionEpochPresent := rawPayload["session_epoch"]
+	return raw.toClaims(v.issuer, v.audience, v.now(), v.sessionEpochRequired, sessionEpochPresent)
 }
 
 func (v *Validator) key(ctx context.Context, kid string) (crypto.PublicKey, error) {
@@ -200,7 +216,7 @@ type jwtPayload struct {
 	ExpiresAt        int64           `json:"exp"`
 }
 
-func (p jwtPayload) toClaims(issuer, audience string, now time.Time) (Claims, error) {
+func (p jwtPayload) toClaims(issuer, audience string, now time.Time, sessionEpochRequired, sessionEpochPresent bool) (Claims, error) {
 	if issuer != "" && p.Issuer != issuer {
 		return Claims{}, errors.New("issuer mismatch")
 	}
@@ -221,7 +237,7 @@ func (p jwtPayload) toClaims(issuer, audience string, now time.Time) (Claims, er
 	if accountType == "" {
 		accountType = "regular"
 	}
-	if p.SessionEpoch <= 0 {
+	if p.SessionEpoch <= 0 && (sessionEpochRequired || sessionEpochPresent) {
 		return Claims{}, errors.New("invalid session epoch")
 	}
 	return Claims{
