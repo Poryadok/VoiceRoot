@@ -51,6 +51,132 @@ void main() {
       expect(await cache.cachedIds(), ['msg-1']);
     });
 
+    test(
+      'same-profile token refresh preserves deleted binding and live idempotency',
+      () async {
+        final auth = _MutableAuthController();
+        final hub = _TestRealtimeHub();
+        final cache = _RecordingCacheStore();
+        final messages = _ScriptedMessagesClient(
+          pages: [
+            _page(
+              ids: const ['msg-1'],
+              cursor: 'cursor-current',
+              hasMore: true,
+              peerState: messaging_pb.DmPeerState.DM_PEER_STATE_DELETED,
+            ),
+          ],
+        );
+        final container = _container(
+          auth: auth,
+          messages: messages,
+          cache: cache,
+          realtimeHub: hub,
+        );
+        addTearDown(container.dispose);
+
+        final subscription = await _loadRoom(container);
+        addTearDown(subscription.close);
+        await pumpEventQueue();
+        var state = container.read(chatRoomControllerProvider('chat-1'));
+        expect(state.isDmPeerDeleted, isTrue);
+        final historyIds = [...state.messages.map((message) => message.id)];
+        final historyCursor = state.nextCursor;
+        final historyHasMore = state.hasMore;
+        final cacheIds = await cache.cachedIdsFor(profileId: 'profile-a');
+        final cacheMutations = cache.mutationSignatures();
+
+        auth.state = _authState(
+          'profile-a',
+          'access-a-rotated',
+          refreshToken: 'refresh-a-rotated',
+        );
+        await pumpEventQueue();
+
+        state = container.read(chatRoomControllerProvider('chat-1'));
+        expect(state.isDmPeerDeleted, isTrue);
+        expect(state.messages.map((message) => message.id), historyIds);
+        expect(state.nextCursor, historyCursor);
+        expect(state.hasMore, historyHasMore);
+        expect(await cache.cachedIdsFor(profileId: 'profile-a'), cacheIds);
+        expect(cache.mutationSignatures(), cacheMutations);
+
+        hub.addFrame(
+          const RealtimeFrame(
+            op: 'dm_peer_deleted',
+            data: {'chat_id': 'chat-1', 'recipient_profile_id': 'profile-a'},
+          ),
+        );
+        await pumpEventQueue();
+
+        state = container.read(chatRoomControllerProvider('chat-1'));
+        expect(state.isDmPeerDeleted, isTrue);
+        expect(state.messages.map((message) => message.id), historyIds);
+        expect(state.nextCursor, historyCursor);
+        expect(state.hasMore, historyHasMore);
+        expect(await cache.cachedIdsFor(profileId: 'profile-a'), cacheIds);
+        expect(cache.mutationSignatures(), cacheMutations);
+      },
+    );
+
+    test('profile change and sign-out clear deleted binding', () async {
+      final auth = _MutableAuthController();
+      final cache = _RecordingCacheStore();
+      final messages = _ScriptedMessagesClient(
+        pages: [
+          _page(
+            ids: const ['profile-a-message'],
+            cursor: 'profile-a-cursor',
+            hasMore: true,
+            peerState: messaging_pb.DmPeerState.DM_PEER_STATE_DELETED,
+          ),
+          _page(
+            ids: const ['profile-b-message'],
+            cursor: 'profile-b-cursor',
+            hasMore: true,
+            peerState: messaging_pb.DmPeerState.DM_PEER_STATE_DELETED,
+          ),
+        ],
+      );
+      final container = _container(
+        auth: auth,
+        messages: messages,
+        cache: cache,
+      );
+      addTearDown(container.dispose);
+
+      final subscription = await _loadRoom(container);
+      addTearDown(subscription.close);
+      await pumpEventQueue();
+      expect(
+        container.read(chatRoomControllerProvider('chat-1')).isDmPeerDeleted,
+        isTrue,
+      );
+
+      auth.state = _authState('profile-b', 'access-b');
+      await pumpEventQueue();
+      expect(
+        container.read(chatRoomControllerProvider('chat-1')).isDmPeerDeleted,
+        isFalse,
+      );
+
+      await container
+          .read(chatRoomControllerProvider('chat-1').notifier)
+          .loadInitial();
+      await pumpEventQueue();
+      expect(
+        container.read(chatRoomControllerProvider('chat-1')).isDmPeerDeleted,
+        isTrue,
+      );
+
+      auth.state = const AuthState();
+      await pumpEventQueue();
+      expect(
+        container.read(chatRoomControllerProvider('chat-1')).isDmPeerDeleted,
+        isFalse,
+      );
+    });
+
     test('empty delta still processes response-level DELETED', () async {
       final hub = _TestRealtimeHub();
       final cache = _RecordingCacheStore();
@@ -536,11 +662,15 @@ VoiceMessage _message(String id) {
   );
 }
 
-AuthState _authState(String profileId, String accessToken) {
+AuthState _authState(
+  String profileId,
+  String accessToken, {
+  String? refreshToken,
+}) {
   return AuthState(
     session: AuthSession(
       accessToken: accessToken,
-      refreshToken: 'refresh-$profileId',
+      refreshToken: refreshToken ?? 'refresh-$profileId',
       accountId: 'account-1',
       activeProfileId: profileId,
       expiresInSeconds: 900,
