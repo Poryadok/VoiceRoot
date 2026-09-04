@@ -137,6 +137,7 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
       _pendingItems.clear();
       _removedChatIds.clear();
       _archivedMutations.clear();
+      _unarchivedMutations.clear();
       _pendingSession = nextSession == null
           ? null
           : _PendingInboxSession(
@@ -154,10 +155,12 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
   ProviderSubscription<AuthState>? _authSub;
   int _generation = 0;
   int _archiveMutationRevision = 0;
+  int _unarchiveMutationRevision = 0;
   _PendingInboxSession? _pendingSession;
   final Map<InboxScope, List<ChatListItem>> _pendingItems = {};
   final Map<String, Map<InboxScope, Set<String>>> _removedChatIds = {};
   final Map<String, Map<String, _ArchivedMutation>> _archivedMutations = {};
+  final Map<String, Map<String, _UnarchivedMutation>> _unarchivedMutations = {};
 
   @override
   void dispose() {
@@ -227,6 +230,10 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
       final mutations = _archivedMutations[profileId];
       mutations?.remove(chatId);
       if (mutations?.isEmpty ?? false) _archivedMutations.remove(profileId);
+    } else if (scope == InboxScope.main) {
+      final mutations = _unarchivedMutations[profileId];
+      mutations?.remove(chatId);
+      if (mutations?.isEmpty ?? false) _unarchivedMutations.remove(profileId);
     }
     _removedChatIds
         .putIfAbsent(profileId, () => <InboxScope, Set<String>>{})
@@ -270,6 +277,12 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
     }
     final profile = state.profileSnapshots[expectedProfileId];
     if (profile == null) return;
+
+    final unarchived = _unarchivedMutations[expectedProfileId];
+    unarchived?.remove(item.chatId);
+    if (unarchived?.isEmpty ?? false) {
+      _unarchivedMutations.remove(expectedProfileId);
+    }
 
     // Retain a confirmed archive row while an older archive page is still in
     // flight. That page may complete, but cannot erase this newer mutation.
@@ -335,6 +348,13 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
     if (archiveMutations?.isEmpty ?? false) {
       _archivedMutations.remove(expectedProfileId);
     }
+    _unarchivedMutations.putIfAbsent(
+      expectedProfileId,
+      () => <String, _UnarchivedMutation>{},
+    )[chatId] = _UnarchivedMutation(
+      item: authoritative,
+      revision: ++_unarchiveMutationRevision,
+    );
     _removedChatIds
         .putIfAbsent(expectedProfileId, () => <InboxScope, Set<String>>{})
         .putIfAbsent(InboxScope.archive, () => <String>{})
@@ -407,6 +427,9 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
       final archiveMutationRevisionAtRequest = scope == InboxScope.archive
           ? _archiveMutationRevision
           : null;
+      final unarchiveMutationRevisionAtRequest = scope == InboxScope.main
+          ? _unarchiveMutationRevision
+          : null;
       final result = await _ref
           .read(voiceChatsClientProvider)
           .listChats(
@@ -426,6 +449,8 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
             nextCursor: _nonEmptyCursor(data.nextCursor),
             replacesPage: replacesPage,
             archiveMutationRevisionAtRequest: archiveMutationRevisionAtRequest,
+            unarchiveMutationRevisionAtRequest:
+                unarchiveMutationRevisionAtRequest,
           );
           if (!_isCurrent(generation, profileId)) return;
           _syncDmPeers(
@@ -511,6 +536,7 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
     required String? nextCursor,
     required bool replacesPage,
     required int? archiveMutationRevisionAtRequest,
+    required int? unarchiveMutationRevisionAtRequest,
   }) {
     if (!_isCurrent(generation, profileId)) return;
     final current =
@@ -522,15 +548,20 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
     final pending = replacesPage
         ? acceptedItems
         : mergeInboxRows(_pendingItems[scope] ?? const [], acceptedItems);
-    final protectedPending = scope == InboxScope.archive
-        ? mergeInboxRows(
-            pending,
-            _protectedArchiveItems(
-              profileId,
-              archiveMutationRevisionAtRequest!,
-            ),
-          )
-        : pending;
+    final protectedPending = switch (scope) {
+      InboxScope.archive => mergeInboxRows(
+        pending,
+        _protectedArchiveItems(profileId, archiveMutationRevisionAtRequest!),
+      ),
+      InboxScope.main => mergeInboxRows(
+        pending,
+        _protectedUnarchivedItems(
+          profileId,
+          unarchiveMutationRevisionAtRequest!,
+        ),
+      ),
+      InboxScope.requests => pending,
+    };
     _pendingItems[scope] = protectedPending;
     _replaceScope(
       generation: generation,
@@ -584,6 +615,22 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
     );
     if (mutations.isEmpty) {
       _archivedMutations.remove(profileId);
+      return const [];
+    }
+    return mutations.values.map((mutation) => mutation.item);
+  }
+
+  Iterable<ChatListItem> _protectedUnarchivedItems(
+    String profileId,
+    int unarchiveMutationRevisionAtRequest,
+  ) {
+    final mutations = _unarchivedMutations[profileId];
+    if (mutations == null) return const [];
+    mutations.removeWhere(
+      (_, mutation) => mutation.revision <= unarchiveMutationRevisionAtRequest,
+    );
+    if (mutations.isEmpty) {
+      _unarchivedMutations.remove(profileId);
       return const [];
     }
     return mutations.values.map((mutation) => mutation.item);
@@ -680,6 +727,13 @@ class _PendingInboxSession {
 
 class _ArchivedMutation {
   const _ArchivedMutation({required this.item, required this.revision});
+
+  final ChatListItem item;
+  final int revision;
+}
+
+class _UnarchivedMutation {
+  const _UnarchivedMutation({required this.item, required this.revision});
 
   final ChatListItem item;
   final int revision;
