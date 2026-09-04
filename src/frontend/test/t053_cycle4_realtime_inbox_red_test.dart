@@ -120,6 +120,65 @@ void main() {
         expect(harness.messages.getCalls, isEmpty);
       },
     );
+
+    test(
+      'late reconciler mount consumes one already accepted current B hello',
+      () async {
+        final harness = _Cycle4Harness(createReconciler: false);
+        addTearDown(harness.dispose);
+
+        await harness.switchToBWithoutHello();
+        harness.connection('profile-b').addHello();
+        await pumpEventQueue();
+
+        expect(
+          harness.bCalls,
+          isEmpty,
+          reason:
+              'the B hello is accepted and stored by the real hub before '
+              'this test creates InboxReconciler',
+        );
+
+        harness.mountReconciler();
+        await pumpEventQueue();
+
+        expect(harness.bCalls, hasLength(3));
+        expect(harness.bCalls.map((call) => call.inbox).toSet(), {
+          'main',
+          'requests',
+          'archive',
+        });
+        expect(
+          harness.bCalls.every(
+            (call) =>
+                call.authorization == 'Bearer access-profile-b' &&
+                call.profileId == 'profile-b' &&
+                call.cursor == null,
+          ),
+          isTrue,
+        );
+        expect(harness.messages.getCalls, isEmpty);
+
+        final subscription = harness.container.listen<InboxReconcilerState>(
+          inboxReconcilerProvider,
+          (_, _) {},
+          fireImmediately: true,
+        );
+        addTearDown(subscription.close);
+        harness.mountReconciler();
+        await pumpEventQueue();
+
+        expect(
+          harness.bCalls,
+          hasLength(3),
+          reason:
+              'repeated reads/listeners must not replay the stored hello or '
+              'duplicate its one current-generation triplet',
+        );
+        expect(harness.messages.getCalls, isEmpty);
+        expect(harness.chats.unmatchedCalls, isEmpty);
+      },
+    );
   });
 }
 
@@ -132,7 +191,7 @@ AuthSession _session(String profileId) => AuthSession(
 );
 
 class _Cycle4Harness {
-  _Cycle4Harness()
+  _Cycle4Harness({bool createReconciler = true})
     : chats = InboxReconcilerChatsFake(
         profileByAuthorization: const {
           'Bearer access-profile-a': 'profile-a',
@@ -195,7 +254,7 @@ class _Cycle4Harness {
     );
     hub = container.read(realtimeHubProvider);
     coordinator = container.read(profileSwitchCoordinatorProvider);
-    container.read(inboxReconcilerProvider);
+    if (createReconciler) mountReconciler();
     // Do not override this production controller: its current auth listener is
     // the duplicate-path regression this Cycle4 contract must expose.
     container.read(chatListControllerProvider);
@@ -239,6 +298,10 @@ class _Cycle4Harness {
 
   _ControlledVoiceRealtimeConnection connection(String profileId) =>
       transport.connection(profileId);
+
+  void mountReconciler() {
+    container.read(inboxReconcilerProvider);
+  }
 
   Future<http.Response> _respond(http.Request request) async {
     if (request.url.path != '/api/v1/auth/switch-profile') {
