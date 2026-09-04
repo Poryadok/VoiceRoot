@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -117,7 +120,94 @@ void main() {
         );
       },
     );
+
+    testWidgets(
+      'does not apply a successful stale A archive mutation to B snapshots or archive UI',
+      (tester) async {
+        final chats = _ArchiveMutationChatsFake(
+          profileByAuthorization: const {
+            'Bearer access-a': 'profile-a',
+            'Bearer access-b': 'profile-b',
+          },
+        );
+        final archiveCompletion = Completer<ChatsApiResult<void>>();
+        chats.deferredArchive = archiveCompletion;
+        final auth = _AuthHarness();
+        final container = _container(chats: chats, auth: auth);
+        addTearDown(container.dispose);
+        addTearDown(() async {
+          if (!archiveCompletion.isCompleted) {
+            archiveCompletion.complete(const ChatsApiOk(null));
+          }
+        });
+
+        final main = container.read(chatListControllerProvider.notifier)
+          ..state = ChatListState(
+            profileId: 'profile-a',
+            items: [inboxChatItem('a-chat')],
+          );
+        final pendingArchive = main.archiveChat('a-chat', archived: true);
+        await tester.pump();
+        expect(chats.archiveCalls, [
+          const _ArchiveCall(
+            authorization: 'Bearer access-a',
+            chatId: 'a-chat',
+            archived: true,
+          ),
+        ]);
+
+        expect(await auth.controller.switchActiveProfile('profile-b'), isNull);
+        expect(
+          container.read(authControllerProvider).session?.authorizationHeader,
+          'Bearer access-b',
+        );
+
+        _enqueueSnapshot(
+          chats,
+          profileId: 'profile-b',
+          authorization: 'Bearer access-b',
+          mainItems: ['b-main'],
+          archiveItems: ['b-archive'],
+        );
+        await container.read(inboxReconcilerProvider.notifier).reconcile();
+        await tester.pumpWidget(_testApp(container));
+        await tester.pump();
+
+        _expectProfileBSnapshots(container);
+        expect(find.byKey(ChatArchiveScreen.tileKey('a-chat')), findsNothing);
+        expect(
+          find.byKey(ChatArchiveScreen.tileKey('b-archive')),
+          findsOneWidget,
+        );
+
+        archiveCompletion.complete(const ChatsApiOk(null));
+        expect(await pendingArchive, kChatActionStaleContext);
+        await tester.pump();
+
+        _expectProfileBSnapshots(container);
+        expect(find.byKey(ChatArchiveScreen.tileKey('a-chat')), findsNothing);
+        expect(
+          find.byKey(ChatArchiveScreen.tileKey('b-archive')),
+          findsOneWidget,
+        );
+        expect(chats.unmatchedCalls, isEmpty);
+        container.dispose();
+      },
+    );
   });
+}
+
+void _expectProfileBSnapshots(ProviderContainer container) {
+  final snapshots = container.read(inboxReconcilerProvider).profileSnapshots;
+  final profileB = snapshots['profile-b']!;
+  expect(profileB[InboxScope.main].items.map((item) => item.chatId), [
+    'b-main',
+  ]);
+  expect(profileB[InboxScope.archive].items.map((item) => item.chatId), [
+    'b-archive',
+  ]);
+  expect(profileB[InboxScope.main].isComplete, isTrue);
+  expect(profileB[InboxScope.archive].isComplete, isTrue);
 }
 
 Widget _testApp(ProviderContainer container) {
@@ -175,6 +265,8 @@ void _enqueueSnapshot(
   required List<String> archiveItems,
   List<String> mainItems = const [],
   bool manualArchive = false,
+  String profileId = 'profile-a',
+  String authorization = 'Bearer access-a',
 }) {
   for (final scope in InboxScope.values) {
     final ids = switch (scope) {
@@ -186,8 +278,8 @@ void _enqueueSnapshot(
       InboxChatPageScript(
         inbox: scope.name,
         cursor: null,
-        profileId: 'profile-a',
-        authorization: 'Bearer access-a',
+        profileId: profileId,
+        authorization: authorization,
         manual: scope == InboxScope.archive && manualArchive,
         result: ChatsApiOk(
           ChatListData(items: [for (final id in ids) inboxChatItem(id)]),
@@ -198,17 +290,19 @@ void _enqueueSnapshot(
 }
 
 class _ArchiveMutationChatsFake extends InboxReconcilerChatsFake {
-  _ArchiveMutationChatsFake()
-    : super(profileByAuthorization: const {'Bearer access-a': 'profile-a'});
+  _ArchiveMutationChatsFake({
+    super.profileByAuthorization = const {'Bearer access-a': 'profile-a'},
+  });
 
   final List<_ArchiveCall> archiveCalls = [];
+  Completer<ChatsApiResult<void>>? deferredArchive;
 
   @override
   Future<ChatsApiResult<void>> archiveChat({
     required String authorization,
     required String chatId,
     required bool archived,
-  }) async {
+  }) {
     archiveCalls.add(
       _ArchiveCall(
         authorization: authorization,
@@ -216,7 +310,8 @@ class _ArchiveMutationChatsFake extends InboxReconcilerChatsFake {
         archived: archived,
       ),
     );
-    return const ChatsApiOk(null);
+    final pending = deferredArchive;
+    return pending?.future ?? Future.value(const ChatsApiOk(null));
   }
 }
 
@@ -244,23 +339,40 @@ class _ArchiveCall {
 }
 
 class _AuthHarness {
-  late final AuthController controller =
-      AuthController(
-          authClient: VoiceAuthClient(
-            gateway: gatewayHttpForTest(
-              MockClient((_) async => http.Response('{}', 500)),
+  _AuthHarness() {
+    final mock = MockClient((request) async {
+      if (request.url.path != '/api/v1/auth/switch-profile') {
+        return http.Response('not found', 404);
+      }
+      expect(request.method, 'POST');
+      expect(request.headers['authorization'], 'Bearer access-a');
+      expect(jsonDecode(request.body), containsPair('profile_id', 'profile-b'));
+      return utf8JsonResponse(
+        jsonEncode({
+          'access_token': 'access-b',
+          'refresh_token': 'refresh-b',
+          'account_id': 'account-1',
+          'profile_id': 'profile-b',
+          'expires_in_seconds': 900,
+        }),
+      );
+    });
+    controller =
+        AuthController(
+            authClient: VoiceAuthClient(gateway: gatewayHttpForTest(mock)),
+            storage: InMemoryAuthSessionStorage(),
+            guestCredentialsStorage: InMemoryGuestCredentialsStorage(),
+          )
+          ..state = const AuthState(
+            session: AuthSession(
+              accessToken: 'access-a',
+              refreshToken: 'refresh-a',
+              accountId: 'account-1',
+              activeProfileId: 'profile-a',
+              expiresInSeconds: 900,
             ),
-          ),
-          storage: InMemoryAuthSessionStorage(),
-          guestCredentialsStorage: InMemoryGuestCredentialsStorage(),
-        )
-        ..state = const AuthState(
-          session: AuthSession(
-            accessToken: 'access-a',
-            refreshToken: 'refresh-a',
-            accountId: 'account-1',
-            activeProfileId: 'profile-a',
-            expiresInSeconds: 900,
-          ),
-        );
+          );
+  }
+
+  late final AuthController controller;
 }
