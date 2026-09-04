@@ -2252,9 +2252,11 @@ class DeleteMessageResponse extends $pb.GeneratedMessage {
 class GetMessagesResponse extends $pb.GeneratedMessage {
   factory GetMessagesResponse({
     MessageList? messageList,
+    DmPeerState? dmPeerState,
   }) {
     final result = create();
     if (messageList != null) result.messageList = messageList;
+    if (dmPeerState != null) result.dmPeerState = dmPeerState;
     return result;
   }
 
@@ -2274,6 +2276,8 @@ class GetMessagesResponse extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOM<MessageList>(1, _omitFieldNames ? '' : 'messageList',
         subBuilder: MessageList.create)
+    ..aE<DmPeerState>(2, _omitFieldNames ? '' : 'dmPeerState',
+        enumValues: DmPeerState.values)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2305,6 +2309,16 @@ class GetMessagesResponse extends $pb.GeneratedMessage {
   void clearMessageList() => $_clearField(1);
   @$pb.TagNumber(1)
   MessageList ensureMessageList() => $_ensure(0);
+
+  /// Response-level state only: never materialize account deletion as a Message row.
+  @$pb.TagNumber(2)
+  DmPeerState get dmPeerState => $_getN(1);
+  @$pb.TagNumber(2)
+  set dmPeerState(DmPeerState value) => $_setField(2, value);
+  @$pb.TagNumber(2)
+  $core.bool hasDmPeerState() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearDmPeerState() => $_clearField(2);
 }
 
 class GetMessageResponse extends $pb.GeneratedMessage {
