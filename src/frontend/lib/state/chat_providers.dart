@@ -715,11 +715,19 @@ enum RealtimeLinkStatus { disconnected, connecting, connected, reconnecting }
 class ChatRoomController extends StateNotifier<ChatRoomState> {
   ChatRoomController(this._ref, this.chatId) : super(const ChatRoomState()) {
     _authSub = _ref.listen<AuthState>(authControllerProvider, (previous, next) {
-      if (previous?.activeProfileId == next.activeProfileId &&
-          previous?.session?.accessToken == next.session?.accessToken) {
+      final previousProfileId = previous?.activeProfileId;
+      final nextProfileId = next.activeProfileId;
+      final profileChanged = previousProfileId != nextProfileId;
+      final sessionChanged =
+          previous?.session?.accessToken != next.session?.accessToken ||
+          previous?.session?.refreshToken != next.session?.refreshToken;
+      if (!profileChanged && !sessionChanged) {
         return;
       }
       _loadGeneration++;
+      if (!profileChanged && nextProfileId != null) {
+        return;
+      }
       _historyGeneration++;
       _loadedHistoryProfileId = null;
       if (mounted) {
