@@ -175,6 +175,11 @@ func TestChatMemberRemovalRevokesEveryLocalTabAndSubscriptionGatedActions(t *tes
 			if err := desktop.WriteJSON(map[string]any{"op": "presence_update", "d": map[string]any{"status": "dnd"}}); err != nil {
 				t.Fatalf("presence_update after %s: %v", change, err)
 			}
+			// Profile-scope presence sync to the other local tab remains valid; the
+			// revoked chat subscription must only prevent chat-scoped peer fan-out.
+			if got := readACLEnvelope(t, mobile); got.Op != "presence_update" {
+				t.Fatalf("local profile presence sync = %+v", got)
+			}
 			time.Sleep(typingIdleTimeout + 40*time.Millisecond)
 			_ = peer.SetReadDeadline(time.Now().Add(250 * time.Millisecond))
 			if _, _, err := peer.ReadMessage(); err == nil {
