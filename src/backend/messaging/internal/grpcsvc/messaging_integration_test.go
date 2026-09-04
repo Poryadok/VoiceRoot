@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"slices"
 	"strings"
@@ -121,7 +122,7 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 	if moderation == nil {
 		moderation = &store.SQLModerationGuard{Pool: pool}
 	}
-	messagingv1.RegisterMessagingServiceServer(srv, &MessagingGRPC{
+	messagingSvc := &MessagingGRPC{
 		Messages:            &store.MessagesStore{Pool: pool},
 		Reactions:           &store.ReactionsStore{Pool: pool},
 		Pins:                &store.PinsStore{Pool: pool},
@@ -142,7 +143,9 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 		PlatformMod:         w.PlatformMod,
 		PreKeyBundles:       &store.E2EPreKeyStore{Pool: pool},
 		Logger:              w.Logger,
-	})
+	}
+	w.wireDeletedAccounts(t, messagingSvc)
+	messagingv1.RegisterMessagingServiceServer(srv, messagingSvc)
 	go func() {
 		if err := srv.Serve(lis); err != nil {
 			t.Logf("grpc serve: %v", err)
@@ -172,6 +175,28 @@ type messagingWire struct {
 	UserPresence    mentions.OnlinePresenceLookup
 	PlatformMod     PlatformModerationChecker
 	Logger          *slog.Logger
+	DeletedAccounts testDeletedAccountChecker
+}
+
+// wireDeletedAccounts keeps the P3 fixture isolated from production while the
+// Messaging-owned Auth deleted-account dependency is introduced. A present
+// production field must accept the checker structurally; its absence leaves the
+// documented requests to fail their behavioral RED assertions below.
+func (w messagingWire) wireDeletedAccounts(t *testing.T, svc *MessagingGRPC) {
+	t.Helper()
+	if w.DeletedAccounts == nil {
+		return
+	}
+	field := reflect.ValueOf(svc).Elem().FieldByName("DeletedAccounts")
+	if !field.IsValid() {
+		t.Errorf("MessagingGRPC must wire an Auth deleted-account checker for DM send gates")
+		return
+	}
+	require.True(t, field.CanSet(), "MessagingGRPC.DeletedAccounts must be settable")
+	checker := reflect.ValueOf(w.DeletedAccounts)
+	require.True(t, checker.Type().AssignableTo(field.Type()),
+		"MessagingGRPC.DeletedAccounts must accept the Auth deleted-account checker")
+	field.Set(checker)
 }
 
 func startMessagingServer(t *testing.T, pool *pgxpool.Pool) (messagingv1.MessagingServiceClient, func()) {
