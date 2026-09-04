@@ -204,7 +204,7 @@ class GuestConversionOperationRepositoryJdbcIntegrationTest {
                   GuestConversionState.PENDING_EVENT,
                   3,
                   now.minus(1, ChronoUnit.MINUTES),
-                  now.plus(1, ChronoUnit.MINUTES),
+                  now,
                   now.minus(10, ChronoUnit.MINUTES)));
 
       assertThat(

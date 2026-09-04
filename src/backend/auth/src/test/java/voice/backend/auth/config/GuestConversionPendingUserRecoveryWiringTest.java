@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -15,6 +16,10 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import voice.backend.auth.repository.GuestConversionOperationRepository;
+import voice.backend.auth.repository.GuestConversionState;
+import voice.backend.auth.repository.InMemoryAccountRepository;
+import voice.backend.auth.repository.InMemoryGuestConversionOperationRepository;
+import voice.backend.auth.service.InMemoryGuestConversionLocalPromotion;
 import voice.backend.auth.service.GuestConversionPendingUserRecoveryRunner;
 import voice.backend.auth.service.GuestConversionLocalPromotion;
 import voice.backend.auth.service.GuestConversionPendingUserWorker;
@@ -79,7 +84,9 @@ class GuestConversionPendingUserRecoveryWiringTest {
         context -> {
           assertThat(context).hasNotFailed();
           assertThat(context).hasSingleBean(GuestConversionOperationRepository.class);
+          assertThat(context).hasSingleBean(InMemoryGuestConversionOperationRepository.class);
           assertThat(context).hasSingleBean(GuestConversionLocalPromotion.class);
+          assertThat(context).hasSingleBean(InMemoryGuestConversionLocalPromotion.class);
           assertThat(context).hasSingleBean(GuestConversionPendingUserWorker.class);
           assertThat(context).hasSingleBean(GuestConversionPendingUserRecoveryRunner.class);
           GuestConversionPendingUserRecoveryProperties properties =
@@ -88,6 +95,26 @@ class GuestConversionPendingUserRecoveryWiringTest {
           assertThat(properties.getBatchSize()).isEqualTo(4);
           assertThat(properties.getLeaseDuration()).isEqualTo(Duration.ofSeconds(30));
           assertThat(properties.getInterval()).isEqualTo(Duration.ofSeconds(5));
+        });
+  }
+
+  @Test
+  void memoryRunnerUsesTheConcreteMemoryPromotionToAdvanceARealPendingUserOperation() {
+    memoryRuntime.run(
+        context -> {
+          InMemoryAccountRepository accounts = context.getBean(InMemoryAccountRepository.class);
+          InMemoryGuestConversionOperationRepository operations =
+              context.getBean(InMemoryGuestConversionOperationRepository.class);
+          var guest = accounts.create("wired-memory@example.com", null, "hash", "guest");
+          Instant now = Instant.now(context.getBean(Clock.class));
+          operations.createOrResume(guest.id(), UUID.randomUUID(), now);
+
+          context.getBean(GuestConversionPendingUserRecoveryRunner.class).tick();
+
+          assertThat(accounts.findById(guest.id().toString()).orElseThrow().type())
+              .isEqualTo("regular");
+          assertThat(operations.findByAccountId(guest.id()).orElseThrow().state())
+              .isEqualTo(GuestConversionState.PENDING_EVENT);
         });
   }
 

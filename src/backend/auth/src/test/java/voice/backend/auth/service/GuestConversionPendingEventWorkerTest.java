@@ -98,17 +98,30 @@ class GuestConversionPendingEventWorkerTest {
     GuestConversionPendingEventWorker worker = worker(operations, publisher, clock);
 
     worker.processDue(1, LEASE);
+    assertThat(operations.state).isEqualTo(GuestConversionState.PENDING_EVENT);
+    assertThat(operations.operation.lockedUntil()).isNull();
     operations.advanceFailure = null;
     clock.advance(Duration.ofSeconds(1));
     worker.processDue(1, LEASE);
 
+    assertThat(operations.failures)
+        .singleElement()
+        .satisfies(
+            failure -> {
+              assertThat(failure.operationId()).isEqualTo(operation.operationId());
+              assertThat(failure.lockedUntil()).isEqualTo(operation.lockedUntil());
+              assertThat(failure.errorCode()).isEqualTo("IllegalStateException");
+              assertThat(failure.nextAttemptAt()).isEqualTo(NOW.plusSeconds(1));
+            });
     assertThat(publisher.publishes)
         .extracting(PublishCall::natsMessageId)
         .containsExactly(operation.operationId().toString(), operation.operationId().toString());
     assertThat(publisher.publishes)
         .extracting(publish -> publish.envelope().getEventId())
         .containsExactly(operation.operationId().toString(), operation.operationId().toString());
-    assertThat(operations.advances).hasSize(2);
+    assertThat(operations.advances)
+        .extracting(AdvanceCall::lockedUntil)
+        .containsExactly(NOW.plus(LEASE), NOW.plusSeconds(1).plus(LEASE));
     assertThat(operations.state).isEqualTo(GuestConversionState.COMPLETED);
   }
 
@@ -154,7 +167,7 @@ class GuestConversionPendingEventWorkerTest {
 
   private static final class RecordingOperations implements GuestConversionOperationRepository {
     private GuestConversionState state;
-    private final GuestConversionOperation operation;
+    private GuestConversionOperation operation;
     private final List<GuestConversionState> claimedStates = new ArrayList<>();
     private final List<AdvanceCall> advances = new ArrayList<>();
     private final List<FailureCall> failures = new ArrayList<>();
@@ -181,7 +194,11 @@ class GuestConversionPendingEventWorkerTest {
     public List<GuestConversionOperation> leaseDue(
         GuestConversionState expectedState, int batchSize, Instant now, Instant leaseUntil) {
       claimedStates.add(expectedState);
-      return state == expectedState && !nextAttemptAt.isAfter(now) ? List.of(operation) : List.of();
+      if (state != expectedState || nextAttemptAt.isAfter(now)) {
+        return List.of();
+      }
+      operation = withLease(operation, leaseUntil, now);
+      return List.of(operation);
     }
 
     @Override
@@ -207,6 +224,7 @@ class GuestConversionPendingEventWorkerTest {
         Instant now) {
       failures.add(new FailureCall(operationId, expectedLockedUntil, errorCode, nextAttemptAt, now));
       this.nextAttemptAt = nextAttemptAt;
+      operation = withRetry(operation, errorCode, nextAttemptAt, now);
       return Optional.of(operation);
     }
   }
@@ -234,6 +252,42 @@ class GuestConversionPendingEventWorkerTest {
 
   private record FailureCall(
       UUID operationId, Instant lockedUntil, String errorCode, Instant nextAttemptAt, Instant now) {}
+
+  private static GuestConversionOperation withLease(
+      GuestConversionOperation operation, Instant leaseUntil, Instant now) {
+    return new GuestConversionOperation(
+        operation.operationId(),
+        operation.accountId(),
+        operation.otpCodeId(),
+        operation.state(),
+        operation.attemptCount(),
+        operation.nextAttemptAt(),
+        leaseUntil,
+        operation.lastErrorCode(),
+        operation.userMarkedAt(),
+        operation.authPromotedAt(),
+        operation.eventPublishedAt(),
+        operation.createdAt(),
+        now);
+  }
+
+  private static GuestConversionOperation withRetry(
+      GuestConversionOperation operation, String errorCode, Instant nextAttemptAt, Instant now) {
+    return new GuestConversionOperation(
+        operation.operationId(),
+        operation.accountId(),
+        operation.otpCodeId(),
+        operation.state(),
+        operation.attemptCount() + 1,
+        nextAttemptAt,
+        null,
+        errorCode,
+        operation.userMarkedAt(),
+        operation.authPromotedAt(),
+        operation.eventPublishedAt(),
+        operation.createdAt(),
+        now);
+  }
 
   private static final class MutableClock extends Clock {
     private Instant instant;
