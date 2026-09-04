@@ -82,8 +82,10 @@ func TestChatMemberRemovalRevokesEveryLocalTabAndSubscriptionGatedActions(t *tes
 			if err := desktop.WriteJSON(map[string]any{"op": "typing_start", "d": map[string]any{"chat_id": chatID}}); err != nil {
 				t.Fatalf("typing_start before %s: %v", change, err)
 			}
-			if got := readACLEnvelope(t, peer); got.Op != "typing" {
-				t.Fatalf("typing start fan-out = %+v", got)
+			for _, c := range []*websocket.Conn{mobile, peer} {
+				if got := readACLEnvelope(t, c); got.Op != "typing" {
+					t.Fatalf("typing start fan-out = %+v", got)
+				}
 			}
 
 			eventBytes, err := proto.Marshal(&eventsv1.ChatStreamEvent{
@@ -98,10 +100,11 @@ func TestChatMemberRemovalRevokesEveryLocalTabAndSubscriptionGatedActions(t *tes
 			if _, err := js.Publish("chat.member_changed", eventBytes); err != nil {
 				t.Fatalf("publish member event: %v", err)
 			}
-			for _, c := range []*websocket.Conn{desktop, mobile} {
-				if got := readACLEnvelope(t, c); got.Op != "chat_update" || got.S != 4 {
-					t.Fatalf("membership update = %+v", got)
-				}
+			if got := readACLEnvelope(t, desktop); got.Op != "chat_update" || got.S != 4 {
+				t.Fatalf("desktop membership update = %+v", got)
+			}
+			if got := readACLEnvelope(t, mobile); got.Op != "chat_update" || got.S != 5 {
+				t.Fatalf("mobile membership update = %+v", got)
 			}
 
 			hub.mu.RLock()
