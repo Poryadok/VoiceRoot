@@ -163,9 +163,10 @@ Send after pick — **Messaging** `POST /api/v1/messages/...` (not File attach).
 1. Клиент отправляет `Authorization: Bearer <access_token>`
 2. Gateway валидирует JWT через JWKS (`GATEWAY_JWKS_URL`), issuer и audience (`GATEWAY_JWT_ISSUER`, `GATEWAY_JWT_AUDIENCE`)
 3. Проверяет Redis blacklist по `jti` (`GATEWAY_JWT_BLACKLIST_PREFIX`, по умолчанию `jwt:blacklist:`)
-4. Извлекает claims: `sub`/`user_id`, `profile_id`, `roles`, `subscription_tier`, `jti`, `session_epoch` (в strict-режиме — обязательный положительный integer)
-5. Сохраняет проверенные claims и upstream JWT в существующем auth context при проксировании `/ws` в Realtime; отдельный downstream header для `session_epoch` этим контрактом не вводится
-6. Публичные endpoints (login, register, OTP, version, health, metrics) — без JWT
+4. В strict-режиме после успешной проверки non-empty `jti` читает Auth-owned session-epoch floor; `session_epoch` обязан быть положительным integer и быть не меньше floor
+5. Извлекает claims: `sub`/`user_id`, `profile_id`, `roles`, `subscription_tier`, `jti`, `session_epoch`
+6. Сохраняет проверенные claims и upstream JWT в существующем auth context при проксировании `/ws` в Realtime; отдельный downstream header для `session_epoch` этим контрактом не вводится
+7. Публичные endpoints (login, register, OTP, version, health, metrics) — без JWT
 
 ### T056-P1: session epoch (staged/WIP)
 
@@ -173,18 +174,34 @@ Send after pick — **Messaging** `POST /api/v1/messages/...` (not File attach).
 хранит `accounts.session_epoch` как durable source of truth и выдаёт его новым
 access JWT положительным integer claim. Gateway в strict-режиме обязан проверить
 claim и Redis minimum-epoch floor: token допускается только при
-`session_epoch >= floor`. Отсутствующий/неположительный claim, отсутствующий или
-повреждённый floor и любая ошибка Redis дают fail-closed отказ; floor нельзя
-считать равным `1`.
+`session_epoch >= floor`. После успешной JWT проверки Gateway проверяет
+non-empty `jti` blacklist **до** floor. Отсутствующий/неположительный claim
+даёт `invalid_token`; отсутствующий или повреждённый floor и любая ошибка/timeout
+Redis дают fail-closed `auth_unavailable`; floor нельзя считать равным `1`.
+Floor читается без Gateway prefix override из Auth-owned ключа
+`auth:session:min_epoch:<account_id>`: положительный `int64`, без TTL, read-only
+для Gateway, через общий `GATEWAY_REDIS_ADDR`/`GATEWAY_REDIS_PASSWORD`; один
+запрос ограничен 2 секундами.
+
+`GATEWAY_SESSION_EPOCH_STRICT` парсится строго: unset означает compatibility,
+точные литералы `false` и `true` включают соответственно compatibility и strict;
+пустая строка, whitespace, иной регистр и прочие значения — startup config error.
+Strict требует `GATEWAY_REDIS_ADDR` до создания HTTP server, но не делает Redis
+Ping на startup. Для JWKS validator Gateway передаёт
+`WithSessionEpochRequired(strict)`: в compatibility legacy JWT без claim допустим,
+но присутствующий malformed/non-positive claim всё равно invalid.
 
 Rollout — `expand → seed → strict`: во время compatibility-этапа старый JWT без
 claim и не seeded floor допускаются, но strict включается только после миграции и
-seed из Auth DB и готовности Realtime. При обычном `/ws` Gateway сохраняет
-проверенные claims для Realtime; при потреблении одноразового
-`/api/v1/realtime/ws-ticket` повторно проверяет JWT и floor, а не доверяет только
-моменту выпуска ticket. Та же проверка обязательна для обычного REST JWT.
-`jti` остаётся
-per-session blacklist-механизмом и не заменяется epoch.
+seed из Auth DB **и готовности Realtime**. При обычном `/ws`, выпуске
+`POST /api/v1/realtime/ws-ticket` и потреблении одноразового ticket Gateway
+применяет ту же JWT → `jti` → floor проверку. Consume атомарно забирает ticket,
+после чего заново валидирует сохранённый `record.UpstreamToken` и строит claims
+из этой свежей проверки, а не из snapshot в ticket. Ticket уже spent при любом
+последующем deny; повтор даёт `invalid_ticket`. Client `Authorization` при
+ticket-upgrade не может его переопределить: upstream получает сохранённый token.
+Та же проверка обязательна для обычного REST JWT. `jti` остаётся per-session
+blacklist-механизмом и не заменяется epoch.
 
 Для dev/tests допускается `GATEWAY_AUTH_MODE=static` + `GATEWAY_STATIC_TOKENS_JSON`; production должен использовать JWKS.
 
@@ -195,6 +212,7 @@ per-session blacklist-механизмом и не заменяется epoch.
 | `GATEWAY_JWKS_URL` | JWKS endpoint Auth Service |
 | `GATEWAY_JWT_ISSUER`, `GATEWAY_JWT_AUDIENCE` | Проверка `iss` и `aud` |
 | `GATEWAY_REDIS_ADDR`, `GATEWAY_REDIS_PASSWORD` | Redis для rate limit и JWT blacklist |
+| `GATEWAY_SESSION_EPOCH_STRICT` | Только точное `true` включает strict; unset/точное `false` — compatibility; прочее не даёт Gateway стартовать |
 | `GATEWAY_JWT_BLACKLIST_PREFIX` | Prefix blacklist ключей; default `jwt:blacklist:` |
 | `GATEWAY_TRUSTED_PROXY_CIDRS` | CIDR/IP список proxy, от которых принимается `X-Forwarded-For` |
 | `GATEWAY_CORS_ALLOWED_ORIGINS` | CSV allowlist browser origins; default deny |
