@@ -20,6 +20,8 @@ func TestRedisSessionEpochFloorMinimumReadsOnlyCanonicalPositiveInt64(t *testing
 	const key = "auth:session:min_epoch:account-1"
 	_, err := floor.Minimum(context.Background(), accountID)
 	require.Error(t, err, "a missing Auth floor must fail closed, never default to epoch one")
+	_, err = floor.Minimum(context.Background(), "")
+	require.Error(t, err, "an empty account id must never read the shared key prefix")
 
 	for _, tc := range []struct {
 		name    string
@@ -31,6 +33,8 @@ func TestRedisSessionEpochFloorMinimumReadsOnlyCanonicalPositiveInt64(t *testing
 		{name: "maximum int64", value: "9223372036854775807", want: 9223372036854775807},
 		{name: "zero", value: "0", wantErr: true},
 		{name: "negative", value: "-1", wantErr: true},
+		{name: "empty", value: "", wantErr: true},
+		{name: "whitespace", value: " 7 ", wantErr: true},
 		{name: "text", value: "seven", wantErr: true},
 		{name: "fraction", value: "7.5", wantErr: true},
 		{name: "overflow", value: "9223372036854775808", wantErr: true},
