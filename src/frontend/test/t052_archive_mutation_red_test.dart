@@ -510,6 +510,129 @@ void main() {
       },
     );
 
+    test(
+      'unarchive keeps the authoritative main row after an older first page completes',
+      () async {
+        final chats = _ArchiveMutationChatsFake();
+        final authoritative = inboxChatItem(
+          'chat-1',
+          preview: 'authoritative archive preview',
+          creatorProfileId: 'authoritative-peer',
+        );
+        for (final scope in InboxScope.values) {
+          chats.enqueue(
+            InboxChatPageScript(
+              inbox: scope.name,
+              cursor: null,
+              profileId: 'profile-a',
+              authorization: 'Bearer access-a',
+              result: ChatsApiOk(
+                ChatListData(
+                  items: scope == InboxScope.archive
+                      ? [authoritative]
+                      : const [],
+                ),
+              ),
+            ),
+          );
+        }
+        // Begin a second, deliberately older main first page before the
+        // mutation. Archive keeps its current row so the unarchive action can
+        // still obtain the authoritative object from the reconciler snapshot.
+        for (final scope in InboxScope.values) {
+          chats.enqueue(
+            InboxChatPageScript(
+              inbox: scope.name,
+              cursor: null,
+              profileId: 'profile-a',
+              authorization: 'Bearer access-a',
+              manual: scope == InboxScope.main,
+              result: ChatsApiOk(
+                ChatListData(
+                  items: scope == InboxScope.archive
+                      ? [authoritative]
+                      : const [],
+                ),
+              ),
+            ),
+          );
+        }
+        final auth = _AuthHarness();
+        final container = _container(
+          chats: chats,
+          auth: auth,
+          realArchiveController: true,
+        );
+        addTearDown(container.dispose);
+
+        final reconciler = container.read(inboxReconcilerProvider.notifier);
+        await reconciler.reconcile();
+        final archiveSubscription = container.listen<ChatListState>(
+          chatArchiveListControllerProvider,
+          (_, _) {},
+          fireImmediately: true,
+        );
+        addTearDown(archiveSubscription.close);
+        final archiveController =
+            container.read(chatArchiveListControllerProvider.notifier)
+              ..state = ChatListState(
+                profileId: 'profile-a',
+                items: [
+                  inboxChatItem(
+                    'chat-1',
+                    preview: 'legacy archive preview',
+                    creatorProfileId: 'legacy-peer',
+                  ),
+                ],
+              );
+
+        final staleReconcile = reconciler.reconcile();
+        final staleMainCall = chats.findCall(
+          inbox: 'main',
+          cursor: null,
+          profileId: 'profile-a',
+          authorization: 'Bearer access-a',
+        );
+        expect(staleMainCall, isNotNull);
+        await pumpEventQueue();
+        final callsBeforeUnarchive = chats.calls.length;
+
+        expect(await archiveController.unarchiveChat('chat-1'), isNull);
+        var snapshot = container
+            .read(inboxReconcilerProvider)
+            .profileSnapshots['profile-a']!;
+        expect(snapshot[InboxScope.archive].items, isEmpty);
+        expect(snapshot[InboxScope.main].items, [same(authoritative)]);
+        expect(chats.calls, hasLength(callsBeforeUnarchive));
+
+        await chats.completeCall(
+          staleMainCall!,
+          result: const ChatsApiOk(ChatListData(items: [])),
+        );
+        await staleReconcile;
+
+        snapshot = container
+            .read(inboxReconcilerProvider)
+            .profileSnapshots['profile-a']!;
+        expect(snapshot[InboxScope.archive].items, isEmpty);
+        expect(
+          snapshot[InboxScope.main].items,
+          [same(authoritative)],
+          reason:
+              'an older empty first main page must not erase the confirmed '
+              'authoritative unarchive handoff',
+        );
+        expect(
+          chats.calls,
+          hasLength(callsBeforeUnarchive),
+          reason:
+              'unarchive must not trigger a reconnect or unrelated full '
+              'ListChats request',
+        );
+        expect(chats.unmatchedCalls, isEmpty);
+      },
+    );
+
     testWidgets(
       'does not apply a successful stale A archive mutation to B snapshots or archive UI',
       (tester) async {
