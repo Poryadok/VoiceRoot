@@ -59,7 +59,8 @@ class JwtServiceTest {
     String token = jwt.issue("account-1", "profile-1", List.of("user"), "free");
 
     SignedJWT signedJwt = SignedJWT.parse(token);
-    assertThat(signedJwt.getJWTClaimsSet().getLongClaim("session_epoch")).isEqualTo(1L);
+    Object sessionEpoch = signedJwt.getJWTClaimsSet().getClaim("session_epoch");
+    assertThat(sessionEpoch).isExactlyInstanceOf(Long.class).isEqualTo(1L);
   }
 
   @Test
