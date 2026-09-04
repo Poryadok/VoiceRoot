@@ -177,7 +177,7 @@ public class JdbcAccountRepository implements AccountRepository {
           UPDATE accounts
           SET type = 'regular', updated_at = now()
           WHERE id = :id AND type = 'guest'
-          RETURNING id, email, phone, password_hash, type, status, totp_secret, totp_enabled, created_at, deleted_at
+          RETURNING id, email, phone, password_hash, type, status, totp_secret, totp_enabled, session_epoch, created_at, deleted_at
           """,
           new MapSqlParameterSource("id", accountId),
           ROW_MAPPER);
