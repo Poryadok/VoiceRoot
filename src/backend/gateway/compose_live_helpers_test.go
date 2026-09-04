@@ -1263,9 +1263,19 @@ func composeUploadSmallTextFile(
 	base, accessToken, chatID string,
 ) (fileID, fileType string) {
 	t.Helper()
-	const content = "e2e"
+	return composeUploadTextFile(t, client, base, accessToken, chatID, "e2e.txt", []byte("e2e"))
+}
+
+func composeUploadTextFile(
+	t *testing.T,
+	client *http.Client,
+	base, accessToken, chatID, originalName string,
+	content []byte,
+) (fileID, fileType string) {
+	t.Helper()
+	require.NotEmpty(t, content, "test upload content must be non-empty")
 	payload, err := json.Marshal(map[string]any{
-		"original_name": "e2e.txt",
+		"original_name": originalName,
 		"mime_type":     "text/plain",
 		"size_bytes":    len(content),
 		"context_chat": map[string]string{
@@ -1296,7 +1306,7 @@ func composeUploadSmallTextFile(
 	require.NotEmpty(t, fileID)
 	require.NotEmpty(t, putURL)
 
-	putReq, err := http.NewRequest(http.MethodPut, putURL, strings.NewReader(content))
+	putReq, err := http.NewRequest(http.MethodPut, putURL, bytes.NewReader(content))
 	require.NoError(t, err)
 	putReq.Header.Set("Content-Type", "text/plain")
 	putResp, err := client.Do(putReq)
@@ -1304,7 +1314,7 @@ func composeUploadSmallTextFile(
 	defer putResp.Body.Close()
 	require.True(t, putResp.StatusCode >= 200 && putResp.StatusCode < 300, "PUT presigned status=%d", putResp.StatusCode)
 
-	hash := sha256Hex([]byte(content))
+	hash := sha256Hex(content)
 	confirmPayload, err := json.Marshal(map[string]string{"sha256_hash": hash})
 	require.NoError(t, err)
 	confirmURL := base + "/api/v1/files/" + fileID + "/confirm"

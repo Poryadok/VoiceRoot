@@ -33,7 +33,7 @@ GO_TEST_SHORT_TARGETS := $(GO_SERVICES:%=go-test-short-%)
 GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 
 .PHONY: buf-lint buf-format buf-breaking buf-generate buf-generate-dart buf-dart-check buf-go-pb-check check-auth-proto-sync sync-pb-from-gen buf-generate-all compose-up compose-app-up compose-down compose-logs-collect compose-observability-up \
-	compose-migrate-all compose-migrate-e2e compose-migrate-bot compose-migrate-story compose-e2e-smoke compose-e2e-live compose-e2e-full compose-e2e-voice-live \
+	compose-migrate-all compose-migrate-e2e compose-migrate-bot compose-migrate-story compose-e2e-smoke compose-e2e-live compose-e2e-full compose-e2e-voice-live compose-file-attachment-restart-proof \
 	build-all build-all-breaking check-toolchain compose-config-ci buf-ci backend-test-ci backend-test-ci-short backend-image-ci \
 	gateway-test-ci gateway-image-ci go-test-pkg go-mod-tidy-all auth-test-ci auth-image-ci buf-breaking-ci \
 	golangci-ci gateway-test-race-ci design-tokens-check penpot-tokens-export penpot-tokens-export-check flutter-ui-color-gate flutter-ci flutter-windows-prefetch-sqlite3 flutter-linux-prefetch-sqlite3 prekey-golden-check coverage-report testcontainers-prune buf-generate-ci-local-template-check \
@@ -126,6 +126,11 @@ compose-e2e-live:
 compose-e2e-full: compose-e2e-live
 
 compose-e2e-voice-live: compose-e2e-full
+
+# A1 durability proof has its own compose project and must not attach to the
+# generic developer stack used by compose-e2e-live.
+compose-file-attachment-restart-proof:
+	$(BASH) "$(ROOT)/scripts/ci/compose-file-attachment-restart-proof.sh"
 
 # --- CI parity: host Go/Maven/golangci (tests need Docker socket for testcontainers); Docker for buf/compose/images ---
 
