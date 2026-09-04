@@ -404,6 +404,56 @@ void main() {
       },
     );
 
+    test(
+      'unarchive moves the exact authoritative row from archive to main immediately',
+      () async {
+        final chats = _ArchiveMutationChatsFake();
+        _enqueueSnapshot(chats, archiveItems: ['chat-1']);
+        final auth = _AuthHarness();
+        final container = _container(chats: chats, auth: auth);
+        addTearDown(container.dispose);
+
+        final reconciler = container.read(inboxReconcilerProvider.notifier);
+        await reconciler.reconcile();
+        final archiveController =
+            container.read(chatArchiveListControllerProvider.notifier)
+              ..state = ChatListState(
+                profileId: 'profile-a',
+                items: [inboxChatItem('chat-1')],
+              );
+        final listCallsBeforeUnarchive = chats.calls.length;
+
+        expect(await archiveController.unarchiveChat('chat-1'), isNull);
+
+        final snapshot = container
+            .read(inboxReconcilerProvider)
+            .profileSnapshots['profile-a']!;
+        expect(snapshot[InboxScope.archive].items, isEmpty);
+        expect(
+          snapshot[InboxScope.main].items.map((item) => item.chatId),
+          ['chat-1'],
+          reason:
+              'the authoritative main scope must receive the exact confirmed '
+              'unarchived row without waiting for reconnect',
+        );
+        expect(
+          chats.calls,
+          hasLength(listCallsBeforeUnarchive),
+          reason:
+              'a confirmed unarchive updates its two authoritative scopes; it '
+              'must not launch a full or unrelated ListChats snapshot',
+        );
+        expect(
+          chats.archiveCalls.last,
+          const _ArchiveCall(
+            authorization: 'Bearer access-a',
+            chatId: 'chat-1',
+            archived: false,
+          ),
+        );
+      },
+    );
+
     testWidgets(
       'does not apply a successful stale A archive mutation to B snapshots or archive UI',
       (tester) async {
