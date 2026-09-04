@@ -142,7 +142,7 @@ set +e
 (
   cd "$ROOT/src/backend/gateway"
   go test -count=1 -parallel 1 -timeout 20m -tags live \
-    -run '^TestComposeA1\(TwoAccountsFoundation\|DailyMessagingREST\)_live$' ./...
+    -run '^TestComposeA1(TwoAccountsFoundation|DailyMessagingREST)_live$' ./...
 )
 test_status=$?
 set -e
