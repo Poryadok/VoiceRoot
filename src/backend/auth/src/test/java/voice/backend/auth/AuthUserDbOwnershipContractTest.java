@@ -22,6 +22,8 @@ class AuthUserDbOwnershipContractTest {
     List<Executable> requirements = List.of(
         () -> assertThat(root.resolve("src/backend/auth/src/main/java/voice/backend/auth/config/UserDbJdbcConfiguration.java"))
             .doesNotExist(),
+        () -> assertThat(root.resolve("src/backend/auth/src/main/java/voice/backend/auth/config/JdbcPersistenceWithUserDbUrlCondition.java"))
+            .doesNotExist(),
         () -> assertThat(root.resolve("src/backend/auth/src/main/java/voice/backend/auth/userdb/JdbcPrimaryProfileProvisioner.java"))
             .doesNotExist(),
         () -> assertThat(root.resolve("src/backend/auth/src/main/java/voice/backend/auth/userdb/JdbcProfileSwitchValidator.java"))
@@ -40,10 +42,12 @@ class AuthUserDbOwnershipContractTest {
         () -> assertThat(read(root, "deploy/prod/services.yaml")).doesNotContain("AUTH_USER_DB_"),
         () -> assertThat(read(root, "docker-compose.yml")).doesNotContain("AUTH_USER_DB_"),
         () -> assertThat(read(root, "scripts/ci/auth-container-smoke.sh")).doesNotContain("AUTH_USER_DB_"),
-        () -> assertThat(read(root, "src/backend/auth/src/main/java/voice/backend/auth/config/JdbcPersistenceWithUserDbUrlCondition.java"))
-            .doesNotContain("auth.user-db"),
         () -> assertThat(read(root, "src/backend/auth/src/main/java/voice/backend/auth/config/UserGrpcClientConfiguration.java"))
-            .contains("EnsurePrimaryProfile", "ResolvePrimaryProfileIDs", "MarkAccountRegular"));
+            .contains(
+                "GrpcPrimaryProfileProvisioner",
+                "GrpcPhoneHashResolver",
+                "GrpcProfileSwitchValidator",
+                "GrpcUserVerificationSync"));
 
     org.junit.jupiter.api.Assertions.assertAll(requirements);
   }

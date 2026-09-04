@@ -39,16 +39,14 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.Date;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
-import voice.backend.auth.oauth.FormUrlEncodedTestSupport;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -61,12 +59,16 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 import voice.backend.auth.grpc.AuthGrpcService;
+import voice.backend.auth.oauth.FormUrlEncodedTestSupport;
 import voice.backend.auth.security.JwtService;
+import voice.backend.auth.support.JdbcUserContractTestConfiguration;
+import voice.backend.auth.support.JdbcUserContractTestConfiguration.RecordingUserContractPorts;
 
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("integration")
 @Testcontainers(disabledWithoutDocker = true)
+@Import(JdbcUserContractTestConfiguration.class)
 class AuthJdbcRedisIntegrationTest {
   private static final String JWT_ISSUER = "voice-auth";
   private static final String JWT_AUDIENCE = "voice-client";
@@ -83,32 +85,17 @@ class AuthJdbcRedisIntegrationTest {
   static final GenericContainer<?> redis =
       new GenericContainer<>(DockerImageName.parse("redis:7-alpine")).withExposedPorts(6379);
 
-  @Container
-  static final PostgreSQLContainer<?> userPostgres =
-      new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
-          .withDatabaseName("user_db")
-          .withUsername("voice")
-          .withPassword("voice")
-          .withInitScript("integration-user-schema.sql");
-
   @DynamicPropertySource
   static void registerProps(DynamicPropertyRegistry registry) {
     if (!"auth_db".equals(postgres.getDatabaseName())) {
       throw new IllegalStateException(
           "Auth TC DB name mismatch: " + postgres.getDatabaseName());
     }
-    if (!"user_db".equals(userPostgres.getDatabaseName())) {
-      throw new IllegalStateException(
-          "User TC DB name mismatch: " + userPostgres.getDatabaseName());
-    }
     registry.add("voice.auth.jdbc.url", postgres::getJdbcUrl);
     registry.add("spring.datasource.username", postgres::getUsername);
     registry.add("spring.datasource.password", postgres::getPassword);
     registry.add("spring.flyway.user", postgres::getUsername);
     registry.add("spring.flyway.password", postgres::getPassword);
-    registry.add("auth.user-db.jdbc-url", userPostgres::getJdbcUrl);
-    registry.add("auth.user-db.username", userPostgres::getUsername);
-    registry.add("auth.user-db.password", userPostgres::getPassword);
     registry.add("spring.data.redis.host", redis::getHost);
     registry.add("spring.data.redis.port", () -> String.valueOf(redis.getMappedPort(6379)));
   }
@@ -117,7 +104,12 @@ class AuthJdbcRedisIntegrationTest {
   @Autowired ObjectMapper objectMapper;
   @Autowired JwtService jwtService;
   @Autowired AuthGrpcService grpcService;
-  @Autowired @Qualifier("userJdbc") NamedParameterJdbcTemplate userJdbc;
+  @Autowired RecordingUserContractPorts userContract;
+
+  @BeforeEach
+  void resetUserContract() {
+    userContract.reset();
+  }
 
   @Test
   void registerLoginRefreshValidateLogoutAndJwksWorkWithPostgresRedisAndStableJwks() throws Exception {
@@ -135,12 +127,15 @@ class AuthJdbcRedisIntegrationTest {
     assertThat(profileId).matches(
         "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
 
-    String dbProfileId =
-        userJdbc.queryForObject(
-            "SELECT id::text FROM profiles WHERE account_id = :accountId AND is_primary = true LIMIT 1",
-            Map.of("accountId", accountId),
-            String.class);
-    assertThat(dbProfileId).isEqualTo(profileId);
+    assertThat(userContract.ensurePrimaryProfileCalls())
+        .singleElement()
+        .satisfies(
+            call -> {
+              assertThat(call.accountId()).isEqualTo(accountId);
+              assertThat(call.displayHint()).isEqualTo("jdbc@example.com");
+              assertThat(call.guestAccount()).isFalse();
+              assertThat(call.profileId()).isEqualTo(profileId);
+            });
 
     var accessClaims = jwtService.validate(access);
     assertThat(accessClaims.userId()).isEqualTo(accountIdStr);

@@ -16,6 +16,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import voice.backend.auth.support.CapturingMailSender;
 import voice.backend.auth.support.RecordingAuthEventPublisher;
 
 @SpringBootTest
@@ -25,9 +26,10 @@ class GuestConvertNatsEventIntegrationTest {
   @Autowired MockMvc mockMvc;
   @Autowired ObjectMapper objectMapper;
   @Autowired ApplicationContext applicationContext;
+  @Autowired CapturingMailSender mailSender;
 
   @Test
-  void convertGuestPublishesUserGuestConvertedEvent() throws Exception {
+  void emailOtpCompletionPublishesUserGuestConvertedEvent() throws Exception {
     RecordingAuthEventPublisher events = findRecordingPublisher(applicationContext);
     assertThat(events).isNotNull();
     events.clear();
@@ -46,11 +48,37 @@ class GuestConvertNatsEventIntegrationTest {
                 .content(
                     "{\"email\":\"nats-guest@example.com\",\"password\":\"New account password 1\"}"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.session.account_id", is(guest.get("account_id").asText())));
+        .andExpect(jsonPath("$.session.account_id", is(guest.get("account_id").asText())))
+        .andExpect(jsonPath("$.session.account_type", is("guest")));
 
     assertThat(events.publishedSubjects())
-        .as("convert-guest must publish user.guest_converted to NATS")
-        .contains("user.guest_converted");
+        .as("convert-guest submit must not publish before email verification")
+        .doesNotContain("user.guest_converted");
+
+    mailSender.clear();
+    mockMvc
+        .perform(
+            post("/api/v1/auth/otp/send")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"email\":\"nats-guest@example.com\",\"otp_type\":\"email_verify\"}"))
+        .andExpect(status().isNoContent());
+    String code = mailSender.lastCode();
+    assertThat(code).matches("\\d{6}");
+
+    mockMvc
+        .perform(
+            post("/api/v1/auth/otp/verify")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"email\":\"nats-guest@example.com\",\"code\":\""
+                        + code
+                        + "\",\"otp_type\":\"email_verify\"}"))
+        .andExpect(status().isNoContent());
+
+    assertThat(events.publishedSubjects())
+        .as("verified email OTP must publish user.guest_converted exactly once")
+        .containsExactly("user.guest_converted");
   }
 
   private JsonNode postJson(String path, String body) throws Exception {

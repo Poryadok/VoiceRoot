@@ -20,12 +20,12 @@
 - Конвертация гостевого аккаунта в полноценный
 - Soft delete аккаунта (30-дневный grace period)
 - JWKS endpoint для публичных ключей (используется Gateway и другими сервисами)
-- **[auth-and-contacts](../features/auth-and-contacts.md):** перед выдачей access JWT обеспечивается первичный профиль в `user_db` (claim `profile_id` = `profiles.id`); см. [primary-profile-bootstrap.md](primary-profile-bootstrap.md), [EXEC_PLAN.md](../EXEC_PLAN.md).
+- **[auth-and-contacts](../features/auth-and-contacts.md):** перед выдачей access JWT Auth вызывает internal User gRPC `EnsurePrimaryProfile`; claim `profile_id` равен User-owned `profiles.id`. Auth не получает credentials к `user_db`; см. [primary-profile-bootstrap.md](primary-profile-bootstrap.md), [EXEC_PLAN.md](../EXEC_PLAN.md).
 - OTP генерация и валидация (email)
 
 ### PR и ревью (bootstrap JWT ↔ User)
 
-- Перед merge — зелёный job **`backend-auth`** в CI (`mvn -B test`). Интеграция JDBC + Redis + совпадение `profile_id` с primary-строкой в `user_db.profiles` покрыта **`AuthJdbcRedisIntegrationTest`** (регистрация / login / refresh / validate).
+- Перед merge — зелёный job **`backend-auth`** в CI (`mvn -B test`). Интеграция Auth JDBC + Redis и контракт Auth ↔ User gRPC покрывают регистрацию / login / refresh / validate, включая совпадение `profile_id` с ответом `EnsurePrimaryProfile` и fail-closed поведение.
 - Maven внутри контейнера **без** доступа к Docker socket хоста может **пропускать** этот класс Testcontainers; ориентир — CI или хостовый `mvn test` с Docker ([TESTING.md](../TESTING.md), job Auth в [.github/workflows/ci.yml](../../.github/workflows/ci.yml)).
 - Меняете claims JWT или схему `profiles` — синхронизируйте потребителей (Gateway, Go) с [`DATA_MODEL.md`](../DATA_MODEL.md) и при необходимости прогоните buf / контрактные проверки.
 
@@ -199,6 +199,9 @@ currently deployed schema/code; see [todo/backend.md](../todo/backend.md).
 
 ## Зависимости
 
+- **User Service gRPC** (`USER_GRPC_ADDR`) — provisioning/resolve/switch профилей,
+  синхронизация verification и завершения guest conversion. User единолично владеет `user_db`;
+  недоступность или непригодный ответ User блокирует выдачу новой сессии.
 - **Redis** — JWT blacklist (запись при logout и отзыве access token), OTP throttling. Сквозные HTTP rate limits (в т.ч. лимит попыток входа с одного IP) — на **API Gateway**; те же лимиты вторым слоем в Auth не дублируем. Подробнее: [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) («Redis: API Gateway и Auth Service»).
 - **Resend** — отправка email (верификация, password reset)
 - **NATS** — публикация событий
@@ -210,5 +213,4 @@ currently deployed schema/code; see [todo/backend.md](../todo/backend.md).
 - Refresh token: только хэш в БД, оригинал — только клиенту
 - Нет SMS 2FA (v1) — только TOTP
 - IP logging для аудита
-
 

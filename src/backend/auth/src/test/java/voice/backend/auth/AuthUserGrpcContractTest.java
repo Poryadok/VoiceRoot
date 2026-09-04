@@ -132,6 +132,32 @@ class AuthUserGrpcContractTest {
   }
 
   @Test
+  void oauthTokenExchangeRechecksCanonicalUserProfileAndFailsClosed() throws Exception {
+    Harness harness = new Harness(UUID.randomUUID().toString());
+    AuthSession registered = harness.service.register(
+        new RegisterCommand(
+            "oauth-contract@example.com",
+            null,
+            "Correct horse battery staple",
+            false,
+            "{}"));
+
+    String oauthToken =
+        harness.service.issueOAuthAccessToken(registered.accountId(), registered.profileId());
+    assertThat(SignedJWT.parse(oauthToken).getJWTClaimsSet().getStringClaim("profile_id"))
+        .isEqualTo(registered.profileId());
+    assertThat(harness.profiles.ensureAccountIds).hasSize(2);
+
+    harness.profiles.failure = new AuthException("auth_unavailable");
+    assertThatThrownBy(
+            () ->
+                harness.service.issueOAuthAccessToken(
+                    registered.accountId(), registered.profileId()))
+        .isInstanceOf(AuthException.class)
+        .hasMessage("auth_unavailable");
+  }
+
+  @Test
   void convertGuestSubmitRemainsPendingAndDoesNotPromoteOrPublish() {
     Harness harness = new Harness(UUID.randomUUID().toString());
     AuthSession guest = harness.service.register(

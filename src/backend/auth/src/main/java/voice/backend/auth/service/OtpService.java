@@ -86,6 +86,9 @@ public class OtpService {
       throttle.recordFailedVerify(throttleKey);
       throw new AuthException("invalid_otp");
     }
+    if ("email_verify".equals(type)) {
+      authService.completeVerifiedGuestConversion(account);
+    }
     otpCodes.markUsed(record.id(), now);
   }
 

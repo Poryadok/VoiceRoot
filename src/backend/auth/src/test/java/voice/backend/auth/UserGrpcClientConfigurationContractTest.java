@@ -68,6 +68,17 @@ class UserGrpcClientConfigurationContractTest {
   }
 
   @Test
+  void jdbcAuthRuntimeFailsClosedWithoutUserGrpcAddress() {
+    jdbcRuntimeContext()
+        .withPropertyValues("auth.persistence=jdbc")
+        .run(context -> {
+          assertThat(context).hasFailed();
+          assertThat(context.getStartupFailure())
+              .hasMessageContaining("UserVerificationSync");
+        });
+  }
+
+  @Test
   void productionUserGrpcConfigurationUsesTcpAndWiresEveryAuthUserPort() throws Exception {
     RecordingUserGrpcService user = new RecordingUserGrpcService();
     MetadataCapture metadata = new MetadataCapture();
@@ -186,15 +197,18 @@ class UserGrpcClientConfigurationContractTest {
   void profileSwitchPortCallsUserWithAuthenticatedAccountAndFailsClosed() throws Exception {
     try (TcpFake fake = TcpFake.start()) {
       UUID accountId = UUID.randomUUID();
+      UUID currentProfileId = UUID.randomUUID();
       UUID profileId = UUID.randomUUID();
       fake.user.setSwitchedProfile(profile(accountId, profileId, false, false));
       runner(fake).run(context -> {
         assertThat(context).hasSingleBean(ProfileSwitchValidator.class);
         ProfileSwitchValidator port = context.getBean(ProfileSwitchValidator.class);
-        port.validateOwnedSwitchable(accountId, profileId);
+        port.validateOwnedSwitchable(accountId, currentProfileId, profileId, "premium");
         assertThat(fake.user.switchRequests()).singleElement()
             .extracting(request -> request.getProfileId()).isEqualTo(profileId.toString());
         assertThat(fake.metadata.userIds).contains(accountId.toString());
+        assertThat(fake.metadata.profileIds).contains(currentProfileId.toString());
+        assertThat(fake.metadata.subscriptionTiers).contains("premium");
 
         for (Profile invalid : List.of(
             profile(UUID.randomUUID(), profileId, false, false),
@@ -274,6 +288,15 @@ class UserGrpcClientConfigurationContractTest {
     return contextRunner.withPropertyValues("auth.user-grpc.addr=localhost:" + fake.server.getPort());
   }
 
+  private static ApplicationContextRunner jdbcRuntimeContext() {
+    return new ApplicationContextRunner()
+        .withConfiguration(AutoConfigurations.of(
+            UserGrpcClientConfiguration.class,
+            JdbcPersistenceConfiguration.class,
+            PrimaryProfileBeansConfiguration.class,
+            JdbcRuntimePropertiesConfiguration.class));
+  }
+
   private static Profile profile(UUID accountId, UUID profileId, boolean primary, boolean frozen) {
     Profile.Builder profile = Profile.newBuilder().setId(profileId.toString()).setAccountId(accountId.toString())
         .setIsPrimary(primary).setCreatedAt(Timestamp.getDefaultInstance()).setUpdatedAt(Timestamp.getDefaultInstance());
@@ -335,12 +358,20 @@ class UserGrpcClientConfigurationContractTest {
     private static final Metadata.Key<String> USER_ID =
         Metadata.Key.of("x-voice-user-id", Metadata.ASCII_STRING_MARSHALLER);
     final List<String> userIds = new ArrayList<>();
+    private static final Metadata.Key<String> PROFILE_ID =
+        Metadata.Key.of("x-voice-profile-id", Metadata.ASCII_STRING_MARSHALLER);
+    final List<String> profileIds = new ArrayList<>();
+    private static final Metadata.Key<String> SUBSCRIPTION_TIER =
+        Metadata.Key.of("x-voice-subscription-tier", Metadata.ASCII_STRING_MARSHALLER);
+    final List<String> subscriptionTiers = new ArrayList<>();
 
     @Override
     public <ReqT, RespT> Listener<ReqT> interceptCall(
         ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
       internalCallers.add(headers.get(INTERNAL_CALLER));
       userIds.add(headers.get(USER_ID));
+      profileIds.add(headers.get(PROFILE_ID));
+      subscriptionTiers.add(headers.get(SUBSCRIPTION_TIER));
       return next.startCall(call, headers);
     }
   }

@@ -209,8 +209,15 @@ public class AuthService {
   public String issueOAuthAccessToken(String accountId, String profileId) {
     Account account = accounts.findById(accountId).orElseThrow(() -> new AuthException("invalid_token"));
     ensureActive(account);
+    String expectedProfileId = requireProfileId(profileId);
+    String ensuredProfileId = requireProfileId(primaryProfileProvisioner.ensurePrimaryProfile(
+        account.id(), displayHint(account), "guest".equals(account.type())));
+    if (!expectedProfileId.equals(ensuredProfileId)) {
+      throw new AuthException("malformed_user_response");
+    }
     String tier = subscriptionTierResolver.resolveTier(account.id());
-    return jwtService.issue(account.id().toString(), profileId, List.of("user"), tier, account.type());
+    return jwtService.issue(
+        account.id().toString(), ensuredProfileId, List.of("user"), tier, account.type());
   }
 
   public long accessTokenTtlSeconds() {
@@ -234,7 +241,17 @@ public class AuthService {
     if (phoneHashResolver == null) {
       return Map.of();
     }
-    return phoneHashResolver.resolvePrimaryProfileIdsByPhoneHashes(phoneHashes);
+    Map<String, String> resolved = phoneHashResolver.resolvePrimaryProfileIdsByPhoneHashes(phoneHashes);
+    if (resolved == null) {
+      throw new AuthException("malformed_user_response");
+    }
+    for (Map.Entry<String, String> entry : resolved.entrySet()) {
+      if (entry.getKey() == null || entry.getKey().isBlank()) {
+        throw new AuthException("malformed_user_response");
+      }
+      requireProfileId(entry.getValue());
+    }
+    return resolved;
   }
 
   /** Internal S2S: return account ids that are soft-deleted (deleted_at set). */
@@ -298,7 +315,11 @@ public class AuthService {
     TokenClaims claims = validate(accessToken);
     UUID accountId = UUID.fromString(claims.userId());
     UUID targetProfile = UUID.fromString(profileId);
-    profileSwitchValidator.validateOwnedSwitchable(accountId, targetProfile);
+    profileSwitchValidator.validateOwnedSwitchable(
+        accountId,
+        UUID.fromString(claims.profileId()),
+        targetProfile,
+        claims.subscriptionTier());
     Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
     ensureActive(account);
     tokenBlacklist.revoke(claims.jti(), jwtService.ttl(claims));
@@ -344,9 +365,21 @@ public class AuthService {
       throw new AuthException("registration_conflict");
     }
     tokenBlacklist.revoke(claims.jti(), jwtService.ttl(claims));
-    primaryProfileProvisioner.clearGuestAccountFlag(converted.id());
-    authEventPublisher.publishGuestConverted(converted.id());
     return issueSession(converted, "{}");
+  }
+
+  void completeVerifiedGuestConversion(Account account) {
+    if (!"guest".equals(account.type())) {
+      return;
+    }
+    primaryProfileProvisioner.clearGuestAccountFlag(account.id());
+    Account regular;
+    try {
+      regular = accounts.markGuestRegular(account.id());
+    } catch (IllegalArgumentException ex) {
+      throw new AuthException("auth_unavailable");
+    }
+    authEventPublisher.publishGuestConverted(regular.id());
   }
 
   public DeleteAccountResult deleteAccount(String accessToken, String password) {
@@ -478,6 +511,7 @@ public class AuthService {
   }
 
   private AuthSession issueSessionForProfile(Account account, String profileId, String deviceInfoJson) {
+    profileId = requireProfileId(profileId);
     if (deviceInfoJson == null || deviceInfoJson.isBlank()) {
       deviceInfoJson = "{}";
     }
@@ -499,6 +533,14 @@ public class AuthService {
         account.id().toString(),
         profileId,
         account.type());
+  }
+
+  private static String requireProfileId(String profileId) {
+    try {
+      return UUID.fromString(profileId).toString();
+    } catch (RuntimeException ex) {
+      throw new AuthException("malformed_user_response");
+    }
   }
 
   private void touchLastOnline(Account account) {

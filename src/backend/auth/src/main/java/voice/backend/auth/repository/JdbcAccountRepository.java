@@ -155,7 +155,7 @@ public class JdbcAccountRepository implements AccountRepository {
       return jdbc.queryForObject(
           """
           UPDATE accounts
-          SET email = :email, phone = :phone, password_hash = :passwordHash, type = 'regular', updated_at = now()
+          SET email = :email, phone = :phone, password_hash = :passwordHash, updated_at = now()
           WHERE id = :id AND type = 'guest'
           RETURNING id, email, phone, password_hash, type, status, totp_secret, totp_enabled, created_at, deleted_at
           """,
@@ -165,6 +165,23 @@ public class JdbcAccountRepository implements AccountRepository {
       throw new IllegalArgumentException("not a guest account", ex);
     } catch (DuplicateKeyException ex) {
       throw new IllegalArgumentException("duplicate account identifier", ex);
+    }
+  }
+
+  @Override
+  public Account markGuestRegular(UUID accountId) {
+    try {
+      return jdbc.queryForObject(
+          """
+          UPDATE accounts
+          SET type = 'regular', updated_at = now()
+          WHERE id = :id AND type = 'guest'
+          RETURNING id, email, phone, password_hash, type, status, totp_secret, totp_enabled, created_at, deleted_at
+          """,
+          new MapSqlParameterSource("id", accountId),
+          ROW_MAPPER);
+    } catch (org.springframework.dao.EmptyResultDataAccessException ex) {
+      throw new IllegalArgumentException("not a guest account", ex);
     }
   }
 

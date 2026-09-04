@@ -81,6 +81,31 @@ func TestEnsurePrimaryProfile_Idempotent(t *testing.T) {
 	require.Equal(t, first.GetProfile().GetId(), second.GetProfile().GetId())
 }
 
+func TestEnsurePrimaryProfile_RejectsDeletedPrimary(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startUserPostgresForSubscriptionTests(t, ctx)
+	profiles := store.NewProfileStore(pool)
+	privacy := store.NewPrivacyStore(pool)
+	cli := startUserSettingsTestServer(t, profiles, privacy)
+
+	accountID := uuid.New()
+	internal := withInternalUserCtx(ctx)
+	created, err := cli.EnsurePrimaryProfile(internal, &userv1.EnsurePrimaryProfileRequest{
+		AccountId: accountID.String(),
+	})
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE profiles SET deleted_at = now() WHERE id = $1`, uuid.MustParse(created.GetProfile().GetId()))
+	require.NoError(t, err)
+
+	_, err = cli.EnsurePrimaryProfile(internal, &userv1.EnsurePrimaryProfileRequest{
+		AccountId: accountID.String(),
+	})
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+}
+
 // TestResolvePrimaryProfileIDs_ResolvesOnlyExistingPrimaryProfiles documents the
 // Auth S2S lookup used to join auth-owned phone hashes to User-owned primary
 // profile ids. Missing accounts and accounts without a primary profile must not
