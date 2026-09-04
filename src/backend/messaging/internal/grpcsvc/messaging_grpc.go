@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"reflect"
 	"strings"
 
 	"github.com/google/uuid"
@@ -43,8 +44,12 @@ type MessagingGRPC struct {
 	SharedMedia *store.SharedMediaStore
 	ChatGuard   ChatGuard
 	// Blocks and UserProfiles are optional S2S gates for SendMessage (Social + User); both must be set to enforce.
-	Blocks            AccountPairBlockChecker
-	UserProfiles      ProfileAccountLookup
+	Blocks       AccountPairBlockChecker
+	UserProfiles ProfileAccountLookup
+	// DeletedAccounts is the Auth S2S gate for DM writes. It is deliberately
+	// separate from other optional S2S policy checks: a missing dependency must
+	// fail closed for DM sends and forwards.
+	DeletedAccounts   AccountDeletedChecker
 	Privacy           PrivacyChecker
 	Friends           ProfileFriendChecker
 	SpaceCoMembership SpaceCoMembershipChecker
@@ -107,6 +112,9 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 			}
 			return nil, status.Error(codes.Internal, err.Error())
 		}
+	}
+	if err := s.checkDeletedDMWrite(ctx, req.GetChat(), chatID, profileID); err != nil {
+		return nil, err
 	}
 	if err := s.checkDMBlocksForSend(ctx, chatID, profileID); err != nil {
 		return nil, err
@@ -431,6 +439,61 @@ func (s *MessagingGRPC) checkDMBlocksForSend(ctx context.Context, chatID, profil
 		return status.Error(codes.PermissionDenied, "cannot send messages between blocked accounts")
 	}
 	return nil
+}
+
+// checkDeletedDMWrite prevents new writes to a DM when either participant's
+// Auth account is soft-deleted. Account status is intentionally checked after
+// target membership, but before idempotency/store work and event publication.
+// Group and channel requests never consult Auth through this gate.
+func (s *MessagingGRPC) checkDeletedDMWrite(ctx context.Context, chat *chatv1.ChatRef, chatID, senderProfileID uuid.UUID) error {
+	if chat.GetType() != chatv1.ChatType_CHAT_TYPE_DM {
+		return nil
+	}
+	if s == nil || isNilAccountDeletedChecker(s.DeletedAccounts) || s.UserProfiles == nil || s.ChatGuard == nil {
+		return status.Error(codes.Unavailable, "dm account status unavailable")
+	}
+
+	senderAccountID, ok := authctx.AccountID(ctx)
+	if !ok || senderAccountID == uuid.Nil {
+		return status.Error(codes.Unavailable, "dm account status unavailable")
+	}
+	peerProfileID, err := s.ChatGuard.DMOtherProfileID(ctx, chatID, senderProfileID)
+	if err != nil || peerProfileID == uuid.Nil {
+		return status.Error(codes.Unavailable, "dm account status unavailable")
+	}
+	peerAccountID, err := s.UserProfiles.AccountIDByProfileID(ctx, peerProfileID)
+	if err != nil || peerAccountID == uuid.Nil {
+		return status.Error(codes.Unavailable, "dm account status unavailable")
+	}
+
+	deleted, err := s.DeletedAccounts.DeletedAmong(ctx, []uuid.UUID{senderAccountID, peerAccountID})
+	if err != nil {
+		return status.Error(codes.Unavailable, "dm account status unavailable")
+	}
+	for accountID := range deleted {
+		if accountID != senderAccountID && accountID != peerAccountID {
+			return status.Error(codes.Unavailable, "dm account status unavailable")
+		}
+	}
+	if len(deleted) > 0 {
+		// Do not reveal which participant was deleted or whether it was sender
+		// or peer. The product contract requires a privacy-safe generic denial.
+		return status.Error(codes.PermissionDenied, "permission denied")
+	}
+	return nil
+}
+
+func isNilAccountDeletedChecker(checker AccountDeletedChecker) bool {
+	if checker == nil {
+		return true
+	}
+	value := reflect.ValueOf(checker)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
 }
 
 func (s *MessagingGRPC) checkSpaceSendPermission(ctx context.Context, chatID, profileID uuid.UUID) error {
@@ -1043,6 +1106,9 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 			}
 			return nil, status.Error(codes.Internal, err.Error())
 		}
+	}
+	if err := s.checkDeletedDMWrite(ctx, req.GetTargetChat(), targetChatID, profileID); err != nil {
+		return nil, err
 	}
 
 	source, err := s.Messages.GetMessageByID(ctx, sourceID)

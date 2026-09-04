@@ -26,6 +26,12 @@ type ProfileAccountLookup interface {
 	AccountIDByProfileID(ctx context.Context, profileID uuid.UUID) (uuid.UUID, error)
 }
 
+// AccountDeletedChecker reports soft-deleted accounts from Auth, the source of
+// truth for account lifecycle. DM writes fail closed when it is unavailable.
+type AccountDeletedChecker interface {
+	DeletedAmong(ctx context.Context, accountIDs []uuid.UUID) (map[uuid.UUID]struct{}, error)
+}
+
 // AccountPairBlockChecker reports whether two accounts must not exchange DM messages (Social IsBlocked, both directions).
 type AccountPairBlockChecker interface {
 	AccountPairBlocked(ctx context.Context, viewerAccountID, otherAccountID uuid.UUID) (bool, error)

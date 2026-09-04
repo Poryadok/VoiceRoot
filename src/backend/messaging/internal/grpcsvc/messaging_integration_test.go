@@ -114,6 +114,9 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 	if w.DeletedAccounts == nil && !w.RequireDeletedAccountsSeam {
 		w.DeletedAccounts = allowDeletedAccounts{}
 	}
+	if w.UserProfiles == nil && !w.RequireDeletedAccountsSeam {
+		w.UserProfiles = allowProfileAccounts{}
+	}
 	guard := w.ChatGuard
 	if guard == nil {
 		guard = &store.SQLChatGuard{Pool: pool}
@@ -245,6 +248,15 @@ func (m profileAcctMap) AccountIDByProfileID(_ context.Context, profileID uuid.U
 		return uuid.Nil, status.Error(codes.NotFound, "profile not found")
 	}
 	return a, nil
+}
+
+// allowProfileAccounts keeps legacy fixtures explicit about their non-deleted
+// Auth world after the DM deleted-account gate gained a required profile lookup.
+// P3 tests set RequireDeletedAccountsSeam and therefore never receive this map.
+type allowProfileAccounts struct{}
+
+func (allowProfileAccounts) AccountIDByProfileID(_ context.Context, profileID uuid.UUID) (uuid.UUID, error) {
+	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(profileID.String())), nil
 }
 
 type boolBlocks bool

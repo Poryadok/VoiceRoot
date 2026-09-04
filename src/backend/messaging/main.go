@@ -25,9 +25,10 @@ import (
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
-	"voice/backend/pkg/runtimeconfig"
 	voiceprom "voice/backend/pkg/promhttp"
+	"voice/backend/pkg/runtimeconfig"
 
+	authv1 "voice.app/voice/auth/v1"
 	chatv1 "voice.app/voice/chat/v1"
 	filev1 "voice.app/voice/file/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
@@ -160,6 +161,22 @@ func main() {
 			privacy = &s2s.GRPCUserPrivacy{Client: userCli}
 			userPresence = &s2s.GRPCUserPresence{Client: userCli}
 		}
+
+		var deletedAccounts grpcsvc.AccountDeletedChecker
+		if authAddr := strings.TrimSpace(os.Getenv("AUTH_GRPC_ADDR")); authAddr != "" {
+			aconn, err := grpc.NewClient(grpcclient.DialTarget(authAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				log.Fatalf("auth grpc: %v", err)
+			}
+			defer func() { _ = aconn.Close() }()
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
+			if err := waitForGRPCReady(waitCtx, aconn); err != nil {
+				waitCancel()
+				log.Fatalf("auth grpc dial: %v", err)
+			}
+			waitCancel()
+			deletedAccounts = s2s.NewAuthGRPCDeletedAccounts(authv1.NewAuthServiceClient(aconn))
+		}
 		if spaceAddr := strings.TrimSpace(os.Getenv("SPACE_GRPC_ADDR")); spaceAddr != "" {
 			spconn, err := grpc.NewClient(grpcclient.DialTarget(spaceAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
@@ -258,18 +275,19 @@ func main() {
 			logger.Warn("CHAT_DATABASE_URL not set; thread policy checks disabled")
 		}
 		messagingv1.RegisterMessagingServiceServer(grpcSrv, &grpcsvc.MessagingGRPC{
-			Messages:      &store.MessagesStore{Pool: pool},
-			Reactions:     &store.ReactionsStore{Pool: pool},
-			Pins:          &store.PinsStore{Pool: pool},
-			SharedMedia:   &store.SharedMediaStore{Pool: pool},
-			ChatGuard:     chatGuard,
-			Blocks:        blocks,
-			UserProfiles:  profiles,
-			Privacy:       privacy,
+			Messages:          &store.MessagesStore{Pool: pool},
+			Reactions:         &store.ReactionsStore{Pool: pool},
+			Pins:              &store.PinsStore{Pool: pool},
+			SharedMedia:       &store.SharedMediaStore{Pool: pool},
+			ChatGuard:         chatGuard,
+			Blocks:            blocks,
+			UserProfiles:      profiles,
+			DeletedAccounts:   deletedAccounts,
+			Privacy:           privacy,
 			Friends:           friends,
 			SpaceCoMembership: spaceCoMembership,
-			Files:         files,
-			MessageEvents: msgEvents,
+			Files:             files,
+			MessageEvents:     msgEvents,
 			Moderation: &store.SQLModerationGuard{
 				Pool:      pool,
 				ChatPool:  chatMetaPool,
@@ -288,9 +306,9 @@ func main() {
 			ChatThreadPolicy:    chatThreadPolicy,
 			PreKeyBundles:       &store.E2EPreKeyStore{Pool: pool},
 			UserPresence:        userPresence,
-				PlatformMod:         platformMod,
-				Logger:              logger,
-			})
+			PlatformMod:         platformMod,
+			Logger:              logger,
+		})
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcListen))
 			if err := grpcSrv.Serve(lis); err != nil {
