@@ -127,6 +127,123 @@ public class JdbcGuestConversionOperationRepository implements GuestConversionOp
         ROW_MAPPER);
   }
 
+  @Override
+  public GuestConversionAdvanceResult advance(
+      UUID operationId, GuestConversionState expectedState, Instant expectedLockedUntil, Instant now) {
+    Objects.requireNonNull(operationId, "operationId");
+    Objects.requireNonNull(expectedState, "expectedState");
+    Objects.requireNonNull(expectedLockedUntil, "expectedLockedUntil");
+    Objects.requireNonNull(now, "now");
+    if (expectedState == GuestConversionState.COMPLETED) {
+      throw new IllegalArgumentException("COMPLETED cannot be advanced");
+    }
+
+    MapSqlParameterSource parameters =
+        new MapSqlParameterSource()
+            .addValue("operationId", operationId)
+            .addValue("expectedState", expectedState.name())
+            .addValue("expectedLockedUntil", Timestamp.from(expectedLockedUntil))
+            .addValue("now", Timestamp.from(now));
+    String transition =
+        expectedState == GuestConversionState.PENDING_USER
+            ? """
+              state = 'PENDING_EVENT',
+              user_marked_at = :now,
+              auth_promoted_at = :now,
+              locked_until = NULL,
+              updated_at = :now
+              """
+            : """
+              state = 'COMPLETED',
+              event_published_at = :now,
+              locked_until = NULL,
+              updated_at = :now
+              """;
+    String markerPreconditions =
+        expectedState == GuestConversionState.PENDING_USER
+            ? "user_marked_at IS NULL AND auth_promoted_at IS NULL AND event_published_at IS NULL"
+            : "user_marked_at IS NOT NULL AND auth_promoted_at IS NOT NULL AND event_published_at IS NULL";
+
+    boolean applied =
+        !jdbc
+            .query(
+                """
+                UPDATE guest_conversion_operations
+                SET %s
+                WHERE operation_id = :operationId
+                  AND state = :expectedState
+                  AND locked_until = :expectedLockedUntil
+                  AND locked_until > :now
+                  AND %s
+                RETURNING operation_id
+                """.formatted(transition, markerPreconditions),
+                parameters,
+                (rs, rowNum) -> rs.getObject("operation_id", UUID.class))
+            .isEmpty();
+    if (applied) {
+      return GuestConversionAdvanceResult.APPLIED;
+    }
+    return classifyAdvanceMiss(operationId, expectedState);
+  }
+
+  private GuestConversionAdvanceResult classifyAdvanceMiss(
+      UUID operationId, GuestConversionState expectedState) {
+    java.util.Optional<GuestConversionOperation> operation =
+        jdbc
+            .query(
+                """
+                SELECT operation_id, account_id, otp_code_id, state, attempt_count,
+                       next_attempt_at, locked_until, last_error_code, user_marked_at,
+                       auth_promoted_at, event_published_at, created_at, updated_at
+                FROM guest_conversion_operations
+                WHERE operation_id = :operationId
+                """,
+                new MapSqlParameterSource("operationId", operationId),
+                ROW_MAPPER)
+            .stream()
+            .findFirst();
+    if (operation.isEmpty()) {
+      return GuestConversionAdvanceResult.NOT_FOUND;
+    }
+    GuestConversionOperation current = operation.get();
+    if (isTargetOrLater(current, expectedState)) {
+      return GuestConversionAdvanceResult.ALREADY_APPLIED;
+    }
+    if (current.state() == expectedState && hasValidMarkers(current)) {
+      return GuestConversionAdvanceResult.LEASE_LOST;
+    }
+    throw new IllegalStateException("guest conversion operation has invalid state markers");
+  }
+
+  private static boolean isTargetOrLater(
+      GuestConversionOperation operation, GuestConversionState expectedState) {
+    return switch (expectedState) {
+      case PENDING_USER ->
+          (operation.state() == GuestConversionState.PENDING_EVENT && hasValidMarkers(operation))
+              || (operation.state() == GuestConversionState.COMPLETED && hasValidMarkers(operation));
+      case PENDING_EVENT ->
+          operation.state() == GuestConversionState.COMPLETED && hasValidMarkers(operation);
+      case COMPLETED -> false;
+    };
+  }
+
+  private static boolean hasValidMarkers(GuestConversionOperation operation) {
+    return switch (operation.state()) {
+      case PENDING_USER ->
+          operation.userMarkedAt() == null
+              && operation.authPromotedAt() == null
+              && operation.eventPublishedAt() == null;
+      case PENDING_EVENT ->
+          operation.userMarkedAt() != null
+              && operation.authPromotedAt() != null
+              && operation.eventPublishedAt() == null;
+      case COMPLETED ->
+          operation.userMarkedAt() != null
+              && operation.authPromotedAt() != null
+              && operation.eventPublishedAt() != null;
+    };
+  }
+
   private java.util.Optional<GuestConversionOperation> findByAccountId(UUID accountId) {
     return jdbc
         .query(
