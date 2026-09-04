@@ -13,7 +13,7 @@
 | `group`         | пресет текстового чата: по умолчанию в ленту пишут участники от своего имени   |
 | `dm` / `direct` | персональный чат 1-на-1                                      |
 
-Пользовательский лейбл для `space` — отдельное решение (UI/перевод), в коде и документации используем "пространство" / `space`.
+Пользовательский лейбл для `space` — **«Спейс»**; в коде и контрактах используется `space`.
 
 См. также: [GLOSSARY.md](../GLOSSARY.md) — **Архив чата**, **Quick Access**, **Pin чата**, **Pin элемента дерева**, **Active strip**, **Запросы сообщений**.
 
@@ -98,7 +98,7 @@ Rail **всегда виден**, не скрывается при открыт�
 | **Visible cap** | ~**8** avatars; horizontal scroll для overflow |
 | **Unread badge** | На иконках strip |
 | **Keyboard** | Strip **скрывается** (§1.6a); pinned bar + composer приоритетнее |
-| **Remove** | Long-press icon → × (§1.6 #5); **back to list — remove from strip** (в т.ч. при unread). Удержание strip при unread после back — **DEFERRED** (AUDIT R3-03-A09) |
+| **Remove** | Long-press icon → × (§1.6 #5); **back to list** удаляет чат из strip только при `unread_count=0`. Чат с unread остаётся в strip до прочтения или явного удаления пользователем |
 | **Limit feedback** | 100/100 → feedback, нельзя добавить ещё один opened chat |
 
 - Нет открытого чата → полный список; drawer для folders / QA / settings

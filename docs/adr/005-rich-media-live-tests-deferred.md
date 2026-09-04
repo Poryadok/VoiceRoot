@@ -13,7 +13,7 @@ What the feature docs say:
 | Surface | Spec | Documented behavior |
 |---------|------|---------------------|
 | Stickers | [text-chat.md](../features/text-chat.md) §Медиа | **v1 confirmed (2026-08-24):** system packs + user-uploaded packs; send/receive first-class; composer picker. Still **no** pack API / storage / message wire shape in code — implementation = [PLAN.md](../PLAN.md) phase **2** |
-| GIF in chat | same | First-class chat GIF (not only file attach); distinct from Premium **GIF avatar** in [user-profile.md](../features/user-profile.md) / [subscription.md](../features/subscription.md). Provider + wire shape still TBD in Messaging/Chat |
+| GIF in chat | same | First-class chat GIF (not only file attach); distinct from Premium **GIF avatar** in [user-profile.md](../features/user-profile.md) / [subscription.md](../features/subscription.md). Provider-neutral wire is defined in Messaging/Chat; live provider selection remains an A6 activation decision |
 | Voice messages | same + [privacy.md](../features/privacy.md) `allow_voice_messages` | «аудиофайл + встроенный плеер»; privacy gate exists; Messaging docs list attachment kind `voice_message` — **no** client record/send/player product path or live DoD |
 | Voice recording | [voice-chat.md](../features/voice-chat.md) §Запись | **Local-only** on the initiator’s device (MP3 128 kbps); server does not store; indicator only for recorder |
 

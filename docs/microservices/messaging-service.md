@@ -126,7 +126,7 @@ enum MessageContentType {
 
 | `content_type` | Payload (JSON sketch) | Валидация / лимиты |
 |----------------|----------------------|---------------------|
-| `article` | `{ "url", "title", "description", "thumb_file_id?", "instant_view_html?" }` | URL https-only; OG/metadata fetch — **not yet implemented** (owner TBD: Gateway vs File vs worker) |
+| `article` | `{ "url", "title", "description", "thumb_file_id?", "instant_view_html?" }` | URL https-only; OG/metadata fetch — **Messaging background worker**, not Gateway/File/client; implementation pending |
 | `location` | `{ "lat", "lon", "label?", "static_map_file_id?" }` | lat ∈ [-90,90], lon ∈ [-180,180]; static map via File Service |
 | `video_note` | `{ "file_id", "duration_seconds", "width", "height" }` | duration ≤ **60 s** ([file-storage.md](../features/file-storage.md)); round crop on File Service |
 | `music` | `{ "file_id", "title?", "artist?", "album?", "duration_seconds?" }` | Metadata: File Service extract on upload; Messaging stores canonical copy on message |
@@ -598,4 +598,3 @@ REST через Gateway: `POST/GET /api/v1/messages/prekeys` (см. [api-gateway
 Key backup хранится в **Auth Service** (`PutE2EKeyBackup` / `GetE2EKeyBackup`), не в Messaging.
 
 Включение E2E в DM — **Chat Service** (`E2EPreKeyGate`: оба участника должны иметь pre-key bundle).
-

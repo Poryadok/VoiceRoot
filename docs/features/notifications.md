@@ -30,6 +30,12 @@
 
 См. [text-chat.md](text-chat.md) § «Запросы сообщений», [friends.md](friends.md). **Code gap:** Realtime may still emit `new_message` for request inbox — [todo/backend.md](../todo/backend.md).
 
+### Архивированные чаты
+
+Если в архивированный чат приходит новое сообщение, чат остаётся в архиве:
+обновляется только счётчик непрочитанных (badge). Push и отдельная строка в
+notification center не создаются.
+
 ## Каналы доставки
 
 | Платформа                 | Канал                                |

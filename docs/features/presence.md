@@ -70,16 +70,17 @@ Each `UpdatePresence` (client heartbeat ~60 s or WS ping):
 
 ## В header chat room
 
-Приоритет subtitle (DM) — **первое подходящее** по таблице (не «только online» при одновременном in-call):
+Приоритет subtitle (DM) — **первое подходящее** по таблице: combined online+call, затем DND, custom status, online/idle, last-seen и offline без времени. Если пользователь только в звонке, показывается «В звонке».
 
 | Условие | Subtitle (RU baseline) |
 |---------|------------------------|
 | **online ∧ in_call** | «в сети · в звонке» — **combined**, не одно из двух |
+| **DND** | «Не беспокоить» |
+| custom status (★ Plus) | текст + эмодзи |
 | online only | «в сети» |
 | in_call only | «В звонке» (без указания какого чата) |
-| custom status (★ Plus) | текст + эмодзи |
-| offline / idle + `show_last_seen` allowed | «был(а) … назад» (rounding — таблица ниже) |
-| **idle** (live session, no activity >5 min) | «Не активен» **или** last-seen row above if product prefers timestamp over idle label — client maps `status=idle` |
+| **idle** (live session, no activity >5 min) | «Не активен» |
+| offline + `show_last_seen` allowed | «был(а) … назад» (rounding — таблица ниже) |
 | offline + last seen hidden | без времени |
 
 **GRP / CH:** subtitle в §3.1 #2 — member count / channel topic, **не** эта таблица presence.

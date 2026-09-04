@@ -32,6 +32,12 @@ else
   fail "expected gateway_dm_ws_live_integration_test.dart in full_flutter"
 fi
 
+if bash "${SCRIPT}" "${MANIFEST}" restart_proof_gateway | grep -x 'TestComposeFileAttachmentRestartProof_live' >/dev/null; then
+  :
+else
+  fail "expected TestComposeFileAttachmentRestartProof_live in restart_proof_gateway"
+fi
+
 if bash "${SCRIPT}" "${MANIFEST}" missing_section >/dev/null 2>&1; then
   fail "expected failure for missing section"
 fi

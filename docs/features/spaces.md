@@ -13,6 +13,11 @@
 - Каталог спейсов (как серверы в Discord)
 - QR-код
 
+Guest admission работает fail-closed: `allow_guests=false` по умолчанию. Владелец
+или администратор должен явно разрешить гостей; даже после этого гость вступает
+только по действующему invite и не обходит entry requirements, бан, member limit,
+роли или отдельный `allow_guests=false` группового чата.
+
 ## Видимость
 
 | Тип        | Виден в поиске | Вход             |
@@ -35,11 +40,19 @@
 
 ## Верификация при вступлении
 
-Все варианты доступны в настройках спейса:
+Требования составляются в versioned `entry_policy`; все включённые требования
+применяются по **AND** и должны быть выполнены:
+
 - Подтверждённый телефон
 - Капча
 - Ответы на вопросы (скрининг, как в Telegram)
 - Одобрение модератором вручную
+
+Порядок проверки: ban/member-limit/guest admission → phone → captcha → questions →
+manual approval. Invite не обходит требования. Если включено ручное одобрение,
+успешное выполнение остальных шагов создаёт pending join request; membership
+появляется только после approve. Гость не может пройти policy с обязательным phone.
+Ошибка или недоступность verifier закрывает вход, но не расходует одноразовый invite.
 
 ## Лимиты участников
 
@@ -92,4 +105,19 @@
 | **≠ Quick Access** | Pin **элемента дерева** (text chat / voice room) — только sidebar спейса; **Quick Access** в rail — отдельная сущность профиля ([navigation.md](navigation.md), [GLOSSARY.md](../GLOSSARY.md)) |
 | **≠ folder pin** | Pin **чата в inbox-папке** — другой контекст ([navigation.md](navigation.md)); не путать с pin **узла дерева** |
 
+## Удаление Спейса
 
+- Удаление доступно только owner и требует пароль/2FA плюс ввод имени Спейса.
+- После подтверждения начинается **7-дневное recovery window**: Спейс скрыт из
+  каталога и списков участников, заморожен для чтения/записи/join/invite/MM, а owner
+  видит только действие восстановления.
+- Восстановление в течение 7 дней возвращает прежние memberships, roles, tree,
+  chats и files; новые события в замороженный Space не принимаются.
+- После 7 дней выполняется необратимый purge: memberships, roles, invites, bans,
+  tree, voice rooms, Space-attached chats/messages и Space-owned media удаляются;
+  File Service удаляет binary objects только когда на них не осталось других refs.
+- Отдельно сохраняется минимальный audit tombstone (`space_id`, owner account
+  tombstone, timestamps, deletion actor/reason) по production retention policy.
+- `space.deletion_scheduled` публикуется при начале окна, `space.restored` — при
+  восстановлении, а `space.deleted` — только после завершённого purge. Частичный
+  cross-service purge повторяется идемпотентно до convergence.

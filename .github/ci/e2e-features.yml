@@ -58,6 +58,11 @@ smoke_flutter:
 
 full_gateway_run: 'TestCompose.*_live'
 
+# Deliberate isolated runner only; excluded from generic compose-e2e-live because
+# it owns its own project, ports, File restart and temporary state.
+restart_proof_gateway:
+  - TestComposeFileAttachmentRestartProof_live
+
 full_flutter:
   - test/gateway_dm_ws_live_integration_test.dart
   - test/dm_two_users_e2e_live_test.dart

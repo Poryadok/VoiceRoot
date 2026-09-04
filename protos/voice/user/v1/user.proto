@@ -33,6 +33,12 @@ service UserService {
   rpc EnsurePrimaryProfile(EnsurePrimaryProfileRequest) returns (EnsurePrimaryProfileResponse);
   // S2S internal: profile ids for account-level social actions (block cascade, …).
   rpc ListProfileIDsForAccount(ListProfileIDsForAccountRequest) returns (ListProfileIDsForAccountResponse);
+  // S2S internal: resolve existing, non-deleted primary profiles for Auth-owned account ids.
+  // Missing accounts and accounts without a usable primary profile are omitted; this never provisions profiles.
+  rpc ResolvePrimaryProfileIDs(ResolvePrimaryProfileIDsRequest) returns (ResolvePrimaryProfileIDsResponse);
+  // S2S internal: after Auth converts a guest account, clear the guest marker on its User-owned profiles.
+  // Idempotent: an already-regular or unknown account succeeds unchanged.
+  rpc MarkAccountRegular(MarkAccountRegularRequest) returns (MarkAccountRegularResponse);
 
   rpc GetProfile(GetProfileRequest) returns (GetProfileResponse);
   rpc GetProfiles(GetProfilesRequest) returns (GetProfilesResponse);
@@ -383,3 +389,18 @@ message ApplyDowngradeProfilesRequest {
 message ApplyDowngradeProfilesResponse {
   repeated string kept_profile_ids = 1;
 }
+
+message ResolvePrimaryProfileIDsRequest {
+  repeated string account_ids = 1;
+}
+
+message ResolvePrimaryProfileIDsResponse {
+  // account_id -> primary profile_id; absent/no-primary/deleted primary accounts are omitted.
+  map<string, string> primary_profile_ids = 1;
+}
+
+message MarkAccountRegularRequest {
+  string account_id = 1;
+}
+
+message MarkAccountRegularResponse {}

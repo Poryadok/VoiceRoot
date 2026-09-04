@@ -129,7 +129,7 @@ Scope разделён явно:
 
 **Состояние:** по требованию; не блокирует документированные части `A`.
 
-**Действие:** выбрать вариант только для реально конфликтующего или отсутствующего поведения. Ближайшие известные решения: phone/SMS provider и anti-abuse flow, advanced Space entry requirements, спорные permissions/limits, recovery/destructive semantics и крупная mobile IA.
+**Действие:** выбрать вариант только для реально конфликтующего или отсутствующего поведения. Текущие alpha-семантики email activation, composable Space entry policy и удаления аккаунта/Space зафиксированы. Следующие owner decisions появляются только при входе соответствующего scope: phone/SMS provider и anti-abuse flow, а также крупная mobile IA.
 
 **Разблокирует:** конкретную узкую ветку реализации; остальные части milestone продолжаются.
 
@@ -189,11 +189,11 @@ Milestone — законченный пользовательский резул
 
 **Результат:** два новых пользователя без ручной настройки проходят onboarding, находят друг друга и стабильно общаются в Web.
 
-**Объём:** email/guest/session/reset, friends/request/block, DM/group/channel/thread, realtime reconnect, global inbox catch-up, history catch-up per selected chat, unread/read state, archive/folders/Quick Access, delete path и базовые attachments. Auth перестаёт ходить напрямую в `user_db` для profile/verification/phone flows и использует User contract. Исправляются видимые profile/chat switching regressions.
+**Объём:** email/guest/session/reset, friends/request/block, DM/group/channel/thread, realtime reconnect, global inbox catch-up, history catch-up per selected chat, unread/read state, archive/folders/Quick Access, минимальный account soft-delete и базовые attachments. Для A1 soft-delete означает немедленный отзыв sessions, запрет новых DM в обе стороны, скрытие удалённого peer из новых snapshots и сохранение уже загруженной истории с именем «Пользователь удалён». Полная 30-дневная erasure/pseudonymization, глобальные tombstones и restore UX завершаются в `A4`. Auth перестаёт ходить напрямую в `user_db` для profile/verification/phone flows и использует User contract. Исправляются видимые profile/chat switching regressions.
 
 **Dependencies:** существующие Auth, Chat, Messaging, Realtime, Social, User и File contracts; внешние providers не нужны.
 
-**DoD:** новый пользователь проходит путь без CLI и hidden token; Auth не требует credentials к `user_db`, межсервисные profile operations идут через contract и fail closed; после reconnect клиент завершает global paginated inbox snapshot и не стирает cache при неуспешной странице, DM/group/channel сохраняют per-member unread→read; attachment переживает service restart и скачивается с тем же hash; полная история приходит через cursor только per selected `chat_id`; block/privacy deny не fail-open; empty/error/offline состояния не маскируют потерю данных.
+**DoD:** новый пользователь проходит путь без CLI и hidden token; Auth не требует credentials к `user_db`, межсервисные profile operations идут через contract и fail closed; после reconnect клиент завершает global paginated inbox snapshot и не стирает cache при неуспешной странице, DM/group/channel сохраняют per-member unread→read; attachment переживает service restart и скачивается с тем же hash; полная история приходит через cursor только per selected `chat_id`; block/privacy deny не fail-open; после account soft-delete старые sessions недействительны, send в обе стороны запрещён, fresh snapshot скрывает DM, а локально загруженная история показывает tombstone «Пользователь удалён»; empty/error/offline состояния не маскируют потерю данных.
 
 **Verification:** unit/integration по затронутым сервисам, Flutter widget tests и live multi-account compose E2E для login → contact/request → DM/group/channel → per-member unread/read → attachment upload → restart/reconnect → global inbox snapshot (`main` / `requests` / `archive`) → history for selected chat → download/hash → block/delete.
 
@@ -201,7 +201,7 @@ Milestone — законченный пользовательский резул
 
 **Результат:** группа создаёт закрытый Space, настраивает дерево и роли, входит в голосовые комнаты и безопасно управляет жизненным циклом Space.
 
-**Объём:** Gateway/Flutter vertical slice для join/leave/transfer, text/voice tree, invites, role checks на всех входах, roster/session events, движение между комнатами, join/speak/mute permissions и понятные RTC states. Audit log получает доступный owner/admin path. Публичный delete flow не входит в DoD, пока `H1` не зафиксирует recovery window, судьбу сообщений/files, confirmation и event compensation; это узкий последующий slice, не blocker остального `A2`.
+**Объём:** Gateway/Flutter vertical slice для join/leave/transfer, text/voice tree, invites, role checks на всех входах, roster/session events, движение между комнатами, join/speak/mute permissions и понятные RTC states. Audit log получает доступный owner/admin path. Delete flow следует зафиксированному контракту: owner confirmation, 7 дней hidden/frozen recovery, затем идемпотентный cross-service purge и attachment GC; это узкий последующий slice, не blocker остального `A2`.
 
 **Dependencies:** `A1` identity/chat foundation; local LiveKit и test media достаточно.
 
@@ -225,7 +225,7 @@ Milestone — законченный пользовательский резул
 
 **Результат:** репозиторий содержит staging-compatible harness, с которым оператор после выдачи доступов может развернуть exact SHA, доказать безопасность базовых потоков, восстановить данные и получить сигнал о P1.
 
-**Объём:** fail-closed privacy/S2S, report → resolve/dismiss → sanction → appeal, account deletion, alpha admission guard, versioned release-profile/capability/client-compatibility, operational-tier и durable-store manifests, secret/config validation, repeatable migrations, backup/restore automation, Loki/request-id chain, Prometheus/Grafana, actionable alerts, degraded-mode checks и минимальные runbooks для deploy/canary/rollback, restore, Redis/NATS triage и P1 ack/escalation. Full per-service runbooks и chaos program остаются вне alpha gate. Product Analytics не входит в launch observability gate.
+**Объём:** fail-closed privacy/S2S, report → resolve/dismiss → sanction → appeal, полный account deletion lifecycle поверх A1 soft-delete (30-дневное restore window, затем необратимая PII/credential/profile-media erasure или pseudonymization и cross-service tombstones), alpha admission guard, versioned release-profile/capability/client-compatibility, operational-tier и durable-store manifests, secret/config validation, repeatable migrations, backup/restore automation, Loki/request-id chain, Prometheus/Grafana, actionable alerts, degraded-mode checks и минимальные runbooks для deploy/canary/rollback, restore, Redis/NATS triage и P1 ack/escalation. Full per-service runbooks и chaos program остаются вне alpha gate. Product Analytics не входит в launch observability gate.
 
 **Dependencies:** `A1–A3` для полного product smoke; инфраструктурный код проверяется раньше на disposable/local environment.
 
@@ -235,7 +235,7 @@ Milestone — законченный пользовательский резул
 - Client compatibility: каждая заявленная OS/arch/browser tuple получает smoke; risk-based sampling применяется только к расширенному regression и записан в matrix. Previous/current Web+Windows проверяются с previous/current backend, version/forced-update/update-URL flow; backend rollback совместим с уже обновлённым клиентом.
 - Deploy/recovery: на disposable environment повторяются deploy/migrate, expand-contract, canary с ненулевым synthetic sample и измеримый rollback trigger. Backup из source восстанавливается только в isolated validation namespace/cluster с synthetic tenant/object и никогда не пишет обратно в source. Manifest покрывает authoritative DB/object/event stores из [DATA_STORES.md](DATA_STORES.md), проверяет cross-domain invariants и rebuild исключённых cache/projections. Drill измеряет RPO/RTO относительно agent-recommended provisional thresholds; владелец принимает их только в `G1/H4`.
 - Operations: Role и Matchmaking имеют Tier 1 SLO/dashboard/alerts/degraded mode; все Tier 0/1 scrape targets и datasources healthy; login/DM даёт request-id chain Gateway → Messaging → NATS → Realtime; P1 проверяется через alert sink.
-- Product smoke: mail sink/fake provider доказывает register/verification/reset и expired/bounce; затем идут A1 DM/group/channel unread/read + attachment restart/hash/delete/restore, report → resolve/dismiss → sanction enforcement + WS/UI delivery → appeal без ручного `sanction_id`, delete account, A2 Space/voice и A3 temporary chat/test-media/history/cleanup/authorization deny.
+- Product smoke: mail sink/fake provider доказывает register/verification/reset и expired/bounce; затем идут A1 DM/group/channel unread/read + attachment restart/hash/delete/restore, report → resolve/dismiss → sanction enforcement + WS/UI delivery → appeal без ручного `sanction_id`, account delete → immediate deny/hide → restore и test-clock expiry → irreversible erasure/tombstone, A2 Space/voice и A3 temporary chat/test-media/history/cleanup/authorization deny.
 
 **Verification:** CI/full на exact SHA, config/render tests, migration rerun, disposable backup→restore, canary observation/rollback-trigger drill, compose/staging-compatible smoke и review [OPERATIONS.md](OPERATIONS.md) / [DEPLOYMENT.md](DEPLOYMENT.md).
 
@@ -243,7 +243,7 @@ Milestone — законченный пользовательский резул
 
 **Результат:** в test-signed alpha-like Web/Windows окружении пользователь устанавливает или открывает Voice, восстанавливает session и выполняет ежедневные chat/Space/profile flows; публично доверенный zero-warning путь завершается только в `G1`.
 
-**Объём:** versioned supported Windows OS/arch и Web browser/version matrix; Windows packaging/startup/update и native Realtime path с agent-generated test signature, immutable production-compatible artifact manifest, sandbox update feed и disposable trust setup; system tray, voice while hidden и global PTT/hotkeys; responsive technical shell; folders/Quick Access/archive/requests/search; profile switch/manage; presence/privacy; notification center и read state; безопасный Space catalog/templates. Включается только то, что имеет честные loading/error/permission states. Нерешённые варианты `R3-03-A09`, `R2-13-A02` и `R2-07-U01` из [product-roadmap.md](todo/product-roadmap.md) не входят в DoD до `H1`; субъективная visual polish относится к `H5`.
+**Объём:** versioned supported Windows OS/arch и Web browser/version matrix; Windows packaging/startup/update и native Realtime path с agent-generated test signature, immutable production-compatible artifact manifest, sandbox update feed и disposable trust setup; system tray, voice while hidden и global PTT/hotkeys; responsive technical shell; folders/Quick Access/archive/requests/search; profile switch/manage; presence/privacy; notification center и read state; безопасный Space catalog/templates. Включается только то, что имеет честные loading/error/permission states. Субъективная visual polish относится к `H5`.
 
 **Dependencies:** `A1–A4`; live push не требуется для Web/Windows free alpha.
 

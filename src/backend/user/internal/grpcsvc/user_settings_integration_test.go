@@ -81,6 +81,173 @@ func TestEnsurePrimaryProfile_Idempotent(t *testing.T) {
 	require.Equal(t, first.GetProfile().GetId(), second.GetProfile().GetId())
 }
 
+// TestResolvePrimaryProfileIDs_ResolvesOnlyExistingPrimaryProfiles documents the
+// Auth S2S lookup used to join auth-owned phone hashes to User-owned primary
+// profile ids. Missing accounts and accounts without a primary profile must not
+// be materialized or included in the result.
+func TestResolvePrimaryProfileIDs_ResolvesOnlyExistingPrimaryProfiles(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startUserPostgresForSubscriptionTests(t, ctx)
+	profiles := store.NewProfileStore(pool)
+	privacy := store.NewPrivacyStore(pool)
+	cli := startUserSettingsTestServer(t, profiles, privacy)
+
+	primaryAccountID := uuid.New()
+	primary, err := cli.EnsurePrimaryProfile(withInternalUserCtx(ctx), &userv1.EnsurePrimaryProfileRequest{
+		AccountId: primaryAccountID.String(),
+	})
+	require.NoError(t, err)
+
+	noPrimaryAccountID := uuid.New()
+	_, err = pool.Exec(ctx, `
+		INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+		VALUES ($1, $2, 'secondaryonly', '0001', 'Secondary Only', false)`,
+		uuid.New(), noPrimaryAccountID)
+	require.NoError(t, err)
+
+	deletedPrimaryAccountID := uuid.New()
+	deletedPrimary, err := cli.EnsurePrimaryProfile(withInternalUserCtx(ctx), &userv1.EnsurePrimaryProfileRequest{
+		AccountId: deletedPrimaryAccountID.String(),
+	})
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE profiles SET deleted_at = now() WHERE id = $1`, uuid.MustParse(deletedPrimary.GetProfile().GetId()))
+	require.NoError(t, err)
+
+	frozenPrimaryAccountID := uuid.New()
+	frozenPrimary, err := cli.EnsurePrimaryProfile(withInternalUserCtx(ctx), &userv1.EnsurePrimaryProfileRequest{
+		AccountId: frozenPrimaryAccountID.String(),
+	})
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE profiles SET frozen_at = now() WHERE id = $1`, uuid.MustParse(frozenPrimary.GetProfile().GetId()))
+	require.NoError(t, err)
+
+	absentAccountID := uuid.New()
+	resp, err := cli.ResolvePrimaryProfileIDs(withInternalUserCtx(ctx), &userv1.ResolvePrimaryProfileIDsRequest{
+		AccountIds: []string{
+			primaryAccountID.String(), noPrimaryAccountID.String(), deletedPrimaryAccountID.String(),
+			frozenPrimaryAccountID.String(), absentAccountID.String(),
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{
+		primaryAccountID.String():       primary.GetProfile().GetId(),
+		frozenPrimaryAccountID.String(): frozenPrimary.GetProfile().GetId(),
+	}, resp.GetPrimaryProfileIds())
+
+	var absentProfiles int
+	err = pool.QueryRow(ctx, `SELECT COUNT(*) FROM profiles WHERE account_id = $1`, absentAccountID).Scan(&absentProfiles)
+	require.NoError(t, err)
+	require.Zero(t, absentProfiles, "read-only lookup must not materialize an absent account")
+}
+
+func TestResolvePrimaryProfileIDs_RejectsNonInternalAndMalformedAccountID(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startUserPostgresForSubscriptionTests(t, ctx)
+	profiles := store.NewProfileStore(pool)
+	privacy := store.NewPrivacyStore(pool)
+	cli := startUserSettingsTestServer(t, profiles, privacy)
+
+	_, err := cli.ResolvePrimaryProfileIDs(ctx, &userv1.ResolvePrimaryProfileIDsRequest{
+		AccountIds: []string{uuid.NewString()},
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	_, err = cli.ResolvePrimaryProfileIDs(withInternalUserCtx(ctx), &userv1.ResolvePrimaryProfileIDsRequest{
+		AccountIds: []string{"not-a-uuid"},
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+// TestMarkAccountRegular_ClearsGuestFlagForEveryOwnedProfile documents the
+// User-owned half of Auth's guest-to-regular conversion. The account remains
+// the same; every profile, including a soft-deleted one, must stop being
+// classified as a guest.
+func TestMarkAccountRegular_ClearsGuestFlagForEveryOwnedProfile(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startUserPostgresForSubscriptionTests(t, ctx)
+	profiles := store.NewProfileStore(pool)
+	privacy := store.NewPrivacyStore(pool)
+	cli := startUserSettingsTestServer(t, profiles, privacy)
+
+	accountID := uuid.New()
+	primary, err := cli.EnsurePrimaryProfile(withInternalUserCtx(ctx), &userv1.EnsurePrimaryProfileRequest{
+		AccountId:      accountID.String(),
+		IsGuestAccount: true,
+	})
+	require.NoError(t, err)
+	secondary, err := profiles.CreateSecondaryProfile(ctx, accountID, "Guest Alt", nil, nil)
+	require.NoError(t, err)
+	deleted, err := profiles.CreateSecondaryProfile(ctx, accountID, "Deleted Guest Alt", nil, nil)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE profiles SET deleted_at = now() WHERE id = $1`, deleted.ID)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE profiles SET is_guest_account = true WHERE account_id = $1`, accountID)
+	require.NoError(t, err)
+
+	_, err = cli.MarkAccountRegular(withInternalUserCtx(ctx), &userv1.MarkAccountRegularRequest{
+		AccountId: accountID.String(),
+	})
+	require.NoError(t, err)
+
+	var guestProfiles int
+	err = pool.QueryRow(ctx, `SELECT COUNT(*) FROM profiles WHERE account_id = $1 AND is_guest_account = true`, accountID).Scan(&guestProfiles)
+	require.NoError(t, err)
+	require.Zero(t, guestProfiles)
+
+	rows, err := profiles.ListByAccountID(ctx, accountID)
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	require.ElementsMatch(t, []uuid.UUID{uuid.MustParse(primary.GetProfile().GetId()), secondary.ID}, []uuid.UUID{rows[0].ID, rows[1].ID})
+	for _, row := range rows {
+		require.False(t, row.IsGuestAccount)
+	}
+
+	_, err = cli.MarkAccountRegular(withInternalUserCtx(ctx), &userv1.MarkAccountRegularRequest{
+		AccountId: accountID.String(),
+	})
+	require.NoError(t, err, "repeated guest-to-regular conversion must be idempotent")
+	unknownAccountID := uuid.New()
+	_, err = cli.MarkAccountRegular(withInternalUserCtx(ctx), &userv1.MarkAccountRegularRequest{
+		AccountId: unknownAccountID.String(),
+	})
+	require.NoError(t, err, "converting an account without profiles must succeed unchanged")
+
+	var unknownProfiles int
+	err = pool.QueryRow(ctx, `SELECT COUNT(*) FROM profiles WHERE account_id = $1`, unknownAccountID).Scan(&unknownProfiles)
+	require.NoError(t, err)
+	require.Zero(t, unknownProfiles, "marking an unknown account regular must not materialize profiles")
+}
+
+func TestMarkAccountRegular_RejectsNonInternalAndMalformedAccountID(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startUserPostgresForSubscriptionTests(t, ctx)
+	profiles := store.NewProfileStore(pool)
+	privacy := store.NewPrivacyStore(pool)
+	cli := startUserSettingsTestServer(t, profiles, privacy)
+
+	_, err := cli.MarkAccountRegular(ctx, &userv1.MarkAccountRegularRequest{AccountId: uuid.NewString()})
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	_, err = cli.MarkAccountRegular(withInternalUserCtx(ctx), &userv1.MarkAccountRegularRequest{AccountId: "not-a-uuid"})
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
 func TestGetSettings_UpdateSettings_OwnedProfile(t *testing.T) {
 	if testing.Short() {
 		t.Skip()

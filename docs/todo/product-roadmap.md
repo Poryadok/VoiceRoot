@@ -19,21 +19,10 @@ _Нет открытых пунктов._
 
 ## Common
 
-### Telegram-parity audit — product policy (undecided, 2026-08-28)
-
-Источник: `tmp/telegram-ux-audit/AUDIT.md` (anti-loop rule §4; round3 DEFER). В feature docs помечено DEFERRED/target-state — **решение человека** до реализации; после решения обновить [screen-controls.md](../design/screen-controls.md) / [notifications.md](../features/notifications.md) / [search.md](../features/search.md).
-
-- [ ] **R3-03-A09 — Active strip: unread retention on back** — normative сейчас: back **удаляет** чат из strip (даже с unread). Альтернатива: удерживать при unread — выбрать одно правило; убрать DEFERRED caveat из §1.6.
-- [ ] **R4-02-D1 — Pinned bar tap cycle** — v1 = jump to latest pin; target-state = cycle pins on bar tap — [text-chat.md](../features/text-chat.md) § «Закреплённые», §3.1a.
-- [ ] **R2-13-A02 — Notifications for archived chats** — push/in-app when archived chat receives message: suppress vs badge-only vs full delivery — [notifications.md](../features/notifications.md) (нет политики).
-- [ ] **R2-12-U03 — Location in Shared Media tabs** — assign `LOCATION` to Media vs Files vs Links vs отдельная вкладка — [search.md](../features/search.md) mapping table incomplete.
-- [ ] **R2-07-U01 — DM header subtitle priority** — idle vs DND vs in-call vs last-seen when multiple apply — [presence.md](../features/presence.md) § header (сейчас «или» без жёсткого порядка).
-
 - [ ] **П.5 — Верификация ранга Steam/FACEIT (MVP)** — `linked_game_accounts`, OAuth/API, badge в ММ, фильтр `verified_rank_only`. Спека: [PROJECT.md](../PROJECT.md), [matchmaking.md](../features/matchmaking.md). → пересекается [User] verification gaps (Batch 14).
 - [ ] **П.6 — Верификация Twitch/YouTube/DNS** — cron `VerificationStatusRefresh`, org TXT flow, Flutter Settings → Верификация. Спека: [verification.md](../features/verification.md). → Batch 14 [User] Verification V1.
 - [ ] **П.8 — Синхронизация контактов телефонной книги** — Flutter hash + `POST /contacts/sync` live есть; нет list/favorites REST + onboarding «Найди друзей» UI. Спека: [auth-and-contacts.md](../features/auth-and-contacts.md). → [backend.md](backend.md) Social REST; [client.md](client.md) phone-book.
 - [x] **Стикеры в v1** — решение 2026-08-24: **делать** (системные паки + upload своих). Зафиксировано в [text-chat.md](../features/text-chat.md), [PLAN.md](../PLAN.md) фаза 2, [ADR 005](../adr/005-rich-media-live-tests-deferred.md). Код/lives — [backend.md](backend.md) Chat.
-- [ ] **Спека vs код (остальные решения человека)** — папка DM requests в спеке vs PLAN «не MVP»; user-add игр vs staff `CreateGame`; space-MM уже в коде (П.1) — зафиксировать в спеке как v1.
 - [x] **П.9 — Гостевой → постоянный аккаунт** — `ConvertGuest` negative tests, NATS `user.guest_converted`, server `guest_reminder_last_shown_at`. Lives shipped: `TestComposeConvertGuestNATS_live`, `TestComposeGuestReminder_live`, `guest_reminder_e2e_live_test` (P1.1–P1.2). UX/docs leftovers: [client.md](client.md) §Guest. Спека: [auth-and-contacts.md](../features/auth-and-contacts.md).
 - [ ] **П.10 — Уведомления: тихие часы, гранулярность, voice join** — Set/Get quiet hours lives shipped (`TestComposeQuietHours_live`, `quiet_hours_e2e_live_test`, P2.5). Still open: FCM grouping (1 push per chat; [notifications.md](../features/notifications.md) §Каналы). → Batch 5 leftovers + Batch 14 [Notification].
 - [x] **П.11 — Командирский режим и raise hand** — `SetCommanderMode`, `RaiseHand`, `GrantFloor`, LiveKit ducking, Flutter organizer panel. Спека: [voice-chat.md](../features/voice-chat.md). → Batch 14 [Voice] unimplemented RPCs.
