@@ -15,8 +15,10 @@ import 'package:voice_frontend/backend/guest_credentials_storage.dart';
 import 'package:voice_frontend/backend/users_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
+import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/profile_switch_coordinator.dart';
+import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/profile/create_profile_sheet.dart';
 import 'package:voice_frontend/ui/profile/profile_avatar_menu.dart';
 import 'package:voice_frontend/ui/profile/profile_avatar_switcher.dart';
@@ -24,6 +26,7 @@ import 'package:voice_frontend/ui/profile/profile_edit_sheet.dart';
 import 'package:voice_frontend/ui/shell/desktop_shell_rail.dart';
 
 import 'support/test_voice_token_catalog.dart';
+import 'support/auth_test_overrides.dart';
 import 'support/voice_test_theme.dart';
 
 /// T-053 Cycle 2b RED contract.
@@ -52,6 +55,7 @@ void main() {
         harness.container.read(authControllerProvider).activeProfileId,
         'profile-alt',
       );
+      await _disposeMountedHarness(tester, harness);
     });
 
     testWidgets(
@@ -71,6 +75,7 @@ void main() {
           harness.container.read(authControllerProvider).activeProfileId,
           'profile-alt',
         );
+        await _disposeMountedHarness(tester, harness);
       },
     );
 
@@ -93,6 +98,7 @@ void main() {
         harness.container.read(authControllerProvider).activeProfileId,
         'profile-alt',
       );
+      await _disposeMountedHarness(tester, harness);
     });
 
     testWidgets(
@@ -142,6 +148,7 @@ void main() {
           harness.container.read(authControllerProvider).activeProfileId,
           'profile-created',
         );
+        await _disposeMountedHarness(tester, harness);
       },
     );
 
@@ -239,10 +246,16 @@ void _disposeHarnessAfterWidget(
   WidgetTester tester,
   _EntryHarness harness,
 ) {
-  addTearDown(() async {
-    await tester.pumpWidget(const SizedBox.shrink());
-    harness.dispose();
-  });
+  addTearDown(harness.dispose);
+}
+
+Future<void> _disposeMountedHarness(
+  WidgetTester tester,
+  _EntryHarness harness,
+) async {
+  await tester.pumpWidget(const SizedBox.shrink());
+  harness.dispose();
+  await tester.pump();
 }
 
 Future<void> _expectOnePausedCoordinatorTransition(
@@ -314,6 +327,7 @@ class _EntryHarness {
     container = ProviderContainer(
       overrides: [
         ...voiceThemeTestOverrides(),
+        profileAccentStorageProvider.overrideWithValue(testProfileAccentStorage),
         authSessionStorageProvider.overrideWithValue(storage),
         guestCredentialsStorageProvider.overrideWithValue(
           InMemoryGuestCredentialsStorage(),
@@ -322,6 +336,7 @@ class _EntryHarness {
           const GatewayConfig(baseUrl: 'http://api.test'),
         ),
         httpClientProvider.overrideWithValue(client),
+        realtimeAutoConnectProvider.overrideWithValue(false),
         authControllerProvider.overrideWith((ref) {
           final controller = AuthController(
             authClient: ref.watch(voiceAuthClientProvider),
@@ -344,6 +359,7 @@ class _EntryHarness {
   var authSwitchRequests = 0;
   var createRequests = 0;
   var avatarRequests = 0;
+  var _disposed = false;
 
   Future<http.Response> _respond(http.Request request) async {
     if (request.url.path == '/health') return http.Response('OK', 200);
@@ -400,6 +416,8 @@ class _EntryHarness {
   }
 
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
     container.dispose();
   }
 }
