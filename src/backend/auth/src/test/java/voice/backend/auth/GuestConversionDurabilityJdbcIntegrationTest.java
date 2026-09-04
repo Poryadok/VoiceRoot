@@ -33,6 +33,8 @@ class GuestConversionDurabilityJdbcIntegrationTest {
   private static final String TABLE = "guest_conversion_operations";
   private static final String FLYWAY_SCHEMA = "guest_conversion_flyway_contract";
   private static final String GOLANG_SCHEMA = "guest_conversion_golang_contract";
+  private static final String GOLANG_PENDING_DOWN_SCHEMA = "guest_conversion_pending_down_contract";
+  private static final String GOLANG_COMPLETED_DOWN_SCHEMA = "guest_conversion_completed_down_contract";
 
   @Container
   static final PostgreSQLContainer<?> postgres =
@@ -57,20 +59,40 @@ class GuestConversionDurabilityJdbcIntegrationTest {
 
   @Test
   void golangMigrateDownRefusesToDiscardPendingGuestConversionWork() throws Exception {
-    migrateGolang(GOLANG_SCHEMA);
+    migrateGolang(GOLANG_PENDING_DOWN_SCHEMA);
     UUID accountId = UUID.randomUUID();
-    insertPendingUser(GOLANG_SCHEMA, UUID.randomUUID(), accountId, UUID.randomUUID());
+    insertPendingUser(
+        GOLANG_PENDING_DOWN_SCHEMA, UUID.randomUUID(), accountId, UUID.randomUUID());
 
     String downMigration =
         Files.readString(
             GuestConversionDurabilityMigrationContractTest.golangMigration(
                 GuestConversionDurabilityMigrationContractTest.GOLANG_DOWN_MIGRATION));
-    assertThatThrownBy(() -> executeSql(GOLANG_SCHEMA, downMigration))
+    assertThatThrownBy(() -> executeSql(GOLANG_PENDING_DOWN_SCHEMA, downMigration))
         .as("rollback must refuse while a conversion can still require User or event delivery")
         .isInstanceOf(SQLException.class);
 
-    assertThat(tableExists(GOLANG_SCHEMA)).isTrue();
-    assertThat(countOperationsForAccount(GOLANG_SCHEMA, accountId)).isEqualTo(1);
+    assertThat(tableExists(GOLANG_PENDING_DOWN_SCHEMA)).isTrue();
+    assertThat(countOperationsForAccount(GOLANG_PENDING_DOWN_SCHEMA, accountId)).isEqualTo(1);
+  }
+
+  @Test
+  void golangMigrateDownDropsOnlyCompletedGuestConversionWork() throws Exception {
+    migrateGolang(GOLANG_COMPLETED_DOWN_SCHEMA);
+    insert(
+        GOLANG_COMPLETED_DOWN_SCHEMA,
+        UUID.randomUUID(),
+        UUID.randomUUID(),
+        UUID.randomUUID(),
+        "COMPLETED");
+
+    String downMigration =
+        Files.readString(
+            GuestConversionDurabilityMigrationContractTest.golangMigration(
+                GuestConversionDurabilityMigrationContractTest.GOLANG_DOWN_MIGRATION));
+    executeSql(GOLANG_COMPLETED_DOWN_SCHEMA, downMigration);
+
+    assertThat(tableExists(GOLANG_COMPLETED_DOWN_SCHEMA)).isFalse();
   }
 
   private void migrateFlyway(String schema) {
@@ -106,12 +128,15 @@ class GuestConversionDurabilityJdbcIntegrationTest {
     assertThat(tableExists(schema)).isTrue();
     assertColumn(schema, "operation_id", "uuid", false, false);
     assertColumn(schema, "account_id", "uuid", false, false);
-    assertColumn(schema, "otp_id", "uuid", false, false);
+    assertColumn(schema, "otp_code_id", "uuid", false, false);
     assertColumn(schema, "state", null, false, false);
-    assertColumn(schema, "attempt", "integer", false, true);
+    assertColumn(schema, "attempt_count", "integer", false, true);
     assertColumn(schema, "next_attempt_at", "timestamp with time zone", false, true);
     assertColumn(schema, "locked_until", "timestamp with time zone", true, false);
-    assertColumn(schema, "last_error", null, true, false);
+    assertColumn(schema, "last_error_code", null, true, false);
+    assertColumn(schema, "user_marked_at", "timestamp with time zone", true, false);
+    assertColumn(schema, "auth_promoted_at", "timestamp with time zone", true, false);
+    assertColumn(schema, "event_published_at", "timestamp with time zone", true, false);
     assertColumn(schema, "created_at", "timestamp with time zone", false, true);
     assertColumn(schema, "updated_at", "timestamp with time zone", false, true);
 
@@ -147,9 +172,14 @@ class GuestConversionDurabilityJdbcIntegrationTest {
         .as("retry attempt cannot be negative")
         .isInstanceOf(SQLException.class);
     UUID defaultAccountId = UUID.randomUUID();
+    Instant beforeInsert = databaseClock();
     insertWithRetryDefaults(schema, UUID.randomUUID(), defaultAccountId, UUID.randomUUID());
-    assertThat(defaultAttemptForAccount(schema, defaultAccountId)).isEqualTo(0);
-    assertThat(defaultNextAttemptForAccount(schema, defaultAccountId)).isNotNull();
+    Instant afterInsert = databaseClock();
+    assertThat(defaultAttemptCountForAccount(schema, defaultAccountId)).isEqualTo(0);
+    assertWithinDatabaseClock(defaultNextAttemptForAccount(schema, defaultAccountId), beforeInsert, afterInsert);
+    assertWithinDatabaseClock(defaultCreatedAtForAccount(schema, defaultAccountId), beforeInsert, afterInsert);
+    assertWithinDatabaseClock(defaultUpdatedAtForAccount(schema, defaultAccountId), beforeInsert, afterInsert);
+    assertInitialStepTimestampsAreNull(schema, defaultAccountId);
   }
 
   private void assertColumn(
@@ -215,7 +245,8 @@ class GuestConversionDurabilityJdbcIntegrationTest {
         PreparedStatement statement =
             connection.prepareStatement(
                 """
-                INSERT INTO %s.%s (operation_id, account_id, otp_id, state, attempt, next_attempt_at)
+                INSERT INTO %s.%s
+                    (operation_id, account_id, otp_code_id, state, attempt_count, next_attempt_at)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """.formatted(schema, TABLE))) {
       statement.setObject(1, operationId);
@@ -234,7 +265,7 @@ class GuestConversionDurabilityJdbcIntegrationTest {
         PreparedStatement statement =
             connection.prepareStatement(
                 """
-                INSERT INTO %s.%s (operation_id, account_id, otp_id, state)
+                INSERT INTO %s.%s (operation_id, account_id, otp_code_id, state)
                 VALUES (?, ?, ?, 'PENDING_USER')
                 """.formatted(schema, TABLE))) {
       statement.setObject(1, operationId);
@@ -257,11 +288,11 @@ class GuestConversionDurabilityJdbcIntegrationTest {
     }
   }
 
-  private int defaultAttemptForAccount(String schema, UUID accountId) throws SQLException {
+  private int defaultAttemptCountForAccount(String schema, UUID accountId) throws SQLException {
     try (Connection connection = connection();
         PreparedStatement statement =
             connection.prepareStatement(
-                "SELECT attempt FROM %s.%s WHERE account_id = ?".formatted(schema, TABLE))) {
+                "SELECT attempt_count FROM %s.%s WHERE account_id = ?".formatted(schema, TABLE))) {
       statement.setObject(1, accountId);
       try (ResultSet result = statement.executeQuery()) {
         result.next();
@@ -281,6 +312,58 @@ class GuestConversionDurabilityJdbcIntegrationTest {
         return result.getObject(1, Instant.class);
       }
     }
+  }
+
+  private Instant defaultCreatedAtForAccount(String schema, UUID accountId) throws SQLException {
+    return timestampForAccount(schema, accountId, "created_at");
+  }
+
+  private Instant defaultUpdatedAtForAccount(String schema, UUID accountId) throws SQLException {
+    return timestampForAccount(schema, accountId, "updated_at");
+  }
+
+  private Instant timestampForAccount(String schema, UUID accountId, String column) throws SQLException {
+    try (Connection connection = connection();
+        PreparedStatement statement =
+            connection.prepareStatement(
+                "SELECT %s FROM %s.%s WHERE account_id = ?".formatted(column, schema, TABLE))) {
+      statement.setObject(1, accountId);
+      try (ResultSet result = statement.executeQuery()) {
+        result.next();
+        return result.getObject(1, Instant.class);
+      }
+    }
+  }
+
+  private void assertInitialStepTimestampsAreNull(String schema, UUID accountId) throws SQLException {
+    try (Connection connection = connection();
+        PreparedStatement statement =
+            connection.prepareStatement(
+                """
+                SELECT user_marked_at, auth_promoted_at, event_published_at
+                FROM %s.%s
+                WHERE account_id = ?
+                """.formatted(schema, TABLE))) {
+      statement.setObject(1, accountId);
+      try (ResultSet result = statement.executeQuery()) {
+        result.next();
+        assertThat(result.getObject("user_marked_at")).isNull();
+        assertThat(result.getObject("auth_promoted_at")).isNull();
+        assertThat(result.getObject("event_published_at")).isNull();
+      }
+    }
+  }
+
+  private Instant databaseClock() throws SQLException {
+    try (Connection connection = connection(); Statement statement = connection.createStatement();
+        ResultSet result = statement.executeQuery("SELECT clock_timestamp()")) {
+      result.next();
+      return result.getObject(1, Instant.class);
+    }
+  }
+
+  private void assertWithinDatabaseClock(Instant value, Instant start, Instant end) {
+    assertThat(value).isAfterOrEqualTo(start).isBeforeOrEqualTo(end);
   }
 
   private void executeSql(String schema, String sql) throws SQLException {
