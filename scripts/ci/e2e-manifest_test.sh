@@ -43,7 +43,7 @@ if LC_ALL=C grep -q $'\r' "${GO_DOWNLOAD_HELPER}"; then
   fail "Docker Go module download helper contains CRLF bytes"
 fi
 
-helper_eol="$(git -C "${ROOT}" check-attr eol -- "src/backend/scripts/docker-go-mod-download.sh" | awk -F': ' '{print $2}')"
+helper_eol="$(git -C "${ROOT}" check-attr eol -- "src/backend/scripts/docker-go-mod-download.sh" | awk -F': ' '{print $3}')"
 [[ "${helper_eol}" == "lf" ]] || fail "Docker Go module download helper must have eol=lf, got ${helper_eol:-unset}"
 
 if bash "${SCRIPT}" "${MANIFEST}" missing_section >/dev/null 2>&1; then
