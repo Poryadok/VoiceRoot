@@ -241,6 +241,39 @@ void main() {
       },
     );
 
+    test(
+      'retires archive protection for an empty snapshot started after mutation',
+      () async {
+        final chats = _ArchiveMutationChatsFake();
+        _enqueueSnapshot(chats, archiveItems: const [], mainItems: ['chat-1']);
+        final auth = _AuthHarness();
+        final container = _container(chats: chats, auth: auth);
+        addTearDown(container.dispose);
+        final reconciler = container.read(inboxReconcilerProvider.notifier);
+        await reconciler.reconcile();
+
+        final main = container.read(chatListControllerProvider.notifier)
+          ..state = ChatListState(
+            profileId: 'profile-a',
+            items: [inboxChatItem('chat-1')],
+          );
+        expect(await main.archiveChat('chat-1', archived: true), isNull);
+
+        _enqueueSnapshot(chats, archiveItems: const [], mainItems: const []);
+        await reconciler.reconcile();
+        expect(
+          container
+              .read(inboxReconcilerProvider)
+              .profileSnapshots['profile-a']![InboxScope.archive]
+              .items,
+          isEmpty,
+          reason:
+              'only archive mutations newer than a request may protect its '
+              'authoritative empty response',
+        );
+      },
+    );
+
     testWidgets(
       'unarchive clears archive protection before a later empty snapshot',
       (tester) async {
