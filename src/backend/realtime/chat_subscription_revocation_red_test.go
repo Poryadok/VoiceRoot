@@ -86,11 +86,20 @@ func TestChatMemberRemovalRevokesEveryLocalTabAndSubscriptionGatedActions(t *tes
 			}
 
 			hub.mu.RLock()
-			_, chatStillRegistered := hub.byChat[chatID]
-			hub.mu.RUnlock()
-			if chatStillRegistered {
-				t.Error("removed/left profile retained a local hub subscription")
+			members, chatStillRegistered := hub.byChat[chatID]
+			if !chatStillRegistered || len(members) != 1 {
+				t.Errorf("chat registrations after removed/left = %d, want exactly peer tab", len(members))
+			} else {
+				for reg := range members {
+					if reg.profileID != peerProfileID {
+						t.Errorf("chat registration profile = %q, want peer profile %q", reg.profileID, peerProfileID)
+					}
+					if _, subscribed := reg.chats[chatID]; !subscribed {
+						t.Error("peer registration lost connReg.chats authority")
+					}
+				}
 			}
+			hub.mu.RUnlock()
 			hub.mu.RLock()
 			regs := make([]*connReg, 0, len(hub.byProfile[profileID]))
 			for reg := range hub.byProfile[profileID] {

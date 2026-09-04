@@ -28,6 +28,7 @@ type recordingGetChatServer struct {
 	metadata metadata.MD
 	err      error
 	delay    time.Duration
+	chatID   string
 }
 
 func (s *recordingGetChatServer) GetChat(ctx context.Context, req *chatv1.GetChatRequest) (*chatv1.GetChatResponse, error) {
@@ -45,7 +46,11 @@ func (s *recordingGetChatServer) GetChat(ctx context.Context, req *chatv1.GetCha
 	if err != nil {
 		return nil, err
 	}
-	return &chatv1.GetChatResponse{Chat: &chatv1.Chat{Id: req.GetChatId()}}, nil
+	chatID := s.chatID
+	if chatID == "" {
+		chatID = req.GetChatId()
+	}
+	return &chatv1.GetChatResponse{Chat: &chatv1.Chat{Id: chatID}}, nil
 }
 
 func (s *recordingGetChatServer) incomingMetadata() metadata.MD {
@@ -78,12 +83,13 @@ func newBufconnChatSubscriptionChecker(t *testing.T, server *recordingGetChatSer
 func TestGRPCChatSubscriptionCheckerForwardsCallerMetadataAndFailsClosed(t *testing.T) {
 	accountID, profileID, chatID := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	for name, setup := range map[string]func(*recordingGetChatServer){
-		"allowed":     func(*recordingGetChatServer) {},
-		"not-found":   func(s *recordingGetChatServer) { s.err = status.Error(codes.NotFound, "not found") },
-		"nonmember":   func(s *recordingGetChatServer) { s.err = status.Error(codes.PermissionDenied, "not member") },
-		"role-denied": func(s *recordingGetChatServer) { s.err = status.Error(codes.PermissionDenied, "role denied") },
-		"internal":    func(s *recordingGetChatServer) { s.err = status.Error(codes.Internal, "dependency detail") },
-		"unavailable": func(s *recordingGetChatServer) { s.err = status.Error(codes.Unavailable, "unavailable") },
+		"allowed":         func(*recordingGetChatServer) {},
+		"mismatched-chat": func(s *recordingGetChatServer) { s.chatID = uuid.NewString() },
+		"not-found":       func(s *recordingGetChatServer) { s.err = status.Error(codes.NotFound, "not found") },
+		"nonmember":       func(s *recordingGetChatServer) { s.err = status.Error(codes.PermissionDenied, "not member") },
+		"role-denied":     func(s *recordingGetChatServer) { s.err = status.Error(codes.PermissionDenied, "role denied") },
+		"internal":        func(s *recordingGetChatServer) { s.err = status.Error(codes.Internal, "dependency detail") },
+		"unavailable":     func(s *recordingGetChatServer) { s.err = status.Error(codes.Unavailable, "unavailable") },
 	} {
 		t.Run(name, func(t *testing.T) {
 			server := &recordingGetChatServer{}

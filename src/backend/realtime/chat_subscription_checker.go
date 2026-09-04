@@ -58,8 +58,8 @@ func (g *grpcChatSubscriptionChecker) AuthorizeChat(ctx context.Context, account
 	if err != nil {
 		return err
 	}
-	if resp.GetChat() == nil || strings.TrimSpace(resp.GetChat().GetId()) == "" {
-		return fmt.Errorf("chat subscription checker received empty chat")
+	if resp.GetChat() == nil || strings.TrimSpace(resp.GetChat().GetId()) != chatID {
+		return fmt.Errorf("chat subscription checker received unexpected chat")
 	}
 	return nil
 }
