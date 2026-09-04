@@ -33,7 +33,10 @@ class GuestConversionDurabilityJdbcIntegrationTest {
   private static final String TABLE = "guest_conversion_operations";
   private static final String FLYWAY_SCHEMA = "guest_conversion_flyway_contract";
   private static final String GOLANG_SCHEMA = "guest_conversion_golang_contract";
-  private static final String GOLANG_PENDING_DOWN_SCHEMA = "guest_conversion_pending_down_contract";
+  private static final String GOLANG_PENDING_USER_DOWN_SCHEMA =
+      "guest_conversion_pending_user_down_contract";
+  private static final String GOLANG_PENDING_EVENT_DOWN_SCHEMA =
+      "guest_conversion_pending_event_down_contract";
   private static final String GOLANG_COMPLETED_DOWN_SCHEMA = "guest_conversion_completed_down_contract";
 
   @Container
@@ -58,34 +61,31 @@ class GuestConversionDurabilityJdbcIntegrationTest {
   }
 
   @Test
-  void golangMigrateDownRefusesToDiscardPendingGuestConversionWork() throws Exception {
-    migrateGolang(GOLANG_PENDING_DOWN_SCHEMA);
-    UUID pendingUserAccountId = UUID.randomUUID();
-    UUID pendingEventAccountId = UUID.randomUUID();
-    insertPendingUser(
-        GOLANG_PENDING_DOWN_SCHEMA, UUID.randomUUID(), pendingUserAccountId, UUID.randomUUID());
-    insert(
-        GOLANG_PENDING_DOWN_SCHEMA,
-        UUID.randomUUID(),
-        pendingEventAccountId,
-        UUID.randomUUID(),
-        "PENDING_EVENT");
+  void golangMigrateDownRefusesToDiscardPendingUserWork() throws Exception {
+    assertPendingDownRejectedAndPreserved(GOLANG_PENDING_USER_DOWN_SCHEMA, "PENDING_USER");
+  }
+
+  @Test
+  void golangMigrateDownRefusesToDiscardPendingEventWork() throws Exception {
+    assertPendingDownRejectedAndPreserved(GOLANG_PENDING_EVENT_DOWN_SCHEMA, "PENDING_EVENT");
+  }
+
+  private void assertPendingDownRejectedAndPreserved(String schema, String state) throws Exception {
+    migrateGolang(schema);
+    UUID accountId = UUID.randomUUID();
+    insert(schema, UUID.randomUUID(), accountId, UUID.randomUUID(), state);
 
     String downMigration =
         Files.readString(
             GuestConversionDurabilityMigrationContractTest.golangMigration(
                 GuestConversionDurabilityMigrationContractTest.GOLANG_DOWN_MIGRATION));
-    assertThatThrownBy(() -> executeSql(GOLANG_PENDING_DOWN_SCHEMA, downMigration))
+    assertThatThrownBy(() -> executeSql(schema, downMigration))
         .as("rollback must refuse while a conversion can still require User marking or event delivery")
         .isInstanceOf(SQLException.class);
 
-    assertThat(tableExists(GOLANG_PENDING_DOWN_SCHEMA)).isTrue();
-    assertThat(countOperationsForAccount(GOLANG_PENDING_DOWN_SCHEMA, pendingUserAccountId)).isEqualTo(1);
-    assertThat(operationStateForAccount(GOLANG_PENDING_DOWN_SCHEMA, pendingUserAccountId))
-        .isEqualTo("PENDING_USER");
-    assertThat(countOperationsForAccount(GOLANG_PENDING_DOWN_SCHEMA, pendingEventAccountId)).isEqualTo(1);
-    assertThat(operationStateForAccount(GOLANG_PENDING_DOWN_SCHEMA, pendingEventAccountId))
-        .isEqualTo("PENDING_EVENT");
+    assertThat(tableExists(schema)).isTrue();
+    assertThat(countOperationsForAccount(schema, accountId)).isEqualTo(1);
+    assertThat(operationStateForAccount(schema, accountId)).isEqualTo(state);
   }
 
   @Test
