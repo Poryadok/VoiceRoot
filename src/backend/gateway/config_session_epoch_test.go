@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -42,7 +43,10 @@ func TestGatewaySessionEpochStrictConfigDefaultsToCompatibility(t *testing.T) {
 }
 
 func TestGatewaySessionEpochStrictConfigRejectsNonExactValues(t *testing.T) {
-	for _, value := range []string{"TRUE", "1", "typo"} {
+	for _, value := range []string{
+		"", " true", "true ", " false", "false ",
+		"TRUE", "True", "FALSE", "False", "1", "typo",
+	} {
 		value := value
 		t.Run(value, func(t *testing.T) {
 			configureSessionEpochEnv(t, &value, "127.0.0.1:6379")
@@ -54,7 +58,7 @@ func TestGatewaySessionEpochStrictConfigRejectsNonExactValues(t *testing.T) {
 	}
 }
 
-func TestGatewaySessionEpochStrictConfigRequiresRedisAndBuildsFloor(t *testing.T) {
+func TestGatewaySessionEpochStrictConfigRequiresRedisAndBuildsCanonicalAuthFloor(t *testing.T) {
 	strict := "true"
 	t.Run("requires Redis before serving", func(t *testing.T) {
 		configureSessionEpochEnv(t, &strict, "")
@@ -64,7 +68,7 @@ func TestGatewaySessionEpochStrictConfigRequiresRedisAndBuildsFloor(t *testing.T
 		}
 	})
 
-	t.Run("uses Auth-owned Redis floor without startup ping", func(t *testing.T) {
+	t.Run("uses Auth-owned Redis floor without prefix override or startup ping", func(t *testing.T) {
 		configureSessionEpochEnv(t, &strict, "198.51.100.11:6379")
 		t.Setenv("GATEWAY_REDIS_PASSWORD", "shared-password")
 
@@ -79,10 +83,52 @@ func TestGatewaySessionEpochStrictConfigRequiresRedisAndBuildsFloor(t *testing.T
 		if !ok || floor == nil {
 			t.Fatalf("session epoch floor = %T, want *redisSessionEpochFloor", config.sessionEpochFloor)
 		}
+		// The epoch floor is Auth-owned and has no Gateway prefix override.
 		if floor.addr != "198.51.100.11:6379" || floor.password != "shared-password" || floor.prefix != sessionEpochFloorPrefix || floor.timeout != 2*time.Second {
 			t.Fatalf("floor = %#v, want shared Redis addr/password, Auth prefix, and 2s timeout", floor)
 		}
 	})
+}
+
+func TestGatewayBootstrapRejectsInvalidStrictConfigBeforeServerConstruction(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		strict string
+		redis  string
+	}{
+		{name: "malformed strict value", strict: "TRUE", redis: "198.51.100.13:6379"},
+		{name: "strict without Redis", strict: "true", redis: ""},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			configureSessionEpochEnv(t, &tc.strict, tc.redis)
+
+			serverConstructed := 0
+			server, err := newGatewayServerFromEnv(":8080", func(handler http.Handler) *http.Server {
+				serverConstructed++
+				return &http.Server{Addr: ":8080", Handler: handler}
+			})
+			if err == nil {
+				t.Fatal("invalid strict config unexpectedly bootstrapped a server")
+			}
+			if server != nil {
+				t.Fatalf("server = %#v, want nil on startup config error", server)
+			}
+			if serverConstructed != 0 {
+				t.Fatalf("server constructor calls = %d, want 0", serverConstructed)
+			}
+		})
+	}
+}
+
+func TestGatewayMainUsesCheckedConfigBootstrap(t *testing.T) {
+	mainSource, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	if !strings.Contains(string(mainSource), "newGatewayServerFromEnv(") {
+		t.Fatal("main must use newGatewayServerFromEnv so startup config errors prevent serving")
+	}
 }
 
 func TestGatewaySessionEpochJWKSConfigUsesStrictnessOption(t *testing.T) {
