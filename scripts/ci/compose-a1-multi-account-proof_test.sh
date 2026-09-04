@@ -20,6 +20,33 @@ assert_eq() { [[ "$1" == "$2" ]] || fail "expected '$2', got '$1'"; }
 assert_abs() {
   [[ "$1" == /* || "$1" =~ ^[A-Za-z]:[/\\] ]] || fail "not absolute: $1"
 }
+assert_full_port_env() {
+  local file="$1" base="${2:-25000}" offset=0 var
+  local vars=(
+    POSTGRES_PORT REDIS_PORT NATS_PORT NATS_HTTP_PORT CLICKHOUSE_HTTP_PORT
+    LIVEKIT_PORT LIVEKIT_RTC_TCP_PORT LIVEKIT_RTC_UDP_PORT CLAMAV_PORT
+    MINIO_PORT MINIO_CONSOLE_PORT NOTIFICATION_DEBUG_PORT GATEWAY_PORT WEB_PORT
+    DEVELOPER_PORTAL_PORT ADMIN_PORT VERIFICATION_STUB_PORT
+  )
+  for var in "${vars[@]}"; do
+    assert_contains "$file" "^env_${var}=$((base + offset))$"
+    offset=$((offset + 1))
+  done
+}
+assert_scrubbed_or_rejected() {
+  local case_dir="$1" hostile="$2"
+  local rc
+  rc="$(cat "${case_dir}/rc")"
+  if [[ "$rc" == 2 && ! -s "${case_dir}/commands.log" ]]; then
+    return 0
+  fi
+  assert_eq "$rc" 0
+  assert_not_contains "${case_dir}/commands.log" "$hostile"
+  assert_contains "${case_dir}/commands.log" 'env_COMPOSE_PROJECT_NAME=voice-a1-multi-'
+  assert_contains "${case_dir}/commands.log" '^env_COMPOSE_PROFILES=$'
+  assert_contains "${case_dir}/commands.log" '^env_COMPOSE_FILE=$'
+  assert_full_port_env "${case_dir}/commands.log"
+}
 
 make_fake_tools() {
   local bin="$1"
@@ -31,9 +58,21 @@ log="${FAKE_LOG:?FAKE_LOG required}"
 printf 'docker' >>"${log}"
 for arg in "$@"; do printf ' <%s>' "$arg" >>"${log}"; done
 printf '\n' >>"${log}"
-printf 'ports=%s,%s\n' "${POSTGRES_PORT:-}" "${GATEWAY_PORT:-}" >>"${log}"
+for var in \
+  POSTGRES_PORT REDIS_PORT NATS_PORT NATS_HTTP_PORT CLICKHOUSE_HTTP_PORT \
+  LIVEKIT_PORT LIVEKIT_RTC_TCP_PORT LIVEKIT_RTC_UDP_PORT CLAMAV_PORT \
+  MINIO_PORT MINIO_CONSOLE_PORT NOTIFICATION_DEBUG_PORT GATEWAY_PORT WEB_PORT \
+  DEVELOPER_PORTAL_PORT ADMIN_PORT VERIFICATION_STUB_PORT; do
+  printf 'env_%s=%s\n' "$var" "${!var:-}" >>"${log}"
+done
+printf 'env_COMPOSE_PROJECT_NAME=%s\n' "${COMPOSE_PROJECT_NAME:-}" >>"${log}"
+printf 'env_COMPOSE_PROFILES=%s\n' "${COMPOSE_PROFILES:-}" >>"${log}"
+printf 'env_COMPOSE_FILE=%s\n' "${COMPOSE_FILE:-}" >>"${log}"
 if [[ "${1:-}" == ps ]]; then
-  if [[ "${FAKE_DOCKER_MODE:-}" == collision && "${2:-}" == -aq ]]; then echo fake-existing-container; fi
+  line="$*"
+  if [[ "${FAKE_DOCKER_MODE:-}" == collision && ( "$line" == ps\ -aq\ * || "$line" == ps\ --all\ --quiet\ * || "$line" == ps\ --quiet\ --all\ * ) ]]; then
+    echo fake-existing-container
+  fi
   if [[ "${FAKE_DOCKER_MODE:-}" == occupied && "${2:-}" == --format ]]; then echo '0.0.0.0:25003->5432/tcp'; fi
   exit 0
 fi
@@ -113,9 +152,19 @@ assert_file "$SCRIPT"
 echo '== ambient project is rejected before Docker =='
 case_dir="$(new_case ambient)"
 run_runner "$case_dir" COMPOSE_PROJECT_NAME=ambient-project
-assert_eq "$(cat "${case_dir}/rc")" 2
-[[ ! -s "${case_dir}/commands.log" ]] || fail 'Docker was called before ambient rejection'
-assert_contains "${case_dir}/stderr" 'COMPOSE_PROJECT_NAME'
+assert_scrubbed_or_rejected "$case_dir" 'env_COMPOSE_PROJECT_NAME=ambient-project'
+
+echo '== hostile Compose profile/file and ambient ports are rejected or scrubbed =='
+case_dir="$(new_case hostile-compose-env)"
+run_runner "$case_dir" \
+  COMPOSE_PROFILES=hostile-profile COMPOSE_FILE=hostile-compose.yml \
+  POSTGRES_PORT=1 REDIS_PORT=2 NATS_PORT=3 NATS_HTTP_PORT=4 \
+  CLICKHOUSE_HTTP_PORT=5 LIVEKIT_PORT=6 LIVEKIT_RTC_TCP_PORT=7 \
+  LIVEKIT_RTC_UDP_PORT=8 CLAMAV_PORT=9 MINIO_PORT=10 MINIO_CONSOLE_PORT=11 \
+  NOTIFICATION_DEBUG_PORT=12 GATEWAY_PORT=13 WEB_PORT=14 \
+  DEVELOPER_PORTAL_PORT=15 ADMIN_PORT=16 VERIFICATION_STUB_PORT=17
+assert_scrubbed_or_rejected "$case_dir" 'env_COMPOSE_PROFILES=hostile-profile'
+assert_not_contains "${case_dir}/commands.log" 'env_COMPOSE_FILE=hostile-compose.yml'
 
 echo '== generated project collision is rejected =='
 case_dir="$(new_case collision)"
@@ -146,7 +195,7 @@ assert_contains "${case_dir}/commands.log" 'compose.*<--profile> <app> <up> <-d>
 assert_contains "${case_dir}/commands.log" 'compose.*<ps> <-q> <gateway>'
 assert_contains "${case_dir}/commands.log" 'compose.*<ps> <-q> <file>'
 assert_contains "${case_dir}/commands.log" 'curl.*<http://127.0.0.1:25012/health>'
-assert_contains "${case_dir}/commands.log" 'ports=25000,25012'
+assert_full_port_env "${case_dir}/commands.log"
 assert_contains "${case_dir}/commands.log" 'go cwd=.*/src/backend/gateway.*<-count=1> <-parallel> <1> <-timeout> <20m> <-tags> <live> <-run> <\\^TestComposeA1\\(TwoAccountsFoundation\\|DailyMessagingREST\\)_live\\$> <\\.\\/\\.\\.\\.>'
 
 echo '== every compose path is absolute and env file is zero-byte =='
