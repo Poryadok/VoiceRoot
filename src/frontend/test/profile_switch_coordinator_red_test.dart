@@ -8,9 +8,11 @@ import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/auth_client.dart';
 import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
+import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/guest_credentials_storage.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
+import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/profile_switch_coordinator.dart';
 
 import 'support/gateway_test_client.dart';
@@ -29,6 +31,7 @@ void main() {
         final harness = _CoordinatorHarness();
         addTearDown(harness.dispose);
         harness.replyWithSession('profile-b', _session('profile-b'));
+        harness.realtime.seedSubscriptions({'chat-a', 'chat-a-background'});
         harness.container.read(selectedChatIdProvider.notifier).state =
             'chat-a';
 
@@ -40,9 +43,18 @@ void main() {
         expect(applied.handoff.previousSession, _session('profile-a'));
         expect(applied.handoff.nextSession, _session('profile-b'));
         expect(applied.handoff.nextAuthorization, 'Bearer access-profile-b');
-        expect(applied.handoff.retireExistingSubscriptions, isTrue);
+        expect(applied.handoff.retiredSubscriptionIds, {
+          'chat-a',
+          'chat-a-background',
+        });
         expect(harness.realtime.handoffs, [applied.handoff]);
         expect(harness.realtime.selectedChatAtHandoff, [null]);
+        expect(harness.realtime.retiredSubscriptions, [
+          {'chat-a', 'chat-a-background'},
+        ]);
+        expect(harness.realtime.activeSubscriptions, isEmpty);
+        expect(harness.realtime.persistedAtHandoff, [_session('profile-b')]);
+        expect(harness.realtime.headerAtHandoff, ['Bearer access-profile-b']);
 
         expect(harness.controller.state.session, _session('profile-b'));
         expect(
@@ -50,6 +62,7 @@ void main() {
           'Bearer access-profile-b',
         );
         expect(await harness.storage.read(), _session('profile-b'));
+        expect(harness.storage.writes, [_session('profile-b')]);
         expect(
           harness.gatewayPaths.where((path) => path.contains('/chats')),
           isEmpty,
@@ -115,6 +128,7 @@ void main() {
       final harness = _CoordinatorHarness();
       addTearDown(harness.dispose);
       harness.reject('profile-b');
+      harness.realtime.seedSubscriptions({'chat-a', 'chat-a-background'});
       harness.container.read(selectedChatIdProvider.notifier).state = 'chat-a';
 
       final outcome = await harness.coordinator.switchTo('profile-b');
@@ -126,8 +140,13 @@ void main() {
         'Bearer access-profile-a',
       );
       expect(await harness.storage.read(), _session('profile-a'));
+      expect(harness.storage.writes, isEmpty);
       expect(harness.container.read(selectedChatIdProvider), 'chat-a');
       expect(harness.realtime.handoffs, isEmpty);
+      expect(harness.realtime.activeSubscriptions, {
+        'chat-a',
+        'chat-a-background',
+      });
       expect(
         harness.gatewayPaths.where((path) => path.contains('/chats')),
         isEmpty,
@@ -155,6 +174,8 @@ class _CoordinatorHarness {
     )..state = AuthState(session: _session('profile-a'));
     realtime = _RecordingProfileSwitchRealtimeBoundary(
       () => container.read(selectedChatIdProvider),
+      () => storage._session,
+      () => container.read(authorizationHeaderProvider),
     );
     container = ProviderContainer(
       overrides: [
@@ -162,6 +183,10 @@ class _CoordinatorHarness {
         authSessionStorageProvider.overrideWithValue(storage),
         guestCredentialsStorageProvider.overrideWithValue(
           InMemoryGuestCredentialsStorage(),
+        ),
+        httpClientProvider.overrideWithValue(client),
+        gatewayConfigProvider.overrideWithValue(
+          const GatewayConfig(baseUrl: 'http://api.test'),
         ),
         profileSwitchRealtimeBoundaryProvider.overrideWithValue(realtime),
       ],
@@ -211,6 +236,7 @@ class _RecordingAuthSessionStorage implements AuthSessionStorage {
   _RecordingAuthSessionStorage(this._session);
 
   AuthSession? _session;
+  final List<AuthSession> writes = [];
 
   @override
   Future<void> clear() async => _session = null;
@@ -219,21 +245,40 @@ class _RecordingAuthSessionStorage implements AuthSessionStorage {
   Future<AuthSession?> read() async => _session;
 
   @override
-  Future<void> write(AuthSession session) async => _session = session;
+  Future<void> write(AuthSession session) async {
+    writes.add(session);
+    _session = session;
+  }
 }
 
 class _RecordingProfileSwitchRealtimeBoundary
     implements ProfileSwitchRealtimeBoundary {
-  _RecordingProfileSwitchRealtimeBoundary(this._selectedChat);
+  _RecordingProfileSwitchRealtimeBoundary(
+    this._selectedChat,
+    this._persistedSession,
+    this._authorization,
+  );
 
   final String? Function() _selectedChat;
+  final AuthSession? Function() _persistedSession;
+  final String? Function() _authorization;
   final List<ProfileSwitchHandoff> handoffs = [];
   final List<String?> selectedChatAtHandoff = [];
+  final List<AuthSession?> persistedAtHandoff = [];
+  final List<String?> headerAtHandoff = [];
+  final List<Set<String>> retiredSubscriptions = [];
+  final Set<String> activeSubscriptions = {};
   final Map<int, Completer<void>> _paused = {};
   final Map<int, Completer<void>> _started = {};
 
   void pauseGeneration(int generation) {
     _paused[generation] = Completer<void>();
+  }
+
+  void seedSubscriptions(Set<String> chatIds) {
+    activeSubscriptions
+      ..clear()
+      ..addAll(chatIds);
   }
 
   Future<void> waitForStart(int generation) =>
@@ -248,6 +293,10 @@ class _RecordingProfileSwitchRealtimeBoundary
   Future<void> retireAndReconnect(ProfileSwitchHandoff handoff) async {
     handoffs.add(handoff);
     selectedChatAtHandoff.add(_selectedChat());
+    persistedAtHandoff.add(_persistedSession());
+    headerAtHandoff.add(_authorization());
+    retiredSubscriptions.add(handoff.retiredSubscriptionIds);
+    activeSubscriptions.removeAll(handoff.retiredSubscriptionIds);
     (_started[handoff.generation] ??= Completer<void>()).complete();
     await _paused[handoff.generation]?.future;
   }
