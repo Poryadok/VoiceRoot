@@ -217,6 +217,7 @@ void main() {
           harness.container.read(authControllerProvider).activeProfileId,
           'profile-primary',
         );
+        await _disposeMountedHarness(tester, harness);
       },
     );
   });
