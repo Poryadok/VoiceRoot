@@ -318,6 +318,9 @@ class AuthController extends StateNotifier<AuthState> {
   Future<String?> switchActiveProfile(String profileId) async {
     final current = state.session;
     if (current == null) return 'not_authenticated';
+    if (_terminatedProfileSessionGeneration != null) {
+      return 'not_authenticated';
+    }
     if (current.activeProfileId == profileId) return null;
     final generation = ++_profileSwitchGeneration;
     _terminatedProfileSessionGeneration = null;
@@ -400,6 +403,7 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Future<void> _persist(AuthSession session) async {
+    _terminatedProfileSessionGeneration = null;
     await _storage.write(session);
     _scheduleProactiveRefresh();
   }
