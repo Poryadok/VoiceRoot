@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"net/http"
+	"reflect"
 	"strings"
 
 	voicejwt "voice/backend/pkg/jwt"
@@ -75,7 +76,7 @@ func (g *gateway) authenticate(r *http.Request) (tokenClaims, string) {
 		if claims.SessionEpoch <= 0 {
 			return tokenClaims{}, "invalid_token"
 		}
-		if g.config.sessionEpochFloor == nil {
+		if isNilSessionEpochFloor(g.config.sessionEpochFloor) {
 			return tokenClaims{}, "auth_unavailable"
 		}
 		minimum, err := g.config.sessionEpochFloor.Minimum(r.Context(), claims.UserID)
@@ -87,6 +88,19 @@ func (g *gateway) authenticate(r *http.Request) (tokenClaims, string) {
 		}
 	}
 	return claims, ""
+}
+
+func isNilSessionEpochFloor(floor sessionEpochFloor) bool {
+	if floor == nil {
+		return true
+	}
+	value := reflect.ValueOf(floor)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
 }
 
 func applyClaims(r *http.Request, claims tokenClaims) {
