@@ -171,17 +171,25 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
           child: Builder(
             builder: (context) {
               final items = reconcilerScope == null
-                  ? chats.items
+                  ? activeProfileId != null && chats.profileId == activeProfileId
+                      ? chats.items
+                      : const <ChatListItem>[]
                   : reconcilerScope.isComplete
                       ? reconcilerScope.items
                       : chats.profileId == activeProfileId
                           ? mergeInboxRows(chats.items, reconcilerScope.items)
                           : reconcilerScope.items;
-              final isLoading = reconcilerScope?.isLoading ?? chats.isLoading;
+              final legacyMatchesProfile = activeProfileId != null &&
+                  chats.profileId == activeProfileId;
+              final isLoading = reconcilerScope?.isLoading ??
+                  (legacyMatchesProfile
+                      ? chats.isLoading
+                      : activeProfileId != null);
               final errorMessage =
-                  reconcilerScope?.errorMessage ?? chats.errorMessage;
+                  reconcilerScope?.errorMessage ??
+                  (legacyMatchesProfile ? chats.errorMessage : null);
               final errorStatusCode = reconcilerScope?.errorStatusCode ??
-                  chats.errorStatusCode;
+                  (legacyMatchesProfile ? chats.errorStatusCode : null);
               final hasReconcilerError = reconcilerScope?.errorMessage != null;
               if (isLoading && items.isEmpty) {
                 return const VoiceListSkeleton();
@@ -317,23 +325,41 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
                         showDragHandle: reorderIndex != null,
                         dragIndex: reorderIndex,
                         onAccept: () async {
+                          final session = ref.read(authControllerProvider).session;
+                          if (session == null) return;
                           final error = await ref
                               .read(chatListControllerProvider.notifier)
                               .acceptRequest(item.chatId);
+                          if (!context.mounted) return;
                           if (error == null) {
                             ref
                                 .read(inboxReconcilerProvider.notifier)
-                                .removeChat(InboxScope.requests, item.chatId);
+                                .removeChat(
+                                  InboxScope.requests,
+                                  item.chatId,
+                                  expectedProfileId: session.activeProfileId,
+                                  expectedAuthorization:
+                                      session.authorizationHeader,
+                                );
                           }
                         },
                         onDecline: () async {
+                          final session = ref.read(authControllerProvider).session;
+                          if (session == null) return;
                           final error = await ref
                               .read(chatListControllerProvider.notifier)
                               .declineRequest(item.chatId);
+                          if (!context.mounted) return;
                           if (error == null) {
                             ref
                                 .read(inboxReconcilerProvider.notifier)
-                                .removeChat(InboxScope.requests, item.chatId);
+                                .removeChat(
+                                  InboxScope.requests,
+                                  item.chatId,
+                                  expectedProfileId: session.activeProfileId,
+                                  expectedAuthorization:
+                                      session.authorizationHeader,
+                                );
                           }
                         },
                       ),
@@ -552,11 +578,19 @@ Future<void> _showChatRowActions(
         });
       }
     case 'archive':
+      final session = ref.read(authControllerProvider).session;
+      if (session == null) return;
       final err = await controller.archiveChat(item.chatId, archived: true);
+      if (!context.mounted) return;
       if (err == null) {
         ref
             .read(inboxReconcilerProvider.notifier)
-            .removeChat(InboxScope.main, item.chatId);
+            .removeChat(
+              InboxScope.main,
+              item.chatId,
+              expectedProfileId: session.activeProfileId,
+              expectedAuthorization: session.authorizationHeader,
+            );
       }
   }
 }

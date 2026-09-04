@@ -59,17 +59,25 @@ class _ChatArchiveScreenState extends ConsumerState<ChatArchiveScreen> {
       body: Builder(
         builder: (context) {
           final items = reconcilerScope == null
-              ? archive.items
+              ? activeProfileId != null && archive.profileId == activeProfileId
+                  ? archive.items
+                  : const []
               : reconcilerScope.isComplete
                   ? reconcilerScope.items
                   : archive.profileId == activeProfileId
                       ? mergeInboxRows(archive.items, reconcilerScope.items)
                       : reconcilerScope.items;
-          final isLoading = reconcilerScope?.isLoading ?? archive.isLoading;
+          final legacyMatchesProfile = activeProfileId != null &&
+              archive.profileId == activeProfileId;
+          final isLoading = reconcilerScope?.isLoading ??
+              (legacyMatchesProfile
+                  ? archive.isLoading
+                  : activeProfileId != null);
           final errorMessage =
-              reconcilerScope?.errorMessage ?? archive.errorMessage;
+              reconcilerScope?.errorMessage ??
+              (legacyMatchesProfile ? archive.errorMessage : null);
           final errorStatusCode = reconcilerScope?.errorStatusCode ??
-              archive.errorStatusCode;
+              (legacyMatchesProfile ? archive.errorStatusCode : null);
           final hasReconcilerError = reconcilerScope?.errorMessage != null;
           if (isLoading && items.isEmpty) {
             return const VoiceListSkeleton();
@@ -193,10 +201,13 @@ class _ChatArchiveScreenState extends ConsumerState<ChatArchiveScreen> {
 
   Future<void> _unarchive(BuildContext context, String chatId) async {
     final l10n = AppLocalizations.of(context)!;
+    final session = ref.read(authControllerProvider).session;
+    if (session == null) return;
     final err = await ref
         .read(chatArchiveListControllerProvider.notifier)
         .unarchiveChat(chatId);
     if (!context.mounted) return;
+    if (err == kChatActionStaleContext) return;
     if (err != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(err)),
@@ -205,7 +216,12 @@ class _ChatArchiveScreenState extends ConsumerState<ChatArchiveScreen> {
     }
     ref
         .read(inboxReconcilerProvider.notifier)
-        .removeChat(InboxScope.archive, chatId);
+        .removeChat(
+          InboxScope.archive,
+          chatId,
+          expectedProfileId: session.activeProfileId,
+          expectedAuthorization: session.authorizationHeader,
+        );
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(l10n.chatArchiveUnarchived)),
     );

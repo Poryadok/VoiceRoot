@@ -1,13 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
+import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
+import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/connectivity_providers.dart';
 import 'package:voice_frontend/state/inbox_reconciler.dart';
+import 'package:voice_frontend/state/shell_providers.dart';
 import 'package:voice_frontend/ui/core/voice_skeleton.dart';
 import 'package:voice_frontend/ui/chat/chat_archive_screen.dart';
 import 'package:voice_frontend/ui/shell/chat_list_body.dart';
@@ -210,6 +215,302 @@ void main() {
       findsNothing,
     );
   });
+
+  testWidgets('profile handoff hides legacy rows before the new scope exists', (
+    tester,
+  ) async {
+    final chats = InboxReconcilerChatsFake(
+      profileByAuthorization: const {
+        'Bearer test-access': 'prof-test',
+        'Bearer access-b': 'profile-b',
+      },
+    );
+    for (final inbox in ['main', 'requests', 'archive']) {
+      chats.enqueue(
+        InboxChatPageScript(
+          inbox: inbox,
+          cursor: null,
+          manual: true,
+          result: const ChatsApiOk(ChatListData(items: [])),
+        ),
+      );
+    }
+    await tester.pumpWidget(
+      _chatListApp(
+        chats: chats,
+        legacyState: ChatListState(
+          items: [inboxChatItem('profile-a-row')],
+          profileId: 'prof-test',
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.byKey(ChatListBody.tileKey('profile-a-row')), findsOneWidget);
+    for (final inbox in ['main', 'requests', 'archive']) {
+      chats.enqueue(
+        InboxChatPageScript(
+          inbox: inbox,
+          cursor: null,
+          profileId: 'profile-b',
+          authorization: 'Bearer access-b',
+          manual: true,
+          result: const ChatsApiOk(ChatListData(items: [])),
+        ),
+      );
+    }
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ChatListBody)),
+    );
+    container.read(authControllerProvider.notifier).state = const AuthState(
+      session: AuthSession(
+        accessToken: 'access-b',
+        refreshToken: 'refresh-b',
+        accountId: 'account-1',
+        activeProfileId: 'profile-b',
+        expiresInSeconds: 900,
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(ChatListBody.tileKey('profile-a-row')), findsNothing);
+  });
+
+  testWidgets('logout hides archived legacy rows', (tester) async {
+    await tester.pumpWidget(
+      _archiveApp(
+        _manualFirstPageScripts(),
+        legacyState: ChatListState(
+          items: [inboxChatItem('archive-before-logout')],
+          profileId: 'prof-test',
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(
+      find.byKey(ChatArchiveScreen.tileKey('archive-before-logout')),
+      findsOneWidget,
+    );
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ChatArchiveScreen)),
+    );
+    container.read(authControllerProvider.notifier).state = const AuthState();
+    await tester.pump();
+
+    expect(
+      find.byKey(ChatArchiveScreen.tileKey('archive-before-logout')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('request accept removes the reconciler-owned row', (
+    tester,
+  ) async {
+    final chats = _MutationChatsFake();
+    for (final inbox in ['main', 'archive']) {
+      chats.enqueue(
+        InboxChatPageScript(
+          inbox: inbox,
+          cursor: null,
+          result: const ChatsApiOk(ChatListData(items: [])),
+        ),
+      );
+    }
+    chats.enqueue(
+      InboxChatPageScript(
+        inbox: 'requests',
+        cursor: null,
+        result: ChatsApiOk(
+          ChatListData(items: [inboxChatItem('request-action')]),
+        ),
+      ),
+    );
+    await tester.pumpWidget(_chatListApp(chats: chats, inbox: 'requests'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Accept'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(ChatListBody.tileKey('request-action')), findsNothing);
+    expect(chats.acceptedChatIds, ['request-action']);
+  });
+
+  testWidgets(
+    'late profile A request accept cannot remove the same chat from profile B',
+    (tester) async {
+      final chats = _MutationChatsFake(
+        profileByAuthorization: const {
+          'Bearer test-access': 'prof-test',
+          'Bearer access-b': 'profile-b',
+        },
+      );
+      for (final inbox in ['main', 'archive']) {
+        chats.enqueue(
+          InboxChatPageScript(
+            inbox: inbox,
+            cursor: null,
+            result: const ChatsApiOk(ChatListData(items: [])),
+          ),
+        );
+      }
+      chats.enqueue(
+        InboxChatPageScript(
+          inbox: 'requests',
+          cursor: null,
+          result: ChatsApiOk(
+            ChatListData(
+              items: [inboxChatItem('same-chat', preview: 'profile A')],
+            ),
+          ),
+        ),
+      );
+      await tester.pumpWidget(_chatListApp(chats: chats, inbox: 'requests'));
+      await tester.pumpAndSettle();
+
+      chats.deferredAccept = Completer<ChatsApiResult<void>>();
+      await tester.tap(find.text('Accept'));
+      await tester.pump();
+
+      for (final inbox in ['main', 'archive']) {
+        chats.enqueue(
+          InboxChatPageScript(
+            inbox: inbox,
+            cursor: null,
+            profileId: 'profile-b',
+            authorization: 'Bearer access-b',
+            result: const ChatsApiOk(ChatListData(items: [])),
+          ),
+        );
+      }
+      chats.enqueue(
+        InboxChatPageScript(
+          inbox: 'requests',
+          cursor: null,
+          profileId: 'profile-b',
+          authorization: 'Bearer access-b',
+          result: ChatsApiOk(
+            ChatListData(
+              items: [inboxChatItem('same-chat', preview: 'profile B')],
+            ),
+          ),
+        ),
+      );
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ChatListBody)),
+      );
+      container.read(authControllerProvider.notifier).state = const AuthState(
+        session: AuthSession(
+          accessToken: 'access-b',
+          refreshToken: 'refresh-b',
+          accountId: 'account-1',
+          activeProfileId: 'profile-b',
+          expiresInSeconds: 900,
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('profile B'), findsOneWidget);
+
+      chats.deferredAccept!.complete(const ChatsApiOk(null));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(ChatListBody.tileKey('same-chat')), findsOneWidget);
+      expect(find.text('profile B'), findsOneWidget);
+      expect(chats.acceptedChatIds, ['same-chat']);
+    },
+  );
+
+  testWidgets('request accept completion after unmount is ignored', (
+    tester,
+  ) async {
+    final chats = _MutationChatsFake();
+    for (final inbox in ['main', 'archive']) {
+      chats.enqueue(
+        InboxChatPageScript(
+          inbox: inbox,
+          cursor: null,
+          result: const ChatsApiOk(ChatListData(items: [])),
+        ),
+      );
+    }
+    chats.enqueue(
+      InboxChatPageScript(
+        inbox: 'requests',
+        cursor: null,
+        result: ChatsApiOk(
+          ChatListData(items: [inboxChatItem('unmounted-action')]),
+        ),
+      ),
+    );
+    await tester.pumpWidget(_chatListApp(chats: chats, inbox: 'requests'));
+    await tester.pumpAndSettle();
+
+    chats.deferredAccept = Completer<ChatsApiResult<void>>();
+    await tester.tap(find.text('Accept'));
+    await tester.pump();
+    await tester.pumpWidget(const SizedBox.shrink());
+    chats.deferredAccept!.complete(const ChatsApiOk(null));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('unarchive removes the reconciler-owned archive row', (
+    tester,
+  ) async {
+    final chats = _MutationChatsFake();
+    for (final inbox in ['main', 'requests']) {
+      chats.enqueue(
+        InboxChatPageScript(
+          inbox: inbox,
+          cursor: null,
+          result: const ChatsApiOk(ChatListData(items: [])),
+        ),
+      );
+    }
+    chats.enqueue(
+      InboxChatPageScript(
+        inbox: 'archive',
+        cursor: null,
+        result: ChatsApiOk(
+          ChatListData(items: [inboxChatItem('archive-action')]),
+        ),
+      ),
+    );
+    await tester.pumpWidget(_archiveApp(chats));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Unarchive'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(ChatArchiveScreen.tileKey('archive-action')),
+      findsNothing,
+    );
+    expect(chats.unarchivedChatIds, ['archive-action']);
+  });
+
+  testWidgets('custom folder keeps legacy membership rows and load more', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _chatListApp(
+        chats: _manualFirstPageScripts(),
+        selectedFolderId: 'custom-folder',
+        legacyState: ChatListState(
+          items: [inboxChatItem('custom-folder-row')],
+          nextCursor: 'folder-next',
+          profileId: 'prof-test',
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.byKey(ChatListBody.tileKey('custom-folder-row')),
+      findsOneWidget,
+    );
+    expect(find.byKey(ChatListBody.loadMoreKey), findsOneWidget);
+  });
 }
 
 Widget _archiveApp(
@@ -243,6 +544,8 @@ Widget _chatListApp({
   required InboxReconcilerChatsFake chats,
   bool offline = false,
   ChatListState? legacyState,
+  String inbox = 'main',
+  String? selectedFolderId,
 }) {
   return ProviderScope(
     overrides: [
@@ -250,6 +553,8 @@ Widget _chatListApp({
         client: MockClient((_) async => http.Response('{}', 404)),
       ),
       voiceChatsClientProvider.overrideWithValue(chats),
+      chatInboxProvider.overrideWith((ref) => inbox),
+      selectedChatFolderIdProvider.overrideWith((ref) => selectedFolderId),
       isDeviceOfflineProvider.overrideWith((ref) => offline),
       chatListControllerProvider.overrideWith(
         (ref) => _NoAutoChatListController(ref, legacyState),
@@ -408,4 +713,33 @@ InboxReconcilerChatsFake _manualFirstPageScripts() {
     );
   }
   return chats;
+}
+
+class _MutationChatsFake extends InboxReconcilerChatsFake {
+  _MutationChatsFake({super.profileByAuthorization});
+
+  final acceptedChatIds = <String>[];
+  final unarchivedChatIds = <String>[];
+  Completer<ChatsApiResult<void>>? deferredAccept;
+
+  @override
+  Future<ChatsApiResult<void>> acceptDmRequest({
+    required String authorization,
+    required String chatId,
+  }) async {
+    acceptedChatIds.add(chatId);
+    final pending = deferredAccept;
+    if (pending != null) return pending.future;
+    return const ChatsApiOk(null);
+  }
+
+  @override
+  Future<ChatsApiResult<void>> archiveChat({
+    required String authorization,
+    required String chatId,
+    required bool archived,
+  }) async {
+    if (!archived) unarchivedChatIds.add(chatId);
+    return const ChatsApiOk(null);
+  }
 }

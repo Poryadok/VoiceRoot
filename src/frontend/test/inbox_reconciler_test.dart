@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -456,10 +458,17 @@ void main() {
         final loading = controller.reconcile();
         await pumpEventQueue();
 
-        controller.removeChat(InboxScope.main, 'archived-during-reconcile');
+        controller.removeChat(
+          InboxScope.main,
+          'archived-during-reconcile',
+          expectedProfileId: 'prof-test',
+          expectedAuthorization: 'Bearer test-access',
+        );
         await chats.completeCall(
           chats.findCall(inbox: 'main', cursor: 'main-terminal')!,
-          result: const ChatsApiOk(ChatListData(items: [])),
+          result: ChatsApiOk(
+            ChatListData(items: [inboxChatItem('archived-during-reconcile')]),
+          ),
         );
         await loading;
 
@@ -1023,6 +1032,24 @@ void main() {
       expect(container.read(dmPeerProfileByChatIdProvider), {
         'shared-chat': 'peer-b',
       });
+      container
+          .read(inboxReconcilerProvider.notifier)
+          .removeChat(
+            InboxScope.main,
+            'shared-chat',
+            expectedProfileId: 'profile-a',
+            expectedAuthorization: 'Bearer access-a',
+          );
+      expect(
+        container
+            .read(inboxReconcilerProvider)
+            .profileSnapshots['profile-b']![InboxScope.main]
+            .items
+            .single
+            .chatId,
+        'shared-chat',
+        reason: 'a late profile A action must not remove profile B state',
+      );
       expect(chats.unmatchedCalls, isEmpty);
       expect(chats.pendingScripts, 0);
     });

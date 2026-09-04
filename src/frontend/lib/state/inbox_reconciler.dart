@@ -129,6 +129,7 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
       // first A response after returning to A.
       _generation++;
       _pendingItems.clear();
+      _removedChatIds.clear();
       if (profileChanged) {
         _ref.read(dmPeerProfileByChatIdProvider.notifier).state = const {};
       }
@@ -137,14 +138,14 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
         // ordering remains owned by T-053.
         final expectedProfileId = nextSession.activeProfileId;
         final expectedAccessToken = nextSession.accessToken;
-        Future<void>(() async {
+        scheduleMicrotask(() {
           if (!mounted) return;
           final current = _ref.read(authControllerProvider).session;
           if (current?.activeProfileId != expectedProfileId ||
               current?.accessToken != expectedAccessToken) {
             return;
           }
-          await reconcile();
+          unawaited(reconcile());
         });
       }
     });
@@ -155,6 +156,7 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
   ProviderSubscription<AuthState>? _authSub;
   int _generation = 0;
   final Map<InboxScope, List<ChatListItem>> _pendingItems = {};
+  final Map<InboxScope, Set<String>> _removedChatIds = {};
 
   @override
   void dispose() {
@@ -171,6 +173,7 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
     final authorization = session.authorizationHeader;
     final generation = ++_generation;
     _pendingItems.clear();
+    _removedChatIds.clear();
 
     await Future.wait([
       for (final scope in InboxScope.values)
@@ -208,12 +211,22 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
 
   /// Applies a successful Chat mutation to the visible authoritative snapshot.
   /// The mutation itself remains owned by the existing action controller.
-  void removeChat(InboxScope scope, String chatId) {
-    final profileId = _ref.read(authControllerProvider).activeProfileId;
-    if (profileId == null) return;
+  void removeChat(
+    InboxScope scope,
+    String chatId, {
+    required String expectedProfileId,
+    required String expectedAuthorization,
+  }) {
+    final session = _ref.read(authControllerProvider).session;
+    if (session?.activeProfileId != expectedProfileId ||
+        session?.authorizationHeader != expectedAuthorization) {
+      return;
+    }
+    final profileId = expectedProfileId;
     final profile = state.profileSnapshots[profileId];
     final current = profile?[scope];
     if (profile == null || current == null) return;
+    _removedChatIds.putIfAbsent(scope, () => <String>{}).add(chatId);
     final items = current.items
         .where((item) => item.chatId != chatId)
         .toList(growable: false);
@@ -277,6 +290,7 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
           _syncDmPeers(
             generation: generation,
             profileId: profileId,
+            scope: scope,
             items: data.items,
           );
           if (!_isCurrent(generation, profileId)) return;
@@ -349,9 +363,13 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
     if (!_isCurrent(generation, profileId)) return;
     final current =
         state.profileSnapshots[profileId]?[scope] ?? const InboxScopeSnapshot();
+    final removed = _removedChatIds[scope] ?? const <String>{};
+    final acceptedItems = items
+        .where((item) => !removed.contains(item.chatId))
+        .toList(growable: false);
     final pending = replacesPage
-        ? List<ChatListItem>.of(items)
-        : mergeInboxRows(_pendingItems[scope] ?? const [], items);
+        ? acceptedItems
+        : mergeInboxRows(_pendingItems[scope] ?? const [], acceptedItems);
     _pendingItems[scope] = pending;
     _replaceScope(
       generation: generation,
@@ -445,6 +463,7 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
   void _syncDmPeers({
     required int generation,
     required String profileId,
+    required InboxScope scope,
     required Iterable<ChatListItem> items,
   }) {
     if (!_isCurrent(generation, profileId)) return;
@@ -453,6 +472,7 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
     );
     var changed = false;
     for (final item in items) {
+      if (_removedChatIds[scope]?.contains(item.chatId) ?? false) continue;
       final peerId = resolveDmPeerProfileId(
         item: item,
         // Current-profile server metadata is authoritative. A global cached
