@@ -184,6 +184,43 @@ func TestSessionEpochFloorFailsClosedWhenUnavailable(t *testing.T) {
 	}
 }
 
+func TestSessionEpochFloorTypedNilRedisStoreFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	var redisFloor *redisSessionEpochFloor
+	var floor sessionEpochFloor = redisFloor
+	blacklist := &recordingBlacklist{}
+	var upstreamCalls int
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenValidator:     fixedValidator{claims: tokenClaims{UserID: "account-1", JTI: "jti-1", SessionEpoch: 7}},
+		tokenBlacklist:     blacklist,
+		sessionEpochStrict: true,
+		sessionEpochFloor:  floor,
+		restUpstreams: map[string]http.Handler{
+			"users": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				upstreamCalls++
+				w.WriteHeader(http.StatusNoContent)
+			}),
+		},
+	})
+
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			t.Fatalf("typed-nil session epoch floor panicked: %v", recovered)
+		}
+	}()
+	rec := performRequest(h, http.MethodGet, "/api/v1/users/me", "", map[string]string{"Authorization": "Bearer any"})
+	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), "auth_unavailable") {
+		t.Fatalf("status/body = %d %q", rec.Code, rec.Body.String())
+	}
+	if blacklist.calls != 1 {
+		t.Fatalf("blacklist calls = %d, want 1 before floor", blacklist.calls)
+	}
+	if upstreamCalls != 0 {
+		t.Fatalf("upstream calls = %d, want 0", upstreamCalls)
+	}
+}
+
 func TestSessionEpochFloorRunsAfterSuccessfulJTIValidation(t *testing.T) {
 	t.Parallel()
 
