@@ -22,7 +22,9 @@ import java.time.Duration;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.BiConsumer;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
@@ -122,6 +124,30 @@ class StringRedisSessionEpochCommandsTest {
         .hasMessageContaining("timeout");
 
     verify(connection, times(1)).close();
+  }
+
+  @Test
+  void timedOutConnectionCancelsOnceAndClosesAnyLatePhysicalConnection() throws Exception {
+    StringRedisTemplate template = mock(StringRedisTemplate.class);
+    RedisClient client = mock(RedisClient.class);
+    ConnectionFuture<StatefulRedisConnection<byte[], byte[]>> connecting = mock(ConnectionFuture.class);
+    StatefulRedisConnection<byte[], byte[]> lateConnection = mock(StatefulRedisConnection.class);
+    when(client.connectAsync(ByteArrayCodec.INSTANCE, ENDPOINT)).thenReturn(connecting);
+    when(connecting.get(any(Long.class), any(TimeUnit.class))).thenThrow(new TimeoutException("late"));
+    StringRedisSessionEpochCommands commands = new StringRedisSessionEpochCommands(template, client, ENDPOINT);
+
+    assertThatThrownBy(
+            () -> commands.readRequiredPositive(
+                "auth:session:min_epoch:" + UUID.randomUUID(), Duration.ofSeconds(2)))
+        .isInstanceOf(SessionEpochFloorUnavailableException.class)
+        .hasMessageContaining("timeout");
+
+    verify(connecting).cancel(true);
+    ArgumentCaptor<BiConsumer<StatefulRedisConnection<byte[], byte[]>, Throwable>> completion =
+        ArgumentCaptor.forClass(BiConsumer.class);
+    verify(connecting).whenComplete(completion.capture());
+    completion.getValue().accept(lateConnection, null);
+    verify(lateConnection).close();
   }
 
   private static void assertPhysicalConnectionOwnership(
