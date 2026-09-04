@@ -64,11 +64,7 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text('Gaming').last);
 
-        await _expectOnePausedCoordinatorTransition(
-          tester,
-          harness,
-          expectedProfileId: 'profile-created',
-        );
+        await _expectOnePausedCoordinatorTransition(tester, harness);
         expect(
           harness.container.read(authControllerProvider).activeProfileId,
           'profile-alt',
@@ -129,7 +125,11 @@ void main() {
         );
         await tester.tap(find.byKey(CreateProfileSheet.submitKey));
 
-        await _expectOnePausedCoordinatorTransition(tester, harness);
+        await _expectOnePausedCoordinatorTransition(
+          tester,
+          harness,
+          expectedProfileId: 'profile-created',
+        );
         expect(harness.createRequests, 1);
         expect(find.byKey(CreateProfileSheet.sheetKey), findsOneWidget);
 
