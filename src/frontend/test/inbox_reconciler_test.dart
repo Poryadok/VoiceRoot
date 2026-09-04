@@ -482,6 +482,71 @@ void main() {
       },
     );
 
+    test(
+      'legacy removal before a scope exists filters the later first page',
+      () async {
+        final chats = InboxReconcilerChatsFake()
+          ..enqueue(
+            const InboxChatPageScript(
+              inbox: 'main',
+              cursor: null,
+              manual: true,
+              result: ChatsApiOk(ChatListData(items: [])),
+            ),
+          );
+        for (final inbox in ['requests', 'archive']) {
+          chats.enqueue(
+            InboxChatPageScript(
+              inbox: inbox,
+              cursor: null,
+              result: const ChatsApiOk(ChatListData(items: [])),
+            ),
+          );
+        }
+        final container = _container(
+          chats: chats,
+          messages: InboxReconcilerMessagesFake(),
+        );
+        addTearDown(container.dispose);
+        final controller = container.read(inboxReconcilerProvider.notifier);
+
+        controller.removeChat(
+          InboxScope.main,
+          'removed-before-scope',
+          expectedProfileId: 'prof-test',
+          expectedAuthorization: 'Bearer test-access',
+        );
+        expect(
+          container
+              .read(inboxReconcilerProvider)
+              .profileSnapshots['prof-test'],
+          isNull,
+        );
+
+        final loading = controller.reconcile();
+        await pumpEventQueue();
+        await chats.completeCall(
+          chats.findCall(inbox: 'main', cursor: null)!,
+          result: ChatsApiOk(
+            ChatListData(items: [inboxChatItem('removed-before-scope')]),
+          ),
+        );
+        await loading;
+
+        expect(
+          container
+              .read(inboxReconcilerProvider)
+              .profileSnapshots['prof-test']![InboxScope.main]
+              .items,
+          isEmpty,
+        );
+        expect(
+          container.read(dmPeerProfileByChatIdProvider),
+          isNot(contains('removed-before-scope')),
+        );
+      },
+    );
+
     test('isolates a later-page failure to its own inbox scope', () async {
       for (final failedInbox in ['main', 'requests', 'archive']) {
         final chats = InboxReconcilerChatsFake();
