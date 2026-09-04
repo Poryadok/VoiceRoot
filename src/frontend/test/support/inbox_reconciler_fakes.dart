@@ -14,16 +14,20 @@ class InboxChatPageScript {
     required this.inbox,
     required this.cursor,
     required this.result,
-    this.profileId,
-    this.authorization,
+    this.profileId = 'prof-test',
+    this.authorization = 'Bearer test-access',
+    this.pageSize,
+    this.folderId,
     this.manual = false,
   });
 
   final String inbox;
   final String? cursor;
   final ChatsApiResult<ChatListData> result;
-  final String? profileId;
-  final String? authorization;
+  final String profileId;
+  final String authorization;
+  final int? pageSize;
+  final String? folderId;
   final bool manual;
 }
 
@@ -34,6 +38,7 @@ class InboxChatCall {
     required this.inbox,
     required this.cursor,
     required this.pageSize,
+    required this.folderId,
   });
 
   final String authorization;
@@ -41,25 +46,31 @@ class InboxChatCall {
   final String? inbox;
   final String? cursor;
   final int? pageSize;
+  final String? folderId;
   bool completed = false;
   Completer<ChatsApiResult<ChatListData>>? completer;
 }
 
 /// Scripted [VoiceChatsClient] that can resolve pages immediately or manually.
 ///
-/// Calls are matched by the exact `(inbox, cursor)` pair. This makes a test
-/// fail if retry restarts at page one or silently changes an opaque cursor.
+/// Calls are matched by the exact `(profile, authorization, inbox, cursor,
+/// pageSize, folderId)` key. This makes a test fail if retry restarts at page
+/// one, crosses a profile boundary, or silently changes an opaque cursor.
 class InboxReconcilerChatsFake extends VoiceChatsClient {
-  InboxReconcilerChatsFake({this.profileByAuthorization = const {}})
-    : super(
-        gateway: gatewayHttpForTest(
-          MockClient((_) async => http.Response('{}', 500)),
-        ),
-      );
+  InboxReconcilerChatsFake({
+    this.profileByAuthorization = const {'Bearer test-access': 'prof-test'},
+  }) : super(
+         gateway: gatewayHttpForTest(
+           MockClient((_) async => http.Response('{}', 500)),
+         ),
+       );
 
   final Map<String, String> profileByAuthorization;
   final List<InboxChatPageScript> _scripts = [];
   final List<InboxChatCall> calls = [];
+  final List<InboxChatCall> unmatchedCalls = [];
+
+  int get pendingScripts => _scripts.length;
 
   void enqueue(InboxChatPageScript script) => _scripts.add(script);
 
@@ -104,6 +115,7 @@ class InboxReconcilerChatsFake extends VoiceChatsClient {
       inbox: inbox,
       cursor: cursor,
       pageSize: pageSize,
+      folderId: folderId,
     );
     calls.add(call);
 
@@ -111,16 +123,17 @@ class InboxReconcilerChatsFake extends VoiceChatsClient {
       (script) =>
           script.inbox == (inbox ?? 'main') &&
           script.cursor == cursor &&
-          (script.profileId == null ||
-              script.profileId == profileByAuthorization[authorization]) &&
-          (script.authorization == null ||
-              script.authorization == authorization),
+          script.pageSize == pageSize &&
+          script.folderId == folderId &&
+          script.profileId == profileByAuthorization[authorization] &&
+          script.authorization == authorization,
     );
     if (index < 0) {
-      return Future.value(
-        const ChatsApiFailure(
-          message: 'missing scripted page',
-          statusCode: 500,
+      unmatchedCalls.add(call);
+      return Future.error(
+        StateError(
+          'Unexpected ListChats call: ${call.profileId}/${call.authorization}/'
+          '${call.inbox}/${call.cursor}/${call.pageSize}/${call.folderId}',
         ),
       );
     }
@@ -229,10 +242,21 @@ class InboxReconcilerMessagesFake extends VoiceMessagesClient {
   }
 }
 
-ChatListItem inboxChatItem(String id, {String? preview, String? inbox}) {
+ChatListItem inboxChatItem(
+  String id, {
+  String? preview,
+  String? inbox,
+  String? creatorProfileId,
+  int unreadCount = 0,
+}) {
   return ChatListItem(
-    chat: VoiceChat(id: id, type: 'CHAT_TYPE_DM', creatorProfileId: 'peer-$id'),
+    chat: VoiceChat(
+      id: id,
+      type: 'CHAT_TYPE_DM',
+      creatorProfileId: creatorProfileId ?? 'peer-$id',
+    ),
     lastMessagePreview: preview,
+    unreadCount: unreadCount,
     inbox: inbox,
   );
 }

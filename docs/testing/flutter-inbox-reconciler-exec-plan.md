@@ -42,7 +42,8 @@ Documentation sources:
 - `docs/ARCHITECTURE_REQUIREMENTS.md` "Reconnect / delivery": Chat REST owns
   global reconciliation and Messaging REST owns per-chat history.
 - `docs/TESTING.md` "Порядок разработки (TDD)" and Flutter checks.
-- `tmp/fleet/plans/A1-daily-messaging.md` T-052 dependency and scope.
+- `docs/PLAN.md` A1 dependency and scope, with the feature and service
+  contracts listed above as the only tracked sources of truth.
 
 Current code:
 
@@ -78,10 +79,9 @@ In scope:
   existing `ChatRoomController`, with a negative assertion that the global
   reconciler makes zero `GetMessages` calls.
 - Honest loading/offline/error/retry state while cached rows remain visible.
-- Clearing or isolating T-052-owned selection/subscription inputs at a profile
-  boundary so an old-profile chat cannot trigger history work. Full atomic
-  switch sequencing, persistence, voice retention, and membership proof remain
-  T-053.
+- Profile-keyed generation isolation at a profile boundary, including rows,
+  cursors, errors, loading flags, and derived peer/cache writes. Selection and
+  subscription lifecycle orchestration remain entirely in T-053.
 
 Out of scope:
 
@@ -109,10 +109,10 @@ Out of scope:
    production API models global WS history replay.
 8. Offline or failed reconciliation is visible with a retry action while
    previously committed rows remain rendered.
-9. On a profile boundary, stale selection and T-052-owned history/subscription
-   work are cleared or ignored before old async results can commit. The stale
-   generation cannot commit rows, cursors, errors, cache writes, or loading
-   flags. T-053 will own the broader atomic switch.
+9. On a profile boundary, the stale generation cannot commit rows, cursors,
+   errors, derived peer/cache writes, or loading flags into either profile's
+   authoritative snapshot. T-053 owns selection clearing and the broader
+   session/socket/subscription transaction.
 
 ## Test Strategy And Fixtures
 
@@ -145,9 +145,9 @@ Out of scope:
 - [x] RED 3: tests preserve selected-`ChatRoomController` Messaging catch-up and
   prove the global reconciler makes zero Messaging/global WS replay calls.
 - [x] RED 4: widget tests require cached rows plus visible offline/error/retry.
-- [x] RED 5: tests require old-profile selection/history work to be ignored;
-  leave complete atomic switch behavior to T-053.
-- [ ] Test review gate: a fresh reviewer checks documentation coverage, assertion
+- [x] RED 5: tests require old-profile reconciler generations and derived peer
+  writes to be ignored; selection/subscription cleanup remains T-053.
+- [x] Test review gate: a fresh reviewer checks documentation coverage, assertion
   quality, fixture realism, expected failures, and absence of production edits.
 - [ ] GREEN 1: add a profile-keyed reconnect snapshot state/controller and make
   RED 1 pass with the smallest implementation.
@@ -177,34 +177,39 @@ Out of scope:
    `GetMessages`, or add a Realtime replay API.
 6. Expose partial loading/error/retry to `ChatListBody` and
    `ChatArchiveScreen`, preserving rendered rows and existing localized copy.
-7. At profile change, invalidate T-052-owned selected-history work and ignore
-   old generation completions. Coordinate the wider session/WS/subscription
-   transaction in T-053 rather than expanding this change.
+7. At profile change, invalidate the old inbox generation and ignore all of its
+   completions. Keep selection, Messaging room lifecycle, and the wider
+   session/WS/subscription transaction in T-053.
 
 ## Validation
 
-- [ ] `flutter test test/inbox_reconciler_test.dart` — expected RED before
-  production implementation; record exact diagnostics/assertions.
-- [ ] `flutter test test/inbox_reconciler_widget_test.dart` — expected RED before
-  production implementation; record exact diagnostics/assertions.
-- [ ] `flutter test test/chat_state_test.dart test/chat_offline_ui_test.dart test/chat_archive_screen_test.dart test/message_requests_providers_test.dart`
-  remains green to isolate the missing reconciler.
-- [ ] `dart format --output=none --set-exit-if-changed test/inbox_reconciler_test.dart test/inbox_reconciler_widget_test.dart test/support/inbox_reconciler_fakes.dart`
+- [x] `flutter test --no-pub test/inbox_reconciler_test.dart` — expected RED:
+  missing `lib/state/inbox_reconciler.dart`, `InboxScope`, and
+  `inboxReconcilerProvider`.
+- [x] `flutter test --no-pub test/inbox_reconciler_widget_test.dart` — expected
+  RED at the same missing production contract.
+- [x] `flutter test --no-pub test/chat_state_test.dart test/chat_offline_ui_test.dart test/chat_archive_screen_test.dart test/message_requests_providers_test.dart`
+  remains green (16 tests) to isolate the missing reconciler.
+- [x] `dart format test/inbox_reconciler_test.dart test/inbox_reconciler_widget_test.dart test/support/inbox_reconciler_fakes.dart`
 - [ ] `flutter analyze` if the expected missing production contract does not make
   the signal redundant; otherwise record the expected RED diagnostics.
-- [ ] `git diff --check`.
+- [x] `git diff --check`.
 
 ## Progress
 
 - [x] Worktree lease and detached base `37fa468d` verified.
 - [x] Created `feature/flutter-inbox-reconciler` without a local collision.
 - [x] RED tests and test-only fakes written.
-- [x] RED failures captured: provider suite cannot compile because the planned
-  `lib/state/inbox_reconciler.dart`, `InboxScope`, and
-  `inboxReconcilerProvider` do not exist; widget suite reaches assertions and
-  fails because partial/offline state renders the cached row without the
-  documented error/retry affordance.
-- [ ] Independent test review has no critical findings.
+- [x] First RED review rejected incomplete assertions and a handcrafted widget
+  state seam; the correction rewires tests to the planned reconciler contract,
+  strict request scripts, exact cursor retry, and complete generation/profile
+  isolation.
+- [x] Corrected RED failures captured. Both focused suites stop
+  at compilation because the planned `lib/state/inbox_reconciler.dart`,
+  `InboxScope`, and `inboxReconcilerProvider` production contract does not yet
+  exist.
+- [x] Independent test review approved the corrected RED diff with no P1/P2
+  findings.
 - [ ] Commit, push, and draft PR attempted.
 
 ## Decisions
