@@ -42,82 +42,123 @@ void main() {
 
         InboxChatCall? staleArchiveCall;
         Future<void>? staleReconcile;
+        Object? bodyFailure;
+        Object? cleanupFailure;
+        StackTrace? cleanupStack;
 
-        final reconciler = container.read(inboxReconcilerProvider.notifier);
-        await reconciler.reconcile();
-        final initialArchive = container
-            .read(inboxReconcilerProvider)
-            .profileSnapshots['profile-a']![InboxScope.archive];
-        expect(initialArchive.items, isEmpty);
-        expect(initialArchive.isComplete, isTrue);
+        Future<void> runCleanup(FutureOr<void> Function() action) async {
+          try {
+            await action();
+          } catch (error, stack) {
+            cleanupFailure ??= error;
+            cleanupStack ??= stack;
+          }
+        }
 
-        staleReconcile = reconciler.reconcile();
-        await tester.pump();
-        staleArchiveCall = chats.findCall(inbox: 'archive', cursor: null);
-        expect(staleArchiveCall, isNotNull);
+        try {
+          final reconciler = container.read(inboxReconcilerProvider.notifier);
+          await reconciler.reconcile();
+          final initialArchive = container
+              .read(inboxReconcilerProvider)
+              .profileSnapshots['profile-a']![InboxScope.archive];
+          expect(initialArchive.items, isEmpty);
+          expect(initialArchive.isComplete, isTrue);
 
-        final main = container.read(chatListControllerProvider.notifier)
-          ..state = ChatListState(
-            profileId: 'profile-a',
-            items: [inboxChatItem('chat-1')],
+          staleReconcile = reconciler.reconcile();
+          await tester.pump();
+          staleArchiveCall = chats.findCall(inbox: 'archive', cursor: null);
+          expect(staleArchiveCall, isNotNull);
+
+          final main = container.read(chatListControllerProvider.notifier)
+            ..state = ChatListState(
+              profileId: 'profile-a',
+              items: [inboxChatItem('chat-1')],
+            );
+          expect(await main.archiveChat('chat-1', archived: true), isNull);
+          expect(chats.archiveCalls, [
+            const _ArchiveCall(
+              authorization: 'Bearer access-a',
+              chatId: 'chat-1',
+              archived: true,
+            ),
+          ]);
+
+          final confirmedArchive = container
+              .read(inboxReconcilerProvider)
+              .profileSnapshots['profile-a']![InboxScope.archive];
+          expect(
+            confirmedArchive.items.map((item) => item.chatId),
+            ['chat-1'],
+            reason:
+                'the confirmed ArchiveChat mutation must update the authoritative '
+                'profile-scoped archive snapshot, not a legacy list',
           );
-        expect(await main.archiveChat('chat-1', archived: true), isNull);
-        expect(chats.archiveCalls, [
-          const _ArchiveCall(
-            authorization: 'Bearer access-a',
-            chatId: 'chat-1',
-            archived: true,
-          ),
-        ]);
+          expect(confirmedArchive.isComplete, isTrue);
 
-        final confirmedArchive = container
-            .read(inboxReconcilerProvider)
-            .profileSnapshots['profile-a']![InboxScope.archive];
-        expect(
-          confirmedArchive.items.map((item) => item.chatId),
-          ['chat-1'],
-          reason:
-              'the confirmed ArchiveChat mutation must update the authoritative '
-              'profile-scoped archive snapshot, not a legacy list',
-        );
-        expect(confirmedArchive.isComplete, isTrue);
+          await tester.pumpWidget(_testApp(container));
+          await tester.pump();
+          expect(
+            find.byKey(ChatArchiveScreen.tileKey('chat-1')),
+            findsOneWidget,
+          );
 
-        await tester.pumpWidget(_testApp(container));
-        await tester.pump();
-        expect(find.byKey(ChatArchiveScreen.tileKey('chat-1')), findsOneWidget);
+          await chats.completeCall(
+            staleArchiveCall!,
+            result: const ChatsApiOk(ChatListData(items: [])),
+          );
+          await staleReconcile;
+          await tester.pump();
 
-        await chats.completeCall(
-          staleArchiveCall!,
-          result: const ChatsApiOk(ChatListData(items: [])),
-        );
-        await staleReconcile;
-        await tester.pump();
-
-        final afterStaleArchive = container
-            .read(inboxReconcilerProvider)
-            .profileSnapshots['profile-a']![InboxScope.archive];
-        expect(afterStaleArchive.items.map((item) => item.chatId), ['chat-1']);
-        expect(afterStaleArchive.isComplete, isTrue);
-        expect(
-          find.byKey(ChatArchiveScreen.tileKey('chat-1')),
-          findsOneWidget,
-          reason:
-              'a stale archive scope response for the same profile/session must not erase the confirmed archive mutation',
-        );
-        expect(chats.unmatchedCalls, isEmpty);
-        expect(
-          chats.calls.every(
-            (call) =>
-                call.profileId == 'profile-a' &&
-                call.authorization == 'Bearer access-a',
-          ),
-          isTrue,
-          reason:
-              'archive reconciliation must stay scoped to the active session',
-        );
-        await tester.pumpWidget(const SizedBox.shrink());
-        await tester.pump();
-        disposeContainer();
+          final afterStaleArchive = container
+              .read(inboxReconcilerProvider)
+              .profileSnapshots['profile-a']![InboxScope.archive];
+          expect(afterStaleArchive.items.map((item) => item.chatId), [
+            'chat-1',
+          ]);
+          expect(afterStaleArchive.isComplete, isTrue);
+          expect(
+            find.byKey(ChatArchiveScreen.tileKey('chat-1')),
+            findsOneWidget,
+            reason:
+                'a stale archive scope response for the same profile/session must not erase the confirmed archive mutation',
+          );
+          expect(chats.unmatchedCalls, isEmpty);
+          expect(
+            chats.calls.every(
+              (call) =>
+                  call.profileId == 'profile-a' &&
+                  call.authorization == 'Bearer access-a',
+            ),
+            isTrue,
+            reason:
+                'archive reconciliation must stay scoped to the active session',
+          );
+        } catch (error) {
+          bodyFailure = error;
+          rethrow;
+        } finally {
+          await runCleanup(() => tester.pumpWidget(const SizedBox.shrink()));
+          await runCleanup(() => tester.pump());
+          await runCleanup(() async {
+            for (final pendingArchiveCall
+                in chats.calls
+                    .where((call) => call.completer != null && !call.completed)
+                    .toList()) {
+              await chats.completeCall(
+                pendingArchiveCall,
+                result: const ChatsApiOk(ChatListData(items: [])),
+              );
+            }
+          });
+          final pendingReconcile = staleReconcile;
+          if (pendingReconcile != null) {
+            await runCleanup(() => pendingReconcile);
+          }
+          await runCleanup(disposeContainer);
+          if (bodyFailure == null && cleanupFailure != null) {
+            Error.throwWithStackTrace(cleanupFailure!, cleanupStack!);
+          }
+        }
       },
     );
 
@@ -146,61 +187,97 @@ void main() {
 
         InboxChatCall? staleArchiveCall;
         Future<void>? staleReconcile;
+        Object? bodyFailure;
+        Object? cleanupFailure;
+        StackTrace? cleanupStack;
 
-        final reconciler = container.read(inboxReconcilerProvider.notifier);
-        await reconciler.reconcile();
-        final legacy = container.read(chatListControllerProvider.notifier)
-          ..state = const ChatListState(profileId: 'profile-a');
-        expect(legacy.state.items, isEmpty);
+        Future<void> runCleanup(FutureOr<void> Function() action) async {
+          try {
+            await action();
+          } catch (error, stack) {
+            cleanupFailure ??= error;
+            cleanupStack ??= stack;
+          }
+        }
 
-        await tester.pumpWidget(_mainTestApp(container));
-        await tester.pump();
-        expect(find.byKey(ChatListBody.tileKey('chat-1')), findsOneWidget);
+        try {
+          final reconciler = container.read(inboxReconcilerProvider.notifier);
+          await reconciler.reconcile();
+          final legacy = container.read(chatListControllerProvider.notifier)
+            ..state = const ChatListState(profileId: 'profile-a');
+          expect(legacy.state.items, isEmpty);
 
-        await tester.longPress(find.byKey(ChatListBody.tileKey('chat-1')));
-        final archiveAction = find.byKey(
-          ChatListBody.archiveActionKey('chat-1'),
-        );
-        await _pumpUntilVisible(tester, archiveAction);
+          await tester.pumpWidget(_mainTestApp(container));
+          await tester.pump();
+          expect(find.byKey(ChatListBody.tileKey('chat-1')), findsOneWidget);
 
-        staleReconcile = reconciler.reconcile();
-        await tester.pump();
-        staleArchiveCall = chats.findCall(inbox: 'archive', cursor: null);
-        expect(staleArchiveCall, isNotNull);
+          await tester.longPress(find.byKey(ChatListBody.tileKey('chat-1')));
+          final archiveAction = find.byKey(
+            ChatListBody.archiveActionKey('chat-1'),
+          );
+          await _pumpUntilVisible(tester, archiveAction);
 
-        await tester.ensureVisible(archiveAction);
-        await tester.tap(archiveAction);
-        await tester.pump();
+          staleReconcile = reconciler.reconcile();
+          await tester.pump();
+          staleArchiveCall = chats.findCall(inbox: 'archive', cursor: null);
+          expect(staleArchiveCall, isNotNull);
 
-        final afterArchive = container
-            .read(inboxReconcilerProvider)
-            .profileSnapshots['profile-a']!;
-        expect(afterArchive[InboxScope.main].items, isEmpty);
-        expect(
-          afterArchive[InboxScope.archive].items.map((item) => item.chatId),
-          ['chat-1'],
-          reason:
-              'the visible reconciler row, not legacy controller state, owns '
-              'the ArchiveChat mutation payload',
-        );
+          await tester.ensureVisible(archiveAction);
+          await tester.tap(archiveAction);
+          await tester.pump();
 
-        await chats.completeCall(
-          staleArchiveCall!,
-          result: const ChatsApiOk(ChatListData(items: [])),
-        );
-        await staleReconcile;
-        expect(
-          container
+          final afterArchive = container
               .read(inboxReconcilerProvider)
-              .profileSnapshots['profile-a']![InboxScope.archive]
-              .items
-              .map((item) => item.chatId),
-          ['chat-1'],
-        );
-        await tester.pumpWidget(const SizedBox.shrink());
-        await tester.pump();
-        disposeContainer();
-        await restoreSurface();
+              .profileSnapshots['profile-a']!;
+          expect(afterArchive[InboxScope.main].items, isEmpty);
+          expect(
+            afterArchive[InboxScope.archive].items.map((item) => item.chatId),
+            ['chat-1'],
+            reason:
+                'the visible reconciler row, not legacy controller state, owns '
+                'the ArchiveChat mutation payload',
+          );
+
+          await chats.completeCall(
+            staleArchiveCall!,
+            result: const ChatsApiOk(ChatListData(items: [])),
+          );
+          await staleReconcile;
+          expect(
+            container
+                .read(inboxReconcilerProvider)
+                .profileSnapshots['profile-a']![InboxScope.archive]
+                .items
+                .map((item) => item.chatId),
+            ['chat-1'],
+          );
+        } catch (error) {
+          bodyFailure = error;
+          rethrow;
+        } finally {
+          await runCleanup(() => tester.pumpWidget(const SizedBox.shrink()));
+          await runCleanup(() => tester.pump());
+          await runCleanup(() async {
+            for (final pendingArchiveCall
+                in chats.calls
+                    .where((call) => call.completer != null && !call.completed)
+                    .toList()) {
+              await chats.completeCall(
+                pendingArchiveCall,
+                result: const ChatsApiOk(ChatListData(items: [])),
+              );
+            }
+          });
+          final pendingReconcile = staleReconcile;
+          if (pendingReconcile != null) {
+            await runCleanup(() => pendingReconcile);
+          }
+          await runCleanup(disposeContainer);
+          await runCleanup(restoreSurface);
+          if (bodyFailure == null && cleanupFailure != null) {
+            Error.throwWithStackTrace(cleanupFailure!, cleanupStack!);
+          }
+        }
       },
     );
 
