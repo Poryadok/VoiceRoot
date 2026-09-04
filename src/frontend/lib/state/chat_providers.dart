@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:meta/meta.dart';
 
 import '../backend/api_errors.dart';
+import '../backend/auth_session.dart';
 import '../backend/chats_client.dart';
 import '../backend/files_client.dart';
 import '../backend/gateway_request_id.dart';
@@ -1421,11 +1422,66 @@ final chatRoomControllerProvider = StateNotifierProvider.autoDispose
     });
 
 /// Keeps a single Realtime WebSocket while authenticated.
-class RealtimeHub {
-  RealtimeHub(this._ref);
+abstract interface class RealtimeTransportFactory {
+  Future<VoiceRealtimeConnection> open({
+    required Uri uri,
+    required AuthSession session,
+  });
+}
+
+class _GatewayRealtimeTransportFactory implements RealtimeTransportFactory {
+  _GatewayRealtimeTransportFactory(this._ref);
 
   final Ref _ref;
-  VoiceRealtimeConnection? _connection;
+
+  @override
+  Future<VoiceRealtimeConnection> open({
+    required Uri uri,
+    required AuthSession session,
+  }) async {
+    String? wsTicket;
+    if (kIsWeb) {
+      final gatewayClient = _ref.read(voiceGatewayClientProvider);
+      final issued = await gatewayClient.requestWsTicket(
+        session.authorizationHeader,
+      );
+      if (issued == null) {
+        throw StateError('realtime_ticket_unavailable');
+      }
+      wsTicket = issued.ticket;
+    }
+    return VoiceRealtimeConnection(
+      uri: uri,
+      headers: <String, String>{
+        if (!kIsWeb) 'Authorization': session.authorizationHeader,
+        if (!kIsWeb) 'X-Voice-Profile-Id': session.activeProfileId,
+        if (!kIsWeb) 'X-Request-Id': newGatewayRequestId(),
+      },
+      wsTicket: wsTicket,
+    );
+  }
+}
+
+final realtimeTransportFactoryProvider = Provider<RealtimeTransportFactory>((
+  ref,
+) {
+  return _GatewayRealtimeTransportFactory(ref);
+});
+
+class _RealtimeHubBinding {
+  const _RealtimeHubBinding({required this.generation, required this.session});
+
+  final int generation;
+  final AuthSession session;
+}
+
+class RealtimeHub {
+  RealtimeHub(this._ref, {required RealtimeTransportFactory transportFactory})
+    : _transportFactory = transportFactory;
+
+  final Ref _ref;
+  final RealtimeTransportFactory _transportFactory;
+  RealtimeTransport? _connection;
   StreamSubscription<RealtimeFrame>? _frameSub;
   final _eventController = StreamController<RealtimeFrame>.broadcast();
   var _status = RealtimeLinkStatus.disconnected;
@@ -1433,65 +1489,90 @@ class RealtimeHub {
   Timer? _reconnectTimer;
   var _reconnectAttempt = 0;
   var _disposed = false;
+  var _nextGeneration = 0;
+  _RealtimeHubBinding? _binding;
+  _RealtimeHubBinding? _connectingBinding;
 
   RealtimeLinkStatus get status => _status;
   Stream<RealtimeFrame> get events => _eventController.stream;
 
   Future<void> ensureConnected() async {
     if (_disposed) return;
-    if (_eventController.isClosed || _connection != null) return;
+    if (_eventController.isClosed ||
+        _connection != null ||
+        _connectingBinding != null) {
+      return;
+    }
     final auth = _ref.read(authControllerProvider).session;
     final config = _ref.read(gatewayConfigProvider);
     if (auth == null || !config.hasBaseUrl) return;
+    final binding = _activateBinding(auth);
+    await _connect(binding, config.baseUrl);
+  }
 
-    _setStatus(RealtimeLinkStatus.connecting);
-    final uri = gatewayWebSocketUri(config.baseUrl);
-    String? wsTicket;
-    if (kIsWeb) {
-      final gatewayClient = _ref.read(voiceGatewayClientProvider);
-      final issued = await gatewayClient.requestWsTicket(
-        auth.authorizationHeader,
-      );
-      if (issued == null) {
-        _scheduleReconnect();
-        return;
-      }
-      wsTicket = issued.ticket;
-    }
-    // Native: Authorization header; web: short-lived ticket in query (no JWT in URL).
-    final headers = <String, String>{
-      if (!kIsWeb) 'Authorization': auth.authorizationHeader,
-      if (!kIsWeb) 'X-Voice-Profile-Id': auth.activeProfileId,
-      if (!kIsWeb) 'X-Request-Id': newGatewayRequestId(),
-    };
-    final connection = VoiceRealtimeConnection(
-      uri: uri,
-      headers: headers,
-      wsTicket: wsTicket,
+  _RealtimeHubBinding _activateBinding(AuthSession session, {int? generation}) {
+    final binding = _RealtimeHubBinding(
+      generation: generation ?? ++_nextGeneration,
+      session: session,
     );
-    _connection = connection;
-    _frameSub = connection.events.listen(
-      _onFrame,
-      onError: (_) => _scheduleReconnect(),
-      onDone: () => _scheduleReconnect(),
-    );
+    _nextGeneration = _nextGeneration < binding.generation
+        ? binding.generation
+        : _nextGeneration;
+    _binding = binding;
+    return binding;
+  }
+
+  bool _isCurrent(_RealtimeHubBinding binding) =>
+      !_disposed && identical(_binding, binding);
+
+  bool _isActive(_RealtimeHubBinding binding, RealtimeTransport connection) =>
+      _isCurrent(binding) && identical(_connection, connection);
+
+  Future<void> _connect(_RealtimeHubBinding binding, String baseUrl) async {
+    if (!_isCurrent(binding)) return;
+    _connectingBinding = binding;
+    _setStatus(RealtimeLinkStatus.connecting, binding: binding);
+    final uri = gatewayWebSocketUri(baseUrl);
+    VoiceRealtimeConnection? connection;
+    StreamSubscription<RealtimeFrame>? frameSub;
     try {
-      await connection.connect();
-    } catch (_) {
-      if (_disposed) {
+      connection = await _transportFactory.open(
+        uri: uri,
+        session: binding.session,
+      );
+      if (!_isCurrent(binding)) {
         await connection.dispose();
         return;
       }
-      _scheduleReconnect();
+      frameSub = connection.events.listen(
+        (frame) => _onFrame(binding, connection!, frame),
+        onError: (_) => _scheduleReconnect(binding, connection!),
+        onDone: () => _scheduleReconnect(binding, connection!),
+      );
+      await connection.connect();
+      if (!_isCurrent(binding)) {
+        await frameSub.cancel();
+        await connection.dispose();
+        return;
+      }
+      _connection = connection;
+      _frameSub = frameSub;
+      _reconnectAttempt = 0;
+      for (final chatId in _subscribedChats) {
+        if (!_isActive(binding, connection)) return;
+        connection.sendSubscribe(chatId);
+      }
+    } catch (_) {
+      await frameSub?.cancel();
+      await connection?.dispose();
+      if (_isCurrent(binding)) {
+        _scheduleReconnect(binding, connection, requiresActiveConnection: false);
+      }
       return;
-    }
-    if (_disposed) {
-      await connection.dispose();
-      return;
-    }
-    _reconnectAttempt = 0;
-    for (final chatId in _subscribedChats) {
-      connection.sendSubscribe(chatId);
+    } finally {
+      if (identical(_connectingBinding, binding)) {
+        _connectingBinding = null;
+      }
     }
   }
 
@@ -1527,33 +1608,55 @@ class RealtimeHub {
     );
   }
 
-  void _onFrame(RealtimeFrame frame) {
+  void _onFrame(
+    _RealtimeHubBinding binding,
+    RealtimeTransport connection,
+    RealtimeFrame frame,
+  ) {
+    if (!_isActive(binding, connection)) return;
     if (!_eventController.isClosed) {
       _eventController.add(frame);
     }
     if (frame.op == 'hello') {
-      _setStatus(RealtimeLinkStatus.connected);
+      _setStatus(RealtimeLinkStatus.connected, binding: binding);
       // Message catch-up after reconnect is REST-only (see ARCHITECTURE_REQUIREMENTS).
     }
   }
 
-  void _scheduleReconnect() {
-    if (_disposed) return;
+  void _scheduleReconnect(
+    _RealtimeHubBinding binding,
+    RealtimeTransport? connection,
+    {bool requiresActiveConnection = true}
+  ) {
+    if (!_isCurrent(binding)) return;
+    if (requiresActiveConnection &&
+        (connection == null || !_isActive(binding, connection))) {
+      return;
+    }
     if (_ref.read(authControllerProvider).session == null) return;
-    _setStatus(RealtimeLinkStatus.reconnecting);
+    _setStatus(RealtimeLinkStatus.reconnecting, binding: binding);
     _reconnectTimer?.cancel();
     final delay = Duration(
       seconds: [1, 2, 4, 8, 16, 30][_reconnectAttempt.clamp(0, 5)],
     );
     _reconnectAttempt++;
     _reconnectTimer = Timer(delay, () async {
-      if (_disposed) return;
-      await _tearDownConnection();
-      await ensureConnected();
+      if (!_isCurrent(binding)) return;
+      if (requiresActiveConnection) {
+        if (connection == null || !_isActive(binding, connection)) return;
+        await _tearDownConnection(expected: connection);
+      } else if (_connection != null) {
+        return;
+      }
+      if (!_isCurrent(binding)) return;
+      final config = _ref.read(gatewayConfigProvider);
+      if (!config.hasBaseUrl) return;
+      await _connect(binding, config.baseUrl);
     });
   }
 
-  Future<void> _tearDownConnection() async {
+  Future<void> _tearDownConnection({RealtimeTransport? expected}) async {
+    if (expected != null && !identical(_connection, expected)) return;
     await _frameSub?.cancel();
     _frameSub = null;
     await _connection?.dispose();
@@ -1561,6 +1664,8 @@ class RealtimeHub {
   }
 
   Future<void> disconnect() async {
+    _binding = null;
+    _connectingBinding = null;
     _reconnectTimer?.cancel();
     _reconnectAttempt = 0;
     _subscribedChats.clear();
@@ -1570,22 +1675,37 @@ class RealtimeHub {
 
   Set<String> get subscribedChatIds => Set.unmodifiable(_subscribedChats);
 
-  Future<void> retireAndReconnect(Set<String> retiredSubscriptionIds) async {
+  Future<void> retireAndReconnect({
+    required int generation,
+    required AuthSession session,
+    required Set<String> retiredSubscriptionIds,
+  }) async {
     _subscribedChats.removeAll(retiredSubscriptionIds);
-    await reconnectWithNewSession();
+    final binding = _activateBinding(session, generation: generation);
+    await _reconnect(binding);
   }
 
   /// Reconnect WebSocket after profile switch (new JWT, same subscriptions).
   Future<void> reconnectWithNewSession() async {
+    final auth = _ref.read(authControllerProvider).session;
+    if (auth == null) return;
+    await _reconnect(_activateBinding(auth));
+  }
+
+  Future<void> _reconnect(_RealtimeHubBinding binding) async {
     if (_disposed) return;
     _reconnectTimer?.cancel();
     _reconnectAttempt = 0;
     await _tearDownConnection();
-    await ensureConnected();
+    if (!_isCurrent(binding)) return;
+    final config = _ref.read(gatewayConfigProvider);
+    if (!config.hasBaseUrl) return;
+    await _connect(binding, config.baseUrl);
   }
 
-  void _setStatus(RealtimeLinkStatus next) {
+  void _setStatus(RealtimeLinkStatus next, {_RealtimeHubBinding? binding}) {
     if (_disposed) return;
+    if (binding != null && !_isCurrent(binding)) return;
     _status = next;
     _ref.read(realtimeLinkStatusProvider.notifier).state = next;
   }
@@ -1601,7 +1721,10 @@ class RealtimeHub {
 final realtimeAutoConnectProvider = Provider<bool>((ref) => true);
 
 final realtimeHubProvider = Provider<RealtimeHub>((ref) {
-  final hub = RealtimeHub(ref);
+  final hub = RealtimeHub(
+    ref,
+    transportFactory: ref.watch(realtimeTransportFactoryProvider),
+  );
   final autoConnect = ref.watch(realtimeAutoConnectProvider);
   ref.onDispose(hub.dispose);
   ref.listen<AuthState>(authControllerProvider, (prev, next) {

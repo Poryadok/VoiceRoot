@@ -103,7 +103,11 @@ class _RealtimeHubProfileSwitchBoundary
 
   @override
   Future<void> retireAndReconnect(ProfileSwitchHandoff handoff) {
-    return _hub.retireAndReconnect(handoff.retiredSubscriptionIds);
+    return _hub.retireAndReconnect(
+      generation: handoff.generation,
+      session: handoff.nextSession,
+      retiredSubscriptionIds: handoff.retiredSubscriptionIds,
+    );
   }
 }
 
