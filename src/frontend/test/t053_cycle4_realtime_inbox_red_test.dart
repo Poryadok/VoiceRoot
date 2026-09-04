@@ -179,6 +179,79 @@ void main() {
         expect(harness.chats.unmatchedCalls, isEmpty);
       },
     );
+
+    test(
+      'late mount ignores a hello published by a transport torn down for reconnect',
+      () async {
+        final harness = _Cycle4Harness(createReconciler: false);
+        addTearDown(harness.dispose);
+
+        await harness.connectAWithoutHello();
+        harness.connection('profile-a').addHello();
+        await pumpEventQueue();
+        expect(
+          harness.container.read(realtimeHelloBindingProvider),
+          isNotNull,
+          reason: 'the first current A transport accepted its hello',
+        );
+
+        // Supply enough external responses to make an erroneous replay before
+        // replacement hello observable separately from the one allowed after.
+        for (var snapshot = 0; snapshot < 2; snapshot++) {
+          for (final inbox in ['main', 'requests', 'archive']) {
+            harness.chats.enqueue(
+              InboxChatPageScript(
+                inbox: inbox,
+                cursor: null,
+                profileId: 'profile-a',
+                authorization: 'Bearer access-profile-a',
+                result: ChatsApiOk(ChatListData(items: [])),
+              ),
+            );
+          }
+        }
+
+        await harness.hub.reconnectWithNewSession();
+
+        expect(
+          harness.container.read(realtimeHelloBindingProvider),
+          isNull,
+          reason:
+              'tearing down the accepted transport must retire its published '
+              'hello before a replacement transport proves the same session',
+        );
+        final callsBeforeLateMount = harness.chats.calls.length;
+        harness.mountReconciler();
+        await pumpEventQueue();
+        expect(harness.chats.calls, hasLength(callsBeforeLateMount));
+        expect(harness.messages.getCalls, isEmpty);
+
+        harness.connection('profile-a').addHello();
+        harness.connection('profile-a').addHello();
+        await pumpEventQueue();
+
+        final replacementCalls = harness.chats.calls
+            .skip(callsBeforeLateMount)
+            .toList(growable: false);
+        expect(replacementCalls, hasLength(3));
+        expect(replacementCalls.map((call) => call.inbox).toSet(), {
+          'main',
+          'requests',
+          'archive',
+        });
+        expect(
+          replacementCalls.every(
+            (call) =>
+                call.authorization == 'Bearer access-profile-a' &&
+                call.profileId == 'profile-a' &&
+                call.cursor == null,
+          ),
+          isTrue,
+        );
+        expect(harness.messages.getCalls, isEmpty);
+        expect(harness.chats.unmatchedCalls, isEmpty);
+      },
+    );
   });
 }
 
@@ -278,16 +351,7 @@ class _Cycle4Harness {
       .toList(growable: false);
 
   Future<void> switchToBWithoutHello() async {
-    await pumpEventQueue();
-    expect(
-      chats.calls.where((call) => call.profileId == 'profile-a'),
-      hasLength(1),
-    );
-
-    final a = hub.ensureConnected();
-    await transport.waitForOpen('profile-a');
-    transport.releaseOpen('profile-a');
-    await a;
+    await connectAWithoutHello();
 
     final b = coordinator.switchTo('profile-b');
     await transport.waitForOpen('profile-b');
@@ -298,6 +362,19 @@ class _Cycle4Harness {
 
   _ControlledVoiceRealtimeConnection connection(String profileId) =>
       transport.connection(profileId);
+
+  Future<void> connectAWithoutHello() async {
+    await pumpEventQueue();
+    expect(
+      chats.calls.where((call) => call.profileId == 'profile-a'),
+      hasLength(1),
+    );
+
+    final a = hub.ensureConnected();
+    await transport.waitForOpen('profile-a');
+    transport.releaseOpen('profile-a');
+    await a;
+  }
 
   void mountReconciler() {
     container.read(inboxReconcilerProvider);
