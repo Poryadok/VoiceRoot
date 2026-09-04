@@ -156,9 +156,12 @@ export VOICE_FILE_ATTACHMENT_RESTART_PHASE=prepare
 )
 [[ -f "$state_path_posix" ]] || { echo "prepare did not create restart-proof state" >&2; exit 1; }
 
-# This is intentionally the only service restart performed by the proof.
+# Restart the durable attachment producer and storage owner separately. The
+# subsequent verify phase must prove the attachment survives both restarts.
 compose restart file
 wait_healthy file
+compose restart messaging
+wait_healthy messaging
 wait_healthy gateway
 wait_gateway
 
