@@ -7,6 +7,8 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
 class RedisSessionEpochFloorStoreTest {
@@ -64,6 +66,40 @@ class RedisSessionEpochFloorStoreTest {
     RedisSessionEpochFloorStore readStore =
         new RedisSessionEpochFloorStore(BlockingCommands.forRead(), COMMAND_TIMEOUT);
     assertFailsClosedWithinTwoSeconds(() -> readStore.requireFloor(UUID.randomUUID()));
+  }
+
+  @Test
+  void nonCooperativeBlockedCommandsSaturateTheBoundedExecutorAndFailClosedWithoutQueuingMoreWork()
+      throws Exception {
+    NonCooperativeCommands commands = new NonCooperativeCommands();
+    RedisSessionEpochFloorStore store = new RedisSessionEpochFloorStore(commands, COMMAND_TIMEOUT);
+    java.util.concurrent.ExecutorService callers = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
+    try {
+      java.util.List<java.util.concurrent.Future<?>> blocked =
+          java.util.stream.IntStream.range(0, RedisSessionEpochFloorStore.MAX_IN_FLIGHT_COMMANDS)
+              .mapToObj(
+                  ignored ->
+                      callers.submit(
+                          () ->
+                              assertThatThrownBy(() -> store.recordAtLeast(UUID.randomUUID(), 1L))
+                                  .isInstanceOf(SessionEpochFloorUnavailableException.class)))
+              .toList();
+      assertThat(commands.allStarted.await(1, TimeUnit.SECONDS)).isTrue();
+
+      long startedAtNanos = System.nanoTime();
+      assertThatThrownBy(() -> store.recordAtLeast(UUID.randomUUID(), 1L))
+          .isInstanceOf(SessionEpochFloorUnavailableException.class)
+          .hasMessageContaining("unavailable");
+      assertThat(Duration.ofNanos(System.nanoTime() - startedAtNanos)).isLessThan(Duration.ofSeconds(1));
+      assertThat(commands.started).isEqualTo(RedisSessionEpochFloorStore.MAX_IN_FLIGHT_COMMANDS);
+
+      for (java.util.concurrent.Future<?> future : blocked) {
+        future.get(3, TimeUnit.SECONDS);
+      }
+    } finally {
+      commands.release.countDown();
+      callers.shutdownNow();
+    }
   }
 
   private static void assertFailsClosedWithinTwoSeconds(org.assertj.core.api.ThrowableAssert.ThrowingCallable call) {
@@ -137,6 +173,34 @@ class RedisSessionEpochFloorStoreTest {
         throw new RuntimeException("interrupted", ex);
       }
       throw new AssertionError("bounded command was not cancelled");
+    }
+  }
+
+  private static final class NonCooperativeCommands implements RedisSessionEpochCommands {
+    private final CountDownLatch allStarted =
+        new CountDownLatch(RedisSessionEpochFloorStore.MAX_IN_FLIGHT_COMMANDS);
+    private final CountDownLatch release = new CountDownLatch(1);
+    private int started;
+
+    @Override
+    public long atomicMaxWithoutExpiry(String key, long candidate, Duration timeout) {
+      synchronized (this) {
+        started++;
+      }
+      allStarted.countDown();
+      while (true) {
+        try {
+          release.await();
+          throw new RuntimeException("released");
+        } catch (InterruptedException ignored) {
+          // Simulates a client call that cannot be interrupted by Future.cancel.
+        }
+      }
+    }
+
+    @Override
+    public long readRequiredPositive(String key, Duration timeout) {
+      throw new UnsupportedOperationException("not used");
     }
   }
 }
