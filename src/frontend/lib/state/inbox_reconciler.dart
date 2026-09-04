@@ -118,6 +118,7 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
         _lastHelloGeneration = hello.generation;
         unawaited(reconcile());
       },
+      fireImmediately: true,
     );
     _authSub = _ref.listen<AuthState>(authControllerProvider, (previous, next) {
       final previousSession = previous?.session;
