@@ -80,7 +80,7 @@ class StringRedisSessionEpochCommandsTest {
         .isInstanceOf(SessionEpochFloorUnavailableException.class)
         .hasMessageContaining("timeout");
 
-    verify(connection, times(1)).close();
+    verify(connection, times(1)).closeAsync();
   }
 
   @Test
@@ -124,7 +124,7 @@ class StringRedisSessionEpochCommandsTest {
         .isInstanceOf(SessionEpochFloorUnavailableException.class)
         .hasMessageContaining("timeout");
 
-    verify(connection, times(1)).close();
+    verify(connection, times(1)).closeAsync();
   }
 
   @Test
@@ -149,14 +149,14 @@ class StringRedisSessionEpochCommandsTest {
         ArgumentCaptor.forClass(BiConsumer.class);
     verify(connecting).whenComplete(completion.capture());
     completion.getValue().accept(lateConnection, null);
-    verify(lateConnection).close();
+    verify(lateConnection).closeAsync();
   }
 
   private static void assertPhysicalConnectionOwnership(
       StatefulRedisConnection<byte[], byte[]> connection) {
     InOrder calls = inOrder(connection);
     calls.verify(connection).async();
-    calls.verify(connection).close();
+    calls.verify(connection).closeAsync();
   }
 
   @SuppressWarnings("unchecked")
