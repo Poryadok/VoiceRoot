@@ -41,6 +41,11 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.stream.IntStream;
+import java.util.stream.LongStream;
 import voice.backend.auth.oauth.FormUrlEncodedTestSupport;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -64,6 +69,7 @@ import voice.backend.auth.grpc.AuthGrpcService;
 import voice.backend.auth.repository.Account;
 import voice.backend.auth.repository.AccountRepository;
 import voice.backend.auth.security.JwtService;
+import voice.backend.auth.service.AuthService;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -119,6 +125,7 @@ class AuthJdbcRedisIntegrationTest {
   @Autowired ObjectMapper objectMapper;
   @Autowired JwtService jwtService;
   @Autowired AuthGrpcService grpcService;
+  @Autowired AuthService authService;
   @Autowired AccountRepository accounts;
   @Autowired @Qualifier("userJdbc") NamedParameterJdbcTemplate userJdbc;
 
@@ -130,6 +137,48 @@ class AuthJdbcRedisIntegrationTest {
     assertThat(accounts.incrementSessionEpoch(account.id())).isEqualTo(2L);
     assertThat(accounts.incrementSessionEpoch(account.id())).isEqualTo(3L);
     assertThat(accounts.findById(account.id().toString())).get().extracting(Account::sessionEpoch).isEqualTo(3L);
+  }
+
+  @Test
+  void jdbcConcurrentEpochIncrementsAreAtomicAndNeverLoseOrReuseValues() {
+    Account account = accounts.create("jdbc-epoch-race@example.com", null, "hash", "regular");
+    ExecutorService workers = Executors.newFixedThreadPool(8);
+    try {
+      List<Future<Long>> increments =
+          IntStream.range(0, 16)
+              .mapToObj(ignored -> workers.<Long>submit(() -> accounts.incrementSessionEpoch(account.id())))
+              .toList();
+
+      assertThat(increments.stream().map(this::awaitEpochIncrement).sorted())
+          .containsExactlyElementsOf(LongStream.rangeClosed(2, 17).boxed().toList());
+      assertThat(accounts.findById(account.id().toString())).get().extracting(Account::sessionEpoch).isEqualTo(17L);
+    } finally {
+      workers.shutdownNow();
+    }
+  }
+
+  @Test
+  void normalAndOAuthIssuanceUsePersistedAccountEpoch() throws Exception {
+    JsonNode registered =
+        session(
+            postJson(
+                "/api/v1/auth/register",
+                "{\"email\":\"jdbc-issued-epoch@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}"));
+    UUID accountId = UUID.fromString(registered.get("account_id").asText());
+    String profileId = registered.get("profile_id").asText();
+
+    assertThat(accounts.incrementSessionEpoch(accountId)).isEqualTo(2L);
+
+    JsonNode login =
+        session(
+            postJson(
+                "/api/v1/auth/login",
+                "{\"email\":\"jdbc-issued-epoch@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}"));
+    assertThat(SignedJWT.parse(login.get("access_token").asText()).getJWTClaimsSet().getClaim("session_epoch"))
+        .isEqualTo(2L);
+
+    String oauthAccess = authService.issueOAuthAccessToken(accountId.toString(), profileId);
+    assertThat(SignedJWT.parse(oauthAccess).getJWTClaimsSet().getClaim("session_epoch")).isEqualTo(2L);
   }
 
   @Test
@@ -444,6 +493,14 @@ class AuthJdbcRedisIntegrationTest {
         .getResponse()
         .getContentAsString();
     return objectMapper.readTree(response);
+  }
+
+  private long awaitEpochIncrement(Future<Long> future) {
+    try {
+      return future.get();
+    } catch (Exception ex) {
+      throw new AssertionError(ex);
+    }
   }
 
   private static JsonNode session(JsonNode envelope) {

@@ -30,7 +30,7 @@ class SessionEpochRepositoryTest {
     try {
       List<Future<Long>> increments =
           IntStream.range(0, 16)
-              .mapToObj(ignored -> workers.submit(() -> accounts.incrementSessionEpoch(account.id())))
+              .mapToObj(ignored -> workers.<Long>submit(() -> accounts.incrementSessionEpoch(account.id())))
               .toList();
 
       assertThat(increments.stream().map(this::await).sorted())

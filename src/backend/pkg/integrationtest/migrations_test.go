@@ -98,26 +98,22 @@ func TestT056AuthSessionEpoch_FlywayV9ParityWithGolangMigrate(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			body, err := os.ReadFile(path)
 			require.NoError(t, err)
-			lower := strings.ToLower(string(body))
-			require.Contains(t, lower, "session_epoch")
-			require.Contains(t, lower, "bigint")
+			require.Regexp(
+				t,
+				`(?is)alter\s+table\s+accounts\s+add\s+column\s+(?:if\s+not\s+exists\s+)?session_epoch\s+bigint\s+not\s+null\s+default\s+1\s+check\s*\(\s*session_epoch\s*>\s*0\s*\)`,
+				string(body),
+			)
 		})
 	}
 	t.Run("golang-down", func(t *testing.T) {
 		body, err := os.ReadFile(golangDownPath)
 		require.NoError(t, err)
-		require.Contains(t, strings.ToLower(string(body)), "drop column")
-		require.Contains(t, strings.ToLower(string(body)), "session_epoch")
+		require.Regexp(
+			t,
+			`(?is)alter\s+table\s+accounts\s+drop\s+column\s+(?:if\s+exists\s+)?session_epoch\s*;`,
+			string(body),
+		)
 	})
-
-	for _, path := range []string{flywayPath, golangUpPath} {
-		body, err := os.ReadFile(path)
-		require.NoError(t, err)
-		lower := strings.ToLower(string(body))
-		require.Contains(t, lower, "not null")
-		require.Contains(t, lower, "default 1")
-		require.Contains(t, lower, "check")
-	}
 }
 
 func migrationsTestRepoRoot(t *testing.T) string {
