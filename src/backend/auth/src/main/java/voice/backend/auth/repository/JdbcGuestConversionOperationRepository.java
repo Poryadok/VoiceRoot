@@ -82,6 +82,51 @@ public class JdbcGuestConversionOperationRepository implements GuestConversionOp
         "guest conversion operation was not visible after a successful insert");
   }
 
+  @Override
+  public java.util.List<GuestConversionOperation> leaseDue(
+      int batchSize, Instant now, Instant leaseUntil) {
+    if (batchSize <= 0) {
+      throw new IllegalArgumentException("batchSize must be positive");
+    }
+    Objects.requireNonNull(now, "now");
+    Objects.requireNonNull(leaseUntil, "leaseUntil");
+    if (!leaseUntil.isAfter(now)) {
+      throw new IllegalArgumentException("leaseUntil must be after now");
+    }
+
+    return jdbc.query(
+        """
+        WITH eligible AS (
+            SELECT operation_id, next_attempt_at, created_at
+            FROM guest_conversion_operations
+            WHERE state <> 'COMPLETED'
+              AND next_attempt_at <= :now
+              AND (locked_until IS NULL OR locked_until <= :now)
+            ORDER BY next_attempt_at, created_at, operation_id
+            LIMIT :batchSize
+            FOR UPDATE SKIP LOCKED
+        ), leased AS (
+            UPDATE guest_conversion_operations operation
+            SET locked_until = :leaseUntil
+            FROM eligible
+            WHERE operation.operation_id = eligible.operation_id
+            RETURNING operation.*
+        )
+        SELECT leased.operation_id, leased.account_id, leased.otp_code_id, leased.state,
+               leased.attempt_count, leased.next_attempt_at, leased.locked_until,
+               leased.last_error_code, leased.user_marked_at, leased.auth_promoted_at,
+               leased.event_published_at, leased.created_at, leased.updated_at
+        FROM leased
+        JOIN eligible ON eligible.operation_id = leased.operation_id
+        ORDER BY eligible.next_attempt_at, eligible.created_at, eligible.operation_id
+        """,
+        new MapSqlParameterSource()
+            .addValue("batchSize", batchSize)
+            .addValue("now", Timestamp.from(now))
+            .addValue("leaseUntil", Timestamp.from(leaseUntil)),
+        ROW_MAPPER);
+  }
+
   private java.util.Optional<GuestConversionOperation> findByAccountId(UUID accountId) {
     return jdbc
         .query(
