@@ -131,6 +131,7 @@ public class JwtService {
           .claim("roles", roles)
           .claim("subscription_tier", subscriptionTier)
           .claim("account_type", normalizedType)
+          .claim("session_epoch", 1L)
           .jwtID(UUID.randomUUID().toString())
           .issueTime(Date.from(now))
           .expirationTime(Date.from(now.plus(accessTtl)))
