@@ -116,6 +116,22 @@ func TestT056AuthSessionEpoch_FlywayV9ParityWithGolangMigrate(t *testing.T) {
 	})
 }
 
+// T056-P1 must follow the durable guest-conversion migration rather than
+// skipping the version occupied by that independently owned prerequisite.
+func TestT056AuthSessionEpoch_MigrationChainIncludesGuestConversionPrerequisite(t *testing.T) {
+	root := migrationsTestRepoRoot(t)
+	paths := []string{
+		filepath.Join(root, "src", "backend", "auth", "src", "main", "resources", "db", "migration", "V8__guest_conversion_operations.sql"),
+		filepath.Join(root, "src", "backend", "auth", "src", "main", "resources", "db", "migration", "V9__accounts_session_epoch.sql"),
+		filepath.Join(root, "src", "backend", "migrations", "auth_db", "000009_guest_conversion_operations.up.sql"),
+		filepath.Join(root, "src", "backend", "migrations", "auth_db", "000010_accounts_session_epoch.up.sql"),
+	}
+	for _, path := range paths {
+		_, err := os.Stat(path)
+		require.NoError(t, err, "required Auth migration chain member %s", path)
+	}
+}
+
 func migrationsTestRepoRoot(t *testing.T) string {
 	t.Helper()
 	_, file, _, ok := runtime.Caller(0)
