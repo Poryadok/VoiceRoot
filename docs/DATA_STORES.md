@@ -16,7 +16,7 @@
 | Social Service       | `social_db`       | —                         | —                                |
 | Chat Service         | `chat_db`         | —                         | —                                |
 | Messaging Service    | `messaging_db`    | —                         | NATS JetStream (publish)         |
-| Realtime Service     | —                 | Pub/Sub, WS registry      | NATS (не БД)                     |
+| Realtime Service     | —                 | Pub/Sub, WS registry; session-epoch floor read/check (staged) | NATS (не БД)          |
 | Space Service        | `space_db`        | —                         | —                                |
 | Role Service         | `role_db`         | —                         | —                                |
 | Voice Service        | —                 | активные сессии звонков   | LiveKit                          |
@@ -121,4 +121,3 @@ seed из Auth DB и готовности strict-потребителей; до 
 1. Скоуп v1 и трассировка фич → сервисы: [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md).
 2. Таблицы и связи для волны v1: [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md) и секции «Модель данных» в [microservices/](microservices/) (общие правила — [DATA_MODEL.md](DATA_MODEL.md)).
 3. Миграции: один сервис — один набор миграций на свою БД; инструменты и порядок — [OPERATIONS.md](OPERATIONS.md#миграции-бд-database-per-service).
-
