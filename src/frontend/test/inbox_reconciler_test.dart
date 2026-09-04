@@ -23,7 +23,7 @@ import 'support/inbox_reconciler_fakes.dart';
 
 void main() {
   group('InboxReconcilerController', () {
-    test('starts the three-scope snapshot after realtime reconnects', () async {
+    test('starts the three-scope snapshot after accepted realtime hello', () async {
       final chats = InboxReconcilerChatsFake();
       for (final inbox in ['main', 'requests', 'archive']) {
         for (var run = 0; run < 2; run++) {
@@ -45,10 +45,7 @@ void main() {
       await pumpEventQueue();
       final callsBeforeReconnect = chats.calls.length;
 
-      container.read(realtimeLinkStatusProvider.notifier).state =
-          RealtimeLinkStatus.reconnecting;
-      container.read(realtimeLinkStatusProvider.notifier).state =
-          RealtimeLinkStatus.connected;
+      _acceptCurrentRealtimeHello(container);
       await pumpEventQueue();
 
       expect(chats.calls, hasLength(callsBeforeReconnect + 3));
@@ -763,8 +760,6 @@ void main() {
         container.read(selectedChatIdProvider.notifier).state =
             'profile-b-selection';
         final callsBeforeProfileB = chats.calls.length;
-        container.read(realtimeLinkStatusProvider.notifier).state =
-            RealtimeLinkStatus.connecting;
         authController.controller.state = const AuthState(
           session: AuthSession(
             accessToken: 'access-b',
@@ -776,8 +771,7 @@ void main() {
         );
         await pumpEventQueue();
         expect(chats.calls, hasLength(callsBeforeProfileB));
-        container.read(realtimeLinkStatusProvider.notifier).state =
-            RealtimeLinkStatus.connected;
+        _acceptCurrentRealtimeHello(container);
         await pumpEventQueue();
         final profileBCalls = chats.calls.skip(callsBeforeProfileB).toList();
         expect(profileBCalls, hasLength(3));
@@ -906,8 +900,6 @@ void main() {
           );
         }
         final callsBeforeProfileB = chats.calls.length;
-        container.read(realtimeLinkStatusProvider.notifier).state =
-            RealtimeLinkStatus.connecting;
         authController.controller.state = const AuthState(
           session: AuthSession(
             accessToken: 'access-b',
@@ -919,8 +911,7 @@ void main() {
         );
         await pumpEventQueue();
         expect(chats.calls, hasLength(callsBeforeProfileB));
-        container.read(realtimeLinkStatusProvider.notifier).state =
-            RealtimeLinkStatus.connected;
+        _acceptCurrentRealtimeHello(container);
         await pumpEventQueue();
         final profileBCalls = chats.calls.skip(callsBeforeProfileB).toList();
         expect(profileBCalls, hasLength(3));
@@ -944,8 +935,6 @@ void main() {
           );
         }
         final callsBeforeProfileA2 = chats.calls.length;
-        container.read(realtimeLinkStatusProvider.notifier).state =
-            RealtimeLinkStatus.connecting;
         authController.controller.state = const AuthState(
           session: AuthSession(
             accessToken: 'access-a2',
@@ -957,8 +946,7 @@ void main() {
         );
         await pumpEventQueue();
         expect(chats.calls, hasLength(callsBeforeProfileA2));
-        container.read(realtimeLinkStatusProvider.notifier).state =
-            RealtimeLinkStatus.connected;
+        _acceptCurrentRealtimeHello(container);
         await pumpEventQueue();
         final profileA2Calls = chats.calls.skip(callsBeforeProfileA2).toList();
         expect(profileA2Calls, hasLength(3));
@@ -1048,8 +1036,6 @@ void main() {
         );
       }
       final callsBeforeTokenRefresh = chats.calls.length;
-      container.read(realtimeLinkStatusProvider.notifier).state =
-          RealtimeLinkStatus.connecting;
       authController.controller.state = const AuthState(
         session: AuthSession(
           accessToken: 'access-a2',
@@ -1061,8 +1047,7 @@ void main() {
       );
       await pumpEventQueue();
       expect(chats.calls, hasLength(callsBeforeTokenRefresh));
-      container.read(realtimeLinkStatusProvider.notifier).state =
-          RealtimeLinkStatus.connected;
+      _acceptCurrentRealtimeHello(container);
       await pumpEventQueue();
       final tokenRefreshCalls = chats.calls
           .skip(callsBeforeTokenRefresh)
@@ -1140,8 +1125,6 @@ void main() {
 
       enqueueProfile('profile-b', 'access-b', 'peer-b');
       final callsBeforeProfileB = chats.calls.length;
-      container.read(realtimeLinkStatusProvider.notifier).state =
-          RealtimeLinkStatus.connecting;
       authController.controller.state = const AuthState(
         session: AuthSession(
           accessToken: 'access-b',
@@ -1153,8 +1136,7 @@ void main() {
       );
       await pumpEventQueue();
       expect(chats.calls, hasLength(callsBeforeProfileB));
-      container.read(realtimeLinkStatusProvider.notifier).state =
-          RealtimeLinkStatus.connected;
+      _acceptCurrentRealtimeHello(container);
       await pumpEventQueue();
       final profileBCalls = chats.calls.skip(callsBeforeProfileB).toList();
       expect(profileBCalls, hasLength(3));
@@ -1206,8 +1188,6 @@ void main() {
         );
         addTearDown(container.dispose);
         container.read(inboxReconcilerProvider);
-        container.read(realtimeLinkStatusProvider.notifier).state =
-            RealtimeLinkStatus.connecting;
         for (final inbox in ['main', 'requests', 'archive']) {
           chats.enqueue(
             InboxChatPageScript(
@@ -1229,8 +1209,7 @@ void main() {
             expiresInSeconds: 900,
           ),
         );
-        container.read(realtimeLinkStatusProvider.notifier).state =
-            RealtimeLinkStatus.connected;
+        _acceptCurrentRealtimeHello(container);
         await pumpEventQueue();
 
         expect(chats.calls, hasLength(3));
@@ -1280,10 +1259,7 @@ void main() {
         container.read(inboxReconcilerProvider);
         await pumpEventQueue();
         final beforeReconnect = chats.calls.length;
-        container.read(realtimeLinkStatusProvider.notifier).state =
-            RealtimeLinkStatus.reconnecting;
-        container.read(realtimeLinkStatusProvider.notifier).state =
-            RealtimeLinkStatus.connected;
+        _acceptCurrentRealtimeHello(container);
         await pumpEventQueue();
         expect(chats.calls.length, beforeReconnect + 3);
         final reconnectCalls = chats.calls.skip(beforeReconnect).toList();
@@ -1425,6 +1401,23 @@ ProviderContainer _container({
         realtimeHubProvider.overrideWithValue(realtimeHub),
     ],
   );
+}
+
+var _nextAcceptedHelloGeneration = 0;
+
+void _acceptCurrentRealtimeHello(ProviderContainer container) {
+  final session = container.read(authControllerProvider).session;
+  if (session == null) {
+    throw StateError('An accepted realtime hello requires an auth session.');
+  }
+  final generation = ++_nextAcceptedHelloGeneration;
+  container.read(realtimeHelloBindingProvider.notifier).state =
+      RealtimeHelloBinding(
+        generation: generation,
+        bindingGeneration: generation,
+        profileId: session.activeProfileId,
+        authorization: session.authorizationHeader,
+      );
 }
 
 class _NoAutoChatListController extends ChatListController {
