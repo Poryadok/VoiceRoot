@@ -64,6 +64,29 @@ class JwtServiceTest {
   }
 
   @Test
+  void issuesAccessJwtWithPersistedPositiveSessionEpoch() throws Exception {
+    JwtService jwt = JwtService.forTests("voice-auth", "voice-client", "test-key", Duration.ofMinutes(15), CLOCK);
+
+    String token = jwt.issue("account-1", "profile-1", List.of("user"), "free", "regular", 7L);
+
+    assertThat(SignedJWT.parse(token).getJWTClaimsSet().getClaim("session_epoch"))
+        .isExactlyInstanceOf(Long.class)
+        .isEqualTo(7L);
+  }
+
+  @Test
+  void rejectsNonPositivePersistedSessionEpoch() {
+    JwtService jwt = JwtService.forTests("voice-auth", "voice-client", "test-key", Duration.ofMinutes(15), CLOCK);
+
+    assertThatThrownBy(() -> jwt.issue("account-1", "profile-1", List.of("user"), "free", "regular", 0L))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("session_epoch");
+    assertThatThrownBy(() -> jwt.issue("account-1", "profile-1", List.of("user"), "free", "regular", -1L))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("session_epoch");
+  }
+
+  @Test
   void stablePkcs8PemProducesJwksWithConfiguredKid() throws Exception {
     String pem;
     try (var in = JwtServiceTest.class.getClassLoader().getResourceAsStream("jwt-test-private.pem")) {

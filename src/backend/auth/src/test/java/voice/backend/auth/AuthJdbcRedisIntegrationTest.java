@@ -61,6 +61,8 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 import voice.backend.auth.grpc.AuthGrpcService;
+import voice.backend.auth.repository.Account;
+import voice.backend.auth.repository.AccountRepository;
 import voice.backend.auth.security.JwtService;
 
 @SpringBootTest
@@ -117,7 +119,18 @@ class AuthJdbcRedisIntegrationTest {
   @Autowired ObjectMapper objectMapper;
   @Autowired JwtService jwtService;
   @Autowired AuthGrpcService grpcService;
+  @Autowired AccountRepository accounts;
   @Autowired @Qualifier("userJdbc") NamedParameterJdbcTemplate userJdbc;
+
+  @Test
+  void jdbcAccountStartsAtPositiveEpochAndIncrementReturnsNewMonotonicValue() {
+    Account account = accounts.create("jdbc-epoch@example.com", null, "hash", "regular");
+
+    assertThat(account.sessionEpoch()).isEqualTo(1L);
+    assertThat(accounts.incrementSessionEpoch(account.id())).isEqualTo(2L);
+    assertThat(accounts.incrementSessionEpoch(account.id())).isEqualTo(3L);
+    assertThat(accounts.findById(account.id().toString())).get().extracting(Account::sessionEpoch).isEqualTo(3L);
+  }
 
   @Test
   void registerLoginRefreshValidateLogoutAndJwksWorkWithPostgresRedisAndStableJwks() throws Exception {

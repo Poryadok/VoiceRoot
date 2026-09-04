@@ -80,6 +80,46 @@ func TestPhase15AuthFlywayV4_ParityWithGolangMigrate(t *testing.T) {
 	require.Contains(t, strings.ToLower(string(golangBody)), "e2e_key_backups")
 }
 
+// T056-P1 expand: Auth's durable session-epoch column must land in both migration runners.
+func TestT056AuthSessionEpoch_FlywayV9ParityWithGolangMigrate(t *testing.T) {
+	root := migrationsTestRepoRoot(t)
+	flywayPath := filepath.Join(
+		root,
+		"src", "backend", "auth", "src", "main", "resources", "db", "migration",
+		"V9__accounts_session_epoch.sql",
+	)
+	golangUpPath := filepath.Join(root, "src", "backend", "migrations", "auth_db", "000010_accounts_session_epoch.up.sql")
+	golangDownPath := filepath.Join(root, "src", "backend", "migrations", "auth_db", "000010_accounts_session_epoch.down.sql")
+
+	for name, path := range map[string]string{
+		"flyway":    flywayPath,
+		"golang-up": golangUpPath,
+	} {
+		t.Run(name, func(t *testing.T) {
+			body, err := os.ReadFile(path)
+			require.NoError(t, err)
+			lower := strings.ToLower(string(body))
+			require.Contains(t, lower, "session_epoch")
+			require.Contains(t, lower, "bigint")
+		})
+	}
+	t.Run("golang-down", func(t *testing.T) {
+		body, err := os.ReadFile(golangDownPath)
+		require.NoError(t, err)
+		require.Contains(t, strings.ToLower(string(body)), "drop column")
+		require.Contains(t, strings.ToLower(string(body)), "session_epoch")
+	})
+
+	for _, path := range []string{flywayPath, golangUpPath} {
+		body, err := os.ReadFile(path)
+		require.NoError(t, err)
+		lower := strings.ToLower(string(body))
+		require.Contains(t, lower, "not null")
+		require.Contains(t, lower, "default 1")
+		require.Contains(t, lower, "check")
+	}
+}
+
 func migrationsTestRepoRoot(t *testing.T) string {
 	t.Helper()
 	_, file, _, ok := runtime.Caller(0)
