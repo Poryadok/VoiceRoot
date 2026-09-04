@@ -46,6 +46,19 @@ func (unavailableProfileLookup) AccountIDByProfileID(context.Context, uuid.UUID)
 	return uuid.Nil, errors.New("profile lookup unavailable")
 }
 
+type peerLookupDMStore struct {
+	DMStore
+	peers map[uuid.UUID]uuid.UUID
+	err   error
+}
+
+func (s peerLookupDMStore) DMPeerProfileIDs(context.Context, uuid.UUID, []uuid.UUID) (map[uuid.UUID]uuid.UUID, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.peers, nil
+}
+
 func seedDMForDeletedPeerTest(t *testing.T, ctx context.Context, pool *pgxpool.Pool, caller, peer uuid.UUID, peerInbox string) *store.ChatRow {
 	t.Helper()
 	row, _, err := (&store.DMStore{Pool: pool}).EnsureDM(ctx, caller, peer, peerInbox)
@@ -273,10 +286,7 @@ func TestListChats_DeletedPeerGateFailuresAreUnavailable(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			options := []chatServerOption{}
-			if tt.deleted != nil {
-				options = append(options, WithAccountDeletedChecker(tt.deleted))
-			}
+			options := []chatServerOption{WithAccountDeletedChecker(tt.deleted)}
 			client, cleanup := startChatGRPCTestServer(t, pool, tt.profiles, nil, nil, options...)
 			t.Cleanup(cleanup)
 
@@ -286,4 +296,45 @@ func TestListChats_DeletedPeerGateFailuresAreUnavailable(t *testing.T) {
 			require.Equal(t, codes.Unavailable, status.Code(err))
 		})
 	}
+}
+
+func TestListChats_DeletedPeerMappingFailuresAreUnavailable(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	accCaller, profCaller := uuid.New(), uuid.New()
+	accPeer, profPeer := uuid.New(), uuid.New()
+	row := seedDMForDeletedPeerTest(t, ctx, pool, profCaller, profPeer, store.InboxMain)
+	profiles := mapProfileAccounts{profCaller: accCaller, profPeer: accPeer}
+	base := &store.DMStore{Pool: pool}
+
+	tests := []struct {
+		name  string
+		store DMStore
+	}{
+		{
+			name:  "peer_mapping_error",
+			store: peerLookupDMStore{DMStore: base, err: errors.New("peer lookup unavailable")},
+		},
+		{
+			name:  "peer_mapping_omits_dm",
+			store: peerLookupDMStore{DMStore: base, peers: map[uuid.UUID]uuid.UUID{}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil, WithDMStore(tt.store))
+			t.Cleanup(cleanup)
+
+			response, err := client.ListChats(withAccountProfileCtx(ctx, accCaller, profCaller), &chatv1.ListChatsRequest{})
+			require.Error(t, err)
+			require.Nil(t, response, "an unresolved DM peer must not leak in a snapshot")
+			require.Equal(t, codes.Unavailable, status.Code(err))
+		})
+	}
+	require.NotEqual(t, uuid.Nil, row.ID)
 }

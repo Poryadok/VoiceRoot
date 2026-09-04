@@ -74,6 +74,12 @@ func (m mapProfileAccounts) AccountIDByProfileID(_ context.Context, profileID uu
 	return a, nil
 }
 
+type allowDeletedAccounts struct{}
+
+func (allowDeletedAccounts) DeletedAmong(context.Context, []uuid.UUID) (map[uuid.UUID]struct{}, error) {
+	return map[uuid.UUID]struct{}{}, nil
+}
+
 type stubBlocks struct {
 	blocked bool
 	err     error
@@ -84,6 +90,10 @@ func (s stubBlocks) AccountPairBlocked(context.Context, uuid.UUID, uuid.UUID) (b
 }
 
 type chatServerOption func(*ChatGRPC)
+
+func WithDMStore(d DMStore) chatServerOption {
+	return func(c *ChatGRPC) { c.DM = d }
+}
 
 // WithChatEventsPublisher wires optional NATS chat.events publisher for integration tests.
 func WithChatEventsPublisher(p chatevents.Publisher) chatServerOption {
@@ -117,10 +127,11 @@ func startChatGRPCTestServer(t *testing.T, pool *pgxpool.Pool, profiles UserProf
 	lis := bufconn.Listen(bufSize)
 	srv := grpc.NewServer()
 	svc := &ChatGRPC{
-		DM:         &store.DMStore{Pool: pool},
-		Profiles:   profiles,
-		Blocks:     blocks,
-		ListEnrich: enrich,
+		DM:              &store.DMStore{Pool: pool},
+		Profiles:        profiles,
+		Blocks:          blocks,
+		ListEnrich:      enrich,
+		DeletedAccounts: allowDeletedAccounts{},
 	}
 	for _, o := range opts {
 		o(svc)
@@ -632,10 +643,7 @@ func TestEnsureDM_DeletedAccountGateFailuresAreUnavailable(t *testing.T) {
 				profiles = unavailableProfileLookup{}
 			}
 
-			options := []chatServerOption{}
-			if tt.deleted != nil {
-				options = append(options, WithAccountDeletedChecker(tt.deleted))
-			}
+			options := []chatServerOption{WithAccountDeletedChecker(tt.deleted)}
 			client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil, options...)
 			t.Cleanup(cleanup)
 			ctxCaller := withAccountProfileCtx(ctx, accCaller, profCaller)

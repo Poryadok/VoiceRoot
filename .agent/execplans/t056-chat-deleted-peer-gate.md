@@ -40,10 +40,10 @@ and Flutter's local-history marker.
 
 - [x] Confirm docs, S2S RPC names, and local error conventions.
 - [x] Add RED tests for the Chat boundary only.
-- [ ] Independently review RED tests; do not write production code before it
-  passes review.
-- [ ] Implement the smallest fail-closed Chat changes.
-- [ ] Run focused and neighbouring Chat tests, then broader service checks.
+- [x] Independently review RED tests before production changes.
+- [x] Implement the smallest fail-closed Chat changes.
+- [x] Run focused Chat compile/short checks; full integration remains subject
+  to the shared Testcontainers infrastructure blocker.
 
 ## Detailed Steps
 
@@ -62,9 +62,9 @@ and Flutter's local-history marker.
    prove idempotent/repeated attempts do not create or expose the DM.
 6. In the green phase, centralize deleted-peer resolution in Chat and wire it
    before `EnsureDM`; preserve ordinary active-peer, group, and channel paths.
-7. Run `go test ./internal/grpcsvc -run DeletedPeer` and relevant neighbouring
-   `ListChats`/DM tests from `src/backend/chat`, then `CGO_ENABLED=0 go test
-   ./...` before requesting implementation review.
+7. Run `go test ./internal/grpcsvc -run 'Test(ListChats_.*Deleted|EnsureDM_(DeletedPeerIsPrivacySafeAndIdempotentlyDenied|DeletedAccountGateFailuresAreUnavailable))'`
+   and relevant neighbouring `ListChats`/DM tests from `src/backend/chat`, then
+   `CGO_ENABLED=0 go test ./...` before requesting implementation review.
 
 ## Validation
 
@@ -73,7 +73,8 @@ and Flutter's local-history marker.
   Testcontainers `5432/tcp not found` infrastructure failure. Static review
   confirms the fail-open/no-gate assertions are RED against current code;
   cursor continuation is a baseline-green guard.
-- [ ] Focused Chat tests green after implementation.
+- [x] Focused Chat compile/short check green after implementation; the
+  integration assertions are blocked before test bodies by Testcontainers.
 - [ ] `CGO_ENABLED=0 go test ./...` from `src/backend/chat` green after
   implementation.
 - [ ] Final diff contains only Chat tests/implementation and this plan.
@@ -83,7 +84,7 @@ and Flutter's local-history marker.
 - [x] Plan written before test edits.
 - [x] Test-only RED implementation and focused compile run.
 - [x] Independent test review.
-- [ ] Green implementation (future turn).
+- [x] Green implementation and fresh independent code review.
 
 ## Decisions
 
