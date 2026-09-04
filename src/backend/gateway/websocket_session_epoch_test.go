@@ -104,25 +104,30 @@ func TestSessionEpochWebSocketStrictFloorDeniesBeforeUpstream(t *testing.T) {
 
 func TestSessionEpochWsTicketIssueUsesStrictChecksAndDoesNotIssueOnDeny(t *testing.T) {
 	for _, tc := range []struct {
-		name      string
-		claims    tokenClaims
-		blacklist wsBlacklistResult
-		floor     wsFloorResult
-		wantCode  int
-		wantError string
+		name           string
+		claims         tokenClaims
+		validationCode string
+		blacklist      wsBlacklistResult
+		floor          wsFloorResult
+		wantCode       int
+		wantError      string
+		wantBlacklist  int
+		wantFloor      int
+		wantEvents     []string
 	}{
-		{name: "current", claims: tokenClaims{UserID: "account-1", JTI: "jti-1", SessionEpoch: 7}, floor: wsFloorResult{minimum: 7}, wantCode: http.StatusOK},
-		{name: "revoked", claims: tokenClaims{UserID: "account-1", JTI: "jti-1", SessionEpoch: 7}, blacklist: wsBlacklistResult{revoked: true}, floor: wsFloorResult{minimum: 7}, wantCode: http.StatusUnauthorized, wantError: "token_revoked"},
-		{name: "stale", claims: tokenClaims{UserID: "account-1", JTI: "jti-1", SessionEpoch: 6}, floor: wsFloorResult{minimum: 7}, wantCode: http.StatusUnauthorized, wantError: "token_revoked"},
-		{name: "invalid epoch", claims: tokenClaims{UserID: "account-1", JTI: "jti-1"}, floor: wsFloorResult{minimum: 7}, wantCode: http.StatusUnauthorized, wantError: "invalid_token"},
-		{name: "blacklist unavailable", claims: tokenClaims{UserID: "account-1", JTI: "jti-1", SessionEpoch: 7}, blacklist: wsBlacklistResult{err: errors.New("redis down")}, floor: wsFloorResult{minimum: 7}, wantCode: http.StatusServiceUnavailable, wantError: "auth_unavailable"},
-		{name: "floor unavailable", claims: tokenClaims{UserID: "account-1", JTI: "jti-1", SessionEpoch: 7}, floor: wsFloorResult{err: errors.New("redis down")}, wantCode: http.StatusServiceUnavailable, wantError: "auth_unavailable"},
+		{name: "current", claims: tokenClaims{UserID: "account-1", JTI: "jti-1", SessionEpoch: 7}, floor: wsFloorResult{minimum: 7}, wantCode: http.StatusOK, wantBlacklist: 1, wantFloor: 1, wantEvents: []string{"validate:issue-token", "blacklist:jti-1", "floor:account-1"}},
+		{name: "revoked", claims: tokenClaims{UserID: "account-1", JTI: "jti-1", SessionEpoch: 7}, blacklist: wsBlacklistResult{revoked: true}, floor: wsFloorResult{minimum: 7}, wantCode: http.StatusUnauthorized, wantError: "token_revoked", wantBlacklist: 1, wantEvents: []string{"validate:issue-token", "blacklist:jti-1"}},
+		{name: "stale", claims: tokenClaims{UserID: "account-1", JTI: "jti-1", SessionEpoch: 6}, floor: wsFloorResult{minimum: 7}, wantCode: http.StatusUnauthorized, wantError: "token_revoked", wantBlacklist: 1, wantFloor: 1, wantEvents: []string{"validate:issue-token", "blacklist:jti-1", "floor:account-1"}},
+		{name: "invalid epoch", claims: tokenClaims{UserID: "account-1", JTI: "jti-1"}, floor: wsFloorResult{minimum: 7}, wantCode: http.StatusUnauthorized, wantError: "invalid_token", wantBlacklist: 1, wantEvents: []string{"validate:issue-token", "blacklist:jti-1"}},
+		{name: "invalid JWT", validationCode: "invalid_token", wantCode: http.StatusUnauthorized, wantError: "invalid_token", wantEvents: []string{"validate:issue-token"}},
+		{name: "blacklist unavailable", claims: tokenClaims{UserID: "account-1", JTI: "jti-1", SessionEpoch: 7}, blacklist: wsBlacklistResult{err: errors.New("redis down")}, floor: wsFloorResult{minimum: 7}, wantCode: http.StatusServiceUnavailable, wantError: "auth_unavailable", wantBlacklist: 1, wantEvents: []string{"validate:issue-token", "blacklist:jti-1"}},
+		{name: "floor unavailable", claims: tokenClaims{UserID: "account-1", JTI: "jti-1", SessionEpoch: 7}, floor: wsFloorResult{err: errors.New("redis down")}, wantCode: http.StatusServiceUnavailable, wantError: "auth_unavailable", wantBlacklist: 1, wantFloor: 1, wantEvents: []string{"validate:issue-token", "blacklist:jti-1", "floor:account-1"}},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			events := []string{}
 			validator := newWSSequenceValidator(&events, map[string][]wsValidationResult{
-				"issue-token": {{claims: tc.claims}},
+				"issue-token": {{claims: tc.claims, code: tc.validationCode}},
 			})
 			blacklist := &wsRecordingBlacklist{events: &events, results: []wsBlacklistResult{tc.blacklist}}
 			floor := &wsSequenceFloor{events: &events, results: []wsFloorResult{tc.floor}}
@@ -142,6 +147,10 @@ func TestSessionEpochWsTicketIssueUsesStrictChecksAndDoesNotIssueOnDeny(t *testi
 			if tc.wantError != "" && !strings.Contains(rec.Body.String(), tc.wantError) {
 				t.Fatalf("body = %q, want %q", rec.Body.String(), tc.wantError)
 			}
+			if validator.calls != 1 || blacklist.calls != tc.wantBlacklist || floor.calls != tc.wantFloor {
+				t.Fatalf("validator/blacklist/floor calls = %d/%d/%d, want 1/%d/%d", validator.calls, blacklist.calls, floor.calls, tc.wantBlacklist, tc.wantFloor)
+			}
+			assertWSEvents(t, events, tc.wantEvents...)
 			if tc.wantCode == http.StatusOK {
 				if store.issueCalls != 1 || len(store.records) != 1 {
 					t.Fatalf("ticket issue calls/records = %d/%d, want 1/1", store.issueCalls, len(store.records))
