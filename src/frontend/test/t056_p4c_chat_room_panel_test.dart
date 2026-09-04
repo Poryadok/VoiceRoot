@@ -6,9 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/backend/message_cache/in_memory_message_cache_store.dart';
 import 'package:voice_frontend/backend/message_cache/message_cache_store.dart';
 import 'package:voice_frontend/backend/messages_client.dart';
+import 'package:voice_frontend/backend/files_client.dart';
 import 'package:voice_frontend/backend/realtime_client.dart';
 import 'package:voice_frontend/gen/voice/messaging/v1/messaging.pb.dart'
     as messaging_pb;
@@ -126,7 +128,38 @@ void main() {
   );
 
   testWidgets(
-    'stale enabled composer callbacks exit after DM becomes deleted',
+    'stale enabled send callback exits before mention lookup and side effects',
+    (tester) async {
+      final mentionLookups = <bool>[];
+      final harness = await _pumpPanel(
+        tester,
+        page: _page(),
+        mentionLookups: mentionLookups,
+      );
+      final sendCallback = tester
+          .widget<ChatComposerTextField>(find.byKey(ChatRoomPanel.inputKey))
+          .onSend!;
+      final cacheBaseline = harness.cache.mutationSignatures();
+
+      final controller = harness.container.read(
+        chatRoomControllerProvider('chat-1').notifier,
+      );
+      controller.state = controller.state.copyWith(isDmPeerDeleted: true);
+      await tester.pump();
+
+      sendCallback();
+      await tester.pumpAndSettle();
+
+      expect(harness.realtime.typingStopCalls, 0);
+      expect(mentionLookups, isEmpty);
+      expect(harness.messages.sendCalls, 0);
+      expect(harness.messages.forwardCalls, 0);
+      expect(harness.cache.mutationSignatures(), cacheBaseline);
+    },
+  );
+
+  testWidgets(
+    'stale enabled attach callback exits before picker and upload side effects',
     (tester) async {
       final picked = <bool>[];
       final harness = await _pumpPanel(
@@ -141,9 +174,6 @@ void main() {
           );
         },
       );
-      final sendCallback = tester
-          .widget<ChatComposerTextField>(find.byKey(ChatRoomPanel.inputKey))
-          .onSend!;
       final attachCallback = tester
           .widget<IconButton>(find.byKey(ChatRoomPanel.attachKey))
           .onPressed!;
@@ -155,15 +185,18 @@ void main() {
       controller.state = controller.state.copyWith(isDmPeerDeleted: true);
       await tester.pump();
 
-      sendCallback();
       attachCallback();
       await tester.pumpAndSettle();
+      expect(find.byKey(const Key('composer_attach_menu')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('composer_attach_document')));
+      await tester.pumpAndSettle();
 
-      expect(harness.realtime.typingStopCalls, 0);
+      expect(picked, isEmpty);
       expect(harness.messages.sendCalls, 0);
       expect(harness.messages.forwardCalls, 0);
-      expect(picked, isEmpty);
-      expect(find.byKey(const Key('composer_attach_menu')), findsNothing);
+      expect(harness.files.requestUploadCalls, 0);
+      expect(harness.files.putBytesCalls, 0);
+      expect(harness.files.confirmUploadCalls, 0);
       expect(harness.cache.mutationSignatures(), cacheBaseline);
     },
   );
@@ -186,6 +219,7 @@ Future<_UiHarness> _pumpPanel(
   MessageListData? page,
   Locale locale = const Locale('en'),
   ChatAttachmentPicker? attachmentPicker,
+  List<bool>? mentionLookups,
 }) async {
   final messages = _UiMessagesClient(
     page:
@@ -194,14 +228,21 @@ Future<_UiHarness> _pumpPanel(
   );
   final realtime = _UiRealtimeHub();
   final cache = _UiCacheStore();
+  final files = _UiFilesClient();
   final container = ProviderContainer(
     overrides: [
       ...voiceAppTestOverrides(
         client: MockClient((_) async => httpResponse404()),
       ),
       voiceMessagesClientProvider.overrideWithValue(messages),
+      voiceFilesClientProvider.overrideWithValue(files),
       realtimeHubProvider.overrideWithValue(realtime),
       messageCacheStoreProvider.overrideWithValue(cache),
+      if (mentionLookups != null)
+        groupMembersProvider('chat-1').overrideWith((ref) async {
+          mentionLookups.add(true);
+          return const MemberListData(members: []);
+        }),
     ],
   );
   addTearDown(container.dispose);
@@ -227,6 +268,7 @@ Future<_UiHarness> _pumpPanel(
   return _UiHarness(
     container: container,
     messages: messages,
+    files: files,
     realtime: realtime,
     cache: cache,
   );
@@ -271,12 +313,14 @@ class _UiHarness {
   const _UiHarness({
     required this.container,
     required this.messages,
+    required this.files,
     required this.realtime,
     required this.cache,
   });
 
   final ProviderContainer container;
   final _UiMessagesClient messages;
+  final _UiFilesClient files;
   final _UiRealtimeHub realtime;
   final _UiCacheStore cache;
 }
@@ -340,6 +384,52 @@ class _UiMessagesClient extends VoiceMessagesClient {
   }) async {
     forwardCalls++;
     return const MessagesApiFailure(message: 'unexpected_forward');
+  }
+}
+
+class _UiFilesClient extends VoiceFilesClient {
+  _UiFilesClient()
+    : super(
+        gateway: gatewayHttpForTest(MockClient((_) async => httpResponse404())),
+      );
+
+  var requestUploadCalls = 0;
+  var putBytesCalls = 0;
+  var confirmUploadCalls = 0;
+
+  @override
+  Future<FilesApiResult<FileUploadTicket>> requestUpload({
+    required String authorization,
+    required String originalName,
+    required String mimeType,
+    required int sizeBytes,
+    String? chatId,
+    String? chatType,
+    String? storyId,
+    bool isE2e = false,
+  }) async {
+    requestUploadCalls++;
+    return const FilesApiFailure(message: 'unexpected_upload_request');
+  }
+
+  @override
+  Future<FilesApiResult<void>> putBytes({
+    required Uri uploadUrl,
+    required Uint8List bytes,
+    required String mimeType,
+  }) async {
+    putBytesCalls++;
+    return const FilesApiFailure(message: 'unexpected_put');
+  }
+
+  @override
+  Future<FilesApiResult<FileMetadataData>> confirmUpload({
+    required String authorization,
+    required String fileId,
+    required Uint8List bytes,
+  }) async {
+    confirmUploadCalls++;
+    return const FilesApiFailure(message: 'unexpected_confirm');
   }
 }
 
