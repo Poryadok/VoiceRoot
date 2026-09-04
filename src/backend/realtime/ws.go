@@ -243,10 +243,10 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 	var seq int64
 	chatSubs := make(map[string]struct{})
 
-	write := func(op string, d json.RawMessage, preAuthorized bool) error {
+	write := func(op string, d json.RawMessage) error {
 		writeMu.Lock()
 		defer writeMu.Unlock()
-		if !preAuthorized && !guard.authorizeWriteLocked(op) {
+		if !guard.authorizeWriteLocked(op) {
 			return context.Canceled
 		}
 		seq++
@@ -256,7 +256,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 	}
 
 	helloD, _ := json.Marshal(map[string]any{"conn_id": connID})
-	if err := write("hello", helloD, false); err != nil {
+	if err := write("hello", helloD); err != nil {
 		return
 	}
 	observeWSHelloDuration(upgradeAt)
@@ -285,7 +285,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 			"source":   "chat",
 			"degraded": degraded,
 		})
-		if err := write("subscription_sync", syncD, false); err != nil {
+		if err := write("subscription_sync", syncD); err != nil {
 			return
 		}
 	}
@@ -308,7 +308,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 	for {
 		select {
 		case env := <-reg.fanout:
-			if err := write(env.Op, env.D, env.sessionEpochAuthorized); err != nil {
+			if err := write(env.Op, env.D); err != nil {
 				return
 			}
 		case rr := <-readCh:
@@ -323,7 +323,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 			case "heartbeat":
 				updatePresence(context.Background(), presence, claims, "online", "")
 				ackD, _ := json.Marshal(map[string]any{})
-				if err := write("heartbeat_ack", ackD, false); err != nil {
+				if err := write("heartbeat_ack", ackD); err != nil {
 					return
 				}
 			case "resume":
@@ -336,7 +336,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 						"code":    "invalid_subscribe",
 						"message": "chat_id must be a valid UUID",
 					})
-					if err := write("error", errD, false); err != nil {
+					if err := write("error", errD); err != nil {
 						return
 					}
 					continue
@@ -353,7 +353,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 					slog.String("profile_id", claims.ProfileID),
 				)
 				ackD, _ := json.Marshal(map[string]any{"chat_id": cid})
-				if err := write("subscribe_ack", ackD, false); err != nil {
+				if err := write("subscribe_ack", ackD); err != nil {
 					return
 				}
 			case "unsubscribe":
@@ -363,7 +363,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 						"code":    "invalid_unsubscribe",
 						"message": "chat_id must be a valid UUID",
 					})
-					if err := write("error", errD, false); err != nil {
+					if err := write("error", errD); err != nil {
 						return
 					}
 					continue
@@ -380,7 +380,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 					slog.String("profile_id", claims.ProfileID),
 				)
 				ackD, _ := json.Marshal(map[string]any{"chat_id": cid})
-				if err := write("unsubscribe_ack", ackD, false); err != nil {
+				if err := write("unsubscribe_ack", ackD); err != nil {
 					return
 				}
 			case "typing_start", "typing_stop":
@@ -394,7 +394,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 						"code":    "invalid_typing",
 						"message": "chat_id must be a valid UUID",
 					})
-					if err := write("error", errD, false); err != nil {
+					if err := write("error", errD); err != nil {
 						return
 					}
 					continue
@@ -408,7 +408,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 						"code":    "invalid_typing",
 						"message": "not subscribed to chat",
 					})
-					if err := write("error", errD, false); err != nil {
+					if err := write("error", errD); err != nil {
 						return
 					}
 					continue
@@ -472,7 +472,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 						"code":    "invalid_mark_read",
 						"message": "chat_id and message_id must be valid UUIDs",
 					})
-					if err := write("error", errD, false); err != nil {
+					if err := write("error", errD); err != nil {
 						return
 					}
 					continue
@@ -487,7 +487,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 						"code":    "invalid_mark_read",
 						"message": "not subscribed to chat",
 					})
-					if err := write("error", errD, false); err != nil {
+					if err := write("error", errD); err != nil {
 						return
 					}
 					continue
@@ -516,7 +516,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 						"code":    "invalid_delivery_ack",
 						"message": "chat_id, message_id and sender_profile_id must be valid UUIDs",
 					})
-					if err := write("error", errD, false); err != nil {
+					if err := write("error", errD); err != nil {
 						return
 					}
 					continue
@@ -532,7 +532,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 						"code":    "invalid_delivery_ack",
 						"message": "not subscribed to chat",
 					})
-					if err := write("error", errD, false); err != nil {
+					if err := write("error", errD); err != nil {
 						return
 					}
 					continue
@@ -564,7 +564,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 						"code":    "invalid_presence",
 						"message": "invalid presence payload",
 					})
-					if err := write("error", errD, false); err != nil {
+					if err := write("error", errD); err != nil {
 						return
 					}
 					continue
@@ -575,7 +575,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 						"code":    "invalid_presence",
 						"message": "status is required",
 					})
-					if err := write("error", errD, false); err != nil {
+					if err := write("error", errD); err != nil {
 						return
 					}
 					continue
@@ -585,7 +585,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 						"code":    "invalid_presence",
 						"message": "invalid status",
 					})
-					if err := write("error", errD, false); err != nil {
+					if err := write("error", errD); err != nil {
 						return
 					}
 					continue

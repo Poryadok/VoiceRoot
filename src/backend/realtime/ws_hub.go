@@ -9,9 +9,8 @@ import (
 
 // fanoutEnvelope is delivered to a WebSocket pump when another instance (or local peer) fans out.
 type fanoutEnvelope struct {
-	Op                     string
-	D                      json.RawMessage
-	sessionEpochAuthorized bool
+	Op string
+	D  json.RawMessage
 }
 
 // connReg is one authenticated WebSocket registered for cross-connection fan-out.
@@ -46,7 +45,6 @@ func (r *connReg) enqueue(env fanoutEnvelope, blocking bool) {
 		if !guard() {
 			return
 		}
-		env.sessionEpochAuthorized = true
 	}
 	if blocking {
 		r.fanout <- env

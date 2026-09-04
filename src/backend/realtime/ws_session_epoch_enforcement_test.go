@@ -406,6 +406,36 @@ func TestWSStrictSessionEpochGuardsEveryOutboundFanoutAndExpiry(t *testing.T) {
 	}
 }
 
+func TestWSStrictSessionEpochRechecksQueuedFanoutAtActualWrite(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, time.September, 5, 12, 0, 0, 0, time.UTC)
+	floor := &epochEnforcementFloor{byAccount: map[string]epochEnforcementFloorResult{
+		"account-from-jwt": {minimum: 7},
+	}}
+	hub := newWSHub()
+	policy := wsSessionEpochPolicy{
+		Strict: true,
+		Floor:  floor,
+		Now:    func() time.Time { return now },
+		BeforeWrite: func(op string) {
+			if op == "message_create" {
+				floor.set("account-from-jwt", epochEnforcementFloorResult{minimum: 8})
+			}
+		},
+	}
+	srv := httptest.NewServer(newWSHandlerWithSessionEpoch(&epochEnforcementValidator{claims: epochEnforcementClaims(now)}, nil, hub, nil, "epoch-test", nil, nil, policy))
+	t.Cleanup(srv.Close)
+	conn := epochEnforcementDial(t, srv, epochEnforcementHeaders("verified-token", "profile-from-jwt"))
+	t.Cleanup(func() { _ = conn.Close() })
+	require.Equal(t, "hello", epochEnforcementRead(t, conn).Op)
+
+	// The hub gate admits this fanout while the floor is 7. The write gate must
+	// still be authoritative when the queued frame reaches Gorilla.
+	hub.broadcastToProfile("profile-from-jwt", fanoutEnvelope{Op: "message_create", D: json.RawMessage(`{"id":"must-not-leak"}`)}, nil, "")
+	epochEnforcementRequireRevokedClose(t, conn)
+	require.Equal(t, 4, floor.callCount(), "upgrade, hello, enqueue, and actual write must each check the floor")
+}
+
 func TestWSStrictSessionEpochSerializesConcurrentInboundAndFanoutRevocationClose(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, time.September, 5, 12, 0, 0, 0, time.UTC)
