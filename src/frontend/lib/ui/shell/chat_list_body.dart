@@ -32,7 +32,11 @@ import 'quick_access_actions.dart';
 
 /// Reusable chat list content for navigation column and legacy middle column.
 class ChatListBody extends ConsumerStatefulWidget {
-  const ChatListBody({super.key, this.showHeader = true, this.onChatSelected});
+  const ChatListBody({
+    super.key,
+    this.showHeader = true,
+    this.onChatSelected,
+  });
 
   static const Key listKey = Key('chat_list_view');
   static Key tileKey(String chatId) => Key('chat_list_tile_$chatId');
@@ -105,17 +109,13 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
     final shellNav = ref.read(shellNavigationProvider);
     final selectedFolderId = ref.watch(selectedChatFolderIdProvider);
     final foldersAsync = ref.watch(chatFoldersProvider);
-    final customFolderReorder =
-        foldersAsync.valueOrNull?.folders.any(
-          (f) => f.id == selectedFolderId && !f.isSystem,
-        ) ??
+    final customFolderReorder = foldersAsync.valueOrNull?.folders
+            .any((f) => f.id == selectedFolderId && !f.isSystem) ??
         false;
     final reconciler = ref.watch(inboxReconcilerProvider);
     final reconcilerScope = selectedFolderId == null && activeProfileId != null
-        ? reconciler.profileSnapshots[activeProfileId]?.scopes[inbox ==
-                  'requests'
-              ? InboxScope.requests
-              : InboxScope.main]
+        ? reconciler.profileSnapshots[activeProfileId]?.scopes[
+            inbox == 'requests' ? InboxScope.requests : InboxScope.main]
         : null;
 
     void selectChat(String chatId) {
@@ -129,353 +129,338 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
     return KeyedSubtree(
       key: OnboardingAnchorKeys.chatsNav,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (widget.showHeader)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: 8),
-                      child: Text(
-                        l10n.chatListTitle,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (widget.showHeader)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: Text(
+                      l10n.chatListTitle,
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
                   ),
-                  IconButton(
-                    key: ChatListBody.createSpaceKey,
-                    icon: const Icon(Icons.hub_outlined),
-                    tooltip: l10n.spaceCreateTooltip,
-                    onPressed: () => CreateSpaceSheet.show(context),
-                  ),
-                  IconButton(
-                    key: ChatListBody.joinSpaceInviteKey,
-                    icon: const Icon(Icons.link),
-                    tooltip: l10n.spaceInviteJoinTooltip,
-                    onPressed: () => JoinSpaceInviteSheet.show(context),
-                  ),
-                  IconButton(
-                    key: ChatListBody.createGroupKey,
-                    icon: const Icon(Icons.group_add_outlined),
-                    tooltip: l10n.chatCreateGroupTooltip,
-                    onPressed: () => CreateGroupSheet.show(context),
-                  ),
-                ],
-              ),
+                ),
+                IconButton(
+                  key: ChatListBody.createSpaceKey,
+                  icon: const Icon(Icons.hub_outlined),
+                  tooltip: l10n.spaceCreateTooltip,
+                  onPressed: () => CreateSpaceSheet.show(context),
+                ),
+                IconButton(
+                  key: ChatListBody.joinSpaceInviteKey,
+                  icon: const Icon(Icons.link),
+                  tooltip: l10n.spaceInviteJoinTooltip,
+                  onPressed: () => JoinSpaceInviteSheet.show(context),
+                ),
+                IconButton(
+                  key: ChatListBody.createGroupKey,
+                  icon: const Icon(Icons.group_add_outlined),
+                  tooltip: l10n.chatCreateGroupTooltip,
+                  onPressed: () => CreateGroupSheet.show(context),
+                ),
+              ],
             ),
-          const _MySpacesStrip(),
-          Expanded(
-            child: Builder(
-              builder: (context) {
-                final items = reconcilerScope == null
-                    ? activeProfileId != null &&
-                              chats.profileId == activeProfileId
-                          ? chats.items
-                          : const <ChatListItem>[]
-                    : reconcilerScope.isComplete
-                    ? reconcilerScope.items
-                    : chats.profileId == activeProfileId
-                    ? mergeInboxRows(chats.items, reconcilerScope.items)
-                    : reconcilerScope.items;
-                final legacyMatchesProfile =
-                    activeProfileId != null &&
-                    chats.profileId == activeProfileId;
-                final isLoading =
-                    reconcilerScope?.isLoading ??
-                    (legacyMatchesProfile
-                        ? chats.isLoading
-                        : activeProfileId != null);
-                final errorMessage =
-                    reconcilerScope?.errorMessage ??
-                    (legacyMatchesProfile ? chats.errorMessage : null);
-                final errorStatusCode =
-                    reconcilerScope?.errorStatusCode ??
-                    (legacyMatchesProfile ? chats.errorStatusCode : null);
-                final hasReconcilerError =
-                    reconcilerScope?.errorMessage != null;
-                if (isLoading && items.isEmpty) {
-                  return const VoiceListSkeleton();
-                }
-                if (errorMessage != null && items.isEmpty) {
-                  final error = isBackendUnavailable(errorStatusCode)
-                      ? const BackendUnavailableException()
-                      : Exception(errorMessage);
-                  return KeyedSubtree(
-                    key: ChatListBody.unavailableKey,
-                    child: VoiceStatePanel(
-                      title: l10n.chatListLoadError,
-                      message: chatListErrorMessage(l10n, error),
-                      icon: Icons.cloud_off_outlined,
-                      actionLabel: l10n.commonRetry,
-                      onAction: reconcilerScope != null
-                          ? () => ref
-                                .read(inboxReconcilerProvider.notifier)
-                                .retry(
-                                  inbox == 'requests'
-                                      ? InboxScope.requests
-                                      : InboxScope.main,
-                                )
-                          : () => ref
-                                .read(chatListControllerProvider.notifier)
-                                .loadInitial(),
-                    ),
-                  );
-                }
-                if (items.isEmpty) {
-                  return VoiceStatePanel(
-                    title: inbox == 'requests'
-                        ? l10n.chatInboxRequests
-                        : l10n.chatListEmpty,
-                    message: inbox == 'requests'
-                        ? l10n.chatMessageRequestsEmptyHint
-                        : l10n.chatListEmptyHint,
-                    icon: inbox == 'requests'
-                        ? Icons.mark_email_unread_outlined
-                        : Icons.forum_outlined,
-                  );
-                }
-                final hasFooter = reconcilerScope != null
-                    ? isLoading ||
-                          reconcilerScope.nextCursor != null ||
-                          hasReconcilerError
-                    : chats.hasMore || chats.isLoadingMore;
-                final canReorder =
-                    customFolderReorder &&
-                    selectedFolderId != null &&
-                    inbox == 'main' &&
-                    !hasFooter;
+          ),
+        const _MySpacesStrip(),
+        Expanded(
+          child: Builder(
+            builder: (context) {
+              final items = reconcilerScope == null
+                  ? activeProfileId != null && chats.profileId == activeProfileId
+                      ? chats.items
+                      : const <ChatListItem>[]
+                  : reconcilerScope.isComplete
+                      ? reconcilerScope.items
+                      : chats.profileId == activeProfileId
+                          ? mergeInboxRows(chats.items, reconcilerScope.items)
+                          : reconcilerScope.items;
+              final legacyMatchesProfile = activeProfileId != null &&
+                  chats.profileId == activeProfileId;
+              final isLoading = reconcilerScope?.isLoading ??
+                  (legacyMatchesProfile
+                      ? chats.isLoading
+                      : activeProfileId != null);
+              final errorMessage =
+                  reconcilerScope?.errorMessage ??
+                  (legacyMatchesProfile ? chats.errorMessage : null);
+              final errorStatusCode = reconcilerScope?.errorStatusCode ??
+                  (legacyMatchesProfile ? chats.errorStatusCode : null);
+              final hasReconcilerError = reconcilerScope?.errorMessage != null;
+              if (isLoading && items.isEmpty) {
+                return const VoiceListSkeleton();
+              }
+              if (errorMessage != null && items.isEmpty) {
+                final error = isBackendUnavailable(errorStatusCode)
+                    ? const BackendUnavailableException()
+                    : Exception(errorMessage);
+                return KeyedSubtree(
+                  key: ChatListBody.unavailableKey,
+                  child: VoiceStatePanel(
+                    title: l10n.chatListLoadError,
+                    message: chatListErrorMessage(l10n, error),
+                    icon: Icons.cloud_off_outlined,
+                    actionLabel: l10n.commonRetry,
+                    onAction: reconcilerScope != null
+                        ? () => ref
+                              .read(inboxReconcilerProvider.notifier)
+                              .retry(inbox == 'requests'
+                                  ? InboxScope.requests
+                                  : InboxScope.main)
+                        : () => ref
+                              .read(chatListControllerProvider.notifier)
+                              .loadInitial(),
+                  ),
+                );
+              }
+              if (items.isEmpty) {
+                return VoiceStatePanel(
+                  title: inbox == 'requests'
+                      ? l10n.chatInboxRequests
+                      : l10n.chatListEmpty,
+                  message: inbox == 'requests'
+                      ? l10n.chatMessageRequestsEmptyHint
+                      : l10n.chatListEmptyHint,
+                  icon: inbox == 'requests'
+                      ? Icons.mark_email_unread_outlined
+                      : Icons.forum_outlined,
+                );
+              }
+              final hasFooter = reconcilerScope != null
+                  ? isLoading ||
+                      reconcilerScope.nextCursor != null ||
+                      hasReconcilerError
+                  : chats.hasMore || chats.isLoadingMore;
+              final canReorder =
+                  customFolderReorder &&
+                  selectedFolderId != null &&
+                  inbox == 'main' &&
+                  !hasFooter;
 
-                Widget buildRow(ChatListItem item, {int? reorderIndex}) {
-                  final peerId = resolveDmPeerProfileId(
-                    item: item,
-                    knownPeerId: peerMap[item.chatId],
-                    activeProfileId: activeProfileId,
-                  );
-                  final titleAsync = peerId != null
-                      ? ref.watch(profileProvider(peerId))
-                      : null;
-                  final profile = titleAsync?.valueOrNull;
-                  final title =
-                      profile?.displayName ??
-                      item.chat.name ??
-                      l10n.chatListDmFallback(_shortChatId(item.chatId));
-                  final showPremium =
-                      peerId != null &&
-                      ref.watch(profilePremiumBadgeProvider(peerId));
-                  final subtitle = item.lastMessagePreview ?? '';
-                  final selected = item.chatId == selectedId;
-                  final presence = peerId != null
-                      ? ref.watch(presenceProvider(peerId))
-                      : null;
-                  final pinned =
-                      item.isPinned ||
-                      isChatPinnedInFolder(ref, selectedFolderId, item.chatId);
-                  final displayItem = pinned
-                      ? item.copyWith(isPinned: true)
-                      : item;
-                  return Column(
-                    key: ChatListBody.tileKey(item.chatId),
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      VoiceListRow(
-                        selected: selected,
-                        title: title,
-                        titleWidget: peerId != null && !item.chat.isGroup
-                            ? ChatAuthorLabel(
-                                displayName: title,
-                                isPremium: showPremium,
-                                verificationType:
-                                    profile?.verificationType ?? 'none',
-                                premiumBadgeSemanticLabel:
-                                    l10n.premiumBadgeLabel,
-                                verifiedBadgeSemanticLabel:
-                                    profile?.verificationType == 'organization'
-                                    ? l10n.verifiedBadgeOrganization
-                                    : l10n.verifiedBadgePersonal,
-                              )
-                            : null,
-                        subtitle: subtitle.isEmpty ? null : subtitle,
-                        leading: item.chat.isGroup
-                            ? VoiceAvatar(
-                                imageUrl: item.chat.avatarUrl,
+              Widget buildRow(
+                ChatListItem item, {
+                int? reorderIndex,
+              }) {
+                final peerId = resolveDmPeerProfileId(
+                  item: item,
+                  knownPeerId: peerMap[item.chatId],
+                  activeProfileId: activeProfileId,
+                );
+                final titleAsync = peerId != null
+                    ? ref.watch(profileProvider(peerId))
+                    : null;
+                final profile = titleAsync?.valueOrNull;
+                final title =
+                    profile?.displayName ??
+                    item.chat.name ??
+                    l10n.chatListDmFallback(_shortChatId(item.chatId));
+                final showPremium = peerId != null &&
+                    ref.watch(profilePremiumBadgeProvider(peerId));
+                final subtitle = item.lastMessagePreview ?? '';
+                final selected = item.chatId == selectedId;
+                final presence = peerId != null
+                    ? ref.watch(presenceProvider(peerId))
+                    : null;
+                final pinned = item.isPinned ||
+                    isChatPinnedInFolder(ref, selectedFolderId, item.chatId);
+                final displayItem = pinned ? item.copyWith(isPinned: true) : item;
+                return Column(
+                  key: ChatListBody.tileKey(item.chatId),
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    VoiceListRow(
+                      selected: selected,
+                      title: title,
+                      titleWidget: peerId != null && !item.chat.isGroup
+                          ? ChatAuthorLabel(
+                              displayName: title,
+                              isPremium: showPremium,
+                              verificationType:
+                                  profile?.verificationType ?? 'none',
+                              premiumBadgeSemanticLabel:
+                                  l10n.premiumBadgeLabel,
+                              verifiedBadgeSemanticLabel:
+                                  profile?.verificationType == 'organization'
+                                  ? l10n.verifiedBadgeOrganization
+                                  : l10n.verifiedBadgePersonal,
+                            )
+                          : null,
+                      subtitle: subtitle.isEmpty ? null : subtitle,
+                      leading: item.chat.isGroup
+                          ? VoiceAvatar(
+                              imageUrl: item.chat.avatarUrl,
+                              label: title,
+                            )
+                          : peerId != null
+                          ? VoiceAvatarWithPresence(
+                              avatar: VoiceAvatar(
+                                imageUrl: profile?.avatarUrl,
                                 label: title,
-                              )
-                            : peerId != null
-                            ? VoiceAvatarWithPresence(
-                                avatar: VoiceAvatar(
-                                  imageUrl: profile?.avatarUrl,
-                                  label: title,
-                                ),
-                                presence: presence != null
-                                    ? PresenceIndicator(
-                                        key: ChatListBody.presenceIndicatorKey(
-                                          item.chatId,
-                                        ),
-                                        presence: presence,
-                                        semanticLabel: _presenceLabel(
-                                          l10n,
-                                          presence.status,
-                                        ),
-                                        size: 12,
-                                      )
-                                    : null,
-                              )
-                            : null,
-                        trailing: _ChatListTrailing(
-                          l10n: l10n,
-                          inbox: inbox,
-                          item: displayItem,
-                          muted:
-                              ref.watch(chatMutedUntilProvider)[item.chatId] !=
-                              null,
-                          showDragHandle: reorderIndex != null,
-                          dragIndex: reorderIndex,
-                          onAccept: () async {
-                            final session = ref
-                                .read(authControllerProvider)
-                                .session;
-                            if (session == null) return;
-                            final error = await ref
-                                .read(chatListControllerProvider.notifier)
-                                .acceptRequest(item.chatId);
-                            if (!context.mounted) return;
-                            if (error == null) {
-                              ref
-                                  .read(inboxReconcilerProvider.notifier)
-                                  .removeChat(
-                                    InboxScope.requests,
-                                    item.chatId,
-                                    expectedProfileId: session.activeProfileId,
-                                    expectedAuthorization:
-                                        session.authorizationHeader,
-                                  );
-                            }
-                          },
-                          onDecline: () async {
-                            final session = ref
-                                .read(authControllerProvider)
-                                .session;
-                            if (session == null) return;
-                            final error = await ref
-                                .read(chatListControllerProvider.notifier)
-                                .declineRequest(item.chatId);
-                            if (!context.mounted) return;
-                            if (error == null) {
-                              ref
-                                  .read(inboxReconcilerProvider.notifier)
-                                  .removeChat(
-                                    InboxScope.requests,
-                                    item.chatId,
-                                    expectedProfileId: session.activeProfileId,
-                                    expectedAuthorization:
-                                        session.authorizationHeader,
-                                  );
-                            }
-                          },
-                        ),
-                        onTap: () => selectChat(item.chatId),
-                        onLongPress: inbox == 'requests'
-                            ? null
-                            : () => _showChatRowActions(
+                              ),
+                              presence: presence != null
+                                  ? PresenceIndicator(
+                                      key: ChatListBody.presenceIndicatorKey(
+                                        item.chatId,
+                                      ),
+                                      presence: presence,
+                                      semanticLabel: _presenceLabel(
+                                        l10n,
+                                        presence.status,
+                                      ),
+                                      size: 12,
+                                    )
+                                  : null,
+                            )
+                          : null,
+                      trailing: _ChatListTrailing(
+                        l10n: l10n,
+                        inbox: inbox,
+                        item: displayItem,
+                        muted: ref.watch(chatMutedUntilProvider)[item.chatId] !=
+                            null,
+                        showDragHandle: reorderIndex != null,
+                        dragIndex: reorderIndex,
+                        onAccept: () async {
+                          final session = ref.read(authControllerProvider).session;
+                          if (session == null) return;
+                          final error = await ref
+                              .read(chatListControllerProvider.notifier)
+                              .acceptRequest(item.chatId);
+                          if (!context.mounted) return;
+                          if (error == null) {
+                            ref
+                                .read(inboxReconcilerProvider.notifier)
+                                .removeChat(
+                                  InboxScope.requests,
+                                  item.chatId,
+                                  expectedProfileId: session.activeProfileId,
+                                  expectedAuthorization:
+                                      session.authorizationHeader,
+                                );
+                          }
+                        },
+                        onDecline: () async {
+                          final session = ref.read(authControllerProvider).session;
+                          if (session == null) return;
+                          final error = await ref
+                              .read(chatListControllerProvider.notifier)
+                              .declineRequest(item.chatId);
+                          if (!context.mounted) return;
+                          if (error == null) {
+                            ref
+                                .read(inboxReconcilerProvider.notifier)
+                                .removeChat(
+                                  InboxScope.requests,
+                                  item.chatId,
+                                  expectedProfileId: session.activeProfileId,
+                                  expectedAuthorization:
+                                      session.authorizationHeader,
+                                );
+                          }
+                        },
+                      ),
+                      onTap: () => selectChat(item.chatId),
+                      onLongPress: inbox == 'requests'
+                          ? null
+                          : () => _showChatRowActions(
                                 context,
                                 ref,
                                 l10n,
                                 displayItem,
                                 folderId: selectedFolderId,
                               ),
-                      ),
-                      if (item.isStranger && inbox == 'main')
-                        Padding(
-                          padding: const EdgeInsets.only(left: 56, bottom: 4),
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: _StrangerChip(
-                              label: l10n.chatListStrangerBadge,
-                            ),
+                    ),
+                    if (item.isStranger && inbox == 'main')
+                      Padding(
+                        padding: const EdgeInsets.only(left: 56, bottom: 4),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: _StrangerChip(
+                            label: l10n.chatListStrangerBadge,
                           ),
                         ),
-                    ],
-                  );
-                }
+                      ),
+                  ],
+                );
+              }
 
-                if (canReorder) {
-                  return ReorderableListView.builder(
-                    key: ChatListBody.listKey,
-                    scrollController: _scrollController,
-                    buildDefaultDragHandles: false,
-                    itemCount: items.length,
-                    onReorder: (oldIndex, newIndex) {
-                      if (newIndex > oldIndex) newIndex -= 1;
-                      final ids = items.map((item) => item.chatId).toList();
-                      final moved = ids.removeAt(oldIndex);
-                      ids.insert(newIndex, moved);
-                      ref
-                          .read(chatListControllerProvider.notifier)
-                          .reorderFolderChats(ids);
-                    },
-                    itemBuilder: (context, index) {
-                      return buildRow(items[index], reorderIndex: index);
-                    },
-                  );
-                }
-
-                return ListView.builder(
+              if (canReorder) {
+                return ReorderableListView.builder(
                   key: ChatListBody.listKey,
-                  controller: _scrollController,
-                  itemCount: items.length + (hasFooter ? 1 : 0),
+                  scrollController: _scrollController,
+                  buildDefaultDragHandles: false,
+                  itemCount: items.length,
+                  onReorder: (oldIndex, newIndex) {
+                    if (newIndex > oldIndex) newIndex -= 1;
+                    final ids = items.map((item) => item.chatId).toList();
+                    final moved = ids.removeAt(oldIndex);
+                    ids.insert(newIndex, moved);
+                    ref
+                        .read(chatListControllerProvider.notifier)
+                        .reorderFolderChats(ids);
+                  },
                   itemBuilder: (context, index) {
-                    if (index == items.length) {
-                      if (hasReconcilerError) {
-                        final error = isBackendUnavailable(errorStatusCode)
-                            ? const BackendUnavailableException()
-                            : Exception(errorMessage);
-                        return VoiceStatePanel(
-                          title: l10n.chatListLoadError,
-                          message: chatListErrorMessage(l10n, error),
-                          icon: Icons.cloud_off_outlined,
-                          actionLabel: l10n.commonRetry,
-                          onAction: () => ref
-                              .read(inboxReconcilerProvider.notifier)
-                              .retry(
-                                inbox == 'requests'
-                                    ? InboxScope.requests
-                                    : InboxScope.main,
-                              ),
-                        );
-                      }
-                      return Center(
-                        child: reconcilerScope != null || chats.isLoadingMore
-                            ? const Padding(
-                                padding: EdgeInsets.all(8),
-                                child: SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                ),
-                              )
-                            : TextButton.icon(
-                                key: ChatListBody.loadMoreKey,
-                                icon: const Icon(Icons.expand_more),
-                                label: Text(l10n.chatListLoadMore),
-                                onPressed: () => ref
-                                    .read(chatListControllerProvider.notifier)
-                                    .loadMore(),
-                              ),
-                      );
-                    }
-                    return buildRow(items[index]);
+                    return buildRow(items[index], reorderIndex: index);
                   },
                 );
-              },
-            ),
+              }
+
+              return ListView.builder(
+                key: ChatListBody.listKey,
+                controller: _scrollController,
+                itemCount: items.length + (hasFooter ? 1 : 0),
+                itemBuilder: (context, index) {
+                  if (index == items.length) {
+                    if (hasReconcilerError) {
+                      final error = isBackendUnavailable(errorStatusCode)
+                          ? const BackendUnavailableException()
+                          : Exception(errorMessage);
+                      return VoiceStatePanel(
+                        title: l10n.chatListLoadError,
+                        message: chatListErrorMessage(l10n, error),
+                        icon: Icons.cloud_off_outlined,
+                        actionLabel: l10n.commonRetry,
+                        onAction: () => ref
+                            .read(inboxReconcilerProvider.notifier)
+                            .retry(inbox == 'requests'
+                                ? InboxScope.requests
+                                : InboxScope.main),
+                      );
+                    }
+                    return Center(
+                      child: reconcilerScope != null || chats.isLoadingMore
+                          ? const Padding(
+                              padding: EdgeInsets.all(8),
+                              child: SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            )
+                          : TextButton.icon(
+                              key: ChatListBody.loadMoreKey,
+                              icon: const Icon(Icons.expand_more),
+                              label: Text(l10n.chatListLoadMore),
+                              onPressed: () => ref
+                                  .read(chatListControllerProvider.notifier)
+                                  .loadMore(),
+                            ),
+                    );
+                  }
+                  return buildRow(items[index]);
+                },
+              );
+            },
           ),
-        ],
-      ),
+        ),
+      ],
+    ),
     );
   }
 }
@@ -508,8 +493,8 @@ Future<void> _showChatRowActions(
 }) async {
   final muted = ref.read(chatMutedUntilProvider)[item.chatId] != null;
   final qaAsync = ref.read(quickAccessListProvider);
-  final inQuickAccess =
-      qaAsync.valueOrNull?.items.any((entry) => entry.chatId == item.chatId) ??
+  final inQuickAccess = qaAsync.valueOrNull?.items
+          .any((entry) => entry.chatId == item.chatId) ??
       false;
   final action = await showModalBottomSheet<String>(
     context: context,
@@ -524,11 +509,8 @@ Future<void> _showChatRowActions(
                 leading: Icon(
                   item.isPinned ? Icons.push_pin : Icons.push_pin_outlined,
                 ),
-                title: Text(
-                  item.isPinned ? l10n.chatListUnpin : l10n.chatListPin,
-                ),
-                onTap: () =>
-                    Navigator.pop(ctx, item.isPinned ? 'unpin' : 'pin'),
+                title: Text(item.isPinned ? l10n.chatListUnpin : l10n.chatListPin),
+                onTap: () => Navigator.pop(ctx, item.isPinned ? 'unpin' : 'pin'),
               ),
             if (!inQuickAccess)
               ListTile(
@@ -539,9 +521,7 @@ Future<void> _showChatRowActions(
               ),
             ListTile(
               key: ChatListBody.muteActionKey(item.chatId),
-              leading: Icon(
-                muted ? Icons.notifications_active : Icons.notifications_off,
-              ),
+              leading: Icon(muted ? Icons.notifications_active : Icons.notifications_off),
               title: Text(muted ? l10n.chatListUnmute : l10n.chatListMute),
               onTap: () => Navigator.pop(ctx, muted ? 'unmute' : 'mute'),
             ),
@@ -629,10 +609,7 @@ class _ChatListTrailing extends StatelessWidget {
       return Wrap(
         spacing: 4,
         children: [
-          TextButton(
-            onPressed: onAccept,
-            child: Text(l10n.socialAcceptRequest),
-          ),
+          TextButton(onPressed: onAccept, child: Text(l10n.socialAcceptRequest)),
           TextButton(
             onPressed: onDecline,
             child: Text(l10n.socialDeclineRequest),
