@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	chatv1 "voice.app/voice/chat/v1"
+	commonv1 "voice.app/voice/common/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
 
 	"voice/backend/messaging/internal/store"
@@ -103,6 +104,31 @@ type failingProfileAccounts struct{ err error }
 
 func (f failingProfileAccounts) AccountIDByProfileID(context.Context, uuid.UUID) (uuid.UUID, error) {
 	return uuid.Nil, f.err
+}
+
+// recordingProfileAccounts proves that the GetMessages deleted-peer state is
+// DM-only: a group or channel history must not consult User's profile mapping.
+type recordingProfileAccounts struct {
+	mu         sync.Mutex
+	accountIDs map[uuid.UUID]uuid.UUID
+	calls      []uuid.UUID
+}
+
+func (p *recordingProfileAccounts) AccountIDByProfileID(_ context.Context, profileID uuid.UUID) (uuid.UUID, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.calls = append(p.calls, profileID)
+	accountID, ok := p.accountIDs[profileID]
+	if !ok {
+		return uuid.Nil, errors.New("profile lookup must not be called")
+	}
+	return accountID, nil
+}
+
+func (p *recordingProfileAccounts) calledProfiles() []uuid.UUID {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]uuid.UUID(nil), p.calls...)
 }
 
 type nonMemberGuard struct{}
@@ -492,4 +518,217 @@ func TestMessagingDeletedPeer_TypedNilDependenciesFailClosed(t *testing.T) {
 		require.Zero(t, messageCountForDeletedPeerTest(t, ctx, pool, targetChat))
 		require.Zero(t, events.eventCount())
 	})
+}
+
+// TestMessagingGetMessages_DMActiveStateAndDeletedPeerHistoryAreDurable
+// documents the selected-known-DM recovery contract: account state is a
+// response field, while PostgreSQL history and pagination stay byte-for-byte
+// unchanged. In particular, GetMessages must not manufacture a system row or
+// publish an unrelated Messaging event for the client marker.
+func TestMessagingGetMessages_DMActiveStateAndDeletedPeerHistoryAreDurable(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applyDeletedPeerMessagingMigrations(t, ctx, pool)
+
+	chatID := uuid.New()
+	profA, profB := uuid.New(), uuid.New()
+	acctA, acctB := uuid.New(), uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+
+	deleted := &recordingDeletedAccounts{deleted: map[uuid.UUID]struct{}{}}
+	events := &spyMessageEvents{}
+	client, _ := startMessagingServerWired(t, pool, messagingWire{
+		UserProfiles:               profileAcctMap{profA: acctA, profB: acctB},
+		DeletedAccounts:            deleted,
+		RequireDeletedAccountsSeam: true,
+		MessageEvents:              events,
+	})
+
+	for _, content := range []string{"oldest", "middle", "newest"} {
+		sendDeletedPeerTestMessage(t, ctx, client, acctA, profA, chatDMRef(chatID), content, nil)
+	}
+	require.Equal(t, 3, messageCountForDeletedPeerTest(t, ctx, pool, chatID))
+	events.reset()
+
+	request := func(cursor string) *messagingv1.GetMessagesRequest {
+		return &messagingv1.GetMessagesRequest{
+			Chat: chatDMRef(chatID),
+			Page: &commonv1.CursorPageRequest{Cursor: cursor, PageSize: 2},
+		}
+	}
+
+	activeFirst, err := client.GetMessages(withProfileCtx(ctx, acctA, profA), request(""))
+	require.NoError(t, err)
+	require.Equal(t, messagingv1.DmPeerState_DM_PEER_STATE_ACTIVE, activeFirst.GetDmPeerState())
+	require.Len(t, activeFirst.GetMessageList().GetMessages(), 2)
+	require.Equal(t, []string{"newest", "middle"}, []string{
+		activeFirst.GetMessageList().GetMessages()[0].GetContent(),
+		activeFirst.GetMessageList().GetMessages()[1].GetContent(),
+	}, "real PostgreSQL history must retain newest-first ordering")
+	require.True(t, activeFirst.GetMessageList().GetHasMore())
+	require.NotEmpty(t, activeFirst.GetMessageList().GetNextCursor())
+	activeSecond, err := client.GetMessages(withProfileCtx(ctx, acctA, profA), request(activeFirst.GetMessageList().GetNextCursor()))
+	require.NoError(t, err)
+	require.Equal(t, messagingv1.DmPeerState_DM_PEER_STATE_ACTIVE, activeSecond.GetDmPeerState())
+	require.Len(t, activeSecond.GetMessageList().GetMessages(), 1)
+	require.Equal(t, "oldest", activeSecond.GetMessageList().GetMessages()[0].GetContent())
+	require.False(t, activeSecond.GetMessageList().GetHasMore())
+	require.Zero(t, events.eventCount(), "history reads must not publish Messaging events")
+
+	deleted.mu.Lock()
+	deleted.deleted[acctB] = struct{}{}
+	deleted.mu.Unlock()
+
+	deletedFirst, err := client.GetMessages(withProfileCtx(ctx, acctA, profA), request(""))
+	require.NoError(t, err, "a surviving DM member must still recover selected history")
+	require.Equal(t, messagingv1.DmPeerState_DM_PEER_STATE_DELETED, deletedFirst.GetDmPeerState())
+	require.Equal(t, activeFirst.GetMessageList(), deletedFirst.GetMessageList(), "peer deletion must not alter the first history page or cursor")
+	deletedSecond, err := client.GetMessages(withProfileCtx(ctx, acctA, profA), request(deletedFirst.GetMessageList().GetNextCursor()))
+	require.NoError(t, err)
+	require.Equal(t, messagingv1.DmPeerState_DM_PEER_STATE_DELETED, deletedSecond.GetDmPeerState())
+	require.Equal(t, activeSecond.GetMessageList(), deletedSecond.GetMessageList(), "peer deletion must not alter later history pages or ordering")
+	require.Equal(t, 3, messageCountForDeletedPeerTest(t, ctx, pool, chatID), "the terminal marker must never be persisted")
+	var systemRows int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM messages WHERE chat_id = $1 AND type = 'system'`, chatID).Scan(&systemRows))
+	require.Zero(t, systemRows, "GetMessages must not synthesize a system Message")
+	require.Zero(t, events.eventCount(), "deleted-peer history recovery must not publish a Messaging event")
+	require.Equal(t, [][]uuid.UUID{{acctA, acctB}, {acctA, acctB}, {acctA, acctB}, {acctA, acctB}}, deleted.calls())
+}
+
+// TestMessagingGetMessages_DeletedSenderStillReceivesOnlyResponseState covers
+// the both-account Auth contract at the service boundary. Auth normally
+// revokes this token, but if it reaches Messaging it must not leak which DM
+// account was deleted or replace history with a marker row.
+func TestMessagingGetMessages_DeletedSenderStillReceivesOnlyResponseState(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applyDeletedPeerMessagingMigrations(t, ctx, pool)
+
+	chatID := uuid.New()
+	profA, profB := uuid.New(), uuid.New()
+	acctA, acctB := uuid.New(), uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+	deleted := &recordingDeletedAccounts{deleted: map[uuid.UUID]struct{}{acctA: {}}}
+	client, _ := startMessagingServerWired(t, pool, messagingWire{
+		UserProfiles:               profileAcctMap{profA: acctA, profB: acctB},
+		DeletedAccounts:            deleted,
+		RequireDeletedAccountsSeam: true,
+	})
+
+	// Seed through the other account: the deleted-account check is deliberately
+	// not a write-side assertion in this GetMessages-focused test.
+	_, err := pool.Exec(ctx, `
+INSERT INTO messages (id, chat_id, chat_type, sender_profile_id, content, attachments, mentions)
+VALUES ($1, $2, 'dm', $3, 'pre-existing history', '[]', '[]')`, uuid.Must(uuid.NewV7()), chatID, profB)
+	require.NoError(t, err)
+
+	resp, err := client.GetMessages(withProfileCtx(ctx, acctA, profA), &messagingv1.GetMessagesRequest{
+		Chat: chatDMRef(chatID), Page: &commonv1.CursorPageRequest{PageSize: 10},
+	})
+	require.NoError(t, err)
+	require.Equal(t, messagingv1.DmPeerState_DM_PEER_STATE_DELETED, resp.GetDmPeerState())
+	require.Len(t, resp.GetMessageList().GetMessages(), 1)
+	require.Equal(t, "pre-existing history", resp.GetMessageList().GetMessages()[0].GetContent())
+	require.Equal(t, [][]uuid.UUID{{acctA, acctB}}, deleted.calls())
+}
+
+func TestMessagingGetMessages_NonMemberDeniedBeforeDeletedAccountLookup(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applyDeletedPeerMessagingMigrations(t, ctx, pool)
+
+	deleted := &recordingDeletedAccounts{deleted: map[uuid.UUID]struct{}{uuid.New(): {}}}
+	client, _ := startMessagingServerWired(t, pool, messagingWire{
+		ChatGuard:                  nonMemberGuard{},
+		UserProfiles:               profileAcctMap{},
+		DeletedAccounts:            deleted,
+		RequireDeletedAccountsSeam: true,
+	})
+
+	resp, err := client.GetMessages(withProfileCtx(ctx, uuid.New(), uuid.New()), &messagingv1.GetMessagesRequest{
+		Chat: chatDMRef(uuid.New()), Page: &commonv1.CursorPageRequest{PageSize: 10},
+	})
+	require.Nil(t, resp)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	require.Empty(t, deleted.calls(), "membership must be checked before the deleted-account checker")
+}
+
+func TestMessagingGetMessages_GroupAndChannelLeaveDMStateUnspecifiedWithoutAccountLookups(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applyDeletedPeerMessagingMigrations(t, ctx, pool)
+
+	groupID, channelID := uuid.New(), uuid.New()
+	profileID, peerProfileID := uuid.New(), uuid.New()
+	accountID := uuid.New()
+	seedGroupChat(t, ctx, pool, groupID, profileID, peerProfileID)
+	seedChannelChat(t, ctx, pool, channelID, profileID)
+	profiles := &recordingProfileAccounts{accountIDs: map[uuid.UUID]uuid.UUID{profileID: accountID}}
+	deleted := &recordingDeletedAccounts{deleted: map[uuid.UUID]struct{}{accountID: {}}}
+	client, _ := startMessagingServerWired(t, pool, messagingWire{
+		UserProfiles:               profiles,
+		DeletedAccounts:            deleted,
+		RequireDeletedAccountsSeam: true,
+	})
+
+	for name, chat := range map[string]*chatv1.ChatRef{"group": chatGroupRef(groupID), "channel": chatChannelRef(channelID)} {
+		t.Run(name, func(t *testing.T) {
+			resp, err := client.GetMessages(withProfileCtx(ctx, accountID, profileID), &messagingv1.GetMessagesRequest{
+				Chat: chat, Page: &commonv1.CursorPageRequest{PageSize: 10},
+			})
+			require.NoError(t, err)
+			require.Equal(t, messagingv1.DmPeerState_DM_PEER_STATE_UNSPECIFIED, resp.GetDmPeerState())
+		})
+	}
+	require.Empty(t, deleted.calls(), "non-DM history must not call Auth's deleted-account checker")
+	require.Empty(t, profiles.calledProfiles(), "non-DM history must not call User profile-to-account mapping")
+}
+
+func TestMessagingGetMessages_DMStatusDependenciesFailClosedWithoutPartialHistory(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applyDeletedPeerMessagingMigrations(t, ctx, pool)
+
+	chatID := uuid.New()
+	profA, profB := uuid.New(), uuid.New()
+	acctA, acctB := uuid.New(), uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+	_, err := pool.Exec(ctx, `
+INSERT INTO messages (id, chat_id, chat_type, sender_profile_id, content, attachments, mentions)
+VALUES ($1, $2, 'dm', $3, 'must never be a partial response', '[]', '[]')`, uuid.Must(uuid.NewV7()), chatID, profB)
+	require.NoError(t, err)
+
+	var typedNilChecker *recordingDeletedAccounts
+	var typedNilProfiles *typedNilProfileAccounts
+	for _, tc := range []struct {
+		name     string
+		guard    ChatGuard
+		checker  testDeletedAccountChecker
+		profiles ProfileAccountLookup
+	}{
+		{name: "missing checker", profiles: profileAcctMap{profA: acctA, profB: acctB}},
+		{name: "typed nil checker", checker: typedNilChecker, profiles: profileAcctMap{profA: acctA, profB: acctB}},
+		{name: "missing profile mapper", checker: allowDeletedAccounts{}},
+		{name: "typed nil profile mapper", checker: allowDeletedAccounts{}, profiles: typedNilProfiles},
+		{name: "checker RPC error", checker: &recordingDeletedAccounts{err: errors.New("auth unavailable")}, profiles: profileAcctMap{profA: acctA, profB: acctB}},
+		{name: "profile mapping RPC error", checker: allowDeletedAccounts{}, profiles: failingProfileAccounts{err: errors.New("user unavailable")}},
+		{name: "checker nil map", checker: nilMapDeletedAccounts{}, profiles: profileAcctMap{profA: acctA, profB: acctB}},
+		{name: "malformed peer profile ID", guard: faultGuard{peer: uuid.Nil}, checker: allowDeletedAccounts{}, profiles: profileAcctMap{profA: acctA, profB: acctB}},
+		{name: "malformed peer account ID", checker: allowDeletedAccounts{}, profiles: profileAcctMap{profB: uuid.Nil}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client, _ := startMessagingServerWired(t, pool, messagingWire{
+				ChatGuard:                  tc.guard,
+				UserProfiles:               tc.profiles,
+				DeletedAccounts:            tc.checker,
+				RequireDeletedAccountsSeam: true,
+			})
+			resp, err := client.GetMessages(withProfileCtx(ctx, acctA, profA), &messagingv1.GetMessagesRequest{
+				Chat: chatDMRef(chatID), Page: &commonv1.CursorPageRequest{PageSize: 10},
+			})
+			require.Nil(t, resp, "unavailable account state must not leak partial history")
+			require.Equal(t, codes.Unavailable, status.Code(err))
+			require.Equal(t, 1, messageCountForDeletedPeerTest(t, ctx, pool, chatID), "status lookup failures must not mutate history")
+		})
+	}
 }
