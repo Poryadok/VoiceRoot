@@ -62,15 +62,29 @@ func (g *gateway) authenticate(r *http.Request) (tokenClaims, string) {
 	if code != "" {
 		return tokenClaims{}, code
 	}
-	if claims.JTI == "" {
-		return claims, ""
+	if claims.JTI != "" {
+		revoked, err := g.tokenBlacklist.IsRevoked(r.Context(), claims.JTI)
+		if err != nil {
+			return tokenClaims{}, "auth_unavailable"
+		}
+		if revoked {
+			return tokenClaims{}, "token_revoked"
+		}
 	}
-	revoked, err := g.tokenBlacklist.IsRevoked(r.Context(), claims.JTI)
-	if err != nil {
-		return tokenClaims{}, "auth_unavailable"
-	}
-	if revoked {
-		return tokenClaims{}, "token_revoked"
+	if g.config.sessionEpochStrict {
+		if claims.SessionEpoch <= 0 {
+			return tokenClaims{}, "invalid_token"
+		}
+		if g.config.sessionEpochFloor == nil {
+			return tokenClaims{}, "auth_unavailable"
+		}
+		minimum, err := g.config.sessionEpochFloor.Minimum(r.Context(), claims.UserID)
+		if err != nil || minimum <= 0 {
+			return tokenClaims{}, "auth_unavailable"
+		}
+		if claims.SessionEpoch < minimum {
+			return tokenClaims{}, "token_revoked"
+		}
 	}
 	return claims, ""
 }
