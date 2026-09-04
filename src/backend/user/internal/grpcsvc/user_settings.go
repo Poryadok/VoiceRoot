@@ -84,6 +84,53 @@ func (s *UserGRPC) ListProfileIDsForAccount(ctx context.Context, req *userv1.Lis
 	return &userv1.ListProfileIDsForAccountResponse{ProfileIds: out}, nil
 }
 
+// ResolvePrimaryProfileIDs is an internal read seam for Auth-owned account identifiers.
+// It never provisions profiles and omits accounts without an existing, non-deleted primary profile.
+func (s *UserGRPC) ResolvePrimaryProfileIDs(ctx context.Context, req *userv1.ResolvePrimaryProfileIDsRequest) (*userv1.ResolvePrimaryProfileIDsResponse, error) {
+	if !authctx.IsInternalService(ctx) {
+		return nil, status.Error(codes.PermissionDenied, "internal only")
+	}
+	if s.Profiles == nil {
+		return nil, status.Error(codes.FailedPrecondition, "profile store not configured")
+	}
+	accountIDs := make([]uuid.UUID, 0, len(req.GetAccountIds()))
+	for _, raw := range req.GetAccountIds() {
+		accountID, err := uuid.Parse(strings.TrimSpace(raw))
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, "invalid account_id")
+		}
+		accountIDs = append(accountIDs, accountID)
+	}
+	resolved, err := s.Profiles.ResolvePrimaryProfileIDs(ctx, accountIDs)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	out := make(map[string]string, len(resolved))
+	for accountID, profileID := range resolved {
+		out[accountID.String()] = profileID.String()
+	}
+	return &userv1.ResolvePrimaryProfileIDsResponse{PrimaryProfileIds: out}, nil
+}
+
+// MarkAccountRegular clears the guest marker after Auth has converted the account.
+// The operation is internal-only and idempotent, including for accounts without profiles.
+func (s *UserGRPC) MarkAccountRegular(ctx context.Context, req *userv1.MarkAccountRegularRequest) (*userv1.MarkAccountRegularResponse, error) {
+	if !authctx.IsInternalService(ctx) {
+		return nil, status.Error(codes.PermissionDenied, "internal only")
+	}
+	if s.Profiles == nil {
+		return nil, status.Error(codes.FailedPrecondition, "profile store not configured")
+	}
+	accountID, err := uuid.Parse(strings.TrimSpace(req.GetAccountId()))
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid account_id")
+	}
+	if err := s.Profiles.MarkAccountRegular(ctx, accountID); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	return &userv1.MarkAccountRegularResponse{}, nil
+}
+
 // GetSettings returns per-profile UI settings stored on profiles row.
 func (s *UserGRPC) GetSettings(ctx context.Context, req *userv1.GetSettingsRequest) (*userv1.GetSettingsResponse, error) {
 	accountID, ok := authctx.AccountID(ctx)
