@@ -110,8 +110,14 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
       previous,
       next,
     ) {
-      if (previous == RealtimeLinkStatus.reconnecting &&
-          next == RealtimeLinkStatus.connected) {
+      if (next != RealtimeLinkStatus.connected) return;
+      final pending = _pendingSession;
+      if (pending != null && _matchesSession(pending)) {
+        _pendingSession = null;
+        unawaited(reconcile());
+        return;
+      }
+      if (previous == RealtimeLinkStatus.reconnecting) {
         unawaited(reconcile());
       }
     });
@@ -130,23 +136,14 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
       _generation++;
       _pendingItems.clear();
       _removedChatIds.clear();
+      _pendingSession = nextSession == null
+          ? null
+          : _PendingInboxSession(
+              profileId: nextSession.activeProfileId,
+              authorization: nextSession.authorizationHeader,
+            );
       if (profileChanged) {
         _ref.read(dmPeerProfileByChatIdProvider.notifier).state = const {};
-      }
-      if (nextSession != null) {
-        // This is the narrow profile/session handoff for T-052. Socket/session
-        // ordering remains owned by T-053.
-        final expectedProfileId = nextSession.activeProfileId;
-        final expectedAccessToken = nextSession.accessToken;
-        scheduleMicrotask(() {
-          if (!mounted) return;
-          final current = _ref.read(authControllerProvider).session;
-          if (current?.activeProfileId != expectedProfileId ||
-              current?.accessToken != expectedAccessToken) {
-            return;
-          }
-          unawaited(reconcile());
-        });
       }
     });
   }
@@ -155,8 +152,10 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
   ProviderSubscription<RealtimeLinkStatus>? _realtimeSub;
   ProviderSubscription<AuthState>? _authSub;
   int _generation = 0;
+  _PendingInboxSession? _pendingSession;
   final Map<InboxScope, List<ChatListItem>> _pendingItems = {};
   final Map<String, Map<InboxScope, Set<String>>> _removedChatIds = {};
+  final Map<String, Map<String, ChatListItem>> _archivedMutations = {};
 
   @override
   void dispose() {
@@ -247,6 +246,53 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
     }
   }
 
+  /// Applies a confirmed archive write to both authoritative inbox scopes.
+  ///
+  /// A successful server mutation belongs to the session that issued it. The
+  /// same fence which protects pagination prevents a late A result from
+  /// changing B after a profile switch.
+  void archiveChat(
+    ChatListItem item, {
+    required String expectedProfileId,
+    required String expectedAuthorization,
+  }) {
+    final session = _ref.read(authControllerProvider).session;
+    if (session?.activeProfileId != expectedProfileId ||
+        session?.authorizationHeader != expectedAuthorization) {
+      return;
+    }
+    final profile = state.profileSnapshots[expectedProfileId];
+    if (profile == null) return;
+
+    // Retain a confirmed archive row while an older archive page is still in
+    // flight. That page may complete, but cannot erase this newer mutation.
+    _archivedMutations.putIfAbsent(
+      expectedProfileId,
+      () => <String, ChatListItem>{},
+    )[item.chatId] = item;
+    final main = profile[InboxScope.main];
+    final archive = profile[InboxScope.archive];
+    final updatedMain = main.copyWith(
+      items: main.items.where((row) => row.chatId != item.chatId).toList(),
+    );
+    final updatedArchive = archive.copyWith(
+      items: mergeInboxRows(archive.items, [item]),
+      clearNextCursor: true,
+      clearFailedCursor: true,
+      clearError: true,
+      isLoading: false,
+      isComplete: true,
+    );
+    state = state.copyWith(
+      profileSnapshots: {
+        ...state.profileSnapshots,
+        expectedProfileId: profile
+            .withScope(InboxScope.main, updatedMain)
+            .withScope(InboxScope.archive, updatedArchive),
+      },
+    );
+  }
+
   Future<void> _reconcileScope({
     required int generation,
     required String profileId,
@@ -335,6 +381,12 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
         _ref.read(authControllerProvider).activeProfileId == profileId;
   }
 
+  bool _matchesSession(_PendingInboxSession pending) {
+    final current = _ref.read(authControllerProvider).session;
+    return current?.activeProfileId == pending.profileId &&
+        current?.authorizationHeader == pending.authorization;
+  }
+
   void _beginScope({
     required int generation,
     required String profileId,
@@ -369,15 +421,20 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
     if (!_isCurrent(generation, profileId)) return;
     final current =
         state.profileSnapshots[profileId]?[scope] ?? const InboxScopeSnapshot();
-    final removed =
-        _removedChatIds[profileId]?[scope] ?? const <String>{};
+    final removed = _removedChatIds[profileId]?[scope] ?? const <String>{};
     final acceptedItems = items
         .where((item) => !removed.contains(item.chatId))
         .toList(growable: false);
     final pending = replacesPage
         ? acceptedItems
         : mergeInboxRows(_pendingItems[scope] ?? const [], acceptedItems);
-    _pendingItems[scope] = pending;
+    final protectedPending = scope == InboxScope.archive
+        ? mergeInboxRows(
+            pending,
+            _archivedMutations[profileId]?.values ?? const [],
+          )
+        : pending;
+    _pendingItems[scope] = protectedPending;
     _replaceScope(
       generation: generation,
       profileId: profileId,
@@ -385,7 +442,7 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
       value: current.copyWith(
         // Progressive pages render immediately, but old cached rows remain
         // until the scope reaches its terminal cursor.
-        items: mergeInboxRows(current.items, pending),
+        items: mergeInboxRows(current.items, protectedPending),
         nextCursor: nextCursor,
         clearNextCursor: nextCursor == null,
         clearFailedCursor: true,
@@ -403,7 +460,13 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
   }) {
     if (!_isCurrent(generation, profileId)) return;
     final current = state.profileSnapshots[profileId]![scope];
-    final authoritativeItems = _pendingItems.remove(scope) ?? current.items;
+    final pendingItems = _pendingItems.remove(scope) ?? current.items;
+    final authoritativeItems = scope == InboxScope.archive
+        ? mergeInboxRows(
+            pendingItems,
+            _archivedMutations[profileId]?.values ?? const [],
+          )
+        : pendingItems;
     _replaceScope(
       generation: generation,
       profileId: profileId,
@@ -496,6 +559,16 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
     if (!changed || !_isCurrent(generation, profileId)) return;
     _ref.read(dmPeerProfileByChatIdProvider.notifier).state = peers;
   }
+}
+
+class _PendingInboxSession {
+  const _PendingInboxSession({
+    required this.profileId,
+    required this.authorization,
+  });
+
+  final String profileId;
+  final String authorization;
 }
 
 /// Merges current rows with newer authoritative metadata while preserving order.
