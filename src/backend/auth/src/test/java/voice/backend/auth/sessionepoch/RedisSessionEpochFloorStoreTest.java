@@ -24,7 +24,6 @@ class RedisSessionEpochFloorStoreTest {
     assertThat(store.recordAtLeast(accountId, 4L)).isEqualTo(9L);
 
     assertThat(commands.values).containsEntry(store.keyFor(accountId), 9L);
-    assertThat(commands.expiryWasRequested).isFalse();
     assertThat(commands.timeouts).containsOnly(COMMAND_TIMEOUT);
   }
 
@@ -68,7 +67,6 @@ class RedisSessionEpochFloorStoreTest {
   private static final class RecordingCommands implements RedisSessionEpochCommands {
     private final Map<String, Long> values = new HashMap<>();
     private final java.util.List<Duration> timeouts = new java.util.ArrayList<>();
-    private boolean expiryWasRequested;
     private RuntimeException failure;
 
     @Override
@@ -77,7 +75,6 @@ class RedisSessionEpochFloorStoreTest {
       if (failure != null) {
         throw failure;
       }
-      expiryWasRequested = false;
       return values.merge(key, candidate, Math::max);
     }
 

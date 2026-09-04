@@ -1,6 +1,7 @@
 package voice.backend.auth.sessionepoch;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -27,6 +28,18 @@ class AuthSessionEpochFloorReconcilerTest {
 
     assertThat(floors.requireFloor(first)).isEqualTo(9L);
     assertThat(floors.requireFloor(second)).isEqualTo(7L);
+  }
+
+  @Test
+  void corruptNonPositiveDurableEpochFailsClosedInsteadOfSeedingAnUnsafeFloor() {
+    UUID accountId = UUID.randomUUID();
+    MutableDurableEpochSource durable = new MutableDurableEpochSource(Map.of(accountId, 0L));
+    AuthSessionEpochFloorReconciler reconciler =
+        new AuthSessionEpochFloorReconciler(durable, new InMemoryFloorStore());
+
+    assertThatThrownBy(reconciler::seedAndReconcile)
+        .isInstanceOf(SessionEpochFloorUnavailableException.class)
+        .hasMessageContaining("invalid");
   }
 
   private static final class MutableDurableEpochSource implements DurableAccountEpochSource {
