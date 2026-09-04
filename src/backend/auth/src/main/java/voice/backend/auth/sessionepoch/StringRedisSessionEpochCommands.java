@@ -1,10 +1,15 @@
 package voice.backend.auth.sessionepoch;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.List;
-import org.springframework.dao.DataAccessException;
-import org.springframework.data.redis.core.RedisOperations;
-import org.springframework.data.redis.core.SessionCallback;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import io.lettuce.core.RedisFuture;
+import io.lettuce.core.TransactionResult;
+import io.lettuce.core.api.async.RedisAsyncCommands;
+import org.springframework.data.redis.connection.RedisConnection;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 /**
@@ -26,23 +31,37 @@ final class StringRedisSessionEpochCommands implements RedisSessionEpochCommands
     long deadlineNanos = System.nanoTime() + timeout.toNanos();
     Long recorded =
         redis.execute(
-            new SessionCallback<>() {
+            new RedisCallback<>() {
               @Override
-              public Long execute(RedisOperations operations) throws DataAccessException {
+              public Long doInRedis(RedisConnection connection) {
+                RedisAsyncCommands<byte[], byte[]> commands = commandsFor(connection);
+                byte[] encodedKey = key.getBytes(StandardCharsets.UTF_8);
                 while (System.nanoTime() < deadlineNanos && !Thread.currentThread().isInterrupted()) {
-                  operations.watch(key);
+                  await(commands.watch(encodedKey), deadlineNanos, connection);
+                  boolean watched = true;
+                  boolean queued = false;
                   try {
-                    String currentRaw = (String) operations.opsForValue().get(key);
-                    long current = currentRaw == null ? 0L : parsePositive(currentRaw);
+                    byte[] currentRaw = await(commands.get(encodedKey), deadlineNanos, connection);
+                    long current = currentRaw == null ? 0L : parsePositive(new String(currentRaw, StandardCharsets.UTF_8));
                     long next = Math.max(current, candidate);
-                    operations.multi();
-                    operations.opsForValue().set(key, Long.toString(next));
-                    List<Object> result = operations.exec();
-                    if (result != null && !result.isEmpty()) {
+                    await(commands.multi(), deadlineNanos, connection);
+                    queued = true;
+                    await(
+                        commands.set(encodedKey, Long.toString(next).getBytes(StandardCharsets.UTF_8)),
+                        deadlineNanos,
+                        connection);
+                    TransactionResult result = await(commands.exec(), deadlineNanos, connection);
+                    queued = false;
+                    watched = false;
+                    if (!result.wasDiscarded() && !result.isEmpty()) {
                       return next;
                     }
                   } finally {
-                    operations.unwatch();
+                    if (queued) {
+                      cancel(commands.discard(), connection);
+                    } else if (watched) {
+                      cancel(commands.unwatch(), connection);
+                    }
                   }
                 }
                 throw new SessionEpochFloorUnavailableException("session epoch floor command timeout");
@@ -56,11 +75,65 @@ final class StringRedisSessionEpochCommands implements RedisSessionEpochCommands
 
   @Override
   public long readRequiredPositive(String key, Duration timeout) {
-    String value = redis.opsForValue().get(key);
+    long deadlineNanos = System.nanoTime() + timeout.toNanos();
+    RedisCallback<Long> readFloor =
+        connection -> {
+          RedisAsyncCommands<byte[], byte[]> commands = commandsFor(connection);
+          byte[] raw =
+              await(commands.get(key.getBytes(StandardCharsets.UTF_8)), deadlineNanos, connection);
+          if (raw == null) {
+            throw new SessionEpochFloorUnavailableException("session epoch floor missing");
+          }
+          return parsePositive(new String(raw, StandardCharsets.UTF_8));
+        };
+    Long value = redis.execute(readFloor);
     if (value == null) {
-      throw new SessionEpochFloorUnavailableException("session epoch floor missing");
+      throw new SessionEpochFloorUnavailableException("session epoch floor Redis unavailable");
     }
-    return parsePositive(value);
+    return value;
+  }
+
+  @SuppressWarnings("unchecked")
+  private static RedisAsyncCommands<byte[], byte[]> commandsFor(RedisConnection connection) {
+    Object nativeConnection = connection.getNativeConnection();
+    if (!(nativeConnection instanceof RedisAsyncCommands<?, ?>)) {
+      throw new SessionEpochFloorUnavailableException("session epoch floor Redis unavailable");
+    }
+    return (RedisAsyncCommands<byte[], byte[]>) nativeConnection;
+  }
+
+  private static <T> T await(
+      RedisFuture<T> future, long deadlineNanos, RedisConnection connection) {
+    long remainingNanos = deadlineNanos - System.nanoTime();
+    if (remainingNanos <= 0) {
+      abort(future, connection);
+      throw new SessionEpochFloorUnavailableException("session epoch floor command timeout");
+    }
+    try {
+      return future.get(remainingNanos, TimeUnit.NANOSECONDS);
+    } catch (TimeoutException ex) {
+      abort(future, connection);
+      throw new SessionEpochFloorUnavailableException("session epoch floor command timeout", ex);
+    } catch (InterruptedException ex) {
+      abort(future, connection);
+      Thread.currentThread().interrupt();
+      throw new SessionEpochFloorUnavailableException("session epoch floor command interrupted", ex);
+    } catch (ExecutionException ex) {
+      throw new SessionEpochFloorUnavailableException("session epoch floor Redis unavailable", ex.getCause());
+    }
+  }
+
+  private static void cancel(RedisFuture<?> future, RedisConnection connection) {
+    try {
+      future.cancel(true);
+    } catch (RuntimeException ignored) {
+      connection.close();
+    }
+  }
+
+  private static void abort(RedisFuture<?> future, RedisConnection connection) {
+    future.cancel(true);
+    connection.close();
   }
 
   private static long parsePositive(String raw) {
