@@ -1676,8 +1676,9 @@ class _RealtimeHubBinding {
 }
 
 class RealtimeHub {
-  RealtimeHub(this._ref, {required RealtimeTransportFactory transportFactory})
-    : _transportFactory = transportFactory;
+  RealtimeHub(this._ref, {RealtimeTransportFactory? transportFactory})
+    : _transportFactory =
+          transportFactory ?? _GatewayRealtimeTransportFactory(_ref);
 
   final Ref _ref;
   final RealtimeTransportFactory _transportFactory;
