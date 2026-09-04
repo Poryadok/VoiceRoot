@@ -110,10 +110,25 @@ func TestComposeA1TwoAccountsFoundation_live(t *testing.T) {
 	}
 	require.NotNil(t, mainItem, "B main inbox must contain the DM: %+v", mainB)
 	require.Equal(t, sessA.ProfileID, mainItem.DMPeerProfileID)
-	require.GreaterOrEqual(t, mainItem.UnreadCount, 1, "B must have unread DM metadata")
+	require.Equal(t, "main", mainItem.Inbox)
+	require.False(t, mainItem.IsStranger)
+	require.Equal(t, 2, mainItem.UnreadCount, "B must have one unread count per fresh A→B message")
 
 	getComposeMessagesContains(t, client, base, sessB.AccessToken, chatID, messageOneID, messageOne)
 	getComposeMessagesContains(t, client, base, sessB.AccessToken, chatID, messageTwoID, messageTwo)
 	markReadComposeMessage(t, client, base, sessB.AccessToken, chatID, messageTwoID)
 	require.Equal(t, messageTwoID, getComposeReadState(t, client, base, sessB.AccessToken, chatID))
+
+	mainBAfterRead := listComposeChats(t, client, base, sessB.AccessToken, "main")
+	var mainItemAfterRead *composeChatListItem
+	for i := range mainBAfterRead {
+		if mainBAfterRead[i].ChatID == chatID {
+			mainItemAfterRead = &mainBAfterRead[i]
+			break
+		}
+	}
+	require.NotNil(t, mainItemAfterRead, "read DM must remain in B main inbox: %+v", mainBAfterRead)
+	require.Equal(t, "main", mainItemAfterRead.Inbox)
+	require.False(t, mainItemAfterRead.IsStranger)
+	require.Equal(t, 0, mainItemAfterRead.UnreadCount)
 }
