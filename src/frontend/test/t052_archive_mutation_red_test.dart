@@ -125,6 +125,8 @@ void main() {
     testWidgets(
       'archives a reconciler-owned visible main row when the legacy list is empty',
       (tester) async {
+        await tester.binding.setSurfaceSize(const Size(800, 1200));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
         final chats = _ArchiveMutationChatsFake();
         _enqueueSnapshot(chats, archiveItems: const [], mainItems: ['chat-1']);
         _enqueueSnapshot(chats, archiveItems: const [], manualArchive: true);
@@ -155,7 +157,7 @@ void main() {
         expect(find.byKey(ChatListBody.tileKey('chat-1')), findsOneWidget);
 
         await tester.longPress(find.byKey(ChatListBody.tileKey('chat-1')));
-        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
 
         staleReconcile = reconciler.reconcile();
         await tester.pump();
@@ -165,7 +167,8 @@ void main() {
         final archiveAction = find.byKey(
           ChatListBody.archiveActionKey('chat-1'),
         );
-        tester.widget<ListTile>(archiveAction).onTap!.call();
+        await tester.ensureVisible(archiveAction);
+        await tester.tap(archiveAction);
         await tester.pump();
 
         final afterArchive = container
