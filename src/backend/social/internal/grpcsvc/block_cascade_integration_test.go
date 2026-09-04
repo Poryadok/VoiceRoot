@@ -439,3 +439,72 @@ WHERE datname = current_database() AND wait_event_type = 'Lock' AND wait_event =
 	require.NoError(t, <-blockDone)
 	require.Zero(t, countFriendshipsBetween(t, ctx, pool, []uuid.UUID{profA}, []uuid.UUID{profB}))
 }
+
+// TestBlockAccount_ConcurrentAcceptCannotLeaveAcceptedFriendshipAfterCommittedBlock
+// holds AcceptInvitation inside its real SQL update point. The account-pair lock
+// orders the accept before the block cascade or makes it observe the block; once
+// BlockAccount returns, no accepted friendship may survive.
+func TestBlockAccount_ConcurrentAcceptCannotLeaveAcceptedFriendshipAfterCommittedBlock(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startSocialPostgresForTest(t, ctx)
+	applySocialMigration(t, ctx, pool)
+
+	accA, accB := uuid.New(), uuid.New()
+	profA, profB := uuid.New(), uuid.New()
+	seedFriendship(t, ctx, pool, profA, profB, "pending")
+	client, cleanup := startSocialGRPCTestServer(t, pool, func(s *SocialGRPC) {
+		s.AccountProfiles = stubAccountProfiles{accA: {profA}, accB: {profB}}
+		s.ProfileAccounts = stubProfileAccounts{profA: accA, profB: accB}
+	})
+	t.Cleanup(cleanup)
+
+	const pauseLockID int64 = 51052
+	lockConn, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+	t.Cleanup(lockConn.Release)
+	_, err = lockConn.Exec(ctx, "SELECT pg_advisory_lock($1)", pauseLockID)
+	require.NoError(t, err)
+	t.Cleanup(func() { _, _ = lockConn.Exec(context.Background(), "SELECT pg_advisory_unlock($1)", pauseLockID) })
+
+	_, err = pool.Exec(ctx, `
+CREATE OR REPLACE FUNCTION pause_friendship_accept_for_block_test() RETURNS trigger AS $$
+BEGIN
+  PERFORM pg_advisory_xact_lock(51052);
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE TRIGGER pause_friendship_accept_for_block_test
+BEFORE UPDATE ON friendships
+FOR EACH ROW
+WHEN (NEW.status = 'accepted' AND OLD.status = 'pending')
+EXECUTE FUNCTION pause_friendship_accept_for_block_test();`)
+	require.NoError(t, err)
+
+	acceptDone := make(chan error, 1)
+	go func() {
+		_, acceptErr := client.AcceptFriendInvitation(withProfileAndAccountCtx(ctx, profB, accB), &socialv1.AcceptFriendInvitationRequest{RequesterProfileId: profA.String()})
+		acceptDone <- acceptErr
+	}()
+	require.Eventually(t, func() bool {
+		var waiting bool
+		err := pool.QueryRow(ctx, `SELECT EXISTS (
+SELECT 1 FROM pg_stat_activity
+WHERE datname = current_database() AND wait_event_type = 'Lock' AND wait_event = 'advisory')`).Scan(&waiting)
+		return err == nil && waiting
+	}, 5*time.Second, 10*time.Millisecond)
+
+	blockDone := make(chan error, 1)
+	go func() {
+		_, blockErr := client.BlockAccount(withAccountCtx(ctx, accA), &socialv1.BlockAccountRequest{BlockedAccountId: accB.String()})
+		blockDone <- blockErr
+	}()
+
+	_, err = lockConn.Exec(ctx, "SELECT pg_advisory_unlock($1)", pauseLockID)
+	require.NoError(t, err)
+	require.NoError(t, <-acceptDone)
+	require.NoError(t, <-blockDone)
+	require.Zero(t, countFriendshipsBetween(t, ctx, pool, []uuid.UUID{profA}, []uuid.UUID{profB}))
+}
