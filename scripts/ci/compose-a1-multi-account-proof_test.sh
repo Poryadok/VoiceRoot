@@ -69,8 +69,16 @@ printf 'env_COMPOSE_PROJECT_NAME=%s\n' "${COMPOSE_PROJECT_NAME:-}" >>"${log}"
 printf 'env_COMPOSE_PROFILES=%s\n' "${COMPOSE_PROFILES:-}" >>"${log}"
 printf 'env_COMPOSE_FILE=%s\n' "${COMPOSE_FILE:-}" >>"${log}"
 if [[ "${1:-}" == ps ]]; then
-  line="$*"
-  if [[ "${FAKE_DOCKER_MODE:-}" == collision && ( "$line" == ps\ -aq\ * || "$line" == ps\ --all\ --quiet\ * || "$line" == ps\ --quiet\ --all\ * ) ]]; then
+  has_all=0
+  has_quiet=0
+  for arg in "${@:2}"; do
+    case "$arg" in
+      -a|--all) has_all=1 ;;
+      -q|--quiet) has_quiet=1 ;;
+      -aq|-qa) has_all=1; has_quiet=1 ;;
+    esac
+  done
+  if [[ "${FAKE_DOCKER_MODE:-}" == collision && "$has_all" == 1 && "$has_quiet" == 1 ]]; then
     echo fake-existing-container
   fi
   if [[ "${FAKE_DOCKER_MODE:-}" == occupied && "${2:-}" == --format ]]; then echo '0.0.0.0:25003->5432/tcp'; fi
