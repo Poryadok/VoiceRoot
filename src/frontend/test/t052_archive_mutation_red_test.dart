@@ -157,7 +157,7 @@ void main() {
         expect(find.byKey(ChatListBody.tileKey('chat-1')), findsOneWidget);
 
         await tester.longPress(find.byKey(ChatListBody.tileKey('chat-1')));
-        await tester.pump(const Duration(milliseconds: 300));
+        await tester.pumpAndSettle();
 
         staleReconcile = reconciler.reconcile();
         await tester.pump();
