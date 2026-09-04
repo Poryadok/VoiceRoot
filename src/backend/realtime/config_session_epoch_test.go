@@ -140,6 +140,29 @@ func TestRealtimeBootstrapRejectsInvalidStrictConfigBeforeServerConstruction(t *
 	}
 }
 
+func TestRealtimeBootstrapRejectsStrictUntilFullEnforcementIsInstalled(t *testing.T) {
+	strict := "true"
+	mr := miniredis.RunT(t)
+	configureRealtimeSessionEpochEnv(t, &strict, mr.Addr(), "https://auth.example/jwks", "voice-auth", "voice-client")
+
+	handlerConstructed := 0
+	serverConstructed := 0
+	server, err := newRealtimeServerFromEnv(":8080", realtimeStartupDependencies{
+		buildHandler: func(realtimeConfig) (http.Handler, error) {
+			handlerConstructed++
+			return http.NotFoundHandler(), nil
+		},
+		buildServer: func(handler http.Handler) *http.Server {
+			serverConstructed++
+			return &http.Server{Addr: ":8080", Handler: handler}
+		},
+	})
+	require.Error(t, err)
+	require.Nil(t, server)
+	require.Zero(t, handlerConstructed, "strict must not start a partially enforced handler")
+	require.Zero(t, serverConstructed, "strict must not start a partially enforced server")
+}
+
 func TestRealtimeMainUsesCheckedSessionEpochBootstrapBeforeDependencies(t *testing.T) {
 	fileSet := token.NewFileSet()
 	file, err := parser.ParseFile(fileSet, "main.go", nil, 0)

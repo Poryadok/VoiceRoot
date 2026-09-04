@@ -19,9 +19,8 @@ import (
 
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/httpserver"
-	"voice/backend/pkg/runtimeconfig"
-	voicejwt "voice/backend/pkg/jwt"
 	voiceprom "voice/backend/pkg/promhttp"
+	"voice/backend/pkg/runtimeconfig"
 )
 
 const serviceName = "realtime"
@@ -33,17 +32,20 @@ func main() {
 		addr = v
 	}
 
-	jwksURL := strings.TrimSpace(os.Getenv("REALTIME_JWKS_URL"))
-	if jwksURL == "" {
-		jwksURL = strings.TrimSpace(os.Getenv("GATEWAY_JWKS_URL"))
-	}
-	var tv tokenValidator
-	if jwksURL != "" {
-		tv = voicejwt.NewJWKSValidator(
-			jwksURL,
-			firstNonEmpty(os.Getenv("REALTIME_JWT_ISSUER"), os.Getenv("GATEWAY_JWT_ISSUER")),
-			firstNonEmpty(os.Getenv("REALTIME_JWT_AUDIENCE"), os.Getenv("GATEWAY_JWT_AUDIENCE")),
-		)
+	startupHandler := &realtimeHandlerSlot{}
+	var config realtimeConfig
+	server, err := newRealtimeServerFromEnv(addr, realtimeStartupDependencies{
+		buildHandler: func(loaded realtimeConfig) (http.Handler, error) {
+			config = loaded
+			return startupHandler, nil
+		},
+		buildServer: func(handler http.Handler) *http.Server {
+			return &http.Server{Addr: addr, Handler: handler}
+		},
+	})
+	if err != nil {
+		logger.Error("invalid realtime configuration", slog.Any("error", err))
+		os.Exit(1)
 	}
 
 	chatLister := dialChatBootstrapLister()
@@ -165,15 +167,13 @@ func main() {
 		}
 	}()
 
-	handler := voiceprom.MountMetricsOnHealth(
-		newServiceHandlerWithPresence(serviceName, tv, chatLister, hub, rf, instanceID, presenceUpdater, dap, ready),
-		metricsReg,
-	)
-	server := &http.Server{
-		Addr:    addr,
-		Handler: httpserver.Wrap(handler, logger),
-	}
-	httpserver.ApplyHTTPServerTimeouts(server)
+	startupHandler.set(httpserver.Wrap(
+		voiceprom.MountMetricsOnHealth(
+			newServiceHandlerWithPresence(serviceName, config.tokenValidator, chatLister, hub, rf, instanceID, presenceUpdater, dap, ready),
+			metricsReg,
+		),
+		logger,
+	))
 	server.ReadTimeout = runtimeconfig.DurationFromEnv("HTTP_READ_TIMEOUT", 0)
 	server.WriteTimeout = runtimeconfig.DurationFromEnv("HTTP_WRITE_TIMEOUT", 0)
 	errCh := make(chan error, 1)
