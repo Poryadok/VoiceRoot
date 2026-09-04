@@ -106,21 +106,19 @@ class InboxReconcilerState {
 /// still owned by the selected [ChatRoomController].
 class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
   InboxReconcilerController(this._ref) : super(const InboxReconcilerState()) {
-    _realtimeSub = _ref.listen<RealtimeLinkStatus>(realtimeLinkStatusProvider, (
-      previous,
-      next,
-    ) {
-      if (next != RealtimeLinkStatus.connected) return;
-      final pending = _pendingSession;
-      if (pending != null && _matchesSession(pending)) {
-        _pendingSession = null;
+    _helloSub = _ref.listen<RealtimeHelloBinding?>(
+      realtimeHelloBindingProvider,
+      (_, hello) {
+        if (hello == null || hello.generation == _lastHelloGeneration) return;
+        final session = _ref.read(authControllerProvider).session;
+        if (session?.activeProfileId != hello.profileId ||
+            session?.authorizationHeader != hello.authorization) {
+          return;
+        }
+        _lastHelloGeneration = hello.generation;
         unawaited(reconcile());
-        return;
-      }
-      if (previous == RealtimeLinkStatus.reconnecting) {
-        unawaited(reconcile());
-      }
-    });
+      },
+    );
     _authSub = _ref.listen<AuthState>(authControllerProvider, (previous, next) {
       final previousSession = previous?.session;
       final nextSession = next.session;
@@ -138,12 +136,7 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
       _removedChatIds.clear();
       _archivedMutations.clear();
       _unarchivedMutations.clear();
-      _pendingSession = nextSession == null
-          ? null
-          : _PendingInboxSession(
-              profileId: nextSession.activeProfileId,
-              authorization: nextSession.authorizationHeader,
-            );
+      _lastHelloGeneration = null;
       if (profileChanged) {
         _ref.read(dmPeerProfileByChatIdProvider.notifier).state = const {};
       }
@@ -151,12 +144,12 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
   }
 
   final Ref _ref;
-  ProviderSubscription<RealtimeLinkStatus>? _realtimeSub;
+  ProviderSubscription<RealtimeHelloBinding?>? _helloSub;
   ProviderSubscription<AuthState>? _authSub;
   int _generation = 0;
   int _archiveMutationRevision = 0;
   int _unarchiveMutationRevision = 0;
-  _PendingInboxSession? _pendingSession;
+  int? _lastHelloGeneration;
   final Map<InboxScope, List<ChatListItem>> _pendingItems = {};
   final Map<String, Map<InboxScope, Set<String>>> _removedChatIds = {};
   final Map<String, Map<String, _ArchivedMutation>> _archivedMutations = {};
@@ -164,7 +157,7 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
 
   @override
   void dispose() {
-    _realtimeSub?.close();
+    _helloSub?.close();
     _authSub?.close();
     super.dispose();
   }
@@ -499,12 +492,6 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
         _ref.read(authControllerProvider).activeProfileId == profileId;
   }
 
-  bool _matchesSession(_PendingInboxSession pending) {
-    final current = _ref.read(authControllerProvider).session;
-    return current?.activeProfileId == pending.profileId &&
-        current?.authorizationHeader == pending.authorization;
-  }
-
   void _beginScope({
     required int generation,
     required String profileId,
@@ -713,16 +700,6 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
     if (!changed || !_isCurrent(generation, profileId)) return;
     _ref.read(dmPeerProfileByChatIdProvider.notifier).state = peers;
   }
-}
-
-class _PendingInboxSession {
-  const _PendingInboxSession({
-    required this.profileId,
-    required this.authorization,
-  });
-
-  final String profileId;
-  final String authorization;
 }
 
 class _ArchivedMutation {

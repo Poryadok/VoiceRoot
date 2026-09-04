@@ -296,11 +296,7 @@ class ChatListController extends StateNotifier<ChatListState> {
         next.isAuthenticated && !(previous?.isAuthenticated ?? false);
     final restoreFinished =
         (previous?.isRestoring ?? false) && !next.isRestoring;
-    final sessionTokenChanged =
-        (previous?.isAuthenticated ?? false) &&
-        next.session != null &&
-        previous?.session?.accessToken != next.session?.accessToken;
-    if (becameAuthenticated || restoreFinished || sessionTokenChanged) {
+    if (becameAuthenticated || restoreFinished) {
       unawaited(loadInitial());
     }
   }
@@ -1681,6 +1677,21 @@ class _RealtimeHubBinding {
   final AuthSession session;
 }
 
+/// Immutable proof that one current Realtime transport accepted its `hello`.
+class RealtimeHelloBinding {
+  const RealtimeHelloBinding({
+    required this.generation,
+    required this.bindingGeneration,
+    required this.profileId,
+    required this.authorization,
+  });
+
+  final int generation;
+  final int bindingGeneration;
+  final String profileId;
+  final String authorization;
+}
+
 class RealtimeHub {
   RealtimeHub(this._ref, {RealtimeTransportFactory? transportFactory})
     : _transportFactory =
@@ -1697,8 +1708,10 @@ class RealtimeHub {
   var _reconnectAttempt = 0;
   var _disposed = false;
   var _nextGeneration = 0;
+  var _nextHelloGeneration = 0;
   _RealtimeHubBinding? _binding;
   _RealtimeHubBinding? _connectingBinding;
+  RealtimeTransport? _helloAcceptedConnection;
 
   RealtimeLinkStatus get status => _status;
   Stream<RealtimeFrame> get events => _eventController.stream;
@@ -1773,7 +1786,11 @@ class RealtimeHub {
       await frameSub?.cancel();
       await connection?.dispose();
       if (_isCurrent(binding)) {
-        _scheduleReconnect(binding, connection, requiresActiveConnection: false);
+        _scheduleReconnect(
+          binding,
+          connection,
+          requiresActiveConnection: false,
+        );
       }
       return;
     } finally {
@@ -1825,7 +1842,17 @@ class RealtimeHub {
       _eventController.add(frame);
     }
     if (frame.op == 'hello') {
+      if (identical(_helloAcceptedConnection, connection)) return;
+      _helloAcceptedConnection = connection;
       _setStatus(RealtimeLinkStatus.connected, binding: binding);
+      _ref
+          .read(realtimeHelloBindingProvider.notifier)
+          .state = RealtimeHelloBinding(
+        generation: ++_nextHelloGeneration,
+        bindingGeneration: binding.generation,
+        profileId: binding.session.activeProfileId,
+        authorization: binding.session.authorizationHeader,
+      );
       // Message catch-up after reconnect is REST-only (see ARCHITECTURE_REQUIREMENTS).
     }
   }
@@ -1864,6 +1891,9 @@ class RealtimeHub {
 
   Future<void> _tearDownConnection({RealtimeTransport? expected}) async {
     if (expected != null && !identical(_connection, expected)) return;
+    if (identical(_helloAcceptedConnection, _connection)) {
+      _helloAcceptedConnection = null;
+    }
     await _frameSub?.cancel();
     _frameSub = null;
     await _connection?.dispose();
@@ -1873,6 +1903,10 @@ class RealtimeHub {
   Future<void> disconnect() async {
     _binding = null;
     _connectingBinding = null;
+    _helloAcceptedConnection = null;
+    if (!_disposed) {
+      _ref.read(realtimeHelloBindingProvider.notifier).state = null;
+    }
     _reconnectTimer?.cancel();
     _reconnectAttempt = 0;
     _subscribedChats.clear();
@@ -1951,6 +1985,10 @@ final realtimeHubProvider = Provider<RealtimeHub>((ref) {
 
 final realtimeLinkStatusProvider = StateProvider<RealtimeLinkStatus>(
   (ref) => RealtimeLinkStatus.disconnected,
+);
+
+final realtimeHelloBindingProvider = StateProvider<RealtimeHelloBinding?>(
+  (ref) => null,
 );
 
 /// Debounced reconnect banner per [ARCHITECTURE_REQUIREMENTS.md]:
