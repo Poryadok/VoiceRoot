@@ -267,6 +267,7 @@ class _RecordingProfileSwitchRealtimeBoundary
   final List<AuthSession?> persistedAtHandoff = [];
   final List<String?> headerAtHandoff = [];
   final List<Set<String>> retiredSubscriptions = [];
+  @override
   final Set<String> activeSubscriptions = {};
   final Map<int, Completer<void>> _paused = {};
   final Map<int, Completer<void>> _started = {};
