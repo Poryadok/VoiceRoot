@@ -445,7 +445,7 @@ Future<void> _pumpUntilVisible(WidgetTester tester, Finder finder) async {
     await tester.pump(frame);
     if (finder.evaluate().isEmpty) continue;
     final rect = tester.getRect(finder);
-    final viewport = tester.binding.renderView.size;
+    final viewport = tester.binding.renderViews.single.size;
     if (rect.top >= 0 && rect.bottom <= viewport.height) return;
   }
   throw TestFailure('archive action sheet did not become visible');
