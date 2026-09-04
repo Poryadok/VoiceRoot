@@ -111,6 +111,8 @@ class GuestConversionPendingUserRecoveryWiringTest {
 
           context.getBean(GuestConversionPendingUserRecoveryRunner.class).tick();
 
+          assertThat(context.getBean(RecordingPrimaryProfiles.class).clearedAccountIds)
+              .containsExactly(guest.id());
           assertThat(accounts.findById(guest.id().toString()).orElseThrow().type())
               .isEqualTo("regular");
           assertThat(operations.findByAccountId(guest.id()).orElseThrow().state())
@@ -203,18 +205,22 @@ class GuestConversionPendingUserRecoveryWiringTest {
     }
 
     @Bean
-    PrimaryProfileProvisioner primaryProfiles() {
-      return new PrimaryProfileProvisioner() {
-        @Override
-        public String ensurePrimaryProfile(UUID accountId, String displayHint, boolean guestAccount) {
-          throw new UnsupportedOperationException();
-        }
+    RecordingPrimaryProfiles primaryProfiles() {
+      return new RecordingPrimaryProfiles();
+    }
+  }
 
-        @Override
-        public void clearGuestAccountFlag(UUID accountId) {
-          throw new UnsupportedOperationException();
-        }
-      };
+  static final class RecordingPrimaryProfiles implements PrimaryProfileProvisioner {
+    private final java.util.List<UUID> clearedAccountIds = new java.util.ArrayList<>();
+
+    @Override
+    public String ensurePrimaryProfile(UUID accountId, String displayHint, boolean guestAccount) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void clearGuestAccountFlag(UUID accountId) {
+      clearedAccountIds.add(accountId);
     }
   }
 }

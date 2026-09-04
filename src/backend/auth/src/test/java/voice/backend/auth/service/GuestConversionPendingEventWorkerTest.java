@@ -1,6 +1,7 @@
 package voice.backend.auth.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -126,6 +127,34 @@ class GuestConversionPendingEventWorkerTest {
   }
 
   @Test
+  void abruptCrashAfterPubAckLeavesTheOriginalLeaseUntilExpiryThenReclaimsTheSameEventIdentity() {
+    GuestConversionOperation operation = operation(GuestConversionState.PENDING_EVENT);
+    RecordingOperations operations = new RecordingOperations(operation);
+    operations.abruptAbort = new AssertionError("abrupt process stop after puback");
+    RecordingPublisher publisher = new RecordingPublisher();
+    MutableClock clock = new MutableClock(NOW);
+    GuestConversionPendingEventWorker worker = worker(operations, publisher, clock);
+
+    assertThatThrownBy(() -> worker.processDue(1, LEASE)).isSameAs(operations.abruptAbort);
+
+    assertThat(operations.failures).isEmpty();
+    assertThat(operations.state).isEqualTo(GuestConversionState.PENDING_EVENT);
+    assertThat(operations.operation.lockedUntil()).isEqualTo(NOW.plus(LEASE));
+    clock.advance(LEASE.plusNanos(1));
+    operations.abruptAbort = null;
+
+    worker.processDue(1, LEASE);
+
+    assertThat(publisher.publishes)
+        .extracting(PublishCall::natsMessageId)
+        .containsExactly(operation.operationId().toString(), operation.operationId().toString());
+    assertThat(publisher.publishes)
+        .extracting(publish -> publish.envelope().getEventId())
+        .containsExactly(operation.operationId().toString(), operation.operationId().toString());
+    assertThat(operations.state).isEqualTo(GuestConversionState.COMPLETED);
+  }
+
+  @Test
   void pendingUserIsNotLeasedOrPublishedByTheEventWorker() {
     RecordingOperations operations = new RecordingOperations(operation(GuestConversionState.PENDING_USER));
     RecordingPublisher publisher = new RecordingPublisher();
@@ -172,7 +201,9 @@ class GuestConversionPendingEventWorkerTest {
     private final List<AdvanceCall> advances = new ArrayList<>();
     private final List<FailureCall> failures = new ArrayList<>();
     private RuntimeException advanceFailure;
+    private Error abruptAbort;
     private Instant nextAttemptAt;
+    private boolean initialDelivery = true;
 
     private RecordingOperations(GuestConversionOperation operation) {
       this.operation = operation;
@@ -194,9 +225,14 @@ class GuestConversionPendingEventWorkerTest {
     public List<GuestConversionOperation> leaseDue(
         GuestConversionState expectedState, int batchSize, Instant now, Instant leaseUntil) {
       claimedStates.add(expectedState);
-      if (state != expectedState || nextAttemptAt.isAfter(now)) {
+      if (state != expectedState
+          || nextAttemptAt.isAfter(now)
+          || (!initialDelivery
+              && operation.lockedUntil() != null
+              && operation.lockedUntil().isAfter(now))) {
         return List.of();
       }
+      initialDelivery = false;
       operation = withLease(operation, leaseUntil, now);
       return List.of(operation);
     }
@@ -208,6 +244,9 @@ class GuestConversionPendingEventWorkerTest {
         Instant expectedLockedUntil,
         Instant now) {
       advances.add(new AdvanceCall(operationId, expectedState, expectedLockedUntil, now));
+      if (abruptAbort != null) {
+        throw abruptAbort;
+      }
       if (advanceFailure != null) {
         throw advanceFailure;
       }
