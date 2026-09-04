@@ -303,6 +303,85 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
     );
   }
 
+  /// Moves a confirmed unarchive mutation between its two authoritative scopes.
+  ///
+  /// The archive row is the authoritative object: the legacy archive
+  /// controller may hold an older copy of the same chat. Updating the pending
+  /// page buffers keeps an in-flight snapshot from undoing this local commit.
+  void unarchiveChat(
+    String chatId, {
+    required String expectedProfileId,
+    required String expectedAuthorization,
+  }) {
+    final session = _ref.read(authControllerProvider).session;
+    if (session?.activeProfileId != expectedProfileId ||
+        session?.authorizationHeader != expectedAuthorization) {
+      return;
+    }
+    final profile = state.profileSnapshots[expectedProfileId];
+    if (profile == null) return;
+    final archive = profile[InboxScope.archive];
+    ChatListItem? authoritative;
+    for (final item in archive.items) {
+      if (item.chatId == chatId) {
+        authoritative = item;
+        break;
+      }
+    }
+    if (authoritative == null) return;
+
+    final archiveMutations = _archivedMutations[expectedProfileId];
+    archiveMutations?.remove(chatId);
+    if (archiveMutations?.isEmpty ?? false) {
+      _archivedMutations.remove(expectedProfileId);
+    }
+    _removedChatIds
+        .putIfAbsent(expectedProfileId, () => <InboxScope, Set<String>>{})
+        .putIfAbsent(InboxScope.archive, () => <String>{})
+        .add(chatId);
+    final mainRemovals = _removedChatIds[expectedProfileId]?[InboxScope.main];
+    mainRemovals?.remove(chatId);
+    if (mainRemovals?.isEmpty ?? false) {
+      _removedChatIds[expectedProfileId]?.remove(InboxScope.main);
+    }
+    if (_removedChatIds[expectedProfileId]?.isEmpty ?? false) {
+      _removedChatIds.remove(expectedProfileId);
+    }
+
+    final archivePending = _pendingItems[InboxScope.archive];
+    if (archivePending != null) {
+      _pendingItems[InboxScope.archive] = archivePending
+          .where((item) => item.chatId != chatId)
+          .toList(growable: false);
+    }
+    final mainPending = _pendingItems[InboxScope.main];
+    if (mainPending != null) {
+      _pendingItems[InboxScope.main] = mergeInboxRows(mainPending, [
+        authoritative,
+      ]);
+    }
+
+    final main = profile[InboxScope.main];
+    state = state.copyWith(
+      profileSnapshots: {
+        ...state.profileSnapshots,
+        expectedProfileId: profile
+            .withScope(
+              InboxScope.archive,
+              archive.copyWith(
+                items: archive.items
+                    .where((item) => item.chatId != chatId)
+                    .toList(growable: false),
+              ),
+            )
+            .withScope(
+              InboxScope.main,
+              main.copyWith(items: mergeInboxRows(main.items, [authoritative])),
+            ),
+      },
+    );
+  }
+
   Future<void> _reconcileScope({
     required int generation,
     required String profileId,

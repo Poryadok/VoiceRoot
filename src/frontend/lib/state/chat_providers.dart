@@ -754,7 +754,13 @@ class ChatArchiveListController extends StateNotifier<ChatListState> {
         state = state.copyWith(
           items: state.items.where((item) => item.chatId != chatId).toList(),
         );
-        await _ref.read(chatListControllerProvider.notifier).loadInitial();
+        _ref
+            .read(inboxReconcilerProvider.notifier)
+            .unarchiveChat(
+              chatId,
+              expectedProfileId: profileId,
+              expectedAuthorization: auth,
+            );
         return null;
       case ChatsApiFailure(:final message):
         return message;
