@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net"
 	"testing"
 	"time"
@@ -59,22 +60,42 @@ func TestRedisSessionEpochFloor_MinimumFailsClosedOnRedisError(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = listener.Close() })
 
-	accepted := make(chan struct{})
+	floor := newRedisSessionEpochFloor(listener.Addr().String(), "")
+	done := make(chan error, 1)
 	go func() {
-		conn, acceptErr := listener.Accept()
-		if acceptErr != nil {
-			return
-		}
-		defer func() { _ = conn.Close() }()
-		close(accepted)
-		_, _ = conn.Read(make([]byte, 1024))
-		_, _ = conn.Write([]byte("-ERR Redis unavailable\r\n"))
+		_, minimumErr := floor.Minimum(context.Background(), "account-1")
+		done <- minimumErr
 	}()
+	conn := acceptRedisConnection(t, listener)
+	defer func() { _ = conn.Close() }()
+	_, _ = conn.Read(make([]byte, 1024))
+	_, _ = conn.Write([]byte("-ERR Redis unavailable\r\n"))
+
+	err = <-done
+	require.Error(t, err)
+}
+
+func TestRedisSessionEpochFloor_MinimumReturnsTimeoutWhenRedisStalls(t *testing.T) {
+	t.Parallel()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = listener.Close() })
 
 	floor := newRedisSessionEpochFloor(listener.Addr().String(), "")
-	_, err = floor.Minimum(context.Background(), "account-1")
-	require.Error(t, err)
-	<-accepted
+	floor.timeout = 25 * time.Millisecond
+	done := make(chan error, 1)
+	go func() {
+		_, minimumErr := floor.Minimum(context.Background(), "account-1")
+		done <- minimumErr
+	}()
+	conn := acceptRedisConnection(t, listener)
+	defer func() { _ = conn.Close() }()
+
+	err = <-done
+	if !isDeadlineOrTimeout(err) {
+		t.Fatalf("stalled Redis error = %v, want deadline or timeout", err)
+	}
 }
 
 func TestRedisSessionEpochFloor_MinimumHonorsCanceledRequestContextWhileRedisStalls(t *testing.T) {
@@ -83,14 +104,6 @@ func TestRedisSessionEpochFloor_MinimumHonorsCanceledRequestContextWhileRedisSta
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = listener.Close() })
-
-	accepted := make(chan net.Conn, 1)
-	go func() {
-		conn, acceptErr := listener.Accept()
-		if acceptErr == nil {
-			accepted <- conn
-		}
-	}()
 
 	floor := newRedisSessionEpochFloor(listener.Addr().String(), "")
 	floor.timeout = 25 * time.Millisecond
@@ -102,10 +115,45 @@ func TestRedisSessionEpochFloor_MinimumHonorsCanceledRequestContextWhileRedisSta
 		_, minimumErr := floor.Minimum(ctx, "account-1")
 		done <- minimumErr
 	}()
-	conn := <-accepted
+	conn := acceptRedisConnection(t, listener)
 	defer func() { _ = conn.Close() }()
 	cancel()
 
 	err = <-done
 	require.ErrorIs(t, err, context.Canceled)
+}
+
+func acceptRedisConnection(t *testing.T, listener net.Listener) net.Conn {
+	t.Helper()
+
+	connections := make(chan net.Conn, 1)
+	acceptErrors := make(chan error, 1)
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			acceptErrors <- err
+			return
+		}
+		connections <- conn
+	}()
+
+	timer := time.NewTimer(time.Second)
+	defer timer.Stop()
+	select {
+	case conn := <-connections:
+		return conn
+	case err := <-acceptErrors:
+		t.Fatalf("accept Redis connection: %v", err)
+	case <-timer.C:
+		t.Fatal("timed out waiting for Redis client connection")
+	}
+	return nil
+}
+
+func isDeadlineOrTimeout(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var networkErr net.Error
+	return errors.As(err, &networkErr) && networkErr.Timeout()
 }
