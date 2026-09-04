@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -127,7 +128,8 @@ class StringRedisSessionEpochCommandsTest {
   }
 
   @Test
-  void timedOutConnectionCancelsOnceAndClosesAnyLatePhysicalConnection() throws Exception {
+  void timedOutConnectionKeepsItsFutureObservableAndClosesAnyLatePhysicalConnection()
+      throws Exception {
     StringRedisTemplate template = mock(StringRedisTemplate.class);
     RedisClient client = mock(RedisClient.class);
     ConnectionFuture<StatefulRedisConnection<byte[], byte[]>> connecting = mock(ConnectionFuture.class);
@@ -142,7 +144,7 @@ class StringRedisSessionEpochCommandsTest {
         .isInstanceOf(SessionEpochFloorUnavailableException.class)
         .hasMessageContaining("timeout");
 
-    verify(connecting).cancel(true);
+    verify(connecting, never()).cancel(true);
     ArgumentCaptor<BiConsumer<StatefulRedisConnection<byte[], byte[]>, Throwable>> completion =
         ArgumentCaptor.forClass(BiConsumer.class);
     verify(connecting).whenComplete(completion.capture());
