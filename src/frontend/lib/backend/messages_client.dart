@@ -333,11 +333,13 @@ class MessageListData {
     required this.messages,
     this.nextCursor,
     this.hasMore = false,
+    this.dmPeerState,
   });
 
   final List<VoiceMessage> messages;
   final String? nextCursor;
   final bool hasMore;
+  final messaging_pb.DmPeerState? dmPeerState;
 
   factory MessageListData.fromJson(Map<String, dynamic> json) {
     final list = json['message_list'] as Map<String, dynamic>? ?? json;
@@ -483,11 +485,19 @@ class VoiceMessagesClient {
     );
     return _map(
       result,
-      (data) => messageListFromProto(
-        data.hasMessageList()
-            ? data.messageList
-            : messaging_pb.MessageList(),
-      ),
+      (data) {
+        final list = messageListFromProto(
+          data.hasMessageList()
+              ? data.messageList
+              : messaging_pb.MessageList(),
+        );
+        return MessageListData(
+          messages: list.messages,
+          nextCursor: list.nextCursor,
+          hasMore: list.hasMore,
+          dmPeerState: data.hasDmPeerState() ? data.dmPeerState : null,
+        );
+      },
     );
   }
 
