@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,6 +14,7 @@ import 'package:voice_frontend/backend/guest_credentials_storage.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
+import 'package:voice_frontend/state/profile_switch_coordinator.dart';
 import 'package:voice_frontend/state/subscription_providers.dart';
 import 'package:voice_frontend/ui/profile/create_profile_sheet.dart';
 import 'package:voice_frontend/ui/profile/profile_edit_sheet.dart';
@@ -34,10 +34,24 @@ class _MemoryAuthStorage implements AuthSessionStorage {
   Future<void> write(AuthSession session) async => _session = session;
 }
 
+class _ImmediateProfileSwitchRealtimeBoundary
+    implements ProfileSwitchRealtimeBoundary {
+  @override
+  final Set<String> activeSubscriptions = {};
+
+  final List<ProfileSwitchHandoff> handoffs = [];
+
+  @override
+  Future<void> retireAndReconnect(ProfileSwitchHandoff handoff) async {
+    handoffs.add(handoff);
+  }
+}
+
 void main() {
   testWidgets('create profile sends work preset in POST body', (tester) async {
     String? capturedBody;
     final operationTrace = <String>[];
+    final realtime = _ImmediateProfileSwitchRealtimeBoundary();
     final mock = MockClient((req) async {
       if (req.url.path == '/api/v1/users/profiles' && req.method == 'POST') {
         operationTrace.add('create');
@@ -136,6 +150,7 @@ void main() {
           voiceAuthClientProvider.overrideWithValue(
             VoiceAuthClient(gateway: gateway),
           ),
+          profileSwitchRealtimeBoundaryProvider.overrideWithValue(realtime),
           myProfilesProvider.overrideWith((_) async => const []),
           subscriptionTierProvider.overrideWith((_) => 'free'),
           authControllerProvider.overrideWith((ref) {
@@ -164,7 +179,9 @@ void main() {
           home: Scaffold(
             body: CreateProfileSheet(
               avatarPicker: () async => ProfileAvatarFile(
-                bytes: Uint8List.fromList([1, 2, 3]),
+                bytes: base64Decode(
+                  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL8+wAAAABJRU5ErkJggg==',
+                ),
                 contentType: 'image/png',
                 name: 'avatar.png',
               ),
@@ -204,6 +221,8 @@ void main() {
     expect(body['display_name'], 'Work Alt');
     expect(body['accent_color'], '#F0A8A8');
     expect(operationTrace, ['create', 'switch', 'presign', 'upload', 'patch']);
+    expect(realtime.handoffs, hasLength(1));
+    expect(realtime.handoffs.single.nextSession.activeProfileId, 'profile-new');
   });
 
   testWidgets(
@@ -221,6 +240,7 @@ void main() {
         activeProfileId: 'profile-primary',
       );
       final storage = _MemoryAuthStorage().._session = oldSession;
+      final realtime = _ImmediateProfileSwitchRealtimeBoundary();
       AuthController? authController;
       final mock = MockClient((req) async {
         if (req.url.path == '/api/v1/users/profiles' && req.method == 'POST') {
@@ -288,6 +308,7 @@ void main() {
             voiceAuthClientProvider.overrideWithValue(
               VoiceAuthClient(gateway: gateway),
             ),
+            profileSwitchRealtimeBoundaryProvider.overrideWithValue(realtime),
             myProfilesProvider.overrideWith((_) async => const []),
             subscriptionTierProvider.overrideWith((_) => 'free'),
             authControllerProvider.overrideWith((ref) {
@@ -309,7 +330,9 @@ void main() {
             home: Scaffold(
               body: CreateProfileSheet(
                 avatarPicker: () async => ProfileAvatarFile(
-                  bytes: Uint8List.fromList([1, 2, 3]),
+                  bytes: base64Decode(
+                    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL8+wAAAABJRU5ErkJggg==',
+                  ),
                   contentType: 'image/png',
                   name: 'avatar.png',
                 ),
@@ -337,6 +360,7 @@ void main() {
       expect(find.text('switch denied'), findsOneWidget);
       expect(authController!.state.session!.activeProfileId, 'profile-primary');
       expect(storage._session, oldSession);
+      expect(realtime.handoffs, isEmpty);
     },
   );
 }
