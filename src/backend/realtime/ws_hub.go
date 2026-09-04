@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"sync"
+
+	"github.com/google/uuid"
 )
 
 // fanoutEnvelope is delivered to a WebSocket pump when another instance (or local peer) fans out.
@@ -30,8 +33,21 @@ type wsHub struct {
 	subscriptionChecker chatSubscriptionChecker
 }
 
+// canonicalChatID makes UUID-equivalent wire spellings use one subscription
+// key. Invalid IDs remain unchanged; client ingress rejects those before it
+// reaches the hub, while bootstrap/event callers can still be observed safely.
+func canonicalChatID(chatID string) string {
+	chatID = strings.TrimSpace(chatID)
+	parsed, err := uuid.Parse(chatID)
+	if err != nil {
+		return chatID
+	}
+	return parsed.String()
+}
+
 // hasChat is the sole local authority for subscription-gated client actions.
 func (h *wsHub) hasChat(reg *connReg, chatID string) bool {
+	chatID = canonicalChatID(chatID)
 	if h == nil || reg == nil || chatID == "" {
 		return false
 	}
@@ -58,6 +74,7 @@ func (h *wsHub) chatIDs(reg *connReg) []string {
 // membership events are authoritative; a later client operation must not rely
 // on an obsolete connection-local subscription.
 func (h *wsHub) revokeProfileChat(profileID, chatID string) {
+	chatID = canonicalChatID(chatID)
 	if h == nil || profileID == "" || chatID == "" {
 		return
 	}
@@ -102,6 +119,7 @@ func (h *wsHub) attachConn(instanceID, connID, profileID string, fanoutBuf int) 
 }
 
 func (h *wsHub) addChat(reg *connReg, chatID string) {
+	chatID = canonicalChatID(chatID)
 	if reg == nil || chatID == "" {
 		return
 	}
@@ -115,6 +133,7 @@ func (h *wsHub) addChat(reg *connReg, chatID string) {
 }
 
 func (h *wsHub) removeChat(reg *connReg, chatID string) {
+	chatID = canonicalChatID(chatID)
 	if reg == nil || chatID == "" {
 		return
 	}
@@ -160,6 +179,7 @@ func (h *wsHub) unregisterConn(reg *connReg) bool {
 // broadcastTypingExcept delivers op "typing" with payload d to every connection subscribed to chatID
 // except the sender identified by (excludeInstance, excludeConn).
 func (h *wsHub) broadcastTypingExcept(chatID, excludeInstance, excludeConn string, d json.RawMessage) {
+	chatID = canonicalChatID(chatID)
 	if chatID == "" {
 		return
 	}
@@ -239,6 +259,7 @@ func (h *wsHub) broadcastPresenceSameProfileExcept(profileID, excludeInstance, e
 // broadcastPresenceInChatExcept delivers op "presence_update" to connections subscribed to chatID,
 // excluding the sender connection and excluding other tabs of the same profile (those get profile-scope sync).
 func (h *wsHub) broadcastPresenceInChatExcept(chatID, senderProfileID, excludeInstance, excludeConn string, d json.RawMessage) {
+	chatID = canonicalChatID(chatID)
 	if chatID == "" {
 		return
 	}
@@ -299,6 +320,7 @@ func fanoutLogAttrs(chatID, profileID, op, requestID string, targets []*connReg)
 
 // profileIDsSubscribedToChat returns unique non-empty profile IDs with at least one connection subscribed to chatID.
 func (h *wsHub) profileIDsSubscribedToChat(chatID string) []string {
+	chatID = canonicalChatID(chatID)
 	if chatID == "" {
 		return nil
 	}
@@ -322,6 +344,7 @@ func (h *wsHub) profileIDsSubscribedToChat(chatID string) []string {
 
 // broadcastToChat delivers a fan-out envelope to every connection subscribed to chatID (local hub only).
 func (h *wsHub) broadcastToChat(chatID string, env fanoutEnvelope, logger *slog.Logger, requestID string) {
+	chatID = canonicalChatID(chatID)
 	if chatID == "" {
 		return
 	}

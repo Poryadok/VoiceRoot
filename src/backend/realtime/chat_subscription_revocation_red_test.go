@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,20 +28,20 @@ func (p *recordingDeliveryAckPublisher) PublishDeliveryAck(context.Context, stri
 
 func TestChatMemberRemovalRevokesEveryLocalTabAndSubscriptionGatedActions(t *testing.T) {
 	oldTypingIdleTimeout := typingIdleTimeout
-	typingIdleTimeout = 120 * time.Millisecond
+	typingIdleTimeout = 250 * time.Millisecond
 	t.Cleanup(func() { typingIdleTimeout = oldTypingIdleTimeout })
 
 	for _, change := range []string{"removed", "left"} {
 		t.Run(change, func(t *testing.T) {
 			accountID, profileID, peerAccountID, peerProfileID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 			chatID, messageID, senderID := uuid.NewString(), uuid.NewString(), uuid.NewString()
-			hub := newWSHub()
+			hub := permitAllTestSubscriptions(newWSHub())
 			deliveryPublisher := &recordingDeliveryAckPublisher{calls: make(chan struct{}, 1)}
 			h := newServiceHandlerWithPresence(serviceName, staticTokenValidator{
 				"desktop": {UserID: accountID, ProfileID: profileID},
 				"mobile":  {UserID: accountID, ProfileID: profileID},
 				"peer":    {UserID: peerAccountID, ProfileID: peerProfileID},
-			}, perProfileBootstrapLister{profileID: {chatID}, peerProfileID: {chatID}}, hub, nil, "acl-revoke-test", nil, deliveryPublisher, readinessDeps{})
+			}, perProfileBootstrapLister{peerProfileID: {chatID}}, hub, nil, "acl-revoke-test", nil, deliveryPublisher, readinessDeps{})
 			wsServer := httptest.NewServer(h)
 			t.Cleanup(wsServer.Close)
 			desktop := dialACLTestConn(t, wsServer, "desktop", profileID)
@@ -51,13 +52,15 @@ func TestChatMemberRemovalRevokesEveryLocalTabAndSubscriptionGatedActions(t *tes
 					t.Fatalf("bootstrap subscription = %+v", got)
 				}
 			}
-			if err := desktop.WriteJSON(map[string]any{"op": "typing_start", "d": map[string]any{"chat_id": chatID}}); err != nil {
-				t.Fatalf("typing_start before %s: %v", change, err)
+			uppercaseChatID := strings.ToUpper(chatID)
+			for _, c := range []*websocket.Conn{desktop, mobile} {
+				if err := c.WriteJSON(map[string]any{"op": "subscribe", "d": map[string]any{"chat_id": uppercaseChatID}}); err != nil {
+					t.Fatalf("uppercase subscribe before %s: %v", change, err)
+				}
+				if got := readACLEnvelope(t, c); got.Op != "subscribe_ack" || got.S != 3 {
+					t.Fatalf("uppercase subscribe ack = %+v", got)
+				}
 			}
-			if got := readACLEnvelope(t, peer); got.Op != "typing" {
-				t.Fatalf("typing start fan-out = %+v", got)
-			}
-
 			jsServer := startRealtimeJSTestServer(t)
 			nc, err := nats.Connect(jsServer.ClientURL())
 			if err != nil {
@@ -76,6 +79,12 @@ func TestChatMemberRemovalRevokesEveryLocalTabAndSubscriptionGatedActions(t *tes
 				t.Fatalf("subscribe chat events: %v", err)
 			}
 			t.Cleanup(func() { _ = sub.Unsubscribe() })
+			if err := desktop.WriteJSON(map[string]any{"op": "typing_start", "d": map[string]any{"chat_id": chatID}}); err != nil {
+				t.Fatalf("typing_start before %s: %v", change, err)
+			}
+			if got := readACLEnvelope(t, peer); got.Op != "typing" {
+				t.Fatalf("typing start fan-out = %+v", got)
+			}
 
 			eventBytes, err := proto.Marshal(&eventsv1.ChatStreamEvent{
 				EventId: uuid.NewString(), OccurredAt: timestamppb.Now(),
@@ -90,7 +99,7 @@ func TestChatMemberRemovalRevokesEveryLocalTabAndSubscriptionGatedActions(t *tes
 				t.Fatalf("publish member event: %v", err)
 			}
 			for _, c := range []*websocket.Conn{desktop, mobile} {
-				if got := readACLEnvelope(t, c); got.Op != "chat_update" || got.S != 3 {
+				if got := readACLEnvelope(t, c); got.Op != "chat_update" || got.S != 4 {
 					t.Fatalf("membership update = %+v", got)
 				}
 			}
