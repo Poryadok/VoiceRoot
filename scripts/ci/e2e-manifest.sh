@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Read .github/ci/e2e-features.yml (smoke_gateway / smoke_flutter / full_flutter sections).
+# Read .github/ci/e2e-features.yml (smoke_gateway / smoke_flutter / full_flutter / restart_proof_gateway sections).
 set -euo pipefail
 
 MANIFEST="${1:?manifest path}"
-SECTION="${2:?section: smoke_gateway|smoke_flutter|full_flutter}"
+SECTION="${2:?section: smoke_gateway|smoke_flutter|full_flutter|restart_proof_gateway}"
 
 case "${SECTION}" in
-  smoke_gateway|smoke_flutter|full_flutter) ;;
+  smoke_gateway|smoke_flutter|full_flutter|restart_proof_gateway) ;;
   *)
-    echo "ERROR: unknown section ${SECTION} (expected smoke_gateway, smoke_flutter, or full_flutter)" >&2
+    echo "ERROR: unknown section ${SECTION} (expected smoke_gateway, smoke_flutter, full_flutter, or restart_proof_gateway)" >&2
     exit 1
     ;;
 esac
