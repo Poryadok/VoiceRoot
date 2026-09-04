@@ -210,7 +210,8 @@ public class AuthService {
     Account account = accounts.findById(accountId).orElseThrow(() -> new AuthException("invalid_token"));
     ensureActive(account);
     String tier = subscriptionTierResolver.resolveTier(account.id());
-    return jwtService.issue(account.id().toString(), profileId, List.of("user"), tier, account.type());
+    return jwtService.issue(
+        account.id().toString(), profileId, List.of("user"), tier, account.type(), account.sessionEpoch());
   }
 
   public long accessTokenTtlSeconds() {
@@ -482,7 +483,9 @@ public class AuthService {
       deviceInfoJson = "{}";
     }
     String tier = subscriptionTierResolver.resolveTier(account.id());
-    String accessToken = jwtService.issue(account.id().toString(), profileId, List.of("user"), tier, account.type());
+    String accessToken =
+        jwtService.issue(
+            account.id().toString(), profileId, List.of("user"), tier, account.type(), account.sessionEpoch());
     TokenClaims claims = jwtService.validate(accessToken);
     String refreshToken = refreshTokenCodec.generate();
     refreshTokens.create(

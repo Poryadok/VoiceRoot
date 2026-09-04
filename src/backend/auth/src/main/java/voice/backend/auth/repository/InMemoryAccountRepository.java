@@ -31,6 +31,7 @@ public class InMemoryAccountRepository implements AccountRepository {
             "active",
             null,
             false,
+            1L,
             Instant.now(),
             null);
     byId.put(account.id(), account);
@@ -120,6 +121,7 @@ public class InMemoryAccountRepository implements AccountRepository {
             existing.status(),
             existing.totpSecret(),
             existing.totpEnabled(),
+            existing.sessionEpoch(),
             existing.createdAt(),
             existing.deletedAt());
     byId.put(accountId, converted);
@@ -149,6 +151,7 @@ public class InMemoryAccountRepository implements AccountRepository {
             existing.status(),
             existing.totpSecret(),
             existing.totpEnabled(),
+            existing.sessionEpoch(),
             existing.createdAt(),
             existing.deletedAt()));
   }
@@ -182,6 +185,28 @@ public class InMemoryAccountRepository implements AccountRepository {
   }
 
   @Override
+  public synchronized long incrementSessionEpoch(UUID accountId) {
+    Account existing = byId.get(accountId);
+    if (existing == null) {
+      throw new IllegalArgumentException("account not found");
+    }
+    long next = Math.addExact(existing.sessionEpoch(), 1L);
+    if (next <= 0) {
+      throw new IllegalStateException("invalid session epoch");
+    }
+    byId.put(
+        accountId,
+        copy(
+            existing,
+            existing.status(),
+            existing.totpSecret(),
+            existing.totpEnabled(),
+            existing.deletedAt(),
+            next));
+    return next;
+  }
+
+  @Override
   public synchronized Optional<Instant> getGuestReminderLastShownAt(UUID accountId) {
     return Optional.ofNullable(guestReminderShownAt.get(accountId));
   }
@@ -210,8 +235,19 @@ public class InMemoryAccountRepository implements AccountRepository {
     }
     return out;
   }
+
   private static Account copy(
       Account existing, String status, byte[] totpSecret, boolean totpEnabled, Instant deletedAt) {
+    return copy(existing, status, totpSecret, totpEnabled, deletedAt, existing.sessionEpoch());
+  }
+
+  private static Account copy(
+      Account existing,
+      String status,
+      byte[] totpSecret,
+      boolean totpEnabled,
+      Instant deletedAt,
+      long sessionEpoch) {
     return new Account(
         existing.id(),
         existing.email(),
@@ -221,6 +257,7 @@ public class InMemoryAccountRepository implements AccountRepository {
         status,
         totpSecret,
         totpEnabled,
+        sessionEpoch,
         existing.createdAt(),
         deletedAt);
   }

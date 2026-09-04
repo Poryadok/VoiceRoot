@@ -31,6 +31,9 @@ public interface AccountRepository {
 
   void restoreDeleted(UUID accountId);
 
+  /** Atomically advances the account-wide session epoch and returns the new positive value. */
+  long incrementSessionEpoch(UUID accountId);
+
   Optional<Instant> getGuestReminderLastShownAt(UUID accountId);
 
   void markGuestReminderShown(UUID accountId, Instant shownAt);
