@@ -150,6 +150,7 @@ public class InMemoryAccountRepository implements AccountRepository {
             existing.status(),
             existing.totpSecret(),
             existing.totpEnabled(),
+            existing.sessionEpoch(),
             existing.createdAt(),
             existing.deletedAt());
     byId.put(accountId, regular);
@@ -172,6 +173,7 @@ public class InMemoryAccountRepository implements AccountRepository {
             existing.status(),
             existing.totpSecret(),
             existing.totpEnabled(),
+            existing.sessionEpoch(),
             existing.createdAt(),
             existing.deletedAt());
     byId.put(accountId, guest);
