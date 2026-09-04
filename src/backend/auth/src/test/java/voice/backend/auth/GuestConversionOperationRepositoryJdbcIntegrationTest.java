@@ -28,6 +28,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
+import voice.backend.auth.repository.GuestConversionAdvanceResult;
 import voice.backend.auth.repository.GuestConversionOperation;
 import voice.backend.auth.repository.GuestConversionOperationRepository;
 import voice.backend.auth.repository.GuestConversionState;
@@ -412,6 +413,363 @@ class GuestConversionOperationRepositoryJdbcIntegrationTest {
     }
   }
 
+  @Nested
+  class AdvanceContract {
+    @BeforeEach
+    void isolateOperations() {
+      deleteAllOperations();
+    }
+
+    @AfterEach
+    void removeOperationsAndAdvanceDelayTrigger() {
+      removeLeaseDelayTrigger();
+      deleteAllOperations();
+    }
+
+    @Test
+    void advance_rejectsNullArgumentsAndCompletedExpectedState() {
+      GuestConversionOperationRepository repository = repository();
+      Instant now = Instant.parse("2026-09-04T15:00:00Z");
+      Instant leaseUntil = now.plus(2, ChronoUnit.MINUTES);
+
+      assertThatThrownBy(
+              () -> repository.advance(null, GuestConversionState.PENDING_USER, leaseUntil, now))
+          .isInstanceOf(NullPointerException.class);
+      assertThatThrownBy(() -> repository.advance(UUID.randomUUID(), null, leaseUntil, now))
+          .isInstanceOf(NullPointerException.class);
+      assertThatThrownBy(
+              () ->
+                  repository.advance(
+                      UUID.randomUUID(), GuestConversionState.PENDING_USER, null, now))
+          .isInstanceOf(NullPointerException.class);
+      assertThatThrownBy(
+              () ->
+                  repository.advance(
+                      UUID.randomUUID(), GuestConversionState.PENDING_USER, leaseUntil, null))
+          .isInstanceOf(NullPointerException.class);
+      assertThatThrownBy(
+              () -> repository.advance(UUID.randomUUID(), GuestConversionState.COMPLETED, leaseUntil, now))
+          .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void advance_pendingUserAtomicallyMarksUserAndAuthAndClearsItsLease() {
+      GuestConversionOperationRepository repository = repository();
+      Instant now = Instant.parse("2026-09-04T15:00:00Z");
+      Instant leaseUntil = now.plus(2, ChronoUnit.MINUTES);
+      GuestConversionOperation pendingUser =
+          seedOperation(
+              operation(
+                  uuid("00000000-0000-0000-0000-000000000101"),
+                  GuestConversionState.PENDING_USER,
+                  9,
+                  now.minus(3, ChronoUnit.MINUTES),
+                  leaseUntil,
+                  now.minus(10, ChronoUnit.MINUTES)));
+
+      GuestConversionAdvanceResult result =
+          repository.advance(
+              pendingUser.operationId(), GuestConversionState.PENDING_USER, leaseUntil, now);
+
+      assertThat(result).isEqualTo(GuestConversionAdvanceResult.APPLIED);
+      assertThat(operationById(pendingUser.operationId()))
+          .isEqualTo(advancedPendingUser(pendingUser, now));
+    }
+
+    @Test
+    void advance_pendingEventPublishesTerminalMarkerAndClearsItsLease() {
+      GuestConversionOperationRepository repository = repository();
+      Instant now = Instant.parse("2026-09-04T15:00:00Z");
+      Instant leaseUntil = now.plus(2, ChronoUnit.MINUTES);
+      GuestConversionOperation pendingEvent =
+          seedOperation(
+              operation(
+                  uuid("00000000-0000-0000-0000-000000000102"),
+                  GuestConversionState.PENDING_EVENT,
+                  7,
+                  now.minus(2, ChronoUnit.MINUTES),
+                  leaseUntil,
+                  now.minus(10, ChronoUnit.MINUTES)));
+
+      GuestConversionAdvanceResult result =
+          repository.advance(
+              pendingEvent.operationId(), GuestConversionState.PENDING_EVENT, leaseUntil, now);
+
+      assertThat(result).isEqualTo(GuestConversionAdvanceResult.APPLIED);
+      assertThat(operationById(pendingEvent.operationId()))
+          .isEqualTo(advancedPendingEvent(pendingEvent, now));
+    }
+
+    @Test
+    void advance_retriesALostPendingEventResponseWithoutRewritingTimestamps() {
+      GuestConversionOperationRepository repository = repository();
+      Instant now = Instant.parse("2026-09-04T15:00:00Z");
+      Instant leaseUntil = now.plus(2, ChronoUnit.MINUTES);
+      GuestConversionOperation pendingEvent =
+          seedOperation(
+              operation(
+                  uuid("00000000-0000-0000-0000-000000000103"),
+                  GuestConversionState.PENDING_EVENT,
+                  6,
+                  now.minus(2, ChronoUnit.MINUTES),
+                  leaseUntil,
+                  now.minus(10, ChronoUnit.MINUTES)));
+
+      GuestConversionAdvanceResult first =
+          repository.advance(
+              pendingEvent.operationId(), GuestConversionState.PENDING_EVENT, leaseUntil, now);
+      GuestConversionOperation afterFirst = operationById(pendingEvent.operationId());
+      GuestConversionAdvanceResult retry =
+          repository.advance(
+              pendingEvent.operationId(),
+              GuestConversionState.PENDING_EVENT,
+              leaseUntil,
+              now.plus(1, ChronoUnit.MINUTES));
+
+      assertThat(first).isEqualTo(GuestConversionAdvanceResult.APPLIED);
+      assertThat(afterFirst).isEqualTo(advancedPendingEvent(pendingEvent, now));
+      assertThat(retry).isEqualTo(GuestConversionAdvanceResult.ALREADY_APPLIED);
+      assertThat(operationById(pendingEvent.operationId())).isEqualTo(afterFirst);
+    }
+
+    @Test
+    void advance_returnsLeaseLostWithoutMutationForExpiredMissingAndMismatchedLeases() {
+      GuestConversionOperationRepository repository = repository();
+      Instant now = Instant.parse("2026-09-04T15:00:00Z");
+      Instant expectedLeaseUntil = now.plus(2, ChronoUnit.MINUTES);
+      GuestConversionOperation expiredLease =
+          seedOperation(
+              operation(
+                  uuid("00000000-0000-0000-0000-000000000104"),
+                  GuestConversionState.PENDING_USER,
+                  1,
+                  now.minus(3, ChronoUnit.MINUTES),
+                  now,
+                  now.minus(10, ChronoUnit.MINUTES)));
+      GuestConversionOperation missingLease =
+          seedOperation(
+              operation(
+                  uuid("00000000-0000-0000-0000-000000000105"),
+                  GuestConversionState.PENDING_USER,
+                  2,
+                  now.minus(3, ChronoUnit.MINUTES),
+                  null,
+                  now.minus(10, ChronoUnit.MINUTES)));
+      GuestConversionOperation mismatchedLease =
+          seedOperation(
+              operation(
+                  uuid("00000000-0000-0000-0000-000000000106"),
+                  GuestConversionState.PENDING_USER,
+                  3,
+                  now.minus(3, ChronoUnit.MINUTES),
+                  expectedLeaseUntil.plus(1, ChronoUnit.MINUTES),
+                  now.minus(10, ChronoUnit.MINUTES)));
+
+      assertThat(
+              repository.advance(
+                  expiredLease.operationId(),
+                  GuestConversionState.PENDING_USER,
+                  now,
+                  now))
+          .isEqualTo(GuestConversionAdvanceResult.LEASE_LOST);
+      assertThat(
+              repository.advance(
+                  missingLease.operationId(),
+                  GuestConversionState.PENDING_USER,
+                  expectedLeaseUntil,
+                  now))
+          .isEqualTo(GuestConversionAdvanceResult.LEASE_LOST);
+      assertThat(
+              repository.advance(
+                  mismatchedLease.operationId(),
+                  GuestConversionState.PENDING_USER,
+                  expectedLeaseUntil,
+                  now))
+          .isEqualTo(GuestConversionAdvanceResult.LEASE_LOST);
+      assertThat(operationById(expiredLease.operationId())).isEqualTo(expiredLease);
+      assertThat(operationById(missingLease.operationId())).isEqualTo(missingLease);
+      assertThat(operationById(mismatchedLease.operationId())).isEqualTo(mismatchedLease);
+    }
+
+    @Test
+    void advance_fencesAStaleWorkerAfterAnotherWorkerReleasesTheOperation() {
+      GuestConversionOperationRepository repository = repository();
+      Instant now = Instant.parse("2026-09-04T15:00:00Z");
+      Instant staleLeaseUntil = now.plus(2, ChronoUnit.MINUTES);
+      Instant renewedLeaseUntil = now.plus(4, ChronoUnit.MINUTES);
+      GuestConversionOperation pendingUser =
+          seedOperation(
+              operation(
+                  uuid("00000000-0000-0000-0000-000000000107"),
+                  GuestConversionState.PENDING_USER,
+                  4,
+                  now.minus(3, ChronoUnit.MINUTES),
+                  staleLeaseUntil,
+                  now.minus(10, ChronoUnit.MINUTES)));
+      GuestConversionOperation renewed = withLease(pendingUser, renewedLeaseUntil);
+      replaceOperation(renewed);
+
+      GuestConversionAdvanceResult result =
+          repository.advance(
+              pendingUser.operationId(),
+              GuestConversionState.PENDING_USER,
+              staleLeaseUntil,
+              now);
+
+      assertThat(result).isEqualTo(GuestConversionAdvanceResult.LEASE_LOST);
+      assertThat(operationById(pendingUser.operationId())).isEqualTo(renewed);
+    }
+
+    @Test
+    void advance_rejectsIllegalMarkerPreconditionsWithoutMutation() {
+      GuestConversionOperationRepository repository = repository();
+      Instant now = Instant.parse("2026-09-04T15:00:00Z");
+      Instant leaseUntil = now.plus(2, ChronoUnit.MINUTES);
+      GuestConversionOperation invalidPendingUser =
+          seedOperation(
+              withMarkers(
+                  operation(
+                      uuid("00000000-0000-0000-0000-000000000108"),
+                      GuestConversionState.PENDING_USER,
+                      5,
+                      now.minus(3, ChronoUnit.MINUTES),
+                      leaseUntil,
+                      now.minus(10, ChronoUnit.MINUTES)),
+                  now.minus(5, ChronoUnit.MINUTES),
+                  null,
+                  null));
+      GuestConversionOperation invalidPendingEvent =
+          seedOperation(
+              withMarkers(
+                  operation(
+                      uuid("00000000-0000-0000-0000-000000000109"),
+                      GuestConversionState.PENDING_EVENT,
+                      6,
+                      now.minus(3, ChronoUnit.MINUTES),
+                      leaseUntil,
+                      now.minus(10, ChronoUnit.MINUTES)),
+                  now.minus(5, ChronoUnit.MINUTES),
+                  null,
+                  null));
+
+      assertThatThrownBy(
+              () ->
+                  repository.advance(
+                      invalidPendingUser.operationId(),
+                      GuestConversionState.PENDING_USER,
+                      leaseUntil,
+                      now))
+          .isInstanceOf(IllegalStateException.class);
+      assertThatThrownBy(
+              () ->
+                  repository.advance(
+                      invalidPendingEvent.operationId(),
+                      GuestConversionState.PENDING_EVENT,
+                      leaseUntil,
+                      now))
+          .isInstanceOf(IllegalStateException.class);
+      assertThat(operationById(invalidPendingUser.operationId())).isEqualTo(invalidPendingUser);
+      assertThat(operationById(invalidPendingEvent.operationId())).isEqualTo(invalidPendingEvent);
+    }
+
+    @Test
+    void advance_returnsNotFoundForAnUnknownOperation() {
+      GuestConversionOperationRepository repository = repository();
+      Instant now = Instant.parse("2026-09-04T15:00:00Z");
+
+      assertThat(
+              repository.advance(
+                  UUID.randomUUID(),
+                  GuestConversionState.PENDING_USER,
+                  now.plus(2, ChronoUnit.MINUTES),
+                  now))
+          .isEqualTo(GuestConversionAdvanceResult.NOT_FOUND);
+    }
+
+    @Test
+    void advance_treatsCompletedOperationsAsTerminalAlreadyAppliedWithoutMutation() {
+      GuestConversionOperationRepository repository = repository();
+      Instant now = Instant.parse("2026-09-04T15:00:00Z");
+      Instant originalLeaseUntil = now.plus(2, ChronoUnit.MINUTES);
+      GuestConversionOperation completed =
+          seedOperation(
+              operation(
+                  uuid("00000000-0000-0000-0000-000000000110"),
+                  GuestConversionState.COMPLETED,
+                  8,
+                  now.minus(3, ChronoUnit.MINUTES),
+                  null,
+                  now.minus(10, ChronoUnit.MINUTES)));
+
+      GuestConversionAdvanceResult result =
+          repository.advance(
+              completed.operationId(),
+              GuestConversionState.PENDING_EVENT,
+              originalLeaseUntil,
+              now);
+
+      assertThat(result).isEqualTo(GuestConversionAdvanceResult.ALREADY_APPLIED);
+      assertThat(operationById(completed.operationId())).isEqualTo(completed);
+    }
+
+    @Test
+    void advance_concurrentWorkersApplyTheSameTransitionExactlyOnce() throws Exception {
+      GuestConversionOperationRepository repository = repository();
+      Instant now = Instant.parse("2026-09-04T15:00:00Z");
+      Instant leaseUntil = now.plus(2, ChronoUnit.MINUTES);
+      GuestConversionOperation pendingUser =
+          seedOperation(
+              operation(
+                  uuid("00000000-0000-0000-0000-000000000111"),
+                  GuestConversionState.PENDING_USER,
+                  10,
+                  now.minus(3, ChronoUnit.MINUTES),
+                  leaseUntil,
+                  now.minus(10, ChronoUnit.MINUTES)));
+      installLeaseDelayTrigger();
+      CyclicBarrier start = new CyclicBarrier(2);
+      ExecutorService executor = Executors.newFixedThreadPool(2);
+      try {
+        List<GuestConversionAdvanceResult> results =
+            executor
+                .invokeAll(
+                    IntStream.range(0, 2)
+                        .<java.util.concurrent.Callable<GuestConversionAdvanceResult>>mapToObj(
+                            ignored ->
+                                () -> {
+                                  start.await(10, TimeUnit.SECONDS);
+                                  return repository.advance(
+                                      pendingUser.operationId(),
+                                      GuestConversionState.PENDING_USER,
+                                      leaseUntil,
+                                      now);
+                                })
+                        .toList(),
+                    30,
+                    TimeUnit.SECONDS)
+                .stream()
+                .map(
+                    future -> {
+                      try {
+                        return future.get();
+                      } catch (Exception ex) {
+                        throw new AssertionError("concurrent advance call failed", ex);
+                      }
+                    })
+                .toList();
+
+        assertThat(results)
+            .containsExactlyInAnyOrder(
+                GuestConversionAdvanceResult.APPLIED, GuestConversionAdvanceResult.ALREADY_APPLIED);
+        assertThat(operationById(pendingUser.operationId()))
+            .isEqualTo(advancedPendingUser(pendingUser, now));
+      } finally {
+        executor.shutdownNow();
+        assertThat(executor.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
+      }
+    }
+  }
+
   private GuestConversionOperationRepository repository() {
     return new JdbcGuestConversionOperationRepository(
         new NamedParameterJdbcTemplate(
@@ -510,6 +868,42 @@ class GuestConversionOperationRepositoryJdbcIntegrationTest {
     assertThat(operationById(expected.operationId())).isEqualTo(withLease(expected, leaseUntil));
   }
 
+  private GuestConversionOperation advancedPendingUser(
+      GuestConversionOperation operation, Instant now) {
+    return new GuestConversionOperation(
+        operation.operationId(),
+        operation.accountId(),
+        operation.otpCodeId(),
+        GuestConversionState.PENDING_EVENT,
+        operation.attemptCount(),
+        operation.nextAttemptAt(),
+        null,
+        operation.lastErrorCode(),
+        now,
+        now,
+        null,
+        operation.createdAt(),
+        now);
+  }
+
+  private GuestConversionOperation advancedPendingEvent(
+      GuestConversionOperation operation, Instant now) {
+    return new GuestConversionOperation(
+        operation.operationId(),
+        operation.accountId(),
+        operation.otpCodeId(),
+        GuestConversionState.COMPLETED,
+        operation.attemptCount(),
+        operation.nextAttemptAt(),
+        null,
+        operation.lastErrorCode(),
+        operation.userMarkedAt(),
+        operation.authPromotedAt(),
+        now,
+        operation.createdAt(),
+        now);
+  }
+
   private GuestConversionOperation withLease(
       GuestConversionOperation operation, Instant leaseUntil) {
     return new GuestConversionOperation(
@@ -526,6 +920,40 @@ class GuestConversionOperationRepositoryJdbcIntegrationTest {
         operation.eventPublishedAt(),
         operation.createdAt(),
         operation.updatedAt());
+  }
+
+  private GuestConversionOperation withMarkers(
+      GuestConversionOperation operation,
+      Instant userMarkedAt,
+      Instant authPromotedAt,
+      Instant eventPublishedAt) {
+    return new GuestConversionOperation(
+        operation.operationId(),
+        operation.accountId(),
+        operation.otpCodeId(),
+        operation.state(),
+        operation.attemptCount(),
+        operation.nextAttemptAt(),
+        operation.lockedUntil(),
+        operation.lastErrorCode(),
+        userMarkedAt,
+        authPromotedAt,
+        eventPublishedAt,
+        operation.createdAt(),
+        operation.updatedAt());
+  }
+
+  private void replaceOperation(GuestConversionOperation operation) {
+    jdbc()
+        .update(
+            """
+            UPDATE guest_conversion_operations
+            SET locked_until = :lockedUntil
+            WHERE operation_id = :operationId
+            """,
+            new MapSqlParameterSource()
+                .addValue("operationId", operation.operationId())
+                .addValue("lockedUntil", timestamp(operation.lockedUntil())));
   }
 
   private GuestConversionOperation operationById(UUID operationId) {
