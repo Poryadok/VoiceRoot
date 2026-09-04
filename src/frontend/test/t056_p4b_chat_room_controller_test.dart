@@ -83,7 +83,7 @@ void main() {
           .read(chatRoomControllerProvider('chat-1'))
           .hasMore;
       final initialCacheIds = await cache.cachedIds();
-      final initialWriteCount = cache.replaceCalls.length;
+      final initialCacheMutations = cache.mutationSignatures();
       hub.addFrame(
         const RealtimeFrame(
           op: 'message_create',
@@ -98,7 +98,7 @@ void main() {
       expect(state.nextCursor, initialCursor);
       expect(state.hasMore, initialHasMore);
       expect(await cache.cachedIds(), initialCacheIds);
-      expect(cache.replaceCalls.length, initialWriteCount);
+      expect(cache.mutationSignatures(), initialCacheMutations);
       expect(messages.calls.last.afterMessageId, 'msg-1');
     });
 
@@ -134,7 +134,7 @@ void main() {
           .read(chatRoomControllerProvider('chat-1'))
           .hasMore;
       final initialCacheIds = await cache.cachedIds();
-      final initialWriteCount = cache.replaceCalls.length;
+      final initialCacheMutations = cache.mutationSignatures();
       await container
           .read(chatRoomControllerProvider('chat-1').notifier)
           .loadOlderMessages();
@@ -145,7 +145,7 @@ void main() {
       expect(state.nextCursor, initialCursor);
       expect(state.hasMore, initialHasMore);
       expect(await cache.cachedIds(), initialCacheIds);
-      expect(cache.replaceCalls.length, initialWriteCount);
+      expect(cache.mutationSignatures(), initialCacheMutations);
       expect(state.isLoadingOlder, isFalse);
     });
 
@@ -182,7 +182,7 @@ void main() {
         await controller.loadInitial();
         await controller.loadInitial();
         await pumpEventQueue();
-        final writesBeforeLive = cache.replaceCalls.length;
+        final mutationsBeforeLive = cache.mutationSignatures();
 
         for (var i = 0; i < 2; i++) {
           hub.addFrame(
@@ -197,7 +197,7 @@ void main() {
         final state = container.read(chatRoomControllerProvider('chat-1'));
         expect(state.isDmPeerDeleted, isTrue);
         expect(state.messages.map((message) => message.id), ['msg-1']);
-        expect(cache.replaceCalls.length, writesBeforeLive);
+        expect(cache.mutationSignatures(), mutationsBeforeLive);
         expect(await cache.cachedIds(), ['msg-1']);
       },
     );
@@ -277,7 +277,7 @@ void main() {
         ]);
         expect(state.nextCursor, 'profile-b-cursor');
         expect(state.hasMore, isTrue);
-        expect(cache.replaceCalls, isEmpty);
+        expect(cache.mutationSignatures(), isEmpty);
       },
     );
 
@@ -353,8 +353,8 @@ void main() {
         final bHistoryIds = [...state.messages.map((message) => message.id)];
         final bCursor = state.nextCursor;
         final bHasMore = state.hasMore;
-        final bCacheIds = await cache.cachedIds();
-        final bWriteCount = cache.replaceCalls.length;
+        final bCacheIds = await cache.cachedIdsFor(profileId: 'profile-b');
+        final bCacheMutations = cache.mutationSignatures();
         hub.addFrame(
           const RealtimeFrame(
             op: 'dm_peer_deleted',
@@ -368,8 +368,8 @@ void main() {
         expect(state.messages.map((message) => message.id), bHistoryIds);
         expect(state.nextCursor, bCursor);
         expect(state.hasMore, bHasMore);
-        expect(await cache.cachedIds(), bCacheIds);
-        expect(cache.replaceCalls.length, bWriteCount);
+        expect(await cache.cachedIdsFor(profileId: 'profile-b'), bCacheIds);
+        expect(cache.mutationSignatures(), bCacheMutations);
       },
     );
 
@@ -653,33 +653,51 @@ class _UnwiredRef implements Ref {
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
 }
 
-class _CacheWrite {
-  const _CacheWrite({
-    required this.profileId,
-    required this.chatId,
-    required this.messages,
+class _CacheMutation {
+  const _CacheMutation({
+    required this.kind,
+    this.profileId,
+    this.chatId,
+    this.messageIds = const [],
   });
 
-  final String profileId;
-  final String chatId;
-  final List<VoiceMessage> messages;
+  final String kind;
+  final String? profileId;
+  final String? chatId;
+  final List<String> messageIds;
+
+  String get signature =>
+      [kind, profileId ?? '', chatId ?? '', ...messageIds].join('|');
 }
 
 class _RecordingCacheStore implements MessageCacheStore {
   final _delegate = InMemoryMessageCacheStore();
-  final replaceCalls = <_CacheWrite>[];
+  final mutations = <_CacheMutation>[];
 
-  Future<List<String>> cachedIds() async => (await _delegate.getMessages(
-    profileId: 'profile-a',
-    chatId: 'chat-1',
+  Future<List<String>> cachedIds() => cachedIdsFor(profileId: 'profile-a');
+
+  Future<List<String>> cachedIdsFor({
+    required String profileId,
+    String chatId = 'chat-1',
+  }) async => (await _delegate.getMessages(
+    profileId: profileId,
+    chatId: chatId,
   )).map((message) => message.id).toList(growable: false);
 
-  @override
-  Future<void> clearAll() => _delegate.clearAll();
+  List<String> mutationSignatures() =>
+      mutations.map((mutation) => mutation.signature).toList(growable: false);
 
   @override
-  Future<void> clearProfile(String profileId) =>
-      _delegate.clearProfile(profileId);
+  Future<void> clearAll() async {
+    mutations.add(const _CacheMutation(kind: 'clearAll'));
+    await _delegate.clearAll();
+  }
+
+  @override
+  Future<void> clearProfile(String profileId) async {
+    mutations.add(_CacheMutation(kind: 'clearProfile', profileId: profileId));
+    await _delegate.clearProfile(profileId);
+  }
 
   @override
   Future<List<VoiceMessage>> getMessages({
@@ -693,11 +711,14 @@ class _RecordingCacheStore implements MessageCacheStore {
     required String chatId,
     required List<VoiceMessage> messages,
   }) async {
-    replaceCalls.add(
-      _CacheWrite(
+    mutations.add(
+      _CacheMutation(
+        kind: 'replace',
         profileId: profileId,
         chatId: chatId,
-        messages: List<VoiceMessage>.unmodifiable(messages),
+        messageIds: messages
+            .map((message) => message.id)
+            .toList(growable: false),
       ),
     );
     await _delegate.replaceChatMessages(
@@ -712,9 +733,21 @@ class _RecordingCacheStore implements MessageCacheStore {
     required String profileId,
     required String chatId,
     required List<VoiceMessage> messages,
-  }) => _delegate.upsertMessages(
-    profileId: profileId,
-    chatId: chatId,
-    messages: messages,
-  );
+  }) async {
+    mutations.add(
+      _CacheMutation(
+        kind: 'upsert',
+        profileId: profileId,
+        chatId: chatId,
+        messageIds: messages
+            .map((message) => message.id)
+            .toList(growable: false),
+      ),
+    );
+    await _delegate.upsertMessages(
+      profileId: profileId,
+      chatId: chatId,
+      messages: messages,
+    );
+  }
 }
