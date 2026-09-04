@@ -31,6 +31,9 @@ func (s *BlockStore) BlockAccountAndSeverFriendships(ctx context.Context, blocke
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := lockAccountPair(ctx, tx, blockerAccountID, blockedAccountID); err != nil {
+		return err
+	}
 
 	_, err = tx.Exec(ctx, `
 INSERT INTO blocks (blocker_account_id, blocked_account_id)

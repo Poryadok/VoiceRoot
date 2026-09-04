@@ -75,14 +75,19 @@ func (s *SocialGRPC) BlockAccount(ctx context.Context, req *socialv1.BlockAccoun
 	if s.Blocks == nil {
 		return nil, status.Error(codes.FailedPrecondition, "persistence not configured")
 	}
-	var blockerProfiles, blockedProfiles []uuid.UUID
-	if s.AccountProfiles != nil {
-		if ids, berr := s.AccountProfiles.ProfileIDsForAccount(ctx, blocker); berr == nil {
-			blockerProfiles = ids
-		}
-		if ids, berr := s.AccountProfiles.ProfileIDsForAccount(ctx, blocked); berr == nil {
-			blockedProfiles = ids
-		}
+	if blocker == blocked {
+		return nil, status.Error(codes.InvalidArgument, store.ErrSelfBlock.Error())
+	}
+	if s.AccountProfiles == nil {
+		return nil, status.Error(codes.FailedPrecondition, "account profile resolution not configured")
+	}
+	blockerProfiles, err := resolveAccountProfiles(ctx, s.AccountProfiles, blocker)
+	if err != nil {
+		return nil, err
+	}
+	blockedProfiles, err := resolveAccountProfiles(ctx, s.AccountProfiles, blocked)
+	if err != nil {
+		return nil, err
 	}
 	err = s.Blocks.BlockAccountAndSeverFriendships(ctx, blocker, blocked, blockerProfiles, blockedProfiles)
 	switch {
@@ -96,6 +101,22 @@ func (s *SocialGRPC) BlockAccount(ctx context.Context, req *socialv1.BlockAccoun
 	default:
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+}
+
+func resolveAccountProfiles(ctx context.Context, resolver AccountProfilesResolver, accountID uuid.UUID) ([]uuid.UUID, error) {
+	ids, err := resolver.ProfileIDsForAccount(ctx, accountID)
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "account profile resolution unavailable")
+	}
+	if len(ids) == 0 {
+		return nil, status.Error(codes.FailedPrecondition, "account profile resolution returned no profiles")
+	}
+	for _, id := range ids {
+		if id == uuid.Nil {
+			return nil, status.Error(codes.FailedPrecondition, "account profile resolution returned invalid profile")
+		}
+	}
+	return ids, nil
 }
 
 // UnblockAccount implements voice.social.v1.SocialService.
