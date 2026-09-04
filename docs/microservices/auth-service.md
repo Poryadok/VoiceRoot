@@ -14,6 +14,7 @@
 - Логин / логаут
 - JWT access token (15 мин) + opaque refresh token (30 дней)
 - Refresh token rotation (одноразовые)
+- Отзыв всех сессий через Auth-owned `session_epoch` (staged/WIP; потребители ещё не в strict)
 - 2FA (TOTP — Google Authenticator и аналоги)
 - JWT blacklist (Redis, для логаута и ротации)
 - Гостевые аккаунты (30-дневный TTL, ограниченные права)
@@ -91,6 +92,7 @@ accounts
 ├── password_hash (bcrypt)
 ├── type (regular | guest)
 ├── status (active | suspended | deleted)
+├── session_epoch (positive monotonic floor, default 1; staged/WIP)
 ├── email_verified_at (nullable; null = restricted pending identity)
 ├── totp_secret (encrypted, nullable)
 ├── totp_enabled (bool)
@@ -133,6 +135,7 @@ accounts
 ├── password_hash TEXT NOT NULL
 ├── type VARCHAR(16) NOT NULL CHECK (type IN ('regular','guest'))
 ├── status VARCHAR(16) NOT NULL CHECK (status IN ('active','suspended','deleted'))
+├── session_epoch BIGINT NOT NULL DEFAULT 1
 ├── email_verified_at TIMESTAMPTZ NULL
 ├── totp_secret BYTEA NULL
 ├── totp_enabled BOOLEAN NOT NULL DEFAULT false
@@ -199,7 +202,7 @@ currently deployed schema/code; see [todo/backend.md](../todo/backend.md).
 
 ## Зависимости
 
-- **Redis** — JWT blacklist (запись при logout и отзыве access token), OTP throttling. Сквозные HTTP rate limits (в т.ч. лимит попыток входа с одного IP) — на **API Gateway**; те же лимиты вторым слоем в Auth не дублируем. Подробнее: [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) («Redis: API Gateway и Auth Service»).
+- **Redis** — JWT blacklist (запись при отзыве одного access token), OTP throttling и staged T056-P1 minimum-epoch floor без TTL. Floor обновляется только вверх из Auth DB; Gateway и Realtime читают его fail-closed в strict-режиме. Сквозные HTTP rate limits (в т.ч. лимит попыток входа с одного IP) — на **API Gateway**; те же лимиты вторым слоем в Auth не дублируем. Подробнее: [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) («Redis: API Gateway и Auth Service»).
 - **Resend** — отправка email (верификация, password reset)
 - **NATS** — публикация событий
 
@@ -211,4 +214,20 @@ currently deployed schema/code; see [todo/backend.md](../todo/backend.md).
 - Нет SMS 2FA (v1) — только TOTP
 - IP logging для аудита
 
+### T056-P1: session epoch (staged/WIP)
+
+`accounts.session_epoch` — durable источник истины, `BIGINT NOT NULL DEFAULT
+1`, положительный и монотонный. Auth атомарно увеличивает его при отзыве всех
+сессий и никогда не уменьшает. Новый access JWT получает обязательный
+положительный integer claim `session_epoch`; `jti` остаётся per-session claim для
+узкого logout/отзыва одного токена.
+
+До завершения зависимостей работает только rollout-контракт `expand → seed →
+strict`: миграция и repository/transactional revocation в Auth, заполнение
+Redis floor, затем strict-проверки Gateway и Realtime. Legacy JWT без claim и
+не seeded floor допустимы только в явно включённом compatibility-режиме; в
+strict missing/corrupt claim или floor, а также Redis error — fail-closed.
+Redis Pub/Sub не является correctness mechanism для отзыва и лишь ускоряет
+адресное закрытие сокетов в Realtime. Текущий staged claim сам по себе не
+означает, что отзыв всех существующих access/refresh сессий уже реализован.
 

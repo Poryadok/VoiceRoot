@@ -12,6 +12,7 @@
 - Маршрутизация HTTP/REST запросов к соответствующим сервисам; текущая Go-реализация — HTTP reverse proxy, REST → gRPC transcoding добавляется вместе с целевыми сервисами
 - Проксирование WebSocket-соединений к Realtime Service
 - JWT-валидация (проверка access token, извлечение claims) и чтение Redis blacklist для отозванных access token
+- T056-P1 session-epoch enforcement (staged/WIP): чтение Auth-owned Redis floor и fail-closed проверка после rollout strict
 - Rate limiting по правилам из конфигурации
 - CORS, request logging, Prometheus metrics (`/metrics`)
 - Версионирование API (`/api/v1/...`)
@@ -166,6 +167,22 @@ Send after pick — **Messaging** `POST /api/v1/messages/...` (not File attach).
 5. Передаёт claims downstream сервисам через `X-Voice-*` headers
 6. Публичные endpoints (login, register, OTP, version, health, metrics) — без JWT
 
+### T056-P1: session epoch (staged/WIP)
+
+Это подготовленный контракт, а не утверждение о shipped enforcement. Auth DB
+хранит `accounts.session_epoch` как durable source of truth и выдаёт его новым
+access JWT положительным integer claim. Gateway в strict-режиме обязан проверить
+claim и Redis minimum-epoch floor: token допускается только при
+`session_epoch >= floor`. Отсутствующий/неположительный claim, отсутствующий или
+повреждённый floor и любая ошибка Redis дают fail-closed отказ; floor нельзя
+считать равным `1`.
+
+Rollout — `expand → seed → strict`: во время compatibility-этапа старый JWT без
+claim и не seeded floor допускаются, но strict включается только после миграции и
+seed из Auth DB и готовности Realtime. Та же проверка обязательна для обычного
+REST JWT и для одноразового `/api/v1/realtime/ws-ticket`. `jti` остаётся
+per-session blacklist-механизмом и не заменяется epoch.
+
 Для dev/tests допускается `GATEWAY_AUTH_MODE=static` + `GATEWAY_STATIC_TOKENS_JSON`; production должен использовать JWKS.
 
 ## Конфигурация Gateway
@@ -184,7 +201,7 @@ Send after pick — **Messaging** `POST /api/v1/messages/...` (not File attach).
 
 ## Зависимости
 
-- **Redis** — rate limiting (sliding window), чтение JWT blacklist. Зона ответственности с **Auth Service**: [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) (раздел «Redis: API Gateway и Auth Service»).
+- **Redis** — rate limiting (sliding window), чтение JWT blacklist и staged T056-P1 minimum-epoch floor. В strict-режиме ошибки/отсутствие floor fail-closed; зона ответственности с **Auth Service**: [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) (раздел «Redis: API Gateway и Auth Service»).
 - **Auth Service** — JWT public key (ротация через JWKS endpoint)
 - **Version config store** — таблица `client_versions` (или эквивалентный конфиг-стор) для `/api/v1/version`
 
@@ -198,4 +215,3 @@ Send after pick — **Messaging** `POST /api/v1/messages/...` (not File attach).
 ## Масштабирование
 
 Stateless, масштабируется горизонтально. За внешним Load Balancer (L4/L7).
-
