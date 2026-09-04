@@ -25,7 +25,6 @@ if (( port_base + 16 > 65535 )); then
   echo "VOICE_A1_MULTI_ACCOUNT_PORT_BASE leaves no room for the isolated 17-port range" >&2
   exit 2
 fi
-
 proof_id="$(date +%s)-${RANDOM}${RANDOM}"
 project="voice-a1-multi-${proof_id}"
 if [[ ! "$project" =~ ^voice-a1-multi-[a-z0-9-]+$ ]] || [[ "$project" == "voice" ]]; then
@@ -154,4 +153,3 @@ if (( test_status != 0 )); then
   compose logs --no-color --timestamps >&2 || true
   exit "$test_status"
 fi
-
