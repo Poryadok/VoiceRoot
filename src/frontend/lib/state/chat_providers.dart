@@ -15,6 +15,7 @@ import '../backend/realtime_client.dart';
 import '../e2e/e2e_exceptions.dart';
 import '../e2e/e2e_file_crypto.dart';
 import '../e2e/e2e_image_thumb.dart';
+import '../gen/voice/messaging/v1/messaging.pb.dart' as messaging_pb;
 import 'auth_providers.dart';
 import 'folder_pin_providers.dart';
 import 'bot_deferred_providers.dart';
@@ -652,6 +653,7 @@ class ChatRoomState {
     this.readMessageIds = const {},
     this.pinnedMessages = const [],
     this.isOfflineCache = false,
+    this.isDmPeerDeleted = false,
   });
 
   final List<VoiceMessage> messages;
@@ -667,6 +669,7 @@ class ChatRoomState {
   final Set<String> readMessageIds;
   final List<VoiceMessage> pinnedMessages;
   final bool isOfflineCache;
+  final bool isDmPeerDeleted;
 
   String? get lastMessageId => messages.isEmpty ? null : messages.last.id;
 
@@ -686,6 +689,7 @@ class ChatRoomState {
     Set<String>? readMessageIds,
     List<VoiceMessage>? pinnedMessages,
     bool? isOfflineCache,
+    bool? isDmPeerDeleted,
   }) {
     return ChatRoomState(
       messages: messages ?? this.messages,
@@ -701,6 +705,7 @@ class ChatRoomState {
       readMessageIds: readMessageIds ?? this.readMessageIds,
       pinnedMessages: pinnedMessages ?? this.pinnedMessages,
       isOfflineCache: isOfflineCache ?? this.isOfflineCache,
+      isDmPeerDeleted: isDmPeerDeleted ?? this.isDmPeerDeleted,
     );
   }
 }
@@ -709,6 +714,18 @@ enum RealtimeLinkStatus { disconnected, connecting, connected, reconnecting }
 
 class ChatRoomController extends StateNotifier<ChatRoomState> {
   ChatRoomController(this._ref, this.chatId) : super(const ChatRoomState()) {
+    _authSub = _ref.listen<AuthState>(authControllerProvider, (previous, next) {
+      if (previous?.activeProfileId == next.activeProfileId &&
+          previous?.session?.accessToken == next.session?.accessToken) {
+        return;
+      }
+      _loadGeneration++;
+      _historyGeneration++;
+      _loadedHistoryProfileId = null;
+      if (mounted) {
+        state = state.copyWith(isDmPeerDeleted: false);
+      }
+    });
     _realtimeSub = _ref.listen<RealtimeLinkStatus>(realtimeLinkStatusProvider, (
       _,
       next,
@@ -838,6 +855,8 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
             messageId: messageId,
             pinned: frame.op == 'message_pinned',
           );
+        } else if (frame.op == 'dm_peer_deleted') {
+          _handleDmPeerDeleted(frame);
         }
       });
     });
@@ -847,9 +866,13 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
 
   final Ref _ref;
   final String chatId;
+  ProviderSubscription<AuthState>? _authSub;
   ProviderSubscription<RealtimeLinkStatus>? _realtimeSub;
   ProviderSubscription<AsyncValue<RealtimeFrame>>? _eventSub;
   String? _lastMarkedReadMessageId;
+  String? _loadedHistoryProfileId;
+  var _historyGeneration = 0;
+  var _loadGeneration = 0;
 
   bool _isE2eChat() => _ref.read(chatE2eEnabledProvider(chatId));
 
@@ -883,6 +906,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
 
   @override
   void dispose() {
+    _authSub?.close();
     _realtimeSub?.close();
     _eventSub?.close();
     super.dispose();
@@ -890,23 +914,62 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
 
   Future<void> loadInitial() async {
     final auth = _ref.read(authorizationHeaderProvider);
-    if (auth == null) return;
+    final profileId = _activeProfileId();
+    if (auth == null || profileId == null) return;
+    final loadGeneration = ++_loadGeneration;
+    final previousHistoryProfileId = _loadedHistoryProfileId;
+    final hadLoadedHistory =
+        previousHistoryProfileId == profileId && state.messages.isNotEmpty;
+    final historyGeneration = ++_historyGeneration;
+    _loadedHistoryProfileId = null;
+    if (previousHistoryProfileId != profileId) {
+      state = state.copyWith(isDmPeerDeleted: false);
+    }
     state = state.copyWith(
       isLoading: true,
       clearError: true,
       isOfflineCache: false,
     );
     if (_isDeviceOffline()) {
-      final served = await _serveCachedMessages();
+      final served = await _serveCachedMessages(
+        profileId: profileId,
+        authorization: auth,
+        historyGeneration: historyGeneration,
+      );
       if (served) return;
     }
     final result = await _ref
         .read(voiceMessagesClientProvider)
         .getMessages(authorization: auth, chatId: chatId);
-    if (!mounted) return;
+    if (!_isCurrentInitialLoad(
+      profileId: profileId,
+      authorization: auth,
+      generation: loadGeneration,
+    )) {
+      return;
+    }
     switch (result) {
       case MessagesApiOk(:final data):
         final sorted = await _finalizeMessages(_sortMessages(data.messages));
+        if (!_isCurrentInitialLoad(
+          profileId: profileId,
+          authorization: auth,
+          generation: loadGeneration,
+        )) {
+          return;
+        }
+        final isDeleted =
+            data.dmPeerState == messaging_pb.DmPeerState.DM_PEER_STATE_DELETED;
+        if (isDeleted && hadLoadedHistory) {
+          _loadedHistoryProfileId = profileId;
+          _markDmPeerDeleted();
+          state = state.copyWith(isLoading: false, clearError: true);
+          return;
+        }
+        if (data.messages.isNotEmpty) {
+          _loadedHistoryProfileId = profileId;
+          _applyDmPeerState(data.dmPeerState);
+        }
         state = state.copyWith(
           messages: sorted,
           isLoading: false,
@@ -916,12 +979,16 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           hasMore: data.hasMore && data.nextCursor != null,
           clearError: true,
         );
-        unawaited(_writeCache(sorted));
+        unawaited(_writeCache(sorted, profileId: profileId));
         unawaited(_markLatestRead());
         unawaited(_refreshPinnedMessages(auth));
       case MessagesApiFailure(:final message, :final errorCode):
         if (errorCode == 'network_error') {
-          final served = await _serveCachedMessages();
+          final served = await _serveCachedMessages(
+            profileId: profileId,
+            authorization: auth,
+            historyGeneration: historyGeneration,
+          );
           if (served) return;
         }
         state = state.copyWith(
@@ -965,7 +1032,9 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     String? lastMessageId,
   }) async {
     final auth = _ref.read(authorizationHeaderProvider);
-    if (auth == null) return;
+    final profileId = _activeProfileId();
+    final historyGeneration = _historyGeneration;
+    if (auth == null || profileId == null) return;
     final result = await _ref
         .read(voiceMessagesClientProvider)
         .getMessages(
@@ -975,7 +1044,18 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           lastMessageId: lastMessageId,
         );
     if (result case MessagesApiOk(:final data)) {
-      if (!mounted) return;
+      if (!_isCurrentHistory(
+        profileId: profileId,
+        authorization: auth,
+        generation: historyGeneration,
+      )) {
+        return;
+      }
+      _applyDmPeerState(data.dmPeerState);
+      if (data.dmPeerState ==
+          messaging_pb.DmPeerState.DM_PEER_STATE_DELETED) {
+        return;
+      }
       if (data.messages.isEmpty) return;
       final merged = [...state.messages];
       for (final m in data.messages) {
@@ -984,12 +1064,19 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         }
       }
       final sorted = await _finalizeMessages(_sortMessages(merged));
+      if (!_isCurrentHistory(
+        profileId: profileId,
+        authorization: auth,
+        generation: historyGeneration,
+      )) {
+        return;
+      }
       state = state.copyWith(
         messages: sorted,
         clearError: true,
         isOfflineCache: false,
       );
-      unawaited(_writeCache(sorted));
+      unawaited(_writeCache(sorted, profileId: profileId));
       unawaited(_markLatestRead());
       _invalidateChatLists(_ref);
     }
@@ -1000,14 +1087,28 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     final cursor = state.nextCursor;
     if (cursor == null || cursor.isEmpty || state.isLoadingOlder) return;
     final auth = _ref.read(authorizationHeaderProvider);
-    if (auth == null) return;
+    final profileId = _activeProfileId();
+    final historyGeneration = _historyGeneration;
+    if (auth == null || profileId == null) return;
     state = state.copyWith(isLoadingOlder: true, clearError: true);
     final result = await _ref
         .read(voiceMessagesClientProvider)
         .getMessages(authorization: auth, chatId: chatId, cursor: cursor);
-    if (!mounted) return;
+    if (!_isCurrentHistory(
+      profileId: profileId,
+      authorization: auth,
+      generation: historyGeneration,
+    )) {
+      return;
+    }
     switch (result) {
       case MessagesApiOk(:final data):
+        _applyDmPeerState(data.dmPeerState);
+        if (data.dmPeerState ==
+            messaging_pb.DmPeerState.DM_PEER_STATE_DELETED) {
+          state = state.copyWith(isLoadingOlder: false);
+          return;
+        }
         final merged = [...state.messages];
         for (final m in data.messages) {
           if (!merged.any((x) => x.id == m.id)) {
@@ -1015,6 +1116,13 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           }
         }
         final sorted = await _finalizeMessages(_sortMessages(merged));
+        if (!_isCurrentHistory(
+          profileId: profileId,
+          authorization: auth,
+          generation: historyGeneration,
+        )) {
+          return;
+        }
         state = state.copyWith(
           messages: sorted,
           isLoadingOlder: false,
@@ -1024,7 +1132,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           hasMore: data.hasMore && data.nextCursor != null,
           clearError: true,
         );
-        unawaited(_writeCache(sorted));
+        unawaited(_writeCache(sorted, profileId: profileId));
       case MessagesApiFailure(:final message):
         state = state.copyWith(isLoadingOlder: false, errorMessage: message);
     }
@@ -1110,15 +1218,81 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
   String? _activeProfileId() =>
       _ref.read(authControllerProvider).activeProfileId;
 
-  Future<bool> _serveCachedMessages() async {
-    final profileId = _activeProfileId();
-    if (profileId == null) return false;
+  bool _isCurrentInitialLoad({
+    required String profileId,
+    required String authorization,
+    required int generation,
+  }) {
+    return mounted &&
+        _loadGeneration == generation &&
+        _activeProfileId() == profileId &&
+        _ref.read(authorizationHeaderProvider) == authorization;
+  }
+
+  bool _isCurrentHistory({
+    required String profileId,
+    required String authorization,
+    required int generation,
+  }) {
+    return mounted &&
+        _loadedHistoryProfileId == profileId &&
+        _historyGeneration == generation &&
+        _activeProfileId() == profileId &&
+        _ref.read(authorizationHeaderProvider) == authorization;
+  }
+
+  void _markDmPeerDeleted() {
+    if (!state.isDmPeerDeleted) {
+      state = state.copyWith(isDmPeerDeleted: true);
+    }
+  }
+
+  void _applyDmPeerState(messaging_pb.DmPeerState? peerState) {
+    if (peerState == messaging_pb.DmPeerState.DM_PEER_STATE_DELETED) {
+      _markDmPeerDeleted();
+    }
+  }
+
+  void _handleDmPeerDeleted(RealtimeFrame frame) {
+    final data = frame.data;
+    final recipientProfileId = data?['recipient_profile_id'] as String?;
+    final activeProfileId = _activeProfileId();
+    if (data?['chat_id'] != chatId ||
+        recipientProfileId == null ||
+        recipientProfileId != activeProfileId ||
+        _loadedHistoryProfileId != activeProfileId) {
+      return;
+    }
+    _markDmPeerDeleted();
+  }
+
+  Future<bool> _serveCachedMessages({
+    required String profileId,
+    required String authorization,
+    required int historyGeneration,
+  }) async {
     final cached = await _ref
         .read(messageCacheStoreProvider)
         .getMessages(profileId: profileId, chatId: chatId);
-    if (!mounted) return false;
+    if (!_isCurrentInitialLoad(
+      profileId: profileId,
+      authorization: authorization,
+      generation: _loadGeneration,
+    ) ||
+        _historyGeneration != historyGeneration) {
+      return false;
+    }
     if (cached.isEmpty) return false;
     final sorted = await _finalizeMessages(_sortMessages(cached));
+    if (!_isCurrentInitialLoad(
+      profileId: profileId,
+      authorization: authorization,
+      generation: _loadGeneration,
+    ) ||
+        _historyGeneration != historyGeneration) {
+      return false;
+    }
+    _loadedHistoryProfileId = profileId;
     state = state.copyWith(
       messages: sorted,
       isLoading: false,
@@ -1130,8 +1304,11 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     return true;
   }
 
-  Future<void> _writeCache(List<VoiceMessage> messages) async {
-    final profileId = _activeProfileId();
+  Future<void> _writeCache(
+    List<VoiceMessage> messages, {
+    String? profileId,
+  }) async {
+    profileId ??= _activeProfileId();
     if (profileId == null || messages.isEmpty) return;
     await _ref
         .read(messageCacheStoreProvider)
