@@ -146,6 +146,7 @@ void main() {
         );
         await controller.loadInitial();
         await controller.loadInitial();
+        await pumpEventQueue();
         final writesBeforeLive = cache.replaceCalls.length;
 
         for (var i = 0; i < 2; i++) {
