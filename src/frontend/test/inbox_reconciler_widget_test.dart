@@ -511,11 +511,242 @@ void main() {
     );
     expect(find.byKey(ChatListBody.loadMoreKey), findsOneWidget);
   });
+
+  testWidgets('custom folder drops a late initial page after folder switch', (
+    tester,
+  ) async {
+    final chats = _manualFirstPageScripts()
+      ..enqueue(
+        const InboxChatPageScript(
+          inbox: 'main',
+          cursor: null,
+          folderId: 'custom-folder-a',
+          manual: true,
+          result: ChatsApiOk(ChatListData(items: [])),
+        ),
+      );
+    await tester.pumpWidget(
+      _chatListApp(
+        chats: chats,
+        selectedFolderId: 'custom-folder-a',
+        legacyState: ChatListState(
+          items: [inboxChatItem('existing-folder-row')],
+          profileId: 'prof-test',
+        ),
+      ),
+    );
+    await tester.pump();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ChatListBody)),
+    );
+    final controller =
+        container.read(chatListControllerProvider.notifier)
+            as _NoAutoChatListController;
+    final loadInitial = controller.loadInitialFromTest();
+    await tester.pump();
+    final lateCall = chats.findCall(
+      inbox: 'main',
+      cursor: null,
+      profileId: 'prof-test',
+    )!;
+
+    container.read(selectedChatFolderIdProvider.notifier).state =
+        'custom-folder-b';
+    await tester.pump();
+    await chats.completeCall(
+      lateCall,
+      result: ChatsApiOk(
+        ChatListData(items: [inboxChatItem('late-folder-a-row')]),
+      ),
+    );
+    await loadInitial;
+    await tester.pump();
+
+    expect(
+      container
+          .read(chatListControllerProvider)
+          .items
+          .map((item) => item.chatId),
+      isNot(contains('late-folder-a-row')),
+    );
+    expect(
+      container.read(dmPeerProfileByChatIdProvider),
+      isNot(contains('late-folder-a-row')),
+    );
+  });
+
+  testWidgets(
+    'custom folder drops a late load-more page after profile switch',
+    (tester) async {
+      final chats = InboxReconcilerChatsFake(
+        profileByAuthorization: const {
+          'Bearer test-access': 'prof-test',
+          'Bearer access-b': 'profile-b',
+        },
+      );
+      for (final inbox in ['main', 'requests', 'archive']) {
+        chats.enqueue(
+          InboxChatPageScript(
+            inbox: inbox,
+            cursor: null,
+            manual: true,
+            result: const ChatsApiOk(ChatListData(items: [])),
+          ),
+        );
+      }
+      chats.enqueue(
+        const InboxChatPageScript(
+          inbox: 'main',
+          cursor: 'folder-next',
+          folderId: 'custom-folder',
+          manual: true,
+          result: ChatsApiOk(ChatListData(items: [])),
+        ),
+      );
+      await tester.pumpWidget(
+        _chatListApp(
+          chats: chats,
+          selectedFolderId: 'custom-folder',
+          allowLegacyLoadMore: true,
+          legacyState: ChatListState(
+            items: [inboxChatItem('profile-a-folder-row')],
+            nextCursor: 'folder-next',
+            profileId: 'prof-test',
+          ),
+        ),
+      );
+      await tester.pump();
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ChatListBody)),
+      );
+      final loadMore = container
+          .read(chatListControllerProvider.notifier)
+          .loadMore();
+      await tester.pump();
+    final lateCall = chats.findCall(
+      inbox: 'main',
+      cursor: 'folder-next',
+      profileId: 'prof-test',
+    )!;
+
+    _enqueueProfileBFirstPages(chats);
+    container.read(authControllerProvider.notifier).state = const AuthState(
+        session: AuthSession(
+          accessToken: 'access-b',
+          refreshToken: 'refresh-b',
+          accountId: 'account-1',
+          activeProfileId: 'profile-b',
+          expiresInSeconds: 900,
+        ),
+      );
+      await tester.pump();
+      await chats.completeCall(
+        lateCall,
+        result: ChatsApiOk(
+          ChatListData(items: [inboxChatItem('late-profile-a-folder-row')]),
+        ),
+      );
+      await loadMore;
+      await tester.pump();
+
+      final legacy = container.read(chatListControllerProvider);
+      expect(
+        legacy.items.map((item) => item.chatId),
+        isNot(contains('late-profile-a-folder-row')),
+      );
+      expect(
+        container.read(dmPeerProfileByChatIdProvider),
+        isNot(contains('late-profile-a-folder-row')),
+      );
+    },
+  );
+
+  testWidgets('archive drops a late load-more page after profile switch', (
+    tester,
+  ) async {
+    final chats = InboxReconcilerChatsFake(
+      profileByAuthorization: const {
+        'Bearer test-access': 'prof-test',
+        'Bearer access-b': 'profile-b',
+      },
+    );
+    for (final inbox in ['main', 'requests', 'archive']) {
+      chats.enqueue(
+        InboxChatPageScript(
+          inbox: inbox,
+          cursor: null,
+          manual: true,
+          result: const ChatsApiOk(ChatListData(items: [])),
+        ),
+      );
+    }
+    chats.enqueue(
+      const InboxChatPageScript(
+        inbox: 'archive',
+        cursor: 'archive-next',
+        manual: true,
+        result: ChatsApiOk(ChatListData(items: [])),
+      ),
+    );
+    await tester.pumpWidget(
+      _archiveApp(
+        chats,
+        allowLegacyLoadMore: true,
+        legacyState: ChatListState(
+          items: [inboxChatItem('profile-a-archive-row')],
+          nextCursor: 'archive-next',
+          profileId: 'prof-test',
+        ),
+      ),
+    );
+    await tester.pump();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ChatArchiveScreen)),
+    );
+    final loadMore = container
+        .read(chatArchiveListControllerProvider.notifier)
+        .loadMore();
+    await tester.pump();
+    final lateCall = chats.findCall(
+      inbox: 'archive',
+      cursor: 'archive-next',
+      profileId: 'prof-test',
+    )!;
+
+    _enqueueProfileBFirstPages(chats);
+    container.read(authControllerProvider.notifier).state = const AuthState(
+      session: AuthSession(
+        accessToken: 'access-b',
+        refreshToken: 'refresh-b',
+        accountId: 'account-1',
+        activeProfileId: 'profile-b',
+        expiresInSeconds: 900,
+      ),
+    );
+    await tester.pump();
+    await chats.completeCall(
+      lateCall,
+      result: ChatsApiOk(
+        ChatListData(items: [inboxChatItem('late-profile-a-archive-row')]),
+      ),
+    );
+    await loadMore;
+    await tester.pump();
+
+    expect(
+      container
+          .read(chatArchiveListControllerProvider)
+          .items
+          .map((item) => item.chatId),
+      isNot(contains('late-profile-a-archive-row')),
+    );
+  });
 }
 
 Widget _archiveApp(
   InboxReconcilerChatsFake chats, {
   ChatListState? legacyState,
+  bool allowLegacyLoadMore = false,
 }) {
   return ProviderScope(
     overrides: [
@@ -527,7 +758,8 @@ Widget _archiveApp(
         (ref) => _NoAutoChatListController(ref),
       ),
       chatArchiveListControllerProvider.overrideWith(
-        (ref) => _NoAutoArchiveListController(ref, legacyState),
+        (ref) =>
+            _NoAutoArchiveListController(ref, legacyState, allowLegacyLoadMore),
       ),
     ],
     child: MaterialApp(
@@ -546,6 +778,7 @@ Widget _chatListApp({
   ChatListState? legacyState,
   String inbox = 'main',
   String? selectedFolderId,
+  bool allowLegacyLoadMore = false,
 }) {
   return ProviderScope(
     overrides: [
@@ -557,7 +790,8 @@ Widget _chatListApp({
       selectedChatFolderIdProvider.overrideWith((ref) => selectedFolderId),
       isDeviceOfflineProvider.overrideWith((ref) => offline),
       chatListControllerProvider.overrideWith(
-        (ref) => _NoAutoChatListController(ref, legacyState),
+        (ref) =>
+            _NoAutoChatListController(ref, legacyState, allowLegacyLoadMore),
       ),
       chatArchiveListControllerProvider.overrideWith(
         (ref) => _NoAutoArchiveListController(ref),
@@ -582,27 +816,45 @@ class _ReconcilerDrivenChatListBody extends ConsumerStatefulWidget {
 }
 
 class _NoAutoChatListController extends ChatListController {
-  _NoAutoChatListController(super.ref, [ChatListState? initial]) {
+  _NoAutoChatListController(
+    super.ref, [
+    ChatListState? initial,
+    this.allowLoadMore = false,
+  ]) {
     if (initial != null) state = initial;
   }
+
+  final bool allowLoadMore;
 
   @override
   Future<void> loadInitial() async {}
 
+  Future<void> loadInitialFromTest() => super.loadInitial();
+
   @override
-  Future<void> loadMore() async {}
+  Future<void> loadMore() async {
+    if (allowLoadMore) await super.loadMore();
+  }
 }
 
 class _NoAutoArchiveListController extends ChatArchiveListController {
-  _NoAutoArchiveListController(super.ref, [ChatListState? initial]) {
+  _NoAutoArchiveListController(
+    super.ref, [
+    ChatListState? initial,
+    this.allowLoadMore = false,
+  ]) {
     if (initial != null) state = initial;
   }
+
+  final bool allowLoadMore;
 
   @override
   Future<void> loadInitial() async {}
 
   @override
-  Future<void> loadMore() async {}
+  Future<void> loadMore() async {
+    if (allowLoadMore) await super.loadMore();
+  }
 }
 
 class _ReconcilerDrivenChatListBodyState
@@ -713,6 +965,21 @@ InboxReconcilerChatsFake _manualFirstPageScripts() {
     );
   }
   return chats;
+}
+
+void _enqueueProfileBFirstPages(InboxReconcilerChatsFake chats) {
+  for (final inbox in ['main', 'requests', 'archive']) {
+    chats.enqueue(
+      InboxChatPageScript(
+        inbox: inbox,
+        cursor: null,
+        profileId: 'profile-b',
+        authorization: 'Bearer access-b',
+        manual: true,
+        result: const ChatsApiOk(ChatListData(items: [])),
+      ),
+    );
+  }
 }
 
 class _MutationChatsFake extends InboxReconcilerChatsFake {
