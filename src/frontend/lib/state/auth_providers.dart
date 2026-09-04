@@ -111,6 +111,8 @@ class AuthController extends StateNotifier<AuthState> {
   final Future<void> Function()? onAuthenticated;
   Timer? _refreshTimer;
   Future<bool>? _refreshInFlight;
+  var _profileSwitchGeneration = 0;
+  AuthSession? _latestProfileSession;
   var _convertingGuest = false;
   static final _random = Random.secure();
 
@@ -315,6 +317,7 @@ class AuthController extends StateNotifier<AuthState> {
     final current = state.session;
     if (current == null) return 'not_authenticated';
     if (current.activeProfileId == profileId) return null;
+    final generation = ++_profileSwitchGeneration;
 
     final result = await _authClient.switchActiveProfile(
       session: current,
@@ -322,8 +325,12 @@ class AuthController extends StateNotifier<AuthState> {
     );
     switch (result) {
       case AuthSessionOk(:final session):
-        await _persist(session);
-        state = state.copyWith(session: session, clearError: true);
+        await _commitProfileSession(
+          session: session,
+          generation: generation,
+          nextState: (currentState) =>
+              currentState.copyWith(session: session, clearError: true),
+        );
         return null;
       case AuthSessionFailure(:final message):
         return message;
@@ -393,6 +400,30 @@ class AuthController extends StateNotifier<AuthState> {
     _scheduleProactiveRefresh();
   }
 
+  Future<void> _commitProfileSession({
+    required AuthSession session,
+    required int generation,
+    required AuthState Function(AuthState currentState) nextState,
+  }) {
+    if (generation != _profileSwitchGeneration) {
+      return Future<void>.value();
+    }
+
+    _latestProfileSession = session;
+    return _storage.write(session).then((_) async {
+      if (generation == _profileSwitchGeneration) {
+        state = nextState(state);
+        _scheduleProactiveRefresh();
+        return;
+      }
+
+      final latest = _latestProfileSession;
+      if (latest != null) {
+        await _storage.write(latest);
+      }
+    });
+  }
+
   Future<void> _notifyAuthenticated() async {
     final callback = onAuthenticated;
     if (callback == null) return;
@@ -403,7 +434,7 @@ class AuthController extends StateNotifier<AuthState> {
   Future<bool> refreshOn401() {
     final inFlight = _refreshInFlight;
     if (inFlight != null) return inFlight;
-    final future = _refreshOn401Once();
+    final future = _refreshOn401Once(_profileSwitchGeneration);
     _refreshInFlight = future;
     return future.whenComplete(() {
       if (identical(_refreshInFlight, future)) {
@@ -412,7 +443,7 @@ class AuthController extends StateNotifier<AuthState> {
     });
   }
 
-  Future<bool> _refreshOn401Once() async {
+  Future<bool> _refreshOn401Once(int generation) async {
     final current = state.session;
     if (current == null) return false;
     final refreshed = await _authClient.refresh(
@@ -420,12 +451,16 @@ class AuthController extends StateNotifier<AuthState> {
     );
     switch (refreshed) {
       case AuthSessionOk(:final session):
-        state = state.copyWith(
+        final isGuest = await _resolveIsGuest(session);
+        await _commitProfileSession(
           session: session,
-          clearError: true,
-          isGuest: await _resolveIsGuest(session),
+          generation: generation,
+          nextState: (currentState) => currentState.copyWith(
+            session: session,
+            clearError: true,
+            isGuest: isGuest,
+          ),
         );
-        await _persist(session);
         return true;
       case AuthSessionFailure(:final message, :final errorCode, :final statusCode):
         if (_convertingGuest) return false;
