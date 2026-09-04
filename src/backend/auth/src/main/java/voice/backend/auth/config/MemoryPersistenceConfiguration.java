@@ -10,8 +10,10 @@ import voice.backend.auth.repository.E2EKeyBackupRepository;
 import voice.backend.auth.repository.InMemoryAccountRepository;
 import voice.backend.auth.repository.InMemoryBackupCodeRepository;
 import voice.backend.auth.repository.InMemoryE2EKeyBackupRepository;
+import voice.backend.auth.repository.InMemoryGuestConversionOperationRepository;
 import voice.backend.auth.repository.InMemoryOtpCodeRepository;
 import voice.backend.auth.repository.OtpCodeRepository;
+import voice.backend.auth.repository.GuestConversionOperationRepository;
 import voice.backend.auth.repository.InMemoryRefreshTokenRepository;
 import voice.backend.auth.repository.RefreshTokenRepository;
 import voice.backend.auth.oauth.InMemoryOAuthAuthorizationCodeStore;
@@ -19,6 +21,8 @@ import voice.backend.auth.oauth.OAuthAuthorizationCodeCodec;
 import voice.backend.auth.oauth.OAuthAuthorizationCodeStore;
 import voice.backend.auth.security.InMemoryTokenBlacklist;
 import voice.backend.auth.security.TokenBlacklist;
+import voice.backend.auth.service.GuestConversionOtpAcceptance;
+import voice.backend.auth.service.InMemoryGuestConversionOtpAcceptance;
 
 @Configuration
 @ConditionalOnProperty(prefix = "auth", name = "persistence", havingValue = "memory")
@@ -46,6 +50,17 @@ public class MemoryPersistenceConfiguration {
   @Bean
   OtpCodeRepository otpCodeRepository() {
     return new InMemoryOtpCodeRepository();
+  }
+
+  @Bean
+  GuestConversionOperationRepository guestConversionOperationRepository() {
+    return new InMemoryGuestConversionOperationRepository();
+  }
+
+  @Bean
+  GuestConversionOtpAcceptance guestConversionOtpAcceptance(
+      OtpCodeRepository otpCodes, GuestConversionOperationRepository operations) {
+    return new InMemoryGuestConversionOtpAcceptance(otpCodes, operations);
   }
 
   @Bean

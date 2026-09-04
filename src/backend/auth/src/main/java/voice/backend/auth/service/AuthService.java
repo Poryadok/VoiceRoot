@@ -117,6 +117,9 @@ public class AuthService {
   public AuthSession register(RegisterCommand command) {
     String email = normalize(command.email());
     String phone = normalize(command.phone());
+    if (command.guest() && (email != null || phone != null)) {
+      throw new AuthException("validation_failed");
+    }
     if (!command.guest() && email == null && phone == null) {
       throw new AuthException("validation_failed");
     }
@@ -339,20 +342,12 @@ public class AuthService {
     String passwordHash = passwordHasher.hash(command.password());
     String email = normalize(command.email());
     String phone = normalize(command.phone());
-    if (email == null && phone == null) {
+    if (email == null || phone != null) {
       throw new AuthException("validation_failed");
     }
     if (email != null) {
       accounts
           .findByEmail(email)
-          .filter(existing -> !existing.id().equals(account.id()))
-          .ifPresent(ignored -> {
-            throw new AuthException("registration_conflict");
-          });
-    }
-    if (phone != null) {
-      accounts
-          .findByPhone(phone)
           .filter(existing -> !existing.id().equals(account.id()))
           .ifPresent(ignored -> {
             throw new AuthException("registration_conflict");
@@ -366,20 +361,6 @@ public class AuthService {
     }
     tokenBlacklist.revoke(claims.jti(), jwtService.ttl(claims));
     return issueSession(converted, "{}");
-  }
-
-  void completeVerifiedGuestConversion(Account account) {
-    if (!"guest".equals(account.type())) {
-      return;
-    }
-    primaryProfileProvisioner.clearGuestAccountFlag(account.id());
-    Account regular;
-    try {
-      regular = accounts.markGuestRegular(account.id());
-    } catch (IllegalArgumentException ex) {
-      throw new AuthException("auth_unavailable");
-    }
-    authEventPublisher.publishGuestConverted(regular.id());
   }
 
   public DeleteAccountResult deleteAccount(String accessToken, String password) {
