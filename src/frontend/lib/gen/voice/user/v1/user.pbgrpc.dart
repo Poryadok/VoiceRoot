@@ -52,6 +52,26 @@ class UserServiceClient extends $grpc.Client {
         options: options);
   }
 
+  /// S2S internal: resolve existing, non-deleted primary profiles for Auth-owned account ids.
+  /// Missing accounts and accounts without a usable primary profile are omitted; this never provisions profiles.
+  $grpc.ResponseFuture<$0.ResolvePrimaryProfileIDsResponse>
+      resolvePrimaryProfileIDs(
+    $0.ResolvePrimaryProfileIDsRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$resolvePrimaryProfileIDs, request,
+        options: options);
+  }
+
+  /// S2S internal: after Auth converts a guest account, clear the guest marker on its User-owned profiles.
+  /// Idempotent: an already-regular or unknown account succeeds unchanged.
+  $grpc.ResponseFuture<$0.MarkAccountRegularResponse> markAccountRegular(
+    $0.MarkAccountRegularRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$markAccountRegular, request, options: options);
+  }
+
   $grpc.ResponseFuture<$0.GetProfileResponse> getProfile(
     $0.GetProfileRequest request, {
     $grpc.CallOptions? options,
@@ -247,6 +267,17 @@ class UserServiceClient extends $grpc.Client {
       '/voice.user.v1.UserService/ListProfileIDsForAccount',
       ($0.ListProfileIDsForAccountRequest value) => value.writeToBuffer(),
       $0.ListProfileIDsForAccountResponse.fromBuffer);
+  static final _$resolvePrimaryProfileIDs = $grpc.ClientMethod<
+          $0.ResolvePrimaryProfileIDsRequest,
+          $0.ResolvePrimaryProfileIDsResponse>(
+      '/voice.user.v1.UserService/ResolvePrimaryProfileIDs',
+      ($0.ResolvePrimaryProfileIDsRequest value) => value.writeToBuffer(),
+      $0.ResolvePrimaryProfileIDsResponse.fromBuffer);
+  static final _$markAccountRegular = $grpc.ClientMethod<
+          $0.MarkAccountRegularRequest, $0.MarkAccountRegularResponse>(
+      '/voice.user.v1.UserService/MarkAccountRegular',
+      ($0.MarkAccountRegularRequest value) => value.writeToBuffer(),
+      $0.MarkAccountRegularResponse.fromBuffer);
   static final _$getProfile =
       $grpc.ClientMethod<$0.GetProfileRequest, $0.GetProfileResponse>(
           '/voice.user.v1.UserService/GetProfile',
@@ -395,6 +426,24 @@ abstract class UserServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.ListProfileIDsForAccountRequest.fromBuffer(value),
         ($0.ListProfileIDsForAccountResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ResolvePrimaryProfileIDsRequest,
+            $0.ResolvePrimaryProfileIDsResponse>(
+        'ResolvePrimaryProfileIDs',
+        resolvePrimaryProfileIDs_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ResolvePrimaryProfileIDsRequest.fromBuffer(value),
+        ($0.ResolvePrimaryProfileIDsResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.MarkAccountRegularRequest,
+            $0.MarkAccountRegularResponse>(
+        'MarkAccountRegular',
+        markAccountRegular_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.MarkAccountRegularRequest.fromBuffer(value),
+        ($0.MarkAccountRegularResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.GetProfileRequest, $0.GetProfileResponse>(
         'GetProfile',
         getProfile_Pre,
@@ -631,6 +680,24 @@ abstract class UserServiceBase extends $grpc.Service {
 
   $async.Future<$0.ListProfileIDsForAccountResponse> listProfileIDsForAccount(
       $grpc.ServiceCall call, $0.ListProfileIDsForAccountRequest request);
+
+  $async.Future<$0.ResolvePrimaryProfileIDsResponse>
+      resolvePrimaryProfileIDs_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.ResolvePrimaryProfileIDsRequest> $request) async {
+    return resolvePrimaryProfileIDs($call, await $request);
+  }
+
+  $async.Future<$0.ResolvePrimaryProfileIDsResponse> resolvePrimaryProfileIDs(
+      $grpc.ServiceCall call, $0.ResolvePrimaryProfileIDsRequest request);
+
+  $async.Future<$0.MarkAccountRegularResponse> markAccountRegular_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.MarkAccountRegularRequest> $request) async {
+    return markAccountRegular($call, await $request);
+  }
+
+  $async.Future<$0.MarkAccountRegularResponse> markAccountRegular(
+      $grpc.ServiceCall call, $0.MarkAccountRegularRequest request);
 
   $async.Future<$0.GetProfileResponse> getProfile_Pre($grpc.ServiceCall $call,
       $async.Future<$0.GetProfileRequest> $request) async {

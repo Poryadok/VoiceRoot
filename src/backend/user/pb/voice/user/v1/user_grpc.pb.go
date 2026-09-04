@@ -21,6 +21,8 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	UserService_EnsurePrimaryProfile_FullMethodName          = "/voice.user.v1.UserService/EnsurePrimaryProfile"
 	UserService_ListProfileIDsForAccount_FullMethodName      = "/voice.user.v1.UserService/ListProfileIDsForAccount"
+	UserService_ResolvePrimaryProfileIDs_FullMethodName      = "/voice.user.v1.UserService/ResolvePrimaryProfileIDs"
+	UserService_MarkAccountRegular_FullMethodName            = "/voice.user.v1.UserService/MarkAccountRegular"
 	UserService_GetProfile_FullMethodName                    = "/voice.user.v1.UserService/GetProfile"
 	UserService_GetProfiles_FullMethodName                   = "/voice.user.v1.UserService/GetProfiles"
 	UserService_UpdateProfile_FullMethodName                 = "/voice.user.v1.UserService/UpdateProfile"
@@ -58,6 +60,12 @@ type UserServiceClient interface {
 	EnsurePrimaryProfile(ctx context.Context, in *EnsurePrimaryProfileRequest, opts ...grpc.CallOption) (*EnsurePrimaryProfileResponse, error)
 	// S2S internal: profile ids for account-level social actions (block cascade, …).
 	ListProfileIDsForAccount(ctx context.Context, in *ListProfileIDsForAccountRequest, opts ...grpc.CallOption) (*ListProfileIDsForAccountResponse, error)
+	// S2S internal: resolve existing, non-deleted primary profiles for Auth-owned account ids.
+	// Missing accounts and accounts without a usable primary profile are omitted; this never provisions profiles.
+	ResolvePrimaryProfileIDs(ctx context.Context, in *ResolvePrimaryProfileIDsRequest, opts ...grpc.CallOption) (*ResolvePrimaryProfileIDsResponse, error)
+	// S2S internal: after Auth converts a guest account, clear the guest marker on its User-owned profiles.
+	// Idempotent: an already-regular or unknown account succeeds unchanged.
+	MarkAccountRegular(ctx context.Context, in *MarkAccountRegularRequest, opts ...grpc.CallOption) (*MarkAccountRegularResponse, error)
 	GetProfile(ctx context.Context, in *GetProfileRequest, opts ...grpc.CallOption) (*GetProfileResponse, error)
 	GetProfiles(ctx context.Context, in *GetProfilesRequest, opts ...grpc.CallOption) (*GetProfilesResponse, error)
 	UpdateProfile(ctx context.Context, in *UpdateProfileRequest, opts ...grpc.CallOption) (*UpdateProfileResponse, error)
@@ -110,6 +118,26 @@ func (c *userServiceClient) ListProfileIDsForAccount(ctx context.Context, in *Li
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListProfileIDsForAccountResponse)
 	err := c.cc.Invoke(ctx, UserService_ListProfileIDsForAccount_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *userServiceClient) ResolvePrimaryProfileIDs(ctx context.Context, in *ResolvePrimaryProfileIDsRequest, opts ...grpc.CallOption) (*ResolvePrimaryProfileIDsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResolvePrimaryProfileIDsResponse)
+	err := c.cc.Invoke(ctx, UserService_ResolvePrimaryProfileIDs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *userServiceClient) MarkAccountRegular(ctx context.Context, in *MarkAccountRegularRequest, opts ...grpc.CallOption) (*MarkAccountRegularResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MarkAccountRegularResponse)
+	err := c.cc.Invoke(ctx, UserService_MarkAccountRegular_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -367,6 +395,12 @@ type UserServiceServer interface {
 	EnsurePrimaryProfile(context.Context, *EnsurePrimaryProfileRequest) (*EnsurePrimaryProfileResponse, error)
 	// S2S internal: profile ids for account-level social actions (block cascade, …).
 	ListProfileIDsForAccount(context.Context, *ListProfileIDsForAccountRequest) (*ListProfileIDsForAccountResponse, error)
+	// S2S internal: resolve existing, non-deleted primary profiles for Auth-owned account ids.
+	// Missing accounts and accounts without a usable primary profile are omitted; this never provisions profiles.
+	ResolvePrimaryProfileIDs(context.Context, *ResolvePrimaryProfileIDsRequest) (*ResolvePrimaryProfileIDsResponse, error)
+	// S2S internal: after Auth converts a guest account, clear the guest marker on its User-owned profiles.
+	// Idempotent: an already-regular or unknown account succeeds unchanged.
+	MarkAccountRegular(context.Context, *MarkAccountRegularRequest) (*MarkAccountRegularResponse, error)
 	GetProfile(context.Context, *GetProfileRequest) (*GetProfileResponse, error)
 	GetProfiles(context.Context, *GetProfilesRequest) (*GetProfilesResponse, error)
 	UpdateProfile(context.Context, *UpdateProfileRequest) (*UpdateProfileResponse, error)
@@ -410,6 +444,12 @@ func (UnimplementedUserServiceServer) EnsurePrimaryProfile(context.Context, *Ens
 }
 func (UnimplementedUserServiceServer) ListProfileIDsForAccount(context.Context, *ListProfileIDsForAccountRequest) (*ListProfileIDsForAccountResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListProfileIDsForAccount not implemented")
+}
+func (UnimplementedUserServiceServer) ResolvePrimaryProfileIDs(context.Context, *ResolvePrimaryProfileIDsRequest) (*ResolvePrimaryProfileIDsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResolvePrimaryProfileIDs not implemented")
+}
+func (UnimplementedUserServiceServer) MarkAccountRegular(context.Context, *MarkAccountRegularRequest) (*MarkAccountRegularResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MarkAccountRegular not implemented")
 }
 func (UnimplementedUserServiceServer) GetProfile(context.Context, *GetProfileRequest) (*GetProfileResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetProfile not implemented")
@@ -536,6 +576,42 @@ func _UserService_ListProfileIDsForAccount_Handler(srv interface{}, ctx context.
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(UserServiceServer).ListProfileIDsForAccount(ctx, req.(*ListProfileIDsForAccountRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _UserService_ResolvePrimaryProfileIDs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolvePrimaryProfileIDsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).ResolvePrimaryProfileIDs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_ResolvePrimaryProfileIDs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).ResolvePrimaryProfileIDs(ctx, req.(*ResolvePrimaryProfileIDsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _UserService_MarkAccountRegular_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MarkAccountRegularRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).MarkAccountRegular(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_MarkAccountRegular_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).MarkAccountRegular(ctx, req.(*MarkAccountRegularRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -986,6 +1062,14 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListProfileIDsForAccount",
 			Handler:    _UserService_ListProfileIDsForAccount_Handler,
+		},
+		{
+			MethodName: "ResolvePrimaryProfileIDs",
+			Handler:    _UserService_ResolvePrimaryProfileIDs_Handler,
+		},
+		{
+			MethodName: "MarkAccountRegular",
+			Handler:    _UserService_MarkAccountRegular_Handler,
 		},
 		{
 			MethodName: "GetProfile",
