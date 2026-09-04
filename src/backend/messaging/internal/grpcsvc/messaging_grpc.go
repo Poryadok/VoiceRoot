@@ -735,13 +735,19 @@ func (s *MessagingGRPC) GetMessages(ctx context.Context, req *messagingv1.GetMes
 	if err := validateChatRefMessaging(req.GetChat()); err != nil {
 		return nil, err
 	}
-	if s.ChatGuard != nil {
-		if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
-			if errors.Is(err, store.ErrNotChatMember) {
-				return nil, status.Error(codes.PermissionDenied, "not a chat member")
-			}
-			return nil, status.Error(codes.Internal, err.Error())
+	if isNilDependency(s.ChatGuard) {
+		return nil, status.Error(codes.Unavailable, "chat membership unavailable")
+	}
+	if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
+		if errors.Is(err, store.ErrNotChatMember) {
+			return nil, status.Error(codes.PermissionDenied, "not a chat member")
 		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	dmPeerState, err := s.dmPeerStateForHistory(ctx, req.GetChat(), chatID, profileID)
+	if err != nil {
+		return nil, err
 	}
 
 	pageSize := int(req.GetPage().GetPageSize())
@@ -891,7 +897,48 @@ func (s *MessagingGRPC) GetMessages(ctx context.Context, req *messagingv1.GetMes
 			HasMore:    hasMore,
 		},
 	}
-	return &messagingv1.GetMessagesResponse{MessageList: ml}, nil
+	return &messagingv1.GetMessagesResponse{MessageList: ml, DmPeerState: dmPeerState}, nil
+}
+
+// dmPeerStateForHistory resolves only the other participant's Auth state for a
+// selected DM. It runs after membership and before history reads, so a failed
+// dependency cannot leak a partial page. Group and channel history intentionally
+// bypasses User and Auth and leaves the optional response field absent.
+func (s *MessagingGRPC) dmPeerStateForHistory(ctx context.Context, chat *chatv1.ChatRef, chatID, senderProfileID uuid.UUID) (*messagingv1.DmPeerState, error) {
+	if chat.GetType() != chatv1.ChatType_CHAT_TYPE_DM {
+		return nil, nil
+	}
+	if s == nil || isNilDependency(s.ChatGuard) || isNilDependency(s.UserProfiles) || isNilDependency(s.DeletedAccounts) {
+		return nil, status.Error(codes.Unavailable, "dm account status unavailable")
+	}
+
+	peerProfileID, err := s.ChatGuard.DMOtherProfileID(ctx, chatID, senderProfileID)
+	if err != nil || peerProfileID == uuid.Nil {
+		return nil, status.Error(codes.Unavailable, "dm account status unavailable")
+	}
+	senderAccountID, err := s.UserProfiles.AccountIDByProfileID(ctx, senderProfileID)
+	if err != nil || senderAccountID == uuid.Nil {
+		return nil, status.Error(codes.Unavailable, "dm account status unavailable")
+	}
+	peerAccountID, err := s.UserProfiles.AccountIDByProfileID(ctx, peerProfileID)
+	if err != nil || peerAccountID == uuid.Nil {
+		return nil, status.Error(codes.Unavailable, "dm account status unavailable")
+	}
+
+	deleted, err := s.DeletedAccounts.DeletedAmong(ctx, []uuid.UUID{senderAccountID, peerAccountID})
+	if err != nil || deleted == nil {
+		return nil, status.Error(codes.Unavailable, "dm account status unavailable")
+	}
+	for accountID := range deleted {
+		if accountID != senderAccountID && accountID != peerAccountID {
+			return nil, status.Error(codes.Unavailable, "dm account status unavailable")
+		}
+	}
+	state := messagingv1.DmPeerState_DM_PEER_STATE_ACTIVE
+	if _, deleted := deleted[peerAccountID]; deleted {
+		state = messagingv1.DmPeerState_DM_PEER_STATE_DELETED
+	}
+	return &state, nil
 }
 
 func (s *MessagingGRPC) GetMessage(ctx context.Context, req *messagingv1.GetMessageRequest) (*messagingv1.GetMessageResponse, error) {
