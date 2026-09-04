@@ -22,55 +22,38 @@ import 'support/inbox_reconciler_fakes.dart';
 void main() {
   group('T052 archive mutation reconciliation (RED)', () {
     testWidgets(
-      'keeps a successfully archived chat visible after its archive refresh when an older archive snapshot completes',
+      'keeps a confirmed archive mutation when a stale archive snapshot completes',
       (tester) async {
         final chats = _ArchiveMutationChatsFake();
-        chats.enqueue(
-          const InboxChatPageScript(
-            inbox: 'main',
-            cursor: null,
-            profileId: 'profile-a',
-            authorization: 'Bearer access-a',
-            result: ChatsApiOk(ChatListData(items: [])),
-          ),
-        );
-        chats.enqueue(
-          const InboxChatPageScript(
-            inbox: 'requests',
-            cursor: null,
-            profileId: 'profile-a',
-            authorization: 'Bearer access-a',
-            result: ChatsApiOk(ChatListData(items: [])),
-          ),
-        );
-        chats.enqueue(
-          const InboxChatPageScript(
-            inbox: 'archive',
-            cursor: null,
-            profileId: 'profile-a',
-            authorization: 'Bearer access-a',
-            result: ChatsApiOk(ChatListData(items: [])),
-            manual: true,
-          ),
-        );
-        chats.enqueue(
-          InboxChatPageScript(
-            inbox: 'archive',
-            cursor: null,
-            profileId: 'profile-a',
-            authorization: 'Bearer access-a',
-            result: ChatsApiOk(ChatListData(items: [inboxChatItem('chat-1')])),
-          ),
-        );
+        _enqueueSnapshot(chats, archiveItems: const [], mainItems: ['chat-1']);
+        _enqueueSnapshot(chats, archiveItems: const [], manualArchive: true);
         final auth = _AuthHarness();
         final container = _container(chats: chats, auth: auth);
         addTearDown(container.dispose);
+        InboxChatCall? staleArchiveCall;
+        Future<void>? staleReconcile;
+        addTearDown(() async {
+          final call = staleArchiveCall;
+          if (call != null && !call.completed) {
+            await chats.completeCall(
+              call,
+              result: const ChatsApiOk(ChatListData(items: [])),
+            );
+          }
+          await staleReconcile;
+        });
 
-        final reconcile = container
-            .read(inboxReconcilerProvider.notifier)
-            .reconcile();
+        final reconciler = container.read(inboxReconcilerProvider.notifier);
+        await reconciler.reconcile();
+        final initialArchive = container
+            .read(inboxReconcilerProvider)
+            .profileSnapshots['profile-a']![InboxScope.archive];
+        expect(initialArchive.items, isEmpty);
+        expect(initialArchive.isComplete, isTrue);
+
+        staleReconcile = reconciler.reconcile();
         await tester.pump();
-        final staleArchiveCall = chats.findCall(inbox: 'archive', cursor: null);
+        staleArchiveCall = chats.findCall(inbox: 'archive', cursor: null);
         expect(staleArchiveCall, isNotNull);
 
         final main = container.read(chatListControllerProvider.notifier)
@@ -87,11 +70,18 @@ void main() {
           ),
         ]);
 
-        // This is the archive view's fresh ListChats snapshot after the
-        // confirmed ArchiveChat mutation.
-        await container
-            .read(chatArchiveListControllerProvider.notifier)
-            .loadInitial();
+        final confirmedArchive = container
+            .read(inboxReconcilerProvider)
+            .profileSnapshots['profile-a']![InboxScope.archive];
+        expect(
+          confirmedArchive.items.map((item) => item.chatId),
+          ['chat-1'],
+          reason:
+              'the confirmed ArchiveChat mutation must update the authoritative '
+              'profile-scoped archive snapshot, not a legacy list',
+        );
+        expect(confirmedArchive.isComplete, isTrue);
+
         await tester.pumpWidget(_testApp(container));
         await tester.pump();
         expect(find.byKey(ChatArchiveScreen.tileKey('chat-1')), findsOneWidget);
@@ -100,9 +90,14 @@ void main() {
           staleArchiveCall!,
           result: const ChatsApiOk(ChatListData(items: [])),
         );
-        await reconcile;
+        await staleReconcile;
         await tester.pump();
 
+        final afterStaleArchive = container
+            .read(inboxReconcilerProvider)
+            .profileSnapshots['profile-a']![InboxScope.archive];
+        expect(afterStaleArchive.items.map((item) => item.chatId), ['chat-1']);
+        expect(afterStaleArchive.isComplete, isTrue);
         expect(
           find.byKey(ChatArchiveScreen.tileKey('chat-1')),
           findsOneWidget,
@@ -154,6 +149,9 @@ ProviderContainer _container({
       ),
       voiceChatsClientProvider.overrideWithValue(chats),
       chatListControllerProvider.overrideWith(_NoAutoChatListController.new),
+      chatArchiveListControllerProvider.overrideWith(
+        _NoAutoArchiveListController.new,
+      ),
     ],
   );
 }
@@ -163,6 +161,40 @@ class _NoAutoChatListController extends ChatListController {
 
   @override
   Future<void> loadInitial() async {}
+}
+
+class _NoAutoArchiveListController extends ChatArchiveListController {
+  _NoAutoArchiveListController(super.ref);
+
+  @override
+  Future<void> loadInitial() async {}
+}
+
+void _enqueueSnapshot(
+  _ArchiveMutationChatsFake chats, {
+  required List<String> archiveItems,
+  List<String> mainItems = const [],
+  bool manualArchive = false,
+}) {
+  for (final scope in InboxScope.values) {
+    final ids = switch (scope) {
+      InboxScope.main => mainItems,
+      InboxScope.archive => archiveItems,
+      InboxScope.requests => const <String>[],
+    };
+    chats.enqueue(
+      InboxChatPageScript(
+        inbox: scope.name,
+        cursor: null,
+        profileId: 'profile-a',
+        authorization: 'Bearer access-a',
+        manual: scope == InboxScope.archive && manualArchive,
+        result: ChatsApiOk(
+          ChatListData(items: [for (final id in ids) inboxChatItem(id)]),
+        ),
+      ),
+    );
+  }
 }
 
 class _ArchiveMutationChatsFake extends InboxReconcilerChatsFake {

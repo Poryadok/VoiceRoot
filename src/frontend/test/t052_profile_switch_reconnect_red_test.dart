@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -27,7 +28,7 @@ void main() {
     test(
       'does not start B global ListChats until its awaited WS reconnect succeeds',
       () async {
-        final auth = _AuthHarness();
+        final auth = _SwitchingAuthHarness();
         final chats = InboxReconcilerChatsFake(
           profileByAuthorization: const {
             'Bearer access-a': 'profile-a',
@@ -55,6 +56,16 @@ void main() {
         final hub = _DeferredProfileSwitchRealtimeHub();
         final container = _container(chats: chats, auth: auth, hub: hub);
         addTearDown(container.dispose);
+        addTearDown(() async {
+          for (final call in _profileBCalls(chats)) {
+            if (!call.completed) {
+              await chats.completeCall(
+                call,
+                result: const ChatsApiOk(ChatListData(items: [])),
+              );
+            }
+          }
+        });
 
         // Both listeners must be installed before the A -> B boundary.
         container.read(profileContextCoordinatorProvider);
@@ -62,22 +73,11 @@ void main() {
         container.read(realtimeLinkStatusProvider.notifier).state =
             RealtimeLinkStatus.reconnecting;
 
-        auth.controller.state = const AuthState(
-          session: AuthSession(
-            accessToken: 'access-b',
-            refreshToken: 'refresh-b',
-            accountId: 'account-1',
-            activeProfileId: 'profile-b',
-            expiresInSeconds: 900,
-          ),
-        );
+        expect(await auth.controller.switchActiveProfile('profile-b'), isNull);
         await pumpEventQueue();
         final callsBeforeReconnectSuccess = _profileBCalls(chats).length;
 
-        hub.completeReconnect();
-        await pumpEventQueue();
-        container.read(realtimeLinkStatusProvider.notifier).state =
-            RealtimeLinkStatus.connected;
+        hub.emitReconnectHello(container);
         await pumpEventQueue();
         final callsAfterReconnectSuccess = _profileBCalls(chats);
 
@@ -102,6 +102,7 @@ void main() {
           ),
           isTrue,
         );
+        expect(auth.switchRequestCount, 1);
 
         for (final call in callsAfterReconnectSuccess) {
           await chats.completeCall(
@@ -136,7 +137,7 @@ List<InboxChatCall> _profileBCalls(InboxReconcilerChatsFake chats) => chats
 
 ProviderContainer _container({
   required InboxReconcilerChatsFake chats,
-  required _AuthHarness auth,
+  required _SwitchingAuthHarness auth,
   required RealtimeHub hub,
 }) {
   return ProviderContainer(
@@ -176,26 +177,45 @@ class _NoAutoChatListController extends ChatListController {
   Future<void> loadInitial() async {}
 }
 
-class _AuthHarness {
-  late final AuthController controller =
-      AuthController(
-          authClient: VoiceAuthClient(
-            gateway: gatewayHttpForTest(
-              MockClient((_) async => http.Response('{}', 500)),
+class _SwitchingAuthHarness {
+  _SwitchingAuthHarness() {
+    final mock = MockClient((request) async {
+      if (request.url.path != '/api/v1/auth/switch-profile') {
+        return http.Response('not found', 404);
+      }
+      switchRequestCount++;
+      expect(request.method, 'POST');
+      expect(request.headers['authorization'], 'Bearer access-a');
+      expect(jsonDecode(request.body), containsPair('profile_id', 'profile-b'));
+      return utf8JsonResponse(
+        jsonEncode({
+          'access_token': 'access-b',
+          'refresh_token': 'refresh-b',
+          'account_id': 'account-1',
+          'profile_id': 'profile-b',
+          'expires_in_seconds': 900,
+        }),
+      );
+    });
+    controller =
+        AuthController(
+            authClient: VoiceAuthClient(gateway: gatewayHttpForTest(mock)),
+            storage: InMemoryAuthSessionStorage(),
+            guestCredentialsStorage: InMemoryGuestCredentialsStorage(),
+          )
+          ..state = const AuthState(
+            session: AuthSession(
+              accessToken: 'access-a',
+              refreshToken: 'refresh-a',
+              accountId: 'account-1',
+              activeProfileId: 'profile-a',
+              expiresInSeconds: 900,
             ),
-          ),
-          storage: InMemoryAuthSessionStorage(),
-          guestCredentialsStorage: InMemoryGuestCredentialsStorage(),
-        )
-        ..state = const AuthState(
-          session: AuthSession(
-            accessToken: 'access-a',
-            refreshToken: 'refresh-a',
-            accountId: 'account-1',
-            activeProfileId: 'profile-a',
-            expiresInSeconds: 900,
-          ),
-        );
+          );
+  }
+
+  late final AuthController controller;
+  var switchRequestCount = 0;
 }
 
 class _DeferredProfileSwitchRealtimeHub extends RealtimeHub {
@@ -206,7 +226,11 @@ class _DeferredProfileSwitchRealtimeHub extends RealtimeHub {
   @override
   Future<void> reconnectWithNewSession() => _reconnect.future;
 
-  void completeReconnect() => _reconnect.complete();
+  void emitReconnectHello(ProviderContainer container) {
+    container.read(realtimeLinkStatusProvider.notifier).state =
+        RealtimeLinkStatus.connected;
+    if (!_reconnect.isCompleted) _reconnect.complete();
+  }
 
   @override
   Future<void> dispose() async {}
