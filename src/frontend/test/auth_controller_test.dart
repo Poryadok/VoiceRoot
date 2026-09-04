@@ -608,6 +608,54 @@ void main() {
     expect(await storage.read(), isNull);
   });
 
+  test('switch started during logout cannot restore a session', () async {
+    const sessionA = AuthSession(
+      accessToken: 'access-a',
+      refreshToken: 'refresh-a',
+      accountId: 'acc-1',
+      activeProfileId: 'profile-a',
+      expiresInSeconds: 900,
+    );
+    const sessionB = AuthSession(
+      accessToken: 'access-b',
+      refreshToken: 'refresh-b',
+      accountId: 'acc-1',
+      activeProfileId: 'profile-b',
+      expiresInSeconds: 900,
+    );
+    final logoutRequested = Completer<void>();
+    final logoutResponse = Completer<http.Response>();
+    final switchResponse = Completer<http.Response>();
+    final storage = _DeferredAuthSessionStorage(persisted: sessionA);
+    final mock = MockClient((req) async {
+      if (req.url.path == '/api/v1/auth/logout') {
+        if (!logoutRequested.isCompleted) logoutRequested.complete();
+        return logoutResponse.future;
+      }
+      if (req.url.path == '/api/v1/auth/switch-profile') {
+        return switchResponse.future;
+      }
+      return http.Response('not found', 404);
+    });
+    final container = buildContainer(mock: mock, storage: storage);
+    addTearDown(container.dispose);
+    final controller = container.read(authControllerProvider.notifier)
+      ..state = const AuthState(session: sessionA);
+
+    final logout = controller.logout();
+    await logoutRequested.future;
+    final switchB = controller.switchActiveProfile('profile-b');
+
+    logoutResponse.complete(http.Response('', 204));
+    await logout;
+    switchResponse.complete(http.Response(jsonEncode(sessionB.toJson()), 200));
+    await switchB;
+
+    expect(container.read(authControllerProvider).session, isNull);
+    expect(container.read(authorizationHeaderProvider), isNull);
+    expect(await storage.read(), isNull);
+  });
+
   test('logout clears session', () async {
     final mock = MockClient((req) async {
       if (req.url.path == '/api/v1/auth/logout') {
