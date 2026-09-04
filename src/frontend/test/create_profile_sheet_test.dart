@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,6 +17,7 @@ import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/subscription_providers.dart';
 import 'package:voice_frontend/ui/profile/create_profile_sheet.dart';
+import 'package:voice_frontend/ui/profile/profile_edit_sheet.dart';
 
 import 'support/test_voice_token_catalog.dart';
 
@@ -35,8 +37,10 @@ class _MemoryAuthStorage implements AuthSessionStorage {
 void main() {
   testWidgets('create profile sends work preset in POST body', (tester) async {
     String? capturedBody;
+    final operationTrace = <String>[];
     final mock = MockClient((req) async {
       if (req.url.path == '/api/v1/users/profiles' && req.method == 'POST') {
+        operationTrace.add('create');
         capturedBody = req.body;
         return http.Response(
           jsonEncode({
@@ -54,6 +58,7 @@ void main() {
         );
       }
       if (req.url.path == '/api/v1/auth/switch-profile') {
+        operationTrace.add('switch');
         return http.Response(
           jsonEncode({
             'access_token': 'after',
@@ -64,6 +69,29 @@ void main() {
           }),
           200,
         );
+      }
+      if (req.url.path == '/api/v1/users/me/avatar/presigned-upload') {
+        operationTrace.add('presign');
+        return http.Response(
+          jsonEncode({
+            'http_method': 'PUT',
+            'upload_url': 'https://upload.test/avatar',
+            'required_headers': {'Content-Type': 'image/png'},
+            'max_bytes': 5242880,
+            'expires_at': '2026-06-02T18:00:00Z',
+            'public_url': 'https://cdn.test/avatar.png',
+            'object_key': 'avatars/profile-new/avatar.png',
+          }),
+          200,
+        );
+      }
+      if (req.url.host == 'upload.test') {
+        operationTrace.add('upload');
+        return http.Response('', 204);
+      }
+      if (req.url.path == '/api/v1/users/me' && req.method == 'PATCH') {
+        operationTrace.add('patch');
+        return http.Response('{}', 200);
       }
       if (req.url.path == '/api/v1/users/profiles') {
         return http.Response(
@@ -133,7 +161,15 @@ void main() {
         child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: const Scaffold(body: CreateProfileSheet()),
+          home: Scaffold(
+            body: CreateProfileSheet(
+              avatarPicker: () async => ProfileAvatarFile(
+                bytes: Uint8List.fromList([1, 2, 3]),
+                contentType: 'image/png',
+                name: 'avatar.png',
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -143,6 +179,8 @@ void main() {
       find.byKey(CreateProfileSheet.displayNameFieldKey),
       'Work Alt',
     );
+    await tester.tap(find.byKey(CreateProfileSheet.avatarButtonKey));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Work'));
     await tester.pumpAndSettle();
     final accentPicker = find.byKey(CreateProfileSheet.accentPickerKey);
@@ -151,7 +189,11 @@ void main() {
       find.descendant(of: accentPicker, matching: find.byType(GestureDetector)),
     );
     expect(swatches.length, greaterThan(1));
-    await tester.tap(find.descendant(of: accentPicker, matching: find.byType(GestureDetector)).at(2));
+    await tester.tap(
+      find
+          .descendant(of: accentPicker, matching: find.byType(GestureDetector))
+          .at(2),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(CreateProfileSheet.submitKey));
     await tester.pumpAndSettle();
@@ -161,5 +203,140 @@ void main() {
     expect(body['preset'], 'work');
     expect(body['display_name'], 'Work Alt');
     expect(body['accent_color'], '#F0A8A8');
+    expect(operationTrace, ['create', 'switch', 'presign', 'upload', 'patch']);
   });
+
+  testWidgets(
+    'create profile switch failure keeps sheet open and does not upload avatar',
+    (tester) async {
+      var createRequests = 0;
+      var avatarPresignRequests = 0;
+      var avatarUploadRequests = 0;
+      var avatarUpdateRequests = 0;
+      final oldSession = const AuthSession(
+        accessToken: 'before',
+        refreshToken: 'refresh',
+        expiresInSeconds: 900,
+        accountId: 'account-1',
+        activeProfileId: 'profile-primary',
+      );
+      final storage = _MemoryAuthStorage().._session = oldSession;
+      AuthController? authController;
+      final mock = MockClient((req) async {
+        if (req.url.path == '/api/v1/users/profiles' && req.method == 'POST') {
+          createRequests++;
+          return http.Response(
+            jsonEncode({
+              'profile': {
+                'id': 'profile-new',
+                'account_id': 'account-1',
+                'username': 'user',
+                'discriminator': '1234',
+                'display_name': 'Work Alt',
+                'is_primary': false,
+              },
+            }),
+            200,
+          );
+        }
+        if (req.url.path == '/api/v1/auth/switch-profile') {
+          return http.Response(
+            jsonEncode({'error': 'profile_frozen', 'message': 'switch denied'}),
+            412,
+          );
+        }
+        if (req.url.path == '/api/v1/users/me/avatar/presigned-upload') {
+          avatarPresignRequests++;
+          return http.Response('{}', 500);
+        }
+        if (req.url.host == 'upload.test') {
+          avatarUploadRequests++;
+          return http.Response('', 200);
+        }
+        if (req.url.path == '/api/v1/users/me' && req.method == 'PATCH') {
+          avatarUpdateRequests++;
+          return http.Response('{}', 200);
+        }
+        if (req.url.path == '/api/v1/users/profiles') {
+          return http.Response(
+            jsonEncode({
+              'profile_list': {'profiles': const []},
+            }),
+            200,
+          );
+        }
+        return http.Response('not found', 404);
+      });
+      final gateway = GatewayHttpClient(
+        httpClient: mock,
+        config: const GatewayConfig(baseUrl: 'http://api.test'),
+        authorizationProvider: () => 'Bearer before',
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...voiceThemeTestOverrides(),
+            authSessionStorageProvider.overrideWithValue(storage),
+            guestCredentialsStorageProvider.overrideWithValue(
+              InMemoryGuestCredentialsStorage(),
+            ),
+            gatewayConfigProvider.overrideWithValue(
+              const GatewayConfig(baseUrl: 'http://api.test'),
+            ),
+            gatewayHttpClientProvider.overrideWithValue(gateway),
+            voiceAuthClientProvider.overrideWithValue(
+              VoiceAuthClient(gateway: gateway),
+            ),
+            myProfilesProvider.overrideWith((_) async => const []),
+            subscriptionTierProvider.overrideWith((_) => 'free'),
+            authControllerProvider.overrideWith((ref) {
+              final controller = AuthController(
+                authClient: ref.watch(voiceAuthClientProvider),
+                storage: ref.watch(authSessionStorageProvider),
+                guestCredentialsStorage: ref.watch(
+                  guestCredentialsStorageProvider,
+                ),
+              );
+              controller.state = AuthState(session: oldSession);
+              authController = controller;
+              return controller;
+            }),
+          ],
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+              body: CreateProfileSheet(
+                avatarPicker: () async => ProfileAvatarFile(
+                  bytes: Uint8List.fromList([1, 2, 3]),
+                  contentType: 'image/png',
+                  name: 'avatar.png',
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(CreateProfileSheet.avatarButtonKey));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(CreateProfileSheet.displayNameFieldKey),
+        'Work Alt',
+      );
+      await tester.tap(find.byKey(CreateProfileSheet.submitKey));
+      await tester.pumpAndSettle();
+
+      expect(createRequests, 1);
+      expect(avatarPresignRequests, 0);
+      expect(avatarUploadRequests, 0);
+      expect(avatarUpdateRequests, 0);
+      expect(find.byKey(CreateProfileSheet.sheetKey), findsOneWidget);
+      expect(find.text('switch denied'), findsOneWidget);
+      expect(authController!.state.session!.activeProfileId, 'profile-primary');
+      expect(storage._session, oldSession);
+    },
+  );
 }
