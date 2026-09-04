@@ -9,6 +9,7 @@ import io.lettuce.core.RedisFuture;
 import io.lettuce.core.TransactionResult;
 import io.lettuce.core.api.async.RedisAsyncCommands;
 import org.springframework.data.redis.connection.RedisConnection;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
@@ -18,59 +19,70 @@ import org.springframework.data.redis.core.StringRedisTemplate;
  */
 final class StringRedisSessionEpochCommands implements RedisSessionEpochCommands {
   private final StringRedisTemplate redis;
+  private final RedisConnectionFactory connectionFactory;
 
   StringRedisSessionEpochCommands(StringRedisTemplate redis) {
     if (redis == null) {
       throw new IllegalArgumentException("redis template is required");
     }
     this.redis = redis;
+    this.connectionFactory = redis.getRequiredConnectionFactory();
+  }
+
+  StringRedisSessionEpochCommands(
+      StringRedisTemplate redis, RedisConnectionFactory connectionFactory) {
+    if (redis == null) {
+      throw new IllegalArgumentException("redis template is required");
+    }
+    if (connectionFactory == null) {
+      throw new IllegalArgumentException("redis connection factory is required");
+    }
+    this.redis = redis;
+    this.connectionFactory = connectionFactory;
   }
 
   @Override
   public long atomicMaxWithoutExpiry(String key, long candidate, Duration timeout) {
     long deadlineNanos = System.nanoTime() + timeout.toNanos();
-    Long recorded =
-        redis.execute(
-            new RedisCallback<>() {
-              @Override
-              public Long doInRedis(RedisConnection connection) {
-                RedisAsyncCommands<byte[], byte[]> commands = commandsFor(connection);
-                byte[] encodedKey = key.getBytes(StandardCharsets.UTF_8);
-                while (System.nanoTime() < deadlineNanos && !Thread.currentThread().isInterrupted()) {
-                  await(commands.watch(encodedKey), deadlineNanos, connection);
-                  boolean watched = true;
-                  boolean queued = false;
-                  try {
-                    byte[] currentRaw = await(commands.get(encodedKey), deadlineNanos, connection);
-                    long current = currentRaw == null ? 0L : parsePositive(new String(currentRaw, StandardCharsets.UTF_8));
-                    long next = Math.max(current, candidate);
-                    await(commands.multi(), deadlineNanos, connection);
-                    queued = true;
-                    await(
-                        commands.set(encodedKey, Long.toString(next).getBytes(StandardCharsets.UTF_8)),
-                        deadlineNanos,
-                        connection);
-                    TransactionResult result = await(commands.exec(), deadlineNanos, connection);
-                    queued = false;
-                    watched = false;
-                    if (!result.wasDiscarded() && !result.isEmpty()) {
-                      return next;
-                    }
-                  } finally {
-                    if (queued) {
-                      cancel(commands.discard(), connection);
-                    } else if (watched) {
-                      cancel(commands.unwatch(), connection);
-                    }
-                  }
-                }
-                throw new SessionEpochFloorUnavailableException("session epoch floor command timeout");
-              }
-            });
-    if (recorded == null) {
-      throw new SessionEpochFloorUnavailableException("session epoch floor Redis unavailable");
+    RedisConnection connection = connectionFactory.getConnection();
+    try {
+      // Spring allocates a dedicated Lettuce connection for a pipelined RedisConnection. Raw
+      // WATCH/MULTI/EXEC calls below therefore cannot interleave with another CAS operation.
+      connection.openPipeline();
+      RedisAsyncCommands<byte[], byte[]> commands = commandsFor(connection);
+      byte[] encodedKey = key.getBytes(StandardCharsets.UTF_8);
+      while (System.nanoTime() < deadlineNanos && !Thread.currentThread().isInterrupted()) {
+        await(commands.watch(encodedKey), deadlineNanos, connection);
+        boolean watched = true;
+        boolean queued = false;
+        try {
+          byte[] currentRaw = await(commands.get(encodedKey), deadlineNanos, connection);
+          long current = currentRaw == null ? 0L : parsePositive(new String(currentRaw, StandardCharsets.UTF_8));
+          long next = Math.max(current, candidate);
+          await(commands.multi(), deadlineNanos, connection);
+          queued = true;
+          await(
+              commands.set(encodedKey, Long.toString(next).getBytes(StandardCharsets.UTF_8)),
+              deadlineNanos,
+              connection);
+          TransactionResult result = await(commands.exec(), deadlineNanos, connection);
+          queued = false;
+          watched = false;
+          if (!result.wasDiscarded() && !result.isEmpty()) {
+            return next;
+          }
+        } finally {
+          if (queued) {
+            cancel(commands.discard(), connection);
+          } else if (watched) {
+            cancel(commands.unwatch(), connection);
+          }
+        }
+      }
+      throw new SessionEpochFloorUnavailableException("session epoch floor command timeout");
+    } finally {
+      closeDedicated(connection);
     }
-    return recorded;
   }
 
   @Override
@@ -134,6 +146,16 @@ final class StringRedisSessionEpochCommands implements RedisSessionEpochCommands
   private static void abort(RedisFuture<?> future, RedisConnection connection) {
     future.cancel(true);
     connection.close();
+  }
+
+  private static void closeDedicated(RedisConnection connection) {
+    try {
+      if (connection.isPipelined()) {
+        connection.closePipeline();
+      }
+    } finally {
+      connection.close();
+    }
   }
 
   private static long parsePositive(String raw) {
