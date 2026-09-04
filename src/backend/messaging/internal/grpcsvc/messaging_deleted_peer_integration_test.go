@@ -166,7 +166,7 @@ func TestMessagingDeletedPeer_SendMessageDeniedInBothDirectionsWithoutWritesOrEv
 
 	require.Equal(t, 0, messageCountForDeletedPeerTest(t, ctx, pool, chatID))
 	require.Zero(t, events.eventCount(), "denied sends must not publish message events")
-	require.Equal(t, [][]uuid.UUID{{acctB}, {acctA}}, deleted.calls(), "each valid DM attempt must consult Auth with its peer account only")
+	require.Equal(t, [][]uuid.UUID{{acctA, acctB}, {acctB, acctA}}, deleted.calls(), "each valid DM attempt must query Auth in sender-then-peer account order")
 }
 
 func TestMessagingDeletedPeer_ForwardMessageWithCommentaryDeniedBeforeWritesOrEvents(t *testing.T) {
@@ -206,7 +206,7 @@ func TestMessagingDeletedPeer_ForwardMessageWithCommentaryDeniedBeforeWritesOrEv
 
 	require.Equal(t, 0, messageCountForDeletedPeerTest(t, ctx, pool, targetChat), "commentary and forwarded message must both be absent")
 	require.Zero(t, events.eventCount(), "denied forwards must not publish message events")
-	require.Equal(t, [][]uuid.UUID{{acctB}, {acctA}}, deleted.calls(), "forward gates must query the target DM peer only")
+	require.Equal(t, [][]uuid.UUID{{acctA, acctB}, {acctB, acctA}}, deleted.calls(), "forward gates must query Auth in forwarder-then-target-peer account order")
 }
 
 func TestMessagingDeletedPeer_NonMemberDeniedBeforeDeletedAccountLookup(t *testing.T) {
@@ -292,7 +292,7 @@ func TestMessagingDeletedPeer_MissingOrFailingCheckerFailsClosed(t *testing.T) {
 			if tc.checker != nil {
 				want := [][]uuid.UUID{}
 				if tc.name == "checker unavailable" {
-					want = [][]uuid.UUID{{acctB}, {acctB}}
+					want = [][]uuid.UUID{{acctA, acctB}, {acctA, acctB}}
 				}
 				require.Equal(t, want, tc.checker.calls())
 			}
@@ -333,7 +333,7 @@ func TestMessagingDeletedPeer_IdempotentReplayDeniedAfterDeletion(t *testing.T) 
 	requireDeletedPeerPermissionDenied(t, err, acctA, acctB)
 	require.Equal(t, 1, messageCountForDeletedPeerTest(t, ctx, pool, chatID), "replay may not create another row")
 	require.Equal(t, 1, events.eventCount(), "replay after deletion may not publish another event")
-	require.Equal(t, [][]uuid.UUID{{acctB}, {acctB}}, deleted.calls(), "both initial send and replay must consult the DM peer before returning")
+	require.Equal(t, [][]uuid.UUID{{acctA, acctB}, {acctA, acctB}}, deleted.calls(), "both initial send and replay must query Auth in sender-then-peer account order before returning")
 }
 
 func TestMessagingDeletedPeer_GroupAndChannelDoNotConsultChecker(t *testing.T) {
