@@ -578,7 +578,11 @@ Future<void> _showChatRowActions(
         });
       }
     case 'archive':
-      await controller.archiveChat(item.chatId, archived: true);
+      await controller.archiveChat(
+        item.chatId,
+        archived: true,
+        sourceItem: item,
+      );
   }
 }
 

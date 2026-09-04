@@ -462,17 +462,34 @@ class ChatListController extends StateNotifier<ChatListState> {
     };
   }
 
-  Future<String?> archiveChat(String chatId, {required bool archived}) async {
+  Future<String?> archiveChat(
+    String chatId, {
+    required bool archived,
+    ChatListItem? sourceItem,
+  }) async {
     final session = _ref.read(authControllerProvider).session;
     if (session == null) return 'not_authenticated';
     final auth = session.authorizationHeader;
     final profileId = session.activeProfileId;
-    ChatListItem? archivedItem;
+    ChatListItem? archivedItem = sourceItem;
     if (archived) {
-      for (final item in state.items) {
-        if (item.chatId == chatId) {
-          archivedItem = item;
-          break;
+      if (archivedItem == null) {
+        for (final item in state.items) {
+          if (item.chatId == chatId) {
+            archivedItem = item;
+            break;
+          }
+        }
+      }
+      final snapshot = _ref
+          .read(inboxReconcilerProvider)
+          .profileSnapshots[profileId]?[InboxScope.main];
+      if (archivedItem == null && snapshot != null) {
+        for (final item in snapshot.items) {
+          if (item.chatId == chatId) {
+            archivedItem = item;
+            break;
+          }
         }
       }
     }

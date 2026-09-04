@@ -136,6 +136,7 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
       _generation++;
       _pendingItems.clear();
       _removedChatIds.clear();
+      _archivedMutations.clear();
       _pendingSession = nextSession == null
           ? null
           : _PendingInboxSession(
@@ -152,10 +153,11 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
   ProviderSubscription<RealtimeLinkStatus>? _realtimeSub;
   ProviderSubscription<AuthState>? _authSub;
   int _generation = 0;
+  int _archiveMutationRevision = 0;
   _PendingInboxSession? _pendingSession;
   final Map<InboxScope, List<ChatListItem>> _pendingItems = {};
   final Map<String, Map<InboxScope, Set<String>>> _removedChatIds = {};
-  final Map<String, Map<String, ChatListItem>> _archivedMutations = {};
+  final Map<String, Map<String, _ArchivedMutation>> _archivedMutations = {};
 
   @override
   void dispose() {
@@ -221,6 +223,11 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
       return;
     }
     final profileId = expectedProfileId;
+    if (scope == InboxScope.archive) {
+      final mutations = _archivedMutations[profileId];
+      mutations?.remove(chatId);
+      if (mutations?.isEmpty ?? false) _archivedMutations.remove(profileId);
+    }
     _removedChatIds
         .putIfAbsent(profileId, () => <InboxScope, Set<String>>{})
         .putIfAbsent(scope, () => <String>{})
@@ -268,8 +275,11 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
     // flight. That page may complete, but cannot erase this newer mutation.
     _archivedMutations.putIfAbsent(
       expectedProfileId,
-      () => <String, ChatListItem>{},
-    )[item.chatId] = item;
+      () => <String, _ArchivedMutation>{},
+    )[item.chatId] = _ArchivedMutation(
+      item: item,
+      revision: ++_archiveMutationRevision,
+    );
     final main = profile[InboxScope.main];
     final archive = profile[InboxScope.archive];
     final updatedMain = main.copyWith(
@@ -315,6 +325,8 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
 
     while (true) {
       final requestedCursor = pageCursor;
+      final archiveMutationRevisionAtRequest =
+          scope == InboxScope.archive ? _archiveMutationRevision : null;
       final result = await _ref
           .read(voiceChatsClientProvider)
           .listChats(
@@ -333,6 +345,7 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
             items: data.items,
             nextCursor: _nonEmptyCursor(data.nextCursor),
             replacesPage: replacesPage,
+            archiveMutationRevisionAtRequest: archiveMutationRevisionAtRequest,
           );
           if (!_isCurrent(generation, profileId)) return;
           _syncDmPeers(
@@ -417,6 +430,7 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
     required List<ChatListItem> items,
     required String? nextCursor,
     required bool replacesPage,
+    required int? archiveMutationRevisionAtRequest,
   }) {
     if (!_isCurrent(generation, profileId)) return;
     final current =
@@ -432,7 +446,11 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
     final protectedPending = scope == InboxScope.archive
         ? mergeInboxRows(
             pending,
-            _archivedMutations[profileId]?.values ?? const [],
+            _protectedArchiveItems(
+              profileId,
+              archiveMutationRevisionAtRequest!,
+              acceptedItems,
+            ),
           )
         : pending;
     _pendingItems[scope] = protectedPending;
@@ -461,13 +479,7 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
   }) {
     if (!_isCurrent(generation, profileId)) return;
     final current = state.profileSnapshots[profileId]![scope];
-    final pendingItems = _pendingItems.remove(scope) ?? current.items;
-    final authoritativeItems = scope == InboxScope.archive
-        ? mergeInboxRows(
-            pendingItems,
-            _archivedMutations[profileId]?.values ?? const [],
-          )
-        : pendingItems;
+    final authoritativeItems = _pendingItems.remove(scope) ?? current.items;
     _replaceScope(
       generation: generation,
       profileId: profileId,
@@ -481,6 +493,26 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
         isComplete: true,
       ),
     );
+  }
+
+  Iterable<ChatListItem> _protectedArchiveItems(
+    String profileId,
+    int archiveMutationRevisionAtRequest,
+    Iterable<ChatListItem> acceptedItems,
+  ) {
+    final mutations = _archivedMutations[profileId];
+    if (mutations == null) return const [];
+    final returnedIds = acceptedItems.map((item) => item.chatId).toSet();
+    mutations.removeWhere(
+      (chatId, mutation) =>
+          mutation.revision <= archiveMutationRevisionAtRequest &&
+          returnedIds.contains(chatId),
+    );
+    if (mutations.isEmpty) {
+      _archivedMutations.remove(profileId);
+      return const [];
+    }
+    return mutations.values.map((mutation) => mutation.item);
   }
 
   void _failScope({
@@ -570,6 +602,13 @@ class _PendingInboxSession {
 
   final String profileId;
   final String authorization;
+}
+
+class _ArchivedMutation {
+  const _ArchivedMutation({required this.item, required this.revision});
+
+  final ChatListItem item;
+  final int revision;
 }
 
 /// Merges current rows with newer authoritative metadata while preserving order.
