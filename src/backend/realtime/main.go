@@ -169,7 +169,21 @@ func main() {
 
 	startupHandler.set(httpserver.Wrap(
 		voiceprom.MountMetricsOnHealth(
-			newServiceHandlerWithPresence(serviceName, config.tokenValidator, chatLister, hub, rf, instanceID, presenceUpdater, dap, ready),
+			newServiceHandlerWithPresenceAndSessionEpoch(
+				serviceName,
+				config.tokenValidator,
+				chatLister,
+				hub,
+				rf,
+				instanceID,
+				presenceUpdater,
+				dap,
+				ready,
+				wsSessionEpochPolicy{
+					Strict: config.sessionEpochStrict,
+					Floor:  config.sessionEpochFloor,
+				},
+			),
 			metricsReg,
 		),
 		logger,

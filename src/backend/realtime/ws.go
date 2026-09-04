@@ -29,6 +29,10 @@ func newServiceHandler(service string, tv tokenValidator, lister chatBootstrapLi
 }
 
 func newServiceHandlerWithPresence(service string, tv tokenValidator, lister chatBootstrapLister, hub *wsHub, rf *redisFanout, instanceID string, presence presenceUpdater, dap deliveryAckPublisher, ready readinessDeps) http.Handler {
+	return newServiceHandlerWithPresenceAndSessionEpoch(service, tv, lister, hub, rf, instanceID, presence, dap, ready, wsSessionEpochPolicy{})
+}
+
+func newServiceHandlerWithPresenceAndSessionEpoch(service string, tv tokenValidator, lister chatBootstrapLister, hub *wsHub, rf *redisFanout, instanceID string, presence presenceUpdater, dap deliveryAckPublisher, ready readinessDeps, policy wsSessionEpochPolicy) http.Handler {
 	if hub == nil {
 		hub = newWSHub()
 	}
@@ -38,11 +42,15 @@ func newServiceHandlerWithPresence(service string, tv tokenValidator, lister cha
 	mux := http.NewServeMux()
 	mux.Handle("/health", healthOnly(service))
 	mux.Handle("/ready", readinessHandler(service, ready))
-	mux.Handle("/ws", newWSHandler(tv, lister, hub, rf, instanceID, presence, dap))
+	mux.Handle("/ws", newWSHandlerWithSessionEpoch(tv, lister, hub, rf, instanceID, presence, dap, policy))
 	return mux
 }
 
 func newWSHandler(tv tokenValidator, lister chatBootstrapLister, hub *wsHub, rf *redisFanout, instanceID string, presence presenceUpdater, dap deliveryAckPublisher) http.Handler {
+	return newWSHandlerWithSessionEpoch(tv, lister, hub, rf, instanceID, presence, dap, wsSessionEpochPolicy{})
+}
+
+func newWSHandlerWithSessionEpoch(tv tokenValidator, lister chatBootstrapLister, hub *wsHub, rf *redisFanout, instanceID string, presence presenceUpdater, dap deliveryAckPublisher, policy wsSessionEpochPolicy) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if tv == nil {
 			observeWSConnectFail()
@@ -82,6 +90,11 @@ func newWSHandler(tv tokenValidator, lister chatBootstrapLister, hub *wsHub, rf 
 			writeJSONError(w, http.StatusUnauthorized, "invalid_token")
 			return
 		}
+		if !policy.authorizeUpgrade(claims) {
+			observeWSConnectFail()
+			writeJSONError(w, http.StatusUnauthorized, "invalid_token")
+			return
+		}
 
 		up := websocket.Upgrader{
 			ReadBufferSize:  1024,
@@ -99,7 +112,7 @@ func newWSHandler(tv tokenValidator, lister chatBootstrapLister, hub *wsHub, rf 
 		}
 		requestID := strings.TrimSpace(r.Header.Get("X-Request-Id"))
 		upgradeAt := time.Now()
-		go runWSConn(conn, claims, lister, hub, rf, instanceID, presence, dap, requestID, upgradeAt)
+		go runWSConn(conn, claims, lister, hub, rf, instanceID, presence, dap, requestID, upgradeAt, policy)
 	})
 }
 
@@ -177,7 +190,7 @@ type readResult struct {
 	err error
 }
 
-func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLister, hub *wsHub, rf *redisFanout, instanceID string, presence presenceUpdater, dap deliveryAckPublisher, requestID string, upgradeAt time.Time) {
+func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLister, hub *wsHub, rf *redisFanout, instanceID string, presence presenceUpdater, dap deliveryAckPublisher, requestID string, upgradeAt time.Time, policy wsSessionEpochPolicy) {
 	connID := uuid.NewString()
 	observeWSConnectSuccess()
 	svcLogger.Info("ws connected",
@@ -187,7 +200,10 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 		slog.String("instance_id", instanceID),
 		slog.String("request_id", requestID),
 	)
+	var writeMu sync.Mutex
 	reg := hub.attachConn(instanceID, connID, claims.ProfileID, 32)
+	guard := policy.newConnectionGuard(c, claims, &writeMu)
+	reg.setWriteGuard(func() bool { return guard.authorizeWrite("fanout") })
 	lastTypingStart := make(map[string]time.Time)
 	typingTimers := make(map[string]*time.Timer)
 
@@ -227,9 +243,12 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 	var seq int64
 	chatSubs := make(map[string]struct{})
 
-	write := func(op string, d json.RawMessage) error {
-		mu.Lock()
-		defer mu.Unlock()
+	write := func(op string, d json.RawMessage, preAuthorized bool) error {
+		writeMu.Lock()
+		defer writeMu.Unlock()
+		if !preAuthorized && !guard.authorizeWriteLocked(op) {
+			return context.Canceled
+		}
 		seq++
 		msg := wsOutbound{Op: op, D: d, S: seq}
 		_ = c.SetWriteDeadline(time.Now().Add(10 * time.Second))
@@ -237,7 +256,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 	}
 
 	helloD, _ := json.Marshal(map[string]any{"conn_id": connID})
-	if err := write("hello", helloD); err != nil {
+	if err := write("hello", helloD, false); err != nil {
 		return
 	}
 	observeWSHelloDuration(upgradeAt)
@@ -266,7 +285,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 			"source":   "chat",
 			"degraded": degraded,
 		})
-		if err := write("subscription_sync", syncD); err != nil {
+		if err := write("subscription_sync", syncD, false); err != nil {
 			return
 		}
 	}
@@ -289,7 +308,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 	for {
 		select {
 		case env := <-reg.fanout:
-			if err := write(env.Op, env.D); err != nil {
+			if err := write(env.Op, env.D, env.sessionEpochAuthorized); err != nil {
 				return
 			}
 		case rr := <-readCh:
@@ -297,11 +316,14 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 				return
 			}
 			in := rr.in
+			if !guard.authorizeInbound(in.Op) {
+				return
+			}
 			switch in.Op {
 			case "heartbeat":
 				updatePresence(context.Background(), presence, claims, "online", "")
 				ackD, _ := json.Marshal(map[string]any{})
-				if err := write("heartbeat_ack", ackD); err != nil {
+				if err := write("heartbeat_ack", ackD, false); err != nil {
 					return
 				}
 			case "resume":
@@ -314,7 +336,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 						"code":    "invalid_subscribe",
 						"message": "chat_id must be a valid UUID",
 					})
-					if err := write("error", errD); err != nil {
+					if err := write("error", errD, false); err != nil {
 						return
 					}
 					continue
@@ -331,7 +353,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 					slog.String("profile_id", claims.ProfileID),
 				)
 				ackD, _ := json.Marshal(map[string]any{"chat_id": cid})
-				if err := write("subscribe_ack", ackD); err != nil {
+				if err := write("subscribe_ack", ackD, false); err != nil {
 					return
 				}
 			case "unsubscribe":
@@ -341,7 +363,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 						"code":    "invalid_unsubscribe",
 						"message": "chat_id must be a valid UUID",
 					})
-					if err := write("error", errD); err != nil {
+					if err := write("error", errD, false); err != nil {
 						return
 					}
 					continue
@@ -358,7 +380,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 					slog.String("profile_id", claims.ProfileID),
 				)
 				ackD, _ := json.Marshal(map[string]any{"chat_id": cid})
-				if err := write("unsubscribe_ack", ackD); err != nil {
+				if err := write("unsubscribe_ack", ackD, false); err != nil {
 					return
 				}
 			case "typing_start", "typing_stop":
@@ -372,7 +394,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 						"code":    "invalid_typing",
 						"message": "chat_id must be a valid UUID",
 					})
-					if err := write("error", errD); err != nil {
+					if err := write("error", errD, false); err != nil {
 						return
 					}
 					continue
@@ -386,12 +408,17 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 						"code":    "invalid_typing",
 						"message": "not subscribed to chat",
 					})
-					if err := write("error", errD); err != nil {
+					if err := write("error", errD, false); err != nil {
 						return
 					}
 					continue
 				}
 				broadcastTyping := func(k string) {
+					// A delayed typing-stop can outlive the inbound frame that scheduled
+					// it. Re-authorize immediately before it can fan out or publish.
+					if !guard.authorizeSideEffect() {
+						return
+					}
 					d, _ := json.Marshal(map[string]any{
 						"chat_id":    cid,
 						"profile_id": claims.ProfileID,
@@ -445,7 +472,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 						"code":    "invalid_mark_read",
 						"message": "chat_id and message_id must be valid UUIDs",
 					})
-					if err := write("error", errD); err != nil {
+					if err := write("error", errD, false); err != nil {
 						return
 					}
 					continue
@@ -460,7 +487,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 						"code":    "invalid_mark_read",
 						"message": "not subscribed to chat",
 					})
-					if err := write("error", errD); err != nil {
+					if err := write("error", errD, false); err != nil {
 						return
 					}
 					continue
@@ -489,7 +516,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 						"code":    "invalid_delivery_ack",
 						"message": "chat_id, message_id and sender_profile_id must be valid UUIDs",
 					})
-					if err := write("error", errD); err != nil {
+					if err := write("error", errD, false); err != nil {
 						return
 					}
 					continue
@@ -505,7 +532,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 						"code":    "invalid_delivery_ack",
 						"message": "not subscribed to chat",
 					})
-					if err := write("error", errD); err != nil {
+					if err := write("error", errD, false); err != nil {
 						return
 					}
 					continue
@@ -537,7 +564,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 						"code":    "invalid_presence",
 						"message": "invalid presence payload",
 					})
-					if err := write("error", errD); err != nil {
+					if err := write("error", errD, false); err != nil {
 						return
 					}
 					continue
@@ -548,7 +575,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 						"code":    "invalid_presence",
 						"message": "status is required",
 					})
-					if err := write("error", errD); err != nil {
+					if err := write("error", errD, false); err != nil {
 						return
 					}
 					continue
@@ -558,7 +585,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 						"code":    "invalid_presence",
 						"message": "invalid status",
 					})
-					if err := write("error", errD); err != nil {
+					if err := write("error", errD, false); err != nil {
 						return
 					}
 					continue

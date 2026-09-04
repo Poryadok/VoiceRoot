@@ -9,8 +9,9 @@ import (
 
 // fanoutEnvelope is delivered to a WebSocket pump when another instance (or local peer) fans out.
 type fanoutEnvelope struct {
-	Op string
-	D  json.RawMessage
+	Op                     string
+	D                      json.RawMessage
+	sessionEpochAuthorized bool
 }
 
 // connReg is one authenticated WebSocket registered for cross-connection fan-out.
@@ -20,6 +21,8 @@ type connReg struct {
 	profileID  string
 	fanout     chan fanoutEnvelope
 	chats      map[string]struct{}
+	guardMu    sync.RWMutex
+	writeGuard func() bool
 }
 
 type wsHub struct {
@@ -27,6 +30,32 @@ type wsHub struct {
 	byChat            map[string]map[*connReg]struct{}
 	byProfile         map[string]map[*connReg]struct{}
 	memberInboxLister chatMemberInboxLister
+}
+
+func (r *connReg) setWriteGuard(guard func() bool) {
+	r.guardMu.Lock()
+	r.writeGuard = guard
+	r.guardMu.Unlock()
+}
+
+func (r *connReg) enqueue(env fanoutEnvelope, blocking bool) {
+	r.guardMu.RLock()
+	guard := r.writeGuard
+	r.guardMu.RUnlock()
+	if guard != nil {
+		if !guard() {
+			return
+		}
+		env.sessionEpochAuthorized = true
+	}
+	if blocking {
+		r.fanout <- env
+		return
+	}
+	select {
+	case r.fanout <- env:
+	default:
+	}
 }
 
 func newWSHub() *wsHub {
@@ -132,11 +161,7 @@ func (h *wsHub) broadcastTypingExcept(chatID, excludeInstance, excludeConn strin
 
 	env := fanoutEnvelope{Op: "typing", D: d}
 	for _, reg := range targets {
-		select {
-		case reg.fanout <- env:
-		default:
-			// Ephemeral typing: drop under backpressure.
-		}
+		reg.enqueue(env, false)
 	}
 }
 
@@ -159,10 +184,7 @@ func (h *wsHub) broadcastMarkReadSameProfileExcept(profileID, excludeInstance, e
 
 	env := fanoutEnvelope{Op: "mark_read", D: d}
 	for _, reg := range targets {
-		select {
-		case reg.fanout <- env:
-		default:
-		}
+		reg.enqueue(env, false)
 	}
 }
 
@@ -184,10 +206,7 @@ func (h *wsHub) broadcastPresenceSameProfileExcept(profileID, excludeInstance, e
 
 	env := fanoutEnvelope{Op: "presence_update", D: d}
 	for _, reg := range targets {
-		select {
-		case reg.fanout <- env:
-		default:
-		}
+		reg.enqueue(env, false)
 	}
 }
 
@@ -213,10 +232,7 @@ func (h *wsHub) broadcastPresenceInChatExcept(chatID, senderProfileID, excludeIn
 
 	env := fanoutEnvelope{Op: "presence_update", D: d}
 	for _, reg := range targets {
-		select {
-		case reg.fanout <- env:
-		default:
-		}
+		reg.enqueue(env, false)
 	}
 }
 
@@ -291,11 +307,7 @@ func (h *wsHub) broadcastToChat(chatID string, env fanoutEnvelope, logger *slog.
 		logger.LogAttrs(context.Background(), slog.LevelDebug, "ws fanout", fanoutLogAttrs(chatID, "", env.Op, requestID, targets)...)
 	}
 	for _, reg := range targets {
-		select {
-		case reg.fanout <- env:
-		default:
-			// Drop under backpressure; client catches up via Messaging REST.
-		}
+		reg.enqueue(env, false)
 	}
 }
 
@@ -325,14 +337,6 @@ func (h *wsHub) broadcastToProfile(profileID string, env fanoutEnvelope, logger 
 		logger.LogAttrs(context.Background(), slog.LevelDebug, "ws fanout", fanoutLogAttrs("", profileID, env.Op, requestID, targets)...)
 	}
 	for _, reg := range targets {
-		if profileFanoutBlocks(env.Op) {
-			reg.fanout <- env
-			continue
-		}
-		select {
-		case reg.fanout <- env:
-		default:
-			// Ephemeral fan-out; clients reconcile through REST.
-		}
+		reg.enqueue(env, profileFanoutBlocks(env.Op))
 	}
 }

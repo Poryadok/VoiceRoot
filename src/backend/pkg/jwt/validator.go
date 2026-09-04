@@ -248,6 +248,7 @@ func (p jwtPayload) toClaims(issuer, audience string, now time.Time, sessionEpoc
 		AccountType:      accountType,
 		JTI:              p.JTI,
 		SessionEpoch:     p.SessionEpoch,
+		ExpiresAt:        time.Unix(p.ExpiresAt, 0).UTC(),
 	}, nil
 }
 

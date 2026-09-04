@@ -86,9 +86,6 @@ func newRealtimeServerFromEnv(addr string, dependencies realtimeStartupDependenc
 	if err != nil {
 		return nil, err
 	}
-	if config.sessionEpochStrict {
-		return nil, errors.New("REALTIME_SESSION_EPOCH_STRICT=true requires full Realtime session epoch enforcement, which is not installed")
-	}
 	if dependencies.buildHandler == nil {
 		return nil, errors.New("realtime handler builder is nil")
 	}
