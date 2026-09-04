@@ -810,23 +810,15 @@ class GuestConversionOperationRepositoryJdbcIntegrationTest {
               () -> repository.recordFailure(operationId, leaseUntil, "   ", now, now))
           .isInstanceOf(IllegalArgumentException.class);
       assertThatThrownBy(
+              () -> repository.recordFailure(operationId, leaseUntil, "", now, now))
+          .isInstanceOf(IllegalArgumentException.class);
+      assertThatThrownBy(
               () ->
                   repository.recordFailure(
                       operationId,
                       leaseUntil,
                       "retryable",
                       now.minus(1, ChronoUnit.MICROS),
-                      now))
-          .isInstanceOf(IllegalArgumentException.class);
-      assertThatThrownBy(() -> repository.recordFailure(operationId, now, "retryable", now, now))
-          .isInstanceOf(IllegalArgumentException.class);
-      assertThatThrownBy(
-              () ->
-                  repository.recordFailure(
-                      operationId,
-                      now.minus(1, ChronoUnit.MICROS),
-                      "retryable",
-                      now,
                       now))
           .isInstanceOf(IllegalArgumentException.class);
     }
@@ -925,7 +917,15 @@ class GuestConversionOperationRepositoryJdbcIntegrationTest {
           .isEmpty();
       assertThat(
               repository.recordFailure(
-                  expiredLease.operationId(), expectedLeaseUntil, "retryable", now, now))
+                  expiredLease.operationId(), now, "retryable", now, now))
+          .isEmpty();
+      assertThat(
+              repository.recordFailure(
+                  expiredLease.operationId(),
+                  now,
+                  "retryable",
+                  now.plus(1, ChronoUnit.MINUTES),
+                  now.plus(1, ChronoUnit.MINUTES)))
           .isEmpty();
       assertThat(
               repository.recordFailure(
