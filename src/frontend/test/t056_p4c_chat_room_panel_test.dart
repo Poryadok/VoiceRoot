@@ -17,6 +17,7 @@ import 'package:voice_frontend/gen/voice/messaging/v1/messaging.pb.dart'
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/message_cache_providers.dart';
+import 'package:voice_frontend/state/presence_providers.dart';
 import 'package:voice_frontend/ui/chat/chat_composer_text_field.dart';
 import 'package:voice_frontend/ui/chat/chat_room_panel.dart';
 import 'package:voice_frontend/ui/core/voice_send_button.dart';
@@ -238,6 +239,7 @@ Future<_UiHarness> _pumpPanel(
       voiceFilesClientProvider.overrideWithValue(files),
       realtimeHubProvider.overrideWithValue(realtime),
       messageCacheStoreProvider.overrideWithValue(cache),
+      presenceProvider.overrideWith((ref, id) => null),
       if (mentionLookups != null)
         groupMembersProvider('chat-1').overrideWith((ref) async {
           mentionLookups.add(true);
