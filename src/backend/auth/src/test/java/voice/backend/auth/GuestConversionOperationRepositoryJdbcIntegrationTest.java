@@ -67,6 +67,7 @@ class GuestConversionOperationRepositoryJdbcIntegrationTest {
         repository.createOrResume(
             accountId, UUID.randomUUID(), createdAt.plus(5, ChronoUnit.MINUTES));
 
+    assertThat(created.operationId()).isNotNull();
     assertThat(resumedWithSameOtp.operationId()).isEqualTo(created.operationId());
     assertThat(resumedWithNewOtp.operationId()).isEqualTo(created.operationId());
     assertThat(resumedWithNewOtp.accountId()).isEqualTo(accountId);
@@ -82,6 +83,7 @@ class GuestConversionOperationRepositoryJdbcIntegrationTest {
     assertThat(resumedWithNewOtp.createdAt()).isEqualTo(createdAt);
     assertThat(resumedWithNewOtp.updatedAt()).isEqualTo(createdAt);
     assertThat(operationCount(accountId)).isEqualTo(1);
+    assertThat(operationIdForAccount(accountId)).isEqualTo(created.operationId());
   }
 
   @Test
@@ -119,11 +121,14 @@ class GuestConversionOperationRepositoryJdbcIntegrationTest {
               .toList();
 
       assertThat(operations).hasSize(callers);
+      UUID commonOperationId = operations.getFirst().operationId();
+      assertThat(commonOperationId).isNotNull();
       assertThat(operations)
           .extracting(GuestConversionOperation::operationId)
-          .containsOnly(operations.getFirst().operationId());
+          .containsOnly(commonOperationId);
       assertThat(operations).extracting(GuestConversionOperation::otpCodeId).containsOnly(otpCodeId);
       assertThat(operationCount(accountId)).isEqualTo(1);
+      assertThat(operationIdForAccount(accountId)).isEqualTo(commonOperationId);
     } finally {
       executor.shutdownNow();
       assertThat(executor.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
@@ -168,6 +173,14 @@ class GuestConversionOperationRepositoryJdbcIntegrationTest {
             "SELECT COUNT(*)::int FROM guest_conversion_operations WHERE otp_code_id = :otpCodeId",
             java.util.Map.of("otpCodeId", otpCodeId),
             Integer.class);
+  }
+
+  private UUID operationIdForAccount(UUID accountId) {
+    return jdbc()
+        .queryForObject(
+            "SELECT operation_id FROM guest_conversion_operations WHERE account_id = :accountId",
+            java.util.Map.of("accountId", accountId),
+            UUID.class);
   }
 
   private NamedParameterJdbcTemplate jdbc() {
