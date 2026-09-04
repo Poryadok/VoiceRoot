@@ -41,7 +41,9 @@ func (p wsSessionEpochPolicy) authorizeClaims(claims voicejwt.Claims) bool {
 	if p.Floor == nil {
 		return false
 	}
-	minimum, err := p.Floor.Minimum(context.Background(), claims.UserID)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	minimum, err := p.Floor.Minimum(ctx, claims.UserID)
 	return err == nil && minimum > 0 && claims.SessionEpoch >= minimum
 }
 
