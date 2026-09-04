@@ -9,8 +9,10 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import io.lettuce.core.ConnectionFuture;
 import io.lettuce.core.RedisFuture;
 import io.lettuce.core.RedisClient;
+import io.lettuce.core.RedisURI;
 import io.lettuce.core.TransactionResult;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.api.async.RedisAsyncCommands;
@@ -25,6 +27,8 @@ import org.mockito.InOrder;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 class StringRedisSessionEpochCommandsTest {
+  private static final RedisURI ENDPOINT = RedisURI.create("redis://localhost:6379/0");
+
   @Test
   void everyCasUsesAndClosesItsOwnPhysicalLettuceConnection() throws Exception {
     StringRedisTemplate template = mock(StringRedisTemplate.class);
@@ -33,19 +37,22 @@ class StringRedisSessionEpochCommandsTest {
     StatefulRedisConnection<byte[], byte[]> secondConnection = mock(StatefulRedisConnection.class);
     RedisAsyncCommands<byte[], byte[]> firstCommands = commandsReturning("1");
     RedisAsyncCommands<byte[], byte[]> secondCommands = commandsReturning("2");
-    when(client.connect(ByteArrayCodec.INSTANCE)).thenReturn(firstConnection, secondConnection);
+    ConnectionFuture<StatefulRedisConnection<byte[], byte[]>> firstConnecting = connected(firstConnection);
+    ConnectionFuture<StatefulRedisConnection<byte[], byte[]>> secondConnecting = connected(secondConnection);
+    when(client.connectAsync(ByteArrayCodec.INSTANCE, ENDPOINT))
+        .thenReturn(firstConnecting, secondConnecting);
     when(firstConnection.async()).thenReturn(firstCommands);
     when(secondConnection.async()).thenReturn(secondCommands);
     when(firstConnection.isOpen()).thenReturn(true);
     when(secondConnection.isOpen()).thenReturn(true);
-    StringRedisSessionEpochCommands commands = new StringRedisSessionEpochCommands(template, client);
+    StringRedisSessionEpochCommands commands = new StringRedisSessionEpochCommands(template, client, ENDPOINT);
 
     assertThat(commands.atomicMaxWithoutExpiry("auth:session:min_epoch:" + UUID.randomUUID(), 1L, Duration.ofSeconds(2)))
         .isEqualTo(1L);
     assertThat(commands.atomicMaxWithoutExpiry("auth:session:min_epoch:" + UUID.randomUUID(), 2L, Duration.ofSeconds(2)))
         .isEqualTo(2L);
 
-    verify(client, times(2)).connect(ByteArrayCodec.INSTANCE);
+    verify(client, times(2)).connectAsync(ByteArrayCodec.INSTANCE, ENDPOINT);
     assertPhysicalConnectionOwnership(firstConnection);
     assertPhysicalConnectionOwnership(secondConnection);
   }
@@ -57,15 +64,60 @@ class StringRedisSessionEpochCommandsTest {
     StatefulRedisConnection<byte[], byte[]> connection = mock(StatefulRedisConnection.class);
     RedisAsyncCommands<byte[], byte[]> redis = mock(RedisAsyncCommands.class);
     RedisFuture<String> timedOutWatch = mock(RedisFuture.class);
-    when(client.connect(ByteArrayCodec.INSTANCE)).thenReturn(connection);
+    ConnectionFuture<StatefulRedisConnection<byte[], byte[]>> connecting = connected(connection);
+    when(client.connectAsync(ByteArrayCodec.INSTANCE, ENDPOINT)).thenReturn(connecting);
     when(connection.async()).thenReturn(redis);
     when(timedOutWatch.get(any(Long.class), any(TimeUnit.class))).thenThrow(new TimeoutException("late"));
     when(redis.watch(any(byte[].class))).thenReturn(timedOutWatch);
-    StringRedisSessionEpochCommands commands = new StringRedisSessionEpochCommands(template, client);
+    StringRedisSessionEpochCommands commands = new StringRedisSessionEpochCommands(template, client, ENDPOINT);
 
     assertThatThrownBy(
             () -> commands.atomicMaxWithoutExpiry(
                 "auth:session:min_epoch:" + UUID.randomUUID(), 1L, Duration.ofSeconds(2)))
+        .isInstanceOf(SessionEpochFloorUnavailableException.class)
+        .hasMessageContaining("timeout");
+
+    verify(connection, times(1)).close();
+  }
+
+  @Test
+  void readUsesAndClosesItsOwnPhysicalConnection() throws Exception {
+    StringRedisTemplate template = mock(StringRedisTemplate.class);
+    RedisClient client = mock(RedisClient.class);
+    StatefulRedisConnection<byte[], byte[]> connection = mock(StatefulRedisConnection.class);
+    RedisAsyncCommands<byte[], byte[]> redis = mock(RedisAsyncCommands.class);
+    RedisFuture<byte[]> value = completed("9007199254740993".getBytes(StandardCharsets.UTF_8));
+    ConnectionFuture<StatefulRedisConnection<byte[], byte[]>> connecting = connected(connection);
+    when(client.connectAsync(ByteArrayCodec.INSTANCE, ENDPOINT)).thenReturn(connecting);
+    when(connection.async()).thenReturn(redis);
+    when(connection.isOpen()).thenReturn(true);
+    when(redis.get(any(byte[].class))).thenReturn(value);
+    StringRedisSessionEpochCommands commands = new StringRedisSessionEpochCommands(template, client, ENDPOINT);
+
+    assertThat(commands.readRequiredPositive("auth:session:min_epoch:" + UUID.randomUUID(), Duration.ofSeconds(2)))
+        .isEqualTo(9_007_199_254_740_993L);
+
+    verify(client).connectAsync(ByteArrayCodec.INSTANCE, ENDPOINT);
+    assertPhysicalConnectionOwnership(connection);
+  }
+
+  @Test
+  void timedOutReadClosesThePhysicalConnectionExactlyOnce() throws Exception {
+    StringRedisTemplate template = mock(StringRedisTemplate.class);
+    RedisClient client = mock(RedisClient.class);
+    StatefulRedisConnection<byte[], byte[]> connection = mock(StatefulRedisConnection.class);
+    RedisAsyncCommands<byte[], byte[]> redis = mock(RedisAsyncCommands.class);
+    RedisFuture<byte[]> timedOutRead = mock(RedisFuture.class);
+    ConnectionFuture<StatefulRedisConnection<byte[], byte[]>> connecting = connected(connection);
+    when(client.connectAsync(ByteArrayCodec.INSTANCE, ENDPOINT)).thenReturn(connecting);
+    when(connection.async()).thenReturn(redis);
+    when(timedOutRead.get(any(Long.class), any(TimeUnit.class))).thenThrow(new TimeoutException("late"));
+    when(redis.get(any(byte[].class))).thenReturn(timedOutRead);
+    StringRedisSessionEpochCommands commands = new StringRedisSessionEpochCommands(template, client, ENDPOINT);
+
+    assertThatThrownBy(
+            () -> commands.readRequiredPositive(
+                "auth:session:min_epoch:" + UUID.randomUUID(), Duration.ofSeconds(2)))
         .isInstanceOf(SessionEpochFloorUnavailableException.class)
         .hasMessageContaining("timeout");
 
@@ -99,6 +151,13 @@ class StringRedisSessionEpochCommandsTest {
   @SuppressWarnings("unchecked")
   private static <T> RedisFuture<T> completed(T value) throws Exception {
     RedisFuture<T> future = mock(RedisFuture.class);
+    when(future.get(any(Long.class), any(TimeUnit.class))).thenReturn(value);
+    return future;
+  }
+
+  @SuppressWarnings("unchecked")
+  private static <T> ConnectionFuture<T> connected(T value) throws Exception {
+    ConnectionFuture<T> future = mock(ConnectionFuture.class);
     when(future.get(any(Long.class), any(TimeUnit.class))).thenReturn(value);
     return future;
   }
