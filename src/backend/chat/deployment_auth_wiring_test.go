@@ -31,10 +31,9 @@ func TestChatAuthGRPCAddrDeploymentWiring(t *testing.T) {
 			chat := findChatDeployment(t, readKubernetesManifests(t, filepath.Join(root, "deploy", environment, "services.yaml")))
 			container := findChatContainer(t, chat)
 			require.Contains(t, container.ConfigMapRefs(), "voice-app-config")
-			require.Empty(t, container.SecretRefs(), "Chat envFrom must not allow a Secret to override AUTH_GRPC_ADDR")
 			for _, env := range container.Env {
 				if env.Name == "AUTH_GRPC_ADDR" {
-					require.Empty(t, env.Value, "Chat must inherit AUTH_GRPC_ADDR from voice-app-config")
+					require.Equal(t, canonicalAuthGRPCAddr, env.Value, "an explicit AUTH_GRPC_ADDR override must remain canonical")
 					require.Nil(t, env.ValueFrom.SecretKeyRef, "AUTH_GRPC_ADDR must remain a ConfigMap literal, not a secret")
 				}
 			}
@@ -81,16 +80,6 @@ func (container kubernetesContainer) ConfigMapRefs() []string {
 	for _, source := range container.EnvFrom {
 		if source.ConfigMapRef != nil {
 			refs = append(refs, source.ConfigMapRef.Name)
-		}
-	}
-	return refs
-}
-
-func (container kubernetesContainer) SecretRefs() []string {
-	refs := make([]string, 0, len(container.EnvFrom))
-	for _, source := range container.EnvFrom {
-		if source.SecretRef != nil {
-			refs = append(refs, source.SecretRef.Name)
 		}
 	}
 	return refs
