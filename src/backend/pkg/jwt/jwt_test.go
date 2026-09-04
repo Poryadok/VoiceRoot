@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -203,6 +204,19 @@ func TestJWKSValidator_sessionEpochCompatibilityOption(t *testing.T) {
 		t.Fatalf("legacy claims = %+v, want preserved claims with zero session epoch", claims)
 	}
 
+	positivePayload := make(map[string]any, len(basePayload)+1)
+	for key, value := range basePayload {
+		positivePayload[key] = value
+	}
+	positivePayload["session_epoch"] = int64(7)
+	claims, code = compat.Validate(requestWithToken(signJWT(t, "key-1", key, positivePayload)))
+	if code != "" {
+		t.Fatalf("positive session epoch in compatibility mode code = %q, want success", code)
+	}
+	if claims.SessionEpoch != 7 {
+		t.Fatalf("positive session epoch = %d, want 7", claims.SessionEpoch)
+	}
+
 	for name, required := range map[string]bool{
 		"default":         true,
 		"explicit-strict": true,
@@ -224,6 +238,8 @@ func TestJWKSValidator_sessionEpochCompatibilityOption(t *testing.T) {
 		"negative":   int64(-1),
 		"string":     "42",
 		"fractional": 42.5,
+		"null":       nil,
+		"boolean":    true,
 	} {
 		t.Run("compatibility-"+name, func(t *testing.T) {
 			payload := make(map[string]any, len(basePayload)+1)
@@ -235,6 +251,34 @@ func TestJWKSValidator_sessionEpochCompatibilityOption(t *testing.T) {
 				t.Fatalf("present session_epoch %s in compatibility mode code = %q, want invalid_token", name, code)
 			}
 		})
+	}
+
+	for name, mutate := range map[string]func(map[string]any){
+		"wrong-issuer": func(payload map[string]any) { payload["iss"] = "other-issuer" },
+		"wrong-audience": func(payload map[string]any) { payload["aud"] = "other-audience" },
+		"expired":        func(payload map[string]any) { payload["exp"] = int64(999) },
+	} {
+		t.Run("compatibility-"+name, func(t *testing.T) {
+			payload := make(map[string]any, len(basePayload))
+			for key, value := range basePayload {
+				payload[key] = value
+			}
+			mutate(payload)
+			if _, code := compat.Validate(requestWithToken(signJWT(t, "key-1", key, payload))); code != "invalid_token" {
+				t.Fatalf("otherwise-valid token with %s in compatibility mode code = %q, want invalid_token", name, code)
+			}
+		})
+	}
+
+	signatureDot := strings.LastIndex(legacy, ".")
+	tamperedSignature := legacy[signatureDot+1:]
+	replacement := byte('A')
+	if tamperedSignature[0] == replacement {
+		replacement = 'B'
+	}
+	tampered := legacy[:signatureDot+1] + string(replacement) + tamperedSignature[1:]
+	if _, code := compat.Validate(requestWithToken(tampered)); code != "invalid_token" {
+		t.Fatalf("tampered signature in compatibility mode code = %q, want invalid_token", code)
 	}
 }
 
