@@ -37,6 +37,8 @@
 service UserService {
   // Профили
   rpc EnsurePrimaryProfile(EnsurePrimaryProfileRequest) returns (EnsurePrimaryProfileResponse); // S2S Auth bootstrap; см. primary-profile-bootstrap.md
+  rpc ResolvePrimaryProfileIDs(ResolvePrimaryProfileIDsRequest) returns (ResolvePrimaryProfileIDsResponse); // S2S Auth: batch account_id -> existing primary profile_id
+  rpc MarkAccountRegular(MarkAccountRegularRequest) returns (MarkAccountRegularResponse); // S2S Auth: guest -> regular profile marker
   rpc GetProfile(GetProfileRequest) returns (Profile);
   rpc GetProfiles(GetProfilesRequest) returns (ProfileList); // batch
   rpc UpdateProfile(UpdateProfileRequest) returns (Profile);
@@ -69,6 +71,10 @@ service UserService {
 ```
 
 Канон RPC и сообщений — репозиторий `protos/voice/user/v1/user.proto`.
+
+### Internal Auth profile seam
+
+`EnsurePrimaryProfile`, `ResolvePrimaryProfileIDs` и `MarkAccountRegular` доступны только internal callers; они не являются Gateway REST API. `ResolvePrimaryProfileIDs` — read-only batch lookup: возвращает только существующие non-deleted primary profiles, пропускает unknown/no-primary/deleted записи и не создаёт профиль. Frozen primary остаётся каноническим и возвращается. После successful guest→regular conversion в Auth `MarkAccountRegular` снимает `is_guest_account` у всех профилей account, включая soft-deleted; повторный вызов или неизвестный account успешен без изменений.
 
 **`PrivacySettings` sketch (spec — not yet in proto/DDL):**
 

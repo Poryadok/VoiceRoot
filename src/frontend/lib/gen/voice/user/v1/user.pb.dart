@@ -4474,6 +4474,215 @@ class ApplyDowngradeProfilesResponse extends $pb.GeneratedMessage {
   $pb.PbList<$core.String> get keptProfileIds => $_getList(0);
 }
 
+class ResolvePrimaryProfileIDsRequest extends $pb.GeneratedMessage {
+  factory ResolvePrimaryProfileIDsRequest({
+    $core.Iterable<$core.String>? accountIds,
+  }) {
+    final result = create();
+    if (accountIds != null) result.accountIds.addAll(accountIds);
+    return result;
+  }
+
+  ResolvePrimaryProfileIDsRequest._();
+
+  factory ResolvePrimaryProfileIDsRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ResolvePrimaryProfileIDsRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ResolvePrimaryProfileIDsRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..pPS(1, _omitFieldNames ? '' : 'accountIds')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolvePrimaryProfileIDsRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolvePrimaryProfileIDsRequest copyWith(
+          void Function(ResolvePrimaryProfileIDsRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as ResolvePrimaryProfileIDsRequest))
+          as ResolvePrimaryProfileIDsRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ResolvePrimaryProfileIDsRequest create() =>
+      ResolvePrimaryProfileIDsRequest._();
+  @$core.override
+  ResolvePrimaryProfileIDsRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ResolvePrimaryProfileIDsRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ResolvePrimaryProfileIDsRequest>(
+          create);
+  static ResolvePrimaryProfileIDsRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $pb.PbList<$core.String> get accountIds => $_getList(0);
+}
+
+class ResolvePrimaryProfileIDsResponse extends $pb.GeneratedMessage {
+  factory ResolvePrimaryProfileIDsResponse({
+    $core.Iterable<$core.MapEntry<$core.String, $core.String>>?
+        primaryProfileIds,
+  }) {
+    final result = create();
+    if (primaryProfileIds != null)
+      result.primaryProfileIds.addEntries(primaryProfileIds);
+    return result;
+  }
+
+  ResolvePrimaryProfileIDsResponse._();
+
+  factory ResolvePrimaryProfileIDsResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ResolvePrimaryProfileIDsResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ResolvePrimaryProfileIDsResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..m<$core.String, $core.String>(
+        1, _omitFieldNames ? '' : 'primaryProfileIds',
+        entryClassName:
+            'ResolvePrimaryProfileIDsResponse.PrimaryProfileIdsEntry',
+        keyFieldType: $pb.PbFieldType.OS,
+        valueFieldType: $pb.PbFieldType.OS,
+        packageName: const $pb.PackageName('voice.user.v1'))
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolvePrimaryProfileIDsResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolvePrimaryProfileIDsResponse copyWith(
+          void Function(ResolvePrimaryProfileIDsResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as ResolvePrimaryProfileIDsResponse))
+          as ResolvePrimaryProfileIDsResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ResolvePrimaryProfileIDsResponse create() =>
+      ResolvePrimaryProfileIDsResponse._();
+  @$core.override
+  ResolvePrimaryProfileIDsResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ResolvePrimaryProfileIDsResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ResolvePrimaryProfileIDsResponse>(
+          create);
+  static ResolvePrimaryProfileIDsResponse? _defaultInstance;
+
+  /// account_id -> primary profile_id; absent/no-primary/deleted primary accounts are omitted.
+  @$pb.TagNumber(1)
+  $pb.PbMap<$core.String, $core.String> get primaryProfileIds => $_getMap(0);
+}
+
+class MarkAccountRegularRequest extends $pb.GeneratedMessage {
+  factory MarkAccountRegularRequest({
+    $core.String? accountId,
+  }) {
+    final result = create();
+    if (accountId != null) result.accountId = accountId;
+    return result;
+  }
+
+  MarkAccountRegularRequest._();
+
+  factory MarkAccountRegularRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory MarkAccountRegularRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'MarkAccountRegularRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'accountId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  MarkAccountRegularRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  MarkAccountRegularRequest copyWith(
+          void Function(MarkAccountRegularRequest) updates) =>
+      super.copyWith((message) => updates(message as MarkAccountRegularRequest))
+          as MarkAccountRegularRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static MarkAccountRegularRequest create() => MarkAccountRegularRequest._();
+  @$core.override
+  MarkAccountRegularRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static MarkAccountRegularRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<MarkAccountRegularRequest>(create);
+  static MarkAccountRegularRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get accountId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set accountId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAccountId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAccountId() => $_clearField(1);
+}
+
+class MarkAccountRegularResponse extends $pb.GeneratedMessage {
+  factory MarkAccountRegularResponse() => create();
+
+  MarkAccountRegularResponse._();
+
+  factory MarkAccountRegularResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory MarkAccountRegularResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'MarkAccountRegularResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  MarkAccountRegularResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  MarkAccountRegularResponse copyWith(
+          void Function(MarkAccountRegularResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as MarkAccountRegularResponse))
+          as MarkAccountRegularResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static MarkAccountRegularResponse create() => MarkAccountRegularResponse._();
+  @$core.override
+  MarkAccountRegularResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static MarkAccountRegularResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<MarkAccountRegularResponse>(create);
+  static MarkAccountRegularResponse? _defaultInstance;
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =

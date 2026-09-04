@@ -554,19 +554,20 @@ func (s *MessagesStore) GetChatListMetadata(ctx context.Context, viewerProfileID
 		var lastSender uuid.UUID
 		var lastAttachments sql.NullString
 		var lastContentType sql.NullString
+		var lastChatType sql.NullString
 		var peerRead *uuid.UUID
 		var peerDelivered *uuid.UUID
 		err := s.Pool.QueryRow(ctx, `
 WITH latest AS (
-  SELECT id, content, created_at, sender_profile_id, attachments, content_type
+  SELECT id, content, created_at, sender_profile_id, attachments, content_type, chat_type
   FROM messages
   WHERE chat_id = $1 AND deleted_at IS NULL
   ORDER BY id DESC
   LIMIT 1
 ), peer AS (
-  SELECT sender_profile_id AS peer_id
-  FROM messages
-  WHERE chat_id = $1 AND deleted_at IS NULL AND sender_profile_id <> $2
+  SELECT profile_id AS peer_id
+  FROM read_receipts
+  WHERE chat_id = $1 AND profile_id <> $2
   LIMIT 1
 ), peer_rr AS (
   SELECT rr.last_read_message_id, rr.last_delivered_message_id
@@ -582,13 +583,13 @@ WITH latest AS (
     AND m.sender_profile_id <> $2
     AND (rr.last_read_message_id IS NULL OR m.id > rr.last_read_message_id)
 )
-SELECT latest.content, latest.created_at, latest.id, latest.sender_profile_id, latest.attachments, latest.content_type,
+SELECT latest.content, latest.created_at, latest.id, latest.sender_profile_id, latest.attachments, latest.content_type, latest.chat_type,
        peer_rr.last_read_message_id, peer_rr.last_delivered_message_id,
        unread.unread_count
 FROM unread
 LEFT JOIN latest ON true
 LEFT JOIN peer_rr ON true
-`, chatID, viewerProfileID).Scan(&preview, &lastAt, &lastMsgID, &lastSender, &lastAttachments, &lastContentType, &peerRead, &peerDelivered, &unread)
+`, chatID, viewerProfileID).Scan(&preview, &lastAt, &lastMsgID, &lastSender, &lastAttachments, &lastContentType, &lastChatType, &peerRead, &peerDelivered, &unread)
 		if err != nil {
 			return nil, err
 		}
@@ -615,9 +616,13 @@ LEFT JOIN peer_rr ON true
 		}
 		if lastMsgID != uuid.Nil {
 			row.LastMessageIsOutgoing = lastSender == viewerProfileID
-			row.LastMessageDeliveryState = deriveLastMessageDeliveryState(
-				row.LastMessageIsOutgoing, lastMsgID, peerRead, peerDelivered,
-			)
+			if lastChatType.String == "dm" {
+				row.LastMessageDeliveryState = deriveLastMessageDeliveryState(
+					row.LastMessageIsOutgoing, lastMsgID, peerRead, peerDelivered,
+				)
+			} else {
+				row.LastMessageDeliveryState = "none"
+			}
 		} else {
 			row.LastMessageDeliveryState = "none"
 		}
