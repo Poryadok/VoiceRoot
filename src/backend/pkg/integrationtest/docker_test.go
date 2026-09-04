@@ -83,3 +83,36 @@ func TestConfigureDockerTesting_disablesRyukOnWindowsAndCI(t *testing.T) {
 		}
 	})
 }
+
+func TestConfigureTestcontainersHostOverride(t *testing.T) {
+	t.Run("windows defaults to loopback", func(t *testing.T) {
+		t.Setenv("TESTCONTAINERS_HOST_OVERRIDE", "")
+
+		configureTestcontainersHost("windows")
+
+		if got := os.Getenv("TESTCONTAINERS_HOST_OVERRIDE"); got != "127.0.0.1" {
+			t.Fatalf("expected loopback host override, got %q", got)
+		}
+	})
+
+	t.Run("explicit override is preserved", func(t *testing.T) {
+		want := "host.docker.internal"
+		t.Setenv("TESTCONTAINERS_HOST_OVERRIDE", want)
+
+		configureTestcontainersHost("windows")
+
+		if got := os.Getenv("TESTCONTAINERS_HOST_OVERRIDE"); got != want {
+			t.Fatalf("expected explicit host override %q, got %q", want, got)
+		}
+	})
+
+	t.Run("non-windows does not add an override", func(t *testing.T) {
+		t.Setenv("TESTCONTAINERS_HOST_OVERRIDE", "")
+
+		configureTestcontainersHost("linux")
+
+		if got := os.Getenv("TESTCONTAINERS_HOST_OVERRIDE"); got != "" {
+			t.Fatalf("expected no host override on linux, got %q", got)
+		}
+	})
+}
