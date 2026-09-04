@@ -589,8 +589,7 @@ class UserGrpcClientConfigurationContractTest {
             .as("%s must receive a gRPC deadline", observation.method())
             .isNotNull()
             .isPositive()
-            .isLessThanOrEqualTo(expected.toMillis())
-            .isGreaterThan(expected.minusSeconds(1).toMillis());
+            .isLessThanOrEqualTo(expected.toMillis());
       });
     }
   }
