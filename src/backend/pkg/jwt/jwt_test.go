@@ -36,6 +36,7 @@ func TestJWKSValidator(t *testing.T) {
 		"roles":             []string{"member"},
 		"subscription_tier": "free",
 		"jti":               "token-1",
+		"session_epoch":     int64(7),
 		"iss":               "voice-auth",
 		"aud":               "voice-client",
 		"exp":               int64(1100),
@@ -44,19 +45,19 @@ func TestJWKSValidator(t *testing.T) {
 	if code != "" {
 		t.Fatalf("valid token code = %q", code)
 	}
-	if claims.UserID != "account-1" || claims.ProfileID != "profile-1" || claims.JTI != "token-1" {
+	if claims.UserID != "account-1" || claims.ProfileID != "profile-1" || claims.JTI != "token-1" || claims.SessionEpoch != 7 {
 		t.Fatalf("claims = %+v", claims)
 	}
 
 	expired := signJWT(t, "key-1", key1, map[string]any{
-		"sub": "account-1", "iss": "voice-auth", "aud": "voice-client", "exp": int64(999),
+		"sub": "account-1", "session_epoch": int64(7), "iss": "voice-auth", "aud": "voice-client", "exp": int64(999),
 	})
 	if _, code := v.Validate(requestWithToken(expired)); code != "invalid_token" {
 		t.Fatalf("expired code = %q, want invalid_token", code)
 	}
 
 	wrongIssuer := signJWT(t, "key-1", key1, map[string]any{
-		"sub": "account-1", "iss": "other", "aud": "voice-client", "exp": int64(1100),
+		"sub": "account-1", "session_epoch": int64(7), "iss": "other", "aud": "voice-client", "exp": int64(1100),
 	})
 	if _, code := v.Validate(requestWithToken(wrongIssuer)); code != "invalid_token" {
 		t.Fatalf("wrong issuer code = %q, want invalid_token", code)
@@ -65,7 +66,7 @@ func TestJWKSValidator(t *testing.T) {
 	activeKey = key2
 	activeKid = "key-2"
 	rotated := signJWT(t, "key-2", key2, map[string]any{
-		"user_id": "account-2", "iss": "voice-auth", "aud": []string{"voice-client"}, "exp": int64(1100),
+		"user_id": "account-2", "session_epoch": int64(8), "iss": "voice-auth", "aud": []string{"voice-client"}, "exp": int64(1100),
 	})
 	claims, code = v.Validate(requestWithToken(rotated))
 	if code != "" {
@@ -116,7 +117,7 @@ func TestJWKSValidator_acceptsAccessTokenQuery(t *testing.T) {
 
 	v := NewJWKSValidator(jwks.URL, "voice-auth", "voice-client", WithClock(func() time.Time { return time.Unix(1000, 0) }))
 	token := signJWT(t, "key-1", key, map[string]any{
-		"sub": "account-1", "profile_id": "profile-1", "iss": "voice-auth", "aud": "voice-client", "exp": int64(1100),
+		"sub": "account-1", "profile_id": "profile-1", "session_epoch": int64(7), "iss": "voice-auth", "aud": "voice-client", "exp": int64(1100),
 	})
 	req := httptest.NewRequest(http.MethodGet, "/ws?access_token="+token, nil)
 	claims, code := v.Validate(req)
@@ -125,6 +126,55 @@ func TestJWKSValidator_acceptsAccessTokenQuery(t *testing.T) {
 	}
 	if claims.ProfileID != "profile-1" {
 		t.Fatalf("profile_id = %q", claims.ProfileID)
+	}
+}
+
+func TestJWKSValidator_sessionEpoch(t *testing.T) {
+	const wantSessionEpoch int64 = 9007199254740993
+
+	key := mustRSAKey(t)
+	jwks := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(t, w, http.StatusOK, map[string]any{
+			"keys": []map[string]string{rsaJWK("key-1", &key.PublicKey)},
+		})
+	}))
+	t.Cleanup(jwks.Close)
+
+	v := NewJWKSValidator(jwks.URL, "voice-auth", "voice-client", WithClock(func() time.Time { return time.Unix(1000, 0) }))
+	basePayload := map[string]any{
+		"sub": "account-1", "iss": "voice-auth", "aud": "voice-client", "exp": int64(1100),
+	}
+
+	validPayload := map[string]any{
+		"sub": "account-1", "iss": "voice-auth", "aud": "voice-client", "exp": int64(1100), "session_epoch": wantSessionEpoch,
+	}
+	claims, code := v.Validate(requestWithToken(signJWT(t, "key-1", key, validPayload)))
+	if code != "" {
+		t.Fatalf("valid session_epoch token code = %q", code)
+	}
+	if claims.SessionEpoch != wantSessionEpoch {
+		t.Fatalf("session_epoch = %d, want %d", claims.SessionEpoch, wantSessionEpoch)
+	}
+
+	for name, sessionEpoch := range map[string]any{
+		"missing":    nil,
+		"zero":       int64(0),
+		"negative":   int64(-1),
+		"string":     "42",
+		"fractional": 42.5,
+	} {
+		t.Run(name, func(t *testing.T) {
+			payload := make(map[string]any, len(basePayload)+1)
+			for key, value := range basePayload {
+				payload[key] = value
+			}
+			if sessionEpoch != nil {
+				payload["session_epoch"] = sessionEpoch
+			}
+			if _, code := v.Validate(requestWithToken(signJWT(t, "key-1", key, payload))); code != "invalid_token" {
+				t.Fatalf("session_epoch %s code = %q, want invalid_token", name, code)
+			}
+		})
 	}
 }
 
