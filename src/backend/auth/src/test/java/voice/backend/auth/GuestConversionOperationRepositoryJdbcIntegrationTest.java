@@ -9,6 +9,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
@@ -770,6 +771,269 @@ class GuestConversionOperationRepositoryJdbcIntegrationTest {
     }
   }
 
+  @Nested
+  class RecordFailureContract {
+    @BeforeEach
+    void isolateOperations() {
+      deleteAllOperations();
+    }
+
+    @AfterEach
+    void removeOperationsAndFailureDelayTrigger() {
+      removeLeaseDelayTrigger();
+      deleteAllOperations();
+    }
+
+    @Test
+    void recordFailure_rejectsInvalidArgumentsBeforeMutatingAnything() {
+      GuestConversionOperationRepository repository = repository();
+      Instant now = Instant.parse("2026-09-04T15:00:00Z");
+      Instant leaseUntil = now.plus(2, ChronoUnit.MINUTES);
+      UUID operationId = UUID.randomUUID();
+
+      assertThatThrownBy(
+              () -> repository.recordFailure(null, leaseUntil, "retryable", now, now))
+          .isInstanceOf(NullPointerException.class);
+      assertThatThrownBy(
+              () -> repository.recordFailure(operationId, null, "retryable", now, now))
+          .isInstanceOf(NullPointerException.class);
+      assertThatThrownBy(
+              () -> repository.recordFailure(operationId, leaseUntil, null, now, now))
+          .isInstanceOf(NullPointerException.class);
+      assertThatThrownBy(
+              () -> repository.recordFailure(operationId, leaseUntil, "retryable", null, now))
+          .isInstanceOf(NullPointerException.class);
+      assertThatThrownBy(
+              () -> repository.recordFailure(operationId, leaseUntil, "retryable", now, null))
+          .isInstanceOf(NullPointerException.class);
+      assertThatThrownBy(
+              () -> repository.recordFailure(operationId, leaseUntil, "   ", now, now))
+          .isInstanceOf(IllegalArgumentException.class);
+      assertThatThrownBy(
+              () ->
+                  repository.recordFailure(
+                      operationId,
+                      leaseUntil,
+                      "retryable",
+                      now.minus(1, ChronoUnit.MICROS),
+                      now))
+          .isInstanceOf(IllegalArgumentException.class);
+      assertThatThrownBy(() -> repository.recordFailure(operationId, now, "retryable", now, now))
+          .isInstanceOf(IllegalArgumentException.class);
+      assertThatThrownBy(
+              () ->
+                  repository.recordFailure(
+                      operationId,
+                      now.minus(1, ChronoUnit.MICROS),
+                      "retryable",
+                      now,
+                      now))
+          .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void recordFailure_updatesCurrentPendingOperationsWithoutChangingStageData() {
+      GuestConversionOperationRepository repository = repository();
+      Instant now = Instant.parse("2026-09-04T15:00:00Z");
+      Instant leaseUntil = now.plus(2, ChronoUnit.MINUTES);
+      GuestConversionOperation pendingUser =
+          seedOperation(
+              operation(
+                  uuid("00000000-0000-0000-0000-000000000201"),
+                  GuestConversionState.PENDING_USER,
+                  3,
+                  now.minus(5, ChronoUnit.MINUTES),
+                  leaseUntil,
+                  now.minus(10, ChronoUnit.MINUTES)));
+      GuestConversionOperation pendingEvent =
+          seedOperation(
+              operation(
+                  uuid("00000000-0000-0000-0000-000000000202"),
+                  GuestConversionState.PENDING_EVENT,
+                  7,
+                  now.minus(4, ChronoUnit.MINUTES),
+                  leaseUntil,
+                  now.minus(10, ChronoUnit.MINUTES)));
+      Instant pendingEventRetryAt = now.plus(5, ChronoUnit.MINUTES);
+
+      Optional<GuestConversionOperation> pendingUserResult =
+          repository.recordFailure(
+              pendingUser.operationId(), leaseUntil, "user-service-unavailable", now, now);
+      Optional<GuestConversionOperation> pendingEventResult =
+          repository.recordFailure(
+              pendingEvent.operationId(),
+              leaseUntil,
+              "event-publish-timeout",
+              pendingEventRetryAt,
+              now);
+
+      GuestConversionOperation expectedPendingUser =
+          recordedFailure(pendingUser, "user-service-unavailable", now, now);
+      GuestConversionOperation expectedPendingEvent =
+          recordedFailure(pendingEvent, "event-publish-timeout", pendingEventRetryAt, now);
+      assertThat(pendingUserResult).contains(expectedPendingUser);
+      assertThat(pendingEventResult).contains(expectedPendingEvent);
+      assertThat(operationById(pendingUser.operationId())).isEqualTo(expectedPendingUser);
+      assertThat(operationById(pendingEvent.operationId())).isEqualTo(expectedPendingEvent);
+    }
+
+    @Test
+    void recordFailure_returnsEmptyWithoutMutationForCompletedAbsentOrLostLeases() {
+      GuestConversionOperationRepository repository = repository();
+      Instant now = Instant.parse("2026-09-04T15:00:00Z");
+      Instant expectedLeaseUntil = now.plus(2, ChronoUnit.MINUTES);
+      GuestConversionOperation completed =
+          seedOperation(
+              operation(
+                  uuid("00000000-0000-0000-0000-000000000203"),
+                  GuestConversionState.COMPLETED,
+                  8,
+                  now.minus(5, ChronoUnit.MINUTES),
+                  null,
+                  now.minus(10, ChronoUnit.MINUTES)));
+      GuestConversionOperation expiredLease =
+          seedOperation(
+              operation(
+                  uuid("00000000-0000-0000-0000-000000000204"),
+                  GuestConversionState.PENDING_USER,
+                  2,
+                  now.minus(5, ChronoUnit.MINUTES),
+                  now,
+                  now.minus(10, ChronoUnit.MINUTES)));
+      GuestConversionOperation missingLease =
+          seedOperation(
+              operation(
+                  uuid("00000000-0000-0000-0000-000000000205"),
+                  GuestConversionState.PENDING_EVENT,
+                  4,
+                  now.minus(5, ChronoUnit.MINUTES),
+                  null,
+                  now.minus(10, ChronoUnit.MINUTES)));
+      GuestConversionOperation mismatchedLease =
+          seedOperation(
+              operation(
+                  uuid("00000000-0000-0000-0000-000000000206"),
+                  GuestConversionState.PENDING_USER,
+                  6,
+                  now.minus(5, ChronoUnit.MINUTES),
+                  expectedLeaseUntil.plus(1, ChronoUnit.MINUTES),
+                  now.minus(10, ChronoUnit.MINUTES)));
+
+      assertThat(
+              repository.recordFailure(
+                  completed.operationId(), expectedLeaseUntil, "retryable", now, now))
+          .isEmpty();
+      assertThat(
+              repository.recordFailure(
+                  expiredLease.operationId(), expectedLeaseUntil, "retryable", now, now))
+          .isEmpty();
+      assertThat(
+              repository.recordFailure(
+                  missingLease.operationId(), expectedLeaseUntil, "retryable", now, now))
+          .isEmpty();
+      assertThat(
+              repository.recordFailure(
+                  mismatchedLease.operationId(), expectedLeaseUntil, "retryable", now, now))
+          .isEmpty();
+      assertThat(
+              repository.recordFailure(
+                  UUID.randomUUID(), expectedLeaseUntil, "retryable", now, now))
+          .isEmpty();
+      assertThat(operationById(completed.operationId())).isEqualTo(completed);
+      assertThat(operationById(expiredLease.operationId())).isEqualTo(expiredLease);
+      assertThat(operationById(missingLease.operationId())).isEqualTo(missingLease);
+      assertThat(operationById(mismatchedLease.operationId())).isEqualTo(mismatchedLease);
+    }
+
+    @Test
+    void recordFailure_fencesAnOldWorkerAfterTheOperationIsReLeased() {
+      GuestConversionOperationRepository repository = repository();
+      Instant now = Instant.parse("2026-09-04T15:00:00Z");
+      Instant staleLeaseUntil = now.plus(2, ChronoUnit.MINUTES);
+      Instant renewedLeaseUntil = now.plus(4, ChronoUnit.MINUTES);
+      GuestConversionOperation pendingUser =
+          seedOperation(
+              operation(
+                  uuid("00000000-0000-0000-0000-000000000207"),
+                  GuestConversionState.PENDING_USER,
+                  5,
+                  now.minus(5, ChronoUnit.MINUTES),
+                  staleLeaseUntil,
+                  now.minus(10, ChronoUnit.MINUTES)));
+      GuestConversionOperation renewed = withLease(pendingUser, renewedLeaseUntil);
+      replaceOperation(renewed);
+
+      Optional<GuestConversionOperation> result =
+          repository.recordFailure(
+              pendingUser.operationId(), staleLeaseUntil, "retryable", now, now);
+
+      assertThat(result).isEmpty();
+      assertThat(operationById(pendingUser.operationId())).isEqualTo(renewed);
+    }
+
+    @Test
+    void recordFailure_concurrentWorkersIncrementExactlyOnce() throws Exception {
+      GuestConversionOperationRepository repository = repository();
+      Instant now = Instant.parse("2026-09-04T15:00:00Z");
+      Instant leaseUntil = now.plus(2, ChronoUnit.MINUTES);
+      GuestConversionOperation pendingEvent =
+          seedOperation(
+              operation(
+                  uuid("00000000-0000-0000-0000-000000000208"),
+                  GuestConversionState.PENDING_EVENT,
+                  11,
+                  now.minus(5, ChronoUnit.MINUTES),
+                  leaseUntil,
+                  now.minus(10, ChronoUnit.MINUTES)));
+      GuestConversionOperation expected =
+          recordedFailure(
+              pendingEvent,
+              "event-publish-timeout",
+              now.plus(1, ChronoUnit.MINUTES),
+              now);
+      installLeaseDelayTrigger();
+      CyclicBarrier start = new CyclicBarrier(2);
+      ExecutorService executor = Executors.newFixedThreadPool(2);
+      try {
+        List<Optional<GuestConversionOperation>> results =
+            executor
+                .invokeAll(
+                    IntStream.range(0, 2)
+                        .<java.util.concurrent.Callable<Optional<GuestConversionOperation>>>
+                            mapToObj(
+                                ignored ->
+                                    () -> {
+                                      start.await(10, TimeUnit.SECONDS);
+                                      return repository.recordFailure(
+                                          pendingEvent.operationId(),
+                                          leaseUntil,
+                                          "event-publish-timeout",
+                                          now.plus(1, ChronoUnit.MINUTES),
+                                          now);
+                                    })
+                        .toList(),
+                    30,
+                    TimeUnit.SECONDS)
+                .stream()
+                .map(
+                    future -> {
+                      try {
+                        return future.get();
+                      } catch (Exception ex) {
+                        throw new AssertionError("concurrent recordFailure call failed", ex);
+                      }
+                    })
+                .toList();
+
+        assertThat(results).containsExactlyInAnyOrder(Optional.of(expected), Optional.empty());
+        assertThat(operationById(pendingEvent.operationId())).isEqualTo(expected);
+      } finally {
+        executor.shutdownNow();
+        assertThat(executor.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
+      }
+    }
+  }
+
   private GuestConversionOperationRepository repository() {
     return new JdbcGuestConversionOperationRepository(
         new NamedParameterJdbcTemplate(
@@ -900,6 +1164,27 @@ class GuestConversionOperationRepositoryJdbcIntegrationTest {
         operation.userMarkedAt(),
         operation.authPromotedAt(),
         now,
+        operation.createdAt(),
+        now);
+  }
+
+  private GuestConversionOperation recordedFailure(
+      GuestConversionOperation operation,
+      String errorCode,
+      Instant nextAttemptAt,
+      Instant now) {
+    return new GuestConversionOperation(
+        operation.operationId(),
+        operation.accountId(),
+        operation.otpCodeId(),
+        operation.state(),
+        operation.attemptCount() + 1,
+        nextAttemptAt,
+        null,
+        errorCode,
+        operation.userMarkedAt(),
+        operation.authPromotedAt(),
+        operation.eventPublishedAt(),
         operation.createdAt(),
         now);
   }
