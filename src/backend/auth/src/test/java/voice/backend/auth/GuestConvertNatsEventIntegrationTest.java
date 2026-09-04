@@ -11,7 +11,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -23,7 +22,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import voice.backend.auth.support.CapturingMailSender;
 import voice.backend.auth.support.RecordingAuthEventPublisher;
 import voice.backend.auth.repository.GuestConversionOperationRepository;
-import voice.backend.auth.repository.GuestConversionState;
+import voice.backend.auth.service.GuestConversionPendingEventWorker;
 import voice.backend.auth.service.GuestConversionPendingUserRecoveryRunner;
 
 @SpringBootTest
@@ -36,6 +35,7 @@ class GuestConvertNatsEventIntegrationTest {
   @Autowired CapturingMailSender mailSender;
   @Autowired GuestConversionOperationRepository operations;
   @Autowired GuestConversionPendingUserRecoveryRunner pendingUserRecovery;
+  @Autowired GuestConversionPendingEventWorker pendingEventWorker;
   @Autowired Clock clock;
 
   @Test
@@ -102,17 +102,15 @@ class GuestConvertNatsEventIntegrationTest {
         .andExpect(jsonPath("$.session.account_id", is(guest.get("account_id").asText())))
         .andExpect(jsonPath("$.session.account_type", is("regular")));
 
-    Instant now = Instant.now(clock);
-    assertThat(operations.leaseDue(1, now, now.plus(Duration.ofMinutes(1))))
-        .singleElement()
-        .satisfies(
-            operation -> {
-              assertThat(operation.accountId()).isEqualTo(UUID.fromString(guest.get("account_id").asText()));
-              assertThat(operation.state()).isEqualTo(GuestConversionState.PENDING_EVENT);
-            });
     assertThat(events.publishedSubjects())
         .as("PENDING_USER recovery must not leak into the future PENDING_EVENT publisher")
         .doesNotContain("user.guest_converted");
+
+    pendingEventWorker.processDue(1, Duration.ofMinutes(1));
+
+    assertThat(events.publishedSubjects()).containsExactly("user.guest_converted");
+    Instant now = Instant.now(clock);
+    assertThat(operations.leaseDue(1, now, now.plus(Duration.ofMinutes(1)))).isEmpty();
   }
 
   private JsonNode postJson(String path, String body) throws Exception {

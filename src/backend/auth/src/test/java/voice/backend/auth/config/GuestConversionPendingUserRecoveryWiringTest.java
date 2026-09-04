@@ -14,7 +14,10 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import voice.backend.auth.repository.GuestConversionOperationRepository;
 import voice.backend.auth.service.GuestConversionPendingUserRecoveryRunner;
+import voice.backend.auth.service.GuestConversionLocalPromotion;
+import voice.backend.auth.service.GuestConversionPendingUserWorker;
 import voice.backend.auth.userdb.PrimaryProfileProvisioner;
 
 class GuestConversionPendingUserRecoveryWiringTest {
@@ -30,6 +33,19 @@ class GuestConversionPendingUserRecoveryWiringTest {
               "auth.guest-conversion.pending-user.batch-size=9",
               "auth.guest-conversion.pending-user.lease-duration=PT45S",
               "auth.guest-conversion.pending-user.interval=PT7S");
+
+  private final ApplicationContextRunner memoryRuntime =
+      new ApplicationContextRunner()
+          .withConfiguration(
+              AutoConfigurations.of(
+                  MemoryPersistenceConfiguration.class, GuestLifecycleConfiguration.class))
+          .withUserConfiguration(MemorySupport.class)
+          .withPropertyValues(
+              "auth.persistence=memory",
+              "auth.guest-conversion.pending-user.enabled=true",
+              "auth.guest-conversion.pending-user.batch-size=4",
+              "auth.guest-conversion.pending-user.lease-duration=PT30S",
+              "auth.guest-conversion.pending-user.interval=PT5S");
 
   @Test
   void jdbcRuntimeWiresAnEnabledRecoveryRunnerWithConfiguredBounds() {
@@ -55,6 +71,53 @@ class GuestConversionPendingUserRecoveryWiringTest {
               assertThat(context).hasNotFailed();
               assertThat(context).doesNotHaveBean(GuestConversionPendingUserRecoveryRunner.class);
             });
+  }
+
+  @Test
+  void memoryRuntimeWiresTheSameRecoveryPathAsJdbc() {
+    memoryRuntime.run(
+        context -> {
+          assertThat(context).hasNotFailed();
+          assertThat(context).hasSingleBean(GuestConversionOperationRepository.class);
+          assertThat(context).hasSingleBean(GuestConversionLocalPromotion.class);
+          assertThat(context).hasSingleBean(GuestConversionPendingUserWorker.class);
+          assertThat(context).hasSingleBean(GuestConversionPendingUserRecoveryRunner.class);
+          GuestConversionPendingUserRecoveryProperties properties =
+              context.getBean(GuestConversionPendingUserRecoveryProperties.class);
+          assertThat(properties.isEnabled()).isTrue();
+          assertThat(properties.getBatchSize()).isEqualTo(4);
+          assertThat(properties.getLeaseDuration()).isEqualTo(Duration.ofSeconds(30));
+          assertThat(properties.getInterval()).isEqualTo(Duration.ofSeconds(5));
+        });
+  }
+
+  @Test
+  void recoveryDefaultsAreEnabledAndBoundedWhileInvalidBoundsFailContextStartup() {
+    new ApplicationContextRunner()
+        .withConfiguration(
+            AutoConfigurations.of(MemoryPersistenceConfiguration.class, GuestLifecycleConfiguration.class))
+        .withUserConfiguration(MemorySupport.class)
+        .withPropertyValues("auth.persistence=memory")
+        .run(
+            context -> {
+              assertThat(context).hasNotFailed();
+              GuestConversionPendingUserRecoveryProperties properties =
+                  context.getBean(GuestConversionPendingUserRecoveryProperties.class);
+              assertThat(properties.isEnabled()).isTrue();
+              assertThat(properties.getBatchSize()).isPositive();
+              assertThat(properties.getLeaseDuration()).isPositive();
+              assertThat(properties.getInterval()).isPositive();
+            });
+
+    memoryRuntime
+        .withPropertyValues("auth.guest-conversion.pending-user.batch-size=0")
+        .run(context -> assertThat(context).hasFailed());
+    memoryRuntime
+        .withPropertyValues("auth.guest-conversion.pending-user.lease-duration=PT0S")
+        .run(context -> assertThat(context).hasFailed());
+    memoryRuntime
+        .withPropertyValues("auth.guest-conversion.pending-user.interval=PT0S")
+        .run(context -> assertThat(context).hasFailed());
   }
 
   @Configuration(proxyBeanMethods = false)
@@ -102,6 +165,29 @@ class GuestConversionPendingUserRecoveryWiringTest {
     @Bean
     AuthProperties authProperties() {
       return new AuthProperties();
+    }
+  }
+
+  @Configuration(proxyBeanMethods = false)
+  static class MemorySupport {
+    @Bean
+    Clock clock() {
+      return Clock.systemUTC();
+    }
+
+    @Bean
+    PrimaryProfileProvisioner primaryProfiles() {
+      return new PrimaryProfileProvisioner() {
+        @Override
+        public String ensurePrimaryProfile(UUID accountId, String displayHint, boolean guestAccount) {
+          throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void clearGuestAccountFlag(UUID accountId) {
+          throw new UnsupportedOperationException();
+        }
+      };
     }
   }
 }

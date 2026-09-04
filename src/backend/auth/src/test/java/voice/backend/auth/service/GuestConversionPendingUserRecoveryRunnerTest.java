@@ -1,6 +1,7 @@
 package voice.backend.auth.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.lang.reflect.Method;
 import java.time.Clock;
@@ -57,6 +58,17 @@ class GuestConversionPendingUserRecoveryRunnerTest {
   }
 
   @Test
+  void userTickClaimsOnlyPendingUserAndLeavesDuePendingEventLeaseUntouched() {
+    StateAwareOperations operations = new StateAwareOperations(operation(GuestConversionState.PENDING_EVENT));
+
+    new GuestConversionPendingUserRecoveryRunner(worker(operations), properties()).tick();
+
+    assertThat(operations.claimedStates).containsExactly(GuestConversionState.PENDING_USER);
+    assertThat(operations.pendingEventLockedUntil).isEqualTo(NOW.plusSeconds(60));
+    assertThat(operations.genericLeaseCalls).isZero();
+  }
+
+  @Test
   void overlappingTickFailsClosedInsteadOfLeasingTheSameWorkTwice() throws Exception {
     GuestConversionOperation pendingUser = operation(GuestConversionState.PENDING_USER);
     RecordingOperations operations = new RecordingOperations(List.of(pendingUser));
@@ -80,6 +92,19 @@ class GuestConversionPendingUserRecoveryRunnerTest {
       user.release.countDown();
       executor.shutdownNow();
     }
+  }
+
+  @Test
+  void failedTickReleasesTheOverlapGuardSoTheNextTickCanRun() {
+    FailOnceOperations operations = new FailOnceOperations();
+    GuestConversionPendingUserRecoveryRunner runner =
+        new GuestConversionPendingUserRecoveryRunner(worker(operations), properties());
+
+    assertThatThrownBy(runner::tick).isInstanceOf(IllegalStateException.class);
+
+    runner.tick();
+
+    assertThat(operations.calls).isEqualTo(2);
   }
 
   @Test
@@ -122,7 +147,7 @@ class GuestConversionPendingUserRecoveryRunnerTest {
         NOW);
   }
 
-  private static final class RecordingOperations implements GuestConversionOperationRepository {
+  private static class RecordingOperations implements GuestConversionOperationRepository {
     private final List<GuestConversionOperation> leased;
     private final java.util.ArrayList<LeaseCall> leaseCalls = new java.util.ArrayList<>();
 
@@ -139,6 +164,13 @@ class GuestConversionPendingUserRecoveryRunnerTest {
     public List<GuestConversionOperation> leaseDue(int batchSize, Instant now, Instant leaseUntil) {
       leaseCalls.add(new LeaseCall(batchSize, now, leaseUntil));
       return leased;
+    }
+
+    @Override
+    public List<GuestConversionOperation> leaseDue(
+        GuestConversionState state, int batchSize, Instant now, Instant leaseUntil) {
+      leaseCalls.add(new LeaseCall(batchSize, now, leaseUntil));
+      return leased.stream().filter(operation -> operation.state() == state).toList();
     }
 
     @Override
@@ -199,6 +231,49 @@ class GuestConversionPendingUserRecoveryRunnerTest {
         Thread.currentThread().interrupt();
         throw new IllegalStateException(interrupted);
       }
+    }
+  }
+
+  private static final class StateAwareOperations extends RecordingOperations {
+    private final java.util.ArrayList<GuestConversionState> claimedStates = new java.util.ArrayList<>();
+    private Instant pendingEventLockedUntil;
+    private int genericLeaseCalls;
+
+    private StateAwareOperations(GuestConversionOperation pendingEvent) {
+      super(List.of(pendingEvent));
+      pendingEventLockedUntil = pendingEvent.lockedUntil();
+    }
+
+    @Override
+    public List<GuestConversionOperation> leaseDue(int batchSize, Instant now, Instant leaseUntil) {
+      genericLeaseCalls++;
+      pendingEventLockedUntil = leaseUntil;
+      return List.of();
+    }
+
+    @Override
+    public List<GuestConversionOperation> leaseDue(
+        GuestConversionState state, int batchSize, Instant now, Instant leaseUntil) {
+      claimedStates.add(state);
+      return List.of();
+    }
+  }
+
+  private static final class FailOnceOperations extends RecordingOperations {
+    private int calls;
+
+    private FailOnceOperations() {
+      super(List.of());
+    }
+
+    @Override
+    public List<GuestConversionOperation> leaseDue(
+        GuestConversionState state, int batchSize, Instant now, Instant leaseUntil) {
+      calls++;
+      if (calls == 1) {
+        throw new IllegalStateException("lease failure");
+      }
+      return List.of();
     }
   }
 

@@ -133,6 +133,36 @@ class InMemoryGuestConversionOperationRepositoryContractTest {
     }
   }
 
+  @Test
+  void stateAwareClaimsKeepPendingUserAndPendingEventWorkDisjoint() {
+    InMemoryGuestConversionOperationRepository repository =
+        new InMemoryGuestConversionOperationRepository();
+    GuestConversionOperation pendingUser = leased(repository);
+    assertThat(
+            repository.advance(
+                pendingUser.operationId(),
+                GuestConversionState.PENDING_USER,
+                pendingUser.lockedUntil(),
+                NOW.plusSeconds(1)))
+        .isEqualTo(GuestConversionAdvanceResult.APPLIED);
+
+    assertThat(
+            repository.leaseDue(
+                GuestConversionState.PENDING_USER,
+                1,
+                NOW.plusSeconds(1),
+                NOW.plusSeconds(61)))
+        .isEmpty();
+    assertThat(
+            repository.leaseDue(
+                GuestConversionState.PENDING_EVENT,
+                1,
+                NOW.plusSeconds(1),
+                NOW.plusSeconds(61)))
+        .singleElement()
+        .satisfies(operation -> assertThat(operation.state()).isEqualTo(GuestConversionState.PENDING_EVENT));
+  }
+
   private static GuestConversionAdvanceResult advance(
       InMemoryGuestConversionOperationRepository repository,
       GuestConversionOperation operation,
