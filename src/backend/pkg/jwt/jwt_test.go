@@ -178,6 +178,66 @@ func TestJWKSValidator_sessionEpoch(t *testing.T) {
 	}
 }
 
+func TestJWKSValidator_sessionEpochCompatibilityOption(t *testing.T) {
+	key := mustRSAKey(t)
+	jwks := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(t, w, http.StatusOK, map[string]any{
+			"keys": []map[string]string{rsaJWK("key-1", &key.PublicKey)},
+		})
+	}))
+	t.Cleanup(jwks.Close)
+
+	clock := WithClock(func() time.Time { return time.Unix(1000, 0) })
+	basePayload := map[string]any{
+		"sub": "account-1", "profile_id": "profile-1", "jti": "token-1",
+		"iss": "voice-auth", "aud": "voice-client", "exp": int64(1100),
+	}
+	legacy := signJWT(t, "key-1", key, basePayload)
+
+	compat := NewJWKSValidator(jwks.URL, "voice-auth", "voice-client", clock, WithSessionEpochRequired(false))
+	claims, code := compat.Validate(requestWithToken(legacy))
+	if code != "" {
+		t.Fatalf("legacy token in compatibility mode code = %q, want success", code)
+	}
+	if claims.UserID != "account-1" || claims.ProfileID != "profile-1" || claims.JTI != "token-1" || claims.SessionEpoch != 0 {
+		t.Fatalf("legacy claims = %+v, want preserved claims with zero session epoch", claims)
+	}
+
+	for name, required := range map[string]bool{
+		"default":         true,
+		"explicit-strict": true,
+	} {
+		t.Run(name, func(t *testing.T) {
+			opts := []Option{clock}
+			if name == "explicit-strict" {
+				opts = append(opts, WithSessionEpochRequired(required))
+			}
+			strict := NewJWKSValidator(jwks.URL, "voice-auth", "voice-client", opts...)
+			if _, code := strict.Validate(requestWithToken(legacy)); code != "invalid_token" {
+				t.Fatalf("legacy token in strict mode code = %q, want invalid_token", code)
+			}
+		})
+	}
+
+	for name, sessionEpoch := range map[string]any{
+		"zero":       int64(0),
+		"negative":   int64(-1),
+		"string":     "42",
+		"fractional": 42.5,
+	} {
+		t.Run("compatibility-"+name, func(t *testing.T) {
+			payload := make(map[string]any, len(basePayload)+1)
+			for key, value := range basePayload {
+				payload[key] = value
+			}
+			payload["session_epoch"] = sessionEpoch
+			if _, code := compat.Validate(requestWithToken(signJWT(t, "key-1", key, payload))); code != "invalid_token" {
+				t.Fatalf("present session_epoch %s in compatibility mode code = %q, want invalid_token", name, code)
+			}
+		})
+	}
+}
+
 func mustRSAKey(t *testing.T) *rsa.PrivateKey {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
