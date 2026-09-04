@@ -36,7 +36,8 @@ func (s *UserGRPC) EnsurePrimaryProfile(ctx context.Context, req *userv1.EnsureP
 		}
 		profileID = &id
 	}
-	row, err := s.Profiles.EnsurePrimaryProfile(ctx, accountID, profileID, strings.TrimSpace(req.GetDisplayHint()))
+	row, err := s.Profiles.EnsurePrimaryProfile(
+		ctx, accountID, profileID, strings.TrimSpace(req.GetDisplayHint()), req.GetIsGuestAccount())
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

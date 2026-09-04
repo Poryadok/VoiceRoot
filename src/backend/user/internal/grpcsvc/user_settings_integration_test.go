@@ -81,6 +81,41 @@ func TestEnsurePrimaryProfile_Idempotent(t *testing.T) {
 	require.Equal(t, first.GetProfile().GetId(), second.GetProfile().GetId())
 }
 
+func TestEnsurePrimaryProfile_PersistsGuestAccountMarker(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startUserPostgresForSubscriptionTests(t, ctx)
+	profiles := store.NewProfileStore(pool)
+	privacy := store.NewPrivacyStore(pool)
+	cli := startUserSettingsTestServer(t, profiles, privacy)
+
+	accountID := uuid.New()
+	internal := withInternalUserCtx(ctx)
+	created, err := cli.EnsurePrimaryProfile(internal, &userv1.EnsurePrimaryProfileRequest{
+		AccountId:      accountID.String(),
+		DisplayHint:    "Guest",
+		IsGuestAccount: true,
+	})
+	require.NoError(t, err)
+	require.True(t, created.GetProfile().GetIsGuestAccount())
+
+	var persistedGuest bool
+	err = pool.QueryRow(ctx, `SELECT is_guest_account FROM profiles WHERE id = $1`,
+		uuid.MustParse(created.GetProfile().GetId())).Scan(&persistedGuest)
+	require.NoError(t, err)
+	require.True(t, persistedGuest)
+
+	existing, err := cli.EnsurePrimaryProfile(internal, &userv1.EnsurePrimaryProfileRequest{
+		AccountId:      accountID.String(),
+		IsGuestAccount: false,
+	})
+	require.NoError(t, err)
+	require.Equal(t, created.GetProfile().GetId(), existing.GetProfile().GetId())
+	require.True(t, existing.GetProfile().GetIsGuestAccount())
+}
+
 func TestEnsurePrimaryProfile_RejectsDeletedPrimary(t *testing.T) {
 	if testing.Short() {
 		t.Skip()

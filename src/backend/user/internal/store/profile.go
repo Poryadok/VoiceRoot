@@ -383,7 +383,7 @@ func (s *ProfileStore) GetOwnedProfile(ctx context.Context, accountID, profileID
 }
 
 // EnsurePrimaryProfile creates or returns the primary profile for account_id (Auth bootstrap).
-func (s *ProfileStore) EnsurePrimaryProfile(ctx context.Context, accountID uuid.UUID, profileID *uuid.UUID, displayHint string) (*ProfileRow, error) {
+func (s *ProfileStore) EnsurePrimaryProfile(ctx context.Context, accountID uuid.UUID, profileID *uuid.UUID, displayHint string, guestAccount bool) (*ProfileRow, error) {
 	existing, err := s.GetPrimaryProfileIDForAccount(ctx, accountID)
 	if err == nil && existing != uuid.Nil {
 		return s.GetByID(ctx, existing)
@@ -407,10 +407,10 @@ func (s *ProfileStore) EnsurePrimaryProfile(ctx context.Context, accountID uuid.
 	for attempt := 0; attempt < maxDiscriminatorAttempts; attempt++ {
 		disc := randomDiscriminator()
 		row := s.pool.QueryRow(ctx, `
-			INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary, locale, theme, verification_type)
-			VALUES ($1, $2, $3, $4, $5, true, 'ru', 'dark', 'none')
+			INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary, locale, theme, verification_type, is_guest_account)
+			VALUES ($1, $2, $3, $4, $5, true, 'ru', 'dark', 'none', $6)
 			RETURNING `+profileSelectCols,
-			id, accountID, base, disc, dn,
+			id, accountID, base, disc, dn, guestAccount,
 		)
 		p, err := scanProfile(row)
 		if err == nil {
