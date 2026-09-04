@@ -53,21 +53,37 @@ void main() {
 
     test('empty delta still processes response-level DELETED', () async {
       final hub = _TestRealtimeHub();
+      final cache = _RecordingCacheStore();
       final messages = _ScriptedMessagesClient(
         pages: [
-          _page(ids: const ['msg-1']),
+          _page(ids: const ['msg-1'], cursor: 'cursor-current', hasMore: true),
           _page(peerState: messaging_pb.DmPeerState.DM_PEER_STATE_DELETED),
         ],
       );
       final container = _container(
         messages: messages,
-        cache: _RecordingCacheStore(),
+        cache: cache,
         realtimeHub: hub,
       );
       addTearDown(container.dispose);
 
       final subscription = await _loadRoom(container);
       addTearDown(subscription.close);
+      await pumpEventQueue();
+      final initialIds = [
+        ...container
+            .read(chatRoomControllerProvider('chat-1'))
+            .messages
+            .map((message) => message.id),
+      ];
+      final initialCursor = container
+          .read(chatRoomControllerProvider('chat-1'))
+          .nextCursor;
+      final initialHasMore = container
+          .read(chatRoomControllerProvider('chat-1'))
+          .hasMore;
+      final initialCacheIds = await cache.cachedIds();
+      final initialWriteCount = cache.replaceCalls.length;
       hub.addFrame(
         const RealtimeFrame(
           op: 'message_create',
@@ -78,11 +94,16 @@ void main() {
 
       final state = container.read(chatRoomControllerProvider('chat-1'));
       expect(state.isDmPeerDeleted, isTrue);
-      expect(state.messages.map((message) => message.id), ['msg-1']);
+      expect(state.messages.map((message) => message.id), initialIds);
+      expect(state.nextCursor, initialCursor);
+      expect(state.hasMore, initialHasMore);
+      expect(await cache.cachedIds(), initialCacheIds);
+      expect(cache.replaceCalls.length, initialWriteCount);
       expect(messages.calls.last.afterMessageId, 'msg-1');
     });
 
     test('older DELETED does not change loaded history or cursor', () async {
+      final cache = _RecordingCacheStore();
       final messages = _ScriptedMessagesClient(
         pages: [
           _page(ids: const ['msg-2'], cursor: 'cursor-current', hasMore: true),
@@ -94,23 +115,37 @@ void main() {
           ),
         ],
       );
-      final container = _container(
-        messages: messages,
-        cache: _RecordingCacheStore(),
-      );
+      final container = _container(messages: messages, cache: cache);
       addTearDown(container.dispose);
 
       final subscription = await _loadRoom(container);
       addTearDown(subscription.close);
+      await pumpEventQueue();
+      final initialIds = [
+        ...container
+            .read(chatRoomControllerProvider('chat-1'))
+            .messages
+            .map((message) => message.id),
+      ];
+      final initialCursor = container
+          .read(chatRoomControllerProvider('chat-1'))
+          .nextCursor;
+      final initialHasMore = container
+          .read(chatRoomControllerProvider('chat-1'))
+          .hasMore;
+      final initialCacheIds = await cache.cachedIds();
+      final initialWriteCount = cache.replaceCalls.length;
       await container
           .read(chatRoomControllerProvider('chat-1').notifier)
           .loadOlderMessages();
 
       final state = container.read(chatRoomControllerProvider('chat-1'));
       expect(state.isDmPeerDeleted, isTrue);
-      expect(state.messages.map((message) => message.id), ['msg-2']);
-      expect(state.nextCursor, 'cursor-current');
-      expect(state.hasMore, isTrue);
+      expect(state.messages.map((message) => message.id), initialIds);
+      expect(state.nextCursor, initialCursor);
+      expect(state.hasMore, initialHasMore);
+      expect(await cache.cachedIds(), initialCacheIds);
+      expect(cache.replaceCalls.length, initialWriteCount);
       expect(state.isLoadingOlder, isFalse);
     });
 
@@ -243,6 +278,77 @@ void main() {
         expect(state.nextCursor, 'profile-b-cursor');
         expect(state.hasMore, isTrue);
         expect(cache.replaceCalls, isEmpty);
+      },
+    );
+
+    test(
+      'matching profile-B live DELETED waits for profile-B-bound history',
+      () async {
+        final auth = _MutableAuthController();
+        final hub = _TestRealtimeHub();
+        final messages = _ScriptedMessagesClient(
+          pages: [
+            _page(
+              ids: const ['profile-a-message'],
+              cursor: 'profile-a-cursor',
+              hasMore: true,
+            ),
+            _page(
+              ids: const ['profile-b-message'],
+              cursor: 'profile-b-cursor',
+              hasMore: true,
+              peerState: messaging_pb.DmPeerState.DM_PEER_STATE_DELETED,
+            ),
+          ],
+        );
+        final container = _container(
+          auth: auth,
+          messages: messages,
+          cache: _RecordingCacheStore(),
+          realtimeHub: hub,
+        );
+        addTearDown(container.dispose);
+
+        final subscription = await _loadRoom(container);
+        addTearDown(subscription.close);
+        await pumpEventQueue();
+        expect(
+          container
+              .read(chatRoomControllerProvider('chat-1'))
+              .messages
+              .map((message) => message.id),
+          ['profile-a-message'],
+        );
+
+        auth.state = _authState('profile-b', 'access-b');
+        hub.addFrame(
+          const RealtimeFrame(
+            op: 'dm_peer_deleted',
+            data: {'chat_id': 'chat-1', 'recipient_profile_id': 'profile-b'},
+          ),
+        );
+        await pumpEventQueue();
+
+        var state = container.read(chatRoomControllerProvider('chat-1'));
+        expect(state.isDmPeerDeleted, isFalse);
+        expect(state.messages.map((message) => message.id), [
+          'profile-a-message',
+        ]);
+        expect(state.nextCursor, 'profile-a-cursor');
+        expect(state.hasMore, isTrue);
+
+        await container
+            .read(chatRoomControllerProvider('chat-1').notifier)
+            .loadInitial();
+        await pumpEventQueue();
+
+        state = container.read(chatRoomControllerProvider('chat-1'));
+        expect(state.isDmPeerDeleted, isTrue);
+        expect(state.messages.map((message) => message.id), [
+          'profile-b-message',
+        ]);
+        expect(state.nextCursor, 'profile-b-cursor');
+        expect(state.hasMore, isTrue);
       },
     );
 
