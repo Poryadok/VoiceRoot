@@ -34,6 +34,7 @@ func TestChatAuthGRPCAddrDeploymentWiring(t *testing.T) {
 			require.Empty(t, container.SecretRefs(), "Chat envFrom must not allow a Secret to override AUTH_GRPC_ADDR")
 			for _, env := range container.Env {
 				if env.Name == "AUTH_GRPC_ADDR" {
+					require.Empty(t, env.Value, "Chat must inherit AUTH_GRPC_ADDR from voice-app-config")
 					require.Nil(t, env.ValueFrom.SecretKeyRef, "AUTH_GRPC_ADDR must remain a ConfigMap literal, not a secret")
 				}
 			}
@@ -97,6 +98,7 @@ func (container kubernetesContainer) SecretRefs() []string {
 
 type kubernetesEnvVar struct {
 	Name      string `yaml:"name"`
+	Value     string `yaml:"value"`
 	ValueFrom struct {
 		SecretKeyRef *kubernetesKeyRef `yaml:"secretKeyRef"`
 	} `yaml:"valueFrom"`

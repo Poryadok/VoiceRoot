@@ -205,6 +205,27 @@ func (m profileAcctMap) AccountIDByProfileID(_ context.Context, profileID uuid.U
 	return a, nil
 }
 
+// explicitDeletedAccounts is supplied by every cross-module Chat fixture that
+// opens a DM. A nil deletion decision is unsafe: the production Chat boundary
+// must fail closed rather than silently treating a peer as active.
+type explicitDeletedAccounts map[uuid.UUID]struct{}
+
+func (m explicitDeletedAccounts) DeletedAmong(_ context.Context, accountIDs []uuid.UUID) (map[uuid.UUID]struct{}, error) {
+	out := make(map[uuid.UUID]struct{})
+	for _, accountID := range accountIDs {
+		if _, deleted := m[accountID]; deleted {
+			out[accountID] = struct{}{}
+		}
+	}
+	return out, nil
+}
+
+type unavailableDeletedAccounts struct{}
+
+func (unavailableDeletedAccounts) DeletedAmong(context.Context, []uuid.UUID) (map[uuid.UUID]struct{}, error) {
+	return nil, errors.New("auth deleted-account lookup unavailable")
+}
+
 type boolBlocks bool
 
 func (b boolBlocks) AccountPairBlocked(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
@@ -778,7 +799,10 @@ func TestChatMessagingIntegration_CreateDM_SendGetMessagesCursor(t *testing.T) {
 	profB := uuid.New()
 	pmap := profileAcctMap{profA: acctA, profB: acctB}
 
-	chatCli, chatCleanup := testchat.NewBufconnChatClientWith(t, pool, testchat.ChatDeps{Profiles: pmap})
+	chatCli, chatCleanup := testchat.NewBufconnChatClientWith(t, pool, testchat.ChatDeps{
+		Profiles:        pmap,
+		DeletedAccounts: explicitDeletedAccounts{},
+	})
 	t.Cleanup(chatCleanup)
 
 	ctxA := withProfileCtx(ctx, acctA, profA)
@@ -834,6 +858,72 @@ func TestChatMessagingIntegration_CreateDM_SendGetMessagesCursor(t *testing.T) {
 	}
 }
 
+// TestChatMessagingIntegration_CreateDM_DeletedPeerGate proves the reusable
+// Chat bufconn fixture carries the same mandatory deleted-account decision as
+// production. Active peers keep the existing Chat→Messaging DM flow, while a
+// deleted or unresolvable peer is denied before a DM row can be opened.
+func TestChatMessagingIntegration_CreateDM_DeletedPeerGate(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applyChatDBForBufconnChat(t, ctx, pool)
+
+	acctCaller, profCaller := uuid.New(), uuid.New()
+	acctActive, profActive := uuid.New(), uuid.New()
+	acctDeleted, profDeleted := uuid.New(), uuid.New()
+	pmap := profileAcctMap{
+		profCaller:  acctCaller,
+		profActive:  acctActive,
+		profDeleted: acctDeleted,
+	}
+	callerCtx := withProfileCtx(ctx, acctCaller, profCaller)
+
+	t.Run("active peer is admitted with an explicit decision", func(t *testing.T) {
+		chatCli, cleanup := testchat.NewBufconnChatClientWith(t, pool, testchat.ChatDeps{
+			Profiles:        pmap,
+			DeletedAccounts: explicitDeletedAccounts{},
+		})
+		t.Cleanup(cleanup)
+
+		created, err := chatCli.CreateDM(callerCtx, &chatv1.CreateDMRequest{OtherProfileId: profActive.String()})
+		require.NoError(t, err)
+		require.NotNil(t, created.GetChat())
+		require.NotEmpty(t, created.GetChat().GetId())
+	})
+
+	t.Run("deleted peer is privacy-safely denied", func(t *testing.T) {
+		chatCli, cleanup := testchat.NewBufconnChatClientWith(t, pool, testchat.ChatDeps{
+			Profiles: pmap,
+			DeletedAccounts: explicitDeletedAccounts{
+				acctDeleted: {},
+			},
+		})
+		t.Cleanup(cleanup)
+
+		created, err := chatCli.CreateDM(callerCtx, &chatv1.CreateDMRequest{OtherProfileId: profDeleted.String()})
+		require.Nil(t, created)
+		require.Equal(t, codes.PermissionDenied, status.Code(err))
+		require.NotContains(t, strings.ToLower(status.Convert(err).Message()), "deleted")
+		var dmCount int
+		require.NoError(t, pool.QueryRow(ctx, `SELECT COUNT(*) FROM chats WHERE type = 'dm'`).Scan(&dmCount))
+		require.Equal(t, 1, dmCount, "a denied deleted peer must not create a second DM")
+	})
+
+	t.Run("unavailable decision fails closed", func(t *testing.T) {
+		chatCli, cleanup := testchat.NewBufconnChatClientWith(t, pool, testchat.ChatDeps{
+			Profiles:        pmap,
+			DeletedAccounts: unavailableDeletedAccounts{},
+		})
+		t.Cleanup(cleanup)
+
+		created, err := chatCli.CreateDM(callerCtx, &chatv1.CreateDMRequest{OtherProfileId: profDeleted.String()})
+		require.Nil(t, created)
+		require.Equal(t, codes.Unavailable, status.Code(err))
+		var dmCount int
+		require.NoError(t, pool.QueryRow(ctx, `SELECT COUNT(*) FROM chats WHERE type = 'dm'`).Scan(&dmCount))
+		require.Equal(t, 1, dmCount, "an unavailable gate must not create a DM")
+	})
+}
+
 // TestChatMessagingIntegration_SendDeniedWhenSocialBlocks uses the same Chat-created DM; Messaging Blocks
 // (Social IsBlocked wiring in production) must reject SendMessage with PermissionDenied.
 func TestChatMessagingIntegration_SendDeniedWhenSocialBlocks(t *testing.T) {
@@ -848,7 +938,10 @@ func TestChatMessagingIntegration_SendDeniedWhenSocialBlocks(t *testing.T) {
 	profB := uuid.New()
 	pmap := profileAcctMap{profA: acctA, profB: acctB}
 
-	chatCli, chatCleanup := testchat.NewBufconnChatClientWith(t, pool, testchat.ChatDeps{Profiles: pmap})
+	chatCli, chatCleanup := testchat.NewBufconnChatClientWith(t, pool, testchat.ChatDeps{
+		Profiles:        pmap,
+		DeletedAccounts: explicitDeletedAccounts{},
+	})
 	t.Cleanup(chatCleanup)
 
 	ctxA := withProfileCtx(ctx, acctA, profA)
