@@ -194,6 +194,7 @@ type jwtPayload struct {
 	SubscriptionTier string          `json:"subscription_tier"`
 	AccountType      string          `json:"account_type"`
 	JTI              string          `json:"jti"`
+	SessionEpoch     int64           `json:"session_epoch"`
 	Issuer           string          `json:"iss"`
 	Audience         json.RawMessage `json:"aud"`
 	ExpiresAt        int64           `json:"exp"`
@@ -220,6 +221,9 @@ func (p jwtPayload) toClaims(issuer, audience string, now time.Time) (Claims, er
 	if accountType == "" {
 		accountType = "regular"
 	}
+	if p.SessionEpoch <= 0 {
+		return Claims{}, errors.New("invalid session epoch")
+	}
 	return Claims{
 		UserID:           userID,
 		ProfileID:        p.ProfileID,
@@ -227,6 +231,7 @@ func (p jwtPayload) toClaims(issuer, audience string, now time.Time) (Claims, er
 		SubscriptionTier: p.SubscriptionTier,
 		AccountType:      accountType,
 		JTI:              p.JTI,
+		SessionEpoch:     p.SessionEpoch,
 	}, nil
 }
 

@@ -8,4 +8,5 @@ type Claims struct {
 	SubscriptionTier string   `json:"subscription_tier"`
 	AccountType      string   `json:"account_type"`
 	JTI              string   `json:"jti"`
+	SessionEpoch     int64    `json:"session_epoch"`
 }
