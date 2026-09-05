@@ -42,10 +42,11 @@ identity.
 
 - [x] Read the governing docs, ChatStreamEvent proto, historical Flutter P4b
   contract, and existing Realtime consumer/hub patterns.
-- [ ] Commit the doc correction and RED tests without production changes.
-- [ ] Obtain independent Luna and Terra reviews of the RED commit; address
-  any critical findings before implementation.
-- [ ] Implement the smallest mapping and targeted fan-out change.
+- [x] Commit the doc correction and RED tests without production changes
+  (`b65d730f`).
+- [x] Obtain independent Luna and Terra reviews of the RED commit; no critical
+  findings were reported.
+- [x] Implement the smallest mapping and targeted fan-out change.
 - [ ] Run focused tests, formatting and static checks; commit GREEN.
 - [ ] Obtain a fresh independent implementation review and resolve blockers.
 
@@ -73,8 +74,9 @@ identity.
 ## Validation
 
 - [ ] `cd src/backend/realtime; CGO_ENABLED=0 go test -run 'TestChatEventBytesToFanout_DmPeerDeleted|TestSubscribeChatEvents_DmPeerDeleted' .` — attempted for RED; package setup is blocked before tests by the missing local module-cache source `github.com/prometheus/client_golang/prometheus` (declared in both `realtime/go.mod` and `pkg/go.mod`). Network use is out of scope.
-- [ ] `gofmt -w chat_events_consumer.go chat_events_consumer_test.go` leaves no diff.
-- [ ] `cd src/backend/realtime; go vet ./...`
+- [x] `gofmt -w chat_events_consumer.go chat_events_consumer_test.go` completed.
+- [ ] `cd src/backend/realtime; go vet ./...` — attempted after GREEN and
+  blocked at the same missing local Prometheus module source before analysis.
 - [ ] `git diff --check` and final scoped diff contain only plan, Realtime
   documentation, consumer, and consumer tests.
 
@@ -85,8 +87,12 @@ identity.
   not execute them because the local Go module cache lacks
   `github.com/prometheus/client_golang/prometheus`; this is an environment
   blocker, not a passing result.
-- [ ] RED review accepted.
-- [ ] GREEN implementation and focused checks complete.
+- [x] RED review accepted: fresh Luna and Terra reviews found no code blocker.
+- [x] GREEN implementation complete: `DmPeerDeleted` validates both UUIDs,
+  emits the exact two-field frame, and returns only the recipient profile ID
+  for the existing profile fan-out branch.
+- [ ] Focused test and `go vet` execution remain blocked at Go package setup
+  by the missing local Prometheus module source; `gofmt` completed.
 - [ ] GREEN review accepted.
 
 ## Decisions
