@@ -40,9 +40,6 @@ func (s *ChatGRPC) ensureDM(ctx context.Context, otherProfileRaw string) (*store
 	if err := guestguard.RequireRegular(ctx); err != nil {
 		return nil, err
 	}
-	if s.Profiles == nil {
-		return nil, status.Error(codes.FailedPrecondition, "user profile lookup not configured")
-	}
 	accountID, ok := authctx.AccountID(ctx)
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing credentials")
@@ -59,7 +56,7 @@ func (s *ChatGRPC) ensureDM(ctx context.Context, otherProfileRaw string) (*store
 		return nil, status.Error(codes.InvalidArgument, "cannot open dm with self")
 	}
 
-	otherAccount, err := s.Profiles.AccountIDByProfileID(ctx, otherProfile)
+	otherAccount, err := s.requireActiveDMPeer(ctx, otherProfile)
 	if err != nil {
 		return nil, err
 	}

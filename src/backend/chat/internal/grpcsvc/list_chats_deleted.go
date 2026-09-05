@@ -2,12 +2,16 @@ package grpcsvc
 
 import (
 	"context"
-	"log"
+	"errors"
 
 	"github.com/google/uuid"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"voice/backend/chat/internal/store"
 )
+
+var errDeletedAccountGateUnavailable = errors.New("deleted-account gate unavailable")
 
 // AccountDeletedChecker reports soft-deleted accounts (Auth source of truth).
 type AccountDeletedChecker interface {
@@ -21,7 +25,7 @@ func filterDeletedPeerDMRows(
 	profiles UserProfileLookup,
 	deleted AccountDeletedChecker,
 ) ([]*store.ChatRow, error) {
-	if deleted == nil || profiles == nil || len(rows) == 0 {
+	if len(rows) == 0 {
 		return rows, nil
 	}
 
@@ -30,12 +34,17 @@ func filterDeletedPeerDMRows(
 		if row.Type != "dm" {
 			continue
 		}
-		if pid, ok := peers[row.ID]; ok {
-			peerProfiles[pid] = struct{}{}
+		pid, ok := peers[row.ID]
+		if !ok || pid == uuid.Nil {
+			return nil, errDeletedAccountGateUnavailable
 		}
+		peerProfiles[pid] = struct{}{}
 	}
 	if len(peerProfiles) == 0 {
 		return rows, nil
+	}
+	if deleted == nil || profiles == nil {
+		return nil, errDeletedAccountGateUnavailable
 	}
 
 	profileToAccount := make(map[uuid.UUID]uuid.UUID, len(peerProfiles))
@@ -43,23 +52,19 @@ func filterDeletedPeerDMRows(
 	for pid := range peerProfiles {
 		acc, err := profiles.AccountIDByProfileID(ctx, pid)
 		if err != nil {
-			continue
+			return nil, errDeletedAccountGateUnavailable
+		}
+		if acc == uuid.Nil {
+			return nil, errDeletedAccountGateUnavailable
 		}
 		profileToAccount[pid] = acc
 		accountIDs = append(accountIDs, acc)
 	}
-	if len(accountIDs) == 0 {
-		return rows, nil
-	}
 
 	deletedSet, err := deleted.DeletedAmong(ctx, accountIDs)
 	if err != nil {
-		return nil, err
+		return nil, errDeletedAccountGateUnavailable
 	}
-	if len(deletedSet) == 0 {
-		return rows, nil
-	}
-
 	out := make([]*store.ChatRow, 0, len(rows))
 	for _, row := range rows {
 		if row.Type != "dm" {
@@ -68,13 +73,11 @@ func filterDeletedPeerDMRows(
 		}
 		pid, ok := peers[row.ID]
 		if !ok {
-			out = append(out, row)
-			continue
+			return nil, errDeletedAccountGateUnavailable
 		}
 		acc, ok := profileToAccount[pid]
 		if !ok {
-			out = append(out, row)
-			continue
+			return nil, errDeletedAccountGateUnavailable
 		}
 		if _, isDeleted := deletedSet[acc]; isDeleted {
 			continue
@@ -88,14 +91,30 @@ func (s *ChatGRPC) filterListChatsDeletedPeerDMs(
 	ctx context.Context,
 	rows []*store.ChatRow,
 	peers map[uuid.UUID]uuid.UUID,
-) []*store.ChatRow {
-	if s == nil || s.DeletedAccounts == nil {
-		return rows
+) ([]*store.ChatRow, error) {
+	if s == nil {
+		return nil, errDeletedAccountGateUnavailable
 	}
-	filtered, err := filterDeletedPeerDMRows(ctx, rows, peers, s.Profiles, s.DeletedAccounts)
+	return filterDeletedPeerDMRows(ctx, rows, peers, s.Profiles, s.DeletedAccounts)
+}
+
+func (s *ChatGRPC) requireActiveDMPeer(ctx context.Context, profileID uuid.UUID) (uuid.UUID, error) {
+	if s == nil || s.Profiles == nil || s.DeletedAccounts == nil {
+		return uuid.Nil, status.Error(codes.Unavailable, "dm availability unavailable")
+	}
+	accountID, err := s.Profiles.AccountIDByProfileID(ctx, profileID)
+	if status.Code(err) == codes.NotFound {
+		return uuid.Nil, status.Error(codes.NotFound, "profile not found")
+	}
+	if err != nil || accountID == uuid.Nil {
+		return uuid.Nil, status.Error(codes.Unavailable, "dm availability unavailable")
+	}
+	deleted, err := s.DeletedAccounts.DeletedAmong(ctx, []uuid.UUID{accountID})
 	if err != nil {
-		log.Printf("chat: ListChats deleted-account filter skipped: %v", err)
-		return rows
+		return uuid.Nil, status.Error(codes.Unavailable, "dm availability unavailable")
 	}
-	return filtered
+	if _, ok := deleted[accountID]; ok {
+		return uuid.Nil, status.Error(codes.PermissionDenied, "dm not available")
+	}
+	return accountID, nil
 }

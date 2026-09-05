@@ -2,6 +2,7 @@ package grpcsvc
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/metadata"
@@ -23,7 +24,10 @@ func NewAuthGRPCDeletedAccounts(client authv1.AuthServiceClient) *AuthGRPCDelete
 
 func (a *AuthGRPCDeletedAccounts) DeletedAmong(ctx context.Context, accountIDs []uuid.UUID) (map[uuid.UUID]struct{}, error) {
 	out := make(map[uuid.UUID]struct{})
-	if a == nil || a.Client == nil || len(accountIDs) == 0 {
+	if a == nil || a.Client == nil {
+		return nil, errors.New("auth deleted-account client not configured")
+	}
+	if len(accountIDs) == 0 {
 		return out, nil
 	}
 	raw := make([]string, 0, len(accountIDs))

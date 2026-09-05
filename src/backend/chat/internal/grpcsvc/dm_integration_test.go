@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -73,6 +74,12 @@ func (m mapProfileAccounts) AccountIDByProfileID(_ context.Context, profileID uu
 	return a, nil
 }
 
+type allowDeletedAccounts struct{}
+
+func (allowDeletedAccounts) DeletedAmong(context.Context, []uuid.UUID) (map[uuid.UUID]struct{}, error) {
+	return map[uuid.UUID]struct{}{}, nil
+}
+
 type stubBlocks struct {
 	blocked bool
 	err     error
@@ -83,6 +90,10 @@ func (s stubBlocks) AccountPairBlocked(context.Context, uuid.UUID, uuid.UUID) (b
 }
 
 type chatServerOption func(*ChatGRPC)
+
+func WithDMStore(d DMStore) chatServerOption {
+	return func(c *ChatGRPC) { c.DM = d }
+}
 
 // WithChatEventsPublisher wires optional NATS chat.events publisher for integration tests.
 func WithChatEventsPublisher(p chatevents.Publisher) chatServerOption {
@@ -116,10 +127,11 @@ func startChatGRPCTestServer(t *testing.T, pool *pgxpool.Pool, profiles UserProf
 	lis := bufconn.Listen(bufSize)
 	srv := grpc.NewServer()
 	svc := &ChatGRPC{
-		DM:         &store.DMStore{Pool: pool},
-		Profiles:   profiles,
-		Blocks:     blocks,
-		ListEnrich: enrich,
+		DM:              &store.DMStore{Pool: pool},
+		Profiles:        profiles,
+		Blocks:          blocks,
+		ListEnrich:      enrich,
+		DeletedAccounts: allowDeletedAccounts{},
 	}
 	for _, o := range opts {
 		o(svc)
@@ -504,4 +516,151 @@ func TestCreateDM_GuestCaller_AllowGuestDMStillDenied(t *testing.T) {
 	_, err := client.CreateDM(ctxGuest, &chatv1.CreateDMRequest{OtherProfileId: profB.String()})
 	require.Error(t, err)
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+// TestEnsureDM_DeletedPeerIsPrivacySafeAndIdempotentlyDenied documents PLAN A1
+// and auth-and-contacts.md: no fresh device can create or reopen a DM with a
+// deleted peer. Replays must not reveal deletion or create another chat row.
+func TestEnsureDM_DeletedPeerIsPrivacySafeAndIdempotentlyDenied(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	accA, profA := uuid.New(), uuid.New()
+	accDeletedExisting, profDeletedExisting := uuid.New(), uuid.New()
+	accDeletedAbsent, profDeletedAbsent := uuid.New(), uuid.New()
+	profiles := mapProfileAccounts{
+		profA:               accA,
+		profDeletedExisting: accDeletedExisting,
+		profDeletedAbsent:   accDeletedAbsent,
+	}
+
+	// This is a pre-delete conversation. It must not be re-openable after the
+	// deleted-account gate is attached to the fresh-snapshot service instance.
+	_, _, err := (&store.DMStore{Pool: pool}).EnsureDM(ctx, profA, profDeletedExisting, store.InboxMain)
+	require.NoError(t, err)
+
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil,
+		WithAccountDeletedChecker(mapDeletedAccounts{
+			accDeletedExisting: {},
+			accDeletedAbsent:   {},
+		}),
+	)
+	t.Cleanup(cleanup)
+	ctxA := withAccountProfileCtx(ctx, accA, profA)
+
+	operations := []struct {
+		name string
+		call func() error
+	}{
+		{
+			name: "create_existing_dm",
+			call: func() error {
+				_, err := client.CreateDM(ctxA, &chatv1.CreateDMRequest{OtherProfileId: profDeletedExisting.String()})
+				return err
+			},
+		},
+		{
+			name: "get_existing_dm",
+			call: func() error {
+				_, err := client.GetDM(ctxA, &chatv1.GetDMRequest{OtherProfileId: profDeletedExisting.String()})
+				return err
+			},
+		},
+		{
+			name: "create_absent_dm",
+			call: func() error {
+				_, err := client.CreateDM(ctxA, &chatv1.CreateDMRequest{OtherProfileId: profDeletedAbsent.String()})
+				return err
+			},
+		},
+		{
+			name: "get_absent_dm",
+			call: func() error {
+				_, err := client.GetDM(ctxA, &chatv1.GetDMRequest{OtherProfileId: profDeletedAbsent.String()})
+				return err
+			},
+		},
+	}
+	for attempt := 0; attempt < 2; attempt++ {
+		for _, operation := range operations {
+			t.Run(operation.name, func(t *testing.T) {
+				err := operation.call()
+				require.Error(t, err)
+				require.Equal(t, codes.PermissionDenied, status.Code(err))
+				require.NotContains(t, strings.ToLower(status.Convert(err).Message()), "deleted",
+					"the denial must not disclose the peer's account state")
+			})
+		}
+	}
+
+	var dmCount int
+	err = pool.QueryRow(ctx, `SELECT COUNT(*) FROM chats WHERE type = 'dm'`).Scan(&dmCount)
+	require.NoError(t, err)
+	require.Equal(t, 1, dmCount, "denied repeats must not create a DM with the deleted peer")
+}
+
+// TestEnsureDM_DeletedAccountGateFailuresAreUnavailable documents the A1
+// fail-closed boundary: when Chat cannot establish deleted-account state, both
+// CreateDM and GetDM must fail honestly rather than create or return a DM.
+func TestEnsureDM_DeletedAccountGateFailuresAreUnavailable(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	tests := []struct {
+		name           string
+		missingProfile bool
+		profileFailure bool
+		deleted        AccountDeletedChecker
+	}{
+		{name: "missing_auth_checker"},
+		{name: "missing_profile_lookup", missingProfile: true, deleted: mapDeletedAccounts{}},
+		{
+			name:    "auth_checker_failure",
+			deleted: unavailableDeletedAccounts{},
+		},
+		{
+			name:           "profile_lookup_failure",
+			profileFailure: true,
+			deleted:        mapDeletedAccounts{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			accCaller, profCaller := uuid.New(), uuid.New()
+			profPeer := uuid.New()
+			var profiles UserProfileLookup = mapProfileAccounts{profCaller: accCaller, profPeer: uuid.New()}
+			if tt.missingProfile {
+				profiles = nil
+			} else if tt.profileFailure {
+				profiles = unavailableProfileLookup{}
+			}
+
+			options := []chatServerOption{WithAccountDeletedChecker(tt.deleted)}
+			client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil, options...)
+			t.Cleanup(cleanup)
+			ctxCaller := withAccountProfileCtx(ctx, accCaller, profCaller)
+
+			created, createErr := client.CreateDM(ctxCaller, &chatv1.CreateDMRequest{OtherProfileId: profPeer.String()})
+			got, getErr := client.GetDM(ctxCaller, &chatv1.GetDMRequest{OtherProfileId: profPeer.String()})
+			var dmCount int
+			err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM chats WHERE type = 'dm'`).Scan(&dmCount)
+			require.NoError(t, err)
+
+			require.Error(t, createErr)
+			require.Nil(t, created, "a failed deleted-account gate must not return a DM")
+			require.Equal(t, codes.Unavailable, status.Code(createErr))
+			require.Error(t, getErr)
+			require.Nil(t, got, "a failed deleted-account gate must not return a DM")
+			require.Equal(t, codes.Unavailable, status.Code(getErr))
+			require.Zero(t, dmCount, "a failed deleted-account gate must not create a DM")
+		})
+	}
 }

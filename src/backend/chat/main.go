@@ -24,8 +24,8 @@ import (
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
-	"voice/backend/pkg/runtimeconfig"
 	voiceprom "voice/backend/pkg/promhttp"
+	"voice/backend/pkg/runtimeconfig"
 
 	authv1 "voice.app/voice/auth/v1"
 	chatv1 "voice.app/voice/chat/v1"
@@ -50,6 +50,7 @@ func main() {
 
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	var grpcSrv *grpc.Server
+	var accountDeletedConsumerDone <-chan error
 	runCtx, runCancel := context.WithCancel(context.Background())
 	defer runCancel()
 	if dbURL != "" {
@@ -97,6 +98,7 @@ func main() {
 		var profiles grpcsvc.UserProfileLookup
 		var privacy grpcsvc.PrivacyChecker
 		var spaceCoMembership grpcsvc.SpaceCoMembershipChecker
+		var accountProfiles accountDeletedProfileLister
 		if userAddr := strings.TrimSpace(os.Getenv("USER_GRPC_ADDR")); userAddr != "" {
 			uconn, err := grpc.NewClient(grpcclient.DialTarget(userAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
@@ -125,6 +127,7 @@ func main() {
 			userClient := userv1.NewUserServiceClient(uconn)
 			profiles = &grpcsvc.UserGRPCProfiles{Client: userClient}
 			privacy = &grpcsvc.UserGRPCPrivacy{Client: userClient}
+			accountProfiles = grpcsvc.NewUserGRPCAccountProfiles(userClient)
 		}
 		if spaceAddr := strings.TrimSpace(os.Getenv("SPACE_GRPC_ADDR")); spaceAddr != "" {
 			spconn, err := grpc.NewClient(grpcclient.DialTarget(spaceAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -181,8 +184,9 @@ func main() {
 		}
 		natsURL := strings.TrimSpace(os.Getenv("NATS_URL"))
 		var chatEvents chatevents.Publisher
+		var jsPub *chatevents.JetStreamPublisher
 		if natsURL != "" {
-			jsPub, err := chatevents.NewJetStreamPublisher(natsURL)
+			jsPub, err = chatevents.NewJetStreamPublisher(natsURL)
 			if err != nil {
 				log.Fatalf("nats jetstream publisher: %v", err)
 			}
@@ -194,6 +198,19 @@ func main() {
 					logger.Error("message activity consumer stopped", slog.String("error", err.Error()))
 				}
 			}()
+			if accountProfiles == nil {
+				logger.Warn("user.account_deleted consumer disabled: USER_GRPC_ADDR not set")
+			} else {
+				consumerDone := make(chan error, 1)
+				accountDeletedConsumerDone = consumerDone
+				go func() {
+					err := runAccountDeletedConsumer(runCtx, natsURL, os.Getenv("HOSTNAME"), accountProfiles, dmStore, jsPub, logger)
+					if err != nil && !errors.Is(err, context.Canceled) {
+						logger.Error("user.account_deleted consumer stopped", slog.String("error", err.Error()))
+					}
+					consumerDone <- err
+				}()
+			}
 		}
 
 		lis, err := net.Listen("tcp", grpcListen)
@@ -202,9 +219,9 @@ func main() {
 		}
 		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))...)
 		chatv1.RegisterChatServiceServer(grpcSrv, &grpcsvc.ChatGRPC{
-			DM:            dmStore,
-			Profiles:      profiles,
-			Blocks:        blocks,
+			DM:                dmStore,
+			Profiles:          profiles,
+			Blocks:            blocks,
 			Privacy:           privacy,
 			Friends:           friends,
 			Contacts:          contacts,
@@ -212,10 +229,10 @@ func main() {
 			ListEnrich:        listEnrich,
 			DeletedAccounts:   deletedAccounts,
 			E2EPreKeyGate:     e2ePreKeyGate,
-			ChatEvents:    chatEvents,
-			Roles:         roleClient,
-			SpaceMembers:  spaceMembers,
-			Logger:        logger,
+			ChatEvents:        chatEvents,
+			Roles:             roleClient,
+			SpaceMembers:      spaceMembers,
+			Logger:            logger,
 		})
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcListen))
@@ -240,15 +257,20 @@ func main() {
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	shutdownServer := false
 	select {
 	case err := <-errCh:
 		if err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
 		}
 	case <-stop:
-		runCancel()
-		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.ShutdownTimeoutFromEnv())
-		defer cancel()
+		shutdownServer = true
+	}
+	runCancel()
+	ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.ShutdownTimeoutFromEnv())
+	defer cancel()
+	waitForAccountDeletedConsumerShutdown(ctx, accountDeletedConsumerDone, logger)
+	if shutdownServer {
 		if grpcSrv != nil {
 			grpcSrv.GracefulStop()
 		}
