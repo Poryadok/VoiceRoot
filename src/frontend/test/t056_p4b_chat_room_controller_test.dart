@@ -604,6 +604,11 @@ void main() {
         invoke: (controller) => controller.sendMessage('stale send'),
       ),
       _DeferredMutationCase(
+        name: 'send failure',
+        kind: _DeferredMutationKind.sendFailure,
+        invoke: (controller) => controller.sendMessage('stale send'),
+      ),
+      _DeferredMutationCase(
         name: 'edit',
         kind: _DeferredMutationKind.edit,
         invoke: (controller) =>
@@ -612,6 +617,12 @@ void main() {
       _DeferredMutationCase(
         name: 'delete',
         kind: _DeferredMutationKind.delete,
+        invoke: (controller) =>
+            controller.deleteMessage('message-a', forMe: false),
+      ),
+      _DeferredMutationCase(
+        name: 'delete failure',
+        kind: _DeferredMutationKind.deleteFailure,
         invoke: (controller) =>
             controller.deleteMessage('message-a', forMe: false),
       ),
@@ -631,8 +642,20 @@ void main() {
             controller.togglePin('message-a', currentlyPinned: false),
       ),
       _DeferredMutationCase(
+        name: 'pin failure',
+        kind: _DeferredMutationKind.pinFailure,
+        invoke: (controller) =>
+            controller.togglePin('message-a', currentlyPinned: false),
+      ),
+      _DeferredMutationCase(
         name: 'unpin',
         kind: _DeferredMutationKind.unpin,
+        invoke: (controller) =>
+            controller.togglePin('message-a', currentlyPinned: true),
+      ),
+      _DeferredMutationCase(
+        name: 'unpin failure',
+        kind: _DeferredMutationKind.unpinFailure,
         invoke: (controller) =>
             controller.togglePin('message-a', currentlyPinned: true),
       ),
@@ -677,6 +700,7 @@ void main() {
             controller.state = ChatRoomState(
               messages: [currentMessage],
               pinnedMessages: [currentPinned],
+              isSending: true,
               errorMessage: 'error-current',
             );
             await cache.replaceChatMessages(
@@ -693,6 +717,7 @@ void main() {
             final state = container.read(chatRoomControllerProvider('chat-1'));
             expect(state.messages, [currentMessage]);
             expect(state.pinnedMessages, [currentPinned]);
+            expect(state.isSending, isTrue);
             expect(state.errorMessage, 'error-current');
             expect(await cache.cachedIdsFor(profileId: currentProfileId), [
               currentMessage.id,
@@ -730,6 +755,7 @@ void main() {
           controller.state = ChatRoomState(
             messages: [currentMessage],
             pinnedMessages: [currentPinned],
+            isSending: true,
             errorMessage: 'error-current',
           );
           await cache.replaceChatMessages(
@@ -745,6 +771,7 @@ void main() {
           final state = container.read(chatRoomControllerProvider('chat-1'));
           expect(state.messages, [currentMessage]);
           expect(state.pinnedMessages, [currentPinned]);
+          expect(state.isSending, isTrue);
           expect(state.errorMessage, 'error-current');
           expect(await cache.cachedIdsFor(profileId: currentProfileId), [
             currentMessage.id,
@@ -903,11 +930,15 @@ class _ScriptedMessagesClient extends VoiceMessagesClient {
 
 enum _DeferredMutationKind {
   send,
+  sendFailure,
   edit,
   delete,
+  deleteFailure,
   addReaction,
   pin,
+  pinFailure,
   unpin,
+  unpinFailure,
   refreshPinned,
 }
 
@@ -1072,20 +1103,32 @@ class _DeferredMutationMessagesClient extends VoiceMessagesClient {
     switch (kind) {
       case _DeferredMutationKind.send:
         _send.complete(MessagesApiOk(_message('stale-send')));
+      case _DeferredMutationKind.sendFailure:
+        _send.complete(const MessagesApiFailure(message: 'stale send failure'));
       case _DeferredMutationKind.edit:
         _edit.complete(
           MessagesApiOk(_message('message-a').copyWith(content: 'stale edit')),
         );
       case _DeferredMutationKind.delete:
         _delete.complete(const MessagesApiOk(null));
+      case _DeferredMutationKind.deleteFailure:
+        _delete.complete(
+          const MessagesApiFailure(message: 'stale delete failure'),
+        );
       case _DeferredMutationKind.addReaction:
         _addReaction.complete(
           const MessagesApiFailure(message: 'stale reaction failure'),
         );
       case _DeferredMutationKind.pin:
         _pin.complete(const MessagesApiOk(null));
+      case _DeferredMutationKind.pinFailure:
+        _pin.complete(const MessagesApiFailure(message: 'stale pin failure'));
       case _DeferredMutationKind.unpin:
         _unpin.complete(const MessagesApiOk(null));
+      case _DeferredMutationKind.unpinFailure:
+        _unpin.complete(
+          const MessagesApiFailure(message: 'stale unpin failure'),
+        );
       case _DeferredMutationKind.refreshPinned:
         _pinned.complete(MessagesApiOk(_page(ids: const ['stale-pinned'])));
     }
