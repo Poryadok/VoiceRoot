@@ -36,10 +36,25 @@ func parseTrustedProxies(cidrs []string) []trustedProxy {
 
 func (g *gateway) clientIP(r *http.Request) string {
 	remote := remoteIP(r.RemoteAddr)
-	if g.isTrustedProxy(remote) {
-		if forwardedFor := r.Header.Get("X-Forwarded-For"); forwardedFor != "" {
-			ip, _, _ := strings.Cut(forwardedFor, ",")
-			return strings.TrimSpace(ip)
+	if !g.isTrustedProxy(remote) {
+		return remote
+	}
+
+	forwardedFor := r.Header.Get("X-Forwarded-For")
+	if forwardedFor == "" {
+		return remote
+	}
+
+	forwarded := strings.Split(forwardedFor, ",")
+	for _, raw := range forwarded {
+		if net.ParseIP(strings.TrimSpace(raw)) == nil {
+			return remote
+		}
+	}
+	for i := len(forwarded) - 1; i >= 0; i-- {
+		ip := strings.TrimSpace(forwarded[i])
+		if !g.isTrustedProxy(ip) {
+			return ip
 		}
 	}
 	return remote

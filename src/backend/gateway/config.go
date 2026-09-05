@@ -26,9 +26,11 @@ func loadGatewayConfigFromEnv() gatewayConfig {
 	loadJSONEnv(logger, "GATEWAY_FORCE_UPDATE_JSON", &config.forceUpdate)
 	loadJSONEnv(logger, "GATEWAY_STATIC_TOKENS_JSON", &config.tokenClaims)
 	static := staticTokenValidator(config.tokenClaims)
-	if strings.EqualFold(os.Getenv("GATEWAY_AUTH_MODE"), "static") {
+	staticMode := strings.EqualFold(os.Getenv("GATEWAY_AUTH_MODE"), "static")
+	if staticMode {
 		config.tokenValidator = static
 	} else if jwksURL := strings.TrimSpace(os.Getenv("GATEWAY_JWKS_URL")); jwksURL != "" {
+		config.blacklistRequired = true
 		jwks := voicejwt.NewJWKSValidator(jwksURL, os.Getenv("GATEWAY_JWT_ISSUER"), os.Getenv("GATEWAY_JWT_AUDIENCE"))
 		if len(static) > 0 {
 			config.tokenValidator = chainedTokenValidator{static: static, next: jwks}

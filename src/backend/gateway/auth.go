@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -23,6 +24,15 @@ type noTokenBlacklist struct{}
 
 func (noTokenBlacklist) IsRevoked(_ context.Context, _ string) (bool, error) {
 	return false, nil
+}
+
+// unavailableTokenBlacklist keeps JWKS authentication fail-closed when Redis
+// blacklist configuration is absent. The HTTP boundary maps this to the
+// established auth_unavailable 503 response.
+type unavailableTokenBlacklist struct{}
+
+func (unavailableTokenBlacklist) IsRevoked(_ context.Context, _ string) (bool, error) {
+	return false, errors.New("token blacklist is unavailable")
 }
 
 type staticTokenValidator map[string]tokenClaims
