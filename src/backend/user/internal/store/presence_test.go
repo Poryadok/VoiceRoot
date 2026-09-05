@@ -97,6 +97,70 @@ func TestPresenceStore_SameStatusHeartbeatRefreshesActivityAndTTLs(t *testing.T)
 	require.Greater(t, lastSeenTTL, 29*24*time.Hour)
 }
 
+func TestPresenceStore_ConcurrentUpsertsReturnLinearizablePreviousStatus(t *testing.T) {
+	ctx := context.Background()
+	s := miniredis.RunT(t)
+	t.Cleanup(s.Close)
+	rdb := redis.NewClient(&redis.Options{Addr: s.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+
+	st := NewPresenceStore(rdb)
+	pid := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+	now := time.Unix(1700000000, 0).UTC()
+	require.NoError(t, st.Upsert(ctx, pid, PresenceUpsert{Status: "online", StatusEnum: 1, Now: now}))
+
+	type updateResult struct {
+		status   string
+		statusID int32
+		previous *PresenceSnapshot
+		err      error
+	}
+	start := make(chan struct{})
+	results := make(chan updateResult, 2)
+	for _, update := range []struct {
+		status   string
+		statusID int32
+	}{
+		{status: "dnd", statusID: 3},
+		{status: "away", statusID: 2},
+	} {
+		go func(status string, statusID int32) {
+			<-start
+			previous, err := st.UpsertAndGetPrevious(ctx, pid, PresenceUpsert{
+				Status:     status,
+				StatusEnum: statusID,
+				Now:        now.Add(time.Minute),
+			})
+			results <- updateResult{status: status, statusID: statusID, previous: previous, err: err}
+		}(update.status, update.statusID)
+	}
+	close(start)
+
+	first, second := <-results, <-results
+	require.NoError(t, first.err)
+	require.NoError(t, second.err)
+	require.True(t, first.previous.Live)
+	require.True(t, second.previous.Live)
+
+	// Exactly one update sees online; the other sees that first update's enum.
+	if first.previous.StatusEnum == 1 {
+		require.Equal(t, first.statusID, second.previous.StatusEnum)
+	} else {
+		require.Equal(t, second.statusID, first.previous.StatusEnum)
+		require.Equal(t, int32(1), second.previous.StatusEnum)
+	}
+	require.NotEqual(t, first.previous.StatusEnum, first.statusID)
+	require.NotEqual(t, second.previous.StatusEnum, second.statusID)
+
+	got, err := st.Get(ctx, pid)
+	require.NoError(t, err)
+	if first.previous.StatusEnum == 1 {
+		require.Equal(t, second.statusID, got.StatusEnum)
+	} else {
+		require.Equal(t, first.statusID, got.StatusEnum)
+	}
+}
+
 func TestPresenceStore_Get_offlineWithLastSeen(t *testing.T) {
 	ctx := context.Background()
 	s := miniredis.RunT(t)
