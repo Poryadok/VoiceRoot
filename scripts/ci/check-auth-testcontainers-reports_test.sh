@@ -70,6 +70,8 @@ auth_target="$(sed -n '/^auth-test-ci:/,/^auth-image-ci:/p' "${MAKEFILE}")"
 [[ "${auth_target#*mvn -B test}" == *"check-auth-testcontainers-reports.sh"* ]] || fail "auth-test-ci must check reports after Maven"
 grep -A 35 '^  backend-auth:' "${WORKFLOW}" | grep -F 'run: make auth-test-ci' >/dev/null || fail "backend-auth must use canonical auth-test-ci"
 grep -A 12 '^auth:' "${PATH_FILTERS}" | grep -Fx '  - src/backend/migrations/auth_db/**' >/dev/null || fail "Auth path filter must include auth_db migrations"
+ci_script_target="$(sed -n '/^ci-script-tests:/,/^generate-staging-services:/p' "${MAKEFILE}")"
+[[ "${ci_script_target}" == *"check-auth-testcontainers-reports_test.sh"* ]] || fail "ci-script-tests must run the Auth report gate fixture test"
 
 echo "== every disabledWithoutDocker suite has a required report and fixture =="
 source_suites="$(while IFS= read -r -d '' source; do

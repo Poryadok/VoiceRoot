@@ -13,8 +13,13 @@ required_suites=(
   "voice.backend.auth.AuthJdbcRedisIntegrationTest"
   "voice.backend.auth.E2EKeyBackupJdbcIntegrationTest"
   "voice.backend.auth.GuestAccountSweeperJdbcIntegrationTest"
+  "voice.backend.auth.GuestConversionDurabilityJdbcIntegrationTest"
+  "voice.backend.auth.GuestConversionLocalPromotionJdbcIntegrationTest"
+  "voice.backend.auth.GuestConversionOperationRepositoryJdbcIntegrationTest"
+  "voice.backend.auth.GuestConversionOtpAcceptanceJdbcIntegrationTest"
   "voice.backend.auth.ProfilesVerificationIntegrationTest"
   "voice.backend.auth.SetAccountStatusIntegrationTest"
+  "voice.backend.auth.sessionepoch.RedisSessionEpochFloorStoreIntegrationTest"
 )
 
 attribute_value() {

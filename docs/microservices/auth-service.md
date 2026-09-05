@@ -27,7 +27,7 @@
 ### PR и ревью (bootstrap JWT ↔ User)
 
 - Перед merge — зелёный job **`backend-auth`** в CI (`mvn -B test`). Интеграция Auth JDBC + Redis и контракт Auth ↔ User gRPC покрывают регистрацию / login / refresh / validate, включая совпадение `profile_id` с ответом `EnsurePrimaryProfile` и fail-closed поведение.
-- Maven внутри контейнера **без** доступа к Docker socket хоста может **пропускать** этот класс Testcontainers; ориентир — CI или хостовый `mvn test` с Docker ([TESTING.md](../TESTING.md), job Auth в [.github/workflows/ci.yml](../../.github/workflows/ci.yml)).
+- Maven внутри контейнера **без** доступа к Docker socket хоста может **пропускать** Testcontainers suites. `backend-auth` после единственного `mvn -B test` fail-closed проверяет Surefire report каждого класса с `@Testcontainers(disabledWithoutDocker = true)`: report должен существовать, содержать `tests > 0`, `skipped=0`, `failures=0` и `errors=0`; ориентир — CI или хостовый `mvn test` с Docker ([TESTING.md](../TESTING.md), job Auth в [.github/workflows/ci.yml](../../.github/workflows/ci.yml)).
 - Меняете claims JWT или схему `profiles` — синхронизируйте потребителей (Gateway, Go) с [`DATA_MODEL.md`](../DATA_MODEL.md) и при необходимости прогоните buf / контрактные проверки.
 
 ## API (gRPC)

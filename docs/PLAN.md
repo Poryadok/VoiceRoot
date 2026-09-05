@@ -318,7 +318,7 @@ Milestone — законченный пользовательский резул
 |---|---|
 | Proto/contracts | `buf lint`, `buf format -d --exit-code` и breaking check по правилам CI |
 | Go/backend | tests изменённых модулей; перед release candidate — `make build-all` и полный service matrix |
-| Auth Java | Maven tests и Flyway validation в `src/backend/auth/`; после `mvn -B test` CI проверяет Surefire reports: каждый обязательный Testcontainers suite существует, выполнил `tests > 0`, не был skipped и не содержит failures/errors |
+| Auth Java | Maven tests и Flyway validation в `src/backend/auth/`; после `mvn -B test` CI проверяет Surefire reports: каждый Auth suite с `@Testcontainers(disabledWithoutDocker = true)` существует, выполнил `tests > 0`, не был skipped и не содержит failures/errors |
 | Flutter | `make flutter-ci`; Web/Windows и нужные widget/integration paths |
 | Интеграция | feature E2E из [`.github/ci/e2e-features.yml`](../.github/ci/e2e-features.yml) |
 | Compose smoke | `make compose-e2e-smoke` |
