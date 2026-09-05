@@ -1,12 +1,15 @@
 package grpcsvc
 
 import (
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	voicestore "voice/backend/voice/internal/store"
 
 	callsv1 "voice.app/voice/calls/v1"
 	chatv1 "voice.app/voice/chat/v1"
@@ -125,6 +128,86 @@ func TestVoiceGRPCGrantFloorAndBroadcasting(t *testing.T) {
 		Enabled: true,
 	})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+func TestVoiceGRPCVoiceRoom_muteOthersDenialOrUnavailabilityPreventsCommanderAndFloorMutations(t *testing.T) {
+	checkers := []struct {
+		name string
+		err  error
+	}{
+		{name: "denied", err: errors.New("VOICE_MUTE_OTHERS denied")},
+		{name: "unavailable", err: errors.New("role service unavailable")},
+	}
+	for _, checker := range checkers {
+		t.Run(checker.name, func(t *testing.T) {
+			t.Run("enable commander mode", func(t *testing.T) {
+				f := startVoiceRoomFixture(t)
+				roles := &recordingVoiceRolePermissions{muteOthersErr: checker.err}
+				f.svc.Roles = roles
+				roomID := f.joinParticipants(t)
+
+				_, err := f.svc.SetCommanderMode(voiceTestCtx("profile-owner"), &callsv1.SetCommanderModeRequest{RoomId: roomID, Enabled: true})
+				require.Equal(t, codes.PermissionDenied, status.Code(err))
+				requireVoiceRoleCheck(t, roles.muteOthersChecks, f.spaceID, "profile-owner", f.voiceRoomID)
+				require.False(t, f.participantState(t, roomID, "profile-owner").GetIsCommander(), "denied commander mode must not mutate state")
+			})
+
+			t.Run("begin broadcasting", func(t *testing.T) {
+				f := startVoiceRoomFixture(t)
+				roles := &recordingVoiceRolePermissions{muteOthersErr: checker.err}
+				f.svc.Roles = roles
+				roomID := f.joinParticipants(t)
+				commander := true
+				f.setParticipantState(t, roomID, "profile-owner", voicestore.VoiceStatePatch{IsCommander: &commander})
+
+				_, err := f.svc.SetBroadcasting(voiceTestCtx("profile-owner"), &callsv1.SetBroadcastingRequest{RoomId: roomID, Enabled: true})
+				require.Equal(t, codes.PermissionDenied, status.Code(err))
+				requireVoiceRoleCheck(t, roles.muteOthersChecks, f.spaceID, "profile-owner", f.voiceRoomID)
+				require.False(t, f.participantState(t, roomID, "profile-owner").GetIsBroadcasting(), "denied broadcast must not mutate state")
+			})
+
+			t.Run("grant floor", func(t *testing.T) {
+				f := startVoiceRoomFixture(t)
+				roles := &recordingVoiceRolePermissions{muteOthersErr: checker.err}
+				f.svc.Roles = roles
+				roomID := f.joinParticipants(t)
+
+				_, err := f.svc.GrantFloor(voiceTestCtx("profile-owner"), &callsv1.GrantFloorRequest{RoomId: roomID, ProfileId: "profile-member"})
+				require.Equal(t, codes.PermissionDenied, status.Code(err))
+				requireVoiceRoleCheck(t, roles.muteOthersChecks, f.spaceID, "profile-owner", f.voiceRoomID)
+				require.False(t, f.participantState(t, roomID, "profile-member").GetHasFloor(), "denied floor grant must not mutate state")
+			})
+
+			t.Run("revoke floor", func(t *testing.T) {
+				f := startVoiceRoomFixture(t)
+				roles := &recordingVoiceRolePermissions{muteOthersErr: checker.err}
+				f.svc.Roles = roles
+				roomID := f.joinParticipants(t)
+				hasFloor := true
+				f.setParticipantState(t, roomID, "profile-member", voicestore.VoiceStatePatch{HasFloor: &hasFloor})
+
+				_, err := f.svc.RevokeFloor(voiceTestCtx("profile-owner"), &callsv1.RevokeFloorRequest{RoomId: roomID, ProfileId: "profile-member"})
+				require.Equal(t, codes.PermissionDenied, status.Code(err))
+				requireVoiceRoleCheck(t, roles.muteOthersChecks, f.spaceID, "profile-owner", f.voiceRoomID)
+				require.True(t, f.participantState(t, roomID, "profile-member").GetHasFloor(), "denied floor revocation must not mutate state")
+			})
+		})
+	}
+}
+
+func TestVoiceGRPCVoiceRoom_broadcastingRequiresVoiceSpeak(t *testing.T) {
+	f := startVoiceRoomFixture(t)
+	roles := &recordingVoiceRolePermissions{voiceSpeakErr: errors.New("VOICE_SPEAK denied")}
+	f.svc.Roles = roles
+	roomID := f.joinParticipants(t)
+	commander := true
+	f.setParticipantState(t, roomID, "profile-owner", voicestore.VoiceStatePatch{IsCommander: &commander})
+
+	_, err := f.svc.SetBroadcasting(voiceTestCtx("profile-owner"), &callsv1.SetBroadcastingRequest{RoomId: roomID, Enabled: true})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	requireVoiceRoleCheck(t, roles.muteOthersChecks, f.spaceID, "profile-owner", f.voiceRoomID)
+	requireVoiceRoleCheck(t, roles.voiceSpeakChecks, f.spaceID, "profile-owner", f.voiceRoomID)
+	require.False(t, f.participantState(t, roomID, "profile-owner").GetIsBroadcasting(), "denied broadcast must not mutate state")
 }
 
 func findParticipantState(states []*callsv1.VoiceParticipantState, profileID string) *callsv1.VoiceParticipantState {
