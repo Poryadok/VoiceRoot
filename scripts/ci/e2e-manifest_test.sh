@@ -39,6 +39,8 @@ else
   fail "expected TestComposeFileAttachmentRestartProof_live in restart_proof_gateway"
 fi
 
+[[ -f "${GO_DOWNLOAD_HELPER}" ]] || fail "Docker Go module download helper is missing: ${GO_DOWNLOAD_HELPER}"
+
 if LC_ALL=C grep -q $'\r' "${GO_DOWNLOAD_HELPER}"; then
   fail "Docker Go module download helper contains CRLF bytes"
 fi
