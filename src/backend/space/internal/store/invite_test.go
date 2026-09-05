@@ -31,7 +31,7 @@ func TestInvite_Create_List_Revoke(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, list, 1)
 
-	require.NoError(t, st.RevokeInvite(ctx, inv.ID))
+	require.NoError(t, st.RevokeInvite(ctx, inv.ID, owner))
 	revoked, err := st.GetInviteByCode(ctx, inv.Code)
 	require.NoError(t, err)
 	require.NotNil(t, revoked.RevokedAt)
@@ -165,7 +165,7 @@ func TestInvite_RevokedRejected(t *testing.T) {
 		CreatorProfileID: owner,
 	})
 	require.NoError(t, err)
-	require.NoError(t, st.RevokeInvite(ctx, inv.ID))
+	require.NoError(t, st.RevokeInvite(ctx, inv.ID, owner))
 
 	_, err = st.JoinByInvite(ctx, inv.Code, joiner, uuid.New())
 	require.ErrorIs(t, err, ErrInviteRevoked)
