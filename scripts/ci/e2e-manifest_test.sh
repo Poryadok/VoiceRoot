@@ -69,6 +69,26 @@ for i in "${!a1_expected[@]}"; do
     fail "a1_multi_account_gateway order drift at index ${i}: expected ${a1_expected[$i]}, got ${a1_actual[$i]}"
 done
 
+echo "== T055 Flutter profile-handoff section is exact =="
+t055_expected='test/t055_profile_switch_reconnect_inbox_e2e_live_test.dart'
+t055_output_file="$(mktemp)"
+t055_error_file="$(mktemp)"
+set +e
+bash "${SCRIPT}" "${MANIFEST}" a1_flutter_profile_handoff >"${t055_output_file}" 2>"${t055_error_file}"
+t055_parser_rc=$?
+set -e
+if [[ "${t055_parser_rc}" -ne 0 ]]; then
+  cat "${t055_error_file}" >&2 || true
+  rm -f "${t055_output_file}" "${t055_error_file}"
+  fail "e2e manifest parser must support a1_flutter_profile_handoff before exact-content checks"
+fi
+mapfile -t t055_actual < "${t055_output_file}"
+rm -f "${t055_output_file}" "${t055_error_file}"
+[[ "${#t055_actual[@]}" -eq 1 ]] || \
+  fail "a1_flutter_profile_handoff must contain exactly one test, got ${#t055_actual[@]}"
+[[ "${t055_actual[0]}" == "${t055_expected}" ]] || \
+  fail "a1_flutter_profile_handoff drift: expected ${t055_expected}, got ${t055_actual[0]:-<empty>}"
+
 if bash "${SCRIPT}" "${MANIFEST}" missing_section >/dev/null 2>&1; then
   fail "expected failure for missing section"
 fi
