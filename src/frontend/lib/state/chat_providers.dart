@@ -1984,6 +1984,14 @@ class RealtimeHelloBinding {
   final String authorization;
 }
 
+/// A Realtime frame tied to the immutable binding that accepted its transport.
+class ProfileBoundRealtimeFrame {
+  const ProfileBoundRealtimeFrame({required this.frame, required this.binding});
+
+  final RealtimeFrame frame;
+  final RealtimeHelloBinding binding;
+}
+
 class RealtimeHub {
   RealtimeHub(this._ref, {RealtimeTransportFactory? transportFactory})
     : _transportFactory =
@@ -1994,6 +2002,8 @@ class RealtimeHub {
   RealtimeTransport? _connection;
   StreamSubscription<RealtimeFrame>? _frameSub;
   final _eventController = StreamController<RealtimeFrame>.broadcast();
+  final _profileBoundEventController =
+      StreamController<ProfileBoundRealtimeFrame>.broadcast();
   var _status = RealtimeLinkStatus.disconnected;
   final _subscribedChats = <String>{};
   Timer? _reconnectTimer;
@@ -2005,9 +2015,12 @@ class RealtimeHub {
   _RealtimeHubBinding? _connectingBinding;
   RealtimeTransport? _helloAcceptedConnection;
   _RealtimeHubBinding? _helloAcceptedBinding;
+  RealtimeHelloBinding? _helloBinding;
 
   RealtimeLinkStatus get status => _status;
   Stream<RealtimeFrame> get events => _eventController.stream;
+  Stream<ProfileBoundRealtimeFrame> get profileBoundEvents =>
+      _profileBoundEventController.stream;
 
   Future<void> ensureConnected() async {
     if (_disposed) return;
@@ -2139,15 +2152,26 @@ class RealtimeHub {
       _helloAcceptedConnection = connection;
       _helloAcceptedBinding = binding;
       _setStatus(RealtimeLinkStatus.connected, binding: binding);
-      _ref
-          .read(realtimeHelloBindingProvider.notifier)
-          .state = RealtimeHelloBinding(
+      final helloBinding = RealtimeHelloBinding(
         generation: ++_nextHelloGeneration,
         bindingGeneration: binding.generation,
         profileId: binding.session.activeProfileId,
         authorization: binding.session.authorizationHeader,
       );
+      _helloBinding = helloBinding;
+      _ref.read(realtimeHelloBindingProvider.notifier).state = helloBinding;
       // Message catch-up after reconnect is REST-only (see ARCHITECTURE_REQUIREMENTS).
+      return;
+    }
+    final helloBinding = _helloBinding;
+    if (helloBinding != null &&
+        identical(_helloAcceptedConnection, connection) &&
+        identical(_helloAcceptedBinding, binding) &&
+        helloBinding.bindingGeneration == binding.generation &&
+        !_profileBoundEventController.isClosed) {
+      _profileBoundEventController.add(
+        ProfileBoundRealtimeFrame(frame: frame, binding: helloBinding),
+      );
     }
   }
 
@@ -2193,6 +2217,7 @@ class RealtimeHub {
       final acceptedBinding = _helloAcceptedBinding;
       _helloAcceptedConnection = null;
       _helloAcceptedBinding = null;
+      _helloBinding = null;
       if (acceptedBinding != null &&
           _ref.read(realtimeHelloBindingProvider)?.bindingGeneration ==
               acceptedBinding.generation) {
@@ -2208,6 +2233,7 @@ class RealtimeHub {
     _connectingBinding = null;
     _helloAcceptedConnection = null;
     _helloAcceptedBinding = null;
+    _helloBinding = null;
     if (!_disposed) {
       _ref.read(realtimeHelloBindingProvider.notifier).state = null;
     }
@@ -2259,6 +2285,7 @@ class RealtimeHub {
     _disposed = true;
     await disconnect();
     await _eventController.close();
+    await _profileBoundEventController.close();
   }
 }
 
@@ -2294,6 +2321,12 @@ final realtimeLinkStatusProvider = StateProvider<RealtimeLinkStatus>(
 final realtimeHelloBindingProvider = StateProvider<RealtimeHelloBinding?>(
   (ref) => null,
 );
+
+/// Frames emitted only after an active Realtime transport accepts `hello`.
+final profileBoundRealtimeEventProvider =
+    StreamProvider<ProfileBoundRealtimeFrame>((ref) {
+      return ref.watch(realtimeHubProvider).profileBoundEvents;
+    });
 
 /// Debounced reconnect banner per [ARCHITECTURE_REQUIREMENTS.md]:
 /// show 2s after disconnect, hide 1s after successful reconnect.
