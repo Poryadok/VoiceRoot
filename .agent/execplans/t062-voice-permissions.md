@@ -86,7 +86,7 @@ returns their permission check as allowed.
 - [x] Read governing docs and inventory all direct gRPC, Gateway, and commander ingress paths.
 - [x] Add documentation-derived regression tests only; demonstrate expected RED failures; commit the RED phase.
 - [x] Obtain independent fresh test review and resolve any critical finding before production changes. The first review found P1 RED gaps (allow/Owner-shaped behavior, `EnsureMuteOthers` deny/unavailable adapter behavior, optional/non-Space state-patch regressions); the correction pass and fresh rereview found no P1/critical findings.
-- [ ] Implement the smallest checker/interface and handler guards; run focused GREEN tests and mutation checks.
+- [x] Implement the smallest checker/interface and handler guards; run focused GREEN tests and mutation checks.
 - [ ] Update the backlog wording/ExecPlan progress, commit GREEN, obtain fresh implementation review, and run bounded verification.
 
 ## Detailed steps
@@ -121,12 +121,12 @@ returns their permission check as allowed.
 
 ## Validation
 
-- [ ] `CGO_ENABLED=0 go test ./internal/grpcsvc -run 'TestVoiceGRPC(.*Role|.*Speak|.*Commander|.*Floor|.*VoiceRoom)'`
-- [ ] `CGO_ENABLED=0 go test ./internal/s2s -run 'TestGRPCRolePermissions'`
-- [ ] `CGO_ENABLED=0 go test ./...` from `src/backend/voice`
-- [ ] `CGO_ENABLED=1 go test -race ./internal/grpcsvc ./internal/s2s` when the cached Windows toolchain permits it
-- [ ] Mutation evidence: each new speak/mute-other protected guard independently causes its corresponding focused test to fail when removed/negated.
-- [ ] `git diff --check` and final diff/status inspection.
+- [x] `$env:GOPROXY='off'; $env:CGO_ENABLED='0'; go test ./internal/grpcsvc -run 'TestVoiceGRPC(.*Role|.*Speak|.*Commander|.*Floor|.*VoiceRoom)'`
+- [x] `$env:GOPROXY='off'; $env:CGO_ENABLED='0'; go test ./internal/s2s -run 'TestGRPCRolePermissions'`
+- [ ] `$env:GOPROXY='off'; $env:CGO_ENABLED='0'; go test ./...` from `src/backend/voice` — internal packages pass, but root package cannot resolve uncached `github.com/prometheus/client_golang` with network disabled.
+- [x] `$env:GOPROXY='off'; $env:CGO_ENABLED='1'; go test -race ./internal/grpcsvc ./internal/s2s`
+- [x] Mutation evidence: removal/negation of each final unmute, commander-enable, broadcast-speak, and floor-control guard made its focused regression fail before the exact source was restored with `apply_patch`.
+- [x] `$env:GOPROXY='off'; go vet ./internal/grpcsvc ./internal/s2s`; `git diff --check`.
 
 ## Progress
 
@@ -139,7 +139,9 @@ returns their permission check as allowed.
   exist yet.
 - [x] Fresh RED test review completed; three P1 test gaps were found.
 - [x] Add reviewed RED gaps (allow behavior, `EnsureMuteOthers` adapter deny/unavailable, optional/non-Space state patches), then obtain a fresh follow-up test review. Production code remains untouched.
-- [ ] Implement minimal GREEN guards only after accepted RED review.
+- [x] Implemented minimal GREEN guards only after accepted RED review: added `EnsureVoiceSpeak`, explicit-unmute and enabled-broadcast checks, and fail-closed Space commander/floor checks.
+- [x] Focused GRPC + Role adapter tests, race tests, vet, and four guard mutations completed; full module test is blocked only by the uncached Prometheus dependency while network is prohibited.
+- [ ] GREEN commit and fresh implementation review.
 
 ## Decisions
 

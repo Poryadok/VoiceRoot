@@ -261,7 +261,16 @@ func (s *VoiceGRPC) UpdateVoiceState(ctx context.Context, req *callsv1.UpdateVoi
 	if err != nil {
 		return nil, err
 	}
-	call, state, err := s.Calls.UpdateVoiceState(ctx, req.GetRoomId(), profileID, voicestore.VoiceStatePatch{
+	call, err := s.requireCall(ctx, req.GetRoomId(), profileID)
+	if err != nil {
+		return nil, err
+	}
+	if req.IsMuted != nil && !req.GetIsMuted() {
+		if err := s.ensureVoiceSpeakPermission(ctx, call, profileID); err != nil {
+			return nil, err
+		}
+	}
+	call, state, err := s.Calls.UpdateVoiceState(ctx, call.RoomID, profileID, voicestore.VoiceStatePatch{
 		IsMuted:    req.IsMuted,
 		IsDeafened: req.IsDeafened,
 		IsVideoOn:  req.IsVideoOn,
