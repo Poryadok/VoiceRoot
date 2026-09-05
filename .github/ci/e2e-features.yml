@@ -68,6 +68,7 @@ a1_multi_account_gateway:
   - TestComposeA1DailyMessagingREST_live
   - TestComposeA1GroupReadIsolation_live
   - TestComposeA1ChannelReadIsolation_live
+  - TestComposeA1BlockDMDenyBothDirections_live
 
 full_flutter:
   - test/gateway_dm_ws_live_integration_test.dart
