@@ -244,14 +244,14 @@ assert_eq "$go_run_regex" "$T055_REGEX"
 assert_isolated_make_target
 
 echo '== every compose path is absolute and env file is zero-byte =='
-compose_line="$(grep -m1 '^docker <compose ' "${case_dir}/commands.log")"
+compose_line="$(grep -m1 '^docker <compose> ' "${case_dir}/commands.log")"
 env_file="$(sed -n 's/.* <--env-file> <\([^>]*\)> .*/\1/p' <<<"$compose_line")"
 compose_dir="$(sed -n 's/.* <--project-directory> <\([^>]*\)> .*/\1/p' <<<"$compose_line")"
 compose_file="$(sed -n 's/.* <-f> <\([^>]*\)> .*/\1/p' <<<"$compose_line")"
 assert_abs "$env_file"; assert_abs "$compose_dir"; assert_abs "$compose_file"
 assert_contains "${case_dir}/commands.log" 'env_size=0'
-assert_contains "${case_dir}/commands.log" 'compose.*--project-name <voice-a1-multi-[a-z0-9-]+>'
-project_count="$(grep '^docker <compose ' "${case_dir}/commands.log" | sed -n 's/.* <--project-name> <\([^>]*\)>.*/\1/p' | sort -u | wc -l | tr -d '[:space:]')"
+assert_contains "${case_dir}/commands.log" 'compose.*<--project-name> <voice-a1-multi-[a-z0-9-]+>'
+project_count="$(grep '^docker <compose> ' "${case_dir}/commands.log" | sed -n 's/.* <--project-name> <\([^>]*\)>.*/\1/p' | sort -u | wc -l | tr -d '[:space:]')"
 assert_eq "$project_count" 1
 
 echo '== failure diagnostics preserve status and cleanup is opt-in =='
@@ -260,7 +260,7 @@ FAKE_GO_RC=23 run_runner "$case_dir"
 assert_eq "$(cat "${case_dir}/rc")" 23
 assert_contains "${case_dir}/commands.log" 'compose.*<ps>$'
 assert_contains "${case_dir}/commands.log" 'compose.*<logs> <--no-color> <--timestamps>'
-assert_contains "${case_dir}/stderr" 'diagnostic\|failure\|failed'
+assert_contains "${case_dir}/stderr" 'diagnostic|failure|failed'
 assert_not_contains "${case_dir}/commands.log" 'compose.*<down>'
 go_line="$(grep -n '^go ' "${case_dir}/commands.log" | head -1 | cut -d: -f1)"
 ps_line="$(grep -n 'compose.*<ps>$' "${case_dir}/commands.log" | head -1 | cut -d: -f1)"
@@ -272,6 +272,6 @@ case_dir="$(new_case cleanup)"
 VOICE_A1_MULTI_ACCOUNT_CLEANUP=true run_runner "$case_dir"
 assert_eq "$(cat "${case_dir}/rc")" 0
 assert_contains "${case_dir}/commands.log" 'compose.*<down> <--remove-orphans>'
-assert_not_contains "${case_dir}/commands.log" '--volumes\|<-v>\|volume prune\|system prune'
+assert_not_contains "${case_dir}/commands.log" '--volumes|<-v>|volume prune|system prune'
 
 echo 'All compose-a1-multi-account-proof tests passed.'
