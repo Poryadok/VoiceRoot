@@ -178,6 +178,22 @@ jobs:
       - name: Staging image matrix unit tests
         run: bash scripts/ci/resolve-staging-matrix_test.sh
 
+  ci-script-tests:
+    needs: changes
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      needs.changes.outputs.code == 'true' &&
+      (
+        needs.changes.outputs.global == 'true' ||
+        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')
+      )
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: CI script regression tests
+        run: make ci-script-tests
+
   flutter:
     needs: changes
     if: >-
@@ -1016,6 +1032,7 @@ jobs:
       - ci-skip-gate
       - protobuf
       - compose-config
+      - ci-script-tests
       - flutter
       - flutter-device-driver
       - web
@@ -1050,6 +1067,7 @@ jobs:
           GLOBAL: ${{ needs.changes.outputs.global }}
           JOB_PROTOBUF: ${{ needs.protobuf.result }}
           JOB_COMPOSE_CONFIG: ${{ needs.compose-config.result }}
+          JOB_CI_SCRIPT_TESTS: ${{ needs.ci-script-tests.result }}
           JOB_FLUTTER: ${{ needs.flutter.result }}
           JOB_FLUTTER_DEVICE_DRIVER: ${{ needs.flutter-device-driver.result }}
           JOB_WEB: ${{ needs.web.result }}

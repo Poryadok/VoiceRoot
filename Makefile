@@ -37,7 +37,7 @@ GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 	build-all build-all-breaking check-toolchain compose-config-ci buf-ci backend-test-ci backend-test-ci-short backend-image-ci \
 	gateway-test-ci gateway-image-ci go-test-pkg go-mod-tidy-all auth-test-ci auth-image-ci buf-breaking-ci \
 	golangci-ci gateway-test-race-ci design-tokens-check penpot-tokens-export penpot-tokens-export-check flutter-ui-color-gate flutter-ci flutter-windows-prefetch-sqlite3 flutter-linux-prefetch-sqlite3 prekey-golden-check coverage-report testcontainers-prune buf-generate-ci-local-template-check \
-	staging-matrix-test go-matrix-test verify-required-jobs-test image-catalog-drift-check ci-script-tests generate-staging-services a11y-web-axe contrast-tokens-check
+	staging-matrix-test go-matrix-test verify-required-jobs-test image-catalog-drift-check e2e-manifest-helper-test ci-script-tests generate-staging-services a11y-web-axe contrast-tokens-check
 
 buf-lint:
 	buf lint
@@ -263,8 +263,12 @@ verify-required-jobs-test:
 image-catalog-drift-check:
 	$(BASH) "$(ROOT)/scripts/ci/check-image-catalog-drift.sh"
 
-ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test buf-generate-ci-local-template-check image-catalog-drift-check
+ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test buf-generate-ci-local-template-check image-catalog-drift-check e2e-manifest-helper-test
+	$(BASH) "$(ROOT)/scripts/ci/ci-script-tests-reachability_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/e2e-manifest_test.sh"
+
+e2e-manifest-helper-test:
+	$(BASH) "$(ROOT)/scripts/ci/e2e-manifest_helper_test.sh"
 
 generate-staging-services:
 	$(BASH) "$(ROOT)/scripts/ci/generate-staging-go-services.sh"

@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 MANIFEST="${ROOT}/.github/ci/e2e-features.yml"
 SCRIPT="${ROOT}/scripts/ci/e2e-manifest.sh"
+GO_DOWNLOAD_HELPER="${ROOT}/src/backend/scripts/docker-go-mod-download.sh"
 
 fail() {
   echo "FAIL: $*" >&2
@@ -37,6 +38,15 @@ if bash "${SCRIPT}" "${MANIFEST}" restart_proof_gateway | grep -x 'TestComposeFi
 else
   fail "expected TestComposeFileAttachmentRestartProof_live in restart_proof_gateway"
 fi
+
+[[ -f "${GO_DOWNLOAD_HELPER}" ]] || fail "Docker Go module download helper is missing: ${GO_DOWNLOAD_HELPER}"
+
+if LC_ALL=C grep -q $'\r' "${GO_DOWNLOAD_HELPER}"; then
+  fail "Docker Go module download helper contains CRLF bytes"
+fi
+
+helper_eol="$(git -C "${ROOT}" check-attr eol -- "src/backend/scripts/docker-go-mod-download.sh" | awk -F': ' '{print $3}')"
+[[ "${helper_eol}" == "lf" ]] || fail "Docker Go module download helper must have eol=lf, got ${helper_eol:-unset}"
 
 if bash "${SCRIPT}" "${MANIFEST}" missing_section >/dev/null 2>&1; then
   fail "expected failure for missing section"
