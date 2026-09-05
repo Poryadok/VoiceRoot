@@ -10,20 +10,27 @@ import (
 	"voice/backend/story/internal/storyevents"
 )
 
-type recordedStoryView struct {
-	storyID   uuid.UUID
-	viewerID  uuid.UUID
-	anonymous bool
+type persistedStoryView struct {
+	storyID     uuid.UUID
+	viewerID    uuid.UUID
+	isAnonymous bool
 }
 
 type storyViewPersistenceFake struct {
-	views []recordedStoryView
+	viewCount int
+	views     map[uuid.UUID]persistedStoryView
 }
 
 func (f *storyViewPersistenceFake) MarkViewed(_ context.Context, storyID, viewerID uuid.UUID, anonymous bool) error {
-	f.views = append(f.views, recordedStoryView{
-		storyID: storyID, viewerID: viewerID, anonymous: anonymous,
-	})
+	if f.views == nil {
+		f.views = make(map[uuid.UUID]persistedStoryView)
+	}
+	if _, exists := f.views[viewerID]; !exists {
+		f.viewCount++
+	}
+	f.views[viewerID] = persistedStoryView{
+		storyID: storyID, viewerID: viewerID, isAnonymous: anonymous,
+	}
 	return nil
 }
 
@@ -84,9 +91,10 @@ func TestPersistAndPublishStoryView_anonymousPersistsButOmitsViewerFromEvent(t *
 		publisher,
 	)
 	require.NoError(t, err)
-	require.Equal(t, []recordedStoryView{{
-		storyID: storyID, viewerID: viewerID, anonymous: true,
-	}}, persistence.views, "anonymous Premium view must still be persisted")
+	require.Equal(t, 1, persistence.viewCount, "anonymous Premium view must increment the view counter")
+	require.Equal(t, persistedStoryView{
+		storyID: storyID, viewerID: viewerID, isAnonymous: true,
+	}, persistence.views[viewerID], "anonymous Premium view must retain its durable anonymous record")
 	require.Equal(t, []publishedStoryView{{
 		storyID: storyID.String(), viewerProfileID: "",
 	}}, publisher.views, "anonymous story.viewed must omit viewer_profile_id")
@@ -109,9 +117,10 @@ func TestPersistAndPublishStoryView_regularViewRetainsViewerInEvent(t *testing.T
 		publisher,
 	)
 	require.NoError(t, err)
-	require.Equal(t, []recordedStoryView{{
-		storyID: storyID, viewerID: viewerID, anonymous: false,
-	}}, persistence.views)
+	require.Equal(t, 1, persistence.viewCount)
+	require.Equal(t, persistedStoryView{
+		storyID: storyID, viewerID: viewerID, isAnonymous: false,
+	}, persistence.views[viewerID])
 	require.Equal(t, []publishedStoryView{{
 		storyID: storyID.String(), viewerProfileID: viewerID.String(),
 	}}, publisher.views, "ordinary story.viewed must retain viewer_profile_id")
