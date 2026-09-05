@@ -159,7 +159,6 @@
 
 
 - [x] **[Social] Contacts/favorites REST** — Gateway `GET/POST /api/v1/friends/contacts`, `GET/POST /api/v1/friends/favorites` shipped (**Batch 23a**). **Remaining:** `SyncPhoneContacts` UX.
-- [ ] **[Social] Block friendship cascade fails open when profile resolution is unavailable** — happy path is implemented: `BlockAccount` resolves both accounts' profile sets and calls transactional `BlockAccountAndSeverFriendships`, which deletes accepted/pending/declined rows between non-empty sets (`block_cascade_integration_test.go`). Residual: when `AccountProfiles` is nil or either `ProfileIDsForAccount` call fails, the handler passes an empty set and the store inserts the block without deleting friendship rows (`social_blocks.go`, `blocks.go`).
 - [x] **[Social] Outgoing request status exposed** — `PendingFriendRequest.status` (`pending` | `declined`) in proto + `ListFriendRequests` mapping; Flutter outgoing requests tab shows declined label — **Batch 24b** (`friends.md`).
 - [x] **[Social] `allow_friend_requests` service integration test** — **done:** `allow_friend_requests_integration_test.go` covers stranger invite denial. Remaining compose-live coverage is tracked below under Social test gaps.
 
