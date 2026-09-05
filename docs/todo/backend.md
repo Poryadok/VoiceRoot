@@ -735,7 +735,7 @@
 
 
 - [ ] **[Voice] Redis key layout differs from `voice-service.md` model** — docs describe `voice:session:{profile_id}` object + room sets; code uses `voice:session:{profile_id}` → `room_id` pointer + JSON blob `voice:call:{room_id}`.
-- [ ] **[Voice] LiveKit JWT minimal grants** — only `video.roomJoin` + `room`; no explicit `canPublish` / `canSubscribe` (works in compose media test, but less explicit than LiveKit best practice).
+- [ ] **[Voice] LiveKit DM/group JWT minimal grants** — Space voice-room JWTs now carry explicit `video.canPublish` from `VOICE_SPEAK`; DM/group JWTs still contain only `video.roomJoin` + `room` and no explicit `canPublish` / `canSubscribe` (works in compose media test, but less explicit than LiveKit best practice).
 - [ ] **[Voice] Commander / raise-hand client surface is proto-only** — generated Dart gRPC stubs exist; no `lib/` product usage beyond `lib/gen/`.
 
 ### Auth
