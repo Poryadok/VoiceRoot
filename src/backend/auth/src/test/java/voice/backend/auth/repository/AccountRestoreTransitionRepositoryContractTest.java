@@ -4,14 +4,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.lang.reflect.InvocationTargetException;
-import java.sql.Timestamp;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Optional;
@@ -28,11 +30,11 @@ class AccountRestoreTransitionRepositoryContractTest {
 
   @Test
   void inMemoryRestoreRejectsAfterCutoffAndKeepsAccountDeleted() throws Exception {
-    InMemoryAccountRepository accounts = new InMemoryAccountRepository();
+    InMemoryAccountRepository accounts = inMemoryRepositoryWithClock(AFTER_CUTOFF);
     Account account = accounts.create("repository-expired@example.com", null, "hash", "regular");
     accounts.markDeleted(account.id(), DELETED_AT);
 
-    assertThat(invokeConditionalRestore(accounts, account.id(), AFTER_CUTOFF)).isFalse();
+    assertThat(invokeConditionalRestore(accounts, account.id())).isFalse();
     assertThat(accounts.findById(account.id().toString()).orElseThrow())
         .extracting(Account::status, Account::deletedAt)
         .containsExactly("deleted", DELETED_AT);
@@ -40,11 +42,11 @@ class AccountRestoreTransitionRepositoryContractTest {
 
   @Test
   void inMemoryRestoreAllowsExactCutoffAndClearsDeletedState() throws Exception {
-    InMemoryAccountRepository accounts = new InMemoryAccountRepository();
+    InMemoryAccountRepository accounts = inMemoryRepositoryWithClock(CUTOFF);
     Account account = accounts.create("repository-boundary@example.com", null, "hash", "regular");
     accounts.markDeleted(account.id(), DELETED_AT);
 
-    assertThat(invokeConditionalRestore(accounts, account.id(), CUTOFF)).isTrue();
+    assertThat(invokeConditionalRestore(accounts, account.id())).isTrue();
     assertThat(accounts.findById(account.id().toString()).orElseThrow())
         .extracting(Account::status, Account::deletedAt)
         .containsExactly("active", null);
@@ -57,31 +59,26 @@ class AccountRestoreTransitionRepositoryContractTest {
     JdbcAccountRepository accounts = new JdbcAccountRepository(jdbc);
     UUID accountId = UUID.randomUUID();
 
-    assertThat(invokeConditionalRestore(accounts, accountId, AFTER_CUTOFF)).isFalse();
+    assertThat(invokeConditionalRestore(accounts, accountId)).isFalse();
 
     ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
     ArgumentCaptor<MapSqlParameterSource> parameters =
         ArgumentCaptor.forClass(MapSqlParameterSource.class);
     verify(jdbc).update(sql.capture(), parameters.capture());
     String normalizedSql = sql.getValue().replaceAll("\\s+", " ").toLowerCase();
-    assertThat(normalizedSql).contains("interval '30 days'");
+    String whereClause = normalizedSql.substring(normalizedSql.indexOf("where"));
+    assertThat(whereClause).contains("interval '30 days'");
+    assertThat(whereClause).containsAnyOf("current_timestamp", "now()");
+    assertThat(whereClause).contains(">=");
     Map<String, Object> values = parameters.getValue().getValues();
-    assertThat(values).containsEntry("id", accountId);
-    String transitionParameter =
-        values.entrySet().stream()
-            .filter(entry -> entry.getValue() instanceof Timestamp)
-            .map(Map.Entry::getKey)
-            .findFirst()
-            .orElseThrow(() -> new AssertionError("transition instant parameter is missing"));
-    assertThat(normalizedSql).contains("deleted_at");
-    assertThat(normalizedSql).contains(":" + transitionParameter);
+    assertThat(values).containsOnlyKeys("id").containsEntry("id", accountId);
   }
 
-  private static boolean invokeConditionalRestore(
-      AccountRepository accounts, UUID accountId, Instant transitionInstant) throws Exception {
+  private static boolean invokeConditionalRestore(AccountRepository accounts, UUID accountId)
+      throws Exception {
     Method method = conditionalRestoreMethod(accounts.getClass());
     try {
-      return (boolean) method.invoke(accounts, accountId, transitionInstant);
+      return (boolean) method.invoke(accounts, accountId);
     } catch (InvocationTargetException ex) {
       throw new AssertionError("conditional restore invocation failed", ex.getCause());
     }
@@ -94,11 +91,25 @@ class AccountRestoreTransitionRepositoryContractTest {
             .filter(
                 candidate ->
                     Arrays.equals(
-                        candidate.getParameterTypes(), new Class<?>[] {UUID.class, Instant.class}))
+                        candidate.getParameterTypes(), new Class<?>[] {UUID.class}))
             .findFirst();
     assertThat(method)
-        .as("restoreDeleted(UUID, Instant) must atomically fence the recovery cutoff")
+        .as("restoreDeleted(UUID) must atomically fence the recovery cutoff")
         .isPresent();
     return method.orElseThrow();
+  }
+
+  private static InMemoryAccountRepository inMemoryRepositoryWithClock(Instant now)
+      throws Exception {
+    Optional<Constructor<?>> constructor =
+        Arrays.stream(InMemoryAccountRepository.class.getDeclaredConstructors())
+            .filter(candidate -> Arrays.equals(candidate.getParameterTypes(), new Class<?>[] {Clock.class}))
+            .findFirst();
+    assertThat(constructor)
+        .as("in-memory repository needs a Clock seam for transition-time expiry")
+        .isPresent();
+    constructor.orElseThrow().setAccessible(true);
+    return (InMemoryAccountRepository)
+        constructor.orElseThrow().newInstance(Clock.fixed(now, ZoneOffset.UTC));
   }
 }

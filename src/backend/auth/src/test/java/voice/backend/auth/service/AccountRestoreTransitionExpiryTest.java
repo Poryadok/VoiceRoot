@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -14,7 +15,7 @@ import java.lang.reflect.Proxy;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.Optional;
 import java.util.UUID;
@@ -44,23 +45,9 @@ class AccountRestoreTransitionExpiryTest {
   private static final Instant AFTER_CUTOFF = CUTOFF.plusNanos(1);
 
   @Test
-  void restoreRepositoryContractCarriesTransitionInstantForAtomicExpiryFence() {
-    Optional<Method> conditionalRestore =
-        Arrays.stream(AccountRepository.class.getMethods())
-            .filter(method -> method.getName().equals("restoreDeleted"))
-            .filter(method -> Arrays.equals(method.getParameterTypes(), new Class<?>[] {UUID.class, Instant.class}))
-            .findFirst();
-
-    assertThat(conditionalRestore)
-        .as("restoreDeleted must fence the 30-day cutoff at the atomic transition")
-        .isPresent();
-    assertThat(conditionalRestore.orElseThrow().getReturnType()).isEqualTo(boolean.class);
-  }
-
-  @Test
-  void restoreRejectsExpiryCrossedBetweenPrecheckAndAtomicTransition() {
+  void restoreRejectsExpiryCrossedBetweenPrecheckAndRepositoryClock() throws Exception {
     AccountRepository accounts =
-        TransitionAwareAccountRepository.create(AFTER_CUTOFF, true);
+        TransitionAwareAccountRepository.create(Clock.fixed(AFTER_CUTOFF, ZoneOffset.UTC));
     Account account = accounts.create("transition-expiry@example.com", null, "hash", "regular");
     accounts.markDeleted(account.id(), DELETED_AT);
     AuthEventPublisher events = mock();
@@ -71,7 +58,7 @@ class AccountRestoreTransitionExpiryTest {
             refreshTokens,
             new FixedRestoreTokenStore(account.id()),
             events,
-            new SequencedClock(PRECHECK, AFTER_CUTOFF));
+            Clock.fixed(PRECHECK, ZoneOffset.UTC));
 
     assertThatThrownBy(() -> service.restoreAccount("restore-token"))
         .isInstanceOf(AuthException.class)
@@ -85,9 +72,9 @@ class AccountRestoreTransitionExpiryTest {
   }
 
   @Test
-  void restoreAtExactTransitionCutoffRemainsAllowed() {
+  void restoreAtExactTransitionCutoffRemainsAllowed() throws Exception {
     AccountRepository accounts =
-        TransitionAwareAccountRepository.create(CUTOFF, false);
+        TransitionAwareAccountRepository.create(Clock.fixed(CUTOFF, ZoneOffset.UTC));
     Account account = accounts.create("transition-boundary@example.com", null, "hash", "regular");
     accounts.markDeleted(account.id(), DELETED_AT);
     AuthEventPublisher events = mock();
@@ -98,7 +85,7 @@ class AccountRestoreTransitionExpiryTest {
                 refreshTokens,
                 new FixedRestoreTokenStore(account.id()),
                 events,
-                new SequencedClock(PRECHECK, CUTOFF))
+                Clock.fixed(CUTOFF, ZoneOffset.UTC))
             .restoreAccount("restore-token");
 
     assertThat(session.accountId()).isEqualTo(account.id().toString());
@@ -167,43 +154,16 @@ class AccountRestoreTransitionExpiryTest {
     }
   }
 
-  private static final class SequencedClock extends Clock {
-    private final Instant[] instants;
-    private int index;
-
-    private SequencedClock(Instant... instants) {
-      this.instants = instants;
-    }
-
-    @Override
-    public ZoneId getZone() {
-      return ZoneId.of("UTC");
-    }
-
-    @Override
-    public Clock withZone(ZoneId zone) {
-      return this;
-    }
-
-    @Override
-    public synchronized Instant instant() {
-      return instants[Math.min(index++, instants.length - 1)];
-    }
-  }
-
   private static final class TransitionAwareAccountRepository implements InvocationHandler {
-    private final InMemoryAccountRepository delegate = new InMemoryAccountRepository();
-    private final Instant transitionInstant;
-    private final boolean expiredAtTransition;
+    private final InMemoryAccountRepository delegate;
 
-    private TransitionAwareAccountRepository(Instant transitionInstant, boolean expiredAtTransition) {
-      this.transitionInstant = transitionInstant;
-      this.expiredAtTransition = expiredAtTransition;
+    private TransitionAwareAccountRepository(Clock repositoryClock) throws Exception {
+      this.delegate = inMemoryRepositoryWithClock(repositoryClock);
     }
 
-    private static AccountRepository create(Instant transitionInstant, boolean expiredAtTransition) {
+    private static AccountRepository create(Clock repositoryClock) throws Exception {
       TransitionAwareAccountRepository handler =
-          new TransitionAwareAccountRepository(transitionInstant, expiredAtTransition);
+          new TransitionAwareAccountRepository(repositoryClock);
       return (AccountRepository)
           Proxy.newProxyInstance(
               AccountRepository.class.getClassLoader(),
@@ -215,14 +175,9 @@ class AccountRestoreTransitionExpiryTest {
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
       if (method.getName().equals("restoreDeleted")) {
         UUID accountId = (UUID) args[0];
-        if (args.length == 2) {
-          assertThat(args[1]).isEqualTo(transitionInstant);
-          if (expiredAtTransition) {
-            return false;
-          }
-        }
-        // The legacy UUID-only method models the current TOCTOU bug: it restores
-        // without receiving or checking the transition instant.
+        assertThat(args).hasSize(1);
+        // The repository samples its own transition-time clock; no caller-supplied
+        // pre-check instant is available to become a stale correctness source.
         return delegate.restoreDeleted(accountId);
       }
       try {
@@ -230,6 +185,21 @@ class AccountRestoreTransitionExpiryTest {
       } catch (InvocationTargetException ex) {
         throw ex.getCause();
       }
+    }
+
+    private static InMemoryAccountRepository inMemoryRepositoryWithClock(Clock clock)
+        throws Exception {
+      Optional<Constructor<?>> constructor =
+          Arrays.stream(InMemoryAccountRepository.class.getDeclaredConstructors())
+              .filter(
+                  candidate ->
+                      Arrays.equals(candidate.getParameterTypes(), new Class<?>[] {Clock.class}))
+              .findFirst();
+      assertThat(constructor)
+          .as("in-memory repository needs a Clock seam for transition-time expiry")
+          .isPresent();
+      constructor.orElseThrow().setAccessible(true);
+      return (InMemoryAccountRepository) constructor.orElseThrow().newInstance(clock);
     }
   }
 }
