@@ -87,6 +87,45 @@ func TestMessagePusher_SendsFCMWithGrouping(t *testing.T) {
 	require.NotEmpty(t, rec.sent[0].CollapseTag)
 }
 
+func TestMessagePusher_MessageRequestGroupsBySenderAcrossChats(t *testing.T) {
+	rec := &recordingFCM{}
+	recipientID := uuid.New()
+	senderID := uuid.New()
+	pusher := &dispatch.MessagePusher{
+		Tokens: &fakeTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
+			recipientID: {{Token: "tok-fcm", PushService: "fcm"}},
+		}},
+		Pusher:   &dispatch.PushDispatcher{FCM: rec},
+		Grouping: grouping.NewMemoryStore(),
+	}
+	decision := map[string]delivery.DeliveryDecision{
+		recipientID.String(): {Push: true},
+	}
+
+	require.NoError(t, pusher.SendPush(context.Background(), decision, delivery.DeliveryInput{
+		SenderProfileID: senderID,
+		ChatID:          "chat-1",
+		Type:            delivery.TypeMessageRequest,
+	}, push.Payload{
+		Body: "First request",
+		Data: map[string]string{"type": "message_request"},
+	}, "First request"))
+	require.NoError(t, pusher.SendPush(context.Background(), decision, delivery.DeliveryInput{
+		SenderProfileID: senderID,
+		ChatID:          "chat-2",
+		Type:            delivery.TypeMessageRequest,
+	}, push.Payload{
+		Body: "Second request",
+		Data: map[string]string{"type": "message_request"},
+	}, "Second request"))
+
+	require.Len(t, rec.sent, 2)
+	require.NotEmpty(t, rec.sent[0].CollapseTag)
+	require.Equal(t, rec.sent[0].CollapseTag, rec.sent[1].CollapseTag)
+	require.Equal(t, 1, rec.sent[0].Counter)
+	require.Equal(t, 2, rec.sent[1].Counter)
+}
+
 func TestMessagePusher_SkipsVoIPToken(t *testing.T) {
 	rec := &recordingFCM{}
 	profileID := uuid.New()
