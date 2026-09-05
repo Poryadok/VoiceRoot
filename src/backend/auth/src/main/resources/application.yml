@@ -28,6 +28,9 @@ auth:
     ttl: P30D
   account-deletion:
     token-secret: "${ACCOUNT_DELETE_TOKEN_SECRET:}"
+    recovery:
+      enabled: ${AUTH_ACCOUNT_DELETION_RECOVERY_ENABLED:true}
+      interval: ${AUTH_ACCOUNT_DELETION_RECOVERY_INTERVAL:PT5S}
   redis:
     blacklist-prefix: "jwt:blacklist:"
   grpc:

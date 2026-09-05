@@ -45,6 +45,32 @@ public class AuthBeans {
   }
 
   @Bean
+  voice.backend.auth.service.AccountDeletionPendingFloorWorker accountDeletionPendingFloorWorker(
+      voice.backend.auth.repository.AccountDeletionOperationRepository operations,
+      SessionEpochFloorStore floors,
+      Clock clock) {
+    return new voice.backend.auth.service.AccountDeletionPendingFloorWorker(operations, floors, clock);
+  }
+
+  @Bean
+  voice.backend.auth.service.AccountDeletionPendingEventWorker accountDeletionPendingEventWorker(
+      voice.backend.auth.repository.AccountDeletionOperationRepository operations,
+      voice.backend.auth.service.AccountDeletionEventPublisher publisher,
+      Clock clock) {
+    return new voice.backend.auth.service.AccountDeletionPendingEventWorker(operations, publisher, clock);
+  }
+
+  @Bean
+  @org.springframework.context.annotation.Profile("!test")
+  @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+      prefix = "auth.account-deletion.recovery", name = "enabled", havingValue = "true")
+  voice.backend.auth.service.AccountDeletionRecoveryRunner accountDeletionRecoveryRunner(
+      voice.backend.auth.service.AccountDeletionPendingFloorWorker floorWorker,
+      voice.backend.auth.service.AccountDeletionPendingEventWorker eventWorker) {
+    return new voice.backend.auth.service.AccountDeletionRecoveryRunner(floorWorker, eventWorker);
+  }
+
+  @Bean
   BCryptPasswordHasher passwordHasher() {
     return new BCryptPasswordHasher(new BCryptPasswordEncoder(12));
   }
@@ -93,7 +119,9 @@ public class AuthBeans {
       voice.backend.auth.repository.AccountDeletionOperationRepository deletionOperations,
       AccountDeletionRestoreTokenCodec deletionTokenCodec,
       voice.backend.auth.service.AccountDeletionEventPublisher deletionEventPublisher,
-      voice.backend.auth.service.AccountDeletionOperationStarter deletionStarter) {
+      voice.backend.auth.service.AccountDeletionOperationStarter deletionStarter,
+      voice.backend.auth.service.AccountDeletionPendingFloorWorker deletionFloorWorker,
+      voice.backend.auth.service.AccountDeletionPendingEventWorker deletionEventWorker) {
     AuthService service = new AuthService(
         accounts,
         refreshTokens,
@@ -116,7 +144,8 @@ public class AuthBeans {
         mailSender,
         sessionEpochFloors);
     service.configureAccountDeletion(
-        deletionOperations, deletionTokenCodec, deletionEventPublisher, deletionStarter);
+        deletionOperations, deletionTokenCodec, deletionEventPublisher, deletionStarter,
+        deletionFloorWorker, deletionEventWorker);
     return service;
   }
 

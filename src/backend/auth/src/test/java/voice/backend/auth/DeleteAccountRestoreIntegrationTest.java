@@ -28,6 +28,7 @@ import voice.backend.auth.events.AuthEventPublisher;
 import voice.backend.auth.service.AuthException;
 import voice.backend.auth.service.AuthService;
 import voice.backend.auth.service.AccountDeletionEventPublisher;
+import voice.backend.auth.service.AccountDeletionRecoveryRunner;
 import voice.backend.auth.service.DeleteAccountResult;
 import voice.backend.auth.sessionepoch.SessionEpochFloorStore;
 import voice.backend.auth.sessionepoch.SessionEpochFloorUnavailableException;
@@ -54,6 +55,7 @@ class DeleteAccountRestoreIntegrationTest {
   @MockBean SessionEpochFloorStore sessionEpochFloors;
   @MockBean AuthEventPublisher authEventPublisher;
   @MockBean AccountDeletionEventPublisher deletionEventPublisher;
+  @MockBean AccountDeletionRecoveryRunner deletionRecoveryRunner;
 
   @BeforeEach
   void setUpEpochFloor() {
@@ -135,7 +137,6 @@ class DeleteAccountRestoreIntegrationTest {
     String accessToken = registered.get("access_token").asText();
     Account before = accounts.findByEmail("delete-epoch-floor-retry@example.com").orElseThrow();
     doThrow(new SessionEpochFloorUnavailableException("redis unavailable"))
-        .doAnswer(invocation -> invocation.getArgument(1))
         .when(sessionEpochFloors)
         .recordAtLeast(any(UUID.class), anyLong());
 
@@ -148,6 +149,10 @@ class DeleteAccountRestoreIntegrationTest {
     assertThat(afterFailure.sessionEpoch()).isEqualTo(before.sessionEpoch() + 1);
     verifyNoInteractions(authEventPublisher);
     verifyNoInteractions(deletionEventPublisher);
+
+    org.mockito.Mockito.doAnswer(invocation -> invocation.getArgument(1))
+        .when(sessionEpochFloors)
+        .recordAtLeast(any(UUID.class), anyLong());
 
     DeleteAccountResult retry =
         authService.deleteAccount("Bearer " + accessToken, "Correct horse battery staple");
