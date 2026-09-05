@@ -4,6 +4,8 @@ import java.time.Duration;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -285,6 +287,50 @@ public class InMemoryAccountRepository implements AccountRepository {
             existing.deletedAt(),
             next));
     return next;
+  }
+
+  @Override
+  public synchronized long advanceSessionEpochAtLeast(UUID accountId, long requestedEpoch) {
+    if (requestedEpoch <= 0) {
+      throw new IllegalArgumentException("session epoch must be positive");
+    }
+    Account existing = byId.get(accountId);
+    if (existing == null) {
+      throw new IllegalArgumentException("account not found");
+    }
+    long advancedEpoch = Math.max(existing.sessionEpoch(), requestedEpoch);
+    byId.put(
+        accountId,
+        copy(
+            existing,
+            existing.status(),
+            existing.totpSecret(),
+            existing.totpEnabled(),
+            existing.deletedAt(),
+            advancedEpoch));
+    return advancedEpoch;
+  }
+
+  @Override
+  public synchronized List<AccountSessionEpoch> pageSessionEpochsAfter(UUID exclusiveAfter, int limit) {
+    if (limit <= 0) {
+      throw new IllegalArgumentException("limit must be positive");
+    }
+    return byId.values().stream()
+        .map(account -> new AccountSessionEpoch(account.id(), account.sessionEpoch()))
+        .filter(account -> exclusiveAfter == null || comparePostgresUuid(account.accountId(), exclusiveAfter) > 0)
+        .sorted(Comparator.comparing(AccountSessionEpoch::accountId, InMemoryAccountRepository::comparePostgresUuid))
+        .limit(limit)
+        .toList();
+  }
+
+  private static int comparePostgresUuid(UUID left, UUID right) {
+    int mostSignificant =
+        Long.compareUnsigned(left.getMostSignificantBits(), right.getMostSignificantBits());
+    if (mostSignificant != 0) {
+      return mostSignificant;
+    }
+    return Long.compareUnsigned(left.getLeastSignificantBits(), right.getLeastSignificantBits());
   }
 
   @Override
