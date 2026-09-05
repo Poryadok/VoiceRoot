@@ -1895,6 +1895,8 @@ class RealtimeHub {
     if (expected != null && !identical(_connection, expected)) return;
     final connection = _connection;
     final frameSub = _frameSub;
+    if (identical(_connection, connection)) _connection = null;
+    if (identical(_frameSub, frameSub)) _frameSub = null;
     if (identical(_helloAcceptedConnection, connection)) {
       final acceptedBinding = _helloAcceptedBinding;
       _helloAcceptedConnection = null;
@@ -1907,9 +1909,6 @@ class RealtimeHub {
     }
     await frameSub?.cancel();
     await connection?.dispose();
-    if (!identical(_connection, connection)) return;
-    if (identical(_frameSub, frameSub)) _frameSub = null;
-    _connection = null;
   }
 
   Future<void> disconnect() async {
