@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -20,6 +21,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -30,8 +32,13 @@ import voice.backend.auth.repository.AccountRepository;
 import voice.backend.auth.security.TokenBlacklist;
 import voice.backend.auth.service.AuthService;
 import voice.backend.auth.service.AccountDeletionOperationStarter;
+import voice.backend.auth.service.GuestConversionLocalPromotion;
+import voice.backend.auth.service.GuestConversionOtpAcceptance;
+import voice.backend.auth.service.GuestConversionPendingUserWorker;
 import voice.backend.auth.service.RegisterCommand;
 import voice.backend.auth.service.TransactionalAccountDeletionOperationStarter;
+import voice.backend.auth.service.TransactionalGuestConversionLocalPromotion;
+import voice.backend.auth.service.TransactionalGuestConversionOtpAcceptance;
 import voice.backend.auth.sessionepoch.SessionEpochFloorStore;
 import voice.backend.auth.sessionepoch.SessionEpochFloorUnavailableException;
 import voice.backend.auth.support.JdbcUserContractTestConfiguration;
@@ -62,12 +69,25 @@ class AccountDeletionEpochFloorJdbcIntegrationTest {
   @Autowired AccountRepository accounts;
   @Autowired AccountDeletionOperationRepository deletionOperations;
   @Autowired AccountDeletionOperationStarter deletionStarter;
+  @Autowired PlatformTransactionManager transactionManager;
+  @Autowired
+  @Qualifier("guestConversionTransactionTemplate")
+  TransactionTemplate guestConversionTransactions;
+  @Autowired GuestConversionOtpAcceptance guestConversionOtpAcceptance;
+  @Autowired GuestConversionLocalPromotion guestConversionLocalPromotion;
+  @Autowired GuestConversionPendingUserWorker guestConversionPendingUserWorker;
   @MockBean SessionEpochFloorStore sessionEpochFloors;
   @MockBean TokenBlacklist tokenBlacklist;
 
   @Test
   void floorFailureRollsBackJdbcDeletionAndItsPendingFloorOperation() {
     assertThat(deletionStarter).isInstanceOf(TransactionalAccountDeletionOperationStarter.class);
+    assertThat(guestConversionTransactions.getTransactionManager()).isSameAs(transactionManager);
+    assertThat(guestConversionOtpAcceptance)
+        .isInstanceOf(TransactionalGuestConversionOtpAcceptance.class);
+    assertThat(guestConversionLocalPromotion)
+        .isInstanceOf(TransactionalGuestConversionLocalPromotion.class);
+    assertThat(guestConversionPendingUserWorker).isNotNull();
     var session =
         authService.register(
             new RegisterCommand(

@@ -34,6 +34,7 @@ class GuestConversionPendingUserRecoveryWiringTest {
           .withConfiguration(
               AutoConfigurations.of(
                   JdbcPersistenceConfiguration.class,
+                  JdbcTransactionConfiguration.class,
                   GuestLifecycleConfiguration.class,
                   SessionEpochFloorConfiguration.class))
           .withUserConfiguration(JdbcSupport.class)

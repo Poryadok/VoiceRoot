@@ -33,6 +33,7 @@ class GuestConversionPendingEventRecoveryWiringTest {
           .withConfiguration(
               AutoConfigurations.of(
                   JdbcPersistenceConfiguration.class,
+                  JdbcTransactionConfiguration.class,
                   GuestLifecycleConfiguration.class,
                   SessionEpochFloorConfiguration.class,
                   AuthEventsConfiguration.class))
@@ -97,6 +98,7 @@ class GuestConversionPendingEventRecoveryWiringTest {
         .withConfiguration(
             AutoConfigurations.of(
                 JdbcPersistenceConfiguration.class,
+                JdbcTransactionConfiguration.class,
                 GuestLifecycleConfiguration.class,
                 SessionEpochFloorConfiguration.class,
                 AuthEventsConfiguration.class))
