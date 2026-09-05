@@ -30,6 +30,31 @@ func (s *RoleGRPC) requireManageRoles(ctx context.Context, spaceID, actor uuid.U
 	return nil
 }
 
+// requireReorderRolesAuthorization keeps reorder hierarchy checks separate from
+// CanEditRole: system roles cannot be edited, but an Owner may reorder them.
+func (s *RoleGRPC) requireReorderRolesAuthorization(ctx context.Context, spaceID, actor uuid.UUID, targetPositions []int32) error {
+	actorRoles, err := s.Store.GetMemberRoles(ctx, spaceID, actor)
+	if err != nil {
+		return status.Error(codes.Internal, err.Error())
+	}
+	actorTop := int32(-1)
+	for _, role := range actorRoles {
+		if role.Name == permissions.RoleOwner {
+			return nil
+		}
+		if role.Position > actorTop {
+			actorTop = role.Position
+		}
+	}
+	for index, targetPosition := range targetPositions {
+		resultingPosition := int32(len(targetPositions) - 1 - index)
+		if targetPosition >= actorTop || resultingPosition >= actorTop {
+			return status.Error(codes.PermissionDenied, "cannot reorder roles above your hierarchy")
+		}
+	}
+	return nil
+}
+
 func (s *RoleGRPC) UpdateRole(ctx context.Context, req *rolev1.UpdateRoleRequest) (*rolev1.UpdateRoleResponse, error) {
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "role persistence not configured")
@@ -125,6 +150,7 @@ func (s *RoleGRPC) ReorderRoles(ctx context.Context, req *rolev1.ReorderRolesReq
 		return nil, err
 	}
 	ids := make([]uuid.UUID, 0, len(req.GetOrderedRoleIds()))
+	targetPositions := make([]int32, 0, len(req.GetOrderedRoleIds()))
 	for _, raw := range req.GetOrderedRoleIds() {
 		id, err := parseUUIDField("role_id", raw)
 		if err != nil {
@@ -137,16 +163,11 @@ func (s *RoleGRPC) ReorderRoles(ctx context.Context, req *rolev1.ReorderRolesReq
 		if target == nil || target.SpaceID != spaceID {
 			return nil, status.Error(codes.InvalidArgument, "role not in space")
 		}
-		if !target.Managed {
-			can, err := s.Store.CanEditRole(ctx, spaceID, actor, id)
-			if err != nil {
-				return nil, status.Error(codes.Internal, err.Error())
-			}
-			if !can {
-				return nil, status.Error(codes.PermissionDenied, "cannot reorder roles above your hierarchy")
-			}
-		}
 		ids = append(ids, id)
+		targetPositions = append(targetPositions, target.Position)
+	}
+	if err := s.requireReorderRolesAuthorization(ctx, spaceID, actor, targetPositions); err != nil {
+		return nil, err
 	}
 	if err := s.Store.ReorderRoles(ctx, spaceID, ids); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
