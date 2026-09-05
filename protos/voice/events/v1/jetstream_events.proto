@@ -14,7 +14,6 @@ option go_package = "voice.app/voice/events/v1;eventsv1";
 // - Subject is the routing key; consumers select the envelope oneof arm from the decoded message, not from subject alone.
 // - Interim divergences (migrate to proto fields; do not add new JSON publishers):
 //   • message.sent: optional thread_parent_id may also appear in NATS header X-Voice-Thread-Parent-Id (Messaging).
-//   • matchmaking.search_cancelled: JSON body until SearchCancelled proto is wired in publisher.
 // - Wave 2 gaps (proto arms / publishers not yet wired): space.updated/deleted/member_*,
 //   voice_room_created/deleted payloads, subscription.space_pro_* arms.
 
