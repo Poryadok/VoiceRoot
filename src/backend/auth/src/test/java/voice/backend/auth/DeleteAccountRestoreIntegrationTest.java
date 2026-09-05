@@ -27,10 +27,12 @@ import voice.backend.auth.repository.AccountRepository;
 import voice.backend.auth.events.AuthEventPublisher;
 import voice.backend.auth.service.AuthException;
 import voice.backend.auth.service.AuthService;
+import voice.backend.auth.service.AccountDeletionEventPublisher;
 import voice.backend.auth.service.DeleteAccountResult;
 import voice.backend.auth.sessionepoch.SessionEpochFloorStore;
 import voice.backend.auth.sessionepoch.SessionEpochFloorUnavailableException;
 import voice.backend.auth.sessionepoch.SessionEpochFloorMissingException;
+import voice.events.v1.JetstreamEvents.UserStreamEvent;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -51,6 +53,7 @@ class DeleteAccountRestoreIntegrationTest {
   @Autowired AccountRepository accounts;
   @MockBean SessionEpochFloorStore sessionEpochFloors;
   @MockBean AuthEventPublisher authEventPublisher;
+  @MockBean AccountDeletionEventPublisher deletionEventPublisher;
 
   @BeforeEach
   void setUpEpochFloor() {
@@ -118,6 +121,7 @@ class DeleteAccountRestoreIntegrationTest {
     assertThat(afterFailure.sessionEpoch()).isEqualTo(before.sessionEpoch() + 1);
     verify(sessionEpochFloors).recordAtLeast(before.id(), afterFailure.sessionEpoch());
     verifyNoInteractions(authEventPublisher);
+    verifyNoInteractions(deletionEventPublisher);
   }
 
   @Test
@@ -143,6 +147,7 @@ class DeleteAccountRestoreIntegrationTest {
     assertThat(afterFailure.deletedAt()).isNotNull();
     assertThat(afterFailure.sessionEpoch()).isEqualTo(before.sessionEpoch() + 1);
     verifyNoInteractions(authEventPublisher);
+    verifyNoInteractions(deletionEventPublisher);
 
     DeleteAccountResult retry =
         authService.deleteAccount("Bearer " + accessToken, "Correct horse battery staple");
@@ -156,7 +161,7 @@ class DeleteAccountRestoreIntegrationTest {
     verify(sessionEpochFloors, times(2)).recordAtLeast(eq(before.id()), sealedEpochs.capture());
     assertThat(sealedEpochs.getAllValues())
         .containsExactly(afterFailure.sessionEpoch(), afterFailure.sessionEpoch());
-    verify(authEventPublisher, times(1)).publishAccountDeleted(before.id());
+    verifyDeletionEvent(before.id());
   }
 
   @Test
@@ -196,7 +201,7 @@ class DeleteAccountRestoreIntegrationTest {
     }
 
     assertThat(accounts.findById(before.id().toString()).orElseThrow().sessionEpoch()).isEqualTo(2L);
-    verify(authEventPublisher, times(1)).publishAccountDeleted(before.id());
+    verifyDeletionEvent(before.id());
   }
 
   @Test
@@ -246,5 +251,15 @@ class DeleteAccountRestoreIntegrationTest {
   private static JsonNode session(JsonNode envelope) {
     assertThat(envelope.has("session")).isTrue();
     return envelope.get("session");
+  }
+
+  private void verifyDeletionEvent(UUID accountId) {
+    ArgumentCaptor<UserStreamEvent> envelope = ArgumentCaptor.forClass(UserStreamEvent.class);
+    ArgumentCaptor<String> natsMessageId = ArgumentCaptor.forClass(String.class);
+    verify(deletionEventPublisher, times(1))
+        .publishAccountDeleted(eq("user.account_deleted"), envelope.capture(), natsMessageId.capture());
+    assertThat(envelope.getValue().getEventId()).isEqualTo(natsMessageId.getValue());
+    assertThat(UUID.fromString(envelope.getValue().getEventId())).isNotNull();
+    assertThat(envelope.getValue().getUserAccountDeleted().getAccountId()).isEqualTo(accountId.toString());
   }
 }
