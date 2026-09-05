@@ -24,6 +24,9 @@ func (s *RoleStore) BootstrapSystemRoles(ctx context.Context, spaceID uuid.UUID)
 
 // bootstrapSystemRoles atomically seeds system roles and returns only rows it created.
 func (s *RoleStore) bootstrapSystemRoles(ctx context.Context, spaceID uuid.UUID) ([]RoleRow, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("role store: pool not configured")
+	}
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return nil, err
