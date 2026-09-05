@@ -29,6 +29,7 @@ import voice.backend.auth.repository.InMemoryOtpCodeRepository;
 import voice.backend.auth.repository.InMemoryRefreshTokenRepository;
 import voice.backend.auth.security.BCryptPasswordHasher;
 import voice.backend.auth.security.InMemoryTokenBlacklist;
+import voice.backend.auth.sessionepoch.InMemorySessionEpochFloorStore;
 import voice.backend.auth.security.JwtService;
 import voice.backend.auth.security.RefreshTokenCodec;
 import voice.backend.auth.service.AccountRestoreTokenStore;
@@ -388,7 +389,8 @@ class AuthUserGrpcContractTest {
           new InMemoryTokenBlacklist(CLOCK), new TotpService(props),
           new BackupCodeService(new InMemoryBackupCodeRepository()), CLOCK, Duration.ofDays(30), profiles,
           phone, new InMemorySubscriptionTierStore(), switches, new InMemoryE2EKeyBackupRepository(), events,
-          new SimpleMeterRegistry(), new InMemoryAccountRestoreTokenStore(), new NoopMailSender());
+          new SimpleMeterRegistry(), new InMemoryAccountRestoreTokenStore(), new NoopMailSender(),
+          new InMemorySessionEpochFloorStore());
     }
 
     String accountId() { return accounts.findByEmail("unavailable@example.com")

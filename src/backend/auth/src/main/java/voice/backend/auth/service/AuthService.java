@@ -24,6 +24,8 @@ import voice.backend.auth.security.RefreshTokenCodec;
 import voice.backend.auth.events.AuthEventPublisher;
 import voice.backend.auth.mail.MailSender;
 import voice.backend.auth.security.TokenBlacklist;
+import voice.backend.auth.sessionepoch.SessionEpochFloorStore;
+import voice.backend.auth.sessionepoch.SessionEpochFloorUnavailableException;
 
 public class AuthService {
   /** Max opaque encrypted blob size for E2E key backup (512 KiB). */
@@ -49,6 +51,7 @@ public class AuthService {
   private final MeterRegistry meterRegistry;
   private final AccountRestoreTokenStore restoreTokenStore;
   private final MailSender mailSender;
+  private final SessionEpochFloorStore sessionEpochFloors;
 
   public AuthService(
       AccountRepository accounts,
@@ -69,7 +72,8 @@ public class AuthService {
       AuthEventPublisher authEventPublisher,
       MeterRegistry meterRegistry,
       AccountRestoreTokenStore restoreTokenStore,
-      MailSender mailSender) {
+      MailSender mailSender,
+      SessionEpochFloorStore sessionEpochFloors) {
     this.accounts = accounts;
     this.refreshTokens = refreshTokens;
     this.refreshTokenCodec = refreshTokenCodec;
@@ -89,6 +93,7 @@ public class AuthService {
     this.meterRegistry = meterRegistry;
     this.restoreTokenStore = restoreTokenStore;
     this.mailSender = mailSender;
+    this.sessionEpochFloors = sessionEpochFloors;
   }
 
   public AuthService withClock(Clock newClock) {
@@ -111,7 +116,8 @@ public class AuthService {
         authEventPublisher,
         meterRegistry,
         restoreTokenStore,
-        mailSender);
+        mailSender,
+        sessionEpochFloors);
   }
 
   public AuthSession register(RegisterCommand command) {
@@ -364,16 +370,32 @@ public class AuthService {
   }
 
   public DeleteAccountResult deleteAccount(String accessToken, String password) {
-    TokenClaims claims = validate(accessToken);
+    TokenClaims claims = validateForAccountDeletion(accessToken);
     Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
     if (!passwordHasher.matches(password, account.passwordHash())) {
       throw new AuthException("invalid_credentials");
     }
     if ("deleted".equals(account.status())) {
-      throw new AuthException("account_inactive");
+      return finishAccountDeletion(claims, account);
     }
+    ensureActive(account);
     Instant now = Instant.now(clock);
     accounts.markDeleted(account.id(), now);
+    long sessionEpoch = accounts.incrementSessionEpoch(account.id());
+    Account deleted =
+        accounts.findById(account.id().toString()).orElseThrow(() -> new AuthException("invalid_token"));
+    if (deleted.sessionEpoch() < sessionEpoch) {
+      throw new SessionEpochFloorUnavailableException("durable session epoch did not advance");
+    }
+    return finishAccountDeletion(claims, deleted);
+  }
+
+  private DeleteAccountResult finishAccountDeletion(TokenClaims claims, Account account) {
+    long recordedFloor = sessionEpochFloors.recordAtLeast(account.id(), account.sessionEpoch());
+    if (recordedFloor < account.sessionEpoch()) {
+      throw new SessionEpochFloorUnavailableException("session epoch floor did not reach durable epoch");
+    }
+    Instant now = Instant.now(clock);
     refreshTokens.revokeAllForAccount(account.id(), now);
     tokenBlacklist.revoke(claims.jti(), jwtService.ttl(claims));
     String restoreToken = refreshTokenCodec.generate();
@@ -386,6 +408,17 @@ public class AuthService {
     }
     authEventPublisher.publishAccountDeleted(account.id());
     return new DeleteAccountResult(restoreToken);
+  }
+
+  private TokenClaims validateForAccountDeletion(String accessToken) {
+    if (accessToken == null || accessToken.isBlank()) {
+      throw new AuthException("invalid_token");
+    }
+    TokenClaims claims = jwtService.validate(stripBearer(accessToken));
+    if (tokenBlacklist.isRevoked(claims.jti())) {
+      throw new AuthException("token_revoked");
+    }
+    return claims;
   }
 
   public AuthSession restoreAccount(String restoreToken) {

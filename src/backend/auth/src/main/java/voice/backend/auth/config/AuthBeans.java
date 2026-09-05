@@ -24,6 +24,7 @@ import voice.backend.auth.oauth.OAuthAuthorizationCodeStore;
 import voice.backend.auth.mail.MailSender;
 import voice.backend.auth.service.AccountRestoreTokenStore;
 import voice.backend.auth.service.TotpService;
+import voice.backend.auth.sessionepoch.SessionEpochFloorStore;
 
 @Configuration
 public class AuthBeans {
@@ -81,7 +82,8 @@ public class AuthBeans {
       AuthEventPublisher authEventPublisher,
       MeterRegistry meterRegistry,
       AccountRestoreTokenStore restoreTokenStore,
-      MailSender mailSender) {
+      MailSender mailSender,
+      SessionEpochFloorStore sessionEpochFloors) {
     return new AuthService(
         accounts,
         refreshTokens,
@@ -101,7 +103,8 @@ public class AuthBeans {
         authEventPublisher,
         meterRegistry,
         restoreTokenStore,
-        mailSender);
+        mailSender,
+        sessionEpochFloors);
   }
 
   @Bean
