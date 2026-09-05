@@ -398,6 +398,8 @@ func TestRateLimitGroup_botRuntimePatchAndUnrelatedRoutes(t *testing.T) {
 	}{
 		{name: "documented edit message", method: http.MethodPatch, path: "/api/v1/bots/me/messages/msg-42", want: "BotAPI"},
 		{name: "bot management patch remains unclassified", method: http.MethodPatch, path: "/api/v1/bots/bot-1", want: ""},
+		{name: "undocumented bot runtime patch remains unclassified", method: http.MethodPatch, path: "/api/v1/bots/me/presence", want: ""},
+		{name: "malformed edit message path remains unclassified", method: http.MethodPatch, path: "/api/v1/bots/me/messages/", want: ""},
 		{name: "bot runtime delete remains unclassified", method: http.MethodDelete, path: "/api/v1/bots/me/messages/msg-42", want: ""},
 		{name: "role assign remains narrower", method: http.MethodPost, path: "/api/v1/bots/me/spaces/space-1/roles/assign", want: "BotRoleOps"},
 		{name: "role revoke remains narrower", method: http.MethodPost, path: "/api/v1/bots/me/spaces/space-1/roles/revoke", want: "BotRoleOps"},
