@@ -148,11 +148,12 @@ func TestWSStrictSessionEpochGuardsEveryInboundOperationBeforeDispatch(t *testin
 				require.NoError(t, conn.WriteJSON(map[string]any{"op": "subscribe", "d": map[string]any{"chat_id": chatID}}))
 				require.Equal(t, "subscribe_ack", epochEnforcementRead(t, conn).Op)
 			}
+			operationsBeforeRevocation := dispatch.operations()
 
 			floor.set("account-from-jwt", epochEnforcementFloorResult{minimum: 8})
 			require.NoError(t, conn.WriteJSON(inbound))
 			epochEnforcementRequireRevokedClose(t, conn)
-			require.Empty(t, dispatch.operations(), "revoked frame must not reach operation dispatch")
+			require.Equal(t, operationsBeforeRevocation, dispatch.operations(), "revoked frame must not reach operation dispatch")
 			require.Equal(t, 1, validator.callCount(), "established frames must not revalidate JWT signatures")
 			require.Equal(t, 1, presence.countStatus("online"), "stale heartbeat must not refresh presence")
 			require.Zero(t, publisher.callCount(), "stale delivery acknowledgement must not publish")
@@ -399,6 +400,9 @@ func TestWSStrictSessionEpochGuardsEveryOutboundFanoutAndExpiry(t *testing.T) {
 				wantFloorCalls := 3 // upgrade, hello write, guarded fanout write
 				if fanoutName == "chat fanout" {
 					wantFloorCalls += 2 // guarded subscribe plus guarded subscribe_ack
+				}
+				if name == "expired token" {
+					wantFloorCalls-- // expiry is checked before the authoritative floor
 				}
 				require.Equal(t, wantFloorCalls, floor.callCount(), "outbound write must check the authoritative floor")
 			})

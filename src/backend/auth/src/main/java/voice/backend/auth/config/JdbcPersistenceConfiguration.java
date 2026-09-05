@@ -84,7 +84,6 @@ public class JdbcPersistenceConfiguration {
   }
 
   @Bean
-  @ConditionalOnBean(TransactionTemplate.class)
   AccountDeletionOperationStarter accountDeletionOperationStarter(
       TransactionTemplate guestConversionTransactionTemplate,
       AccountRepository accounts,
