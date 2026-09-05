@@ -1192,7 +1192,13 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         );
         unawaited(_writeCache(sorted, profileId: profileId));
         unawaited(_markLatestRead());
-        unawaited(_refreshPinnedMessages(auth));
+        unawaited(
+          _refreshPinnedMessages(
+            auth,
+            profileId: profileId,
+            generation: loadGeneration,
+          ),
+        );
       case MessagesApiFailure(:final message, :final errorCode):
         if (errorCode == 'network_error') {
           final served = await _serveCachedMessages(
@@ -1210,11 +1216,21 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     }
   }
 
-  Future<void> _refreshPinnedMessages(String auth) async {
+  Future<void> _refreshPinnedMessages(
+    String auth, {
+    required String profileId,
+    required int generation,
+  }) async {
     final pinned = await _ref
         .read(voiceMessagesClientProvider)
         .getPinnedMessages(authorization: auth, chatId: chatId);
-    if (!mounted) return;
+    if (!_isCurrentMutation(
+      profileId: profileId,
+      authorization: auth,
+      generation: generation,
+    )) {
+      return;
+    }
     if (pinned case MessagesApiOk(:final data)) {
       state = state.copyWith(pinnedMessages: data.messages);
     }
@@ -1358,7 +1374,9 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     final trimmed = content.trim();
     if (trimmed.isEmpty && attachments.isEmpty) return null;
     final auth = _ref.read(authorizationHeaderProvider);
-    if (auth == null) return 'not_authenticated';
+    final profileId = _activeProfileId();
+    final generation = _loadGeneration;
+    if (auth == null || profileId == null) return 'not_authenticated';
     if (_isDeviceOffline()) {
       return kChatOfflineBlockedError;
     }
@@ -1379,9 +1397,22 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
                 authorization: auth,
                 chatId: chatId,
               );
+          if (!_isCurrentMutation(
+            profileId: profileId,
+            authorization: auth,
+            generation: generation,
+          )) {
+            return null;
+          }
           isE2e = true;
         } on E2eEncryptException catch (e) {
-          if (!mounted) return e.message;
+          if (!_isCurrentMutation(
+            profileId: profileId,
+            authorization: auth,
+            generation: generation,
+          )) {
+            return null;
+          }
           state = state.copyWith(isSending: false, errorMessage: e.message);
           return e.message;
         }
@@ -1400,7 +1431,13 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           threadParentId: threadParentId,
           isE2e: isE2e,
         );
-    if (!mounted) return null;
+    if (!_isCurrentMutation(
+      profileId: profileId,
+      authorization: auth,
+      generation: generation,
+    )) {
+      return null;
+    }
     switch (result) {
       case MessagesApiOk(:final data):
         final merged = [...state.messages];
@@ -1408,13 +1445,20 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           merged.add(data);
         }
         final sorted = await _finalizeMessages(_sortMessages(merged));
+        if (!_isCurrentMutation(
+          profileId: profileId,
+          authorization: auth,
+          generation: generation,
+        )) {
+          return null;
+        }
         state = state.copyWith(
           messages: sorted,
           isSending: false,
           isOfflineCache: false,
           clearError: true,
         );
-        unawaited(_writeCache(sorted));
+        unawaited(_writeCache(sorted, profileId: profileId));
         unawaited(_markLatestRead());
         _invalidateChatLists(_ref);
         return null;
@@ -1430,6 +1474,17 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       _ref.read(authControllerProvider).activeProfileId;
 
   bool _isCurrentInitialLoad({
+    required String profileId,
+    required String authorization,
+    required int generation,
+  }) {
+    return mounted &&
+        _loadGeneration == generation &&
+        _activeProfileId() == profileId &&
+        _ref.read(authorizationHeaderProvider) == authorization;
+  }
+
+  bool _isCurrentMutation({
     required String profileId,
     required String authorization,
     required int generation,
@@ -1553,7 +1608,9 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     final trimmed = content.trim();
     if (trimmed.isEmpty) return null;
     final auth = _ref.read(authorizationHeaderProvider);
-    if (auth == null) return 'not_authenticated';
+    final profileId = _activeProfileId();
+    final generation = _loadGeneration;
+    if (auth == null || profileId == null) return 'not_authenticated';
 
     var outbound = trimmed;
     VoiceMessage? existing;
@@ -1577,7 +1634,21 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
                 authorization: auth,
                 chatId: chatId,
               );
+          if (!_isCurrentMutation(
+            profileId: profileId,
+            authorization: auth,
+            generation: generation,
+          )) {
+            return null;
+          }
         } on E2eEncryptException catch (e) {
+          if (!_isCurrentMutation(
+            profileId: profileId,
+            authorization: auth,
+            generation: generation,
+          )) {
+            return null;
+          }
           return e.message;
         }
       }
@@ -1590,9 +1661,15 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           messageId: messageId,
           content: outbound,
         );
-    if (!mounted) return null;
+    if (!_isCurrentMutation(
+      profileId: profileId,
+      authorization: auth,
+      generation: generation,
+    )) {
+      return null;
+    }
     return switch (result) {
-      MessagesApiOk(:final data) => _replaceMessage(data),
+      MessagesApiOk(:final data) => _replaceMessage(data, profileId: profileId),
       MessagesApiFailure(:final message) => message,
     };
   }
@@ -1603,7 +1680,9 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     required bool currentlyReacted,
   }) async {
     final auth = _ref.read(authorizationHeaderProvider);
-    if (auth == null) return 'not_authenticated';
+    final profileId = _activeProfileId();
+    final generation = _loadGeneration;
+    if (auth == null || profileId == null) return 'not_authenticated';
     _applyReactionDelta(
       messageId: messageId,
       emoji: emoji,
@@ -1622,7 +1701,13 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
             messageId: messageId,
             emoji: emoji,
           );
-    if (!mounted) return null;
+    if (!_isCurrentMutation(
+      profileId: profileId,
+      authorization: auth,
+      generation: generation,
+    )) {
+      return null;
+    }
     switch (result) {
       case MessagesApiOk<void>():
         return null;
@@ -1650,7 +1735,9 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     required bool currentlyPinned,
   }) async {
     final auth = _ref.read(authorizationHeaderProvider);
-    if (auth == null) return 'not_authenticated';
+    final profileId = _activeProfileId();
+    final generation = _loadGeneration;
+    if (auth == null || profileId == null) return 'not_authenticated';
     _applyPinDelta(messageId: messageId, pinned: !currentlyPinned);
     final client = _ref.read(voiceMessagesClientProvider);
     final result = currentlyPinned
@@ -1664,10 +1751,22 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
             messageId: messageId,
             chatId: chatId,
           );
-    if (!mounted) return null;
+    if (!_isCurrentMutation(
+      profileId: profileId,
+      authorization: auth,
+      generation: generation,
+    )) {
+      return null;
+    }
     switch (result) {
       case MessagesApiOk<void>():
-        unawaited(_refreshPinnedMessages(auth));
+        unawaited(
+          _refreshPinnedMessages(
+            auth,
+            profileId: profileId,
+            generation: generation,
+          ),
+        );
         return null;
       case MessagesApiFailure(:final message):
         unawaited(loadInitial());
@@ -1739,7 +1838,9 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
 
   Future<String?> deleteMessage(String messageId, {required bool forMe}) async {
     final auth = _ref.read(authorizationHeaderProvider);
-    if (auth == null) return 'not_authenticated';
+    final profileId = _activeProfileId();
+    final generation = _loadGeneration;
+    if (auth == null || profileId == null) return 'not_authenticated';
     final result = await _ref
         .read(voiceMessagesClientProvider)
         .deleteMessage(
@@ -1747,14 +1848,20 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           messageId: messageId,
           scope: forMe ? 'me' : 'everyone',
         );
-    if (!mounted) return null;
+    if (!_isCurrentMutation(
+      profileId: profileId,
+      authorization: auth,
+      generation: generation,
+    )) {
+      return null;
+    }
     switch (result) {
       case MessagesApiOk<void>():
         final messages = state.messages
             .where((m) => m.id != messageId)
             .toList();
         state = state.copyWith(messages: messages, clearError: true);
-        unawaited(_writeCache(messages));
+        unawaited(_writeCache(messages, profileId: profileId));
         _invalidateChatLists(_ref);
         return null;
       case MessagesApiFailure(:final message):
@@ -1763,12 +1870,12 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     }
   }
 
-  String? _replaceMessage(VoiceMessage message) {
+  String? _replaceMessage(VoiceMessage message, {required String profileId}) {
     final messages = state.messages
         .map((m) => m.id == message.id ? message : m)
         .toList();
     state = state.copyWith(messages: messages, clearError: true);
-    unawaited(_writeCache(messages));
+    unawaited(_writeCache(messages, profileId: profileId));
     _invalidateChatLists(_ref);
     return null;
   }
