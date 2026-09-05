@@ -1712,6 +1712,7 @@ class RealtimeHub {
   _RealtimeHubBinding? _binding;
   _RealtimeHubBinding? _connectingBinding;
   RealtimeTransport? _helloAcceptedConnection;
+  _RealtimeHubBinding? _helloAcceptedBinding;
 
   RealtimeLinkStatus get status => _status;
   Stream<RealtimeFrame> get events => _eventController.stream;
@@ -1844,6 +1845,7 @@ class RealtimeHub {
     if (frame.op == 'hello') {
       if (identical(_helloAcceptedConnection, connection)) return;
       _helloAcceptedConnection = connection;
+      _helloAcceptedBinding = binding;
       _setStatus(RealtimeLinkStatus.connected, binding: binding);
       _ref
           .read(realtimeHelloBindingProvider.notifier)
@@ -1891,8 +1893,16 @@ class RealtimeHub {
 
   Future<void> _tearDownConnection({RealtimeTransport? expected}) async {
     if (expected != null && !identical(_connection, expected)) return;
-    if (identical(_helloAcceptedConnection, _connection)) {
+    final connection = _connection;
+    if (identical(_helloAcceptedConnection, connection)) {
+      final acceptedBinding = _helloAcceptedBinding;
       _helloAcceptedConnection = null;
+      _helloAcceptedBinding = null;
+      if (acceptedBinding != null &&
+          _ref.read(realtimeHelloBindingProvider)?.bindingGeneration ==
+              acceptedBinding.generation) {
+        _ref.read(realtimeHelloBindingProvider.notifier).state = null;
+      }
     }
     await _frameSub?.cancel();
     _frameSub = null;
@@ -1904,6 +1914,7 @@ class RealtimeHub {
     _binding = null;
     _connectingBinding = null;
     _helloAcceptedConnection = null;
+    _helloAcceptedBinding = null;
     if (!_disposed) {
       _ref.read(realtimeHelloBindingProvider.notifier).state = null;
     }
