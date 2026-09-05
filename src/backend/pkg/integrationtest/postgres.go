@@ -19,6 +19,28 @@ const (
 	postgresPass  = "p"
 )
 
+var postgresRun = postgres.Run
+
+var postgresTerminate = func(ctx context.Context, container *postgres.PostgresContainer) error {
+	if container == nil {
+		return nil
+	}
+	return container.Terminate(ctx)
+}
+
+func startPostgresContainer(ctx context.Context, dbName string) (*postgres.PostgresContainer, error) {
+	container, err := postgresRun(ctx, PostgresImage,
+		postgres.BasicWaitStrategies(),
+		postgres.WithDatabase(dbName),
+		postgres.WithUsername(postgresUser),
+		postgres.WithPassword(postgresPass),
+	)
+	if err != nil && container != nil {
+		_ = postgresTerminate(ctx, container)
+	}
+	return container, err
+}
+
 // StartPostgres runs a Postgres testcontainer, waits until the DB accepts connections,
 // optionally applies a single migration SQL file, and returns a pgx pool with t.Cleanup hooks.
 // migrationSQLPath is empty to skip migration.
@@ -28,14 +50,9 @@ func StartPostgres(t *testing.T, ctx context.Context, dbName, migrationSQLPath s
 		t.Skip("integration test skipped in -short mode")
 	}
 
-	pgC, err := postgres.Run(ctx, PostgresImage,
-		postgres.BasicWaitStrategies(),
-		postgres.WithDatabase(dbName),
-		postgres.WithUsername(postgresUser),
-		postgres.WithPassword(postgresPass),
-	)
+	pgC, err := startPostgresContainer(ctx, dbName)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = pgC.Terminate(ctx) })
+	t.Cleanup(func() { _ = postgresTerminate(ctx, pgC) })
 
 	connStr, err := pgC.ConnectionString(ctx, "sslmode=disable")
 	require.NoError(t, err)

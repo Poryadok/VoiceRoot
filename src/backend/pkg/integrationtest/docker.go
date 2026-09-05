@@ -10,9 +10,19 @@ func init() {
 	ConfigureDockerTesting()
 }
 
+func configureTestcontainersHost(goos string) {
+	if host, ok := os.LookupEnv("TESTCONTAINERS_HOST_OVERRIDE"); ok && host != "" {
+		return
+	}
+	if goos == "windows" {
+		_ = os.Setenv("TESTCONTAINERS_HOST_OVERRIDE", "127.0.0.1")
+	}
+}
+
 // ConfigureDockerTesting adjusts testcontainers for the host OS and CI runners.
 // Import this package with a blank import in integration test packages, or call from TestMain.
 func ConfigureDockerTesting() {
+	configureTestcontainersHost(runtime.GOOS)
 	if os.Getenv("TESTCONTAINERS_RYUK_DISABLED") != "" {
 		return
 	}
