@@ -15,6 +15,7 @@ import (
 	voicestore "voice/backend/voice/internal/store"
 
 	callsv1 "voice.app/voice/calls/v1"
+	chatv1 "voice.app/voice/chat/v1"
 	spacev1 "voice.app/voice/space/v1"
 )
 
@@ -314,6 +315,46 @@ func TestVoiceGRPCVoiceRoom_unmuteFailsClosedWithoutOrWithUnavailableRoleChecker
 			require.True(t, f.participantState(t, roomID, "profile-owner").GetIsMuted(), "failed-closed unmute must not mutate state")
 		})
 	}
+}
+
+func TestVoiceGRPCVoiceRoom_nonMutePatchDoesNotRequireVoiceSpeak(t *testing.T) {
+	f := startVoiceRoomFixture(t)
+	roles := &recordingVoiceRolePermissions{voiceSpeakErr: errors.New("VOICE_SPEAK denied")}
+	f.svc.Roles = roles
+	roomID := f.joinParticipants(t)
+	deafened := true
+
+	_, err := f.svc.UpdateVoiceState(voiceTestCtx("profile-owner"), &callsv1.UpdateVoiceStateRequest{
+		RoomId:     roomID,
+		IsDeafened: &deafened,
+	})
+	require.NoError(t, err, "an absent is_muted patch is not an unmute")
+	require.True(t, f.participantState(t, roomID, "profile-owner").GetIsDeafened())
+	require.Empty(t, roles.voiceSpeakChecks, "a non-mute patch must not call VOICE_SPEAK")
+}
+
+func TestVoiceGRPCUpdateVoiceState_groupNonMutePatchAllowsMissingRoleChecker(t *testing.T) {
+	svc := newTestGroupVoiceService(time.Unix(1700000000, 0).UTC(), &recordingEvents{})
+	var noRoles RolePermissionChecker
+	svc.Roles = noRoles
+	group := chatv1.ChatType_CHAT_TYPE_GROUP
+	started, err := svc.StartCall(voiceTestCtx("profile-owner"), &callsv1.StartCallRequest{
+		RoomTypeEnum: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE.Enum(),
+		LinkedChat:   &chatv1.ChatRef{Id: "group-chat-1", Type: &group},
+		MediaKind:    mediaPtr(callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO),
+	})
+	require.NoError(t, err)
+	roomID := started.GetCallSession().GetRoomId()
+	deafened := true
+
+	_, err = svc.UpdateVoiceState(voiceTestCtx("profile-owner"), &callsv1.UpdateVoiceStateRequest{
+		RoomId:     roomID,
+		IsDeafened: &deafened,
+	})
+	require.NoError(t, err, "group voice has no Space Role scope")
+	states, err := svc.GetVoiceStates(voiceTestCtx("profile-owner"), &callsv1.GetVoiceStatesRequest{RoomId: roomID})
+	require.NoError(t, err)
+	require.True(t, findParticipantState(states.GetParticipants(), "profile-owner").GetIsDeafened())
 }
 
 func TestVoiceGRPCVoiceRoom_protectedActionsFailClosedWithoutRoleChecker(t *testing.T) {

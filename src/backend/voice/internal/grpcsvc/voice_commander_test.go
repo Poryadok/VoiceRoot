@@ -210,6 +210,77 @@ func TestVoiceGRPCVoiceRoom_broadcastingRequiresVoiceSpeak(t *testing.T) {
 	require.False(t, f.participantState(t, roomID, "profile-owner").GetIsBroadcasting(), "denied broadcast must not mutate state")
 }
 
+func TestVoiceGRPCVoiceRoom_roleAllowedOwnerCallsProtectedActions(t *testing.T) {
+	t.Run("explicit unmute", func(t *testing.T) {
+		f := startVoiceRoomFixture(t)
+		roles := &recordingVoiceRolePermissions{}
+		f.svc.Roles = roles
+		roomID := f.joinParticipants(t)
+		muted := true
+		_, err := f.svc.UpdateVoiceState(voiceTestCtx("profile-owner"), &callsv1.UpdateVoiceStateRequest{RoomId: roomID, IsMuted: &muted})
+		require.NoError(t, err)
+		unmuted := false
+
+		_, err = f.svc.UpdateVoiceState(voiceTestCtx("profile-owner"), &callsv1.UpdateVoiceStateRequest{RoomId: roomID, IsMuted: &unmuted})
+		require.NoError(t, err, "an owner-shaped Role allow must permit unmute")
+		require.False(t, f.participantState(t, roomID, "profile-owner").GetIsMuted())
+		requireVoiceRoleCheck(t, roles.voiceSpeakChecks, f.spaceID, "profile-owner", f.voiceRoomID)
+	})
+
+	t.Run("enable commander mode", func(t *testing.T) {
+		f := startVoiceRoomFixture(t)
+		roles := &recordingVoiceRolePermissions{}
+		f.svc.Roles = roles
+		roomID := f.joinParticipants(t)
+
+		_, err := f.svc.SetCommanderMode(voiceTestCtx("profile-owner"), &callsv1.SetCommanderModeRequest{RoomId: roomID, Enabled: true})
+		require.NoError(t, err, "an owner-shaped Role allow must permit commander mode")
+		require.True(t, f.participantState(t, roomID, "profile-owner").GetIsCommander())
+		requireVoiceRoleCheck(t, roles.muteOthersChecks, f.spaceID, "profile-owner", f.voiceRoomID)
+	})
+
+	t.Run("begin broadcasting", func(t *testing.T) {
+		f := startVoiceRoomFixture(t)
+		roles := &recordingVoiceRolePermissions{}
+		f.svc.Roles = roles
+		roomID := f.joinParticipants(t)
+		commander := true
+		f.setParticipantState(t, roomID, "profile-owner", voicestore.VoiceStatePatch{IsCommander: &commander})
+
+		_, err := f.svc.SetBroadcasting(voiceTestCtx("profile-owner"), &callsv1.SetBroadcastingRequest{RoomId: roomID, Enabled: true})
+		require.NoError(t, err, "an owner-shaped Role allow must permit broadcasting")
+		require.True(t, f.participantState(t, roomID, "profile-owner").GetIsBroadcasting())
+		requireVoiceRoleCheck(t, roles.muteOthersChecks, f.spaceID, "profile-owner", f.voiceRoomID)
+		requireVoiceRoleCheck(t, roles.voiceSpeakChecks, f.spaceID, "profile-owner", f.voiceRoomID)
+	})
+
+	t.Run("grant floor", func(t *testing.T) {
+		f := startVoiceRoomFixture(t)
+		roles := &recordingVoiceRolePermissions{}
+		f.svc.Roles = roles
+		roomID := f.joinParticipants(t)
+
+		_, err := f.svc.GrantFloor(voiceTestCtx("profile-owner"), &callsv1.GrantFloorRequest{RoomId: roomID, ProfileId: "profile-member"})
+		require.NoError(t, err, "an owner-shaped Role allow must permit floor grant")
+		require.True(t, f.participantState(t, roomID, "profile-member").GetHasFloor())
+		requireVoiceRoleCheck(t, roles.muteOthersChecks, f.spaceID, "profile-owner", f.voiceRoomID)
+	})
+
+	t.Run("revoke floor", func(t *testing.T) {
+		f := startVoiceRoomFixture(t)
+		roles := &recordingVoiceRolePermissions{}
+		f.svc.Roles = roles
+		roomID := f.joinParticipants(t)
+		hasFloor := true
+		f.setParticipantState(t, roomID, "profile-member", voicestore.VoiceStatePatch{HasFloor: &hasFloor})
+
+		_, err := f.svc.RevokeFloor(voiceTestCtx("profile-owner"), &callsv1.RevokeFloorRequest{RoomId: roomID, ProfileId: "profile-member"})
+		require.NoError(t, err, "an owner-shaped Role allow must permit floor revocation")
+		require.False(t, f.participantState(t, roomID, "profile-member").GetHasFloor())
+		requireVoiceRoleCheck(t, roles.muteOthersChecks, f.spaceID, "profile-owner", f.voiceRoomID)
+	})
+}
+
 func findParticipantState(states []*callsv1.VoiceParticipantState, profileID string) *callsv1.VoiceParticipantState {
 	for _, s := range states {
 		if s.GetProfileId() == profileID {

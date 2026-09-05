@@ -85,7 +85,7 @@ returns their permission check as allowed.
 
 - [x] Read governing docs and inventory all direct gRPC, Gateway, and commander ingress paths.
 - [x] Add documentation-derived regression tests only; demonstrate expected RED failures; commit the RED phase.
-- [ ] Obtain independent fresh test review and resolve any critical finding before production changes.
+- [x] Obtain independent fresh test review and resolve any critical finding before production changes. The first review found P1 RED gaps (allow/Owner-shaped behavior, `EnsureMuteOthers` deny/unavailable adapter behavior, optional/non-Space state-patch regressions); the correction pass and fresh rereview found no P1/critical findings.
 - [ ] Implement the smallest checker/interface and handler guards; run focused GREEN tests and mutation checks.
 - [ ] Update the backlog wording/ExecPlan progress, commit GREEN, obtain fresh implementation review, and run bounded verification.
 
@@ -137,7 +137,9 @@ returns their permission check as allowed.
   mutations return OK instead of `PERMISSION_DENIED`; the s2s test is an
   intentional compile-RED because `EnsureVoiceSpeak` and its sentinel do not
   exist yet.
-- [ ] Fresh RED test review in progress; production code remains untouched.
+- [x] Fresh RED test review completed; three P1 test gaps were found.
+- [x] Add reviewed RED gaps (allow behavior, `EnsureMuteOthers` adapter deny/unavailable, optional/non-Space state patches), then obtain a fresh follow-up test review. Production code remains untouched.
+- [ ] Implement minimal GREEN guards only after accepted RED review.
 
 ## Decisions
 
