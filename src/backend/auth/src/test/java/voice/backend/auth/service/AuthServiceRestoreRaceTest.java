@@ -36,8 +36,9 @@ import voice.backend.auth.userdb.InMemoryPrimaryProfileProvisioner;
 import voice.backend.auth.userdb.NoOpProfileSwitchValidator;
 
 class AuthServiceRestoreRaceTest {
+  private static final Instant NOW = Instant.now();
   private static final Clock CLOCK =
-      Clock.fixed(Instant.parse("2026-05-01T10:00:00Z"), ZoneOffset.UTC);
+      Clock.fixed(NOW.plus(Duration.ofDays(1)), ZoneOffset.UTC);
 
   @Test
   void repositoryDoesNotReactivateAnAccountOutsideDeletedState() {
@@ -56,7 +57,7 @@ class AuthServiceRestoreRaceTest {
   void duplicateRestoreDeliveriesIssueOnlyOneSessionAndRestoredEvent() throws Exception {
     GatedDeletedReadAccountRepository accounts = new GatedDeletedReadAccountRepository();
     Account account = accounts.create("restore-race@example.com", null, "hash", "regular");
-    accounts.markDeleted(account.id(), CLOCK.instant());
+    accounts.markDeleted(account.id(), NOW);
     InMemoryRefreshTokenRepository refreshTokens = new InMemoryRefreshTokenRepository();
     AuthEventPublisher events = mock();
     AccountRestoreTokenStore duplicateDelivery = new DuplicateDeliveryTokenStore(account.id());
