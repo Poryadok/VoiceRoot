@@ -6,9 +6,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	botv1 "voice.app/voice/bot/v1"
 	chatv1 "voice.app/voice/chat/v1"
@@ -21,9 +24,10 @@ func TestBotCRUD_and_webhookURL(t *testing.T) {
 	client, _, cleanup := startBotGRPC(t)
 	defer cleanup()
 	ctx := withAccount(context.Background(), uuid.New(), uuid.New())
+	updatedScopes := `["DM_SEND","TEXT_CHAT_SEND_MESSAGES"]`
 
 	reg, err := client.RegisterBot(ctx, &botv1.RegisterBotRequest{
-		Name: "ApiBot", Description: "desc", ScopesJson: `["TEXT_CHAT_SEND_MESSAGES"]`,
+		Name: "ApiBot", Description: "desc", ScopesJson: updatedScopes,
 	})
 	require.NoError(t, err)
 	botID := reg.GetBot().GetId()
@@ -33,9 +37,53 @@ func TestBotCRUD_and_webhookURL(t *testing.T) {
 	require.Equal(t, "ApiBot", got.GetBot().GetName())
 
 	updatedName := "ApiBot2"
-	upd, err := client.UpdateBot(ctx, &botv1.UpdateBotRequest{BotId: botID, Name: &updatedName})
+	updatedAvatar := "https://example.com/avatar.png"
+	requestedScopes := `["TEXT_CHAT_SEND_MESSAGES","DM_SEND"]`
+	upd, err := client.UpdateBot(ctx, &botv1.UpdateBotRequest{
+		BotId: botID, Name: &updatedName, AvatarUrl: &updatedAvatar, ScopesJson: &requestedScopes,
+	})
 	require.NoError(t, err)
 	require.Equal(t, "ApiBot2", upd.GetBot().GetName())
+	require.Equal(t, updatedAvatar, upd.GetBot().GetAvatarUrl())
+	require.JSONEq(t, updatedScopes, upd.GetBot().GetScopesJson())
+
+	removedScopes := `["TEXT_CHAT_SEND_MESSAGES"]`
+	removed, err := client.UpdateBot(ctx, &botv1.UpdateBotRequest{
+		BotId: botID, ScopesJson: &removedScopes,
+	})
+	require.NoError(t, err)
+	require.JSONEq(t, removedScopes, removed.GetBot().GetScopesJson())
+
+	escalatedScopes := `["TEXT_CHAT_SEND_MESSAGES","SPACE_VIEW_MEMBER_LIST"]`
+	_, err = client.UpdateBot(ctx, &botv1.UpdateBotRequest{
+		BotId: botID, ScopesJson: &escalatedScopes,
+	})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	unchanged, err := client.GetBot(ctx, &botv1.GetBotRequest{BotId: botID})
+	require.NoError(t, err)
+	require.JSONEq(t, removedScopes, unchanged.GetBot().GetScopesJson())
+
+	for _, invalidScopes := range []string{
+		`not-json`,
+		`["TEXT_CHAT_SEND_MESSAGES","UNKNOWN_SCOPE"]`,
+		`["TEXT_CHAT_SEND_MESSAGES","TEXT_CHAT_SEND_MESSAGES"]`,
+	} {
+		_, err = client.UpdateBot(ctx, &botv1.UpdateBotRequest{
+			BotId: botID, ScopesJson: &invalidScopes,
+		})
+		require.Equal(t, codes.InvalidArgument, status.Code(err), invalidScopes)
+		unchanged, err = client.GetBot(ctx, &botv1.GetBotRequest{BotId: botID})
+		require.NoError(t, err)
+		require.JSONEq(t, removedScopes, unchanged.GetBot().GetScopesJson())
+	}
+
+	nameOnly := "ApiBot3"
+	preserved, err := client.UpdateBot(ctx, &botv1.UpdateBotRequest{BotId: botID, Name: &nameOnly})
+	require.NoError(t, err)
+	require.Equal(t, nameOnly, preserved.GetBot().GetName())
+	require.Equal(t, updatedAvatar, preserved.GetBot().GetAvatarUrl())
+	require.JSONEq(t, removedScopes, preserved.GetBot().GetScopesJson())
+	require.Equal(t, "desc", preserved.GetBot().GetDescription())
 
 	_, err = client.SetWebhookURL(ctx, &botv1.SetWebhookURLRequest{
 		BotId: botID,
@@ -48,6 +96,58 @@ func TestBotCRUD_and_webhookURL(t *testing.T) {
 
 	_, err = client.DeleteBot(ctx, &botv1.DeleteBotRequest{BotId: botID})
 	require.NoError(t, err)
+}
+
+func TestBotUpdateScopes_rechecksAfterConcurrentRemoval(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	client, st, cleanup := startBotGRPC(t)
+	defer cleanup()
+	ctx := withAccount(context.Background(), uuid.New(), uuid.New())
+	granted := `["DM_SEND","TEXT_CHAT_SEND_MESSAGES"]`
+
+	reg, err := client.RegisterBot(ctx, &botv1.RegisterBotRequest{
+		Name: "ConcurrentBot", ScopesJson: granted,
+	})
+	require.NoError(t, err)
+	botID := reg.GetBot().GetId()
+	botUUID, err := uuid.Parse(botID)
+	require.NoError(t, err)
+
+	tx, err := st.Pool.Begin(ctx)
+	require.NoError(t, err)
+	defer tx.Rollback(ctx) //nolint:errcheck // commit is asserted below
+	removed := `["TEXT_CHAT_SEND_MESSAGES"]`
+	_, err = tx.Exec(ctx, `UPDATE bots SET scopes = $2::jsonb WHERE id = $1`, botUUID, removed)
+	require.NoError(t, err)
+
+	restore := granted
+	updateDone := make(chan error, 1)
+	go func() {
+		_, updateErr := client.UpdateBot(ctx, &botv1.UpdateBotRequest{
+			BotId: botID, ScopesJson: &restore,
+		})
+		updateDone <- updateErr
+	}()
+
+	// The writer must be inside its second transaction before the removal commits;
+	// otherwise an old read-then-write implementation could race past this test.
+	require.Eventually(t, func() bool {
+		return st.Pool.Stat().AcquiredConns() >= 2
+	}, 2*time.Second, 10*time.Millisecond)
+	select {
+	case updateErr := <-updateDone:
+		t.Fatalf("update completed before concurrent removal committed: %v", updateErr)
+	default:
+	}
+	require.NoError(t, tx.Commit(ctx))
+
+	updateErr := <-updateDone
+	require.Equal(t, codes.PermissionDenied, status.Code(updateErr))
+	got, err := client.GetBot(ctx, &botv1.GetBotRequest{BotId: botID})
+	require.NoError(t, err)
+	require.JSONEq(t, removed, got.GetBot().GetScopesJson())
 }
 
 func TestApplyManifest_subcommandsListedWithGroup(t *testing.T) {
