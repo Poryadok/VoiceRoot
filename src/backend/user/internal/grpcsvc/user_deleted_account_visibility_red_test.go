@@ -55,7 +55,7 @@ func (c *deletedAccountCheckerStub) DeletedAmong(_ context.Context, ids []uuid.U
 // setDeletedAccountChecker is intentionally reflective while UserGRPC lacks
 // the new injection point. It keeps this RED suite compiling on the current
 // train, then enforces the small internal contract once GREEN adds it.
-func setDeletedAccountChecker(t *testing.T, svc *UserGRPC, checker *deletedAccountCheckerStub) {
+func setDeletedAccountChecker(t *testing.T, svc *UserGRPC, checker any) {
 	t.Helper()
 	field := reflect.ValueOf(svc).Elem().FieldByName("DeletedAccounts")
 	if !field.IsValid() {
@@ -64,10 +64,11 @@ func setDeletedAccountChecker(t *testing.T, svc *UserGRPC, checker *deletedAccou
 	if !field.CanSet() {
 		t.Fatalf("UserGRPC.DeletedAccounts must be injectable")
 	}
-	if !reflect.TypeOf(checker).AssignableTo(field.Type()) {
+	checkerValue := reflect.ValueOf(checker)
+	if !checkerValue.Type().AssignableTo(field.Type()) {
 		t.Fatalf("UserGRPC.DeletedAccounts must accept DeletedAmong checker, got %s", field.Type())
 	}
-	field.Set(reflect.ValueOf(checker))
+	field.Set(checkerValue)
 }
 
 func TestUserGRPC_DeletedAccountsCheckerContract(t *testing.T) {
@@ -120,6 +121,12 @@ VALUES ($1, $2, $3, $4, $5, $6)`, profileID, accountID, username, discriminator,
 	require.NoError(t, err)
 }
 
+func requireCheckerAccountBatch(t *testing.T, checker *deletedAccountCheckerStub, call int, want []uuid.UUID) {
+	t.Helper()
+	require.Greater(t, len(checker.calls), call)
+	require.ElementsMatch(t, want, checker.calls[call], "checker must receive account_id values only")
+}
+
 func TestDeletedAccountProfiles_AreHiddenFromDirectAndBatchReads(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
@@ -134,15 +141,30 @@ func TestDeletedAccountProfiles_AreHiddenFromDirectAndBatchReads(t *testing.T) {
 	byID := &userv1.GetProfileRequest{By: &userv1.GetProfileRequest_ProfileId{ProfileId: deletedProfile.String()}}
 	_, idErr := client.GetProfile(ctx, byID)
 	require.Equal(t, codes.NotFound, status.Code(idErr))
+	requireCheckerAccountBatch(t, checker, 0, []uuid.UUID{deletedAccount})
 
 	byUsername := &userv1.GetProfileRequest{By: &userv1.GetProfileRequest_Username{Username: "deletedprofile#0001"}}
 	_, usernameErr := client.GetProfile(ctx, byUsername)
 	require.Equal(t, codes.NotFound, status.Code(usernameErr))
 	require.Equal(t, status.Convert(idErr).Message(), status.Convert(usernameErr).Message(), "deleted profiles must not be distinguishable by lookup path")
+	requireCheckerAccountBatch(t, checker, 1, []uuid.UUID{deletedAccount})
 
+	checker.calls = nil
+	activeByID, err := client.GetProfile(ctx, &userv1.GetProfileRequest{By: &userv1.GetProfileRequest_ProfileId{ProfileId: activeProfile.String()}})
+	require.NoError(t, err)
+	require.Equal(t, activeProfile.String(), activeByID.GetProfile().GetId())
+	requireCheckerAccountBatch(t, checker, 0, []uuid.UUID{activeAccount})
+
+	activeByUsername, err := client.GetProfile(ctx, &userv1.GetProfileRequest{By: &userv1.GetProfileRequest_Username{Username: "activeprofile#0002"}})
+	require.NoError(t, err)
+	require.Equal(t, activeProfile.String(), activeByUsername.GetProfile().GetId())
+	requireCheckerAccountBatch(t, checker, 1, []uuid.UUID{activeAccount})
+
+	checker.calls = nil
 	batch, err := client.GetProfiles(ctx, &userv1.GetProfilesRequest{ProfileIds: []string{deletedProfile.String(), activeProfile.String()}})
 	require.NoError(t, err)
 	require.Equal(t, []string{activeProfile.String()}, collectProfileIDs(batch.GetProfileList().GetProfiles()))
+	requireCheckerAccountBatch(t, checker, 0, []uuid.UUID{deletedAccount, activeAccount})
 }
 
 func TestDeletedAccountProfiles_SearchFillsPagesAndPreservesCursor(t *testing.T) {
@@ -151,6 +173,7 @@ func TestDeletedAccountProfiles_SearchFillsPagesAndPreservesCursor(t *testing.T)
 	}
 	viewerAccount, viewerProfile := uuid.New(), uuid.New()
 	checker := &deletedAccountCheckerStub{deleted: make(map[uuid.UUID]struct{})}
+	deletedAccounts := make([]uuid.UUID, 0, searchProfilesBatch)
 	ctx, profiles, privacyStore, client := startDeletedAccountVisibilityServer(t, checker)
 	insertVisibleProfile(t, ctx, profiles, viewerProfile, viewerAccount, "visibilityviewer", "0001", true)
 
@@ -158,6 +181,7 @@ func TestDeletedAccountProfiles_SearchFillsPagesAndPreservesCursor(t *testing.T)
 		accountID, profileID := uuid.New(), uuid.New()
 		insertVisibleProfile(t, ctx, profiles, profileID, accountID, fmt.Sprintf("a%03dhidepage", i), "0002", true)
 		checker.deleted[accountID] = struct{}{}
+		deletedAccounts = append(deletedAccounts, accountID)
 	}
 	firstAccount, firstProfile := uuid.New(), uuid.New()
 	secondAccount, secondProfile := uuid.New(), uuid.New()
@@ -170,6 +194,7 @@ func TestDeletedAccountProfiles_SearchFillsPagesAndPreservesCursor(t *testing.T)
 		require.NoError(t, err)
 	}
 
+	checker.calls = nil
 	first, err := client.SearchProfiles(withUserAuthCtx(ctx, viewerAccount, viewerProfile), &userv1.SearchProfilesRequest{
 		Query: "hidepage",
 		Page:  &commonv1.CursorPageRequest{PageSize: 1},
@@ -178,7 +203,10 @@ func TestDeletedAccountProfiles_SearchFillsPagesAndPreservesCursor(t *testing.T)
 	require.Equal(t, []string{firstProfile.String()}, collectProfileIDs(first.GetProfileList().GetProfiles()))
 	require.True(t, first.GetPage().GetHasMore(), "a hidden first DB batch must not truncate the visible page")
 	require.NotEmpty(t, first.GetPage().GetNextCursor())
+	requireCheckerAccountBatch(t, checker, 0, deletedAccounts)
+	requireCheckerAccountBatch(t, checker, 1, []uuid.UUID{firstAccount, secondAccount})
 
+	checker.calls = nil
 	second, err := client.SearchProfiles(withUserAuthCtx(ctx, viewerAccount, viewerProfile), &userv1.SearchProfilesRequest{
 		Query: "hidepage",
 		Page:  &commonv1.CursorPageRequest{PageSize: 1, Cursor: first.GetPage().GetNextCursor()},
@@ -186,7 +214,7 @@ func TestDeletedAccountProfiles_SearchFillsPagesAndPreservesCursor(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, []string{secondProfile.String()}, collectProfileIDs(second.GetProfileList().GetProfiles()))
 	require.False(t, second.GetPage().GetHasMore())
-	require.GreaterOrEqual(t, len(checker.calls), 2, "search must continue after a deleted-only DB batch")
+	requireCheckerAccountBatch(t, checker, 0, []uuid.UUID{secondAccount})
 }
 
 func TestDeletedAccountProfiles_DoNotRevealPresence(t *testing.T) {
@@ -194,28 +222,47 @@ func TestDeletedAccountProfiles_DoNotRevealPresence(t *testing.T) {
 		t.Skip()
 	}
 	ownerAccount, ownerProfile := uuid.New(), uuid.New()
+	activeAccount, activeProfile := uuid.New(), uuid.New()
 	viewerAccount, viewerProfile := uuid.New(), uuid.New()
 	checker := &deletedAccountCheckerStub{deleted: make(map[uuid.UUID]struct{})}
 	ctx, profiles, privacyStore, client := startDeletedAccountVisibilityServer(t, checker)
 	insertVisibleProfile(t, ctx, profiles, ownerProfile, ownerAccount, "deletedpresence", "0001", true)
-	insertVisibleProfile(t, ctx, profiles, viewerProfile, viewerAccount, "presenceviewer", "0002", true)
+	insertVisibleProfile(t, ctx, profiles, activeProfile, activeAccount, "activepresence", "0002", true)
+	insertVisibleProfile(t, ctx, profiles, viewerProfile, viewerAccount, "presenceviewer", "0003", true)
 	row := store.PrivacyRowFromSettings(ownerProfile, privacy.SettingsForPreset("gaming"))
 	row.ShowOnline = privacy.EveryoneWithGuests()
 	_, err := privacyStore.Upsert(ctx, row)
 	require.NoError(t, err)
+	activeRow := store.PrivacyRowFromSettings(activeProfile, privacy.SettingsForPreset("gaming"))
+	activeRow.ShowOnline = privacy.EveryoneWithGuests()
+	_, err = privacyStore.Upsert(ctx, activeRow)
+	require.NoError(t, err)
 
 	_, err = client.UpdatePresence(withUserAuthCtx(ctx, ownerAccount, ownerProfile), &userv1.UpdatePresenceRequest{Status: "online"})
 	require.NoError(t, err)
+	_, err = client.UpdatePresence(withUserAuthCtx(ctx, activeAccount, activeProfile), &userv1.UpdatePresenceRequest{Status: "online"})
+	require.NoError(t, err)
 	checker.deleted[ownerAccount] = struct{}{}
 
+	checker.calls = nil
 	direct, err := client.GetPresence(withUserAuthCtx(ctx, viewerAccount, viewerProfile), &userv1.GetPresenceRequest{ProfileId: ownerProfile.String()})
 	require.NoError(t, err)
 	require.Empty(t, direct.GetPresenceStatus().GetStatus())
 	require.Nil(t, direct.GetPresenceStatus().GetLastSeen())
+	requireCheckerAccountBatch(t, checker, 0, []uuid.UUID{ownerAccount})
 
-	bulk, err := client.GetBulkPresence(withUserAuthCtx(ctx, viewerAccount, viewerProfile), &userv1.GetBulkPresenceRequest{ProfileIds: []string{ownerProfile.String()}})
+	checker.calls = nil
+	activeDirect, err := client.GetPresence(withUserAuthCtx(ctx, viewerAccount, viewerProfile), &userv1.GetPresenceRequest{ProfileId: activeProfile.String()})
+	require.NoError(t, err)
+	require.Equal(t, "online", activeDirect.GetPresenceStatus().GetStatus())
+	requireCheckerAccountBatch(t, checker, 0, []uuid.UUID{activeAccount})
+
+	checker.calls = nil
+	bulk, err := client.GetBulkPresence(withUserAuthCtx(ctx, viewerAccount, viewerProfile), &userv1.GetBulkPresenceRequest{ProfileIds: []string{ownerProfile.String(), activeProfile.String()}})
 	require.NoError(t, err)
 	require.NotContains(t, bulk.GetByProfileId(), ownerProfile.String(), "deleted profile presence must be absent from bulk response")
+	require.Equal(t, "online", bulk.GetByProfileId()[activeProfile.String()].GetStatus())
+	requireCheckerAccountBatch(t, checker, 0, []uuid.UUID{ownerAccount, activeAccount})
 }
 
 func TestDeletedAccountCheckerFailuresFailClosed(t *testing.T) {
@@ -223,18 +270,32 @@ func TestDeletedAccountCheckerFailuresFailClosed(t *testing.T) {
 		t.Skip()
 	}
 	accountID, profileID := uuid.New(), uuid.New()
+	viewerAccount, viewerProfile := uuid.New(), uuid.New()
 	for _, checker := range []*deletedAccountCheckerStub{
 		{err: errors.New("auth unavailable")},
 		{malformed: true},
 	} {
 		ctx, profiles, _, client := startDeletedAccountVisibilityServer(t, checker)
 		insertVisibleProfile(t, ctx, profiles, profileID, accountID, "failclosed", "0001", true)
+		insertVisibleProfile(t, ctx, profiles, viewerProfile, viewerAccount, "failureviewer", "0002", true)
 
 		_, err := client.GetProfile(ctx, &userv1.GetProfileRequest{By: &userv1.GetProfileRequest_ProfileId{ProfileId: profileID.String()}})
 		require.Error(t, err)
 		require.Equal(t, codes.Unavailable, status.Code(err))
 
 		_, err = client.GetProfiles(ctx, &userv1.GetProfilesRequest{ProfileIds: []string{profileID.String()}})
+		require.Error(t, err)
+		require.Equal(t, codes.Unavailable, status.Code(err))
+
+		_, err = client.SearchProfiles(withUserAuthCtx(ctx, viewerAccount, viewerProfile), &userv1.SearchProfilesRequest{Query: "failclosed"})
+		require.Error(t, err)
+		require.Equal(t, codes.Unavailable, status.Code(err))
+
+		_, err = client.GetPresence(withUserAuthCtx(ctx, viewerAccount, viewerProfile), &userv1.GetPresenceRequest{ProfileId: profileID.String()})
+		require.Error(t, err)
+		require.Equal(t, codes.Unavailable, status.Code(err))
+
+		_, err = client.GetBulkPresence(withUserAuthCtx(ctx, viewerAccount, viewerProfile), &userv1.GetBulkPresenceRequest{ProfileIds: []string{profileID.String()}})
 		require.Error(t, err)
 		require.Equal(t, codes.Unavailable, status.Code(err))
 	}
