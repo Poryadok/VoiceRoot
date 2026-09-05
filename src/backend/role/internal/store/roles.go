@@ -18,45 +18,110 @@ func (s *RoleStore) BootstrapSystemRoles(ctx context.Context, spaceID uuid.UUID)
 	if s == nil || s.Pool == nil {
 		return errors.New("role store: pool not configured")
 	}
-	existing, err := s.ListRoles(ctx, spaceID)
+	_, err := s.bootstrapSystemRoles(ctx, spaceID)
+	return err
+}
+
+// bootstrapSystemRoles atomically seeds system roles and returns only rows it created.
+func (s *RoleStore) bootstrapSystemRoles(ctx context.Context, spaceID uuid.UUID) ([]RoleRow, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("role store: pool not configured")
+	}
+	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	created, err := s.bootstrapSystemRolesTx(ctx, tx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return created, nil
+}
+
+func (s *RoleStore) bootstrapSystemRolesTx(ctx context.Context, tx pgx.Tx, spaceID uuid.UUID) ([]RoleRow, error) {
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, spaceID.String()); err != nil {
+		return nil, err
+	}
+	existing, err := listRoles(ctx, tx, spaceID)
+	if err != nil {
+		return nil, err
 	}
 	if len(existing) > 0 {
-		return nil
+		return nil, nil
 	}
 	specs, err := permissions.SystemRoles()
 	if err != nil {
-		return err
+		return nil, err
 	}
+	created := make([]RoleRow, 0, len(specs))
 	for _, spec := range specs {
 		defaultJoin := spec.Name == permissions.RoleMember
-		_, err := s.Pool.Exec(ctx, `
+		var id uuid.UUID
+		err := tx.QueryRow(ctx, `
 INSERT INTO roles (space_id, name, is_system, position, permissions, is_default_join)
 VALUES ($1, $2, true, $3, $4, $5)
-`, spaceID, spec.Name, spec.Position, int64(spec.Mask), defaultJoin)
+
+RETURNING id
+`, spaceID, spec.Name, spec.Position, int64(spec.Mask), defaultJoin).Scan(&id)
 		if err != nil {
-			return fmt.Errorf("insert system role %q: %w", spec.Name, err)
+			return nil, fmt.Errorf("insert system role %q: %w", spec.Name, err)
 		}
+		created = append(created, RoleRow{
+			ID:              id,
+			SpaceID:         spaceID,
+			Name:            spec.Name,
+			PermissionsMask: spec.Mask,
+			Position:        spec.Position,
+			Managed:         true,
+		})
 	}
-	return nil
+	return created, nil
 }
 
 // BootstrapSpaceRoles seeds roles and assigns Owner to ownerProfileID.
 func (s *RoleStore) BootstrapSpaceRoles(ctx context.Context, spaceID, ownerProfileID uuid.UUID) error {
-	if err := s.BootstrapSystemRoles(ctx, spaceID); err != nil {
-		return err
+	_, err := s.BootstrapSpaceRolesWithCreatedSystemRoles(ctx, spaceID, ownerProfileID)
+	return err
+}
+
+// BootstrapSpaceRolesWithCreatedSystemRoles seeds roles, assigns Owner, and returns only newly created system roles.
+func (s *RoleStore) BootstrapSpaceRolesWithCreatedSystemRoles(ctx context.Context, spaceID, ownerProfileID uuid.UUID) ([]RoleRow, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("role store: pool not configured")
 	}
-	roles, err := s.ListRoles(ctx, spaceID)
+	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	created, err := s.bootstrapSystemRolesTx(ctx, tx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	roles, err := listRoles(ctx, tx, spaceID)
+	if err != nil {
+		return nil, err
 	}
 	for _, r := range roles {
 		if r.Name == permissions.RoleOwner {
-			return s.AssignMemberRole(ctx, spaceID, ownerProfileID, r.ID, ownerProfileID)
+			if _, err := tx.Exec(ctx, `
+INSERT INTO member_roles (space_id, profile_id, role_id, assigned_by)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (space_id, profile_id, role_id) DO NOTHING
+`, spaceID, ownerProfileID, r.ID, ownerProfileID); err != nil {
+				return nil, err
+			}
+			if err := tx.Commit(ctx); err != nil {
+				return nil, err
+			}
+			return created, nil
 		}
 	}
-	return errRoleNotFound
+	return nil, errRoleNotFound
 }
 
 func scanRoleRow(row pgx.Row) (RoleRow, error) {
@@ -74,12 +139,12 @@ func scanRoleRow(row pgx.Row) (RoleRow, error) {
 	return r, nil
 }
 
-// ListRoles returns roles for a space ordered by position descending.
-func (s *RoleStore) ListRoles(ctx context.Context, spaceID uuid.UUID) ([]RoleRow, error) {
-	if s == nil || s.Pool == nil {
-		return nil, errors.New("role store: pool not configured")
-	}
-	rows, err := s.Pool.Query(ctx, `
+type roleQueryer interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+}
+
+func listRoles(ctx context.Context, queryer roleQueryer, spaceID uuid.UUID) ([]RoleRow, error) {
+	rows, err := queryer.Query(ctx, `
 SELECT id, space_id, name, is_system, position, permissions, created_by_profile_id
 FROM roles
 WHERE space_id = $1
@@ -98,6 +163,14 @@ ORDER BY position DESC, name ASC
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// ListRoles returns roles for a space ordered by position descending.
+func (s *RoleStore) ListRoles(ctx context.Context, spaceID uuid.UUID) ([]RoleRow, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("role store: pool not configured")
+	}
+	return listRoles(ctx, s.Pool, spaceID)
 }
 
 // GetRoleByID loads a single role.
