@@ -1894,6 +1894,7 @@ class RealtimeHub {
   Future<void> _tearDownConnection({RealtimeTransport? expected}) async {
     if (expected != null && !identical(_connection, expected)) return;
     final connection = _connection;
+    final frameSub = _frameSub;
     if (identical(_helloAcceptedConnection, connection)) {
       final acceptedBinding = _helloAcceptedBinding;
       _helloAcceptedConnection = null;
@@ -1904,9 +1905,10 @@ class RealtimeHub {
         _ref.read(realtimeHelloBindingProvider.notifier).state = null;
       }
     }
-    await _frameSub?.cancel();
-    _frameSub = null;
-    await _connection?.dispose();
+    await frameSub?.cancel();
+    await connection?.dispose();
+    if (!identical(_connection, connection)) return;
+    if (identical(_frameSub, frameSub)) _frameSub = null;
     _connection = null;
   }
 
