@@ -14,6 +14,7 @@ import voice.backend.auth.service.AuthException;
 import voice.backend.auth.service.AuthService;
 import voice.backend.auth.service.AuthSession;
 import voice.backend.auth.service.LoginCommand;
+import voice.backend.auth.sessionepoch.PreparedSessionEpoch;
 
 public class OAuth2Service {
   private final AuthProperties properties;
@@ -122,10 +123,26 @@ public class OAuth2Service {
     }
     var client = resolveClient(request.clientId());
     validateClientSecret(client, request.clientSecret());
+    OAuthAuthorizationCode peeked =
+        codeStore
+            .peek(request.code())
+            .orElseThrow(() -> new OAuthException("invalid_grant", 401));
+    validateCodeRecord(peeked, request);
+    PreparedSessionEpoch prepared = authService.prepareOAuthAccessToken(peeked.accountId());
     OAuthAuthorizationCode record =
         codeStore
             .consume(request.code())
             .orElseThrow(() -> new OAuthException("invalid_grant", 401));
+    if (!peeked.equals(record)) {
+      throw new OAuthException("invalid_grant", 401);
+    }
+    validateCodeRecord(record, request);
+    String accessToken =
+        authService.issueOAuthAccessToken(record.accountId(), record.profileId(), prepared);
+    return new OAuthTokenResponse(accessToken, "Bearer", authService.accessTokenTtlSeconds());
+  }
+
+  private void validateCodeRecord(OAuthAuthorizationCode record, OAuthTokenRequest request) {
     if (record.isExpired(Instant.now(clock))) {
       throw new OAuthException("invalid_grant", 401);
     }
@@ -135,8 +152,6 @@ public class OAuth2Service {
     if (!PkceVerifier.verifyS256(request.codeVerifier(), record.codeChallenge())) {
       throw new OAuthException("invalid_grant", 401);
     }
-    String accessToken = authService.issueOAuthAccessToken(record.accountId(), record.profileId());
-    return new OAuthTokenResponse(accessToken, "Bearer", authService.accessTokenTtlSeconds());
   }
 
   public Map<String, String> openIdConfiguration() {

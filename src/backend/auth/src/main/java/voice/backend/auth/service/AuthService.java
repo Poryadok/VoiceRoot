@@ -256,8 +256,24 @@ public class AuthService {
 
   /** Issues a user access JWT for OAuth authorization_code grant (no refresh token). */
   public String issueOAuthAccessToken(String accountId, String profileId) {
+    return issueOAuthAccessToken(accountId, profileId, prepareOAuthAccessToken(accountId));
+  }
+
+  /** Prepares an active OAuth account's epoch before an authorization-code consume. */
+  public PreparedSessionEpoch prepareOAuthAccessToken(String accountId) {
     Account account = accounts.findById(accountId).orElseThrow(() -> new AuthException("invalid_token"));
     ensureActive(account);
+    return sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
+  }
+
+  /** Signs an OAuth access token from a previously prepared epoch without another floor write. */
+  public String issueOAuthAccessToken(
+      String accountId, String profileId, PreparedSessionEpoch prepared) {
+    Account account = accounts.findById(accountId).orElseThrow(() -> new AuthException("invalid_token"));
+    ensureActive(account);
+    if (!account.id().equals(prepared.accountId())) {
+      throw new IllegalStateException("prepared session epoch account mismatch");
+    }
     String expectedProfileId = requireProfileId(profileId);
     String ensuredProfileId = requireProfileId(primaryProfileProvisioner.ensurePrimaryProfile(
         account.id(), displayHint(account), "guest".equals(account.type())));
@@ -266,7 +282,7 @@ public class AuthService {
     }
     String tier = subscriptionTierResolver.resolveTier(account.id());
     return jwtService.issue(
-        account.id().toString(), ensuredProfileId, List.of("user"), tier, account.type(), account.sessionEpoch());
+        account.id().toString(), ensuredProfileId, List.of("user"), tier, account.type(), prepared.sessionEpoch());
   }
 
   public long accessTokenTtlSeconds() {
@@ -532,11 +548,38 @@ public class AuthService {
     if (restoreToken == null || restoreToken.isBlank()) {
       throw new AuthException("invalid_token");
     }
-    UUID accountId =
+    String token = restoreToken.trim();
+    UUID peekedAccountId =
         restoreTokenStore
-            .consume(restoreToken.trim())
+            .peek(token)
             .orElseThrow(() -> new AuthException("invalid_token"));
-    Account account = accounts.findById(accountId.toString()).orElseThrow(() -> new AuthException("invalid_token"));
+    Account account =
+        accounts
+            .findById(peekedAccountId.toString())
+            .orElseThrow(() -> new AuthException("invalid_token"));
+    ensureRestorable(account);
+    PreparedSessionEpoch prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
+    UUID consumedAccountId =
+        restoreTokenStore
+            .consume(token)
+            .orElseThrow(() -> new AuthException("invalid_token"));
+    if (!peekedAccountId.equals(consumedAccountId)) {
+      throw new AuthException("invalid_token");
+    }
+    account =
+        accounts
+            .findById(consumedAccountId.toString())
+            .orElseThrow(() -> new AuthException("invalid_token"));
+    ensureRestorable(account);
+    if (!accounts.restoreDeleted(account.id())) {
+      throw new AuthException("validation_failed");
+    }
+    Account restored = accounts.findById(account.id().toString()).orElse(account);
+    authEventPublisher.publishAccountRestored(restored.id());
+    return issueSession(restored, prepared, "{}");
+  }
+
+  private void ensureRestorable(Account account) {
     if (!"deleted".equals(account.status()) || account.deletedAt() == null) {
       throw new AuthException("validation_failed");
     }
@@ -544,12 +587,6 @@ public class AuthService {
     if (account.deletedAt().plus(ACCOUNT_RESTORE_GRACE).isBefore(precheckNow)) {
       throw new AuthException("account_inactive");
     }
-    if (!accounts.restoreDeleted(account.id())) {
-      throw new AuthException("validation_failed");
-    }
-    Account restored = accounts.findById(account.id().toString()).orElse(account);
-    authEventPublisher.publishAccountRestored(restored.id());
-    return issueSession(restored, "{}");
   }
 
   public void putE2EKeyBackup(String accessToken, String encryptedBlob, String passwordHint) {
