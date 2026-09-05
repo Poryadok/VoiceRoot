@@ -238,7 +238,8 @@ assert_contains "${case_dir}/commands.log" 'compose.*<ps> <-q> <gateway>'
 assert_contains "${case_dir}/commands.log" 'compose.*<ps> <-q> <file>'
 assert_contains "${case_dir}/commands.log" 'curl.*<http://127.0.0.1:25012/health>'
 assert_full_port_env "${case_dir}/commands.log"
-assert_contains "${case_dir}/commands.log" 'go cwd=.*/src/backend/gateway.*<-count=1> <-parallel> <1> <-timeout> <20m> <-tags> <live> <-run>'
+assert_contains "${case_dir}/commands.log" 'go cwd=.*/src/backend/gateway.*<-count=1> <-parallel> <1> <-timeout> <20m> <-run>'
+assert_not_contains "${case_dir}/commands.log" '^go .*(<-tags> <live>|<-tags=live>)'
 go_run_regex="$(sed -n 's/.* <-run> <\([^>]*\)> <.*/\1/p' "${case_dir}/commands.log" | head -1)"
 assert_eq "$go_run_regex" "$T055_REGEX"
 assert_isolated_make_target
