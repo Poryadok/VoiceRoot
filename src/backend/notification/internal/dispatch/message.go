@@ -126,7 +126,7 @@ func (p *MessagePusher) EnrichDecision(
 		return delivery.DeliveryDecision{}, err
 	}
 	isOnline := false
-	if p != nil && p.Presence != nil {
+	if p != nil && p.Presence != nil && !delivery.SkipsPresenceCheck(typ) {
 		isOnline, err = p.Presence.IsOnline(ctx, recipient)
 		if err != nil {
 			isOnline = false

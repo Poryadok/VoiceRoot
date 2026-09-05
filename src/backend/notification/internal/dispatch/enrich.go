@@ -33,7 +33,7 @@ func EnrichDecisions(
 			continue
 		}
 		isOnline := false
-		if presenceChecker != nil {
+		if presenceChecker != nil && !delivery.SkipsPresenceCheck(typ) {
 			isOnline, err = presenceChecker.IsOnline(ctx, recipient)
 			if err != nil {
 				isOnline = false
