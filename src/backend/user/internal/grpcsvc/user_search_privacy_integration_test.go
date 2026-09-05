@@ -60,12 +60,14 @@ func TestSearchProfiles_EnforcesFriendRequestDiscoverability(t *testing.T) {
 		profile  uuid.UUID
 		audience privacy.Audience
 	}{
-		"everyone": {uuid.New(), uuid.New(), privacy.EveryoneWithGuests()},
-		"friend":   {uuid.New(), uuid.New(), privacy.FriendsOnly()},
-		"fof":      {uuid.New(), uuid.New(), privacy.Audience{FriendsOfFriends: true}},
-		"nobody":   {uuid.New(), uuid.New(), privacy.Nobody()},
-		"phone":    {uuid.New(), uuid.New(), privacy.EveryoneWithGuests()},
-		"default":  {uuid.New(), uuid.New(), privacy.EveryoneWithGuests()},
+		"everyone":  {uuid.New(), uuid.New(), privacy.EveryoneWithGuests()},
+		"friend":    {uuid.New(), uuid.New(), privacy.FriendsOnly()},
+		"fof":       {uuid.New(), uuid.New(), privacy.Audience{FriendsOfFriends: true}},
+		"fofdirect": {uuid.New(), uuid.New(), privacy.Audience{FriendsOfFriends: true}},
+		"nobody":    {uuid.New(), uuid.New(), privacy.Nobody()},
+		"phone":     {uuid.New(), uuid.New(), privacy.EveryoneWithGuests()},
+		"default":   {uuid.New(), uuid.New(), privacy.EveryoneWithGuests()},
+		"blocked":   {uuid.New(), uuid.New(), privacy.EveryoneWithGuests()},
 	}
 	for name, target := range targets {
 		insertSearchPrivacyProfile(t, ctx, pool, target.profile, target.account, "discover"+name, "1000", true)
@@ -90,11 +92,18 @@ func TestSearchProfiles_EnforcesFriendRequestDiscoverability(t *testing.T) {
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
 	graph := searchPrivacyGraph{
-		friends: map[string]bool{privacyPairKey(viewerProfile, targets["friend"].profile): true},
-		fof:     map[string]bool{privacyPairKey(viewerProfile, targets["fof"].profile): true},
+		friends: map[string]bool{
+			privacyPairKey(viewerProfile, targets["friend"].profile):    true,
+			privacyPairKey(viewerProfile, targets["fofdirect"].profile): true,
+		},
+		fof: map[string]bool{privacyPairKey(viewerProfile, targets["fof"].profile): true},
 	}
+	blocker := &testBlockChecker{}
 	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), privacyStore, rdb,
-		func(s *UserGRPC) { s.SocialGraph = graph },
+		func(s *UserGRPC) {
+			s.SocialGraph = graph
+			s.Blocks = blocker
+		},
 	)
 
 	t.Run("active profile metadata controls relationship audience", func(t *testing.T) {
@@ -116,7 +125,24 @@ func TestSearchProfiles_EnforcesFriendRequestDiscoverability(t *testing.T) {
 		ids := collectProfileIDs(resp.GetProfileList().GetProfiles())
 		require.Contains(t, ids, targets["friend"].profile.String())
 		require.Contains(t, ids, targets["fof"].profile.String())
+		require.Contains(t, ids, targets["fofdirect"].profile.String(), "a direct friend is included in friends-of-friends audience")
 		require.NotContains(t, ids, targets["nobody"].profile.String())
+	})
+
+	t.Run("either-direction account block hides otherwise discoverable target", func(t *testing.T) {
+		for _, direction := range []string{"viewer blocks target", "target blocks viewer"} {
+			t.Run(direction, func(t *testing.T) {
+				// AccountPairBlocked is the Social S2S pairwise result, so either
+				// underlying direction is represented as one denied account pair.
+				blocker.fn = func(viewer, other uuid.UUID) bool {
+					return viewer == viewerAccount && other == targets["blocked"].account
+				}
+				t.Cleanup(func() { blocker.fn = nil })
+				resp, err := cli.SearchProfiles(withUserAuthCtx(ctx, viewerAccount, viewerProfile), &userv1.SearchProfilesRequest{Query: "discoverblocked"})
+				require.NoError(t, err)
+				require.NotContains(t, collectProfileIDs(resp.GetProfileList().GetProfiles()), targets["blocked"].profile.String())
+			})
+		}
 	})
 }
 
