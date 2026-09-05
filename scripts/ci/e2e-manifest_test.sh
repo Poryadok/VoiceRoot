@@ -38,6 +38,21 @@ else
   fail "expected TestComposeFileAttachmentRestartProof_live in restart_proof_gateway"
 fi
 
+echo "== A1 isolated gateway section is exact and ordered =="
+a1_expected=(
+  TestComposeA1TwoAccountsFoundation_live
+  TestComposeA1DailyMessagingREST_live
+  TestComposeA1GroupReadIsolation_live
+  TestComposeA1ChannelReadIsolation_live
+)
+mapfile -t a1_actual < <(bash "${SCRIPT}" "${MANIFEST}" a1_multi_account_gateway)
+[[ "${#a1_actual[@]}" -eq "${#a1_expected[@]}" ]] || \
+  fail "a1_multi_account_gateway must contain exactly four tests, got ${#a1_actual[@]}"
+for i in "${!a1_expected[@]}"; do
+  [[ "${a1_actual[$i]}" == "${a1_expected[$i]}" ]] || \
+    fail "a1_multi_account_gateway order drift at index ${i}: expected ${a1_expected[$i]}, got ${a1_actual[$i]}"
+done
+
 if bash "${SCRIPT}" "${MANIFEST}" missing_section >/dev/null 2>&1; then
   fail "expected failure for missing section"
 fi

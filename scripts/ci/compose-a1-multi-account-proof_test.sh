@@ -5,7 +5,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 SCRIPT="${ROOT}/scripts/ci/compose-a1-multi-account-proof.sh"
-T055_REGEX='^TestComposeA1(TwoAccountsFoundation|DailyMessagingREST)_live$'
+T055_REGEX='^TestComposeA1(TwoAccountsFoundation|DailyMessagingREST|GroupReadIsolation|ChannelReadIsolation)_live$'
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 assert_file() { [[ -f "$1" ]] || fail "missing file: $1"; }
@@ -47,6 +47,20 @@ assert_scrubbed_or_rejected() {
   assert_contains "${case_dir}/commands.log" '^env_COMPOSE_PROFILES=$'
   assert_contains "${case_dir}/commands.log" '^env_COMPOSE_FILE=$'
   assert_full_port_env "${case_dir}/commands.log"
+}
+assert_isolated_make_target() {
+  local output_file="${TEST_TMP}/make-a1-target.out" rc runner_count
+  set +e
+  make -n compose-a1-multi-account-proof >"$output_file" 2>&1
+  rc=$?
+  set -e
+  [[ "$rc" == 0 ]] || { cat "$output_file" >&2; fail 'make target compose-a1-multi-account-proof is missing or failed'; }
+  runner_count="$(grep -Fc 'scripts/ci/compose-a1-multi-account-proof.sh' "$output_file" || true)"
+  assert_eq "$runner_count" 1
+  if grep -Eq 'compose-e2e|compose-file-attachment|docker compose' "$output_file"; then
+    cat "$output_file" >&2
+    fail 'A1 target must not delegate to generic/shared compose targets'
+  fi
 }
 
 make_fake_tools() {
@@ -157,9 +171,14 @@ run_runner() {
 TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/a1-runner-tests.XXXXXXXX")"
 trap 'rm -rf -- "$TEST_TMP"' EXIT
 assert_file "$SCRIPT"
+assert_isolated_make_target
 
-echo '== T055 regex matches exactly the two current tests =='
-for test_name in TestComposeA1TwoAccountsFoundation_live TestComposeA1DailyMessagingREST_live; do
+echo '== T055 regex matches exactly the four current tests =='
+for test_name in \
+  TestComposeA1TwoAccountsFoundation_live \
+  TestComposeA1DailyMessagingREST_live \
+  TestComposeA1GroupReadIsolation_live \
+  TestComposeA1ChannelReadIsolation_live; do
   printf '%s\n' "$test_name" | grep -Eq -- "$T055_REGEX" || fail "regex did not match ${test_name}"
 done
 if printf '%s\n' TestComposeAuthLifecycle_live | grep -Eq -- "$T055_REGEX"; then
