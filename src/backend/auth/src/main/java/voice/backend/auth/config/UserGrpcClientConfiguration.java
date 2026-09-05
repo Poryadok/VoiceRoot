@@ -8,6 +8,7 @@ import io.grpc.stub.MetadataUtils;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import voice.backend.auth.repository.AccountRepository;
 import voice.backend.auth.userdb.GrpcPhoneHashResolver;
 import voice.backend.auth.userdb.GrpcPrimaryProfileProvisioner;
@@ -31,11 +32,25 @@ public class UserGrpcClientConfiguration {
   }
 
   @Bean
-  UserServiceGrpc.UserServiceBlockingStub userGrpcStub(ManagedChannel userGrpcChannel) {
+  UserGrpcDeadlineClientInterceptor userGrpcDeadlineClientInterceptor(
+      AuthProperties props, Environment environment) {
+    String configuredDeadline = environment.getProperty("auth.user-grpc.deadline");
+    if (configuredDeadline != null && configuredDeadline.isBlank()) {
+      throw new IllegalArgumentException("auth.user-grpc.deadline must be positive");
+    }
+    return new UserGrpcDeadlineClientInterceptor(props.getUserGrpc().getDeadline());
+  }
+
+  @Bean
+  UserServiceGrpc.UserServiceBlockingStub userGrpcStub(
+      ManagedChannel userGrpcChannel,
+      UserGrpcDeadlineClientInterceptor userGrpcDeadlineClientInterceptor) {
     Metadata headers = new Metadata();
     headers.put(INTERNAL_CALLER_HEADER, "auth");
     return UserServiceGrpc.newBlockingStub(userGrpcChannel)
-        .withInterceptors(MetadataUtils.newAttachHeadersInterceptor(headers));
+        .withInterceptors(
+            MetadataUtils.newAttachHeadersInterceptor(headers),
+            userGrpcDeadlineClientInterceptor);
   }
 
   @Bean

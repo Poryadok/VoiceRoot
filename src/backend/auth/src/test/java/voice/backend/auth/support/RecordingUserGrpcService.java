@@ -26,8 +26,12 @@ import java.util.Map;
 public final class RecordingUserGrpcService extends UserServiceGrpc.UserServiceImplBase {
   public enum Outcome {
     SUCCESS,
+    INVALID_ARGUMENT,
     UNAVAILABLE,
     NOT_FOUND,
+    PERMISSION_DENIED,
+    UNAUTHENTICATED,
+    DEADLINE_EXCEEDED,
     FAILED_PRECONDITION,
     MALFORMED
   }
@@ -148,8 +152,12 @@ public final class RecordingUserGrpcService extends UserServiceGrpc.UserServiceI
 
   private static boolean fail(Outcome outcome, StreamObserver<?> observer) {
     Status status = switch (outcome) {
+      case INVALID_ARGUMENT -> Status.INVALID_ARGUMENT;
       case UNAVAILABLE -> Status.UNAVAILABLE;
       case NOT_FOUND -> Status.NOT_FOUND;
+      case PERMISSION_DENIED -> Status.PERMISSION_DENIED;
+      case UNAUTHENTICATED -> Status.UNAUTHENTICATED;
+      case DEADLINE_EXCEEDED -> Status.DEADLINE_EXCEEDED;
       case FAILED_PRECONDITION -> Status.FAILED_PRECONDITION;
       default -> null;
     };

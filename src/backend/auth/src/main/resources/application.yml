@@ -32,6 +32,7 @@ auth:
     port: 9090
   user-grpc:
     addr: "${USER_GRPC_ADDR:}"
+    deadline: "${AUTH_USER_GRPC_DEADLINE:PT15S}"
   oauth:
     public-api-base-url: "${AUTH_OAUTH_PUBLIC_API_BASE_URL:http://127.0.0.1:18080}"
     twitch:

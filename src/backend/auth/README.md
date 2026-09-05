@@ -36,6 +36,9 @@ Schema for `auth_db` is defined in two places; apply it with **one** tool per da
 - `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`
 - `SPRING_DATA_REDIS_HOST`, `SPRING_DATA_REDIS_PORT`
 - `USER_GRPC_ADDR` — адрес internal gRPC User Service; Auth не подключается к `user_db` напрямую
+- `AUTH_USER_GRPC_DEADLINE` — positive ISO-8601 `Duration` для каждого blocking Auth→User RPC;
+  если переменная отсутствует, действует `PT15S`. Явные blank/malformed/zero/negative значения
+  останавливают startup.
 - `AUTH_JWT_PRIVATE_KEY_PEM` or `AUTH_JWT_PRIVATE_KEY_LOCATION`
 - `AUTH_FLYWAY_ENABLED` (default `true`) — set `false` for Path B (schema applied only via golang-migrate).
 

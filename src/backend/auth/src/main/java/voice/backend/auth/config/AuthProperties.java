@@ -359,6 +359,7 @@ public class AuthProperties {
 
   public static class UserGrpc {
     private String addr = "";
+    private Duration deadline = Duration.ofSeconds(15);
 
     public boolean isConfigured() {
       return addr != null && !addr.isBlank();
@@ -370,6 +371,17 @@ public class AuthProperties {
 
     public void setAddr(String addr) {
       this.addr = addr;
+    }
+
+    public Duration getDeadline() {
+      return deadline;
+    }
+
+    public void setDeadline(Duration deadline) {
+      if (deadline == null || deadline.isZero() || deadline.isNegative()) {
+        throw new IllegalArgumentException("auth.user-grpc.deadline must be positive");
+      }
+      this.deadline = deadline;
     }
   }
 
