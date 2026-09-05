@@ -40,6 +40,7 @@ func TestJetStreamPublisher_SearchCancelledPublishesProtoEnvelope(t *testing.T) 
 	require.NotEmpty(t, envelope.GetEventId())
 	require.NotNil(t, envelope.GetOccurredAt())
 	require.NoError(t, envelope.GetOccurredAt().CheckValid())
+	require.True(t, envelope.GetOccurredAt().GetSeconds() != 0 || envelope.GetOccurredAt().GetNanos() != 0)
 	require.False(t, envelope.GetOccurredAt().AsTime().IsZero())
 	require.Equal(t, envelope.GetEventId(), capture.msg.Header.Get(nats.MsgIdHdr))
 
