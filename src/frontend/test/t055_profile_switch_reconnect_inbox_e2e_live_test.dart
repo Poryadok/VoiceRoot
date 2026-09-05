@@ -25,8 +25,9 @@ import 'support/live_gateway_harness.dart';
 /// that InboxReconciler cannot start B REST reconciliation before RealtimeHub
 /// has accepted B's real `hello` frame.
 ///
-/// It intentionally does not claim cursor catch-up, a reconnect transition, or
-/// deterministic late responses; those are separate contracts.
+/// It records the real opaque ListChats cursors, including a complete second
+/// page for every inbox. Reconnect history catch-up remains a separate
+/// contract.
 void main() {
   test(
     'profile switch accepts real B hello before B inbox REST, then selected history only',
@@ -63,12 +64,79 @@ void main() {
       final stranger = await ctx.registerUser('t055-stranger');
       final chats = ctx.chatsClient();
 
+      final createdMainAlt = await users.createProfile(
+        authorization: mainPeer.authorizationHeader,
+        displayName: 'T055 Main Alt',
+      );
+      expect(
+        createdMainAlt,
+        isA<UsersApiOk<VoiceProfile>>(),
+        reason: '$createdMainAlt',
+      );
+      final mainAltProfileId =
+          (createdMainAlt as UsersApiOk<VoiceProfile>).data.id;
+      final createdArchiveAlt = await users.createProfile(
+        authorization: archivePeer.authorizationHeader,
+        displayName: 'T055 Archive Alt',
+      );
+      expect(
+        createdArchiveAlt,
+        isA<UsersApiOk<VoiceProfile>>(),
+        reason: '$createdArchiveAlt',
+      );
+      final archiveAltProfileId =
+          (createdArchiveAlt as UsersApiOk<VoiceProfile>).data.id;
+      final createdStrangerAlt = await users.createProfile(
+        authorization: stranger.authorizationHeader,
+        displayName: 'T055 Stranger Alt',
+      );
+      expect(
+        createdStrangerAlt,
+        isA<UsersApiOk<VoiceProfile>>(),
+        reason: '$createdStrangerAlt',
+      );
+      final strangerAltProfileId =
+          (createdStrangerAlt as UsersApiOk<VoiceProfile>).data.id;
+
+      // Privacy settings are profile-owned. Open the two additional targets
+      // through the same public session-switch flow used by the application.
+      final rawMainAltResult = await ctx.authClient().switchActiveProfile(
+        session: mainPeer,
+        profileId: mainAltProfileId,
+      );
+      expect(
+        rawMainAltResult,
+        isA<AuthSessionOk>(),
+        reason: '$rawMainAltResult',
+      );
+      await ctx.allowOpenGamingPrivacy(
+        (rawMainAltResult as AuthSessionOk).session,
+      );
+      final rawArchiveAltResult = await ctx.authClient().switchActiveProfile(
+        session: archivePeer,
+        profileId: archiveAltProfileId,
+      );
+      expect(
+        rawArchiveAltResult,
+        isA<AuthSessionOk>(),
+        reason: '$rawArchiveAltResult',
+      );
+      await ctx.allowOpenGamingPrivacy(
+        (rawArchiveAltResult as AuthSessionOk).session,
+      );
+
       final selectedDm = await chats.createDm(
         authorization: rawB.authorizationHeader,
         otherProfileId: mainPeer.activeProfileId,
       );
       expect(selectedDm, isA<ChatsApiOk<VoiceChat>>(), reason: '$selectedDm');
       final selectedChatId = (selectedDm as ChatsApiOk<VoiceChat>).data.id;
+      final mainAltDm = await chats.createDm(
+        authorization: rawB.authorizationHeader,
+        otherProfileId: mainAltProfileId,
+      );
+      expect(mainAltDm, isA<ChatsApiOk<VoiceChat>>(), reason: '$mainAltDm');
+      final mainAltChatId = (mainAltDm as ChatsApiOk<VoiceChat>).data.id;
 
       final archivedDm = await chats.createDm(
         authorization: rawB.authorizationHeader,
@@ -76,12 +144,29 @@ void main() {
       );
       expect(archivedDm, isA<ChatsApiOk<VoiceChat>>(), reason: '$archivedDm');
       final archivedChatId = (archivedDm as ChatsApiOk<VoiceChat>).data.id;
+      final archivedAltDm = await chats.createDm(
+        authorization: rawB.authorizationHeader,
+        otherProfileId: archiveAltProfileId,
+      );
+      expect(
+        archivedAltDm,
+        isA<ChatsApiOk<VoiceChat>>(),
+        reason: '$archivedAltDm',
+      );
+      final archivedAltChatId =
+          (archivedAltDm as ChatsApiOk<VoiceChat>).data.id;
       final archive = await chats.archiveChat(
         authorization: rawB.authorizationHeader,
         chatId: archivedChatId,
         archived: true,
       );
       expect(archive, isA<ChatsApiOk<void>>(), reason: '$archive');
+      final archiveAlt = await chats.archiveChat(
+        authorization: rawB.authorizationHeader,
+        chatId: archivedAltChatId,
+        archived: true,
+      );
+      expect(archiveAlt, isA<ChatsApiOk<void>>(), reason: '$archiveAlt');
 
       final requestDm = await chats.createDm(
         authorization: stranger.authorizationHeader,
@@ -89,26 +174,48 @@ void main() {
       );
       expect(requestDm, isA<ChatsApiOk<VoiceChat>>(), reason: '$requestDm');
       final requestChatId = (requestDm as ChatsApiOk<VoiceChat>).data.id;
+      final rawStrangerAltResult = await ctx.authClient().switchActiveProfile(
+        session: stranger,
+        profileId: strangerAltProfileId,
+      );
+      expect(
+        rawStrangerAltResult,
+        isA<AuthSessionOk>(),
+        reason: '$rawStrangerAltResult',
+      );
+      final rawStrangerAlt = (rawStrangerAltResult as AuthSessionOk).session;
+      final requestAltDm = await chats.createDm(
+        authorization: rawStrangerAlt.authorizationHeader,
+        otherProfileId: bProfileId,
+      );
+      expect(
+        requestAltDm,
+        isA<ChatsApiOk<VoiceChat>>(),
+        reason: '$requestAltDm',
+      );
+      final requestAltChatId = (requestAltDm as ChatsApiOk<VoiceChat>).data.id;
 
-      // Prove the public fixture has exactly one first page in every scope
-      // before starting the production-side recorder.
-      await _expectSingleInboxItem(
+      // Validate the public fixture over two actual one-row pages before
+      // starting the production-side recorder. The opaque cursors become the
+      // exact values expected from the production reconciler below.
+      final expectedCursors = <String, String>{};
+      expectedCursors['main'] = await _expectTwoInboxItems(
         chats: chats,
         authorization: rawB.authorizationHeader,
         inbox: 'main',
-        chatId: selectedChatId,
+        chatIds: {selectedChatId, mainAltChatId},
       );
-      await _expectSingleInboxItem(
+      expectedCursors['requests'] = await _expectTwoInboxItems(
         chats: chats,
         authorization: rawB.authorizationHeader,
         inbox: 'requests',
-        chatId: requestChatId,
+        chatIds: {requestChatId, requestAltChatId},
       );
-      await _expectSingleInboxItem(
+      expectedCursors['archive'] = await _expectTwoInboxItems(
         chats: chats,
         authorization: rawB.authorizationHeader,
         inbox: 'archive',
-        chatId: archivedChatId,
+        chatIds: {archivedChatId, archivedAltChatId},
       );
 
       // The setup switch from A to B rotates A's session. Return to A only
@@ -125,10 +232,7 @@ void main() {
       final storage = InMemoryAuthSessionStorage();
       final controller = AuthController(
         authClient: VoiceAuthClient(
-          gateway: GatewayHttpClient(
-            httpClient: recorder,
-            config: ctx.config,
-          ),
+          gateway: GatewayHttpClient(httpClient: recorder, config: ctx.config),
         ),
         storage: storage,
         guestCredentialsStorage: InMemoryGuestCredentialsStorage(),
@@ -140,9 +244,7 @@ void main() {
           guestCredentialsStorageProvider.overrideWithValue(
             InMemoryGuestCredentialsStorage(),
           ),
-          gatewayConfigProvider.overrideWithValue(
-            ctx.config,
-          ),
+          gatewayConfigProvider.overrideWithValue(ctx.config),
           httpClientProvider.overrideWithValue(recorder),
           // The default production factory remains in use. Suppressing only
           // automatic initial-A connection makes the explicit coordinator
@@ -218,35 +320,51 @@ void main() {
           .read(authControllerProvider)
           .session!
           .authorizationHeader;
-      expect(recorder.chatRequests, hasLength(3));
+      expect(recorder.chatRequests, hasLength(6));
       final bInboxRequests = recorder.chatRequests
           .where((request) => request.authorization == bAuthorization)
           .toList(growable: false);
-      expect(bInboxRequests, hasLength(3));
+      expect(bInboxRequests, hasLength(6));
       expect(bInboxRequests.map((request) => request.inbox).toSet(), {
         'main',
         'requests',
         'archive',
       });
-      expect(
-        bInboxRequests.every(
-          (request) => request.uri.queryParameters['cursor'] == null,
-        ),
-        isTrue,
-      );
+      for (final inbox in expectedCursors.keys) {
+        final pageRequests = bInboxRequests
+            .where((request) => request.inbox == inbox)
+            .toList(growable: false);
+        expect(pageRequests, hasLength(2));
+        expect(
+          pageRequests.map((request) => request.uri.queryParameters['cursor']),
+          containsAllInOrder([null, expectedCursors[inbox]]),
+        );
+        expect(
+          pageRequests.every(
+            (request) => request.uri.queryParameters['page_size'] == '1',
+          ),
+          isTrue,
+        );
+      }
       expect(recorder.messageRequests, isEmpty);
       final bSnapshot = container
           .read(inboxReconcilerProvider)
           .snapshotFor(bProfileId)!;
-      expect(bSnapshot[InboxScope.main].items.map((item) => item.chatId), [
-        selectedChatId,
-      ]);
-      expect(bSnapshot[InboxScope.requests].items.map((item) => item.chatId), [
-        requestChatId,
-      ]);
-      expect(bSnapshot[InboxScope.archive].items.map((item) => item.chatId), [
-        archivedChatId,
-      ]);
+      expect(bSnapshot[InboxScope.main].items, hasLength(2));
+      expect(
+        bSnapshot[InboxScope.main].items.map((item) => item.chatId).toSet(),
+        {selectedChatId, mainAltChatId},
+      );
+      expect(bSnapshot[InboxScope.requests].items, hasLength(2));
+      expect(
+        bSnapshot[InboxScope.requests].items.map((item) => item.chatId).toSet(),
+        {requestChatId, requestAltChatId},
+      );
+      expect(bSnapshot[InboxScope.archive].items, hasLength(2));
+      expect(
+        bSnapshot[InboxScope.archive].items.map((item) => item.chatId).toSet(),
+        {archivedChatId, archivedAltChatId},
+      );
 
       container.read(selectedChatIdProvider.notifier).state = selectedChatId;
       final selectedRoom = container.listen<ChatRoomState>(
@@ -273,6 +391,7 @@ void main() {
       expect(history.single.uri.queryParameters['chat_id'], selectedChatId);
       expect(history.single.uri.queryParameters['cursor'], isNull);
       expect(history.single.uri.queryParameters['after_message_id'], isNull);
+      expect(history.single.uri.queryParameters['last_message_id'], isNull);
       expect(
         history.single.uri.queryParameters['chat_id'],
         isNot(archivedChatId),
@@ -285,20 +404,39 @@ void main() {
   );
 }
 
-Future<void> _expectSingleInboxItem({
+Future<String> _expectTwoInboxItems({
   required VoiceChatsClient chats,
   required String authorization,
   required String inbox,
-  required String chatId,
+  required Set<String> chatIds,
 }) async {
-  final listed = await chats.listChats(
+  final first = await chats.listChats(
     authorization: authorization,
     inbox: inbox,
+    pageSize: 1,
   );
-  expect(listed, isA<ChatsApiOk<ChatListData>>(), reason: '$listed');
-  final data = (listed as ChatsApiOk<ChatListData>).data;
-  expect(data.nextCursor, isNull, reason: '$inbox must fit one page');
-  expect(data.items.map((item) => item.chatId), [chatId]);
+  expect(first, isA<ChatsApiOk<ChatListData>>(), reason: '$first');
+  final firstPage = (first as ChatsApiOk<ChatListData>).data;
+  expect(firstPage.items, hasLength(1));
+  final cursor = firstPage.nextCursor;
+  expect(cursor, isNotNull, reason: '$inbox first cursor');
+  expect(cursor, isNotEmpty, reason: '$inbox first cursor');
+
+  final second = await chats.listChats(
+    authorization: authorization,
+    inbox: inbox,
+    pageSize: 1,
+    cursor: cursor,
+  );
+  expect(second, isA<ChatsApiOk<ChatListData>>(), reason: '$second');
+  final secondPage = (second as ChatsApiOk<ChatListData>).data;
+  expect(secondPage.items, hasLength(1));
+  expect(secondPage.nextCursor, isNull, reason: '$inbox second cursor');
+  expect({
+    ...firstPage.items.map((item) => item.chatId),
+    ...secondPage.items.map((item) => item.chatId),
+  }, chatIds);
+  return cursor!;
 }
 
 class _RecordedRequest {
@@ -342,18 +480,32 @@ class _RecordingHttpClient extends http.BaseClient {
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) {
+    final effectiveRequest = _withOneRowInboxPage(request);
     requests.add(
       _RecordedRequest(
-        method: request.method,
-        uri: request.url,
-        authorization: _header(request.headers, 'Authorization'),
+        method: effectiveRequest.method,
+        uri: effectiveRequest.url,
+        authorization: _header(effectiveRequest.headers, 'Authorization'),
         beforeBHello: !bHelloObserved,
       ),
     );
-    if (request.method == 'GET' && request.url.path == '/api/v1/messages') {
+    if (effectiveRequest.method == 'GET' &&
+        effectiveRequest.url.path == '/api/v1/messages') {
       if (!firstMessageRequest.isCompleted) firstMessageRequest.complete();
     }
-    return _delegate.send(request);
+    return _delegate.send(effectiveRequest);
+  }
+
+  http.BaseRequest _withOneRowInboxPage(http.BaseRequest request) {
+    if (request.method != 'GET' || request.url.path != '/api/v1/chats') {
+      return request;
+    }
+    return http.Request(
+      request.method,
+      request.url.replace(
+        queryParameters: {...request.url.queryParameters, 'page_size': '1'},
+      ),
+    )..headers.addAll(request.headers);
   }
 
   // The shared live harness owns the underlying client for this test.
