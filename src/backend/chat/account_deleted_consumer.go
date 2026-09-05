@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,6 +16,7 @@ import (
 	eventsv1 "voice.app/voice/events/v1"
 	"voice/backend/chat/internal/store"
 	"voice/backend/pkg/natslog"
+	"voice/backend/pkg/runtimeconfig"
 )
 
 const (
@@ -137,6 +140,108 @@ func accountDeletedDurableName(instanceID string) string {
 	return "chat_" + strings.ReplaceAll(id, "-", "") + "_account_deleted"
 }
 
+func accountDeletedDeliverySubject(durable string) string {
+	return "_INBOX.voice.chat." + durable
+}
+
+func accountDeletedConsumerConfig(durable string) *nats.ConsumerConfig {
+	return &nats.ConsumerConfig{
+		Durable:        durable,
+		DeliverSubject: accountDeletedDeliverySubject(durable),
+		DeliverPolicy:  nats.DeliverAllPolicy,
+		AckPolicy:      nats.AckExplicitPolicy,
+		FilterSubject:  userAccountDeletedSubject,
+	}
+}
+
+// ensureAccountDeletedDurable creates the durable outside of Subscribe so
+// nats.go does not own its lifecycle. Existing legacy durables retain their
+// delivery subject and acknowledgement cursor; rebinding them is safe once
+// their contract is validated.
+func ensureAccountDeletedDurable(js nats.JetStreamContext, durable string) error {
+	info, err := js.ConsumerInfo(userEventsStreamName, durable)
+	if errors.Is(err, nats.ErrConsumerNotFound) {
+		if _, err := js.AddConsumer(userEventsStreamName, accountDeletedConsumerConfig(durable)); err != nil {
+			return fmt.Errorf("create user.account_deleted durable: %w", err)
+		}
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("inspect user.account_deleted durable: %w", err)
+	}
+	if info.Config.Durable != durable ||
+		info.Config.DeliverPolicy != nats.DeliverAllPolicy ||
+		info.Config.AckPolicy != nats.AckExplicitPolicy ||
+		info.Config.FilterSubject != userAccountDeletedSubject ||
+		info.Config.DeliverSubject == "" {
+		return fmt.Errorf("user.account_deleted durable %q has incompatible configuration", durable)
+	}
+	if _, err := js.UpdateConsumer(userEventsStreamName, &info.Config); err != nil {
+		return fmt.Errorf("update user.account_deleted durable: %w", err)
+	}
+	return nil
+}
+
+type accountDeletedInFlight struct {
+	mu       sync.Mutex
+	stopping bool
+	wg       sync.WaitGroup
+}
+
+func (f *accountDeletedInFlight) begin() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.stopping {
+		return false
+	}
+	f.wg.Add(1)
+	return true
+}
+
+func (f *accountDeletedInFlight) done() {
+	f.wg.Done()
+}
+
+func (f *accountDeletedInFlight) stop() {
+	f.mu.Lock()
+	f.stopping = true
+	f.mu.Unlock()
+}
+
+func (f *accountDeletedInFlight) wait(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() {
+		f.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("wait for in-flight user.account_deleted handlers: %w", ctx.Err())
+	}
+}
+
+type accountDeletedSubscription struct {
+	sub      *nats.Subscription
+	inFlight *accountDeletedInFlight
+}
+
+func (s *accountDeletedSubscription) stopIntakeAndWait(ctx context.Context) error {
+	if s == nil || s.sub == nil || s.inFlight == nil {
+		return fmt.Errorf("user.account_deleted subscription not configured")
+	}
+	s.inFlight.stop()
+	var shutdownErrors []error
+	if err := s.sub.Unsubscribe(); err != nil {
+		shutdownErrors = append(shutdownErrors, fmt.Errorf("unsubscribe user.account_deleted: %w", err))
+	}
+	if err := s.inFlight.wait(ctx); err != nil {
+		shutdownErrors = append(shutdownErrors, err)
+	}
+	return errors.Join(shutdownErrors...)
+}
+
 func subscribeAccountDeletedConsumer(
 	js nats.JetStreamContext,
 	profiles accountDeletedProfileLister,
@@ -145,7 +250,11 @@ func subscribeAccountDeletedConsumer(
 	instanceID string,
 	logger *slog.Logger,
 ) (*nats.Subscription, error) {
-	return subscribeAccountDeletedConsumerWithContext(context.Background(), js, profiles, targets, publisher, instanceID, logger)
+	subscription, err := subscribeAccountDeletedConsumerWithContext(context.Background(), js, profiles, targets, publisher, instanceID, logger)
+	if err != nil {
+		return nil, err
+	}
+	return subscription.sub, nil
 }
 
 func subscribeAccountDeletedConsumerWithContext(
@@ -156,12 +265,23 @@ func subscribeAccountDeletedConsumerWithContext(
 	publisher dmPeerDeletedPublisher,
 	instanceID string,
 	logger *slog.Logger,
-) (*nats.Subscription, error) {
+) (*accountDeletedSubscription, error) {
 	if js == nil {
 		return nil, fmt.Errorf("user.account_deleted consumer JetStream not configured")
 	}
+	durable := accountDeletedDurableName(instanceID)
+	if err := ensureAccountDeletedDurable(js, durable); err != nil {
+		return nil, err
+	}
 	consumer := newAccountDeletedDMConsumer(profiles, targets, publisher, logger)
+	inFlight := &accountDeletedInFlight{}
 	handler := func(msg *nats.Msg) {
+		if !inFlight.begin() {
+			natslog.LogConsume(logger, msg, slog.LevelWarn, "user.account_deleted intake stopped")
+			_ = msg.Nak()
+			return
+		}
+		defer inFlight.done()
 		if err := consumer.handleUserAccountDeleted(ctx, msg); err != nil {
 			natslog.LogConsume(logger, msg, slog.LevelWarn, "user.account_deleted processing failed", slog.String("error", err.Error()))
 			_ = msg.Nak()
@@ -170,23 +290,14 @@ func subscribeAccountDeletedConsumerWithContext(
 		natslog.LogConsume(logger, msg, slog.LevelInfo, "user.account_deleted processed")
 		_ = msg.Ack()
 	}
-	durable := accountDeletedDurableName(instanceID)
 	sub, err := js.Subscribe(userAccountDeletedSubject, handler,
-		nats.Durable(durable),
-		nats.BindStream(userEventsStreamName),
-		nats.DeliverAll(),
+		nats.Bind(userEventsStreamName, durable),
 		nats.ManualAck(),
 	)
 	if err != nil {
-		sub, err = js.Subscribe("", handler,
-			nats.Bind(userEventsStreamName, durable),
-			nats.ManualAck(),
-		)
-		if err != nil {
-			return nil, fmt.Errorf("jetstream subscribe user.account_deleted: %w", err)
-		}
+		return nil, fmt.Errorf("bind user.account_deleted durable: %w", err)
 	}
-	return sub, nil
+	return &accountDeletedSubscription{sub: sub, inFlight: inFlight}, nil
 }
 
 func runAccountDeletedConsumer(
@@ -234,22 +345,35 @@ func runAccountDeletedConsumerOnce(
 	if err != nil {
 		return fmt.Errorf("nats connect: %w", err)
 	}
-	defer func() { _ = nc.Drain() }()
 
 	js, err := nc.JetStream()
 	if err != nil {
+		nc.Close()
 		return fmt.Errorf("jetstream: %w", err)
 	}
-	sub, err := subscribeAccountDeletedConsumerWithContext(ctx, js, profiles, targets, publisher, instanceID, logger)
+	handlerCtx, cancelHandler := context.WithCancel(context.Background())
+	defer cancelHandler()
+	sub, err := subscribeAccountDeletedConsumerWithContext(handlerCtx, js, profiles, targets, publisher, instanceID, logger)
 	if err != nil {
+		nc.Close()
 		return err
 	}
-	defer func() {
-		if err := sub.Unsubscribe(); err != nil && logger != nil {
-			logger.Warn("user.account_deleted unsubscribe failed", slog.String("error", err.Error()))
-		}
-	}()
 
 	<-ctx.Done()
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), runtimeconfig.ShutdownTimeoutFromEnv())
+	defer cancelShutdown()
+	if err := sub.stopIntakeAndWait(shutdownCtx); err != nil {
+		if logger != nil {
+			logger.Warn("user.account_deleted graceful shutdown failed", slog.String("error", err.Error()))
+		}
+		nc.Close()
+		return ctx.Err()
+	}
+	if err := nc.Drain(); err != nil {
+		if logger != nil {
+			logger.Warn("user.account_deleted NATS drain failed", slog.String("error", err.Error()))
+		}
+		nc.Close()
+	}
 	return ctx.Err()
 }
