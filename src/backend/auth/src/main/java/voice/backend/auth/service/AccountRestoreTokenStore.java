@@ -11,5 +11,7 @@ public interface AccountRestoreTokenStore {
 
   void store(String token, UUID accountId, Duration ttl);
 
+  Optional<UUID> peek(String token);
+
   Optional<UUID> consume(String token);
 }
