@@ -84,6 +84,7 @@ compose:
   - src/backend/migrations/**
   - scripts/dev/compose-migrate-all.sh
   - scripts/ci/compose*
+  - scripts/ci/testdata/compose-postgres-tcp-readiness/**
 
 svc_analytics:
   - src/backend/analytics/**

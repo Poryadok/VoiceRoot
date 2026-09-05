@@ -218,6 +218,8 @@ Promtail ставит label **`namespace`** из pod metadata; **`request_id`** 
 
 Полный sign-off на Windows без WSL: **`make compose-config-ci`**, **`make buf-ci`**, backend в Docker (таблица выше), **`make flutter-ci`** на хосте, compose smoke (gateway Docker + Flutter). Скилл: [`.cursor/skills/voice-project-full-verification/SKILL.md`](../.cursor/skills/voice-project-full-verification/SKILL.md).
 
+Проверка PostgreSQL healthcheck требует запущенный Docker daemon и образы `postgres:16-alpine` и `ghcr.io/jqlang/jq:1.7`: `docker pull postgres:16-alpine; docker pull ghcr.io/jqlang/jq:1.7; bash scripts/ci/compose-postgres-tcp-readiness_test.sh`. Скрипт создаёт и удаляет собственные изолированные ресурсы.
+
 ---
 
 ## CI (GitHub Actions)
