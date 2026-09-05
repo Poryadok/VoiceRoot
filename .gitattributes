@@ -1,3 +1,4 @@
 docker/postgres/*.sh text eol=lf
 docker/postgres/initdb.d/*.sh text eol=lf
 *.proto text eol=lf
+src/backend/scripts/docker-go-mod-download.sh text eol=lf
