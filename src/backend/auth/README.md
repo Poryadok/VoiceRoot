@@ -35,21 +35,33 @@ Schema for `auth_db` is defined in two places; apply it with **one** tool per da
 
 - `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`
 - `SPRING_DATA_REDIS_HOST`, `SPRING_DATA_REDIS_PORT`
+- `USER_GRPC_ADDR` — адрес internal gRPC User Service; Auth не подключается к `user_db` напрямую
+- `AUTH_USER_GRPC_DEADLINE` — positive ISO-8601 `Duration` для каждого blocking Auth→User RPC;
+  если переменная отсутствует, действует `PT15S`. Явные blank/malformed/zero/negative значения
+  останавливают startup.
 - `AUTH_JWT_PRIVATE_KEY_PEM` or `AUTH_JWT_PRIVATE_KEY_LOCATION`
 - `AUTH_FLYWAY_ENABLED` (default `true`) — set `false` for Path B (schema applied only via golang-migrate).
 
-## User DB (`user_db`) — первичный профиль ([auth-and-contacts.md](../../../docs/features/auth-and-contacts.md))
+## User Service — профили ([auth-and-contacts.md](../../../docs/features/auth-and-contacts.md))
 
-При `auth.persistence=jdbc` нужен второй JDBC URL к **`user_db`**, чтобы перед выдачей access JWT создавалась строка в `profiles` (см. [EXEC_PLAN.md](../../../docs/EXEC_PLAN.md), [primary-profile-bootstrap.md](../../../docs/microservices/primary-profile-bootstrap.md)):
+Auth владеет только `auth_db`. Перед выдачей access JWT он вызывает internal User gRPC по
+`USER_GRPC_ADDR`: `EnsurePrimaryProfile` возвращает канонический `profile_id`, а остальные
+profile-related paths используют `ResolvePrimaryProfileIDs`, `SwitchProfile`,
+`SetVerification` / `ClearVerification` и `MarkAccountRegular` (см.
+[EXEC_PLAN.md](../../../docs/EXEC_PLAN.md),
+[primary-profile-bootstrap.md](../../../docs/microservices/primary-profile-bootstrap.md)).
+При ошибке или непригодном ответе User новая сессия не выдаётся.
 
-- `auth.user-db.jdbc-url` (или env `AUTH_USER_DB_JDBC_URL`)
-- `auth.user-db.username` / `auth.user-db.password` (или `AUTH_USER_DB_USERNAME` / `AUTH_USER_DB_PASSWORD`; по умолчанию совпадают с `spring.datasource.*`)
-
-Схема `profiles` — [migrations/user_db](../migrations/user_db/). Локальный Compose: `docker/postgres/02-user-schema.sh` + `user_db_init.sql.snippet`.
+Схема `profiles` и доступ к `user_db` принадлежат User Service:
+[migrations/user_db](../migrations/user_db/). Локальный Compose передаёт Auth только
+`USER_GRPC_ADDR=user:9090`, без credentials к User-owned БД.
 
 ## Tests
 
 - `mvn -B test` — unit + `@ActiveProfiles("test")` REST/gRPC smoke (in-memory).
-- `AuthJdbcRedisIntegrationTest` — Postgres (`auth_db`) + Redis + отдельный Postgres (`user_db` со схемой профилей) через Testcontainers (`@ActiveProfiles("integration")`). Runs when Docker is available to the JVM; skipped in environments without Docker (e.g. plain `docker run … mvn` without mounting `/var/run/docker.sock`).
+- JDBC/Testcontainers tests use Postgres for Auth-owned persistence and Redis. User interaction is
+  exercised through a test gRPC server; Auth tests do not receive `user_db` credentials. Runs when
+  Docker is available to the JVM; skipped in environments without Docker (e.g. plain
+  `docker run … mvn` without mounting `/var/run/docker.sock`).
 
 Canonical product spec: [docs/microservices/auth-service.md](../../../docs/microservices/auth-service.md).

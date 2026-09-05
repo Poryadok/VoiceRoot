@@ -8,6 +8,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -15,6 +19,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import voice.backend.auth.support.CapturingMailSender;
+import voice.backend.auth.repository.GuestConversionOperationRepository;
+import voice.backend.auth.repository.GuestConversionState;
+import voice.backend.auth.service.GuestConversionPendingUserRecoveryRunner;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -22,6 +30,10 @@ import org.springframework.test.web.servlet.MockMvc;
 class ConvertGuestIntegrationTest {
   @Autowired MockMvc mockMvc;
   @Autowired ObjectMapper objectMapper;
+  @Autowired CapturingMailSender mailSender;
+  @Autowired GuestConversionOperationRepository operations;
+  @Autowired GuestConversionPendingUserRecoveryRunner pendingUserRecovery;
+  @Autowired Clock clock;
 
   @Test
   void registerGuestWithoutEmailOrPhoneSucceeds() throws Exception {
@@ -120,7 +132,7 @@ class ConvertGuestIntegrationTest {
   }
 
   @Test
-  void convertGuestToRegularKeepsAccountIdAndSetsNewPassword() throws Exception {
+  void convertGuestMovesFromDurablePendingUserToPendingEventOnlyAfterRecoveryTick() throws Exception {
     JsonNode guest =
         session(
             postJson(
@@ -140,6 +152,7 @@ class ConvertGuestIntegrationTest {
                         "{\"email\":\"guest-convert@example.com\",\"password\":\"" + newPassword + "\"}"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.session.account_id", is(guestAccountId)))
+            .andExpect(jsonPath("$.session.account_type", is("guest")))
             .andReturn()
             .getResponse()
             .getContentAsString();
@@ -153,9 +166,63 @@ class ConvertGuestIntegrationTest {
             post("/api/v1/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
+                    "{\"email\":\"guest-convert@example.com\",\"password\":\""
+                        + newPassword
+                        + "\",\"device_info_json\":\"{}\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.session.account_type", is("guest")));
+
+    mailSender.clear();
+    mockMvc
+        .perform(
+            post("/api/v1/auth/otp/send")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"email\":\"guest-convert@example.com\",\"otp_type\":\"email_verify\"}"))
+        .andExpect(status().isNoContent());
+    String code = mailSender.lastCode();
+    assertThat(code).matches("\\d{6}");
+
+    mockMvc
+        .perform(
+            post("/api/v1/auth/otp/verify")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"email\":\"guest-convert@example.com\",\"code\":\""
+                        + code
+                        + "\",\"otp_type\":\"email_verify\"}"))
+        .andExpect(status().isNoContent());
+
+    mockMvc
+        .perform(
+            post("/api/v1/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
                     "{\"email\":\"guest-convert@example.com\",\"password\":\"" + newPassword + "\",\"device_info_json\":\"{}\"}"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.session.account_id", is(guestAccountId)));
+        .andExpect(jsonPath("$.session.account_id", is(guestAccountId)))
+        .andExpect(jsonPath("$.session.account_type", is("guest")));
+
+    pendingUserRecovery.tick();
+
+    mockMvc
+        .perform(
+            post("/api/v1/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"email\":\"guest-convert@example.com\",\"password\":\"" + newPassword + "\",\"device_info_json\":\"{}\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.session.account_id", is(guestAccountId)))
+        .andExpect(jsonPath("$.session.account_type", is("regular")));
+
+    Instant now = Instant.now(clock);
+    assertThat(operations.leaseDue(1, now, now.plus(Duration.ofMinutes(1))))
+        .singleElement()
+        .satisfies(
+            operation -> {
+              assertThat(operation.accountId()).isEqualTo(UUID.fromString(guestAccountId));
+              assertThat(operation.state()).isEqualTo(GuestConversionState.PENDING_EVENT);
+            });
   }
 
   private JsonNode postJson(String path, String body) throws Exception {

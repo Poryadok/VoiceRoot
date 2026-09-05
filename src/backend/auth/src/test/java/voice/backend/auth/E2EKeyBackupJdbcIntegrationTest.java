@@ -17,6 +17,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -28,6 +29,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 import voice.backend.auth.grpc.AuthGrpcService;
 import voice.backend.auth.service.AuthService;
+import voice.backend.auth.support.JdbcUserContractTestConfiguration;
 
 /**
  * encryption (docs/features/encryption.md) E2E-B red tests: encrypted key backup persisted via JDBC + Flyway V4
@@ -36,6 +38,7 @@ import voice.backend.auth.service.AuthService;
 @SpringBootTest
 @ActiveProfiles("integration")
 @Testcontainers(disabledWithoutDocker = true)
+@Import(JdbcUserContractTestConfiguration.class)
 class E2EKeyBackupJdbcIntegrationTest {
   @Container
   static final PostgreSQLContainer<?> postgres =
@@ -48,14 +51,6 @@ class E2EKeyBackupJdbcIntegrationTest {
   static final GenericContainer<?> redis =
       new GenericContainer<>(DockerImageName.parse("redis:7-alpine")).withExposedPorts(6379);
 
-  @Container
-  static final PostgreSQLContainer<?> userPostgres =
-      new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
-          .withDatabaseName("user_db")
-          .withUsername("voice")
-          .withPassword("voice")
-          .withInitScript("integration-user-schema.sql");
-
   @DynamicPropertySource
   static void registerProps(DynamicPropertyRegistry registry) {
     registry.add("voice.auth.jdbc.url", postgres::getJdbcUrl);
@@ -63,9 +58,6 @@ class E2EKeyBackupJdbcIntegrationTest {
     registry.add("spring.datasource.password", postgres::getPassword);
     registry.add("spring.flyway.user", postgres::getUsername);
     registry.add("spring.flyway.password", postgres::getPassword);
-    registry.add("auth.user-db.jdbc-url", userPostgres::getJdbcUrl);
-    registry.add("auth.user-db.username", userPostgres::getUsername);
-    registry.add("auth.user-db.password", userPostgres::getPassword);
     registry.add("spring.data.redis.host", redis::getHost);
     registry.add("spring.data.redis.port", () -> String.valueOf(redis.getMappedPort(6379)));
   }

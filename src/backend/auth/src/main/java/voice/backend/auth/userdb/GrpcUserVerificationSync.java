@@ -11,20 +11,25 @@ import java.util.UUID;
 import voice.backend.auth.service.AuthException;
 
 /** S2S verification sync via User Service SetVerification / ClearVerification. */
-public class GrpcUserVerificationSync implements UserVerificationSync, AutoCloseable {
+public class GrpcUserVerificationSync implements UserVerificationSync {
   private static final Metadata.Key<String> INTERNAL_CALLER_HEADER =
       Metadata.Key.of("x-voice-internal-caller", Metadata.ASCII_STRING_MARSHALLER);
 
-  private final ManagedChannel channel;
   private final UserServiceGrpc.UserServiceBlockingStub stub;
 
   public GrpcUserVerificationSync(ManagedChannel channel) {
-    this.channel = channel;
+    this(authenticatedStub(channel));
+  }
+
+  public GrpcUserVerificationSync(UserServiceGrpc.UserServiceBlockingStub stub) {
+    this.stub = stub;
+  }
+
+  private static UserServiceGrpc.UserServiceBlockingStub authenticatedStub(ManagedChannel channel) {
     Metadata headers = new Metadata();
     headers.put(INTERNAL_CALLER_HEADER, "auth");
-    this.stub =
-        UserServiceGrpc.newBlockingStub(channel)
-            .withInterceptors(MetadataUtils.newAttachHeadersInterceptor(headers));
+    return UserServiceGrpc.newBlockingStub(channel)
+        .withInterceptors(MetadataUtils.newAttachHeadersInterceptor(headers));
   }
 
   @Override
@@ -36,7 +41,11 @@ public class GrpcUserVerificationSync implements UserVerificationSync, AutoClose
               .setVerificationType("personal")
               .setBadge(badge == null || badge.isBlank() ? "verified" : badge)
               .build();
-      stub.setVerification(req);
+      var status = stub.setVerification(req).getVerificationStatus();
+      if (!profileId.toString().equals(status.getProfileId())
+          || !"personal".equals(status.getVerificationType())) {
+        throw new AuthException("verification_sync_failed");
+      }
     } catch (StatusRuntimeException ex) {
       throw new AuthException("verification_sync_failed");
     }
@@ -45,17 +54,16 @@ public class GrpcUserVerificationSync implements UserVerificationSync, AutoClose
   @Override
   public void clearVerification(UUID profileId) {
     try {
-      stub.clearVerification(
-          ClearVerificationRequest.newBuilder().setProfileId(profileId.toString()).build());
+      var status =
+          stub.clearVerification(
+                  ClearVerificationRequest.newBuilder().setProfileId(profileId.toString()).build())
+              .getVerificationStatus();
+      if (!profileId.toString().equals(status.getProfileId())
+          || !"none".equals(status.getVerificationType())) {
+        throw new AuthException("verification_sync_failed");
+      }
     } catch (StatusRuntimeException ex) {
       throw new AuthException("verification_sync_failed");
-    }
-  }
-
-  @Override
-  public void close() {
-    if (channel != null) {
-      channel.shutdown();
     }
   }
 }

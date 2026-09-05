@@ -21,6 +21,8 @@ public interface AccountRepository {
 
   Account convertGuest(UUID accountId, String email, String phone, String passwordHash);
 
+  Account markGuestRegular(UUID accountId);
+
   void updatePasswordHash(UUID accountId, String passwordHash);
 
   void touchLastOnlineAt(UUID accountId, Instant at);
@@ -30,6 +32,9 @@ public interface AccountRepository {
   void markDeleted(UUID accountId, Instant deletedAt);
 
   void restoreDeleted(UUID accountId);
+
+  /** Atomically advances the account-wide session epoch and returns the new positive value. */
+  long incrementSessionEpoch(UUID accountId);
 
   Optional<Instant> getGuestReminderLastShownAt(UUID accountId);
 

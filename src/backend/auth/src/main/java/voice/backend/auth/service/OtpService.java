@@ -5,6 +5,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
+import java.util.Objects;
 import voice.backend.auth.mail.MailSender;
 import voice.backend.auth.repository.Account;
 import voice.backend.auth.repository.AccountRepository;
@@ -25,6 +26,7 @@ public class OtpService {
   private final MailSender mailSender;
   private final OtpThrottle throttle;
   private final Clock clock;
+  private final GuestConversionOtpAcceptance guestConversionAcceptance;
   private final SecureRandom random = new SecureRandom();
 
   public OtpService(
@@ -35,7 +37,8 @@ public class OtpService {
       BCryptPasswordHasher passwordHasher,
       MailSender mailSender,
       OtpThrottle throttle,
-      Clock clock) {
+      Clock clock,
+      GuestConversionOtpAcceptance guestConversionAcceptance) {
     this.accounts = accounts;
     this.otpCodes = otpCodes;
     this.refreshTokens = refreshTokens;
@@ -44,6 +47,7 @@ public class OtpService {
     this.mailSender = mailSender;
     this.throttle = throttle;
     this.clock = clock;
+    this.guestConversionAcceptance = Objects.requireNonNull(guestConversionAcceptance, "guestConversionAcceptance");
   }
 
   public void sendOtp(SendOtpCommand command, AuthService authService) {
@@ -85,6 +89,10 @@ public class OtpService {
     if (!codec.hash(command.code().trim()).equals(record.codeHash())) {
       throttle.recordFailedVerify(throttleKey);
       throw new AuthException("invalid_otp");
+    }
+    if ("email_verify".equals(type) && "guest".equals(account.type())) {
+      guestConversionAcceptance.acceptVerifiedGuestEmailOtp(account.id(), record, now);
+      return;
     }
     otpCodes.markUsed(record.id(), now);
   }

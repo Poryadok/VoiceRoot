@@ -22,7 +22,7 @@ const (
 )
 
 const profileSelectCols = `id, account_id, username, discriminator, display_name, avatar_url, banner_url, bio,
-		locale, theme, is_primary, verification_type, verification_badge, frozen_at, accent_color, is_guest_account, created_at, updated_at`
+		locale, theme, is_primary, verification_type, verification_badge, frozen_at, accent_color, is_guest_account, deleted_at, created_at, updated_at`
 
 // MaxDisplayNameRunes is the maximum length of profile display_name (aligned with Discord).
 const MaxDisplayNameRunes = 32
@@ -45,6 +45,7 @@ type ProfileRow struct {
 	AccentColor       *string
 	IsGuestAccount    bool
 	FrozenAt          *time.Time
+	DeletedAt         *time.Time
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
 }
@@ -90,7 +91,7 @@ func scanProfile(row pgx.Row) (*ProfileRow, error) {
 		&p.ID, &p.AccountID, &p.Username, &p.Discriminator, &p.DisplayName,
 		&p.AvatarURL, &p.BannerURL, &p.Bio, &p.Locale, &p.Theme, &p.IsPrimary,
 		&p.VerificationType, &p.VerificationBadge, &p.FrozenAt, &p.AccentColor, &p.IsGuestAccount,
-		&p.CreatedAt, &p.UpdatedAt,
+		&p.DeletedAt, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -382,7 +383,7 @@ func (s *ProfileStore) GetOwnedProfile(ctx context.Context, accountID, profileID
 }
 
 // EnsurePrimaryProfile creates or returns the primary profile for account_id (Auth bootstrap).
-func (s *ProfileStore) EnsurePrimaryProfile(ctx context.Context, accountID uuid.UUID, profileID *uuid.UUID, displayHint string) (*ProfileRow, error) {
+func (s *ProfileStore) EnsurePrimaryProfile(ctx context.Context, accountID uuid.UUID, profileID *uuid.UUID, displayHint string, guestAccount bool) (*ProfileRow, error) {
 	existing, err := s.GetPrimaryProfileIDForAccount(ctx, accountID)
 	if err == nil && existing != uuid.Nil {
 		return s.GetByID(ctx, existing)
@@ -406,10 +407,10 @@ func (s *ProfileStore) EnsurePrimaryProfile(ctx context.Context, accountID uuid.
 	for attempt := 0; attempt < maxDiscriminatorAttempts; attempt++ {
 		disc := randomDiscriminator()
 		row := s.pool.QueryRow(ctx, `
-			INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary, locale, theme, verification_type)
-			VALUES ($1, $2, $3, $4, $5, true, 'ru', 'dark', 'none')
+			INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary, locale, theme, verification_type, is_guest_account)
+			VALUES ($1, $2, $3, $4, $5, true, 'ru', 'dark', 'none', $6)
 			RETURNING `+profileSelectCols,
-			id, accountID, base, disc, dn,
+			id, accountID, base, disc, dn, guestAccount,
 		)
 		p, err := scanProfile(row)
 		if err == nil {

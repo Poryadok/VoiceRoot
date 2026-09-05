@@ -20,6 +20,7 @@ import voice.backend.auth.service.InMemoryAccountRestoreTokenStore;
 import voice.backend.auth.service.InMemoryOtpThrottle;
 import voice.backend.auth.service.OtpService;
 import voice.backend.auth.service.OtpThrottle;
+import voice.backend.auth.service.GuestConversionOtpAcceptance;
 import voice.backend.auth.service.RedisAccountRestoreTokenStore;
 import voice.backend.auth.service.RedisOtpThrottle;
 import voice.backend.auth.support.CapturingMailSender;
@@ -82,7 +83,8 @@ public class OtpAndMailConfiguration {
       BCryptPasswordHasher passwordHasher,
       MailSender mailSender,
       OtpThrottle throttle,
-      java.time.Clock clock) {
+      java.time.Clock clock,
+      GuestConversionOtpAcceptance guestConversionAcceptance) {
     return new OtpService(
         accounts,
         otpCodes,
@@ -91,6 +93,7 @@ public class OtpAndMailConfiguration {
         passwordHasher,
         mailSender,
         throttle,
-        clock);
+        clock,
+        guestConversionAcceptance);
   }
 }

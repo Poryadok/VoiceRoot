@@ -46,7 +46,8 @@
 ### User
 
 
-- [ ] **[User] OAuth verification bypasses User Service** — Twitch link writes `profiles` via `JdbcUserVerificationSync` (`src/backend/auth/src/main/java/voice/backend/auth/userdb/JdbcUserVerificationSync.java`), not `SetVerification` (`src/backend/user/internal/grpcsvc/user_verification.go`). No `user.verified` NATS publish on OAuth path (`src/backend/user/internal/userevents/jetstream.go`). `EnsurePrimaryProfile` / `GetSettings` — **есть** (`user_settings.go`), не заводить снова.
+- [x] **[User] OAuth verification goes through User Service** — Auth uses User gRPC
+  `SetVerification` / `ClearVerification`; direct `user_db` verification writes were removed.
 
 ### Analytics
 
@@ -96,7 +97,8 @@
 
 - [ ] **[A1/T-056 Auth/Chat] Minimum account soft-delete contract** — revoke all sessions immediately, deny new DM send in both directions, hide deleted peer/DM in fresh snapshots, and keep already loaded history with one terminal «Пользователь удалён» marker. Owner decision recorded; code WIP unblocked. — [PLAN.md](../PLAN.md) A1, [auth-and-contacts.md](../features/auth-and-contacts.md), `tmp/fleet/plans/A1-daily-messaging.md`.
 - [ ] **[A4 Auth/User/Chat/File/Search] Complete account erasure lifecycle** — password+2FA confirmation, 30-day restore, then idempotent PII/credential/profile-media erasure or pseudonymization; retain messages with non-public author tombstone and isolate minimal legal/anti-abuse records by production retention policy. Existing `DeleteAccount`/`RestoreAccount` and ListChats deleted-peer filter are partial. — [auth-and-contacts.md](../features/auth-and-contacts.md), [client.md](client.md).
-- [ ] **[Auth] Email signup and convert-guest verification gate** — pending identity preserves session/history but keeps guest-level restrictions; only successful verification promotes to `regular` and emits `user.guest_converted`; add idempotent resend and negative capability tests. Current code promotes immediately. — [auth-and-contacts.md](../features/auth-and-contacts.md), `src/backend/auth/`.
+- [x] **[Auth] Email signup and convert-guest verification gate** — pending identity preserves session/history and guest-level restrictions; successful email verification calls User `MarkAccountRegular`, promotes Auth to `regular`, then emits `user.guest_converted`. Negative User-failure coverage is in the Auth contract tests. — [auth-and-contacts.md](../features/auth-and-contacts.md), `src/backend/auth/`.
+- [ ] **[Auth] Durable guest-conversion completion** — make the verified conversion workflow retry-safe across User `MarkAccountRegular`, Auth DB promotion, and `user.guest_converted` publication. The User RPC is idempotent but has no operation key, and Auth currently has no durable outbox/pending-promotion state, so partial failures can repeat the RPC or lose the best-effort NATS event. Add fault-injection coverage for Auth DB and event-publication failures.
 
 
 ## High
@@ -373,7 +375,8 @@
 ### Multi-Profile
 
 - [ ] **[Multi-Profile] Soft-deleted profiles still count toward limit** — `CountByAccountID` has no `deleted_at IS NULL` filter (`src/backend/user/internal/store/profile.go`); blocks re-create after delete per archive semantics in `docs/features/multi-profile.md`.
-- [ ] **[Multi-Profile] Auth `switch-profile` bypasses User service** — `AuthService.switchActiveProfile` reissues JWT via `JdbcProfileSwitchValidator` only; does not call `User.SwitchProfile` → no `user.profile_switched` NATS on client path (downstream Search/analytics; см. [User] NATS gaps, [Search] ProfileSwitched).
+- [x] **[Multi-Profile] Auth `switch-profile` uses User Service** — Auth calls the existing
+  `User.SwitchProfile` contract before issuing the replacement JWT; direct profile SQL was removed.
 - [ ] **[Multi-Profile] Premium profile limit unreliable** — `CreateProfile` gates on JWT `subscription_tier` (`user.go`); tier stuck at `free` until Auth↔Subscription wired (см. [Subscription] JWT tier).
 ### Auth / Social
 

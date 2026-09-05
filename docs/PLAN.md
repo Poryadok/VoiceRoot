@@ -306,7 +306,7 @@ Milestone — законченный пользовательский резул
 - Auth остаётся Java/Spring в `src/backend/auth/`; перенос в Go требует отдельного решения.
 - Realtime в `src/backend/realtime/` владеет WebSocket event flow и протоколом `s` / `resume`.
 - После reconnect global inbox state сверяется через Chat REST `ListChats` и durable Messaging metadata; история сообщений догружается через Messaging REST/API с cursor отдельно для выбранного `chat_id`. Глобального WS replay/event-log catch-up нет.
-- Сервис владеет своей БД; межсервисные записи идут через контракт или событие, а не прямой JDBC/SQL в чужую схему. Существующие Auth → `user_db` JDBC paths — debt для `A1`, а не исключение из правила.
+- Сервис владеет своей БД; межсервисные записи идут через контракт или событие, а не прямой JDBC/SQL в чужую схему. Auth обращается к User-owned profile данным только через User gRPC и не получает credentials к `user_db`.
 - Node.js для frontend/CI — 24.
 - Federation и её производные остаются deferred; scaffold может компилироваться в full-repo CI, но `G0–G4` profiles исключают Federation deployment, DB/migrations, readiness и alerts.
 
