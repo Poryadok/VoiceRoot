@@ -31,9 +31,8 @@ type voiceRolePermissionCheck struct {
 	voiceRoomID string
 }
 
-// recordingVoiceRolePermissions is a test double for the intended complete
-// Space voice permission boundary. EnsureVoiceSpeak is deliberately present
-// before production wires it into RolePermissionChecker.
+// recordingVoiceRolePermissions is a test double for the complete Space voice
+// permission boundary, including the RolePermissionChecker speak check.
 type recordingVoiceRolePermissions struct {
 	voiceSpeakErr error
 	muteOthersErr error

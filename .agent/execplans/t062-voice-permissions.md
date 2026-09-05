@@ -87,7 +87,7 @@ returns their permission check as allowed.
 - [x] Add documentation-derived regression tests only; demonstrate expected RED failures; commit the RED phase.
 - [x] Obtain independent fresh test review and resolve any critical finding before production changes. The first review found P1 RED gaps (allow/Owner-shaped behavior, `EnsureMuteOthers` deny/unavailable adapter behavior, optional/non-Space state-patch regressions); the correction pass and fresh rereview found no P1/critical findings.
 - [x] Implement the smallest checker/interface and handler guards; run focused GREEN tests and mutation checks.
-- [ ] Update the backlog wording/ExecPlan progress, commit GREEN, obtain fresh implementation review, and run bounded verification.
+- [x] Update the backlog wording/ExecPlan progress, commit GREEN, obtain fresh implementation review, and run bounded verification.
 
 ## Detailed steps
 
@@ -141,7 +141,8 @@ returns their permission check as allowed.
 - [x] Add reviewed RED gaps (allow behavior, `EnsureMuteOthers` adapter deny/unavailable, optional/non-Space state patches), then obtain a fresh follow-up test review. Production code remains untouched.
 - [x] Implemented minimal GREEN guards only after accepted RED review: added `EnsureVoiceSpeak`, explicit-unmute and enabled-broadcast checks, and fail-closed Space commander/floor checks.
 - [x] Focused GRPC + Role adapter tests, race tests, vet, and four guard mutations completed; full module test is blocked only by the uncached Prometheus dependency while network is prohibited.
-- [ ] GREEN commit and fresh implementation review.
+- [x] GREEN commit and fresh implementation review. No P0/P1 findings; accepted
+  and corrected the sole P2 stale test-double comment in a follow-up commit.
 
 ## Decisions
 
