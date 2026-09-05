@@ -30,7 +30,6 @@ import 'package:voice_frontend/shell/three_column_shell.dart';
 import 'package:voice_frontend/theme/profile_accent_storage.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/auth/auth_screen.dart';
-import 'package:voice_frontend/ui/shell/chat_list_body.dart';
 
 import 'support/fake_voice_api_clients.dart';
 import 'support/voice_test_theme.dart';
@@ -102,6 +101,7 @@ void main() {
 
     await tester.binding.setSurfaceSize(const Size(1280, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
+    final semantics = tester.ensureSemantics();
 
     final container = ProviderContainer(
       overrides: [
@@ -202,13 +202,14 @@ void main() {
       findsNothing,
     );
     expect(find.byKey(ThreeColumnShell.navActiveRail), findsOneWidget);
-    expect(find.byKey(ChatListBody.listKey), findsOneWidget);
-    expect(find.bySemanticsLabel('Chat list'), findsOneWidget);
+    expect(find.text(AppLocalizationsEn().chatListEmpty), findsOneWidget);
+    expect(find.bySemanticsLabel('Navigation'), findsOneWidget);
     expect(find.text(AppLocalizationsEn().chatListTitle), findsWidgets);
     expect(
       requests.where((request) => request.url.path == '/api/v1/auth/register'),
       hasLength(1),
     );
+    semantics.dispose();
   });
 }
 
