@@ -149,7 +149,11 @@ func (s *SpaceGRPC) RevokeInvite(ctx context.Context, req *spacev1.RevokeInviteR
 	if err := s.requireSpaceOwner(ctx, inv.SpaceID); err != nil {
 		return nil, err
 	}
-	if err := s.Store.RevokeInvite(ctx, inviteID); err != nil {
+	caller, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
+	if err := s.Store.RevokeInvite(ctx, inviteID, caller); err != nil {
 		return nil, mapInviteStoreErr(err)
 	}
 	return &spacev1.RevokeInviteResponse{}, nil
