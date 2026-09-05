@@ -17,6 +17,7 @@ import 'package:voice_frontend/backend/voice_client.dart';
 import 'package:voice_frontend/settings/voice_input_settings.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/call_providers.dart';
+import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/profile_switch_coordinator.dart';
 
@@ -117,6 +118,89 @@ void main() {
       );
     }
   }
+
+  group('profile-bound call signaling contract', () {
+    test(
+      'late A or B signals cannot replace or end active A after C switch',
+      () async {
+        final harness = _VoiceBindingHarness();
+        addTearDown(harness.dispose);
+        harness.setActiveA();
+        await harness.coordinator.switchTo('profile-b');
+        await harness.coordinator.switchTo('profile-c');
+        final cBinding = _binding('profile-c', generation: 3);
+        harness.container.read(realtimeHelloBindingProvider.notifier).state =
+            cBinding;
+
+        for (final stale in [
+          ProfileBoundRealtimeFrame(
+            frame: const RealtimeFrame(
+              op: 'call_incoming',
+              data: {'room_id': 'room-b'},
+            ),
+            binding: _binding('profile-a', generation: 1),
+          ),
+          ProfileBoundRealtimeFrame(
+            frame: const RealtimeFrame(
+              op: 'call_accepted',
+              data: {'room_id': 'room-a'},
+            ),
+            binding: _binding('profile-b', generation: 2),
+          ),
+          ProfileBoundRealtimeFrame(
+            frame: const RealtimeFrame(
+              op: 'call_ended',
+              data: {'room_id': 'room-a'},
+            ),
+            binding: _binding('profile-a', generation: 1),
+          ),
+        ]) {
+          harness.boundSignals.add(stale);
+        }
+        await _drain();
+
+        final state = harness.container.read(callControllerProvider);
+        expect(harness.auth.state.session, _session('profile-c'));
+        expect(state.phase, CallPhase.active);
+        expect(state.session?.roomId, 'room-a');
+        expect(state.voiceBindingProfileId, 'profile-a');
+        expect(harness.liveKit.disconnectCalls, 0);
+      },
+    );
+
+    test('idle C accepts exactly one C-bound incoming call', () async {
+      final harness = _VoiceBindingHarness();
+      addTearDown(harness.dispose);
+      await harness.coordinator.switchTo('profile-b');
+      await harness.coordinator.switchTo('profile-c');
+      final cBinding = _binding('profile-c', generation: 3);
+      harness.container.read(realtimeHelloBindingProvider.notifier).state =
+          cBinding;
+      final incoming = ProfileBoundRealtimeFrame(
+        frame: const RealtimeFrame(
+          op: 'call_incoming',
+          data: {
+            'room_id': 'room-c',
+            'livekit_room_name': 'livekit-c',
+            'chat_id': 'chat-c',
+            'initiator_profile_id': 'peer-c',
+            'callee_profile_id': 'profile-c',
+          },
+        ),
+        binding: cBinding,
+      );
+
+      harness.boundSignals
+        ..add(incoming)
+        ..add(incoming);
+      await _drain();
+
+      final state = harness.container.read(callControllerProvider);
+      expect(state.phase, CallPhase.incoming);
+      expect(state.session?.roomId, 'room-c');
+      expect(state.voiceBindingProfileId, 'profile-c');
+    });
+  });
 }
 
 AuthSession _session(String profileId) => AuthSession(
@@ -136,6 +220,14 @@ VoiceCallSession _aSession() => VoiceCallSession(
   mediaKind: VoiceCallMediaKind.audio,
   status: VoiceCallStatus.active,
 );
+
+RealtimeHelloBinding _binding(String profileId, {required int generation}) =>
+    RealtimeHelloBinding(
+      generation: generation,
+      bindingGeneration: generation,
+      profileId: profileId,
+      authorization: 'Bearer access-$profileId',
+    );
 
 class _VoiceEntry {
   const _VoiceEntry(this.name, this.invoke);
@@ -173,6 +265,9 @@ class _VoiceBindingHarness {
         ),
         liveKitRoomFactoryProvider.overrideWithValue(() => liveKit),
         callSignalingStreamProvider.overrideWith((_) => signaling.stream),
+        profileBoundRealtimeEventProvider.overrideWith(
+          (_) => boundSignals.stream,
+        ),
         profileSwitchRealtimeBoundaryProvider.overrideWithValue(realtime),
         voiceInputSettingsProvider.overrideWith(() => _FixedVoiceInput()),
       ],
@@ -183,6 +278,7 @@ class _VoiceBindingHarness {
 
   final storage = InMemoryAuthSessionStorage();
   final signaling = StreamController<RealtimeFrame>.broadcast();
+  final boundSignals = StreamController<ProfileBoundRealtimeFrame>.broadcast();
   final liveKit = _RecordingLiveKitRoom();
   final realtime = _PassiveProfileSwitchRealtimeBoundary();
   final requestPaths = <String>[];
@@ -239,6 +335,7 @@ class _VoiceBindingHarness {
   Future<void> dispose() async {
     container.dispose();
     await signaling.close();
+    await boundSignals.close();
   }
 }
 
