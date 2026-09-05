@@ -63,6 +63,12 @@ full_gateway_run: 'TestCompose.*_live'
 restart_proof_gateway:
   - TestComposeFileAttachmentRestartProof_live
 
+a1_multi_account_gateway:
+  - TestComposeA1TwoAccountsFoundation_live
+  - TestComposeA1DailyMessagingREST_live
+  - TestComposeA1GroupReadIsolation_live
+  - TestComposeA1ChannelReadIsolation_live
+
 full_flutter:
   - test/gateway_dm_ws_live_integration_test.dart
   - test/dm_two_users_e2e_live_test.dart

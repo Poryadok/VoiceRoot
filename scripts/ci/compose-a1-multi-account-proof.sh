@@ -5,7 +5,36 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 COMPOSE_FILE_PATH="${ROOT}/docker-compose.yml"
+MANIFEST_PATH="${ROOT}/.github/ci/e2e-features.yml"
+A1_TEST_REGEX='^TestComposeA1(TwoAccountsFoundation|DailyMessagingREST|GroupReadIsolation|ChannelReadIsolation)_live$'
+A1_EXPECTED_TESTS=(
+  TestComposeA1TwoAccountsFoundation_live
+  TestComposeA1DailyMessagingREST_live
+  TestComposeA1GroupReadIsolation_live
+  TestComposeA1ChannelReadIsolation_live
+)
 umask 077
+
+manifest_entries="$(bash "${ROOT}/scripts/ci/e2e-manifest.sh" "${MANIFEST_PATH}" a1_multi_account_gateway)" || {
+  echo "failed to read a1_multi_account_gateway from ${MANIFEST_PATH}" >&2
+  exit 2
+}
+if [[ -z "${manifest_entries}" ]]; then
+  echo "a1_multi_account_gateway is empty in ${MANIFEST_PATH}" >&2
+  exit 2
+fi
+mapfile -t manifest_tests <<<"${manifest_entries}"
+if [[ "${#manifest_tests[@]}" -ne "${#A1_EXPECTED_TESTS[@]}" ]]; then
+  echo "a1_multi_account_gateway must contain exactly four tests" >&2
+  exit 2
+fi
+for index in "${!A1_EXPECTED_TESTS[@]}"; do
+  if [[ "${manifest_tests[$index]}" != "${A1_EXPECTED_TESTS[$index]}" ]] ||
+    [[ ! "${manifest_tests[$index]}" =~ ${A1_TEST_REGEX} ]]; then
+    echo "a1_multi_account_gateway order or test-name drift at index ${index}" >&2
+    exit 2
+  fi
+done
 
 for compose_var in \
   COMPOSE_PROJECT_NAME COMPOSE_PROFILES COMPOSE_FILE COMPOSE_ENV_FILES \
@@ -142,7 +171,7 @@ set +e
 (
   cd "$ROOT/src/backend/gateway"
   go test -count=1 -parallel 1 -timeout 20m -tags live \
-    -run '^TestComposeA1(TwoAccountsFoundation|DailyMessagingREST)_live$' ./...
+    -run "$A1_TEST_REGEX" ./...
 )
 test_status=$?
 set -e
