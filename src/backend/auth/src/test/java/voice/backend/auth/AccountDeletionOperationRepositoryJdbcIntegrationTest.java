@@ -103,6 +103,39 @@ class AccountDeletionOperationRepositoryJdbcIntegrationTest {
     }
   }
 
+  @Test
+  void leaseDue_usesTheLeasedRowColumnsAndReturnsARecoverableFencedLease() {
+    AccountDeletionOperationRepository repository = repository();
+    UUID accountId = UUID.randomUUID();
+    seedAccount(accountId);
+    Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+    AccountDeletionOperation operation =
+        repository.createOrResume(UUID.randomUUID(), accountId, 3, "token-verifier", now);
+    Instant leaseUntil = now.plus(2, ChronoUnit.MINUTES);
+    try {
+      assertThat(repository.leaseDue(AccountDeletionState.PENDING_FLOOR, 1, now, leaseUntil))
+          .containsExactly(
+              new AccountDeletionOperation(
+                  operation.operationId(),
+                  accountId,
+                  3,
+                  "token-verifier",
+                  AccountDeletionState.PENDING_FLOOR,
+                  0,
+                  now,
+                  leaseUntil,
+                  null,
+                  null,
+                  null,
+                  now,
+                  now));
+    } finally {
+      jdbc().update("DELETE FROM account_deletion_operations WHERE account_id = :accountId",
+          new MapSqlParameterSource("accountId", accountId));
+      jdbc().update("DELETE FROM accounts WHERE id = :accountId", new MapSqlParameterSource("accountId", accountId));
+    }
+  }
+
   private static Optional<AccountDeletionOperation> claimAfterBarrier(
       AccountDeletionOperationRepository repository,
       UUID operationId,

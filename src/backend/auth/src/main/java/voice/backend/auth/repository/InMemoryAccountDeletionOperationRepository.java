@@ -56,7 +56,9 @@ public final class InMemoryAccountDeletionOperationRepository
   @Override
   public synchronized Optional<AccountDeletionOperation> lease(
       UUID operationId, AccountDeletionState state, Instant now, Instant leaseUntil) {
-    AccountDeletionOperation operation = require(operationId);
+    String key = keysByOperation.get(operationId);
+    if (key == null) return Optional.empty();
+    AccountDeletionOperation operation = operations.get(key);
     if (operation.state() != state || operation.nextAttemptAt().isAfter(now)
         || (operation.lockedUntil() != null && operation.lockedUntil().isAfter(now))) {
       return Optional.empty();
@@ -64,7 +66,7 @@ public final class InMemoryAccountDeletionOperationRepository
     AccountDeletionOperation leased = copy(operation, operation.state(), operation.attemptCount(),
         operation.nextAttemptAt(), leaseUntil, operation.lastErrorCode(), operation.floorRecordedAt(),
         operation.eventPublishedAt(), now);
-    operations.put(keysByOperation.get(operationId), leased);
+    operations.put(key, leased);
     return Optional.of(leased);
   }
 

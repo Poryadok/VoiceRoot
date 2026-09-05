@@ -30,6 +30,7 @@ import voice.backend.auth.service.AuthService;
 import voice.backend.auth.service.AccountDeletionEventPublisher;
 import voice.backend.auth.service.AccountDeletionRecoveryRunner;
 import voice.backend.auth.service.DeleteAccountResult;
+import voice.backend.auth.service.GuestConversionPublishAck;
 import voice.backend.auth.sessionepoch.SessionEpochFloorStore;
 import voice.backend.auth.sessionepoch.SessionEpochFloorUnavailableException;
 import voice.backend.auth.sessionepoch.SessionEpochFloorMissingException;
@@ -73,6 +74,8 @@ class DeleteAccountRestoreIntegrationTest {
               }
               return floor;
             });
+    when(deletionEventPublisher.publishAccountDeleted(any(), any(), any()))
+        .thenReturn(new GuestConversionPublishAck("user_events", 1L));
   }
 
   @Test

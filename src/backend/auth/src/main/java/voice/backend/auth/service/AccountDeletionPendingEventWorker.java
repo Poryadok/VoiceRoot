@@ -43,7 +43,7 @@ public final class AccountDeletionPendingEventWorker {
   private void process(AccountDeletionOperation operation) {
     try {
       String eventId = operation.operationId().toString();
-      publisher.publishAccountDeleted(
+      GuestConversionPublishAck acknowledgement = publisher.publishAccountDeleted(
           AuthEventPublisher.SUBJECT_ACCOUNT_DELETED,
           UserStreamEvent.newBuilder()
               .setEventId(eventId)
@@ -52,6 +52,9 @@ public final class AccountDeletionPendingEventWorker {
                   UserAccountDeleted.newBuilder().setAccountId(operation.accountId().toString()))
               .build(),
           eventId);
+      if (acknowledgement == null) {
+        throw new IllegalStateException("JetStream did not return a PubAck");
+      }
       operations.markEventPublished(operation.operationId(), operation.lockedUntil(), Instant.now(clock));
     } catch (RuntimeException failure) {
       Instant failedAt = Instant.now(clock);

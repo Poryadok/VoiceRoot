@@ -58,6 +58,7 @@ public final class JdbcAccountDeletionOperationRepository implements AccountDele
   public List<AccountDeletionOperation> leaseDue(
       AccountDeletionState state, int batchSize, Instant now, Instant leaseUntil) {
     if (batchSize <= 0 || !leaseUntil.isAfter(now)) throw new IllegalArgumentException("invalid lease");
+    String leasedColumns = "leased." + COLUMNS.replace(", ", ", leased.");
     return jdbc.query(
         """
         WITH eligible AS (
@@ -75,7 +76,7 @@ public final class JdbcAccountDeletionOperationRepository implements AccountDele
         )
         SELECT %s FROM leased JOIN eligible USING (operation_id)
         ORDER BY eligible.next_attempt_at, eligible.created_at, eligible.operation_id
-        """.formatted(COLUMNS),
+        """.formatted(leasedColumns),
         new MapSqlParameterSource().addValue("state", state.name()).addValue("batchSize", batchSize)
             .addValue("now", Timestamp.from(now)).addValue("leaseUntil", Timestamp.from(leaseUntil)), ROW);
   }

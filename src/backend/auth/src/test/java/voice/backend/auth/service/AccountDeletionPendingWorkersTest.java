@@ -79,6 +79,23 @@ class AccountDeletionPendingWorkersTest {
         .publishAccountDeleted(any(), any(), org.mockito.ArgumentMatchers.eq(created.operationId().toString()));
   }
 
+  @Test
+  void missingPubAckNeverCompletesTheDeletionOutbox() {
+    InMemoryAccountDeletionOperationRepository operations = new InMemoryAccountDeletionOperationRepository();
+    UUID accountId = UUID.randomUUID();
+    operations.createOrResume(UUID.randomUUID(), accountId, 2, "hash", NOW);
+    SessionEpochFloorStore floors = mock(SessionEpochFloorStore.class);
+    when(floors.recordAtLeast(accountId, 2)).thenReturn(2L);
+    new AccountDeletionPendingFloorWorker(operations, floors, CLOCK).recover(1, Duration.ofSeconds(30));
+
+    AccountDeletionEventPublisher publisher = mock(AccountDeletionEventPublisher.class);
+    new AccountDeletionPendingEventWorker(operations, publisher, CLOCK).recover(1, Duration.ofSeconds(30));
+
+    AccountDeletionOperation pending = operations.findByAccountAndEpoch(accountId, 2).orElseThrow();
+    assertThat(pending.state()).isEqualTo(AccountDeletionState.PENDING_EVENT);
+    assertThat(pending.attemptCount()).isEqualTo(1);
+  }
+
   /** Simulates process death after a broker PubAck but before the state transition is persisted. */
   private static final class CrashOnceAfterPubAckRepository
       implements AccountDeletionOperationRepository {
