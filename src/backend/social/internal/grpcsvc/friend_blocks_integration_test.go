@@ -46,6 +46,10 @@ func TestSendFriendInvitation_BlockedAccounts_PermissionDenied(t *testing.T) {
 	accB := uuid.New()
 
 	client, cleanup := startSocialGRPCTestServer(t, pool, func(s *SocialGRPC) {
+		s.AccountProfiles = stubAccountProfiles{
+			accA: {profA},
+			accB: {profB},
+		}
 		s.ProfileAccounts = stubProfileAccounts{
 			profA: accA,
 			profB: accB,

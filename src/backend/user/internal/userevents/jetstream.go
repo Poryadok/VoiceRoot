@@ -193,19 +193,24 @@ func (p *JetStreamPublisher) PublishProfileSwitched(ctx context.Context, account
 		return p.publishProto(ctx, subjectProfileVerified, env)
 	}
 
-	// PublishPresenceChanged emits user.presence_changed (docs/microservices/user-service.md).
-	func (p *JetStreamPublisher) PublishPresenceChanged(ctx context.Context, profileID, status string) error {
-		env := &eventsv1.UserStreamEvent{
+	func newPresenceChangedEvent(profileID, oldStatus, newStatus string) *eventsv1.UserStreamEvent {
+		return &eventsv1.UserStreamEvent{
 			EventId:    uuid.NewString(),
 			OccurredAt: timestamppb.New(time.Now().UTC()),
 			Payload: &eventsv1.UserStreamEvent_PresenceChange{
 				PresenceChange: &eventsv1.PresenceChange{
 					ProfileId: profileID,
-					Status:    status,
+					Status:    newStatus,
+					OldStatus: oldStatus,
+					NewStatus: newStatus,
 				},
 			},
 		}
-		return p.publishProto(ctx, subjectPresenceChanged, env)
+	}
+
+	// PublishPresenceChanged emits user.presence_changed (docs/microservices/user-service.md).
+	func (p *JetStreamPublisher) PublishPresenceChanged(ctx context.Context, profileID, oldStatus, newStatus string) error {
+		return p.publishProto(ctx, subjectPresenceChanged, newPresenceChangedEvent(profileID, oldStatus, newStatus))
 	}
 
 	// Close drains the underlying NATS connection.

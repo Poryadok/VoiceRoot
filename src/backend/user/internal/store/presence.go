@@ -65,9 +65,33 @@ type PresenceSnapshot struct {
 	LastSeenUnix   int64
 }
 
+var presenceUpsertAndGetPreviousScript = redis.NewScript(`
+local previous = redis.call('HMGET', KEYS[1], 'status', 'status_enum', 'game_title', 'custom_status', 'call_info_json', 'ts_unix')
+local live = redis.call('EXISTS', KEYS[1])
+
+redis.call('HSET', KEYS[1],
+  'status', ARGV[1],
+  'status_enum', ARGV[2],
+  'game_title', ARGV[3],
+  'custom_status', ARGV[4],
+  'call_info_json', ARGV[5],
+  'ts_unix', ARGV[6])
+redis.call('EXPIRE', KEYS[1], ARGV[7])
+redis.call('SET', KEYS[2], ARGV[6], 'EX', ARGV[8])
+
+return {live, previous[1] or '', previous[2] or '', previous[3] or '', previous[4] or '', previous[5] or '', previous[6] or ''}
+`)
+
 func (s *PresenceStore) Upsert(ctx context.Context, profileID uuid.UUID, in PresenceUpsert) error {
+	_, err := s.UpsertAndGetPrevious(ctx, profileID, in)
+	return err
+}
+
+// UpsertAndGetPrevious atomically snapshots the live session and refreshes it.
+// A failed write returns no previous snapshot, so callers must not publish a transition.
+func (s *PresenceStore) UpsertAndGetPrevious(ctx context.Context, profileID uuid.UUID, in PresenceUpsert) (*PresenceSnapshot, error) {
 	if s == nil || s.rdb == nil {
-		return fmt.Errorf("presence store not configured")
+		return nil, fmt.Errorf("presence store not configured")
 	}
 	now := in.Now
 	if now.IsZero() {
@@ -77,19 +101,82 @@ func (s *PresenceStore) Upsert(ctx context.Context, profileID uuid.UUID, in Pres
 	hk := presenceHashKey(profileID)
 	lsk := lastSeenRedisKey(profileID)
 
-	pipe := s.rdb.Pipeline()
-	pipe.HSet(ctx, hk,
-		hashFieldStatus, in.Status,
-		hashFieldStatusEnum, strconv.FormatInt(int64(in.StatusEnum), 10),
-		hashFieldGameTitle, in.GameTitle,
-		hashFieldCustomStatus, in.CustomStatus,
-		hashFieldCallInfo, in.CallInfoJSON,
-		hashFieldTS, ts,
-	)
-	pipe.Expire(ctx, hk, PresenceSessionTTL)
-	pipe.Set(ctx, lsk, ts, presenceLastSeenTTL)
-	_, err := pipe.Exec(ctx)
-	return err
+	result, err := presenceUpsertAndGetPreviousScript.Run(ctx, s.rdb, []string{hk, lsk},
+		in.Status,
+		strconv.FormatInt(int64(in.StatusEnum), 10),
+		in.GameTitle,
+		in.CustomStatus,
+		in.CallInfoJSON,
+		ts,
+		strconv.FormatInt(int64(PresenceSessionTTL/time.Second), 10),
+		strconv.FormatInt(int64(presenceLastSeenTTL/time.Second), 10),
+	).Result()
+	if err != nil {
+		return nil, err
+	}
+	return presenceSnapshotFromUpsertScript(result)
+}
+
+func presenceSnapshotFromUpsertScript(result any) (*PresenceSnapshot, error) {
+	values, ok := result.([]interface{})
+	if !ok || len(values) != 7 {
+		return nil, fmt.Errorf("unexpected presence upsert script result")
+	}
+	text := make([]string, len(values))
+	for i, value := range values {
+		switch value := value.(type) {
+		case nil:
+			text[i] = ""
+		case string:
+			text[i] = value
+		case []byte:
+			text[i] = string(value)
+		case int64:
+			text[i] = strconv.FormatInt(value, 10)
+		default:
+			return nil, fmt.Errorf("unexpected presence upsert script value %T", value)
+		}
+	}
+
+	live, err := strconv.ParseInt(text[0], 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("parse presence upsert live value: %w", err)
+	}
+	previous := &PresenceSnapshot{
+		Live:           live != 0,
+		Status:         text[1],
+		GameTitle:      text[3],
+		CustomStatus:   text[4],
+		CallInfoJSON:   text[5],
+		LastActiveUnix: parsePresenceTimestamp(text[6]),
+		LastSeenUnix:   parsePresenceTimestamp(text[6]),
+	}
+	if previous.Live {
+		previous.StatusEnum = parsePresenceStatusEnum(text[2])
+	}
+	return previous, nil
+}
+
+func parsePresenceStatusEnum(value string) int32 {
+	if value == "" {
+		return 0
+	}
+	n, err := strconv.ParseInt(value, 10, 32)
+	if err != nil {
+		return 0
+	}
+	return int32(n)
+}
+
+func parsePresenceTimestamp(value string) int64 {
+	if value == "" {
+		return 0
+	}
+	n, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return n
 }
 
 // Get returns live presence if the session key exists; otherwise offline data from last_seen.

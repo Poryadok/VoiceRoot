@@ -19,6 +19,17 @@ type FriendshipStore struct {
 // Idempotent when the same ordered pair is already pending.
 // Re-opens a declined row in the same direction (friends.md: declined visible to sender; new invite allowed).
 func (s *FriendshipStore) SendInvitation(ctx context.Context, requester, target uuid.UUID) error {
+	return s.sendInvitation(ctx, requester, target, uuid.Nil, uuid.Nil)
+}
+
+// SendInvitationChecked creates a pending invitation only while neither account
+// has blocked the other. Its block recheck shares an account-pair lock with the
+// block cascade, preventing a post-block friendship row.
+func (s *FriendshipStore) SendInvitationChecked(ctx context.Context, requester, target, requesterAccount, targetAccount uuid.UUID) error {
+	return s.sendInvitation(ctx, requester, target, requesterAccount, targetAccount)
+}
+
+func (s *FriendshipStore) sendInvitation(ctx context.Context, requester, target, requesterAccount, targetAccount uuid.UUID) error {
 	if requester == target {
 		return ErrSelfInvitation
 	}
@@ -27,6 +38,18 @@ func (s *FriendshipStore) SendInvitation(ctx context.Context, requester, target 
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if requesterAccount != uuid.Nil && targetAccount != uuid.Nil {
+		if err := lockAccountPair(ctx, tx, requesterAccount, targetAccount); err != nil {
+			return err
+		}
+		blocked, err := accountPairBlockedTx(ctx, tx, requesterAccount, targetAccount)
+		if err != nil {
+			return err
+		}
+		if blocked {
+			return ErrFriendshipBlocked
+		}
+	}
 
 	var acceptedID uuid.UUID
 	err = tx.QueryRow(ctx, `
@@ -95,7 +118,34 @@ VALUES ($1, $2, 'pending')`, requester, target)
 
 // AcceptInvitation marks the pending row (requester -> caller) as accepted.
 func (s *FriendshipStore) AcceptInvitation(ctx context.Context, caller, requester uuid.UUID) error {
-	cmd, err := s.Pool.Exec(ctx, `
+	return s.acceptInvitation(ctx, caller, requester, uuid.Nil, uuid.Nil)
+}
+
+// AcceptInvitationChecked accepts only while neither account has blocked the
+// other, serialized with BlockAccountAndSeverFriendships for that account pair.
+func (s *FriendshipStore) AcceptInvitationChecked(ctx context.Context, caller, requester, callerAccount, requesterAccount uuid.UUID) error {
+	return s.acceptInvitation(ctx, caller, requester, callerAccount, requesterAccount)
+}
+
+func (s *FriendshipStore) acceptInvitation(ctx context.Context, caller, requester, callerAccount, requesterAccount uuid.UUID) error {
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if callerAccount != uuid.Nil && requesterAccount != uuid.Nil {
+		if err := lockAccountPair(ctx, tx, callerAccount, requesterAccount); err != nil {
+			return err
+		}
+		blocked, err := accountPairBlockedTx(ctx, tx, callerAccount, requesterAccount)
+		if err != nil {
+			return err
+		}
+		if blocked {
+			return ErrFriendshipBlocked
+		}
+	}
+	cmd, err := tx.Exec(ctx, `
 UPDATE friendships
 SET status = 'accepted', updated_at = now()
 WHERE status = 'pending'
@@ -106,7 +156,7 @@ WHERE status = 'pending'
 	if cmd.RowsAffected() == 0 {
 		return ErrFriendshipNotFound
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
 // DeclineInvitation marks the pending row (requester -> caller) as declined.

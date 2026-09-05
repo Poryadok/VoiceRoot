@@ -296,13 +296,16 @@ const PresenceChange$json = {
   '2': [
     {'1': 'profile_id', '3': 1, '4': 1, '5': 9, '10': 'profileId'},
     {'1': 'status', '3': 2, '4': 1, '5': 9, '10': 'status'},
+    {'1': 'old_status', '3': 3, '4': 1, '5': 9, '10': 'oldStatus'},
+    {'1': 'new_status', '3': 4, '4': 1, '5': 9, '10': 'newStatus'},
   ],
 };
 
 /// Descriptor for `PresenceChange`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List presenceChangeDescriptor = $convert.base64Decode(
     'Cg5QcmVzZW5jZUNoYW5nZRIdCgpwcm9maWxlX2lkGAEgASgJUglwcm9maWxlSWQSFgoGc3RhdH'
-    'VzGAIgASgJUgZzdGF0dXM=');
+    'VzGAIgASgJUgZzdGF0dXMSHQoKb2xkX3N0YXR1cxgDIAEoCVIJb2xkU3RhdHVzEh0KCm5ld19z'
+    'dGF0dXMYBCABKAlSCW5ld1N0YXR1cw==');
 
 @$core.Deprecated('Use socialStreamEventDescriptor instead')
 const SocialStreamEvent$json = {

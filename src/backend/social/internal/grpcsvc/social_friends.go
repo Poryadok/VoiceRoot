@@ -13,10 +13,10 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"voice/backend/social/internal/authctx"
-	"voice/backend/social/internal/store"
 	"voice/backend/pkg/guestguard"
 	"voice/backend/pkg/privacy"
+	"voice/backend/social/internal/authctx"
+	"voice/backend/social/internal/store"
 
 	socialv1 "voice.app/voice/social/v1"
 )
@@ -29,16 +29,16 @@ const (
 // SocialGRPC implements voice.social.v1.SocialService (friend subset + embedded defaults).
 type SocialGRPC struct {
 	socialv1.UnimplementedSocialServiceServer
-	Friends *store.FriendshipStore
-	Blocks  *store.BlockStore
-	Contacts *store.ContactStore
-	Privacy FriendRequestPrivacyChecker
+	Friends            *store.FriendshipStore
+	Blocks             *store.BlockStore
+	Contacts           *store.ContactStore
+	Privacy            FriendRequestPrivacyChecker
 	PhoneSearchPrivacy PhoneSearchPrivacyChecker
 	PhoneHashes        PhoneHashLookup
-	SpaceCoMembership SpaceCoMembershipChecker
-	AccountProfiles AccountProfilesResolver
-	ProfileAccounts ProfileAccountsResolver
-	Events interface {
+	SpaceCoMembership  SpaceCoMembershipChecker
+	AccountProfiles    AccountProfilesResolver
+	ProfileAccounts    ProfileAccountsResolver
+	Events             interface {
 		PublishFriendRequest(ctx context.Context, requestID, requesterProfileID, targetProfileID string) error
 		PublishFriendAccepted(ctx context.Context, requesterProfileID, targetProfileID string) error
 		PublishFriendRemoved(ctx context.Context, profileA, profileB string) error
@@ -139,7 +139,11 @@ func (s *SocialGRPC) SendFriendInvitation(ctx context.Context, req *socialv1.Sen
 	if err := s.ensureFriendInvitationNotBlocked(ctx, caller, target); err != nil {
 		return nil, err
 	}
-	err = s.Friends.SendInvitation(ctx, caller, target)
+	callerAccount, targetAccount, err := s.friendInvitationAccounts(ctx, caller, target)
+	if err != nil {
+		return nil, err
+	}
+	err = s.Friends.SendInvitationChecked(ctx, caller, target, callerAccount, targetAccount)
 	switch {
 	case err == nil:
 		if s.Events != nil {
@@ -152,6 +156,8 @@ func (s *SocialGRPC) SendFriendInvitation(ctx context.Context, req *socialv1.Sen
 		return nil, status.Error(codes.AlreadyExists, err.Error())
 	case errors.Is(err, store.ErrIncomingPendingExists):
 		return nil, status.Error(codes.FailedPrecondition, err.Error())
+	case errors.Is(err, store.ErrFriendshipBlocked):
+		return nil, status.Error(codes.PermissionDenied, err.Error())
 	default:
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -170,8 +176,15 @@ func (s *SocialGRPC) AcceptFriendInvitation(ctx context.Context, req *socialv1.A
 	if s.Friends == nil {
 		return nil, status.Error(codes.FailedPrecondition, "persistence not configured")
 	}
-	err = s.Friends.AcceptInvitation(ctx, caller, requester)
+	callerAccount, requesterAccount, err := s.friendInvitationAccounts(ctx, caller, requester)
 	if err != nil {
+		return nil, err
+	}
+	err = s.Friends.AcceptInvitationChecked(ctx, caller, requester, callerAccount, requesterAccount)
+	if err != nil {
+		if errors.Is(err, store.ErrFriendshipBlocked) {
+			return nil, status.Error(codes.PermissionDenied, err.Error())
+		}
 		if errors.Is(err, store.ErrFriendshipNotFound) {
 			return nil, status.Error(codes.NotFound, "pending friend request not found")
 		}
@@ -181,6 +194,31 @@ func (s *SocialGRPC) AcceptFriendInvitation(ctx context.Context, req *socialv1.A
 		_ = s.Events.PublishFriendAccepted(ctx, requester.String(), caller.String())
 	}
 	return &socialv1.AcceptFriendInvitationResponse{}, nil
+}
+
+func (s *SocialGRPC) friendInvitationAccounts(ctx context.Context, callerProfile, targetProfile uuid.UUID) (uuid.UUID, uuid.UUID, error) {
+	if s == nil || s.Blocks == nil || s.ProfileAccounts == nil {
+		return uuid.Nil, uuid.Nil, status.Error(codes.FailedPrecondition, "social block check not configured")
+	}
+	callerAccount, err := s.ProfileAccounts.AccountIDByProfileID(ctx, callerProfile)
+	if err != nil {
+		return uuid.Nil, uuid.Nil, mapProfileAccountResolutionError(err)
+	}
+	targetAccount, err := s.ProfileAccounts.AccountIDByProfileID(ctx, targetProfile)
+	if err != nil {
+		return uuid.Nil, uuid.Nil, mapProfileAccountResolutionError(err)
+	}
+	if callerAccount == uuid.Nil || targetAccount == uuid.Nil {
+		return uuid.Nil, uuid.Nil, status.Error(codes.FailedPrecondition, "profile account resolution returned invalid account")
+	}
+	return callerAccount, targetAccount, nil
+}
+
+func mapProfileAccountResolutionError(err error) error {
+	if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
+		return status.Error(codes.NotFound, "profile not found")
+	}
+	return status.Error(codes.Internal, err.Error())
 }
 
 // DeclineFriendInvitation implements voice.social.v1.SocialService.
@@ -438,10 +476,7 @@ func (s *SocialGRPC) ensureFriendInvitationNotBlocked(ctx context.Context, calle
 	}
 	targetAccount, err := s.ProfileAccounts.AccountIDByProfileID(ctx, targetProfile)
 	if err != nil {
-		if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
-			return status.Error(codes.NotFound, "profile not found")
-		}
-		return status.Error(codes.Internal, err.Error())
+		return mapProfileAccountResolutionError(err)
 	}
 	blocked, err := s.accountPairBlocked(ctx, callerAccount, targetAccount)
 	if err != nil {

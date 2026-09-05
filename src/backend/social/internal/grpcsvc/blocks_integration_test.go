@@ -50,12 +50,16 @@ func TestBlockFlow_Integration(t *testing.T) {
 	pool := startSocialPostgresForTest(t, ctx)
 	applySocialMigration(t, ctx, pool)
 
-	client, cleanup := startSocialGRPCTestServer(t, pool)
-	t.Cleanup(cleanup)
-
 	accA := uuid.New()
 	accB := uuid.New()
 	profA := uuid.New()
+	client, cleanup := startSocialGRPCTestServer(t, pool, func(s *SocialGRPC) {
+		s.AccountProfiles = stubAccountProfiles{
+			accA: {profA},
+			accB: {uuid.New()},
+		}
+	})
+	t.Cleanup(cleanup)
 
 	// Missing account in metadata
 	_, err := client.BlockAccount(withProfileCtx(ctx, profA), &socialv1.BlockAccountRequest{BlockedAccountId: accB.String()})
@@ -180,13 +184,19 @@ func TestListBlocked_PaginationRoundTrip(t *testing.T) {
 	pool := startSocialPostgresForTest(t, ctx)
 	applySocialMigration(t, ctx, pool)
 
-	client, cleanup := startSocialGRPCTestServer(t, pool)
-	t.Cleanup(cleanup)
-
 	acc := uuid.New()
 	b1 := uuid.New()
 	b2 := uuid.New()
 	b3 := uuid.New()
+	client, cleanup := startSocialGRPCTestServer(t, pool, func(s *SocialGRPC) {
+		s.AccountProfiles = stubAccountProfiles{
+			acc: {uuid.New()},
+			b1:  {uuid.New()},
+			b2:  {uuid.New()},
+			b3:  {uuid.New()},
+		}
+	})
+	t.Cleanup(cleanup)
 
 	for _, blocked := range []uuid.UUID{b1, b2, b3} {
 		_, err := client.BlockAccount(withAccountCtx(ctx, acc), &socialv1.BlockAccountRequest{BlockedAccountId: blocked.String()})
