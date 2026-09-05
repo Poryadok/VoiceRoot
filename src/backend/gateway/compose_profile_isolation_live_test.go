@@ -215,9 +215,11 @@ func composePostJSON(t *testing.T, client *http.Client, url, accessToken, body s
 
 func composeReadBody(t *testing.T, resp *http.Response) string {
 	t.Helper()
-	defer resp.Body.Close()
-	b, err := io.ReadAll(resp.Body)
+	originalBody := resp.Body
+	b, err := io.ReadAll(originalBody)
 	require.NoError(t, err)
+	require.NoError(t, originalBody.Close())
+	resp.Body = io.NopCloser(bytes.NewReader(b))
 	return string(b)
 }
 
