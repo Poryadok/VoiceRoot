@@ -32,6 +32,8 @@ import voice.backend.auth.service.GuestConversionOtpAcceptance;
 import voice.backend.auth.service.GuestConversionPendingUserWorker;
 import voice.backend.auth.service.TransactionalGuestConversionLocalPromotion;
 import voice.backend.auth.service.TransactionalGuestConversionOtpAcceptance;
+import voice.backend.auth.service.AccountDeletionOperationStarter;
+import voice.backend.auth.service.TransactionalAccountDeletionOperationStarter;
 import voice.backend.auth.userdb.PrimaryProfileProvisioner;
 
 @Configuration
@@ -78,6 +80,16 @@ public class JdbcPersistenceConfiguration {
   @ConditionalOnBean(PlatformTransactionManager.class)
   TransactionTemplate guestConversionTransactionTemplate(PlatformTransactionManager transactions) {
     return new TransactionTemplate(transactions);
+  }
+
+  @Bean
+  @ConditionalOnBean(TransactionTemplate.class)
+  AccountDeletionOperationStarter accountDeletionOperationStarter(
+      TransactionTemplate guestConversionTransactionTemplate,
+      AccountRepository accounts,
+      AccountDeletionOperationRepository operations) {
+    return new TransactionalAccountDeletionOperationStarter(
+        guestConversionTransactionTemplate, accounts, operations);
   }
 
   @Bean

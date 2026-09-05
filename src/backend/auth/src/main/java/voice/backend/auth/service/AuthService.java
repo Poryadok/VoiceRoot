@@ -62,6 +62,7 @@ public class AuthService {
   private AccountDeletionOperationRepository deletionOperations;
   private AccountDeletionRestoreTokenCodec deletionTokenCodec;
   private AccountDeletionEventPublisher deletionEventPublisher;
+  private AccountDeletionOperationStarter deletionStarter;
 
   public AuthService(
       AccountRepository accounts,
@@ -128,8 +129,10 @@ public class AuthService {
         restoreTokenStore,
         mailSender,
         sessionEpochFloors);
-    if (deletionOperations != null && deletionTokenCodec != null && deletionEventPublisher != null) {
-      copy.configureAccountDeletion(deletionOperations, deletionTokenCodec, deletionEventPublisher);
+    if (deletionOperations != null && deletionTokenCodec != null && deletionEventPublisher != null
+        && deletionStarter != null) {
+      copy.configureAccountDeletion(
+          deletionOperations, deletionTokenCodec, deletionEventPublisher, deletionStarter);
     }
     return copy;
   }
@@ -138,11 +141,13 @@ public class AuthService {
   public void configureAccountDeletion(
       AccountDeletionOperationRepository deletionOperations,
       AccountDeletionRestoreTokenCodec deletionTokenCodec,
-      AccountDeletionEventPublisher deletionEventPublisher) {
+      AccountDeletionEventPublisher deletionEventPublisher,
+      AccountDeletionOperationStarter deletionStarter) {
     this.deletionOperations = java.util.Objects.requireNonNull(deletionOperations, "deletionOperations");
     this.deletionTokenCodec = java.util.Objects.requireNonNull(deletionTokenCodec, "deletionTokenCodec");
     this.deletionEventPublisher =
         java.util.Objects.requireNonNull(deletionEventPublisher, "deletionEventPublisher");
+    this.deletionStarter = java.util.Objects.requireNonNull(deletionStarter, "deletionStarter");
   }
 
   public AuthSession register(RegisterCommand command) {
@@ -404,31 +409,7 @@ public class AuthService {
       return finishAccountDeletion(claims, account, operationForDeletedAccount(account));
     }
     ensureActive(account);
-    Instant now = Instant.now(clock);
-    long sessionEpoch;
-    try {
-      sessionEpoch = accounts.markDeletedAndIncrementSessionEpoch(account.id(), now);
-    } catch (IllegalArgumentException ex) {
-      Account deleted =
-          accounts.findById(account.id().toString()).orElseThrow(() -> new AuthException("invalid_token"));
-      if (!"deleted".equals(deleted.status())) {
-        throw ex;
-      }
-      return finishAccountDeletion(claims, deleted, operationForDeletedAccount(deleted));
-    }
-    Account deleted = new Account(
-        account.id(),
-        account.email(),
-        account.phone(),
-        account.passwordHash(),
-        account.type(),
-        "deleted",
-        account.totpSecret(),
-        account.totpEnabled(),
-        sessionEpoch,
-        account.createdAt(),
-        now);
-    return finishAccountDeletion(claims, deleted, createOperation(deleted));
+    return finishAccountDeletion(claims, startOperation(account));
   }
 
   private boolean hasSealedDeletionEpoch(Account account) {
@@ -439,16 +420,12 @@ public class AuthService {
     }
   }
 
-  private AccountDeletionOperation createOperation(Account account) {
+  private AccountDeletionStartResult startOperation(Account account) {
     requireDeletionOperations();
     UUID proposedOperationId = UUID.randomUUID();
     String proposedToken = deletionTokenCodec.derive(account.id(), proposedOperationId);
-    return deletionOperations.createOrResume(
-        proposedOperationId,
-        account.id(),
-        account.sessionEpoch(),
-        refreshTokenCodec.hash(proposedToken),
-        Instant.now(clock));
+    return deletionStarter.startOrResume(
+        account, proposedOperationId, refreshTokenCodec.hash(proposedToken), Instant.now(clock));
   }
 
   private AccountDeletionOperation operationForDeletedAccount(Account account) {
@@ -498,8 +475,14 @@ public class AuthService {
     return new DeleteAccountResult(restoreToken);
   }
 
+  private DeleteAccountResult finishAccountDeletion(
+      TokenClaims claims, AccountDeletionStartResult started) {
+    return finishAccountDeletion(claims, started.account(), started.operation());
+  }
+
   private void requireDeletionOperations() {
-    if (deletionOperations == null || deletionTokenCodec == null || deletionEventPublisher == null) {
+    if (deletionOperations == null || deletionTokenCodec == null || deletionEventPublisher == null
+        || deletionStarter == null) {
       throw new IllegalStateException("account deletion durable operation repository is not configured");
     }
   }

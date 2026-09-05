@@ -92,7 +92,8 @@ public class AuthBeans {
       SessionEpochFloorStore sessionEpochFloors,
       voice.backend.auth.repository.AccountDeletionOperationRepository deletionOperations,
       AccountDeletionRestoreTokenCodec deletionTokenCodec,
-      voice.backend.auth.service.AccountDeletionEventPublisher deletionEventPublisher) {
+      voice.backend.auth.service.AccountDeletionEventPublisher deletionEventPublisher,
+      voice.backend.auth.service.AccountDeletionOperationStarter deletionStarter) {
     AuthService service = new AuthService(
         accounts,
         refreshTokens,
@@ -114,7 +115,8 @@ public class AuthBeans {
         restoreTokenStore,
         mailSender,
         sessionEpochFloors);
-    service.configureAccountDeletion(deletionOperations, deletionTokenCodec, deletionEventPublisher);
+    service.configureAccountDeletion(
+        deletionOperations, deletionTokenCodec, deletionEventPublisher, deletionStarter);
     return service;
   }
 
