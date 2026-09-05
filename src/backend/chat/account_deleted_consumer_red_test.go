@@ -69,16 +69,18 @@ type dmPeerDeletedPublishCallForTest struct {
 
 type dmPeerDeletedPublisherForTest struct {
 	calls      []dmPeerDeletedPublishCallForTest
+	contexts   []context.Context
 	failAt     int
 	callSignal chan struct{}
 	block      chan struct{}
 }
 
-func (f *dmPeerDeletedPublisherForTest) PublishDMPeerDeleted(_ context.Context, eventID string, chatID, recipientProfileID uuid.UUID) error {
+func (f *dmPeerDeletedPublisherForTest) PublishDMPeerDeleted(ctx context.Context, eventID string, chatID, recipientProfileID uuid.UUID) error {
 	call := dmPeerDeletedPublishCallForTest{
 		EventID: eventID, ChatID: chatID, RecipientProfileID: recipientProfileID,
 	}
 	f.calls = append(f.calls, call)
+	f.contexts = append(f.contexts, ctx)
 	if f.callSignal != nil {
 		f.callSignal <- struct{}{}
 	}
@@ -248,6 +250,48 @@ func waitForAckFloorForTest(t *testing.T, sub *nats.Subscription) {
 	}
 }
 
+func waitForAccountDeletedDurableForTest(t *testing.T, js nats.JetStreamContext, instanceID string) *nats.ConsumerInfo {
+	t.Helper()
+	durable := accountDeletedDurableName(instanceID)
+	deadline := time.NewTimer(3 * time.Second)
+	ticker := time.NewTicker(10 * time.Millisecond)
+	t.Cleanup(func() { deadline.Stop() })
+	t.Cleanup(ticker.Stop)
+	for {
+		info, err := js.ConsumerInfo(userEventsStreamName, durable)
+		if err == nil {
+			return info
+		}
+		select {
+		case <-deadline.C:
+			require.NoError(t, err, "account deletion durable was not created")
+			return nil
+		case <-ticker.C:
+		}
+	}
+}
+
+func waitForAccountDeletedAckFloorForTest(t *testing.T, js nats.JetStreamContext, instanceID string) {
+	t.Helper()
+	deadline := time.NewTimer(3 * time.Second)
+	ticker := time.NewTicker(10 * time.Millisecond)
+	t.Cleanup(func() { deadline.Stop() })
+	t.Cleanup(ticker.Stop)
+	for {
+		info, err := js.ConsumerInfo(userEventsStreamName, accountDeletedDurableName(instanceID))
+		if err == nil && info.NumAckPending == 0 {
+			return
+		}
+		select {
+		case <-deadline.C:
+			require.NoError(t, err)
+			require.Zero(t, info.NumAckPending, "account deletion event was not Acked")
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
 func subscribeAccountDeletedManualAckForTest(
 	t *testing.T,
 	js nats.JetStreamContext,
@@ -391,6 +435,104 @@ func TestAccountDeletedConsumer_JetStreamNakOnLookupOrPublishFailure(t *testing.
 		require.GreaterOrEqual(t, len(publisher.calls), 2,
 			"publish failure must trigger JetStream redelivery, not auto-ack")
 	})
+}
+
+func TestAccountDeletedConsumer_CleanShutdownKeepsDurableOffsetAcrossRestart(t *testing.T) {
+	server := startAccountDeletedJSTestServer(t)
+	nc, err := nats.Connect(server.ClientURL())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = nc.Drain() })
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+	_, err = js.AddStream(&nats.StreamConfig{Name: userEventsStreamName, Subjects: []string{userAccountDeletedSubject}, Storage: nats.MemoryStorage})
+	require.NoError(t, err)
+
+	const instanceID = "durable-offset"
+	profiles := &deletedAccountProfileListerForTest{profileIDs: []uuid.UUID{uuid.New()}}
+	targets := &deletedDMTargetStoreForTest{targets: []store.DMPeerDeletionTarget{{ChatID: uuid.New(), SurvivingProfileID: uuid.New()}}}
+	firstPublisher := &dmPeerDeletedPublisherForTest{callSignal: make(chan struct{}, 1)}
+	firstCtx, firstCancel := context.WithCancel(context.Background())
+	firstDone := make(chan error, 1)
+	go func() {
+		firstDone <- runAccountDeletedConsumerOnce(firstCtx, server.ClientURL(), instanceID, profiles, targets, firstPublisher, slog.Default())
+	}()
+	waitForAccountDeletedDurableForTest(t, js, instanceID)
+	_, err = js.Publish(userAccountDeletedSubject, accountDeletedMessageForTest(t, uuid.NewString(), uuid.NewString()).Data)
+	require.NoError(t, err)
+	select {
+	case <-firstPublisher.callSignal:
+	case <-time.After(3 * time.Second):
+		t.Fatal("first consumer did not publish the DM deletion target")
+	}
+	waitForAccountDeletedAckFloorForTest(t, js, instanceID)
+	firstCancel()
+	require.ErrorIs(t, <-firstDone, context.Canceled)
+	info := waitForAccountDeletedDurableForTest(t, js, instanceID)
+	require.Equal(t, nats.AckExplicitPolicy, info.Config.AckPolicy)
+
+	secondPublisher := &dmPeerDeletedPublisherForTest{callSignal: make(chan struct{}, 1)}
+	secondCtx, secondCancel := context.WithCancel(context.Background())
+	secondDone := make(chan error, 1)
+	go func() {
+		secondDone <- runAccountDeletedConsumerOnce(secondCtx, server.ClientURL(), instanceID, profiles, targets, secondPublisher, slog.Default())
+	}()
+	waitForAccountDeletedDurableForTest(t, js, instanceID)
+	select {
+	case <-secondPublisher.callSignal:
+		t.Fatal("restart re-fanned out an already ACKed account deletion event")
+	case <-time.After(250 * time.Millisecond):
+	}
+	secondCancel()
+	require.ErrorIs(t, <-secondDone, context.Canceled)
+	require.Empty(t, secondPublisher.calls)
+}
+
+func TestAccountDeletedConsumer_GracefulShutdownWaitsForInFlightAck(t *testing.T) {
+	server := startAccountDeletedJSTestServer(t)
+	nc, err := nats.Connect(server.ClientURL())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = nc.Drain() })
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+	_, err = js.AddStream(&nats.StreamConfig{Name: userEventsStreamName, Subjects: []string{userAccountDeletedSubject}, Storage: nats.MemoryStorage})
+	require.NoError(t, err)
+
+	release := make(chan struct{})
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	})
+	publisher := &dmPeerDeletedPublisherForTest{callSignal: make(chan struct{}, 1), block: release}
+	profiles := &deletedAccountProfileListerForTest{profileIDs: []uuid.UUID{uuid.New()}}
+	targets := &deletedDMTargetStoreForTest{targets: []store.DMPeerDeletionTarget{{ChatID: uuid.New(), SurvivingProfileID: uuid.New()}}}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	const instanceID = "graceful-inflight"
+	go func() {
+		done <- runAccountDeletedConsumerOnce(ctx, server.ClientURL(), instanceID, profiles, targets, publisher, slog.Default())
+	}()
+	waitForAccountDeletedDurableForTest(t, js, instanceID)
+	_, err = js.Publish(userAccountDeletedSubject, accountDeletedMessageForTest(t, uuid.NewString(), uuid.NewString()).Data)
+	require.NoError(t, err)
+	select {
+	case <-publisher.callSignal:
+	case <-time.After(3 * time.Second):
+		t.Fatal("consumer did not enter the blocking publish")
+	}
+	require.Len(t, publisher.contexts, 1)
+	cancel()
+	require.NoError(t, publisher.contexts[0].Err(), "run cancellation must stop intake without cancelling handler I/O")
+	select {
+	case err := <-done:
+		t.Fatalf("consumer stopped before in-flight publish could Ack: %v", err)
+	case <-time.After(150 * time.Millisecond):
+	}
+	close(release)
+	require.ErrorIs(t, <-done, context.Canceled)
+	waitForAccountDeletedAckFloorForTest(t, js, instanceID)
 }
 
 func TestAccountDeletedConsumer_ZeroTargetsDoesNotPublish(t *testing.T) {
