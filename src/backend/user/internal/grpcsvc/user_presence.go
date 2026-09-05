@@ -13,9 +13,9 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"voice/backend/pkg/guestguard"
 	"voice/backend/user/internal/authctx"
 	"voice/backend/user/internal/store"
-	"voice/backend/pkg/guestguard"
 
 	userv1 "voice.app/voice/user/v1"
 )
@@ -44,13 +44,25 @@ func (s *UserGRPC) UpdatePresence(ctx context.Context, req *userv1.UpdatePresenc
 		CallInfoJSON: req.GetCallInfoJson(),
 		Now:          time.Now().UTC(),
 	}
-	if err := s.Presence.Upsert(ctx, profileID, in); err != nil {
+	previous, err := s.Presence.UpsertAndGetPrevious(ctx, profileID, in)
+	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	if s.Events != nil {
-		_ = s.Events.PublishPresenceChanged(ctx, profileID.String(), st)
+	oldStatus, newStatus, publish := presenceTransitionForSnapshot(previous, st, enum)
+	if publish && s.Events != nil {
+		_ = s.Events.PublishPresenceChanged(ctx, profileID.String(), oldStatus, newStatus)
 	}
 	return &userv1.UpdatePresenceResponse{}, nil
+}
+
+func presenceTransitionForSnapshot(previous *store.PresenceSnapshot, newStatus string, newEnum int32) (oldStatus, currentStatus string, publish bool) {
+	if previous == nil || !previous.Live {
+		return "", newStatus, true
+	}
+	if previous.StatusEnum == newEnum {
+		return "", "", false
+	}
+	return presenceEnumToCanonicalString(userv1.PresenceOnlineStatus(previous.StatusEnum)), newStatus, true
 }
 
 func (s *UserGRPC) GetPresence(ctx context.Context, req *userv1.GetPresenceRequest) (*userv1.GetPresenceResponse, error) {

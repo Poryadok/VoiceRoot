@@ -64,7 +64,7 @@ Each `UpdatePresence` (client heartbeat ~60 s or WS ping):
 
 1. Refresh session hash fields (`status`, `game`, `custom_status`, `call_info`, `ts_unix`) + **5 min TTL**
 2. Set `voice:user:last_seen:{profile_id}` = `ts_unix` with **30 d TTL** (always — including invisible/DND)
-3. Publish `user.presence_changed` when **status enum** changes (target spec: include `old_status`, `new_status`, `profile_id`)
+3. Publish `user.presence_changed` when **status enum** changes (target spec: include `old_status`, `new_status`, `profile_id`). The first live observation has no previous enum: `old_status` is the empty string and `new_status` is the canonical current status. A heartbeat with the same enum publishes no event, but still performs steps 1–2.
 
 **Fan-out filter (spec):** Realtime WS `presence_update` delivers to subscribers who pass **`show_online`** audience check; **`last_seen` timestamp omitted** on wire when viewer fails **`show_last_seen`**. **Invisible** users appear offline to others; Notification Service treats invisible as **offline for push routing** (in-app still delivered) — [notifications.md](../features/notifications.md) § Presence routing. **Code gap:** broadcast may skip privacy filter and omit delta fields — [todo/backend.md](../todo/backend.md).
 
