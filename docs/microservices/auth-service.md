@@ -246,3 +246,11 @@ Auth producer этого floor всё ещё staged/WIP: после реализ
 TTL и обновляет его только вверх. Gateway и Realtime являются read-only
 consumers; их strict rollout не заменяет Auth migration, seed и готовность
 Realtime consumer.
+
+При `auth.persistence=jdbc` startup Auth до запуска любого `SmartLifecycle`
+постранично seed-ит и сверяет Redis floor с durable `accounts.session_epoch`.
+`auth.session-epoch.seed.page-size` задаёт положительный размер страницы и по
+умолчанию равен `256`. Hook зависит от инициализации БД, но не от конкретного
+Flyway bean: он работает и с внешними миграциями, а недоступный Redis или
+отсутствующая schema завершают startup ошибкой. Strict-проверки и issuance
+claim на этом этапе ещё не включены.

@@ -6,6 +6,9 @@ import java.util.Optional;
 public interface OAuthAuthorizationCodeStore {
   void save(OAuthAuthorizationCode code, Duration ttl);
 
+  /** Returns the code record without consuming it. */
+  Optional<OAuthAuthorizationCode> peek(String code);
+
   /** Returns the code record and removes it (one-time use). */
   Optional<OAuthAuthorizationCode> consume(String code);
 }

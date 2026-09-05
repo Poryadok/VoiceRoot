@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	"voice/backend/user/internal/authctx"
@@ -63,6 +64,38 @@ func (s *UserGRPC) EnsurePrimaryProfile(ctx context.Context, req *userv1.EnsureP
 		_ = s.Events.PublishProfileCreated(ctx, row.ID.String(), row.AccountID.String())
 	}
 	return &userv1.EnsurePrimaryProfileResponse{Profile: rowToProto(row)}, nil
+}
+
+// ResolveAccountIDForProfile resolves profile ownership for Messaging DM lifecycle checks.
+// It intentionally bypasses public profile visibility because it returns no Profile data.
+func (s *UserGRPC) ResolveAccountIDForProfile(ctx context.Context, req *userv1.ResolveAccountIDForProfileRequest) (*userv1.ResolveAccountIDForProfileResponse, error) {
+	if !isMessagingInternalCaller(ctx) {
+		return nil, status.Error(codes.PermissionDenied, "internal messaging only")
+	}
+	if s.Profiles == nil {
+		return nil, status.Error(codes.FailedPrecondition, "profile store not configured")
+	}
+	profileID, err := uuid.Parse(strings.TrimSpace(req.GetProfileId()))
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid profile_id")
+	}
+	row, err := s.Profiles.GetByID(ctx, profileID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if row == nil {
+		return nil, status.Error(codes.NotFound, "profile not found")
+	}
+	return &userv1.ResolveAccountIDForProfileResponse{AccountId: row.AccountID.String()}, nil
+}
+
+func isMessagingInternalCaller(ctx context.Context) bool {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return false
+	}
+	callers := md.Get(authctx.HeaderInternalCaller)
+	return len(callers) == 1 && callers[0] == "messaging"
 }
 
 // ListProfileIDsForAccount returns profile ids for an account (Social block cascade S2S).

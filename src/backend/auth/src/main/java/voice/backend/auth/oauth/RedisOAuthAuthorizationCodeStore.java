@@ -1,6 +1,7 @@
 package voice.backend.auth.oauth;
 
 import java.time.Duration;
+import java.util.Optional;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 public class RedisOAuthAuthorizationCodeStore implements OAuthAuthorizationCodeStore {
@@ -21,12 +22,21 @@ public class RedisOAuthAuthorizationCodeStore implements OAuthAuthorizationCodeS
   }
 
   @Override
-  public java.util.Optional<OAuthAuthorizationCode> consume(String code) {
+  public Optional<OAuthAuthorizationCode> peek(String code) {
+    String raw = redis.opsForValue().get(PREFIX + code);
+    if (raw == null || raw.isBlank()) {
+      return Optional.empty();
+    }
+    return Optional.of(codec.decode(raw));
+  }
+
+  @Override
+  public Optional<OAuthAuthorizationCode> consume(String code) {
     String key = PREFIX + code;
     String raw = redis.opsForValue().getAndDelete(key);
     if (raw == null || raw.isBlank()) {
-      return java.util.Optional.empty();
+      return Optional.empty();
     }
-    return java.util.Optional.of(codec.decode(raw));
+    return Optional.of(codec.decode(raw));
   }
 }

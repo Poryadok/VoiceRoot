@@ -139,6 +139,11 @@ class AccountRestoreExpiryTest {
     public void store(String token, UUID accountId, Duration ttl) {}
 
     @Override
+    public synchronized Optional<UUID> peek(String token) {
+      return available ? Optional.of(accountId) : Optional.empty();
+    }
+
+    @Override
     public synchronized Optional<UUID> consume(String token) {
       consumeCount++;
       if (!available) {

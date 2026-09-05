@@ -58,6 +58,7 @@ a1_expected=(
   TestComposeA1GroupReadIsolation_live
   TestComposeA1ChannelReadIsolation_live
   TestComposeA1BlockDMDenyBothDirections_live
+  TestComposeA1SessionEpochRealtime_live
 )
 a1_output_file="$(mktemp)"
 a1_error_file="$(mktemp)"
@@ -73,7 +74,7 @@ fi
 mapfile -t a1_actual < "${a1_output_file}"
 rm -f "${a1_output_file}" "${a1_error_file}"
 [[ "${#a1_actual[@]}" -eq "${#a1_expected[@]}" ]] || \
-  fail "a1_multi_account_gateway must contain exactly five tests, got ${#a1_actual[@]}"
+  fail "a1_multi_account_gateway must contain exactly six tests, got ${#a1_actual[@]}"
 for i in "${!a1_expected[@]}"; do
   [[ "${a1_actual[$i]}" == "${a1_expected[$i]}" ]] || \
     fail "a1_multi_account_gateway order drift at index ${i}: expected ${a1_expected[$i]}, got ${a1_actual[$i]}"

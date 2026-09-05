@@ -278,6 +278,9 @@ void main() {
           ),
           gatewayConfigProvider.overrideWithValue(ctx.config),
           httpClientProvider.overrideWithValue(recorder),
+          inboxReconcilerProvider.overrideWith(
+            (ref) => _TaggedInboxReconcilerController(ref),
+          ),
           realtimeTransportFactoryProvider.overrideWithValue(
             _RelayRealtimeTransportFactory(relay),
           ),
@@ -286,7 +289,15 @@ void main() {
           realtimeAutoConnectProvider.overrideWithValue(false),
         ],
       );
-      addTearDown(container.dispose);
+      addTearDown(() async {
+        await recorder.settle().timeout(
+          const Duration(seconds: 3),
+          onTimeout: () => throw TestFailure(
+            'timed out draining recorder: ${recorder.settleDiagnostic}',
+          ),
+        );
+        container.dispose();
+      });
 
       final initialBHello = Completer<RealtimeHelloBinding>();
       final reconnectBHello = Completer<RealtimeHelloBinding>();
@@ -380,9 +391,12 @@ void main() {
           .read(authControllerProvider)
           .session!
           .authorizationHeader;
-      expect(recorder.chatRequests, hasLength(6));
       final bInboxRequests = recorder.chatRequests
-          .where((request) => request.authorization == bAuthorization)
+          .where(
+            (request) =>
+                request.isInboxReconciliation &&
+                request.authorization == bAuthorization,
+          )
           .toList(growable: false);
       expect(bInboxRequests, hasLength(6));
       expect(bInboxRequests.map((request) => request.inbox).toSet(), {
@@ -482,11 +496,20 @@ void main() {
             .lastMessageId,
         baselineMessageId,
       );
+      await recorder
+          .waitForCompletedReadResponses(1)
+          .timeout(
+            const Duration(seconds: 12),
+            onTimeout: () => throw TestFailure(
+              'timed out completing selected baseline read',
+            ),
+          );
 
       final requestCountBeforeTransportLoss = recorder.requests.length;
+      final completedReadsBeforeReconnect = recorder.completedReadResponses;
       waitingForReconnectSnapshot = true;
       reconnectChatResponsesRequired =
-          recorder.responseStartedChatRequests.length + 6;
+          recorder.responseStartedInboxReconciliationChatRequests.length + 6;
       await relay.dropInitialClientTransport();
       await relay.secondUpgradeRequested.timeout(
         const Duration(seconds: 12),
@@ -557,6 +580,14 @@ void main() {
         onTimeout: () =>
             throw TestFailure('timed out loading selected reconnect delta'),
       );
+      await recorder
+          .waitForCompletedReadResponses(completedReadsBeforeReconnect + 1)
+          .timeout(
+            const Duration(seconds: 12),
+            onTimeout: () => throw TestFailure(
+              'timed out completing selected reconnect read',
+            ),
+          );
       final currentReconnectHello = container.read(
         realtimeHelloBindingProvider,
       );
@@ -580,13 +611,14 @@ void main() {
             (request) =>
                 request.method == 'GET' &&
                 request.uri.path == '/api/v1/chats' &&
+                request.isInboxReconciliation &&
                 request.authorization == bAuthorization,
           )
           .toList(growable: false);
       expect(
         reconnectInboxRequests,
         hasLength(6),
-        reason: _reconnectRequestDiagnostic(reconnectInboxRequests),
+        reason: _reconnectRequestDiagnostic(reconnectRequests),
       );
       for (final inbox in reconnectCursors.keys) {
         final pageRequests = reconnectInboxRequests
@@ -696,14 +728,28 @@ Future<String> _expectTwoInboxItems({
   return cursor!;
 }
 
+const _inboxReconciliationZoneKey = #t055InboxReconciliation;
+
 String _reconnectRequestDiagnostic(Iterable<_RecordedRequest> requests) {
   final paths = requests
       .map(
         (request) =>
-            '${request.uri.path}?inbox=${request.inbox}&cursor=${request.uri.queryParameters['cursor']}',
+            '${request.requestOrigin}:${request.uri.path}?inbox=${request.inbox}&cursor=${request.uri.queryParameters['cursor']}',
       )
       .join(', ');
   return 'reconnect inbox requests: $paths';
+}
+
+class _TaggedInboxReconcilerController extends InboxReconcilerController {
+  _TaggedInboxReconcilerController(super.ref);
+
+  @override
+  Future<void> reconcile() {
+    return runZoned(
+      () => super.reconcile(),
+      zoneValues: {_inboxReconciliationZoneKey: true},
+    );
+  }
 }
 
 class _RecordedRequest {
@@ -712,14 +758,19 @@ class _RecordedRequest {
     required this.uri,
     required this.authorization,
     required this.beforeBHello,
+    required this.isInboxReconciliation,
   });
 
   final String method;
   final Uri uri;
   final String? authorization;
   final bool beforeBHello;
+  final bool isInboxReconciliation;
 
   String? get inbox => uri.queryParameters['inbox'];
+
+  String get requestOrigin =>
+      isInboxReconciliation ? 'inbox-reconciler' : 'other';
 }
 
 class _RecordingHttpClient extends http.BaseClient {
@@ -728,7 +779,12 @@ class _RecordingHttpClient extends http.BaseClient {
   final http.Client _delegate;
   final requests = <_RecordedRequest>[];
   final responseStartedRequests = <_RecordedRequest>[];
+  final responseCompletedRequests = <_RecordedRequest>[];
   final firstMessageRequest = Completer<void>();
+  final _readResponseWaiters = <Completer<void>>[];
+  final _pendingReadResponseCompletions = <Object>{};
+  final _settleWaiters = <Completer<void>>[];
+  var _activeRequests = 0;
   var bHelloObserved = false;
 
   Iterable<_RecordedRequest> get chatRequests => requests.where(
@@ -752,23 +808,127 @@ class _RecordingHttpClient extends http.BaseClient {
             request.method == 'GET' && request.uri.path == '/api/v1/chats',
       );
 
+  Iterable<_RecordedRequest>
+  get responseStartedInboxReconciliationChatRequests =>
+      responseStartedChatRequests.where(
+        (request) => request.isInboxReconciliation,
+      );
+
+  int get completedReadResponses => responseCompletedRequests
+      .where(
+        (request) =>
+            request.method == 'POST' &&
+            request.uri.path == '/api/v1/messages/read',
+      )
+      .length;
+
+  String get settleDiagnostic =>
+      'active=$_activeRequests pending_read=${_pendingReadResponseCompletions.length}';
+
+  Future<void> waitForCompletedReadResponses(int requiredCount) async {
+    while (completedReadResponses < requiredCount) {
+      final waiter = Completer<void>();
+      _readResponseWaiters.add(waiter);
+      await waiter.future;
+    }
+  }
+
+  Future<void> settle() async {
+    while (_activeRequests > 0 || _pendingReadResponseCompletions.isNotEmpty) {
+      final waiter = Completer<void>();
+      _settleWaiters.add(waiter);
+      await waiter.future;
+    }
+    await Future<void>.microtask(() {});
+  }
+
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
-    final effectiveRequest = _withOneRowInboxPage(request);
-    final recorded = _RecordedRequest(
-      method: effectiveRequest.method,
-      uri: effectiveRequest.url,
-      authorization: _header(effectiveRequest.headers, 'Authorization'),
-      beforeBHello: !bHelloObserved,
-    );
-    requests.add(recorded);
-    if (effectiveRequest.method == 'GET' &&
-        effectiveRequest.url.path == '/api/v1/messages') {
-      if (!firstMessageRequest.isCompleted) firstMessageRequest.complete();
+    _activeRequests++;
+    try {
+      final effectiveRequest = _withOneRowInboxPage(request);
+      final recorded = _RecordedRequest(
+        method: effectiveRequest.method,
+        uri: effectiveRequest.url,
+        authorization: _header(effectiveRequest.headers, 'Authorization'),
+        beforeBHello: !bHelloObserved,
+        isInboxReconciliation:
+            Zone.current[_inboxReconciliationZoneKey] == true,
+      );
+      requests.add(recorded);
+      if (effectiveRequest.method == 'GET' &&
+          effectiveRequest.url.path == '/api/v1/messages') {
+        if (!firstMessageRequest.isCompleted) firstMessageRequest.complete();
+      }
+      final response = await _delegate.send(effectiveRequest);
+      responseStartedRequests.add(recorded);
+      if (recorded.method != 'POST' ||
+          recorded.uri.path != '/api/v1/messages/read') {
+        return response;
+      }
+      final readResponse = Object();
+      _pendingReadResponseCompletions.add(readResponse);
+      return http.StreamedResponse(
+        response.stream.transform(
+          StreamTransformer.fromHandlers(
+            handleDone: (sink) {
+              _finishReadResponse(recorded, readResponse);
+              sink.close();
+            },
+            handleError: (error, stackTrace, sink) {
+              _finishReadResponse(
+                recorded,
+                readResponse,
+                error: error,
+                stackTrace: stackTrace,
+              );
+              sink.addError(error, stackTrace);
+            },
+          ),
+        ),
+        response.statusCode,
+        contentLength: response.contentLength,
+        request: response.request,
+        headers: response.headers,
+        isRedirect: response.isRedirect,
+        persistentConnection: response.persistentConnection,
+        reasonPhrase: response.reasonPhrase,
+      );
+    } finally {
+      _activeRequests--;
+      _notifySettled();
     }
-    final response = await _delegate.send(effectiveRequest);
-    responseStartedRequests.add(recorded);
-    return response;
+  }
+
+  void _notifySettled() {
+    if (_activeRequests > 0 || _pendingReadResponseCompletions.isNotEmpty) {
+      return;
+    }
+    for (final waiter in _settleWaiters) {
+      if (!waiter.isCompleted) waiter.complete();
+    }
+    _settleWaiters.clear();
+  }
+
+  void _finishReadResponse(
+    _RecordedRequest recorded,
+    Object readResponse, {
+    Object? error,
+    StackTrace? stackTrace,
+  }) {
+    if (!_pendingReadResponseCompletions.remove(readResponse)) return;
+    if (error == null) {
+      responseCompletedRequests.add(recorded);
+      for (final waiter in _readResponseWaiters) {
+        if (!waiter.isCompleted) waiter.complete();
+      }
+    } else {
+      for (final waiter in _readResponseWaiters) {
+        if (!waiter.isCompleted) waiter.completeError(error, stackTrace);
+      }
+    }
+    _readResponseWaiters.clear();
+    _notifySettled();
   }
 
   http.BaseRequest _withOneRowInboxPage(http.BaseRequest request) {

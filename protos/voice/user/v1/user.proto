@@ -33,6 +33,9 @@ service UserService {
   rpc EnsurePrimaryProfile(EnsurePrimaryProfileRequest) returns (EnsurePrimaryProfileResponse);
   // S2S internal: profile ids for account-level social actions (block cascade, …).
   rpc ListProfileIDsForAccount(ListProfileIDsForAccountRequest) returns (ListProfileIDsForAccountResponse);
+  // S2S internal: resolve the owning account for Messaging DM lifecycle checks.
+  // This returns the owner even when the profile is soft-deleted and is not a public visibility lookup.
+  rpc ResolveAccountIDForProfile(ResolveAccountIDForProfileRequest) returns (ResolveAccountIDForProfileResponse);
   // S2S internal: resolve existing, non-deleted primary profiles for Auth-owned account ids.
   // Missing accounts and accounts without a usable primary profile are omitted; this never provisions profiles.
   rpc ResolvePrimaryProfileIDs(ResolvePrimaryProfileIDsRequest) returns (ResolvePrimaryProfileIDsResponse);
@@ -95,6 +98,14 @@ message ListProfileIDsForAccountRequest {
 
 message ListProfileIDsForAccountResponse {
   repeated string profile_ids = 1;
+}
+
+message ResolveAccountIDForProfileRequest {
+  string profile_id = 1;
+}
+
+message ResolveAccountIDForProfileResponse {
+  string account_id = 1;
 }
 
 message GetProfileRequest {

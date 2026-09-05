@@ -16,6 +16,15 @@ public class InMemoryAccountRestoreTokenStore implements AccountRestoreTokenStor
   }
 
   @Override
+  public Optional<UUID> peek(String token) {
+    Entry entry = tokens.get(AccountRestoreTokenHash.of(token));
+    if (entry == null || entry.expiresAt().isBefore(Instant.now())) {
+      return Optional.empty();
+    }
+    return Optional.of(entry.accountId());
+  }
+
+  @Override
   public Optional<UUID> consume(String token) {
     Entry entry = tokens.remove(AccountRestoreTokenHash.of(token));
     if (entry == null || entry.expiresAt().isBefore(Instant.now())) {

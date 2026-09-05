@@ -137,6 +137,11 @@ class AuthServiceRestoreRaceTest {
     public void store(String token, UUID accountId, Duration ttl) {}
 
     @Override
+    public Optional<UUID> peek(String token) {
+      return Optional.of(accountId);
+    }
+
+    @Override
     public Optional<UUID> consume(String token) {
       return Optional.of(accountId);
     }
