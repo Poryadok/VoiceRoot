@@ -131,20 +131,32 @@ func TestSearchProfiles_GuestAndDependencyFailuresFailClosed(t *testing.T) {
 	viewerAccount, viewerProfile := uuid.New(), uuid.New()
 	guestAccount, guestProfile := uuid.New(), uuid.New()
 	openAccount, openProfile := uuid.New(), uuid.New()
+	guestRestrictedAccount, guestRestrictedProfile := uuid.New(), uuid.New()
 	restrictedAccount, restrictedProfile := uuid.New(), uuid.New()
+	fofRestrictedAccount, fofRestrictedProfile := uuid.New(), uuid.New()
 	insertSearchPrivacyProfile(t, ctx, pool, viewerProfile, viewerAccount, "viewer", "0001", true)
 	insertSearchPrivacyProfile(t, ctx, pool, guestProfile, guestAccount, "guest", "0002", true)
 	insertSearchPrivacyProfile(t, ctx, pool, openProfile, openAccount, "guestopen", "0003", true)
-	insertSearchPrivacyProfile(t, ctx, pool, restrictedProfile, restrictedAccount, "failedaudience", "0004", true)
+	insertSearchPrivacyProfile(t, ctx, pool, guestRestrictedProfile, guestRestrictedAccount, "guestfriendsonly", "0004", true)
+	insertSearchPrivacyProfile(t, ctx, pool, restrictedProfile, restrictedAccount, "failedaudience", "0005", true)
+	insertSearchPrivacyProfile(t, ctx, pool, fofRestrictedProfile, fofRestrictedAccount, "fofdependency", "0006", true)
 
 	privacyStore := store.NewPrivacyStore(pool)
 	open := store.PrivacyRowFromSettings(openProfile, privacy.SettingsForPreset("gaming"))
 	open.AllowFriendRequests = privacy.EveryoneWithGuests()
 	_, err := privacyStore.Upsert(ctx, open)
 	require.NoError(t, err)
+	guestRestricted := store.PrivacyRowFromSettings(guestRestrictedProfile, privacy.SettingsForPreset("personal"))
+	guestRestricted.AllowFriendRequests = privacy.FriendsOnly()
+	_, err = privacyStore.Upsert(ctx, guestRestricted)
+	require.NoError(t, err)
 	restricted := store.PrivacyRowFromSettings(restrictedProfile, privacy.SettingsForPreset("personal"))
 	restricted.AllowFriendRequests = privacy.FriendsOnly()
 	_, err = privacyStore.Upsert(ctx, restricted)
+	require.NoError(t, err)
+	fofRestricted := store.PrivacyRowFromSettings(fofRestrictedProfile, privacy.SettingsForPreset("personal"))
+	fofRestricted.AllowFriendRequests = privacy.Audience{FriendsOfFriends: true}
+	_, err = privacyStore.Upsert(ctx, fofRestricted)
 	require.NoError(t, err)
 
 	mr := miniredis.RunT(t)
@@ -158,13 +170,22 @@ func TestSearchProfiles_GuestAndDependencyFailuresFailClosed(t *testing.T) {
 	t.Run("guest uses canonical audience only", func(t *testing.T) {
 		resp, err := cli.SearchProfiles(withGuestUserAuthCtx(ctx, guestAccount, guestProfile), &userv1.SearchProfilesRequest{Query: "guest"})
 		require.NoError(t, err)
-		require.Contains(t, collectProfileIDs(resp.GetProfileList().GetProfiles()), openProfile.String())
+		ids := collectProfileIDs(resp.GetProfileList().GetProfiles())
+		require.Contains(t, ids, openProfile.String())
+		require.NotContains(t, ids, guestRestrictedProfile.String())
+		require.NotContains(t, ids, guestProfile.String(), "a guest must not discover a profile on its own account")
 	})
 
 	t.Run("restricted audience dependency errors do not disclose", func(t *testing.T) {
 		resp, err := cli.SearchProfiles(withUserAuthCtx(ctx, viewerAccount, viewerProfile), &userv1.SearchProfilesRequest{Query: "failedaudience"})
 		require.NoError(t, err)
 		require.NotContains(t, collectProfileIDs(resp.GetProfileList().GetProfiles()), restrictedProfile.String())
+	})
+
+	t.Run("friends-of-friends dependency errors do not disclose", func(t *testing.T) {
+		resp, err := cli.SearchProfiles(withUserAuthCtx(ctx, viewerAccount, viewerProfile), &userv1.SearchProfilesRequest{Query: "fofdependency"})
+		require.NoError(t, err)
+		require.NotContains(t, collectProfileIDs(resp.GetProfileList().GetProfiles()), fofRestrictedProfile.String())
 	})
 }
 
