@@ -74,8 +74,8 @@ service MessagingService {
 | `PinMessage` / `UnpinMessage` / `GetPinnedMessages` | ✓ | limit **5**/chat (`MaxPinsPerChat`); 6th → `ResourceExhausted` |
 | `UnpinMessagesBySenderInChats` | ✓ | bot cleanup |
 | `UploadPreKeyBundle` / `GetPreKeyBundle` | ✓ | DM E2E pre-keys |
-| `MarkRead` / `GetReadState` / `GetBulkReadState` | ✓ | DM-typed validation today |
-| `GetChatListMetadata` | ✓ partial | preview text + unread only |
+| `MarkRead` / `GetReadState` / `GetBulkReadState` | ✓ | DM/group/channel; per-member read cursor; non-members → `PERMISSION_DENIED` |
+| `GetChatListMetadata` | ✓ | per-member unread + preview/content metadata; DM-only delivery ticks; non-members → `PERMISSION_DENIED` |
 | `ListSharedMedia` | ✓ | shared media tabs in chat info |
 | `DeleteMessage` (`DeleteScope.FOR_ME` / `FOR_EVERYONE`) | ✓ | `FOR_ME` soft-hides for caller only |
 | `SendMessage` send options (`send_silent`, `scheduled_at`, `send_when_online`) | ✗ | spec below; not in proto |
@@ -181,16 +181,16 @@ message UpdateScheduledMessageRequest {
 
 ### `GetChatListMetadata` / `ChatListItem` preview
 
-S2S enrichment для Chat `ListChats`. **Код сегодня:** только `last_message_preview` text + `unread_count`.
+S2S enrichment для Chat `ListChats`. Код возвращает per-member unread state и preview metadata для DM/group/channel.
 
-**Spec fields** на `ChatListMetadata` (per `chat_id`; **not yet in proto/code**):
+**Shipped fields** на `ChatListMetadata` (per `chat_id`):
 
 | Поле | Тип | Назначение |
 |------|-----|------------|
 | `last_message_preview` | string | Текст или **media label** (см. ниже) |
 | `last_message_content_type` | `MessageContentType` | Для client-side label без парсинга текста |
 | `last_message_is_outgoing` | bool | Последнее сообщение от `profile_id` запроса |
-| `last_message_delivery_state` | enum | `none` \| `sent` \| `delivered` \| `read` — **durable**, DM only |
+| `last_message_delivery_state` | enum | `none` \| `sent` \| `delivered` \| `read` — **durable**, DM only; group/channel возвращают `none` |
 | `unread_count` | int32 | Без изменений |
 | `last_message_at` | timestamp | Для сортировки |
 
@@ -217,7 +217,7 @@ S2S enrichment для Chat `ListChats`. **Код сегодня:** только 
 
 **Не смешивать:** WS `delivery_ack` / `message_delivered` — live fan-out для открытого bubble; list preview ticks — **только** из durable metadata после `ListChats` / `GetChatListMetadata`. WS alone после reconnect **недостаточен**.
 
-### Durable delivery derivation (spec — not yet in code)
+### Durable delivery derivation (shipped for DM list ticks)
 
 **Owner:** Messaging. **Not** Realtime Redis fan-out.
 
@@ -241,7 +241,7 @@ read_receipts (extended)
 
 **Ordering:** `last_delivered_message_id` ≤ `last_read_message_id` always (read implies delivered). Client may skip explicit `delivery_ack` if it immediately `MarkRead`s — server promotes delivered cursor to read cursor.
 
-**Code gap:** no `last_delivered_message_id` column, no `message.delivery_ack` consumer, no `last_message_delivery_state` in proto — [todo/backend.md](../todo/backend.md) § Durable delivery.
+**Shipped:** `last_delivered_message_id` is persisted in `read_receipts`; the Messaging consumer handles `message.delivery_ack`; `GetChatListMetadata` derives the durable DM delivery state. Group/channel delivery ticks remain `none`.
 
 ### MarkRead: REST persist vs WS fan-out
 
@@ -253,7 +253,7 @@ read_receipts (extended)
 
 List UI **must** complete the global `ListChats` inbox snapshot after reconnect — not infer ticks from WS alone.
 
-**Shipped scope:** `MarkRead` / `GetReadState` handlers validate **DM** chat type today; group/channel read parity — backlog. WS `mark_read` never writes `read_receipts`.
+**Shipped scope:** `MarkRead` / `GetReadState` / `GetBulkReadState` / `GetChatListMetadata` accept **DM/group/channel** refs, scope read/unread metadata to the caller's `profile_id`, and fail closed with gRPC `PERMISSION_DENIED` for non-members. WS `mark_read` never writes `read_receipts`. Group/channel per-message view counters remain a separate future gap; the shipped A1 contract is per-member unread/read state.
 
 После reconnect клиент завершает paginated `ListChats` snapshot для `main` / `requests` / `archive` с Messaging metadata, а не восстанавливает ticks из WS ([ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) § Reconnect). Полные сообщения остаются `GetMessages` per selected `chat_id`.
 
@@ -279,7 +279,7 @@ List UI **must** complete the global `ListChats` inbox snapshot after reconnect 
 | Deleted peer in selected DM | `GetMessages.dm_peer_state` | — | — | `dm_peer_deleted` (live acceleration only) | — | local client marker |
 | Mark read (persist) | `MarkRead` | `message.read` | — | `message_read` (from NATS) | `read_receipts` | — |
 | Mark read (multi-tab) | — (after REST) | — | `mark_read` | `message_read` | — | fan-out |
-| Delivery ack | — | `message.delivery_ack` (spec) | `delivery_ack` | `message_delivered` | `last_delivered_message_id` (spec) | fan-out + Redis |
+| Delivery ack | — | `message.delivery_ack` | `delivery_ack` | `message_delivered` | `last_delivered_message_id` | fan-out + Redis |
 | List preview ✓/✓✓ | S2S `GetChatListMetadata` | — | — | — | read + delivery cursors | — |
 | Reactions / pins | gRPC | `message.reaction_*`, `message.pinned` | — | `reaction_*`, `message_pinned` | `reactions` / `pins` | — |
 
@@ -338,7 +338,7 @@ read_receipts
 ├── chat_id
 ├── profile_id
 ├── last_read_message_id
-├── last_delivered_message_id (spec — durable ✓ ticks; not yet in migration)
+├── last_delivered_message_id (durable ✓ ticks; DM list delivery state)
 ├── updated_at
 └── UNIQUE(chat_id, profile_id)
 ```
@@ -347,9 +347,9 @@ read_receipts
 
 **Migrations shipped:** `messages`, `read_receipts`, `reactions`, `pins`, `thread_parent_id`, `forward_*`, `ghost_only` (platform shadow-ban column — **DB only**, not yet on `SendMessageRequest` proto), E2E columns.
 
-**Handlers shipped beyond DM-only baseline:** threads (`GetThreadMessages`, `ListThreads`), reactions, pins (limit **5**/chat), `MarkRead`/`GetReadState`/`GetBulkReadState`, `ListSharedMedia`, `DeleteMessage` with `DeleteScope.FOR_ME`, idempotent `client_message_id` on `SendMessage`, E2E pre-key RPCs.
+**Handlers shipped beyond basic message CRUD:** threads (`GetThreadMessages`, `ListThreads`), reactions, pins (limit **5**/chat), per-member `MarkRead`/`GetReadState`/`GetBulkReadState` for DM/group/channel, `GetChatListMetadata` with per-member unread/preview metadata and non-member denial, `ListSharedMedia`, `DeleteMessage` with `DeleteScope.FOR_ME`, idempotent `client_message_id` on `SendMessage`, E2E pre-key RPCs.
 
-**Gaps vs full spec:** `send_silent` / schedule / typed `content_type`, durable `last_delivered_message_id` + `last_message_delivery_state`, `message.delivery_ack` consumer, `message_attachments` table, `RecordMessageView`, `UpdateScheduledMessage` — см. § ниже и [todo/backend.md](../todo/backend.md).
+**Gaps vs full spec:** `send_silent` / schedule / typed `content_type`, `message_attachments` table, `RecordMessageView`, `UpdateScheduledMessage` — см. § ниже и [todo/backend.md](../todo/backend.md).
 
 **Attachment validation (code):** `validateAttachments` today requires `file_id` on each attachment — blocks normative `location` / `article` payloads without File row until validation branches on `content_type` (**code backlog**, R3-A06).
 
@@ -514,7 +514,7 @@ messages (deployed — simplified)
 |--------------------------|----------------------------------------------|
 | `message.sent`           | message_id, chat_id, sender_id, has_mentions, **content_type**, **send_silent**, **was_scheduled** (bool), **scheduled_at** (nullable — original intent time) |
 | `message.read`           | chat_id, profile_id, last_read_message_id    |
-| `message.delivery_ack`   | chat_id, profile_id, message_id (spec — persist delivery cursor; publisher: Realtime on client `delivery_ack`) |
+| `message.delivery_ack`   | chat_id, profile_id, message_id (persist delivery cursor; publisher: Realtime on client `delivery_ack`) |
 | `message.mention_added`  | message_id, chat_id, **sender_profile_id**, mentioned_profile_ids |
 | `message.edited`         | message_id, chat_id                          |
 | `message.deleted`        | message_id, chat_id                          |
@@ -545,7 +545,7 @@ When File Service finishes async processing (`file.processed` on JetStream), Mes
 |-----------------|-------|-------|
 | `chats.last_message_at` (sort key for `ListChats`) | **Chat Service** | Updated on `message.sent` consumer (`TouchLastMessageAt`) for `dm` / `group` / `channel` |
 | `last_message_preview`, `unread_count` | **Messaging** | S2S `GetChatListMetadata` |
-| `last_message_delivery_state`, `last_message_content_type` | **Messaging** (spec) | Durable list ticks; not Realtime WS |
+| `last_message_delivery_state`, `last_message_content_type` | **Messaging** | Durable list ticks/content metadata; not Realtime WS |
 | Client list sort | **Chat `ListChats`** | Uses `chats.last_message_at`; do **not** sort client-side from Messaging preview timestamps alone |
 
 Messaging does **not** own `chats.last_message_at`. Cross-ref — [chat-service.md](chat-service.md) § ListChats ownership table.
