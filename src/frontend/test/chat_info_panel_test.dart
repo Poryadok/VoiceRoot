@@ -114,11 +114,15 @@ void main() {
     tester,
   ) async {
     const rawPayload = 'internal gateway details';
+    tester.view
+      ..physicalSize = const Size(800, 1000)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
 
     await tester.pumpWidget(
       testApp(
         home: SizedBox(
-          height: 500,
+          height: 900,
           width: 400,
           child: ChatInfoPanel(chatId: 'chat-shared-media-backend-error'),
         ),
@@ -147,7 +151,7 @@ void main() {
     await tester.pumpWidget(
       testApp(
         home: SizedBox(
-          height: 500,
+          height: 900,
           width: 400,
           child: ChatInfoPanel(chatId: 'chat-shared-media-error'),
         ),
