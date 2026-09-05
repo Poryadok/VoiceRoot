@@ -38,7 +38,8 @@ changes_job_file=
 gate_job_file=
 filter_block_file=
 filter_entries_file=
-trap 'rm -f "$candidate_file" "$a1_job_file" "$changes_job_file" "$gate_job_file" "$filter_block_file" "$filter_entries_file"' EXIT
+near_miss_file=
+trap 'rm -f "$candidate_file" "$a1_job_file" "$changes_job_file" "$gate_job_file" "$filter_block_file" "$filter_entries_file" "$near_miss_file"' EXIT
 awk '
   function flush() {
     if (job != "" && block ~ /make[[:space:]]+compose-a1-multi-account-proof([^[:alnum:]_-]|$)/) {
@@ -65,6 +66,13 @@ awk '/^__A1_JOB__$/ { capture = 1; next } capture { print }' "$candidate_file" >
 # Accept either one-line run: make ... or a literal command below run: |.
 if ! grep -Eq '^[[:space:]]*run:[[:space:]]+make[[:space:]]+compose-a1-multi-account-proof[[:space:]]*$' "$a1_job_file" && ! grep -Eq '^[[:space:]]+make[[:space:]]+compose-a1-multi-account-proof[[:space:]]*$' "$a1_job_file"; then
   fail "isolated A1 job must invoke the exact make compose-a1-multi-account-proof target"
+fi
+
+# A near-miss command must not satisfy the exact-target contract.
+near_miss_file="$(mktemp)"
+printf '%s\n' 'run: make compose-a1-multi-account-proof-extra' >"$near_miss_file"
+if grep -Eq '^[[:space:]]*run:[[:space:]]+make[[:space:]]+compose-a1-multi-account-proof[[:space:]]*$' "$near_miss_file"; then
+  fail "near-miss A1 make target was accepted"
 fi
 
 grep -Eq '^[[:space:]]*timeout-minutes:[[:space:]]*60[[:space:]]*$' "$a1_job_file" || fail "isolated A1 job must have timeout-minutes: 60"
