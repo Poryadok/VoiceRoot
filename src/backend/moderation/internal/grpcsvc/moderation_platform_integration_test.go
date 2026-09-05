@@ -134,6 +134,94 @@ func TestModerationPlatform_GetReport_ResolveReport_AssignReport(t *testing.T) {
 	require.NotNil(t, resolved.GetReport().ResolvedAt)
 }
 
+func TestModerationPlatform_ResolveReport_StatusValidationBeforeMutation(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startModerationPostgresPlatform(t, ctx)
+	client, cleanup := startModerationGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	modProfile := uuid.New()
+	modCtx := withInternalModCtx(ctx, modProfile)
+
+	created, err := client.CreateReport(withReporterProfile(ctx, uuid.New()), &moderationv1.CreateReportRequest{
+		TargetType:   "user",
+		TargetId:     uuid.New().String(),
+		Category:     "harassment",
+		EvidenceJson: `{}`,
+	})
+	require.NoError(t, err)
+	reportID := created.GetReport().GetId()
+
+	for _, invalidStatus := range []string{"", "garbage"} {
+		invalidStatus := invalidStatus
+		t.Run("invalid/"+invalidStatus, func(t *testing.T) {
+			_, err := client.ResolveReport(modCtx, &moderationv1.ResolveReportRequest{
+				ReportId:  reportID,
+				NewStatus: invalidStatus,
+			})
+			require.Error(t, err)
+			require.Equal(t, codes.InvalidArgument, status.Code(err))
+
+			var persistedStatus string
+			var assignedIsNull, resolvedAtIsNull, resolutionIsNull bool
+			err = pool.QueryRow(ctx, `
+SELECT status, assigned_to IS NULL, resolved_at IS NULL, resolution IS NULL
+FROM reports WHERE id = $1`, reportID).Scan(
+				&persistedStatus, &assignedIsNull, &resolvedAtIsNull, &resolutionIsNull,
+			)
+			require.NoError(t, err)
+			require.Equal(t, "pending", persistedStatus)
+			require.True(t, assignedIsNull)
+			require.True(t, resolvedAtIsNull)
+			require.True(t, resolutionIsNull)
+
+			var auditCount int
+			err = pool.QueryRow(ctx, `
+SELECT COUNT(*) FROM moderation_audit_log
+WHERE actor_profile_id = $1
+  AND action = 'report_resolved'
+  AND target_type = 'report'
+  AND target_id = $2`, modProfile, reportID).Scan(&auditCount)
+			require.NoError(t, err)
+			require.Zero(t, auditCount, "invalid status must not emit a moderation audit event")
+		})
+	}
+}
+
+func TestModerationPlatform_ResolveReport_CanonicalStatusesAccepted(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startModerationPostgresPlatform(t, ctx)
+	client, cleanup := startModerationGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	modCtx := withInternalModCtx(ctx, uuid.New())
+	for _, wantStatus := range []string{"pending", "reviewing", "resolved", "dismissed"} {
+		wantStatus := wantStatus
+		t.Run(wantStatus, func(t *testing.T) {
+			created, err := client.CreateReport(withReporterProfile(ctx, uuid.New()), &moderationv1.CreateReportRequest{
+				TargetType:   "user",
+				TargetId:     uuid.New().String(),
+				Category:     "spam",
+				EvidenceJson: `{}`,
+			})
+			require.NoError(t, err)
+
+			resolved, err := client.ResolveReport(modCtx, &moderationv1.ResolveReportRequest{
+				ReportId:  created.GetReport().GetId(),
+				NewStatus: wantStatus,
+			})
+			require.NoError(t, err)
+			require.Equal(t, wantStatus, resolved.GetReport().GetStatus())
+		})
+	}
+}
+
 func TestModerationPlatform_ListReports_queueFilter_content_vs_spaces(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
