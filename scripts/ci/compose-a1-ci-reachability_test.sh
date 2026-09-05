@@ -91,7 +91,7 @@ grep -Fq "inputs.profile == 'full'" "$a1_job_file" || fail "isolated A1 job must
 grep -Fq "github.event_name == 'push'" "$a1_job_file" || fail "isolated A1 job must support master push"
 grep -Fq "github.ref == 'refs/heads/master'" "$a1_job_file" || fail "isolated A1 job push path must be gated to master"
 grep -Fq "needs.changes.outputs.a1_e2e == 'true'" "$a1_job_file" || fail "isolated A1 job push path must be gated by changes.outputs.a1_e2e"
-if grep -Fq "github.event_name == 'pull_request'" "$a1_job_file"; then
+if grep -Fq "pull_request" "$a1_job_file"; then
   fail "isolated A1 job must never run on pull_request"
 fi
 if grep -Fq "inputs.profile != 'auto'" "$a1_job_file"; then
