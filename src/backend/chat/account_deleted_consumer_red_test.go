@@ -8,10 +8,16 @@ package main
 // generated type.
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"net"
+	"strconv"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -229,6 +235,118 @@ func startAccountDeletedJSTestServer(t *testing.T) *server.Server {
 	require.True(t, ns.ReadyForConnections(5*time.Second))
 	t.Cleanup(ns.Shutdown)
 	return ns
+}
+
+type accountDeletedAckGateForTest struct {
+	listener  net.Listener
+	ackHeld   chan struct{}
+	release   chan struct{}
+	releaseMu sync.Once
+	closeMu   sync.Mutex
+	client    net.Conn
+	upstream  net.Conn
+}
+
+func startAccountDeletedAckGateForTest(t *testing.T, upstreamAddr string) *accountDeletedAckGateForTest {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	gate := &accountDeletedAckGateForTest{
+		listener: listener,
+		ackHeld:  make(chan struct{}, 1),
+		release:  make(chan struct{}),
+	}
+	go func() {
+		client, err := listener.Accept()
+		if err != nil {
+			return
+		}
+		upstream, err := net.Dial("tcp", upstreamAddr)
+		if err != nil {
+			_ = client.Close()
+			return
+		}
+		gate.closeMu.Lock()
+		gate.client = client
+		gate.upstream = upstream
+		gate.closeMu.Unlock()
+		go func() { _, _ = io.Copy(client, upstream) }()
+		gate.forwardClientToServer(client, upstream)
+	}()
+	t.Cleanup(gate.close)
+	return gate
+}
+
+func (g *accountDeletedAckGateForTest) clientURL() string {
+	return "nats://" + g.listener.Addr().String()
+}
+
+func (g *accountDeletedAckGateForTest) releaseAck() {
+	g.releaseMu.Do(func() { close(g.release) })
+}
+
+func (g *accountDeletedAckGateForTest) close() {
+	g.releaseAck()
+	_ = g.listener.Close()
+	g.closeMu.Lock()
+	defer g.closeMu.Unlock()
+	if g.client != nil {
+		_ = g.client.Close()
+	}
+	if g.upstream != nil {
+		_ = g.upstream.Close()
+	}
+}
+
+func (g *accountDeletedAckGateForTest) forwardClientToServer(client, upstream net.Conn) {
+	reader := bufio.NewReader(client)
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return
+		}
+		payload, err := natsPayloadForTest(reader, line)
+		if err != nil {
+			return
+		}
+		if strings.HasPrefix(line, "PUB $JS.ACK.") {
+			select {
+			case g.ackHeld <- struct{}{}:
+			default:
+			}
+			<-g.release
+		}
+		if err := writeNATSFrameForTest(upstream, []byte(line), payload); err != nil {
+			return
+		}
+	}
+}
+
+func natsPayloadForTest(reader *bufio.Reader, line string) ([]byte, error) {
+	fields := strings.Fields(line)
+	if len(fields) == 0 || (fields[0] != "PUB" && fields[0] != "HPUB") {
+		return nil, nil
+	}
+	size, err := strconv.Atoi(fields[len(fields)-1])
+	if err != nil {
+		return nil, err
+	}
+	payload := make([]byte, size+2)
+	_, err = io.ReadFull(reader, payload)
+	return payload, err
+}
+
+func writeNATSFrameForTest(conn net.Conn, parts ...[]byte) error {
+	for _, part := range parts {
+		for len(part) > 0 {
+			written, err := conn.Write(part)
+			if err != nil {
+				return err
+			}
+			part = part[written:]
+		}
+	}
+	return nil
 }
 
 func waitForAckFloorForTest(t *testing.T, sub *nats.Subscription) {
@@ -533,6 +651,72 @@ func TestAccountDeletedConsumer_GracefulShutdownWaitsForInFlightAck(t *testing.T
 	close(release)
 	require.ErrorIs(t, <-done, context.Canceled)
 	waitForAccountDeletedAckFloorForTest(t, js, instanceID)
+}
+
+func TestAccountDeletedConsumer_ShutdownWaitsForAckFlush(t *testing.T) {
+	server := startAccountDeletedJSTestServer(t)
+	nc, err := nats.Connect(server.ClientURL())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = nc.Drain() })
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+	_, err = js.AddStream(&nats.StreamConfig{Name: userEventsStreamName, Subjects: []string{userAccountDeletedSubject}, Storage: nats.MemoryStorage})
+	require.NoError(t, err)
+
+	ackGate := startAccountDeletedAckGateForTest(t, server.Addr().String())
+	publisher := &dmPeerDeletedPublisherForTest{callSignal: make(chan struct{}, 1)}
+	profiles := &deletedAccountProfileListerForTest{profileIDs: []uuid.UUID{uuid.New()}}
+	targets := &deletedDMTargetStoreForTest{targets: []store.DMPeerDeletionTarget{{ChatID: uuid.New(), SurvivingProfileID: uuid.New()}}}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	done := make(chan error, 1)
+	const instanceID = "ack-flush"
+	go func() {
+		done <- runAccountDeletedConsumerOnce(ctx, ackGate.clientURL(), instanceID, profiles, targets, publisher, slog.Default())
+	}()
+	waitForAccountDeletedDurableForTest(t, js, instanceID)
+	_, err = js.Publish(userAccountDeletedSubject, accountDeletedMessageForTest(t, uuid.NewString(), uuid.NewString()).Data)
+	require.NoError(t, err)
+	select {
+	case <-publisher.callSignal:
+	case <-time.After(3 * time.Second):
+		t.Fatal("consumer did not publish the DM deletion target")
+	}
+	select {
+	case <-ackGate.ackHeld:
+	case <-time.After(3 * time.Second):
+		t.Fatal("test proxy did not hold the JetStream ACK")
+	}
+
+	cancel()
+	select {
+	case err := <-done:
+		t.Fatalf("consumer returned before its ACK was flushed to JetStream: %v", err)
+	case <-time.After(200 * time.Millisecond):
+	}
+	ackGate.releaseAck()
+	require.ErrorIs(t, <-done, context.Canceled)
+	waitForAccountDeletedAckFloorForTest(t, js, instanceID)
+}
+
+func TestAccountDeletedConsumerShutdown_JoinsBeforeDependentClose(t *testing.T) {
+	consumerDone := make(chan error, 1)
+	dependentClosed := make(chan struct{})
+	go func() {
+		waitForAccountDeletedConsumerShutdown(context.Background(), consumerDone, slog.Default())
+		close(dependentClosed)
+	}()
+	select {
+	case <-dependentClosed:
+		t.Fatal("dependent publisher closed before account deletion consumer exited")
+	case <-time.After(150 * time.Millisecond):
+	}
+	consumerDone <- context.Canceled
+	select {
+	case <-dependentClosed:
+	case <-time.After(3 * time.Second):
+		t.Fatal("account deletion consumer shutdown was not joined")
+	}
 }
 
 func TestAccountDeletedConsumer_ZeroTargetsDoesNotPublish(t *testing.T) {
