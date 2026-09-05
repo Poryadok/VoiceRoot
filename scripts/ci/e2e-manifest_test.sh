@@ -45,7 +45,19 @@ a1_expected=(
   TestComposeA1GroupReadIsolation_live
   TestComposeA1ChannelReadIsolation_live
 )
-mapfile -t a1_actual < <(bash "${SCRIPT}" "${MANIFEST}" a1_multi_account_gateway)
+a1_output_file="$(mktemp)"
+a1_error_file="$(mktemp)"
+set +e
+bash "${SCRIPT}" "${MANIFEST}" a1_multi_account_gateway >"${a1_output_file}" 2>"${a1_error_file}"
+a1_parser_rc=$?
+set -e
+if [[ "${a1_parser_rc}" -ne 0 ]]; then
+  cat "${a1_error_file}" >&2 || true
+  rm -f "${a1_output_file}" "${a1_error_file}"
+  fail "e2e manifest parser must support a1_multi_account_gateway before exact-content checks"
+fi
+mapfile -t a1_actual < "${a1_output_file}"
+rm -f "${a1_output_file}" "${a1_error_file}"
 [[ "${#a1_actual[@]}" -eq "${#a1_expected[@]}" ]] || \
   fail "a1_multi_account_gateway must contain exactly four tests, got ${#a1_actual[@]}"
 for i in "${!a1_expected[@]}"; do

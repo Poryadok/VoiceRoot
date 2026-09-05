@@ -171,7 +171,6 @@ run_runner() {
 TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/a1-runner-tests.XXXXXXXX")"
 trap 'rm -rf -- "$TEST_TMP"' EXIT
 assert_file "$SCRIPT"
-assert_isolated_make_target
 
 echo '== T055 regex matches exactly the four current tests =='
 for test_name in \
@@ -183,6 +182,9 @@ for test_name in \
 done
 if printf '%s\n' TestComposeAuthLifecycle_live | grep -Eq -- "$T055_REGEX"; then
   fail 'T055 regex matched an unrelated live test'
+fi
+if printf '%s\n' TestComposeA1GroupReadIsolation_liveExtra | grep -Eq -- "$T055_REGEX"; then
+  fail 'T055 regex matched a near-miss test name'
 fi
 
 echo '== ambient project is rejected before Docker =='
@@ -235,6 +237,7 @@ assert_full_port_env "${case_dir}/commands.log"
 assert_contains "${case_dir}/commands.log" 'go cwd=.*/src/backend/gateway.*<-count=1> <-parallel> <1> <-timeout> <20m> <-tags> <live> <-run>'
 go_run_regex="$(sed -n 's/.* <-run> <\([^>]*\)> <.*/\1/p' "${case_dir}/commands.log" | head -1)"
 assert_eq "$go_run_regex" "$T055_REGEX"
+assert_isolated_make_target
 
 echo '== every compose path is absolute and env file is zero-byte =='
 compose_line="$(grep -m1 '^docker <compose ' "${case_dir}/commands.log")"
