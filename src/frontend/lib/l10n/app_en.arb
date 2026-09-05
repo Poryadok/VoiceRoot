@@ -239,6 +239,7 @@
   },
   "chatRoomEmpty": "No messages yet",
   "chatRoomEmptyHint": "Send the first message when you are ready.",
+  "chatDmPeerDeleted": "User deleted",
   "chatRoomLoadOlder": "Load older messages",
   "chatRoomInputHint": "Message",
   "chatSendMessage": "Send message",

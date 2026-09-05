@@ -24,6 +24,26 @@ class AuthSession {
 
   String get authorizationHeader => 'Bearer $accessToken';
 
+  @override
+  bool operator ==(Object other) =>
+      other is AuthSession &&
+      other.accessToken == accessToken &&
+      other.refreshToken == refreshToken &&
+      other.accountId == accountId &&
+      other.activeProfileId == activeProfileId &&
+      other.expiresInSeconds == expiresInSeconds &&
+      other.accountType == accountType;
+
+  @override
+  int get hashCode => Object.hash(
+    accessToken,
+    refreshToken,
+    accountId,
+    activeProfileId,
+    expiresInSeconds,
+    accountType,
+  );
+
   Map<String, dynamic> toJson() => {
     'access_token': accessToken,
     'refresh_token': refreshToken,

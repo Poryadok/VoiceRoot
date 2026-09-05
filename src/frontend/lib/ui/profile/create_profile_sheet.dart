@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../backend/users_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
+import '../../state/profile_switch_coordinator.dart';
 import '../../state/social_providers.dart';
 import '../../state/subscription_providers.dart';
 import '../../theme/voice_colors.dart';
@@ -74,9 +75,32 @@ class _CreateProfileSheetState extends ConsumerState<CreateProfileSheet> {
     switch (result) {
       case UsersApiOk(:final data):
         ref.invalidate(myProfilesProvider);
-        await ref
-            .read(authControllerProvider.notifier)
-            .switchActiveProfile(data.id);
+        ProfileSwitchResult switchResult;
+        ref.read(profileSwitchInProgressProvider.notifier).state = true;
+        try {
+          switchResult = await ref
+              .read(profileSwitchCoordinatorProvider)
+              .switchTo(data.id);
+        } on Object catch (error) {
+          if (!mounted) return;
+          setState(() {
+            _submitting = false;
+            _error = error.toString();
+          });
+          return;
+        } finally {
+          ref.read(profileSwitchInProgressProvider.notifier).state = false;
+        }
+        if (!mounted) return;
+        if (switchResult is! ProfileSwitchApplied) {
+          setState(() {
+            _submitting = false;
+            _error = switchResult is ProfileSwitchRejected
+                ? switchResult.errorCode
+                : null;
+          });
+          return;
+        }
         if (_avatar != null) {
           final avatarErr = await _uploadAvatarForActiveProfile(l10n, _avatar!);
           if (!mounted) return;

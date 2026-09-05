@@ -78,7 +78,7 @@ void main() {
       expect(chats.calls, hasLength(1));
     });
 
-    test('reloads chats when session access token changes', () async {
+    test('does not load chats directly when session access token changes', () async {
       final chats = _FakeChatsClient(
         pages: [
           const ChatListData(items: []),
@@ -140,8 +140,8 @@ void main() {
       await pumpEventQueue();
 
       final state = container.read(chatListControllerProvider);
-      expect(state.items.map((item) => item.chatId), ['chat-after-convert']);
-      expect(chats.calls, hasLength(2));
+      expect(state.items, isEmpty);
+      expect(chats.calls, hasLength(1));
     });
 
     test('loads the next chat page and keeps existing rows', () async {

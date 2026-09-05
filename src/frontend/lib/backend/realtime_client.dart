@@ -67,7 +67,29 @@ abstract final class RealtimeProtocol {
 }
 
 /// Live WebSocket session to Realtime via API Gateway `/ws`.
-class VoiceRealtimeConnection {
+abstract interface class RealtimeTransport {
+  Stream<RealtimeFrame> get events;
+
+  Future<void> connect();
+
+  Future<void> dispose();
+
+  void sendSubscribe(String chatId);
+
+  void sendMarkRead({required String chatId, required String messageId});
+
+  void sendTypingStart(String chatId);
+
+  void sendTypingStop(String chatId);
+
+  void sendDeliveryAck({
+    required String chatId,
+    required String messageId,
+    required String senderProfileId,
+  });
+}
+
+class VoiceRealtimeConnection implements RealtimeTransport {
   VoiceRealtimeConnection({
     required Uri uri,
     required Map<String, String> headers,
@@ -99,10 +121,12 @@ class VoiceRealtimeConnection {
   int? _lastSequence;
   var _disposed = false;
 
+  @override
   Stream<RealtimeFrame> get events => _events.stream;
 
   int? get lastSequence => _lastSequence;
 
+  @override
   Future<void> connect() async {
     if (_disposed) return;
     await disconnect();
@@ -148,14 +172,17 @@ class VoiceRealtimeConnection {
     sendOp('resume', {'last_s': last});
   }
 
+  @override
   void sendSubscribe(String chatId) {
     sendOp('subscribe', {'chat_id': chatId});
   }
 
+  @override
   void sendMarkRead({required String chatId, required String messageId}) {
     sendOp('mark_read', {'chat_id': chatId, 'message_id': messageId});
   }
 
+  @override
   void sendDeliveryAck({
     required String chatId,
     required String messageId,
@@ -168,10 +195,12 @@ class VoiceRealtimeConnection {
     });
   }
 
+  @override
   void sendTypingStart(String chatId) {
     sendOp('typing_start', {'chat_id': chatId});
   }
 
+  @override
   void sendTypingStop(String chatId) {
     sendOp('typing_stop', {'chat_id': chatId});
   }
@@ -195,6 +224,7 @@ class VoiceRealtimeConnection {
     _channel = null;
   }
 
+  @override
   Future<void> dispose() async {
     _disposed = true;
     await disconnect();
