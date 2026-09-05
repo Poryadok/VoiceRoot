@@ -211,7 +211,15 @@ void main() {
           }
         }
 
-        await harness.hub.reconnectWithNewSession();
+        final reconnect = harness.hub.reconnectWithNewSession();
+        await harness.transport.waitForOpen('profile-a', attempt: 1);
+        harness.transport.releaseOpen('profile-a', attempt: 1);
+        await reconnect;
+        expect(
+          harness.connection('profile-a', attempt: 1),
+          isNot(same(harness.connection('profile-a'))),
+          reason: 'the replacement hello must belong to a new transport',
+        );
 
         expect(
           harness.container.read(realtimeHelloBindingProvider),
@@ -226,8 +234,8 @@ void main() {
         expect(harness.chats.calls, hasLength(callsBeforeLateMount));
         expect(harness.messages.getCalls, isEmpty);
 
-        harness.connection('profile-a').addHello();
-        harness.connection('profile-a').addHello();
+        harness.connection('profile-a', attempt: 1).addHello();
+        harness.connection('profile-a', attempt: 1).addHello();
         await pumpEventQueue();
 
         final replacementCalls = harness.chats.calls
@@ -360,8 +368,10 @@ class _Cycle4Harness {
     await pumpEventQueue();
   }
 
-  _ControlledVoiceRealtimeConnection connection(String profileId) =>
-      transport.connection(profileId);
+  _ControlledVoiceRealtimeConnection connection(
+    String profileId, {
+    int attempt = 0,
+  }) => transport.connection(profileId, attempt: attempt);
 
   Future<void> connectAWithoutHello() async {
     await pumpEventQueue();
@@ -429,33 +439,61 @@ class _ControlledRealtimeTransportFactory implements RealtimeTransportFactory {
     required AuthSession session,
   }) async {
     final slot = _slots[session.activeProfileId]!;
-    slot.openStarted.complete();
-    await slot.openGate.future;
-    return slot.connection;
+    final attempt = slot.nextOpen();
+    attempt.openStarted.complete();
+    await attempt.openGate.future;
+    return attempt.connection;
   }
 
-  Future<void> waitForOpen(String profileId) =>
-      _slot(profileId).openStarted.future;
+  Future<void> waitForOpen(String profileId, {int attempt = 0}) =>
+      _slot(profileId).attempt(attempt).openStarted.future;
 
-  void releaseOpen(String profileId) {
-    final gate = _slot(profileId).openGate;
+  void releaseOpen(String profileId, {int attempt = 0}) {
+    final gate = _slot(profileId).attempt(attempt).openGate;
     if (!gate.isCompleted) gate.complete();
   }
 
-  _ControlledVoiceRealtimeConnection connection(String profileId) =>
-      _slot(profileId).connection;
+  _ControlledVoiceRealtimeConnection connection(
+    String profileId, {
+    int attempt = 0,
+  }) => _slot(profileId).attempt(attempt).connection;
 
   _TransportSlot _slot(String profileId) => _slots[profileId]!;
 
   Future<void> dispose() async {
     for (final slot in _slots.values) {
-      await slot.connection.closeEvents();
+      for (final attempt in slot.attempts) {
+        await attempt.connection.closeEvents();
+      }
     }
   }
 }
 
 class _TransportSlot {
-  _TransportSlot(String profileId)
+  _TransportSlot(this.profileId);
+
+  final String profileId;
+  final List<_TransportAttempt> _attempts = [];
+  var _nextOpenAttempt = 0;
+
+  Iterable<_TransportAttempt> get attempts => _attempts;
+
+  _TransportAttempt nextOpen() {
+    final attempt = this.attempt(_nextOpenAttempt);
+    _nextOpenAttempt++;
+    return attempt;
+  }
+
+  _TransportAttempt attempt(int index) {
+    while (_attempts.length <= index) {
+      _attempts.add(_TransportAttempt(profileId));
+    }
+    return _attempts[index];
+  }
+}
+
+class _TransportAttempt {
+  _TransportAttempt(String profileId)
     : connection = _ControlledVoiceRealtimeConnection(profileId);
 
   final Completer<void> openStarted = Completer<void>();
