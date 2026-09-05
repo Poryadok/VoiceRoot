@@ -139,7 +139,7 @@ func TestWSStrictSessionEpochGuardsEveryInboundOperationBeforeDispatch(t *testin
 				Now:                 func() time.Time { return now },
 				OnAuthorizedInbound: dispatch.record,
 			}
-			srv := httptest.NewServer(newWSHandlerWithSessionEpoch(validator, nil, newWSHub(), nil, "epoch-test", presence, publisher, policy))
+			srv := httptest.NewServer(newWSHandlerWithSessionEpoch(validator, nil, permitAllTestSubscriptions(newWSHub()), nil, "epoch-test", presence, publisher, policy))
 			t.Cleanup(srv.Close)
 			conn := epochEnforcementDial(t, srv, epochEnforcementHeaders("verified-token", "profile-from-jwt"))
 			t.Cleanup(func() { _ = conn.Close() })
@@ -349,7 +349,7 @@ func TestWSStrictSessionEpochRechecksFloorBeforeEveryLocalWrite(t *testing.T) {
 					}
 				},
 			}
-			srv := httptest.NewServer(newWSHandlerWithSessionEpoch(validator, testCase.lister, newWSHub(), nil, "epoch-test", nil, nil, policy))
+			srv := httptest.NewServer(newWSHandlerWithSessionEpoch(validator, testCase.lister, permitAllTestSubscriptions(newWSHub()), nil, "epoch-test", nil, nil, policy))
 			t.Cleanup(srv.Close)
 			conn := epochEnforcementDial(t, srv, epochEnforcementHeaders("verified-token", "profile-from-jwt"))
 			t.Cleanup(func() { _ = conn.Close() })
@@ -508,7 +508,7 @@ func TestWSCompatibilitySessionEpochSkipsFloorForLegacyConnection(t *testing.T) 
 // epochEnforcementPolicy is deliberately the only test-facing wiring seam.
 // GREEN may wire it through realtimeConfig rather than exposing it publicly.
 func newEpochEnforcementHandler(tv tokenValidator, floor sessionEpochFloor, now func() time.Time, strict bool, hub *wsHub, presence presenceUpdater, dap deliveryAckPublisher) http.Handler {
-	return newEpochEnforcementHandlerWithLister(tv, nil, floor, now, strict, hub, presence, dap)
+	return newEpochEnforcementHandlerWithLister(tv, nil, floor, now, strict, permitAllTestSubscriptions(hub), presence, dap)
 }
 
 func newEpochEnforcementHandlerWithLister(tv tokenValidator, lister chatBootstrapLister, floor sessionEpochFloor, now func() time.Time, strict bool, hub *wsHub, presence presenceUpdater, dap deliveryAckPublisher) http.Handler {

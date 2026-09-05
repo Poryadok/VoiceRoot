@@ -56,7 +56,11 @@ func closedPoolSvc(t *testing.T) (*MessagingGRPC, context.Context, uuid.UUID, uu
 	pool.Close()
 	acct := uuid.New()
 	prof := uuid.New()
-	svc := &MessagingGRPC{Messages: &store.MessagesStore{Pool: pool}}
+	svc := &MessagingGRPC{
+		Messages:         &store.MessagesStore{Pool: pool},
+		ChatGuard:        faultGuard{},
+		ChatTypeResolver: faultingTestAuthoritativeChatTypeResolver{typ: chatv1.ChatType_CHAT_TYPE_GROUP},
+	}
 	return svc, profileCtx(acct, prof), acct, prof
 }
 

@@ -11,6 +11,8 @@ import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
@@ -23,15 +25,17 @@ import voice.backend.auth.service.InMemoryGuestConversionLocalPromotion;
 import voice.backend.auth.service.GuestConversionPendingUserRecoveryRunner;
 import voice.backend.auth.service.GuestConversionLocalPromotion;
 import voice.backend.auth.service.GuestConversionPendingUserWorker;
+import voice.backend.auth.sessionepoch.SessionEpochFloorConfiguration;
 import voice.backend.auth.userdb.PrimaryProfileProvisioner;
-import static org.mockito.Mockito.mock;
 
 class GuestConversionPendingUserRecoveryWiringTest {
   private final ApplicationContextRunner jdbcRuntime =
       new ApplicationContextRunner()
           .withConfiguration(
               AutoConfigurations.of(
-                  JdbcPersistenceConfiguration.class, GuestLifecycleConfiguration.class))
+                  JdbcPersistenceConfiguration.class,
+                  GuestLifecycleConfiguration.class,
+                  SessionEpochFloorConfiguration.class))
           .withUserConfiguration(JdbcSupport.class)
           .withPropertyValues(
               "auth.persistence=jdbc",
@@ -44,7 +48,9 @@ class GuestConversionPendingUserRecoveryWiringTest {
       new ApplicationContextRunner()
           .withConfiguration(
               AutoConfigurations.of(
-                  MemoryPersistenceConfiguration.class, GuestLifecycleConfiguration.class))
+                  MemoryPersistenceConfiguration.class,
+                  GuestLifecycleConfiguration.class,
+                  SessionEpochFloorConfiguration.class))
           .withUserConfiguration(MemorySupport.class)
           .withPropertyValues(
               "auth.persistence=memory",
@@ -125,7 +131,10 @@ class GuestConversionPendingUserRecoveryWiringTest {
   void recoveryDefaultsAreEnabledAndBoundedWhileInvalidBoundsFailContextStartup() {
     new ApplicationContextRunner()
         .withConfiguration(
-            AutoConfigurations.of(MemoryPersistenceConfiguration.class, GuestLifecycleConfiguration.class))
+            AutoConfigurations.of(
+                MemoryPersistenceConfiguration.class,
+                GuestLifecycleConfiguration.class,
+                SessionEpochFloorConfiguration.class))
         .withUserConfiguration(MemorySupport.class)
         .withPropertyValues("auth.persistence=memory")
         .run(
@@ -189,7 +198,12 @@ class GuestConversionPendingUserRecoveryWiringTest {
 
     @Bean
     StringRedisTemplate redis() {
-      return mock(StringRedisTemplate.class);
+      LettuceConnectionFactory connection =
+          new LettuceConnectionFactory(new RedisStandaloneConfiguration("127.0.0.1", 6379));
+      connection.afterPropertiesSet();
+      StringRedisTemplate template = new StringRedisTemplate(connection);
+      template.afterPropertiesSet();
+      return template;
     }
 
     @Bean

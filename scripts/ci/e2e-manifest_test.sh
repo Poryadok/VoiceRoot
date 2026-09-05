@@ -12,9 +12,6 @@ fail() {
   exit 1
 }
 
-echo "== A1 CI reachability contract =="
-bash "$ROOT/scripts/ci/compose-a1-ci-reachability_test.sh"
-
 count_gateway="$(bash "${SCRIPT}" "${MANIFEST}" smoke_gateway | wc -l | tr -d '[:space:]')"
 count_flutter="$(bash "${SCRIPT}" "${MANIFEST}" smoke_flutter | wc -l | tr -d '[:space:]')"
 count_full_flutter="$(bash "${SCRIPT}" "${MANIFEST}" full_flutter | wc -l | tr -d '[:space:]')"
@@ -50,6 +47,9 @@ fi
 
 helper_eol="$(git -C "${ROOT}" check-attr eol -- "src/backend/scripts/docker-go-mod-download.sh" | awk -F': ' '{print $3}')"
 [[ "${helper_eol}" == "lf" ]] || fail "Docker Go module download helper must have eol=lf, got ${helper_eol:-unset}"
+
+echo "== A1 CI reachability contract =="
+bash "$ROOT/scripts/ci/compose-a1-ci-reachability_test.sh"
 
 echo "== A1 isolated gateway section is exact and ordered =="
 a1_expected=(

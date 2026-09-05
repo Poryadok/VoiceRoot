@@ -2,6 +2,7 @@ package grpcsvc
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 
@@ -357,7 +358,7 @@ func TestReorderRoles_NonOwnerCannotPromoteRoleToOwnPosition(t *testing.T) {
 			require.NoError(t, err)
 			ordered := []string{target.ID.String()}
 			for i := 0; i < tc.belowCount; i++ {
-				below, err := s.CreateCustomRole(context.Background(), spaceID, "Below target", 0, 0, &ownerID)
+				below, err := s.CreateCustomRole(context.Background(), spaceID, fmt.Sprintf("Below target %d", i), 0, 0, &ownerID)
 				require.NoError(t, err)
 				ordered = append(ordered, below.ID.String())
 			}

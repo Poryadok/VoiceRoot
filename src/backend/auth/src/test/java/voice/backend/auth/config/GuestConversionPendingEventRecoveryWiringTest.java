@@ -1,8 +1,6 @@
 package voice.backend.auth.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -12,6 +10,8 @@ import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
@@ -23,6 +23,7 @@ import voice.backend.auth.repository.InMemoryGuestConversionOperationRepository;
 import voice.backend.auth.service.GuestConversionEventPublisher;
 import voice.backend.auth.service.GuestConversionPendingEventRecoveryRunner;
 import voice.backend.auth.service.GuestConversionPendingEventWorker;
+import voice.backend.auth.sessionepoch.SessionEpochFloorConfiguration;
 import voice.backend.auth.service.UnavailableGuestConversionEventPublisher;
 import voice.backend.auth.userdb.PrimaryProfileProvisioner;
 
@@ -33,6 +34,7 @@ class GuestConversionPendingEventRecoveryWiringTest {
               AutoConfigurations.of(
                   JdbcPersistenceConfiguration.class,
                   GuestLifecycleConfiguration.class,
+                  SessionEpochFloorConfiguration.class,
                   AuthEventsConfiguration.class))
           .withUserConfiguration(JdbcSupport.class)
           .withPropertyValues(
@@ -49,6 +51,7 @@ class GuestConversionPendingEventRecoveryWiringTest {
               AutoConfigurations.of(
                   MemoryPersistenceConfiguration.class,
                   GuestLifecycleConfiguration.class,
+                  SessionEpochFloorConfiguration.class,
                   AuthEventsConfiguration.class))
           .withUserConfiguration(MemorySupport.class)
           .withPropertyValues(
@@ -95,6 +98,7 @@ class GuestConversionPendingEventRecoveryWiringTest {
             AutoConfigurations.of(
                 JdbcPersistenceConfiguration.class,
                 GuestLifecycleConfiguration.class,
+                SessionEpochFloorConfiguration.class,
                 AuthEventsConfiguration.class))
         .withUserConfiguration(JdbcSupport.class)
         .withPropertyValues("auth.persistence=jdbc")
@@ -192,7 +196,12 @@ class GuestConversionPendingEventRecoveryWiringTest {
 
     @Bean
     StringRedisTemplate redis() {
-      return mock(StringRedisTemplate.class);
+      LettuceConnectionFactory connection =
+          new LettuceConnectionFactory(new RedisStandaloneConfiguration("127.0.0.1", 6379));
+      connection.afterPropertiesSet();
+      StringRedisTemplate template = new StringRedisTemplate(connection);
+      template.afterPropertiesSet();
+      return template;
     }
 
     @Bean

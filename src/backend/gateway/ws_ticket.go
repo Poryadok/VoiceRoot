@@ -26,20 +26,6 @@ type wsTicketRecord struct {
 	UpstreamToken    string   `json:"upstream_token"`
 }
 
-func (r wsTicketRecord) claims() tokenClaims {
-	accountType := r.AccountType
-	if accountType == "" {
-		accountType = "regular"
-	}
-	return tokenClaims{
-		UserID:           r.UserID,
-		ProfileID:        r.ProfileID,
-		Roles:            r.Roles,
-		SubscriptionTier: r.SubscriptionTier,
-		AccountType:      accountType,
-	}
-}
-
 type wsTicketStore interface {
 	Issue(ctx context.Context, record wsTicketRecord, ttl time.Duration) (string, error)
 	Consume(ctx context.Context, ticket string) (wsTicketRecord, bool, error)

@@ -58,7 +58,7 @@ func TestEnrichDecisions_PresenceExceptionsStillApplySuppressTypes(t *testing.T)
 			recipient := uuid.New()
 			decisions, err := dispatch.EnrichDecisions(
 				t.Context(),
-				onlinePresenceChecker{},
+				&countingPresenceChecker{},
 				suppressTypePolicyLoader{typ: typ},
 				map[string]delivery.DeliveryDecision{recipient.String(): {}},
 				uuid.Nil,
