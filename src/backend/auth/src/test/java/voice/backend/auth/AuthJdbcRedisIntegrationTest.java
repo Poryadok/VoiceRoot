@@ -135,7 +135,7 @@ class AuthJdbcRedisIntegrationTest {
   @Test
   void jdbcConditionalRestoreLetsDeletedAccountTransitionOnlyOnce() throws Exception {
     Account deleted = accounts.create("jdbc-restore-deleted@example.com", null, "hash", "regular");
-    accounts.markDeleted(deleted.id(), Instant.parse("2026-05-01T10:00:00Z"));
+    accounts.markDeleted(deleted.id(), Instant.now().minus(Duration.ofDays(1)));
 
     assertThat(conditionalRestore(deleted.id())).isTrue();
     assertThat(accounts.findById(deleted.id().toString()))
