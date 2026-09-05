@@ -6,7 +6,9 @@ Close the documented Voice Service authorization gap so a Space voice-room
 participant cannot unmute/speak or acquire organizer/floor powers unless Role
 Service authorizes the matching voice-room permission.  Role Service outages
 must deny the protected action; a participant must still be able to mute
-themself.  Space owners retain the documented bypass because Role Service
+themself.  The issued LiveKit token must make the same publish decision, so an
+otherwise admitted listener cannot bypass the Voice RPC through direct media
+publication. Space owners retain the documented bypass because Role Service
 returns their permission check as allowed.
 
 ## Context
@@ -43,20 +45,21 @@ returns their permission check as allowed.
   behavior, which has no Space role context. Preserve Owner authorization by
   forwarding the regular Role Service check instead of adding a local owner
   exception.
+- In: `GetJoinToken` for Space voice rooms maps a denied `VOICE_SPEAK` check to
+  a LiveKit `canPublish=false` grant, preserves publish for an allowed/Owner
+  response, and fails closed when the checker is absent or unavailable.
 - Out: A new target-participant mute RPC (the proto has none), move-room
-  implementation (currently unimplemented), LiveKit media-token grant redesign,
-  UI wiring, and unrelated voice lifecycle work.
-- Documentation gap: `GetJoinToken` has no permission-aware publish grant; it
-  is inventoried below but changes neither mute nor commander/floor state. Its
-  LiveKit publish-grant limitation remains outside this bounded RPC-authorization
-  task and is already adjacent to the documented LiveKit grant follow-up.
+  implementation (currently unimplemented), UI wiring, and unrelated voice
+  lifecycle work. Previously-issued LiveKit JWTs are not revoked before their
+  configured TTL; the canonical docs do not define a token refresh/revocation
+  contract.
 
 ## Inventory of ingress paths before tests
 
 | Path | Mutation/capability | T-062 disposition |
 | --- | --- | --- |
 | `UpdateVoiceState` | Caller changes own mute/deafen/video state | Require `VOICE_SPEAK` only when `is_muted` is explicitly false in a Space voice room; self-mute remains allowed. |
-| `GetJoinToken` | Mints current generic LiveKit join token | No state mutation and no permission-aware publish flag today; recorded as out of scope above, not an alternate state bypass. |
+| `GetJoinToken` | Mints LiveKit join token | For a Space voice room, `VOICE_SPEAK` allow/Owner gets `canPublish=true`; an explicit deny gets `canPublish=false`; missing/unavailable Role service fails closed. DM/group remains publish-capable. |
 | `SetCommanderMode(enabled)` | Gives caller organizer flag | Require `VOICE_MUTE_OTHERS` for Space voice rooms before enabling. |
 | `SetBroadcasting(enabled)` | Commander begins speaking/broadcasting | Require both `VOICE_MUTE_OTHERS` and `VOICE_SPEAK` for Space voice rooms before enabling. |
 | `GrantFloor` / `RevokeFloor` | Mutates another participant's floor | Require `VOICE_MUTE_OTHERS` for Space voice rooms before mutation; do not accept existing initiator/commander state as a substitute. |
@@ -80,6 +83,9 @@ returns their permission check as allowed.
    `space_id`, `profile_id`, and `voice_room_id`; a Role allow (including the
    Owner response) succeeds without a local bypass.
 5. Existing join/share and self-service paths continue to pass.
+6. A denied Space participant receives no publish-capable LiveKit token; an
+   allowed/Owner-shaped response receives `video.canPublish=true`; unavailable
+   Role Service receives no token. DM/group token behavior remains publish-capable.
 
 ## Milestones
 
@@ -109,14 +115,19 @@ returns their permission check as allowed.
    `UpdateVoiceState`. Map deny/unavailable into fail-closed gRPC errors using
    the service's existing screen-share style; do not special-case owner or
    permit a Space path when the checker is nil.
-6. Run the focused tests after each small change; run a bounded mutation
+6. Add documentation-derived `GetJoinToken` grant tests: decode the issued JWT
+   and check denied, allow/Owner-shaped allow, unavailable, and a non-Space
+   regression. Commit these RED tests before changing the token issuer or RPC.
+7. Have a fresh reviewer check the new RED tests for real grant decoding,
+   denial-vs-unavailability coverage, and non-Space preservation.
+8. Run the focused tests after each small change; run a bounded mutation
    check by locally negating/removing each new guard one at a time and observing
    a focused regression fail, restoring the exact source afterward with
    `apply_patch` only.
-7. Update this plan and the specific `docs/todo/backend.md` residual wording
+9. Update this plan and the specific `docs/todo/backend.md` residual wording
    to describe the closed T-062 gap without claiming unimplemented LiveKit or
    targeted-mute work. Commit the minimal GREEN implementation and docs.
-8. Obtain a fresh independent implementation review. Fix every critical
+10. Obtain a fresh independent implementation review. Fix every critical
    finding in a new commit; repeat focused checks and review if needed.
 
 ## Validation

@@ -2,8 +2,11 @@ package grpcsvc
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -127,6 +130,24 @@ func requireVoiceRoleCheck(t *testing.T, checks []voiceRolePermissionCheck, spac
 	}, checks[0])
 }
 
+func liveKitCanPublish(t *testing.T, token string) (allowed, present bool) {
+	t.Helper()
+	parts := strings.Split(token, ".")
+	require.Len(t, parts, 3)
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	require.NoError(t, err)
+	var claims struct {
+		Video map[string]json.RawMessage `json:"video"`
+	}
+	require.NoError(t, json.Unmarshal(payload, &claims))
+	grant, present := claims.Video["canPublish"]
+	if !present {
+		return false, false
+	}
+	require.NoError(t, json.Unmarshal(grant, &allowed))
+	return allowed, true
+}
+
 func TestVoiceGRPCJoinVoiceRoom_createsActiveSession(t *testing.T) {
 	f := startVoiceRoomFixture(t)
 
@@ -152,6 +173,77 @@ func TestVoiceGRPCVoiceRoom_memberJoinsExistingRoom(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, states.GetParticipants(), 2)
+}
+
+func TestVoiceGRPCVoiceRoom_joinTokenPublishGrantFollowsVoiceSpeakPermission(t *testing.T) {
+	tests := []struct {
+		name         string
+		profileID    string
+		roles        RolePermissionChecker
+		wantCode     codes.Code
+		wantPublish  bool
+		wantRoleCall bool
+	}{
+		{
+			name:         "denied member receives listen-only token",
+			profileID:    "profile-member",
+			roles:        &recordingVoiceRolePermissions{voiceSpeakErr: ErrVoiceSpeakDenied},
+			wantCode:     codes.OK,
+			wantPublish:  false,
+			wantRoleCall: true,
+		},
+		{
+			name:         "allowed member receives publish token",
+			profileID:    "profile-member",
+			roles:        &recordingVoiceRolePermissions{},
+			wantCode:     codes.OK,
+			wantPublish:  true,
+			wantRoleCall: true,
+		},
+		{
+			name:         "owner-shaped role allow receives publish token",
+			profileID:    "profile-owner",
+			roles:        &recordingVoiceRolePermissions{},
+			wantCode:     codes.OK,
+			wantPublish:  true,
+			wantRoleCall: true,
+		},
+		{
+			name:         "role unavailable fails closed",
+			profileID:    "profile-member",
+			roles:        &recordingVoiceRolePermissions{voiceSpeakErr: errors.New("role service unavailable")},
+			wantCode:     codes.PermissionDenied,
+			wantRoleCall: true,
+		},
+		{
+			name:      "role checker missing fails closed",
+			profileID: "profile-member",
+			wantCode:  codes.PermissionDenied,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			f := startVoiceRoomFixture(t)
+			roomID := f.joinParticipants(t)
+			f.svc.Roles = tc.roles
+
+			response, err := f.svc.GetJoinToken(voiceTestCtx(tc.profileID), &callsv1.GetJoinTokenRequest{RoomId: roomID})
+			require.Equal(t, tc.wantCode, status.Code(err))
+			if tc.wantRoleCall {
+				roles := tc.roles.(*recordingVoiceRolePermissions)
+				requireVoiceRoleCheck(t, roles.voiceSpeakChecks, f.spaceID, tc.profileID, f.voiceRoomID)
+			}
+			if tc.wantCode != codes.OK {
+				require.Nil(t, response)
+				return
+			}
+
+			allowed, present := liveKitCanPublish(t, response.GetJwt())
+			require.True(t, present, "Space voice token must carry an explicit publish grant")
+			require.Equal(t, tc.wantPublish, allowed)
+		})
+	}
 }
 
 func TestVoiceGRPCVoiceRoom_nonMemberDenied(t *testing.T) {
