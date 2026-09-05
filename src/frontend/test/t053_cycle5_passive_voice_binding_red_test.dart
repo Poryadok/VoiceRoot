@@ -342,11 +342,30 @@ class _VoiceBindingHarness {
       voiceBindingProfileId: 'profile-a',
       mediaTracksVersion: 7,
     );
+    final aBinding = _binding('profile-a', generation: 1);
+    container.read(realtimeHelloBindingProvider.notifier).state = aBinding;
+    boundSignals.add(
+      ProfileBoundRealtimeFrame(
+        frame: const RealtimeFrame(
+          op: 'call_accepted',
+          data: {'room_id': 'room-a'},
+        ),
+        binding: aBinding,
+      ),
+    );
+    await _drain();
+    expect(container.read(callControllerProvider).phase, CallPhase.active);
     signaling.add(
       const RealtimeFrame(op: 'call_accepted', data: {'room_id': 'room-a'}),
     );
     await _drain();
-    expect(container.read(callControllerProvider).phase, CallPhase.active);
+    expect(
+      container.read(callControllerProvider).phase,
+      CallPhase.active,
+      reason: 'unbound raw signaling must not bypass the profile fence',
+    );
+    expect(liveKit.connectCalls, 1);
+    expect(liveKit.disconnectCalls, 0);
   }
 
   Future<http.Response> _respond(http.Request request) async {
