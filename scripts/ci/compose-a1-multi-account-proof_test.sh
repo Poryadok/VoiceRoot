@@ -5,7 +5,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 SCRIPT="${ROOT}/scripts/ci/compose-a1-multi-account-proof.sh"
-T055_REGEX='^TestComposeA1(TwoAccountsFoundation|DailyMessagingREST|GroupReadIsolation|ChannelReadIsolation)_live$'
+T055_REGEX='^TestComposeA1(TwoAccountsFoundation|DailyMessagingREST|GroupReadIsolation|ChannelReadIsolation|BlockDMDenyBothDirections)_live$'
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 assert_file() { [[ -f "$1" ]] || fail "missing file: $1"; }
@@ -172,12 +172,13 @@ TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/a1-runner-tests.XXXXXXXX")"
 trap 'rm -rf -- "$TEST_TMP"' EXIT
 assert_file "$SCRIPT"
 
-echo '== T055 regex matches exactly the four current tests =='
+echo '== T055 regex matches exactly the five current tests =='
 for test_name in \
   TestComposeA1TwoAccountsFoundation_live \
   TestComposeA1DailyMessagingREST_live \
   TestComposeA1GroupReadIsolation_live \
-  TestComposeA1ChannelReadIsolation_live; do
+  TestComposeA1ChannelReadIsolation_live \
+  TestComposeA1BlockDMDenyBothDirections_live; do
   printf '%s\n' "$test_name" | grep -Eq -- "$T055_REGEX" || fail "regex did not match ${test_name}"
 done
 if printf '%s\n' TestComposeAuthLifecycle_live | grep -Eq -- "$T055_REGEX"; then
@@ -185,6 +186,9 @@ if printf '%s\n' TestComposeAuthLifecycle_live | grep -Eq -- "$T055_REGEX"; then
 fi
 if printf '%s\n' TestComposeA1GroupReadIsolation_liveExtra | grep -Eq -- "$T055_REGEX"; then
   fail 'T055 regex matched a near-miss test name'
+fi
+if printf '%s\n' TestComposeA1BlockDMDenyBothDirections_liveExtra | grep -Eq -- "$T055_REGEX"; then
+  fail 'T055 regex matched the BlockDM near-miss test name'
 fi
 
 echo '== ambient project is rejected before Docker =='
