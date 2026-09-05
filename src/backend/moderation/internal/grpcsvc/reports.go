@@ -28,6 +28,13 @@ var allowedCategories = map[string]struct{}{
 	"other":      {},
 }
 
+var allowedReportStatuses = map[string]struct{}{
+	"pending":   {},
+	"reviewing": {},
+	"resolved":  {},
+	"dismissed": {},
+}
+
 func (s *ModerationGRPC) CreateReport(ctx context.Context, req *moderationv1.CreateReportRequest) (*moderationv1.CreateReportResponse, error) {
 	if s == nil || s.Reports == nil {
 		return nil, status.Error(codes.FailedPrecondition, "report store is not configured")
@@ -252,6 +259,9 @@ func (s *ModerationGRPC) ResolveReport(ctx context.Context, req *moderationv1.Re
 	newStatus := strings.TrimSpace(req.GetNewStatus())
 	if newStatus == "" {
 		return nil, status.Error(codes.InvalidArgument, "new_status is required")
+	}
+	if _, ok := allowedReportStatuses[newStatus]; !ok {
+		return nil, status.Error(codes.InvalidArgument, "invalid new_status")
 	}
 	var assignedTo *uuid.UUID
 	if req.GetAssignedToProfileId() != "" {
