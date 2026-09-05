@@ -244,7 +244,13 @@ func (s *errorStore) Set(context.Context, string, delivery.GroupingState) error 
 }
 
 func (s *errorStore) Update(context.Context, string, string) (delivery.GroupingState, error) {
-	return delivery.GroupingState{}, s.updateErr
+	if s.updateErr != nil {
+		return delivery.GroupingState{}, s.updateErr
+	}
+	if s.getErr != nil {
+		return delivery.GroupingState{}, s.getErr
+	}
+	return delivery.GroupingState{}, s.setErr
 }
 
 type commandIntercept struct {
