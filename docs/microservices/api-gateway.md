@@ -167,6 +167,9 @@ Send after pick — **Messaging** `POST /api/v1/messages/...` (not File attach).
 6. Публичные endpoints (login, register, OTP, version, health, metrics) — без JWT
 
 Для dev/tests допускается `GATEWAY_AUTH_MODE=static` + `GATEWAY_STATIC_TOKENS_JSON`; production должен использовать JWKS.
+В JWKS-режиме `GATEWAY_REDIS_ADDR` обязателен для проверки `jti`: без него Gateway
+не пропускает защищённый запрос с `jti` и отвечает `503 auth_unavailable`. Явный
+`static` режим для dev/tests может работать без Redis.
 
 ## Конфигурация Gateway
 
@@ -198,4 +201,3 @@ Send after pick — **Messaging** `POST /api/v1/messages/...` (not File attach).
 ## Масштабирование
 
 Stateless, масштабируется горизонтально. За внешним Load Balancer (L4/L7).
-

@@ -27,6 +27,7 @@ type gatewayConfig struct {
 		requestIDGenerator func() string
 	tokenValidator     tokenValidator
 	tokenBlacklist     tokenBlacklist
+	blacklistRequired  bool
 	rateLimiter        rateLimiter
 	trustedProxyCIDRs  []string
 	cors               corsConfig
@@ -70,7 +71,11 @@ func newGateway(config gatewayConfig) http.Handler {
 		config.tokenValidator = staticTokenValidator(config.tokenClaims)
 	}
 	if config.tokenBlacklist == nil {
-		config.tokenBlacklist = noTokenBlacklist{}
+		if config.blacklistRequired {
+			config.tokenBlacklist = unavailableTokenBlacklist{}
+		} else {
+			config.tokenBlacklist = noTokenBlacklist{}
+		}
 	}
 	if config.rateLimiter == nil {
 		config.rateLimiter = staticGroupLimiter(config.rateLimitedGroups)
