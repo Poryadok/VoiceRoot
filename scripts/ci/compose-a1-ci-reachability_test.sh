@@ -134,9 +134,11 @@ src/backend/social/**
 src/backend/file/**
 src/backend/gateway/**
 src/backend/realtime/**
+src/backend/pkg/**
 src/frontend/**
 src/backend/migrations/**
 protos/**
+docker/**
 docker-compose*.yml
 scripts/ci/compose-a1*
 scripts/ci/e2e-manifest*"
