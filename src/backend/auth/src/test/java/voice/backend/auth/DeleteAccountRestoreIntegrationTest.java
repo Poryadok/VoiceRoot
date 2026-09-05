@@ -135,7 +135,7 @@ class DeleteAccountRestoreIntegrationTest {
   }
 
   @Test
-  void retryAfterRedisFloorFailureResealsTheEpochWithoutDuplicateDeleteOrEvent()
+  void retryAfterRedisFloorFailureStartsAndCompletesANewDeletion()
       throws Exception {
     JsonNode registered =
         session(
@@ -152,9 +152,12 @@ class DeleteAccountRestoreIntegrationTest {
             () -> authService.deleteAccount("Bearer " + accessToken, "Correct horse battery staple"))
         .isInstanceOf(SessionEpochFloorUnavailableException.class);
     Account afterFailure = accounts.findById(before.id().toString()).orElseThrow();
-    assertThat(afterFailure.status()).isEqualTo("deleted");
-    assertThat(afterFailure.deletedAt()).isNotNull();
-    assertThat(afterFailure.sessionEpoch()).isEqualTo(before.sessionEpoch() + 1);
+    assertThat(afterFailure.status()).isEqualTo("active");
+    assertThat(afterFailure.deletedAt()).isNull();
+    assertThat(afterFailure.sessionEpoch()).isEqualTo(before.sessionEpoch());
+    assertThat(deletionOperations.findByAccountAndEpoch(before.id(), before.sessionEpoch() + 1))
+        .isEmpty();
+    assertThat(authService.validate("Bearer " + accessToken).userId()).isEqualTo(before.id().toString());
     verifyNoInteractions(authEventPublisher);
     verifyNoInteractions(deletionEventPublisher);
 
@@ -168,12 +171,12 @@ class DeleteAccountRestoreIntegrationTest {
     assertThat(retry.restoreToken()).isNotBlank();
     Account afterRetry = accounts.findById(before.id().toString()).orElseThrow();
     assertThat(afterRetry.status()).isEqualTo("deleted");
-    assertThat(afterRetry.deletedAt()).isEqualTo(afterFailure.deletedAt());
-    assertThat(afterRetry.sessionEpoch()).isEqualTo(afterFailure.sessionEpoch());
+    assertThat(afterRetry.deletedAt()).isNotNull();
+    assertThat(afterRetry.sessionEpoch()).isEqualTo(before.sessionEpoch() + 1);
     ArgumentCaptor<Long> sealedEpochs = ArgumentCaptor.forClass(Long.class);
     verify(sessionEpochFloors, times(2)).recordAtLeast(eq(before.id()), sealedEpochs.capture());
     assertThat(sealedEpochs.getAllValues())
-        .containsExactly(afterFailure.sessionEpoch(), afterFailure.sessionEpoch());
+        .containsExactly(before.sessionEpoch() + 1, before.sessionEpoch() + 1);
     verifyDeletionEvent(before.id());
   }
 
