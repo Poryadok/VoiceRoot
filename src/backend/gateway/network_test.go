@@ -24,6 +24,12 @@ func TestClientIP_TrustedProxyForwardedForChain(t *testing.T) {
 			want:         "203.0.113.11",
 		},
 		{
+			name:         "all trusted forwarded addresses fall back to peer",
+			remoteAddr:   "192.0.2.9:1234",
+			forwardedFor: "192.0.2.11",
+			want:         "192.0.2.9",
+		},
+		{
 			name:         "malformed forwarded chain fails safe to peer",
 			remoteAddr:   "192.0.2.9:1234",
 			forwardedFor: "198.51.100.77, not-an-ip, 192.0.2.11",
