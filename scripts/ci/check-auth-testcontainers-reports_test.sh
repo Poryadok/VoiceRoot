@@ -8,6 +8,7 @@ FIXTURES="${ROOT}/scripts/ci/testdata/auth-testcontainers-reports/valid"
 MAKEFILE="${ROOT}/Makefile"
 WORKFLOW="${ROOT}/.github/workflows/ci.yml"
 PATH_FILTERS="${ROOT}/.github/ci/path-filters.yml"
+AUTH_TEST_SOURCES="${ROOT}/src/backend/auth/src/test/java"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TMP_DIR}"' EXIT
 
@@ -69,5 +70,17 @@ auth_target="$(sed -n '/^auth-test-ci:/,/^auth-image-ci:/p' "${MAKEFILE}")"
 [[ "${auth_target#*mvn -B test}" == *"check-auth-testcontainers-reports.sh"* ]] || fail "auth-test-ci must check reports after Maven"
 grep -A 35 '^  backend-auth:' "${WORKFLOW}" | grep -F 'run: make auth-test-ci' >/dev/null || fail "backend-auth must use canonical auth-test-ci"
 grep -A 12 '^auth:' "${PATH_FILTERS}" | grep -Fx '  - src/backend/migrations/auth_db/**' >/dev/null || fail "Auth path filter must include auth_db migrations"
+
+echo "== every disabledWithoutDocker suite has a required report and fixture =="
+source_suites="$(grep -rl -E '@Testcontainers\(disabledWithoutDocker = true\)' "${AUTH_TEST_SOURCES}" \
+  | sed -E "s#^${AUTH_TEST_SOURCES}/##; s#/#.#g; s#\\.java$##" \
+  | LC_ALL=C sort)"
+required_suites="$(sed -n '/^required_suites=(/,/^)/p' "${SCRIPT}" \
+  | sed -nE 's/^[[:space:]]*"([^"]+)"$/\1/p' \
+  | LC_ALL=C sort)"
+[[ "${source_suites}" == "${required_suites}" ]] || fail "required Testcontainers suites drift from disabledWithoutDocker inventory"
+while IFS= read -r suite; do
+  [[ -f "${FIXTURES}/TEST-${suite}.xml" ]] || fail "missing fixture report for ${suite}"
+done <<<"${source_suites}"
 
 echo "All Auth Testcontainers report gate tests passed."
