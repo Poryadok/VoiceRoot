@@ -265,6 +265,53 @@ func TestSearchProfiles_PrivacyFilteringFillsCursorPage(t *testing.T) {
 	require.False(t, resp.GetPage().GetHasMore())
 }
 
+func TestSearchProfiles_CursorPreservesVerifiedRankingAfterPrivacyFiltering(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
+	applyUserPrivacyMigrations(t, ctx, pool)
+
+	viewerAccount, viewerProfile := uuid.New(), uuid.New()
+	verifiedAccount, verifiedProfile := uuid.New(), uuid.New()
+	unverifiedAccount, unverifiedProfile := uuid.New(), uuid.New()
+	insertSearchPrivacyProfile(t, ctx, pool, viewerProfile, viewerAccount, "viewer", "0001", true)
+	insertSearchPrivacyProfile(t, ctx, pool, verifiedProfile, verifiedAccount, "zverifiedcursor", "0002", true)
+	insertSearchPrivacyProfile(t, ctx, pool, unverifiedProfile, unverifiedAccount, "aunverifiedcursor", "0003", true)
+	_, err := pool.Exec(ctx, `UPDATE profiles SET verification_type = 'personal' WHERE id = $1`, verifiedProfile)
+	require.NoError(t, err)
+
+	privacyStore := store.NewPrivacyStore(pool)
+	for _, profileID := range []uuid.UUID{verifiedProfile, unverifiedProfile} {
+		row := store.PrivacyRowFromSettings(profileID, privacy.SettingsForPreset("gaming"))
+		row.AllowFriendRequests = privacy.EveryoneWithGuests()
+		_, err = privacyStore.Upsert(ctx, row)
+		require.NoError(t, err)
+	}
+	mr := miniredis.RunT(t)
+	t.Cleanup(mr.Close)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), privacyStore, rdb)
+
+	first, err := cli.SearchProfiles(withUserAuthCtx(ctx, viewerAccount, viewerProfile), &userv1.SearchProfilesRequest{
+		Query: "cursor",
+		Page:  &commonv1.CursorPageRequest{PageSize: 1},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{verifiedProfile.String()}, collectProfileIDs(first.GetProfileList().GetProfiles()))
+	require.True(t, first.GetPage().GetHasMore())
+
+	second, err := cli.SearchProfiles(withUserAuthCtx(ctx, viewerAccount, viewerProfile), &userv1.SearchProfilesRequest{
+		Query: "cursor",
+		Page:  &commonv1.CursorPageRequest{Cursor: first.GetPage().GetNextCursor(), PageSize: 1},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{unverifiedProfile.String()}, collectProfileIDs(second.GetProfileList().GetProfiles()))
+	require.False(t, second.GetPage().GetHasMore())
+}
+
 func insertSearchPrivacyProfile(t *testing.T, ctx context.Context, pool *pgxpool.Pool, profileID, accountID uuid.UUID, username, discriminator string, primary bool) {
 	t.Helper()
 	_, err := pool.Exec(ctx, `
