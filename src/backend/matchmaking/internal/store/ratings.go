@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -35,6 +34,18 @@ type InsertMatchRatingParams struct {
 type RatingStore struct {
 	Pool *pgxpool.Pool
 }
+
+const completedMatchesForRating = `
+	SELECT COUNT(DISTINCT m.id)::int
+	FROM matches m
+	WHERE m.game_id = $2
+	  AND m.status = 'completed'
+	  AND EXISTS (
+		SELECT 1
+		FROM jsonb_array_elements(m.participants) AS participant
+		WHERE participant->>'profile_id' = $1::text
+	  )
+`
 
 func validateStars(stars int) error {
 	if stars < 1 || stars > 5 {
@@ -88,25 +99,36 @@ func (s *RatingStore) UpsertPlayerRating(ctx context.Context, profileID, gameID 
 			) / (player_ratings.total_ratings_received + 1),
 			total_ratings_received = player_ratings.total_ratings_received + 1,
 			updated_at = now()
-		RETURNING profile_id, game_id, average_rating, total_ratings_received
+		RETURNING profile_id, game_id, average_rating
 	`, profileID, gameID, float64(stars)).Scan(
-		&pr.ProfileID, &pr.GameID, &pr.RatingValue, &pr.GamesPlayed,
+		&pr.ProfileID, &pr.GameID, &pr.RatingValue,
 	)
-	return pr, err
+	if err != nil {
+		return PlayerRating{}, err
+	}
+	err = s.Pool.QueryRow(ctx, completedMatchesForRating, profileID, gameID).Scan(
+		&pr.GamesPlayed,
+	)
+	if err != nil {
+		return PlayerRating{}, err
+	}
+	return pr, nil
 }
 
-// GetPlayerRating loads aggregate rating for a profile+game.
+// GetPlayerRating loads the rating aggregate and the number of completed
+// matches containing this profile for the requested game.
 func (s *RatingStore) GetPlayerRating(ctx context.Context, profileID, gameID uuid.UUID) (PlayerRating, error) {
 	if s == nil || s.Pool == nil {
 		return PlayerRating{}, errors.New("rating store unavailable")
 	}
 	var pr PlayerRating
 	err := s.Pool.QueryRow(ctx, `
-		SELECT profile_id, game_id, average_rating, total_ratings_received
-		FROM player_ratings WHERE profile_id = $1 AND game_id = $2
-	`, profileID, gameID).Scan(&pr.ProfileID, &pr.GameID, &pr.RatingValue, &pr.GamesPlayed)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return PlayerRating{ProfileID: profileID, GameID: gameID}, nil
-	}
+		SELECT $1::uuid, $2::uuid, COALESCE(pr.average_rating, 0), (`+completedMatchesForRating+`)
+		FROM (SELECT $1::uuid AS profile_id, $2::uuid AS game_id) requested
+		LEFT JOIN player_ratings pr
+		  ON pr.profile_id = requested.profile_id AND pr.game_id = requested.game_id
+	`, profileID, gameID).Scan(
+		&pr.ProfileID, &pr.GameID, &pr.RatingValue, &pr.GamesPlayed,
+	)
 	return pr, err
 }
