@@ -260,6 +260,80 @@ void main() {
         expect(harness.chats.unmatchedCalls, isEmpty);
       },
     );
+
+    test(
+      'a delayed retired A1 teardown cannot clobber accepted replacement A2',
+      () async {
+        final harness = _Cycle4Harness(createReconciler: false);
+        addTearDown(harness.dispose);
+        final frames = <RealtimeFrame>[];
+        final frameSubscription = harness.hub.events.listen(frames.add);
+        addTearDown(frameSubscription.cancel);
+
+        await harness.connectAWithoutHello();
+        final a1 = harness.connection('profile-a');
+        a1.addHello();
+        harness.hub.ensureSubscribed('retained-chat');
+        await pumpEventQueue();
+        expect(a1.subscribedChatIds, ['retained-chat']);
+
+        for (final inbox in ['main', 'requests', 'archive']) {
+          harness.chats.enqueue(
+            InboxChatPageScript(
+              inbox: inbox,
+              cursor: null,
+              profileId: 'profile-a',
+              authorization: 'Bearer access-profile-a',
+              result: const ChatsApiOk(ChatListData(items: [])),
+            ),
+          );
+        }
+
+        a1.blockFirstDispose();
+        addTearDown(a1.releaseFirstDispose);
+        final firstReconnect = harness.hub.reconnectWithNewSession();
+        await a1.waitForFirstDispose();
+
+        final replacementReconnect = harness.hub.reconnectWithNewSession();
+        await harness.transport.waitForOpen('profile-a', attempt: 1);
+        harness.transport.releaseOpen('profile-a', attempt: 1);
+        await replacementReconnect;
+        final a2 = harness.connection('profile-a', attempt: 1);
+        expect(a2, isNot(same(a1)));
+        expect(a2.subscribedChatIds, ['retained-chat']);
+
+        a2.addHello();
+        await pumpEventQueue();
+        harness.mountReconciler();
+        await pumpEventQueue();
+        expect(harness.chats.calls.skip(1), hasLength(3));
+        expect(harness.messages.getCalls, isEmpty);
+        final framesBeforeA1Release = frames.length;
+
+        a1.releaseFirstDispose();
+        await firstReconnect;
+        a2.addFrame(const RealtimeFrame(op: 'message_create', sequence: 2));
+        await pumpEventQueue();
+
+        expect(harness.hub.status, RealtimeLinkStatus.connected);
+        expect(harness.hub.subscribedChatIds, {'retained-chat'});
+        expect(a2.subscribedChatIds, ['retained-chat']);
+        expect(
+          frames,
+          hasLength(framesBeforeA1Release + 1),
+          reason:
+              'A2 must remain the active event source after the retired A1 '
+              'dispose completes',
+        );
+        expect(
+          harness.chats.calls.skip(1),
+          hasLength(3),
+          reason: 'a delayed A1 teardown must not replay the A2 snapshot',
+        );
+        expect(harness.messages.getCalls, isEmpty);
+        expect(harness.chats.unmatchedCalls, isEmpty);
+      },
+    );
   });
 }
 
@@ -508,6 +582,10 @@ class _ControlledVoiceRealtimeConnection extends VoiceRealtimeConnection {
   final String profileId;
   final StreamController<RealtimeFrame> _frames =
       StreamController<RealtimeFrame>.broadcast(sync: true);
+  final List<String> subscribedChatIds = [];
+  final Completer<void> _firstDisposeStarted = Completer<void>();
+  Completer<void>? _firstDisposeGate;
+  var _disposeCount = 0;
 
   @override
   Stream<RealtimeFrame> get events => _frames.stream;
@@ -516,12 +594,38 @@ class _ControlledVoiceRealtimeConnection extends VoiceRealtimeConnection {
   Future<void> connect() async {}
 
   @override
-  Future<void> dispose() async {}
+  Future<void> dispose() async {
+    _disposeCount++;
+    if (_disposeCount != 1) return;
+    if (!_firstDisposeStarted.isCompleted) _firstDisposeStarted.complete();
+    final gate = _firstDisposeGate;
+    if (gate != null) await gate.future;
+  }
+
+  @override
+  void sendSubscribe(String chatId) {
+    subscribedChatIds.add(chatId);
+  }
 
   void addHello() {
     if (!_frames.isClosed) {
       _frames.add(const RealtimeFrame(op: 'hello', sequence: 1));
     }
+  }
+
+  void addFrame(RealtimeFrame frame) {
+    if (!_frames.isClosed) _frames.add(frame);
+  }
+
+  void blockFirstDispose() {
+    _firstDisposeGate ??= Completer<void>();
+  }
+
+  Future<void> waitForFirstDispose() => _firstDisposeStarted.future;
+
+  void releaseFirstDispose() {
+    final gate = _firstDisposeGate;
+    if (gate != null && !gate.isCompleted) gate.complete();
   }
 
   Future<void> closeEvents() async {
