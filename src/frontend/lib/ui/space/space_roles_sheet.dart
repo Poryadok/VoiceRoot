@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../backend/space_permissions.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/space_providers.dart';
+import '../api_error_messages.dart';
 import '../core/voice_bottom_sheet.dart';
+import '../core/voice_skeleton.dart';
 import '../core/voice_state_panel.dart';
 import 'space_role_editor_sheet.dart';
 
@@ -82,10 +84,10 @@ class SpaceRolesSheet extends ConsumerWidget {
             ),
             Expanded(
               child: rolesAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
+                loading: () => const VoiceListSkeleton(rowCount: 4),
                 error: (error, _) => VoiceStatePanel(
                   title: l10n.spaceRolesLoadError,
-                  message: '$error',
+                  message: spaceRolesErrorMessage(l10n, error),
                   icon: Icons.badge_outlined,
                   actionLabel: l10n.commonRetry,
                   onAction: () => ref.invalidate(spaceRolesProvider(spaceId)),
