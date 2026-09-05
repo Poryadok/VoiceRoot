@@ -32,6 +32,7 @@ a1_e2e:
   - src/backend/pkg/**
   - src/frontend/**
   - src/backend/migrations/**
+  - src/backend/scripts/**
   - protos/**
   - docker/**
   - docker-compose*.yml

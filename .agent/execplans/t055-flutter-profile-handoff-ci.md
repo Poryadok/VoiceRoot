@@ -98,18 +98,44 @@ this reachability proof.
    this plan, docs, accepted RED contracts, and the final diff. Resolve any
    critical finding locally and rerun affected checks.
 
+### GREEN Implementation Detail
+
+1. Extend `e2e-manifest.sh`'s closed section allow-list with
+   `a1_flutter_profile_handoff` and add one ordered manifest entry:
+   `test/t055_profile_switch_reconnect_inbox_e2e_live_test.dart`.
+2. Add `compose-a1-flutter-profile-handoff` to the Makefile phony list and
+   implement it as exactly one Bash runner invocation. Append both new offline
+   contracts to the existing `ci-script-tests` recipe.
+3. Implement `compose-a1-flutter-profile-handoff.sh`: reject every ambient
+   Compose selector before Docker; generate/check a `voice-a1-flutter-handoff-`
+   project and 17-port range; use a generated zero-byte explicit env-file; use
+   one wrapper with `--env-file`, `--project-name`, `--project-directory`,
+   `-f`, and `--profile app`; wait for Realtime and Gateway health plus Gateway
+   HTTP health; read exactly one selected test through `e2e-manifest.sh`; then
+   run one constrained Flutter VM test. On failure print project diagnostics;
+   opt-in cleanup uses the same wrapper identity and no volumes.
+4. Add `a1-flutter-profile-handoff` adjacent to existing A1 jobs. Its `if`
+   expression retains the exact accepted schedule/full-dispatch/filtered-master
+   structure; it uses checkout v5, cached Flutter action, Linux SQLite prefetch,
+   cleanup=true, and the exact Make target.
+5. Add the independently discovered `src/backend/scripts/**` A1 filter entry
+   without changing global or PR-gate behavior.
+
 ## Validation
 
 - [ ] `bash scripts/ci/e2e-manifest_test.sh` validates parser, manifest,
-  workflow, and dedicated path-filter contracts without Docker/network.
+  workflow, and dedicated path-filter contracts without Docker/network. It is
+  host-blocked before script execution: system Bash targets WSL without
+  `/bin/bash`, while direct Git Bash child processes hang even for `printf`.
 - [ ] `bash scripts/ci/compose-a1-flutter-profile-handoff_test.sh` exercises
-  the runner through fake `docker`, `curl`, and `flutter` shims only.
-- [ ] `make -n compose-a1-flutter-profile-handoff` proves the exact isolated
-  target.
-- [ ] A local YAML parse verifies `.github/workflows/ci.yml`,
-  `.github/ci/e2e-features.yml`, and `.github/ci/path-filters.yml` are valid.
-- [ ] `git diff --check`, targeted status/diff review, and fresh review show
-  no unrelated changes.
+  the runner through fake `docker`, `curl`, and `flutter` shims only. It has
+  the same host Bash blocker; no Docker/Flutter/network command was started.
+- [x] `make -n compose-a1-flutter-profile-handoff` proves the exact isolated
+  target; `make -n ci-script-tests` contains both new contract commands.
+- [x] Python PyYAML parsed `.github/workflows/ci.yml`,
+  `.github/ci/e2e-features.yml`, and `.github/ci/path-filters.yml`.
+- [x] `git diff --check`, targeted status/diff review, and fresh GREEN review
+  show no unrelated changes.
 
 ## Progress
 
@@ -136,8 +162,14 @@ this reachability proof.
   the alternate path among potentially several tests. Final review found the
   parser shim was not executable; it is now explicitly included in its local
   fixture `chmod` set.
-- [ ] GREEN implementation and bounded verification.
-- [ ] GREEN review, final checklist, and clean worktree.
+- [x] RED contract accepted by fresh review and committed as `06b3923e`.
+- [x] GREEN implementation and bounded static verification: parser/manifest,
+  Make target, isolated runner, separate CI job, and `src/backend/scripts/**`
+  filter added without changing T-052/T-053/T-055 source behavior.
+- [x] Fresh independent GREEN review approved with no P1/P2; Docker, Bash,
+  Flutter, and network execution remain intentionally unperformed/blocked.
+- [x] Final checklist: docs, plan, RED contracts, and implementation agree;
+  only the documented host Bash limitation prevents shim execution.
 
 ## Decisions
 
@@ -150,6 +182,9 @@ this reachability proof.
 - The current writer owns every edit because the task explicitly designates one
   consolidated writer. Fresh agents are read-only review delegates, satisfying
   the independent-review requirement without shared-write conflicts.
+- Keep the runner's selected Dart path manifest-driven. The manifest/parser
+  contract owns the canonical T-055 path, while the runner validates only one
+  relative Dart path so the shim can prove selection is not hard-coded.
 
 ## Risks And Follow-Ups
 
