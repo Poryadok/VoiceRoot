@@ -392,11 +392,17 @@ class VoiceAuthClient {
   Future<AuthApiResult<void>> deleteAccount({
     required AuthSession session,
     required String password,
+    String? totpCode,
   }) async {
+    final body = <String, dynamic>{'password': password};
+    final normalizedTotpCode = totpCode?.trim();
+    if (normalizedTotpCode != null && normalizedTotpCode.isNotEmpty) {
+      body['totp_code'] = normalizedTotpCode;
+    }
     final result = await _gateway.postEmpty(
       uri: _gateway.resolve('/api/v1/auth/delete-account'),
       authorization: session.authorizationHeader,
-      jsonBody: {'password': password},
+      jsonBody: body,
     );
     return switch (result) {
       GatewayHttpOk<void>() => const AuthApiOk(null),
