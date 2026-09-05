@@ -171,7 +171,7 @@ wait_gateway
 set +e
 (
   cd "$ROOT/src/backend/gateway"
-  go test -count=1 -parallel 1 -timeout 20m -tags live \
+  go test -count=1 -parallel 1 -timeout 20m \
     -run "$A1_TEST_REGEX" ./...
 )
 test_status=$?
