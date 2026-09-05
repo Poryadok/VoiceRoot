@@ -73,7 +73,6 @@ func TestRevokeInvite_RecordsAuditEntry(t *testing.T) {
 	invite, err := client.CreateInvite(ownerCtx, &spacev1.CreateInviteRequest{SpaceId: spaceID.String()})
 	require.NoError(t, err)
 	inviteID := uuid.MustParse(invite.GetInvite().GetId())
-	inviteCode := invite.GetInvite().GetCode()
 
 	_, err = client.RevokeInvite(ownerCtx, &spacev1.RevokeInviteRequest{InviteId: inviteID.String()})
 	require.NoError(t, err)
@@ -91,7 +90,7 @@ WHERE space_id = $1 AND action = 'invite_revoked'
 	require.Equal(t, "invite_revoked", action)
 	require.Equal(t, "invite", targetType)
 	require.Equal(t, inviteID, targetID)
-	require.JSONEq(t, fmt.Sprintf(`{"code":%q}`, inviteCode), details)
+	require.JSONEq(t, `{}`, details)
 }
 
 func TestGetAuditLog_MapsFieldsOrdersAndScopesToRequestedSpace(t *testing.T) {
