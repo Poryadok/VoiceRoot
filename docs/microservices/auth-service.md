@@ -239,3 +239,10 @@ strict missing/corrupt claim или floor, а также Redis error — fail-cl
 Redis Pub/Sub не является correctness mechanism для отзыва и лишь ускоряет
 адресное закрытие сокетов в Realtime. Текущий staged claim сам по себе не
 означает, что отзыв всех существующих access/refresh сессий уже реализован.
+
+Auth producer этого floor всё ещё staged/WIP: после реализации он остаётся
+единственным writer фиксированного ключа
+`auth:session:min_epoch:<account_id>` со значением положительного `int64` без
+TTL и обновляет его только вверх. Gateway и Realtime являются read-only
+consumers; их strict rollout не заменяет Auth migration, seed и готовность
+Realtime consumer.

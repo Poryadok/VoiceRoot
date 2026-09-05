@@ -34,6 +34,14 @@ floor отклоняются (floor не подставляется как `1`).
 Auth DB после сбоя/rollback: это безопасный over-revoke, который подлежит
 reconcile без снижения floor.
 
+Ключ floor имеет фиксированный Auth-owned формат
+`auth:session:min_epoch:<account_id>`, содержит положительный `int64` и не имеет
+TTL. Auth остаётся единственным writer; Gateway читает этот ключ через общий
+Gateway Redis и тот же пароль, не меняя prefix. После успешной валидации JWT
+Gateway сначала проверяет non-empty `jti` blacklist, затем floor; запрос Redis
+ограничен 2 секундами. В strict missing/corrupt floor либо ошибка/timeout Redis
+на Gateway boundary дают `auth_unavailable`, а не fallback к epoch `1`.
+
 Rollout: `expand` (колонка + выпуск claim) → `seed` floor из Auth DB → `strict`
 проверки Gateway и Realtime. До strict compatibility-режим допускает legacy JWT
 без claim и не seeded floor; переключение strict разрешено только после готовности

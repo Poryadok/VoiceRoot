@@ -107,6 +107,9 @@ func TestWebSocketTicketUpgrade(t *testing.T) {
 	var downstream http.Header
 	h := newGatewayForContract(t, gatewayTestOptions{
 		wsTicketStore: store,
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
 		realtimeUpstream: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			downstream = r.Header.Clone()
 			w.WriteHeader(http.StatusSwitchingProtocols)
@@ -142,6 +145,9 @@ func TestWebSocketTicketSingleUse(t *testing.T) {
 
 	h := newGatewayForContract(t, gatewayTestOptions{
 		wsTicketStore: store,
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
 		realtimeUpstream: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusSwitchingProtocols)
 		}),

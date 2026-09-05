@@ -27,6 +27,8 @@ type gatewayConfig struct {
 		requestIDGenerator func() string
 	tokenValidator     tokenValidator
 	tokenBlacklist     tokenBlacklist
+	sessionEpochStrict bool
+	sessionEpochFloor  sessionEpochFloor
 	rateLimiter        rateLimiter
 	trustedProxyCIDRs  []string
 	cors               corsConfig

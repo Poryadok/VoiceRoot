@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -33,6 +34,281 @@ func TestBlacklistBoundary(t *testing.T) {
 	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), "auth_unavailable") {
 		t.Fatalf("blacklist failure status/body = %d %q", rec.Code, rec.Body.String())
 	}
+}
+
+func TestSessionEpochFloorAllowsCurrentAndNewerTokens(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name  string
+		epoch int64
+	}{
+		{name: "equal floor", epoch: 7},
+		{name: "newer than floor", epoch: 8},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			floor := &recordingSessionEpochFloor{minimum: 7}
+			var upstreamCalls int
+			h := newGatewayForContract(t, gatewayTestOptions{
+				tokenValidator: fixedValidator{claims: tokenClaims{
+					UserID:       "account-1",
+					JTI:          "jti-1",
+					SessionEpoch: tc.epoch,
+				}},
+				sessionEpochStrict: true,
+				sessionEpochFloor:  floor,
+				restUpstreams: map[string]http.Handler{
+					"users": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+						upstreamCalls++
+						w.WriteHeader(http.StatusNoContent)
+					}),
+				},
+			})
+
+			rec := performRequest(h, http.MethodGet, "/api/v1/users/me", "", map[string]string{"Authorization": "Bearer any"})
+			if rec.Code != http.StatusNoContent {
+				t.Fatalf("status/body = %d %q", rec.Code, rec.Body.String())
+			}
+			if floor.calls != 1 || floor.accounts[0] != "account-1" {
+				t.Fatalf("floor calls/accounts = %d/%v", floor.calls, floor.accounts)
+			}
+			if upstreamCalls != 1 {
+				t.Fatalf("upstream calls = %d, want 1", upstreamCalls)
+			}
+		})
+	}
+}
+
+func TestSessionEpochFloorRejectsStaleToken(t *testing.T) {
+	t.Parallel()
+
+	floor := &recordingSessionEpochFloor{minimum: 7}
+	var upstreamCalls int
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenValidator:     fixedValidator{claims: tokenClaims{UserID: "account-1", JTI: "jti-1", SessionEpoch: 6}},
+		sessionEpochStrict: true,
+		sessionEpochFloor:  floor,
+		restUpstreams: map[string]http.Handler{
+			"users": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				upstreamCalls++
+				w.WriteHeader(http.StatusNoContent)
+			}),
+		},
+	})
+
+	rec := performRequest(h, http.MethodGet, "/api/v1/users/me", "", map[string]string{"Authorization": "Bearer any"})
+	if rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Body.String(), "token_revoked") {
+		t.Fatalf("status/body = %d %q", rec.Code, rec.Body.String())
+	}
+	if floor.calls != 1 || upstreamCalls != 0 {
+		t.Fatalf("floor/upstream calls = %d/%d, want 1/0", floor.calls, upstreamCalls)
+	}
+}
+
+func TestStrictStaticTokenRejectsMissingOrNonPositiveSessionEpochBeforeFloor(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name   string
+		claims tokenClaims
+	}{
+		{name: "missing", claims: tokenClaims{UserID: "account-1", JTI: "jti-1"}},
+		{name: "zero", claims: tokenClaims{UserID: "account-1", JTI: "jti-1", SessionEpoch: 0}},
+		{name: "negative", claims: tokenClaims{UserID: "account-1", JTI: "jti-1", SessionEpoch: -1}},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			floor := &recordingSessionEpochFloor{minimum: 1}
+			var upstreamCalls int
+			h := newGatewayForContract(t, gatewayTestOptions{
+				tokenClaims:        map[string]tokenClaims{"static-token": tc.claims},
+				sessionEpochStrict: true,
+				sessionEpochFloor:  floor,
+				restUpstreams: map[string]http.Handler{
+					"users": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+						upstreamCalls++
+						w.WriteHeader(http.StatusNoContent)
+					}),
+				},
+			})
+
+			rec := performRequest(h, http.MethodGet, "/api/v1/users/me", "", map[string]string{"Authorization": "Bearer static-token"})
+			if rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Body.String(), "invalid_token") {
+				t.Fatalf("status/body = %d %q", rec.Code, rec.Body.String())
+			}
+			if floor.calls != 0 || upstreamCalls != 0 {
+				t.Fatalf("floor/upstream calls = %d/%d, want 0/0", floor.calls, upstreamCalls)
+			}
+		})
+	}
+}
+
+func TestSessionEpochFloorFailsClosedWhenUnavailable(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name  string
+		floor recordingSessionEpochFloor
+	}{
+		{name: "missing", floor: recordingSessionEpochFloor{}},
+		{name: "redis error", floor: recordingSessionEpochFloor{err: errors.New("redis down")}},
+		{name: "deadline", floor: recordingSessionEpochFloor{err: context.DeadlineExceeded}},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			floor := tc.floor
+			h := newGatewayForContract(t, gatewayTestOptions{
+				tokenValidator:     fixedValidator{claims: tokenClaims{UserID: "account-1", JTI: "jti-1", SessionEpoch: 7}},
+				sessionEpochStrict: true,
+				sessionEpochFloor:  &floor,
+				restUpstreams: map[string]http.Handler{
+					"users": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }),
+				},
+			})
+
+			rec := performRequest(h, http.MethodGet, "/api/v1/users/me", "", map[string]string{"Authorization": "Bearer any"})
+			if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), "auth_unavailable") {
+				t.Fatalf("status/body = %d %q", rec.Code, rec.Body.String())
+			}
+			if floor.calls != 1 {
+				t.Fatalf("floor calls = %d, want 1", floor.calls)
+			}
+		})
+	}
+}
+
+func TestSessionEpochFloorTypedNilRedisStoreFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	var redisFloor *redisSessionEpochFloor
+	var floor sessionEpochFloor = redisFloor
+	blacklist := &recordingBlacklist{}
+	var upstreamCalls int
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenValidator:     fixedValidator{claims: tokenClaims{UserID: "account-1", JTI: "jti-1", SessionEpoch: 7}},
+		tokenBlacklist:     blacklist,
+		sessionEpochStrict: true,
+		sessionEpochFloor:  floor,
+		restUpstreams: map[string]http.Handler{
+			"users": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				upstreamCalls++
+				w.WriteHeader(http.StatusNoContent)
+			}),
+		},
+	})
+
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			t.Fatalf("typed-nil session epoch floor panicked: %v", recovered)
+		}
+	}()
+	rec := performRequest(h, http.MethodGet, "/api/v1/users/me", "", map[string]string{"Authorization": "Bearer any"})
+	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), "auth_unavailable") {
+		t.Fatalf("status/body = %d %q", rec.Code, rec.Body.String())
+	}
+	if blacklist.calls != 1 {
+		t.Fatalf("blacklist calls = %d, want 1 before floor", blacklist.calls)
+	}
+	if upstreamCalls != 0 {
+		t.Fatalf("upstream calls = %d, want 0", upstreamCalls)
+	}
+}
+
+func TestSessionEpochFloorRunsAfterSuccessfulJTIValidation(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name      string
+		blacklist recordingBlacklist
+		wantCode  int
+		wantBody  string
+	}{
+		{name: "revoked JTI", blacklist: recordingBlacklist{revoked: true}, wantCode: http.StatusUnauthorized, wantBody: "token_revoked"},
+		{name: "blacklist unavailable", blacklist: recordingBlacklist{err: errors.New("redis down")}, wantCode: http.StatusServiceUnavailable, wantBody: "auth_unavailable"},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			floor := &recordingSessionEpochFloor{minimum: 7}
+			blacklist := tc.blacklist
+			h := newGatewayForContract(t, gatewayTestOptions{
+				tokenValidator:     fixedValidator{claims: tokenClaims{UserID: "account-1", JTI: "jti-1", SessionEpoch: 7}},
+				tokenBlacklist:     &blacklist,
+				sessionEpochStrict: true,
+				sessionEpochFloor:  floor,
+				restUpstreams: map[string]http.Handler{
+					"users": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }),
+				},
+			})
+
+			rec := performRequest(h, http.MethodGet, "/api/v1/users/me", "", map[string]string{"Authorization": "Bearer any"})
+			if rec.Code != tc.wantCode || !strings.Contains(rec.Body.String(), tc.wantBody) {
+				t.Fatalf("status/body = %d %q", rec.Code, rec.Body.String())
+			}
+			if blacklist.calls != 1 || floor.calls != 0 {
+				t.Fatalf("blacklist/floor calls = %d/%d, want 1/0", blacklist.calls, floor.calls)
+			}
+		})
+	}
+}
+
+func TestSessionEpochFloorChecksTokenWithoutJTI(t *testing.T) {
+	t.Parallel()
+
+	floor := &recordingSessionEpochFloor{minimum: 7}
+	blacklist := &recordingBlacklist{}
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenValidator:     fixedValidator{claims: tokenClaims{UserID: "account-1", SessionEpoch: 7}},
+		tokenBlacklist:     blacklist,
+		sessionEpochStrict: true,
+		sessionEpochFloor:  floor,
+		restUpstreams: map[string]http.Handler{
+			"users": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }),
+		},
+	})
+
+	rec := performRequest(h, http.MethodGet, "/api/v1/users/me", "", map[string]string{"Authorization": "Bearer any"})
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status/body = %d %q", rec.Code, rec.Body.String())
+	}
+	if floor.calls != 1 || floor.accounts[0] != "account-1" {
+		t.Fatalf("floor calls/accounts = %d/%v", floor.calls, floor.accounts)
+	}
+	if blacklist.calls != 0 {
+		t.Fatalf("blacklist calls = %d, want 0", blacklist.calls)
+	}
+}
+
+type recordingSessionEpochFloor struct {
+	minimum  int64
+	err      error
+	calls    int
+	accounts []string
+}
+
+func (f *recordingSessionEpochFloor) Minimum(_ context.Context, accountID string) (int64, error) {
+	f.calls++
+	f.accounts = append(f.accounts, accountID)
+	return f.minimum, f.err
+}
+
+type recordingBlacklist struct {
+	revoked bool
+	err     error
+	calls   int
+}
+
+func (b *recordingBlacklist) IsRevoked(_ context.Context, _ string) (bool, error) {
+	b.calls++
+	return b.revoked, b.err
 }
 
 func TestTrustedProxyControlsForwardedFor(t *testing.T) {

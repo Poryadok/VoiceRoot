@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -36,6 +37,7 @@ func TestJWKSValidator(t *testing.T) {
 		"roles":             []string{"member"},
 		"subscription_tier": "free",
 		"jti":               "token-1",
+		"session_epoch":     int64(7),
 		"iss":               "voice-auth",
 		"aud":               "voice-client",
 		"exp":               int64(1100),
@@ -44,19 +46,19 @@ func TestJWKSValidator(t *testing.T) {
 	if code != "" {
 		t.Fatalf("valid token code = %q", code)
 	}
-	if claims.UserID != "account-1" || claims.ProfileID != "profile-1" || claims.JTI != "token-1" {
+	if claims.UserID != "account-1" || claims.ProfileID != "profile-1" || claims.JTI != "token-1" || claims.SessionEpoch != 7 {
 		t.Fatalf("claims = %+v", claims)
 	}
 
 	expired := signJWT(t, "key-1", key1, map[string]any{
-		"sub": "account-1", "iss": "voice-auth", "aud": "voice-client", "exp": int64(999),
+		"sub": "account-1", "session_epoch": int64(7), "iss": "voice-auth", "aud": "voice-client", "exp": int64(999),
 	})
 	if _, code := v.Validate(requestWithToken(expired)); code != "invalid_token" {
 		t.Fatalf("expired code = %q, want invalid_token", code)
 	}
 
 	wrongIssuer := signJWT(t, "key-1", key1, map[string]any{
-		"sub": "account-1", "iss": "other", "aud": "voice-client", "exp": int64(1100),
+		"sub": "account-1", "session_epoch": int64(7), "iss": "other", "aud": "voice-client", "exp": int64(1100),
 	})
 	if _, code := v.Validate(requestWithToken(wrongIssuer)); code != "invalid_token" {
 		t.Fatalf("wrong issuer code = %q, want invalid_token", code)
@@ -65,7 +67,7 @@ func TestJWKSValidator(t *testing.T) {
 	activeKey = key2
 	activeKid = "key-2"
 	rotated := signJWT(t, "key-2", key2, map[string]any{
-		"user_id": "account-2", "iss": "voice-auth", "aud": []string{"voice-client"}, "exp": int64(1100),
+		"user_id": "account-2", "session_epoch": int64(8), "iss": "voice-auth", "aud": []string{"voice-client"}, "exp": int64(1100),
 	})
 	claims, code = v.Validate(requestWithToken(rotated))
 	if code != "" {
@@ -116,7 +118,7 @@ func TestJWKSValidator_acceptsAccessTokenQuery(t *testing.T) {
 
 	v := NewJWKSValidator(jwks.URL, "voice-auth", "voice-client", WithClock(func() time.Time { return time.Unix(1000, 0) }))
 	token := signJWT(t, "key-1", key, map[string]any{
-		"sub": "account-1", "profile_id": "profile-1", "iss": "voice-auth", "aud": "voice-client", "exp": int64(1100),
+		"sub": "account-1", "profile_id": "profile-1", "session_epoch": int64(7), "iss": "voice-auth", "aud": "voice-client", "exp": int64(1100),
 	})
 	req := httptest.NewRequest(http.MethodGet, "/ws?access_token="+token, nil)
 	claims, code := v.Validate(req)
@@ -125,6 +127,158 @@ func TestJWKSValidator_acceptsAccessTokenQuery(t *testing.T) {
 	}
 	if claims.ProfileID != "profile-1" {
 		t.Fatalf("profile_id = %q", claims.ProfileID)
+	}
+}
+
+func TestJWKSValidator_sessionEpoch(t *testing.T) {
+	const wantSessionEpoch int64 = 9007199254740993
+
+	key := mustRSAKey(t)
+	jwks := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(t, w, http.StatusOK, map[string]any{
+			"keys": []map[string]string{rsaJWK("key-1", &key.PublicKey)},
+		})
+	}))
+	t.Cleanup(jwks.Close)
+
+	v := NewJWKSValidator(jwks.URL, "voice-auth", "voice-client", WithClock(func() time.Time { return time.Unix(1000, 0) }))
+	basePayload := map[string]any{
+		"sub": "account-1", "iss": "voice-auth", "aud": "voice-client", "exp": int64(1100),
+	}
+
+	validPayload := map[string]any{
+		"sub": "account-1", "iss": "voice-auth", "aud": "voice-client", "exp": int64(1100), "session_epoch": wantSessionEpoch,
+	}
+	claims, code := v.Validate(requestWithToken(signJWT(t, "key-1", key, validPayload)))
+	if code != "" {
+		t.Fatalf("valid session_epoch token code = %q", code)
+	}
+	if claims.SessionEpoch != wantSessionEpoch {
+		t.Fatalf("session_epoch = %d, want %d", claims.SessionEpoch, wantSessionEpoch)
+	}
+
+	for name, sessionEpoch := range map[string]any{
+		"missing":    nil,
+		"zero":       int64(0),
+		"negative":   int64(-1),
+		"string":     "42",
+		"fractional": 42.5,
+	} {
+		t.Run(name, func(t *testing.T) {
+			payload := make(map[string]any, len(basePayload)+1)
+			for key, value := range basePayload {
+				payload[key] = value
+			}
+			if sessionEpoch != nil {
+				payload["session_epoch"] = sessionEpoch
+			}
+			if _, code := v.Validate(requestWithToken(signJWT(t, "key-1", key, payload))); code != "invalid_token" {
+				t.Fatalf("session_epoch %s code = %q, want invalid_token", name, code)
+			}
+		})
+	}
+}
+
+func TestJWKSValidator_sessionEpochCompatibilityOption(t *testing.T) {
+	key := mustRSAKey(t)
+	jwks := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(t, w, http.StatusOK, map[string]any{
+			"keys": []map[string]string{rsaJWK("key-1", &key.PublicKey)},
+		})
+	}))
+	t.Cleanup(jwks.Close)
+
+	clock := WithClock(func() time.Time { return time.Unix(1000, 0) })
+	basePayload := map[string]any{
+		"sub": "account-1", "profile_id": "profile-1", "jti": "token-1",
+		"iss": "voice-auth", "aud": "voice-client", "exp": int64(1100),
+	}
+	legacy := signJWT(t, "key-1", key, basePayload)
+
+	compat := NewJWKSValidator(jwks.URL, "voice-auth", "voice-client", clock, WithSessionEpochRequired(false))
+	claims, code := compat.Validate(requestWithToken(legacy))
+	if code != "" {
+		t.Fatalf("legacy token in compatibility mode code = %q, want success", code)
+	}
+	if claims.UserID != "account-1" || claims.ProfileID != "profile-1" || claims.JTI != "token-1" || claims.SessionEpoch != 0 {
+		t.Fatalf("legacy claims = %+v, want preserved claims with zero session epoch", claims)
+	}
+
+	positivePayload := make(map[string]any, len(basePayload)+1)
+	for key, value := range basePayload {
+		positivePayload[key] = value
+	}
+	positivePayload["session_epoch"] = int64(7)
+	claims, code = compat.Validate(requestWithToken(signJWT(t, "key-1", key, positivePayload)))
+	if code != "" {
+		t.Fatalf("positive session epoch in compatibility mode code = %q, want success", code)
+	}
+	if claims.SessionEpoch != 7 {
+		t.Fatalf("positive session epoch = %d, want 7", claims.SessionEpoch)
+	}
+
+	for name, required := range map[string]bool{
+		"default":         true,
+		"explicit-strict": true,
+	} {
+		t.Run(name, func(t *testing.T) {
+			opts := []Option{clock}
+			if name == "explicit-strict" {
+				opts = append(opts, WithSessionEpochRequired(required))
+			}
+			strict := NewJWKSValidator(jwks.URL, "voice-auth", "voice-client", opts...)
+			if _, code := strict.Validate(requestWithToken(legacy)); code != "invalid_token" {
+				t.Fatalf("legacy token in strict mode code = %q, want invalid_token", code)
+			}
+		})
+	}
+
+	for name, sessionEpoch := range map[string]any{
+		"zero":       int64(0),
+		"negative":   int64(-1),
+		"string":     "42",
+		"fractional": 42.5,
+		"null":       nil,
+		"boolean":    true,
+	} {
+		t.Run("compatibility-"+name, func(t *testing.T) {
+			payload := make(map[string]any, len(basePayload)+1)
+			for key, value := range basePayload {
+				payload[key] = value
+			}
+			payload["session_epoch"] = sessionEpoch
+			if _, code := compat.Validate(requestWithToken(signJWT(t, "key-1", key, payload))); code != "invalid_token" {
+				t.Fatalf("present session_epoch %s in compatibility mode code = %q, want invalid_token", name, code)
+			}
+		})
+	}
+
+	for name, mutate := range map[string]func(map[string]any){
+		"wrong-issuer": func(payload map[string]any) { payload["iss"] = "other-issuer" },
+		"wrong-audience": func(payload map[string]any) { payload["aud"] = "other-audience" },
+		"expired":        func(payload map[string]any) { payload["exp"] = int64(999) },
+	} {
+		t.Run("compatibility-"+name, func(t *testing.T) {
+			payload := make(map[string]any, len(basePayload))
+			for key, value := range basePayload {
+				payload[key] = value
+			}
+			mutate(payload)
+			if _, code := compat.Validate(requestWithToken(signJWT(t, "key-1", key, payload))); code != "invalid_token" {
+				t.Fatalf("otherwise-valid token with %s in compatibility mode code = %q, want invalid_token", name, code)
+			}
+		})
+	}
+
+	signatureDot := strings.LastIndex(legacy, ".")
+	tamperedSignature := legacy[signatureDot+1:]
+	replacement := byte('A')
+	if tamperedSignature[0] == replacement {
+		replacement = 'B'
+	}
+	tampered := legacy[:signatureDot+1] + string(replacement) + tamperedSignature[1:]
+	if _, code := compat.Validate(requestWithToken(tampered)); code != "invalid_token" {
+		t.Fatalf("tampered signature in compatibility mode code = %q, want invalid_token", code)
 	}
 }
 
