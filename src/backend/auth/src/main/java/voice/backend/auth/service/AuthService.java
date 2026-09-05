@@ -30,6 +30,8 @@ import voice.backend.auth.security.TokenBlacklist;
 import voice.backend.auth.sessionepoch.SessionEpochFloorStore;
 import voice.backend.auth.sessionepoch.SessionEpochFloorMissingException;
 import voice.backend.auth.sessionepoch.SessionEpochFloorUnavailableException;
+import voice.backend.auth.sessionepoch.PreparedSessionEpoch;
+import voice.backend.auth.sessionepoch.SessionEpochIssuanceGate;
 
 public class AuthService {
   /** Max opaque encrypted blob size for E2E key backup (512 KiB). */
@@ -56,6 +58,7 @@ public class AuthService {
   private final AccountRestoreTokenStore restoreTokenStore;
   private final MailSender mailSender;
   private final SessionEpochFloorStore sessionEpochFloors;
+  private final SessionEpochIssuanceGate sessionEpochIssuanceGate;
   private AccountDeletionOperationRepository deletionOperations;
   private AccountDeletionRestoreTokenCodec deletionTokenCodec;
   private AccountDeletionEventPublisher deletionEventPublisher;
@@ -104,6 +107,7 @@ public class AuthService {
     this.restoreTokenStore = restoreTokenStore;
     this.mailSender = mailSender;
     this.sessionEpochFloors = sessionEpochFloors;
+    this.sessionEpochIssuanceGate = new SessionEpochIssuanceGate(accounts, sessionEpochFloors);
   }
 
   public AuthService withClock(Clock newClock) {
@@ -183,6 +187,7 @@ public class AuthService {
         throw new AuthException("invalid_credentials");
       }
       ensureActive(account);
+      PreparedSessionEpoch prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
       if (account.totpEnabled()) {
         String code = command.totpCode();
         if (code == null || code.isBlank()) {
@@ -194,7 +199,7 @@ public class AuthService {
         }
       }
       touchLastOnline(account);
-      AuthSession session = issueSession(account, command.deviceInfoJson());
+      AuthSession session = issueSession(account, prepared, command.deviceInfoJson());
       recordAuthLoginMetric(true);
       return session;
     } catch (RuntimeException ex) {
@@ -207,12 +212,13 @@ public class AuthService {
     try {
       RefreshTokenRecord current = refreshRecord(command.refreshToken());
       ensureUsableRefresh(current);
-      refreshTokens.revoke(current.tokenHash(), Instant.now(clock));
       Account account = accounts.findById(current.accountId().toString()).orElseThrow(() -> new AuthException("invalid_token"));
       ensureActive(account);
+      PreparedSessionEpoch prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
+      refreshTokens.revoke(current.tokenHash(), Instant.now(clock));
       tokenBlacklist.revoke(current.accessJti(), jwtService.accessTtl());
       touchLastOnline(account);
-      AuthSession session = issueSession(account, command.deviceInfoJson());
+      AuthSession session = issueSession(account, prepared, command.deviceInfoJson());
       recordAuthLoginMetric(true);
       return session;
     } catch (RuntimeException ex) {
@@ -365,8 +371,9 @@ public class AuthService {
         claims.subscriptionTier());
     Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
     ensureActive(account);
+    PreparedSessionEpoch prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
     tokenBlacklist.revoke(claims.jti(), jwtService.ttl(claims));
-    return issueSessionForProfile(account, profileId, deviceInfoJson == null ? "{}" : deviceInfoJson);
+    return issueSessionForProfile(account, prepared, profileId, deviceInfoJson == null ? "{}" : deviceInfoJson);
   }
 
   public AuthSession convertGuest(String accessToken, ConvertGuestCommand command) {
@@ -625,7 +632,21 @@ public class AuthService {
     return issueSessionForProfile(account, profileId, deviceInfoJson);
   }
 
+  private AuthSession issueSession(Account account, PreparedSessionEpoch prepared, String deviceInfoJson) {
+    String profileId = primaryProfileProvisioner.ensurePrimaryProfile(
+        account.id(), displayHint(account), "guest".equals(account.type()));
+    return issueSessionForProfile(account, prepared, profileId, deviceInfoJson);
+  }
+
   private AuthSession issueSessionForProfile(Account account, String profileId, String deviceInfoJson) {
+    return issueSessionForProfile(account, new PreparedSessionEpoch(account.id(), account.sessionEpoch()), profileId, deviceInfoJson);
+  }
+
+  private AuthSession issueSessionForProfile(
+      Account account, PreparedSessionEpoch prepared, String profileId, String deviceInfoJson) {
+    if (!account.id().equals(prepared.accountId())) {
+      throw new IllegalStateException("prepared session epoch account mismatch");
+    }
     profileId = requireProfileId(profileId);
     if (deviceInfoJson == null || deviceInfoJson.isBlank()) {
       deviceInfoJson = "{}";
@@ -633,7 +654,7 @@ public class AuthService {
     String tier = subscriptionTierResolver.resolveTier(account.id());
     String accessToken =
         jwtService.issue(
-            account.id().toString(), profileId, List.of("user"), tier, account.type(), account.sessionEpoch());
+            account.id().toString(), profileId, List.of("user"), tier, account.type(), prepared.sessionEpoch());
     TokenClaims claims = jwtService.validate(accessToken);
     String refreshToken = refreshTokenCodec.generate();
     refreshTokens.create(
