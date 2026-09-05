@@ -335,7 +335,7 @@ class GuestConversionDurabilityJdbcIntegrationTest {
       statement.setObject(1, accountId);
       try (ResultSet result = statement.executeQuery()) {
         result.next();
-        return result.getObject(1, Instant.class);
+        return result.getTimestamp(1).toInstant();
       }
     }
   }
@@ -356,7 +356,7 @@ class GuestConversionDurabilityJdbcIntegrationTest {
       statement.setObject(1, accountId);
       try (ResultSet result = statement.executeQuery()) {
         result.next();
-        return result.getObject(1, Instant.class);
+        return result.getTimestamp(1).toInstant();
       }
     }
   }
@@ -387,7 +387,7 @@ class GuestConversionDurabilityJdbcIntegrationTest {
     try (Connection connection = connection(); Statement statement = connection.createStatement();
         ResultSet result = statement.executeQuery("SELECT clock_timestamp()")) {
       result.next();
-      return result.getObject(1, Instant.class);
+      return result.getTimestamp(1).toInstant();
     }
   }
 
