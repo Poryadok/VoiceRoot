@@ -33,6 +33,11 @@ Voice is a Discord-like messenger with voice chat and built-in matchmaking. Prod
 - Lite fleet workflow: `.agent/fleet/README.md`, local backlog `tmp/fleet/backlog.md`, captain skill `.agent/codex/skills/voice-fleet-captain/SKILL.md`, rule `.agent/codex/rules/voice-fleet-captain.mdc`.
 - Crew agents: `.agent/codex/agents/voice-*.md` (gateway, realtime, chat/messaging, go-backend, java-auth, flutter, protos, verify, designer). Cursor mirrors live in `.cursor/agents/`.
 - Parallel **code** isolation: treehouse (`treehouse.toml`, skill `.agent/codex/skills/treehouse/SKILL.md`) — one crew ↔ one worktree path; not mixed with Cursor `/worktree` on the same task.
+- Delegate bounded, independent work when it improves quality or saves time,
+  including review within one service. Read-only reviewers may inspect the
+  working checkout; parallel code writers need separate worktrees.
+- In Codex, use subagent tools for internal work. Create a user-visible task only
+  when the user explicitly requests one. Keep inter-agent messages readable.
 
 ## Development Workflow
 
@@ -47,6 +52,24 @@ Voice is a Discord-like messenger with voice chat and built-in matchmaking. Prod
 - Change test expectations only when the specification in `docs/` was updated or the user task explicitly changes the requirement.
 - If the docs have a gap, use `docs/TODO.md` or ask the user. Do not add product behavior without a repository-backed source.
 - For the full TDD cycle, exceptions, and source priority, see `docs/TESTING.md`, especially the "Порядок разработки (TDD)" section.
+
+## Autonomy And Skill Precedence
+
+- Carry action requests through implementation and verification within their
+  authorized scope. Resolve routine technical choices from context; preserve
+  earlier authorization and continue independent work while awaiting needed input.
+- Explicit user instructions override skill guidelines. Apply `docs/TESTING.md`
+  scope and exceptions without adding an approval step. An explicit product
+  requirement change authorizes matching docs, plan, test, and code updates;
+  unresolved product decisions still require input or a documented gap.
+- When a skill requires a pause, identify the exact `SKILL.md` and quote the
+  relevant rule with a link. Explain the actual unresolved decision. Complete
+  available preparation before requesting any necessary final approval.
+- Treat follow-up corrections as steering the active task. A status question
+  does not cancel it; carry progress and remaining work across context compaction.
+- Run required checks for the affected scope. Add meaningful behavior tests;
+  documentation or mechanical edits do not need tests that only mirror wording.
+  Broaden or repeat passing checks only after changes, failures, or new concerns.
 
 ## Architectural Boundaries
 
@@ -63,6 +86,9 @@ Voice is a Discord-like messenger with voice chat and built-in matchmaking. Prod
 - Use English for code identifiers, commands, API names, error messages, commit messages, and standard engineering terms when translation would reduce precision.
 - Keep internal planning notes and implementation terminology concise; prefer English technical wording where practical.
 - Be brief in routine status updates and final answers. Skip filler, greetings, and generic preambles.
+- Lead with the result, why it matters, verification, and material limitations.
+  Prefer clear paragraphs; use lists for steps or parallel items, without stock
+  phrases or unnecessary headings.
 - `caveman`, `brief`, or `low-token` means terse engineering mode, not weaker reasoning.
 - In low-token mode, keep output compact and use `Changed`, `Checked`, and `Risk` when reporting code work.
 - For architecture, security, migrations, production incidents, and code reviews, prefer concise but clear explanations over ultra-compressed answers.

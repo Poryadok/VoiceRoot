@@ -1,0 +1,3 @@
+# Voice project default. Explicit session/CLI model selections take precedence.
+# Inherit the user's reasoning effort and runtime settings.
+model = "gpt-6-astra"

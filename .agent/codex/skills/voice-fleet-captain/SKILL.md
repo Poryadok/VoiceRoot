@@ -1,6 +1,6 @@
 ---
 name: voice-fleet-captain
-description: 'Voice fleet captain playbook for Codex: delegate parallel work using Codex task/thread or multi-agent tools, maintain ignored tmp/fleet backlog, use treehouse worktrees for isolated code, and coordinate verification.'
+description: 'Voice fleet captain playbook for Codex: delegate independent work to subagents, maintain ignored tmp/fleet backlog for a fleet, use treehouse worktrees for parallel code, and coordinate verification.'
 ---
 
 # Voice Fleet Captain
@@ -10,7 +10,7 @@ Use this skill when work should be split across multiple services, Flutter plus 
 ## Principles
 
 1. One user-facing captain keeps the user updated and integrates outcomes.
-2. Delegate when scopes are independent or the work spans 2+ services.
+2. Delegate bounded independent work when it saves time or improves quality, including reviews within one service. Use subagent tools for internal work; create a user-visible Codex task only when the user explicitly requests one.
 3. Repository docs define behavior; read `AGENTS.md`, `.agent/AGENTS.md`, and the relevant `docs/*` first.
 4. Write durable coordination state to `tmp/fleet/backlog.md` and `tmp/fleet/tasks/T-*.meta` when running a real fleet.
 5. Do not create or update a tracked backlog with live PR/branch/CI statuses; those snapshots are local operator state and go stale quickly.
@@ -21,7 +21,8 @@ Use this skill when work should be split across multiple services, Flutter plus 
 
 | Situation | Action |
 | --- | --- |
-| One file, one service, or read-only question | Captain can handle directly |
+| Small task with no useful independent slice | Captain handles directly |
+| Independent audit, research, or verification | Delegate while the captain advances other work; read-only agents may inspect the same checkout |
 | Gateway plus service, or 2+ backend services | Split by service/profile |
 | Flutter plus backend | Separate Flutter and backend tasks |
 | Protos plus implementation | Protos first or parallel with explicit contracts |

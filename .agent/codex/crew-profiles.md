@@ -1,8 +1,9 @@
 # Voice Crew Profiles For Codex
 
 Cursor stored these as `.cursor/agents/voice-*.md`. Codex does not consume those
-files as native subagents, so use these profiles when delegating work through
-Codex task/thread or multi-agent tooling.
+files as native subagents, so include the relevant profile in a Codex subagent's
+instructions. Use internal subagents for delegated work; create a user-visible
+Codex task only when the user explicitly requests one.
 
 ## Roster
 

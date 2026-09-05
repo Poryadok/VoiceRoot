@@ -40,6 +40,7 @@ and root `AGENTS.md` is the Codex-native entrypoint.
 ## Native Codex Shape
 
 - Project entrypoint: `AGENTS.md`.
+- Project model default: [`.codex/config.toml`](../../.codex/config.toml).
 - Shared agent canon: `.agent/AGENTS.md`.
 - Living plans: `.agent/execplans/` using `.agent/PLANS.md`.
 - Fleet docs/templates: `.agent/fleet/`.
@@ -55,3 +56,28 @@ machine, run:
 ```powershell
 powershell -ExecutionPolicy Bypass -File .agent\codex\install-local.ps1
 ```
+
+## GPT-6 Astra
+
+Voice selects `gpt-6-astra` in the project config. The machine's reasoning effort
+is inherited; permissions, providers, credentials, and service tiers remain
+machine settings. Crew profiles keep `model: inherit`.
+
+Start a new Codex task in the trusted Voice project and check its model selector.
+For an explicit CLI selection, run `codex -m gpt-6-astra` from the repository root.
+Project defaults do not replace an explicitly selected model. See OpenAI's
+[configuration precedence](https://learn.chatgpt.com/docs/config-file/config-basic).
+
+Preparation follows the official
+[GPT-6 Astra guide](https://developers.openai.com/api/docs/guides/latest-model?model=gpt-6-astra),
+checked on 2026-09-05, using the `openai-docs` skill. Shared working rules live in
+[`../AGENTS.md`](../AGENTS.md); the
+[TDD workflow](../workflows/tdd-code-workflow/SKILL.md) preserves strict explicit
+invocation and the exceptions in [`docs/TESTING.md`](../../docs/TESTING.md).
+The portable TDD skill must match its canonical source when refreshed locally.
+
+The migration audit found no OpenAI API call sites in `src/`, `scripts/`, or
+`.github/`. No product API migration is required. To inspect the current model
+catalog without a model request, run `codex debug models` and check for
+`gpt-6-astra`. The bundled offline catalog may lag behind the current catalog.
+This inspection does not benchmark model quality or prove API access.

@@ -24,6 +24,9 @@ Get-Content -Raw -Encoding UTF8 .agent\AGENTS.md
 
 ## Codex Workflow
 
+- Apply the autonomy, skill precedence, delegation, and verification rules in
+  `.agent/AGENTS.md`. Project model setup and official GPT-6 Astra guidance are
+  linked from `.agent/codex/README.md`.
 - Use repository documentation as the source of product behavior. Do not invent
   missing product or API behavior; ask the user or record a gap in the proper
   `docs/todo/*.md` file.

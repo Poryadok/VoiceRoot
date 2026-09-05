@@ -1,13 +1,13 @@
 ---
 name: tdd-code-workflow
-description: Documentation-first, plan-first, test-driven coding workflow for any implementation or bugfix task. Use when a coding agent (Cursor Agent, OpenAI Codex, Claude Code, or similar) must write, change, refactor, or repair code through documented requirements, a detailed plan, tests written before implementation, delegated review loops where available, incremental implementation, and final verification against documentation and plan.
+description: Documentation-first TDD for new nontrivial behavior and bug fixes, or an explicit request for TDD Code Workflow. Includes planning, tests before implementation, delegated reviews, and verification. Apply repository scope and exceptions for documentation, mechanical edits, and behavior-preserving refactoring.
 ---
 
 # TDD Code Workflow
 
 ## Multi-tool layout (canonical path)
 
-- **This file is canonical:** `.agent/workflows/tdd-code-workflow/SKILL.md`
+- **Canonical source:** `.agent/workflows/tdd-code-workflow/SKILL.md`; `.agent/codex/skills/tdd-code-workflow/SKILL.md` and the installed Codex skill are portable copies of this content.
 - **Cursor Agent Skills:** project stub at `.cursor/skills/tdd-code-workflow/SKILL.md` points here — see [Agent Skills](https://cursor.com/docs/skills). Related customization: [Skills (help)](https://cursor.com/help/customization/skills).
 - **OpenAI Codex (plugin metadata):** `.agent/workflows/tdd-code-workflow/agents/openai.yaml`
 - **Repo-wide agent defaults:** `.agent/AGENTS.md`
@@ -16,11 +16,13 @@ Throughout this document, **delegation** means any supported mechanism: Cursor T
 
 ## Non-Negotiable Rules
 
-Use this workflow for every coding task unless the user explicitly asks for analysis only, review only, or no code changes.
+In Voice, apply the scope and exceptions in `docs/TESTING.md`: use TDD for new nontrivial behavior and behavior-changing fixes. Documentation-only or mechanical edits and behavior-preserving refactoring need proportionate validation, not artificial red tests. Outside Voice, follow the repository's documented workflow. Analysis-only and review-only requests do not authorize implementation.
+
+Explicit user instructions take precedence over skill guidelines. Do not infer additional approval gates from an exception. If this skill causes a pause, link the exact file read, quote the applicable rule, and explain the unresolved decision; continue independent authorized work.
 
 ### Strict mode when the user invokes this workflow
 
-If the user **explicitly** asks to follow this skill/workflow (by name, by path `.agent/workflows/tdd-code-workflow/SKILL.md`, or the Cursor stub under `.cursor/skills/tdd-code-workflow/`), treat the rest of this document as **mandatory**, not a loose guideline:
+If the user **explicitly** asks to follow this skill/workflow (by name, canonical path, portable Codex copy, installed skill, or Cursor stub), follow the workflow strictly within its documented scope and any explicit user constraints:
 
 - Produce a **written plan** (in chat, ExecPlan per `.agent/PLANS.md`, or another repo-agreed artifact) **before** editing production code: sources read, acceptance criteria, files to touch, verification commands, red–green sequence.
 - **Do not** skip delegation for convenience: when Task / parallel agents / separate sessions are available, use them for **test authoring**, **test review**, **implementation**, and **implementation review** as described below; if a tool cannot delegate, still execute the same steps **in order** in one session.
@@ -33,7 +35,7 @@ Use real TDD, not only "tests somewhere before final verification": drive implem
 
 Do not create the plan from memory alone. First read the project documentation that governs the requested behavior. Prefer repository docs, specs, ADRs, README files, API contracts, issue text, protocol definitions, comments that are treated as source-of-truth, and existing test descriptions. If documentation location is unclear, search the repository for likely docs before planning.
 
-If the user request conflicts with documentation, stop before coding. Tell the user exactly which documented expectation conflicts with the request and ask whether the documentation should be changed. Do not silently prefer the user request over the documentation.
+If the user explicitly changes a documented requirement, record the change and update the relevant documentation, plan, tests, and implementation together. Do not ask for the same decision again. If the conflict leaves product behavior or a contract unresolved, identify the exact source and ask for that decision before implementing the dependent behavior.
 
 If documentation is missing or too vague to define expected behavior, state the gap in the plan and use the safest existing-code inference only for exploration. Ask the user before making product or contract decisions that documentation should own.
 
@@ -60,12 +62,12 @@ Find and read the documentation before writing a plan. Use fast repository searc
 - Record the specific files and sections used as the basis for the plan.
 - Distinguish documented facts from inferences.
 
-Stop if the requested change contradicts documentation. Report:
+For a contradiction that the user has not explicitly resolved, report:
 
 - The user-requested behavior.
 - The documented behavior.
 - The documentation source.
-- The decision needed from the user, usually whether to update documentation first.
+- The unresolved decision needed from the user. Continue independent authorized work while waiting.
 
 ### 2. Analyze Requirements
 
@@ -82,12 +84,12 @@ If assumptions affect product behavior, ask before coding. If assumptions are pu
 
 ### 3. Create A Detailed Plan
 
-Create a detailed plan before any code edit. Do not conserve tokens in the plan; include every relevant implementation and verification step needed to avoid ambiguity.
+Create a detailed plan before production code edits. Include enough implementation and verification detail to make the work resumable without repeating the specifications.
 
 The plan must include:
 
 - Documentation sources read.
-- Confirmation that the request matches documentation, or the exact mismatch and stop decision.
+- Confirmation that the request matches documentation, the user's explicit requirement change, or the unresolved mismatch and dependent work awaiting input.
 - Requirements and acceptance criteria.
 - Files/modules likely to change.
 - Test strategy, including unit, integration, contract, regression, and negative tests as appropriate.
@@ -101,7 +103,7 @@ The plan must include:
 - Risks and rollback/containment notes.
 - Final completion checklist.
 
-Use the task planning tool when available (e.g. Cursor todo list). Keep exactly one plan item in progress at a time and update it as work advances.
+Use the task planning tool when available (e.g. Cursor todo list). Track the active phase and each delegated work item's actual state; independent work may progress concurrently.
 
 ### 4. Write Tests First Via Delegation When Possible
 
@@ -226,12 +228,12 @@ Before final response, perform a last local check:
 - Confirm every plan item is complete or explicitly explained.
 - Confirm every documented expectation is covered by tests or a justified verification method.
 - Confirm each documented behavior went through an explicit red-green-refactor cycle, or explain why it could not.
-- Run the agreed narrow and broad test commands where feasible.
+- Complete the agreed checks for the affected scope. Reuse passing results for unchanged code; repeat or broaden checks when edits, failures, or new concerns justify it.
 - Confirm tests pass, or report exact failures and blockers.
 - Inspect the final diff for unrelated edits.
 - Confirm implementation, tests, documentation, and user request are consistent.
 
-If documentation needed updates and the user approved them, verify documentation was updated together with tests and code.
+If the user requested or approved a requirement change, verify documentation was updated together with tests and code.
 
 ## Subagent Prompt Templates
 

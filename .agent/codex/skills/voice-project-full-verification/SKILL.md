@@ -3,7 +3,9 @@ name: voice-project-full-verification
 description: >-
   Verifies the whole Voice monorepo end-to-end: same layers as CI (buf, compose,
   Go services, Auth Maven, Docker images) plus host Flutter CI, optional buf
-  breaking, then deep-dives via module skills. Use before merge or release,
+  breaking, then deep-dives via module skills. Use for whole-repo sign-off,
+  a large cross-cutting PR, or release verification; ordinary scoped changes
+  use the affected component's checks from docs/TESTING.md. Also applies to:
   полная проверка репозитория, как CI локально, sign-off всего проекта,
   прогонить всё как в GitHub Actions.
 ---
