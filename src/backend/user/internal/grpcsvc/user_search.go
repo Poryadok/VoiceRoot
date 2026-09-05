@@ -8,6 +8,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"voice/backend/pkg/guestguard"
+	"voice/backend/pkg/privacy"
 	"voice/backend/user/internal/authctx"
 	"voice/backend/user/internal/store"
 
@@ -20,11 +22,10 @@ const (
 	searchProfilesMaxPage     = 50
 	searchProfilesMaxQuery    = 128
 	searchProfilesBatch       = 40
-	searchProfilesMaxIters    = 32
 )
 
 // SearchProfiles discovers profiles by username/display_name substring (user_db).
-// v1 DDL has no privacy_settings row yet (see docs/microservices/user-service.md); block filtering uses optional Social S2S when Blocks is set.
+// Discovery uses the target profile's allow_friend_requests audience and pairwise blocks.
 func (s *UserGRPC) SearchProfiles(ctx context.Context, req *userv1.SearchProfilesRequest) (*userv1.SearchProfilesResponse, error) {
 	viewer, ok := authctx.AccountID(ctx)
 	if !ok {
@@ -63,16 +64,19 @@ func (s *UserGRPC) SearchProfiles(ctx context.Context, req *userv1.SearchProfile
 	if after != nil {
 		scan = after
 	}
+	viewerProfile, err := s.resolveOwnedActiveProfile(ctx, viewer)
+	if err != nil {
+		return nil, err
+	}
+	privacyStore := s.privacyStore()
 
 	want := pageSize + 1
 	out := make([]*userv1.Profile, 0, want)
 	emittedRows := make([]*store.ProfileRow, 0, want)
-	iter := 0
 	dbExhausted := false
 	var lastEmitted *store.ProfileRow
 
-	for len(out) < want && iter < searchProfilesMaxIters {
-		iter++
+	for len(out) < want {
 		rows, err := s.Profiles.SearchProfilesAfter(ctx, viewer, q, scan, searchProfilesBatch)
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
@@ -90,6 +94,9 @@ func (s *UserGRPC) SearchProfiles(ctx context.Context, req *userv1.SearchProfile
 				return nil, status.Error(codes.Internal, err.Error())
 			}
 			if blocked {
+				continue
+			}
+			if !s.mayDiscoverProfile(ctx, privacyStore, viewerProfile, row) {
 				continue
 			}
 			out = append(out, rowToProto(row))
@@ -131,6 +138,27 @@ func (s *UserGRPC) SearchProfiles(ctx context.Context, req *userv1.SearchProfile
 			HasMore:    hasMore,
 		},
 	}, nil
+}
+
+func (s *UserGRPC) mayDiscoverProfile(ctx context.Context, privacyStore *store.PrivacyStore, viewerProfile uuid.UUID, target *store.ProfileRow) bool {
+	if privacyStore == nil || target == nil {
+		return false
+	}
+	settings, err := privacyStore.GetByProfileID(ctx, target.ID)
+	if err != nil {
+		return false
+	}
+	if settings == nil {
+		// GetPrivacySettings bootstraps this same canonical default. Search must not
+		// create state on a read path, but must evaluate absent rows identically.
+		defaults := store.PrivacyRowFromSettings(target.ID, privacy.SettingsForPreset("gaming"))
+		settings = &defaults
+	}
+	allowed, err := s.audienceMatcher().Allowed(ctx, target.ID, viewerProfile, settings.AllowFriendRequests, guestguard.IsGuest(ctx))
+	if err != nil {
+		return false
+	}
+	return allowed
 }
 
 func (s *UserGRPC) pairwiseBlocked(ctx context.Context, viewer, other uuid.UUID) (bool, error) {
