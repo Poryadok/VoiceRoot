@@ -25,6 +25,7 @@ import voice.backend.auth.events.AuthEventPublisher;
 import voice.backend.auth.mail.MailSender;
 import voice.backend.auth.security.TokenBlacklist;
 import voice.backend.auth.sessionepoch.SessionEpochFloorStore;
+import voice.backend.auth.sessionepoch.SessionEpochFloorMissingException;
 import voice.backend.auth.sessionepoch.SessionEpochFloorUnavailableException;
 
 public class AuthService {
@@ -369,18 +370,34 @@ public class AuthService {
     return issueSession(converted, "{}");
   }
 
-  public DeleteAccountResult deleteAccount(String accessToken, String password) {
+  public synchronized DeleteAccountResult deleteAccount(String accessToken, String password) {
     TokenClaims claims = validateForAccountDeletion(accessToken);
     Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
     if (!passwordHasher.matches(password, account.passwordHash())) {
       throw new AuthException("invalid_credentials");
     }
     if ("deleted".equals(account.status())) {
+      if (hasSealedDeletionEpoch(account)) {
+        throw new AuthException("account_inactive");
+      }
       return finishAccountDeletion(claims, account);
     }
     ensureActive(account);
     Instant now = Instant.now(clock);
-    long sessionEpoch = accounts.markDeletedAndIncrementSessionEpoch(account.id(), now);
+    long sessionEpoch;
+    try {
+      sessionEpoch = accounts.markDeletedAndIncrementSessionEpoch(account.id(), now);
+    } catch (IllegalArgumentException ex) {
+      Account deleted =
+          accounts.findById(account.id().toString()).orElseThrow(() -> new AuthException("invalid_token"));
+      if (!"deleted".equals(deleted.status())) {
+        throw ex;
+      }
+      if (hasSealedDeletionEpoch(deleted)) {
+        throw new AuthException("account_inactive");
+      }
+      return finishAccountDeletion(claims, deleted);
+    }
     Account deleted = new Account(
         account.id(),
         account.email(),
@@ -394,6 +411,14 @@ public class AuthService {
         account.createdAt(),
         now);
     return finishAccountDeletion(claims, deleted);
+  }
+
+  private boolean hasSealedDeletionEpoch(Account account) {
+    try {
+      return sessionEpochFloors.requireFloor(account.id()) >= account.sessionEpoch();
+    } catch (SessionEpochFloorMissingException ignored) {
+      return false;
+    }
   }
 
   private DeleteAccountResult finishAccountDeletion(TokenClaims claims, Account account) {

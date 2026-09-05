@@ -253,6 +253,7 @@ public class JdbcAccountRepository implements AccountRepository {
                   session_epoch = session_epoch + 1,
                   updated_at = now()
               WHERE id = :id
+                AND status = 'active'
               RETURNING session_epoch
               """,
               new MapSqlParameterSource()

@@ -31,6 +31,7 @@ import voice.backend.auth.service.AuthService;
 import voice.backend.auth.service.DeleteAccountResult;
 import voice.backend.auth.sessionepoch.SessionEpochFloorStore;
 import voice.backend.auth.sessionepoch.SessionEpochFloorUnavailableException;
+import voice.backend.auth.sessionepoch.SessionEpochFloorMissingException;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -64,7 +65,7 @@ class DeleteAccountRestoreIntegrationTest {
             invocation -> {
               Long floor = floors.get(invocation.getArgument(0));
               if (floor == null) {
-                throw new SessionEpochFloorUnavailableException("session epoch floor missing");
+                throw new SessionEpochFloorMissingException("session epoch floor missing");
               }
               return floor;
             });

@@ -112,7 +112,7 @@ final class StringRedisSessionEpochCommands implements RedisSessionEpochCommands
       byte[] raw =
           await(commands.get(key.getBytes(StandardCharsets.UTF_8)), deadlineNanos, connection::closeAsync);
       if (raw == null) {
-        throw new SessionEpochFloorUnavailableException("session epoch floor missing");
+        throw new SessionEpochFloorMissingException("session epoch floor missing");
       }
       return parsePositive(new String(raw, StandardCharsets.UTF_8));
     } finally {

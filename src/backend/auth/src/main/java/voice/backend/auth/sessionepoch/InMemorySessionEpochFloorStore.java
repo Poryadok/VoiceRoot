@@ -19,7 +19,7 @@ public final class InMemorySessionEpochFloorStore implements SessionEpochFloorSt
   public long requireFloor(UUID accountId) {
     Long floor = floors.get(accountId);
     if (floor == null || floor <= 0) {
-      throw new SessionEpochFloorUnavailableException("session epoch floor missing");
+      throw new SessionEpochFloorMissingException("session epoch floor missing");
     }
     return floor;
   }
