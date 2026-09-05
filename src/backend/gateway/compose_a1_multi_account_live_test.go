@@ -279,6 +279,94 @@ func TestComposeA1ChannelReadIsolation_live(t *testing.T) {
 	assertComposeA1PerMemberReadIsolation(t, client, base, "channel", channelID, sessA, sessB, sessC, n)
 }
 
+// TestComposeA1BlockDMDenyBothDirections_live proves the documented block
+// boundary against an already-established DM. It is deliberately REST-only:
+// this slice asserts that denied mutations make no persisted history or inbox
+// preview change, while Realtime event delivery has its own vertical proof.
+func TestComposeA1BlockDMDenyBothDirections_live(t *testing.T) {
+	if !liveComposeEnabled() {
+		t.Skip("set VOICE_RUN_LIVE_COMPOSE=true to run against local compose")
+	}
+	clearLiveComposeAuthRateLimit(t)
+
+	client := &http.Client{Timeout: 45 * time.Second}
+	base := liveGatewayBaseURL()
+	n := time.Now().UnixNano()
+	const password = "VoiceQaTest1!"
+
+	sessA := registerComposeUser(t, client, base, formatComposeEmail("a1-t055-block-a", n), password)
+	sessB := registerComposeUser(t, client, base, formatComposeEmail("a1-t055-block-b", n), password)
+	dmID := createComposeDMBetween(t, client, base, sessA, sessB)
+	baselineContent := fmt.Sprintf("a1-t055-block-baseline-%d", n)
+	baselineMessageID := sendComposeMessage(t, client, base, sessA.AccessToken, dmID, baselineContent)
+	acceptComposeDMRequest(t, client, base, sessB.AccessToken, dmID)
+
+	var beforeA, beforeB composeChatListItem
+	require.Eventually(t, func() bool {
+		itemA := composeA1ChatItem(listComposeChats(t, client, base, sessA.AccessToken, "main"), dmID)
+		itemB := composeA1ChatItem(listComposeChats(t, client, base, sessB.AccessToken, "main"), dmID)
+		if itemA == nil || itemB == nil || itemA.LastPreview != baselineContent || itemB.LastPreview != baselineContent {
+			return false
+		}
+		beforeA, beforeB = *itemA, *itemB
+		return true
+	}, 45*time.Second, 500*time.Millisecond,
+		"baseline DM must be established in both main inboxes before block assertions")
+	getComposeMessagesContains(t, client, base, sessA.AccessToken, dmID, baselineMessageID, baselineContent)
+	getComposeMessagesContains(t, client, base, sessB.AccessToken, dmID, baselineMessageID, baselineContent)
+	beforeHistoryA := composeA1MessageHistory(t, client, base, sessA.AccessToken, dmID)
+	beforeHistoryB := composeA1MessageHistory(t, client, base, sessB.AccessToken, dmID)
+
+	blockComposeAccount(t, client, base, sessA.AccessToken, sessB.AccountID)
+
+	require.Equal(t, http.StatusForbidden,
+		sendComposeMessageStatus(t, client, base, sessA.AccessToken, dmID, fmt.Sprintf("a1-t055-block-a-to-b-%d", n), ""),
+		"A-to-B send after A blocks B must be a block-policy denial, not dependency degradation")
+	require.Equal(t, http.StatusForbidden,
+		sendComposeMessageStatus(t, client, base, sessB.AccessToken, dmID, fmt.Sprintf("a1-t055-block-b-to-a-%d", n), ""),
+		"B-to-A send after A blocks B must be a block-policy denial, not dependency degradation")
+	require.Equal(t, http.StatusForbidden,
+		createComposeDMStatus(t, client, base, sessA.AccessToken, sessB.ProfileID),
+		"A must not reopen a DM to the blocked account")
+	require.Equal(t, http.StatusForbidden,
+		createComposeDMStatus(t, client, base, sessB.AccessToken, sessA.ProfileID),
+		"B must not reopen a DM to the blocking account")
+
+	require.Equal(t, beforeHistoryA, composeA1MessageHistory(t, client, base, sessA.AccessToken, dmID),
+		"denied A/B sends must not append or alter A's DM history")
+	require.Equal(t, beforeHistoryB, composeA1MessageHistory(t, client, base, sessB.AccessToken, dmID),
+		"denied A/B sends must not append or alter B's DM history")
+	afterA := composeA1ChatItem(listComposeChats(t, client, base, sessA.AccessToken, "main"), dmID)
+	afterB := composeA1ChatItem(listComposeChats(t, client, base, sessB.AccessToken, "main"), dmID)
+	require.Equal(t, &beforeA, afterA, "denied A/B sends must not mutate A's DM list row")
+	require.Equal(t, &beforeB, afterB, "denied A/B sends must not mutate B's DM list row")
+}
+
+type composeA1HistoryMessage struct {
+	ID      string
+	Content string
+}
+
+func composeA1MessageHistory(t *testing.T, client *http.Client, base, accessToken, chatID string) []composeA1HistoryMessage {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, base+"/api/v1/messages?chat_id="+url.QueryEscape(chatID), nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "GET messages body=%s", string(body))
+
+	var parsed struct {
+		MessageList struct {
+			Messages []composeA1HistoryMessage `json:"messages"`
+		} `json:"message_list"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	return parsed.MessageList.Messages
+}
+
 func assertComposeA1PerMemberReadIsolation(
 	t *testing.T,
 	client *http.Client,
