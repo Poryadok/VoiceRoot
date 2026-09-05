@@ -202,6 +202,8 @@ services:
       AUTH_OAUTH_AUTHORIZATION_CODE_TTL: ${AUTH_OAUTH_AUTHORIZATION_CODE_TTL:-PT60S}
       AUTH_NATS_URL: nats://nats:4222
       AUTH_TOTP_ENCRYPTION_KEY: ${AUTH_TOTP_ENCRYPTION_KEY:-voice-compose-totp-key-32-bytes!!}
+      # Compose-only fixture. Staging/prod receive a distinct Secret value.
+      ACCOUNT_DELETE_TOKEN_SECRET: ${ACCOUNT_DELETE_TOKEN_SECRET:-voice-compose-account-delete-token-secret-32b}
       USER_GRPC_ADDR: user:9090
       # Compose live: Helix/YPP + token exchange via verification-stub (not real Twitch/YouTube).
       AUTH_OAUTH_TWITCH_CLIENT_ID: voice-twitch-compose

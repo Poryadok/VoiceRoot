@@ -197,7 +197,7 @@ currently deployed schema/code; see [todo/backend.md](../todo/backend.md).
 | `user.logged_out`       | account_id, device_info     |
 | `user.2fa_enabled`      | account_id                  |
 | `user.guest_converted`  | account_id                  |
-| `user.account_deleted`  | account_id                  |
+| `user.account_deleted`  | account_id; stable envelope `event_id` |
 | `user.account_restored` | account_id                  |
 
 ## Зависимости
