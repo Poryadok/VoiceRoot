@@ -22,6 +22,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/encoding/protojson"
+
+	chatv1 "voice.app/voice/chat/v1"
 )
 
 func formatComposeEmail(prefix string, n int64) string {
@@ -1190,12 +1193,12 @@ func blockComposeAccount(t *testing.T, client *http.Client, base, accessToken, b
 }
 
 type composeChatListItem struct {
-	ChatID           string
-	LastPreview      string
-	UnreadCount      int
-	Inbox            string
-	IsStranger       bool
-	DMPeerProfileID  string
+	ChatID          string
+	LastPreview     string
+	UnreadCount     int64
+	Inbox           string
+	IsStranger      bool
+	DMPeerProfileID string
 }
 
 func listComposeChats(t *testing.T, client *http.Client, base, accessToken, inbox string) []composeChatListItem {
@@ -1213,30 +1216,18 @@ func listComposeChats(t *testing.T, client *http.Client, base, accessToken, inbo
 	body, _ := io.ReadAll(resp.Body)
 	require.Equal(t, http.StatusOK, resp.StatusCode, "list chats body=%s", string(body))
 
-	var parsed struct {
-		ChatList struct {
-			Items []struct {
-				Chat struct {
-					ID string `json:"id"`
-				} `json:"chat"`
-				LastMessagePreview  string `json:"last_message_preview"`
-				UnreadCount         int    `json:"unread_count"`
-				Inbox               string `json:"inbox"`
-				IsStranger          bool   `json:"is_stranger"`
-				DMPeerProfileID     string `json:"dm_peer_profile_id"`
-			} `json:"items"`
-		} `json:"chat_list"`
-	}
-	require.NoError(t, json.Unmarshal(body, &parsed))
-	var out []composeChatListItem
-	for _, item := range parsed.ChatList.Items {
+	var parsed chatv1.ListChatsResponse
+	require.NoError(t, protojson.Unmarshal(body, &parsed))
+	items := parsed.GetChatList().GetItems()
+	out := make([]composeChatListItem, 0, len(items))
+	for _, item := range items {
 		out = append(out, composeChatListItem{
-			ChatID:          item.Chat.ID,
-			LastPreview:     item.LastMessagePreview,
-			UnreadCount:     item.UnreadCount,
-			Inbox:           item.Inbox,
-			IsStranger:      item.IsStranger,
-			DMPeerProfileID: item.DMPeerProfileID,
+			ChatID:          item.GetChat().GetId(),
+			LastPreview:     item.GetLastMessagePreview(),
+			UnreadCount:     item.GetUnreadCount(),
+			Inbox:           item.GetInbox(),
+			IsStranger:      item.GetIsStranger(),
+			DMPeerProfileID: item.GetDmPeerProfileId(),
 		})
 	}
 	return out

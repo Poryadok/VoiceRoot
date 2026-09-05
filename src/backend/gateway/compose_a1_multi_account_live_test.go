@@ -112,7 +112,7 @@ func TestComposeA1TwoAccountsFoundation_live(t *testing.T) {
 	require.Equal(t, sessA.ProfileID, mainItem.DMPeerProfileID)
 	require.Equal(t, "main", mainItem.Inbox)
 	require.False(t, mainItem.IsStranger)
-	require.Equal(t, 2, mainItem.UnreadCount, "B must have one unread count per fresh A→B message")
+	require.Equal(t, int64(2), mainItem.UnreadCount, "B must have one unread count per fresh A→B message")
 
 	getComposeMessagesContains(t, client, base, sessB.AccessToken, chatID, messageOneID, messageOne)
 	getComposeMessagesContains(t, client, base, sessB.AccessToken, chatID, messageTwoID, messageTwo)
@@ -130,7 +130,7 @@ func TestComposeA1TwoAccountsFoundation_live(t *testing.T) {
 	require.NotNil(t, mainItemAfterRead, "read DM must remain in B main inbox: %+v", mainBAfterRead)
 	require.Equal(t, "main", mainItemAfterRead.Inbox)
 	require.False(t, mainItemAfterRead.IsStranger)
-	require.Equal(t, 0, mainItemAfterRead.UnreadCount)
+	require.Equal(t, int64(0), mainItemAfterRead.UnreadCount)
 }
 
 // TestComposeA1DailyMessagingREST_live is the REST-only RED proof for the
@@ -196,6 +196,7 @@ func TestComposeA1DailyMessagingREST_live(t *testing.T) {
 
 	spaceID := createComposeSpace(t, client, base, sessA.AccessToken,
 		fmt.Sprintf("a1-t055-phase2-space-%d", n), "A1 REST daily messaging proof")
+	allowComposeChatSpaceInvitesEveryone(t, client, base, sessB.AccessToken, sessC.AccessToken)
 	invite := createComposeSpaceInvite(t, client, base, sessA.AccessToken, spaceID)
 	joinComposeSpaceByInvite(t, client, base, sessB.AccessToken, invite.Code)
 	joinComposeSpaceByInvite(t, client, base, sessC.AccessToken, invite.Code)
@@ -270,6 +271,7 @@ func TestComposeA1ChannelReadIsolation_live(t *testing.T) {
 	sessC := registerComposeUser(t, client, base, formatComposeEmail("a1-t055-channel-untouched", n), password)
 	spaceID := createComposeSpace(t, client, base, sessA.AccessToken,
 		fmt.Sprintf("a1-t055-channel-space-%d", n), "A1 per-member channel read proof")
+	allowComposeChatSpaceInvitesEveryone(t, client, base, sessB.AccessToken, sessC.AccessToken)
 	invite := createComposeSpaceInvite(t, client, base, sessA.AccessToken, spaceID)
 	joinComposeSpaceByInvite(t, client, base, sessB.AccessToken, invite.Code)
 	joinComposeSpaceByInvite(t, client, base, sessC.AccessToken, invite.Code)
@@ -402,7 +404,7 @@ func assertComposeA1PerMemberReadIsolation(
 		"reader's %s MarkRead must clear only reader's unread main-inbox badge", chatKind)
 }
 
-func composeA1UnreadCount(t *testing.T, client *http.Client, base, accessToken, chatID string) int {
+func composeA1UnreadCount(t *testing.T, client *http.Client, base, accessToken, chatID string) int64 {
 	t.Helper()
 	item := composeA1ChatItem(listComposeChats(t, client, base, accessToken, "main"), chatID)
 	if item == nil || item.Inbox != "main" {
