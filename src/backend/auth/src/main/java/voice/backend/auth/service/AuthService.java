@@ -535,8 +535,7 @@ public class AuthService {
     if (account.deletedAt().plus(ACCOUNT_RESTORE_GRACE).isBefore(precheckNow)) {
       throw new AuthException("account_inactive");
     }
-    Instant transitionNow = Instant.now(clock);
-    if (!accounts.restoreDeleted(account.id(), transitionNow)) {
+    if (!accounts.restoreDeleted(account.id())) {
       throw new AuthException("validation_failed");
     }
     Account restored = accounts.findById(account.id().toString()).orElse(account);

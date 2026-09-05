@@ -1,7 +1,8 @@
 package voice.backend.auth.repository;
 
-import java.time.Instant;
 import java.time.Duration;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Optional;
@@ -13,6 +14,15 @@ public class InMemoryAccountRepository implements AccountRepository {
   private final Map<String, UUID> byEmail = new ConcurrentHashMap<>();
   private final Map<String, UUID> byPhone = new ConcurrentHashMap<>();
   private final Map<UUID, Instant> guestReminderShownAt = new ConcurrentHashMap<>();
+  private final Clock clock;
+
+  public InMemoryAccountRepository() {
+    this(Clock.systemUTC());
+  }
+
+  public InMemoryAccountRepository(Clock clock) {
+    this.clock = java.util.Objects.requireNonNull(clock, "clock");
+  }
 
   @Override
   public synchronized Account create(String email, String phone, String passwordHash, String type) {
@@ -242,28 +252,18 @@ public class InMemoryAccountRepository implements AccountRepository {
   }
 
   @Override
-  public synchronized boolean restoreDeleted(UUID accountId, Instant transitionNow) {
+  public synchronized boolean restoreDeleted(UUID accountId) {
     Account existing = byId.get(accountId);
     if (existing == null
         || !"deleted".equals(existing.status())
         || existing.deletedAt() == null
-        || existing.deletedAt().plus(Duration.ofDays(30)).isBefore(transitionNow)) {
+        || existing.deletedAt().plus(Duration.ofDays(30)).isBefore(clock.instant())) {
       return false;
     }
     byId.put(accountId, copy(existing, "active", existing.totpSecret(), existing.totpEnabled(), null));
     return true;
   }
 
-  @Override
-  @Deprecated
-  public synchronized boolean restoreDeleted(UUID accountId) {
-    Account existing = byId.get(accountId);
-    if (existing == null || !"deleted".equals(existing.status()) || existing.deletedAt() == null) {
-      return false;
-    }
-    byId.put(accountId, copy(existing, "active", existing.totpSecret(), existing.totpEnabled(), null));
-    return true;
-  }
 
   @Override
   public synchronized long incrementSessionEpoch(UUID accountId) {
