@@ -192,10 +192,11 @@ ProviderContainer _callTestContainer({
       ),
       liveKitRoomFactoryProvider.overrideWithValue(() => fakeRoom),
       callSignalingStreamProvider.overrideWith((ref) => realtime.stream),
-      if (boundRealtime != null)
-        profileBoundRealtimeEventProvider.overrideWith(
-          (ref) => boundRealtime.stream,
-        ),
+      profileBoundRealtimeEventProvider.overrideWith(
+        (ref) =>
+            boundRealtime?.stream ??
+            const Stream<ProfileBoundRealtimeFrame>.empty(),
+      ),
       authControllerProvider.overrideWith(
         (ref) => _authControllerForProfile(ref, activeProfileId),
       ),

@@ -12,6 +12,7 @@ import 'package:voice_frontend/backend/users_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/routing/app_router.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
+import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/subscription_providers.dart';
 import 'package:voice_frontend/ui/chat/chat_archive_screen.dart';
@@ -104,6 +105,7 @@ void main() {
         ),
         httpClientProvider.overrideWithValue(mock),
         authSessionStorageProvider.overrideWithValue(storage),
+        realtimeAutoConnectProvider.overrideWithValue(false),
       ],
     );
     addTearDown(container.dispose);
@@ -183,7 +185,9 @@ void main() {
       if (req.url.path == '/api/v1/chats' &&
           req.url.queryParameters['inbox'] == 'archive') {
         return http.Response(
-          jsonEncode({'chat_list': {'items': []}}),
+          jsonEncode({
+            'chat_list': {'items': []},
+          }),
           200,
         );
       }
