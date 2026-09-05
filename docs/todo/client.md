@@ -79,7 +79,7 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 
 - [x] **VoiceListSkeleton / VoiceStatePanel — wave A residual loaders** — PR #128: `chat_room_panel` pagination, space members/bots/invites, `player_profile_sheet`, `story_viewer_screen`, settings/search/subscription list loads → skeleton/state panel; `VoiceListSkeleton` uses `shrinkWrap: true` + `primary: false` (sheet CI).
 
-- [ ] **VoiceListSkeleton / VoiceStatePanel — остаточные loaders** — list loads still CPI: `group_members_sheet`, `chat_info_panel`, `space_roles_sheet`, `manage_profiles_sheet` / `create_profile_sheet`, `active_sessions_screen`, `manage_folders_sheet`, `bot_install_page`, `profile_downgrade_picker_screen` (button-level CPI OK).
+- [ ] **VoiceListSkeleton / VoiceStatePanel — остаточные loaders** — list loads still CPI: `chat_info_panel`, `manage_profiles_sheet` / `create_profile_sheet`, `active_sessions_screen`, `manage_folders_sheet`, `bot_install_page`, `profile_downgrade_picker_screen` (button-level CPI OK).
 
 - [ ] **VoiceListSkeleton + VoiceStatePanel widget tests** — dedicated tests отсутствуют (reconnect/onboarding/focus trap покрыты; `social_panel_test` only asserts `find.byType(VoiceListSkeleton)`).
 

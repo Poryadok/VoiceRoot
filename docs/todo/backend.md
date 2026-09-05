@@ -159,7 +159,6 @@
 
 - [x] **[Social] Contacts/favorites REST** — Gateway `GET/POST /api/v1/friends/contacts`, `GET/POST /api/v1/friends/favorites` shipped (**Batch 23a**). **Remaining:** `SyncPhoneContacts` UX.
 - [x] **[Social] Outgoing request status exposed** — `PendingFriendRequest.status` (`pending` | `declined`) in proto + `ListFriendRequests` mapping; Flutter outgoing requests tab shows declined label — **Batch 24b** (`friends.md`).
-- [x] **[Social] `allow_friend_requests` service integration test** — **done:** `allow_friend_requests_integration_test.go` covers stranger invite denial. Remaining compose-live coverage is tracked below under Social test gaps.
 
 ### User
 
@@ -167,10 +166,9 @@
 - [ ] **[User] Premium animated GIF avatar is a dead path** — premium gate in `user_avatar.go` but `image/gif` rejected by `r2avatar/validate.go` (`TestValidateUploadParams_rejectsGifInPhase1`); conflicts with `docs/features/user-profile.md`. `GetSettings`/`UpdateSettings` **есть** (`user_settings.go`). `GetPrivacySettings` ownership check **есть** (non-S2S → `GetOwnedProfile`).
 - [ ] **[User] `SetPrimaryProfile` отсутствует** — `is_primary` только bootstrap; phone search всегда primary.
 - [ ] **[User] Verification V1 incomplete (Auth + User boundary)** — Twitch only in `LinkedAccountsService` (`src/backend/auth/src/main/java/voice/backend/auth/service/LinkedAccountsService.java`); YouTube in DB schema only (`src/backend/auth/src/main/resources/db/migration/V3__linked_identities.sql`); no partner-status recheck cron (`docs/features/verification.md`).
-- [ ] **[User] NATS contract gaps** — `user.presence_changed` **published** but JetStream proto lacks `old_status`/`new_status`; missing `user.game_detected`, `user.settings_changed` ([user-service.md](../microservices/user-service.md)); `PublishProfileUpdated` / `PublishVerified` emit stub `ProfileCreated` without `changed_fields` / `verification_type`; `PublishProfileSwitched` drops `old_profile_id` (`src/backend/user/internal/userevents/jetstream.go`).
+- [ ] **[User] NATS contract gaps** — missing `user.game_detected`, `user.settings_changed` ([user-service.md](../microservices/user-service.md)); `PublishProfileUpdated` / `PublishVerified` emit stub `ProfileCreated` without `changed_fields` / `verification_type`; `PublishProfileSwitched` drops `old_profile_id` (`src/backend/user/internal/userevents/jetstream.go`).
 - [ ] **[User] Durable `last_seen_at` (PostgreSQL)** — spec requires PG persistence for header; code Redis-only TTL 5 min — [presence.md](../features/presence.md), [user-service.md](../microservices/user-service.md). Sub-bullet: privacy filter at read time when `show_last_seen` lands.
 - [ ] **[User] `show_last_seen` privacy enforcement** — add `show_last_seen` to `privacy_settings` proto/DDL; filter `last_seen_at` in `GetPresence`/`GetBulkPresence` per viewer — [user-service.md](../microservices/user-service.md) — **P0**
-- [ ] **[User] JetStream `presence_changed`: `old_status`/`new_status` in proto + publisher** — event table spec vs stub payload in `jetstream_events.proto` / `userevents/jetstream.go` — **P0**
 - [ ] **[User] Homoglyph-normalized search not implemented** — anti-spoof on create only (`src/backend/user/internal/store/verification.go`); `SearchProfilesAfter` uses raw `ILIKE` (`src/backend/user/internal/store/profile_search.go`); spec requires normalized lookup (`docs/features/verification.md`).
 - [ ] **[User] Premium custom status not gated** — `UpdatePresence` accepts `custom_status` for all tiers (`src/backend/user/internal/grpcsvc/user_presence.go`); spec: Premium only. `UpdateProfile.custom_status` не persist в DDL (только Redis presence).
 
@@ -284,7 +282,7 @@
 - [ ] **[Chat/Messaging/File] Stickers/GIF wire (R2-A32, R4-04)** — expand checklist: `chat_db` migrations `sticker_packs`/`stickers`/`profile_installed_packs`; Chat RPCs (`ListInstalledStickerPacks`, `InstallStickerPack`, `SearchGifs`, …); Gateway REST ([api-gateway.md](../microservices/api-gateway.md) § Stickers and GIF); ~~Messaging proto `STICKER`/`GIF` + send validation~~ **Messaging send validation done (Batch 31a)**; File `UPLOAD_INTENT_STICKER`/GIF transcode; `ListSharedMedia` `STICKERS` kind extension — **P0**
 - [x] **[Messaging] Durable delivery consumer** — **done (Batch 12):** Realtime JetStream `message.delivery_ack` publish (Batch 11) + Messaging consumer → `last_delivered_message_id`; list ✓✓ via `GetChatListMetadata.last_message_delivery_state`.
 - [x] **[Realtime] R3-A27 — @mention notification payload naming** — WS `mention` op uses `profile_id` (not `user_id`) in `dispatchMentionAdded` (Batch 11).
-- [ ] **[User] R3-A19 — Presence WS privacy filter (code)** — Realtime `presence_update` must apply `show_online` / omit `last_seen` per viewer; publish `old_status`/`new_status` delta on `user.presence_changed` — doc in [presence.md](../features/presence.md); code gaps in User + Realtime.
+- [ ] **[User] R3-A19 — Presence WS privacy filter (code)** — Realtime `presence_update` must apply `show_online` / omit `last_seen` per viewer — doc in [presence.md](../features/presence.md); code gaps in User + Realtime.
 - [x] **[Notification] R3-A23/R4-A15 — `message_request` type in code** — **done (Batch 22a):** `TypeMessageRequest` in notification delivery; push/in-app route by recipient `inbox_bucket=requests` via Chat `ListMembers.inbox_bucket` S2S; Realtime WS fan-out emits `message_request` (not `new_message`) for requests inbox — [notification-service.md](../microservices/notification-service.md). **Client toggle:** [client.md](client.md) Batch 22b.
 
 ### Chat — other
@@ -312,7 +310,6 @@
 - [ ] **[Notification] `reply` marked ✓ but not implemented — no `reply` type in message consumer or Realtime in-app fanout; thread replies are treated as `new_message`.** — `docs/features/notifications.md`, `src/backend/notification/message_events_consumer.go`, `src/backend/realtime/in_app_notification_fanout.go`
 - [ ] **[Notification] Matchmaking/voice push ignores presence — handlers hardcode `IsOnline: false`; no `EnrichDecision` / User gRPC check → online users still get push (messages path does check).** — `src/backend/notification/internal/consumer/matchmaking_events.go`, `src/backend/notification/matchmaking_events_consumer.go`, `src/backend/notification/voice_events_consumer.go`
 - [ ] **[Notification] `system` in-app / Gateway gaps (T-023)** — Moderation NATS consumer produces `system` push for sanctions and narrowly skips presence until an in-app path exists. Still missing/undefined: Notification→Realtime transport + payload + dedupe, final account→profiles semantics, Flutter presentation, other system producers, and Gateway REST exposure — `src/backend/notification/moderation_events_consumer.go`; `src/backend/notification/internal/grpcsvc/server.go`; `src/backend/gateway/transcode_notifications.go`; `src/backend/realtime/`
-- [x] **[Notification] Multi-replica duplicate push risk — per-pod durable consumer name (`notif_<hostname>_mod`) on moderation stream caused duplicate delivery across replicas; all notification JetStream consumers now use cluster-wide `SharedDurable` names (moderation → `notif_mod`).** — **done (Batch 31c):** `src/backend/notification/internal/consumer/durable.go`, `moderation_events_consumer.go`, `main.go`
 
 ### Federation
 
@@ -327,7 +324,6 @@
 
 
 - [x] **[Story] `show_stories = Nobody` global privacy bypass** — CreateStory caps explicit visibility to `show_stories` floor; `canViewStory` denies when floor is Nobody. Path: `src/backend/story/internal/grpcsvc/story.go` (`capCreateStoryVisibility`, `canViewStory`).
-- [ ] **[Story] Anonymous view leaks viewer in NATS** — `MarkViewed` always calls `PublishStoryViewed` with `viewer_profile_id` even when `anonymous=true`; contradicts [stories.md](../features/stories.md) §Анонимный просмотр. Paths: `src/backend/story/internal/grpcsvc/story.go`, `src/backend/story/internal/storyevents/jetstream.go`.
 - [ ] **[Story] No `media_file_id` ownership / story-context validation** — any UUID accepted; video duration checked only when File client is wired. Path: `src/backend/story/internal/grpcsvc/story.go` (`CreateStory`, `CreateLookingForParty`); File story context exists in `src/backend/file/internal/grpcsvc/file_grpc.go` but Story does not enforce it.
 - [ ] **[Story] Feed degrades to global scan when Social fails** — `GetStoryFeed` falls back to `ListActiveStoriesPaginated` (all active rows) if `ListFeedAuthorIDs` errors; only post-filtered by `canViewStory`. Path: `src/backend/story/internal/grpcsvc/story.go` (`GetStoryFeed`); related: `src/backend/story/internal/privacy/friends.go`, `src/backend/gateway/compose_stories_degradation_live_test.go` (checks liveness only).
 - [ ] **[Story] `DeleteStory` orphans R2 media** — soft-delete only; purge worker targets `expired_at IS NOT NULL`, so early-deleted stories never reach `RunArchivePurgeOnce` / `FileDeleter`. Paths: `src/backend/story/internal/store/store.go` (`DeleteStory`), `src/backend/story/internal/jobs/jobs.go`.
@@ -417,7 +413,7 @@
 
 
 - [ ] **[Space] ChatLookup S2S hardening (Agent batch)** — set `x-voice-internal-caller=space` on Chat GetChat; Warn on lookup failures instead of silent skip; add unit/mock test for enrichment; optional batch GetChat to avoid N+1 (`chat_lookup.go`, `main.go`). Closed High wiring via PR #129.
-- [ ] **[Space] No audit rows for tree CRUD, invite revoke, space settings, role changes (spec lists these)** — `src/backend/space/internal/store/tree.go`, `src/backend/space/internal/grpcsvc/invites.go`
+- [ ] **[Space] No audit rows for tree CRUD, space settings, role changes (spec lists these)** — `src/backend/space/internal/store/tree.go`, `src/backend/space/internal/grpcsvc/invites.go`
 - [ ] **[Space] `RevokeInvite` / `ListInvites` owner-only — `CreateInvite` uses `SpaceManageInvites`; revoke/list use `requireSpaceOwner`** — `src/backend/space/internal/grpcsvc/invites.go`
 - [x] **[Space] Invite/public join membership event** — both join paths call `finalizeMembership`, which publishes `space.member_joined` after a new membership is created (`invites.go`, `join.go`, `spaceevents/jetstream.go`).
 - [x] **[Space] Kick/leave membership event** — `KickMember` and `LeaveSpace` publish `space.member_left` after removal (`members.go`, `join.go`, `spaceevents/jetstream.go`). Residual Space event gaps remain in the dedicated NATS item above.
@@ -452,7 +448,6 @@
 ### User
 
 
-- [ ] **[User] `SearchProfiles` ignores discoverability privacy** — no `allow_friend_requests` / phone-search enforcement (`src/backend/user/internal/grpcsvc/user_search.go`); comment still references pre-privacy DDL.
 - [ ] **[User] `UpdateProfile.custom_status` ignored** — comment "not persisted in current DDL" (`src/backend/user/internal/grpcsvc/user.go`); only Redis presence path works.
 - [ ] **[User] Org DNS verification lifecycle thin** — unlimited pending rows, no expiry/TTL (`src/backend/user/internal/store/verification.go`).
 - [x] **[User] `README.md` status** — describes the implemented RPC surface and keeps residual gaps explicit (`src/backend/user/README.md`).
@@ -477,11 +472,9 @@
 ### Matchmaking
 
 
-- [ ] **[Matchmaking] `GamesPlayed` is rating count, not match count** — `UpsertPlayerRating` increments `total_ratings_received` but API exposes it as `games_played` (`store/ratings.go`, `grpcsvc/rating.go`). Spec model separates `total_matches` vs `total_ratings_received` (`docs/microservices/matchmaking-service.md`).
 - [ ] **[Matchmaking] Ratings cannot be skipped** — `validateStars` enforces 1–5 only (`store/ratings.go`). Spec allows skip per participant (`docs/features/matchmaking.md`).
 - [ ] **[Matchmaking] `mm.player_banned` never published** — Stream subject registered (`mmevents/publisher.go`) but `BanFromMM` does not emit it (`grpcsvc/rating.go`).
 - [ ] **[Matchmaking] Popular-games ordering missing** — `ListGames` sorts by `created_at DESC` (`store/games.go`). Spec wants popularity by active queue depth (`docs/features/game-catalog.md`).
-- [ ] **[Matchmaking] Matcher scans ≤100 games** — `Worker.RunOnce` lists `PageSize: 100` active games once (`matcher/worker.go`). Additional catalog pages never polled.
 - [ ] **[Matchmaking] `CreateGame` lacks `icon_url` / `external_id`** — Columns exist (`migrations/matchmaking_db/000001_init.up.sql`, `store/games.go`) but `CreateGame` only persists name+config (`grpcsvc/server.go`).
 - [ ] **[Matchmaking] Party / voice-derived MM absent** — `PartyStore` is a stub (`store/parties.go`); `StartSearch` always validates `partySize=1` (`grpcsvc/search.go`, `criteria/criteria.go`). Voice join/leave reset flow from spec not implementable yet.
 - [ ] **[Matchmaking] Test gaps for prod-scale modes** — No matcher test for seeded 10-slot games or role-diversity matching (`matcher/worker_test.go` uses custom 2-slot Duo only).
@@ -492,9 +485,7 @@
 - [ ] **[Role] `color`, `is_mentionable` in DB, not in API — columns in migration; absent from proto, store scans, REST responses.** — `src/backend/migrations/role_db/000001_init.up.sql`, `protos/voice/role/v1/role.proto`, `src/backend/role/internal/store/roles.go`, `grpcsvc/roles.go`
 - [x] **[Role] No live E2E for voice room overrides — store/grpc tests exist; no compose/Flutter E2E for `VOICE_JOIN` deny (UI strings exist).** — **done (VOICE_JOIN deny):** `TestComposeVoiceJoinDeny_live` + Flutter VOICE_JOIN deny (#14).
 - [ ] **[Role] Owner role lifecycle unguarded — Owner can assign Owner to others (`CanManageRole` owner bypass); no block on revoking last Owner.** — `src/backend/role/internal/store/roles.go` (`CanManageRole`, `AssignMemberRole`)
-- [ ] **[Role] `ReorderRoles` skips hierarchy for system roles — managed roles reorder without `CanEditRole` / position vs actor checks.** — `src/backend/role/internal/grpcsvc/roles_manage.go` (`ReorderRoles`)
 - [ ] **[Role] Override removal not published — `RemoveChatOverride` / `RemoveVoiceRoomOverride` emit no NATS events; Realtime consumer won't invalidate clients.** — `src/backend/role/internal/grpcsvc/roles_manage.go`, `internal/roleevents/publisher.go`, `src/backend/realtime/role_events_consumer.go`
-- [ ] **[Role] `BootstrapSpaceRoles` floods events — publishes `role.created` for all 5 system roles on every bootstrap.** — `src/backend/role/internal/grpcsvc/roles.go`
 - [ ] **[Role] S2S RPCs unauthenticated — `BootstrapSpaceRoles`, `CheckPermission`, `GetEffectivePermissions`, `DeleteRolesCreatedByProfile` trust network boundary (not exposed via Gateway, but no service auth).** — `src/backend/role/internal/grpcsvc/roles.go`, `roles_cleanup.go`, `main.go`
 - [ ] **[Role] `created_at` wrong in API — `roleRowToProto` uses `timestamppb.Now()` instead of DB `created_at`.** — `src/backend/role/internal/grpcsvc/roles.go`
 - [ ] **[Role] Federation role sync — listed in role-service deps; Federation deferred, no SyncSnapshot path.** — `docs/microservices/role-service.md`; `src/backend/federation/`
@@ -700,7 +691,6 @@
 
 - [x] **[Role] Server comment** — `RoleGRPC` now identifies the implemented service without stale red-phase wording. — `src/backend/role/internal/grpcsvc/server.go`
 - [x] **[Role] README status** — describes the implemented role and permission surface. — `src/backend/role/README.md`
-- [ ] **[Role] `NamesFor` order non-deterministic — map iteration; awkward for UI/tests expecting stable lists.** — `src/backend/role/permissions/permissions.go`
 - [ ] **[Role] No test for dual-scope effective mask — chat + `voice_room_id` together in one `GetEffectiveMask` call.** — `src/backend/role/internal/store/`, `internal/grpcsvc/` tests
 - [x] **[Role] `CreateRole` hierarchy validation — non-owner with `SPACE_MANAGE_ROLES` may create only below their top role; equal/higher denial leaves no role or event, Owner bypass is covered.** — `src/backend/role/internal/grpcsvc/roles.go`, `roles_manage_integration_test.go`
 - [ ] **[Role] Guest role under-exercised — default join falls back to Member; Guest mask (`SPACE_VIEW` only) rarely applies unless `SetDefaultJoinRole` points to Guest.** — `src/backend/role/permissions/permissions.go`, `internal/store/roles.go`
