@@ -59,6 +59,7 @@ public class AuthService {
   private final MailSender mailSender;
   private final SessionEpochFloorStore sessionEpochFloors;
   private final SessionEpochIssuanceGate sessionEpochIssuanceGate;
+  private RegistrationSessionEpochPreparer registrationSessionEpochPreparer;
   private AccountDeletionOperationRepository deletionOperations;
   private AccountDeletionRestoreTokenCodec deletionTokenCodec;
   private AccountDeletionEventPublisher deletionEventPublisher;
@@ -138,6 +139,9 @@ public class AuthService {
           deletionOperations, deletionTokenCodec, deletionEventPublisher, deletionStarter,
           deletionFloorWorker, deletionEventWorker);
     }
+    if (registrationSessionEpochPreparer != null) {
+      copy.configureRegistrationSessionEpochPreparer(registrationSessionEpochPreparer);
+    }
     return copy;
   }
 
@@ -158,6 +162,12 @@ public class AuthService {
     this.deletionEventWorker = java.util.Objects.requireNonNull(deletionEventWorker, "deletionEventWorker");
   }
 
+  public void configureRegistrationSessionEpochPreparer(
+      RegistrationSessionEpochPreparer registrationSessionEpochPreparer) {
+    this.registrationSessionEpochPreparer =
+        java.util.Objects.requireNonNull(registrationSessionEpochPreparer, "registrationSessionEpochPreparer");
+  }
+
   public AuthSession register(RegisterCommand command) {
     String email = normalize(command.email());
     String phone = normalize(command.phone());
@@ -170,14 +180,25 @@ public class AuthService {
     if (command.password() == null || command.password().length() < 8) {
       throw new AuthException("validation_failed");
     }
+    String passwordHash = passwordHasher.hash(command.password());
+    String type = command.guest() ? "guest" : "regular";
     Account account;
+    PreparedSessionEpoch prepared;
     try {
-      account = accounts.create(email, phone, passwordHasher.hash(command.password()), command.guest() ? "guest" : "regular");
+      if (registrationSessionEpochPreparer != null) {
+        RegistrationSessionEpochPreparer.PreparedRegistration registration =
+            registrationSessionEpochPreparer.prepare(email, phone, passwordHash, type);
+        account = registration.account();
+        prepared = registration.preparedEpoch();
+      } else {
+        account = accounts.create(email, phone, passwordHash, type);
+        prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
+      }
     } catch (IllegalArgumentException ex) {
       throw new AuthException("registration_conflict");
     }
     touchLastOnline(account);
-    return issueSession(account, command.deviceInfoJson());
+    return issueSession(account, prepared, command.deviceInfoJson());
   }
 
   public AuthSession login(LoginCommand command) {

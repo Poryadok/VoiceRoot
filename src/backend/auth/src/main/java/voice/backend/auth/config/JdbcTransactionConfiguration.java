@@ -18,7 +18,9 @@ import voice.backend.auth.service.GuestConversionPendingUserWorker;
 import voice.backend.auth.service.TransactionalAccountDeletionOperationStarter;
 import voice.backend.auth.service.TransactionalGuestConversionLocalPromotion;
 import voice.backend.auth.service.TransactionalGuestConversionOtpAcceptance;
+import voice.backend.auth.service.RegistrationSessionEpochPreparer;
 import voice.backend.auth.sessionepoch.SessionEpochFloorStore;
+import voice.backend.auth.sessionepoch.SessionEpochIssuanceGate;
 import voice.backend.auth.userdb.PrimaryProfileProvisioner;
 
 /** JDBC-only transaction collaborators, created after all required bean definitions are registered. */
@@ -28,6 +30,15 @@ public class JdbcTransactionConfiguration {
   @Bean
   TransactionTemplate guestConversionTransactionTemplate(PlatformTransactionManager transactions) {
     return new TransactionTemplate(transactions);
+  }
+
+  @Bean
+  RegistrationSessionEpochPreparer registrationSessionEpochPreparer(
+      @Qualifier("guestConversionTransactionTemplate") TransactionTemplate transactions,
+      AccountRepository accounts,
+      SessionEpochFloorStore floors) {
+    return new RegistrationSessionEpochPreparer(
+        transactions, accounts, new SessionEpochIssuanceGate(accounts, floors));
   }
 
   @Bean
