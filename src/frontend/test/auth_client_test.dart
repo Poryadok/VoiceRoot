@@ -172,6 +172,7 @@ void main() {
         expect(req.headers['authorization'], 'Bearer access-abc');
         final body = jsonDecode(req.body) as Map<String, dynamic>;
         expect(body['password'], 'secret');
+        expect(body.containsKey('totp_code'), isFalse);
         deleteCalled = true;
         return http.Response('', 204);
       });
@@ -190,6 +191,35 @@ void main() {
         password: 'secret',
       );
       expect(deleteCalled, isTrue);
+      expect(result, isA<AuthApiOk<void>>());
+    });
+
+    test('includes optional totp_code when supplied', () async {
+      final mock = MockClient((req) async {
+        expect(req.method, 'POST');
+        expect(req.url.path, '/api/v1/auth/delete-account');
+        final body = jsonDecode(req.body) as Map<String, dynamic>;
+        expect(body['password'], 'secret');
+        expect(body['totp_code'], '654321');
+        return http.Response('', 204);
+      });
+      final client = VoiceAuthClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
+      final session = AuthSession(
+        accessToken: 'access-abc',
+        refreshToken: 'refresh-xyz',
+        expiresInSeconds: 900,
+        accountId: 'acc-1',
+        activeProfileId: 'prof-1',
+      );
+
+      final result = await client.deleteAccount(
+        session: session,
+        password: 'secret',
+        totpCode: '654321',
+      );
+
       expect(result, isA<AuthApiOk<void>>());
     });
   });
