@@ -1,6 +1,9 @@
 package permissions
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+)
 
 // Canonical permission names — docs/microservices/role-service.md.
 const (
@@ -119,11 +122,20 @@ func MaskFor(name string) (uint64, error) {
 
 // NamesFor expands a bitmask to permission names.
 func NamesFor(mask uint64) []string {
-	var names []string
+	type permissionEntry struct {
+		name string
+		bit  uint64
+	}
+	entries := make([]permissionEntry, 0, len(permissionBits))
 	for name, bit := range permissionBits {
 		if mask&bit != 0 {
-			names = append(names, name)
+			entries = append(entries, permissionEntry{name: name, bit: bit})
 		}
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].bit < entries[j].bit })
+	var names []string
+	for _, entry := range entries {
+		names = append(names, entry.name)
 	}
 	return names
 }
