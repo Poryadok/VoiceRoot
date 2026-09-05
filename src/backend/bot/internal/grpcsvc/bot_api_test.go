@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -95,6 +96,58 @@ func TestBotCRUD_and_webhookURL(t *testing.T) {
 
 	_, err = client.DeleteBot(ctx, &botv1.DeleteBotRequest{BotId: botID})
 	require.NoError(t, err)
+}
+
+func TestBotUpdateScopes_rechecksAfterConcurrentRemoval(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	client, st, cleanup := startBotGRPC(t)
+	defer cleanup()
+	ctx := withAccount(context.Background(), uuid.New(), uuid.New())
+	granted := `["DM_SEND","TEXT_CHAT_SEND_MESSAGES"]`
+
+	reg, err := client.RegisterBot(ctx, &botv1.RegisterBotRequest{
+		Name: "ConcurrentBot", ScopesJson: granted,
+	})
+	require.NoError(t, err)
+	botID := reg.GetBot().GetId()
+	botUUID, err := uuid.Parse(botID)
+	require.NoError(t, err)
+
+	tx, err := st.Pool.Begin(ctx)
+	require.NoError(t, err)
+	defer tx.Rollback(ctx) //nolint:errcheck // commit is asserted below
+	removed := `["TEXT_CHAT_SEND_MESSAGES"]`
+	_, err = tx.Exec(ctx, `UPDATE bots SET scopes = $2::jsonb WHERE id = $1`, botUUID, removed)
+	require.NoError(t, err)
+
+	restore := granted
+	updateDone := make(chan error, 1)
+	go func() {
+		_, updateErr := client.UpdateBot(ctx, &botv1.UpdateBotRequest{
+			BotId: botID, ScopesJson: &restore,
+		})
+		updateDone <- updateErr
+	}()
+
+	// The writer must be inside its second transaction before the removal commits;
+	// otherwise an old read-then-write implementation could race past this test.
+	require.Eventually(t, func() bool {
+		return st.Pool.Stat().AcquiredConns() >= 2
+	}, 2*time.Second, 10*time.Millisecond)
+	select {
+	case updateErr := <-updateDone:
+		t.Fatalf("update completed before concurrent removal committed: %v", updateErr)
+	default:
+	}
+	require.NoError(t, tx.Commit(ctx))
+
+	updateErr := <-updateDone
+	require.Equal(t, codes.PermissionDenied, status.Code(updateErr))
+	got, err := client.GetBot(ctx, &botv1.GetBotRequest{BotId: botID})
+	require.NoError(t, err)
+	require.JSONEq(t, removed, got.GetBot().GetScopesJson())
 }
 
 func TestApplyManifest_subcommandsListedWithGroup(t *testing.T) {
