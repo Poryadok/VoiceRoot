@@ -168,6 +168,28 @@ class AuthJdbcRedisIntegrationTest {
   }
 
   @Test
+  void jdbcConditionalRestoreFencesTransitionExpiryAndKeepsExactBoundaryInclusive() throws Exception {
+    Instant deletedAt = Instant.parse("2026-04-01T10:00:00Z");
+    Instant cutoff = deletedAt.plus(Duration.ofDays(30));
+
+    Account expired = accounts.create("jdbc-restore-expired@example.com", null, "hash", "regular");
+    accounts.markDeleted(expired.id(), deletedAt);
+    assertThat(conditionalRestoreAt(expired.id(), cutoff.plusNanos(1))).isFalse();
+    assertThat(accounts.findById(expired.id().toString()))
+        .get()
+        .extracting(Account::status, Account::deletedAt)
+        .containsExactly("deleted", deletedAt);
+
+    Account boundary = accounts.create("jdbc-restore-boundary@example.com", null, "hash", "regular");
+    accounts.markDeleted(boundary.id(), deletedAt);
+    assertThat(conditionalRestoreAt(boundary.id(), cutoff)).isTrue();
+    assertThat(accounts.findById(boundary.id().toString()))
+        .get()
+        .extracting(Account::status, Account::deletedAt)
+        .containsExactly("active", null);
+  }
+
+  @Test
   void jdbcConcurrentEpochIncrementsAreAtomicAndNeverLoseOrReuseValues() {
     Account account = accounts.create("jdbc-epoch-race@example.com", null, "hash", "regular");
     ExecutorService workers = Executors.newFixedThreadPool(8);
@@ -530,6 +552,12 @@ class AuthJdbcRedisIntegrationTest {
     Method method = AccountRepository.class.getMethod("restoreDeleted", UUID.class);
     assertThat(method.getReturnType()).isEqualTo(boolean.class);
     return (boolean) method.invoke(accounts, accountId);
+  }
+
+  private boolean conditionalRestoreAt(UUID accountId, Instant transitionInstant) throws Exception {
+    Method method = AccountRepository.class.getMethod("restoreDeleted", UUID.class, Instant.class);
+    assertThat(method.getReturnType()).isEqualTo(boolean.class);
+    return (boolean) method.invoke(accounts, accountId, transitionInstant);
   }
 
   private long awaitEpochIncrement(Future<Long> future) {
