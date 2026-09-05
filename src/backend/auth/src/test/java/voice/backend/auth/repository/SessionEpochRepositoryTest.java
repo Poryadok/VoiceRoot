@@ -2,6 +2,7 @@ package voice.backend.auth.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -11,6 +12,25 @@ import java.util.stream.LongStream;
 import org.junit.jupiter.api.Test;
 
 class SessionEpochRepositoryTest {
+  @Test
+  void deletionAdvancesTheEpochInTheSameDurableTransition() {
+    InMemoryAccountRepository accounts = new InMemoryAccountRepository();
+    Account account = accounts.create("delete-epoch@example.com", null, "hash", "regular");
+    Instant deletedAt = Instant.parse("2026-09-05T11:00:00Z");
+
+    long epoch = accounts.markDeletedAndIncrementSessionEpoch(account.id(), deletedAt);
+
+    assertThat(epoch).isEqualTo(2L);
+    assertThat(accounts.findById(account.id().toString()))
+        .get()
+        .satisfies(
+            deleted -> {
+              assertThat(deleted.status()).isEqualTo("deleted");
+              assertThat(deleted.deletedAt()).isEqualTo(deletedAt);
+              assertThat(deleted.sessionEpoch()).isEqualTo(epoch);
+            });
+  }
+
   @Test
   void newInMemoryAccountStartsAtPositiveEpochAndIncrementReturnsNextMonotonicValue() {
     InMemoryAccountRepository accounts = new InMemoryAccountRepository();
