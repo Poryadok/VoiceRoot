@@ -14,6 +14,7 @@ public class AuthProperties {
   private final OAuth oauth = new OAuth();
   private final Nats nats = new Nats();
   private final Resend resend = new Resend();
+  private final AccountDeletion accountDeletion = new AccountDeletion();
   private PersistenceMode persistence = PersistenceMode.JDBC;
 
   public UserGrpc getUserGrpc() {
@@ -63,6 +64,23 @@ public class AuthProperties {
 
   public Resend getResend() {
     return resend;
+  }
+
+  public AccountDeletion getAccountDeletion() {
+    return accountDeletion;
+  }
+
+  /** Dedicated HMAC material for deterministic account-restore tokens. */
+  public static class AccountDeletion {
+    private String tokenSecret = "";
+
+    public String getTokenSecret() {
+      return tokenSecret;
+    }
+
+    public void setTokenSecret(String tokenSecret) {
+      this.tokenSecret = tokenSecret;
+    }
   }
 
   public static class Resend {

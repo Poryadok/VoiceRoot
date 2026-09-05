@@ -23,6 +23,7 @@ import voice.backend.auth.oauth.OAuth2Service;
 import voice.backend.auth.oauth.OAuthAuthorizationCodeStore;
 import voice.backend.auth.mail.MailSender;
 import voice.backend.auth.service.AccountRestoreTokenStore;
+import voice.backend.auth.service.AccountDeletionRestoreTokenCodec;
 import voice.backend.auth.service.TotpService;
 import voice.backend.auth.sessionepoch.SessionEpochFloorStore;
 
@@ -36,6 +37,11 @@ public class AuthBeans {
   @Bean
   RefreshTokenCodec refreshTokenCodec() {
     return new RefreshTokenCodec();
+  }
+
+  @Bean
+  AccountDeletionRestoreTokenCodec accountDeletionRestoreTokenCodec(AuthProperties properties) {
+    return new AccountDeletionRestoreTokenCodec(properties);
   }
 
   @Bean

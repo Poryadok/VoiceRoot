@@ -26,6 +26,8 @@ auth:
     private-key-location: "${AUTH_JWT_PRIVATE_KEY_LOCATION:}"
   refresh:
     ttl: P30D
+  account-deletion:
+    token-secret: "${ACCOUNT_DELETE_TOKEN_SECRET:}"
   redis:
     blacklist-prefix: "jwt:blacklist:"
   grpc:
