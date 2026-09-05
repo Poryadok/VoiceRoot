@@ -68,6 +68,47 @@ func TestDecideRouting_IncomingCallOnlineNoPush(t *testing.T) {
 	require.True(t, decision.InApp)
 }
 
+func TestDecideRouting_OnlineMatchFoundKeepsPushEligible(t *testing.T) {
+	decision := delivery.DecideRouting(delivery.DeliveryInput{
+		RecipientProfileID: uuid.New(),
+		SenderProfileID:    uuid.New(),
+		Type:               delivery.TypeMatchFound,
+		IsOnline:           true,
+		At:                 time.Now().UTC(),
+	})
+	require.True(t, decision.InApp)
+	require.True(t, decision.Push, "match_found must skip online presence while evaluating push policy")
+}
+
+func TestDecideRouting_OnlineVoiceMemberJoinedKeepsPushEligible(t *testing.T) {
+	decision := delivery.DecideRouting(delivery.DeliveryInput{
+		RecipientProfileID: uuid.New(),
+		SenderProfileID:    uuid.New(),
+		Type:               delivery.TypeVoiceMemberJoined,
+		IsOnline:           true,
+		At:                 time.Now().UTC(),
+	})
+	require.True(t, decision.InApp)
+	require.True(t, decision.Push, "voice_member_joined must skip online presence while evaluating push policy")
+}
+
+func TestDecideRouting_PresenceExceptionsStillExcludeSender(t *testing.T) {
+	for _, typ := range []delivery.NotificationType{delivery.TypeMatchFound, delivery.TypeVoiceMemberJoined} {
+		t.Run(string(typ), func(t *testing.T) {
+			profileID := uuid.New()
+			decision := delivery.DecideRouting(delivery.DeliveryInput{
+				RecipientProfileID: profileID,
+				SenderProfileID:    profileID,
+				Type:               typ,
+				IsOnline:           true,
+				At:                 time.Now().UTC(),
+			})
+			require.False(t, decision.InApp)
+			require.False(t, decision.Push, "sender exclusion must win over %s presence exception", typ)
+		})
+	}
+}
+
 func TestDecideRouting_SenderExcluded(t *testing.T) {
 	sender := uuid.New()
 	decision := delivery.DecideRouting(delivery.DeliveryInput{
