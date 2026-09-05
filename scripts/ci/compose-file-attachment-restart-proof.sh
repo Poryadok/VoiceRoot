@@ -144,7 +144,15 @@ wait_gateway() {
 
 echo "A1 restart proof project=${project} gateway=${VOICE_API_BASE_URL}"
 compose --profile app config --quiet
+set +e
 compose --profile app up -d --build
+initial_up_status=$?
+set -e
+if (( initial_up_status != 0 )); then
+  compose ps --all >&2 || true
+  compose logs --no-color --timestamps compose-db-init >&2 || true
+  exit "$initial_up_status"
+fi
 wait_healthy file
 wait_healthy gateway
 wait_gateway
@@ -152,7 +160,7 @@ wait_gateway
 export VOICE_FILE_ATTACHMENT_RESTART_PHASE=prepare
 (
   cd "$ROOT/src/backend/gateway"
-  go test -count=1 -parallel 1 -timeout 10m -tags live -run "^${restart_test}$" ./...
+  go test -count=1 -parallel 1 -timeout 10m -run "^${restart_test}$" ./...
 )
 [[ -f "$state_path_posix" ]] || { echo "prepare did not create restart-proof state" >&2; exit 1; }
 
@@ -168,5 +176,5 @@ wait_gateway
 export VOICE_FILE_ATTACHMENT_RESTART_PHASE=verify
 (
   cd "$ROOT/src/backend/gateway"
-  go test -count=1 -parallel 1 -timeout 10m -tags live -run "^${restart_test}$" ./...
+  go test -count=1 -parallel 1 -timeout 10m -run "^${restart_test}$" ./...
 )
