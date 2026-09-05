@@ -1,6 +1,7 @@
 package voice.backend.auth.service;
 
 import io.micrometer.core.instrument.MeterRegistry;
+import com.google.protobuf.Timestamp;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -30,6 +31,8 @@ import voice.backend.auth.security.TokenBlacklist;
 import voice.backend.auth.sessionepoch.SessionEpochFloorStore;
 import voice.backend.auth.sessionepoch.SessionEpochFloorMissingException;
 import voice.backend.auth.sessionepoch.SessionEpochFloorUnavailableException;
+import voice.events.v1.JetstreamEvents.UserAccountDeleted;
+import voice.events.v1.JetstreamEvents.UserStreamEvent;
 
 public class AuthService {
   /** Max opaque encrypted blob size for E2E key backup (512 KiB). */
@@ -58,6 +61,7 @@ public class AuthService {
   private final SessionEpochFloorStore sessionEpochFloors;
   private AccountDeletionOperationRepository deletionOperations;
   private AccountDeletionRestoreTokenCodec deletionTokenCodec;
+  private AccountDeletionEventPublisher deletionEventPublisher;
 
   public AuthService(
       AccountRepository accounts,
@@ -124,8 +128,8 @@ public class AuthService {
         restoreTokenStore,
         mailSender,
         sessionEpochFloors);
-    if (deletionOperations != null && deletionTokenCodec != null) {
-      copy.configureAccountDeletion(deletionOperations, deletionTokenCodec);
+    if (deletionOperations != null && deletionTokenCodec != null && deletionEventPublisher != null) {
+      copy.configureAccountDeletion(deletionOperations, deletionTokenCodec, deletionEventPublisher);
     }
     return copy;
   }
@@ -133,9 +137,12 @@ public class AuthService {
   /** Injects the Auth-owned durable deletion outbox without changing legacy unit-test constructors. */
   public void configureAccountDeletion(
       AccountDeletionOperationRepository deletionOperations,
-      AccountDeletionRestoreTokenCodec deletionTokenCodec) {
+      AccountDeletionRestoreTokenCodec deletionTokenCodec,
+      AccountDeletionEventPublisher deletionEventPublisher) {
     this.deletionOperations = java.util.Objects.requireNonNull(deletionOperations, "deletionOperations");
     this.deletionTokenCodec = java.util.Objects.requireNonNull(deletionTokenCodec, "deletionTokenCodec");
+    this.deletionEventPublisher =
+        java.util.Objects.requireNonNull(deletionEventPublisher, "deletionEventPublisher");
   }
 
   public AuthSession register(RegisterCommand command) {
@@ -478,16 +485,27 @@ public class AuthService {
           "Your account was scheduled for deletion. Restore within 30 days using token: " + restoreToken);
     }
     if (operation.state() == AccountDeletionState.PENDING_EVENT) {
-      authEventPublisher.publishAccountDeleted(account.id());
+      deletionEventPublisher.publishAccountDeleted(
+          AuthEventPublisher.SUBJECT_ACCOUNT_DELETED,
+          UserStreamEvent.newBuilder()
+              .setEventId(operation.operationId().toString())
+              .setOccurredAt(timestamp(operation.createdAt()))
+              .setUserAccountDeleted(UserAccountDeleted.newBuilder().setAccountId(account.id().toString()))
+              .build(),
+          operation.operationId().toString());
       deletionOperations.markEventPublished(operation.operationId(), Instant.now(clock));
     }
     return new DeleteAccountResult(restoreToken);
   }
 
   private void requireDeletionOperations() {
-    if (deletionOperations == null || deletionTokenCodec == null) {
+    if (deletionOperations == null || deletionTokenCodec == null || deletionEventPublisher == null) {
       throw new IllegalStateException("account deletion durable operation repository is not configured");
     }
+  }
+
+  private static Timestamp timestamp(Instant value) {
+    return Timestamp.newBuilder().setSeconds(value.getEpochSecond()).setNanos(value.getNano()).build();
   }
 
   private TokenClaims validateForAccountDeletion(String accessToken) {

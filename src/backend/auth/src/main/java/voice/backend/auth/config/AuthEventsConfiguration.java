@@ -12,10 +12,12 @@ import voice.backend.auth.events.NatsAuthEventPublisher;
 import voice.backend.auth.events.NoopAuthEventPublisher;
 import voice.backend.auth.support.RecordingAuthEventPublisher;
 import voice.backend.auth.service.GuestConversionEventPublisher;
+import voice.backend.auth.service.AccountDeletionEventPublisher;
 import voice.backend.auth.service.GuestConversionPendingEventRecoveryRunner;
 import voice.backend.auth.service.GuestConversionPendingEventWorker;
 import voice.backend.auth.service.GuestConversionPublishAck;
 import voice.backend.auth.service.UnavailableGuestConversionEventPublisher;
+import voice.backend.auth.service.UnavailableAccountDeletionEventPublisher;
 
 @Configuration
 public class AuthEventsConfiguration {
@@ -63,10 +65,34 @@ public class AuthEventsConfiguration {
   }
 
   @Bean
+  @Profile("test")
+  @ConditionalOnMissingBean(AccountDeletionEventPublisher.class)
+  AccountDeletionEventPublisher testAccountDeletionEventPublisher(
+      @Qualifier("testAuthEventPublisher") AuthEventPublisher events) {
+    return (subject, envelope, natsMessageId) -> {
+      if (!AuthEventPublisher.SUBJECT_ACCOUNT_DELETED.equals(subject)
+          || !natsMessageId.equals(envelope.getEventId())
+          || !envelope.hasUserAccountDeleted()) {
+        throw new IllegalArgumentException("invalid account deletion event envelope");
+      }
+      events.publishAccountDeleted(
+          java.util.UUID.fromString(envelope.getUserAccountDeleted().getAccountId()));
+      return new GuestConversionPublishAck("test", 1L);
+    };
+  }
+
+  @Bean
   @Profile("!test")
   @ConditionalOnMissingBean(GuestConversionEventPublisher.class)
   GuestConversionEventPublisher unavailableGuestConversionEventPublisher() {
     return new UnavailableGuestConversionEventPublisher();
+  }
+
+  @Bean
+  @Profile("!test")
+  @ConditionalOnMissingBean(AccountDeletionEventPublisher.class)
+  AccountDeletionEventPublisher unavailableAccountDeletionEventPublisher() {
+    return new UnavailableAccountDeletionEventPublisher();
   }
 
   @Bean
