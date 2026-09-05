@@ -699,6 +699,114 @@ func TestAccountDeletedConsumer_ShutdownWaitsForAckFlush(t *testing.T) {
 	waitForAccountDeletedAckFloorForTest(t, js, instanceID)
 }
 
+func TestAccountDeletedConsumer_LegacyDurableRetainsDeliverySubjectAndCursor(t *testing.T) {
+	server := startAccountDeletedJSTestServer(t)
+	nc, err := nats.Connect(server.ClientURL())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = nc.Drain() })
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+	_, err = js.AddStream(&nats.StreamConfig{Name: userEventsStreamName, Subjects: []string{userAccountDeletedSubject}, Storage: nats.MemoryStorage})
+	require.NoError(t, err)
+
+	const instanceID = "legacy-durable"
+	durable := accountDeletedDurableName(instanceID)
+	legacyDelivery := "_INBOX.voice.chat.legacy." + durable
+	_, err = js.AddConsumer(userEventsStreamName, &nats.ConsumerConfig{
+		Durable:        durable,
+		DeliverSubject: legacyDelivery,
+		DeliverPolicy:  nats.DeliverAllPolicy,
+		AckPolicy:      nats.AckExplicitPolicy,
+		FilterSubject:  userAccountDeletedSubject,
+	})
+	require.NoError(t, err)
+	legacyAcked := make(chan struct{}, 1)
+	legacySub, err := js.Subscribe(userAccountDeletedSubject, func(msg *nats.Msg) {
+		_ = msg.Ack()
+		legacyAcked <- struct{}{}
+	}, nats.Bind(userEventsStreamName, durable), nats.ManualAck())
+	require.NoError(t, err)
+	_, err = js.Publish(userAccountDeletedSubject, accountDeletedMessageForTest(t, uuid.NewString(), uuid.NewString()).Data)
+	require.NoError(t, err)
+	select {
+	case <-legacyAcked:
+	case <-time.After(3 * time.Second):
+		t.Fatal("legacy durable did not acknowledge the source event")
+	}
+	waitForAccountDeletedAckFloorForTest(t, js, instanceID)
+	require.NoError(t, legacySub.Unsubscribe())
+	before := waitForAccountDeletedDurableForTest(t, js, instanceID)
+
+	publisher := &dmPeerDeletedPublisherForTest{callSignal: make(chan struct{}, 1)}
+	sub, err := subscribeAccountDeletedConsumer(
+		js,
+		&deletedAccountProfileListerForTest{profileIDs: []uuid.UUID{uuid.New()}},
+		&deletedDMTargetStoreForTest{targets: []store.DMPeerDeletionTarget{{ChatID: uuid.New(), SurvivingProfileID: uuid.New()}}},
+		publisher,
+		instanceID,
+		slog.Default(),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sub.Unsubscribe() })
+	select {
+	case <-publisher.callSignal:
+		t.Fatal("legacy durable replayed its acknowledged source event")
+	case <-time.After(150 * time.Millisecond):
+	}
+	after := waitForAccountDeletedDurableForTest(t, js, instanceID)
+	require.Equal(t, legacyDelivery, after.Config.DeliverSubject)
+	require.Equal(t, before.AckFloor, after.AckFloor)
+}
+
+func TestAccountDeletedConsumer_ShutdownAckFlushTimeoutIsBounded(t *testing.T) {
+	t.Setenv("HTTP_SHUTDOWN_TIMEOUT", "50ms")
+	server := startAccountDeletedJSTestServer(t)
+	nc, err := nats.Connect(server.ClientURL())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = nc.Drain() })
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+	_, err = js.AddStream(&nats.StreamConfig{Name: userEventsStreamName, Subjects: []string{userAccountDeletedSubject}, Storage: nats.MemoryStorage})
+	require.NoError(t, err)
+
+	ackGate := startAccountDeletedAckGateForTest(t, server.Addr().String())
+	publisher := &dmPeerDeletedPublisherForTest{callSignal: make(chan struct{}, 1)}
+	profiles := &deletedAccountProfileListerForTest{profileIDs: []uuid.UUID{uuid.New()}}
+	targets := &deletedDMTargetStoreForTest{targets: []store.DMPeerDeletionTarget{{ChatID: uuid.New(), SurvivingProfileID: uuid.New()}}}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	done := make(chan error, 1)
+	const instanceID = "ack-flush-timeout"
+	go func() {
+		done <- runAccountDeletedConsumerOnce(ctx, ackGate.clientURL(), instanceID, profiles, targets, publisher, slog.Default())
+	}()
+	waitForAccountDeletedDurableForTest(t, js, instanceID)
+	_, err = js.Publish(userAccountDeletedSubject, accountDeletedMessageForTest(t, uuid.NewString(), uuid.NewString()).Data)
+	require.NoError(t, err)
+	select {
+	case <-publisher.callSignal:
+	case <-time.After(3 * time.Second):
+		t.Fatal("consumer did not publish the DM deletion target")
+	}
+	select {
+	case <-ackGate.ackHeld:
+	case <-time.After(3 * time.Second):
+		t.Fatal("test proxy did not hold the JetStream ACK")
+	}
+
+	started := time.Now()
+	cancel()
+	select {
+	case err := <-done:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(time.Second):
+		t.Fatal("consumer shutdown exceeded its bounded timeout")
+	}
+	require.GreaterOrEqual(t, time.Since(started), 40*time.Millisecond)
+	info := waitForAccountDeletedDurableForTest(t, js, instanceID)
+	require.Equal(t, 1, info.NumAckPending, "unflushed ACK must remain retryable")
+}
+
 func TestAccountDeletedConsumerShutdown_JoinsBeforeDependentClose(t *testing.T) {
 	consumerDone := make(chan error, 1)
 	dependentClosed := make(chan struct{})

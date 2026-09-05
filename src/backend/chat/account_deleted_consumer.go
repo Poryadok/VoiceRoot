@@ -242,6 +242,60 @@ func (s *accountDeletedSubscription) stopIntakeAndWait(ctx context.Context) erro
 	return errors.Join(shutdownErrors...)
 }
 
+func remainingAccountDeletedShutdownTimeout(ctx context.Context) (time.Duration, error) {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return runtimeconfig.ShutdownTimeoutFromEnv(), nil
+	}
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		return 0, ctx.Err()
+	}
+	return remaining, nil
+}
+
+func closeAccountDeletedNATS(ctx context.Context, nc *nats.Conn, closed <-chan struct{}) error {
+	if nc == nil {
+		return nil
+	}
+	flushTimeout, err := remainingAccountDeletedShutdownTimeout(ctx)
+	if err != nil {
+		nc.Close()
+		return fmt.Errorf("account deletion shutdown budget exhausted: %w", err)
+	}
+	if err := nc.FlushTimeout(flushTimeout); err != nil {
+		nc.Close()
+		return fmt.Errorf("flush user.account_deleted ACK: %w", err)
+	}
+	if err := nc.Drain(); err != nil {
+		nc.Close()
+		return fmt.Errorf("drain user.account_deleted NATS connection: %w", err)
+	}
+	if nc.IsClosed() {
+		return nil
+	}
+	select {
+	case <-closed:
+		return nil
+	case <-ctx.Done():
+		nc.Close()
+		return fmt.Errorf("wait for user.account_deleted NATS close: %w", ctx.Err())
+	}
+}
+
+func waitForAccountDeletedConsumerShutdown(ctx context.Context, done <-chan error, logger *slog.Logger) {
+	if done == nil {
+		return
+	}
+	select {
+	case <-done:
+	case <-ctx.Done():
+		if logger != nil {
+			logger.Error("user.account_deleted consumer did not stop before shutdown deadline", slog.String("error", ctx.Err().Error()))
+		}
+	}
+}
+
 func subscribeAccountDeletedConsumer(
 	js nats.JetStreamContext,
 	profiles accountDeletedProfileLister,
@@ -335,12 +389,18 @@ func runAccountDeletedConsumerOnce(
 	publisher dmPeerDeletedPublisher,
 	logger *slog.Logger,
 ) error {
+	closed := make(chan struct{})
+	var closeOnce sync.Once
 	nc, err := nats.Connect(natsURL,
 		nats.Name("voice-chat-account-deleted"),
 		nats.Timeout(10*time.Second),
 		nats.RetryOnFailedConnect(true),
 		nats.MaxReconnects(-1),
 		nats.ReconnectWait(time.Second),
+		nats.DrainTimeout(runtimeconfig.ShutdownTimeoutFromEnv()),
+		nats.ClosedHandler(func(*nats.Conn) {
+			closeOnce.Do(func() { close(closed) })
+		}),
 	)
 	if err != nil {
 		return fmt.Errorf("nats connect: %w", err)
@@ -369,11 +429,10 @@ func runAccountDeletedConsumerOnce(
 		nc.Close()
 		return ctx.Err()
 	}
-	if err := nc.Drain(); err != nil {
+	if err := closeAccountDeletedNATS(shutdownCtx, nc, closed); err != nil {
 		if logger != nil {
-			logger.Warn("user.account_deleted NATS drain failed", slog.String("error", err.Error()))
+			logger.Warn("user.account_deleted NATS shutdown failed", slog.String("error", err.Error()))
 		}
-		nc.Close()
 	}
 	return ctx.Err()
 }

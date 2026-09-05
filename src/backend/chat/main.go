@@ -50,6 +50,7 @@ func main() {
 
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	var grpcSrv *grpc.Server
+	var accountDeletedConsumerDone <-chan error
 	runCtx, runCancel := context.WithCancel(context.Background())
 	defer runCancel()
 	if dbURL != "" {
@@ -200,10 +201,14 @@ func main() {
 			if accountProfiles == nil {
 				logger.Warn("user.account_deleted consumer disabled: USER_GRPC_ADDR not set")
 			} else {
+				consumerDone := make(chan error, 1)
+				accountDeletedConsumerDone = consumerDone
 				go func() {
-					if err := runAccountDeletedConsumer(runCtx, natsURL, os.Getenv("HOSTNAME"), accountProfiles, dmStore, jsPub, logger); err != nil && !errors.Is(err, context.Canceled) {
+					err := runAccountDeletedConsumer(runCtx, natsURL, os.Getenv("HOSTNAME"), accountProfiles, dmStore, jsPub, logger)
+					if err != nil && !errors.Is(err, context.Canceled) {
 						logger.Error("user.account_deleted consumer stopped", slog.String("error", err.Error()))
 					}
+					consumerDone <- err
 				}()
 			}
 		}
@@ -252,15 +257,20 @@ func main() {
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	shutdownServer := false
 	select {
 	case err := <-errCh:
 		if err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
 		}
 	case <-stop:
-		runCancel()
-		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.ShutdownTimeoutFromEnv())
-		defer cancel()
+		shutdownServer = true
+	}
+	runCancel()
+	ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.ShutdownTimeoutFromEnv())
+	defer cancel()
+	waitForAccountDeletedConsumerShutdown(ctx, accountDeletedConsumerDone, logger)
+	if shutdownServer {
 		if grpcSrv != nil {
 			grpcSrv.GracefulStop()
 		}
