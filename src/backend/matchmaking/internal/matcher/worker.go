@@ -48,15 +48,20 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 	if w == nil || w.Games == nil || w.Queue == nil || w.Sessions == nil || w.Matches == nil {
 		return nil
 	}
-	spaceIDs, err := w.Sessions.ListDistinctSearchingSpaceIDs(ctx)
-	if err != nil {
-		return err
-	}
+	var spaceIDs []uuid.UUID
+	spaceIDsLoaded := false
 	cursor := ""
 	for {
 		res, err := w.Games.List(ctx, store.ListGamesParams{Cursor: cursor, PageSize: 100, Status: store.StatusActive})
 		if err != nil {
 			return err
+		}
+		if !spaceIDsLoaded {
+			spaceIDs, err = w.Sessions.ListDistinctSearchingSpaceIDs(ctx)
+			if err != nil {
+				return err
+			}
+			spaceIDsLoaded = true
 		}
 		for _, game := range res.Games {
 			cfg, err := config.Parse(game.ConfigRaw)
