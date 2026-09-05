@@ -222,6 +222,22 @@ public class InMemoryAccountRepository implements AccountRepository {
   }
 
   @Override
+  public synchronized long markDeletedAndIncrementSessionEpoch(UUID accountId, Instant deletedAt) {
+    Account existing = byId.get(accountId);
+    if (existing == null) {
+      throw new IllegalArgumentException("account not found");
+    }
+    long next = Math.addExact(existing.sessionEpoch(), 1L);
+    if (next <= 0) {
+      throw new IllegalStateException("invalid session epoch");
+    }
+    byId.put(
+        accountId,
+        copy(existing, "deleted", existing.totpSecret(), existing.totpEnabled(), deletedAt, next));
+    return next;
+  }
+
+  @Override
   public synchronized void restoreDeleted(UUID accountId) {
     Account existing = byId.get(accountId);
     if (existing == null) {

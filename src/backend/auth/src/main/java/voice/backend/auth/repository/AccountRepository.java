@@ -31,6 +31,9 @@ public interface AccountRepository {
 
   void markDeleted(UUID accountId, Instant deletedAt);
 
+  /** Atomically marks the account deleted and advances its account-wide session epoch. */
+  long markDeletedAndIncrementSessionEpoch(UUID accountId, Instant deletedAt);
+
   void restoreDeleted(UUID accountId);
 
   /** Atomically advances the account-wide session epoch and returns the new positive value. */

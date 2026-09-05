@@ -380,13 +380,19 @@ public class AuthService {
     }
     ensureActive(account);
     Instant now = Instant.now(clock);
-    accounts.markDeleted(account.id(), now);
-    long sessionEpoch = accounts.incrementSessionEpoch(account.id());
-    Account deleted =
-        accounts.findById(account.id().toString()).orElseThrow(() -> new AuthException("invalid_token"));
-    if (deleted.sessionEpoch() < sessionEpoch) {
-      throw new SessionEpochFloorUnavailableException("durable session epoch did not advance");
-    }
+    long sessionEpoch = accounts.markDeletedAndIncrementSessionEpoch(account.id(), now);
+    Account deleted = new Account(
+        account.id(),
+        account.email(),
+        account.phone(),
+        account.passwordHash(),
+        account.type(),
+        "deleted",
+        account.totpSecret(),
+        account.totpEnabled(),
+        sessionEpoch,
+        account.createdAt(),
+        now);
     return finishAccountDeletion(claims, deleted);
   }
 

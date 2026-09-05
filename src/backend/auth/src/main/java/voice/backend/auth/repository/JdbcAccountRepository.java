@@ -242,6 +242,33 @@ public class JdbcAccountRepository implements AccountRepository {
   }
 
   @Override
+  public long markDeletedAndIncrementSessionEpoch(UUID accountId, Instant deletedAt) {
+    try {
+      Long epoch =
+          jdbc.queryForObject(
+              """
+              UPDATE accounts
+              SET status = 'deleted',
+                  deleted_at = :deletedAt,
+                  session_epoch = session_epoch + 1,
+                  updated_at = now()
+              WHERE id = :id
+              RETURNING session_epoch
+              """,
+              new MapSqlParameterSource()
+                  .addValue("id", accountId)
+                  .addValue("deletedAt", java.sql.Timestamp.from(deletedAt)),
+              Long.class);
+      if (epoch == null || epoch <= 0) {
+        throw new IllegalStateException("invalid session epoch");
+      }
+      return epoch;
+    } catch (org.springframework.dao.EmptyResultDataAccessException ex) {
+      throw new IllegalArgumentException("account not found", ex);
+    }
+  }
+
+  @Override
   public void restoreDeleted(UUID accountId) {
     jdbc.update(
         """
