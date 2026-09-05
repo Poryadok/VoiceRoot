@@ -160,7 +160,7 @@ Redis-only interim **недостаточен** для long-tail «был 2 не
 |------|--------|
 | 1 | Upsert session hash; EXPIRE 5 min |
 | 2 | SET `last_seen` key = now unix; EXPIRE 30 d |
-| 3 | If status enum changed → publish `user.presence_changed` with `old_status`, `new_status` |
+| 3 | If status enum changed → publish `user.presence_changed` with `old_status`, `new_status`; for the first live observation `old_status` is empty and `new_status` is the canonical current status. Same-enum heartbeats still complete steps 1–2 but publish nothing. |
 | 4 | Realtime fan-out `presence_update` to friends/subscribers **after** privacy filter (spec) |
 
 **`show_last_seen` enforcement:** when `show_last_seen = nobody` (or viewer not in allowed audience for `friends`), `GetPresence` / `GetBulkPresence` **omit** `last_seen_at` / `last_seen` timestamp (live online may still respect `show_online`). Invisible: live status shown as offline to others; **must not** leak `last_seen` when hidden. Header «был(а)…» in DM — [presence.md](../features/presence.md). **Code gap:** field not in proto/DDL; no read-time filter — [todo/backend.md](../todo/backend.md).
@@ -218,7 +218,7 @@ onboarding_state
 | `user.settings_changed` | profile_id, changed_keys                   |
 | `user.verified`         | profile_id, verification_type              |
 
-**`user.presence_changed`:** событие **публикуется** при `UpdatePresence` (`user/internal/userevents/jetstream.go`). **Proto gap:** JetStream payload сегодня без `old_status` / `new_status` — **not yet in proto** (`jetstream_events.proto`; docs ранее ошибочно помечали как «not published»).
+**`user.presence_changed`:** target semantics are an enum transition in `UpdatePresence` (`user/internal/userevents/jetstream.go`): its first observation uses an empty `old_status`, and a same-enum heartbeat updates Redis activity but emits nothing. The legacy `status` value remains the current status for existing consumers while additive JetStream fields carry `old_status` / `new_status`. **Current proto gap:** the payload still has only legacy `status` until that contract is regenerated from `jetstream_events.proto`.
 
 ## Зависимости
 
@@ -227,5 +227,3 @@ onboarding_state
 - **Space Service** — `AreCoMembers` для проверки privacy-аудитории `space_members` (User подключает S2S-клиент через `SPACE_GRPC_ADDR`)
 - **Redis** — presence кэш (TTL 5 мин, heartbeat)
 - **File Service** — загрузка аватара/баннера; **not yet deployed** as standalone service — минимальный R2/presigned для статичного аватара может жить в User ([user-profile.md](../features/user-profile.md), [PLAN.md](../PLAN.md))
-
-

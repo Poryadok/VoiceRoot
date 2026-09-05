@@ -50,6 +50,53 @@ func TestPresenceStore_UpsertAndGet_online(t *testing.T) {
 	require.True(t, s.Exists("voice:user:presence:"+pid.String()))
 }
 
+func TestPresenceStore_SameStatusHeartbeatRefreshesActivityAndTTLs(t *testing.T) {
+	ctx := context.Background()
+	s := miniredis.RunT(t)
+	t.Cleanup(s.Close)
+	rdb := redis.NewClient(&redis.Options{Addr: s.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+
+	st := NewPresenceStore(rdb)
+	pid := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+	firstAt := time.Unix(1700000000, 0).UTC()
+	heartbeatAt := firstAt.Add(4 * time.Minute)
+
+	require.NoError(t, st.Upsert(ctx, pid, PresenceUpsert{
+		Status:       "online",
+		StatusEnum:   1,
+		GameTitle:    "Dota 2",
+		CustomStatus: "first",
+		Now:          firstAt,
+	}))
+	s.FastForward(4 * time.Minute)
+
+	require.NoError(t, st.Upsert(ctx, pid, PresenceUpsert{
+		Status:       "online", // unchanged enum: this is a heartbeat, not a transition.
+		StatusEnum:   1,
+		GameTitle:    "Counter-Strike 2",
+		CustomStatus: "second",
+		Now:          heartbeatAt,
+	}))
+
+	got, err := st.Get(ctx, pid)
+	require.NoError(t, err)
+	require.True(t, got.Live)
+	require.Equal(t, "online", got.Status)
+	require.Equal(t, int32(1), got.StatusEnum)
+	require.Equal(t, "Counter-Strike 2", got.GameTitle)
+	require.Equal(t, "second", got.CustomStatus)
+	require.Equal(t, heartbeatAt.Unix(), got.LastActiveUnix)
+	require.Equal(t, heartbeatAt.Unix(), got.LastSeenUnix)
+
+	sessionTTL, err := rdb.TTL(ctx, presenceHashKey(pid)).Result()
+	require.NoError(t, err)
+	require.Greater(t, sessionTTL, 4*time.Minute)
+	lastSeenTTL, err := rdb.TTL(ctx, lastSeenRedisKey(pid)).Result()
+	require.NoError(t, err)
+	require.Greater(t, lastSeenTTL, 29*24*time.Hour)
+}
+
 func TestPresenceStore_Get_offlineWithLastSeen(t *testing.T) {
 	ctx := context.Background()
 	s := miniredis.RunT(t)
