@@ -35,11 +35,17 @@ public interface AccountRepository {
   long markDeletedAndIncrementSessionEpoch(UUID accountId, Instant deletedAt);
 
   /**
-   * Conditionally restores one soft-deleted account.
+   * Conditionally restores one soft-deleted account at a caller-supplied transition instant.
    *
    * @return true only for the caller that transitioned deleted_at-backed deleted state to active
    */
-  boolean restoreDeleted(UUID accountId);
+  boolean restoreDeleted(UUID accountId, Instant transitionNow);
+
+  /** @deprecated callers that enforce the recovery window must supply their transition instant. */
+  @Deprecated
+  default boolean restoreDeleted(UUID accountId) {
+    return restoreDeleted(accountId, Instant.now());
+  }
 
   /** Atomically advances the account-wide session epoch and returns the new positive value. */
   long incrementSessionEpoch(UUID accountId);

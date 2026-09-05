@@ -531,10 +531,12 @@ public class AuthService {
     if (!"deleted".equals(account.status()) || account.deletedAt() == null) {
       throw new AuthException("validation_failed");
     }
-    if (account.deletedAt().plus(ACCOUNT_RESTORE_GRACE).isBefore(Instant.now(clock))) {
+    Instant precheckNow = Instant.now(clock);
+    if (account.deletedAt().plus(ACCOUNT_RESTORE_GRACE).isBefore(precheckNow)) {
       throw new AuthException("account_inactive");
     }
-    if (!accounts.restoreDeleted(account.id())) {
+    Instant transitionNow = Instant.now(clock);
+    if (!accounts.restoreDeleted(account.id(), transitionNow)) {
       throw new AuthException("validation_failed");
     }
     Account restored = accounts.findById(account.id().toString()).orElse(account);

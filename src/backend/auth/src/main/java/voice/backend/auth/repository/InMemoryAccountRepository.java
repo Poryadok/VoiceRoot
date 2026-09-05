@@ -1,6 +1,7 @@
 package voice.backend.auth.repository;
 
 import java.time.Instant;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Optional;
@@ -241,6 +242,20 @@ public class InMemoryAccountRepository implements AccountRepository {
   }
 
   @Override
+  public synchronized boolean restoreDeleted(UUID accountId, Instant transitionNow) {
+    Account existing = byId.get(accountId);
+    if (existing == null
+        || !"deleted".equals(existing.status())
+        || existing.deletedAt() == null
+        || existing.deletedAt().plus(Duration.ofDays(30)).isBefore(transitionNow)) {
+      return false;
+    }
+    byId.put(accountId, copy(existing, "active", existing.totpSecret(), existing.totpEnabled(), null));
+    return true;
+  }
+
+  @Override
+  @Deprecated
   public synchronized boolean restoreDeleted(UUID accountId) {
     Account existing = byId.get(accountId);
     if (existing == null || !"deleted".equals(existing.status()) || existing.deletedAt() == null) {

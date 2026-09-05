@@ -270,7 +270,7 @@ public class JdbcAccountRepository implements AccountRepository {
   }
 
   @Override
-  public boolean restoreDeleted(UUID accountId) {
+  public boolean restoreDeleted(UUID accountId, Instant transitionNow) {
     return jdbc.update(
         """
         UPDATE accounts
@@ -278,8 +278,11 @@ public class JdbcAccountRepository implements AccountRepository {
         WHERE id = :id
           AND status = 'deleted'
           AND deleted_at IS NOT NULL
+          AND deleted_at + INTERVAL '30 days' >= :transitionnow
         """,
-        new MapSqlParameterSource("id", accountId)) == 1;
+        new MapSqlParameterSource()
+            .addValue("id", accountId)
+            .addValue("transitionnow", java.sql.Timestamp.from(transitionNow))) == 1;
   }
 
   @Override
