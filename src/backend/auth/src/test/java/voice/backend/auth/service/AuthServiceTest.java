@@ -17,6 +17,7 @@ import voice.backend.auth.repository.InMemoryBackupCodeRepository;
 import voice.backend.auth.repository.InMemoryRefreshTokenRepository;
 import voice.backend.auth.security.BCryptPasswordHasher;
 import voice.backend.auth.security.InMemoryTokenBlacklist;
+import voice.backend.auth.sessionepoch.InMemorySessionEpochFloorStore;
 import voice.backend.auth.security.JwtService;
 import voice.backend.auth.security.RefreshTokenCodec;
 
@@ -176,7 +177,8 @@ class AuthServiceTest {
         new NoopAuthEventPublisher(),
         new SimpleMeterRegistry(),
         new InMemoryAccountRestoreTokenStore(),
-        new NoopMailSender());
+        new NoopMailSender(),
+        new InMemorySessionEpochFloorStore());
   }
 
   private static voice.backend.auth.config.AuthProperties memoryTotpProperties() {

@@ -12,12 +12,12 @@ public class InMemoryAccountRestoreTokenStore implements AccountRestoreTokenStor
 
   @Override
   public void store(String token, UUID accountId, Duration ttl) {
-    tokens.put(token, new Entry(accountId, Instant.now().plus(ttl)));
+    tokens.put(AccountRestoreTokenHash.of(token), new Entry(accountId, Instant.now().plus(ttl)));
   }
 
   @Override
   public Optional<UUID> consume(String token) {
-    Entry entry = tokens.remove(token);
+    Entry entry = tokens.remove(AccountRestoreTokenHash.of(token));
     if (entry == null || entry.expiresAt().isBefore(Instant.now())) {
       return Optional.empty();
     }

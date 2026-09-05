@@ -9,17 +9,13 @@ public class AuthProperties {
   private final Refresh refresh = new Refresh();
   private final Redis redis = new Redis();
   private final Grpc grpc = new Grpc();
-  private final UserDb userDb = new UserDb();
   private final UserGrpc userGrpc = new UserGrpc();
   private final Totp totp = new Totp();
   private final OAuth oauth = new OAuth();
   private final Nats nats = new Nats();
   private final Resend resend = new Resend();
+  private final AccountDeletion accountDeletion = new AccountDeletion();
   private PersistenceMode persistence = PersistenceMode.JDBC;
-
-  public UserDb getUserDb() {
-    return userDb;
-  }
 
   public UserGrpc getUserGrpc() {
     return userGrpc;
@@ -68,6 +64,23 @@ public class AuthProperties {
 
   public Resend getResend() {
     return resend;
+  }
+
+  public AccountDeletion getAccountDeletion() {
+    return accountDeletion;
+  }
+
+  /** Dedicated HMAC material for deterministic account-restore tokens. */
+  public static class AccountDeletion {
+    private String tokenSecret = "";
+
+    public String getTokenSecret() {
+      return tokenSecret;
+    }
+
+    public void setTokenSecret(String tokenSecret) {
+      this.tokenSecret = tokenSecret;
+    }
   }
 
   public static class Resend {
@@ -362,50 +375,9 @@ public class AuthProperties {
     }
   }
 
-  public static class UserDb {
-    private String jdbcUrl = "";
-    private String username = "";
-    private String password = "";
-
-    public boolean isConfigured() {
-      return jdbcUrl != null && !jdbcUrl.isBlank();
-    }
-
-    public String getJdbcUrl() {
-      return jdbcUrl;
-    }
-
-    public void setJdbcUrl(String jdbcUrl) {
-      this.jdbcUrl = jdbcUrl;
-    }
-
-    public String getUsername() {
-      return username;
-    }
-
-    public void setUsername(String username) {
-      this.username = username;
-    }
-
-    public String getPassword() {
-      return password;
-    }
-
-    public void setPassword(String password) {
-      this.password = password;
-    }
-
-    public String resolveUsername() {
-      return username == null || username.isBlank() ? "voice" : username;
-    }
-
-    public String resolvePassword() {
-      return password == null ? "" : password;
-    }
-  }
-
   public static class UserGrpc {
     private String addr = "";
+    private Duration deadline = Duration.ofSeconds(15);
 
     public boolean isConfigured() {
       return addr != null && !addr.isBlank();
@@ -417,6 +389,17 @@ public class AuthProperties {
 
     public void setAddr(String addr) {
       this.addr = addr;
+    }
+
+    public Duration getDeadline() {
+      return deadline;
+    }
+
+    public void setDeadline(Duration deadline) {
+      if (deadline == null || deadline.isZero() || deadline.isNegative()) {
+        throw new IllegalArgumentException("auth.user-grpc.deadline must be positive");
+      }
+      this.deadline = deadline;
     }
   }
 

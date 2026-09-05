@@ -16,12 +16,12 @@ public class RedisAccountRestoreTokenStore implements AccountRestoreTokenStore {
 
   @Override
   public void store(String token, UUID accountId, Duration ttl) {
-    redis.opsForValue().set(PREFIX + token, accountId.toString(), ttl);
+    redis.opsForValue().set(PREFIX + AccountRestoreTokenHash.of(token), accountId.toString(), ttl);
   }
 
   @Override
   public Optional<UUID> consume(String token) {
-    String key = PREFIX + token;
+    String key = PREFIX + AccountRestoreTokenHash.of(token);
     String accountId = redis.opsForValue().get(key);
     if (accountId == null) {
       return Optional.empty();

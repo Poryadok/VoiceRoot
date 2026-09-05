@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/proto"
 
@@ -59,6 +60,27 @@ func chatEventBytesToFanout(data []byte) (profileID string, env fanoutEnvelope, 
 			return "", fanoutEnvelope{}, false
 		}
 		return changed.GetProfileId(), fanoutEnvelope{Op: "chat_update", D: d}, true
+	case *eventsv1.ChatStreamEvent_DmPeerDeleted:
+		deleted := p.DmPeerDeleted
+		if deleted == nil {
+			return "", fanoutEnvelope{}, false
+		}
+		chatID, err := uuid.Parse(deleted.GetChatId())
+		if err != nil {
+			return "", fanoutEnvelope{}, false
+		}
+		recipientProfileID, err := uuid.Parse(deleted.GetRecipientProfileId())
+		if err != nil {
+			return "", fanoutEnvelope{}, false
+		}
+		d, err := json.Marshal(map[string]string{
+			"chat_id":              chatID.String(),
+			"recipient_profile_id": recipientProfileID.String(),
+		})
+		if err != nil {
+			return "", fanoutEnvelope{}, false
+		}
+		return recipientProfileID.String(), fanoutEnvelope{Op: "dm_peer_deleted", D: d}, true
 	default:
 		return "", fanoutEnvelope{}, false
 	}
@@ -91,6 +113,13 @@ func subscribeChatEvents(js nats.JetStreamContext, hub *wsHub, instanceID string
 		natslog.LogConsume(logger, msg, slog.LevelInfo, "chat event consumed", attrs...)
 		reqID := natslog.RequestIDFromMsg(msg)
 		if profileID != "" {
+			var body map[string]string
+			if err := json.Unmarshal(fe.D, &body); err == nil {
+				change := strings.TrimSpace(body["change"])
+				if change == "removed" || change == "left" {
+					hub.revokeProfileChat(profileID, strings.TrimSpace(body["chat_id"]))
+				}
+			}
 			hub.broadcastToProfile(profileID, fe, logger, reqID)
 			return
 		}

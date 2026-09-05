@@ -11,6 +11,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	google.golang.org/grpc v1.70.0
 	google.golang.org/protobuf v1.36.5
+	gopkg.in/yaml.v3 v3.0.1
 	voice.app/voice/auth v0.0.0
 	voice.app/voice/chat v0.0.0
 	voice.app/voice/common v0.0.0
@@ -88,7 +89,6 @@ require (
 	golang.org/x/text v0.24.0 // indirect
 	golang.org/x/time v0.8.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241202173237-19429a94021a // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
 replace voice/backend/pkg => ../pkg

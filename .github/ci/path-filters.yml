@@ -62,6 +62,7 @@ frontend:
 
 auth:
   - src/backend/auth/**
+  - src/backend/migrations/auth_db/**
 
 developer-portal:
   - src/developer-portal/**

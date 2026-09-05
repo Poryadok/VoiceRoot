@@ -37,8 +37,8 @@ class JwtServiceTest {
   void issuesGatewayCompatibleClaimsWithFifteenMinuteTtlAndUniqueJti() {
     JwtService jwt = JwtService.forTests("voice-auth", "voice-client", "test-key", Duration.ofMinutes(15), CLOCK);
 
-    String first = jwt.issue("account-1", "profile-1", List.of("user"), "free");
-    String second = jwt.issue("account-1", "profile-1", List.of("user"), "free");
+    String first = jwt.issue("account-1", "profile-1", List.of("user"), "free", "regular", 1L);
+    String second = jwt.issue("account-1", "profile-1", List.of("user"), "free", "regular", 1L);
 
     TokenClaims claims = jwt.validate(first);
 
@@ -53,6 +53,40 @@ class JwtServiceTest {
   }
 
   @Test
+  void issuesAccessJwtWithInitialSessionEpoch() throws Exception {
+    JwtService jwt = JwtService.forTests("voice-auth", "voice-client", "test-key", Duration.ofMinutes(15), CLOCK);
+
+    String token = jwt.issue("account-1", "profile-1", List.of("user"), "free", "regular", 1L);
+
+    SignedJWT signedJwt = SignedJWT.parse(token);
+    Object sessionEpoch = signedJwt.getJWTClaimsSet().getClaim("session_epoch");
+    assertThat(sessionEpoch).isExactlyInstanceOf(Long.class).isEqualTo(1L);
+  }
+
+  @Test
+  void issuesAccessJwtWithPersistedPositiveSessionEpoch() throws Exception {
+    JwtService jwt = JwtService.forTests("voice-auth", "voice-client", "test-key", Duration.ofMinutes(15), CLOCK);
+
+    String token = jwt.issue("account-1", "profile-1", List.of("user"), "free", "regular", 7L);
+
+    assertThat(SignedJWT.parse(token).getJWTClaimsSet().getClaim("session_epoch"))
+        .isExactlyInstanceOf(Long.class)
+        .isEqualTo(7L);
+  }
+
+  @Test
+  void rejectsNonPositivePersistedSessionEpoch() {
+    JwtService jwt = JwtService.forTests("voice-auth", "voice-client", "test-key", Duration.ofMinutes(15), CLOCK);
+
+    assertThatThrownBy(() -> jwt.issue("account-1", "profile-1", List.of("user"), "free", "regular", 0L))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("session_epoch");
+    assertThatThrownBy(() -> jwt.issue("account-1", "profile-1", List.of("user"), "free", "regular", -1L))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("session_epoch");
+  }
+
+  @Test
   void stablePkcs8PemProducesJwksWithConfiguredKid() throws Exception {
     String pem;
     try (var in = JwtServiceTest.class.getClassLoader().getResourceAsStream("jwt-test-private.pem")) {
@@ -62,7 +96,7 @@ class JwtServiceTest {
     JwtService jwt =
         JwtService.fromPkcs8PrivateKeyPem(
             "voice-auth", "voice-client", "file-key", Duration.ofMinutes(15), CLOCK, pem);
-    String token = jwt.issue("account-1", "profile-1", List.of("user"), "free");
+    String token = jwt.issue("account-1", "profile-1", List.of("user"), "free", "regular", 1L);
     TokenClaims claims = jwt.validate(token);
     assertThat(claims.userId()).isEqualTo("account-1");
     assertThat(jwt.jwksJson()).contains("\"kid\":\"file-key\"");
@@ -71,10 +105,10 @@ class JwtServiceTest {
   @Test
   void issueRejectsBlankProfileId() {
     JwtService jwt = JwtService.forTests("voice-auth", "voice-client", "test-key", Duration.ofMinutes(15), CLOCK);
-    assertThatThrownBy(() -> jwt.issue("account-1", "  ", List.of("user"), "free"))
+    assertThatThrownBy(() -> jwt.issue("account-1", "  ", List.of("user"), "free", "regular", 1L))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("profile_id");
-    assertThatThrownBy(() -> jwt.issue("account-1", null, List.of("user"), "free"))
+    assertThatThrownBy(() -> jwt.issue("account-1", null, List.of("user"), "free", "regular", 1L))
         .isInstanceOf(IllegalArgumentException.class);
   }
 
@@ -123,7 +157,7 @@ class JwtServiceTest {
   @Test
   void issuesAccessTokenWithAccountTypeRegular() throws Exception {
     JwtService jwt = JwtService.forTests("voice-auth", "voice-client", "test-key", Duration.ofMinutes(15), CLOCK);
-    String token = jwt.issue("account-1", "profile-1", List.of("user"), "free");
+    String token = jwt.issue("account-1", "profile-1", List.of("user"), "free", "regular", 1L);
 
     assertThat(SignedJWT.parse(token).getJWTClaimsSet().getStringClaim("account_type")).isEqualTo("regular");
   }
@@ -131,7 +165,7 @@ class JwtServiceTest {
   @Test
   void rejectsInvalidSignatureAndExpiredToken() {
     JwtService jwt = JwtService.forTests("voice-auth", "voice-client", "test-key", Duration.ofMinutes(15), CLOCK);
-    String token = jwt.issue("account-1", "profile-1", List.of("user"), "free");
+    String token = jwt.issue("account-1", "profile-1", List.of("user"), "free", "regular", 1L);
 
     assertThatThrownBy(() -> jwt.validate(token + "x"))
         .isInstanceOf(AuthException.class)

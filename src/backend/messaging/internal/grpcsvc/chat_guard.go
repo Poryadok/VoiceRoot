@@ -8,6 +8,7 @@ import (
 
 	"voice/backend/pkg/privacy"
 
+	chatv1 "voice.app/voice/chat/v1"
 	filev1 "voice.app/voice/file/v1"
 )
 
@@ -21,9 +22,22 @@ type ChatGuard interface {
 	MemberRole(ctx context.Context, chatID, profileID uuid.UUID) (string, error)
 }
 
+// AuthoritativeChatTypeResolver obtains a chat's stored type from Chat. Client
+// supplied ChatRef.type is routing metadata only and must never decide a DM
+// account-lifecycle policy.
+type AuthoritativeChatTypeResolver interface {
+	ResolveChatType(ctx context.Context, chatID, profileID uuid.UUID) (chatv1.ChatType, error)
+}
+
 // ProfileAccountLookup resolves profile_id → account_id (User Service).
 type ProfileAccountLookup interface {
 	AccountIDByProfileID(ctx context.Context, profileID uuid.UUID) (uuid.UUID, error)
+}
+
+// AccountDeletedChecker reports soft-deleted accounts from Auth, the source of
+// truth for account lifecycle. DM writes fail closed when it is unavailable.
+type AccountDeletedChecker interface {
+	DeletedAmong(ctx context.Context, accountIDs []uuid.UUID) (map[uuid.UUID]struct{}, error)
 }
 
 // AccountPairBlockChecker reports whether two accounts must not exchange DM messages (Social IsBlocked, both directions).

@@ -16,6 +16,7 @@ WebSocket-шлюз для доставки событий в реальном в
 - Typing indicators
 - Reconnection support (exponential backoff на клиенте)
 - Нумерация событий **`s`** в рамках WebSocket-сессии, op **`resume`** с `last_s` после reconnect (см. ниже)
+- T056-P1 account session-epoch enforcement (staged/WIP): fail-closed upgrade/operation/fan-out checks and account-targeted close
 - **Не хранит inbox или историю чатов**; после reconnect клиент делает глобальную REST-сверку inbox через Chat `ListChats`, а сообщения догружает через Messaging API (Gateway → REST/gRPC) только per selected `chat_id`, см. [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) (Reconnect)
 - Heartbeat / ping-pong для детекции разрыва
 - На client **`delivery_ack`**: ephemeral `message_delivered` fan-out **и** publish JetStream **`message.delivery_ack`** на `message.events` (Messaging consumer → durable cursor) — см. § `delivery_ack` op
@@ -29,6 +30,21 @@ Headers:
   Authorization: Bearer <access_token>
   X-Profile-Id: <active_profile_id>
 ```
+
+### T056-P1: session epoch (staged/WIP)
+
+Realtime не считается реализовавшим этот контракт до готовности Auth migration /
+repository и Gateway strict consumer. После rollout `expand → seed → strict` он
+проверяет положительный JWT claim `session_epoch` и Auth-owned Redis
+minimum-epoch floor при upgrade, на каждой inbound operation и перед outbound
+fan-out. Stale/missing/corrupt claim или floor, а также Redis error, дают
+fail-closed; missing floor не преобразуется в epoch `1`.
+
+При увеличении epoch Auth/координатор может послать account-targeted close всем
+соединениям аккаунта. Redis Pub/Sub — только ускоритель доставки этого сигнала:
+если событие потеряно, повторная проверка floor всё равно не позволяет stale
+сокету отправлять или получать события. Это не заменяет `jti`-проверку Gateway
+для single-session logout и не вводит глобальный event replay.
 
 ### Формат сообщений (JSON)
 
@@ -101,7 +117,7 @@ Two producers may emit WS `notification` for the same message; clients **dedupe*
 | `subscription_sync`  | Снимок подписок DM после `hello` (см. раздел «Подписки»): `d.scope` = `dm`, `d.chat_ids`, `d.source` = `chat`, `d.degraded` при ошибке S2S к Chat |
 | `subscribe_ack`      | Подтверждение `subscribe`: `d.chat_id`                              |
 | `unsubscribe_ack`    | Подтверждение `unsubscribe`: `d.chat_id`                          |
-| `error`              | Ошибка разбора клиентской операции, напр. `d.code` = `invalid_subscribe` / `invalid_unsubscribe` |
+| `error`              | Ошибка клиентской операции: malformed UUID сохраняет `invalid_subscribe` / `invalid_unsubscribe`; valid lazy `subscribe`, который Chat не разрешил или не смог проверить, возвращает generic `d.code=permission_denied`, `d.message=chat subscription denied`, `d.chat_id` |
 | `message_create`     | Новое сообщение                                                     |
 | `message_update`     | Сообщение отредактировано                                           |
 | `message_delete`     | Сообщение удалено                                                   |
@@ -116,7 +132,7 @@ Two producers may emit WS `notification` for the same message; clients **dedupe*
 | `chat_update`        | Изменение чата/группы                                               |
 | `member_add`         | Новый участник                                                      |
 | `member_remove`      | Участник удалён                                                     |
-| `dm_peer_deleted`    | Удалён второй участник уже известного DM; `d.chat_id` only, только для surviving profile; live-ускорение, не durable history/replay |
+| `dm_peer_deleted`    | Удалён второй участник уже известного DM; `d.chat_id` + `d.recipient_profile_id`, только для designated surviving profile, без deleted identity; live-ускорение, не durable history/replay |
 | `call_incoming`      | Входящий DM-звонок: `room_id`, `chat_id`, `initiator_profile_id`, `callee_profile_id`, `media_kind`, `expires_at` |
 | `call_accepted`      | Звонок принят: `room_id`, `chat_id`, `accepted_by_profile_id`, `profile_ids`, `media_kind` |
 | `call_declined`      | Звонок отклонён: `room_id`, `chat_id`, `declined_by_profile_id`, `profile_ids` |
@@ -186,7 +202,7 @@ Routing rules (presence, quiet hours, `send_silent`, mute) — [notification-ser
 
 - **`NATS_URL`** — URL NATS Server с JetStream (порт **4222**). В Compose: `nats://nats:4222`; с хоста: `nats://127.0.0.1:${NATS_PORT:-4222}` (см. [`docker-compose.yml`](../../docker-compose.yml)).
 - Подписки на доменные потоки для fan-out в WebSocket — в первую очередь **`message.events`** (consume: `message.sent`, …; **publish:** client `delivery_ack` → `message.delivery_ack`), **`chat.events`** и с Фазы 2 **`voice.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)); детали subject/consumer — в реализации сервиса.
-- **`REALTIME_CHAT_GRPC_ADDR`** (опционально) — gRPC адрес **Chat Service** для bootstrap списка DM при открытии WebSocket (например `chat:50051` в compose). Если не задан, сервер **не** вызывает Chat и **не** шлёт `subscription_sync`; клиент может подписываться через `subscribe` (lazy). TLS/insecure — как принято в окружении (локально часто plaintext внутри mesh).
+- **`REALTIME_CHAT_GRPC_ADDR`** (опционально) — gRPC адрес **Chat Service** для bootstrap списка DM при открытии WebSocket и проверки lazy `subscribe` через `GetChat` (например `chat:50051` в compose). Если не задан, сервер **не** вызывает Chat и **не** шлёт `subscription_sync`; valid lazy `subscribe` fail-closed с generic `permission_denied`, а не создаёт неподтверждённую подписку. TLS/insecure — как принято в окружении (локально часто plaintext внутри mesh).
 - **`REALTIME_USER_GRPC_ADDR`** (опционально) — User Service для записи presence при WS `presence_update`.
 - **`REALTIME_SOCIAL_GRPC_ADDR`** (опционально) — Social Service `ListFriends` для fan-out `user.presence_changed` друзьям по WebSocket (без общей chat-подписки).
 
@@ -199,6 +215,10 @@ NATS (message.sent) ──► Realtime Instance A ──► Client 1
 Realtime Instance A ──Redis Pub/Sub──► Realtime Instance B
    (typing event)                      (forward to subscribers)
 ```
+
+Для T056-P1 тот же Pub/Sub может ускорить account-targeted close, но floor в
+Redis и проверка JWT остаются correctness path; нельзя считать доставку Pub/Sub
+доказательством отзыва сессии.
 
 1. Сервис (Messaging, Voice, etc.) публикует событие в NATS
 2. Все инстансы Realtime подписаны на релевантные NATS subjects
@@ -222,15 +242,15 @@ Realtime Instance A ──Redis Pub/Sub──► Realtime Instance B
 | Подход | Описание |
 |--------|----------|
 | **Bootstrap из Chat (основной)** | После `hello`, если задан `REALTIME_CHAT_GRPC_ADDR`, Realtime вызывает Chat Service **`ListChats`** (постранично), собирает чаты с типом **`CHAT_TYPE_DM`** и регистрирует их в локальном наборе подписок соединения. Клиент получает **`subscription_sync`** с отсортированным `chat_ids`. Источник истины по членству в чатах — **Chat**; так не пропускаются события по DM, в которые пользователь вступил, но UI ещё не открывал. |
-| **Lazy `subscribe`** | Клиент шлёт `subscribe` с `chat_id` (например гонка сразу после `CreateDM`, пока список не обновился, или вспомогательный чат вне первой страницы `ListChats` до доработки пагинации на стороне bootstrap). Подписки суммируются с bootstrap. |
-| **Только lazy** | Если Chat gRPC **не** сконфигурирован, bootstrap не выполняется — подписки только через `subscribe` / `unsubscribe`. Это сознательная деградация для dev/частичного деплоя; для продакшена DM MVP ожидается заданный адрес Chat. |
+| **Lazy `subscribe`** | Клиент шлёт `subscribe` с `chat_id` (например гонка сразу после `CreateDM`, пока список не обновился, или вспомогательный чат вне первой страницы `ListChats` до доработки пагинации на стороне bootstrap). Перед `subscribe_ack` Realtime вызывает Chat `GetChat` c обычными user/profile metadata (не internal caller); unknown, nonmember, deleted-for-self, dependency failure или timeout возвращают только generic `permission_denied`. Подписки суммируются с bootstrap. |
+| **Chat не сконфигурирован** | Bootstrap не выполняется; lazy `subscribe` **не** служит fallback для ACL и fail-closed с generic `permission_denied`. Для продакшена DM MVP ожидается заданный адрес Chat. |
 | **Ошибка Chat при bootstrap** | Всё равно отправляется `subscription_sync` с `degraded: true` и пустым `chat_ids`; клиенту следует опереться на REST список чатов и при необходимости прислать `subscribe` по известным `chat_id`. |
 
-Группы/каналы и прочие scope — вне этого чанка; по мере готовности Chat/Realtime их bootstrap расширяется по той же схеме (источник списка в Chat, не выдумывать членство в Realtime).
+Группы/каналы и прочие scope — вне этого чанка; по мере готовности Chat/Realtime их bootstrap расширяется по той же схеме (источник списка в Chat, не выдумывать членство в Realtime). `chat.member_changed` c `removed` или `left` отзывает все локальные подписки profile/chat; `joined` не создаёт подписку автоматически.
 
 ## Зависимости
 
-- **Redis** — Pub/Sub, registry подключений `{profile_id → [instance_id, ws_conn_id]}`
+- **Redis** — Pub/Sub, registry подключений `{profile_id → [instance_id, ws_conn_id]}` и staged minimum-epoch floor для fail-closed проверок аккаунта
 - **NATS** — получение событий от всех сервисов
 
 Ни глобальная сверка inbox, ни догрузка пропущенных **сообщений** не проходят через Realtime: клиент обращается через API Gateway к Chat `ListChats`, затем при необходимости к Messaging Service `GetMessages` (без обязательного gRPC Realtime → Messaging для catch-up).
@@ -248,5 +268,3 @@ Realtime Instance A ──Redis Pub/Sub──► Realtime Instance B
 - **Несколько инстансов**: каждый подписан на NATS; между инстансами **Redis Pub/Sub** и общий **registry** подключений (см. выше), чтобы fan-out доходил до клиента независимо от того, на каком инстансе открыт сокет.
 - **Падение инстанса**: соединения на нём обрываются; клиент переподключается с exponential backoff ([ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md)). Глобальное состояние списка сверяется через Chat `ListChats`, а выбранные пропущенные **сообщения** догружаются через Messaging и API Gateway, а не через «догон» в Realtime.
 - **Эфемерные события** (typing, часть presence): гарантии catch-up как у сообщений **нет** — после reconnect состояние восстанавливается из следующих live-событий или снимка из других API.
-
-

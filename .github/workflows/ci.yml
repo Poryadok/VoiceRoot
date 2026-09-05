@@ -545,9 +545,8 @@ jobs:
           distribution: temurin
           java-version: "25"
           cache: maven
-      - name: Maven test (auth)
-        working-directory: src/backend/auth
-        run: mvn -B test
+      - name: Maven test and Testcontainers report gate (auth)
+        run: make auth-test-ci
       - uses: docker/setup-buildx-action@v4
       - name: Log in to GHCR
         if: >-

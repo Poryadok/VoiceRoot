@@ -12,5 +12,6 @@ public record Account(
     String status,
     byte[] totpSecret,
     boolean totpEnabled,
+    long sessionEpoch,
     Instant createdAt,
     Instant deletedAt) {}

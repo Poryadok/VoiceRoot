@@ -10,13 +10,13 @@
 
 | Сервис               | PostgreSQL        | Redis                     | Прочее                           |
 |----------------------|-------------------|---------------------------|----------------------------------|
-| API Gateway          | —                 | rate limit, JWT blacklist | —                                |
-| Auth Service         | `auth_db`         | blacklist, limits, OTP    | —                                |
+| API Gateway          | —                 | rate limit, JWT blacklist; session-epoch floor (staged) | —                  |
+| Auth Service         | `auth_db`         | blacklist, session-epoch floor (staged), limits, OTP | —            |
 | User Service         | `user_db`         | presence cache            | —                                |
 | Social Service       | `social_db`       | —                         | —                                |
 | Chat Service         | `chat_db`         | —                         | —                                |
 | Messaging Service    | `messaging_db`    | —                         | NATS JetStream (publish)         |
-| Realtime Service     | —                 | Pub/Sub, WS registry      | NATS (не БД)                     |
+| Realtime Service     | —                 | Pub/Sub, WS registry; session-epoch floor read/check (staged) | NATS (не БД)          |
 | Space Service        | `space_db`        | —                         | —                                |
 | Role Service         | `role_db`         | —                         | —                                |
 | Voice Service        | —                 | активные сессии звонков   | LiveKit                          |
@@ -61,7 +61,7 @@
 
 | Таблица | Примечание |
 |---------|------------|
-| `accounts` | учётная запись, 2FA, soft delete |
+| `accounts` | учётная запись, 2FA, soft delete; `session_epoch` — durable Auth source (staged/WIP) |
 | `refresh_tokens` | opaque refresh, rotation |
 | `otp_codes` | email verify / password reset |
 | `e2e_key_backups` | [encryption.md](features/encryption.md) — client-encrypted key backup blob (`V4__e2e_key_backups.sql`) |
@@ -102,6 +102,18 @@ Sticker/GIF bytes live in **`file_db`** (`files`); send payloads in **`messaging
 
 В документации зоны использования разные (Gateway, Auth, User presence, Realtime, Voice, Notification, Matchmaking, Analytics buffer). На старте обычно **один Redis** с разделением по ключам/префиксам; при росте — вынести Realtime / Matchmaking в отдельные инстансы по нагрузке.
 
+### Минимальный epoch сессии (T056-P1, staged/WIP)
+
+`auth_db.accounts.session_epoch` — durable source of truth, а Redis хранит
+монотонный minimum-epoch floor для чтения Gateway и Realtime. Такие значения не
+имеют TTL и обновляются только операцией `max`; Redis не может понизить floor
+при сбое или откате Auth DB. В strict-режиме ошибка чтения, отсутствие ключа или
+невалидное значение приводят к fail-closed отказу. Redis Pub/Sub используется
+только как ускоритель account-targeted закрытия Realtime-сокетов; потеря события
+не должна ослаблять проверку JWT/floor. Контракт активируется после миграции и
+seed из Auth DB и готовности strict-потребителей; до этого действует только
+явно включённый compatibility-режим.
+
 ---
 
 ## Следующие шаги к модели данных
@@ -109,5 +121,3 @@ Sticker/GIF bytes live in **`file_db`** (`files`); send payloads in **`messaging
 1. Скоуп v1 и трассировка фич → сервисы: [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md).
 2. Таблицы и связи для волны v1: [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md) и секции «Модель данных» в [microservices/](microservices/) (общие правила — [DATA_MODEL.md](DATA_MODEL.md)).
 3. Миграции: один сервис — один набор миграций на свою БД; инструменты и порядок — [OPERATIONS.md](OPERATIONS.md#миграции-бд-database-per-service).
-
-

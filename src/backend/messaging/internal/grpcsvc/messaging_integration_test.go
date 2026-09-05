@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"slices"
 	"strings"
@@ -110,6 +111,15 @@ INSERT INTO chat_members (chat_id, profile_id, role) VALUES
 
 func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire) (messagingv1.MessagingServiceClient, func()) {
 	t.Helper()
+	if w.ChatTypeResolver == nil && !w.RequireChatTypeResolver {
+		w.ChatTypeResolver = sqlTestAuthoritativeChatTypeResolver{pool: pool}
+	}
+	if w.DeletedAccounts == nil && !w.RequireDeletedAccountsSeam {
+		w.DeletedAccounts = allowDeletedAccounts{}
+	}
+	if w.UserProfiles == nil && !w.RequireDeletedAccountsSeam {
+		w.UserProfiles = allowProfileAccounts{}
+	}
 	guard := w.ChatGuard
 	if guard == nil {
 		guard = &store.SQLChatGuard{Pool: pool}
@@ -121,7 +131,7 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 	if moderation == nil {
 		moderation = &store.SQLModerationGuard{Pool: pool}
 	}
-	messagingv1.RegisterMessagingServiceServer(srv, &MessagingGRPC{
+	messagingSvc := &MessagingGRPC{
 		Messages:            &store.MessagesStore{Pool: pool},
 		Reactions:           &store.ReactionsStore{Pool: pool},
 		Pins:                &store.PinsStore{Pool: pool},
@@ -142,7 +152,10 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 		PlatformMod:         w.PlatformMod,
 		PreKeyBundles:       &store.E2EPreKeyStore{Pool: pool},
 		Logger:              w.Logger,
-	})
+		ChatTypeResolver:    w.ChatTypeResolver,
+	}
+	w.wireDeletedAccounts(t, messagingSvc)
+	messagingv1.RegisterMessagingServiceServer(srv, messagingSvc)
 	go func() {
 		if err := srv.Serve(lis); err != nil {
 			t.Logf("grpc serve: %v", err)
@@ -172,11 +185,49 @@ type messagingWire struct {
 	UserPresence    mentions.OnlinePresenceLookup
 	PlatformMod     PlatformModerationChecker
 	Logger          *slog.Logger
+	DeletedAccounts testDeletedAccountChecker
+	// RequireDeletedAccountsSeam is true only in P3 gate tests. Legacy fixtures
+	// receive an explicit allow checker while production wiring is introduced.
+	RequireDeletedAccountsSeam bool
+	ChatTypeResolver           testAuthoritativeChatTypeResolver
+	RequireChatTypeResolver    bool
+}
+
+// wireDeletedAccounts keeps the P3 fixture isolated from production while the
+// Messaging-owned Auth deleted-account dependency is introduced. A present
+// production field must accept the checker structurally; its absence leaves the
+// documented requests to fail their behavioral RED assertions below.
+func (w messagingWire) wireDeletedAccounts(t *testing.T, svc *MessagingGRPC) {
+	t.Helper()
+	field := reflect.ValueOf(svc).Elem().FieldByName("DeletedAccounts")
+	if !field.IsValid() {
+		if w.RequireDeletedAccountsSeam {
+			t.Errorf("MessagingGRPC must wire an Auth deleted-account checker for DM send gates")
+		}
+		return
+	}
+	if !field.CanSet() {
+		if w.RequireDeletedAccountsSeam {
+			t.Errorf("MessagingGRPC.DeletedAccounts must be settable")
+		}
+		return
+	}
+	if w.DeletedAccounts == nil {
+		return
+	}
+	checker := reflect.ValueOf(w.DeletedAccounts)
+	if !checker.Type().AssignableTo(field.Type()) {
+		if w.RequireDeletedAccountsSeam {
+			t.Errorf("MessagingGRPC.DeletedAccounts must accept the Auth deleted-account checker")
+		}
+		return
+	}
+	field.Set(checker)
 }
 
 func startMessagingServer(t *testing.T, pool *pgxpool.Pool) (messagingv1.MessagingServiceClient, func()) {
 	t.Helper()
-	return startMessagingServerWired(t, pool, messagingWire{})
+	return startMessagingServerWired(t, pool, messagingWire{DeletedAccounts: allowDeletedAccounts{}})
 }
 
 func startMessagingDirect(t *testing.T, pool *pgxpool.Pool) *MessagingGRPC {
@@ -188,6 +239,7 @@ func startMessagingDirect(t *testing.T, pool *pgxpool.Pool) *MessagingGRPC {
 		Pins:             &store.PinsStore{Pool: pool},
 		SharedMedia:      &store.SharedMediaStore{Pool: pool},
 		ChatGuard:        guard,
+		ChatTypeResolver: &store.SQLChatTypeResolver{Pool: pool},
 		Moderation:       &store.SQLModerationGuard{Pool: pool},
 		ChatMentionsMeta: &store.SQLChatMentionsMeta{Pool: pool},
 		ChatThreadPolicy: &store.SQLChatThreadPolicy{Pool: pool},
@@ -203,6 +255,36 @@ func (m profileAcctMap) AccountIDByProfileID(_ context.Context, profileID uuid.U
 		return uuid.Nil, status.Error(codes.NotFound, "profile not found")
 	}
 	return a, nil
+}
+
+// explicitDeletedAccounts is supplied by every cross-module Chat fixture that
+// opens a DM. A nil deletion decision is unsafe: the production Chat boundary
+// must fail closed rather than silently treating a peer as active.
+type explicitDeletedAccounts map[uuid.UUID]struct{}
+
+func (m explicitDeletedAccounts) DeletedAmong(_ context.Context, accountIDs []uuid.UUID) (map[uuid.UUID]struct{}, error) {
+	out := make(map[uuid.UUID]struct{})
+	for _, accountID := range accountIDs {
+		if _, deleted := m[accountID]; deleted {
+			out[accountID] = struct{}{}
+		}
+	}
+	return out, nil
+}
+
+type unavailableDeletedAccounts struct{}
+
+func (unavailableDeletedAccounts) DeletedAmong(context.Context, []uuid.UUID) (map[uuid.UUID]struct{}, error) {
+	return nil, errors.New("auth deleted-account lookup unavailable")
+}
+
+// allowProfileAccounts keeps legacy fixtures explicit about their non-deleted
+// Auth world after the DM deleted-account gate gained a required profile lookup.
+// P3 tests set RequireDeletedAccountsSeam and therefore never receive this map.
+type allowProfileAccounts struct{}
+
+func (allowProfileAccounts) AccountIDByProfileID(_ context.Context, profileID uuid.UUID) (uuid.UUID, error) {
+	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(profileID.String())), nil
 }
 
 type boolBlocks bool
@@ -746,7 +828,9 @@ func TestMessagingChatMembershipViaGRPC(t *testing.T) {
 	acctA := uuid.New()
 	seedDMChat(t, ctx, pool, chatID, profA, profB)
 
-	chatCli, chatCleanup := testchat.NewBufconnChatClient(t, pool)
+	chatCli, chatCleanup := testchat.NewBufconnChatClient(t, pool, testchat.ChatDeps{
+		DeletedAccounts: explicitDeletedAccounts{},
+	})
 	t.Cleanup(chatCleanup)
 
 	client, _ := startMessagingServerWired(t, pool, messagingWire{
@@ -778,7 +862,10 @@ func TestChatMessagingIntegration_CreateDM_SendGetMessagesCursor(t *testing.T) {
 	profB := uuid.New()
 	pmap := profileAcctMap{profA: acctA, profB: acctB}
 
-	chatCli, chatCleanup := testchat.NewBufconnChatClientWith(t, pool, testchat.ChatDeps{Profiles: pmap})
+	chatCli, chatCleanup := testchat.NewBufconnChatClientWith(t, pool, testchat.ChatDeps{
+		Profiles:        pmap,
+		DeletedAccounts: explicitDeletedAccounts{},
+	})
 	t.Cleanup(chatCleanup)
 
 	ctxA := withProfileCtx(ctx, acctA, profA)
@@ -834,6 +921,72 @@ func TestChatMessagingIntegration_CreateDM_SendGetMessagesCursor(t *testing.T) {
 	}
 }
 
+// TestChatMessagingIntegration_CreateDM_DeletedPeerGate proves the reusable
+// Chat bufconn fixture carries the same mandatory deleted-account decision as
+// production. Active peers keep the existing Chat→Messaging DM flow, while a
+// deleted or unresolvable peer is denied before a DM row can be opened.
+func TestChatMessagingIntegration_CreateDM_DeletedPeerGate(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applyChatDBForBufconnChat(t, ctx, pool)
+
+	acctCaller, profCaller := uuid.New(), uuid.New()
+	acctActive, profActive := uuid.New(), uuid.New()
+	acctDeleted, profDeleted := uuid.New(), uuid.New()
+	pmap := profileAcctMap{
+		profCaller:  acctCaller,
+		profActive:  acctActive,
+		profDeleted: acctDeleted,
+	}
+	callerCtx := withProfileCtx(ctx, acctCaller, profCaller)
+
+	t.Run("active peer is admitted with an explicit decision", func(t *testing.T) {
+		chatCli, cleanup := testchat.NewBufconnChatClientWith(t, pool, testchat.ChatDeps{
+			Profiles:        pmap,
+			DeletedAccounts: explicitDeletedAccounts{},
+		})
+		t.Cleanup(cleanup)
+
+		created, err := chatCli.CreateDM(callerCtx, &chatv1.CreateDMRequest{OtherProfileId: profActive.String()})
+		require.NoError(t, err)
+		require.NotNil(t, created.GetChat())
+		require.NotEmpty(t, created.GetChat().GetId())
+	})
+
+	t.Run("deleted peer is privacy-safely denied", func(t *testing.T) {
+		chatCli, cleanup := testchat.NewBufconnChatClientWith(t, pool, testchat.ChatDeps{
+			Profiles: pmap,
+			DeletedAccounts: explicitDeletedAccounts{
+				acctDeleted: {},
+			},
+		})
+		t.Cleanup(cleanup)
+
+		created, err := chatCli.CreateDM(callerCtx, &chatv1.CreateDMRequest{OtherProfileId: profDeleted.String()})
+		require.Nil(t, created)
+		require.Equal(t, codes.PermissionDenied, status.Code(err))
+		require.NotContains(t, strings.ToLower(status.Convert(err).Message()), "deleted")
+		var dmCount int
+		require.NoError(t, pool.QueryRow(ctx, `SELECT COUNT(*) FROM chats WHERE type = 'dm'`).Scan(&dmCount))
+		require.Equal(t, 1, dmCount, "a denied deleted peer must not create a second DM")
+	})
+
+	t.Run("unavailable decision fails closed", func(t *testing.T) {
+		chatCli, cleanup := testchat.NewBufconnChatClientWith(t, pool, testchat.ChatDeps{
+			Profiles:        pmap,
+			DeletedAccounts: unavailableDeletedAccounts{},
+		})
+		t.Cleanup(cleanup)
+
+		created, err := chatCli.CreateDM(callerCtx, &chatv1.CreateDMRequest{OtherProfileId: profDeleted.String()})
+		require.Nil(t, created)
+		require.Equal(t, codes.Unavailable, status.Code(err))
+		var dmCount int
+		require.NoError(t, pool.QueryRow(ctx, `SELECT COUNT(*) FROM chats WHERE type = 'dm'`).Scan(&dmCount))
+		require.Equal(t, 1, dmCount, "an unavailable gate must not create a DM")
+	})
+}
+
 // TestChatMessagingIntegration_SendDeniedWhenSocialBlocks uses the same Chat-created DM; Messaging Blocks
 // (Social IsBlocked wiring in production) must reject SendMessage with PermissionDenied.
 func TestChatMessagingIntegration_SendDeniedWhenSocialBlocks(t *testing.T) {
@@ -848,7 +1001,10 @@ func TestChatMessagingIntegration_SendDeniedWhenSocialBlocks(t *testing.T) {
 	profB := uuid.New()
 	pmap := profileAcctMap{profA: acctA, profB: acctB}
 
-	chatCli, chatCleanup := testchat.NewBufconnChatClientWith(t, pool, testchat.ChatDeps{Profiles: pmap})
+	chatCli, chatCleanup := testchat.NewBufconnChatClientWith(t, pool, testchat.ChatDeps{
+		Profiles:        pmap,
+		DeletedAccounts: explicitDeletedAccounts{},
+	})
 	t.Cleanup(chatCleanup)
 
 	ctxA := withProfileCtx(ctx, acctA, profA)

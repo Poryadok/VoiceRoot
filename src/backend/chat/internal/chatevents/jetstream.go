@@ -21,6 +21,7 @@ const (
 	streamName               = "chat_events"
 	subjectChatCreated       = "chat.created"
 	subjectChatMemberChanged = "chat.member_changed"
+	subjectDMPeerDeleted     = "chat.dm_peer_deleted"
 )
 
 // JetStreamPublisher publishes ChatStreamEvent payloads to NATS JetStream.
@@ -63,7 +64,16 @@ func (p *JetStreamPublisher) ensureStream() error {
 		return fmt.Errorf("jetstream publisher not initialized")
 	}
 	p.ensureOnce.Do(func() {
-		if _, err := p.js.StreamInfo(streamName); err == nil {
+		info, err := p.js.StreamInfo(streamName)
+		if err == nil {
+			for _, subject := range info.Config.Subjects {
+				if subject == subjectDMPeerDeleted {
+					return
+				}
+			}
+			config := info.Config
+			config.Subjects = append(config.Subjects, subjectDMPeerDeleted)
+			_, p.ensureErr = p.js.UpdateStream(&config)
 			return
 		}
 		_, p.ensureErr = p.js.AddStream(&nats.StreamConfig{
@@ -71,6 +81,7 @@ func (p *JetStreamPublisher) ensureStream() error {
 			Subjects: []string{
 				subjectChatCreated,
 				subjectChatMemberChanged,
+				subjectDMPeerDeleted,
 			},
 			Retention: nats.LimitsPolicy,
 			MaxAge:    7 * 24 * time.Hour,
@@ -81,6 +92,10 @@ func (p *JetStreamPublisher) ensureStream() error {
 }
 
 func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, env *eventsv1.ChatStreamEvent) error {
+	return p.publishProtoWithMsgID(ctx, subject, env, "")
+}
+
+func (p *JetStreamPublisher) publishProtoWithMsgID(ctx context.Context, subject string, env *eventsv1.ChatStreamEvent, msgID string) error {
 	if err := p.ensureStream(); err != nil {
 		return err
 	}
@@ -91,6 +106,9 @@ func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, e
 	requestID := correlation.FromGRPC(ctx)
 	msg := &nats.Msg{Subject: subject, Data: b, Header: nats.Header{}}
 	natslog.SetRequestIDHeader(msg.Header, requestID)
+	if msgID != "" {
+		msg.Header.Set(nats.MsgIdHdr, msgID)
+	}
 	if _, err := p.js.PublishMsg(msg); err != nil {
 		return fmt.Errorf("jetstream publish %s: %w", subject, err)
 	}
@@ -100,6 +118,9 @@ func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, e
 	}
 	if changed := env.GetChatMemberChanged(); changed != nil {
 		attrs = append(attrs, slog.String("chat_id", changed.GetChatId()), slog.String("profile_id", changed.GetProfileId()))
+	}
+	if deleted := env.GetDmPeerDeleted(); deleted != nil {
+		attrs = append(attrs, slog.String("chat_id", deleted.GetChatId()), slog.String("recipient_profile_id", deleted.GetRecipientProfileId()))
 	}
 	natslog.LogPublish(p.Logger, subject, requestID, "chat event published", attrs...)
 	return nil
@@ -134,6 +155,28 @@ func (p *JetStreamPublisher) PublishChatMemberChanged(ctx context.Context, chatI
 		},
 	}
 	return p.publishProto(ctx, subjectChatMemberChanged, env)
+}
+
+// PublishDMPeerDeleted emits a targeted account-deletion acceleration event.
+// eventID is supplied by the consumer and is also the JetStream de-duplication key.
+func (p *JetStreamPublisher) PublishDMPeerDeleted(ctx context.Context, eventID string, chatID, recipientProfileID uuid.UUID) error {
+	if eventID == "" {
+		return fmt.Errorf("empty dm peer-deleted event id")
+	}
+	if chatID == uuid.Nil || recipientProfileID == uuid.Nil {
+		return fmt.Errorf("invalid dm peer-deleted target")
+	}
+	env := &eventsv1.ChatStreamEvent{
+		EventId:    eventID,
+		OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.ChatStreamEvent_DmPeerDeleted{
+			DmPeerDeleted: &eventsv1.DmPeerDeleted{
+				ChatId:             chatID.String(),
+				RecipientProfileId: recipientProfileID.String(),
+			},
+		},
+	}
+	return p.publishProtoWithMsgID(ctx, subjectDMPeerDeleted, env, eventID)
 }
 
 // Close drains the underlying NATS connection.
