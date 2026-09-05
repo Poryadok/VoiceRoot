@@ -29,6 +29,7 @@ type deletedAccountProfileListerForTest struct {
 	calls      []string
 	profileIDs []uuid.UUID
 	err        error
+	failRemain int // -1 means every lookup fails; positive values are transient failures.
 	callSignal chan struct{}
 }
 
@@ -37,7 +38,10 @@ func (f *deletedAccountProfileListerForTest) ListProfileIDsForAccount(_ context.
 	if f.callSignal != nil {
 		f.callSignal <- struct{}{}
 	}
-	if f.err != nil {
+	if f.err != nil && f.failRemain != 0 {
+		if f.failRemain > 0 {
+			f.failRemain--
+		}
 		return nil, f.err
 	}
 	return append([]uuid.UUID(nil), f.profileIDs...), nil
@@ -299,10 +303,12 @@ func TestAccountDeletedConsumer_JetStreamNakOnLookupOrPublishFailure(t *testing.
 	require.NoError(t, err)
 
 	t.Run("lookup failure", func(t *testing.T) {
-		profiles := &deletedAccountProfileListerForTest{err: errors.New("user unavailable"), callSignal: make(chan struct{}, 1)}
+		profiles := &deletedAccountProfileListerForTest{
+			err: errors.New("user unavailable"), failRemain: 1, callSignal: make(chan struct{}, 1),
+		}
 		targets := &deletedDMTargetStoreForTest{}
 		publisher := &dmPeerDeletedPublisherForTest{}
-		_ = subscribeAccountDeletedManualAckForTest(t, js, profiles, targets, publisher, "manual-nak-lookup")
+		sub := subscribeAccountDeletedManualAckForTest(t, js, profiles, targets, publisher, "manual-nak-lookup")
 		_, err = js.Publish("user.account_deleted", accountDeletedMessageForTest(t, "source-manual-lookup-failure", uuid.NewString()).Data)
 		require.NoError(t, err)
 		select {
@@ -315,6 +321,8 @@ func TestAccountDeletedConsumer_JetStreamNakOnLookupOrPublishFailure(t *testing.
 		case <-time.After(3 * time.Second):
 			t.Fatal("lookup failure was not redelivered after Nak")
 		}
+		waitForAckFloorForTest(t, sub)
+		require.NoError(t, sub.Drain())
 		require.GreaterOrEqual(t, len(profiles.calls), 2,
 			"lookup failure must trigger JetStream redelivery, not auto-ack")
 	})
@@ -323,7 +331,7 @@ func TestAccountDeletedConsumer_JetStreamNakOnLookupOrPublishFailure(t *testing.
 		profiles := &deletedAccountProfileListerForTest{profileIDs: []uuid.UUID{uuid.New()}}
 		targets := &deletedDMTargetStoreForTest{targets: []store.DMPeerDeletionTarget{{ChatID: uuid.New(), SurvivingProfileID: uuid.New()}}}
 		publisher := &dmPeerDeletedPublisherForTest{failAt: 1, callSignal: make(chan struct{}, 1)}
-		_ = subscribeAccountDeletedManualAckForTest(t, js, profiles, targets, publisher, "manual-nak-publish")
+		sub := subscribeAccountDeletedManualAckForTest(t, js, profiles, targets, publisher, "manual-nak-publish")
 		_, err = js.Publish("user.account_deleted", accountDeletedMessageForTest(t, "source-manual-publish-failure", uuid.NewString()).Data)
 		require.NoError(t, err)
 		select {
@@ -336,6 +344,8 @@ func TestAccountDeletedConsumer_JetStreamNakOnLookupOrPublishFailure(t *testing.
 		case <-time.After(3 * time.Second):
 			t.Fatal("publish failure was not redelivered after Nak")
 		}
+		waitForAckFloorForTest(t, sub)
+		require.NoError(t, sub.Drain())
 		require.GreaterOrEqual(t, len(publisher.calls), 2,
 			"publish failure must trigger JetStream redelivery, not auto-ack")
 	})
@@ -353,7 +363,7 @@ func TestAccountDeletedConsumer_ZeroTargetsDoesNotPublish(t *testing.T) {
 }
 
 func TestAccountDeletedConsumer_ProfileLookupFailureRequestsRetry(t *testing.T) {
-	profiles := &deletedAccountProfileListerForTest{err: errors.New("user unavailable")}
+	profiles := &deletedAccountProfileListerForTest{err: errors.New("user unavailable"), failRemain: -1}
 	targets := &deletedDMTargetStoreForTest{}
 	publisher := &dmPeerDeletedPublisherForTest{}
 	consumer := newAccountDeletedConsumerForTest(t, profiles, targets, publisher)
