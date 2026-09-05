@@ -263,8 +263,11 @@ verify-required-jobs-test:
 image-catalog-drift-check:
 	$(BASH) "$(ROOT)/scripts/ci/check-image-catalog-drift.sh"
 
-ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test buf-generate-ci-local-template-check image-catalog-drift-check
+ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test buf-generate-ci-local-template-check image-catalog-drift-check e2e-manifest-helper-test
 	$(BASH) "$(ROOT)/scripts/ci/e2e-manifest_test.sh"
+
+e2e-manifest-helper-test:
+	$(BASH) "$(ROOT)/scripts/ci/e2e-manifest_helper_test.sh"
 
 generate-staging-services:
 	$(BASH) "$(ROOT)/scripts/ci/generate-staging-go-services.sh"
