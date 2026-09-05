@@ -23,7 +23,7 @@ Produce a reviewable RED-only commit that demonstrates the current `RoleService.
 - [x] Read role documentation, existing hierarchy tests, role store and gRPC paths.
 - [x] Add RED tests for the indisputable prohibitions and regression coverage.
 - [x] Compile the focused test package, record the Docker-free validation limitation and expected failures, and obtain independent test review.
-- [ ] Commit only the ExecPlan and test files; leave the worktree clean and do not push.
+- [x] Commit only the ExecPlan and test files; leave the worktree clean and do not push.
 
 ## Detailed Steps
 
@@ -48,7 +48,7 @@ Produce a reviewable RED-only commit that demonstrates the current `RoleService.
 - [x] RED tests authored; `gofmt` and `git diff --check` pass.
 - [x] Focused package compiles with no tests run; dynamic integration execution is deliberately excluded by the no-Docker/no-network constraint.
 - [x] First independent review identified omitted strictly-higher final-position coverage; it was added. A fresh re-review found no critical findings.
-- [ ] RED commit created locally.
+- [x] RED test commit `bb5c514e` created locally; not pushed.
 
 ## Decisions
 
