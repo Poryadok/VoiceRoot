@@ -9,6 +9,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	botv1 "voice.app/voice/bot/v1"
 	chatv1 "voice.app/voice/chat/v1"
@@ -43,12 +45,42 @@ func TestBotCRUD_and_webhookURL(t *testing.T) {
 	require.Equal(t, updatedAvatar, upd.GetBot().GetAvatarUrl())
 	require.JSONEq(t, updatedScopes, upd.GetBot().GetScopesJson())
 
+	removedScopes := `["TEXT_CHAT_SEND_MESSAGES"]`
+	removed, err := client.UpdateBot(ctx, &botv1.UpdateBotRequest{
+		BotId: botID, ScopesJson: &removedScopes,
+	})
+	require.NoError(t, err)
+	require.JSONEq(t, removedScopes, removed.GetBot().GetScopesJson())
+
+	escalatedScopes := `["TEXT_CHAT_SEND_MESSAGES","SPACE_VIEW_MEMBER_LIST"]`
+	_, err = client.UpdateBot(ctx, &botv1.UpdateBotRequest{
+		BotId: botID, ScopesJson: &escalatedScopes,
+	})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	unchanged, err := client.GetBot(ctx, &botv1.GetBotRequest{BotId: botID})
+	require.NoError(t, err)
+	require.JSONEq(t, removedScopes, unchanged.GetBot().GetScopesJson())
+
+	for _, invalidScopes := range []string{
+		`not-json`,
+		`["TEXT_CHAT_SEND_MESSAGES","UNKNOWN_SCOPE"]`,
+		`["TEXT_CHAT_SEND_MESSAGES","TEXT_CHAT_SEND_MESSAGES"]`,
+	} {
+		_, err = client.UpdateBot(ctx, &botv1.UpdateBotRequest{
+			BotId: botID, ScopesJson: &invalidScopes,
+		})
+		require.Equal(t, codes.InvalidArgument, status.Code(err), invalidScopes)
+		unchanged, err = client.GetBot(ctx, &botv1.GetBotRequest{BotId: botID})
+		require.NoError(t, err)
+		require.JSONEq(t, removedScopes, unchanged.GetBot().GetScopesJson())
+	}
+
 	nameOnly := "ApiBot3"
 	preserved, err := client.UpdateBot(ctx, &botv1.UpdateBotRequest{BotId: botID, Name: &nameOnly})
 	require.NoError(t, err)
 	require.Equal(t, nameOnly, preserved.GetBot().GetName())
 	require.Equal(t, updatedAvatar, preserved.GetBot().GetAvatarUrl())
-	require.JSONEq(t, updatedScopes, preserved.GetBot().GetScopesJson())
+	require.JSONEq(t, removedScopes, preserved.GetBot().GetScopesJson())
 	require.Equal(t, "desc", preserved.GetBot().GetDescription())
 
 	_, err = client.SetWebhookURL(ctx, &botv1.SetWebhookURLRequest{
