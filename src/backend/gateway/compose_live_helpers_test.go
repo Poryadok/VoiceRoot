@@ -25,6 +25,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	chatv1 "voice.app/voice/chat/v1"
+	spacev1 "voice.app/voice/space/v1"
 )
 
 func formatComposeEmail(prefix string, n int64) string {
@@ -1842,24 +1843,11 @@ func createComposeSpaceChannel(t *testing.T, client *http.Client, base, accessTo
 	body, _ := io.ReadAll(resp.Body)
 	require.Equal(t, http.StatusOK, resp.StatusCode, "POST channel body=%s", string(body))
 
-	var parsed struct {
-		SpaceTreeNode struct {
-			ID           string `json:"id"`
-			LinkedChatID string `json:"linked_chat_id"`
-		} `json:"space_tree_node"`
-	}
-	require.NoError(t, json.Unmarshal(body, &parsed))
-	if parsed.SpaceTreeNode.LinkedChatID != "" {
-		return parsed.SpaceTreeNode.LinkedChatID
-	}
-	tree := getComposeSpaceTree(t, client, base, accessToken, spaceID)
-	for _, node := range tree.Nodes {
-		if node.ID == parsed.SpaceTreeNode.ID && node.LinkedChatID != "" {
-			return node.LinkedChatID
-		}
-	}
-	t.Fatalf("channel node missing linked_chat_id: %s", string(body))
-	return ""
+	var parsed spacev1.UpsertTreeNodeResponse
+	require.NoError(t, protojson.Unmarshal(body, &parsed))
+	linkedChatID := parsed.GetSpaceTreeNode().GetLinkedChat().GetId()
+	require.NotEmpty(t, linkedChatID, "channel node missing linked_chat.id: %s", string(body))
+	return linkedChatID
 }
 
 func composeRoleIDByName(t *testing.T, client *http.Client, base, accessToken, spaceID, name string) string {
@@ -1919,6 +1907,7 @@ func sendComposeMessageStatus(t *testing.T, client *http.Client, base, accessTok
 	if mentionsJSON == "" {
 		mentionsJSON = "[]"
 	}
+	requestID := composeClientMessageID()
 	payload, err := json.Marshal(map[string]any{
 		"chat":              map[string]string{"id": chatID},
 		"content":           content,
@@ -1930,10 +1919,36 @@ func sendComposeMessageStatus(t *testing.T, client *http.Client, base, accessTok
 	require.NoError(t, err)
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Request-Id", requestID)
 	resp, err := client.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
+	if resp.StatusCode >= http.StatusBadRequest {
+		var failure struct {
+			ErrorCode string `json:"error_code"`
+			Message   string `json:"message"`
+		}
+		_ = json.NewDecoder(io.LimitReader(resp.Body, 64*1024)).Decode(&failure)
+		if responseRequestID := resp.Header.Get("X-Request-Id"); responseRequestID != "" {
+			requestID = responseRequestID
+		}
+		t.Logf("message send failure status=%d grpc_code=%q request_id=%q error_code=%q message=%q",
+			resp.StatusCode,
+			resp.Header.Get("X-Voice-GRPC-Code"),
+			requestID,
+			truncateComposeFailureDetail(failure.ErrorCode),
+			truncateComposeFailureDetail(failure.Message),
+		)
+	}
 	return resp.StatusCode
+}
+
+func truncateComposeFailureDetail(value string) string {
+	const maxLength = 512
+	if len(value) > maxLength {
+		return value[:maxLength]
+	}
+	return value
 }
 
 func forwardComposeMessageStatus(t *testing.T, client *http.Client, base, accessToken, sourceMessageID, targetChatID, commentary string) (int, []byte) {
