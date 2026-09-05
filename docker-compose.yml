@@ -366,6 +366,7 @@ services:
       CHAT_GRPC_ADDR: chat:9090
       SOCIAL_GRPC_ADDR: social:9090
       USER_GRPC_ADDR: user:9090
+      AUTH_GRPC_ADDR: auth:9090
       FILE_GRPC_ADDR: file:9090
       ROLE_GRPC_ADDR: role:9090
       MODERATION_GRPC_ADDR: moderation:9090
@@ -380,6 +381,8 @@ services:
       social:
         condition: service_healthy
       user:
+        condition: service_healthy
+      auth:
         condition: service_healthy
       file:
         condition: service_healthy

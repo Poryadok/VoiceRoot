@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"slices"
 	"strings"
@@ -110,6 +111,15 @@ INSERT INTO chat_members (chat_id, profile_id, role) VALUES
 
 func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire) (messagingv1.MessagingServiceClient, func()) {
 	t.Helper()
+	if w.ChatTypeResolver == nil && !w.RequireChatTypeResolver {
+		w.ChatTypeResolver = sqlTestAuthoritativeChatTypeResolver{pool: pool}
+	}
+	if w.DeletedAccounts == nil && !w.RequireDeletedAccountsSeam {
+		w.DeletedAccounts = allowDeletedAccounts{}
+	}
+	if w.UserProfiles == nil && !w.RequireDeletedAccountsSeam {
+		w.UserProfiles = allowProfileAccounts{}
+	}
 	guard := w.ChatGuard
 	if guard == nil {
 		guard = &store.SQLChatGuard{Pool: pool}
@@ -121,7 +131,7 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 	if moderation == nil {
 		moderation = &store.SQLModerationGuard{Pool: pool}
 	}
-	messagingv1.RegisterMessagingServiceServer(srv, &MessagingGRPC{
+	messagingSvc := &MessagingGRPC{
 		Messages:            &store.MessagesStore{Pool: pool},
 		Reactions:           &store.ReactionsStore{Pool: pool},
 		Pins:                &store.PinsStore{Pool: pool},
@@ -142,7 +152,10 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 		PlatformMod:         w.PlatformMod,
 		PreKeyBundles:       &store.E2EPreKeyStore{Pool: pool},
 		Logger:              w.Logger,
-	})
+		ChatTypeResolver:    w.ChatTypeResolver,
+	}
+	w.wireDeletedAccounts(t, messagingSvc)
+	messagingv1.RegisterMessagingServiceServer(srv, messagingSvc)
 	go func() {
 		if err := srv.Serve(lis); err != nil {
 			t.Logf("grpc serve: %v", err)
@@ -172,11 +185,49 @@ type messagingWire struct {
 	UserPresence    mentions.OnlinePresenceLookup
 	PlatformMod     PlatformModerationChecker
 	Logger          *slog.Logger
+	DeletedAccounts testDeletedAccountChecker
+	// RequireDeletedAccountsSeam is true only in P3 gate tests. Legacy fixtures
+	// receive an explicit allow checker while production wiring is introduced.
+	RequireDeletedAccountsSeam bool
+	ChatTypeResolver           testAuthoritativeChatTypeResolver
+	RequireChatTypeResolver    bool
+}
+
+// wireDeletedAccounts keeps the P3 fixture isolated from production while the
+// Messaging-owned Auth deleted-account dependency is introduced. A present
+// production field must accept the checker structurally; its absence leaves the
+// documented requests to fail their behavioral RED assertions below.
+func (w messagingWire) wireDeletedAccounts(t *testing.T, svc *MessagingGRPC) {
+	t.Helper()
+	field := reflect.ValueOf(svc).Elem().FieldByName("DeletedAccounts")
+	if !field.IsValid() {
+		if w.RequireDeletedAccountsSeam {
+			t.Errorf("MessagingGRPC must wire an Auth deleted-account checker for DM send gates")
+		}
+		return
+	}
+	if !field.CanSet() {
+		if w.RequireDeletedAccountsSeam {
+			t.Errorf("MessagingGRPC.DeletedAccounts must be settable")
+		}
+		return
+	}
+	if w.DeletedAccounts == nil {
+		return
+	}
+	checker := reflect.ValueOf(w.DeletedAccounts)
+	if !checker.Type().AssignableTo(field.Type()) {
+		if w.RequireDeletedAccountsSeam {
+			t.Errorf("MessagingGRPC.DeletedAccounts must accept the Auth deleted-account checker")
+		}
+		return
+	}
+	field.Set(checker)
 }
 
 func startMessagingServer(t *testing.T, pool *pgxpool.Pool) (messagingv1.MessagingServiceClient, func()) {
 	t.Helper()
-	return startMessagingServerWired(t, pool, messagingWire{})
+	return startMessagingServerWired(t, pool, messagingWire{DeletedAccounts: allowDeletedAccounts{}})
 }
 
 func startMessagingDirect(t *testing.T, pool *pgxpool.Pool) *MessagingGRPC {
@@ -188,6 +239,7 @@ func startMessagingDirect(t *testing.T, pool *pgxpool.Pool) *MessagingGRPC {
 		Pins:             &store.PinsStore{Pool: pool},
 		SharedMedia:      &store.SharedMediaStore{Pool: pool},
 		ChatGuard:        guard,
+		ChatTypeResolver: &store.SQLChatTypeResolver{Pool: pool},
 		Moderation:       &store.SQLModerationGuard{Pool: pool},
 		ChatMentionsMeta: &store.SQLChatMentionsMeta{Pool: pool},
 		ChatThreadPolicy: &store.SQLChatThreadPolicy{Pool: pool},
@@ -224,6 +276,15 @@ type unavailableDeletedAccounts struct{}
 
 func (unavailableDeletedAccounts) DeletedAmong(context.Context, []uuid.UUID) (map[uuid.UUID]struct{}, error) {
 	return nil, errors.New("auth deleted-account lookup unavailable")
+}
+
+// allowProfileAccounts keeps legacy fixtures explicit about their non-deleted
+// Auth world after the DM deleted-account gate gained a required profile lookup.
+// P3 tests set RequireDeletedAccountsSeam and therefore never receive this map.
+type allowProfileAccounts struct{}
+
+func (allowProfileAccounts) AccountIDByProfileID(_ context.Context, profileID uuid.UUID) (uuid.UUID, error) {
+	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(profileID.String())), nil
 }
 
 type boolBlocks bool

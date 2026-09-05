@@ -24,12 +24,13 @@ import (
 const contractMessageSentSubject = "message.sent"
 
 type spyMessageEvents struct {
-	mu       sync.Mutex
-	sent     [][4]string // message_id, chat_id, sender_profile_id, has_mentions
-	mentions [][4]string // message_id, chat_id, sender_profile_id, mentioned_ids_csv
-	edited   [][2]string
-	deleted  [][2]string
-	read     [][3]string // message_id, chat_id, profile_id
+	mu        sync.Mutex
+	sent      [][4]string // message_id, chat_id, sender_profile_id, has_mentions
+	mentions  [][4]string // message_id, chat_id, sender_profile_id, mentioned_ids_csv
+	edited    [][2]string
+	deleted   [][2]string
+	read      [][3]string // message_id, chat_id, profile_id
+	forwarded [][4]string // message_id, source_chat_id, target_chat_id, forwarder_profile_id
 }
 
 func (s *spyMessageEvents) PublishMessageSent(_ context.Context, messageID, chatID, senderProfileID string, hasMentions bool, _ string, _ bool, _ string) error {
@@ -87,8 +88,28 @@ func (s *spyMessageEvents) PublishMessageUnpinned(_ context.Context, _, _, _ str
 	return nil
 }
 
-func (s *spyMessageEvents) PublishMessageForwarded(_ context.Context, _, _, _, _ string) error {
+func (s *spyMessageEvents) PublishMessageForwarded(_ context.Context, messageID, sourceChatID, targetChatID, forwarderProfileID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.forwarded = append(s.forwarded, [4]string{messageID, sourceChatID, targetChatID, forwarderProfileID})
 	return nil
+}
+
+func (s *spyMessageEvents) eventCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.sent) + len(s.mentions) + len(s.edited) + len(s.deleted) + len(s.read) + len(s.forwarded)
+}
+
+func (s *spyMessageEvents) reset() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sent = nil
+	s.mentions = nil
+	s.edited = nil
+	s.deleted = nil
+	s.read = nil
+	s.forwarded = nil
 }
 
 func (s *spyMessageEvents) snapshot() (sent [][4]string, mentions [][4]string, edited [][2]string, deleted [][2]string, read [][3]string) {
@@ -215,7 +236,7 @@ func TestMessagingGRPC_MessageEvents_SendEditDelete(t *testing.T) {
 	require.Empty(t, read)
 
 	_, err = client.MarkRead(withProfileCtx(ctx, acctA, profA), &messagingv1.MarkReadRequest{
-		Chat:               chatDMRef(chatID),
+		Chat:              chatDMRef(chatID),
 		LastReadMessageId: msgID,
 	})
 	require.NoError(t, err)
