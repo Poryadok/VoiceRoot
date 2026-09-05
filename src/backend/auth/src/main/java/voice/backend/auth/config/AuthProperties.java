@@ -15,6 +15,7 @@ public class AuthProperties {
   private final Nats nats = new Nats();
   private final Resend resend = new Resend();
   private final AccountDeletion accountDeletion = new AccountDeletion();
+  private final SessionEpoch sessionEpoch = new SessionEpoch();
   private PersistenceMode persistence = PersistenceMode.JDBC;
 
   public UserGrpc getUserGrpc() {
@@ -68,6 +69,30 @@ public class AuthProperties {
 
   public AccountDeletion getAccountDeletion() {
     return accountDeletion;
+  }
+
+  public SessionEpoch getSessionEpoch() {
+    return sessionEpoch;
+  }
+
+  public static class SessionEpoch {
+    private final Seed seed = new Seed();
+
+    public Seed getSeed() {
+      return seed;
+    }
+
+    public static class Seed {
+      private int pageSize = 256;
+
+      public int getPageSize() {
+        return pageSize;
+      }
+
+      public void setPageSize(int pageSize) {
+        this.pageSize = pageSize;
+      }
+    }
   }
 
   /** Dedicated HMAC material for deterministic account-restore tokens. */
