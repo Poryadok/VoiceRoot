@@ -163,6 +163,8 @@ void main() {
     });
   });
 
+  // T056 RED seam: `totpCode` is intentionally absent from production until
+  // the accepted client contract is implemented.
   group('VoiceAuthClient.deleteAccount', () {
     test('POST /api/v1/auth/delete-account with password', () async {
       var deleteCalled = false;

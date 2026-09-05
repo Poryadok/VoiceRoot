@@ -131,6 +131,8 @@ void main() {
     expect(deleteCalled, isTrue);
   });
 
+  // T056 RED seam: deleteAccountTotpKey is intentionally introduced by the
+  // minimal production dialog change after these accepted tests.
   testWidgets(
     'totp_required keeps deletion pending and retries with authenticator code',
     (tester) async {
@@ -151,7 +153,7 @@ void main() {
             expect(body['totp_code'], 'invalid-code');
             return http.Response(jsonEncode({'error': 'invalid_totp'}), 401);
           }
-          expect(body['totp_code'], 'backup-code-123');
+          expect(body['totp_code'], '654321');
           return http.Response('', 204);
         }
         if (req.method == 'POST' && req.url.path == '/api/v1/auth/logout') {
@@ -203,6 +205,7 @@ void main() {
             }),
           ],
           child: MaterialApp(
+            locale: const Locale('ru'),
             localizationsDelegates: AppLocalizations.localizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             home: const SecuritySettingsScreen(),
@@ -230,10 +233,12 @@ void main() {
         'secret',
       );
       await tester.tap(
-        find.descendant(
-          of: find.byKey(SecuritySettingsScreen.deleteAccountDialogKey),
-          matching: find.text('Delete'),
-        ),
+        find
+            .descendant(
+              of: find.byKey(SecuritySettingsScreen.deleteAccountDialogKey),
+              matching: find.byType(TextButton),
+            )
+            .last,
       );
       await tester.pumpAndSettle();
 
@@ -243,12 +248,12 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.bySemanticsLabel('Authenticator or backup code'),
+        find.bySemanticsLabel('Код аутентификатора или резервный'),
         findsOneWidget,
       );
       expect(
         find.text(
-          'Enter the code from your authenticator app or a backup code.',
+          'Введите код из приложения-аутентификатора или резервный код.',
         ),
         findsOneWidget,
       );
@@ -259,29 +264,33 @@ void main() {
         'invalid-code',
       );
       await tester.tap(
-        find.descendant(
-          of: find.byKey(SecuritySettingsScreen.deleteAccountDialogKey),
-          matching: find.text('Delete'),
-        ),
+        find
+            .descendant(
+              of: find.byKey(SecuritySettingsScreen.deleteAccountDialogKey),
+              matching: find.byType(TextButton),
+            )
+            .last,
       );
       await tester.pumpAndSettle();
 
       expect(deleteAttempts, 2);
       expect(
-        find.text('Invalid authenticator or backup code.'),
+        find.text('Неверный код аутентификатора или резервный код.'),
         findsOneWidget,
       );
       expect(logoutCalled, isFalse);
 
       await tester.enterText(
         find.byKey(SecuritySettingsScreen.deleteAccountTotpKey),
-        'backup-code-123',
+        '654321',
       );
       await tester.tap(
-        find.descendant(
-          of: find.byKey(SecuritySettingsScreen.deleteAccountDialogKey),
-          matching: find.text('Delete'),
-        ),
+        find
+            .descendant(
+              of: find.byKey(SecuritySettingsScreen.deleteAccountDialogKey),
+              matching: find.byType(TextButton),
+            )
+            .last,
       );
       await tester.pumpAndSettle();
 
