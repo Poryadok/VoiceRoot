@@ -215,6 +215,10 @@ func subscribeAccountDeletedManualAckForTest(
 	// Ack only after handleUserAccountDeleted returns nil and Nak every error.
 	sub, err := subscribeAccountDeletedConsumer(js, profiles, targets, publisher, instanceID, slog.Default())
 	require.NoError(t, err)
+	info, err := sub.ConsumerInfo()
+	require.NoError(t, err)
+	require.Equal(t, nats.AckExplicitPolicy, info.Config.AckPolicy,
+		"account deletion consumer must use explicit/manual acknowledgements")
 	t.Cleanup(func() { _ = sub.Unsubscribe() })
 	return sub
 }
