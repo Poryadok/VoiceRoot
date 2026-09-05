@@ -174,9 +174,14 @@ func profileRowSearchCursor(p *store.ProfileRow) *store.ProfileSearchCursor {
 }
 
 func profileSearchCursorFromRow(p *store.ProfileRow) store.ProfileSearchCursor {
+	verificationRank := 1
+	if p.VerificationType != "none" {
+		verificationRank = 0
+	}
 	return store.ProfileSearchCursor{
-		UsernameLower: strings.ToLower(p.Username),
-		Discriminator: p.Discriminator,
-		ID:            p.ID,
+		VerificationRank: &verificationRank,
+		UsernameLower:    strings.ToLower(p.Username),
+		Discriminator:    p.Discriminator,
+		ID:               p.ID,
 	}
 }
