@@ -89,7 +89,9 @@ func prepareComposeFileAttachmentRestartProof(t *testing.T, client *http.Client,
 	sendComposeMessage(t, client, base, sessA.AccessToken, chatID, "attachment-restart-baseline")
 
 	content := []byte("attachment-restart-proof: deterministic text bytes\n")
-	fileID, fileType := composeUploadTextFile(t, client, base, sessA.AccessToken, chatID, "restart-proof.txt", content)
+	objectClient := composeRestartProofDownloadClient()
+	t.Cleanup(objectClient.CloseIdleConnections)
+	fileID, fileType := composeUploadTextFile(t, objectClient, base, sessA.AccessToken, chatID, "restart-proof.txt", content)
 	attachments, err := json.Marshal([]map[string]string{{"file_id": fileID, "type": fileType}})
 	require.NoError(t, err)
 	messageID := sendComposeMessageWithAttachmentsJSON(t, client, base, sessA.AccessToken, chatID, string(attachments))
