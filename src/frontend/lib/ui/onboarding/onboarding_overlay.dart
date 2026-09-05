@@ -22,6 +22,7 @@ class OnboardingOverlay extends ConsumerStatefulWidget {
 
 class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
   var _loaded = false;
+  var _saveAccountModalOpen = false;
   OverlayEntry? _coachMark;
 
   @override
@@ -164,40 +165,46 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
   }
 
   Future<void> _showSaveAccountModal(AppLocalizations l10n) async {
+    if (_saveAccountModalOpen) return;
     final profile = ref.read(activeProfileProvider).valueOrNull;
     if (profile == null) return;
     if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: Text(l10n.onboardingSaveAccountTitle),
-        content: Text(l10n.onboardingSaveAccountBody),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              await ref.read(onboardingControllerProvider.notifier).dismiss();
-              if (ctx.mounted) Navigator.of(ctx).pop();
-            },
-            child: Text(l10n.onboardingSkip),
-          ),
-          FilledButton(
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              if (!mounted) return;
-              await showModalBottomSheet<void>(
-                context: context,
-                isScrollControlled: true,
-                builder: (_) => ProfileEditSheet(profile: profile),
-              );
-              await ref.read(onboardingControllerProvider.notifier).completeCurrentStep();
-              _maybeShowStep();
-            },
-            child: Text(l10n.commonSave),
-          ),
-        ],
-      ),
-    );
+    _saveAccountModalOpen = true;
+    try {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: Text(l10n.onboardingSaveAccountTitle),
+          content: Text(l10n.onboardingSaveAccountBody),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                await ref.read(onboardingControllerProvider.notifier).dismiss();
+                if (ctx.mounted) Navigator.of(ctx).pop();
+              },
+              child: Text(l10n.onboardingSkip),
+            ),
+            FilledButton(
+              onPressed: () async {
+                Navigator.of(ctx).pop();
+                if (!mounted) return;
+                await showModalBottomSheet<void>(
+                  context: context,
+                  isScrollControlled: true,
+                  builder: (_) => ProfileEditSheet(profile: profile),
+                );
+                await ref.read(onboardingControllerProvider.notifier).completeCurrentStep();
+                _maybeShowStep();
+              },
+              child: Text(l10n.commonSave),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      _saveAccountModalOpen = false;
+    }
     if (mounted) _maybeShowStep();
   }
 
@@ -236,5 +243,14 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
   }
 
   @override
-  Widget build(BuildContext context) => widget.child;
+  Widget build(BuildContext context) {
+    ref.listen(activeProfileProvider, (previous, next) {
+      if (next.valueOrNull == null) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _maybeShowStep();
+      });
+    });
+    return widget.child;
+  }
 }

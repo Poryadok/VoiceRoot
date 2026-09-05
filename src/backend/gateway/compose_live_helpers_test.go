@@ -686,6 +686,21 @@ func createComposeDM(t *testing.T, client *http.Client, base, accessToken, other
 	return parsed.Chat.ID
 }
 
+func createComposeDMStatus(t *testing.T, client *http.Client, base, accessToken, otherProfileID string) int {
+	t.Helper()
+	payload, err := json.Marshal(map[string]string{"other_profile_id": otherProfileID})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/chats/dm", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	_, _ = io.ReadAll(resp.Body)
+	return resp.StatusCode
+}
+
 func composeGamingOpenPrivacySettings() map[string]any {
 	everyone := map[string]any{
 		"friends": true, "friends_of_friends": true, "space_members": true, "include_guests": true,

@@ -12,6 +12,7 @@ import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
+import 'package:voice_frontend/state/profile_switch_coordinator.dart';
 import 'package:voice_frontend/ui/profile/profile_avatar_switcher.dart';
 import 'package:voice_frontend/ui/profile/profile_switcher.dart';
 
@@ -29,6 +30,19 @@ class _MemoryAuthStorage implements AuthSessionStorage {
 
   @override
   Future<void> write(AuthSession session) async => _session = session;
+}
+
+class _ImmediateProfileSwitchRealtimeBoundary
+    implements ProfileSwitchRealtimeBoundary {
+  @override
+  final Set<String> activeSubscriptions = {};
+
+  final List<ProfileSwitchHandoff> handoffs = [];
+
+  @override
+  Future<void> retireAndReconnect(ProfileSwitchHandoff handoff) async {
+    handoffs.add(handoff);
+  }
 }
 
 void main() {
@@ -399,6 +413,7 @@ void main() {
 
   testWidgets('ProfileAvatarSwitcher swipe skips frozen profiles', (tester) async {
     final storage = _MemoryAuthStorage();
+    final realtime = _ImmediateProfileSwitchRealtimeBoundary();
     await storage.write(
       const AuthSession(
         accessToken: 'before',
@@ -472,6 +487,7 @@ void main() {
           const GatewayConfig(baseUrl: 'http://api.test'),
         ),
         httpClientProvider.overrideWithValue(mock),
+        profileSwitchRealtimeBoundaryProvider.overrideWithValue(realtime),
       ],
     );
     addTearDown(container.dispose);
@@ -513,6 +529,8 @@ void main() {
       container.read(authControllerProvider).activeProfileId,
       'profile-alt',
     );
+    expect(realtime.handoffs, hasLength(1));
+    expect(realtime.handoffs.single.nextSession.activeProfileId, 'profile-alt');
     container.dispose();
   });
 }

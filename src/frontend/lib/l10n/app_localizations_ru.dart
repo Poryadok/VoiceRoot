@@ -491,6 +491,9 @@ class AppLocalizationsRu extends AppLocalizations {
       'Отправьте первое сообщение, когда будете готовы.';
 
   @override
+  String get chatDmPeerDeleted => 'Пользователь удалён';
+
+  @override
   String get chatRoomLoadOlder => 'Загрузить старые сообщения';
 
   @override

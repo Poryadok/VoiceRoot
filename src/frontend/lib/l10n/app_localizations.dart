@@ -950,6 +950,12 @@ abstract class AppLocalizations {
   /// **'Send the first message when you are ready.'**
   String get chatRoomEmptyHint;
 
+  /// No description provided for @chatDmPeerDeleted.
+  ///
+  /// In en, this message translates to:
+  /// **'User deleted'**
+  String get chatDmPeerDeleted;
+
   /// No description provided for @chatRoomLoadOlder.
   ///
   /// In en, this message translates to:
