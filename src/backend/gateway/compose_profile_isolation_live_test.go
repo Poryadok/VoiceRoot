@@ -43,8 +43,16 @@ func TestComposeProfileFriendIsolation_live(t *testing.T) {
 	sendComposeFriendInvitation(t, client, base, switchBody.AccessToken, peer.ProfileID)
 	acceptComposeFriendInvitation(t, client, base, peer.AccessToken, altProfileID)
 
-	primaryFriends := composeFriendIDs(t, client, base, sess.AccessToken)
 	altFriends := composeFriendIDs(t, client, base, switchBody.AccessToken)
+	switchBackResp := composePostJSON(t, client, base+"/api/v1/auth/switch-profile", switchBody.AccessToken,
+		`{"profile_id":"`+sess.ProfileID+`"}`)
+	require.Equal(t, http.StatusOK, switchBackResp.StatusCode, composeReadBody(t, switchBackResp))
+	var switchBackBody struct {
+		AccessToken string `json:"access_token"`
+	}
+	composeDecodeJSON(t, switchBackResp.Body, &switchBackBody)
+	require.NotEmpty(t, switchBackBody.AccessToken)
+	primaryFriends := composeFriendIDs(t, client, base, switchBackBody.AccessToken)
 
 	require.False(t, slices.Contains(primaryFriends, peer.ProfileID),
 		"primary profile must not see alt profile's friends")
@@ -69,8 +77,16 @@ func TestComposeProfileChatIsolation_live(t *testing.T) {
 	peer := registerComposeUser(t, client, base, formatComposeEmail("p13-chat-peer", n), "VoiceQaTest1!")
 	altDMChatID := createComposeDM(t, client, base, altToken, peer.ProfileID)
 
-	primaryChats := listComposeChats(t, client, base, sess.AccessToken, "main")
 	altChats := listComposeChats(t, client, base, altToken, "main")
+	switchBackResp := composePostJSON(t, client, base+"/api/v1/auth/switch-profile", altToken,
+		`{"profile_id":"`+sess.ProfileID+`"}`)
+	require.Equal(t, http.StatusOK, switchBackResp.StatusCode, composeReadBody(t, switchBackResp))
+	var switchBackBody struct {
+		AccessToken string `json:"access_token"`
+	}
+	composeDecodeJSON(t, switchBackResp.Body, &switchBackBody)
+	require.NotEmpty(t, switchBackBody.AccessToken)
+	primaryChats := listComposeChats(t, client, base, switchBackBody.AccessToken, "main")
 
 	primaryIDs := chatIDsFromList(primaryChats)
 	altIDs := chatIDsFromList(altChats)
@@ -169,9 +185,9 @@ func TestComposeProfileFreeLimit_live(t *testing.T) {
 	n := time.Now().UnixNano()
 
 	sess := registerComposeUser(t, client, base, formatComposeEmail("p13-limit", n), "VoiceQaTest1!")
-	_, _ = composeCreateAltProfile(t, client, base, sess.AccessToken, "Alt One", "personal")
+	altToken, _ := composeCreateAltProfile(t, client, base, sess.AccessToken, "Alt One", "personal")
 
-	thirdResp := composePostJSON(t, client, base+"/api/v1/users/profiles", sess.AccessToken,
+	thirdResp := composePostJSON(t, client, base+"/api/v1/users/profiles", altToken,
 		`{"display_name":"Alt Two"}`)
 	require.Equal(t, http.StatusTooManyRequests, thirdResp.StatusCode, composeReadBody(t, thirdResp))
 }
