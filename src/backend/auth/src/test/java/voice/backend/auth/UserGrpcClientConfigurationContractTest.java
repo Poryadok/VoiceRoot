@@ -39,6 +39,7 @@ import voice.backend.auth.config.UserGrpcClientConfiguration;
 import voice.backend.auth.repository.InMemoryAccountRepository;
 import voice.backend.auth.support.RecordingUserGrpcService;
 import voice.backend.auth.service.AuthException;
+import voice.backend.auth.service.AccountDeletionOperationStarter;
 import voice.backend.auth.service.ProfileSwitchException;
 import voice.backend.auth.userdb.PhoneHashResolver;
 import voice.backend.auth.userdb.PrimaryProfileProvisioner;
@@ -68,6 +69,7 @@ class UserGrpcClientConfigurationContractTest {
             assertThat(context).hasBean("authJdbc");
             assertThat(context).doesNotHaveBean("userDataSource");
             assertThat(context).doesNotHaveBean("userJdbc");
+            assertThat(context).doesNotHaveBean(AccountDeletionOperationStarter.class);
             assertThat(context).hasSingleBean(PrimaryProfileProvisioner.class);
             assertThat(context).hasSingleBean(ProfileSwitchValidator.class);
             assertThat(context).hasSingleBean(PhoneHashResolver.class);

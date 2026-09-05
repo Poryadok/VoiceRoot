@@ -29,7 +29,9 @@ import voice.backend.auth.repository.AccountDeletionOperationRepository;
 import voice.backend.auth.repository.AccountRepository;
 import voice.backend.auth.security.TokenBlacklist;
 import voice.backend.auth.service.AuthService;
+import voice.backend.auth.service.AccountDeletionOperationStarter;
 import voice.backend.auth.service.RegisterCommand;
+import voice.backend.auth.service.TransactionalAccountDeletionOperationStarter;
 import voice.backend.auth.sessionepoch.SessionEpochFloorStore;
 import voice.backend.auth.sessionepoch.SessionEpochFloorUnavailableException;
 import voice.backend.auth.support.JdbcUserContractTestConfiguration;
@@ -59,11 +61,13 @@ class AccountDeletionEpochFloorJdbcIntegrationTest {
   @Autowired AuthService authService;
   @Autowired AccountRepository accounts;
   @Autowired AccountDeletionOperationRepository deletionOperations;
+  @Autowired AccountDeletionOperationStarter deletionStarter;
   @MockBean SessionEpochFloorStore sessionEpochFloors;
   @MockBean TokenBlacklist tokenBlacklist;
 
   @Test
   void floorFailureRollsBackJdbcDeletionAndItsPendingFloorOperation() {
+    assertThat(deletionStarter).isInstanceOf(TransactionalAccountDeletionOperationStarter.class);
     var session =
         authService.register(
             new RegisterCommand(

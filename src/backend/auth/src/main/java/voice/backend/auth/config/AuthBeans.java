@@ -2,11 +2,15 @@ package voice.backend.auth.config;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import voice.backend.auth.events.AuthEventPublisher;
 import voice.backend.auth.repository.AccountRepository;
+import voice.backend.auth.repository.AccountDeletionOperationRepository;
 import voice.backend.auth.repository.BackupCodeRepository;
 import voice.backend.auth.repository.E2EKeyBackupRepository;
 import voice.backend.auth.repository.RefreshTokenRepository;
@@ -24,6 +28,8 @@ import voice.backend.auth.oauth.OAuthAuthorizationCodeStore;
 import voice.backend.auth.mail.MailSender;
 import voice.backend.auth.service.AccountRestoreTokenStore;
 import voice.backend.auth.service.AccountDeletionRestoreTokenCodec;
+import voice.backend.auth.service.AccountDeletionOperationStarter;
+import voice.backend.auth.service.TransactionalAccountDeletionOperationStarter;
 import voice.backend.auth.service.TotpService;
 import voice.backend.auth.sessionepoch.SessionEpochFloorStore;
 
@@ -92,6 +98,17 @@ public class AuthBeans {
       return new NatsSubscriptionTierStore(natsUrl);
     }
     return new InMemorySubscriptionTierStore();
+  }
+
+  @Bean
+  @ConditionalOnProperty(prefix = "auth", name = "persistence", havingValue = "jdbc")
+  AccountDeletionOperationStarter accountDeletionOperationStarter(
+      PlatformTransactionManager transactions,
+      AccountRepository accounts,
+      AccountDeletionOperationRepository operations,
+      SessionEpochFloorStore floors) {
+    return new TransactionalAccountDeletionOperationStarter(
+        new TransactionTemplate(transactions), accounts, operations, floors);
   }
 
   @Bean
