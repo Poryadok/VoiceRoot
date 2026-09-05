@@ -8,6 +8,9 @@ func DecideRouting(in DeliveryInput) DeliveryDecision {
 	if in.RecipientProfileID == in.SenderProfileID && in.SenderProfileID != uuid.Nil {
 		return DeliveryDecision{}
 	}
+	if in.Type == TypeMatchFound || in.Type == TypeVoiceMemberJoined {
+		return DeliveryDecision{InApp: true, Push: true}
+	}
 	if in.IsOnline {
 		return DeliveryDecision{InApp: true, Push: false}
 	}
