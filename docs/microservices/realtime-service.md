@@ -132,7 +132,7 @@ Two producers may emit WS `notification` for the same message; clients **dedupe*
 | `chat_update`        | Изменение чата/группы                                               |
 | `member_add`         | Новый участник                                                      |
 | `member_remove`      | Участник удалён                                                     |
-| `dm_peer_deleted`    | Удалён второй участник уже известного DM; `d.chat_id` only, только для surviving profile; live-ускорение, не durable history/replay |
+| `dm_peer_deleted`    | Удалён второй участник уже известного DM; `d.chat_id` + `d.recipient_profile_id`, только для designated surviving profile, без deleted identity; live-ускорение, не durable history/replay |
 | `call_incoming`      | Входящий DM-звонок: `room_id`, `chat_id`, `initiator_profile_id`, `callee_profile_id`, `media_kind`, `expires_at` |
 | `call_accepted`      | Звонок принят: `room_id`, `chat_id`, `accepted_by_profile_id`, `profile_ids`, `media_kind` |
 | `call_declined`      | Звонок отклонён: `room_id`, `chat_id`, `declined_by_profile_id`, `profile_ids` |
