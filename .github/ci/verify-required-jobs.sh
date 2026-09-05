@@ -77,6 +77,7 @@ fi
 
 check_if "$(or_true "${PROTOS}" "${GLOBAL}")" protobuf
 check_if "$(or_true "${COMPOSE}" "${GLOBAL}")" compose-config
+check_if "${GLOBAL}" ci-script-tests
 check_if "$(or_true "${RUN_FLUTTER}" "${PROTOS}" "${GLOBAL}")" flutter
 check_if "$(or_true "${RUN_FLUTTER}" "${PROTOS}" "${GLOBAL}")" flutter-device-driver
 check_if "$(or_true "${RUN_WEB}" "${RUN_FLUTTER}" "${GLOBAL}")" web
