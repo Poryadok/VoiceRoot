@@ -160,7 +160,7 @@ wait_gateway
 export VOICE_FILE_ATTACHMENT_RESTART_PHASE=prepare
 (
   cd "$ROOT/src/backend/gateway"
-  go test -count=1 -parallel 1 -timeout 10m -tags live -run "^${restart_test}$" ./...
+  go test -count=1 -parallel 1 -timeout 10m -run "^${restart_test}$" ./...
 )
 [[ -f "$state_path_posix" ]] || { echo "prepare did not create restart-proof state" >&2; exit 1; }
 
@@ -176,5 +176,5 @@ wait_gateway
 export VOICE_FILE_ATTACHMENT_RESTART_PHASE=verify
 (
   cd "$ROOT/src/backend/gateway"
-  go test -count=1 -parallel 1 -timeout 10m -tags live -run "^${restart_test}$" ./...
+  go test -count=1 -parallel 1 -timeout 10m -run "^${restart_test}$" ./...
 )

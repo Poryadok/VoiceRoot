@@ -36,14 +36,23 @@ if [[ "${1:-}" == ps ]]; then
   # Collision and occupied-port checks must pass without creating containers.
   exit 0
 fi
+if [[ "${1:-}" == inspect ]]; then
+  echo healthy
+  exit 0
+fi
 if [[ "${1:-}" == compose ]]; then
   line="$*"
   if [[ "$line" == *' config '* ]]; then exit 0; fi
   if [[ "$line" == *' up '* ]]; then exit "${FAKE_UP_RC:?FAKE_UP_RC required}"; fi
+  if [[ "$line" == *' ps -q '* ]]; then
+    echo fake-container
+    exit 0
+  fi
   if [[ "$line" == *' ps '* ]]; then
     echo fake-compose-ps >&2
     exit "${FAKE_PS_RC:-0}"
   fi
+  if [[ "$line" == *' restart '* ]]; then exit 0; fi
   if [[ "$line" == *' logs '* ]]; then
     echo fake-compose-db-init-logs >&2
     exit "${FAKE_LOGS_RC:-0}"
@@ -53,7 +62,26 @@ if [[ "${1:-}" == compose ]]; then
 fi
 exit 0
 EOF
-  chmod +x "$bin/bash" "$bin/docker"
+  cat >"$bin/go" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+log="${FAKE_LOG:?FAKE_LOG required}"
+printf 'go cwd=%s' "$PWD" >>"$log"
+for arg in "$@"; do printf ' <%s>' "$arg" >>"$log"; done
+printf ' phase=%s\n' "${VOICE_FILE_ATTACHMENT_RESTART_PHASE:-}" >>"$log"
+if [[ "${VOICE_FILE_ATTACHMENT_RESTART_PHASE:-}" == prepare ]]; then
+  : >"${VOICE_FILE_ATTACHMENT_RESTART_STATE_PATH:?VOICE_FILE_ATTACHMENT_RESTART_STATE_PATH required}"
+fi
+EOF
+  cat >"$bin/curl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'curl' >>"${FAKE_LOG:?FAKE_LOG required}"
+for arg in "$@"; do printf ' <%s>' "$arg" >>"${FAKE_LOG}"; done
+printf '\n' >>"${FAKE_LOG}"
+exit 0
+EOF
+  chmod +x "$bin/bash" "$bin/docker" "$bin/go" "$bin/curl"
 }
 
 new_case() {
@@ -71,6 +99,8 @@ run_runner() {
   (
     cd "$work/tmp"
     env PATH="$work/bin:$PATH" REAL_BASH="$REAL_BASH" FAKE_LOG="$work/commands.log" \
+      FAKE_UP_RC="${FAKE_UP_RC:-0}" FAKE_PS_RC="${FAKE_PS_RC:-0}" \
+      FAKE_LOGS_RC="${FAKE_LOGS_RC:-0}" FAKE_DOWN_RC="${FAKE_DOWN_RC:-0}" \
       FAKE_MANIFEST_SCRIPT="$ROOT/scripts/ci/e2e-manifest.sh" \
       TMPDIR="$work/tmp" VOICE_FILE_ATTACHMENT_RESTART_PORT_BASE=25000 \
       "$@" "$REAL_BASH" "$SCRIPT" >"$work/stdout" 2>"$work/stderr"
@@ -131,5 +161,22 @@ case_dir="$(new_case no-cleanup)"
 FAKE_UP_RC=37 run_runner "$case_dir"
 assert_eq "$(cat "$case_dir/rc")" 37
 assert_not_contains "$case_dir/commands.log" 'compose.*<down>'
+
+echo '== successful prepare/verify path uses one selected test and restarts file then messaging =='
+case_dir="$(new_case success)"
+run_runner "$case_dir"
+assert_eq "$(cat "$case_dir/rc")" 0
+go_count="$(grep -c '^go ' "$case_dir/commands.log" || true)"
+assert_eq "$go_count" 2
+assert_contains "$case_dir/commands.log" 'go.*<test>.*<-count=1>.*<-parallel> <1>.*<-timeout> <10m>.*<-run> <\^TestComposeFileAttachmentRestartProof_live\$>.*<\./\.\.\.>.*phase=prepare'
+assert_contains "$case_dir/commands.log" 'go.*<test>.*<-count=1>.*<-parallel> <1>.*<-timeout> <10m>.*<-run> <\^TestComposeFileAttachmentRestartProof_live\$>.*<\./\.\.\.>.*phase=verify'
+assert_not_contains "$case_dir/commands.log" 'go .*<-tags> <live>'
+restart_lines="$(grep -n 'compose.*<restart>' "$case_dir/commands.log" | cut -d: -f1)"
+file_restart="$(grep -n 'compose.*<restart> <file>' "$case_dir/commands.log" | cut -d: -f1)"
+messaging_restart="$(grep -n 'compose.*<restart> <messaging>' "$case_dir/commands.log" | cut -d: -f1)"
+prepare_line="$(grep -n 'go .*phase=prepare' "$case_dir/commands.log" | cut -d: -f1)"
+verify_line="$(grep -n 'go .*phase=verify' "$case_dir/commands.log" | cut -d: -f1)"
+[[ -n "$restart_lines" && "$prepare_line" -lt "$file_restart" && "$file_restart" -lt "$messaging_restart" && "$messaging_restart" -lt "$verify_line" ]] || \
+  fail 'successful path must order prepare, file restart, messaging restart, verify'
 
 echo 'All compose-file-attachment-restart-proof tests passed.'
