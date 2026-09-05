@@ -557,6 +557,20 @@ void main() {
         onTimeout: () =>
             throw TestFailure('timed out loading selected reconnect delta'),
       );
+      final currentReconnectHello = container.read(
+        realtimeHelloBindingProvider,
+      );
+      expect(currentReconnectHello, isNotNull);
+      expect(
+        currentReconnectHello!.generation,
+        acceptedReconnectHello.generation,
+      );
+      expect(
+        currentReconnectHello.bindingGeneration,
+        acceptedReconnectHello.bindingGeneration,
+      );
+      expect(currentReconnectHello.profileId, bProfileId);
+      expect(currentReconnectHello.authorization, bAuthorization);
 
       final reconnectRequests = recorder.requests
           .skip(requestCountBeforeTransportLoss)
@@ -569,7 +583,11 @@ void main() {
                 request.authorization == bAuthorization,
           )
           .toList(growable: false);
-      expect(reconnectInboxRequests, hasLength(6));
+      expect(
+        reconnectInboxRequests,
+        hasLength(6),
+        reason: _reconnectRequestDiagnostic(reconnectInboxRequests),
+      );
       for (final inbox in reconnectCursors.keys) {
         final pageRequests = reconnectInboxRequests
             .where((request) => request.inbox == inbox)
@@ -676,6 +694,16 @@ Future<String> _expectTwoInboxItems({
     ...secondPage.items.map((item) => item.chatId),
   }, chatIds);
   return cursor!;
+}
+
+String _reconnectRequestDiagnostic(Iterable<_RecordedRequest> requests) {
+  final paths = requests
+      .map(
+        (request) =>
+            '${request.uri.path}?inbox=${request.inbox}&cursor=${request.uri.queryParameters['cursor']}',
+      )
+      .join(', ');
+  return 'reconnect inbox requests: $paths';
 }
 
 class _RecordedRequest {
@@ -932,24 +960,67 @@ class _RelaySocketPair {
   StreamSubscription<dynamic>? _clientFrames;
   StreamSubscription<dynamic>? _upstreamFrames;
   var _disposed = false;
+  var _clientTerminated = false;
+  var _upstreamTerminated = false;
+  var _clientCloseInitiated = false;
+  var _upstreamCloseInitiated = false;
 
   void start() {
     _clientFrames = client.listen(
-      upstream.add,
-      onDone: () {
-        if (!clientClosed.isCompleted) clientClosed.complete();
-        unawaited(upstream.close());
-      },
-      onError: (error, stackTrace) {
-        if (!clientClosed.isCompleted) clientClosed.complete();
-        unawaited(upstream.close());
-      },
+      _forwardToUpstream,
+      onDone: _onClientTerminal,
+      onError: (_, _) => _onClientTerminal(),
     );
     _upstreamFrames = upstream.listen(
-      client.add,
-      onDone: () => unawaited(client.close()),
-      onError: (error, stackTrace) => unawaited(client.close()),
+      _forwardToClient,
+      onDone: _onUpstreamTerminal,
+      onError: (_, _) => _onUpstreamTerminal(),
     );
+  }
+
+  void _forwardToUpstream(dynamic frame) {
+    if (_disposed || _upstreamTerminated || _upstreamCloseInitiated) return;
+    try {
+      upstream.add(frame);
+    } on StateError {
+      _onUpstreamTerminal();
+    }
+  }
+
+  void _forwardToClient(dynamic frame) {
+    if (_disposed || _clientTerminated || _clientCloseInitiated) return;
+    try {
+      client.add(frame);
+    } on StateError {
+      _onClientTerminal();
+    }
+  }
+
+  void _onClientTerminal() {
+    if (_clientTerminated) return;
+    _clientTerminated = true;
+    if (!clientClosed.isCompleted) clientClosed.complete();
+    // A WebSocket can close synchronously while the first subscription is
+    // being installed. Defer peer shutdown until start() installs both sides.
+    scheduleMicrotask(() => unawaited(_closeUpstream()));
+  }
+
+  void _onUpstreamTerminal() {
+    if (_upstreamTerminated) return;
+    _upstreamTerminated = true;
+    scheduleMicrotask(() => unawaited(_closeClient()));
+  }
+
+  Future<void> _closeUpstream() async {
+    if (_disposed || _upstreamCloseInitiated) return;
+    _upstreamCloseInitiated = true;
+    await _LiveWebSocketRelay._settle(upstream.close());
+  }
+
+  Future<void> _closeClient() async {
+    if (_disposed || _clientCloseInitiated) return;
+    _clientCloseInitiated = true;
+    await _LiveWebSocketRelay._settle(client.close());
   }
 
   Future<void> closeClientTransport() async {
@@ -960,6 +1031,10 @@ class _RelaySocketPair {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    _clientTerminated = true;
+    _upstreamTerminated = true;
+    _clientCloseInitiated = true;
+    _upstreamCloseInitiated = true;
     await _LiveWebSocketRelay._settle(
       Future.wait([
         _clientFrames?.cancel() ?? Future<void>.value(),
