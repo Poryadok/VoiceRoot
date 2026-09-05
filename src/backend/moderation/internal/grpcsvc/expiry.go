@@ -19,13 +19,13 @@ func (s *ModerationGRPC) ProcessExpiredTempBans(ctx context.Context, limit int) 
 	processed := 0
 	for i := range rows {
 		row := rows[i]
-		if err := s.Sanctions.RevokeSanction(ctx, row.ID, systemIssuer); err != nil {
-			continue
-		}
 		if s.Auth != nil {
 			if err := s.Auth.SetAccountStatus(ctx, row.TargetAccountID, "active", "temp ban expired"); err != nil {
 				continue
 			}
+		}
+		if err := s.Sanctions.RevokeSanction(ctx, row.ID, systemIssuer); err != nil {
+			continue
 		}
 		processed++
 	}
