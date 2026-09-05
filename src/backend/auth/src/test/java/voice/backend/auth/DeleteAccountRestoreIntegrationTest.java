@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.UUID;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +20,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import voice.backend.auth.repository.Account;
 import voice.backend.auth.repository.AccountRepository;
+import voice.backend.auth.events.AuthEventPublisher;
 import voice.backend.auth.service.AuthException;
 import voice.backend.auth.service.AuthService;
 import voice.backend.auth.service.DeleteAccountResult;
@@ -27,8 +29,11 @@ import voice.backend.auth.sessionepoch.SessionEpochFloorUnavailableException;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @SpringBootTest
@@ -40,6 +45,7 @@ class DeleteAccountRestoreIntegrationTest {
   @Autowired AuthService authService;
   @Autowired AccountRepository accounts;
   @MockBean SessionEpochFloorStore sessionEpochFloors;
+  @MockBean AuthEventPublisher authEventPublisher;
 
   @BeforeEach
   void setUpEpochFloor() {
@@ -55,6 +61,12 @@ class DeleteAccountRestoreIntegrationTest {
                 "/api/v1/auth/register",
                 "{\"email\":\"delete-epoch@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}"));
     String accessToken = registered.get("access_token").asText();
+    JsonNode otherSession =
+        session(
+            postJson(
+                "/api/v1/auth/login",
+                "{\"email\":\"delete-epoch@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"other-device\"}"));
+    assertThat(otherSession.get("access_token").asText()).isNotEqualTo(accessToken);
     Account before = accounts.findByEmail("delete-epoch@example.com").orElseThrow();
 
     authService.deleteAccount("Bearer " + accessToken, "Correct horse battery staple");
@@ -66,13 +78,15 @@ class DeleteAccountRestoreIntegrationTest {
   }
 
   @Test
-  void deleteFailsClosedWhenTheAccountWideEpochFloorCannotBeRecorded() throws Exception {
+  void redisFloorFailureLeavesTheDeleteDurablySealedWithoutReportingSuccessOrPublishingEvent()
+      throws Exception {
     JsonNode registered =
         session(
             postJson(
                 "/api/v1/auth/register",
                 "{\"email\":\"delete-epoch-floor-failure@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}"));
     String accessToken = registered.get("access_token").asText();
+    Account before = accounts.findByEmail("delete-epoch-floor-failure@example.com").orElseThrow();
     doThrow(new SessionEpochFloorUnavailableException("redis unavailable"))
         .when(sessionEpochFloors)
         .recordAtLeast(any(UUID.class), anyLong());
@@ -80,6 +94,52 @@ class DeleteAccountRestoreIntegrationTest {
     assertThatThrownBy(
             () -> authService.deleteAccount("Bearer " + accessToken, "Correct horse battery staple"))
         .isInstanceOf(SessionEpochFloorUnavailableException.class);
+
+    Account afterFailure = accounts.findById(before.id().toString()).orElseThrow();
+    assertThat(afterFailure.status()).isEqualTo("deleted");
+    assertThat(afterFailure.deletedAt()).isNotNull();
+    assertThat(afterFailure.sessionEpoch()).isEqualTo(before.sessionEpoch() + 1);
+    verify(sessionEpochFloors).recordAtLeast(before.id(), afterFailure.sessionEpoch());
+    verifyNoInteractions(authEventPublisher);
+  }
+
+  @Test
+  void retryAfterRedisFloorFailureResealsTheEpochWithoutDuplicateDeleteOrEvent()
+      throws Exception {
+    JsonNode registered =
+        session(
+            postJson(
+                "/api/v1/auth/register",
+                "{\"email\":\"delete-epoch-floor-retry@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}"));
+    String accessToken = registered.get("access_token").asText();
+    Account before = accounts.findByEmail("delete-epoch-floor-retry@example.com").orElseThrow();
+    doThrow(new SessionEpochFloorUnavailableException("redis unavailable"))
+        .doAnswer(invocation -> invocation.getArgument(1))
+        .when(sessionEpochFloors)
+        .recordAtLeast(any(UUID.class), anyLong());
+
+    assertThatThrownBy(
+            () -> authService.deleteAccount("Bearer " + accessToken, "Correct horse battery staple"))
+        .isInstanceOf(SessionEpochFloorUnavailableException.class);
+    Account afterFailure = accounts.findById(before.id().toString()).orElseThrow();
+    assertThat(afterFailure.status()).isEqualTo("deleted");
+    assertThat(afterFailure.deletedAt()).isNotNull();
+    assertThat(afterFailure.sessionEpoch()).isEqualTo(before.sessionEpoch() + 1);
+    verifyNoInteractions(authEventPublisher);
+
+    DeleteAccountResult retry =
+        authService.deleteAccount("Bearer " + accessToken, "Correct horse battery staple");
+
+    assertThat(retry.restoreToken()).isNotBlank();
+    Account afterRetry = accounts.findById(before.id().toString()).orElseThrow();
+    assertThat(afterRetry.status()).isEqualTo("deleted");
+    assertThat(afterRetry.deletedAt()).isEqualTo(afterFailure.deletedAt());
+    assertThat(afterRetry.sessionEpoch()).isEqualTo(afterFailure.sessionEpoch());
+    ArgumentCaptor<Long> sealedEpochs = ArgumentCaptor.forClass(Long.class);
+    verify(sessionEpochFloors, times(2)).recordAtLeast(eq(before.id()), sealedEpochs.capture());
+    assertThat(sealedEpochs.getAllValues())
+        .containsExactly(afterFailure.sessionEpoch(), afterFailure.sessionEpoch());
+    verify(authEventPublisher, times(1)).publishAccountDeleted(before.id());
   }
 
   @Test

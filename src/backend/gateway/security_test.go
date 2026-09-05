@@ -108,6 +108,41 @@ func TestSessionEpochFloorRejectsStaleToken(t *testing.T) {
 	}
 }
 
+func TestAccountDeleteFloorRejectsAnotherPreDeleteSessionAtGatewayBoundary(t *testing.T) {
+	floor := &recordingSessionEpochFloor{minimum: 1}
+	var upstreamCalls int
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"delete-session": {UserID: "account-1", JTI: "delete-jti", SessionEpoch: 1},
+			"other-session":  {UserID: "account-1", JTI: "other-jti", SessionEpoch: 1},
+		},
+		sessionEpochStrict: true,
+		sessionEpochFloor:  floor,
+		restUpstreams: map[string]http.Handler{
+			"users": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				upstreamCalls++
+				w.WriteHeader(http.StatusNoContent)
+			}),
+		},
+	})
+
+	beforeDelete := performRequest(h, http.MethodGet, "/api/v1/users/me", "", map[string]string{"Authorization": "Bearer other-session"})
+	if beforeDelete.Code != http.StatusNoContent {
+		t.Fatalf("pre-delete second-session status/body = %d %q", beforeDelete.Code, beforeDelete.Body.String())
+	}
+
+	// Auth writes this max-only floor after deleting the account. This boundary
+	// contract deliberately models only the shared durable floor, not an Auth call.
+	floor.minimum = 2
+	afterDelete := performRequest(h, http.MethodGet, "/api/v1/users/me", "", map[string]string{"Authorization": "Bearer other-session"})
+	if afterDelete.Code != http.StatusUnauthorized || !strings.Contains(afterDelete.Body.String(), "token_revoked") {
+		t.Fatalf("post-delete second-session status/body = %d %q", afterDelete.Code, afterDelete.Body.String())
+	}
+	if floor.calls != 2 || upstreamCalls != 1 {
+		t.Fatalf("floor/upstream calls = %d/%d, want 2/1", floor.calls, upstreamCalls)
+	}
+}
+
 func TestStrictStaticTokenRejectsMissingOrNonPositiveSessionEpochBeforeFloor(t *testing.T) {
 	t.Parallel()
 
