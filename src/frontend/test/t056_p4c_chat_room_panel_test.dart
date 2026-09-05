@@ -55,6 +55,30 @@ void main() {
     },
   );
 
+  testWidgets('deleted DM marker is localized through the English app locale', (
+    tester,
+  ) async {
+    final harness = await _pumpPanel(tester, locale: const Locale('en'));
+
+    expect(
+      AppLocalizations.of(tester.element(find.byKey(_dmPeerDeletedMarkerKey))),
+      isNotNull,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(_dmPeerDeletedMarkerKey),
+        matching: find.text('User deleted'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      harness.container
+          .read(chatRoomControllerProvider('chat-1'))
+          .isDmPeerDeleted,
+      isTrue,
+    );
+  });
+
   testWidgets('deleted marker is absent without loaded history', (
     tester,
   ) async {
@@ -201,6 +225,65 @@ void main() {
       expect(harness.cache.mutationSignatures(), cacheBaseline);
     },
   );
+
+  for (final attachEntry in const <String, Key>{
+    'document': Key('composer_attach_document'),
+    'photo or video': Key('composer_attach_photo_or_video'),
+  }.entries) {
+    testWidgets(
+      'selected ${attachEntry.key} is discarded when the DM becomes deleted while picker is pending',
+      (tester) async {
+        final selected = Completer<ChatAttachmentFile?>();
+        var pickerCalls = 0;
+        final harness = await _pumpPanel(
+          tester,
+          page: _page(),
+          attachmentPicker: () {
+            pickerCalls++;
+            return selected.future;
+          },
+        );
+        final cacheBaseline = harness.cache.mutationSignatures();
+
+        await tester.tap(find.byKey(ChatRoomPanel.attachKey));
+        await tester.pump();
+        expect(find.byKey(const Key('composer_attach_menu')), findsOneWidget);
+        await tester.tap(find.byKey(attachEntry.value));
+        await tester.pump();
+        await tester.pump();
+        expect(pickerCalls, 1);
+
+        final controller = harness.container.read(
+          chatRoomControllerProvider('chat-1').notifier,
+        );
+        controller.state = controller.state.copyWith(isDmPeerDeleted: true);
+        await tester.pump();
+
+        selected.complete(
+          ChatAttachmentFile(
+            bytes: Uint8List.fromList([1]),
+            contentType: 'text/plain',
+            name: 'late-${attachEntry.key}.txt',
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+
+        expect(harness.files.requestUploadCalls, 0);
+        expect(harness.files.putBytesCalls, 0);
+        expect(harness.files.confirmUploadCalls, 0);
+        expect(harness.messages.sendCalls, 0);
+        expect(harness.messages.forwardCalls, 0);
+        expect(harness.cache.mutationSignatures(), cacheBaseline);
+        expect(find.byKey(_dmPeerDeletedMarkerKey), findsOneWidget);
+        final composer = tester.widget<ChatComposerTextField>(
+          find.byKey(ChatRoomPanel.inputKey),
+        );
+        expect(composer.readOnly, isTrue);
+        expect(composer.onSend, isNull);
+      },
+    );
+  }
 
   testWidgets('deleted DM message actions hide Forward without initiating it', (
     tester,
