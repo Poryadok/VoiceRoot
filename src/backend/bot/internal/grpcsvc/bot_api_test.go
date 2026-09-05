@@ -23,9 +23,10 @@ func TestBotCRUD_and_webhookURL(t *testing.T) {
 	client, _, cleanup := startBotGRPC(t)
 	defer cleanup()
 	ctx := withAccount(context.Background(), uuid.New(), uuid.New())
+	updatedScopes := `["DM_SEND","TEXT_CHAT_SEND_MESSAGES"]`
 
 	reg, err := client.RegisterBot(ctx, &botv1.RegisterBotRequest{
-		Name: "ApiBot", Description: "desc", ScopesJson: `["TEXT_CHAT_SEND_MESSAGES"]`,
+		Name: "ApiBot", Description: "desc", ScopesJson: updatedScopes,
 	})
 	require.NoError(t, err)
 	botID := reg.GetBot().GetId()
@@ -36,9 +37,9 @@ func TestBotCRUD_and_webhookURL(t *testing.T) {
 
 	updatedName := "ApiBot2"
 	updatedAvatar := "https://example.com/avatar.png"
-	updatedScopes := `["TEXT_CHAT_SEND_MESSAGES","DM_SEND"]`
+	requestedScopes := `["TEXT_CHAT_SEND_MESSAGES","DM_SEND"]`
 	upd, err := client.UpdateBot(ctx, &botv1.UpdateBotRequest{
-		BotId: botID, Name: &updatedName, AvatarUrl: &updatedAvatar, ScopesJson: &updatedScopes,
+		BotId: botID, Name: &updatedName, AvatarUrl: &updatedAvatar, ScopesJson: &requestedScopes,
 	})
 	require.NoError(t, err)
 	require.Equal(t, "ApiBot2", upd.GetBot().GetName())

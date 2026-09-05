@@ -110,7 +110,11 @@ func (s *BotGRPC) UpdateBot(ctx context.Context, req *botv1.UpdateBotRequest) (*
 		row.AvatarURL = &avatarURL
 	}
 	if req.ScopesJson != nil {
-		row.ScopesJSON = strings.TrimSpace(req.GetScopesJson())
+		validatedScopes, err := validateUpdateScopes(row.ScopesJSON, req.GetScopesJson())
+		if err != nil {
+			return nil, err
+		}
+		row.ScopesJSON = validatedScopes
 	}
 	_, err = s.Store.Pool.Exec(ctx, `
 UPDATE bots SET name = $2, description = $3, avatar_url = $4, scopes = $5::jsonb, updated_at = now()
