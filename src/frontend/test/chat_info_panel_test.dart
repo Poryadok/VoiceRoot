@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -12,6 +13,7 @@ import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/chat/chat_info_panel.dart';
+import 'package:voice_frontend/ui/core/voice_skeleton.dart';
 
 import 'support/auth_test_overrides.dart';
 import 'support/test_voice_token_catalog.dart';
@@ -83,5 +85,83 @@ void main() {
     expect(find.byKey(ChatInfoPanel.linksTabKey), findsOneWidget);
     expect(find.byKey(ChatInfoPanel.voiceTabKey), findsOneWidget);
     expect(find.text('Nothing here yet'), findsOneWidget);
+  });
+
+  testWidgets('shared media loading uses the canonical skeleton', (
+    tester,
+  ) async {
+    final pending = Completer<http.Response>();
+
+    await tester.pumpWidget(
+      testApp(
+        home: SizedBox(
+          height: 500,
+          width: 400,
+          child: ChatInfoPanel(chatId: 'chat-shared-media-loading'),
+        ),
+        client: MockClient((_) => pending.future),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(VoiceListSkeleton), findsWidgets);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    pending.complete(http.Response('{}', 200));
+  });
+
+  testWidgets('shared media backend failures use localized copy', (
+    tester,
+  ) async {
+    const rawPayload = 'internal gateway details';
+
+    await tester.pumpWidget(
+      testApp(
+        home: SizedBox(
+          height: 500,
+          width: 400,
+          child: ChatInfoPanel(chatId: 'chat-shared-media-backend-error'),
+        ),
+        client: MockClient((_) async {
+          return http.Response(
+            jsonEncode({'error': 'backend_down', 'message': rawPayload}),
+            503,
+          );
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'Social and chat features are unavailable. Start the full API stack (docker compose --profile app).',
+      ),
+      findsWidgets,
+    );
+    expect(find.text(rawPayload), findsNothing);
+  });
+
+  testWidgets('shared media failures hide raw API details', (tester) async {
+    const rawPayload = 'database connection string';
+
+    await tester.pumpWidget(
+      testApp(
+        home: SizedBox(
+          height: 500,
+          width: 400,
+          child: ChatInfoPanel(chatId: 'chat-shared-media-error'),
+        ),
+        client: MockClient((_) async {
+          return http.Response(
+            jsonEncode({'error': 'internal_error', 'message': rawPayload}),
+            500,
+          );
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not load shared media'), findsWidgets);
+    expect(find.text(rawPayload), findsNothing);
   });
 }
