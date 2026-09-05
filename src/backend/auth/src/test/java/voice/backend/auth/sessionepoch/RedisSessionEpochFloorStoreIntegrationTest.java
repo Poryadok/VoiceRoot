@@ -49,23 +49,25 @@ class RedisSessionEpochFloorStoreIntegrationTest {
 
   @Test
   void realRedisMaxIsConcurrentMonotonicAndNeverSetsTtl() throws Exception {
-    UUID accountId = UUID.randomUUID();
     RedisSessionEpochFloorStore store =
         new RedisSessionEpochFloorStore(new StringRedisSessionEpochCommands(template), Duration.ofSeconds(2));
-    ExecutorService workers = Executors.newFixedThreadPool(8);
-    try {
-      List<Future<Long>> writes =
-          IntStream.rangeClosed(1, 16)
-              .mapToObj(epoch -> workers.<Long>submit(() -> store.recordAtLeast(accountId, epoch)))
-              .toList();
+    for (int round = 0; round < 3; round++) {
+      UUID accountId = UUID.randomUUID();
+      ExecutorService workers = Executors.newFixedThreadPool(8);
+      try {
+        List<Future<Long>> writes =
+            IntStream.rangeClosed(1, 16)
+                .mapToObj(epoch -> workers.<Long>submit(() -> store.recordAtLeast(accountId, epoch)))
+                .toList();
 
-      assertThat(writes.stream().map(this::await).max(Long::compareTo)).hasValue(16L);
-      assertThat(store.recordAtLeast(accountId, 4L)).isEqualTo(16L);
-      assertThat(store.requireFloor(accountId)).isEqualTo(16L);
-      assertThat(template.getExpire(store.keyFor(accountId))).isEqualTo(-1L);
-      assertThat(writes).hasSize(16);
-    } finally {
-      workers.shutdownNow();
+        assertThat(writes.stream().map(this::await).max(Long::compareTo)).hasValue(16L);
+        assertThat(store.recordAtLeast(accountId, 4L)).isEqualTo(16L);
+        assertThat(store.requireFloor(accountId)).isEqualTo(16L);
+        assertThat(template.getExpire(store.keyFor(accountId))).isEqualTo(-1L);
+        assertThat(writes).hasSize(16);
+      } finally {
+        workers.shutdownNow();
+      }
     }
   }
 
@@ -76,8 +78,10 @@ class RedisSessionEpochFloorStoreIntegrationTest {
         new RedisSessionEpochFloorStore(new StringRedisSessionEpochCommands(template), Duration.ofSeconds(2));
 
     assertThat(store.recordAtLeast(accountId, 9L)).isEqualTo(9L);
+    assertThat(template.expire(store.keyFor(accountId), Duration.ofSeconds(30))).isTrue();
     assertThat(store.recordAtLeast(accountId, 4L)).isEqualTo(9L);
     assertThat(store.requireFloor(accountId)).isEqualTo(9L);
+    assertThat(template.getExpire(store.keyFor(accountId))).isEqualTo(-1L);
   }
 
   @Test
@@ -97,6 +101,10 @@ class RedisSessionEpochFloorStoreIntegrationTest {
     assertThatThrownBy(() -> store.requireFloor(malformed))
         .isInstanceOf(SessionEpochFloorUnavailableException.class)
         .hasMessageContaining("invalid");
+    assertThatThrownBy(() -> store.recordAtLeast(malformed, 1L))
+        .isInstanceOf(SessionEpochFloorUnavailableException.class)
+        .hasMessageContaining("invalid");
+    assertThat(template.opsForValue().get(store.keyFor(malformed))).isEqualTo("not-an-int64");
 
     UUID overflow = UUID.randomUUID();
     template.opsForValue().set(store.keyFor(overflow), "9223372036854775808");
