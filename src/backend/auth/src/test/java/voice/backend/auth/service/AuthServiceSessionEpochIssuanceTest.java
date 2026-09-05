@@ -145,6 +145,92 @@ class AuthServiceSessionEpochIssuanceTest {
         .isEqualTo(7L);
   }
 
+  @Test
+  void verify2FAFloorFailureLeavesEnrollmentPendingUntilHealthyRetry() throws Exception {
+    Harness harness = new Harness();
+    AuthSession registered = harness.register("verify-floor@example.com");
+    harness.service.enable2FA(registered.accessToken(), PASSWORD);
+    harness.resetSideEffects();
+    harness.floors.failWith(new IllegalStateException("redis down"));
+
+    assertThatThrownBy(() -> harness.service.verify2FA(registered.accessToken(), "000000"))
+        .isInstanceOf(SessionEpochFloorUnavailableException.class);
+
+    assertThat(harness.accounts.setTotpEnabledCalls).isZero();
+    assertThat(harness.refreshTokens.createCalls).isZero();
+    assertThat(harness.accounts.findById(registered.accountId()).orElseThrow().totpEnabled()).isFalse();
+    assertThat(harness.service.validate(registered.accessToken()).userId()).isEqualTo(registered.accountId());
+
+    harness.resetSideEffects();
+    harness.floors.healthy(7L);
+    AuthSession retry = harness.service.verify2FA(registered.accessToken(), "000000");
+    var claims = SignedJWT.parse(retry.accessToken()).getJWTClaimsSet();
+    TokenClaims validated = harness.service.validate(retry.accessToken());
+
+    assertThat(harness.accounts.setTotpEnabledCalls).isEqualTo(1);
+    assertThat(harness.refreshTokens.createCalls).isEqualTo(1);
+    assertThat(harness.accounts.findById(registered.accountId()).orElseThrow().totpEnabled()).isTrue();
+    assertThat(retry.accountId()).isEqualTo(registered.accountId());
+    assertThat(retry.profileId()).isEqualTo(registered.profileId());
+    assertThat(retry.accountType()).isEqualTo(registered.accountType());
+    assertThat(claims.getStringClaim("user_id")).isEqualTo(registered.accountId());
+    assertThat(claims.getStringClaim("profile_id")).isEqualTo(registered.profileId());
+    assertThat(claims.getStringClaim("account_type")).isEqualTo(registered.accountType());
+    assertThat(claims.getLongClaim("session_epoch")).isEqualTo(7L);
+    assertThat(validated.userId()).isEqualTo(registered.accountId());
+    assertThat(validated.profileId()).isEqualTo(registered.profileId());
+    assertThat(validated.accountType()).isEqualTo(registered.accountType());
+    assertThat(harness.floors.recordCalls).isEqualTo(1);
+    assertThat(harness.accounts.advanceCalls).isEqualTo(1);
+    assertThat(harness.accounts.lastAdvanceRequested).isEqualTo(7L);
+  }
+
+  @Test
+  void convertGuestFloorFailureLeavesPendingIdentityAndBearerUsableUntilHealthyRetry() throws Exception {
+    Harness harness = new Harness();
+    AuthSession guest = harness.registerGuest();
+    String originalJti = SignedJWT.parse(guest.accessToken()).getJWTClaimsSet().getJWTID();
+    ConvertGuestCommand command = new ConvertGuestCommand("pending-floor@example.com", null, "New account password 1");
+    harness.resetSideEffects();
+    harness.floors.failWith(new IllegalStateException("redis down"));
+
+    assertThatThrownBy(() -> harness.service.convertGuest(guest.accessToken(), command))
+        .isInstanceOf(SessionEpochFloorUnavailableException.class);
+
+    assertThat(harness.accounts.convertGuestCalls).isZero();
+    assertThat(harness.accounts.findByEmail("pending-floor@example.com")).isEmpty();
+    assertThat(harness.accounts.findById(guest.accountId()).orElseThrow().type()).isEqualTo("guest");
+    assertThat(harness.blacklist.revokeCalls).isZero();
+    assertThat(harness.blacklist.isRevoked(originalJti)).isFalse();
+    assertThat(harness.refreshTokens.createCalls).isZero();
+    assertThat(harness.service.validate(guest.accessToken()).accountType()).isEqualTo("guest");
+
+    harness.resetSideEffects();
+    harness.floors.healthy(7L);
+    AuthSession retry = harness.service.convertGuest(guest.accessToken(), command);
+    var claims = SignedJWT.parse(retry.accessToken()).getJWTClaimsSet();
+    TokenClaims validated = harness.service.validate(retry.accessToken());
+
+    assertThat(harness.accounts.convertGuestCalls).isEqualTo(1);
+    assertThat(harness.blacklist.revokeCalls).isEqualTo(1);
+    assertThat(harness.refreshTokens.createCalls).isEqualTo(1);
+    assertThat(retry.accountId()).isEqualTo(guest.accountId());
+    assertThat(retry.profileId()).isEqualTo(guest.profileId());
+    assertThat(retry.accountType()).isEqualTo("guest");
+    assertThat(claims.getStringClaim("user_id")).isEqualTo(guest.accountId());
+    assertThat(claims.getStringClaim("profile_id")).isEqualTo(guest.profileId());
+    assertThat(claims.getStringClaim("account_type")).isEqualTo("guest");
+    assertThat(claims.getLongClaim("session_epoch")).isEqualTo(7L);
+    assertThat(validated.userId()).isEqualTo(guest.accountId());
+    assertThat(validated.profileId()).isEqualTo(guest.profileId());
+    assertThat(validated.accountType()).isEqualTo("guest");
+    assertThat(harness.accounts.findByEmail("pending-floor@example.com")).isPresent();
+    assertThat(harness.accounts.findById(guest.accountId()).orElseThrow().sessionEpoch()).isEqualTo(7L);
+    assertThat(harness.floors.recordCalls).isEqualTo(1);
+    assertThat(harness.accounts.advanceCalls).isEqualTo(1);
+    assertThat(harness.accounts.lastAdvanceRequested).isEqualTo(7L);
+  }
+
   private static LoginCommand login(String email, String totpCode) {
     return new LoginCommand(email, null, PASSWORD, totpCode, "{}");
   }
@@ -185,6 +271,10 @@ class AuthServiceSessionEpochIssuanceTest {
       return service.register(new RegisterCommand(email, null, PASSWORD, false, "{}"));
     }
 
+    AuthSession registerGuest() {
+      return service.register(new RegisterCommand(null, null, PASSWORD, true, "{}"));
+    }
+
     void enableBackupCode(UUID accountId) {
       accounts.saveTotpSecret(accountId, totp.encryptSecret(totp.generateSecret()), true);
     }
@@ -201,12 +291,15 @@ class AuthServiceSessionEpochIssuanceTest {
   private static AuthProperties memoryTotpProperties() {
     AuthProperties properties = new AuthProperties();
     properties.setPersistence(AuthProperties.PersistenceMode.MEMORY);
+    properties.getTotp().setTestBypass(true);
     return properties;
   }
 
   private static final class RecordingAccounts extends InMemoryAccountRepository {
     int advanceCalls;
     long lastAdvanceRequested;
+    int setTotpEnabledCalls;
+    int convertGuestCalls;
 
     @Override
     public synchronized long advanceSessionEpochAtLeast(UUID accountId, long requestedEpoch) {
@@ -215,9 +308,23 @@ class AuthServiceSessionEpochIssuanceTest {
       return super.advanceSessionEpochAtLeast(accountId, requestedEpoch);
     }
 
+    @Override
+    public synchronized void setTotpEnabled(UUID accountId, boolean enabled) {
+      setTotpEnabledCalls++;
+      super.setTotpEnabled(accountId, enabled);
+    }
+
+    @Override
+    public synchronized Account convertGuest(UUID accountId, String email, String phone, String passwordHash) {
+      convertGuestCalls++;
+      return super.convertGuest(accountId, email, phone, passwordHash);
+    }
+
     void resetRecording() {
       advanceCalls = 0;
       lastAdvanceRequested = 0L;
+      setTotpEnabledCalls = 0;
+      convertGuestCalls = 0;
     }
   }
 

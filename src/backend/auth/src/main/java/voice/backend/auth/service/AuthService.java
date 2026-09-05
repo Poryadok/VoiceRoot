@@ -355,9 +355,10 @@ public class AuthService {
     if (!totpService.verifyEncrypted(account.totpSecret(), totpCode)) {
       throw new AuthException("invalid_totp");
     }
+    PreparedSessionEpoch prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
     accounts.setTotpEnabled(account.id(), true);
     Account fresh = accounts.findById(account.id().toString()).orElse(account);
-    return issueSession(fresh, "{}");
+    return issueSession(fresh, prepared, "{}");
   }
 
   public AuthSession switchActiveProfile(String accessToken, String profileId, String deviceInfoJson) {
@@ -400,6 +401,7 @@ public class AuthService {
             throw new AuthException("registration_conflict");
           });
     }
+    PreparedSessionEpoch prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
     Account converted;
     try {
       converted = accounts.convertGuest(account.id(), email, phone, passwordHash);
@@ -407,7 +409,7 @@ public class AuthService {
       throw new AuthException("registration_conflict");
     }
     tokenBlacklist.revoke(claims.jti(), jwtService.ttl(claims));
-    return issueSession(converted, "{}");
+    return issueSession(converted, prepared, "{}");
   }
 
   public DeleteAccountResult deleteAccount(String accessToken, String password) {
