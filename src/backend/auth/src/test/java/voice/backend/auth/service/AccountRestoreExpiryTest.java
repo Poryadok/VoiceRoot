@@ -40,7 +40,7 @@ class AccountRestoreExpiryTest {
 
   @Test
   void restoreOlderThanThirtyDaysIsInactiveAndConsumesTokenWithoutRestoring() {
-    InMemoryAccountRepository accounts = new InMemoryAccountRepository();
+    InMemoryAccountRepository accounts = new InMemoryAccountRepository(CLOCK);
     Account account = accounts.create("expired-restore@example.com", null, "hash", "regular");
     Instant deletedAt = NOW.minus(Duration.ofDays(31));
     accounts.markDeleted(account.id(), deletedAt);
@@ -71,7 +71,7 @@ class AccountRestoreExpiryTest {
 
   @Test
   void restoreAtExactlyThirtyDaysUsesInclusiveBoundaryAndIssuesSession() {
-    InMemoryAccountRepository accounts = new InMemoryAccountRepository();
+    InMemoryAccountRepository accounts = new InMemoryAccountRepository(CLOCK);
     Account account = accounts.create("boundary-restore@example.com", null, "hash", "regular");
     accounts.markDeleted(account.id(), NOW.minus(AuthService.ACCOUNT_RESTORE_GRACE));
     OneTimeRestoreTokenStore restoreTokens = new OneTimeRestoreTokenStore(account.id());
