@@ -635,10 +635,10 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             onTap: (messageId) => _scrollToMessage(messageId),
           ),
         if (room.isDmPeerDeleted && room.messages.isNotEmpty)
-          const Padding(
+          Padding(
             key: ValueKey<String>('chat_room_dm_peer_deleted'),
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Text('Пользователь удалён'),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Text(l10n.chatDmPeerDeleted),
           ),
         Expanded(
           child: Stack(
@@ -1011,7 +1011,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final picker = widget.attachmentPicker ??
         () => _defaultPickChatAttachment(imagesOnly: imagesOnly);
     final picked = await picker();
-    if (picked == null || !mounted) return;
+    if (picked == null || !mounted || _isDmPeerDeleted()) return;
     final auth = ref.read(authorizationHeaderProvider);
     if (auth == null) return;
     setState(() => _uploadingAttachment = true);
@@ -1041,6 +1041,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         );
         uploadBytes = encrypted.ciphertext;
         e2eKeyWire = encrypted.keyWire;
+        if (!mounted || _isDmPeerDeleted()) return;
       }
       final ticket = await files.requestUpload(
         authorization: auth,
@@ -1051,18 +1052,21 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         chatType: chatType,
         isE2e: isE2eChat,
       );
+      if (!mounted || _isDmPeerDeleted()) return;
       if (ticket is! FilesApiOk<FileUploadTicket>) return;
       final put = await files.putBytes(
         uploadUrl: ticket.data.presignedPutUrl,
         bytes: uploadBytes,
         mimeType: picked.contentType,
       );
+      if (!mounted || _isDmPeerDeleted()) return;
       if (put is! FilesApiOk<void>) return;
       final confirmed = await files.confirmUpload(
         authorization: auth,
         fileId: ticket.data.fileId,
         bytes: uploadBytes,
       );
+      if (!mounted || _isDmPeerDeleted()) return;
       if (confirmed is! FilesApiOk<FileMetadataData>) return;
       final metadata = confirmed.data;
       final err = await ref
@@ -1079,7 +1083,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
               ),
             ],
           );
-      if (!mounted) return;
+      if (!mounted || _isDmPeerDeleted()) return;
       if (err == null) {
         _composer.clear();
       }
@@ -1090,6 +1094,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       }
     }
   }
+
+  bool _isDmPeerDeleted() =>
+      ref.read(chatRoomControllerProvider(widget.chatId)).isDmPeerDeleted;
 
   Future<void> _showMessageActions(VoiceMessage message, bool isMine) async {
     String? spaceId;
