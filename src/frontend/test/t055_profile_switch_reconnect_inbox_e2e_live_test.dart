@@ -42,6 +42,7 @@ void main() {
       // Fixture setup uses only public Gateway APIs and completes before the
       // recorder exists. B is a second profile of A's account.
       final a = await ctx.registerUser('t055-account-a');
+      final aProfileId = a.activeProfileId;
       final users = VoiceUsersClient(gateway: ctx.gatewayHttp());
       final createdB = await users.createProfile(
         authorization: a.authorizationHeader,
@@ -110,6 +111,16 @@ void main() {
         chatId: archivedChatId,
       );
 
+      // The setup switch from A to B rotates A's session. Return to A only
+      // after every B-owned fixture operation, then seed the coordinator with
+      // the freshly issued A session for the actual A -> B handoff below.
+      final rawAResult = await ctx.authClient().switchActiveProfile(
+        session: rawB,
+        profileId: aProfileId,
+      );
+      expect(rawAResult, isA<AuthSessionOk>(), reason: '$rawAResult');
+      final rawA = (rawAResult as AuthSessionOk).session;
+
       final recorder = _RecordingHttpClient(ctx.httpClient);
       final storage = InMemoryAuthSessionStorage();
       final controller = AuthController(
@@ -121,7 +132,7 @@ void main() {
         ),
         storage: storage,
         guestCredentialsStorage: InMemoryGuestCredentialsStorage(),
-      )..state = AuthState(session: a);
+      )..state = AuthState(session: rawA);
       final container = ProviderContainer(
         overrides: [
           authControllerProvider.overrideWith((_) => controller),
@@ -179,7 +190,15 @@ void main() {
       final switched = await container
           .read(profileSwitchCoordinatorProvider)
           .switchTo(bProfileId);
-      expect(switched, isA<ProfileSwitchApplied>(), reason: '$switched');
+      expect(
+        switched,
+        isA<ProfileSwitchApplied>(),
+        reason: switch (switched) {
+          ProfileSwitchRejected(:final errorCode) =>
+            'ProfileSwitchRejected($errorCode)',
+          _ => '$switched',
+        },
+      );
 
       final acceptedBHello = await bHello.future.timeout(
         const Duration(seconds: 12),
