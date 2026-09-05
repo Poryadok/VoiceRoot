@@ -144,6 +144,7 @@ class DeleteAccountRestoreIntegrationTest {
                 "{\"email\":\"delete-epoch-floor-retry@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}"));
     String accessToken = registered.get("access_token").asText();
     Account before = accounts.findByEmail("delete-epoch-floor-retry@example.com").orElseThrow();
+    org.mockito.Mockito.clearInvocations(sessionEpochFloors);
     doThrow(new SessionEpochFloorUnavailableException("redis unavailable"))
         .when(sessionEpochFloors)
         .recordAtLeast(any(UUID.class), anyLong());

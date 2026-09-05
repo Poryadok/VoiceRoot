@@ -5,6 +5,7 @@ import java.time.Clock;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import voice.backend.auth.events.AuthEventPublisher;
 import voice.backend.auth.repository.AccountRepository;
@@ -26,6 +27,7 @@ import voice.backend.auth.mail.MailSender;
 import voice.backend.auth.service.AccountRestoreTokenStore;
 import voice.backend.auth.service.AccountDeletionRestoreTokenCodec;
 import voice.backend.auth.service.TotpService;
+import voice.backend.auth.service.RegistrationSessionEpochPreparer;
 import voice.backend.auth.sessionepoch.SessionEpochFloorStore;
 
 @Configuration
@@ -122,7 +124,8 @@ public class AuthBeans {
       voice.backend.auth.service.AccountDeletionEventPublisher deletionEventPublisher,
       voice.backend.auth.service.AccountDeletionOperationStarter deletionStarter,
       voice.backend.auth.service.AccountDeletionPendingFloorWorker deletionFloorWorker,
-      voice.backend.auth.service.AccountDeletionPendingEventWorker deletionEventWorker) {
+      voice.backend.auth.service.AccountDeletionPendingEventWorker deletionEventWorker,
+      ObjectProvider<RegistrationSessionEpochPreparer> registrationSessionEpochPreparer) {
     AuthService service = new AuthService(
         accounts,
         refreshTokens,
@@ -147,6 +150,10 @@ public class AuthBeans {
     service.configureAccountDeletion(
         deletionOperations, deletionTokenCodec, deletionEventPublisher, deletionStarter,
         deletionFloorWorker, deletionEventWorker);
+    RegistrationSessionEpochPreparer registrationPreparer = registrationSessionEpochPreparer.getIfAvailable();
+    if (registrationPreparer != null) {
+      service.configureRegistrationSessionEpochPreparer(registrationPreparer);
+    }
     return service;
   }
 

@@ -10,6 +10,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.UUID;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import voice.backend.auth.config.AuthProperties;
 import voice.backend.auth.events.NoopAuthEventPublisher;
@@ -27,9 +28,8 @@ import voice.backend.auth.security.RefreshTokenCodec;
 import voice.backend.auth.security.TokenBlacklist;
 import voice.backend.auth.sessionepoch.SessionEpochFloorStore;
 import voice.backend.auth.sessionepoch.SessionEpochFloorUnavailableException;
-import voice.backend.auth.userdb.InMemoryPhoneHashResolver;
-import voice.backend.auth.userdb.InMemoryPrimaryProfileProvisioner;
 import voice.backend.auth.userdb.NoOpProfileSwitchValidator;
+import voice.backend.auth.userdb.PrimaryProfileProvisioner;
 
 class AuthServiceSessionEpochIssuanceTest {
   private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-05-01T10:00:00Z"), ZoneOffset.UTC);
@@ -235,6 +235,19 @@ class AuthServiceSessionEpochIssuanceTest {
     return new LoginCommand(email, null, PASSWORD, totpCode, "{}");
   }
 
+  @Test
+  void memoryRegistrationFloorFailureDoesNotProvisionMintRefreshOrTouch() {
+    Harness harness = new Harness();
+    harness.floors.failWith(new IllegalStateException("redis down"));
+
+    assertThatThrownBy(() -> harness.register("memory-registration-floor@example.com"))
+        .isInstanceOf(SessionEpochFloorUnavailableException.class);
+
+    assertThat(harness.profiles.calls).isZero();
+    assertThat(harness.refreshTokens.createCalls).isZero();
+    assertThat(harness.accounts.touchCalls).isZero();
+  }
+
   private static final class Harness {
     final RecordingAccounts accounts = new RecordingAccounts();
     final RecordingRefreshTokens refreshTokens = new RecordingRefreshTokens();
@@ -243,7 +256,7 @@ class AuthServiceSessionEpochIssuanceTest {
     final RecordingFloors floors = new RecordingFloors();
     final RefreshTokenCodec codec = new RefreshTokenCodec();
     final TotpService totp = new TotpService(memoryTotpProperties());
-    final InMemoryPrimaryProfileProvisioner profiles = new InMemoryPrimaryProfileProvisioner();
+    final RecordingProfiles profiles = new RecordingProfiles();
     final AuthService service = new AuthService(
         accounts,
         refreshTokens,
@@ -256,7 +269,7 @@ class AuthServiceSessionEpochIssuanceTest {
         CLOCK,
         Duration.ofDays(30),
         profiles,
-        new InMemoryPhoneHashResolver(accounts, profiles),
+        hashes -> Map.of(),
         new InMemorySubscriptionTierStore(),
         new NoOpProfileSwitchValidator(),
         new InMemoryE2EKeyBackupRepository(),
@@ -300,6 +313,7 @@ class AuthServiceSessionEpochIssuanceTest {
     long lastAdvanceRequested;
     int setTotpEnabledCalls;
     int convertGuestCalls;
+    int touchCalls;
 
     @Override
     public synchronized long advanceSessionEpochAtLeast(UUID accountId, long requestedEpoch) {
@@ -325,6 +339,29 @@ class AuthServiceSessionEpochIssuanceTest {
       lastAdvanceRequested = 0L;
       setTotpEnabledCalls = 0;
       convertGuestCalls = 0;
+      touchCalls = 0;
+    }
+
+    @Override
+    public synchronized void touchLastOnlineAt(UUID accountId, Instant at) {
+      touchCalls++;
+      super.touchLastOnlineAt(accountId, at);
+    }
+  }
+
+  private static final class RecordingProfiles implements PrimaryProfileProvisioner {
+    private final Map<UUID, String> profileIds = new java.util.HashMap<>();
+    int calls;
+
+    @Override
+    public String ensurePrimaryProfile(UUID accountId, String displayHint, boolean guestAccount) {
+      calls++;
+      return profileIds.computeIfAbsent(accountId, ignored -> UUID.randomUUID().toString());
+    }
+
+    @Override
+    public void clearGuestAccountFlag(UUID accountId) {
+      throw new UnsupportedOperationException();
     }
   }
 
