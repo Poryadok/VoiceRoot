@@ -11,6 +11,9 @@ fail() {
   exit 1
 }
 
+echo "== A1 CI reachability contract =="
+bash "$ROOT/scripts/ci/compose-a1-ci-reachability_test.sh"
+
 count_gateway="$(bash "${SCRIPT}" "${MANIFEST}" smoke_gateway | wc -l | tr -d '[:space:]')"
 count_flutter="$(bash "${SCRIPT}" "${MANIFEST}" smoke_flutter | wc -l | tr -d '[:space:]')"
 count_full_flutter="$(bash "${SCRIPT}" "${MANIFEST}" full_flutter | wc -l | tr -d '[:space:]')"
