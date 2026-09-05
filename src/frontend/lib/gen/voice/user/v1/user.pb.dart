@@ -290,6 +290,124 @@ class ListProfileIDsForAccountResponse extends $pb.GeneratedMessage {
   $pb.PbList<$core.String> get profileIds => $_getList(0);
 }
 
+class ResolveAccountIDForProfileRequest extends $pb.GeneratedMessage {
+  factory ResolveAccountIDForProfileRequest({
+    $core.String? profileId,
+  }) {
+    final result = create();
+    if (profileId != null) result.profileId = profileId;
+    return result;
+  }
+
+  ResolveAccountIDForProfileRequest._();
+
+  factory ResolveAccountIDForProfileRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ResolveAccountIDForProfileRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ResolveAccountIDForProfileRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'profileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolveAccountIDForProfileRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolveAccountIDForProfileRequest copyWith(
+          void Function(ResolveAccountIDForProfileRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as ResolveAccountIDForProfileRequest))
+          as ResolveAccountIDForProfileRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ResolveAccountIDForProfileRequest create() =>
+      ResolveAccountIDForProfileRequest._();
+  @$core.override
+  ResolveAccountIDForProfileRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ResolveAccountIDForProfileRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ResolveAccountIDForProfileRequest>(
+          create);
+  static ResolveAccountIDForProfileRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get profileId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set profileId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProfileId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProfileId() => $_clearField(1);
+}
+
+class ResolveAccountIDForProfileResponse extends $pb.GeneratedMessage {
+  factory ResolveAccountIDForProfileResponse({
+    $core.String? accountId,
+  }) {
+    final result = create();
+    if (accountId != null) result.accountId = accountId;
+    return result;
+  }
+
+  ResolveAccountIDForProfileResponse._();
+
+  factory ResolveAccountIDForProfileResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ResolveAccountIDForProfileResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ResolveAccountIDForProfileResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'accountId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolveAccountIDForProfileResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolveAccountIDForProfileResponse copyWith(
+          void Function(ResolveAccountIDForProfileResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as ResolveAccountIDForProfileResponse))
+          as ResolveAccountIDForProfileResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ResolveAccountIDForProfileResponse create() =>
+      ResolveAccountIDForProfileResponse._();
+  @$core.override
+  ResolveAccountIDForProfileResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ResolveAccountIDForProfileResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ResolveAccountIDForProfileResponse>(
+          create);
+  static ResolveAccountIDForProfileResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get accountId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set accountId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAccountId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAccountId() => $_clearField(1);
+}
+
 enum GetProfileRequest_By { profileId, username, notSet }
 
 class GetProfileRequest extends $pb.GeneratedMessage {

@@ -21,6 +21,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	UserService_EnsurePrimaryProfile_FullMethodName          = "/voice.user.v1.UserService/EnsurePrimaryProfile"
 	UserService_ListProfileIDsForAccount_FullMethodName      = "/voice.user.v1.UserService/ListProfileIDsForAccount"
+	UserService_ResolveAccountIDForProfile_FullMethodName    = "/voice.user.v1.UserService/ResolveAccountIDForProfile"
 	UserService_ResolvePrimaryProfileIDs_FullMethodName      = "/voice.user.v1.UserService/ResolvePrimaryProfileIDs"
 	UserService_MarkAccountRegular_FullMethodName            = "/voice.user.v1.UserService/MarkAccountRegular"
 	UserService_GetProfile_FullMethodName                    = "/voice.user.v1.UserService/GetProfile"
@@ -60,6 +61,9 @@ type UserServiceClient interface {
 	EnsurePrimaryProfile(ctx context.Context, in *EnsurePrimaryProfileRequest, opts ...grpc.CallOption) (*EnsurePrimaryProfileResponse, error)
 	// S2S internal: profile ids for account-level social actions (block cascade, …).
 	ListProfileIDsForAccount(ctx context.Context, in *ListProfileIDsForAccountRequest, opts ...grpc.CallOption) (*ListProfileIDsForAccountResponse, error)
+	// S2S internal: resolve the owning account for Messaging DM lifecycle checks.
+	// This returns the owner even when the profile is soft-deleted and is not a public visibility lookup.
+	ResolveAccountIDForProfile(ctx context.Context, in *ResolveAccountIDForProfileRequest, opts ...grpc.CallOption) (*ResolveAccountIDForProfileResponse, error)
 	// S2S internal: resolve existing, non-deleted primary profiles for Auth-owned account ids.
 	// Missing accounts and accounts without a usable primary profile are omitted; this never provisions profiles.
 	ResolvePrimaryProfileIDs(ctx context.Context, in *ResolvePrimaryProfileIDsRequest, opts ...grpc.CallOption) (*ResolvePrimaryProfileIDsResponse, error)
@@ -118,6 +122,16 @@ func (c *userServiceClient) ListProfileIDsForAccount(ctx context.Context, in *Li
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListProfileIDsForAccountResponse)
 	err := c.cc.Invoke(ctx, UserService_ListProfileIDsForAccount_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *userServiceClient) ResolveAccountIDForProfile(ctx context.Context, in *ResolveAccountIDForProfileRequest, opts ...grpc.CallOption) (*ResolveAccountIDForProfileResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResolveAccountIDForProfileResponse)
+	err := c.cc.Invoke(ctx, UserService_ResolveAccountIDForProfile_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -395,6 +409,9 @@ type UserServiceServer interface {
 	EnsurePrimaryProfile(context.Context, *EnsurePrimaryProfileRequest) (*EnsurePrimaryProfileResponse, error)
 	// S2S internal: profile ids for account-level social actions (block cascade, …).
 	ListProfileIDsForAccount(context.Context, *ListProfileIDsForAccountRequest) (*ListProfileIDsForAccountResponse, error)
+	// S2S internal: resolve the owning account for Messaging DM lifecycle checks.
+	// This returns the owner even when the profile is soft-deleted and is not a public visibility lookup.
+	ResolveAccountIDForProfile(context.Context, *ResolveAccountIDForProfileRequest) (*ResolveAccountIDForProfileResponse, error)
 	// S2S internal: resolve existing, non-deleted primary profiles for Auth-owned account ids.
 	// Missing accounts and accounts without a usable primary profile are omitted; this never provisions profiles.
 	ResolvePrimaryProfileIDs(context.Context, *ResolvePrimaryProfileIDsRequest) (*ResolvePrimaryProfileIDsResponse, error)
@@ -444,6 +461,9 @@ func (UnimplementedUserServiceServer) EnsurePrimaryProfile(context.Context, *Ens
 }
 func (UnimplementedUserServiceServer) ListProfileIDsForAccount(context.Context, *ListProfileIDsForAccountRequest) (*ListProfileIDsForAccountResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListProfileIDsForAccount not implemented")
+}
+func (UnimplementedUserServiceServer) ResolveAccountIDForProfile(context.Context, *ResolveAccountIDForProfileRequest) (*ResolveAccountIDForProfileResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResolveAccountIDForProfile not implemented")
 }
 func (UnimplementedUserServiceServer) ResolvePrimaryProfileIDs(context.Context, *ResolvePrimaryProfileIDsRequest) (*ResolvePrimaryProfileIDsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResolvePrimaryProfileIDs not implemented")
@@ -576,6 +596,24 @@ func _UserService_ListProfileIDsForAccount_Handler(srv interface{}, ctx context.
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(UserServiceServer).ListProfileIDsForAccount(ctx, req.(*ListProfileIDsForAccountRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _UserService_ResolveAccountIDForProfile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveAccountIDForProfileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).ResolveAccountIDForProfile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_ResolveAccountIDForProfile_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).ResolveAccountIDForProfile(ctx, req.(*ResolveAccountIDForProfileRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1062,6 +1100,10 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListProfileIDsForAccount",
 			Handler:    _UserService_ListProfileIDsForAccount_Handler,
+		},
+		{
+			MethodName: "ResolveAccountIDForProfile",
+			Handler:    _UserService_ResolveAccountIDForProfile_Handler,
 		},
 		{
 			MethodName: "ResolvePrimaryProfileIDs",

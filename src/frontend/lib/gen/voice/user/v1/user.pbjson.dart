@@ -129,6 +129,34 @@ final $typed_data.Uint8List listProfileIDsForAccountResponseDescriptor =
         'CiBMaXN0UHJvZmlsZUlEc0ZvckFjY291bnRSZXNwb25zZRIfCgtwcm9maWxlX2lkcxgBIAMoCV'
         'IKcHJvZmlsZUlkcw==');
 
+@$core.Deprecated('Use resolveAccountIDForProfileRequestDescriptor instead')
+const ResolveAccountIDForProfileRequest$json = {
+  '1': 'ResolveAccountIDForProfileRequest',
+  '2': [
+    {'1': 'profile_id', '3': 1, '4': 1, '5': 9, '10': 'profileId'},
+  ],
+};
+
+/// Descriptor for `ResolveAccountIDForProfileRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List resolveAccountIDForProfileRequestDescriptor =
+    $convert.base64Decode(
+        'CiFSZXNvbHZlQWNjb3VudElERm9yUHJvZmlsZVJlcXVlc3QSHQoKcHJvZmlsZV9pZBgBIAEoCV'
+        'IJcHJvZmlsZUlk');
+
+@$core.Deprecated('Use resolveAccountIDForProfileResponseDescriptor instead')
+const ResolveAccountIDForProfileResponse$json = {
+  '1': 'ResolveAccountIDForProfileResponse',
+  '2': [
+    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+  ],
+};
+
+/// Descriptor for `ResolveAccountIDForProfileResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List resolveAccountIDForProfileResponseDescriptor =
+    $convert.base64Decode(
+        'CiJSZXNvbHZlQWNjb3VudElERm9yUHJvZmlsZVJlc3BvbnNlEh0KCmFjY291bnRfaWQYASABKA'
+        'lSCWFjY291bnRJZA==');
+
 @$core.Deprecated('Use getProfileRequestDescriptor instead')
 const GetProfileRequest$json = {
   '1': 'GetProfileRequest',

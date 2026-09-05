@@ -556,6 +556,7 @@ Messaging does **not** own `chats.last_message_at`. Cross-ref — [chat-service.
 - **Space Service** — если у `chats.space_id` задан спейс: членство в спейсе (для канала и группы в спейсе)
 - **Role Service** — проверка прав в спейсе для текстового чата (`chat_id` = `chats.id`, `group` \| `channel`)
 - **Social Service** — проверка блокировок
+- **User Service** — internal `ResolveAccountIDForProfile` для DM lifecycle: fresh S2S metadata с единственным caller `messaging`, без viewer identity; lookup возвращает owner soft-deleted peer только для следующей Auth account-status проверки
 - **File Service** — привязка вложений
 - **Realtime Service** — (через NATS) уведомление о новых сообщениях для WebSocket fan-out
 
