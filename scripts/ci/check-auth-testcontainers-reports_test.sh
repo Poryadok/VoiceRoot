@@ -72,9 +72,12 @@ grep -A 35 '^  backend-auth:' "${WORKFLOW}" | grep -F 'run: make auth-test-ci' >
 grep -A 12 '^auth:' "${PATH_FILTERS}" | grep -Fx '  - src/backend/migrations/auth_db/**' >/dev/null || fail "Auth path filter must include auth_db migrations"
 
 echo "== every disabledWithoutDocker suite has a required report and fixture =="
-source_suites="$(grep -rl -E '@Testcontainers\(disabledWithoutDocker = true\)' "${AUTH_TEST_SOURCES}" \
-  | sed -E "s#^${AUTH_TEST_SOURCES}/##; s#/#.#g; s#\\.java$##" \
-  | LC_ALL=C sort)"
+source_suites="$(while IFS= read -r -d '' source; do
+  if tr '\n' ' ' <"${source}" | grep -Eq '@Testcontainers[[:space:]]*\([[:space:]]*disabledWithoutDocker[[:space:]]*=[[:space:]]*true'; then
+    relative="${source#"${AUTH_TEST_SOURCES}"/}"
+    printf '%s\n' "${relative%.java}" | tr '/' '.'
+  fi
+done < <(find "${AUTH_TEST_SOURCES}" -name '*.java' -print0) | LC_ALL=C sort)"
 required_suites="$(sed -n '/^required_suites=(/,/^)/p' "${SCRIPT}" \
   | sed -nE 's/^[[:space:]]*"([^"]+)"$/\1/p' \
   | LC_ALL=C sort)"
