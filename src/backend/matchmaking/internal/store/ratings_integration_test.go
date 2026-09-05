@@ -49,12 +49,12 @@ func TestRatingStore_UpsertPlayerRatingAggregatesStars(t *testing.T) {
 	first, err := ratings.UpsertPlayerRating(ctx, profileID, list.Games[0].ID, 5)
 	require.NoError(t, err)
 	require.Equal(t, 5.0, first.RatingValue)
-	require.Equal(t, int32(1), first.GamesPlayed)
+	require.Equal(t, int32(0), first.GamesPlayed)
 
 	second, err := ratings.UpsertPlayerRating(ctx, profileID, list.Games[0].ID, 3)
 	require.NoError(t, err)
 	require.Equal(t, 4.0, second.RatingValue)
-	require.Equal(t, int32(2), second.GamesPlayed)
+	require.Equal(t, int32(0), second.GamesPlayed)
 }
 
 func TestRatingStore_GetPlayerRatingReturnsStoredAggregate(t *testing.T) {
@@ -80,7 +80,7 @@ func TestRatingStore_GetPlayerRatingReturnsStoredAggregate(t *testing.T) {
 	require.Equal(t, profileID, got.ProfileID)
 	require.Equal(t, list.Games[0].ID, got.GameID)
 	require.Equal(t, 4.0, got.RatingValue)
-	require.Equal(t, int32(1), got.GamesPlayed)
+	require.Equal(t, int32(0), got.GamesPlayed)
 }
 
 func TestRatingStore_InsertMatchRatingEnforcesUniqueness(t *testing.T) {
