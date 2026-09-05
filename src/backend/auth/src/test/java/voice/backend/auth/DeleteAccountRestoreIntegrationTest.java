@@ -23,6 +23,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import voice.backend.auth.repository.Account;
+import voice.backend.auth.repository.AccountDeletionOperationRepository;
 import voice.backend.auth.repository.AccountRepository;
 import voice.backend.auth.events.AuthEventPublisher;
 import voice.backend.auth.service.AuthException;
@@ -53,6 +54,7 @@ class DeleteAccountRestoreIntegrationTest {
   @Autowired ObjectMapper objectMapper;
   @Autowired AuthService authService;
   @Autowired AccountRepository accounts;
+  @Autowired AccountDeletionOperationRepository deletionOperations;
   @MockBean SessionEpochFloorStore sessionEpochFloors;
   @MockBean AuthEventPublisher authEventPublisher;
   @MockBean AccountDeletionEventPublisher deletionEventPublisher;
@@ -103,7 +105,7 @@ class DeleteAccountRestoreIntegrationTest {
   }
 
   @Test
-  void redisFloorFailureLeavesTheDeleteDurablySealedWithoutReportingSuccessOrPublishingEvent()
+  void redisFloorFailureRollsBackDeletionBeforeAnOldFloorCanRemainVisible()
       throws Exception {
     JsonNode registered =
         session(
@@ -121,10 +123,13 @@ class DeleteAccountRestoreIntegrationTest {
         .isInstanceOf(SessionEpochFloorUnavailableException.class);
 
     Account afterFailure = accounts.findById(before.id().toString()).orElseThrow();
-    assertThat(afterFailure.status()).isEqualTo("deleted");
-    assertThat(afterFailure.deletedAt()).isNotNull();
-    assertThat(afterFailure.sessionEpoch()).isEqualTo(before.sessionEpoch() + 1);
-    verify(sessionEpochFloors).recordAtLeast(before.id(), afterFailure.sessionEpoch());
+    assertThat(afterFailure.status()).isEqualTo("active");
+    assertThat(afterFailure.deletedAt()).isNull();
+    assertThat(afterFailure.sessionEpoch()).isEqualTo(before.sessionEpoch());
+    assertThat(deletionOperations.findByAccountAndEpoch(before.id(), before.sessionEpoch() + 1))
+        .isEmpty();
+    assertThat(authService.validate("Bearer " + accessToken).userId()).isEqualTo(before.id().toString());
+    verify(sessionEpochFloors).recordAtLeast(before.id(), before.sessionEpoch() + 1);
     verifyNoInteractions(authEventPublisher);
     verifyNoInteractions(deletionEventPublisher);
   }

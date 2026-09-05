@@ -1,0 +1,89 @@
+package voice.backend.auth;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
+import voice.backend.auth.repository.Account;
+import voice.backend.auth.repository.AccountDeletionOperationRepository;
+import voice.backend.auth.repository.AccountRepository;
+import voice.backend.auth.security.TokenBlacklist;
+import voice.backend.auth.service.AuthService;
+import voice.backend.auth.service.RegisterCommand;
+import voice.backend.auth.sessionepoch.SessionEpochFloorStore;
+import voice.backend.auth.sessionepoch.SessionEpochFloorUnavailableException;
+import voice.backend.auth.support.JdbcUserContractTestConfiguration;
+
+/** Proves a Redis floor outage cannot leave a PostgreSQL deletion visible to strict consumers. */
+@SpringBootTest
+@ActiveProfiles("integration")
+@Testcontainers(disabledWithoutDocker = true)
+@Import(JdbcUserContractTestConfiguration.class)
+class AccountDeletionEpochFloorJdbcIntegrationTest {
+  @Container
+  static final PostgreSQLContainer<?> postgres =
+      new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
+          .withDatabaseName("auth_db")
+          .withUsername("voice")
+          .withPassword("voice");
+
+  @DynamicPropertySource
+  static void databaseProperties(DynamicPropertyRegistry registry) {
+    registry.add("voice.auth.jdbc.url", postgres::getJdbcUrl);
+    registry.add("spring.datasource.username", postgres::getUsername);
+    registry.add("spring.datasource.password", postgres::getPassword);
+    registry.add("spring.flyway.user", postgres::getUsername);
+    registry.add("spring.flyway.password", postgres::getPassword);
+  }
+
+  @Autowired AuthService authService;
+  @Autowired AccountRepository accounts;
+  @Autowired AccountDeletionOperationRepository deletionOperations;
+  @MockBean SessionEpochFloorStore sessionEpochFloors;
+  @MockBean TokenBlacklist tokenBlacklist;
+
+  @Test
+  void floorFailureRollsBackJdbcDeletionAndItsPendingFloorOperation() {
+    var session =
+        authService.register(
+            new RegisterCommand(
+                "jdbc-floor-rollback@example.com",
+                null,
+                "Correct horse battery staple",
+                false,
+                "{}"));
+    Account before = accounts.findByEmail("jdbc-floor-rollback@example.com").orElseThrow();
+    doThrow(new SessionEpochFloorUnavailableException("redis unavailable"))
+        .when(sessionEpochFloors)
+        .recordAtLeast(any(), anyLong());
+
+    assertThatThrownBy(
+            () ->
+                authService.deleteAccount(
+                    "Bearer " + session.accessToken(), "Correct horse battery staple"))
+        .isInstanceOf(SessionEpochFloorUnavailableException.class);
+
+    Account afterFailure = accounts.findById(before.id().toString()).orElseThrow();
+    assertThat(afterFailure)
+        .extracting(Account::status, Account::deletedAt, Account::sessionEpoch)
+        .containsExactly("active", null, before.sessionEpoch());
+    assertThat(deletionOperations.findByAccountAndEpoch(before.id(), before.sessionEpoch() + 1))
+        .isEmpty();
+    verify(sessionEpochFloors).recordAtLeast(before.id(), before.sessionEpoch() + 1);
+  }
+}
