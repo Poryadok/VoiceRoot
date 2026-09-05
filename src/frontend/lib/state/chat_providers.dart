@@ -2680,6 +2680,9 @@ final groupMembersProvider = FutureProvider.family<MemberListData, String>((
       .listGroupMembers(authorization: auth, chatId: chatId);
   return switch (result) {
     ChatsApiOk(:final data) => data,
+    ChatsApiFailure(:final statusCode)
+        when isBackendUnavailable(statusCode) =>
+      throw const BackendUnavailableException(),
     ChatsApiFailure(:final message) => throw Exception(message),
   };
 });

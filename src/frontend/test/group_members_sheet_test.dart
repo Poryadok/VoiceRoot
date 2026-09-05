@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -6,7 +7,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
+import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
+import 'package:voice_frontend/l10n/app_localizations_en.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
@@ -15,6 +18,8 @@ import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/chat/chat_info_panel.dart';
 import 'package:voice_frontend/ui/chat/chat_room_panel.dart';
 import 'package:voice_frontend/ui/chat/group_members_sheet.dart';
+import 'package:voice_frontend/ui/core/voice_skeleton.dart';
+import 'package:voice_frontend/ui/core/voice_state_panel.dart';
 
 import 'support/auth_test_overrides.dart';
 import 'support/test_voice_token_catalog.dart';
@@ -52,6 +57,91 @@ void main() {
       ),
     );
   }
+
+  testWidgets(
+    'group members sheet uses the Voice list skeleton while loading',
+    (tester) async {
+      const chatId = 'group-members-loading';
+      final members = Completer<MemberListData>();
+
+      await tester.pumpWidget(
+        testApp(
+          home: const GroupMembersSheet(chatId: chatId),
+          client: MockClient((_) async => http.Response('{}', 404)),
+          extraOverrides: [
+            groupMembersProvider(chatId).overrideWith((_) => members.future),
+          ],
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byType(VoiceListSkeleton), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+
+      members.complete(const MemberListData(members: []));
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets('group members error is localized in the bottom sheet', (
+    tester,
+  ) async {
+    const chatId = 'group-members-error-sheet';
+
+    await tester.pumpWidget(
+      testApp(
+        home: const GroupMembersSheet(chatId: chatId),
+        client: MockClient((_) async => http.Response('{}', 503)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(VoiceStatePanel), findsOneWidget);
+    expect(find.text(AppLocalizationsEn().backendUnavailable), findsOneWidget);
+    expect(find.textContaining('BackendUnavailableException'), findsNothing);
+  });
+
+  testWidgets('ChatInfo embeds the same localized group members state', (
+    tester,
+  ) async {
+    const chatId = 'group-members-error-chat-info';
+
+    await tester.pumpWidget(
+      testApp(
+        home: const SizedBox(
+          width: 400,
+          height: 600,
+          child: ChatInfoPanel(chatId: chatId, isGroup: true),
+        ),
+        client: MockClient((req) async {
+          if (req.url.path.contains('/shared-media')) {
+            return http.Response(
+              jsonEncode({
+                'shared_media_list': {
+                  'items': [],
+                  'next_cursor': '',
+                  'has_more': false,
+                },
+              }),
+              200,
+            );
+          }
+          return http.Response('{}', 404);
+        }),
+        extraOverrides: [
+          groupMembersProvider(
+            chatId,
+          ).overrideWith((_) async => throw StateError('raw upstream failure')),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(ChatInfoPanel.panelKey), findsOneWidget);
+    expect(find.byType(VoiceStatePanel), findsOneWidget);
+    expect(find.text('Could not load members'), findsOneWidget);
+    expect(find.textContaining('raw upstream failure'), findsNothing);
+  });
 
   testWidgets('group room shows members sheet with owner badge and kick', (
     tester,

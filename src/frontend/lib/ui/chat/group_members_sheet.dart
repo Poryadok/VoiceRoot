@@ -9,6 +9,7 @@ import '../../state/social_providers.dart';
 import '../api_error_messages.dart';
 import '../core/voice_avatar.dart';
 import '../core/voice_bottom_sheet.dart';
+import '../core/voice_skeleton.dart';
 import '../core/voice_state_panel.dart';
 
 /// Group members list (embedded in side panel or bottom sheet).
@@ -48,10 +49,10 @@ class GroupMembersContent extends ConsumerWidget {
         ],
         Expanded(
           child: membersAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
+            loading: () => const VoiceListSkeleton(),
             error: (error, _) => VoiceStatePanel(
               title: l10n.chatGroupMembersLoadError,
-              message: '$error',
+              message: groupMembersErrorMessage(l10n, error),
               icon: Icons.cloud_off_outlined,
               actionLabel: l10n.commonRetry,
               onAction: () => ref.invalidate(groupMembersProvider(chatId)),
