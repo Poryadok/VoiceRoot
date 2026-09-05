@@ -5,6 +5,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SCRIPT="${ROOT}/scripts/ci/check-auth-testcontainers-reports.sh"
 FIXTURES="${ROOT}/scripts/ci/testdata/auth-testcontainers-reports/valid"
+MAKEFILE="${ROOT}/Makefile"
+WORKFLOW="${ROOT}/.github/workflows/ci.yml"
+PATH_FILTERS="${ROOT}/.github/ci/path-filters.yml"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TMP_DIR}"' EXIT
 
@@ -58,5 +61,13 @@ echo "== zero-test Testcontainers suite fails =="
 copy_reports "${TMP_DIR}/zero-tests"
 sed -i 's/tests="1"/tests="0"/' "${TMP_DIR}/zero-tests/TEST-voice.backend.auth.AuthJdbcRedisIntegrationTest.xml"
 expect_fail "${TMP_DIR}/zero-tests"
+
+echo "== canonical Auth CI wiring runs the report gate =="
+auth_target="$(sed -n '/^auth-test-ci:/,/^auth-image-ci:/p' "${MAKEFILE}")"
+[[ "${auth_target}" == *"mvn -B test"* ]] || fail "auth-test-ci must run Maven tests"
+[[ "${auth_target}" == *"check-auth-testcontainers-reports.sh"* ]] || fail "auth-test-ci must check Surefire reports"
+[[ "${auth_target#*mvn -B test}" == *"check-auth-testcontainers-reports.sh"* ]] || fail "auth-test-ci must check reports after Maven"
+grep -A 35 '^  backend-auth:' "${WORKFLOW}" | grep -F 'run: make auth-test-ci' >/dev/null || fail "backend-auth must use canonical auth-test-ci"
+grep -A 12 '^auth:' "${PATH_FILTERS}" | grep -Fx '  - src/backend/migrations/auth_db/**' >/dev/null || fail "Auth path filter must include auth_db migrations"
 
 echo "All Auth Testcontainers report gate tests passed."

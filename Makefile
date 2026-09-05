@@ -180,6 +180,7 @@ gateway-image-ci:
 
 auth-test-ci:
 	cd "$(ROOT)/src/backend/auth" && mvn -B test
+	$(BASH) "$(ROOT)/scripts/ci/check-auth-testcontainers-reports.sh" "$(ROOT)/src/backend/auth/target/surefire-reports"
 
 auth-image-ci:
 	docker build -f src/backend/auth/Dockerfile -t voice-auth:local .
