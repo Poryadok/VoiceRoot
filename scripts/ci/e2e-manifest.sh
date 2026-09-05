@@ -33,7 +33,7 @@ while IFS= read -r line || [ -n "${line}" ]; do
     continue
   fi
   if [ "${in_section}" -eq 1 ]; then
-    if printf '%s' "${trimmed}" | grep -Eq '^[a-z_]+:$'; then
+    if printf '%s' "${trimmed}" | grep -Eq '^[a-z0-9_]+:$'; then
       break
     fi
     if [[ "${trimmed}" == -* ]]; then
