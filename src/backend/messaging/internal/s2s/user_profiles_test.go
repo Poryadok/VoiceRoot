@@ -16,28 +16,28 @@ import (
 	userv1 "voice.app/voice/user/v1"
 )
 
-type stubUserGetProfile struct {
+type stubUserProfileOwner struct {
 	userv1.UnimplementedUserServiceServer
-	profile *userv1.Profile
-	err     error
+	accountID string
+	err       error
 }
 
-type stubUserEmptyProfile struct {
+type stubUserEmptyProfileOwner struct {
 	userv1.UnimplementedUserServiceServer
 }
 
-func (s *stubUserEmptyProfile) GetProfile(context.Context, *userv1.GetProfileRequest) (*userv1.GetProfileResponse, error) {
-	return &userv1.GetProfileResponse{Profile: nil}, nil
+func (s *stubUserEmptyProfileOwner) ResolveAccountIDForProfile(context.Context, *userv1.ResolveAccountIDForProfileRequest) (*userv1.ResolveAccountIDForProfileResponse, error) {
+	return &userv1.ResolveAccountIDForProfileResponse{}, nil
 }
 
-func (s *stubUserGetProfile) GetProfile(_ context.Context, req *userv1.GetProfileRequest) (*userv1.GetProfileResponse, error) {
+func (s *stubUserProfileOwner) ResolveAccountIDForProfile(_ context.Context, req *userv1.ResolveAccountIDForProfileRequest) (*userv1.ResolveAccountIDForProfileResponse, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
-	if s.profile == nil {
+	if s.accountID == "" {
 		return nil, status.Error(codes.NotFound, "profile not found")
 	}
-	return &userv1.GetProfileResponse{Profile: s.profile}, nil
+	return &userv1.ResolveAccountIDForProfileResponse{AccountId: s.accountID}, nil
 }
 
 func startBufconnUser(t *testing.T, impl userv1.UserServiceServer) (grpc.ClientConnInterface, func()) {
@@ -74,8 +74,8 @@ func TestUserGRPCProfiles_AccountIDByProfileID(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
-		conn, cleanup := startBufconnUser(t, &stubUserGetProfile{
-			profile: &userv1.Profile{Id: profileID.String(), AccountId: accountID.String()},
+		conn, cleanup := startBufconnUser(t, &stubUserProfileOwner{
+			accountID: accountID.String(),
 		})
 		t.Cleanup(cleanup)
 		u := &UserGRPCProfiles{Client: userv1.NewUserServiceClient(conn)}
@@ -84,19 +84,19 @@ func TestUserGRPCProfiles_AccountIDByProfileID(t *testing.T) {
 		require.Equal(t, accountID, got)
 	})
 
-	t.Run("nil profile in response", func(t *testing.T) {
+	t.Run("missing account_id in response", func(t *testing.T) {
 		t.Parallel()
-		conn, cleanup := startBufconnUser(t, &stubUserEmptyProfile{})
+		conn, cleanup := startBufconnUser(t, &stubUserEmptyProfileOwner{})
 		t.Cleanup(cleanup)
 		u := &UserGRPCProfiles{Client: userv1.NewUserServiceClient(conn)}
 		_, err := u.AccountIDByProfileID(context.Background(), profileID)
 		require.Error(t, err)
-		require.Equal(t, codes.NotFound, status.Code(err))
+		require.Equal(t, codes.Internal, status.Code(err))
 	})
 
 	t.Run("non-notfound grpc error", func(t *testing.T) {
 		t.Parallel()
-		conn, cleanup := startBufconnUser(t, &stubUserGetProfile{
+		conn, cleanup := startBufconnUser(t, &stubUserProfileOwner{
 			err: status.Error(codes.Unavailable, "user down"),
 		})
 		t.Cleanup(cleanup)
@@ -108,7 +108,7 @@ func TestUserGRPCProfiles_AccountIDByProfileID(t *testing.T) {
 
 	t.Run("not found", func(t *testing.T) {
 		t.Parallel()
-		conn, cleanup := startBufconnUser(t, &stubUserGetProfile{err: status.Error(codes.NotFound, "missing")})
+		conn, cleanup := startBufconnUser(t, &stubUserProfileOwner{err: status.Error(codes.NotFound, "missing")})
 		t.Cleanup(cleanup)
 		u := &UserGRPCProfiles{Client: userv1.NewUserServiceClient(conn)}
 		_, err := u.AccountIDByProfileID(context.Background(), profileID)
@@ -116,22 +116,10 @@ func TestUserGRPCProfiles_AccountIDByProfileID(t *testing.T) {
 		require.Equal(t, codes.NotFound, status.Code(err))
 	})
 
-	t.Run("missing account_id", func(t *testing.T) {
-		t.Parallel()
-		conn, cleanup := startBufconnUser(t, &stubUserGetProfile{
-			profile: &userv1.Profile{Id: profileID.String()},
-		})
-		t.Cleanup(cleanup)
-		u := &UserGRPCProfiles{Client: userv1.NewUserServiceClient(conn)}
-		_, err := u.AccountIDByProfileID(context.Background(), profileID)
-		require.Error(t, err)
-		require.Equal(t, codes.Internal, status.Code(err))
-	})
-
 	t.Run("invalid account_id", func(t *testing.T) {
 		t.Parallel()
-		conn, cleanup := startBufconnUser(t, &stubUserGetProfile{
-			profile: &userv1.Profile{Id: profileID.String(), AccountId: "not-a-uuid"},
+		conn, cleanup := startBufconnUser(t, &stubUserProfileOwner{
+			accountID: "not-a-uuid",
 		})
 		t.Cleanup(cleanup)
 		u := &UserGRPCProfiles{Client: userv1.NewUserServiceClient(conn)}
