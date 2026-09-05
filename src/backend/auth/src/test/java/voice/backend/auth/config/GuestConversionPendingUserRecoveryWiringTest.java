@@ -197,13 +197,13 @@ class GuestConversionPendingUserRecoveryWiringTest {
     }
 
     @Bean
-    StringRedisTemplate redis() {
-      LettuceConnectionFactory connection =
-          new LettuceConnectionFactory(new RedisStandaloneConfiguration("127.0.0.1", 6379));
-      connection.afterPropertiesSet();
-      StringRedisTemplate template = new StringRedisTemplate(connection);
-      template.afterPropertiesSet();
-      return template;
+    LettuceConnectionFactory redisConnectionFactory() {
+      return new LettuceConnectionFactory(new RedisStandaloneConfiguration("127.0.0.1", 6379));
+    }
+
+    @Bean
+    StringRedisTemplate redis(LettuceConnectionFactory redisConnectionFactory) {
+      return new StringRedisTemplate(redisConnectionFactory);
     }
 
     @Bean
