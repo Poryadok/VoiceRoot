@@ -13,6 +13,9 @@ import voice.backend.auth.userdb.PhoneHashResolver;
 import voice.backend.auth.userdb.PrimaryProfileProvisioner;
 import voice.backend.auth.userdb.ProfileSwitchValidator;
 import voice.backend.auth.repository.Account;
+import voice.backend.auth.repository.AccountDeletionOperation;
+import voice.backend.auth.repository.AccountDeletionOperationRepository;
+import voice.backend.auth.repository.AccountDeletionState;
 import voice.backend.auth.repository.AccountRepository;
 import voice.backend.auth.repository.E2EKeyBackupRecord;
 import voice.backend.auth.repository.E2EKeyBackupRepository;
@@ -53,6 +56,8 @@ public class AuthService {
   private final AccountRestoreTokenStore restoreTokenStore;
   private final MailSender mailSender;
   private final SessionEpochFloorStore sessionEpochFloors;
+  private AccountDeletionOperationRepository deletionOperations;
+  private AccountDeletionRestoreTokenCodec deletionTokenCodec;
 
   public AuthService(
       AccountRepository accounts,
@@ -98,7 +103,7 @@ public class AuthService {
   }
 
   public AuthService withClock(Clock newClock) {
-    return new AuthService(
+    AuthService copy = new AuthService(
         accounts,
         refreshTokens,
         refreshTokenCodec,
@@ -119,6 +124,18 @@ public class AuthService {
         restoreTokenStore,
         mailSender,
         sessionEpochFloors);
+    if (deletionOperations != null && deletionTokenCodec != null) {
+      copy.configureAccountDeletion(deletionOperations, deletionTokenCodec);
+    }
+    return copy;
+  }
+
+  /** Injects the Auth-owned durable deletion outbox without changing legacy unit-test constructors. */
+  public void configureAccountDeletion(
+      AccountDeletionOperationRepository deletionOperations,
+      AccountDeletionRestoreTokenCodec deletionTokenCodec) {
+    this.deletionOperations = java.util.Objects.requireNonNull(deletionOperations, "deletionOperations");
+    this.deletionTokenCodec = java.util.Objects.requireNonNull(deletionTokenCodec, "deletionTokenCodec");
   }
 
   public AuthSession register(RegisterCommand command) {
@@ -370,17 +387,14 @@ public class AuthService {
     return issueSession(converted, "{}");
   }
 
-  public synchronized DeleteAccountResult deleteAccount(String accessToken, String password) {
+  public DeleteAccountResult deleteAccount(String accessToken, String password) {
     TokenClaims claims = validateForAccountDeletion(accessToken);
     Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
     if (!passwordHasher.matches(password, account.passwordHash())) {
       throw new AuthException("invalid_credentials");
     }
     if ("deleted".equals(account.status())) {
-      if (hasSealedDeletionEpoch(account)) {
-        throw new AuthException("account_inactive");
-      }
-      return finishAccountDeletion(claims, account);
+      return finishAccountDeletion(claims, account, operationForDeletedAccount(account));
     }
     ensureActive(account);
     Instant now = Instant.now(clock);
@@ -393,10 +407,7 @@ public class AuthService {
       if (!"deleted".equals(deleted.status())) {
         throw ex;
       }
-      if (hasSealedDeletionEpoch(deleted)) {
-        throw new AuthException("account_inactive");
-      }
-      return finishAccountDeletion(claims, deleted);
+      return finishAccountDeletion(claims, deleted, operationForDeletedAccount(deleted));
     }
     Account deleted = new Account(
         account.id(),
@@ -410,7 +421,7 @@ public class AuthService {
         sessionEpoch,
         account.createdAt(),
         now);
-    return finishAccountDeletion(claims, deleted);
+    return finishAccountDeletion(claims, deleted, createOperation(deleted));
   }
 
   private boolean hasSealedDeletionEpoch(Account account) {
@@ -421,15 +432,44 @@ public class AuthService {
     }
   }
 
-  private DeleteAccountResult finishAccountDeletion(TokenClaims claims, Account account) {
-    long recordedFloor = sessionEpochFloors.recordAtLeast(account.id(), account.sessionEpoch());
-    if (recordedFloor < account.sessionEpoch()) {
-      throw new SessionEpochFloorUnavailableException("session epoch floor did not reach durable epoch");
+  private AccountDeletionOperation createOperation(Account account) {
+    requireDeletionOperations();
+    UUID proposedOperationId = UUID.randomUUID();
+    String proposedToken = deletionTokenCodec.derive(account.id(), proposedOperationId);
+    return deletionOperations.createOrResume(
+        proposedOperationId,
+        account.id(),
+        account.sessionEpoch(),
+        refreshTokenCodec.hash(proposedToken),
+        Instant.now(clock));
+  }
+
+  private AccountDeletionOperation operationForDeletedAccount(Account account) {
+    requireDeletionOperations();
+    return deletionOperations
+        .findByAccountAndEpoch(account.id(), account.sessionEpoch())
+        .orElseThrow(
+            () ->
+                new SessionEpochFloorUnavailableException(
+                    "account deletion completion has not been durably recorded"));
+  }
+
+  private DeleteAccountResult finishAccountDeletion(
+      TokenClaims claims, Account account, AccountDeletionOperation operation) {
+    String restoreToken = deletionTokenCodec.derive(account.id(), operation.operationId());
+    if (!refreshTokenCodec.hash(restoreToken).equals(operation.restoreTokenHash())) {
+      throw new IllegalStateException("account deletion restore token verifier mismatch");
+    }
+    if (operation.state() == AccountDeletionState.PENDING_FLOOR) {
+      long recordedFloor = sessionEpochFloors.recordAtLeast(account.id(), account.sessionEpoch());
+      if (recordedFloor < account.sessionEpoch()) {
+        throw new SessionEpochFloorUnavailableException("session epoch floor did not reach durable epoch");
+      }
+      operation = deletionOperations.markFloorRecorded(operation.operationId(), Instant.now(clock));
     }
     Instant now = Instant.now(clock);
     refreshTokens.revokeAllForAccount(account.id(), now);
     tokenBlacklist.revoke(claims.jti(), jwtService.ttl(claims));
-    String restoreToken = refreshTokenCodec.generate();
     restoreTokenStore.store(restoreToken, account.id(), AccountRestoreTokenStore.RESTORE_TTL);
     if (account.email() != null && !account.email().isBlank()) {
       mailSender.sendOtpEmail(
@@ -437,8 +477,17 @@ public class AuthService {
           "Restore your Voice account",
           "Your account was scheduled for deletion. Restore within 30 days using token: " + restoreToken);
     }
-    authEventPublisher.publishAccountDeleted(account.id());
+    if (operation.state() == AccountDeletionState.PENDING_EVENT) {
+      authEventPublisher.publishAccountDeleted(account.id());
+      deletionOperations.markEventPublished(operation.operationId(), Instant.now(clock));
+    }
     return new DeleteAccountResult(restoreToken);
+  }
+
+  private void requireDeletionOperations() {
+    if (deletionOperations == null || deletionTokenCodec == null) {
+      throw new IllegalStateException("account deletion durable operation repository is not configured");
+    }
   }
 
   private TokenClaims validateForAccountDeletion(String accessToken) {

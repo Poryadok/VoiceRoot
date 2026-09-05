@@ -89,8 +89,10 @@ public class AuthBeans {
       MeterRegistry meterRegistry,
       AccountRestoreTokenStore restoreTokenStore,
       MailSender mailSender,
-      SessionEpochFloorStore sessionEpochFloors) {
-    return new AuthService(
+      SessionEpochFloorStore sessionEpochFloors,
+      voice.backend.auth.repository.AccountDeletionOperationRepository deletionOperations,
+      AccountDeletionRestoreTokenCodec deletionTokenCodec) {
+    AuthService service = new AuthService(
         accounts,
         refreshTokens,
         refreshTokenCodec,
@@ -111,6 +113,8 @@ public class AuthBeans {
         restoreTokenStore,
         mailSender,
         sessionEpochFloors);
+    service.configureAccountDeletion(deletionOperations, deletionTokenCodec);
+    return service;
   }
 
   @Bean

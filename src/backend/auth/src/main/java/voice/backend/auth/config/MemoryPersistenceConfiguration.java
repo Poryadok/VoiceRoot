@@ -5,8 +5,10 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import voice.backend.auth.repository.BackupCodeRepository;
+import voice.backend.auth.repository.AccountDeletionOperationRepository;
 import voice.backend.auth.repository.E2EKeyBackupRepository;
 import voice.backend.auth.repository.InMemoryAccountRepository;
+import voice.backend.auth.repository.InMemoryAccountDeletionOperationRepository;
 import voice.backend.auth.repository.InMemoryBackupCodeRepository;
 import voice.backend.auth.repository.InMemoryE2EKeyBackupRepository;
 import voice.backend.auth.repository.InMemoryGuestConversionOperationRepository;
@@ -32,6 +34,11 @@ public class MemoryPersistenceConfiguration {
   @Bean
   InMemoryAccountRepository accountRepository() {
     return new InMemoryAccountRepository();
+  }
+
+  @Bean
+  AccountDeletionOperationRepository accountDeletionOperationRepository() {
+    return new InMemoryAccountDeletionOperationRepository();
   }
 
   @Bean

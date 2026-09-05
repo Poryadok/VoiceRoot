@@ -9,9 +9,11 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import voice.backend.auth.repository.AccountRepository;
+import voice.backend.auth.repository.AccountDeletionOperationRepository;
 import voice.backend.auth.repository.BackupCodeRepository;
 import voice.backend.auth.repository.E2EKeyBackupRepository;
 import voice.backend.auth.repository.JdbcAccountRepository;
+import voice.backend.auth.repository.JdbcAccountDeletionOperationRepository;
 import voice.backend.auth.repository.JdbcBackupCodeRepository;
 import voice.backend.auth.repository.JdbcE2EKeyBackupRepository;
 import voice.backend.auth.repository.JdbcOtpCodeRepository;
@@ -38,6 +40,12 @@ public class JdbcPersistenceConfiguration {
   @Bean
   AccountRepository accountRepository(NamedParameterJdbcTemplate jdbc) {
     return new JdbcAccountRepository(jdbc);
+  }
+
+  @Bean
+  AccountDeletionOperationRepository accountDeletionOperationRepository(
+      NamedParameterJdbcTemplate jdbc) {
+    return new JdbcAccountDeletionOperationRepository(jdbc);
   }
 
   @Bean

@@ -227,6 +227,9 @@ public class InMemoryAccountRepository implements AccountRepository {
     if (existing == null) {
       throw new IllegalArgumentException("account not found");
     }
+    if (!"active".equals(existing.status())) {
+      throw new IllegalArgumentException("account is not active");
+    }
     long next = Math.addExact(existing.sessionEpoch(), 1L);
     if (next <= 0) {
       throw new IllegalStateException("invalid session epoch");
