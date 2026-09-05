@@ -16,6 +16,28 @@ global:
   - buf.lock
   - buf.gen*.yaml
 
+a1_e2e:
+  - Makefile
+  - .github/workflows/ci.yml
+  - .github/ci/path-filters.yml
+  - .github/ci/e2e-features.yml
+  - src/backend/auth/**
+  - src/backend/user/**
+  - src/backend/chat/**
+  - src/backend/messaging/**
+  - src/backend/social/**
+  - src/backend/file/**
+  - src/backend/gateway/**
+  - src/backend/realtime/**
+  - src/backend/pkg/**
+  - src/frontend/**
+  - src/backend/migrations/**
+  - protos/**
+  - docker/**
+  - docker-compose*.yml
+  - scripts/ci/compose-a1*
+  - scripts/ci/e2e-manifest*
+
 staging_infra:
   - deploy/staging/infra.yaml
   - deploy/staging/namespace.yaml
