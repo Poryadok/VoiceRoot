@@ -230,6 +230,99 @@ func TestComposeA1DailyMessagingREST_live(t *testing.T) {
 		"B unarchive action must leave C's archive placement unchanged")
 }
 
+// TestComposeA1GroupReadIsolation_live proves that a group member's durable
+// read cursor and main-inbox unread badge do not advance another member.
+func TestComposeA1GroupReadIsolation_live(t *testing.T) {
+	if !liveComposeEnabled() {
+		t.Skip("set VOICE_RUN_LIVE_COMPOSE=true to run against local compose")
+	}
+	clearLiveComposeAuthRateLimit(t)
+
+	client := &http.Client{Timeout: 45 * time.Second}
+	base := liveGatewayBaseURL()
+	n := time.Now().UnixNano()
+	const password = "VoiceQaTest1!"
+
+	sessA := registerComposeUser(t, client, base, formatComposeEmail("a1-t055-group-author", n), password)
+	sessB := registerComposeUser(t, client, base, formatComposeEmail("a1-t055-group-reader", n), password)
+	sessC := registerComposeUser(t, client, base, formatComposeEmail("a1-t055-group-untouched", n), password)
+	groupID := createComposeGroup(t, client, base, sessA.AccessToken, fmt.Sprintf("a1-t055-group-read-%d", n))
+	addComposeGroupMembersForInvitees(t, client, base, sessA.AccessToken, groupID, sessB, sessC)
+
+	assertComposeA1PerMemberReadIsolation(t, client, base, "group", groupID, sessA, sessB, sessC, n)
+}
+
+// TestComposeA1ChannelReadIsolation_live proves the same per-member read
+// boundary for a Space channel, where membership is established by invite.
+func TestComposeA1ChannelReadIsolation_live(t *testing.T) {
+	if !liveComposeEnabled() {
+		t.Skip("set VOICE_RUN_LIVE_COMPOSE=true to run against local compose")
+	}
+	clearLiveComposeAuthRateLimit(t)
+
+	client := &http.Client{Timeout: 45 * time.Second}
+	base := liveGatewayBaseURL()
+	n := time.Now().UnixNano()
+	const password = "VoiceQaTest1!"
+
+	sessA := registerComposeUser(t, client, base, formatComposeEmail("a1-t055-channel-author", n), password)
+	sessB := registerComposeUser(t, client, base, formatComposeEmail("a1-t055-channel-reader", n), password)
+	sessC := registerComposeUser(t, client, base, formatComposeEmail("a1-t055-channel-untouched", n), password)
+	spaceID := createComposeSpace(t, client, base, sessA.AccessToken,
+		fmt.Sprintf("a1-t055-channel-space-%d", n), "A1 per-member channel read proof")
+	invite := createComposeSpaceInvite(t, client, base, sessA.AccessToken, spaceID)
+	joinComposeSpaceByInvite(t, client, base, sessB.AccessToken, invite.Code)
+	joinComposeSpaceByInvite(t, client, base, sessC.AccessToken, invite.Code)
+	channelID := createComposeSpaceChannel(t, client, base, sessA.AccessToken, spaceID,
+		fmt.Sprintf("a1-t055-channel-read-%d", n))
+
+	assertComposeA1PerMemberReadIsolation(t, client, base, "channel", channelID, sessA, sessB, sessC, n)
+}
+
+func assertComposeA1PerMemberReadIsolation(
+	t *testing.T,
+	client *http.Client,
+	base, chatKind, chatID string,
+	author, reader, untouched authSessionResponse,
+	n int64,
+) {
+	t.Helper()
+	messageContent := fmt.Sprintf("a1-t055-%s-read-isolation-%d", chatKind, n)
+	messageID := sendComposeMessage(t, client, base, author.AccessToken, chatID, messageContent)
+
+	require.Eventually(t, func() bool {
+		return composeA1UnreadCount(t, client, base, reader.AccessToken, chatID) == 1 &&
+			composeA1UnreadCount(t, client, base, untouched.AccessToken, chatID) == 1
+	}, 45*time.Second, 500*time.Millisecond,
+		"%s message must leave one unread main-inbox item for both reader and untouched member", chatKind)
+
+	// The Gateway REST ChatListItem does not expose last_message_delivery_state;
+	// the canonical Messaging contract requires group/channel ticks to remain NONE.
+	require.Empty(t, getComposeReadState(t, client, base, untouched.AccessToken, chatID),
+		"untouched %s member must not have a read cursor before B reads", chatKind)
+
+	markReadComposeMessage(t, client, base, reader.AccessToken, chatID, messageID)
+	require.Equal(t, messageID, getComposeReadState(t, client, base, reader.AccessToken, chatID),
+		"reader must persist its own %s cursor", chatKind)
+	require.Empty(t, getComposeReadState(t, client, base, untouched.AccessToken, chatID),
+		"reader must not advance another member's %s cursor", chatKind)
+
+	require.Eventually(t, func() bool {
+		return composeA1UnreadCount(t, client, base, reader.AccessToken, chatID) == 0 &&
+			composeA1UnreadCount(t, client, base, untouched.AccessToken, chatID) == 1
+	}, 45*time.Second, 500*time.Millisecond,
+		"reader's %s MarkRead must clear only reader's unread main-inbox badge", chatKind)
+}
+
+func composeA1UnreadCount(t *testing.T, client *http.Client, base, accessToken, chatID string) int {
+	t.Helper()
+	item := composeA1ChatItem(listComposeChats(t, client, base, accessToken, "main"), chatID)
+	if item == nil || item.Inbox != "main" {
+		return -1
+	}
+	return item.UnreadCount
+}
+
 func composeA1ChatItem(items []composeChatListItem, chatID string) *composeChatListItem {
 	for i := range items {
 		if items[i].ChatID == chatID {
