@@ -52,6 +52,17 @@ class UserServiceClient extends $grpc.Client {
         options: options);
   }
 
+  /// S2S internal: resolve the owning account for Messaging DM lifecycle checks.
+  /// This returns the owner even when the profile is soft-deleted and is not a public visibility lookup.
+  $grpc.ResponseFuture<$0.ResolveAccountIDForProfileResponse>
+      resolveAccountIDForProfile(
+    $0.ResolveAccountIDForProfileRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$resolveAccountIDForProfile, request,
+        options: options);
+  }
+
   /// S2S internal: resolve existing, non-deleted primary profiles for Auth-owned account ids.
   /// Missing accounts and accounts without a usable primary profile are omitted; this never provisions profiles.
   $grpc.ResponseFuture<$0.ResolvePrimaryProfileIDsResponse>
@@ -267,6 +278,12 @@ class UserServiceClient extends $grpc.Client {
       '/voice.user.v1.UserService/ListProfileIDsForAccount',
       ($0.ListProfileIDsForAccountRequest value) => value.writeToBuffer(),
       $0.ListProfileIDsForAccountResponse.fromBuffer);
+  static final _$resolveAccountIDForProfile = $grpc.ClientMethod<
+          $0.ResolveAccountIDForProfileRequest,
+          $0.ResolveAccountIDForProfileResponse>(
+      '/voice.user.v1.UserService/ResolveAccountIDForProfile',
+      ($0.ResolveAccountIDForProfileRequest value) => value.writeToBuffer(),
+      $0.ResolveAccountIDForProfileResponse.fromBuffer);
   static final _$resolvePrimaryProfileIDs = $grpc.ClientMethod<
           $0.ResolvePrimaryProfileIDsRequest,
           $0.ResolvePrimaryProfileIDsResponse>(
@@ -426,6 +443,16 @@ abstract class UserServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.ListProfileIDsForAccountRequest.fromBuffer(value),
         ($0.ListProfileIDsForAccountResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ResolveAccountIDForProfileRequest,
+            $0.ResolveAccountIDForProfileResponse>(
+        'ResolveAccountIDForProfile',
+        resolveAccountIDForProfile_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ResolveAccountIDForProfileRequest.fromBuffer(value),
+        ($0.ResolveAccountIDForProfileResponse value) =>
+            value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.ResolvePrimaryProfileIDsRequest,
             $0.ResolvePrimaryProfileIDsResponse>(
         'ResolvePrimaryProfileIDs',
@@ -680,6 +707,16 @@ abstract class UserServiceBase extends $grpc.Service {
 
   $async.Future<$0.ListProfileIDsForAccountResponse> listProfileIDsForAccount(
       $grpc.ServiceCall call, $0.ListProfileIDsForAccountRequest request);
+
+  $async.Future<$0.ResolveAccountIDForProfileResponse>
+      resolveAccountIDForProfile_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.ResolveAccountIDForProfileRequest> $request) async {
+    return resolveAccountIDForProfile($call, await $request);
+  }
+
+  $async.Future<$0.ResolveAccountIDForProfileResponse>
+      resolveAccountIDForProfile(
+          $grpc.ServiceCall call, $0.ResolveAccountIDForProfileRequest request);
 
   $async.Future<$0.ResolvePrimaryProfileIDsResponse>
       resolvePrimaryProfileIDs_Pre($grpc.ServiceCall $call,
