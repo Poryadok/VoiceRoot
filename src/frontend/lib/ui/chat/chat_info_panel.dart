@@ -23,6 +23,8 @@ import '../../state/space_providers.dart';
 import 'e2e_attachment_actions.dart';
 import 'e2e_chat_settings.dart';
 import '../settings/notification_settings_screen.dart';
+import '../api_error_messages.dart';
+import '../core/voice_skeleton.dart';
 
 /// Chat info with shared media tabs (roles/threads (docs/features/roles.md)).
 class ChatInfoPanel extends ConsumerStatefulWidget {
@@ -133,10 +135,10 @@ class _SharedMediaTab extends ConsumerWidget {
     final async = ref.watch(sharedMediaListProvider((chatId, kind)));
 
     return async.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const VoiceListSkeleton(rowCount: 4),
       error: (error, _) => VoiceStatePanel(
         title: l10n.chatSharedMediaLoadError,
-        message: '$error',
+        message: sharedMediaErrorMessage(l10n, error),
         icon: Icons.cloud_off_outlined,
         actionLabel: l10n.commonRetry,
         onAction: () =>
