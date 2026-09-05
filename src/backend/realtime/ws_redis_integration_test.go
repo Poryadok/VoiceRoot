@@ -15,6 +15,9 @@ import (
 )
 
 func TestWSTypingCrossInstancesViaRedis(t *testing.T) {
+	oldIdle := typingIdleTimeout
+	typingIdleTimeout = 150 * time.Millisecond
+	t.Cleanup(func() { typingIdleTimeout = oldIdle })
 	s := miniredis.RunT(t)
 	t.Cleanup(s.Close)
 	addr := s.Addr()
@@ -23,8 +26,8 @@ func TestWSTypingCrossInstancesViaRedis(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	hub1 := newWSHub()
-	hub2 := newWSHub()
+	hub1 := permitAllTestSubscriptions(newWSHub())
+	hub2 := permitAllTestSubscriptions(newWSHub())
 	rsub1 := redis.NewClient(&redis.Options{Addr: addr})
 	rsub2 := redis.NewClient(&redis.Options{Addr: addr})
 	rchk := redis.NewClient(&redis.Options{Addr: addr})
@@ -65,6 +68,7 @@ func TestWSTypingCrossInstancesViaRedis(t *testing.T) {
 	t.Cleanup(srv2.Close)
 
 	chatID := "33333333-3333-3333-3333-333333333333"
+	uppercaseChatID := strings.ToUpper(chatID)
 
 	dial := func(srv *httptest.Server, token, profile string) *websocket.Conn {
 		t.Helper()
@@ -148,8 +152,28 @@ func TestWSTypingCrossInstancesViaRedis(t *testing.T) {
 	if err := json.Unmarshal(typing.D, &td); err != nil {
 		t.Fatalf("typing d: %v", err)
 	}
-	if td.ChatID != chatID || td.ProfileID != "p1" || td.Kind != "start" {
+	if canonicalChatID(td.ChatID) != chatID || td.ProfileID != "p1" || td.Kind != "start" {
 		t.Fatalf("typing body = %+v", td)
+	}
+
+	if err := c1.WriteJSON(map[string]any{"op": "typing_start", "d": map[string]any{"chat_id": uppercaseChatID}}); err != nil {
+		t.Fatalf("uppercase typing_start: %v", err)
+	}
+	// The case variant must share the local throttle/timer key before the
+	// resulting event traverses Redis to the other Realtime instance.
+	stop := readOp(c2)
+	if stop.Op != "typing" {
+		t.Fatalf("c2 expected only idle typing stop, got %+v", stop)
+	}
+	if err := json.Unmarshal(stop.D, &td); err != nil {
+		t.Fatalf("idle typing d: %v", err)
+	}
+	if canonicalChatID(td.ChatID) != chatID || td.ProfileID != "p1" || td.Kind != "stop" {
+		t.Fatalf("idle typing body = %+v", td)
+	}
+	_ = c2.SetReadDeadline(time.Now().Add(typingIdleTimeout + 150*time.Millisecond))
+	if _, _, err := c2.ReadMessage(); err == nil {
+		t.Fatal("cross-instance peer received more than one idle stop")
 	}
 }
 
@@ -162,8 +186,8 @@ func TestWSMarkReadCrossInstancesViaRedis(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	hub1 := newWSHub()
-	hub2 := newWSHub()
+	hub1 := permitAllTestSubscriptions(newWSHub())
+	hub2 := permitAllTestSubscriptions(newWSHub())
 	rsub1 := redis.NewClient(&redis.Options{Addr: addr})
 	rsub2 := redis.NewClient(&redis.Options{Addr: addr})
 	t.Cleanup(func() {
@@ -283,8 +307,8 @@ func TestWSProfilePresenceCrossInstancesViaRedis(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	hub1 := newWSHub()
-	hub2 := newWSHub()
+	hub1 := permitAllTestSubscriptions(newWSHub())
+	hub2 := permitAllTestSubscriptions(newWSHub())
 	rsub1 := redis.NewClient(&redis.Options{Addr: addr})
 	rsub2 := redis.NewClient(&redis.Options{Addr: addr})
 	t.Cleanup(func() {
