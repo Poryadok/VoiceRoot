@@ -379,6 +379,11 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 					continue
 				}
 				cid := strings.TrimSpace(p.ChatID)
+				// Keep the client-provided spelling on the wire, but use the same
+				// normalized UUID key as the hub for per-chat local typing state.
+				// Otherwise case-equivalent RFC4122 values can bypass the throttle
+				// and create independent idle timers.
+				typingKey := canonicalChatID(cid)
 				if !hub.hasChat(reg, cid) {
 					errD, _ := json.Marshal(map[string]any{
 						"code":    "invalid_typing",
@@ -408,30 +413,30 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 					}
 				}
 				mu.Lock()
-				timer := typingTimers[cid]
+				timer := typingTimers[typingKey]
 				if timer != nil {
 					timer.Stop()
-					delete(typingTimers, cid)
+					delete(typingTimers, typingKey)
 				}
 				mu.Unlock()
 				if kind == "stop" {
 					mu.Lock()
-					delete(lastTypingStart, cid)
+					delete(lastTypingStart, typingKey)
 					mu.Unlock()
 					broadcastTyping("stop")
 					continue
 				}
 				now := time.Now()
 				mu.Lock()
-				last, ok := lastTypingStart[cid]
+				last, ok := lastTypingStart[typingKey]
 				shouldBroadcast := !ok || now.Sub(last) >= typingThrottle
 				if shouldBroadcast {
-					lastTypingStart[cid] = now
+					lastTypingStart[typingKey] = now
 				}
-				typingTimers[cid] = time.AfterFunc(typingIdleTimeout, func() {
+				typingTimers[typingKey] = time.AfterFunc(typingIdleTimeout, func() {
 					mu.Lock()
-					delete(lastTypingStart, cid)
-					delete(typingTimers, cid)
+					delete(lastTypingStart, typingKey)
+					delete(typingTimers, typingKey)
 					mu.Unlock()
 					broadcastTyping("stop")
 				})
