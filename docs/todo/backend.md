@@ -485,7 +485,6 @@
 - [ ] **[Matchmaking] Popular-games ordering missing** — `ListGames` sorts by `created_at DESC` (`store/games.go`). Spec wants popularity by active queue depth (`docs/features/game-catalog.md`).
 - [ ] **[Matchmaking] Matcher scans ≤100 games** — `Worker.RunOnce` lists `PageSize: 100` active games once (`matcher/worker.go`). Additional catalog pages never polled.
 - [ ] **[Matchmaking] `CreateGame` lacks `icon_url` / `external_id`** — Columns exist (`migrations/matchmaking_db/000001_init.up.sql`, `store/games.go`) but `CreateGame` only persists name+config (`grpcsvc/server.go`).
-- [ ] **[Matchmaking] `mm.search_cancelled` ad-hoc JSON** — Not proto like other MM events (`mmevents/publisher.go` comment). Contract inconsistency for Notification subscribers.
 - [ ] **[Matchmaking] Party / voice-derived MM absent** — `PartyStore` is a stub (`store/parties.go`); `StartSearch` always validates `partySize=1` (`grpcsvc/search.go`, `criteria/criteria.go`). Voice join/leave reset flow from spec not implementable yet.
 - [ ] **[Matchmaking] Test gaps for prod-scale modes** — No matcher test for seeded 10-slot games or role-diversity matching (`matcher/worker_test.go` uses custom 2-slot Duo only).
 
