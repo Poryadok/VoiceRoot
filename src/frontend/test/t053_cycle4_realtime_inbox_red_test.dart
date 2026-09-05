@@ -269,6 +269,14 @@ void main() {
         final frames = <RealtimeFrame>[];
         final frameSubscription = harness.hub.events.listen(frames.add);
         addTearDown(frameSubscription.cancel);
+        final providerFrames = <RealtimeFrame>[];
+        final providerSubscription = harness.container
+            .listen<AsyncValue<RealtimeFrame>>(
+              realtimeEventProvider,
+              (_, next) => next.whenData(providerFrames.add),
+              fireImmediately: true,
+            );
+        addTearDown(providerSubscription.close);
 
         await harness.connectAWithoutHello();
         final a1 = harness.connection('profile-a');
@@ -309,6 +317,11 @@ void main() {
         expect(harness.chats.calls.skip(1), hasLength(3));
         expect(harness.messages.getCalls, isEmpty);
         final framesBeforeA1Release = frames.length;
+        final providerFramesBeforeA1Release = providerFrames.length;
+        final a2HelloBinding = harness.container.read(
+          realtimeHelloBindingProvider,
+        );
+        expect(a2HelloBinding, isNotNull);
 
         a1.releaseFirstDispose();
         await firstReconnect;
@@ -324,6 +337,20 @@ void main() {
           reason:
               'A2 must remain the active event source after the retired A1 '
               'dispose completes',
+        );
+        expect(
+          providerFrames,
+          hasLength(providerFramesBeforeA1Release + 1),
+          reason:
+              'the provider-facing realtime event stream must remain bound to '
+              'accepted A2 after retired A1 completes',
+        );
+        expect(
+          harness.container.read(realtimeHelloBindingProvider),
+          same(a2HelloBinding),
+          reason:
+              'a delayed retired teardown must not clear or replace A2 hello '
+              'proof published to providers',
         );
         expect(
           harness.chats.calls.skip(1),
