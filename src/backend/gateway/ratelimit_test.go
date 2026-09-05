@@ -330,6 +330,33 @@ func TestGateway_botAPIRateLimit_returns429WithRetryAfter(t *testing.T) {
 	}
 }
 
+func TestGateway_botRuntimePatchRateLimit_returns429WithRetryAfter(t *testing.T) {
+	t.Parallel()
+	limiter := newSlidingWindowLimiter(map[string]rateLimitRule{
+		"BotAPI": {Limit: 1, Window: time.Minute},
+	})
+	tc := newTranscoder(&grpcClients{bot: &fakeBotClient{}})
+	h := newGatewayForContract(t, gatewayTestOptions{
+		rateLimiter: limiter,
+		transcoder:  tc,
+	})
+	headers := map[string]string{"Authorization": "Bot vb_patch_ratelimit_test"}
+	target := "/api/v1/bots/me/messages/msg-42"
+	body := `{"content":"edited"}`
+
+	first := performRequest(h, http.MethodPatch, target, body, headers)
+	if first.Code != http.StatusOK {
+		t.Fatalf("first PATCH status=%d body=%q, want 200", first.Code, first.Body.String())
+	}
+	second := performRequest(h, http.MethodPatch, target, body, headers)
+	if second.Code != http.StatusTooManyRequests {
+		t.Fatalf("second PATCH status=%d body=%q, want 429", second.Code, second.Body.String())
+	}
+	if got := second.Header().Get("Retry-After"); got == "" {
+		t.Fatal("missing Retry-After header on bot PATCH 429")
+	}
+}
+
 func TestRateLimitKey_botRoute_usesBotToken(t *testing.T) {
 	t.Parallel()
 	g := &gateway{config: gatewayConfig{trustedProxyCIDRs: nil}}
@@ -356,6 +383,34 @@ func TestRateLimitGroup_botRoleOps(t *testing.T) {
 			t.Parallel()
 			if got := rateLimitGroup(tc.method, tc.path); got != "BotRoleOps" {
 				t.Fatalf("group=%q, want BotRoleOps for %s %s (BOT-C)", got, tc.method, tc.path)
+			}
+		})
+	}
+}
+
+func TestRateLimitGroup_botRuntimePatchAndUnrelatedRoutes(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name   string
+		method string
+		path   string
+		want   string
+	}{
+		{name: "documented edit message", method: http.MethodPatch, path: "/api/v1/bots/me/messages/msg-42", want: "BotAPI"},
+		{name: "bot management patch remains unclassified", method: http.MethodPatch, path: "/api/v1/bots/bot-1", want: ""},
+		{name: "undocumented bot runtime patch remains unclassified", method: http.MethodPatch, path: "/api/v1/bots/me/presence", want: ""},
+		{name: "malformed edit message path remains unclassified", method: http.MethodPatch, path: "/api/v1/bots/me/messages/", want: ""},
+		{name: "bot runtime delete remains unclassified", method: http.MethodDelete, path: "/api/v1/bots/me/messages/msg-42", want: ""},
+		{name: "role assign remains narrower", method: http.MethodPost, path: "/api/v1/bots/me/spaces/space-1/roles/assign", want: "BotRoleOps"},
+		{name: "role revoke remains narrower", method: http.MethodPost, path: "/api/v1/bots/me/spaces/space-1/roles/revoke", want: "BotRoleOps"},
+		{name: "role create remains narrower", method: http.MethodPost, path: "/api/v1/bots/me/roles", want: "BotRoleOps"},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := rateLimitGroup(tc.method, tc.path); got != tc.want {
+				t.Fatalf("group=%q, want %q for %s %s", got, tc.want, tc.method, tc.path)
 			}
 		})
 	}
