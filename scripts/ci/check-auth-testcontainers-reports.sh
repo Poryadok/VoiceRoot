@@ -10,6 +10,8 @@ if [[ -z "${reports_dir}" || ! -d "${reports_dir}" ]]; then
 fi
 
 required_suites=(
+  "voice.backend.auth.AccountDeletionEpochFloorJdbcIntegrationTest"
+  "voice.backend.auth.AccountDeletionOperationRepositoryJdbcIntegrationTest"
   "voice.backend.auth.AuthJdbcRedisIntegrationTest"
   "voice.backend.auth.E2EKeyBackupJdbcIntegrationTest"
   "voice.backend.auth.GuestAccountSweeperJdbcIntegrationTest"
@@ -19,6 +21,7 @@ required_suites=(
   "voice.backend.auth.GuestConversionOtpAcceptanceJdbcIntegrationTest"
   "voice.backend.auth.ProfilesVerificationIntegrationTest"
   "voice.backend.auth.SetAccountStatusIntegrationTest"
+  "voice.backend.auth.service.RedisAccountRestoreTokenStoreIntegrationTest"
   "voice.backend.auth.sessionepoch.RedisSessionEpochFloorStoreIntegrationTest"
 )
 
