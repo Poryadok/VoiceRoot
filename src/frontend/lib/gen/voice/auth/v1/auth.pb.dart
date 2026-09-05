@@ -676,9 +676,11 @@ class ConvertGuestRequest extends $pb.GeneratedMessage {
 class DeleteAccountRequest extends $pb.GeneratedMessage {
   factory DeleteAccountRequest({
     $core.String? password,
+    $core.String? totpCode,
   }) {
     final result = create();
     if (password != null) result.password = password;
+    if (totpCode != null) result.totpCode = totpCode;
     return result;
   }
 
@@ -696,6 +698,7 @@ class DeleteAccountRequest extends $pb.GeneratedMessage {
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'password')
+    ..aOS(2, _omitFieldNames ? '' : 'totpCode')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -725,6 +728,15 @@ class DeleteAccountRequest extends $pb.GeneratedMessage {
   $core.bool hasPassword() => $_has(0);
   @$pb.TagNumber(1)
   void clearPassword() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get totpCode => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set totpCode($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasTotpCode() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearTotpCode() => $_clearField(2);
 }
 
 class RestoreAccountRequest extends $pb.GeneratedMessage {

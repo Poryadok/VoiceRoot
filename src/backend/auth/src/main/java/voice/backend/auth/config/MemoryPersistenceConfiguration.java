@@ -29,6 +29,7 @@ import voice.backend.auth.service.InMemoryGuestConversionLocalPromotion;
 import voice.backend.auth.service.InMemoryGuestConversionOtpAcceptance;
 import voice.backend.auth.service.AccountDeletionOperationStarter;
 import voice.backend.auth.service.InMemoryAccountDeletionOperationStarter;
+import voice.backend.auth.sessionepoch.SessionEpochFloorStore;
 
 @Configuration
 @ConditionalOnProperty(prefix = "auth", name = "persistence", havingValue = "memory")
@@ -45,8 +46,10 @@ public class MemoryPersistenceConfiguration {
 
   @Bean
   AccountDeletionOperationStarter accountDeletionOperationStarter(
-      InMemoryAccountRepository accounts, AccountDeletionOperationRepository operations) {
-    return new InMemoryAccountDeletionOperationStarter(accounts, operations);
+      InMemoryAccountRepository accounts,
+      AccountDeletionOperationRepository operations,
+      SessionEpochFloorStore floors) {
+    return new InMemoryAccountDeletionOperationStarter(accounts, operations, floors);
   }
 
   @Bean

@@ -135,7 +135,7 @@ public class AuthRestController {
   public ResponseEntity<Void> deleteAccount(
       @RequestHeader(name = "Authorization", required = false) String authorization,
       @Valid @RequestBody DeleteAccountRequest request) {
-    authService.deleteAccount(authorization, request.password());
+    authService.deleteAccount(authorization, request.password(), request.totpCode());
     return ResponseEntity.noContent().build();
   }
 
@@ -345,7 +345,8 @@ public class AuthRestController {
       @NotBlank String code,
       @JsonProperty("new_password") @NotBlank String newPassword) {}
 
-  public record DeleteAccountRequest(@NotBlank String password) {}
+  public record DeleteAccountRequest(
+      @NotBlank String password, @JsonProperty("totp_code") String totpCode) {}
 
   public record RestoreAccountRequest(@NotBlank String token) {}
 

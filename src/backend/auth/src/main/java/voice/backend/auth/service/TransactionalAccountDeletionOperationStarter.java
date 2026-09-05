@@ -7,20 +7,24 @@ import voice.backend.auth.repository.Account;
 import voice.backend.auth.repository.AccountDeletionOperation;
 import voice.backend.auth.repository.AccountDeletionOperationRepository;
 import voice.backend.auth.repository.AccountRepository;
+import voice.backend.auth.sessionepoch.SessionEpochFloorStore;
 
 /** Couples active→deleted+epoch and the outbox insert in one Auth database transaction. */
 public final class TransactionalAccountDeletionOperationStarter implements AccountDeletionOperationStarter {
   private final TransactionTemplate transactions;
   private final AccountRepository accounts;
   private final AccountDeletionOperationRepository operations;
+  private final SessionEpochFloorStore floors;
 
   public TransactionalAccountDeletionOperationStarter(
       TransactionTemplate transactions,
       AccountRepository accounts,
-      AccountDeletionOperationRepository operations) {
+      AccountDeletionOperationRepository operations,
+      SessionEpochFloorStore floors) {
     this.transactions = transactions;
     this.accounts = accounts;
     this.operations = operations;
+    this.floors = floors;
   }
 
   @Override
@@ -35,7 +39,22 @@ public final class TransactionalAccountDeletionOperationStarter implements Accou
                     accounts.findById(account.id().toString()).orElseThrow();
                 AccountDeletionOperation operation =
                     operations.createOrResume(proposedOperationId, account.id(), epoch, tokenHash, now);
-                return new AccountDeletionStartResult(deleted, operation);
+                long floor = floors.recordAtLeast(account.id(), epoch);
+                if (floor < epoch) {
+                  throw new IllegalStateException("session epoch floor did not reach durable epoch");
+                }
+                AccountDeletionOperation leased =
+                    operations
+                        .lease(
+                            operation.operationId(),
+                            voice.backend.auth.repository.AccountDeletionState.PENDING_FLOOR,
+                            now,
+                            now.plusSeconds(30))
+                        .orElseThrow(() -> new IllegalStateException("deletion operation lease missing"));
+                operations.markFloorRecorded(operation.operationId(), leased.lockedUntil(), now);
+                AccountDeletionOperation advanced =
+                    operations.findByAccountAndEpoch(account.id(), epoch).orElseThrow();
+                return new AccountDeletionStartResult(deleted, advanced);
               } catch (IllegalArgumentException raced) {
                 Account deleted =
                     accounts.findById(account.id().toString()).orElseThrow(() -> raced);

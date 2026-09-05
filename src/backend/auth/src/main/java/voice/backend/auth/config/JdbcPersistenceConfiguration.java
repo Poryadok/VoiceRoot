@@ -34,6 +34,7 @@ import voice.backend.auth.service.TransactionalGuestConversionLocalPromotion;
 import voice.backend.auth.service.TransactionalGuestConversionOtpAcceptance;
 import voice.backend.auth.service.AccountDeletionOperationStarter;
 import voice.backend.auth.service.TransactionalAccountDeletionOperationStarter;
+import voice.backend.auth.sessionepoch.SessionEpochFloorStore;
 import voice.backend.auth.userdb.PrimaryProfileProvisioner;
 
 @Configuration
@@ -87,9 +88,10 @@ public class JdbcPersistenceConfiguration {
   AccountDeletionOperationStarter accountDeletionOperationStarter(
       TransactionTemplate guestConversionTransactionTemplate,
       AccountRepository accounts,
-      AccountDeletionOperationRepository operations) {
+      AccountDeletionOperationRepository operations,
+      SessionEpochFloorStore floors) {
     return new TransactionalAccountDeletionOperationStarter(
-        guestConversionTransactionTemplate, accounts, operations);
+        guestConversionTransactionTemplate, accounts, operations, floors);
   }
 
   @Bean

@@ -241,12 +241,13 @@ public class InMemoryAccountRepository implements AccountRepository {
   }
 
   @Override
-  public synchronized void restoreDeleted(UUID accountId) {
+  public synchronized boolean restoreDeleted(UUID accountId) {
     Account existing = byId.get(accountId);
-    if (existing == null) {
-      return;
+    if (existing == null || !"deleted".equals(existing.status()) || existing.deletedAt() == null) {
+      return false;
     }
     byId.put(accountId, copy(existing, "active", existing.totpSecret(), existing.totpEnabled(), null));
+    return true;
   }
 
   @Override

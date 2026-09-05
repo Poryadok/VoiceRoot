@@ -147,7 +147,7 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
   @Override
   public void deleteAccount(DeleteAccountRequest request, StreamObserver<DeleteAccountResponse> responseObserver) {
     run(responseObserver, () -> {
-      authService.deleteAccount(lastAccessToken(), request.getPassword());
+      authService.deleteAccount(lastAccessToken(), request.getPassword(), request.getTotpCode());
       return DeleteAccountResponse.getDefaultInstance();
     });
   }

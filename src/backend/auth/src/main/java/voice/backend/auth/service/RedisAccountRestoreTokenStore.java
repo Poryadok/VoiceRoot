@@ -22,11 +22,10 @@ public class RedisAccountRestoreTokenStore implements AccountRestoreTokenStore {
   @Override
   public Optional<UUID> consume(String token) {
     String key = PREFIX + AccountRestoreTokenHash.of(token);
-    String accountId = redis.opsForValue().get(key);
+    String accountId = redis.opsForValue().getAndDelete(key);
     if (accountId == null) {
       return Optional.empty();
     }
-    redis.delete(key);
     return Optional.of(UUID.fromString(accountId));
   }
 }

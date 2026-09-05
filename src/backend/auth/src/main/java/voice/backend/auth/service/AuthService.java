@@ -404,16 +404,36 @@ public class AuthService {
   }
 
   public DeleteAccountResult deleteAccount(String accessToken, String password) {
+    return deleteAccount(accessToken, password, null);
+  }
+
+  public DeleteAccountResult deleteAccount(String accessToken, String password, String totpCode) {
     TokenClaims claims = validateForAccountDeletion(accessToken);
     Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
     if (!passwordHasher.matches(password, account.passwordHash())) {
       throw new AuthException("invalid_credentials");
     }
+    verifyDeletionSecondFactor(account, totpCode);
     if ("deleted".equals(account.status())) {
       return finishAccountDeletion(claims, account, operationForDeletedAccount(account));
     }
     ensureActive(account);
     return finishAccountDeletion(claims, startOperation(account));
+  }
+
+  private void verifyDeletionSecondFactor(Account account, String totpCode) {
+    if (!account.totpEnabled()) {
+      return;
+    }
+    if (totpCode == null || totpCode.isBlank()) {
+      throw new AuthException("totp_required");
+    }
+    String code = totpCode.trim();
+    boolean validTotp =
+        account.totpSecret() != null && totpService.verifyEncrypted(account.totpSecret(), code);
+    if (!validTotp && !backupCodeService.consume(account.id(), code)) {
+      throw new AuthException("invalid_totp");
+    }
   }
 
   private boolean hasSealedDeletionEpoch(Account account) {
@@ -514,7 +534,9 @@ public class AuthService {
     if (account.deletedAt().plus(ACCOUNT_RESTORE_GRACE).isBefore(Instant.now(clock))) {
       throw new AuthException("account_inactive");
     }
-    accounts.restoreDeleted(account.id());
+    if (!accounts.restoreDeleted(account.id())) {
+      throw new AuthException("validation_failed");
+    }
     Account restored = accounts.findById(account.id().toString()).orElse(account);
     authEventPublisher.publishAccountRestored(restored.id());
     return issueSession(restored, "{}");

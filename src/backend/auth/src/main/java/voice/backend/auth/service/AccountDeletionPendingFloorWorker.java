@@ -6,6 +6,7 @@ import java.time.Instant;
 import voice.backend.auth.repository.AccountDeletionOperation;
 import voice.backend.auth.repository.AccountDeletionOperationRepository;
 import voice.backend.auth.repository.AccountDeletionState;
+import voice.backend.auth.sessionepoch.SessionEpochFloorMissingException;
 import voice.backend.auth.sessionepoch.SessionEpochFloorStore;
 
 /** Recovers durable deletion epoch floors without requiring the original JWT. */
@@ -39,7 +40,10 @@ public final class AccountDeletionPendingFloorWorker {
 
   private void process(AccountDeletionOperation operation) {
     try {
-      long floor = floors.recordAtLeast(operation.accountId(), operation.sessionEpoch());
+      long floor = currentFloor(operation);
+      if (floor < operation.sessionEpoch()) {
+        floor = floors.recordAtLeast(operation.accountId(), operation.sessionEpoch());
+      }
       if (floor < operation.sessionEpoch()) {
         throw new IllegalStateException("session epoch floor did not reach durable epoch");
       }
@@ -48,6 +52,14 @@ public final class AccountDeletionPendingFloorWorker {
       Instant failedAt = Instant.now(clock);
       operations.recordFailure(
           operation.operationId(), operation.lockedUntil(), "epoch_floor", failedAt, failedAt);
+    }
+  }
+
+  private long currentFloor(AccountDeletionOperation operation) {
+    try {
+      return floors.requireFloor(operation.accountId());
+    } catch (SessionEpochFloorMissingException ignored) {
+      return 0L;
     }
   }
 }

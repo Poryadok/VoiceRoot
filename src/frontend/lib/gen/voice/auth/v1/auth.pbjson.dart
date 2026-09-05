@@ -208,13 +208,25 @@ const DeleteAccountRequest$json = {
   '1': 'DeleteAccountRequest',
   '2': [
     {'1': 'password', '3': 1, '4': 1, '5': 9, '10': 'password'},
+    {
+      '1': 'totp_code',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'totpCode',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_totp_code'},
   ],
 };
 
 /// Descriptor for `DeleteAccountRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List deleteAccountRequestDescriptor =
-    $convert.base64Decode(
-        'ChREZWxldGVBY2NvdW50UmVxdWVzdBIaCghwYXNzd29yZBgBIAEoCVIIcGFzc3dvcmQ=');
+final $typed_data.Uint8List deleteAccountRequestDescriptor = $convert.base64Decode(
+    'ChREZWxldGVBY2NvdW50UmVxdWVzdBIaCghwYXNzd29yZBgBIAEoCVIIcGFzc3dvcmQSIAoJdG'
+    '90cF9jb2RlGAIgASgJSABSCHRvdHBDb2RliAEBQgwKCl90b3RwX2NvZGU=');
 
 @$core.Deprecated('Use restoreAccountRequestDescriptor instead')
 const RestoreAccountRequest$json = {

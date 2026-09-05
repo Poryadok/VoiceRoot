@@ -270,14 +270,16 @@ public class JdbcAccountRepository implements AccountRepository {
   }
 
   @Override
-  public void restoreDeleted(UUID accountId) {
-    jdbc.update(
+  public boolean restoreDeleted(UUID accountId) {
+    return jdbc.update(
         """
         UPDATE accounts
         SET status = 'active', deleted_at = NULL, updated_at = now()
         WHERE id = :id
+          AND status = 'deleted'
+          AND deleted_at IS NOT NULL
         """,
-        new MapSqlParameterSource("id", accountId));
+        new MapSqlParameterSource("id", accountId)) == 1;
   }
 
   @Override
