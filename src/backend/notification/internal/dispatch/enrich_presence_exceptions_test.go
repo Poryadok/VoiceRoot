@@ -12,9 +12,12 @@ import (
 	"voice/backend/notification/internal/dispatch"
 )
 
-type onlinePresenceChecker struct{}
+type countingPresenceChecker struct {
+	calls int
+}
 
-func (onlinePresenceChecker) IsOnline(context.Context, uuid.UUID) (bool, error) {
+func (c *countingPresenceChecker) IsOnline(context.Context, uuid.UUID) (bool, error) {
+	c.calls++
 	return true, nil
 }
 
@@ -26,38 +29,27 @@ func (p suppressTypePolicyLoader) LoadPolicy(context.Context, uuid.UUID, string,
 	return delivery.SettingsSnapshot{SuppressTypes: []delivery.NotificationType{p.typ}}, delivery.QuietHoursSnapshot{}, nil
 }
 
-func TestEnrichDecisions_OnlineMatchFoundKeepsPushEligible(t *testing.T) {
-	recipient := uuid.New()
+func TestEnrichDecisions_PresenceExceptionsDoNotCallPresence(t *testing.T) {
+	for _, typ := range []delivery.NotificationType{delivery.TypeMatchFound, delivery.TypeVoiceMemberJoined} {
+		t.Run(string(typ), func(t *testing.T) {
+			recipient := uuid.New()
+			presence := &countingPresenceChecker{}
 
-	decisions, err := dispatch.EnrichDecisions(
-		t.Context(),
-		onlinePresenceChecker{},
-		delivery.PermissivePolicyLoader{},
-		map[string]delivery.DeliveryDecision{recipient.String(): {}},
-		uuid.Nil,
-		"",
-		delivery.TypeMatchFound,
-	)
-	require.NoError(t, err)
-	require.True(t, decisions[recipient.String()].InApp)
-	require.True(t, decisions[recipient.String()].Push, "match_found must skip online presence while evaluating push policy")
-}
-
-func TestEnrichDecisions_OnlineVoiceMemberJoinedKeepsPushEligible(t *testing.T) {
-	recipient := uuid.New()
-
-	decisions, err := dispatch.EnrichDecisions(
-		t.Context(),
-		onlinePresenceChecker{},
-		delivery.PermissivePolicyLoader{},
-		map[string]delivery.DeliveryDecision{recipient.String(): {}},
-		uuid.New(),
-		"",
-		delivery.TypeVoiceMemberJoined,
-	)
-	require.NoError(t, err)
-	require.True(t, decisions[recipient.String()].InApp)
-	require.True(t, decisions[recipient.String()].Push, "voice_member_joined must skip online presence while evaluating push policy")
+			decisions, err := dispatch.EnrichDecisions(
+				t.Context(),
+				presence,
+				delivery.PermissivePolicyLoader{},
+				map[string]delivery.DeliveryDecision{recipient.String(): {}},
+				uuid.New(),
+				"",
+				typ,
+			)
+			require.NoError(t, err)
+			require.Zero(t, presence.calls, "%s must skip the presence check", typ)
+			require.True(t, decisions[recipient.String()].InApp)
+			require.True(t, decisions[recipient.String()].Push, "%s must evaluate push policy without presence", typ)
+		})
+	}
 }
 
 func TestEnrichDecisions_PresenceExceptionsStillApplySuppressTypes(t *testing.T) {

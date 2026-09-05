@@ -195,6 +195,26 @@ func TestMessagePusher_EnrichDecision_OfflineGetsPush(t *testing.T) {
 	require.True(t, decision.Push)
 }
 
+func TestMessagePusher_EnrichDecision_PresenceExceptionsDoNotCallPresence(t *testing.T) {
+	for _, typ := range []delivery.NotificationType{delivery.TypeMatchFound, delivery.TypeVoiceMemberJoined} {
+		t.Run(string(typ), func(t *testing.T) {
+			profileID := uuid.New()
+			presence := &countingPresenceChecker{}
+			decision, err := (&dispatch.MessagePusher{Presence: presence}).EnrichDecision(
+				context.Background(),
+				profileID.String(),
+				uuid.New(),
+				"chat-1",
+				typ,
+			)
+			require.NoError(t, err)
+			require.Zero(t, presence.calls, "%s must skip the presence check", typ)
+			require.True(t, decision.InApp)
+			require.True(t, decision.Push)
+		})
+	}
+}
+
 type mutedPolicy struct{}
 
 func (mutedPolicy) LoadPolicy(context.Context, uuid.UUID, string, delivery.NotificationType, time.Time) (delivery.SettingsSnapshot, delivery.QuietHoursSnapshot, error) {
