@@ -13,8 +13,10 @@ import (
 	"fmt"
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -27,10 +29,14 @@ type deletedAccountProfileListerForTest struct {
 	calls      []string
 	profileIDs []uuid.UUID
 	err        error
+	callSignal chan struct{}
 }
 
 func (f *deletedAccountProfileListerForTest) ListProfileIDsForAccount(_ context.Context, accountID string) ([]uuid.UUID, error) {
 	f.calls = append(f.calls, accountID)
+	if f.callSignal != nil {
+		f.callSignal <- struct{}{}
+	}
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -58,8 +64,10 @@ type dmPeerDeletedPublishCallForTest struct {
 }
 
 type dmPeerDeletedPublisherForTest struct {
-	calls  []dmPeerDeletedPublishCallForTest
-	failAt int
+	calls      []dmPeerDeletedPublishCallForTest
+	failAt     int
+	callSignal chan struct{}
+	block      chan struct{}
 }
 
 func (f *dmPeerDeletedPublisherForTest) PublishDMPeerDeleted(_ context.Context, eventID string, chatID, recipientProfileID uuid.UUID) error {
@@ -67,6 +75,12 @@ func (f *dmPeerDeletedPublisherForTest) PublishDMPeerDeleted(_ context.Context, 
 		EventID: eventID, ChatID: chatID, RecipientProfileID: recipientProfileID,
 	}
 	f.calls = append(f.calls, call)
+	if f.callSignal != nil {
+		f.callSignal <- struct{}{}
+	}
+	if f.block != nil {
+		<-f.block
+	}
 	if f.failAt > 0 && len(f.calls) == f.failAt {
 		return errors.New("publisher unavailable")
 	}
@@ -108,8 +122,10 @@ func accountDeletedMessageForTest(t *testing.T, eventID, accountID string) *nats
 func TestAccountDeletedConsumer_ResolvesAllProfilesAndPublishesOnlySurvivors(t *testing.T) {
 	accountID := uuid.NewString()
 	deletedA, deletedB := uuid.New(), uuid.New()
-	chatA, chatB := uuid.New(), uuid.New()
-	survivorA, survivorB := uuid.New(), uuid.New()
+	chatA := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	chatB := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	survivorA := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+	survivorB := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
 	profiles := &deletedAccountProfileListerForTest{profileIDs: []uuid.UUID{deletedA, deletedB}}
 	targets := &deletedDMTargetStoreForTest{targets: []store.DMPeerDeletionTarget{
 		{ChatID: chatA, SurvivingProfileID: survivorA},
@@ -123,6 +139,12 @@ func TestAccountDeletedConsumer_ResolvesAllProfilesAndPublishesOnlySurvivors(t *
 	require.Equal(t, []string{accountID}, profiles.calls)
 	require.Equal(t, [][]uuid.UUID{{deletedA, deletedB}}, targets.calls)
 	require.Len(t, publisher.calls, 2)
+	require.Equal(t, []dmPeerDeletedPublishCallForTest{
+		{EventID: publisher.calls[0].EventID, ChatID: chatA, RecipientProfileID: survivorA},
+		{EventID: publisher.calls[1].EventID, ChatID: chatB, RecipientProfileID: survivorB},
+	}, publisher.calls, "fanout must preserve canonical target order")
+	require.NotEqual(t, publisher.calls[0].EventID, publisher.calls[1].EventID,
+		"each target needs a distinct durable event identity")
 	for _, call := range publisher.calls {
 		require.NotEmpty(t, call.EventID)
 		require.NotContains(t, []uuid.UUID{deletedA, deletedB}, call.RecipientProfileID)
@@ -144,6 +166,167 @@ func TestAccountDeletedConsumer_RedeliveryReusesStableTargetIdentity(t *testing.
 	require.Len(t, publisher.calls, 2)
 	require.Equal(t, publisher.calls[0].EventID, publisher.calls[1].EventID,
 		"target event identity/Nats-Msg-Id must be stable across source redelivery")
+	require.Equal(t, publisher.calls[0].ChatID, publisher.calls[1].ChatID)
+	require.Equal(t, publisher.calls[0].RecipientProfileID, publisher.calls[1].RecipientProfileID)
+}
+
+func startAccountDeletedJSTestServer(t *testing.T) *server.Server {
+	t.Helper()
+	ns, err := server.NewServer(&server.Options{
+		Host: "127.0.0.1", Port: -1, NoLog: true, NoSigs: true,
+		JetStream: true, StoreDir: t.TempDir(),
+	})
+	require.NoError(t, err)
+	go ns.Start()
+	require.True(t, ns.ReadyForConnections(5*time.Second))
+	t.Cleanup(ns.Shutdown)
+	return ns
+}
+
+func waitForAckFloorForTest(t *testing.T, sub *nats.Subscription) {
+	t.Helper()
+	deadline := time.NewTimer(3 * time.Second)
+	ticker := time.NewTicker(10 * time.Millisecond)
+	t.Cleanup(func() { deadline.Stop() })
+	t.Cleanup(ticker.Stop)
+	for {
+		info, err := sub.ConsumerInfo()
+		if err == nil && info.NumAckPending == 0 {
+			return
+		}
+		select {
+		case <-deadline.C:
+			require.FailNow(t, "JetStream message was not Acked after all publishes completed", err)
+		case <-ticker.C:
+		}
+	}
+}
+
+func subscribeAccountDeletedManualAckForTest(
+	t *testing.T,
+	js nats.JetStreamContext,
+	profiles *deletedAccountProfileListerForTest,
+	targets *deletedDMTargetStoreForTest,
+	publisher *dmPeerDeletedPublisherForTest,
+	instanceID string,
+) *nats.Subscription {
+	t.Helper()
+	// The RED seam requires an explicit ManualAck adapter.  Its callback must
+	// Ack only after handleUserAccountDeleted returns nil and Nak every error.
+	sub, err := subscribeAccountDeletedConsumer(js, profiles, targets, publisher, instanceID, slog.Default())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sub.Unsubscribe() })
+	return sub
+}
+
+func TestAccountDeletedConsumer_JetStreamManualAckAfterAllPublishes(t *testing.T) {
+	server := startAccountDeletedJSTestServer(t)
+	nc, err := nats.Connect(server.ClientURL())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = nc.Drain() })
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+	_, err = js.AddStream(&nats.StreamConfig{Name: "user_events", Subjects: []string{"user.account_deleted"}, Storage: nats.MemoryStorage})
+	require.NoError(t, err)
+
+	entered := make(chan struct{}, 2)
+	release := make(chan struct{})
+	profiles := &deletedAccountProfileListerForTest{profileIDs: []uuid.UUID{uuid.New()}}
+	targets := &deletedDMTargetStoreForTest{targets: []store.DMPeerDeletionTarget{
+		{ChatID: uuid.New(), SurvivingProfileID: uuid.New()},
+		{ChatID: uuid.New(), SurvivingProfileID: uuid.New()},
+	}}
+	publisher := &dmPeerDeletedPublisherForTest{callSignal: entered, block: release}
+	sub := subscribeAccountDeletedManualAckForTest(t, js, profiles, targets, publisher, "manual-ack-success")
+
+	_, err = js.Publish("user.account_deleted", accountDeletedMessageForTest(t, "source-manual-ack", uuid.NewString()).Data)
+	require.NoError(t, err)
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("consumer did not begin first publish")
+	}
+	info, err := sub.ConsumerInfo()
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), info.NumAckPending, "message must remain pending while a publish is blocked")
+	close(release)
+	for range targets.targets[1:] {
+		select {
+		case <-entered:
+		case <-time.After(3 * time.Second):
+			t.Fatal("consumer did not complete every target publish")
+		}
+	}
+	waitForAckFloorForTest(t, sub)
+}
+
+func TestAccountDeletedConsumer_JetStreamManualAckZeroTargets(t *testing.T) {
+	server := startAccountDeletedJSTestServer(t)
+	nc, err := nats.Connect(server.ClientURL())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = nc.Drain() })
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+	_, err = js.AddStream(&nats.StreamConfig{Name: "user_events", Subjects: []string{"user.account_deleted"}, Storage: nats.MemoryStorage})
+	require.NoError(t, err)
+	profiles := &deletedAccountProfileListerForTest{profileIDs: []uuid.UUID{uuid.New()}, callSignal: make(chan struct{}, 1)}
+	targets := &deletedDMTargetStoreForTest{}
+	publisher := &dmPeerDeletedPublisherForTest{}
+	sub := subscribeAccountDeletedManualAckForTest(t, js, profiles, targets, publisher, "manual-ack-empty")
+	_, err = js.Publish("user.account_deleted", accountDeletedMessageForTest(t, "source-manual-empty", uuid.NewString()).Data)
+	require.NoError(t, err)
+	select {
+	case <-profiles.callSignal:
+	case <-time.After(3 * time.Second):
+		t.Fatal("zero-target event was not handled")
+	}
+	waitForAckFloorForTest(t, sub)
+	require.Empty(t, publisher.calls)
+}
+
+func TestAccountDeletedConsumer_JetStreamNakOnLookupOrPublishFailure(t *testing.T) {
+	server := startAccountDeletedJSTestServer(t)
+	nc, err := nats.Connect(server.ClientURL())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = nc.Drain() })
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+	_, err = js.AddStream(&nats.StreamConfig{Name: "user_events", Subjects: []string{"user.account_deleted"}, Storage: nats.MemoryStorage})
+	require.NoError(t, err)
+
+	t.Run("lookup failure", func(t *testing.T) {
+		profiles := &deletedAccountProfileListerForTest{err: errors.New("user unavailable"), callSignal: make(chan struct{}, 1)}
+		targets := &deletedDMTargetStoreForTest{}
+		publisher := &dmPeerDeletedPublisherForTest{}
+		sub := subscribeAccountDeletedManualAckForTest(t, js, profiles, targets, publisher, "manual-nak-lookup")
+		_, err = js.Publish("user.account_deleted", accountDeletedMessageForTest(t, "source-manual-lookup-failure", uuid.NewString()).Data)
+		require.NoError(t, err)
+		select {
+		case <-profiles.callSignal:
+		case <-time.After(3 * time.Second):
+			t.Fatal("lookup failure was not delivered")
+		}
+		info, err := sub.ConsumerInfo()
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, info.NumAckPending, uint64(1), "lookup failure must not Ack")
+	})
+
+	t.Run("publish failure", func(t *testing.T) {
+		profiles := &deletedAccountProfileListerForTest{profileIDs: []uuid.UUID{uuid.New()}}
+		targets := &deletedDMTargetStoreForTest{targets: []store.DMPeerDeletionTarget{{ChatID: uuid.New(), SurvivingProfileID: uuid.New()}}}
+		publisher := &dmPeerDeletedPublisherForTest{failAt: 1, callSignal: make(chan struct{}, 1)}
+		sub := subscribeAccountDeletedManualAckForTest(t, js, profiles, targets, publisher, "manual-nak-publish")
+		_, err = js.Publish("user.account_deleted", accountDeletedMessageForTest(t, "source-manual-publish-failure", uuid.NewString()).Data)
+		require.NoError(t, err)
+		select {
+		case <-publisher.callSignal:
+		case <-time.After(3 * time.Second):
+			t.Fatal("publish failure was not delivered")
+		}
+		info, err := sub.ConsumerInfo()
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, info.NumAckPending, uint64(1), "publish failure must not Ack")
+	})
 }
 
 func TestAccountDeletedConsumer_ZeroTargetsDoesNotPublish(t *testing.T) {
