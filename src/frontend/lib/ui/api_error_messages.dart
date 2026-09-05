@@ -185,6 +185,13 @@ String spaceMembersErrorMessage(AppLocalizations l10n, Object error) {
   return l10n.spaceMembersLoadError;
 }
 
+String groupMembersErrorMessage(AppLocalizations l10n, Object error) {
+  if (error is BackendUnavailableException) {
+    return l10n.backendUnavailable;
+  }
+  return l10n.chatGroupMembersLoadError;
+}
+
 String spaceBotsErrorMessage(
   AppLocalizations l10n,
   Object error, {

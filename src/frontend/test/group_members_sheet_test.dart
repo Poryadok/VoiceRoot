@@ -7,9 +7,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
-import 'package:voice_frontend/backend/api_errors.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
+import 'package:voice_frontend/l10n/app_localizations_en.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
@@ -91,18 +91,13 @@ void main() {
     await tester.pumpWidget(
       testApp(
         home: const GroupMembersSheet(chatId: chatId),
-        client: MockClient((_) async => http.Response('{}', 404)),
-        extraOverrides: [
-          groupMembersProvider(chatId).overrideWith(
-            (_) async => throw const BackendUnavailableException(),
-          ),
-        ],
+        client: MockClient((_) async => http.Response('{}', 503)),
       ),
     );
     await tester.pumpAndSettle();
 
     expect(find.byType(VoiceStatePanel), findsOneWidget);
-    expect(find.text('Backend unavailable'), findsOneWidget);
+    expect(find.text(AppLocalizationsEn().backendUnavailable), findsOneWidget);
     expect(find.textContaining('BackendUnavailableException'), findsNothing);
   });
 
