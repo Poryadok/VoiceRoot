@@ -1,26 +1,28 @@
-# Exec plan — приёмка вертикального среза (Auth + primary profile)
+# Exec plan — приёмка вертикального среза (Auth ↔ User primary profile)
 
 Связано с [PLAN.md](PLAN.md) и [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Цель
 
-Воспроизводимая проверка стыка **Auth (Java, JDBC) ↔ PostgreSQL (`auth_db` + `user_db`) ↔ Redis** и выдачи **access JWT с валидными `user_id` и `profile_id`**, где **`profile_id`** — строка первичного профиля в **`user_db.profiles`** (нет окна «токен без профиля» при включённом провижининге User DB).
+Воспроизводимая проверка стыка **Auth (Java, `auth_db`, Redis) ↔ User gRPC (`user_db`)** и выдачи **access JWT с валидными `user_id` и `profile_id`**, где **`profile_id`** возвращён `UserService.EnsurePrimaryProfile`. Auth не получает credentials к `user_db`; нет окна «токен без профиля».
 
 **Скоуп по [PLAN.md](PLAN.md):** обязательное ядро — Auth + данные в `profiles`. Проверка **через API Gateway** (те же пути `/api/v1/auth/*`, прокси на Auth + `GATEWAY_JWKS_URL`) — **опциональное расширение** того же сценария, когда Gateway уже направлен на живой Auth.
 
 ## Предпосылки
 
-- PostgreSQL с БД `auth_db` и `user_db` (схема `profiles` — [migrations/user_db](../src/backend/migrations/user_db/) и [user-service.md](microservices/user-service.md)). Локально: `docker compose up -d` применяет [docker/postgres](../docker/postgres/) (создание БД + DDL `profiles` для `user_db`).
+- PostgreSQL с БД `auth_db`; для live vertical также User Service со своей БД `user_db` (схема `profiles` — [migrations/user_db](../src/backend/migrations/user_db/) и [user-service.md](microservices/user-service.md)). Локальный full-app Compose поднимает оба сервиса и передаёт Auth адрес User gRPC.
 - Redis (blacklist refresh/logout).
 - Для режима `auth.persistence=jdbc`: PKCS#8 RSA PEM — `AUTH_JWT_PRIVATE_KEY_PEM` или `AUTH_JWT_PRIVATE_KEY_LOCATION` (в CI/smoke используется тестовый ключ из репозитория, см. ниже).
 
-## Включение провижининга профиля в Auth
+## Настройка стыка Auth ↔ User
 
 В `application.yml` / env:
 
 - `auth.persistence=jdbc`
-- `auth.user-db.jdbc-url` — JDBC URL к **`user_db`** (не к `auth_db`). Если свойство пустое при `jdbc`, приложение **не стартует**.
-- `auth.user-db.username` / `auth.user-db.password` — учётные данные (по умолчанию совпадают с `spring.datasource.*`, см. `application.yml`).
+- `spring.datasource.*` / `SPRING_DATASOURCE_*` — только Auth-owned `auth_db`.
+- `auth.user-grpc.addr` / `USER_GRPC_ADDR` — internal gRPC адрес User Service.
+
+Второй datasource и credentials к User-owned БД не поддерживаются: профильные данные доступны Auth только через User RPC.
 
 ## Воспроизводимые команды приёмки
 
@@ -36,11 +38,11 @@
 mvn -B test
 ```
 
-**Что считается пройденным вертикальным срезом:** зелёный `AuthJdbcRedisIntegrationTest` — регистрация, строка в `profiles`, совпадение `profile_id` с БД, `validate`, `login`/`refresh` с тем же первичным профилем, JWKS/claims согласованы с токеном. Юнит-тесты на `memory`-профиле не заменяют этот интеграционный сценарий.
+**Что считается пройденным Auth-контрактом:** зелёные JDBC/Redis тесты и gRPC contract tests — register/login/refresh вызывают `EnsurePrimaryProfile`, используют возвращённый `profile_id`, а User unavailable или непригодный профиль не приводит к выдаче новой сессии. Юнит-тесты на `memory`-профиле не заменяют этот сценарий.
 
 ### 2. Паритет CI: образ Auth + compose + smoke-скрипт
 
-Как в job `backend-auth` ([ci.yml](../.github/workflows/ci.yml)): собрать образ, затем скрипт поднимает `postgres` + `redis`, при необходимости накатывает DDL `user_db`, стартует контейнер Auth и проверяет `/health`, JWKS по REST и `GetJWKS` по gRPC.
+Как в job `backend-auth` ([ci.yml](../.github/workflows/ci.yml)): собрать образ, затем скрипт поднимает `postgres` + `redis`, стартует контейнер Auth без доступа к `user_db` и проверяет `/health`, JWKS по REST и `GetJWKS` по gRPC. Это container smoke Auth, а не live-проверка профиля.
 
 Из **корня** репозитория (нужны **bash** и **curl**, на Windows — Git Bash или WSL):
 
@@ -51,35 +53,16 @@ bash scripts/ci/auth-container-smoke.sh
 
 Переопределения: `AUTH_IMAGE`, `AUTH_HTTP_PORT` (по умолчанию **18080**), `JWT_KEY_PATH`. Скрипт по завершении делает `docker compose down` и удаляет контейнер Auth — для ручных HTTP-шагов поднимите стек отдельно (см. п. 3) или опирайтесь на п. 1.
 
-### 3. Ручной HTTP + SQL (отладка / демо)
+### 3. Ручной live vertical через full-app Compose
 
-Базовый URL Auth: **`BASE`** = `http://127.0.0.1:8080` (или порт, проброшенный из `docker run`, например **18080** из smoke).
-
-Из **корня** репозитория: собрать образ, поднять Postgres и Redis, определить имя Docker-сети compose (как в [auth-container-smoke.sh](../scripts/ci/auth-container-smoke.sh)) и запустить Auth с пробросом **8080** на хост.
+Full-app Compose связывает Auth с User через `USER_GRPC_ADDR=user:9090`; Auth получает только credentials к `auth_db`, User — к `user_db`. Из корня репозитория:
 
 ```text
-docker build -t voice-auth:local -f src/backend/auth/Dockerfile src/backend/auth
-docker compose up -d postgres redis
-POSTGRES_CID=$(docker compose ps -q postgres)
-NETWORK=$(docker inspect "$POSTGRES_CID" --format '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{"\n"}}{{end}}' | head -1)
-JWT_KEY="$PWD/src/backend/auth/src/test/resources/jwt-test-private.pem"
-docker rm -f auth-local 2>/dev/null || true
-docker run -d --name auth-local --network "$NETWORK" \
-  -e SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/auth_db \
-  -e SPRING_DATASOURCE_USERNAME=voice \
-  -e SPRING_DATASOURCE_PASSWORD=voice \
-  -e AUTH_USER_DB_JDBC_URL=jdbc:postgresql://postgres:5432/user_db \
-  -e AUTH_USER_DB_USERNAME=voice \
-  -e AUTH_USER_DB_PASSWORD=voice \
-  -e SPRING_DATA_REDIS_HOST=redis \
-  -e SPRING_DATA_REDIS_PORT=6379 \
-  -e AUTH_JWT_PRIVATE_KEY_LOCATION=file:/run/jwt.pem \
-  -v "$JWT_KEY:/run/jwt.pem:ro" \
-  -p 8080:8080 \
-  voice-auth:local
+docker compose --profile app up -d --build postgres redis nats user auth gateway
+docker compose ps user auth gateway
 ```
 
-На Windows выполняйте блок в **Git Bash** или WSL (нужны `head`, подстановка `$(...)`). Альтернатива без shell: скопировать флаги из `docker run` в [auth-container-smoke.sh](../scripts/ci/auth-container-smoke.sh) и добавить `-p 8080:8080`, подставив сеть и абсолютный путь к `jwt-test-private.pem`.
+Базовый URL — Gateway `http://127.0.0.1:18080`; для диагностики смотрите `docker compose logs auth user gateway`.
 
 Проверка таблицы через compose:
 
@@ -112,7 +95,7 @@ docker compose exec -T postgres psql -U voice -d user_db -c "SELECT id, account_
    → **200**, в теле есть `access_token`, `account_id`, **`profile_id`** (UUID).
 2. `POST /api/v1/auth/validate` с заголовком `Authorization: Bearer <access_token>` → **200**, `user_id` = `account_id`, **`profile_id`** совпадает с шагом 1.
 3. Декод JWT (например [jwt.io](https://jwt.io) с публичным ключом из `GET /api/v1/auth/.well-known/jwks.json`): claims **`user_id`**, **`profile_id`** присутствуют и совпадают с п. 1–2.
-4. В БД `user_db`:  
+4. В User-owned БД `user_db` (диагностическая проверка, не доступ Auth):
    `SELECT id, account_id FROM profiles WHERE account_id = '<account_id>' AND is_primary = true` — **`id` = `profile_id`** из ответа.
 
 Повтор для **`login`** и **`refresh`**: тот же первичный **`profile_id`** для аккаунта.
@@ -127,4 +110,6 @@ docker compose exec -T postgres psql -U voice -d user_db -c "SELECT id, account_
 
 ## Примечание по эволюции
 
-Пока User Service (Go) не выделен в отдельный процесс с gRPC, Auth может писать первичный профиль в `user_db` через второй datasource (см. [primary-profile-bootstrap.md](microservices/primary-profile-bootstrap.md)). После появления **EnsurePrimaryProfile** в User Service вызов заменяется на gRPC; критерии приёмки по данным в `profiles` сохраняются.
+User Service — единственный владелец `user_db`. Auth потребляет существующие internal RPC
+`EnsurePrimaryProfile`, `ResolvePrimaryProfileIDs`, `SwitchProfile`, `SetVerification`,
+`ClearVerification` и `MarkAccountRegular`; прямой datasource к `user_db` не допускается.

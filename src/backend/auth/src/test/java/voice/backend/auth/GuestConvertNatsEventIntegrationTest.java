@@ -8,6 +8,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.Duration;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -16,7 +18,12 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import voice.backend.auth.support.CapturingMailSender;
 import voice.backend.auth.support.RecordingAuthEventPublisher;
+import voice.backend.auth.repository.GuestConversionOperationRepository;
+import voice.backend.auth.repository.GuestConversionState;
+import voice.backend.auth.service.GuestConversionPendingEventWorker;
+import voice.backend.auth.service.GuestConversionPendingUserRecoveryRunner;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -25,9 +32,13 @@ class GuestConvertNatsEventIntegrationTest {
   @Autowired MockMvc mockMvc;
   @Autowired ObjectMapper objectMapper;
   @Autowired ApplicationContext applicationContext;
+  @Autowired CapturingMailSender mailSender;
+  @Autowired GuestConversionOperationRepository operations;
+  @Autowired GuestConversionPendingUserRecoveryRunner pendingUserRecovery;
+  @Autowired GuestConversionPendingEventWorker pendingEventWorker;
 
   @Test
-  void convertGuestPublishesUserGuestConvertedEvent() throws Exception {
+  void emailOtpCompletionDefersEventUntilTheSeparatePendingEventPublisher() throws Exception {
     RecordingAuthEventPublisher events = findRecordingPublisher(applicationContext);
     assertThat(events).isNotNull();
     events.clear();
@@ -46,11 +57,76 @@ class GuestConvertNatsEventIntegrationTest {
                 .content(
                     "{\"email\":\"nats-guest@example.com\",\"password\":\"New account password 1\"}"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.session.account_id", is(guest.get("account_id").asText())));
+        .andExpect(jsonPath("$.session.account_id", is(guest.get("account_id").asText())))
+        .andExpect(jsonPath("$.session.account_type", is("guest")));
 
     assertThat(events.publishedSubjects())
-        .as("convert-guest must publish user.guest_converted to NATS")
-        .contains("user.guest_converted");
+        .as("convert-guest submit must not publish before email verification")
+        .doesNotContain("user.guest_converted");
+
+    mailSender.clear();
+    mockMvc
+        .perform(
+            post("/api/v1/auth/otp/send")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"email\":\"nats-guest@example.com\",\"otp_type\":\"email_verify\"}"))
+        .andExpect(status().isNoContent());
+    String code = mailSender.lastCode();
+    assertThat(code).matches("\\d{6}");
+
+    mockMvc
+        .perform(
+            post("/api/v1/auth/otp/verify")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"email\":\"nats-guest@example.com\",\"code\":\""
+                        + code
+                        + "\",\"otp_type\":\"email_verify\"}"))
+        .andExpect(status().isNoContent());
+
+    assertThat(events.publishedSubjects())
+        .as("verified email OTP creates PENDING_USER work but does not publish from the request path")
+        .doesNotContain("user.guest_converted");
+    UUID operationId =
+        operations
+            .findByAccountId(UUID.fromString(guest.get("account_id").asText()))
+            .orElseThrow()
+            .operationId();
+    assertThat(operations.findByAccountId(UUID.fromString(guest.get("account_id").asText())).orElseThrow().state())
+        .isEqualTo(GuestConversionState.PENDING_USER);
+
+    pendingUserRecovery.tick();
+
+    mockMvc
+        .perform(
+            post("/api/v1/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"email\":\"nats-guest@example.com\",\"password\":\"New account password 1\",\"device_info_json\":\"{}\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.session.account_id", is(guest.get("account_id").asText())))
+        .andExpect(jsonPath("$.session.account_type", is("regular")));
+
+    assertThat(events.publishedSubjects())
+        .as("PENDING_USER recovery must not leak into the future PENDING_EVENT publisher")
+        .doesNotContain("user.guest_converted");
+    assertThat(operations.findByAccountId(UUID.fromString(guest.get("account_id").asText())).orElseThrow())
+        .satisfies(
+            operation -> {
+              assertThat(operation.operationId()).isEqualTo(operationId);
+              assertThat(operation.state()).isEqualTo(GuestConversionState.PENDING_EVENT);
+            });
+
+    pendingEventWorker.processDue(1, Duration.ofMinutes(1));
+
+    assertThat(events.publishedSubjects()).containsExactly("user.guest_converted");
+    assertThat(operations.findByAccountId(UUID.fromString(guest.get("account_id").asText())).orElseThrow())
+        .satisfies(
+            operation -> {
+              assertThat(operation.operationId()).isEqualTo(operationId);
+              assertThat(operation.state()).isEqualTo(GuestConversionState.COMPLETED);
+            });
   }
 
   private JsonNode postJson(String path, String body) throws Exception {

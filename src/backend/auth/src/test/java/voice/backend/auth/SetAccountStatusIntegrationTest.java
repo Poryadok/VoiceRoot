@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -29,6 +30,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 import voice.backend.auth.grpc.AuthGrpcService;
+import voice.backend.auth.support.JdbcUserContractTestConfiguration;
 
 /**
  * moderation (docs/features/reports.md) red test: SetAccountStatus suspends account; subsequent login is rejected.
@@ -37,6 +39,7 @@ import voice.backend.auth.grpc.AuthGrpcService;
 @AutoConfigureMockMvc
 @ActiveProfiles("integration")
 @Testcontainers(disabledWithoutDocker = true)
+@Import(JdbcUserContractTestConfiguration.class)
 class SetAccountStatusIntegrationTest {
   @Container
   static final PostgreSQLContainer<?> postgres =
@@ -44,14 +47,6 @@ class SetAccountStatusIntegrationTest {
           .withDatabaseName("auth_db")
           .withUsername("voice")
           .withPassword("voice");
-
-  @Container
-  static final PostgreSQLContainer<?> userPostgres =
-      new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
-          .withDatabaseName("user_db")
-          .withUsername("voice")
-          .withPassword("voice")
-          .withInitScript("integration-user-schema.sql");
 
   @Container
   static final GenericContainer<?> redis =
@@ -64,9 +59,6 @@ class SetAccountStatusIntegrationTest {
     registry.add("spring.datasource.password", postgres::getPassword);
     registry.add("spring.flyway.user", postgres::getUsername);
     registry.add("spring.flyway.password", postgres::getPassword);
-    registry.add("auth.user-db.jdbc-url", userPostgres::getJdbcUrl);
-    registry.add("auth.user-db.username", userPostgres::getUsername);
-    registry.add("auth.user-db.password", userPostgres::getPassword);
     registry.add("spring.data.redis.host", redis::getHost);
     registry.add("spring.data.redis.port", () -> String.valueOf(redis.getMappedPort(6379)));
   }

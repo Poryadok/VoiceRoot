@@ -306,7 +306,7 @@ Milestone — законченный пользовательский резул
 - Auth остаётся Java/Spring в `src/backend/auth/`; перенос в Go требует отдельного решения.
 - Realtime в `src/backend/realtime/` владеет WebSocket event flow и протоколом `s` / `resume`.
 - После reconnect global inbox state сверяется через Chat REST `ListChats` и durable Messaging metadata; история сообщений догружается через Messaging REST/API с cursor отдельно для выбранного `chat_id`. Глобального WS replay/event-log catch-up нет.
-- Сервис владеет своей БД; межсервисные записи идут через контракт или событие, а не прямой JDBC/SQL в чужую схему. Существующие Auth → `user_db` JDBC paths — debt для `A1`, а не исключение из правила.
+- Сервис владеет своей БД; межсервисные записи идут через контракт или событие, а не прямой JDBC/SQL в чужую схему. Auth обращается к User-owned profile данным только через User gRPC и не получает credentials к `user_db`.
 - Node.js для frontend/CI — 24.
 - Federation и её производные остаются deferred; scaffold может компилироваться в full-repo CI, но `G0–G4` profiles исключают Federation deployment, DB/migrations, readiness и alerts.
 
@@ -318,7 +318,7 @@ Milestone — законченный пользовательский резул
 |---|---|
 | Proto/contracts | `buf lint`, `buf format -d --exit-code` и breaking check по правилам CI |
 | Go/backend | tests изменённых модулей; перед release candidate — `make build-all` и полный service matrix |
-| Auth Java | Maven tests и Flyway validation в `src/backend/auth/` |
+| Auth Java | Maven tests и Flyway validation в `src/backend/auth/`; после `mvn -B test` CI проверяет Surefire reports: каждый Auth suite с `@Testcontainers(disabledWithoutDocker = true)` существует, выполнил `tests > 0`, не был skipped и не содержит failures/errors |
 | Flutter | `make flutter-ci`; Web/Windows и нужные widget/integration paths |
 | Интеграция | feature E2E из [`.github/ci/e2e-features.yml`](../.github/ci/e2e-features.yml) |
 | Compose smoke | `make compose-e2e-smoke` |

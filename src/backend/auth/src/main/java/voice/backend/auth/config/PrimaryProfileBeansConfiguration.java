@@ -1,9 +1,9 @@
 package voice.backend.auth.config;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -15,10 +15,6 @@ import voice.backend.auth.repository.LinkedIdentityRepository;
 import voice.backend.auth.service.LinkedAccountsService;
 import voice.backend.auth.userdb.InMemoryPhoneHashResolver;
 import voice.backend.auth.userdb.InMemoryPrimaryProfileProvisioner;
-import voice.backend.auth.userdb.JdbcPhoneHashResolver;
-import voice.backend.auth.userdb.JdbcPrimaryProfileProvisioner;
-import voice.backend.auth.userdb.JdbcProfileSwitchValidator;
-import voice.backend.auth.userdb.JdbcUserVerificationSync;
 import voice.backend.auth.userdb.NoOpProfileSwitchValidator;
 import voice.backend.auth.userdb.NoOpUserVerificationSync;
 import voice.backend.auth.userdb.PhoneHashResolver;
@@ -30,61 +26,34 @@ import voice.backend.auth.userdb.UserVerificationSync;
 public class PrimaryProfileBeansConfiguration {
 
   @Bean
-  PrimaryProfileProvisioner primaryProfileProvisioner(
-      AuthProperties props,
-      @Autowired(required = false) @Qualifier("userJdbc") NamedParameterJdbcTemplate userJdbc) {
-    if (props.getPersistence() == AuthProperties.PersistenceMode.MEMORY) {
-      return new InMemoryPrimaryProfileProvisioner();
-    }
-    if (userJdbc == null) {
-      throw new IllegalStateException(
-          "auth.user-db.jdbc-url is required when auth.persistence=jdbc (see docs/EXEC_PLAN.md)");
-    }
-    return new JdbcPrimaryProfileProvisioner(userJdbc);
+  @ConditionalOnProperty(prefix = "auth", name = "persistence", havingValue = "memory")
+  @ConditionalOnMissingBean(PrimaryProfileProvisioner.class)
+  PrimaryProfileProvisioner primaryProfileProvisioner() {
+    return new InMemoryPrimaryProfileProvisioner();
   }
 
   @Bean
+  @ConditionalOnProperty(prefix = "auth", name = "persistence", havingValue = "memory")
+  @ConditionalOnMissingBean(PhoneHashResolver.class)
   PhoneHashResolver phoneHashResolver(
-      AuthProperties props,
       AccountRepository accounts,
-      PrimaryProfileProvisioner primaryProfileProvisioner,
-      NamedParameterJdbcTemplate authJdbc,
-      @Autowired(required = false) @Qualifier("userJdbc") NamedParameterJdbcTemplate userJdbc) {
-    if (props.getPersistence() == AuthProperties.PersistenceMode.MEMORY) {
-      return new InMemoryPhoneHashResolver(accounts, primaryProfileProvisioner);
-    }
-    if (userJdbc == null) {
-      throw new IllegalStateException("userJdbc required for phone hash resolution");
-    }
-    return new JdbcPhoneHashResolver(authJdbc, userJdbc);
+      PrimaryProfileProvisioner primaryProfileProvisioner) {
+    return new InMemoryPhoneHashResolver(accounts, primaryProfileProvisioner);
   }
 
   @Bean
-  ProfileSwitchValidator profileSwitchValidator(
-      AuthProperties props,
-      @Autowired(required = false) @Qualifier("userJdbc") NamedParameterJdbcTemplate userJdbc) {
-    if (props.getPersistence() == AuthProperties.PersistenceMode.MEMORY) {
-      return new NoOpProfileSwitchValidator();
-    }
-    if (userJdbc == null) {
-      throw new IllegalStateException("userJdbc required for profile switch validation");
-    }
-    return new JdbcProfileSwitchValidator(userJdbc);
+  @ConditionalOnProperty(prefix = "auth", name = "persistence", havingValue = "memory")
+  @ConditionalOnMissingBean(ProfileSwitchValidator.class)
+  ProfileSwitchValidator profileSwitchValidator() {
+    return new NoOpProfileSwitchValidator();
   }
 
   @Bean
   @ConditionalOnExpression("'${auth.user-grpc.addr:}'.blank")
   @ConditionalOnMissingBean(UserVerificationSync.class)
-  UserVerificationSync jdbcUserVerificationSync(
-      AuthProperties props,
-      @Autowired(required = false) @Qualifier("userJdbc") NamedParameterJdbcTemplate userJdbc) {
-    if (props.getPersistence() == AuthProperties.PersistenceMode.MEMORY) {
-      return new NoOpUserVerificationSync();
-    }
-    if (userJdbc == null) {
-      throw new IllegalStateException("userJdbc required for verification sync");
-    }
-    return new JdbcUserVerificationSync(userJdbc);
+  @ConditionalOnProperty(prefix = "auth", name = "persistence", havingValue = "memory")
+  UserVerificationSync memoryUserVerificationSync() {
+    return new NoOpUserVerificationSync();
   }
 
   @Bean

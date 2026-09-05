@@ -20,6 +20,7 @@ public class JdbcAccountRepository implements AccountRepository {
               rs.getString("status"),
               rs.getBytes("totp_secret"),
               rs.getBoolean("totp_enabled"),
+              rs.getLong("session_epoch"),
               rs.getTimestamp("created_at").toInstant(),
               rs.getTimestamp("deleted_at") == null
                   ? null
@@ -44,7 +45,7 @@ public class JdbcAccountRepository implements AccountRepository {
           """
           INSERT INTO accounts (email, phone, password_hash, type, status)
           VALUES (:email, :phone, :passwordHash, :type, 'active')
-          RETURNING id, email, phone, password_hash, type, status, totp_secret, totp_enabled, created_at, deleted_at
+          RETURNING id, email, phone, password_hash, type, status, totp_secret, totp_enabled, session_epoch, created_at, deleted_at
           """,
           params,
           ROW_MAPPER);
@@ -60,7 +61,7 @@ public class JdbcAccountRepository implements AccountRepository {
     }
     return jdbc.query(
             """
-            SELECT id, email, phone, password_hash, type, status, totp_secret, totp_enabled, created_at, deleted_at
+            SELECT id, email, phone, password_hash, type, status, totp_secret, totp_enabled, session_epoch, created_at, deleted_at
             FROM accounts WHERE email = :email LIMIT 1
             """,
             new MapSqlParameterSource("email", email),
@@ -76,7 +77,7 @@ public class JdbcAccountRepository implements AccountRepository {
     }
     return jdbc.query(
             """
-            SELECT id, email, phone, password_hash, type, status, totp_secret, totp_enabled, created_at, deleted_at
+            SELECT id, email, phone, password_hash, type, status, totp_secret, totp_enabled, session_epoch, created_at, deleted_at
             FROM accounts WHERE phone = :phone LIMIT 1
             """,
             new MapSqlParameterSource("phone", phone),
@@ -91,7 +92,7 @@ public class JdbcAccountRepository implements AccountRepository {
       UUID uuid = UUID.fromString(id);
       return jdbc.query(
               """
-              SELECT id, email, phone, password_hash, type, status, totp_secret, totp_enabled, created_at, deleted_at
+              SELECT id, email, phone, password_hash, type, status, totp_secret, totp_enabled, session_epoch, created_at, deleted_at
               FROM accounts WHERE id = :id LIMIT 1
               """,
               new MapSqlParameterSource("id", uuid),
@@ -155,9 +156,9 @@ public class JdbcAccountRepository implements AccountRepository {
       return jdbc.queryForObject(
           """
           UPDATE accounts
-          SET email = :email, phone = :phone, password_hash = :passwordHash, type = 'regular', updated_at = now()
+          SET email = :email, phone = :phone, password_hash = :passwordHash, updated_at = now()
           WHERE id = :id AND type = 'guest'
-          RETURNING id, email, phone, password_hash, type, status, totp_secret, totp_enabled, created_at, deleted_at
+          RETURNING id, email, phone, password_hash, type, status, totp_secret, totp_enabled, session_epoch, created_at, deleted_at
           """,
           params,
           ROW_MAPPER);
@@ -165,6 +166,23 @@ public class JdbcAccountRepository implements AccountRepository {
       throw new IllegalArgumentException("not a guest account", ex);
     } catch (DuplicateKeyException ex) {
       throw new IllegalArgumentException("duplicate account identifier", ex);
+    }
+  }
+
+  @Override
+  public Account markGuestRegular(UUID accountId) {
+    try {
+      return jdbc.queryForObject(
+          """
+          UPDATE accounts
+          SET type = 'regular', updated_at = now()
+          WHERE id = :id AND type = 'guest'
+          RETURNING id, email, phone, password_hash, type, status, totp_secret, totp_enabled, session_epoch, created_at, deleted_at
+          """,
+          new MapSqlParameterSource("id", accountId),
+          ROW_MAPPER);
+    } catch (org.springframework.dao.EmptyResultDataAccessException ex) {
+      throw new IllegalArgumentException("not a guest account", ex);
     }
   }
 
@@ -232,6 +250,28 @@ public class JdbcAccountRepository implements AccountRepository {
         WHERE id = :id
         """,
         new MapSqlParameterSource("id", accountId));
+  }
+
+  @Override
+  public long incrementSessionEpoch(UUID accountId) {
+    try {
+      Long epoch =
+          jdbc.queryForObject(
+              """
+              UPDATE accounts
+              SET session_epoch = session_epoch + 1, updated_at = now()
+              WHERE id = :id
+              RETURNING session_epoch
+              """,
+              new MapSqlParameterSource("id", accountId),
+              Long.class);
+      if (epoch == null || epoch <= 0) {
+        throw new IllegalStateException("invalid session epoch");
+      }
+      return epoch;
+    } catch (org.springframework.dao.EmptyResultDataAccessException ex) {
+      throw new IllegalArgumentException("account not found", ex);
+    }
   }
 
   @Override
