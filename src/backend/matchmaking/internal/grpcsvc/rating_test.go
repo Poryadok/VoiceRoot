@@ -228,6 +228,9 @@ func TestGetPlayerRating_GamesPlayedCountsCompletedMatchesNotRatings(t *testing.
 	require.NoError(t, err)
 	_, err = srv.CompleteMatch(ctxWithProfile(profileB), &matchmakingv1.CompleteMatchRequest{MatchId: match2})
 	require.NoError(t, err)
+	// A repeated leave after completion must not create another completed match.
+	_, err = srv.CompleteMatch(ctxWithProfile(profileB), &matchmakingv1.CompleteMatchRequest{MatchId: match2})
+	require.NoError(t, err)
 
 	resp, err := srv.GetPlayerRating(ctx, &matchmakingv1.GetPlayerRatingRequest{
 		ProfileId: profileB.String(), GameId: game.ID.String(),
