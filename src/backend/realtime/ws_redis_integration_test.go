@@ -152,7 +152,7 @@ func TestWSTypingCrossInstancesViaRedis(t *testing.T) {
 	if err := json.Unmarshal(typing.D, &td); err != nil {
 		t.Fatalf("typing d: %v", err)
 	}
-	if td.ChatID != chatID || td.ProfileID != "p1" || td.Kind != "start" {
+	if canonicalChatID(td.ChatID) != chatID || td.ProfileID != "p1" || td.Kind != "start" {
 		t.Fatalf("typing body = %+v", td)
 	}
 
@@ -168,7 +168,7 @@ func TestWSTypingCrossInstancesViaRedis(t *testing.T) {
 	if err := json.Unmarshal(stop.D, &td); err != nil {
 		t.Fatalf("idle typing d: %v", err)
 	}
-	if td.ChatID != chatID || td.ProfileID != "p1" || td.Kind != "stop" {
+	if canonicalChatID(td.ChatID) != chatID || td.ProfileID != "p1" || td.Kind != "stop" {
 		t.Fatalf("idle typing body = %+v", td)
 	}
 	_ = c2.SetReadDeadline(time.Now().Add(typingIdleTimeout + 150*time.Millisecond))

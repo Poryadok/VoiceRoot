@@ -703,8 +703,8 @@ func TestWSTypingThrottleAndIdleStopUseCanonicalChatID(t *testing.T) {
 	typingIdleTimeout = 150 * time.Millisecond
 	t.Cleanup(func() { typingIdleTimeout = oldIdle })
 
-	canonicalChatID := "123e4567-e89b-42d3-a456-426614174000"
-	uppercaseChatID := strings.ToUpper(canonicalChatID)
+	expectedChatID := "123e4567-e89b-42d3-a456-426614174000"
+	uppercaseChatID := strings.ToUpper(expectedChatID)
 	srv := httptest.NewServer(testRealtimeHandler(staticTokenValidator{
 		"sender": {UserID: "sender-account", ProfileID: "sender-profile"},
 		"peer":   {UserID: "peer-account", ProfileID: "peer-profile"},
@@ -766,7 +766,7 @@ func TestWSTypingThrottleAndIdleStopUseCanonicalChatID(t *testing.T) {
 		t.Fatalf("peer hello = %+v", got)
 	}
 	for _, conn := range []*websocket.Conn{sender, peer} {
-		if err := conn.WriteJSON(map[string]any{"op": "subscribe", "d": map[string]any{"chat_id": canonicalChatID}}); err != nil {
+		if err := conn.WriteJSON(map[string]any{"op": "subscribe", "d": map[string]any{"chat_id": expectedChatID}}); err != nil {
 			t.Fatalf("subscribe: %v", err)
 		}
 		if got := read(conn); got.Op != "subscribe_ack" {
@@ -774,11 +774,11 @@ func TestWSTypingThrottleAndIdleStopUseCanonicalChatID(t *testing.T) {
 		}
 	}
 
-	if err := sender.WriteJSON(map[string]any{"op": "typing_start", "d": map[string]any{"chat_id": canonicalChatID}}); err != nil {
+	if err := sender.WriteJSON(map[string]any{"op": "typing_start", "d": map[string]any{"chat_id": expectedChatID}}); err != nil {
 		t.Fatalf("canonical typing_start: %v", err)
 	}
-	if got := readTyping(peer); got.Kind != "start" || got.ChatID != canonicalChatID {
-		t.Fatalf("first typing body = %+v, want canonical start", got)
+	if got := readTyping(peer); got.Kind != "start" || canonicalChatID(got.ChatID) != expectedChatID {
+		t.Fatalf("first typing body = %+v, want start for UUID %q", got, expectedChatID)
 	}
 	if err := sender.WriteJSON(map[string]any{"op": "typing_start", "d": map[string]any{"chat_id": uppercaseChatID}}); err != nil {
 		t.Fatalf("uppercase typing_start: %v", err)
@@ -787,8 +787,8 @@ func TestWSTypingThrottleAndIdleStopUseCanonicalChatID(t *testing.T) {
 	// means the upper-case spelling allocated an independent throttle/timer key.
 	if got := readTyping(peer); got.Kind != "stop" {
 		t.Fatalf("second typing kind = %q, want only idle stop", got.Kind)
-	} else if got.ChatID != canonicalChatID {
-		t.Fatalf("idle typing chat_id = %q, want canonical %q", got.ChatID, canonicalChatID)
+	} else if canonicalChatID(got.ChatID) != expectedChatID {
+		t.Fatalf("idle typing chat_id = %q, want UUID-equivalent %q", got.ChatID, expectedChatID)
 	}
 	_ = peer.SetReadDeadline(time.Now().Add(typingIdleTimeout + 150*time.Millisecond))
 	if _, _, err := peer.ReadMessage(); err == nil {
