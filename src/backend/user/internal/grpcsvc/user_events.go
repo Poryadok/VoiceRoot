@@ -8,5 +8,5 @@ type UserEventsPublisher interface {
 	PublishProfileUpdated(ctx context.Context, profileID, accountID, changedFieldsJSON string) error
 	PublishProfileSwitched(ctx context.Context, accountID, oldProfileID, newProfileID string) error
 	PublishVerified(ctx context.Context, profileID, accountID, verificationType string) error
-	PublishPresenceChanged(ctx context.Context, profileID, status string) error
+	PublishPresenceChanged(ctx context.Context, profileID, oldStatus, newStatus string) error
 }

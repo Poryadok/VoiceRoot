@@ -218,7 +218,7 @@ onboarding_state
 | `user.settings_changed` | profile_id, changed_keys                   |
 | `user.verified`         | profile_id, verification_type              |
 
-**`user.presence_changed`:** target semantics are an enum transition in `UpdatePresence` (`user/internal/userevents/jetstream.go`): its first observation uses an empty `old_status`, and a same-enum heartbeat updates Redis activity but emits nothing. The legacy `status` value remains the current status for existing consumers while additive JetStream fields carry `old_status` / `new_status`. **Current proto gap:** the payload still has only legacy `status` until that contract is regenerated from `jetstream_events.proto`.
+**`user.presence_changed`:** the event is published for an enum transition in `UpdatePresence` (`user/internal/userevents/jetstream.go`): its first observation uses an empty `old_status`, and a same-enum heartbeat updates Redis activity but emits nothing. The legacy `status` value remains the current status for existing consumers, and the JetStream payload carries additive `old_status` / `new_status` fields.
 
 ## Зависимости
 

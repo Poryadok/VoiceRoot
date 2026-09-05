@@ -88,7 +88,11 @@ message SettingsChanged {
 
 message PresenceChange {
   string profile_id = 1;
+  // Legacy current status for existing consumers; equal to new_status.
   string status = 2;
+  // Empty when this is the first live observation for a profile.
+  string old_status = 3;
+  string new_status = 4;
 }
 
 // --- social.events ---

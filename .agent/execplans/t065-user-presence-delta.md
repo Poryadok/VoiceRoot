@@ -37,10 +37,10 @@ last-seen TTLs.
 
 - [x] Read the governing documentation and inspect current User presence flow.
 - [x] Commit documentation plus failing transition-contract tests (RED).
-- [x] Review RED tests with a fresh agent, remove Docker/publisher/tag-coverage blockers, and obtain a clean re-review.
-- [ ] Add the additive proto fields, regenerate stubs, and implement the smallest
+- [x] Review RED tests with fresh agents, remove Docker/publisher/tag-coverage blockers, and obtain a clean re-review.
+- [x] Add the additive proto fields, regenerate stubs, and implement the smallest
   enum-transition comparison/publish change (GREEN).
-- [ ] Commit implementation and generated artifacts (GREEN).
+- [x] Commit implementation and generated artifacts (GREEN).
 - [ ] Review implementation with a fresh agent and run focused/proto validation.
 
 ## Detailed Steps
@@ -65,11 +65,13 @@ last-seen TTLs.
 
 ## Validation
 
-- [ ] `go test ./internal/grpcsvc ./internal/store` in `src/backend/user`
-- [ ] `buf format -d --exit-code protos`
-- [ ] `buf lint protos`
-- [ ] local-master protobuf breaking check using the repository target
-- [ ] generated Go/Dart artifact check using the repository target
+- [x] Focused transition tests in `internal/grpcsvc`, `internal/store`, and
+  `internal/userevents` with `GOPROXY=off`
+- [x] `buf format -d --exit-code protos`
+- [x] `buf lint protos`
+- [x] Local-master protobuf breaking check using the repository target
+- [x] Generated Go/Dart artifact check using repository Buf templates and the
+  approved Windows mechanical Go mirror
 
 ## Progress
 
@@ -77,8 +79,21 @@ last-seen TTLs.
 - [x] RED tests and documentation prepared; offline RED observed with `GOPROXY=off; go test ./internal/grpcsvc ./internal/store`: the delta recorder no longer satisfies the three-argument publisher interface and generated `PresenceChange` lacks `OldStatus` / `NewStatus` fields and getters. `GOPROXY=off; go test ./internal/store` passes without download errors.
 - [x] Initial RED review found that an integration helper would require prohibited Docker and that legacy publisher/tag compatibility was not directly asserted.
 - [x] Replaced it with a no-Docker transition helper matrix, direct publisher-envelope RED test, and additive descriptor assertions; focused offline RED now fails only on absent helper/contract seams.
-- [ ] Fresh RED re-review accepted.
-- [ ] GREEN implementation and generated stubs committed.
+- [x] Fresh RED re-review accepted: no blocking findings; `GOPROXY=off; go test ./internal/grpcsvc ./internal/store ./internal/userevents` fails only at the intended absent helper/generated contract seams.
+- [x] GREEN implementation adds proto tags 3/4, regenerates the three Go and
+  two Dart event artifacts, compares the stored enum before publishing, and
+  preserves the unconditional Redis upsert for every heartbeat.
+- [x] Native cached generation completed without Docker or network. The Go
+  mirror matched 94 files across 48 package destinations by SHA-256 before four
+  unrelated pre-existing generated-stub drifts were precisely reversed; the
+  final semantic generated diff is exactly the three Go event copies and two
+  Dart event files.
+- [x] Focused tests passed with `GOPROXY=off`: three grpcsvc transition/proto
+  tests, the miniredis same-status TTL/activity test, and the envelope test.
+  The broad grpcsvc package run was stopped after an unrelated existing test
+  ran silently beyond the bounded check; no Docker was started.
+- [x] `buf format`, `buf lint`, and `buf breaking` against local `master` pass.
+- [x] GREEN implementation and generated stubs committed.
 - [ ] GREEN review and final validation accepted.
 
 ## Decisions

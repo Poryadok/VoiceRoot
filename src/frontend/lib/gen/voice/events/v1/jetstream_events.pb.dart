@@ -964,10 +964,14 @@ class PresenceChange extends $pb.GeneratedMessage {
   factory PresenceChange({
     $core.String? profileId,
     $core.String? status,
+    $core.String? oldStatus,
+    $core.String? newStatus,
   }) {
     final result = create();
     if (profileId != null) result.profileId = profileId;
     if (status != null) result.status = status;
+    if (oldStatus != null) result.oldStatus = oldStatus;
+    if (newStatus != null) result.newStatus = newStatus;
     return result;
   }
 
@@ -987,6 +991,8 @@ class PresenceChange extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'profileId')
     ..aOS(2, _omitFieldNames ? '' : 'status')
+    ..aOS(3, _omitFieldNames ? '' : 'oldStatus')
+    ..aOS(4, _omitFieldNames ? '' : 'newStatus')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1017,6 +1023,7 @@ class PresenceChange extends $pb.GeneratedMessage {
   @$pb.TagNumber(1)
   void clearProfileId() => $_clearField(1);
 
+  /// Legacy current status for existing consumers; equal to new_status.
   @$pb.TagNumber(2)
   $core.String get status => $_getSZ(1);
   @$pb.TagNumber(2)
@@ -1025,6 +1032,25 @@ class PresenceChange extends $pb.GeneratedMessage {
   $core.bool hasStatus() => $_has(1);
   @$pb.TagNumber(2)
   void clearStatus() => $_clearField(2);
+
+  /// Empty when this is the first live observation for a profile.
+  @$pb.TagNumber(3)
+  $core.String get oldStatus => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set oldStatus($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasOldStatus() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearOldStatus() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get newStatus => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set newStatus($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasNewStatus() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearNewStatus() => $_clearField(4);
 }
 
 enum SocialStreamEvent_Payload {
