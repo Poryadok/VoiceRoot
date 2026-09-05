@@ -75,7 +75,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Could not load roles'), findsOneWidget);
+    expect(find.text('Could not load roles'), findsNWidgets(2));
     expect(find.text('Exception: sensitive backend payload'), findsNothing);
   });
 
