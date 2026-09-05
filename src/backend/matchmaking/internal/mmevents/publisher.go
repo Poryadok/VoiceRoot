@@ -93,13 +93,6 @@ func (NoopPublisher) PublishSearchTimeout(context.Context, string, string, strin
 }
 func (NoopPublisher) Close() error { return nil }
 
-// searchCancelledJSON is published until generated SearchCancelled proto is wired (buf generate).
-type searchCancelledJSON struct {
-	EventID   string `json:"event_id"`
-	SessionID string `json:"session_id"`
-	ProfileID string `json:"profile_id"`
-}
-
 // JetStreamPublisher publishes to matchmaking.events stream.
 type JetStreamPublisher struct {
 	nc     *nats.Conn
@@ -171,6 +164,7 @@ func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, e
 	}
 	requestID := correlation.FromGRPC(ctx)
 	msg := &nats.Msg{Subject: subject, Data: b, Header: nats.Header{}}
+	msg.Header.Set(nats.MsgIdHdr, env.GetEventId())
 	natslog.SetRequestIDHeader(msg.Header, requestID)
 	if _, err := p.js.PublishMsg(msg); err != nil {
 		return fmt.Errorf("jetstream publish %s: %w", subject, err)
@@ -304,11 +298,17 @@ func (p *JetStreamPublisher) PublishSearchTimeout(ctx context.Context, sessionID
 
 // PublishSearchCancelled implements Publisher.
 func (p *JetStreamPublisher) PublishSearchCancelled(ctx context.Context, sessionID, profileID string) error {
-	return p.publishJSON(ctx, subjectSearchCancel, searchCancelledJSON{
-		EventID:   uuid.NewString(),
-		SessionID: sessionID,
-		ProfileID: profileID,
-	})
+	env := &eventsv1.MatchmakingStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.MatchmakingStreamEvent_SearchCancelled{
+			SearchCancelled: &eventsv1.SearchCancelled{
+				SessionId: sessionID,
+				ProfileId: profileID,
+			},
+		},
+	}
+	return p.publishProto(ctx, subjectSearchCancel, env)
 }
 
 // PublishPlayerBanned implements Publisher.
