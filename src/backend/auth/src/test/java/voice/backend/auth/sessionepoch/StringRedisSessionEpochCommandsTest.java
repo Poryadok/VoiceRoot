@@ -12,6 +12,8 @@ import static org.mockito.Mockito.when;
 import io.lettuce.core.RedisFuture;
 import io.lettuce.core.ScriptOutputType;
 import io.lettuce.core.api.async.RedisAsyncCommands;
+import io.lettuce.core.cluster.api.async.RedisAdvancedClusterAsyncCommands;
+import io.lettuce.core.cluster.api.async.RedisClusterAsyncCommands;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.UUID;
@@ -71,6 +73,21 @@ class StringRedisSessionEpochCommandsTest {
   }
 
   @Test
+  void atomicMaxAcceptsAdvancedClusterNativeCommands() throws Exception {
+    StringRedisTemplate template = mock(StringRedisTemplate.class);
+    RedisConnection connection = mock(RedisConnection.class);
+    RedisAdvancedClusterAsyncCommands<byte[], byte[]> redis = mock(RedisAdvancedClusterAsyncCommands.class);
+    RedisFuture<Object> result = completed((Object) "9".getBytes(StandardCharsets.UTF_8));
+    wireSharedConnection(template, connection, redis);
+    when(redis.eval(any(byte[].class), eq(ScriptOutputType.VALUE), any(byte[][].class), any(byte[].class)))
+        .thenReturn(result);
+    StringRedisSessionEpochCommands commands = new StringRedisSessionEpochCommands(template);
+
+    assertThat(commands.atomicMaxWithoutExpiry("auth:session:min_epoch:" + UUID.randomUUID(), 9L, TIMEOUT))
+        .isEqualTo(9L);
+  }
+
+  @Test
   void timedOutEvalCancelsOnlyItsFutureAndLeavesSharedConnectionOpen() throws Exception {
     StringRedisTemplate template = mock(StringRedisTemplate.class);
     RedisConnection connection = mock(RedisConnection.class);
@@ -114,7 +131,7 @@ class StringRedisSessionEpochCommandsTest {
   private static void wireSharedConnection(
       StringRedisTemplate template,
       RedisConnection connection,
-      RedisAsyncCommands<byte[], byte[]> redis) {
+      RedisClusterAsyncCommands<byte[], byte[]> redis) {
     when(template.execute(any(RedisCallback.class)))
         .thenAnswer(invocation -> ((RedisCallback<Object>) invocation.getArgument(0)).doInRedis(connection));
     when(connection.getNativeConnection()).thenReturn(redis);

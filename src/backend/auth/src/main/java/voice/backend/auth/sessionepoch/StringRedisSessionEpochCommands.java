@@ -2,7 +2,7 @@ package voice.backend.auth.sessionepoch;
 
 import io.lettuce.core.RedisFuture;
 import io.lettuce.core.ScriptOutputType;
-import io.lettuce.core.api.async.RedisAsyncCommands;
+import io.lettuce.core.cluster.api.async.RedisClusterAsyncCommands;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.concurrent.ExecutionException;
@@ -87,12 +87,12 @@ final class StringRedisSessionEpochCommands implements RedisSessionEpochCommands
   }
 
   @SuppressWarnings("unchecked")
-  private static RedisAsyncCommands<byte[], byte[]> commandsFor(RedisConnection connection) {
+  private static RedisClusterAsyncCommands<byte[], byte[]> commandsFor(RedisConnection connection) {
     Object nativeConnection = connection.getNativeConnection();
-    if (!(nativeConnection instanceof RedisAsyncCommands<?, ?>)) {
+    if (!(nativeConnection instanceof RedisClusterAsyncCommands<?, ?>)) {
       throw new SessionEpochFloorUnavailableException("session epoch floor Redis unavailable");
     }
-    return (RedisAsyncCommands<byte[], byte[]>) nativeConnection;
+    return (RedisClusterAsyncCommands<byte[], byte[]>) nativeConnection;
   }
 
   private static <T> T await(Future<T> future, long deadlineNanos) {
