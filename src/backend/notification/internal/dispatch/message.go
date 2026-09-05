@@ -21,7 +21,7 @@ type TokenRepository interface {
 	DeleteByToken(ctx context.Context, token string) error
 }
 
-// MessagePusher sends chat-grouped message pushes with settings, grouping, and presence.
+// MessagePusher sends grouped message pushes with settings, grouping, and presence.
 type MessagePusher struct {
 	Tokens   TokenRepository
 	Pusher   *PushDispatcher
