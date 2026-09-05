@@ -43,6 +43,14 @@ func TestBotCRUD_and_webhookURL(t *testing.T) {
 	require.Equal(t, updatedAvatar, upd.GetBot().GetAvatarUrl())
 	require.JSONEq(t, updatedScopes, upd.GetBot().GetScopesJson())
 
+	nameOnly := "ApiBot3"
+	preserved, err := client.UpdateBot(ctx, &botv1.UpdateBotRequest{BotId: botID, Name: &nameOnly})
+	require.NoError(t, err)
+	require.Equal(t, nameOnly, preserved.GetBot().GetName())
+	require.Equal(t, updatedAvatar, preserved.GetBot().GetAvatarUrl())
+	require.JSONEq(t, updatedScopes, preserved.GetBot().GetScopesJson())
+	require.Equal(t, "desc", preserved.GetBot().GetDescription())
+
 	_, err = client.SetWebhookURL(ctx, &botv1.SetWebhookURLRequest{
 		BotId: botID,
 		Url:   "https://example.com/hook",
