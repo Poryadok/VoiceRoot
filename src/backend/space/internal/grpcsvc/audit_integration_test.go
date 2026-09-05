@@ -56,6 +56,44 @@ VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)
 	return targetID
 }
 
+func TestRevokeInvite_RecordsAuditEntry(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	owner, _, ownerCtx := profileFixture(t)
+	ctx := context.Background()
+	pool := startSpacePostgresForTest(t, ctx)
+	applySpaceMigration(t, ctx, pool)
+	client, cleanup := startSpaceGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Invite audit"})
+	require.NoError(t, err)
+	spaceID := uuid.MustParse(created.GetSpace().GetId())
+	invite, err := client.CreateInvite(ownerCtx, &spacev1.CreateInviteRequest{SpaceId: spaceID.String()})
+	require.NoError(t, err)
+	inviteID := uuid.MustParse(invite.GetInvite().GetId())
+	inviteCode := invite.GetInvite().GetCode()
+
+	_, err = client.RevokeInvite(ownerCtx, &spacev1.RevokeInviteRequest{InviteId: inviteID.String()})
+	require.NoError(t, err)
+
+	var actorID uuid.UUID
+	var action, targetType, details string
+	var targetID uuid.UUID
+	err = pool.QueryRow(ctx, `
+SELECT actor_profile_id, action, target_type, target_id, details::text
+FROM audit_log
+WHERE space_id = $1 AND action = 'invite_revoked'
+`, spaceID).Scan(&actorID, &action, &targetType, &targetID, &details)
+	require.NoError(t, err)
+	require.Equal(t, owner, actorID)
+	require.Equal(t, "invite_revoked", action)
+	require.Equal(t, "invite", targetType)
+	require.Equal(t, inviteID, targetID)
+	require.JSONEq(t, fmt.Sprintf(`{"code":%q}`, inviteCode), details)
+}
+
 func TestGetAuditLog_MapsFieldsOrdersAndScopesToRequestedSpace(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
