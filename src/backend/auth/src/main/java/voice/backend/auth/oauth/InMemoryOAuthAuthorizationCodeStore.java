@@ -21,6 +21,15 @@ public class InMemoryOAuthAuthorizationCodeStore implements OAuthAuthorizationCo
   }
 
   @Override
+  public Optional<OAuthAuthorizationCode> peek(String code) {
+    OAuthAuthorizationCode record = codes.get(code);
+    if (record == null || record.isExpired(Instant.now(clock))) {
+      return Optional.empty();
+    }
+    return Optional.of(record);
+  }
+
+  @Override
   public Optional<OAuthAuthorizationCode> consume(String code) {
     OAuthAuthorizationCode record = codes.remove(code);
     if (record == null) {
