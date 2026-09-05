@@ -302,7 +302,7 @@ func TestAccountDeletedConsumer_JetStreamNakOnLookupOrPublishFailure(t *testing.
 		profiles := &deletedAccountProfileListerForTest{err: errors.New("user unavailable"), callSignal: make(chan struct{}, 1)}
 		targets := &deletedDMTargetStoreForTest{}
 		publisher := &dmPeerDeletedPublisherForTest{}
-		sub := subscribeAccountDeletedManualAckForTest(t, js, profiles, targets, publisher, "manual-nak-lookup")
+		_ = subscribeAccountDeletedManualAckForTest(t, js, profiles, targets, publisher, "manual-nak-lookup")
 		_, err = js.Publish("user.account_deleted", accountDeletedMessageForTest(t, "source-manual-lookup-failure", uuid.NewString()).Data)
 		require.NoError(t, err)
 		select {
@@ -310,16 +310,20 @@ func TestAccountDeletedConsumer_JetStreamNakOnLookupOrPublishFailure(t *testing.
 		case <-time.After(3 * time.Second):
 			t.Fatal("lookup failure was not delivered")
 		}
-		info, err := sub.ConsumerInfo()
-		require.NoError(t, err)
-		require.GreaterOrEqual(t, info.NumAckPending, uint64(1), "lookup failure must not Ack")
+		select {
+		case <-profiles.callSignal:
+		case <-time.After(3 * time.Second):
+			t.Fatal("lookup failure was not redelivered after Nak")
+		}
+		require.GreaterOrEqual(t, len(profiles.calls), 2,
+			"lookup failure must trigger JetStream redelivery, not auto-ack")
 	})
 
 	t.Run("publish failure", func(t *testing.T) {
 		profiles := &deletedAccountProfileListerForTest{profileIDs: []uuid.UUID{uuid.New()}}
 		targets := &deletedDMTargetStoreForTest{targets: []store.DMPeerDeletionTarget{{ChatID: uuid.New(), SurvivingProfileID: uuid.New()}}}
 		publisher := &dmPeerDeletedPublisherForTest{failAt: 1, callSignal: make(chan struct{}, 1)}
-		sub := subscribeAccountDeletedManualAckForTest(t, js, profiles, targets, publisher, "manual-nak-publish")
+		_ = subscribeAccountDeletedManualAckForTest(t, js, profiles, targets, publisher, "manual-nak-publish")
 		_, err = js.Publish("user.account_deleted", accountDeletedMessageForTest(t, "source-manual-publish-failure", uuid.NewString()).Data)
 		require.NoError(t, err)
 		select {
@@ -327,9 +331,13 @@ func TestAccountDeletedConsumer_JetStreamNakOnLookupOrPublishFailure(t *testing.
 		case <-time.After(3 * time.Second):
 			t.Fatal("publish failure was not delivered")
 		}
-		info, err := sub.ConsumerInfo()
-		require.NoError(t, err)
-		require.GreaterOrEqual(t, info.NumAckPending, uint64(1), "publish failure must not Ack")
+		select {
+		case <-publisher.callSignal:
+		case <-time.After(3 * time.Second):
+			t.Fatal("publish failure was not redelivered after Nak")
+		}
+		require.GreaterOrEqual(t, len(publisher.calls), 2,
+			"publish failure must trigger JetStream redelivery, not auto-ack")
 	})
 }
 
