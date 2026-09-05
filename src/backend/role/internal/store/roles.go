@@ -31,7 +31,18 @@ func (s *RoleStore) bootstrapSystemRoles(ctx context.Context, spaceID uuid.UUID)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	created, err := s.bootstrapSystemRolesTx(ctx, tx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return created, nil
+}
+
+func (s *RoleStore) bootstrapSystemRolesTx(ctx context.Context, tx pgx.Tx, spaceID uuid.UUID) ([]RoleRow, error) {
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, spaceID.String()); err != nil {
 		return nil, err
 	}
@@ -40,28 +51,33 @@ func (s *RoleStore) bootstrapSystemRoles(ctx context.Context, spaceID uuid.UUID)
 		return nil, err
 	}
 	if len(existing) > 0 {
-		return nil, tx.Commit(ctx)
+		return nil, nil
 	}
 	specs, err := permissions.SystemRoles()
 	if err != nil {
 		return nil, err
 	}
+	created := make([]RoleRow, 0, len(specs))
 	for _, spec := range specs {
 		defaultJoin := spec.Name == permissions.RoleMember
-		_, err := tx.Exec(ctx, `
+		var id uuid.UUID
+		err := tx.QueryRow(ctx, `
 INSERT INTO roles (space_id, name, is_system, position, permissions, is_default_join)
 VALUES ($1, $2, true, $3, $4, $5)
-`, spaceID, spec.Name, spec.Position, int64(spec.Mask), defaultJoin)
+
+RETURNING id
+`, spaceID, spec.Name, spec.Position, int64(spec.Mask), defaultJoin).Scan(&id)
 		if err != nil {
 			return nil, fmt.Errorf("insert system role %q: %w", spec.Name, err)
 		}
-	}
-	created, err := listRoles(ctx, tx, spaceID)
-	if err != nil {
-		return nil, err
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, err
+		created = append(created, RoleRow{
+			ID:              id,
+			SpaceID:         spaceID,
+			Name:            spec.Name,
+			PermissionsMask: spec.Mask,
+			Position:        spec.Position,
+			Managed:         true,
+		})
 	}
 	return created, nil
 }
@@ -74,17 +90,32 @@ func (s *RoleStore) BootstrapSpaceRoles(ctx context.Context, spaceID, ownerProfi
 
 // BootstrapSpaceRolesWithCreatedSystemRoles seeds roles, assigns Owner, and returns only newly created system roles.
 func (s *RoleStore) BootstrapSpaceRolesWithCreatedSystemRoles(ctx context.Context, spaceID, ownerProfileID uuid.UUID) ([]RoleRow, error) {
-	created, err := s.bootstrapSystemRoles(ctx, spaceID)
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("role store: pool not configured")
+	}
+	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	roles, err := s.ListRoles(ctx, spaceID)
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	created, err := s.bootstrapSystemRolesTx(ctx, tx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	roles, err := listRoles(ctx, tx, spaceID)
 	if err != nil {
 		return nil, err
 	}
 	for _, r := range roles {
 		if r.Name == permissions.RoleOwner {
-			if err := s.AssignMemberRole(ctx, spaceID, ownerProfileID, r.ID, ownerProfileID); err != nil {
+			if _, err := tx.Exec(ctx, `
+INSERT INTO member_roles (space_id, profile_id, role_id, assigned_by)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (space_id, profile_id, role_id) DO NOTHING
+`, spaceID, ownerProfileID, r.ID, ownerProfileID); err != nil {
+				return nil, err
+			}
+			if err := tx.Commit(ctx); err != nil {
 				return nil, err
 			}
 			return created, nil
