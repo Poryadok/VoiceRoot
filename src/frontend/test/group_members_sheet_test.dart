@@ -138,8 +138,19 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(ChatInfoPanel.panelKey), findsOneWidget);
-    expect(find.byType(VoiceStatePanel), findsOneWidget);
-    expect(find.text('Could not load members'), findsOneWidget);
+    final groupMembers = find.byType(GroupMembersContent);
+    expect(groupMembers, findsOneWidget);
+    expect(
+      find.descendant(of: groupMembers, matching: find.byType(VoiceStatePanel)),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: groupMembers,
+        matching: find.text('Could not load members'),
+      ),
+      findsNWidgets(2),
+    );
     expect(find.textContaining('raw upstream failure'), findsNothing);
   });
 

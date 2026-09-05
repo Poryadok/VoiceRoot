@@ -17,6 +17,7 @@ import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
+import 'package:voice_frontend/state/onboarding_controller.dart';
 import 'package:voice_frontend/state/profile_switch_coordinator.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/profile/create_profile_sheet.dart';
@@ -338,6 +339,9 @@ class _EntryHarness {
         ),
         httpClientProvider.overrideWithValue(client),
         realtimeAutoConnectProvider.overrideWithValue(false),
+        onboardingControllerProvider.overrideWith(
+          _CompletedOnboardingController.new,
+        ),
         authControllerProvider.overrideWith((ref) {
           final controller = AuthController(
             authClient: ref.watch(voiceAuthClientProvider),
@@ -421,6 +425,11 @@ class _EntryHarness {
     _disposed = true;
     container.dispose();
   }
+}
+
+class _CompletedOnboardingController extends OnboardingController {
+  @override
+  OnboardingUiState build() => const OnboardingUiState(completed: true);
 }
 
 AuthSession _sessionFor(String profileId) => AuthSession(

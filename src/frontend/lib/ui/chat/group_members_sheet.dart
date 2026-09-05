@@ -50,12 +50,14 @@ class GroupMembersContent extends ConsumerWidget {
         Expanded(
           child: membersAsync.when(
             loading: () => const VoiceListSkeleton(),
-            error: (error, _) => VoiceStatePanel(
-              title: l10n.chatGroupMembersLoadError,
-              message: groupMembersErrorMessage(l10n, error),
-              icon: Icons.cloud_off_outlined,
-              actionLabel: l10n.commonRetry,
-              onAction: () => ref.invalidate(groupMembersProvider(chatId)),
+            error: (error, _) => SingleChildScrollView(
+              child: VoiceStatePanel(
+                title: l10n.chatGroupMembersLoadError,
+                message: groupMembersErrorMessage(l10n, error),
+                icon: Icons.cloud_off_outlined,
+                actionLabel: l10n.commonRetry,
+                onAction: () => ref.invalidate(groupMembersProvider(chatId)),
+              ),
             ),
             data: (data) {
               final myRole = _myRole(data.members, activeId);
