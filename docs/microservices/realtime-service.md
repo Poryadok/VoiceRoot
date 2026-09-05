@@ -117,7 +117,7 @@ Two producers may emit WS `notification` for the same message; clients **dedupe*
 | `subscription_sync`  | Снимок подписок DM после `hello` (см. раздел «Подписки»): `d.scope` = `dm`, `d.chat_ids`, `d.source` = `chat`, `d.degraded` при ошибке S2S к Chat |
 | `subscribe_ack`      | Подтверждение `subscribe`: `d.chat_id`                              |
 | `unsubscribe_ack`    | Подтверждение `unsubscribe`: `d.chat_id`                          |
-| `error`              | Ошибка разбора клиентской операции, напр. `d.code` = `invalid_subscribe` / `invalid_unsubscribe` |
+| `error`              | Ошибка клиентской операции: malformed UUID сохраняет `invalid_subscribe` / `invalid_unsubscribe`; valid lazy `subscribe`, который Chat не разрешил или не смог проверить, возвращает generic `d.code=permission_denied`, `d.message=chat subscription denied`, `d.chat_id` |
 | `message_create`     | Новое сообщение                                                     |
 | `message_update`     | Сообщение отредактировано                                           |
 | `message_delete`     | Сообщение удалено                                                   |
@@ -202,7 +202,7 @@ Routing rules (presence, quiet hours, `send_silent`, mute) — [notification-ser
 
 - **`NATS_URL`** — URL NATS Server с JetStream (порт **4222**). В Compose: `nats://nats:4222`; с хоста: `nats://127.0.0.1:${NATS_PORT:-4222}` (см. [`docker-compose.yml`](../../docker-compose.yml)).
 - Подписки на доменные потоки для fan-out в WebSocket — в первую очередь **`message.events`** (consume: `message.sent`, …; **publish:** client `delivery_ack` → `message.delivery_ack`), **`chat.events`** и с Фазы 2 **`voice.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)); детали subject/consumer — в реализации сервиса.
-- **`REALTIME_CHAT_GRPC_ADDR`** (опционально) — gRPC адрес **Chat Service** для bootstrap списка DM при открытии WebSocket (например `chat:50051` в compose). Если не задан, сервер **не** вызывает Chat и **не** шлёт `subscription_sync`; клиент может подписываться через `subscribe` (lazy). TLS/insecure — как принято в окружении (локально часто plaintext внутри mesh).
+- **`REALTIME_CHAT_GRPC_ADDR`** (опционально) — gRPC адрес **Chat Service** для bootstrap списка DM при открытии WebSocket и проверки lazy `subscribe` через `GetChat` (например `chat:50051` в compose). Если не задан, сервер **не** вызывает Chat и **не** шлёт `subscription_sync`; valid lazy `subscribe` fail-closed с generic `permission_denied`, а не создаёт неподтверждённую подписку. TLS/insecure — как принято в окружении (локально часто plaintext внутри mesh).
 - **`REALTIME_USER_GRPC_ADDR`** (опционально) — User Service для записи presence при WS `presence_update`.
 - **`REALTIME_SOCIAL_GRPC_ADDR`** (опционально) — Social Service `ListFriends` для fan-out `user.presence_changed` друзьям по WebSocket (без общей chat-подписки).
 
@@ -242,11 +242,11 @@ Redis и проверка JWT остаются correctness path; нельзя с
 | Подход | Описание |
 |--------|----------|
 | **Bootstrap из Chat (основной)** | После `hello`, если задан `REALTIME_CHAT_GRPC_ADDR`, Realtime вызывает Chat Service **`ListChats`** (постранично), собирает чаты с типом **`CHAT_TYPE_DM`** и регистрирует их в локальном наборе подписок соединения. Клиент получает **`subscription_sync`** с отсортированным `chat_ids`. Источник истины по членству в чатах — **Chat**; так не пропускаются события по DM, в которые пользователь вступил, но UI ещё не открывал. |
-| **Lazy `subscribe`** | Клиент шлёт `subscribe` с `chat_id` (например гонка сразу после `CreateDM`, пока список не обновился, или вспомогательный чат вне первой страницы `ListChats` до доработки пагинации на стороне bootstrap). Подписки суммируются с bootstrap. |
-| **Только lazy** | Если Chat gRPC **не** сконфигурирован, bootstrap не выполняется — подписки только через `subscribe` / `unsubscribe`. Это сознательная деградация для dev/частичного деплоя; для продакшена DM MVP ожидается заданный адрес Chat. |
+| **Lazy `subscribe`** | Клиент шлёт `subscribe` с `chat_id` (например гонка сразу после `CreateDM`, пока список не обновился, или вспомогательный чат вне первой страницы `ListChats` до доработки пагинации на стороне bootstrap). Перед `subscribe_ack` Realtime вызывает Chat `GetChat` c обычными user/profile metadata (не internal caller); unknown, nonmember, deleted-for-self, dependency failure или timeout возвращают только generic `permission_denied`. Подписки суммируются с bootstrap. |
+| **Chat не сконфигурирован** | Bootstrap не выполняется; lazy `subscribe` **не** служит fallback для ACL и fail-closed с generic `permission_denied`. Для продакшена DM MVP ожидается заданный адрес Chat. |
 | **Ошибка Chat при bootstrap** | Всё равно отправляется `subscription_sync` с `degraded: true` и пустым `chat_ids`; клиенту следует опереться на REST список чатов и при необходимости прислать `subscribe` по известным `chat_id`. |
 
-Группы/каналы и прочие scope — вне этого чанка; по мере готовности Chat/Realtime их bootstrap расширяется по той же схеме (источник списка в Chat, не выдумывать членство в Realtime).
+Группы/каналы и прочие scope — вне этого чанка; по мере готовности Chat/Realtime их bootstrap расширяется по той же схеме (источник списка в Chat, не выдумывать членство в Realtime). `chat.member_changed` c `removed` или `left` отзывает все локальные подписки profile/chat; `joined` не создаёт подписку автоматически.
 
 ## Зависимости
 

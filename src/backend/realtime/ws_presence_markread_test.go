@@ -15,7 +15,7 @@ import (
 
 func TestWSMarkReadFanoutSameProfileTwoConnections(t *testing.T) {
 	t.Parallel()
-	hub := newWSHub()
+	hub := permitAllTestSubscriptions(newWSHub())
 	v := staticTokenValidator{
 		"mobile":  {UserID: "u1", ProfileID: "prof-same"},
 		"desktop": {UserID: "u1", ProfileID: "prof-same"},
@@ -147,7 +147,7 @@ func TestWSMarkReadRejectedWithoutChatSubscription(t *testing.T) {
 
 func TestWSPresenceUpdateFanoutToPeerInSharedChat(t *testing.T) {
 	t.Parallel()
-	hub := newWSHub()
+	hub := permitAllTestSubscriptions(newWSHub())
 	v := staticTokenValidator{
 		"t1": {UserID: "a", ProfileID: "p1"},
 		"t2": {UserID: "b", ProfileID: "p2"},

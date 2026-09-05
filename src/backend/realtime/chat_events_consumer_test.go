@@ -139,6 +139,13 @@ func TestRunChatEventsConsumer_JetStreamToProfile(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("timed out waiting for chat_update fan-out")
 	}
+	hub.mu.RLock()
+	_, joinedSubscribed := reg.chats[chatID]
+	_, joinedRegistered := hub.byChat[chatID]
+	hub.mu.RUnlock()
+	if joinedSubscribed || joinedRegistered {
+		t.Fatal("joined membership event must not auto-subscribe the local connection")
+	}
 	cancel()
 	<-errCh
 }
