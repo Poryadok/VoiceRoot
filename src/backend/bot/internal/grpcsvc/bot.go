@@ -3,6 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -354,6 +355,9 @@ func (s *BotGRPC) ApplyManifest(ctx context.Context, req *botv1.ApplyManifestReq
 		return nil, status.Error(codes.InvalidArgument, msg)
 	}
 	if err := s.Store.ApplyManifest(ctx, botID, doc); err != nil {
+		if errors.Is(err, store.ErrScopeEscalation) {
+			return nil, status.Error(codes.PermissionDenied, err.Error())
+		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	row, err := s.Store.GetBotByID(ctx, botID)

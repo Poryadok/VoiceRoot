@@ -3,6 +3,7 @@ package manifest
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -81,13 +82,63 @@ func Validate(doc Document) []string {
 	if strings.TrimSpace(doc.Name) == "" {
 		errs = append(errs, "name is required")
 	}
-	for _, scope := range doc.Scopes {
-		if _, ok := allowedScopes[strings.TrimSpace(scope)]; !ok {
-			errs = append(errs, "unknown scope: "+scope)
-		}
-	}
+	errs = append(errs, ValidateScopes(doc.Scopes)...)
 	errs = append(errs, validateCommands(doc.Commands)...)
 	return errs
+}
+
+// ValidateScopes returns validation errors for a canonical set of bot scopes.
+func ValidateScopes(scopes []string) []string {
+	var errs []string
+	seen := make(map[string]struct{}, len(scopes))
+	for _, scope := range scopes {
+		if strings.TrimSpace(scope) != scope || scope == "" {
+			errs = append(errs, "scope identifiers must be non-empty and canonical")
+			continue
+		}
+		if _, ok := allowedScopes[scope]; !ok {
+			errs = append(errs, "unknown scope: "+scope)
+			continue
+		}
+		if _, duplicate := seen[scope]; duplicate {
+			errs = append(errs, "duplicate scope: "+scope)
+			continue
+		}
+		seen[scope] = struct{}{}
+	}
+	return errs
+}
+
+// ParseScopeSetJSON decodes a scope JSON array into a canonical set. Stored
+// scopes are parsed without the allowed-scope check so callers can distinguish
+// malformed persistence from a request for a scope the bot does not have.
+func ParseScopeSetJSON(raw string, validateAllowed bool) (map[string]struct{}, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" || trimmed == "null" {
+		return nil, fmt.Errorf("scopes_json must be a JSON array")
+	}
+
+	var scopes []string
+	if err := json.Unmarshal([]byte(trimmed), &scopes); err != nil || scopes == nil {
+		return nil, fmt.Errorf("scopes_json must be a JSON array of strings")
+	}
+	if validateAllowed {
+		if errs := ValidateScopes(scopes); len(errs) > 0 {
+			return nil, fmt.Errorf("%s", strings.Join(errs, "; "))
+		}
+	}
+
+	seen := make(map[string]struct{}, len(scopes))
+	for _, scope := range scopes {
+		if strings.TrimSpace(scope) != scope || scope == "" {
+			return nil, fmt.Errorf("scope identifiers must be non-empty and canonical")
+		}
+		if _, duplicate := seen[scope]; duplicate {
+			return nil, fmt.Errorf("duplicate scope: %s", scope)
+		}
+		seen[scope] = struct{}{}
+	}
+	return seen, nil
 }
 
 // ValidateCommands validates slash command definitions without manifest metadata.
@@ -221,7 +272,30 @@ func ToJSON(doc Document) (string, error) {
 	return string(b), nil
 }
 
-// ScopesJSON encodes scopes slice.
+// CanonicalScopesJSON validates scopes and encodes them in deterministic order.
+func CanonicalScopesJSON(scopes []string) (string, error) {
+	if errs := ValidateScopes(scopes); len(errs) > 0 {
+		return "", fmt.Errorf("%s", strings.Join(errs, "; "))
+	}
+	ordered := append([]string(nil), scopes...)
+	sort.Strings(ordered)
+	b, _ := json.Marshal(ordered)
+	return string(b), nil
+}
+
+// CanonicalScopeSetJSON encodes a scope set in deterministic order.
+func CanonicalScopeSetJSON(scopes map[string]struct{}) string {
+	ordered := make([]string, 0, len(scopes))
+	for scope := range scopes {
+		ordered = append(ordered, scope)
+	}
+	sort.Strings(ordered)
+	b, _ := json.Marshal(ordered)
+	return string(b)
+}
+
+// ScopesJSON encodes a validated scope slice. Callers accepting external input
+// should use CanonicalScopesJSON first.
 func ScopesJSON(scopes []string) string {
 	b, _ := json.Marshal(scopes)
 	return string(b)

@@ -19,9 +19,10 @@ import (
 )
 
 var (
-	ErrNotFound      = errors.New("not found")
-	ErrInvalidToken  = errors.New("invalid bot token")
-	ErrNotWhitelisted = errors.New("chat not whitelisted")
+	ErrNotFound        = errors.New("not found")
+	ErrInvalidToken    = errors.New("invalid bot token")
+	ErrNotWhitelisted  = errors.New("chat not whitelisted")
+	ErrScopeEscalation = errors.New("scope escalation requires renewed consent")
 )
 
 // BotStore persists bot platform data.
@@ -244,16 +245,30 @@ func (s *BotStore) ApplyManifest(ctx context.Context, botID uuid.UUID, doc manif
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	canonicalScopes, err := manifest.CanonicalScopesJSON(doc.Scopes)
+	if err != nil {
+		return err
+	}
 
 	webhook := strings.TrimSpace(doc.WebhookURL)
 	polling := webhook == ""
-	_, err = tx.Exec(ctx, `
+	tag, err := tx.Exec(ctx, `
 UPDATE bots SET name = $2, description = $3, avatar_url = NULLIF($4, ''), webhook_url = NULLIF($5, ''),
 	is_polling_mode = $6, scopes = $7::jsonb, updated_at = now()
-WHERE id = $1`,
-		botID, doc.Name, doc.Description, doc.IconURL, webhook, polling, manifest.ScopesJSON(doc.Scopes))
+WHERE id = $1 AND scopes @> $7::jsonb`,
+		botID, doc.Name, doc.Description, doc.IconURL, webhook, polling, canonicalScopes)
 	if err != nil {
 		return err
+	}
+	if tag.RowsAffected() == 0 {
+		var exists bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bots WHERE id = $1)`, botID).Scan(&exists); err != nil {
+			return err
+		}
+		if !exists {
+			return ErrNotFound
+		}
+		return ErrScopeEscalation
 	}
 	_, err = tx.Exec(ctx, `DELETE FROM bot_commands WHERE bot_id = $1`, botID)
 	if err != nil {
