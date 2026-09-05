@@ -269,7 +269,9 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/user_db?sslmode=disable
       USER_GRPC_ADDR: :9090
       SOCIAL_GRPC_ADDR: social:9090
+      AUTH_GRPC_ADDR: auth:9090
       USER_REDIS_ADDR: redis:6379
+      NATS_URL: nats://nats:4222
       USER_R2_ENDPOINT: ${USER_R2_ENDPOINT:-}
       USER_R2_REGION: ${USER_R2_REGION:-auto}
       USER_R2_ACCESS_KEY_ID: ${USER_R2_ACCESS_KEY_ID:-}
@@ -283,6 +285,8 @@ services:
       compose-db-init:
         condition: service_completed_successfully
       redis:
+        condition: service_healthy
+      nats:
         condition: service_healthy
       social:
         condition: service_healthy

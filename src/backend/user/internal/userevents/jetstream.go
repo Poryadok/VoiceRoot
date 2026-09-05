@@ -18,8 +18,9 @@ import (
 )
 
 	const (
-		streamName                = "user_events"
-		subjectProfileCreated     = "user.profile_created"
+	streamName                = "user_events"
+	subjectAccountDeleted     = "user.account_deleted"
+	subjectProfileCreated     = "user.profile_created"
 		subjectProfileUpdated     = "user.profile_updated"
 		subjectProfileSwitched    = "user.profile_switched"
 		subjectProfileVerified    = "user.verified"
@@ -65,6 +66,7 @@ func NewJetStreamPublisher(natsURL string) (*JetStreamPublisher, error) {
 		}
 		p.ensureOnce.Do(func() {
 			subjects := []string{
+				subjectAccountDeleted,
 				subjectProfileCreated,
 				subjectProfileUpdated,
 				subjectProfileSwitched,

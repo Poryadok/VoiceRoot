@@ -63,6 +63,7 @@ func main() {
 		var blocks grpcsvc.AccountBlockChecker
 		var socialGraph grpcsvc.SocialGraphChecker
 		var spaceCoMembership grpcsvc.SpaceCoMembershipChecker
+		var deletedAccounts grpcsvc.DeletedAccountsChecker
 		if socialAddr := strings.TrimSpace(os.Getenv("SOCIAL_GRPC_ADDR")); socialAddr != "" {
 			sconn, err := grpc.NewClient(grpcclient.DialTarget(socialAddr),
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -122,6 +123,18 @@ func main() {
 			defer func() { _ = spconn.Close() }()
 			spaceCoMembership = grpcsvc.NewSpaceGRPCCoMembership(spconn)
 		}
+		authAddr := strings.TrimSpace(os.Getenv("AUTH_GRPC_ADDR"))
+		if authAddr == "" {
+			log.Fatal("AUTH_GRPC_ADDR is required for deleted-account visibility")
+		}
+		authConn, err := grpc.NewClient(grpcclient.DialTarget(authAddr),
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+		)
+		if err != nil {
+			log.Fatalf("auth grpc: %v", err)
+		}
+		defer func() { _ = authConn.Close() }()
+		deletedAccounts = grpcsvc.NewAuthGRPCDeletedAccounts(authConn)
 
 		var presence *store.PresenceStore
 		if redisAddr := strings.TrimSpace(os.Getenv("USER_REDIS_ADDR")); redisAddr != "" {
@@ -180,6 +193,7 @@ func main() {
 			AvatarPresigner:     avatarPresigner,
 			AvatarPublicBaseURL: avatarPublicBase,
 			Events:              events,
+			DeletedAccounts:     deletedAccounts,
 			DNSResolver:         dnsResolver,
 		})
 		go func() {

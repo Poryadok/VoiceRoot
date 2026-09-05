@@ -73,6 +73,19 @@ func (s *UserGRPC) GetPresence(ctx context.Context, req *userv1.GetPresenceReque
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid profile_id")
 	}
+	if s.DeletedAccounts != nil {
+		profiles, err := s.Profiles.GetByIDs(ctx, []uuid.UUID{profileID})
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		profiles, err = s.filterDeletedAccountProfiles(ctx, profiles)
+		if err != nil {
+			return nil, deletedAccountCheckUnavailable(err)
+		}
+		if len(profiles) == 0 {
+			return &userv1.GetPresenceResponse{PresenceStatus: presenceSnapshotToProto(profileID, nil)}, nil
+		}
+	}
 	snap, err := s.Presence.Get(ctx, profileID)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -169,12 +182,33 @@ func (s *UserGRPC) GetBulkPresence(ctx context.Context, req *userv1.GetBulkPrese
 		}
 		ids = append(ids, id)
 	}
+	visible := make(map[uuid.UUID]struct{}, len(ids))
+	if s.DeletedAccounts != nil {
+		profiles, err := s.Profiles.GetByIDs(ctx, ids)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		profiles, err = s.filterDeletedAccountProfiles(ctx, profiles)
+		if err != nil {
+			return nil, deletedAccountCheckUnavailable(err)
+		}
+		for _, profile := range profiles {
+			visible[profile.ID] = struct{}{}
+		}
+	} else {
+		for _, id := range ids {
+			visible[id] = struct{}{}
+		}
+	}
 	m, err := s.Presence.GetMany(ctx, ids)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	out := make(map[string]*userv1.PresenceStatus, len(m))
 	for id, snap := range m {
+		if _, ok := visible[id]; !ok {
+			continue
+		}
 		if snap != nil && snap.Live && !s.mayViewOnlineStatus(ctx, id) {
 			out[id.String()] = presenceSnapshotToProto(id, nil)
 			continue

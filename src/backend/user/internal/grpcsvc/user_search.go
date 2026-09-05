@@ -89,6 +89,12 @@ func (s *UserGRPC) SearchProfiles(ctx context.Context, req *userv1.SearchProfile
 		}
 		for _, row := range rows {
 			scan = profileRowSearchCursor(row)
+		}
+		rows, err = s.filterDeletedAccountProfiles(ctx, rows)
+		if err != nil {
+			return nil, deletedAccountCheckUnavailable(err)
+		}
+		for _, row := range rows {
 			blocked, err := s.pairwiseBlocked(ctx, viewer, row.AccountID)
 			if err != nil {
 				return nil, status.Error(codes.Internal, err.Error())

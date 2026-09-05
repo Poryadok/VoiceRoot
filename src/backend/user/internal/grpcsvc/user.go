@@ -42,6 +42,9 @@ type UserGRPC struct {
 	AvatarPublicBaseURL string
 	// Events optional JetStream publisher for user.events.
 	Events UserEventsPublisher
+	// DeletedAccounts synchronously hides profiles for Auth-deleted accounts.
+	// Main configures it; nil keeps isolated unit fixtures backwards-compatible.
+	DeletedAccounts DeletedAccountsChecker
 }
 
 func (s *UserGRPC) GetProfile(ctx context.Context, req *userv1.GetProfileRequest) (*userv1.GetProfileResponse, error) {
@@ -69,6 +72,14 @@ func (s *UserGRPC) GetProfile(ctx context.Context, req *userv1.GetProfileRequest
 	if row == nil {
 		return nil, status.Error(codes.NotFound, "profile not found")
 	}
+	visible, visibilityErr := s.filterDeletedAccountProfiles(ctx, []*store.ProfileRow{row})
+	if visibilityErr != nil {
+		return nil, deletedAccountCheckUnavailable(visibilityErr)
+	}
+	if len(visible) == 0 {
+		return nil, status.Error(codes.NotFound, "profile not found")
+	}
+	row = visible[0]
 	if viewerAccountID, ok := authctx.AccountID(ctx); ok && s.Blocks != nil {
 		blocked, blockErr := s.Blocks.AccountPairBlocked(ctx, viewerAccountID, row.AccountID)
 		if blockErr != nil {
@@ -97,6 +108,10 @@ func (s *UserGRPC) GetProfiles(ctx context.Context, req *userv1.GetProfilesReque
 	rows, err := s.Profiles.GetByIDs(ctx, ids)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
+	}
+	rows, err = s.filterDeletedAccountProfiles(ctx, rows)
+	if err != nil {
+		return nil, deletedAccountCheckUnavailable(err)
 	}
 	out := make([]*userv1.Profile, 0, len(rows))
 	for _, r := range rows {
