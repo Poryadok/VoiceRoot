@@ -595,10 +595,169 @@ void main() {
       expect(state.messages, isEmpty);
     });
   });
+
+  group('T053 P4b mutation completions respect active auth generation', () {
+    final mutations = <_DeferredMutationCase>[
+      _DeferredMutationCase(
+        name: 'send',
+        kind: _DeferredMutationKind.send,
+        invoke: (controller) => controller.sendMessage('stale send'),
+      ),
+      _DeferredMutationCase(
+        name: 'edit',
+        kind: _DeferredMutationKind.edit,
+        invoke: (controller) =>
+            controller.editMessage('message-a', 'stale edit'),
+      ),
+      _DeferredMutationCase(
+        name: 'delete',
+        kind: _DeferredMutationKind.delete,
+        invoke: (controller) =>
+            controller.deleteMessage('message-a', forMe: false),
+      ),
+      _DeferredMutationCase(
+        name: 'reaction failure',
+        kind: _DeferredMutationKind.addReaction,
+        invoke: (controller) => controller.toggleReaction(
+          'message-a',
+          '👍',
+          currentlyReacted: false,
+        ),
+      ),
+      _DeferredMutationCase(
+        name: 'pin',
+        kind: _DeferredMutationKind.pin,
+        invoke: (controller) =>
+            controller.togglePin('message-a', currentlyPinned: false),
+      ),
+      _DeferredMutationCase(
+        name: 'unpin',
+        kind: _DeferredMutationKind.unpin,
+        invoke: (controller) =>
+            controller.togglePin('message-a', currentlyPinned: true),
+      ),
+    ];
+
+    for (final transition in _StaleAuthTransition.values) {
+      for (final mutation in mutations) {
+        test(
+          '${mutation.name} completion cannot mutate ${transition.label} state or cache',
+          () async {
+            final auth = _MutableAuthController();
+            final cache = _RecordingCacheStore();
+            final messages = _DeferredMutationMessagesClient(mutation.kind);
+            final container = _container(
+              auth: auth,
+              messages: messages,
+              cache: cache,
+            );
+            addTearDown(container.dispose);
+            final subscription = await _loadRoom(container);
+            addTearDown(subscription.close);
+            final controller = container.read(
+              chatRoomControllerProvider('chat-1').notifier,
+            );
+            controller.state = ChatRoomState(
+              messages: [_message('message-a')],
+              pinnedMessages: [_message('message-a')],
+              errorMessage: 'error-a',
+            );
+
+            final completion = mutation.invoke(controller);
+            expect(messages.wasRequested, isTrue);
+            expect(messages.requestedAuthorization, 'Bearer access-a');
+
+            final currentProfileId = transition.apply(auth);
+            final currentMessage = _message(
+              'current-${mutation.kind.name}-${transition.name}',
+            );
+            final currentPinned = _message(
+              'pinned-${mutation.kind.name}-${transition.name}',
+            );
+            controller.state = ChatRoomState(
+              messages: [currentMessage],
+              pinnedMessages: [currentPinned],
+              errorMessage: 'error-current',
+            );
+            await cache.replaceChatMessages(
+              profileId: currentProfileId,
+              chatId: 'chat-1',
+              messages: [currentMessage],
+            );
+            final cacheMutations = cache.mutationSignatures();
+
+            messages.completeStaleResult();
+            await completion;
+            await pumpEventQueue();
+
+            final state = container.read(chatRoomControllerProvider('chat-1'));
+            expect(state.messages, [currentMessage]);
+            expect(state.pinnedMessages, [currentPinned]);
+            expect(state.errorMessage, 'error-current');
+            expect(await cache.cachedIdsFor(profileId: currentProfileId), [
+              currentMessage.id,
+            ]);
+            expect(cache.mutationSignatures(), cacheMutations);
+          },
+        );
+      }
+
+      test(
+        'late pinned refresh cannot mutate ${transition.label} pinned state',
+        () async {
+          final auth = _MutableAuthController();
+          final cache = _RecordingCacheStore();
+          final messages = _DeferredMutationMessagesClient(
+            _DeferredMutationKind.refreshPinned,
+          );
+          final container = _container(
+            auth: auth,
+            messages: messages,
+            cache: cache,
+          );
+          addTearDown(container.dispose);
+          final subscription = await _loadRoom(container);
+          addTearDown(subscription.close);
+          expect(messages.wasRequested, isTrue);
+          expect(messages.requestedAuthorization, 'Bearer access-a');
+
+          final currentProfileId = transition.apply(auth);
+          final currentMessage = _message('current-refresh-${transition.name}');
+          final currentPinned = _message('pinned-refresh-${transition.name}');
+          final controller = container.read(
+            chatRoomControllerProvider('chat-1').notifier,
+          );
+          controller.state = ChatRoomState(
+            messages: [currentMessage],
+            pinnedMessages: [currentPinned],
+            errorMessage: 'error-current',
+          );
+          await cache.replaceChatMessages(
+            profileId: currentProfileId,
+            chatId: 'chat-1',
+            messages: [currentMessage],
+          );
+          final cacheMutations = cache.mutationSignatures();
+
+          messages.completeStaleResult();
+          await pumpEventQueue();
+
+          final state = container.read(chatRoomControllerProvider('chat-1'));
+          expect(state.messages, [currentMessage]);
+          expect(state.pinnedMessages, [currentPinned]);
+          expect(state.errorMessage, 'error-current');
+          expect(await cache.cachedIdsFor(profileId: currentProfileId), [
+            currentMessage.id,
+          ]);
+          expect(cache.mutationSignatures(), cacheMutations);
+        },
+      );
+    }
+  });
 }
 
 ProviderContainer _container({
-  required _ScriptedMessagesClient messages,
+  required VoiceMessagesClient messages,
   required _RecordingCacheStore cache,
   _MutableAuthController? auth,
   _TestRealtimeHub? realtimeHub,
@@ -740,6 +899,197 @@ class _ScriptedMessagesClient extends VoiceMessagesClient {
     required String chatId,
     required String lastReadMessageId,
   }) async => const MessagesApiOk(null);
+}
+
+enum _DeferredMutationKind {
+  send,
+  edit,
+  delete,
+  addReaction,
+  pin,
+  unpin,
+  refreshPinned,
+}
+
+enum _StaleAuthTransition {
+  profileSwitch('profile switch', 'profile-b'),
+  tokenRotation('same-profile token rotation', 'profile-a');
+
+  const _StaleAuthTransition(this.label, this.profileId);
+
+  final String label;
+  final String profileId;
+
+  String apply(_MutableAuthController auth) {
+    switch (this) {
+      case _StaleAuthTransition.profileSwitch:
+        auth.state = _authState('profile-b', 'access-b');
+      case _StaleAuthTransition.tokenRotation:
+        auth.state = _authState(
+          'profile-a',
+          'access-a-rotated',
+          refreshToken: 'refresh-a-rotated',
+        );
+    }
+    return profileId;
+  }
+}
+
+class _DeferredMutationCase {
+  const _DeferredMutationCase({
+    required this.name,
+    required this.kind,
+    required this.invoke,
+  });
+
+  final String name;
+  final _DeferredMutationKind kind;
+  final Future<String?> Function(ChatRoomController controller) invoke;
+}
+
+/// A controlled external REST boundary.  The controller under test and its
+/// providers stay real; each case intentionally withholds only one RPC result.
+class _DeferredMutationMessagesClient extends VoiceMessagesClient {
+  _DeferredMutationMessagesClient(this.kind)
+    : super(
+        gateway: gatewayHttpForTest(
+          MockClient((_) async => http.Response('{}', 500)),
+        ),
+      );
+
+  final _DeferredMutationKind kind;
+  final _send = Completer<MessagesApiResult<VoiceMessage>>();
+  final _edit = Completer<MessagesApiResult<VoiceMessage>>();
+  final _delete = Completer<MessagesApiResult<void>>();
+  final _addReaction = Completer<MessagesApiResult<void>>();
+  final _pin = Completer<MessagesApiResult<void>>();
+  final _unpin = Completer<MessagesApiResult<void>>();
+  final _pinned = Completer<MessagesApiResult<MessageListData>>();
+  var wasRequested = false;
+  String? requestedAuthorization;
+
+  void _markRequested(String authorization) {
+    wasRequested = true;
+    requestedAuthorization ??= authorization;
+  }
+
+  @override
+  Future<MessagesApiResult<MessageListData>> getMessages({
+    required String authorization,
+    required String chatId,
+    String? afterMessageId,
+    String? beforeMessageId,
+    String? lastMessageId,
+    String? cursor,
+    int? pageSize,
+  }) async => const MessagesApiOk(MessageListData(messages: []));
+
+  @override
+  Future<MessagesApiResult<VoiceMessage>> sendMessage({
+    required String authorization,
+    required String chatId,
+    required String content,
+    List<MessageAttachment> attachments = const [],
+    List<MessageMention> mentions = const [],
+    String? clientMessageId,
+    String? threadParentId,
+    bool isE2e = false,
+  }) {
+    _markRequested(authorization);
+    return _send.future;
+  }
+
+  @override
+  Future<MessagesApiResult<VoiceMessage>> editMessage({
+    required String authorization,
+    required String messageId,
+    required String content,
+  }) {
+    _markRequested(authorization);
+    return _edit.future;
+  }
+
+  @override
+  Future<MessagesApiResult<void>> deleteMessage({
+    required String authorization,
+    required String messageId,
+    String scope = 'everyone',
+  }) {
+    _markRequested(authorization);
+    return _delete.future;
+  }
+
+  @override
+  Future<MessagesApiResult<void>> addReaction({
+    required String authorization,
+    required String messageId,
+    required String emoji,
+  }) {
+    _markRequested(authorization);
+    return _addReaction.future;
+  }
+
+  @override
+  Future<MessagesApiResult<void>> pinMessage({
+    required String authorization,
+    required String messageId,
+    required String chatId,
+  }) {
+    _markRequested(authorization);
+    return _pin.future;
+  }
+
+  @override
+  Future<MessagesApiResult<void>> unpinMessage({
+    required String authorization,
+    required String messageId,
+    required String chatId,
+  }) {
+    _markRequested(authorization);
+    return _unpin.future;
+  }
+
+  @override
+  Future<MessagesApiResult<MessageListData>> getPinnedMessages({
+    required String authorization,
+    required String chatId,
+  }) {
+    if (kind == _DeferredMutationKind.refreshPinned) {
+      _markRequested(authorization);
+      return _pinned.future;
+    }
+    return Future.value(const MessagesApiOk(MessageListData(messages: [])));
+  }
+
+  @override
+  Future<MessagesApiResult<void>> markRead({
+    required String authorization,
+    required String chatId,
+    required String lastReadMessageId,
+  }) async => const MessagesApiOk(null);
+
+  void completeStaleResult() {
+    switch (kind) {
+      case _DeferredMutationKind.send:
+        _send.complete(MessagesApiOk(_message('stale-send')));
+      case _DeferredMutationKind.edit:
+        _edit.complete(
+          MessagesApiOk(_message('message-a').copyWith(content: 'stale edit')),
+        );
+      case _DeferredMutationKind.delete:
+        _delete.complete(const MessagesApiOk(null));
+      case _DeferredMutationKind.addReaction:
+        _addReaction.complete(
+          const MessagesApiFailure(message: 'stale reaction failure'),
+        );
+      case _DeferredMutationKind.pin:
+        _pin.complete(const MessagesApiOk(null));
+      case _DeferredMutationKind.unpin:
+        _unpin.complete(const MessagesApiOk(null));
+      case _DeferredMutationKind.refreshPinned:
+        _pinned.complete(MessagesApiOk(_page(ids: const ['stale-pinned'])));
+    }
+  }
 }
 
 class _GetMessagesCall {
