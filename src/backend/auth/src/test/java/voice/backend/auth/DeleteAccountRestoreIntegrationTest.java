@@ -7,7 +7,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -49,8 +54,20 @@ class DeleteAccountRestoreIntegrationTest {
 
   @BeforeEach
   void setUpEpochFloor() {
+    Map<UUID, Long> floors = new ConcurrentHashMap<>();
     when(sessionEpochFloors.recordAtLeast(any(UUID.class), anyLong()))
-        .thenAnswer(invocation -> invocation.getArgument(1));
+        .thenAnswer(
+            invocation ->
+                floors.merge(invocation.getArgument(0), invocation.getArgument(1), Math::max));
+    when(sessionEpochFloors.requireFloor(any(UUID.class)))
+        .thenAnswer(
+            invocation -> {
+              Long floor = floors.get(invocation.getArgument(0));
+              if (floor == null) {
+                throw new SessionEpochFloorUnavailableException("session epoch floor missing");
+              }
+              return floor;
+            });
   }
 
   @Test
@@ -139,6 +156,52 @@ class DeleteAccountRestoreIntegrationTest {
     verify(sessionEpochFloors, times(2)).recordAtLeast(eq(before.id()), sealedEpochs.capture());
     assertThat(sealedEpochs.getAllValues())
         .containsExactly(afterFailure.sessionEpoch(), afterFailure.sessionEpoch());
+    verify(authEventPublisher, times(1)).publishAccountDeleted(before.id());
+  }
+
+  @Test
+  void concurrentDeleteCallsCompleteOnlyOneAccountDeletion() throws Exception {
+    JsonNode registered =
+        session(
+            postJson(
+                "/api/v1/auth/register",
+                "{\"email\":\"delete-epoch-concurrent@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}"));
+    String firstAccessToken = registered.get("access_token").asText();
+    String secondAccessToken =
+        session(
+                postJson(
+                    "/api/v1/auth/login",
+                    "{\"email\":\"delete-epoch-concurrent@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"other-device\"}"))
+            .get("access_token")
+            .asText();
+    Account before = accounts.findByEmail("delete-epoch-concurrent@example.com").orElseThrow();
+    ExecutorService workers = Executors.newFixedThreadPool(2);
+    try {
+      var first =
+          workers.submit(
+              () -> authService.deleteAccount("Bearer " + firstAccessToken, "Correct horse battery staple"));
+      var second =
+          workers.submit(
+              () -> authService.deleteAccount("Bearer " + secondAccessToken, "Correct horse battery staple"));
+
+      int successes = 0;
+      int inactive = 0;
+      for (var future : java.util.List.of(first, second)) {
+        try {
+          assertThat(future.get().restoreToken()).isNotBlank();
+          successes++;
+        } catch (ExecutionException ex) {
+          assertThat(ex.getCause()).isInstanceOf(AuthException.class).hasMessage("account_inactive");
+          inactive++;
+        }
+      }
+      assertThat(successes).isEqualTo(1);
+      assertThat(inactive).isEqualTo(1);
+    } finally {
+      workers.shutdownNow();
+    }
+
+    assertThat(accounts.findById(before.id().toString()).orElseThrow().sessionEpoch()).isEqualTo(2L);
     verify(authEventPublisher, times(1)).publishAccountDeleted(before.id());
   }
 
