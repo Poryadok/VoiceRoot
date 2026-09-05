@@ -3,6 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -10,10 +11,45 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"voice/backend/matchmaking/internal/criteria"
 	"voice/backend/matchmaking/internal/store"
 
 	matchmakingv1 "voice.app/voice/matchmaking/v1"
 )
+
+func seedPendingDuoMatchForGame(t *testing.T, ctx context.Context, srv *MatchmakingGRPC, gameID, profileB uuid.UUID) (matchID string, profileA uuid.UUID) {
+	t.Helper()
+	profileA = uuid.New()
+	timeout := time.Now().UTC().Add(30 * time.Minute)
+	crit := criteria.MustMarshal(criteria.SearchCriteria{Region: "eu"})
+	sessA, err := srv.Sessions.Create(ctx, store.CreateSessionParams{
+		ProfileID: profileA,
+		GameID:    gameID,
+		Mode:      "Duo",
+		Criteria:  crit,
+		TimeoutAt: timeout,
+	})
+	require.NoError(t, err)
+	sessB, err := srv.Sessions.Create(ctx, store.CreateSessionParams{
+		ProfileID: profileB,
+		GameID:    gameID,
+		Mode:      "Duo",
+		Criteria:  crit,
+		TimeoutAt: timeout,
+	})
+	require.NoError(t, err)
+	result, err := srv.Matches.CreateProposal(ctx, store.CreateProposalParams{
+		GameID: gameID,
+		Mode:   "Duo",
+		Region: "eu",
+		Sessions: []store.ProposalSession{
+			{SessionID: sessA.ID, ProfileID: profileA},
+			{SessionID: sessB.ID, ProfileID: profileB},
+		},
+	})
+	require.NoError(t, err)
+	return result.Match.ID.String(), profileA
+}
 
 func ratingTestServer(t *testing.T, pool *pgxpool.Pool) *MatchmakingGRPC {
 	t.Helper()
@@ -155,6 +191,47 @@ func TestGetPlayerRating_ReturnsAggregate(t *testing.T) {
 	require.Equal(t, gameID, resp.GetPlayerRating().GetGameId())
 	require.Equal(t, 5.0, resp.GetPlayerRating().GetRatingValue())
 	require.Equal(t, int32(1), resp.GetPlayerRating().GetGamesPlayed())
+}
+
+func TestGetPlayerRating_GamesPlayedCountsCompletedMatchesNotRatings(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startDB(t, ctx)
+	srv := ratingTestServer(t, pool)
+
+	game, err := srv.Games.Create(ctx, "Games played test", duoGameConfig(), uuid.New())
+	require.NoError(t, err)
+	profileB := uuid.New()
+	match1, profileA1 := seedPendingDuoMatchForGame(t, ctx, srv, game.ID, profileB)
+	match2, profileA2 := seedPendingDuoMatchForGame(t, ctx, srv, game.ID, profileB)
+	for _, participant := range []struct {
+		matchID, profileA string
+	}{{match1, profileA1.String()}, {match2, profileA2.String()}} {
+		_, err = srv.RespondToMatch(ctxWithProfile(uuid.MustParse(participant.profileA)), &matchmakingv1.RespondToMatchRequest{MatchId: participant.matchID, Accept: true})
+		require.NoError(t, err)
+		_, err = srv.RespondToMatch(ctxWithProfile(profileB), &matchmakingv1.RespondToMatchRequest{MatchId: participant.matchID, Accept: true})
+		require.NoError(t, err)
+	}
+	for _, participant := range []struct {
+		matchID, profile string
+	}{{match1, profileA1.String()}, {match1, profileB.String()}, {match2, profileA2.String()}, {match2, profileB.String()}} {
+		_, err = srv.CompleteMatch(ctxWithProfile(uuid.MustParse(participant.profile)), &matchmakingv1.CompleteMatchRequest{MatchId: participant.matchID})
+		require.NoError(t, err)
+	}
+
+	_, err = srv.RateMatch(ctxWithProfile(profileA1), &matchmakingv1.RateMatchRequest{
+		MatchId: match1, RatedProfileId: profileB.String(), Stars: 5,
+	})
+	require.NoError(t, err)
+
+	resp, err := srv.GetPlayerRating(ctx, &matchmakingv1.GetPlayerRatingRequest{
+		ProfileId: profileB.String(), GameId: game.ID.String(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, 5.0, resp.GetPlayerRating().GetRatingValue())
+	require.Equal(t, int32(2), resp.GetPlayerRating().GetGamesPlayed())
 }
 
 func TestUnbanFromMM_ClearsPeerBan(t *testing.T) {
