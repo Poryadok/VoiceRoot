@@ -36,10 +36,6 @@ func (s *UserGRPC) UpdatePresence(ctx context.Context, req *userv1.UpdatePresenc
 	if err != nil {
 		return nil, err
 	}
-	previous, err := s.Presence.Get(ctx, profileID)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
 	in := store.PresenceUpsert{
 		Status:       st,
 		StatusEnum:   enum,
@@ -48,7 +44,8 @@ func (s *UserGRPC) UpdatePresence(ctx context.Context, req *userv1.UpdatePresenc
 		CallInfoJSON: req.GetCallInfoJson(),
 		Now:          time.Now().UTC(),
 	}
-	if err := s.Presence.Upsert(ctx, profileID, in); err != nil {
+	previous, err := s.Presence.UpsertAndGetPrevious(ctx, profileID, in)
+	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	oldStatus, newStatus, publish := presenceTransitionForSnapshot(previous, st, enum)

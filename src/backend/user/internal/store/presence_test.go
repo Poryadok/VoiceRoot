@@ -107,7 +107,11 @@ func TestPresenceStore_ConcurrentUpsertsReturnLinearizablePreviousStatus(t *test
 	st := NewPresenceStore(rdb)
 	pid := uuid.MustParse("55555555-5555-5555-5555-555555555555")
 	now := time.Unix(1700000000, 0).UTC()
-	require.NoError(t, st.Upsert(ctx, pid, PresenceUpsert{Status: "online", StatusEnum: 1, Now: now}))
+	initial, err := st.UpsertAndGetPrevious(ctx, pid, PresenceUpsert{Status: "online", StatusEnum: 1, Now: now})
+	require.NoError(t, err)
+	require.False(t, initial.Live)
+	require.Empty(t, initial.Status)
+	require.Zero(t, initial.StatusEnum)
 
 	type updateResult struct {
 		status   string

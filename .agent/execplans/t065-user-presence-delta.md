@@ -56,9 +56,9 @@ last-seen TTLs.
    the legacy `status` field populated with `new_status` for existing consumers.
 5. Regenerate all Go and Dart protobuf artifacts only with the repository Make
    targets; stop rather than downloading dependencies if a tool needs network.
-6. Read the prior live snapshot before the unconditional upsert; after a
-   successful upsert publish only when its previous enum differs from the
-   normalized incoming enum.
+6. Atomically read the prior live snapshot and refresh the session/last-seen
+   keys in Redis; after the successful write publish only when the returned
+   prior enum differs from the normalized incoming enum.
 7. Run focused User tests, `buf` format/lint/breaking against local `master`,
    inspect generated copies and final diff, then obtain a fresh implementation
    review.
@@ -72,6 +72,8 @@ last-seen TTLs.
 - [x] Local-master protobuf breaking check using the repository target
 - [x] Generated Go/Dart artifact check using repository Buf templates and the
   approved Windows mechanical Go mirror
+- [x] `GOPROXY=off; go test -race ./internal/store -run
+  TestPresenceStore_ConcurrentUpsertsReturnLinearizablePreviousStatus`
 
 ## Progress
 
@@ -94,7 +96,13 @@ last-seen TTLs.
   ran silently beyond the bounded check; no Docker was started.
 - [x] `buf format`, `buf lint`, and `buf breaking` against local `master` pass.
 - [x] GREEN implementation and generated stubs committed.
-- [ ] GREEN review and final validation accepted.
+- [x] Initial GREEN review found a P1 stale-snapshot race: separate `Get` and
+  `Upsert` calls could publish an incorrect old enum or suppress a later
+  transition under concurrent heartbeats.
+- [x] Correction RED commit `62961446` adds a concurrent same-profile upsert
+  test that requires a linearizable prior snapshot and retains the
+  first-observation assertion.
+- [ ] Atomic correction committed, re-reviewed, and finally validated.
 
 ## Decisions
 
@@ -102,8 +110,9 @@ last-seen TTLs.
   consumers; add `old_status` and `new_status` rather than repurposing a wire
   field.
 - Use the stored enum, not optional game/custom/call/last-seen fields, as the
-  transition predicate. The unconditional upsert remains before any best-effort
-  event publish.
+  transition predicate. A Redis Lua operation atomically returns the prior
+  live snapshot while preserving the unconditional session/activity/last-seen
+  refresh before any best-effort event publish.
 - Keep the transition-decision unit test Docker-free: `UpdatePresence` depends
   on the concrete profile store, while the exact previous-snapshot-to-event
   decision is independently deterministic and the miniredis store test proves
@@ -111,8 +120,8 @@ last-seen TTLs.
 
 ## Risks And Follow-Ups
 
-- Reading then writing Redis is not a distributed compare-and-set; concurrent
-  heartbeats can independently observe the same old enum. This task preserves
-  the current store model and does not invent an atomic transition protocol.
+- Redis Lua serialization is scoped to the two presence keys and avoids a
+  distributed lock; if the atomic write fails, User returns an internal error
+  and does not publish a transition.
 - Existing Realtime consumers continue to consume legacy `status`; migrating
   consumers to delta fields is separate work.
