@@ -1,137 +1,86 @@
 package grpcsvc
 
 import (
-	"context"
 	"testing"
-	"time"
 
-	"github.com/alicebob/miniredis/v2"
-	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 
-	"voice/backend/user/internal/authctx"
 	"voice/backend/user/internal/store"
 
 	eventsv1 "voice.app/voice/events/v1"
 	userv1 "voice.app/voice/user/v1"
 )
 
-type presenceTransitionEvent struct {
-	profileID string
-	oldStatus string
-	newStatus string
-}
+func TestPresenceTransitionForSnapshot_PublishesOnlyCanonicalEnumTransitions(t *testing.T) {
+	online := int32(userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_ONLINE)
 
-// presenceDeltaEventsRecorder is deliberately private to these presence
-// transition tests, so lifecycle-test fakes remain unrelated to this contract.
-type presenceDeltaEventsRecorder struct {
-	events []presenceTransitionEvent
-}
-
-func (r *presenceDeltaEventsRecorder) PublishProfileCreated(context.Context, string, string) error {
-	return nil
-}
-
-func (r *presenceDeltaEventsRecorder) PublishProfileUpdated(context.Context, string, string, string) error {
-	return nil
-}
-
-func (r *presenceDeltaEventsRecorder) PublishProfileSwitched(context.Context, string, string, string) error {
-	return nil
-}
-
-func (r *presenceDeltaEventsRecorder) PublishVerified(context.Context, string, string, string) error {
-	return nil
-}
-
-func (r *presenceDeltaEventsRecorder) PublishPresenceChanged(_ context.Context, profileID, oldStatus, newStatus string) error {
-	r.events = append(r.events, presenceTransitionEvent{
-		profileID: profileID,
-		oldStatus: oldStatus,
-		newStatus: newStatus,
-	})
-	return nil
-}
-
-func TestUpdatePresence_PublishesOnlyCanonicalEnumTransitions(t *testing.T) {
-	if testing.Short() {
-		t.Skip()
+	tests := []struct {
+		name        string
+		previous    *store.PresenceSnapshot
+		request     *userv1.UpdatePresenceRequest
+		wantOld     string
+		wantNew     string
+		wantPublish bool
+	}{
+		{
+			name:        "first live observation publishes empty old status",
+			previous:    &store.PresenceSnapshot{},
+			request:     &userv1.UpdatePresenceRequest{Status: "ONLINE"},
+			wantOld:     "",
+			wantNew:     "online",
+			wantPublish: true,
+		},
+		{
+			name: "same enum heartbeat with ancillary changes does not publish",
+			previous: &store.PresenceSnapshot{
+				Live:           true,
+				Status:         "online",
+				StatusEnum:     online,
+				GameTitle:      "Dota 2",
+				CustomStatus:   "first",
+				CallInfoJSON:   `{"room":"one"}`,
+				LastActiveUnix: 1,
+			},
+			request: &userv1.UpdatePresenceRequest{
+				Status:       "online",
+				GameTitle:    proto.String("Counter-Strike 2"),
+				CustomStatus: proto.String("second"),
+				CallInfoJson: proto.String(`{"room":"two"}`),
+			},
+			wantPublish: false,
+		},
+		{
+			name: "status enum transition publishes canonical online to dnd",
+			previous: &store.PresenceSnapshot{
+				Live:       true,
+				Status:     "ONLINE",
+				StatusEnum: online,
+			},
+			request: &userv1.UpdatePresenceRequest{
+				Status:     "ONLINE",
+				StatusEnum: userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_DND.Enum(),
+			},
+			wantOld:     "online",
+			wantNew:     "dnd",
+			wantPublish: true,
+		},
 	}
-	ctx := context.Background()
-	pool := startUserPostgresForSubscriptionTests(t, ctx)
 
-	accountID := uuid.MustParse("11111111-2222-3333-4444-555555555555")
-	profileID := uuid.MustParse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
-	_, err := pool.Exec(ctx, `
-INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
-VALUES ($1, $2, 'presence_delta', '0065', 'Presence Delta', true)`,
-		profileID, accountID)
-	require.NoError(t, err)
-
-	mr := miniredis.RunT(t)
-	t.Cleanup(mr.Close)
-	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	t.Cleanup(func() { _ = rdb.Close() })
-
-	events := &presenceDeltaEventsRecorder{}
-	svc := &UserGRPC{
-		Profiles: store.NewProfileStore(pool),
-		Presence: store.NewPresenceStore(rdb),
-		Events:   events,
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			currentStatus, currentEnum, err := normalizePresenceInput(tt.request)
+			require.NoError(t, err)
+			oldStatus, newStatus, publish := presenceTransitionForSnapshot(tt.previous, currentStatus, currentEnum)
+			require.Equal(t, tt.wantPublish, publish)
+			if !tt.wantPublish {
+				return
+			}
+			require.Equal(t, tt.wantOld, oldStatus)
+			require.Equal(t, tt.wantNew, newStatus)
+		})
 	}
-	authed := presenceDeltaAuthContext(ctx, accountID, profileID)
-
-	// The first live observation has no predecessor and must publish canonical
-	// values even when the legacy string input uses a different case.
-	_, err = svc.UpdatePresence(authed, &userv1.UpdatePresenceRequest{
-		Status:    "ONLINE",
-		GameTitle: proto.String("Dota 2"),
-	})
-	require.NoError(t, err)
-	require.Equal(t, []presenceTransitionEvent{{
-		profileID: profileID.String(),
-		oldStatus: "",
-		newStatus: "online",
-	}}, events.events)
-
-	// A same-enum heartbeat changes activity fields and refreshes Redis TTLs but
-	// must not become a duplicate transition event.
-	mr.FastForward(4 * time.Minute)
-	_, err = svc.UpdatePresence(authed, &userv1.UpdatePresenceRequest{
-		Status:       "online",
-		GameTitle:    proto.String("Counter-Strike 2"),
-		CustomStatus: proto.String("queueing"),
-		CallInfoJson: proto.String(`{"room":"delta"}`),
-	})
-	require.NoError(t, err)
-	require.Len(t, events.events, 1, "same status enum heartbeat must not publish user.presence_changed")
-
-	sessionTTL, err := rdb.TTL(ctx, "voice:user:presence:"+profileID.String()).Result()
-	require.NoError(t, err)
-	require.Greater(t, sessionTTL, 4*time.Minute, "heartbeat must refresh the five-minute live session TTL")
-	lastSeenTTL, err := rdb.TTL(ctx, "voice:user:last_seen:"+profileID.String()).Result()
-	require.NoError(t, err)
-	require.Greater(t, lastSeenTTL, 29*24*time.Hour, "heartbeat must refresh the thirty-day interim last_seen TTL")
-
-	// The enum is canonical: DND wins over the conflicting legacy string and
-	// reports the prior online enum as the old side of the transition.
-	_, err = svc.UpdatePresence(authed, &userv1.UpdatePresenceRequest{
-		Status:     "ONLINE",
-		StatusEnum: userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_DND.Enum(),
-	})
-	require.NoError(t, err)
-	require.Equal(t, []presenceTransitionEvent{
-		{profileID: profileID.String(), oldStatus: "", newStatus: "online"},
-		{profileID: profileID.String(), oldStatus: "online", newStatus: "dnd"},
-	}, events.events)
-
-	snap, err := svc.Presence.Get(ctx, profileID)
-	require.NoError(t, err)
-	require.Equal(t, "dnd", snap.Status)
-	require.Equal(t, int32(userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_DND), snap.StatusEnum)
 }
 
 func TestPresenceChangeProto_DeltaFieldsRoundTripWithLegacyCurrentStatus(t *testing.T) {
@@ -152,9 +101,22 @@ func TestPresenceChangeProto_DeltaFieldsRoundTripWithLegacyCurrentStatus(t *test
 	require.Equal(t, "dnd", got.GetNewStatus())
 }
 
-func presenceDeltaAuthContext(ctx context.Context, accountID, profileID uuid.UUID) context.Context {
-	return metadata.NewIncomingContext(ctx, metadata.Pairs(
-		authctx.HeaderUserID, accountID.String(),
-		authctx.HeaderProfileID, profileID.String(),
-	))
+func TestPresenceChangeProto_DeltaFieldsKeepLegacyWireShapeAdditive(t *testing.T) {
+	fields := (&eventsv1.PresenceChange{}).ProtoReflect().Descriptor().Fields()
+	status := fields.ByName("status")
+	oldStatus := fields.ByName("old_status")
+	newStatus := fields.ByName("new_status")
+
+	require.NotNil(t, status, "legacy status must remain in the event contract")
+	require.NotNil(t, oldStatus, "old_status must be an additive delta field")
+	require.NotNil(t, newStatus, "new_status must be an additive delta field")
+	require.Equal(t, protoreflect.FieldNumber(2), status.Number())
+	require.Equal(t, protoreflect.FieldNumber(3), oldStatus.Number())
+	require.Equal(t, protoreflect.FieldNumber(4), newStatus.Number())
+	require.NotEqual(t, status.Name(), oldStatus.Name())
+	require.NotEqual(t, status.Name(), newStatus.Name())
+	require.NotEqual(t, oldStatus.Name(), newStatus.Name())
+	require.NotEqual(t, status.Number(), oldStatus.Number())
+	require.NotEqual(t, status.Number(), newStatus.Number())
+	require.NotEqual(t, oldStatus.Number(), newStatus.Number())
 }

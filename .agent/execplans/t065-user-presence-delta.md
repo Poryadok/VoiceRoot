@@ -37,7 +37,7 @@ last-seen TTLs.
 
 - [x] Read the governing documentation and inspect current User presence flow.
 - [x] Commit documentation plus failing transition-contract tests (RED).
-- [ ] Review RED tests with a fresh agent and resolve critical findings.
+- [x] Review RED tests with a fresh agent, remove Docker/publisher/tag-coverage blockers, and obtain a clean re-review.
 - [ ] Add the additive proto fields, regenerate stubs, and implement the smallest
   enum-transition comparison/publish change (GREEN).
 - [ ] Commit implementation and generated artifacts (GREEN).
@@ -75,7 +75,9 @@ last-seen TTLs.
 
 - [x] Documentation, code, and test seams identified.
 - [x] RED tests and documentation prepared; offline RED observed with `GOPROXY=off; go test ./internal/grpcsvc ./internal/store`: the delta recorder no longer satisfies the three-argument publisher interface and generated `PresenceChange` lacks `OldStatus` / `NewStatus` fields and getters. `GOPROXY=off; go test ./internal/store` passes without download errors.
-- [ ] RED test review accepted.
+- [x] Initial RED review found that an integration helper would require prohibited Docker and that legacy publisher/tag compatibility was not directly asserted.
+- [x] Replaced it with a no-Docker transition helper matrix, direct publisher-envelope RED test, and additive descriptor assertions; focused offline RED now fails only on absent helper/contract seams.
+- [ ] Fresh RED re-review accepted.
 - [ ] GREEN implementation and generated stubs committed.
 - [ ] GREEN review and final validation accepted.
 
@@ -87,6 +89,10 @@ last-seen TTLs.
 - Use the stored enum, not optional game/custom/call/last-seen fields, as the
   transition predicate. The unconditional upsert remains before any best-effort
   event publish.
+- Keep the transition-decision unit test Docker-free: `UpdatePresence` depends
+  on the concrete profile store, while the exact previous-snapshot-to-event
+  decision is independently deterministic and the miniredis store test proves
+  same-enum heartbeats still refresh activity and both TTLs.
 
 ## Risks And Follow-Ups
 
