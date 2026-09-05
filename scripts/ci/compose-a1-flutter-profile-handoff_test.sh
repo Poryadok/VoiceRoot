@@ -248,14 +248,14 @@ assert_eq "${flutter_dart_args[0]}" '<test/manifest-selected.dart>'
 assert_not_contains "${case_dir}/commands.log" "<${T055_TEST}>"
 
 echo '== every Compose path is absolute and env file is empty =='
-compose_line="$(grep -m1 '^docker <compose ' "${case_dir}/commands.log")"
+compose_line="$(grep -m1 '^docker <compose> ' "${case_dir}/commands.log")"
 env_file="$(sed -n 's/.* <--env-file> <\([^>]*\)> .*/\1/p' <<<"$compose_line")"
 compose_dir="$(sed -n 's/.* <--project-directory> <\([^>]*\)> .*/\1/p' <<<"$compose_line")"
 compose_file="$(sed -n 's/.* <-f> <\([^>]*\)> .*/\1/p' <<<"$compose_line")"
 assert_abs "$env_file"; assert_abs "$compose_dir"; assert_abs "$compose_file"
 assert_contains "${case_dir}/commands.log" 'env_size=0'
-assert_contains "${case_dir}/commands.log" 'compose.*--project-name <voice-a1-flutter-handoff-[a-z0-9-]+>'
-project_count="$(grep '^docker <compose ' "${case_dir}/commands.log" | sed -n 's/.* <--project-name> <\([^>]*\)>.*/\1/p' | sort -u | wc -l | tr -d '[:space:]')"
+assert_contains "${case_dir}/commands.log" 'compose.*<--project-name> <voice-a1-flutter-handoff-[a-z0-9-]+>'
+project_count="$(grep '^docker <compose> ' "${case_dir}/commands.log" | sed -n 's/.* <--project-name> <\([^>]*\)>.*/\1/p' | sort -u | wc -l | tr -d '[:space:]')"
 assert_eq "$project_count" 1
 
 echo '== Flutter failure emits diagnostics and cleanup is exact/opt-in =='
@@ -264,15 +264,15 @@ FAKE_FLUTTER_RC=23 run_runner "$case_dir"
 assert_eq "$(cat "${case_dir}/rc")" 23
 assert_contains "${case_dir}/commands.log" 'compose.*<ps>$'
 assert_contains "${case_dir}/commands.log" 'compose.*<logs> <--no-color> <--timestamps>'
-assert_contains "${case_dir}/stderr" 'diagnostic\|failure\|failed'
+assert_contains "${case_dir}/stderr" 'diagnostic|failure|failed'
 assert_not_contains "${case_dir}/commands.log" 'compose.*<down>'
 
 case_dir="$(new_case cleanup)"
 VOICE_A1_FLUTTER_PROFILE_HANDOFF_CLEANUP=true run_runner "$case_dir"
 assert_eq "$(cat "${case_dir}/rc")" 0
 assert_contains "${case_dir}/commands.log" 'compose.*<down> <--remove-orphans>'
-assert_not_contains "${case_dir}/commands.log" '--volumes\|<-v>\|volume prune\|system prune'
-cleanup_line="$(grep '^docker <compose ' "${case_dir}/commands.log" | grep '<down>' | tail -1)"
+assert_not_contains "${case_dir}/commands.log" '--volumes|<-v>|volume prune|system prune'
+cleanup_line="$(grep '^docker <compose> ' "${case_dir}/commands.log" | grep '<down>' | tail -1)"
 cleanup_env_file="$(sed -n 's/.* <--env-file> <\([^>]*\)> .*/\1/p' <<<"$cleanup_line")"
 cleanup_project="$(sed -n 's/.* <--project-name> <\([^>]*\)> .*/\1/p' <<<"$cleanup_line")"
 cleanup_directory="$(sed -n 's/.* <--project-directory> <\([^>]*\)> .*/\1/p' <<<"$cleanup_line")"
@@ -293,6 +293,6 @@ while IFS= read -r compose_identity_line; do
   assert_eq "$identity_directory" "$cleanup_directory"
   assert_eq "$identity_compose_file" "$cleanup_compose_file"
   assert_eq "$identity_profile" "$cleanup_profile"
-done < <(grep '^docker <compose ' "${case_dir}/commands.log")
+done < <(grep '^docker <compose> ' "${case_dir}/commands.log")
 
 echo 'All compose-a1-flutter-profile-handoff tests passed.'
