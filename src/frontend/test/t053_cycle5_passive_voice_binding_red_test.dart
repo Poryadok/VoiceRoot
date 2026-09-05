@@ -176,6 +176,41 @@ void main() {
       final cBinding = _binding('profile-c', generation: 3);
       harness.container.read(realtimeHelloBindingProvider.notifier).state =
           cBinding;
+      var acceptedCIncoming = 0;
+      final stateSub = harness.container.listen<CallState>(
+        callControllerProvider,
+        (_, next) {
+          if (next.phase == CallPhase.incoming &&
+              next.session?.roomId == 'room-c') {
+            acceptedCIncoming++;
+          }
+        },
+      );
+      addTearDown(stateSub.close);
+      harness.boundSignals
+        ..add(
+          ProfileBoundRealtimeFrame(
+            frame: const RealtimeFrame(
+              op: 'call_incoming',
+              data: {'room_id': 'room-a-late'},
+            ),
+            binding: _binding('profile-a', generation: 1),
+          ),
+        )
+        ..add(
+          ProfileBoundRealtimeFrame(
+            frame: const RealtimeFrame(
+              op: 'call_incoming',
+              data: {'room_id': 'room-b-late'},
+            ),
+            binding: _binding('profile-b', generation: 2),
+          ),
+        );
+      await _drain();
+      expect(
+        harness.container.read(callControllerProvider).phase,
+        CallPhase.idle,
+      );
       final incoming = ProfileBoundRealtimeFrame(
         frame: const RealtimeFrame(
           op: 'call_incoming',
@@ -199,6 +234,7 @@ void main() {
       expect(state.phase, CallPhase.incoming);
       expect(state.session?.roomId, 'room-c');
       expect(state.voiceBindingProfileId, 'profile-c');
+      expect(acceptedCIncoming, 1);
     });
   });
 }
