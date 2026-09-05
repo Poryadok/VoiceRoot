@@ -116,6 +116,7 @@ Two producers may emit WS `notification` for the same message; clients **dedupe*
 | `chat_update`        | Изменение чата/группы                                               |
 | `member_add`         | Новый участник                                                      |
 | `member_remove`      | Участник удалён                                                     |
+| `dm_peer_deleted`    | Удалён второй участник уже известного DM; `d.chat_id` only, только для surviving profile; live-ускорение, не durable history/replay |
 | `call_incoming`      | Входящий DM-звонок: `room_id`, `chat_id`, `initiator_profile_id`, `callee_profile_id`, `media_kind`, `expires_at` |
 | `call_accepted`      | Звонок принят: `room_id`, `chat_id`, `accepted_by_profile_id`, `profile_ids`, `media_kind` |
 | `call_declined`      | Звонок отклонён: `room_id`, `chat_id`, `declined_by_profile_id`, `profile_ids` |
@@ -175,6 +176,7 @@ Routing rules (presence, quiet hours, `send_silent`, mute) — [notification-ser
 |--------------------|-----------------|
 | Inbox state across chats | REST `ListChats` snapshot for `main` / `requests` / `archive`, paginate to completion; failed page retries without clearing cached state |
 | Missed messages | REST `GetMessages` per open, notification-target or otherwise selected `chat_id` |
+| Deleted peer in selected DM | REST `GetMessages.dm_peer_state`; `dm_peer_deleted` может ускорить локальный marker, но не replay-ится |
 | List preview ticks / unread | Included in authoritative `ListChats` snapshot via S2S Messaging metadata |
 | Read cursor | REST `MarkRead` if chat was open; do not rely on WS-only `mark_read` |
 | Ephemeral delivery | Live `delivery_ack` only; list ✓✓ from durable metadata |
