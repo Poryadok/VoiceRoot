@@ -10,7 +10,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.mockito.ArgumentCaptor;
@@ -161,7 +160,7 @@ class DeleteAccountRestoreIntegrationTest {
   }
 
   @Test
-  void concurrentDeleteCallsCompleteOnlyOneAccountDeletion() throws Exception {
+  void twoAuthInstancesResumeOneDeletionWithTheSameRestoreTokenAndEvent() throws Exception {
     JsonNode registered =
         session(
             postJson(
@@ -176,6 +175,7 @@ class DeleteAccountRestoreIntegrationTest {
             .get("access_token")
             .asText();
     Account before = accounts.findByEmail("delete-epoch-concurrent@example.com").orElseThrow();
+    AuthService secondAuthInstance = authService.withClock(java.time.Clock.systemUTC());
     ExecutorService workers = Executors.newFixedThreadPool(2);
     try {
       var first =
@@ -183,21 +183,14 @@ class DeleteAccountRestoreIntegrationTest {
               () -> authService.deleteAccount("Bearer " + firstAccessToken, "Correct horse battery staple"));
       var second =
           workers.submit(
-              () -> authService.deleteAccount("Bearer " + secondAccessToken, "Correct horse battery staple"));
+              () ->
+                  secondAuthInstance.deleteAccount(
+                      "Bearer " + secondAccessToken, "Correct horse battery staple"));
 
-      int successes = 0;
-      int inactive = 0;
-      for (var future : java.util.List.of(first, second)) {
-        try {
-          assertThat(future.get().restoreToken()).isNotBlank();
-          successes++;
-        } catch (ExecutionException ex) {
-          assertThat(ex.getCause()).isInstanceOf(AuthException.class).hasMessage("account_inactive");
-          inactive++;
-        }
-      }
-      assertThat(successes).isEqualTo(1);
-      assertThat(inactive).isEqualTo(1);
+      String firstToken = first.get().restoreToken();
+      String secondToken = second.get().restoreToken();
+      assertThat(firstToken).isNotBlank();
+      assertThat(secondToken).isEqualTo(firstToken);
     } finally {
       workers.shutdownNow();
     }
