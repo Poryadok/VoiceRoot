@@ -46,24 +46,26 @@ class RedisAccountRestoreTokenStoreIntegrationTest {
   }
 
   @Test
-  void realRedisAllowsOnlyOneOfTwoStoreInstancesToConsumeAToken() throws Exception {
+  void realRedisRepeatedlyAllowsOnlyOneOfTwoStoreInstancesToConsumeAToken() throws Exception {
     RedisAccountRestoreTokenStore first = new RedisAccountRestoreTokenStore(template(firstConnection));
     RedisAccountRestoreTokenStore second = new RedisAccountRestoreTokenStore(template(secondConnection));
-    UUID accountId = UUID.randomUUID();
-    String token = "real-redis-restore-token";
-    first.store(token, accountId, Duration.ofMinutes(1));
-    CountDownLatch start = new CountDownLatch(1);
 
     ExecutorService workers = Executors.newFixedThreadPool(2);
     try {
-      List<Future<java.util.Optional<UUID>>> results =
-          List.of(
-              workers.submit(() -> consumeWhenStarted(first, token, start)),
-              workers.submit(() -> consumeWhenStarted(second, token, start)));
-      start.countDown();
+      for (int attempt = 0; attempt < 100; attempt++) {
+        UUID accountId = UUID.randomUUID();
+        String token = "real-redis-restore-token-" + attempt;
+        first.store(token, accountId, Duration.ofMinutes(1));
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<java.util.Optional<UUID>>> results =
+            List.of(
+                workers.submit(() -> consumeWhenStarted(first, token, start)),
+                workers.submit(() -> consumeWhenStarted(second, token, start)));
+        start.countDown();
 
-      assertThat(results.stream().map(this::await).filter(java.util.Optional::isPresent))
-          .containsExactly(java.util.Optional.of(accountId));
+        assertThat(results.stream().map(this::await).filter(java.util.Optional::isPresent))
+            .containsExactly(java.util.Optional.of(accountId));
+      }
     } finally {
       workers.shutdownNow();
     }

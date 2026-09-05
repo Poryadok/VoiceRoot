@@ -2,8 +2,10 @@ package voice.backend.auth.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -16,7 +18,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
@@ -24,10 +25,9 @@ class RedisAccountRestoreTokenStoreTest {
   private static final String PREFIX = "account:restore:";
 
   @Test
-  void twoIndependentStoresHaveExactlyOneConcurrentConsumeWinner() throws Exception {
+  void deterministicSplitReadHarnessAllowsOnlyOneConcurrentConsumeWinner() throws Exception {
     String token = "restore-token-plaintext-must-not-be-a-key";
     UUID accountId = UUID.randomUUID();
-    String expectedKey = PREFIX + AccountRestoreTokenHash.of(token);
     AtomicReference<String> storedValue = new AtomicReference<>(accountId.toString());
     CyclicBarrier simultaneousReads = new CyclicBarrier(2);
 
@@ -47,13 +47,6 @@ class RedisAccountRestoreTokenStoreTest {
     } finally {
       workers.shutdownNow();
     }
-
-    ArgumentCaptor<String> firstKey = ArgumentCaptor.forClass(String.class);
-    ArgumentCaptor<String> secondKey = ArgumentCaptor.forClass(String.class);
-    verify(firstValues).get(firstKey.capture());
-    verify(secondValues).get(secondKey.capture());
-    assertThat(List.of(firstKey.getValue(), secondKey.getValue())).containsOnly(expectedKey);
-    assertThat(expectedKey).doesNotContain(token);
   }
 
   @Test
@@ -69,6 +62,8 @@ class RedisAccountRestoreTokenStoreTest {
     assertThat(new RedisAccountRestoreTokenStore(redis).consume(token)).contains(accountId);
 
     verify(values).getAndDelete(key);
+    verify(values, never()).get(any());
+    verify(redis, never()).delete(anyString());
   }
 
   @Test
@@ -80,8 +75,8 @@ class RedisAccountRestoreTokenStoreTest {
 
     new RedisAccountRestoreTokenStore(redis).store(token, accountId, Duration.ofDays(30));
 
-    ArgumentCaptor<String> key = ArgumentCaptor.forClass(String.class);
-    ArgumentCaptor<String> value = ArgumentCaptor.forClass(String.class);
+    org.mockito.ArgumentCaptor<String> key = org.mockito.ArgumentCaptor.forClass(String.class);
+    org.mockito.ArgumentCaptor<String> value = org.mockito.ArgumentCaptor.forClass(String.class);
     verify(values).set(key.capture(), value.capture(), eq(Duration.ofDays(30)));
     assertThat(key.getValue()).isEqualTo(PREFIX + AccountRestoreTokenHash.of(token));
     assertThat(key.getValue()).doesNotContain(token);

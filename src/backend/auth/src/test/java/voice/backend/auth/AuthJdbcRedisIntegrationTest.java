@@ -26,6 +26,7 @@ import io.grpc.Server;
 import io.grpc.StatusRuntimeException;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyFactory;
 import java.security.NoSuchAlgorithmException;
@@ -132,16 +133,38 @@ class AuthJdbcRedisIntegrationTest {
   }
 
   @Test
-  void jdbcRestoreTransitionsOnlyASoftDeletedAccount() {
-    Account suspended = accounts.create("jdbc-restore-suspended@example.com", null, "hash", "regular");
-    accounts.setStatus(suspended.id(), "suspended");
+  void jdbcConditionalRestoreLetsDeletedAccountTransitionOnlyOnce() throws Exception {
+    Account deleted = accounts.create("jdbc-restore-deleted@example.com", null, "hash", "regular");
+    accounts.markDeleted(deleted.id(), Instant.parse("2026-05-01T10:00:00Z"));
 
-    accounts.restoreDeleted(suspended.id());
-
-    assertThat(accounts.findById(suspended.id().toString()))
+    assertThat(conditionalRestore(deleted.id())).isTrue();
+    assertThat(accounts.findById(deleted.id().toString()))
         .get()
         .extracting(Account::status, Account::deletedAt)
-        .containsExactly("suspended", null);
+        .containsExactly("active", null);
+    assertThat(conditionalRestore(deleted.id())).isFalse();
+  }
+
+  @Test
+  void jdbcConditionalRestoreRejectsInconsistentDeletedState() throws Exception {
+    Account missingDeletedAt =
+        accounts.create("jdbc-restore-missing-at@example.com", null, "hash", "regular");
+    accounts.setStatus(missingDeletedAt.id(), "deleted");
+    Account missingDeletedStatus =
+        accounts.create("jdbc-restore-missing-status@example.com", null, "hash", "regular");
+    accounts.markDeleted(missingDeletedStatus.id(), Instant.parse("2026-05-01T10:00:00Z"));
+    accounts.setStatus(missingDeletedStatus.id(), "active");
+
+    assertThat(conditionalRestore(missingDeletedAt.id())).isFalse();
+    assertThat(conditionalRestore(missingDeletedStatus.id())).isFalse();
+    assertThat(accounts.findById(missingDeletedAt.id().toString()))
+        .get()
+        .extracting(Account::status, Account::deletedAt)
+        .containsExactly("deleted", null);
+    assertThat(accounts.findById(missingDeletedStatus.id().toString()))
+        .get()
+        .extracting(Account::status, Account::deletedAt)
+        .containsExactly("active", Instant.parse("2026-05-01T10:00:00Z"));
   }
 
   @Test
@@ -501,6 +524,12 @@ class AuthJdbcRedisIntegrationTest {
         .getResponse()
         .getContentAsString();
     return objectMapper.readTree(response);
+  }
+
+  private boolean conditionalRestore(UUID accountId) throws Exception {
+    Method method = AccountRepository.class.getMethod("restoreDeleted", UUID.class);
+    assertThat(method.getReturnType()).isEqualTo(boolean.class);
+    return (boolean) method.invoke(accounts, accountId);
   }
 
   private long awaitEpochIncrement(Future<Long> future) {
