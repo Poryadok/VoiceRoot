@@ -361,6 +361,95 @@ void main() {
         expect(harness.chats.unmatchedCalls, isEmpty);
       },
     );
+
+    test(
+      'concurrent reconnect teardown owns retired A1 cleanup exactly once',
+      () async {
+        final harness = _Cycle4Harness(createReconciler: false);
+        addTearDown(harness.dispose);
+        final hubFrames = <RealtimeFrame>[];
+        final hubSubscription = harness.hub.events.listen(hubFrames.add);
+        addTearDown(hubSubscription.cancel);
+        final providerFrames = <RealtimeFrame>[];
+        final providerSubscription = harness.container
+            .listen<AsyncValue<RealtimeFrame>>(
+              realtimeEventProvider,
+              (_, next) => next.whenData(providerFrames.add),
+              fireImmediately: true,
+            );
+        addTearDown(providerSubscription.close);
+
+        await harness.connectAWithoutHello();
+        final a1 = harness.connection('profile-a');
+        a1.addHello();
+        harness.hub.ensureSubscribed('retained-chat');
+        await pumpEventQueue();
+
+        for (final inbox in ['main', 'requests', 'archive']) {
+          harness.chats.enqueue(
+            InboxChatPageScript(
+              inbox: inbox,
+              cursor: null,
+              profileId: 'profile-a',
+              authorization: 'Bearer access-profile-a',
+              result: const ChatsApiOk(ChatListData(items: [])),
+            ),
+          );
+        }
+
+        a1.blockFirstDispose();
+        addTearDown(a1.releaseFirstDispose);
+        final firstReconnect = harness.hub.reconnectWithNewSession();
+        await a1.waitForFirstDispose();
+
+        final replacementReconnect = harness.hub.reconnectWithNewSession();
+        await harness.transport.waitForOpen('profile-a', attempt: 1);
+        harness.transport.releaseOpen('profile-a', attempt: 1);
+        await replacementReconnect;
+        final a2 = harness.connection('profile-a', attempt: 1);
+        expect(a2, isNot(same(a1)));
+        expect(harness.transport.openCount('profile-a'), 2);
+        expect(a2.subscribedChatIds, ['retained-chat']);
+
+        a2.addHello();
+        await pumpEventQueue();
+        harness.mountReconciler();
+        await pumpEventQueue();
+        expect(harness.chats.calls.skip(1), hasLength(3));
+        final hubFramesBeforeA1Release = hubFrames.length;
+        final providerFramesBeforeA1Release = providerFrames.length;
+        final a2HelloBinding = harness.container.read(
+          realtimeHelloBindingProvider,
+        );
+        expect(a2HelloBinding, isNotNull);
+
+        a1.releaseFirstDispose();
+        await firstReconnect;
+        a2.addFrame(const RealtimeFrame(op: 'message_create', sequence: 3));
+        await pumpEventQueue();
+
+        expect(
+          [a1.frameSubscriptionCancelCount, a1.disposeCount],
+          [1, 1],
+          reason:
+              'only the teardown that captured A1 may cancel its stream and '
+              'dispose its transport',
+        );
+        expect(harness.transport.openCount('profile-a'), 2);
+        expect(harness.hub.status, RealtimeLinkStatus.connected);
+        expect(harness.hub.subscribedChatIds, {'retained-chat'});
+        expect(a2.subscribedChatIds, ['retained-chat']);
+        expect(hubFrames, hasLength(hubFramesBeforeA1Release + 1));
+        expect(providerFrames, hasLength(providerFramesBeforeA1Release + 1));
+        expect(
+          harness.container.read(realtimeHelloBindingProvider),
+          same(a2HelloBinding),
+        );
+        expect(harness.chats.calls.skip(1), hasLength(3));
+        expect(harness.messages.getCalls, isEmpty);
+        expect(harness.chats.unmatchedCalls, isEmpty);
+      },
+    );
   });
 }
 
@@ -559,6 +648,8 @@ class _ControlledRealtimeTransportFactory implements RealtimeTransportFactory {
     int attempt = 0,
   }) => _slot(profileId).attempt(attempt).connection;
 
+  int openCount(String profileId) => _slot(profileId).openCount;
+
   _TransportSlot _slot(String profileId) => _slots[profileId]!;
 
   Future<void> dispose() async {
@@ -578,6 +669,7 @@ class _TransportSlot {
   var _nextOpenAttempt = 0;
 
   Iterable<_TransportAttempt> get attempts => _attempts;
+  int get openCount => _nextOpenAttempt;
 
   _TransportAttempt nextOpen() {
     final attempt = this.attempt(_nextOpenAttempt);
@@ -613,9 +705,16 @@ class _ControlledVoiceRealtimeConnection extends VoiceRealtimeConnection {
   final Completer<void> _firstDisposeStarted = Completer<void>();
   Completer<void>? _firstDisposeGate;
   var _disposeCount = 0;
+  var _frameSubscriptionCancelCount = 0;
+
+  int get disposeCount => _disposeCount;
+  int get frameSubscriptionCancelCount => _frameSubscriptionCancelCount;
 
   @override
-  Stream<RealtimeFrame> get events => _frames.stream;
+  Stream<RealtimeFrame> get events => _CancelCountingStream(
+    _frames.stream,
+    onCancel: () => _frameSubscriptionCancelCount++,
+  );
 
   @override
   Future<void> connect() async {}
@@ -658,4 +757,67 @@ class _ControlledVoiceRealtimeConnection extends VoiceRealtimeConnection {
   Future<void> closeEvents() async {
     if (!_frames.isClosed) await _frames.close();
   }
+}
+
+class _CancelCountingStream<T> extends Stream<T> {
+  _CancelCountingStream(this._delegate, {required this.onCancel});
+
+  final Stream<T> _delegate;
+  final void Function() onCancel;
+
+  @override
+  bool get isBroadcast => _delegate.isBroadcast;
+
+  @override
+  StreamSubscription<T> listen(
+    void Function(T event)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) {
+    return _CancelCountingSubscription<T>(
+      _delegate.listen(
+        onData,
+        onError: onError,
+        onDone: onDone,
+        cancelOnError: cancelOnError,
+      ),
+      onCancel,
+    );
+  }
+}
+
+class _CancelCountingSubscription<T> implements StreamSubscription<T> {
+  _CancelCountingSubscription(this._delegate, this._onCancel);
+
+  final StreamSubscription<T> _delegate;
+  final void Function() _onCancel;
+
+  @override
+  Future<E> asFuture<E>([E? futureValue]) => _delegate.asFuture(futureValue);
+
+  @override
+  Future<void> cancel() {
+    _onCancel();
+    return _delegate.cancel();
+  }
+
+  @override
+  bool get isPaused => _delegate.isPaused;
+
+  @override
+  void onData(void Function(T data)? handleData) =>
+      _delegate.onData(handleData);
+
+  @override
+  void onDone(void Function()? handleDone) => _delegate.onDone(handleDone);
+
+  @override
+  void onError(Function? handleError) => _delegate.onError(handleError);
+
+  @override
+  void pause([Future<void>? resumeSignal]) => _delegate.pause(resumeSignal);
+
+  @override
+  void resume() => _delegate.resume();
 }
