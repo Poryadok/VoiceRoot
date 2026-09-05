@@ -205,25 +205,28 @@ func TestGetPlayerRating_GamesPlayedCountsCompletedMatchesNotRatings(t *testing.
 	require.NoError(t, err)
 	profileB := uuid.New()
 	match1, profileA1 := seedPendingDuoMatchForGame(t, ctx, srv, game.ID, profileB)
-	match2, profileA2 := seedPendingDuoMatchForGame(t, ctx, srv, game.ID, profileB)
-	for _, participant := range []struct {
-		matchID, profileA string
-	}{{match1, profileA1.String()}, {match2, profileA2.String()}} {
-		_, err = srv.RespondToMatch(ctxWithProfile(uuid.MustParse(participant.profileA)), &matchmakingv1.RespondToMatchRequest{MatchId: participant.matchID, Accept: true})
-		require.NoError(t, err)
-		_, err = srv.RespondToMatch(ctxWithProfile(profileB), &matchmakingv1.RespondToMatchRequest{MatchId: participant.matchID, Accept: true})
-		require.NoError(t, err)
-	}
-	for _, participant := range []struct {
-		matchID, profile string
-	}{{match1, profileA1.String()}, {match1, profileB.String()}, {match2, profileA2.String()}, {match2, profileB.String()}} {
-		_, err = srv.CompleteMatch(ctxWithProfile(uuid.MustParse(participant.profile)), &matchmakingv1.CompleteMatchRequest{MatchId: participant.matchID})
-		require.NoError(t, err)
-	}
+	_, err = srv.RespondToMatch(ctxWithProfile(profileA1), &matchmakingv1.RespondToMatchRequest{MatchId: match1, Accept: true})
+	require.NoError(t, err)
+	_, err = srv.RespondToMatch(ctxWithProfile(profileB), &matchmakingv1.RespondToMatchRequest{MatchId: match1, Accept: true})
+	require.NoError(t, err)
+	_, err = srv.CompleteMatch(ctxWithProfile(profileA1), &matchmakingv1.CompleteMatchRequest{MatchId: match1})
+	require.NoError(t, err)
+	_, err = srv.CompleteMatch(ctxWithProfile(profileB), &matchmakingv1.CompleteMatchRequest{MatchId: match1})
+	require.NoError(t, err)
 
 	_, err = srv.RateMatch(ctxWithProfile(profileA1), &matchmakingv1.RateMatchRequest{
 		MatchId: match1, RatedProfileId: profileB.String(), Stars: 5,
 	})
+	require.NoError(t, err)
+
+	match2, profileA2 := seedPendingDuoMatchForGame(t, ctx, srv, game.ID, profileB)
+	_, err = srv.RespondToMatch(ctxWithProfile(profileA2), &matchmakingv1.RespondToMatchRequest{MatchId: match2, Accept: true})
+	require.NoError(t, err)
+	_, err = srv.RespondToMatch(ctxWithProfile(profileB), &matchmakingv1.RespondToMatchRequest{MatchId: match2, Accept: true})
+	require.NoError(t, err)
+	_, err = srv.CompleteMatch(ctxWithProfile(profileA2), &matchmakingv1.CompleteMatchRequest{MatchId: match2})
+	require.NoError(t, err)
+	_, err = srv.CompleteMatch(ctxWithProfile(profileB), &matchmakingv1.CompleteMatchRequest{MatchId: match2})
 	require.NoError(t, err)
 
 	resp, err := srv.GetPlayerRating(ctx, &matchmakingv1.GetPlayerRatingRequest{
