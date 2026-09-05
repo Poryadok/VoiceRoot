@@ -132,6 +132,19 @@ class AuthJdbcRedisIntegrationTest {
   }
 
   @Test
+  void jdbcRestoreTransitionsOnlyASoftDeletedAccount() {
+    Account suspended = accounts.create("jdbc-restore-suspended@example.com", null, "hash", "regular");
+    accounts.setStatus(suspended.id(), "suspended");
+
+    accounts.restoreDeleted(suspended.id());
+
+    assertThat(accounts.findById(suspended.id().toString()))
+        .get()
+        .extracting(Account::status, Account::deletedAt)
+        .containsExactly("suspended", null);
+  }
+
+  @Test
   void jdbcConcurrentEpochIncrementsAreAtomicAndNeverLoseOrReuseValues() {
     Account account = accounts.create("jdbc-epoch-race@example.com", null, "hash", "regular");
     ExecutorService workers = Executors.newFixedThreadPool(8);
