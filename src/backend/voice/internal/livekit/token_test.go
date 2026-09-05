@@ -14,7 +14,7 @@ func TestJoinTokenOmitsObjectMetadataClaim(t *testing.T) {
 	t.Parallel()
 
 	issuer := NewHS256TokenIssuer("devkey", "secret", "ws://127.0.0.1:7880", time.Hour)
-	jwt, _, err := issuer.JoinToken("profile-a", "voice-dm-room-1", time.Unix(1_700_000_000, 0))
+	jwt, _, err := issuer.JoinToken("profile-a", "voice-dm-room-1", nil, time.Unix(1_700_000_000, 0))
 	require.NoError(t, err)
 
 	parts := strings.Split(jwt, ".")

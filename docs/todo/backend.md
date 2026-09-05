@@ -61,7 +61,7 @@
 ### Role
 
 
-- [x] **[Role] Voice Service never wires Role Service — `Roles` is nil in prod; `VOICE_JOIN`, `VOICE_SPEAK`, `VOICE_MUTE_OTHERS`, etc. are not enforced on join/speak/mute. Only `EnsureScreenShare` exists and is unused without a Role client.** — **partial:** `voice/main.go` wires `Roles` via `ROLE_GRPC_ADDR`; `EnsureVoiceJoin` + `EnsureScreenShare` enforced on join/share (`role_guard.go`, `voice_room.go`). Compose/Flutter `VOICE_JOIN` deny live shipped (`TestComposeVoiceJoinDeny_live`, #14). Still open: `VOICE_SPEAK` / `VOICE_MUTE_OTHERS` (and related) not enforced on speak/mute paths.
+- [x] **[Role] Voice Service never wires Role Service — `Roles` is nil in prod; `VOICE_JOIN`, `VOICE_SPEAK`, `VOICE_MUTE_OTHERS`, etc. are not enforced on join/speak/mute. Only `EnsureScreenShare` exists and is unused without a Role client.** — **partial:** `voice/main.go` wires `Roles` via `ROLE_GRPC_ADDR`; `EnsureVoiceJoin` + `EnsureScreenShare` enforce join/share (`role_guard.go`, `voice_room.go`). T-062 closes the remaining state/commander guard: `VOICE_SPEAK` gates explicit unmute, enabled broadcast, and Space LiveKit token `canPublish`; `VOICE_MUTE_OTHERS` gates enabling commander, enabling broadcast, and grant/revoke floor. A denied speaker receives `canPublish=false`; missing or unavailable Role dependency fails closed for protected Space actions. Self-mute and non-Space calls remain available, and Owner bypass stays in Role Service. gRPC regressions cover deny, unavailable, allow, room override context, and decoded token grants. Compose/Flutter `VOICE_JOIN` deny live shipped (`TestComposeVoiceJoinDeny_live`, #14). Already-issued LiveKit JWTs remain effective until their configured TTL because the canon has no refresh/revocation contract; a target-participant mute RPC remains a separate gap.
 - [x] **[Role] Chat send overrides are API-only — `TEXT_CHAT_SEND_MESSAGES` deny via `chat_overrides` is computed in Role Service but Messaging `SendMessage` never calls `CheckPermission` / `HasChatPermission` for send; E2E only probes `/api/v1/roles/check`.** — **done (send path):** `SendMessage` / `ForwardMessage` call `checkSpaceSendPermission` → `HasChatPermission(..., TEXT_CHAT_SEND_MESSAGES)` (`messaging_grpc.go`); Messaging IT `messaging_send_permission_integration_test.go`; compose/Flutter deny live `TestComposeRolesSendDeny_live` (#14). Other TEXT_CHAT_* bits still partial (see High Role bullets).
 
 ### Cross-cutting
@@ -732,7 +732,7 @@
 
 
 - [ ] **[Voice] Redis key layout differs from `voice-service.md` model** — docs describe `voice:session:{profile_id}` object + room sets; code uses `voice:session:{profile_id}` → `room_id` pointer + JSON blob `voice:call:{room_id}`.
-- [ ] **[Voice] LiveKit JWT minimal grants** — only `video.roomJoin` + `room`; no explicit `canPublish` / `canSubscribe` (works in compose media test, but less explicit than LiveKit best practice).
+- [ ] **[Voice] LiveKit DM/group JWT minimal grants** — Space voice-room JWTs now carry explicit `video.canPublish` from `VOICE_SPEAK`; DM/group JWTs still contain only `video.roomJoin` + `room` and no explicit `canPublish` / `canSubscribe` (works in compose media test, but less explicit than LiveKit best practice).
 - [ ] **[Voice] Commander / raise-hand client surface is proto-only** — generated Dart gRPC stubs exist; no `lib/` product usage beyond `lib/gen/`.
 
 ### Auth

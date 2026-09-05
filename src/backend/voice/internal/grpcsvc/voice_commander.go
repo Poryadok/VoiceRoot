@@ -22,6 +22,11 @@ func (s *VoiceGRPC) SetCommanderMode(ctx context.Context, req *callsv1.SetComman
 		return nil, err
 	}
 	enabled := req.GetEnabled()
+	if enabled {
+		if err := s.ensureMuteOthersPermission(ctx, call, profileID); err != nil {
+			return nil, err
+		}
+	}
 	call, state, err := s.Calls.UpdateVoiceState(ctx, call.RoomID, profileID, voicestore.VoiceStatePatch{
 		IsCommander: &enabled,
 	})
@@ -46,6 +51,14 @@ func (s *VoiceGRPC) SetBroadcasting(ctx context.Context, req *callsv1.SetBroadca
 		return nil, status.Error(codes.PermissionDenied, "commander mode required")
 	}
 	enabled := req.GetEnabled()
+	if enabled {
+		if err := s.ensureMuteOthersPermission(ctx, call, profileID); err != nil {
+			return nil, err
+		}
+		if err := s.ensureVoiceSpeakPermission(ctx, call, profileID); err != nil {
+			return nil, err
+		}
+	}
 	call, state, err = s.Calls.UpdateVoiceState(ctx, call.RoomID, profileID, voicestore.VoiceStatePatch{
 		IsBroadcasting: &enabled,
 	})
@@ -158,8 +171,12 @@ func (s *VoiceGRPC) RevokeFloor(ctx context.Context, req *callsv1.RevokeFloorReq
 	return &callsv1.RevokeFloorResponse{}, nil
 }
 
-// ensureOrganizerFloorControl: commander flag, call initiator, or VOICE_MUTE_OTHERS in space rooms.
+// ensureOrganizerFloorControl requires Role Service in Space voice rooms and
+// preserves the existing commander/initiator policy for calls without role scope.
 func (s *VoiceGRPC) ensureOrganizerFloorControl(ctx context.Context, call voicestore.Call, organizerID string) error {
+	if call.IsVoiceRoom() && call.SpaceID != "" {
+		return s.ensureMuteOthersPermission(ctx, call, organizerID)
+	}
 	state := call.States[organizerID]
 	if state.IsCommander || call.InitiatorProfileID == organizerID {
 		return nil

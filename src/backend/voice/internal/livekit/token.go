@@ -11,7 +11,7 @@ import (
 )
 
 type TokenIssuer interface {
-	JoinToken(profileID, roomName string, now time.Time) (jwt string, expiresAt time.Time, err error)
+	JoinToken(profileID, roomName string, canPublish *bool, now time.Time) (jwt string, expiresAt time.Time, err error)
 	LivekitURL() string
 }
 
@@ -36,7 +36,7 @@ func NewHS256TokenIssuer(apiKey, secret, url string, tokenTTL time.Duration) *HS
 	return &HS256TokenIssuer{apiKey: apiKey, secret: secret, url: url, tokenTTL: tokenTTL}
 }
 
-func (i *HS256TokenIssuer) JoinToken(profileID, roomName string, now time.Time) (string, time.Time, error) {
+func (i *HS256TokenIssuer) JoinToken(profileID, roomName string, canPublish *bool, now time.Time) (string, time.Time, error) {
 	if i == nil || strings.TrimSpace(i.apiKey) == "" || strings.TrimSpace(i.secret) == "" {
 		return "", time.Time{}, fmt.Errorf("livekit credentials not configured")
 	}
@@ -46,16 +46,20 @@ func (i *HS256TokenIssuer) JoinToken(profileID, roomName string, now time.Time) 
 	expiresAt := now.UTC().Add(i.tokenTTL)
 	issuedAt := now.UTC().Unix()
 	header := map[string]string{"alg": "HS256", "typ": "JWT"}
+	video := map[string]any{
+		"roomJoin": true,
+		"room":     roomName,
+	}
+	if canPublish != nil {
+		video["canPublish"] = *canPublish
+	}
 	claims := map[string]any{
-		"iss": i.apiKey,
-		"sub": profileID,
-		"iat": issuedAt,
-		"nbf": issuedAt,
-		"exp": expiresAt.Unix(),
-		"video": map[string]any{
-			"roomJoin": true,
-			"room":     roomName,
-		},
+		"iss":   i.apiKey,
+		"sub":   profileID,
+		"iat":   issuedAt,
+		"nbf":   issuedAt,
+		"exp":   expiresAt.Unix(),
+		"video": video,
 	}
 	// livekit_url is returned via GetJoinTokenResponse; do not embed an object in
 	// JWT "metadata" — LiveKit expects metadata to be a string claim.

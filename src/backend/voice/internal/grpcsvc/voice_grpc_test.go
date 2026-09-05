@@ -156,6 +156,8 @@ func TestVoiceGRPCStartAcceptTokenStateAndEnd(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, token.GetJwt())
 	require.Equal(t, "ws://livekit:7880", token.GetLivekitUrl())
+	_, present := liveKitCanPublish(t, token.GetJwt())
+	require.False(t, present, "DM token must preserve its existing generic publish grant")
 
 	muted := true
 	video := false
