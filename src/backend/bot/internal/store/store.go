@@ -170,6 +170,15 @@ FROM bots WHERE id = $1`, id)
 	return scanBot(row)
 }
 
+// GetBotByIDForUpdate reads a bot while holding its row lock until tx commits.
+func (s *BotStore) GetBotByIDForUpdate(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*BotRow, error) {
+	row := tx.QueryRow(ctx, `
+SELECT id, owner_account_id, name, description, avatar_url, token_hash, webhook_url, webhook_secret,
+	is_polling_mode, scopes::text, status, actor_profile_id, slug, created_at, updated_at
+FROM bots WHERE id = $1 FOR UPDATE`, id)
+	return scanBot(row)
+}
+
 func (s *BotStore) GetBotByTokenHash(ctx context.Context, hash string) (*BotRow, error) {
 	row := s.Pool.QueryRow(ctx, `
 SELECT id, owner_account_id, name, description, avatar_url, token_hash, webhook_url, webhook_secret,

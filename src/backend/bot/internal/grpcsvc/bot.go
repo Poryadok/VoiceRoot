@@ -95,7 +95,12 @@ func (s *BotGRPC) UpdateBot(ctx context.Context, req *botv1.UpdateBotRequest) (*
 		return nil, err
 	}
 	// Preserve PATCH semantics: omitted optional fields retain their current values.
-	row, err := s.Store.GetBotByID(ctx, botID)
+	tx, err := s.Store.Pool.Begin(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	row, err := s.Store.GetBotByIDForUpdate(ctx, tx, botID)
 	if err != nil {
 		return nil, mapStoreErr(err)
 	}
@@ -116,10 +121,13 @@ func (s *BotGRPC) UpdateBot(ctx context.Context, req *botv1.UpdateBotRequest) (*
 		}
 		row.ScopesJSON = validatedScopes
 	}
-	_, err = s.Store.Pool.Exec(ctx, `
+	_, err = tx.Exec(ctx, `
 UPDATE bots SET name = $2, description = $3, avatar_url = $4, scopes = $5::jsonb, updated_at = now()
 WHERE id = $1`, botID, row.Name, row.Description, row.AvatarURL, row.ScopesJSON)
 	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	updated, err := s.Store.GetBotByID(ctx, botID)
