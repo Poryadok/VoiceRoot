@@ -316,13 +316,31 @@ func (s *StoryGRPC) MarkViewed(ctx context.Context, req *storyv1.MarkViewedReque
 			return nil, status.Error(codes.PermissionDenied, "premium subscription required")
 		}
 	}
-	if err := s.Store.MarkViewed(ctx, storyID, viewerID, req.GetAnonymous()); err != nil {
+	if err := persistAndPublishStoryView(ctx, storyID, viewerID, req.GetAnonymous(), s.Store.MarkViewed, s.Events); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	if s.Events != nil {
-		_ = s.Events.PublishStoryViewed(ctx, storyID.String(), viewerID.String())
-	}
 	return &storyv1.MarkViewedResponse{}, nil
+}
+
+func persistAndPublishStoryView(
+	ctx context.Context,
+	storyID, viewerID uuid.UUID,
+	anonymous bool,
+	markViewed func(context.Context, uuid.UUID, uuid.UUID, bool) error,
+	publisher storyevents.Publisher,
+) error {
+	if err := markViewed(ctx, storyID, viewerID, anonymous); err != nil {
+		return err
+	}
+	if publisher == nil {
+		return nil
+	}
+	viewerProfileID := viewerID.String()
+	if anonymous {
+		viewerProfileID = ""
+	}
+	_ = publisher.PublishStoryViewed(ctx, storyID.String(), viewerProfileID)
+	return nil
 }
 
 func (s *StoryGRPC) GetViewers(ctx context.Context, req *storyv1.GetViewersRequest) (*storyv1.GetViewersResponse, error) {
