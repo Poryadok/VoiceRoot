@@ -86,19 +86,32 @@ func (m *mapRolePermissions) EnsureMuteOthers(_ context.Context, spaceID, profil
 }
 
 func (s *VoiceGRPC) ensureVoiceSpeakPermission(ctx context.Context, call voicestore.Call, profileID string) error {
+	canPublish, err := s.voicePublishGrant(ctx, call, profileID)
+	if err != nil {
+		return err
+	}
+	if canPublish != nil && !*canPublish {
+		return status.Error(codes.PermissionDenied, "voice speak not permitted")
+	}
+	return nil
+}
+
+func (s *VoiceGRPC) voicePublishGrant(ctx context.Context, call voicestore.Call, profileID string) (*bool, error) {
 	if !call.IsVoiceRoom() || call.SpaceID == "" {
-		return nil
+		return nil, nil
 	}
 	if s.Roles == nil {
-		return status.Error(codes.PermissionDenied, "voice speak permission check unavailable")
+		return nil, status.Error(codes.PermissionDenied, "voice speak permission check unavailable")
 	}
 	if err := s.Roles.EnsureVoiceSpeak(ctx, call.SpaceID, profileID, call.VoiceRoomID); err != nil {
 		if errors.Is(err, ErrVoiceSpeakDenied) {
-			return status.Error(codes.PermissionDenied, "voice speak not permitted")
+			denied := false
+			return &denied, nil
 		}
-		return status.Error(codes.PermissionDenied, "voice speak permission check unavailable")
+		return nil, status.Error(codes.PermissionDenied, "voice speak permission check unavailable")
 	}
-	return nil
+	allowed := true
+	return &allowed, nil
 }
 
 func (s *VoiceGRPC) ensureMuteOthersPermission(ctx context.Context, call voicestore.Call, profileID string) error {

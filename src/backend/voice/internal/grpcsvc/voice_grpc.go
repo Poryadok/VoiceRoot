@@ -13,11 +13,11 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"voice/backend/pkg/guestguard"
 	"voice/backend/voice/internal/authctx"
 	"voice/backend/voice/internal/livekit"
 	voicestore "voice/backend/voice/internal/store"
 	"voice/backend/voice/internal/voiceevents"
-	"voice/backend/pkg/guestguard"
 
 	callsv1 "voice.app/voice/calls/v1"
 	chatv1 "voice.app/voice/chat/v1"
@@ -31,18 +31,18 @@ type SpaceProLookup interface {
 type VoiceGRPC struct {
 	callsv1.UnimplementedVoiceServiceServer
 
-	Calls        voicestore.CallStore
-	ChatMembers  ChatMembership
-	SpaceMembers SpaceMembership
-	SpacePro     SpaceProLookup
-	Roles        RolePermissionChecker
-	Privacy      CallPrivacyChecker
-	Friends      CallProfileFriendChecker
+	Calls             voicestore.CallStore
+	ChatMembers       ChatMembership
+	SpaceMembers      SpaceMembership
+	SpacePro          SpaceProLookup
+	Roles             RolePermissionChecker
+	Privacy           CallPrivacyChecker
+	Friends           CallProfileFriendChecker
 	SpaceCoMembership CallSpaceCoMembershipChecker
-	Tokens       livekit.TokenIssuer
-	Events       voiceevents.Publisher
-	Now          func() time.Time
-	RingTimeout  time.Duration
+	Tokens            livekit.TokenIssuer
+	Events            voiceevents.Publisher
+	Now               func() time.Time
+	RingTimeout       time.Duration
 	// Logger emits structured nats_publish errors when JetStream publish fails after a successful RPC.
 	Logger *slog.Logger
 }
@@ -245,14 +245,18 @@ func (s *VoiceGRPC) GetJoinToken(ctx context.Context, req *callsv1.GetJoinTokenR
 	if s.Tokens == nil {
 		return nil, status.Error(codes.FailedPrecondition, "livekit token issuer not configured")
 	}
-	jwt, expiresAt, err := s.Tokens.JoinToken(profileID, call.LivekitRoomName, s.now())
+	canPublish, err := s.voicePublishGrant(ctx, call, profileID)
+	if err != nil {
+		return nil, err
+	}
+	jwt, expiresAt, err := s.Tokens.JoinToken(profileID, call.LivekitRoomName, canPublish, s.now())
 	if err != nil {
 		return nil, status.Error(codes.FailedPrecondition, err.Error())
 	}
 	return &callsv1.GetJoinTokenResponse{
-		Jwt:         jwt,
-		ExpiresAt:   timestamppb.New(expiresAt),
-		LivekitUrl:  s.Tokens.LivekitURL(),
+		Jwt:        jwt,
+		ExpiresAt:  timestamppb.New(expiresAt),
+		LivekitUrl: s.Tokens.LivekitURL(),
 	}, nil
 }
 
@@ -684,11 +688,11 @@ func (s *VoiceGRPC) publishVoiceMemberJoined(ctx context.Context, call voicestor
 		}
 	}
 	if err := s.Events.PublishVoiceMemberJoined(ctx, &eventsv1.VoiceMemberJoined{
-		RoomId:            call.RoomID,
-		VoiceRoomId:       call.VoiceRoomID,
-		SpaceId:           call.SpaceID,
-		JoinedProfileId:   joinedProfileID,
-		NotifyProfileIds:  notify,
+		RoomId:           call.RoomID,
+		VoiceRoomId:      call.VoiceRoomID,
+		SpaceId:          call.SpaceID,
+		JoinedProfileId:  joinedProfileID,
+		NotifyProfileIds: notify,
 	}); err != nil {
 		s.logPublishError(ctx, "voice.member_joined", err, slog.String("room_id", call.RoomID))
 	}
