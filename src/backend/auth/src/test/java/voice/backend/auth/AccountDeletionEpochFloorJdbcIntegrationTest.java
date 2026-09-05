@@ -7,14 +7,19 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 
+import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -33,7 +38,7 @@ import voice.backend.auth.support.JdbcUserContractTestConfiguration;
 @SpringBootTest
 @ActiveProfiles("integration")
 @Testcontainers(disabledWithoutDocker = true)
-@Import(JdbcUserContractTestConfiguration.class)
+@Import({JdbcUserContractTestConfiguration.class, JdbcTransactionTestConfiguration.class})
 class AccountDeletionEpochFloorJdbcIntegrationTest {
   @Container
   static final PostgreSQLContainer<?> postgres =
@@ -85,5 +90,13 @@ class AccountDeletionEpochFloorJdbcIntegrationTest {
     assertThat(deletionOperations.findByAccountAndEpoch(before.id(), before.sessionEpoch() + 1))
         .isEmpty();
     verify(sessionEpochFloors).recordAtLeast(before.id(), before.sessionEpoch() + 1);
+  }
+}
+
+@TestConfiguration(proxyBeanMethods = false)
+class JdbcTransactionTestConfiguration {
+  @Bean
+  PlatformTransactionManager transactionManager(DataSource dataSource) {
+    return new DataSourceTransactionManager(dataSource);
   }
 }
