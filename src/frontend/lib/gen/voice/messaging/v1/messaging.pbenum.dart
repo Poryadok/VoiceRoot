@@ -188,5 +188,29 @@ class LastMessageDeliveryState extends $pb.ProtobufEnum {
   const LastMessageDeliveryState._(super.value, super.name);
 }
 
+/// State of the other participant in a selected direct-message chat.
+/// UNSPECIFIED preserves the existing response for non-DM chats and legacy producers.
+class DmPeerState extends $pb.ProtobufEnum {
+  static const DmPeerState DM_PEER_STATE_UNSPECIFIED =
+      DmPeerState._(0, _omitEnumNames ? '' : 'DM_PEER_STATE_UNSPECIFIED');
+  static const DmPeerState DM_PEER_STATE_ACTIVE =
+      DmPeerState._(1, _omitEnumNames ? '' : 'DM_PEER_STATE_ACTIVE');
+  static const DmPeerState DM_PEER_STATE_DELETED =
+      DmPeerState._(2, _omitEnumNames ? '' : 'DM_PEER_STATE_DELETED');
+
+  static const $core.List<DmPeerState> values = <DmPeerState>[
+    DM_PEER_STATE_UNSPECIFIED,
+    DM_PEER_STATE_ACTIVE,
+    DM_PEER_STATE_DELETED,
+  ];
+
+  static final $core.List<DmPeerState?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 2);
+  static DmPeerState? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const DmPeerState._(super.value, super.name);
+}
+
 const $core.bool _omitEnumNames =
     $core.bool.fromEnvironment('protobuf.omit_enum_names');

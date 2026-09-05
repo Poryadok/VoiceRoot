@@ -75,7 +75,7 @@
 После reconnect клиент получает авторитетный paginated snapshot своего inbox через `ListChats`: `main`, `requests` и `archive`; `Chat` обогащает строки durable metadata из Messaging. Первую страницу можно показать сразу, остальные страницы догружаются в фоне до конца snapshot. Ошибка страницы оставляет локальный cache и требует retry: отсутствие ответа нельзя трактовать как пустой inbox, удаление строки или `unread_count = 0`. Это **глобальный catch-up состояния списка**, а не журнал WebSocket-событий и не выгрузка истории всех чатов.
 
 **3. История сообщений (Messaging, REST через Gateway)**
-Пропущенные **сообщения** догружаются **с клиента** через публичный API Messaging (`GetMessages` с курсором **per `chat_id`**: `last_message_id` / `after_message_id`) только для открытого чата, явного перехода из notification или другого выбранного пользователем контекста. Offline queue на сервере не нужна. Если курсор не найден (сообщение удалено) — запрос последних 50 сообщений чата без курсора. Детали контракта — [microservices/messaging-service.md](microservices/messaging-service.md).
+Пропущенные **сообщения** догружаются **с клиента** через публичный API Messaging (`GetMessages` с курсором **per `chat_id`**: `last_message_id` / `after_message_id`) только для открытого чата, явного перехода из notification или другого выбранного пользователем контекста. Offline queue на сервере не нужна. Если курсор не найден (сообщение удалено) — запрос последних 50 сообщений чата без курсора. Для уже выбранного known DM `GetMessagesResponse.dm_peer_state=DELETED` — durable state удаления второго участника: клиент добавляет единственный локальный неперсистентный marker «Пользователь удалён», не синтезируя message/tombstone и не раскрывая deleted identity. Детали контракта — [microservices/messaging-service.md](microservices/messaging-service.md).
 
 **Эфемерные события** (typing, часть presence, `delivery_ack` / `message_delivered`): catch-up **не гарантируется** — после reconnect состояние «с нуля» или из следующих live-событий.
 
@@ -88,7 +88,7 @@
 
 | Concern | REST / gRPC (durable) | WebSocket (ephemeral fan-out) |
 |---------|----------------------|-------------------------------|
-| История сообщений | `GetMessages` per `chat_id` | `message_create` / `message_update` / `message_delete` |
+| История сообщений | `GetMessages` per `chat_id`, включая `dm_peer_state` для selected DM | `message_create` / `message_update` / `message_delete`; `dm_peer_deleted` только live-ускорение, без replay |
 | Read cursor | `Messaging.MarkRead` → `read_receipts` | `mark_read` op + `message_read` (same-profile tabs) |
 | Delivery ticks (list) | `GetChatListMetadata.last_message_delivery_state` | `delivery_ack` → `message_delivered` (live bubble only) |
 | Catch-up после reconnect | `ListChats` global inbox snapshot + `GetMessages` per selected `chat_id` + metadata | `resume` + `last_s` — только live-поток новой сессии, не журнал |

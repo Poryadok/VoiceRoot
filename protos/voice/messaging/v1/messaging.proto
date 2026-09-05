@@ -242,6 +242,14 @@ enum LastMessageDeliveryState {
   LAST_MESSAGE_DELIVERY_STATE_READ = 4;
 }
 
+// State of the other participant in a selected direct-message chat.
+// UNSPECIFIED preserves the existing response for non-DM chats and legacy producers.
+enum DmPeerState {
+  DM_PEER_STATE_UNSPECIFIED = 0;
+  DM_PEER_STATE_ACTIVE = 1;
+  DM_PEER_STATE_DELETED = 2;
+}
+
 message ChatListMetadata {
   voice.chat.v1.ChatRef chat = 1;
   optional string last_message_preview = 2;
@@ -261,6 +269,8 @@ message EditMessageResponse {
 message DeleteMessageResponse {}
 message GetMessagesResponse {
   MessageList message_list = 1;
+  // Response-level state only: never materialize account deletion as a Message row.
+  optional DmPeerState dm_peer_state = 2;
 }
 message GetMessageResponse {
   Message message = 1;
