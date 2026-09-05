@@ -116,6 +116,10 @@ func TestSearchProfiles_EnforcesFriendRequestDiscoverability(t *testing.T) {
 		require.NotContains(t, ids, targets["friend"].profile.String())
 		require.NotContains(t, ids, targets["fof"].profile.String())
 		require.NotContains(t, ids, targets["nobody"].profile.String())
+		var privacyRows int
+		err = pool.QueryRow(ctx, `SELECT COUNT(*) FROM privacy_settings WHERE profile_id = $1`, targets["default"].profile).Scan(&privacyRows)
+		require.NoError(t, err)
+		require.Zero(t, privacyRows, "SearchProfiles must not create privacy state for a read-only default fallback")
 	})
 
 	t.Run("primary profile is the fallback when active metadata is absent", func(t *testing.T) {
