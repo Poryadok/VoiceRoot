@@ -64,10 +64,16 @@ func TestVoiceEventHandler_InitiatorExcluded(t *testing.T) {
 func TestVoiceEventHandler_MemberJoinedNotifiesOthers(t *testing.T) {
 	notifyID := uuid.NewString()
 	joinedID := uuid.NewString()
+	presenceCalls := 0
 	h := &consumer.VoiceEventHandler{Router: delivery.DecideRouting}
 	decisions := h.HandleVoiceMemberJoined(context.Background(), &eventsv1.VoiceMemberJoined{
 		JoinedProfileId:  joinedID,
 		NotifyProfileIds: []string{notifyID},
-	}, func(string) bool { return false })
+	}, func(string) bool {
+		presenceCalls++
+		return true
+	})
+	require.Zero(t, presenceCalls, "voice_member_joined must skip the presence check")
 	require.True(t, decisions[notifyID].Push)
+	require.True(t, decisions[notifyID].InApp)
 }
