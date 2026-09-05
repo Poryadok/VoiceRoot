@@ -10,12 +10,14 @@ import (
 	"github.com/google/uuid"
 )
 
-// ProfileSearchCursor is a keyset position in SearchProfiles ordering:
-// lower(username) ASC, discriminator ASC, id ASC.
+// ProfileSearchCursor is a keyset position in SearchProfiles ordering.
+// VerificationRank is optional so cursors issued before ranked keysets retain
+// their previous predicate on decode.
 type ProfileSearchCursor struct {
-	UsernameLower string    `json:"u"`
-	Discriminator string    `json:"d"`
-	ID            uuid.UUID `json:"i"`
+	VerificationRank *int      `json:"v,omitempty"`
+	UsernameLower    string    `json:"u"`
+	Discriminator    string    `json:"d"`
+	ID               uuid.UUID `json:"i"`
 }
 
 func EncodeSearchCursor(c ProfileSearchCursor) (string, error) {
@@ -42,6 +44,9 @@ func DecodeSearchCursor(s string) (*ProfileSearchCursor, error) {
 	if c.UsernameLower == "" || len(c.Discriminator) != 4 || c.ID == uuid.Nil {
 		return nil, fmt.Errorf("invalid cursor")
 	}
+	if c.VerificationRank != nil && (*c.VerificationRank < 0 || *c.VerificationRank > 1) {
+		return nil, fmt.Errorf("invalid cursor")
+	}
 	return &c, nil
 }
 
@@ -63,8 +68,15 @@ func (s *ProfileStore) SearchProfilesAfter(ctx context.Context, excludeAccount u
 	args := []any{excludeAccount, pat}
 	extra := ""
 	if after != nil {
-		extra = ` AND (lower(username), discriminator, id) > (lower($3::text), $4::text, $5::uuid)`
-		args = append(args, after.UsernameLower, after.Discriminator, after.ID)
+		if after.VerificationRank == nil {
+			// Cursors issued before verification ranking was encoded retain their
+			// former keyset behavior rather than being reinterpreted as rank zero.
+			extra = ` AND (lower(username), discriminator, id) > (lower($3::text), $4::text, $5::uuid)`
+			args = append(args, after.UsernameLower, after.Discriminator, after.ID)
+		} else {
+			extra = ` AND ((CASE WHEN verification_type <> 'none' THEN 0 ELSE 1 END), lower(username), discriminator, id) > ($3::int, lower($4::text), $5::text, $6::uuid)`
+			args = append(args, *after.VerificationRank, after.UsernameLower, after.Discriminator, after.ID)
+		}
 	}
 	limitArg := len(args) + 1
 	q := fmt.Sprintf(`SELECT %s
