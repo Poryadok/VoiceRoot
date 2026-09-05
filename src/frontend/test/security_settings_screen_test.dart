@@ -299,4 +299,125 @@ void main() {
       expect(controller.state.session, isNull);
     },
   );
+
+  testWidgets(
+    'totp_required accepts a backup code and logs out after success',
+    (tester) async {
+      var deleteAttempts = 0;
+      var logoutCalled = false;
+      late AuthController controller;
+      final mock = MockClient((req) async {
+        if (req.method == 'POST' &&
+            req.url.path == '/api/v1/auth/delete-account') {
+          deleteAttempts++;
+          final body = jsonDecode(req.body) as Map<String, dynamic>;
+          expect(body['password'], 'secret');
+          if (deleteAttempts == 1) {
+            expect(body.containsKey('totp_code'), isFalse);
+            return http.Response(jsonEncode({'error': 'totp_required'}), 401);
+          }
+          expect(body['totp_code'], 'backup-code-123');
+          return http.Response('', 204);
+        }
+        if (req.method == 'POST' && req.url.path == '/api/v1/auth/logout') {
+          logoutCalled = true;
+          return http.Response('', 204);
+        }
+        return http.Response('not found', 404);
+      });
+
+      final gateway = GatewayHttpClient(
+        httpClient: mock,
+        config: const GatewayConfig(baseUrl: 'http://api.test'),
+        authorizationProvider: () => 'Bearer token',
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...voiceThemeTestOverrides(),
+            authSessionStorageProvider.overrideWithValue(_MemoryAuthStorage()),
+            guestCredentialsStorageProvider.overrideWithValue(
+              InMemoryGuestCredentialsStorage(),
+            ),
+            gatewayConfigProvider.overrideWithValue(
+              const GatewayConfig(baseUrl: 'http://api.test'),
+            ),
+            gatewayHttpClientProvider.overrideWithValue(gateway),
+            voiceAuthClientProvider.overrideWithValue(
+              VoiceAuthClient(gateway: gateway),
+            ),
+            authControllerProvider.overrideWith((ref) {
+              controller = AuthController(
+                authClient: ref.watch(voiceAuthClientProvider),
+                storage: ref.watch(authSessionStorageProvider),
+                guestCredentialsStorage: ref.watch(
+                  guestCredentialsStorageProvider,
+                ),
+              );
+              controller.state = const AuthState(
+                session: AuthSession(
+                  accessToken: 'token',
+                  refreshToken: 'refresh',
+                  expiresInSeconds: 900,
+                  accountId: 'account-1',
+                  activeProfileId: 'profile-primary',
+                ),
+              );
+              return controller;
+            }),
+          ],
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const SecuritySettingsScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(
+        find.byKey(SecuritySettingsScreen.deleteAccountButtonKey),
+        120,
+        scrollable: find
+            .descendant(
+              of: find.byKey(SecuritySettingsScreen.screenKey),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.tap(
+        find.byKey(SecuritySettingsScreen.deleteAccountButtonKey),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(SecuritySettingsScreen.deleteAccountPasswordKey),
+        'secret',
+      );
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(SecuritySettingsScreen.deleteAccountDialogKey),
+          matching: find.text('Delete'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(deleteAttempts, 1);
+      await tester.enterText(
+        find.byKey(SecuritySettingsScreen.deleteAccountTotpKey),
+        'backup-code-123',
+      );
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(SecuritySettingsScreen.deleteAccountDialogKey),
+          matching: find.text('Delete'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(deleteAttempts, 2);
+      expect(logoutCalled, isTrue);
+      expect(controller.state.session, isNull);
+    },
+  );
 }
