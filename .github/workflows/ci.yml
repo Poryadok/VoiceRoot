@@ -47,6 +47,7 @@ jobs:
       packages: read
     outputs:
       global: ${{ steps.filter.outputs.global }}
+      a1_e2e: ${{ steps.filter.outputs.a1_e2e }}
       protos: ${{ steps.filter.outputs.protos }}
       pkg: ${{ steps.filter.outputs.pkg }}
       frontend: ${{ steps.filter.outputs.frontend }}
@@ -1148,6 +1149,91 @@ jobs:
           VOICE_RUN_LIVE_COMPOSE: "true"
           VOICE_API_BASE_URL: http://127.0.0.1:18080
         run: bash scripts/ci/compose-e2e-smoke.sh
+
+  a1-e2e:
+    needs: changes
+    if: >-
+      always() &&
+      (
+        github.event_name == 'schedule' ||
+        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') ||
+        (
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/master' &&
+          needs.changes.result == 'success' &&
+          needs.changes.outputs.a1_e2e == 'true'
+        )
+      ) &&
+      (needs.changes.result == 'success' || needs.changes.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: A1 multi-account compose proof
+        env:
+          VOICE_A1_MULTI_ACCOUNT_CLEANUP: "true"
+        run: make compose-a1-multi-account-proof
+
+  a1-flutter-profile-handoff:
+    needs: changes
+    if: >-
+      always() &&
+      (
+        github.event_name == 'schedule' ||
+        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') ||
+        (
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/master' &&
+          needs.changes.result == 'success' &&
+          needs.changes.outputs.a1_e2e == 'true'
+        )
+      ) &&
+      (needs.changes.result == 'success' || needs.changes.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Prefetch sqlite3mc native assets
+        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
+      - name: T055 Flutter profile handoff
+        env:
+          VOICE_A1_FLUTTER_PROFILE_HANDOFF_CLEANUP: "true"
+        run: make compose-a1-flutter-profile-handoff
+
+  a1-attachment-restart-proof:
+    needs: changes
+    if: >-
+      always() &&
+      (
+        github.event_name == 'schedule' ||
+        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') ||
+        (
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/master' &&
+          needs.changes.result == 'success' &&
+          needs.changes.outputs.a1_e2e == 'true'
+        )
+      ) &&
+      (needs.changes.result == 'success' || needs.changes.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: File attachment restart proof
+        env:
+          VOICE_FILE_ATTACHMENT_RESTART_CLEANUP: "true"
+        run: make compose-file-attachment-restart-proof
 
   # --- Tier 3: nightly / manual full parity ---
   backend-go-integration:

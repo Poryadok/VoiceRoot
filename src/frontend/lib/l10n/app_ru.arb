@@ -211,6 +211,7 @@
   },
   "chatRoomEmpty": "Сообщений пока нет",
   "chatRoomEmptyHint": "Отправьте первое сообщение, когда будете готовы.",
+  "chatDmPeerDeleted": "Пользователь удалён",
   "chatRoomLoadOlder": "Загрузить старые сообщения",
   "chatRoomInputHint": "Сообщение",
   "chatSendMessage": "Отправить сообщение",

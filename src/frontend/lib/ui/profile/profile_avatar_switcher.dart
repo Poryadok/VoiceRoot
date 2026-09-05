@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../backend/users_client.dart';
 import '../../state/auth_providers.dart';
+import '../../state/profile_switch_coordinator.dart';
 import '../../state/subscription_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../../theme/voice_theme_providers.dart';
@@ -34,10 +35,10 @@ class ProfileAvatarSwitcher extends ConsumerWidget {
 
     ref.read(profileSwitchInProgressProvider.notifier).state = true;
     try {
-      final err = await ref
-          .read(authControllerProvider.notifier)
-          .switchActiveProfile(profile.id);
-      if (err == null) {
+      final result = await ref
+          .read(profileSwitchCoordinatorProvider)
+          .switchTo(profile.id);
+      if (result is ProfileSwitchApplied) {
         HapticFeedback.selectionClick();
         ref.invalidate(myProfilesProvider);
         if (context.mounted) {

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../backend/api_errors.dart';
 import '../backend/messages_client.dart';
 import 'auth_providers.dart';
 import 'chat_providers.dart';
@@ -58,6 +59,9 @@ class SharedMediaListController
     );
     return switch (result) {
       MessagesApiOk(:final data) => data,
+      MessagesApiFailure(:final statusCode)
+          when isBackendUnavailable(statusCode) =>
+        throw const BackendUnavailableException(),
       MessagesApiFailure(:final message) => throw Exception(message),
     };
   }

@@ -234,7 +234,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final blockChannelMainFeed =
         chatMeta?.isChannel == true && chatMeta!.allowUserMainFeed == false;
     final composerBlocked =
-        isOffline || (blockChannelMainFeed && replyTarget == null);
+        isOffline ||
+        room.isDmPeerDeleted ||
+        (blockChannelMainFeed && replyTarget == null);
     final peerId = isGroup
         ? null
         : resolveDmPeerForChatId(
@@ -632,6 +634,12 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             label: l10n.chatPinnedBar(room.pinnedMessages.length),
             onTap: (messageId) => _scrollToMessage(messageId),
           ),
+        if (room.isDmPeerDeleted && room.messages.isNotEmpty)
+          Padding(
+            key: ValueKey<String>('chat_room_dm_peer_deleted'),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Text(l10n.chatDmPeerDeleted),
+          ),
         Expanded(
           child: Stack(
             children: [
@@ -916,6 +924,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   }
 
   Future<void> _send() async {
+    if (ref.read(chatRoomControllerProvider(widget.chatId)).isDmPeerDeleted) {
+      return;
+    }
     if (ref.read(isDeviceOfflineProvider) ||
         ref.read(chatRoomControllerProvider(widget.chatId)).isOfflineCache) {
       if (!mounted) return;
@@ -987,14 +998,20 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       onDismiss: () => _attachFocus.requestFocus(),
     );
     if (!mounted || action == null) return;
+    if (ref.read(chatRoomControllerProvider(widget.chatId)).isDmPeerDeleted) {
+      return;
+    }
     await _attachAndSend(imagesOnly: action == ComposerAttachAction.photoOrVideo);
   }
 
   Future<void> _attachAndSend({bool imagesOnly = false}) async {
+    if (ref.read(chatRoomControllerProvider(widget.chatId)).isDmPeerDeleted) {
+      return;
+    }
     final picker = widget.attachmentPicker ??
         () => _defaultPickChatAttachment(imagesOnly: imagesOnly);
     final picked = await picker();
-    if (picked == null || !mounted) return;
+    if (picked == null || !mounted || _isDmPeerDeleted()) return;
     final auth = ref.read(authorizationHeaderProvider);
     if (auth == null) return;
     setState(() => _uploadingAttachment = true);
@@ -1024,6 +1041,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         );
         uploadBytes = encrypted.ciphertext;
         e2eKeyWire = encrypted.keyWire;
+        if (!mounted || _isDmPeerDeleted()) return;
       }
       final ticket = await files.requestUpload(
         authorization: auth,
@@ -1034,18 +1052,21 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         chatType: chatType,
         isE2e: isE2eChat,
       );
+      if (!mounted || _isDmPeerDeleted()) return;
       if (ticket is! FilesApiOk<FileUploadTicket>) return;
       final put = await files.putBytes(
         uploadUrl: ticket.data.presignedPutUrl,
         bytes: uploadBytes,
         mimeType: picked.contentType,
       );
+      if (!mounted || _isDmPeerDeleted()) return;
       if (put is! FilesApiOk<void>) return;
       final confirmed = await files.confirmUpload(
         authorization: auth,
         fileId: ticket.data.fileId,
         bytes: uploadBytes,
       );
+      if (!mounted || _isDmPeerDeleted()) return;
       if (confirmed is! FilesApiOk<FileMetadataData>) return;
       final metadata = confirmed.data;
       final err = await ref
@@ -1062,7 +1083,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
               ),
             ],
           );
-      if (!mounted) return;
+      if (!mounted || _isDmPeerDeleted()) return;
       if (err == null) {
         _composer.clear();
       }
@@ -1073,6 +1094,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       }
     }
   }
+
+  bool _isDmPeerDeleted() =>
+      ref.read(chatRoomControllerProvider(widget.chatId)).isDmPeerDeleted;
 
   Future<void> _showMessageActions(VoiceMessage message, bool isMine) async {
     String? spaceId;
@@ -1102,11 +1126,14 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   title: Text(sheetL10n.chatMessageReply),
                   onTap: () => Navigator.of(context).pop('reply'),
                 ),
-                ListTile(
-                  leading: const Icon(Icons.forward_outlined),
-                  title: Text(sheetL10n.chatMessageForward),
-                  onTap: () => Navigator.of(context).pop('forward'),
-                ),
+                if (!ref
+                    .read(chatRoomControllerProvider(widget.chatId))
+                    .isDmPeerDeleted)
+                  ListTile(
+                    leading: const Icon(Icons.forward_outlined),
+                    title: Text(sheetL10n.chatMessageForward),
+                    onTap: () => Navigator.of(context).pop('forward'),
+                  ),
                 ListTile(
                   key: const Key('message_action_copy_as_new'),
                   leading: const Icon(Icons.content_copy_outlined),
@@ -1182,6 +1209,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
           message.id;
       _refocusComposer();
     } else if (action == 'forward') {
+      if (ref.read(chatRoomControllerProvider(widget.chatId)).isDmPeerDeleted) {
+        return;
+      }
       await ForwardMessageSheet.show(
         context,
         sourceMessage: message,

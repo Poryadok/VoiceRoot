@@ -59,13 +59,19 @@ class PresenceController extends StateNotifier<Map<String, VoicePresence>> {
     final status = data['status'] as String?;
     if (profileId == null || profileId.isEmpty || status == null) return;
     if (!_watched.contains(profileId)) return;
+    final customStatus = data['custom_status'] as String?;
     final lastSeenRaw = data['last_seen'] as String?;
     state = {
       ...state,
       profileId: VoicePresence(
         profileId: profileId,
         status: status,
-        lastSeen: lastSeenRaw == null ? null : DateTime.tryParse(lastSeenRaw)?.toUtc(),
+        customStatus: customStatus == null || customStatus.isEmpty
+            ? null
+            : customStatus,
+        lastSeen: lastSeenRaw == null
+            ? null
+            : DateTime.tryParse(lastSeenRaw)?.toUtc(),
       ),
     };
   }

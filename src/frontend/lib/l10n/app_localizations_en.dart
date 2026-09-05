@@ -490,6 +490,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatRoomEmptyHint => 'Send the first message when you are ready.';
 
   @override
+  String get chatDmPeerDeleted => 'User deleted';
+
+  @override
   String get chatRoomLoadOlder => 'Load older messages';
 
   @override

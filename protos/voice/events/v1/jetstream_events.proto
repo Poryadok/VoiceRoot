@@ -267,6 +267,7 @@ message ChatStreamEvent {
     SpaceMemberLeft space_member_left = 16;
     SpaceUpdated space_updated = 17;
     SpaceDeleted space_deleted = 18;
+    DmPeerDeleted dm_peer_deleted = 19;
   }
 }
 
@@ -318,6 +319,13 @@ message SpaceUpdated {
 
 message SpaceDeleted {
   string space_id = 1;
+}
+
+// Targeted acceleration for a surviving participant of a DM. The deleted
+// account or profile identity is intentionally absent from this payload.
+message DmPeerDeleted {
+  string chat_id = 1;
+  string recipient_profile_id = 2;
 }
 
 // --- voice.events ---

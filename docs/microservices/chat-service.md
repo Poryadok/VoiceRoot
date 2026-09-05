@@ -238,6 +238,8 @@ CREATE INDEX quick_access_profile_order_idx ON quick_access_chats (profile_id, s
 
 `ListChats` — durable control plane для глобальной сверки списка после reconnect, не WebSocket. Клиент запрашивает paginated snapshot `main`, `requests` и `archive`; первую страницу может отрисовать сразу, но продолжает каждый scope до `next_cursor == ""` в фоне. Пока scope не завершён успешно, клиент не удаляет старые cache rows и не заменяет их пустым ответом/нулевым `unread_count`; неуспешная страница повторяется. `Chat` остаётся owner membership, inbox bucket, archive и сортировки, а Messaging S2S обогащает каждую строку preview/unread/delivery metadata. Полные сообщения не возвращаются: после snapshot клиент вызывает `Messaging.GetMessages` только для открытого, notification-target или иного выбранного `chat_id`.
 
+После account delete успешный новый snapshot не включает DM-строку surviving участника с удалённым peer. Это не меняет правило failed-page: ошибка page не является доказательством удаления строки. Уже выбранная локально загруженная история восстанавливает terminal state только через `Messaging.GetMessages.dm_peer_state`, не через `ListChats` и не через раскрытие deleted profile.
+
 ### Timestamp ownership (`chats.last_message_at`)
 
 | Writer | Что обновляет | Статус |
@@ -469,6 +471,7 @@ Gateway REST (sketch): `GET /api/v1/sticker-packs`, `POST /api/v1/sticker-packs/
 | `chat.member_removed` | chat_id, profile_id, removed_by    |
 | `chat.member_left`    | chat_id, profile_id                |
 | `chat.member_changed` | chat_id, profile_id, change (`added` \| `removed` \| `left` \| `owner_transferred` \| `inbox_bucket_changed` \| `role_changed`) |
+| `chat.dm_peer_deleted` | chat_id, recipient_profile_id; только surviving участнику, без deleted identity |
 
 **Note:** JetStream payload for `chat.member_changed` may emit `removed`, `owner_transferred`, and inbox transitions beyond minimal proto comment — consumers must tolerate unknown `change` values.
 

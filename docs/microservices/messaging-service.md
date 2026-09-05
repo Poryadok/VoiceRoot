@@ -257,6 +257,14 @@ List UI **must** complete the global `ListChats` inbox snapshot after reconnect 
 
 После reconnect клиент завершает paginated `ListChats` snapshot для `main` / `requests` / `archive` с Messaging metadata, а не восстанавливает ticks из WS ([ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) § Reconnect). Полные сообщения остаются `GetMessages` per selected `chat_id`.
 
+### Удалённый DM peer: durable recovery выбранной истории
+
+Для уже известного и выбранного DM `GetMessagesResponse.dm_peer_state` — response-level состояние второго участника: `ACTIVE` или `DELETED`; для не-DM и legacy producer остаётся `UNSPECIFIED`. При `DELETED` `message_list`, его cursor и существующая история не меняются. Messaging не создаёт system `Message`, tombstone author или иной persistent marker.
+
+Клиент добавляет ровно один локальный, неперсистентный, локализованный terminal marker «Пользователь удалён» для данного `chat_id` и запрещает новые DM sends. Состояние не является profile lookup: оно доступно только участнику уже известного выбранного DM и не раскрывает ID либо другие данные удалённого account/profile. После reconnect этот вызов `GetMessages` — durable recovery; WebSocket replay для marker не используется.
+
+Полное 30-day erasure/tombstone/restore UX не является обязанностью этого контракта и остаётся A4.
+
 ### Message path matrix (REST / NATS / WS)
 
 Компактная карта для implementers: что пишет durable store, что только fan-out ([realtime-service.md](realtime-service.md), [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) § WS vs REST).
@@ -268,6 +276,7 @@ List UI **must** complete the global `ListChats` inbox snapshot after reconnect 
 | Delete | `DeleteMessage` | `message.deleted` | — | `message_delete` | soft-delete | — |
 | Inbox reconnect catch-up | Chat `ListChats` snapshot + S2S `GetChatListMetadata` | — | — | — | Chat membership + Messaging metadata | — |
 | History / reconnect gap | `GetMessages` (per selected `chat_id`) | — | — | — | `messages` | — |
+| Deleted peer in selected DM | `GetMessages.dm_peer_state` | — | — | `dm_peer_deleted` (live acceleration only) | — | local client marker |
 | Mark read (persist) | `MarkRead` | `message.read` | — | `message_read` (from NATS) | `read_receipts` | — |
 | Mark read (multi-tab) | — (after REST) | — | `mark_read` | `message_read` | — | fan-out |
 | Delivery ack | — | `message.delivery_ack` | `delivery_ack` | `message_delivered` | `last_delivered_message_id` | fan-out + Redis |
