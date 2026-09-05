@@ -165,6 +165,7 @@ AuthController _authControllerForProfile(Ref ref, String profileId) {
 ProviderContainer _callTestContainer({
   required http.Client client,
   required StreamController<RealtimeFrame> realtime,
+  StreamController<ProfileBoundRealtimeFrame>? boundRealtime,
   required _FakeLiveKitRoom fakeRoom,
   required String activeProfileId,
   GatewayConfig config = const GatewayConfig(
@@ -191,6 +192,11 @@ ProviderContainer _callTestContainer({
       ),
       liveKitRoomFactoryProvider.overrideWithValue(() => fakeRoom),
       callSignalingStreamProvider.overrideWith((ref) => realtime.stream),
+      profileBoundRealtimeEventProvider.overrideWith(
+        (ref) =>
+            boundRealtime?.stream ??
+            const Stream<ProfileBoundRealtimeFrame>.empty(),
+      ),
       authControllerProvider.overrideWith(
         (ref) => _authControllerForProfile(ref, activeProfileId),
       ),
@@ -199,6 +205,42 @@ ProviderContainer _callTestContainer({
       ),
     ],
   );
+}
+
+Future<void> _acceptBoundCall({
+  required ProviderContainer container,
+  required StreamController<RealtimeFrame> rawRealtime,
+  required StreamController<ProfileBoundRealtimeFrame> boundRealtime,
+  required VoiceCallSession session,
+  required _FakeLiveKitRoom fakeRoom,
+}) async {
+  final activeSession = container.read(authControllerProvider).session!;
+  final binding = RealtimeHelloBinding(
+    generation: 1,
+    bindingGeneration: 1,
+    profileId: activeSession.activeProfileId,
+    authorization: activeSession.authorizationHeader,
+  );
+  container.read(realtimeHelloBindingProvider.notifier).state = binding;
+  boundRealtime.add(
+    ProfileBoundRealtimeFrame(
+      frame: RealtimeFrame(
+        op: 'call_accepted',
+        data: {'room_id': session.roomId},
+      ),
+      binding: binding,
+    ),
+  );
+  await drainMicrotasks();
+  expect(container.read(callControllerProvider).phase, CallPhase.active);
+  expect(fakeRoom.connectCalls, 1);
+
+  rawRealtime.add(
+    RealtimeFrame(op: 'call_accepted', data: {'room_id': session.roomId}),
+  );
+  await drainMicrotasks();
+  expect(container.read(callControllerProvider).phase, CallPhase.active);
+  expect(fakeRoom.connectCalls, 1);
 }
 
 Future<void> drainMicrotasks({int rounds = 30}) async {
@@ -312,25 +354,32 @@ void main() {
       return http.Response('{}', 404);
     });
     final realtime = StreamController<RealtimeFrame>.broadcast();
+    final boundRealtime =
+        StreamController<ProfileBoundRealtimeFrame>.broadcast();
     final fakeRoom = _FakeLiveKitRoom();
     final session = _ringingSession();
     final container = _callTestContainer(
       client: client,
       realtime: realtime,
+      boundRealtime: boundRealtime,
       fakeRoom: fakeRoom,
       activeProfileId: 'prof-caller',
     );
     addTearDown(container.dispose);
     addTearDown(realtime.close);
+    addTearDown(boundRealtime.close);
 
     container.read(callControllerProvider.notifier).state = CallState(
       phase: CallPhase.outgoing,
       session: session,
     );
-    realtime.add(
-      RealtimeFrame(op: 'call_accepted', data: {'room_id': session.roomId}),
+    await _acceptBoundCall(
+      container: container,
+      rawRealtime: realtime,
+      boundRealtime: boundRealtime,
+      session: session,
+      fakeRoom: fakeRoom,
     );
-    await drainMicrotasks();
     expect(fakeRoom.connectCalls, 1);
     expect(fakeRoom.lastUrl, 'ws://127.0.0.1:7880');
     expect(container.read(callControllerProvider).phase, CallPhase.active);
@@ -442,22 +491,29 @@ void main() {
       return http.Response('{}', 404);
     });
     final realtime = StreamController<RealtimeFrame>.broadcast();
+    final boundRealtime =
+        StreamController<ProfileBoundRealtimeFrame>.broadcast();
     final fakeRoom = _FakeLiveKitRoom()..throwOnSetSpeakerMuted = true;
     final container = _callTestContainer(
       client: client,
       realtime: realtime,
+      boundRealtime: boundRealtime,
       fakeRoom: fakeRoom,
       activeProfileId: 'prof-caller',
     );
     addTearDown(container.dispose);
     addTearDown(realtime.close);
+    addTearDown(boundRealtime.close);
 
     final notifier = container.read(callControllerProvider.notifier);
     notifier.state = CallState(phase: CallPhase.outgoing, session: session);
-    realtime.add(
-      RealtimeFrame(op: 'call_accepted', data: {'room_id': session.roomId}),
+    await _acceptBoundCall(
+      container: container,
+      rawRealtime: realtime,
+      boundRealtime: boundRealtime,
+      session: session,
+      fakeRoom: fakeRoom,
     );
-    await drainMicrotasks();
     expect(container.read(callControllerProvider).phase, CallPhase.active);
 
     notifier.state = container
@@ -584,6 +640,8 @@ void main() {
       return http.Response('{}', 404);
     });
     final realtime = StreamController<RealtimeFrame>.broadcast();
+    final boundRealtime =
+        StreamController<ProfileBoundRealtimeFrame>.broadcast();
     final fakeRoom = _FakeLiveKitRoom();
     final container = ProviderContainer(
       overrides: [
@@ -615,6 +673,9 @@ void main() {
         ),
         liveKitRoomFactoryProvider.overrideWithValue(() => fakeRoom),
         callSignalingStreamProvider.overrideWith((ref) => realtime.stream),
+        profileBoundRealtimeEventProvider.overrideWith(
+          (ref) => boundRealtime.stream,
+        ),
         authControllerProvider.overrideWith(
           (ref) => _authControllerForProfile(ref, 'prof-caller'),
         ),
@@ -625,13 +686,17 @@ void main() {
     );
     addTearDown(container.dispose);
     addTearDown(realtime.close);
+    addTearDown(boundRealtime.close);
 
     final notifier = container.read(callControllerProvider.notifier);
     notifier.state = CallState(phase: CallPhase.outgoing, session: session);
-    realtime.add(
-      RealtimeFrame(op: 'call_accepted', data: {'room_id': session.roomId}),
+    await _acceptBoundCall(
+      container: container,
+      rawRealtime: realtime,
+      boundRealtime: boundRealtime,
+      session: session,
+      fakeRoom: fakeRoom,
     );
-    await drainMicrotasks();
     expect(container.read(callControllerProvider).phase, CallPhase.active);
 
     await notifier.setPttHeld(false);

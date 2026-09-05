@@ -61,6 +61,76 @@ func TestGRPCRolePermissions_EnsureVoiceJoin_unavailable(t *testing.T) {
 	require.Equal(t, codes.Unavailable, status.Code(err))
 }
 
+func TestGRPCRolePermissions_EnsureMuteOthers_passesVoiceRoomID(t *testing.T) {
+	t.Parallel()
+	spaceID := uuid.NewString()
+	profileID := uuid.NewString()
+	voiceRoomID := uuid.NewString()
+	cli := &recordingRoleClient{allowed: true}
+	g := NewGRPCRolePermissions(cli)
+
+	err := g.EnsureMuteOthers(context.Background(), spaceID, profileID, voiceRoomID)
+	require.NoError(t, err)
+	require.NotNil(t, cli.lastReq)
+	require.Equal(t, permVoiceMuteOthers, cli.lastReq.GetPermissionName())
+	require.Equal(t, spaceID, cli.lastReq.GetSpaceId())
+	require.Equal(t, profileID, cli.lastReq.GetProfileId())
+	require.Equal(t, voiceRoomID, cli.lastReq.GetVoiceRoomId())
+}
+
+func TestGRPCRolePermissions_EnsureMuteOthers_denied(t *testing.T) {
+	t.Parallel()
+	cli := &recordingRoleClient{allowed: false}
+	g := NewGRPCRolePermissions(cli)
+
+	err := g.EnsureMuteOthers(context.Background(), uuid.NewString(), uuid.NewString(), uuid.NewString())
+	require.ErrorIs(t, err, grpcsvc.ErrMuteOthersDenied)
+}
+
+func TestGRPCRolePermissions_EnsureMuteOthers_unavailable(t *testing.T) {
+	t.Parallel()
+	cli := &unavailableRoleClient{}
+	g := NewGRPCRolePermissions(cli)
+
+	err := g.EnsureMuteOthers(context.Background(), uuid.NewString(), uuid.NewString(), uuid.NewString())
+	require.Equal(t, codes.Unavailable, status.Code(err))
+}
+
+func TestGRPCRolePermissions_EnsureVoiceSpeak_passesVoiceRoomID(t *testing.T) {
+	t.Parallel()
+	spaceID := uuid.NewString()
+	profileID := uuid.NewString()
+	voiceRoomID := uuid.NewString()
+	cli := &recordingRoleClient{allowed: true}
+	g := NewGRPCRolePermissions(cli)
+
+	err := g.EnsureVoiceSpeak(context.Background(), spaceID, profileID, voiceRoomID)
+	require.NoError(t, err)
+	require.NotNil(t, cli.lastReq)
+	require.Equal(t, "VOICE_SPEAK", cli.lastReq.GetPermissionName())
+	require.Equal(t, spaceID, cli.lastReq.GetSpaceId())
+	require.Equal(t, profileID, cli.lastReq.GetProfileId())
+	require.Equal(t, voiceRoomID, cli.lastReq.GetVoiceRoomId())
+}
+
+func TestGRPCRolePermissions_EnsureVoiceSpeak_denied(t *testing.T) {
+	t.Parallel()
+	cli := &recordingRoleClient{allowed: false}
+	g := NewGRPCRolePermissions(cli)
+
+	err := g.EnsureVoiceSpeak(context.Background(), uuid.NewString(), uuid.NewString(), uuid.NewString())
+	require.ErrorIs(t, err, grpcsvc.ErrVoiceSpeakDenied)
+}
+
+func TestGRPCRolePermissions_EnsureVoiceSpeak_unavailable(t *testing.T) {
+	t.Parallel()
+	cli := &unavailableRoleClient{}
+	g := NewGRPCRolePermissions(cli)
+
+	err := g.EnsureVoiceSpeak(context.Background(), uuid.NewString(), uuid.NewString(), uuid.NewString())
+	require.Equal(t, codes.Unavailable, status.Code(err))
+}
+
 type unavailableRoleClient struct {
 	rolev1.RoleServiceClient
 }

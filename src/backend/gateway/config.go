@@ -2,6 +2,8 @@ package main
 
 import (
 	"database/sql"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -10,26 +12,68 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	voicecfg "voice/backend/pkg/config"
+	"voice/backend/pkg/httpserver"
 	voicejwt "voice/backend/pkg/jwt"
 	voicelog "voice/backend/pkg/logging"
 )
 
 func loadGatewayConfigFromEnv() gatewayConfig {
+	config, err := loadGatewayConfigFromEnvChecked()
+	if err == nil {
+		return config
+	}
+	logger := voicelog.NewJSONLogger(voicelog.LevelFromEnv(), slog.String("service", "gateway"))
+	logger.Warn("invalid session epoch configuration; using compatibility mode", slog.Any("error", err))
+	return loadGatewayConfigFromEnvMode(false)
+}
+
+func loadGatewayConfigFromEnvChecked() (gatewayConfig, error) {
+	strict, err := sessionEpochStrictFromEnv()
+	if err != nil {
+		return gatewayConfig{}, err
+	}
+	if strict {
+		if strings.TrimSpace(os.Getenv("GATEWAY_REDIS_ADDR")) == "" {
+			return gatewayConfig{}, errors.New("GATEWAY_REDIS_ADDR is required when GATEWAY_SESSION_EPOCH_STRICT=true")
+		}
+	}
+	return loadGatewayConfigFromEnvMode(strict), nil
+}
+
+func sessionEpochStrictFromEnv() (bool, error) {
+	value, ok := os.LookupEnv("GATEWAY_SESSION_EPOCH_STRICT")
+	if !ok {
+		return false, nil
+	}
+	switch value {
+	case "false":
+		return false, nil
+	case "true":
+		return true, nil
+	default:
+		return false, fmt.Errorf("GATEWAY_SESSION_EPOCH_STRICT must be exactly \"true\" or \"false\", got %q", value)
+	}
+}
+
+func loadGatewayConfigFromEnvMode(strict bool) gatewayConfig {
 	logger := voicelog.NewJSONLogger(voicelog.LevelFromEnv(), slog.String("service", "gateway"))
 	config := gatewayConfig{
-		versionConfigs: map[string]versionConfig{},
-		tokenClaims:    map[string]tokenClaims{},
-		restUpstreams:  map[string]http.Handler{},
-		slogLogger:     logger,
+		versionConfigs:     map[string]versionConfig{},
+		tokenClaims:        map[string]tokenClaims{},
+		restUpstreams:      map[string]http.Handler{},
+		slogLogger:         logger,
+		sessionEpochStrict: strict,
 	}
 	loadJSONEnv(logger, "GATEWAY_VERSION_CONFIGS_JSON", &config.versionConfigs)
 	loadJSONEnv(logger, "GATEWAY_FORCE_UPDATE_JSON", &config.forceUpdate)
 	loadJSONEnv(logger, "GATEWAY_STATIC_TOKENS_JSON", &config.tokenClaims)
 	static := staticTokenValidator(config.tokenClaims)
-	if strings.EqualFold(os.Getenv("GATEWAY_AUTH_MODE"), "static") {
+	staticMode := strings.EqualFold(os.Getenv("GATEWAY_AUTH_MODE"), "static")
+	if staticMode {
 		config.tokenValidator = static
 	} else if jwksURL := strings.TrimSpace(os.Getenv("GATEWAY_JWKS_URL")); jwksURL != "" {
-		jwks := voicejwt.NewJWKSValidator(jwksURL, os.Getenv("GATEWAY_JWT_ISSUER"), os.Getenv("GATEWAY_JWT_AUDIENCE"))
+		config.blacklistRequired = true
+		jwks := voicejwt.NewJWKSValidator(jwksURL, os.Getenv("GATEWAY_JWT_ISSUER"), os.Getenv("GATEWAY_JWT_AUDIENCE"), voicejwt.WithSessionEpochRequired(strict))
 		if len(static) > 0 {
 			config.tokenValidator = chainedTokenValidator{static: static, next: jwks}
 		} else {
@@ -48,6 +92,9 @@ func loadGatewayConfigFromEnv() gatewayConfig {
 	}
 	if redisAddr := strings.TrimSpace(os.Getenv("GATEWAY_REDIS_ADDR")); redisAddr != "" {
 		password := os.Getenv("GATEWAY_REDIS_PASSWORD")
+		if strict {
+			config.sessionEpochFloor = newRedisSessionEpochFloor(redisAddr, password)
+		}
 		config.versionCacheRedis = redisAddr
 		config.rateLimiter = newRedisSlidingWindowLimiter(redisAddr, password, rateLimitRulesFromEnv(logger))
 		config.tokenBlacklist = newRedisTokenBlacklist(redisAddr, password, os.Getenv("GATEWAY_JWT_BLACKLIST_PREFIX"))
@@ -68,6 +115,25 @@ func loadGatewayConfigFromEnv() gatewayConfig {
 	}
 	config.analyticsTelemetry = gatewayAnalyticsFromEnv()
 	return config
+}
+
+func newGatewayServerFromEnv(addr string, factory func(http.Handler) *http.Server) (*http.Server, error) {
+	config, err := loadGatewayConfigFromEnvChecked()
+	if err != nil {
+		return nil, err
+	}
+	if factory == nil {
+		return nil, errors.New("gateway server factory is nil")
+	}
+	server := factory(newGateway(config))
+	if server == nil {
+		return nil, errors.New("gateway server factory returned nil")
+	}
+	if server.Addr == "" {
+		server.Addr = addr
+	}
+	httpserver.ApplyHTTPServerTimeouts(server)
+	return server, nil
 }
 
 func loadJSONEnv(logger *slog.Logger, name string, dst any) {

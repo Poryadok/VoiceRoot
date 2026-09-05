@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +11,50 @@ import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/guest_credentials_storage.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
+
+class _DeferredAuthSessionStorage implements AuthSessionStorage {
+  _DeferredAuthSessionStorage({this.persisted});
+
+  AuthSession? persisted;
+  final Map<String, Completer<void>> _writeStarted = {};
+  final Map<String, Completer<void>> _writeGates = {};
+
+  void pauseWriteFor(String accessToken) {
+    _writeGates.putIfAbsent(accessToken, Completer<void>.new);
+  }
+
+  Future<void> waitForWrite(String accessToken) {
+    return _writeStarted.putIfAbsent(accessToken, Completer<void>.new).future;
+  }
+
+  void completeWriteFor(String accessToken) {
+    final gate = _writeGates[accessToken];
+    if (gate == null || gate.isCompleted) {
+      throw StateError('No pending write for $accessToken');
+    }
+    gate.complete();
+  }
+
+  @override
+  Future<void> clear() async {
+    persisted = null;
+  }
+
+  @override
+  Future<AuthSession?> read() async => persisted;
+
+  @override
+  Future<void> write(AuthSession session) async {
+    final started = _writeStarted.putIfAbsent(
+      session.accessToken,
+      Completer<void>.new,
+    );
+    if (!started.isCompleted) started.complete();
+    final gate = _writeGates[session.accessToken];
+    if (gate != null) await gate.future;
+    persisted = session;
+  }
+}
 
 void main() {
   const config = GatewayConfig(baseUrl: 'http://api.test');
@@ -297,6 +342,318 @@ void main() {
       'access-converted',
     );
     expect((await storage.read())?.accessToken, 'access-converted');
+  });
+
+  test('late A refresh cannot overwrite completed profile B switch', () async {
+    const sessionA = AuthSession(
+      accessToken: 'access-a',
+      refreshToken: 'refresh-a',
+      accountId: 'acc-1',
+      activeProfileId: 'profile-a',
+      expiresInSeconds: 900,
+    );
+    const sessionB = AuthSession(
+      accessToken: 'access-b',
+      refreshToken: 'refresh-b',
+      accountId: 'acc-1',
+      activeProfileId: 'profile-b',
+      expiresInSeconds: 900,
+    );
+    const refreshedA = AuthSession(
+      accessToken: 'access-a-refreshed',
+      refreshToken: 'refresh-a-refreshed',
+      accountId: 'acc-1',
+      activeProfileId: 'profile-a',
+      expiresInSeconds: 900,
+    );
+    final refreshRequested = Completer<void>();
+    final refreshResponse = Completer<http.Response>();
+    final storage = _DeferredAuthSessionStorage(persisted: sessionA);
+    final mock = MockClient((req) async {
+      if (req.url.path == '/api/v1/auth/refresh') {
+        if (!refreshRequested.isCompleted) refreshRequested.complete();
+        return refreshResponse.future;
+      }
+      if (req.url.path == '/api/v1/auth/switch-profile') {
+        return http.Response(jsonEncode(sessionB.toJson()), 200);
+      }
+      return http.Response('not found', 404);
+    });
+    final container = buildContainer(mock: mock, storage: storage);
+    addTearDown(container.dispose);
+    final controller = container.read(authControllerProvider.notifier)
+      ..state = const AuthState(session: sessionA);
+
+    final refresh = controller.refreshOn401();
+    await refreshRequested.future;
+    expect(await controller.switchActiveProfile('profile-b'), isNull);
+
+    refreshResponse.complete(
+      http.Response(jsonEncode(refreshedA.toJson()), 200),
+    );
+    expect(await refresh, isTrue);
+
+    final current = container.read(authControllerProvider).session;
+    expect(current?.activeProfileId, sessionB.activeProfileId);
+    expect(current?.accessToken, sessionB.accessToken);
+    expect(
+      container.read(authorizationHeaderProvider),
+      sessionB.authorizationHeader,
+    );
+    final persisted = await storage.read();
+    expect(persisted?.activeProfileId, sessionB.activeProfileId);
+    expect(persisted?.accessToken, sessionB.accessToken);
+  });
+
+  test('late B storage write cannot overwrite newer C switch', () async {
+    const sessionA = AuthSession(
+      accessToken: 'access-a',
+      refreshToken: 'refresh-a',
+      accountId: 'acc-1',
+      activeProfileId: 'profile-a',
+      expiresInSeconds: 900,
+    );
+    const sessionB = AuthSession(
+      accessToken: 'access-b',
+      refreshToken: 'refresh-b',
+      accountId: 'acc-1',
+      activeProfileId: 'profile-b',
+      expiresInSeconds: 900,
+    );
+    const sessionC = AuthSession(
+      accessToken: 'access-c',
+      refreshToken: 'refresh-c',
+      accountId: 'acc-1',
+      activeProfileId: 'profile-c',
+      expiresInSeconds: 900,
+    );
+    final storage = _DeferredAuthSessionStorage(persisted: sessionA)
+      ..pauseWriteFor(sessionB.accessToken);
+    final mock = MockClient((req) async {
+      if (req.url.path == '/api/v1/auth/switch-profile') {
+        final body = jsonDecode(req.body) as Map<String, dynamic>;
+        return switch (body['profile_id']) {
+          'profile-b' => http.Response(jsonEncode(sessionB.toJson()), 200),
+          'profile-c' => http.Response(jsonEncode(sessionC.toJson()), 200),
+          _ => http.Response('unknown profile', 400),
+        };
+      }
+      return http.Response('not found', 404);
+    });
+    final container = buildContainer(mock: mock, storage: storage);
+    addTearDown(container.dispose);
+    final controller = container.read(authControllerProvider.notifier)
+      ..state = const AuthState(session: sessionA);
+
+    final switchB = controller.switchActiveProfile('profile-b');
+    await storage.waitForWrite(sessionB.accessToken);
+    expect(await controller.switchActiveProfile('profile-c'), isNull);
+
+    storage.completeWriteFor(sessionB.accessToken);
+    expect(await switchB, isNull);
+
+    final current = container.read(authControllerProvider).session;
+    expect(current?.activeProfileId, sessionC.activeProfileId);
+    expect(current?.accessToken, sessionC.accessToken);
+    expect(
+      container.read(authorizationHeaderProvider),
+      sessionC.authorizationHeader,
+    );
+    final persisted = await storage.read();
+    expect(persisted?.activeProfileId, sessionC.activeProfileId);
+    expect(persisted?.accessToken, sessionC.accessToken);
+  });
+
+  test('late A definitive refresh failure cannot clear completed B switch', () async {
+    const sessionA = AuthSession(
+      accessToken: 'access-a',
+      refreshToken: 'refresh-a',
+      accountId: 'acc-1',
+      activeProfileId: 'profile-a',
+      expiresInSeconds: 900,
+    );
+    const sessionB = AuthSession(
+      accessToken: 'access-b',
+      refreshToken: 'refresh-b',
+      accountId: 'acc-1',
+      activeProfileId: 'profile-b',
+      expiresInSeconds: 900,
+    );
+    final refreshRequested = Completer<void>();
+    final refreshResponse = Completer<http.Response>();
+    final storage = _DeferredAuthSessionStorage(persisted: sessionA);
+    final mock = MockClient((req) async {
+      if (req.url.path == '/api/v1/auth/refresh') {
+        if (!refreshRequested.isCompleted) refreshRequested.complete();
+        return refreshResponse.future;
+      }
+      if (req.url.path == '/api/v1/auth/switch-profile') {
+        return http.Response(jsonEncode(sessionB.toJson()), 200);
+      }
+      return http.Response('not found', 404);
+    });
+    final container = buildContainer(mock: mock, storage: storage);
+    addTearDown(container.dispose);
+    final controller = container.read(authControllerProvider.notifier)
+      ..state = const AuthState(session: sessionA);
+
+    final refresh = controller.refreshOn401();
+    await refreshRequested.future;
+    expect(await controller.switchActiveProfile('profile-b'), isNull);
+
+    refreshResponse.complete(
+      http.Response(jsonEncode({'error': 'invalid_token'}), 401),
+    );
+    expect(await refresh, isFalse);
+
+    final current = container.read(authControllerProvider).session;
+    expect(current?.activeProfileId, sessionB.activeProfileId);
+    expect(current?.accessToken, sessionB.accessToken);
+    expect(
+      container.read(authorizationHeaderProvider),
+      sessionB.authorizationHeader,
+    );
+    final persisted = await storage.read();
+    expect(persisted?.activeProfileId, sessionB.activeProfileId);
+    expect(persisted?.accessToken, sessionB.accessToken);
+  });
+
+  test('logout prevents a delayed profile switch from restoring its session', () async {
+    const sessionA = AuthSession(
+      accessToken: 'access-a',
+      refreshToken: 'refresh-a',
+      accountId: 'acc-1',
+      activeProfileId: 'profile-a',
+      expiresInSeconds: 900,
+    );
+    const sessionB = AuthSession(
+      accessToken: 'access-b',
+      refreshToken: 'refresh-b',
+      accountId: 'acc-1',
+      activeProfileId: 'profile-b',
+      expiresInSeconds: 900,
+    );
+    final storage = _DeferredAuthSessionStorage(persisted: sessionA)
+      ..pauseWriteFor(sessionB.accessToken);
+    final mock = MockClient((req) async {
+      if (req.url.path == '/api/v1/auth/switch-profile') {
+        return http.Response(jsonEncode(sessionB.toJson()), 200);
+      }
+      if (req.url.path == '/api/v1/auth/logout') {
+        return http.Response('', 204);
+      }
+      return http.Response('not found', 404);
+    });
+    final container = buildContainer(mock: mock, storage: storage);
+    addTearDown(container.dispose);
+    final controller = container.read(authControllerProvider.notifier)
+      ..state = const AuthState(session: sessionA);
+
+    final switchB = controller.switchActiveProfile('profile-b');
+    await storage.waitForWrite(sessionB.accessToken);
+    await controller.logout();
+
+    storage.completeWriteFor(sessionB.accessToken);
+    expect(await switchB, isNull);
+
+    expect(container.read(authControllerProvider).session, isNull);
+    expect(container.read(authorizationHeaderProvider), isNull);
+    expect(await storage.read(), isNull);
+  });
+
+  test('logout prevents a delayed refresh from restoring its session', () async {
+    const sessionA = AuthSession(
+      accessToken: 'access-a',
+      refreshToken: 'refresh-a',
+      accountId: 'acc-1',
+      activeProfileId: 'profile-a',
+      expiresInSeconds: 900,
+    );
+    const refreshedA = AuthSession(
+      accessToken: 'access-a-refreshed',
+      refreshToken: 'refresh-a-refreshed',
+      accountId: 'acc-1',
+      activeProfileId: 'profile-a',
+      expiresInSeconds: 900,
+    );
+    final refreshRequested = Completer<void>();
+    final refreshResponse = Completer<http.Response>();
+    final storage = _DeferredAuthSessionStorage(persisted: sessionA);
+    final mock = MockClient((req) async {
+      if (req.url.path == '/api/v1/auth/refresh') {
+        if (!refreshRequested.isCompleted) refreshRequested.complete();
+        return refreshResponse.future;
+      }
+      if (req.url.path == '/api/v1/auth/logout') {
+        return http.Response('', 204);
+      }
+      return http.Response('not found', 404);
+    });
+    final container = buildContainer(mock: mock, storage: storage);
+    addTearDown(container.dispose);
+    final controller = container.read(authControllerProvider.notifier)
+      ..state = const AuthState(session: sessionA);
+
+    final refresh = controller.refreshOn401();
+    await refreshRequested.future;
+    await controller.logout();
+
+    refreshResponse.complete(
+      http.Response(jsonEncode(refreshedA.toJson()), 200),
+    );
+    expect(await refresh, isTrue);
+
+    expect(container.read(authControllerProvider).session, isNull);
+    expect(container.read(authorizationHeaderProvider), isNull);
+    expect(await storage.read(), isNull);
+  });
+
+  test('switch started during logout cannot restore a session', () async {
+    const sessionA = AuthSession(
+      accessToken: 'access-a',
+      refreshToken: 'refresh-a',
+      accountId: 'acc-1',
+      activeProfileId: 'profile-a',
+      expiresInSeconds: 900,
+    );
+    const sessionB = AuthSession(
+      accessToken: 'access-b',
+      refreshToken: 'refresh-b',
+      accountId: 'acc-1',
+      activeProfileId: 'profile-b',
+      expiresInSeconds: 900,
+    );
+    final logoutRequested = Completer<void>();
+    final logoutResponse = Completer<http.Response>();
+    final switchResponse = Completer<http.Response>();
+    final storage = _DeferredAuthSessionStorage(persisted: sessionA);
+    final mock = MockClient((req) async {
+      if (req.url.path == '/api/v1/auth/logout') {
+        if (!logoutRequested.isCompleted) logoutRequested.complete();
+        return logoutResponse.future;
+      }
+      if (req.url.path == '/api/v1/auth/switch-profile') {
+        return switchResponse.future;
+      }
+      return http.Response('not found', 404);
+    });
+    final container = buildContainer(mock: mock, storage: storage);
+    addTearDown(container.dispose);
+    final controller = container.read(authControllerProvider.notifier)
+      ..state = const AuthState(session: sessionA);
+
+    final logout = controller.logout();
+    await logoutRequested.future;
+    final switchB = controller.switchActiveProfile('profile-b');
+
+    logoutResponse.complete(http.Response('', 204));
+    await logout;
+    switchResponse.complete(http.Response(jsonEncode(sessionB.toJson()), 200));
+    await switchB;
+
+    expect(container.read(authControllerProvider).session, isNull);
+    expect(container.read(authorizationHeaderProvider), isNull);
+    expect(await storage.read(), isNull);
   });
 
   test('logout clears session', () async {

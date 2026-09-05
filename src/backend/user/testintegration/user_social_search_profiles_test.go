@@ -15,11 +15,11 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
-	"voice/backend/pkg/integrationtest"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/test/bufconn"
+	"voice/backend/pkg/integrationtest"
 
 	"voice/backend/social/testsocial"
 	"voice/backend/user/internal/authctx"
@@ -45,6 +45,12 @@ func startPostgresPool(t *testing.T, ctx context.Context, database string) *pgxp
 
 func withOutgoingAccountID(ctx context.Context, accountID uuid.UUID) context.Context {
 	return metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountID.String())
+}
+
+type integrationAccountProfiles map[uuid.UUID][]uuid.UUID
+
+func (m integrationAccountProfiles) ProfileIDsForAccount(_ context.Context, accountID uuid.UUID) ([]uuid.UUID, error) {
+	return m[accountID], nil
 }
 
 type stubAvatarPresigner struct{}
@@ -81,7 +87,15 @@ func TestSearchProfiles_UserSocialIntegration(t *testing.T) {
 	_, err = socialPool.Exec(ctx, string(sqlSocial))
 	require.NoError(t, err)
 
-	socialConn, stopSocial := testsocial.NewBufconnClient(t, socialPool)
+	accountViewer := uuid.New()
+	accountTarget := uuid.New()
+	viewerPID := uuid.New()
+	targetPID := uuid.New()
+
+	socialConn, stopSocial := testsocial.NewBufconnClient(t, socialPool, integrationAccountProfiles{
+		accountViewer: {viewerPID},
+		accountTarget: {targetPID},
+	})
 	t.Cleanup(stopSocial)
 	socialCli := socialv1.NewSocialServiceClient(socialConn)
 
@@ -112,10 +126,13 @@ func TestSearchProfiles_UserSocialIntegration(t *testing.T) {
 	t.Cleanup(func() { _ = userConn.Close() })
 	userCli := userv1.NewUserServiceClient(userConn)
 
-	accountViewer := uuid.New()
-	accountTarget := uuid.New()
-	targetPID := uuid.New()
 	queryToken := "Phase1SearchTokenXy9"
+
+	_, err = userPool.Exec(ctx, `
+		INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+		VALUES ($1, $2, 'ph1viewer', '0706', 'Viewer', true)`,
+		viewerPID, accountViewer)
+	require.NoError(t, err)
 
 	_, err = userPool.Exec(ctx, `
 		INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)

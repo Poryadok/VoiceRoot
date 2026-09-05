@@ -80,6 +80,58 @@ func TestPhase15AuthFlywayV4_ParityWithGolangMigrate(t *testing.T) {
 	require.Contains(t, strings.ToLower(string(golangBody)), "e2e_key_backups")
 }
 
+// T056-P1 expand: Auth's durable session-epoch column must land in both migration runners.
+func TestT056AuthSessionEpoch_FlywayV9ParityWithGolangMigrate(t *testing.T) {
+	root := migrationsTestRepoRoot(t)
+	flywayPath := filepath.Join(
+		root,
+		"src", "backend", "auth", "src", "main", "resources", "db", "migration",
+		"V9__accounts_session_epoch.sql",
+	)
+	golangUpPath := filepath.Join(root, "src", "backend", "migrations", "auth_db", "000010_accounts_session_epoch.up.sql")
+	golangDownPath := filepath.Join(root, "src", "backend", "migrations", "auth_db", "000010_accounts_session_epoch.down.sql")
+
+	for name, path := range map[string]string{
+		"flyway":    flywayPath,
+		"golang-up": golangUpPath,
+	} {
+		t.Run(name, func(t *testing.T) {
+			body, err := os.ReadFile(path)
+			require.NoError(t, err)
+			require.Regexp(
+				t,
+				`(?is)alter\s+table\s+accounts\s+add\s+column\s+(?:if\s+not\s+exists\s+)?session_epoch\s+bigint\s+not\s+null\s+default\s+1\s+check\s*\(\s*session_epoch\s*>\s*0\s*\)`,
+				string(body),
+			)
+		})
+	}
+	t.Run("golang-down", func(t *testing.T) {
+		body, err := os.ReadFile(golangDownPath)
+		require.NoError(t, err)
+		require.Regexp(
+			t,
+			`(?is)alter\s+table\s+accounts\s+drop\s+column\s+(?:if\s+exists\s+)?session_epoch\s*;`,
+			string(body),
+		)
+	})
+}
+
+// T056-P1 must follow the durable guest-conversion migration rather than
+// skipping the version occupied by that independently owned prerequisite.
+func TestT056AuthSessionEpoch_MigrationChainIncludesGuestConversionPrerequisite(t *testing.T) {
+	root := migrationsTestRepoRoot(t)
+	paths := []string{
+		filepath.Join(root, "src", "backend", "auth", "src", "main", "resources", "db", "migration", "V8__guest_conversion_operations.sql"),
+		filepath.Join(root, "src", "backend", "auth", "src", "main", "resources", "db", "migration", "V9__accounts_session_epoch.sql"),
+		filepath.Join(root, "src", "backend", "migrations", "auth_db", "000009_guest_conversion_operations.up.sql"),
+		filepath.Join(root, "src", "backend", "migrations", "auth_db", "000010_accounts_session_epoch.up.sql"),
+	}
+	for _, path := range paths {
+		_, err := os.Stat(path)
+		require.NoError(t, err, "required Auth migration chain member %s", path)
+	}
+}
+
 func migrationsTestRepoRoot(t *testing.T) string {
 	t.Helper()
 	_, file, _, ok := runtime.Caller(0)

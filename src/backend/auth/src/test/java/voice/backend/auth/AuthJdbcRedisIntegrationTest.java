@@ -26,6 +26,7 @@ import io.grpc.Server;
 import io.grpc.StatusRuntimeException;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyFactory;
 import java.security.NoSuchAlgorithmException;
@@ -39,16 +40,19 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.Date;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
-import voice.backend.auth.oauth.FormUrlEncodedTestSupport;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.stream.IntStream;
+import java.util.stream.LongStream;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -61,12 +65,19 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 import voice.backend.auth.grpc.AuthGrpcService;
+import voice.backend.auth.oauth.FormUrlEncodedTestSupport;
+import voice.backend.auth.repository.Account;
+import voice.backend.auth.repository.AccountRepository;
 import voice.backend.auth.security.JwtService;
+import voice.backend.auth.service.AuthService;
+import voice.backend.auth.support.JdbcUserContractTestConfiguration;
+import voice.backend.auth.support.JdbcUserContractTestConfiguration.RecordingUserContractPorts;
 
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("integration")
 @Testcontainers(disabledWithoutDocker = true)
+@Import(JdbcUserContractTestConfiguration.class)
 class AuthJdbcRedisIntegrationTest {
   private static final String JWT_ISSUER = "voice-auth";
   private static final String JWT_AUDIENCE = "voice-client";
@@ -83,32 +94,17 @@ class AuthJdbcRedisIntegrationTest {
   static final GenericContainer<?> redis =
       new GenericContainer<>(DockerImageName.parse("redis:7-alpine")).withExposedPorts(6379);
 
-  @Container
-  static final PostgreSQLContainer<?> userPostgres =
-      new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
-          .withDatabaseName("user_db")
-          .withUsername("voice")
-          .withPassword("voice")
-          .withInitScript("integration-user-schema.sql");
-
   @DynamicPropertySource
   static void registerProps(DynamicPropertyRegistry registry) {
     if (!"auth_db".equals(postgres.getDatabaseName())) {
       throw new IllegalStateException(
           "Auth TC DB name mismatch: " + postgres.getDatabaseName());
     }
-    if (!"user_db".equals(userPostgres.getDatabaseName())) {
-      throw new IllegalStateException(
-          "User TC DB name mismatch: " + userPostgres.getDatabaseName());
-    }
     registry.add("voice.auth.jdbc.url", postgres::getJdbcUrl);
     registry.add("spring.datasource.username", postgres::getUsername);
     registry.add("spring.datasource.password", postgres::getPassword);
     registry.add("spring.flyway.user", postgres::getUsername);
     registry.add("spring.flyway.password", postgres::getPassword);
-    registry.add("auth.user-db.jdbc-url", userPostgres::getJdbcUrl);
-    registry.add("auth.user-db.username", userPostgres::getUsername);
-    registry.add("auth.user-db.password", userPostgres::getPassword);
     registry.add("spring.data.redis.host", redis::getHost);
     registry.add("spring.data.redis.port", () -> String.valueOf(redis.getMappedPort(6379)));
   }
@@ -117,7 +113,114 @@ class AuthJdbcRedisIntegrationTest {
   @Autowired ObjectMapper objectMapper;
   @Autowired JwtService jwtService;
   @Autowired AuthGrpcService grpcService;
-  @Autowired @Qualifier("userJdbc") NamedParameterJdbcTemplate userJdbc;
+  @Autowired AuthService authService;
+  @Autowired AccountRepository accounts;
+  @Autowired RecordingUserContractPorts userContract;
+
+  @BeforeEach
+  void resetUserContract() {
+    userContract.reset();
+  }
+
+  @Test
+  void jdbcAccountStartsAtPositiveEpochAndIncrementReturnsNewMonotonicValue() {
+    Account account = accounts.create("jdbc-epoch@example.com", null, "hash", "regular");
+
+    assertThat(account.sessionEpoch()).isEqualTo(1L);
+    assertThat(accounts.incrementSessionEpoch(account.id())).isEqualTo(2L);
+    assertThat(accounts.incrementSessionEpoch(account.id())).isEqualTo(3L);
+    assertThat(accounts.findById(account.id().toString())).get().extracting(Account::sessionEpoch).isEqualTo(3L);
+  }
+
+  @Test
+  void jdbcConditionalRestoreLetsDeletedAccountTransitionOnlyOnce() throws Exception {
+    Account deleted = accounts.create("jdbc-restore-deleted@example.com", null, "hash", "regular");
+    accounts.markDeleted(deleted.id(), Instant.now().minus(Duration.ofDays(1)));
+
+    assertThat(conditionalRestore(deleted.id())).isTrue();
+    assertThat(accounts.findById(deleted.id().toString()))
+        .get()
+        .extracting(Account::status, Account::deletedAt)
+        .containsExactly("active", null);
+    assertThat(conditionalRestore(deleted.id())).isFalse();
+  }
+
+  @Test
+  void jdbcConditionalRestoreRejectsInconsistentDeletedState() throws Exception {
+    Account missingDeletedAt =
+        accounts.create("jdbc-restore-missing-at@example.com", null, "hash", "regular");
+    accounts.setStatus(missingDeletedAt.id(), "deleted");
+    Account missingDeletedStatus =
+        accounts.create("jdbc-restore-missing-status@example.com", null, "hash", "regular");
+    accounts.markDeleted(missingDeletedStatus.id(), Instant.parse("2026-05-01T10:00:00Z"));
+    accounts.setStatus(missingDeletedStatus.id(), "active");
+
+    assertThat(conditionalRestore(missingDeletedAt.id())).isFalse();
+    assertThat(conditionalRestore(missingDeletedStatus.id())).isFalse();
+    assertThat(accounts.findById(missingDeletedAt.id().toString()))
+        .get()
+        .extracting(Account::status, Account::deletedAt)
+        .containsExactly("deleted", null);
+    assertThat(accounts.findById(missingDeletedStatus.id().toString()))
+        .get()
+        .extracting(Account::status, Account::deletedAt)
+        .containsExactly("active", Instant.parse("2026-05-01T10:00:00Z"));
+  }
+
+  @Test
+  void jdbcConditionalRestoreRejectsClearlyExpiredAtDatabaseTime() throws Exception {
+    Instant deletedAt = Instant.parse("2020-01-01T00:00:00Z");
+    Account expired = accounts.create("jdbc-restore-expired@example.com", null, "hash", "regular");
+    accounts.markDeleted(expired.id(), deletedAt);
+
+    assertThat(conditionalRestore(expired.id())).isFalse();
+    assertThat(accounts.findById(expired.id().toString()))
+        .get()
+        .extracting(Account::status, Account::deletedAt)
+        .containsExactly("deleted", deletedAt);
+  }
+
+  @Test
+  void jdbcConcurrentEpochIncrementsAreAtomicAndNeverLoseOrReuseValues() {
+    Account account = accounts.create("jdbc-epoch-race@example.com", null, "hash", "regular");
+    ExecutorService workers = Executors.newFixedThreadPool(8);
+    try {
+      List<Future<Long>> increments =
+          IntStream.range(0, 16)
+              .mapToObj(ignored -> workers.<Long>submit(() -> accounts.incrementSessionEpoch(account.id())))
+              .toList();
+
+      assertThat(increments.stream().map(this::awaitEpochIncrement).sorted())
+          .containsExactlyElementsOf(LongStream.rangeClosed(2, 17).boxed().toList());
+      assertThat(accounts.findById(account.id().toString())).get().extracting(Account::sessionEpoch).isEqualTo(17L);
+    } finally {
+      workers.shutdownNow();
+    }
+  }
+
+  @Test
+  void normalAndOAuthIssuanceUsePersistedAccountEpoch() throws Exception {
+    JsonNode registered =
+        session(
+            postJson(
+                "/api/v1/auth/register",
+                "{\"email\":\"jdbc-issued-epoch@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}"));
+    UUID accountId = UUID.fromString(registered.get("account_id").asText());
+    String profileId = registered.get("profile_id").asText();
+
+    assertThat(accounts.incrementSessionEpoch(accountId)).isEqualTo(2L);
+
+    JsonNode login =
+        session(
+            postJson(
+                "/api/v1/auth/login",
+                "{\"email\":\"jdbc-issued-epoch@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}"));
+    assertThat(SignedJWT.parse(login.get("access_token").asText()).getJWTClaimsSet().getClaim("session_epoch"))
+        .isEqualTo(2L);
+
+    String oauthAccess = authService.issueOAuthAccessToken(accountId.toString(), profileId);
+    assertThat(SignedJWT.parse(oauthAccess).getJWTClaimsSet().getClaim("session_epoch")).isEqualTo(2L);
+  }
 
   @Test
   void registerLoginRefreshValidateLogoutAndJwksWorkWithPostgresRedisAndStableJwks() throws Exception {
@@ -135,12 +238,15 @@ class AuthJdbcRedisIntegrationTest {
     assertThat(profileId).matches(
         "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
 
-    String dbProfileId =
-        userJdbc.queryForObject(
-            "SELECT id::text FROM profiles WHERE account_id = :accountId AND is_primary = true LIMIT 1",
-            Map.of("accountId", accountId),
-            String.class);
-    assertThat(dbProfileId).isEqualTo(profileId);
+    assertThat(userContract.ensurePrimaryProfileCalls())
+        .singleElement()
+        .satisfies(
+            call -> {
+              assertThat(call.accountId()).isEqualTo(accountId);
+              assertThat(call.displayHint()).isEqualTo("jdbc@example.com");
+              assertThat(call.guestAccount()).isFalse();
+              assertThat(call.profileId()).isEqualTo(profileId);
+            });
 
     var accessClaims = jwtService.validate(access);
     assertThat(accessClaims.userId()).isEqualTo(accountIdStr);
@@ -431,6 +537,20 @@ class AuthJdbcRedisIntegrationTest {
         .getResponse()
         .getContentAsString();
     return objectMapper.readTree(response);
+  }
+
+  private boolean conditionalRestore(UUID accountId) throws Exception {
+    Method method = AccountRepository.class.getMethod("restoreDeleted", UUID.class);
+    assertThat(method.getReturnType()).isEqualTo(boolean.class);
+    return (boolean) method.invoke(accounts, accountId);
+  }
+
+  private long awaitEpochIncrement(Future<Long> future) {
+    try {
+      return future.get();
+    } catch (Exception ex) {
+      throw new AssertionError(ex);
+    }
   }
 
   private static JsonNode session(JsonNode envelope) {

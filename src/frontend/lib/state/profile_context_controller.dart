@@ -32,10 +32,6 @@ Future<void> _onActiveProfileChanged(Ref ref) async {
   ref.invalidate(myProfilesProvider);
   ref.invalidate(subscriptionProvider);
 
-  final hub = ref.read(realtimeHubProvider);
-  await hub.reconnectWithNewSession();
-  unawaited(ref.read(chatListControllerProvider.notifier).loadInitial());
-
   final auth = ref.read(authorizationHeaderProvider);
   final activeSearch = ref.read(activeSearchSessionProvider);
   if (auth != null && activeSearch != null) {

@@ -22,33 +22,37 @@ import (
 
 const defaultBufSize = 1 << 20
 
-// ChatDeps configures optional ChatService collaborators (same as production ChatGRPC wiring).
-// Zero value is valid for S2S paths that only need DM rows already present (e.g. ListMembers).
+// ChatDeps configures ChatService collaborators (same as production ChatGRPC wiring).
+// DeletedAccounts is mandatory so test fixtures cannot silently bypass Chat's
+// fail-closed deleted-peer gate.
 type ChatDeps struct {
-	Profiles   chatgrpc.UserProfileLookup
-	Blocks     chatgrpc.AccountBlockChecker
-	ListEnrich chatgrpc.ListChatsEnrichment
-	ChatEvents chatevents.Publisher
+	Profiles        chatgrpc.UserProfileLookup
+	Blocks          chatgrpc.AccountBlockChecker
+	ListEnrich      chatgrpc.ListChatsEnrichment
+	DeletedAccounts chatgrpc.AccountDeletedChecker
+	ChatEvents      chatevents.Publisher
 }
 
 // NewBufconnChatClient returns a ChatService client backed by an in-process server using pool.
 // Caller must apply chat_db migrations including 000011_deleted_for_self (ListMembers checks soft-delete).
-func NewBufconnChatClient(t *testing.T, pool *pgxpool.Pool) (chatv1.ChatServiceClient, func()) {
+func NewBufconnChatClient(t *testing.T, pool *pgxpool.Pool, deps ChatDeps) (chatv1.ChatServiceClient, func()) {
 	t.Helper()
-	return NewBufconnChatClientWith(t, pool, ChatDeps{})
+	return NewBufconnChatClientWith(t, pool, deps)
 }
 
-// NewBufconnChatClientWith is like [NewBufconnChatClient] but wires profiles/blocks/enrichment for CreateDM/GetDM/ListChats.
+// NewBufconnChatClientWith wires collaborators for CreateDM/GetDM/ListChats.
 func NewBufconnChatClientWith(t *testing.T, pool *pgxpool.Pool, deps ChatDeps) (chatv1.ChatServiceClient, func()) {
 	t.Helper()
+	require.NotNil(t, deps.DeletedAccounts, "testchat.ChatDeps.DeletedAccounts is required")
 	lis := bufconn.Listen(defaultBufSize)
 	srv := grpc.NewServer()
 	chatv1.RegisterChatServiceServer(srv, &chatgrpc.ChatGRPC{
-		DM:         &chatstore.DMStore{Pool: pool},
-		Profiles:   deps.Profiles,
-		Blocks:     deps.Blocks,
-		ListEnrich: deps.ListEnrich,
-		ChatEvents: deps.ChatEvents,
+		DM:              &chatstore.DMStore{Pool: pool},
+		Profiles:        deps.Profiles,
+		Blocks:          deps.Blocks,
+		ListEnrich:      deps.ListEnrich,
+		DeletedAccounts: deps.DeletedAccounts,
+		ChatEvents:      deps.ChatEvents,
 	})
 	go func() {
 		if err := srv.Serve(lis); err != nil {

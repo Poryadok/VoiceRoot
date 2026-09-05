@@ -21,7 +21,7 @@ type TokenRepository interface {
 	DeleteByToken(ctx context.Context, token string) error
 }
 
-// MessagePusher sends chat-grouped message pushes with settings, grouping, and presence.
+// MessagePusher sends grouped message pushes with settings, grouping, and presence.
 type MessagePusher struct {
 	Tokens   TokenRepository
 	Pusher   *PushDispatcher
@@ -84,8 +84,8 @@ func (p *MessagePusher) SendPush(
 			continue
 		}
 		out := payload
-		if in.ChatID != "" && isChatGroupedType(in.Type) {
-			if err := grouping.ApplyToPayload(ctx, p.Grouping, recipient, in.ChatID, previewBody, &out); err != nil {
+		if groupingID := pushGroupingID(in); groupingID != "" {
+			if err := grouping.ApplyToPayload(ctx, p.Grouping, recipient, groupingID, previewBody, &out); err != nil {
 				// Degraded: send without grouping when Redis fails.
 				out = payload
 			}
@@ -126,7 +126,7 @@ func (p *MessagePusher) EnrichDecision(
 		return delivery.DeliveryDecision{}, err
 	}
 	isOnline := false
-	if p != nil && p.Presence != nil {
+	if p != nil && p.Presence != nil && !delivery.SkipsPresenceCheck(typ) {
 		isOnline, err = p.Presence.IsOnline(ctx, recipient)
 		if err != nil {
 			isOnline = false
@@ -148,11 +148,16 @@ func (p *MessagePusher) EnrichDecision(
 	return delivery.FinalizeDecision(decision, in, settings, quiet), nil
 }
 
-func isChatGroupedType(typ delivery.NotificationType) bool {
-	switch typ {
+func pushGroupingID(in delivery.DeliveryInput) string {
+	switch in.Type {
+	case delivery.TypeMessageRequest:
+		if in.SenderProfileID == uuid.Nil {
+			return ""
+		}
+		return "sender:" + in.SenderProfileID.String()
 	case delivery.TypeNewMessage, delivery.TypeMention, delivery.TypeReply:
-		return true
+		return in.ChatID
 	default:
-		return false
+		return ""
 	}
 }

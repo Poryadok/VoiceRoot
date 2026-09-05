@@ -103,6 +103,7 @@ message ConvertGuestRequest {
 
 message DeleteAccountRequest {
   string password = 1;
+  optional string totp_code = 2;
 }
 
 message RestoreAccountRequest {

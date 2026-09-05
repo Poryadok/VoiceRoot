@@ -296,13 +296,16 @@ const PresenceChange$json = {
   '2': [
     {'1': 'profile_id', '3': 1, '4': 1, '5': 9, '10': 'profileId'},
     {'1': 'status', '3': 2, '4': 1, '5': 9, '10': 'status'},
+    {'1': 'old_status', '3': 3, '4': 1, '5': 9, '10': 'oldStatus'},
+    {'1': 'new_status', '3': 4, '4': 1, '5': 9, '10': 'newStatus'},
   ],
 };
 
 /// Descriptor for `PresenceChange`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List presenceChangeDescriptor = $convert.base64Decode(
     'Cg5QcmVzZW5jZUNoYW5nZRIdCgpwcm9maWxlX2lkGAEgASgJUglwcm9maWxlSWQSFgoGc3RhdH'
-    'VzGAIgASgJUgZzdGF0dXM=');
+    'VzGAIgASgJUgZzdGF0dXMSHQoKb2xkX3N0YXR1cxgDIAEoCVIJb2xkU3RhdHVzEh0KCm5ld19z'
+    'dGF0dXMYBCABKAlSCW5ld1N0YXR1cw==');
 
 @$core.Deprecated('Use socialStreamEventDescriptor instead')
 const SocialStreamEvent$json = {
@@ -1005,6 +1008,15 @@ const ChatStreamEvent$json = {
       '9': 0,
       '10': 'spaceDeleted'
     },
+    {
+      '1': 'dm_peer_deleted',
+      '3': 19,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.DmPeerDeleted',
+      '9': 0,
+      '10': 'dmPeerDeleted'
+    },
   ],
   '8': [
     {'1': 'payload'},
@@ -1027,7 +1039,9 @@ final $typed_data.Uint8List chatStreamEventDescriptor = $convert.base64Decode(
     'EoCzIgLnZvaWNlLmV2ZW50cy52MS5TcGFjZU1lbWJlckxlZnRIAFIPc3BhY2VNZW1iZXJMZWZ0'
     'EkQKDXNwYWNlX3VwZGF0ZWQYESABKAsyHS52b2ljZS5ldmVudHMudjEuU3BhY2VVcGRhdGVkSA'
     'BSDHNwYWNlVXBkYXRlZBJECg1zcGFjZV9kZWxldGVkGBIgASgLMh0udm9pY2UuZXZlbnRzLnYx'
-    'LlNwYWNlRGVsZXRlZEgAUgxzcGFjZURlbGV0ZWRCCQoHcGF5bG9hZA==');
+    'LlNwYWNlRGVsZXRlZEgAUgxzcGFjZURlbGV0ZWQSSAoPZG1fcGVlcl9kZWxldGVkGBMgASgLMh'
+    '4udm9pY2UuZXZlbnRzLnYxLkRtUGVlckRlbGV0ZWRIAFINZG1QZWVyRGVsZXRlZEIJCgdwYXls'
+    'b2Fk');
 
 @$core.Deprecated('Use chatCreatedDescriptor instead')
 const ChatCreated$json = {
@@ -1190,6 +1204,26 @@ const SpaceDeleted$json = {
 /// Descriptor for `SpaceDeleted`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List spaceDeletedDescriptor = $convert
     .base64Decode('CgxTcGFjZURlbGV0ZWQSGQoIc3BhY2VfaWQYASABKAlSB3NwYWNlSWQ=');
+
+@$core.Deprecated('Use dmPeerDeletedDescriptor instead')
+const DmPeerDeleted$json = {
+  '1': 'DmPeerDeleted',
+  '2': [
+    {'1': 'chat_id', '3': 1, '4': 1, '5': 9, '10': 'chatId'},
+    {
+      '1': 'recipient_profile_id',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '10': 'recipientProfileId'
+    },
+  ],
+};
+
+/// Descriptor for `DmPeerDeleted`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List dmPeerDeletedDescriptor = $convert.base64Decode(
+    'Cg1EbVBlZXJEZWxldGVkEhcKB2NoYXRfaWQYASABKAlSBmNoYXRJZBIwChRyZWNpcGllbnRfcH'
+    'JvZmlsZV9pZBgCIAEoCVIScmVjaXBpZW50UHJvZmlsZUlk');
 
 @$core.Deprecated('Use voiceStreamEventDescriptor instead')
 const VoiceStreamEvent$json = {

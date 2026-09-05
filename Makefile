@@ -33,11 +33,11 @@ GO_TEST_SHORT_TARGETS := $(GO_SERVICES:%=go-test-short-%)
 GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 
 .PHONY: buf-lint buf-format buf-breaking buf-generate buf-generate-dart buf-dart-check buf-go-pb-check check-auth-proto-sync sync-pb-from-gen buf-generate-all compose-up compose-app-up compose-down compose-logs-collect compose-observability-up \
-	compose-migrate-all compose-migrate-e2e compose-migrate-bot compose-migrate-story compose-e2e-smoke compose-e2e-live compose-e2e-full compose-e2e-voice-live compose-file-attachment-restart-proof \
+	compose-migrate-all compose-migrate-e2e compose-migrate-bot compose-migrate-story compose-e2e-smoke compose-e2e-live compose-e2e-full compose-e2e-voice-live compose-file-attachment-restart-proof compose-a1-multi-account-proof compose-a1-flutter-profile-handoff \
 	build-all build-all-breaking check-toolchain compose-config-ci buf-ci backend-test-ci backend-test-ci-short backend-image-ci \
 	gateway-test-ci gateway-image-ci go-test-pkg go-mod-tidy-all auth-test-ci auth-image-ci buf-breaking-ci \
 	golangci-ci gateway-test-race-ci design-tokens-check penpot-tokens-export penpot-tokens-export-check flutter-ui-color-gate flutter-ci flutter-windows-prefetch-sqlite3 flutter-linux-prefetch-sqlite3 prekey-golden-check coverage-report testcontainers-prune buf-generate-ci-local-template-check \
-	staging-matrix-test go-matrix-test verify-required-jobs-test image-catalog-drift-check ci-script-tests generate-staging-services a11y-web-axe contrast-tokens-check
+	staging-matrix-test go-matrix-test verify-required-jobs-test image-catalog-drift-check e2e-manifest-helper-test ci-script-tests generate-staging-services a11y-web-axe contrast-tokens-check
 
 buf-lint:
 	buf lint
@@ -132,6 +132,14 @@ compose-e2e-voice-live: compose-e2e-full
 compose-file-attachment-restart-proof:
 	$(BASH) "$(ROOT)/scripts/ci/compose-file-attachment-restart-proof.sh"
 
+# A1 multi-account proof has its own compose project and manifest-selected Go tests.
+compose-a1-multi-account-proof:
+	$(BASH) "$(ROOT)/scripts/ci/compose-a1-multi-account-proof.sh"
+
+# T-055 Flutter profile handoff has its own Compose project and manifest-selected live test.
+compose-a1-flutter-profile-handoff:
+	$(BASH) "$(ROOT)/scripts/ci/compose-a1-flutter-profile-handoff.sh"
+
 # --- CI parity: host Go/Maven/golangci (tests need Docker socket for testcontainers); Docker for buf/compose/images ---
 
 check-toolchain:
@@ -180,6 +188,7 @@ gateway-image-ci:
 
 auth-test-ci:
 	cd "$(ROOT)/src/backend/auth" && mvn -B test
+	$(BASH) "$(ROOT)/scripts/ci/check-auth-testcontainers-reports.sh" "$(ROOT)/src/backend/auth/target/surefire-reports"
 
 auth-image-ci:
 	docker build -f src/backend/auth/Dockerfile -t voice-auth:local .
@@ -263,8 +272,16 @@ verify-required-jobs-test:
 image-catalog-drift-check:
 	$(BASH) "$(ROOT)/scripts/ci/check-image-catalog-drift.sh"
 
-ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test buf-generate-ci-local-template-check image-catalog-drift-check
+ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test buf-generate-ci-local-template-check image-catalog-drift-check e2e-manifest-helper-test
+	$(BASH) "$(ROOT)/scripts/ci/ci-script-tests-reachability_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/e2e-manifest_test.sh"
+	$(BASH) "$(ROOT)/scripts/ci/check-auth-testcontainers-reports_test.sh"
+	$(BASH) "$(ROOT)/scripts/ci/compose-a1-multi-account-proof_test.sh"
+	$(BASH) "$(ROOT)/scripts/ci/compose-a1-flutter-profile-handoff_test.sh"
+	$(BASH) "$(ROOT)/scripts/ci/a1-flutter-profile-handoff-ci-reachability_test.sh"
+
+e2e-manifest-helper-test:
+	$(BASH) "$(ROOT)/scripts/ci/e2e-manifest_helper_test.sh"
 
 generate-staging-services:
 	$(BASH) "$(ROOT)/scripts/ci/generate-staging-go-services.sh"

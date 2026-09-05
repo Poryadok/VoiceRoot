@@ -77,7 +77,7 @@ func TestApplyManifest_registersPingCommand(t *testing.T) {
 	ctx := context.Background()
 	st := startBotStore(t)
 	owner := uuid.New()
-	row, _, err := st.CreateBot(ctx, owner, "PingBot", "", `[]`, uuid.Nil)
+	row, _, err := st.CreateBot(ctx, owner, "PingBot", "", `["TEXT_CHAT_SEND_MESSAGES"]`, uuid.Nil)
 	require.NoError(t, err)
 	doc, _, err := manifest.ParseYAML(`
 name: PingBot

@@ -60,12 +60,12 @@ func (s *RoleGRPC) BootstrapSpaceRoles(ctx context.Context, req *rolev1.Bootstra
 	if err != nil {
 		return nil, err
 	}
-	if err := s.Store.BootstrapSpaceRoles(ctx, spaceID, ownerID); err != nil {
+	createdRoles, err := s.Store.BootstrapSpaceRolesWithCreatedSystemRoles(ctx, spaceID, ownerID)
+	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if s.Events != nil {
-		roles, _ := s.Store.ListRoles(ctx, spaceID)
-		for _, r := range roles {
+		for _, r := range createdRoles {
 			_ = s.Events.PublishRoleCreated(ctx, spaceID.String(), r.ID.String(), r.Name)
 		}
 	}

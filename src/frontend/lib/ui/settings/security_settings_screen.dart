@@ -27,6 +27,7 @@ class SecuritySettingsScreen extends ConsumerStatefulWidget {
   static const Key deleteAccountButtonKey = Key('security_delete_account');
   static const Key deleteAccountDialogKey = Key('security_delete_account_dialog');
   static const Key deleteAccountPasswordKey = Key('security_delete_account_password');
+  static const Key deleteAccountTotpKey = Key('security_delete_account_totp');
   static const Key activeSessionsButtonKey = Key('security_active_sessions');
 
   @override
@@ -42,12 +43,14 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
   var _busy = false;
   String? _error;
   final _deletePasswordController = TextEditingController();
+  final _deleteTotpController = TextEditingController();
 
   @override
   void dispose() {
     _passwordController.dispose();
     _totpController.dispose();
     _deletePasswordController.dispose();
+    _deleteTotpController.dispose();
     super.dispose();
   }
 
@@ -132,8 +135,69 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
       return;
     }
 
+    final password = await _showDeletePasswordDialog(l10n);
+    if (password == null || password.isEmpty || !mounted) return;
+
+    final session = ref.read(authControllerProvider).session;
+    if (session == null) return;
+
+    String? totpCode;
+    while (mounted) {
+      setState(() {
+        _busy = true;
+        _error = null;
+      });
+
+      final result = await ref
+          .read(voiceAuthClientProvider)
+          .deleteAccount(
+            session: session,
+            password: password,
+            totpCode: totpCode,
+          );
+
+      if (!mounted) return;
+      setState(() => _busy = false);
+
+      switch (result) {
+        case AuthApiOk<void>():
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(l10n.securityDeleteAccountSuccess)),
+          );
+          await ref.read(authControllerProvider.notifier).logout();
+          if (!mounted) return;
+          Navigator.of(context).popUntil((route) => route.isFirst);
+          return;
+        case AuthApiFailure(
+          :final message,
+          :final errorCode,
+          :final statusCode,
+        ):
+          final errorKey = resolveAuthErrorKey(
+            errorCode: errorCode,
+            statusCode: statusCode,
+            message: message,
+          );
+          if (errorKey == AuthErrorKeys.totpRequired ||
+              errorKey == AuthErrorKeys.invalidTotp) {
+            totpCode = await _showDeleteTotpDialog(
+              l10n,
+              errorKey: errorKey == AuthErrorKeys.invalidTotp ? errorKey : null,
+            );
+            if (totpCode == null || totpCode.trim().isEmpty || !mounted) {
+              return;
+            }
+            continue;
+          }
+          setState(() => _error = errorKey ?? message);
+          return;
+      }
+    }
+  }
+
+  Future<String?> _showDeletePasswordDialog(AppLocalizations l10n) {
     _deletePasswordController.clear();
-    final confirmed = await showDialog<bool>(
+    return showDialog<String>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
@@ -156,54 +220,73 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
+              onPressed: () => Navigator.of(dialogContext).pop(),
               child: Text(l10n.commonCancel),
             ),
             TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
+              onPressed: () => Navigator.of(
+                dialogContext,
+              ).pop(_deletePasswordController.text),
               child: Text(l10n.securityDeleteAccountConfirmAction),
             ),
           ],
         );
       },
     );
-    if (confirmed != true || !mounted) return;
+  }
 
-    final password = _deletePasswordController.text;
-    if (password.isEmpty) return;
-    final session = ref.read(authControllerProvider).session;
-    if (session == null) return;
-
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-
-    final result = await ref
-        .read(voiceAuthClientProvider)
-        .deleteAccount(session: session, password: password);
-
-    if (!mounted) return;
-    switch (result) {
-      case AuthApiOk<void>():
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.securityDeleteAccountSuccess)),
+  Future<String?> _showDeleteTotpDialog(
+    AppLocalizations l10n, {
+    String? errorKey,
+  }) {
+    _deleteTotpController.clear();
+    return showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          key: SecuritySettingsScreen.deleteAccountDialogKey,
+          title: Text(l10n.securityDeleteAccountConfirmTitle),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(l10n.securityDeleteAccountConfirmMessage),
+              const SizedBox(height: 16),
+              TextField(
+                key: SecuritySettingsScreen.deleteAccountTotpKey,
+                controller: _deleteTotpController,
+                decoration: InputDecoration(
+                  labelText: l10n.authTotpLabel,
+                  helperText: l10n.authTotpHelper,
+                ),
+                autofocus: true,
+              ),
+              if (errorKey != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  authErrorMessage(l10n, errorKey),
+                  style: TextStyle(
+                    color: Theme.of(dialogContext).colorScheme.error,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(l10n.commonCancel),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(
+                dialogContext,
+              ).pop(_deleteTotpController.text.trim()),
+              child: Text(l10n.securityDeleteAccountConfirmAction),
+            ),
+          ],
         );
-        await ref.read(authControllerProvider.notifier).logout();
-        if (!mounted) return;
-        Navigator.of(context).popUntil((route) => route.isFirst);
-      case AuthApiFailure(:final message, :final errorCode, :final statusCode):
-        setState(() {
-          _busy = false;
-          _error =
-              resolveAuthErrorKey(
-                errorCode: errorCode,
-                statusCode: statusCode,
-                message: message,
-              ) ??
-              message;
-        });
-    }
+      },
+    );
   }
 
   @override

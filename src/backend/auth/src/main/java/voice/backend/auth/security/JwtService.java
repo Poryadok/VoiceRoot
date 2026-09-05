@@ -110,14 +110,18 @@ public class JwtService {
     return new JwtService(issuer, audience, keyId, accessTtl, newClock, jwk);
   }
 
-  public String issue(String accountId, String profileId, List<String> roles, String subscriptionTier) {
-    return issue(accountId, profileId, roles, subscriptionTier, "regular");
-  }
-
   public String issue(
-      String accountId, String profileId, List<String> roles, String subscriptionTier, String accountType) {
+      String accountId,
+      String profileId,
+      List<String> roles,
+      String subscriptionTier,
+      String accountType,
+      long sessionEpoch) {
     if (profileId == null || profileId.isBlank()) {
       throw new IllegalArgumentException("profile_id required in access JWT");
+    }
+    if (sessionEpoch <= 0) {
+      throw new IllegalArgumentException("session_epoch must be positive");
     }
     String normalizedType = accountType == null || accountType.isBlank() ? "regular" : accountType;
     try {
@@ -131,6 +135,7 @@ public class JwtService {
           .claim("roles", roles)
           .claim("subscription_tier", subscriptionTier)
           .claim("account_type", normalizedType)
+          .claim("session_epoch", sessionEpoch)
           .jwtID(UUID.randomUUID().toString())
           .issueTime(Date.from(now))
           .expirationTime(Date.from(now.plus(accessTtl)))

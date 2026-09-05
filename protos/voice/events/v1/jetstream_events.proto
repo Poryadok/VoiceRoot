@@ -14,7 +14,6 @@ option go_package = "voice.app/voice/events/v1;eventsv1";
 // - Subject is the routing key; consumers select the envelope oneof arm from the decoded message, not from subject alone.
 // - Interim divergences (migrate to proto fields; do not add new JSON publishers):
 //   • message.sent: optional thread_parent_id may also appear in NATS header X-Voice-Thread-Parent-Id (Messaging).
-//   • matchmaking.search_cancelled: JSON body until SearchCancelled proto is wired in publisher.
 // - Wave 2 gaps (proto arms / publishers not yet wired): space.updated/deleted/member_*,
 //   voice_room_created/deleted payloads, subscription.space_pro_* arms.
 
@@ -88,7 +87,11 @@ message SettingsChanged {
 
 message PresenceChange {
   string profile_id = 1;
+  // Legacy current status for existing consumers; equal to new_status.
   string status = 2;
+  // Empty when this is the first live observation for a profile.
+  string old_status = 3;
+  string new_status = 4;
 }
 
 // --- social.events ---
@@ -264,6 +267,7 @@ message ChatStreamEvent {
     SpaceMemberLeft space_member_left = 16;
     SpaceUpdated space_updated = 17;
     SpaceDeleted space_deleted = 18;
+    DmPeerDeleted dm_peer_deleted = 19;
   }
 }
 
@@ -315,6 +319,13 @@ message SpaceUpdated {
 
 message SpaceDeleted {
   string space_id = 1;
+}
+
+// Targeted acceleration for a surviving participant of a DM. The deleted
+// account or profile identity is intentionally absent from this payload.
+message DmPeerDeleted {
+  string chat_id = 1;
+  string recipient_profile_id = 2;
 }
 
 // --- voice.events ---

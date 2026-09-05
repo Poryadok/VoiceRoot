@@ -7,6 +7,7 @@ import (
 	"net"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -21,15 +22,25 @@ import (
 
 const defaultBufSize = 1 << 20
 
+// AccountProfilesResolver supplies the User-owned profiles needed for an
+// account-level Social block cascade in cross-service tests.
+type AccountProfilesResolver interface {
+	ProfileIDsForAccount(context.Context, uuid.UUID) ([]uuid.UUID, error)
+}
+
 // NewBufconnClient returns a gRPC client connection to an in-process SocialService backed by pool.
-// Caller must run migrations on pool before use. cleanup closes the client and stops the server.
-func NewBufconnClient(t *testing.T, pool *pgxpool.Pool) (grpc.ClientConnInterface, func()) {
+// Caller must run migrations on pool before use and provide the deterministic
+// User-owned account-to-profile resolver. cleanup closes the client and stops
+// the server.
+func NewBufconnClient(t *testing.T, pool *pgxpool.Pool, accountProfiles AccountProfilesResolver) (grpc.ClientConnInterface, func()) {
 	t.Helper()
+	require.NotNil(t, accountProfiles, "account profile resolver is required")
 	lis := bufconn.Listen(defaultBufSize)
 	srv := grpc.NewServer()
 	socialv1.RegisterSocialServiceServer(srv, &socgrpc.SocialGRPC{
-		Friends: &socialstore.FriendshipStore{Pool: pool},
-		Blocks:  &socialstore.BlockStore{Pool: pool},
+		Friends:         &socialstore.FriendshipStore{Pool: pool},
+		Blocks:          &socialstore.BlockStore{Pool: pool},
+		AccountProfiles: accountProfiles,
 	})
 	go func() {
 		if err := srv.Serve(lis); err != nil {

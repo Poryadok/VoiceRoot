@@ -14,10 +14,41 @@
 - **Таблица refresh-токенов** (имена колонок выровнены с [microservices/auth-service.md](microservices/auth-service.md)):  
   `refresh_tokens(id, account_id, token_hash, device_info, expires_at, created_at, revoked_at)` — логически **`account_id`** = `accounts.id`; в JWT claim по-прежнему **`user_id`** (историческое имя, то же значение, что у аккаунта).
 - **Инвалидация refresh tokens**: смена пароля → удалить все; logout → удалить один
-- **Досрочный отзыв access token**: Redis blacklist (ключ = jti, TTL = оставшееся время токена)
+- **Досрочный отзыв одного access token**: Redis blacklist (ключ = jti, TTL = оставшееся время токена); `jti` остаётся per-session механизмом и не заменяется epoch.
 - **Одновременных сессий**: неограниченно → страница "Активные устройства"
 - **Восстановление пароля**: через email (ссылка или код)
 - **Удаление аккаунта**: soft delete, поле **`deleted_at`** на таблице **`accounts`** в `auth_db` (антискам + 152-ФЗ); детали модели — [microservices/auth-service.md](microservices/auth-service.md)
+
+### T056-P1: epoch для отзыва всех сессий (staged/WIP)
+
+Контракт подготовлен до rollout потребителей и не описывает shipped-поведение.
+Auth DB остаётся источником истины: `accounts.session_epoch BIGINT NOT NULL
+DEFAULT 1`, положительный и монотонный; операция отзыва всех сессий увеличивает
+его атомарно и никогда не уменьшает. Новый access JWT обязан содержать
+положительный integer claim `session_epoch`.
+
+Auth зеркалирует в Redis minimum-epoch floor аккаунта без TTL. Gateway и Realtime
+принимают токен только когда `token.session_epoch >= floor`; в strict-режиме
+отсутствующий/невалидный claim, отсутствующий floor, ошибка Redis или corrupt
+floor отклоняются (floor не подставляется как `1`). Redis floor может быть выше
+Auth DB после сбоя/rollback: это безопасный over-revoke, который подлежит
+reconcile без снижения floor.
+
+Ключ floor имеет фиксированный Auth-owned формат
+`auth:session:min_epoch:<account_id>`, содержит положительный `int64` и не имеет
+TTL. Auth остаётся единственным writer; Gateway читает этот ключ через общий
+Gateway Redis и тот же пароль, не меняя prefix. После успешной валидации JWT
+Gateway сначала проверяет non-empty `jti` blacklist, затем floor; запрос Redis
+ограничен 2 секундами. В strict missing/corrupt floor либо ошибка/timeout Redis
+на Gateway boundary дают `auth_unavailable`, а не fallback к epoch `1`.
+
+Rollout: `expand` (колонка + выпуск claim) → `seed` floor из Auth DB → `strict`
+проверки Gateway и Realtime. До strict compatibility-режим допускает legacy JWT
+без claim и не seeded floor; переключение strict разрешено только после готовности
+обоих потребителей. Realtime закрывает сокеты, адресованные аккаунту, при
+изменении epoch; Redis Pub/Sub — лишь ускорение этого закрытия, не correctness
+path. Проверка остаётся обязательной на upgrade, каждой inbound operation и
+outbound fan-out.
 
 ---
 
@@ -43,8 +74,8 @@
 
 | Компонент        | Redis: что делает                                                                                                                                                                                                                                                                                                                                                                                              |
 |------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **API Gateway**  | Счётчики **сквозных** лимитов из таблицы выше (например `ratelimit:{user_id}:{endpoint_group}`, где **`user_id` в ключе** = subject JWT, то есть **`accounts.id`** / логическое `account_id`; см. [DATA_MODEL.md](DATA_MODEL.md); для лимитов по IP — ключи с IP в составе). **Чтение** blacklist access token: ключ = `jti`, TTL = оставшееся время жизни токена (см. раздел «Аутентификация и сессии» выше). |
-| **Auth Service** | **Запись** в blacklist при logout и сценариях отзыва access token; состояние OTP / throttling верификации. HTTP-лимиты из таблицы (в т.ч. вход с одного IP) обрабатывает **Gateway** — дублирующие счётчики в Auth для тех же лимитов не заводим.                                                                                                                                                              |
+| **API Gateway**  | Счётчики **сквозных** лимитов из таблицы выше (например `ratelimit:{user_id}:{endpoint_group}`, где **`user_id` в ключе** = subject JWT, то есть **`accounts.id`** / логическое `account_id`; см. [DATA_MODEL.md](DATA_MODEL.md); для лимитов по IP — ключи с IP в составе). **Чтение** blacklist access token: ключ = `jti`, TTL = оставшееся время жизни токена; чтение minimum-epoch floor — staged T056-P1, strict fail-closed. |
+| **Auth Service** | **Запись** в blacklist при logout и сценариях отзыва одного access token; публикация/поддержание minimum-epoch floor (staged T056-P1); состояние OTP / throttling верификации. HTTP-лимиты из таблицы (в т.ч. вход с одного IP) обрабатывает **Gateway** — дублирующие счётчики в Auth для тех же лимитов не заводим. |
 
 ### Версии клиента
 
@@ -75,7 +106,7 @@
 После reconnect клиент получает авторитетный paginated snapshot своего inbox через `ListChats`: `main`, `requests` и `archive`; `Chat` обогащает строки durable metadata из Messaging. Первую страницу можно показать сразу, остальные страницы догружаются в фоне до конца snapshot. Ошибка страницы оставляет локальный cache и требует retry: отсутствие ответа нельзя трактовать как пустой inbox, удаление строки или `unread_count = 0`. Это **глобальный catch-up состояния списка**, а не журнал WebSocket-событий и не выгрузка истории всех чатов.
 
 **3. История сообщений (Messaging, REST через Gateway)**
-Пропущенные **сообщения** догружаются **с клиента** через публичный API Messaging (`GetMessages` с курсором **per `chat_id`**: `last_message_id` / `after_message_id`) только для открытого чата, явного перехода из notification или другого выбранного пользователем контекста. Offline queue на сервере не нужна. Если курсор не найден (сообщение удалено) — запрос последних 50 сообщений чата без курсора. Детали контракта — [microservices/messaging-service.md](microservices/messaging-service.md).
+Пропущенные **сообщения** догружаются **с клиента** через публичный API Messaging (`GetMessages` с курсором **per `chat_id`**: `last_message_id` / `after_message_id`) только для открытого чата, явного перехода из notification или другого выбранного пользователем контекста. Offline queue на сервере не нужна. Если курсор не найден (сообщение удалено) — запрос последних 50 сообщений чата без курсора. Для уже выбранного known DM `GetMessagesResponse.dm_peer_state=DELETED` — durable state удаления второго участника: клиент добавляет единственный локальный неперсистентный marker «Пользователь удалён», не синтезируя message/tombstone и не раскрывая deleted identity. Детали контракта — [microservices/messaging-service.md](microservices/messaging-service.md).
 
 **Эфемерные события** (typing, часть presence, `delivery_ack` / `message_delivered`): catch-up **не гарантируется** — после reconnect состояние «с нуля» или из следующих live-событий.
 
@@ -88,7 +119,7 @@
 
 | Concern | REST / gRPC (durable) | WebSocket (ephemeral fan-out) |
 |---------|----------------------|-------------------------------|
-| История сообщений | `GetMessages` per `chat_id` | `message_create` / `message_update` / `message_delete` |
+| История сообщений | `GetMessages` per `chat_id`, включая `dm_peer_state` для selected DM | `message_create` / `message_update` / `message_delete`; `dm_peer_deleted` только live-ускорение, без replay |
 | Read cursor | `Messaging.MarkRead` → `read_receipts` | `mark_read` op + `message_read` (same-profile tabs) |
 | Delivery ticks (list) | `GetChatListMetadata.last_message_delivery_state` | `delivery_ack` → `message_delivered` (live bubble only) |
 | Catch-up после reconnect | `ListChats` global inbox snapshot + `GetMessages` per selected `chat_id` + metadata | `resume` + `last_s` — только live-поток новой сессии, не журнал |
@@ -255,4 +286,3 @@
 - error model (status code + `error_code`)
 - pagination/курсоры (если применимо)
 - idempotency/повтор запроса (если применимо)
-

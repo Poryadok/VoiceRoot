@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 	voicejwt "voice/backend/pkg/jwt"
@@ -88,6 +89,60 @@ func TestGatewayConfigFromEnvSelectsAuthMode(t *testing.T) {
 	claims := chainedConfig.tokenClaims["staff-token"]
 	if claims.UserID != "staff" || claims.ProfileID != "staff-profile" || len(claims.Roles) != 1 || claims.Roles[0] != "staff" {
 		t.Fatalf("static staff claims = %+v, want user_id/profile_id/roles from snake_case JSON", claims)
+	}
+}
+
+func TestGatewayConfigFromEnv_JWKSWithoutRedisFailsClosedForJTIToken(t *testing.T) {
+
+	t.Setenv("GATEWAY_AUTH_MODE", "")
+	t.Setenv("GATEWAY_JWKS_URL", "https://auth.voice.example/.well-known/jwks.json")
+	t.Setenv("GATEWAY_STATIC_TOKENS_JSON", "")
+	t.Setenv("GATEWAY_REDIS_ADDR", "")
+
+	config := loadGatewayConfigFromEnv()
+	if _, ok := config.tokenValidator.(*voicejwt.Validator); !ok {
+		t.Fatalf("tokenValidator = %T, want *voicejwt.Validator in JWKS mode", config.tokenValidator)
+	}
+	// The real JWKS validator would require a network fetch. Keep the configured
+	// JWKS mode while using a valid, deterministic JTI-bearing token at the
+	// Gateway boundary.
+	config.tokenValidator = fixedValidator{claims: tokenClaims{UserID: "account-1", JTI: "revoked-jti"}}
+	downstreamCalled := false
+	config.restUpstreams = map[string]http.Handler{
+		"users": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			downstreamCalled = true
+			w.WriteHeader(http.StatusNoContent)
+		}),
+	}
+
+	rec := performRequest(newGateway(config), http.MethodGet, "/api/v1/users/me", "", map[string]string{
+		"Authorization": "Bearer valid-jwks-token",
+	})
+	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), "auth_unavailable") {
+		t.Fatalf("JWKS without Redis status/body = %d %q, want 503 auth_unavailable", rec.Code, rec.Body.String())
+	}
+	if downstreamCalled {
+		t.Fatal("JWKS token reached downstream without a configured blacklist")
+	}
+}
+
+func TestGatewayConfigFromEnv_StaticWithoutRedisRemainsDevTestOnly(t *testing.T) {
+
+	t.Setenv("GATEWAY_AUTH_MODE", "static")
+	t.Setenv("GATEWAY_STATIC_TOKENS_JSON", `{"dev-token":{"user_id":"account-1","jti":"test-jti"}}`)
+	t.Setenv("GATEWAY_JWKS_URL", "")
+	t.Setenv("GATEWAY_REDIS_ADDR", "")
+
+	config := loadGatewayConfigFromEnv()
+	config.restUpstreams = map[string]http.Handler{
+		"users": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }),
+	}
+
+	rec := performRequest(newGateway(config), http.MethodGet, "/api/v1/users/me", "", map[string]string{
+		"Authorization": "Bearer dev-token",
+	})
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("static dev/test token status = %d, want %d; body=%q", rec.Code, http.StatusNoContent, rec.Body.String())
 	}
 }
 

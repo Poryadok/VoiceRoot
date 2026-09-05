@@ -13,6 +13,9 @@ import voice.backend.auth.userdb.PhoneHashResolver;
 import voice.backend.auth.userdb.PrimaryProfileProvisioner;
 import voice.backend.auth.userdb.ProfileSwitchValidator;
 import voice.backend.auth.repository.Account;
+import voice.backend.auth.repository.AccountDeletionOperation;
+import voice.backend.auth.repository.AccountDeletionOperationRepository;
+import voice.backend.auth.repository.AccountDeletionState;
 import voice.backend.auth.repository.AccountRepository;
 import voice.backend.auth.repository.E2EKeyBackupRecord;
 import voice.backend.auth.repository.E2EKeyBackupRepository;
@@ -24,6 +27,9 @@ import voice.backend.auth.security.RefreshTokenCodec;
 import voice.backend.auth.events.AuthEventPublisher;
 import voice.backend.auth.mail.MailSender;
 import voice.backend.auth.security.TokenBlacklist;
+import voice.backend.auth.sessionepoch.SessionEpochFloorStore;
+import voice.backend.auth.sessionepoch.SessionEpochFloorMissingException;
+import voice.backend.auth.sessionepoch.SessionEpochFloorUnavailableException;
 
 public class AuthService {
   /** Max opaque encrypted blob size for E2E key backup (512 KiB). */
@@ -49,6 +55,13 @@ public class AuthService {
   private final MeterRegistry meterRegistry;
   private final AccountRestoreTokenStore restoreTokenStore;
   private final MailSender mailSender;
+  private final SessionEpochFloorStore sessionEpochFloors;
+  private AccountDeletionOperationRepository deletionOperations;
+  private AccountDeletionRestoreTokenCodec deletionTokenCodec;
+  private AccountDeletionEventPublisher deletionEventPublisher;
+  private AccountDeletionOperationStarter deletionStarter;
+  private AccountDeletionPendingFloorWorker deletionFloorWorker;
+  private AccountDeletionPendingEventWorker deletionEventWorker;
 
   public AuthService(
       AccountRepository accounts,
@@ -69,7 +82,8 @@ public class AuthService {
       AuthEventPublisher authEventPublisher,
       MeterRegistry meterRegistry,
       AccountRestoreTokenStore restoreTokenStore,
-      MailSender mailSender) {
+      MailSender mailSender,
+      SessionEpochFloorStore sessionEpochFloors) {
     this.accounts = accounts;
     this.refreshTokens = refreshTokens;
     this.refreshTokenCodec = refreshTokenCodec;
@@ -89,10 +103,11 @@ public class AuthService {
     this.meterRegistry = meterRegistry;
     this.restoreTokenStore = restoreTokenStore;
     this.mailSender = mailSender;
+    this.sessionEpochFloors = sessionEpochFloors;
   }
 
   public AuthService withClock(Clock newClock) {
-    return new AuthService(
+    AuthService copy = new AuthService(
         accounts,
         refreshTokens,
         refreshTokenCodec,
@@ -111,12 +126,40 @@ public class AuthService {
         authEventPublisher,
         meterRegistry,
         restoreTokenStore,
-        mailSender);
+        mailSender,
+        sessionEpochFloors);
+    if (deletionOperations != null && deletionTokenCodec != null && deletionEventPublisher != null
+        && deletionStarter != null && deletionFloorWorker != null && deletionEventWorker != null) {
+      copy.configureAccountDeletion(
+          deletionOperations, deletionTokenCodec, deletionEventPublisher, deletionStarter,
+          deletionFloorWorker, deletionEventWorker);
+    }
+    return copy;
+  }
+
+  /** Injects the Auth-owned durable deletion outbox without changing legacy unit-test constructors. */
+  public void configureAccountDeletion(
+      AccountDeletionOperationRepository deletionOperations,
+      AccountDeletionRestoreTokenCodec deletionTokenCodec,
+      AccountDeletionEventPublisher deletionEventPublisher,
+      AccountDeletionOperationStarter deletionStarter,
+      AccountDeletionPendingFloorWorker deletionFloorWorker,
+      AccountDeletionPendingEventWorker deletionEventWorker) {
+    this.deletionOperations = java.util.Objects.requireNonNull(deletionOperations, "deletionOperations");
+    this.deletionTokenCodec = java.util.Objects.requireNonNull(deletionTokenCodec, "deletionTokenCodec");
+    this.deletionEventPublisher =
+        java.util.Objects.requireNonNull(deletionEventPublisher, "deletionEventPublisher");
+    this.deletionStarter = java.util.Objects.requireNonNull(deletionStarter, "deletionStarter");
+    this.deletionFloorWorker = java.util.Objects.requireNonNull(deletionFloorWorker, "deletionFloorWorker");
+    this.deletionEventWorker = java.util.Objects.requireNonNull(deletionEventWorker, "deletionEventWorker");
   }
 
   public AuthSession register(RegisterCommand command) {
     String email = normalize(command.email());
     String phone = normalize(command.phone());
+    if (command.guest() && (email != null || phone != null)) {
+      throw new AuthException("validation_failed");
+    }
     if (!command.guest() && email == null && phone == null) {
       throw new AuthException("validation_failed");
     }
@@ -209,8 +252,15 @@ public class AuthService {
   public String issueOAuthAccessToken(String accountId, String profileId) {
     Account account = accounts.findById(accountId).orElseThrow(() -> new AuthException("invalid_token"));
     ensureActive(account);
+    String expectedProfileId = requireProfileId(profileId);
+    String ensuredProfileId = requireProfileId(primaryProfileProvisioner.ensurePrimaryProfile(
+        account.id(), displayHint(account), "guest".equals(account.type())));
+    if (!expectedProfileId.equals(ensuredProfileId)) {
+      throw new AuthException("malformed_user_response");
+    }
     String tier = subscriptionTierResolver.resolveTier(account.id());
-    return jwtService.issue(account.id().toString(), profileId, List.of("user"), tier, account.type());
+    return jwtService.issue(
+        account.id().toString(), ensuredProfileId, List.of("user"), tier, account.type(), account.sessionEpoch());
   }
 
   public long accessTokenTtlSeconds() {
@@ -234,7 +284,17 @@ public class AuthService {
     if (phoneHashResolver == null) {
       return Map.of();
     }
-    return phoneHashResolver.resolvePrimaryProfileIdsByPhoneHashes(phoneHashes);
+    Map<String, String> resolved = phoneHashResolver.resolvePrimaryProfileIdsByPhoneHashes(phoneHashes);
+    if (resolved == null) {
+      throw new AuthException("malformed_user_response");
+    }
+    for (Map.Entry<String, String> entry : resolved.entrySet()) {
+      if (entry.getKey() == null || entry.getKey().isBlank()) {
+        throw new AuthException("malformed_user_response");
+      }
+      requireProfileId(entry.getValue());
+    }
+    return resolved;
   }
 
   /** Internal S2S: return account ids that are soft-deleted (deleted_at set). */
@@ -298,7 +358,11 @@ public class AuthService {
     TokenClaims claims = validate(accessToken);
     UUID accountId = UUID.fromString(claims.userId());
     UUID targetProfile = UUID.fromString(profileId);
-    profileSwitchValidator.validateOwnedSwitchable(accountId, targetProfile);
+    profileSwitchValidator.validateOwnedSwitchable(
+        accountId,
+        UUID.fromString(claims.profileId()),
+        targetProfile,
+        claims.subscriptionTier());
     Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
     ensureActive(account);
     tokenBlacklist.revoke(claims.jti(), jwtService.ttl(claims));
@@ -318,20 +382,12 @@ public class AuthService {
     String passwordHash = passwordHasher.hash(command.password());
     String email = normalize(command.email());
     String phone = normalize(command.phone());
-    if (email == null && phone == null) {
+    if (email == null || phone != null) {
       throw new AuthException("validation_failed");
     }
     if (email != null) {
       accounts
           .findByEmail(email)
-          .filter(existing -> !existing.id().equals(account.id()))
-          .ifPresent(ignored -> {
-            throw new AuthException("registration_conflict");
-          });
-    }
-    if (phone != null) {
-      accounts
-          .findByPhone(phone)
           .filter(existing -> !existing.id().equals(account.id()))
           .ifPresent(ignored -> {
             throw new AuthException("registration_conflict");
@@ -344,25 +400,84 @@ public class AuthService {
       throw new AuthException("registration_conflict");
     }
     tokenBlacklist.revoke(claims.jti(), jwtService.ttl(claims));
-    primaryProfileProvisioner.clearGuestAccountFlag(converted.id());
-    authEventPublisher.publishGuestConverted(converted.id());
     return issueSession(converted, "{}");
   }
 
   public DeleteAccountResult deleteAccount(String accessToken, String password) {
-    TokenClaims claims = validate(accessToken);
+    return deleteAccount(accessToken, password, null);
+  }
+
+  public DeleteAccountResult deleteAccount(String accessToken, String password, String totpCode) {
+    TokenClaims claims = validateForAccountDeletion(accessToken);
     Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
     if (!passwordHasher.matches(password, account.passwordHash())) {
       throw new AuthException("invalid_credentials");
     }
+    verifyDeletionSecondFactor(account, totpCode);
     if ("deleted".equals(account.status())) {
-      throw new AuthException("account_inactive");
+      return finishAccountDeletion(claims, account, operationForDeletedAccount(account));
+    }
+    ensureActive(account);
+    return finishAccountDeletion(claims, startOperation(account));
+  }
+
+  private void verifyDeletionSecondFactor(Account account, String totpCode) {
+    if (!account.totpEnabled()) {
+      return;
+    }
+    if (totpCode == null || totpCode.isBlank()) {
+      throw new AuthException("totp_required");
+    }
+    String code = totpCode.trim();
+    boolean validTotp =
+        account.totpSecret() != null && totpService.verifyEncrypted(account.totpSecret(), code);
+    if (!validTotp && !backupCodeService.consume(account.id(), code)) {
+      throw new AuthException("invalid_totp");
+    }
+  }
+
+  private boolean hasSealedDeletionEpoch(Account account) {
+    try {
+      return sessionEpochFloors.requireFloor(account.id()) >= account.sessionEpoch();
+    } catch (SessionEpochFloorMissingException ignored) {
+      return false;
+    }
+  }
+
+  private AccountDeletionStartResult startOperation(Account account) {
+    requireDeletionOperations();
+    UUID proposedOperationId = UUID.randomUUID();
+    String proposedToken = deletionTokenCodec.derive(account.id(), proposedOperationId);
+    return deletionStarter.startOrResume(
+        account, proposedOperationId, refreshTokenCodec.hash(proposedToken), Instant.now(clock));
+  }
+
+  private AccountDeletionOperation operationForDeletedAccount(Account account) {
+    requireDeletionOperations();
+    return deletionOperations
+        .findByAccountAndEpoch(account.id(), account.sessionEpoch())
+        .orElseThrow(
+            () ->
+                new SessionEpochFloorUnavailableException(
+                    "account deletion completion has not been durably recorded"));
+  }
+
+  private DeleteAccountResult finishAccountDeletion(
+      TokenClaims claims, Account account, AccountDeletionOperation operation) {
+    String restoreToken = deletionTokenCodec.derive(account.id(), operation.operationId());
+    if (!refreshTokenCodec.hash(restoreToken).equals(operation.restoreTokenHash())) {
+      throw new IllegalStateException("account deletion restore token verifier mismatch");
+    }
+    if (operation.state() == AccountDeletionState.PENDING_FLOOR) {
+      deletionFloorWorker.recoverOperation(operation.operationId(), Duration.ofSeconds(30));
+      operation = operationForDeletedAccount(account);
+      if (operation.state() == AccountDeletionState.PENDING_FLOOR) {
+        throw new SessionEpochFloorUnavailableException("account deletion epoch floor is not durably sealed");
+      }
     }
     Instant now = Instant.now(clock);
-    accounts.markDeleted(account.id(), now);
     refreshTokens.revokeAllForAccount(account.id(), now);
     tokenBlacklist.revoke(claims.jti(), jwtService.ttl(claims));
-    String restoreToken = refreshTokenCodec.generate();
     restoreTokenStore.store(restoreToken, account.id(), AccountRestoreTokenStore.RESTORE_TTL);
     if (account.email() != null && !account.email().isBlank()) {
       mailSender.sendOtpEmail(
@@ -370,8 +485,38 @@ public class AuthService {
           "Restore your Voice account",
           "Your account was scheduled for deletion. Restore within 30 days using token: " + restoreToken);
     }
-    authEventPublisher.publishAccountDeleted(account.id());
+    if (operation.state() == AccountDeletionState.PENDING_EVENT) {
+      deletionEventWorker.recoverOperation(operation.operationId(), Duration.ofSeconds(30));
+      operation = operationForDeletedAccount(account);
+      if (operation.state() != AccountDeletionState.COMPLETED) {
+        throw new IllegalStateException("account deletion event has not been durably acknowledged");
+      }
+    }
     return new DeleteAccountResult(restoreToken);
+  }
+
+  private DeleteAccountResult finishAccountDeletion(
+      TokenClaims claims, AccountDeletionStartResult started) {
+    return finishAccountDeletion(claims, started.account(), started.operation());
+  }
+
+  private void requireDeletionOperations() {
+    if (deletionOperations == null || deletionTokenCodec == null || deletionEventPublisher == null
+        || deletionStarter == null || deletionFloorWorker == null || deletionEventWorker == null) {
+      throw new IllegalStateException("account deletion durable operation repository is not configured");
+    }
+  }
+
+
+  private TokenClaims validateForAccountDeletion(String accessToken) {
+    if (accessToken == null || accessToken.isBlank()) {
+      throw new AuthException("invalid_token");
+    }
+    TokenClaims claims = jwtService.validate(stripBearer(accessToken));
+    if (tokenBlacklist.isRevoked(claims.jti())) {
+      throw new AuthException("token_revoked");
+    }
+    return claims;
   }
 
   public AuthSession restoreAccount(String restoreToken) {
@@ -386,10 +531,13 @@ public class AuthService {
     if (!"deleted".equals(account.status()) || account.deletedAt() == null) {
       throw new AuthException("validation_failed");
     }
-    if (account.deletedAt().plus(ACCOUNT_RESTORE_GRACE).isBefore(Instant.now(clock))) {
+    Instant precheckNow = Instant.now(clock);
+    if (account.deletedAt().plus(ACCOUNT_RESTORE_GRACE).isBefore(precheckNow)) {
       throw new AuthException("account_inactive");
     }
-    accounts.restoreDeleted(account.id());
+    if (!accounts.restoreDeleted(account.id())) {
+      throw new AuthException("validation_failed");
+    }
     Account restored = accounts.findById(account.id().toString()).orElse(account);
     authEventPublisher.publishAccountRestored(restored.id());
     return issueSession(restored, "{}");
@@ -478,11 +626,14 @@ public class AuthService {
   }
 
   private AuthSession issueSessionForProfile(Account account, String profileId, String deviceInfoJson) {
+    profileId = requireProfileId(profileId);
     if (deviceInfoJson == null || deviceInfoJson.isBlank()) {
       deviceInfoJson = "{}";
     }
     String tier = subscriptionTierResolver.resolveTier(account.id());
-    String accessToken = jwtService.issue(account.id().toString(), profileId, List.of("user"), tier, account.type());
+    String accessToken =
+        jwtService.issue(
+            account.id().toString(), profileId, List.of("user"), tier, account.type(), account.sessionEpoch());
     TokenClaims claims = jwtService.validate(accessToken);
     String refreshToken = refreshTokenCodec.generate();
     refreshTokens.create(
@@ -499,6 +650,14 @@ public class AuthService {
         account.id().toString(),
         profileId,
         account.type());
+  }
+
+  private static String requireProfileId(String profileId) {
+    try {
+      return UUID.fromString(profileId).toString();
+    } catch (RuntimeException ex) {
+      throw new AuthException("malformed_user_response");
+    }
   }
 
   private void touchLastOnline(Account account) {

@@ -14,8 +14,7 @@ import 'gateway_providers.dart';
 import 'voice_background_mobile.dart';
 import 'screen_share_providers.dart';
 
-/// Call signaling must use the raw hub stream — [realtimeEventProvider] keeps only
-/// the latest frame and can drop `call_incoming` between heartbeats.
+/// Raw Realtime frames remain available to non-call consumers.
 final callSignalingStreamProvider = Provider<Stream<RealtimeFrame>>((ref) {
   return ref.watch(realtimeHubProvider).events;
 });
@@ -144,9 +143,10 @@ class CallState {
 
 class CallController extends StateNotifier<CallState> {
   CallController(this._ref) : super(const CallState()) {
-    _eventsSub = _ref
-        .read(callSignalingStreamProvider)
-        .listen(_onRealtimeFrame);
+    _eventsSub = _ref.listen<AsyncValue<ProfileBoundRealtimeFrame>>(
+      profileBoundRealtimeEventProvider,
+      (_, next) => next.whenData(_onProfileBoundRealtimeFrame),
+    );
     _linkSub = _ref.listen<RealtimeLinkStatus>(realtimeLinkStatusProvider, (
       prev,
       next,
@@ -164,7 +164,7 @@ class CallController extends StateNotifier<CallState> {
   }
 
   final Ref _ref;
-  StreamSubscription<RealtimeFrame>? _eventsSub;
+  ProviderSubscription<AsyncValue<ProfileBoundRealtimeFrame>>? _eventsSub;
   ProviderSubscription<RealtimeLinkStatus>? _linkSub;
   ProviderSubscription<VoiceInputSettings>? _inputSub;
   VoiceLiveKitRoom? _room;
@@ -308,6 +308,10 @@ class CallController extends StateNotifier<CallState> {
   }) async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return;
+    if (state.blocksAnotherVoiceEntry(chatId: groupChatId)) {
+      state = state.copyWith(errorMessage: 'voice_session_conflict');
+      return;
+    }
     if (_groupVoiceInFlight) return;
     _groupVoiceInFlight = true;
     state = state.copyWith(
@@ -404,6 +408,10 @@ class CallController extends StateNotifier<CallState> {
   Future<void> joinGroupVoice({required String roomId}) async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return;
+    if (state.blocksAnotherVoiceEntry(roomId: roomId)) {
+      state = state.copyWith(errorMessage: 'voice_session_conflict');
+      return;
+    }
     if (_groupVoiceInFlight) return;
     _groupVoiceInFlight = true;
     state = state.copyWith(phase: CallPhase.connecting, clearError: true);
@@ -759,7 +767,32 @@ class CallController extends StateNotifier<CallState> {
     }
   }
 
-  void _onRealtimeFrame(RealtimeFrame frame) {
+  void _onProfileBoundRealtimeFrame(ProfileBoundRealtimeFrame event) {
+    final binding = event.binding;
+    final currentHello = _ref.read(realtimeHelloBindingProvider);
+    final activeProfileId = _ref.read(authControllerProvider).activeProfileId;
+    final authorization = _ref.read(authorizationHeaderProvider);
+    if (currentHello == null ||
+        activeProfileId != binding.profileId ||
+        authorization != binding.authorization ||
+        currentHello.generation != binding.generation ||
+        currentHello.bindingGeneration != binding.bindingGeneration ||
+        currentHello.profileId != binding.profileId ||
+        currentHello.authorization != binding.authorization) {
+      return;
+    }
+    final voiceBindingProfileId = state.voiceBindingProfileId;
+    if (voiceBindingProfileId != null &&
+        voiceBindingProfileId != binding.profileId) {
+      return;
+    }
+    _onRealtimeFrame(event.frame, bindingProfileId: binding.profileId);
+  }
+
+  void _onRealtimeFrame(
+    RealtimeFrame frame, {
+    required String bindingProfileId,
+  }) {
     switch (frame.op) {
       case 'call_incoming':
         final session = _sessionFromFrame(frame, VoiceCallStatus.ringing);
@@ -769,11 +802,13 @@ class CallController extends StateNotifier<CallState> {
               current?.roomId == session.roomId &&
               (state.phase == CallPhase.outgoing ||
                   state.phase == CallPhase.connecting ||
-                  state.phase == CallPhase.active);
+                  state.phase == CallPhase.active ||
+                  state.phase == CallPhase.incoming);
           if (!sameRoomInProgress) {
             state = CallState(
               phase: CallPhase.incoming,
               session: session,
+              voiceBindingProfileId: bindingProfileId,
               isVideoEnabled: session.mediaKind == VoiceCallMediaKind.video,
             );
           }
@@ -890,7 +925,7 @@ class CallController extends StateNotifier<CallState> {
 
   @override
   void dispose() {
-    _eventsSub?.cancel();
+    _eventsSub?.close();
     _linkSub?.close();
     _inputSub?.close();
     unawaited(_room?.disconnect());

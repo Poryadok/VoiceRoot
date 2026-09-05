@@ -6,12 +6,16 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import voice.backend.auth.repository.AccountRepository;
+import voice.backend.auth.repository.AccountDeletionOperationRepository;
 import voice.backend.auth.repository.BackupCodeRepository;
 import voice.backend.auth.repository.E2EKeyBackupRepository;
 import voice.backend.auth.repository.JdbcAccountRepository;
+import voice.backend.auth.repository.JdbcAccountDeletionOperationRepository;
 import voice.backend.auth.repository.JdbcBackupCodeRepository;
 import voice.backend.auth.repository.JdbcE2EKeyBackupRepository;
 import voice.backend.auth.repository.JdbcOtpCodeRepository;
+import voice.backend.auth.repository.JdbcGuestConversionOperationRepository;
+import voice.backend.auth.repository.GuestConversionOperationRepository;
 import voice.backend.auth.repository.OtpCodeRepository;
 import voice.backend.auth.repository.JdbcRefreshTokenRepository;
 import voice.backend.auth.repository.RefreshTokenRepository;
@@ -27,6 +31,12 @@ public class JdbcPersistenceConfiguration {
   @Bean
   AccountRepository accountRepository(NamedParameterJdbcTemplate jdbc) {
     return new JdbcAccountRepository(jdbc);
+  }
+
+  @Bean
+  AccountDeletionOperationRepository accountDeletionOperationRepository(
+      NamedParameterJdbcTemplate jdbc) {
+    return new JdbcAccountDeletionOperationRepository(jdbc);
   }
 
   @Bean
@@ -47,6 +57,12 @@ public class JdbcPersistenceConfiguration {
   @Bean
   OtpCodeRepository otpCodeRepository(NamedParameterJdbcTemplate jdbc) {
     return new JdbcOtpCodeRepository(jdbc);
+  }
+
+  @Bean
+  GuestConversionOperationRepository guestConversionOperationRepository(
+      NamedParameterJdbcTemplate jdbc) {
+    return new JdbcGuestConversionOperationRepository(jdbc);
   }
 
   @Bean

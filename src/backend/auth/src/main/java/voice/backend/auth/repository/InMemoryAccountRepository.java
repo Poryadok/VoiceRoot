@@ -1,5 +1,7 @@
 package voice.backend.auth.repository;
 
+import java.time.Duration;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Map;
@@ -12,6 +14,15 @@ public class InMemoryAccountRepository implements AccountRepository {
   private final Map<String, UUID> byEmail = new ConcurrentHashMap<>();
   private final Map<String, UUID> byPhone = new ConcurrentHashMap<>();
   private final Map<UUID, Instant> guestReminderShownAt = new ConcurrentHashMap<>();
+  private final Clock clock;
+
+  public InMemoryAccountRepository() {
+    this(Clock.systemUTC());
+  }
+
+  public InMemoryAccountRepository(Clock clock) {
+    this.clock = java.util.Objects.requireNonNull(clock, "clock");
+  }
 
   @Override
   public synchronized Account create(String email, String phone, String passwordHash, String type) {
@@ -31,6 +42,7 @@ public class InMemoryAccountRepository implements AccountRepository {
             "active",
             null,
             false,
+            1L,
             Instant.now(),
             null);
     byId.put(account.id(), account);
@@ -116,10 +128,11 @@ public class InMemoryAccountRepository implements AccountRepository {
             email,
             phone,
             passwordHash,
-            "regular",
+            "guest",
             existing.status(),
             existing.totpSecret(),
             existing.totpEnabled(),
+            existing.sessionEpoch(),
             existing.createdAt(),
             existing.deletedAt());
     byId.put(accountId, converted);
@@ -130,6 +143,52 @@ public class InMemoryAccountRepository implements AccountRepository {
       byPhone.put(phone, accountId);
     }
     return converted;
+  }
+
+  @Override
+  public synchronized Account markGuestRegular(UUID accountId) {
+    Account existing = byId.get(accountId);
+    if (existing == null || !"guest".equals(existing.type())) {
+      throw new IllegalArgumentException("not a guest account");
+    }
+    Account regular =
+        new Account(
+            existing.id(),
+            existing.email(),
+            existing.phone(),
+            existing.passwordHash(),
+            "regular",
+            existing.status(),
+            existing.totpSecret(),
+            existing.totpEnabled(),
+            existing.sessionEpoch(),
+            existing.createdAt(),
+            existing.deletedAt());
+    byId.put(accountId, regular);
+    return regular;
+  }
+
+  /** Restores a local promotion when the matching in-memory durable advance did not apply. */
+  public synchronized Account restoreRegularGuest(UUID accountId) {
+    Account existing = byId.get(accountId);
+    if (existing == null || !"regular".equals(existing.type())) {
+      throw new IllegalArgumentException("not a regular account");
+    }
+    Account guest =
+        new Account(
+            existing.id(),
+            existing.email(),
+            existing.phone(),
+            existing.passwordHash(),
+            "guest",
+            existing.status(),
+            existing.totpSecret(),
+            existing.totpEnabled(),
+            existing.sessionEpoch(),
+            existing.createdAt(),
+            existing.deletedAt());
+    byId.put(accountId, guest);
+    return guest;
   }
 
   @Override
@@ -149,6 +208,7 @@ public class InMemoryAccountRepository implements AccountRepository {
             existing.status(),
             existing.totpSecret(),
             existing.totpEnabled(),
+            existing.sessionEpoch(),
             existing.createdAt(),
             existing.deletedAt()));
   }
@@ -173,12 +233,58 @@ public class InMemoryAccountRepository implements AccountRepository {
   }
 
   @Override
-  public synchronized void restoreDeleted(UUID accountId) {
+  public synchronized long markDeletedAndIncrementSessionEpoch(UUID accountId, Instant deletedAt) {
     Account existing = byId.get(accountId);
     if (existing == null) {
-      return;
+      throw new IllegalArgumentException("account not found");
+    }
+    if (!"active".equals(existing.status())) {
+      throw new IllegalArgumentException("account is not active");
+    }
+    long next = Math.addExact(existing.sessionEpoch(), 1L);
+    if (next <= 0) {
+      throw new IllegalStateException("invalid session epoch");
+    }
+    byId.put(
+        accountId,
+        copy(existing, "deleted", existing.totpSecret(), existing.totpEnabled(), deletedAt, next));
+    return next;
+  }
+
+  @Override
+  public synchronized boolean restoreDeleted(UUID accountId) {
+    Account existing = byId.get(accountId);
+    if (existing == null
+        || !"deleted".equals(existing.status())
+        || existing.deletedAt() == null
+        || existing.deletedAt().plus(Duration.ofDays(30)).isBefore(clock.instant())) {
+      return false;
     }
     byId.put(accountId, copy(existing, "active", existing.totpSecret(), existing.totpEnabled(), null));
+    return true;
+  }
+
+
+  @Override
+  public synchronized long incrementSessionEpoch(UUID accountId) {
+    Account existing = byId.get(accountId);
+    if (existing == null) {
+      throw new IllegalArgumentException("account not found");
+    }
+    long next = Math.addExact(existing.sessionEpoch(), 1L);
+    if (next <= 0) {
+      throw new IllegalStateException("invalid session epoch");
+    }
+    byId.put(
+        accountId,
+        copy(
+            existing,
+            existing.status(),
+            existing.totpSecret(),
+            existing.totpEnabled(),
+            existing.deletedAt(),
+            next));
+    return next;
   }
 
   @Override
@@ -210,8 +316,19 @@ public class InMemoryAccountRepository implements AccountRepository {
     }
     return out;
   }
+
   private static Account copy(
       Account existing, String status, byte[] totpSecret, boolean totpEnabled, Instant deletedAt) {
+    return copy(existing, status, totpSecret, totpEnabled, deletedAt, existing.sessionEpoch());
+  }
+
+  private static Account copy(
+      Account existing,
+      String status,
+      byte[] totpSecret,
+      boolean totpEnabled,
+      Instant deletedAt,
+      long sessionEpoch) {
     return new Account(
         existing.id(),
         existing.email(),
@@ -221,6 +338,7 @@ public class InMemoryAccountRepository implements AccountRepository {
         status,
         totpSecret,
         totpEnabled,
+        sessionEpoch,
         existing.createdAt(),
         deletedAt);
   }

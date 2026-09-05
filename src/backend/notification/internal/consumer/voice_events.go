@@ -74,7 +74,7 @@ func (h *VoiceEventHandler) HandleVoiceMemberJoined(
 			continue
 		}
 		isOnline := false
-		if isOnlineByProfile != nil {
+		if isOnlineByProfile != nil && !delivery.SkipsPresenceCheck(delivery.TypeVoiceMemberJoined) {
 			isOnline = isOnlineByProfile(profileID)
 		}
 		out[profileID] = h.route(profileID, ev.GetJoinedProfileId(), delivery.TypeVoiceMemberJoined, isOnline)

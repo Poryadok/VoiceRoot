@@ -2,6 +2,7 @@ package grpcsvc
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 
@@ -55,6 +56,33 @@ func bootstrapRoleManagerAtPositionTwo(t *testing.T, s *store.RoleStore) (spaceI
 	require.NoError(t, err)
 	require.NoError(t, s.AssignMemberRole(context.Background(), spaceID, actorID, manager.ID, ownerID))
 	return spaceID, ownerID, actorID
+}
+
+func roleIDsByName(t *testing.T, s *store.RoleStore, spaceID uuid.UUID) map[string]uuid.UUID {
+	t.Helper()
+	roles, err := s.ListRoles(context.Background(), spaceID)
+	require.NoError(t, err)
+	ids := make(map[string]uuid.UUID, len(roles))
+	for _, role := range roles {
+		ids[role.Name] = role.ID
+	}
+	return ids
+}
+
+func rolePositionsByID(t *testing.T, s *store.RoleStore, spaceID uuid.UUID) map[uuid.UUID]int32 {
+	t.Helper()
+	roles, err := s.ListRoles(context.Background(), spaceID)
+	require.NoError(t, err)
+	positions := make(map[uuid.UUID]int32, len(roles))
+	for _, role := range roles {
+		positions[role.ID] = role.Position
+	}
+	return positions
+}
+
+func requireRolePositionsUnchanged(t *testing.T, s *store.RoleStore, spaceID uuid.UUID, before map[uuid.UUID]int32) {
+	t.Helper()
+	require.Equal(t, before, rolePositionsByID(t, s, spaceID))
 }
 
 func TestGetVoiceRoomOverrides_SetAndList(t *testing.T) {
@@ -270,6 +298,166 @@ func TestCreateRole_PositionOwnerBypassPreserved(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.EqualValues(t, 4, created.GetRole().GetPosition())
+}
+
+// TestReorderRoles_NonOwnerCannotReorderProtectedHierarchyRoles requires a role
+// manager to stay below Owner, Admin, and every role at the manager's position.
+func TestReorderRoles_NonOwnerCannotReorderProtectedHierarchyRoles(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	s, cleanup := startRoleStoreTest(t)
+	defer cleanup()
+	client, stop := startRoleGRPCTestServer(t, s.Pool)
+	defer stop()
+
+	spaceID, _, actorID := bootstrapRoleManagerAtPositionTwo(t, s)
+	_, err := s.CreateCustomRole(context.Background(), spaceID, "Equal custom target", 0, 2, nil)
+	require.NoError(t, err)
+	ids := roleIDsByName(t, s, spaceID)
+
+	for _, target := range []string{
+		permissions.RoleOwner,
+		permissions.RoleAdmin,
+		permissions.RoleModerator,
+		"Equal custom target",
+	} {
+		t.Run(target, func(t *testing.T) {
+			before := rolePositionsByID(t, s, spaceID)
+			_, err := client.ReorderRoles(ctxWithProfile(actorID), &rolev1.ReorderRolesRequest{
+				SpaceId:        spaceID.String(),
+				OrderedRoleIds: []string{ids[target].String()},
+			})
+			require.Equal(t, codes.PermissionDenied, status.Code(err))
+			requireRolePositionsUnchanged(t, s, spaceID, before)
+		})
+	}
+}
+
+// TestReorderRoles_NonOwnerCannotPromoteRoleToOwnPosition requires a role
+// manager to keep every reordered role strictly below the manager's top position.
+func TestReorderRoles_NonOwnerCannotPromoteRoleToOwnPosition(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	s, cleanup := startRoleStoreTest(t)
+	defer cleanup()
+	client, stop := startRoleGRPCTestServer(t, s.Pool)
+	defer stop()
+
+	for _, tc := range []struct {
+		name       string
+		belowCount int
+	}{
+		{name: "equal-to-actor-position", belowCount: 2},
+		{name: "above-actor-position", belowCount: 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			spaceID, ownerID, actorID := bootstrapRoleManagerAtPositionTwo(t, s)
+			target, err := s.CreateCustomRole(context.Background(), spaceID, "Promoted target", 0, 1, &ownerID)
+			require.NoError(t, err)
+			ordered := []string{target.ID.String()}
+			for i := 0; i < tc.belowCount; i++ {
+				below, err := s.CreateCustomRole(context.Background(), spaceID, fmt.Sprintf("Below target %d", i), 0, 0, &ownerID)
+				require.NoError(t, err)
+				ordered = append(ordered, below.ID.String())
+			}
+
+			before := rolePositionsByID(t, s, spaceID)
+			_, err = client.ReorderRoles(ctxWithProfile(actorID), &rolev1.ReorderRolesRequest{
+				SpaceId:        spaceID.String(),
+				OrderedRoleIds: ordered,
+			})
+			require.Equal(t, codes.PermissionDenied, status.Code(err))
+			requireRolePositionsUnchanged(t, s, spaceID, before)
+		})
+	}
+}
+
+// TestReorderRoles_MixedBatchIsDeniedAtomically verifies an otherwise editable
+// role cannot be reordered together with a protected hierarchy role.
+func TestReorderRoles_MixedBatchIsDeniedAtomically(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	s, cleanup := startRoleStoreTest(t)
+	defer cleanup()
+	client, stop := startRoleGRPCTestServer(t, s.Pool)
+	defer stop()
+
+	spaceID, ownerID, actorID := bootstrapRoleManagerAtPositionTwo(t, s)
+	custom, err := s.CreateCustomRole(context.Background(), spaceID, "Below manager", 0, 1, &ownerID)
+	require.NoError(t, err)
+	ids := roleIDsByName(t, s, spaceID)
+	before := rolePositionsByID(t, s, spaceID)
+
+	_, err = client.ReorderRoles(ctxWithProfile(actorID), &rolev1.ReorderRolesRequest{
+		SpaceId:        spaceID.String(),
+		OrderedRoleIds: []string{custom.ID.String(), ids[permissions.RoleOwner].String()},
+	})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	requireRolePositionsUnchanged(t, s, spaceID, before)
+}
+
+// TestReorderRoles_RequiresManageRolesPermission keeps authorization separate
+// from hierarchy and confirms a denied request cannot change positions.
+func TestReorderRoles_RequiresManageRolesPermission(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	s, cleanup := startRoleStoreTest(t)
+	defer cleanup()
+	client, stop := startRoleGRPCTestServer(t, s.Pool)
+	defer stop()
+
+	spaceID := uuid.New()
+	memberID := uuid.New()
+	require.NoError(t, s.BootstrapSystemRoles(context.Background(), spaceID))
+	ids := roleIDsByName(t, s, spaceID)
+	before := rolePositionsByID(t, s, spaceID)
+
+	_, err := client.ReorderRoles(ctxWithProfile(memberID), &rolev1.ReorderRolesRequest{
+		SpaceId:        spaceID.String(),
+		OrderedRoleIds: []string{ids[permissions.RoleMember].String()},
+	})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	requireRolePositionsUnchanged(t, s, spaceID, before)
+}
+
+// TestReorderRoles_MalformedOrWrongSpaceLeavesPositionsUnchanged requires the
+// service to validate every supplied role before the store transaction begins.
+func TestReorderRoles_MalformedOrWrongSpaceLeavesPositionsUnchanged(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	s, cleanup := startRoleStoreTest(t)
+	defer cleanup()
+	client, stop := startRoleGRPCTestServer(t, s.Pool)
+	defer stop()
+
+	spaceID, ownerID, _ := bootstrapRoleManagerAtPositionTwo(t, s)
+	ids := roleIDsByName(t, s, spaceID)
+	otherSpaceID := uuid.New()
+	require.NoError(t, s.BootstrapSystemRoles(context.Background(), otherSpaceID))
+	otherIDs := roleIDsByName(t, s, otherSpaceID)
+
+	for _, tc := range []struct {
+		name string
+		ids  []string
+	}{
+		{name: "malformed-role-id", ids: []string{ids[permissions.RoleMember].String(), "not-a-uuid"}},
+		{name: "role-from-another-space", ids: []string{ids[permissions.RoleMember].String(), otherIDs[permissions.RoleMember].String()}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			before := rolePositionsByID(t, s, spaceID)
+			_, err := client.ReorderRoles(ctxWithProfile(ownerID), &rolev1.ReorderRolesRequest{
+				SpaceId:        spaceID.String(),
+				OrderedRoleIds: tc.ids,
+			})
+			require.Equal(t, codes.InvalidArgument, status.Code(err))
+			requireRolePositionsUnchanged(t, s, spaceID, before)
+		})
+	}
 }
 
 func TestGetEffectivePermissions_ReturnsMask(t *testing.T) {

@@ -169,6 +169,8 @@ func rateLimitGroup(method, path string) string {
 		return "BotRoleOps"
 	case (method == http.MethodPost || method == http.MethodGet) && strings.HasPrefix(path, "/api/v1/bots/me/"):
 		return "BotAPI"
+	case method == http.MethodPatch && isBotMessageEditPath(path):
+		return "BotAPI"
 	case method == http.MethodPost && strings.HasPrefix(path, "/api/v1/bots/"):
 		return "BotAPI"
 	case method == http.MethodPut && path == "/api/v1/auth/e2e-key-backup":
@@ -182,6 +184,15 @@ func rateLimitGroup(method, path string) string {
 	default:
 		return ""
 	}
+}
+
+func isBotMessageEditPath(path string) bool {
+	const prefix = "/api/v1/bots/me/messages/"
+	if !strings.HasPrefix(path, prefix) {
+		return false
+	}
+	messageID := strings.TrimPrefix(path, prefix)
+	return messageID != "" && !strings.Contains(messageID, "/")
 }
 
 func rateLimitRetryAfterSeconds(group string) int {

@@ -25,6 +25,8 @@ type gatewayTestOptions struct {
 	requestIDGenerator func() string
 	tokenValidator     tokenValidator
 	tokenBlacklist     tokenBlacklist
+	sessionEpochStrict bool
+	sessionEpochFloor  sessionEpochFloor
 	rateLimiter        rateLimiter
 	trustedProxyCIDRs  []string
 	cors               corsConfig
@@ -55,6 +57,8 @@ func newGatewayForContract(_ *testing.T, options gatewayTestOptions) http.Handle
 		requestIDGenerator: options.requestIDGenerator,
 		tokenValidator:     options.tokenValidator,
 		tokenBlacklist:     options.tokenBlacklist,
+		sessionEpochStrict: options.sessionEpochStrict,
+		sessionEpochFloor:  options.sessionEpochFloor,
 		rateLimiter:        options.rateLimiter,
 		trustedProxyCIDRs:  options.trustedProxyCIDRs,
 		cors:               options.cors,

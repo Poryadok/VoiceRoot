@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/messages_client.dart';
+import 'package:voice_frontend/gen/voice/messaging/v1/messaging.pb.dart'
+    as messaging_pb;
 
 import 'support/gateway_test_client.dart';
 
@@ -13,6 +15,174 @@ void main() {
   const auth = 'Bearer access-token';
 
   group('VoiceMessagesClient.getMessages', () {
+    test(
+      'maps deleted dm peer state without adding a message or changing paging',
+      () async {
+        final mock = MockClient((req) async {
+          expect(req.method, 'GET');
+          expect(req.url.path, '/api/v1/messages');
+          return http.Response(
+            jsonEncode({
+              'message_list': {
+                'messages': [
+                  {
+                    'id': 'msg-1',
+                    'chat': {'id': 'chat-1'},
+                    'sender_profile_id': 'profile-peer',
+                    'content': 'History survives',
+                    'created_at': '2024-01-01T00:00:00Z',
+                  },
+                ],
+                'next_cursor': 'cursor-older',
+                'has_more': true,
+              },
+              'dm_peer_state': 'DM_PEER_STATE_DELETED',
+            }),
+            200,
+          );
+        });
+        final client = VoiceMessagesClient(
+          gateway: gatewayHttpForTest(mock, config: config),
+        );
+
+        final result = await client.getMessages(
+          authorization: auth,
+          chatId: 'chat-1',
+        );
+
+        expect(result, isA<MessagesApiOk<MessageListData>>());
+        final data = (result as MessagesApiOk<MessageListData>).data;
+        expect(
+          data.dmPeerState,
+          messaging_pb.DmPeerState.DM_PEER_STATE_DELETED,
+        );
+        expect(data.messages, hasLength(1));
+        expect(data.messages.single.id, 'msg-1');
+        expect(data.messages.single.messageKind, VoiceMessageKind.regular);
+        expect(data.nextCursor, 'cursor-older');
+        expect(data.hasMore, isTrue);
+      },
+    );
+
+    test('omitted dm peer state is not interpreted as deleted', () async {
+      final mock = MockClient((_) async {
+        return http.Response(
+          jsonEncode({
+            'message_list': {
+              'messages': [],
+              'next_cursor': 'cursor-next',
+              'has_more': true,
+            },
+          }),
+          200,
+        );
+      });
+      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+
+      final result = await client.getMessages(
+        authorization: auth,
+        chatId: 'chat-1',
+      );
+
+      final data = (result as MessagesApiOk<MessageListData>).data;
+      expect(data.dmPeerState, isNull);
+      expect(data.messages, isEmpty);
+      expect(data.nextCursor, 'cursor-next');
+      expect(data.hasMore, isTrue);
+    });
+
+    test('unspecified dm peer state is not interpreted as deleted', () async {
+      final mock = MockClient((_) async {
+        return http.Response(
+          jsonEncode({
+            'message_list': {'messages': [], 'has_more': false},
+            'dm_peer_state': 'DM_PEER_STATE_UNSPECIFIED',
+          }),
+          200,
+        );
+      });
+      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+
+      final result = await client.getMessages(
+        authorization: auth,
+        chatId: 'chat-1',
+      );
+
+      final data = (result as MessagesApiOk<MessageListData>).data;
+      expect(
+        data.dmPeerState,
+        messaging_pb.DmPeerState.DM_PEER_STATE_UNSPECIFIED,
+      );
+      expect(
+        data.dmPeerState,
+        isNot(equals(messaging_pb.DmPeerState.DM_PEER_STATE_DELETED)),
+      );
+      expect(data.messages, isEmpty);
+    });
+
+    test('thread history does not consume dm peer state', () async {
+      final mock = MockClient((req) async {
+        expect(req.url.path, '/api/v1/messages/thread');
+        return http.Response(
+          jsonEncode({
+            'message_list': {
+              'messages': [
+                {
+                  'id': 'reply-1',
+                  'chat': {'id': 'chat-1'},
+                  'sender_profile_id': 'profile-peer',
+                  'content': 'Reply',
+                },
+              ],
+            },
+          }),
+          200,
+        );
+      });
+      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+
+      final result = await client.getThreadMessages(
+        authorization: auth,
+        chatId: 'chat-1',
+        threadParentId: 'msg-1',
+      );
+
+      final data = (result as MessagesApiOk<MessageListData>).data;
+      expect(data.dmPeerState, isNull);
+      expect(data.messages.single.id, 'reply-1');
+    });
+
+    test('pinned history does not consume dm peer state', () async {
+      final mock = MockClient((req) async {
+        expect(req.url.path, '/api/v1/chats/chat-1/pinned-messages');
+        return http.Response(
+          jsonEncode({
+            'message_list': {
+              'messages': [
+                {
+                  'id': 'pinned-1',
+                  'chat': {'id': 'chat-1'},
+                  'sender_profile_id': 'profile-peer',
+                  'content': 'Pinned',
+                },
+              ],
+            },
+          }),
+          200,
+        );
+      });
+      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+
+      final result = await client.getPinnedMessages(
+        authorization: auth,
+        chatId: 'chat-1',
+      );
+
+      final data = (result as MessagesApiOk<MessageListData>).data;
+      expect(data.dmPeerState, isNull);
+      expect(data.messages.single.id, 'pinned-1');
+    });
+
     test('GET /api/v1/messages with chat_id and after_message_id', () async {
       final mock = MockClient((req) async {
         expect(req.method, 'GET');

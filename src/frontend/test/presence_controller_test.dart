@@ -38,6 +38,7 @@ void main() {
               data: {
                 'profile_id': 'peer-1',
                 'status': 'dnd',
+                'custom_status': '🎧 deep focus',
                 'last_seen': '2026-06-02T18:30:00Z',
               },
             ),
@@ -57,9 +58,60 @@ void main() {
 
     expect(container.read(presenceProvider('peer-1'))?.status, 'dnd');
     expect(
+      container.read(presenceProvider('peer-1'))?.customStatus,
+      '🎧 deep focus',
+    );
+    expect(
       container.read(presenceProvider('peer-1'))?.lastSeen,
       DateTime.utc(2026, 6, 2, 18, 30),
     );
+  });
+
+  test('clears empty custom status from a live presence update', () async {
+    final container = ProviderContainer(
+      overrides: [
+        authSessionStorageProvider.overrideWithValue(
+          InMemoryAuthSessionStorage(),
+        ),
+        authControllerProvider.overrideWith(authenticatedAuthController),
+        gatewayConfigProvider.overrideWithValue(
+          const GatewayConfig(baseUrl: 'http://api.test'),
+        ),
+        httpClientProvider.overrideWithValue(
+          MockClient((_) async => http.Response('{}', 404)),
+        ),
+        realtimeLinkStatusProvider.overrideWith(
+          (ref) => RealtimeLinkStatus.connected,
+        ),
+        realtimeEventProvider.overrideWith(
+          (ref) => Stream.value(
+            const RealtimeFrame(
+              op: 'presence_update',
+              data: {
+                'profile_id': 'peer-1',
+                'status': 'online',
+                'custom_status': '',
+                'last_seen': '2026-06-02T18:30:00Z',
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    container.read(presenceProvider('peer-1'));
+    for (var i = 0; i < 30; i++) {
+      await Future<void>.delayed(Duration.zero);
+      if (container.read(presenceProvider('peer-1'))?.status == 'online') {
+        break;
+      }
+    }
+
+    final presence = container.read(presenceProvider('peer-1'));
+    expect(presence?.status, 'online');
+    expect(presence?.customStatus, isNull);
+    expect(presence?.lastSeen, DateTime.utc(2026, 6, 2, 18, 30));
   });
 
   test(

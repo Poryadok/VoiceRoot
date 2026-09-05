@@ -98,6 +98,22 @@ func (s *ChatGRPC) ListChats(ctx context.Context, req *chatv1.ListChatsRequest) 
 	rows := page.Rows
 	nextCursor := page.NextCursor
 
+	peers := map[uuid.UUID]uuid.UUID{}
+	if len(rows) > 0 {
+		rawIDs := make([]uuid.UUID, 0, len(rows))
+		for _, row := range rows {
+			rawIDs = append(rawIDs, row.ID)
+		}
+		peers, err = s.DM.DMPeerProfileIDs(ctx, caller, rawIDs)
+		if err != nil {
+			return nil, status.Error(codes.Unavailable, "chat snapshot unavailable")
+		}
+	}
+	rows, err = s.filterListChatsDeletedPeerDMs(ctx, rows, peers)
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "chat snapshot unavailable")
+	}
+
 	ids := make([]uuid.UUID, 0, len(rows))
 	for _, row := range rows {
 		ids = append(ids, row.ID)
@@ -113,15 +129,6 @@ func (s *ChatGRPC) ListChats(ctx context.Context, req *chatv1.ListChatsRequest) 
 			extras = map[uuid.UUID]ListChatExtra{}
 		}
 	}
-
-	peers := map[uuid.UUID]uuid.UUID{}
-	if len(ids) > 0 {
-		peers, err = s.DM.DMPeerProfileIDs(ctx, caller, ids)
-		if err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
-	}
-	rows = s.filterListChatsDeletedPeerDMs(ctx, rows, peers)
 
 	items := make([]*chatv1.ChatListItem, 0, len(rows))
 	for _, row := range rows {

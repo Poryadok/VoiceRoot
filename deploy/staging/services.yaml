@@ -30,9 +30,6 @@ spec:
             - {name: SPRING_DATASOURCE_URL, value: "jdbc:postgresql://voice-postgres:5432/auth_db"}
             - {name: SPRING_DATASOURCE_USERNAME, valueFrom: {configMapKeyRef: {name: voice-app-config, key: POSTGRES_USER}}}
             - {name: SPRING_DATASOURCE_PASSWORD, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: POSTGRES_PASSWORD}}}
-            - {name: AUTH_USER_DB_JDBC_URL, value: "jdbc:postgresql://voice-postgres:5432/user_db"}
-            - {name: AUTH_USER_DB_USERNAME, valueFrom: {configMapKeyRef: {name: voice-app-config, key: POSTGRES_USER}}}
-            - {name: AUTH_USER_DB_PASSWORD, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: POSTGRES_PASSWORD}}}
             - {name: AUTH_FLYWAY_ENABLED, value: "false"}
             - {name: JAVA_TOOL_OPTIONS, value: "-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=25.0"}
             - {name: SPRING_DATA_REDIS_HOST, value: voice-redis}
@@ -50,6 +47,7 @@ spec:
             - {name: AUTH_RESEND_API_KEY, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: AUTH_RESEND_API_KEY, optional: true}}}
             - {name: AUTH_RESEND_FROM, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: AUTH_RESEND_FROM, optional: true}}}
             - {name: AUTH_TOTP_ENCRYPTION_KEY, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: AUTH_TOTP_ENCRYPTION_KEY}}}
+            - {name: ACCOUNT_DELETE_TOKEN_SECRET, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: ACCOUNT_DELETE_TOKEN_SECRET}}}
           volumeMounts:
             - {name: jwt-key, mountPath: /run/jwt.pem, subPath: jwt.pem, readOnly: true}
           startupProbe: {httpGet: {path: /health, port: http}, periodSeconds: 10, failureThreshold: 60}

@@ -964,10 +964,14 @@ class PresenceChange extends $pb.GeneratedMessage {
   factory PresenceChange({
     $core.String? profileId,
     $core.String? status,
+    $core.String? oldStatus,
+    $core.String? newStatus,
   }) {
     final result = create();
     if (profileId != null) result.profileId = profileId;
     if (status != null) result.status = status;
+    if (oldStatus != null) result.oldStatus = oldStatus;
+    if (newStatus != null) result.newStatus = newStatus;
     return result;
   }
 
@@ -987,6 +991,8 @@ class PresenceChange extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'profileId')
     ..aOS(2, _omitFieldNames ? '' : 'status')
+    ..aOS(3, _omitFieldNames ? '' : 'oldStatus')
+    ..aOS(4, _omitFieldNames ? '' : 'newStatus')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1017,6 +1023,7 @@ class PresenceChange extends $pb.GeneratedMessage {
   @$pb.TagNumber(1)
   void clearProfileId() => $_clearField(1);
 
+  /// Legacy current status for existing consumers; equal to new_status.
   @$pb.TagNumber(2)
   $core.String get status => $_getSZ(1);
   @$pb.TagNumber(2)
@@ -1025,6 +1032,25 @@ class PresenceChange extends $pb.GeneratedMessage {
   $core.bool hasStatus() => $_has(1);
   @$pb.TagNumber(2)
   void clearStatus() => $_clearField(2);
+
+  /// Empty when this is the first live observation for a profile.
+  @$pb.TagNumber(3)
+  $core.String get oldStatus => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set oldStatus($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasOldStatus() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearOldStatus() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get newStatus => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set newStatus($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasNewStatus() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearNewStatus() => $_clearField(4);
 }
 
 enum SocialStreamEvent_Payload {
@@ -3089,6 +3115,7 @@ enum ChatStreamEvent_Payload {
   spaceMemberLeft,
   spaceUpdated,
   spaceDeleted,
+  dmPeerDeleted,
   notSet
 }
 
@@ -3105,6 +3132,7 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
     SpaceMemberLeft? spaceMemberLeft,
     SpaceUpdated? spaceUpdated,
     SpaceDeleted? spaceDeleted,
+    DmPeerDeleted? dmPeerDeleted,
   }) {
     final result = create();
     if (eventId != null) result.eventId = eventId;
@@ -3119,6 +3147,7 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
     if (spaceMemberLeft != null) result.spaceMemberLeft = spaceMemberLeft;
     if (spaceUpdated != null) result.spaceUpdated = spaceUpdated;
     if (spaceDeleted != null) result.spaceDeleted = spaceDeleted;
+    if (dmPeerDeleted != null) result.dmPeerDeleted = dmPeerDeleted;
     return result;
   }
 
@@ -3142,6 +3171,7 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
     16: ChatStreamEvent_Payload.spaceMemberLeft,
     17: ChatStreamEvent_Payload.spaceUpdated,
     18: ChatStreamEvent_Payload.spaceDeleted,
+    19: ChatStreamEvent_Payload.dmPeerDeleted,
     0: ChatStreamEvent_Payload.notSet
   };
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
@@ -3149,7 +3179,7 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
       package:
           const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
       createEmptyInstance: create)
-    ..oo(0, [10, 11, 12, 13, 14, 15, 16, 17, 18])
+    ..oo(0, [10, 11, 12, 13, 14, 15, 16, 17, 18, 19])
     ..aOS(1, _omitFieldNames ? '' : 'eventId')
     ..aOM<$0.Timestamp>(2, _omitFieldNames ? '' : 'occurredAt',
         subBuilder: $0.Timestamp.create)
@@ -3171,6 +3201,8 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
         subBuilder: SpaceUpdated.create)
     ..aOM<SpaceDeleted>(18, _omitFieldNames ? '' : 'spaceDeleted',
         subBuilder: SpaceDeleted.create)
+    ..aOM<DmPeerDeleted>(19, _omitFieldNames ? '' : 'dmPeerDeleted',
+        subBuilder: DmPeerDeleted.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3201,6 +3233,7 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(16)
   @$pb.TagNumber(17)
   @$pb.TagNumber(18)
+  @$pb.TagNumber(19)
   ChatStreamEvent_Payload whichPayload() =>
       _ChatStreamEvent_PayloadByTag[$_whichOneof(0)]!;
   @$pb.TagNumber(10)
@@ -3212,6 +3245,7 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(16)
   @$pb.TagNumber(17)
   @$pb.TagNumber(18)
+  @$pb.TagNumber(19)
   void clearPayload() => $_clearField($_whichOneof(0));
 
   @$pb.TagNumber(1)
@@ -3332,6 +3366,17 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
   void clearSpaceDeleted() => $_clearField(18);
   @$pb.TagNumber(18)
   SpaceDeleted ensureSpaceDeleted() => $_ensure(10);
+
+  @$pb.TagNumber(19)
+  DmPeerDeleted get dmPeerDeleted => $_getN(11);
+  @$pb.TagNumber(19)
+  set dmPeerDeleted(DmPeerDeleted value) => $_setField(19, value);
+  @$pb.TagNumber(19)
+  $core.bool hasDmPeerDeleted() => $_has(11);
+  @$pb.TagNumber(19)
+  void clearDmPeerDeleted() => $_clearField(19);
+  @$pb.TagNumber(19)
+  DmPeerDeleted ensureDmPeerDeleted() => $_ensure(11);
 }
 
 class ChatCreated extends $pb.GeneratedMessage {
@@ -3995,6 +4040,76 @@ class SpaceDeleted extends $pb.GeneratedMessage {
   $core.bool hasSpaceId() => $_has(0);
   @$pb.TagNumber(1)
   void clearSpaceId() => $_clearField(1);
+}
+
+/// Targeted acceleration for a surviving participant of a DM. The deleted
+/// account or profile identity is intentionally absent from this payload.
+class DmPeerDeleted extends $pb.GeneratedMessage {
+  factory DmPeerDeleted({
+    $core.String? chatId,
+    $core.String? recipientProfileId,
+  }) {
+    final result = create();
+    if (chatId != null) result.chatId = chatId;
+    if (recipientProfileId != null)
+      result.recipientProfileId = recipientProfileId;
+    return result;
+  }
+
+  DmPeerDeleted._();
+
+  factory DmPeerDeleted.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory DmPeerDeleted.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'DmPeerDeleted',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'chatId')
+    ..aOS(2, _omitFieldNames ? '' : 'recipientProfileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DmPeerDeleted clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DmPeerDeleted copyWith(void Function(DmPeerDeleted) updates) =>
+      super.copyWith((message) => updates(message as DmPeerDeleted))
+          as DmPeerDeleted;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static DmPeerDeleted create() => DmPeerDeleted._();
+  @$core.override
+  DmPeerDeleted createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static DmPeerDeleted getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<DmPeerDeleted>(create);
+  static DmPeerDeleted? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get chatId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set chatId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasChatId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearChatId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get recipientProfileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set recipientProfileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasRecipientProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearRecipientProfileId() => $_clearField(2);
 }
 
 enum VoiceStreamEvent_Payload {

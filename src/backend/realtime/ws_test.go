@@ -18,7 +18,7 @@ import (
 )
 
 func testRealtimeHandler(tv tokenValidator, lister chatBootstrapLister) http.Handler {
-	return newServiceHandler(serviceName, tv, lister, newWSHub(), nil, "test-instance", readinessDeps{})
+	return newServiceHandler(serviceName, tv, lister, permitAllTestSubscriptions(newWSHub()), nil, "test-instance", readinessDeps{})
 }
 
 func wsEndpoint(t *testing.T, srv *httptest.Server) string {
@@ -37,6 +37,17 @@ func wsEndpoint(t *testing.T, srv *httptest.Server) string {
 }
 
 type staticTokenValidator map[string]voicejwt.Claims
+
+type allowAllChatSubscriptionChecker struct{}
+
+func (allowAllChatSubscriptionChecker) AuthorizeChat(context.Context, string, string, string) error {
+	return nil
+}
+
+func permitAllTestSubscriptions(hub *wsHub) *wsHub {
+	hub.subscriptionChecker = allowAllChatSubscriptionChecker{}
+	return hub
+}
 
 func (v staticTokenValidator) Validate(r *http.Request) (voicejwt.Claims, string) {
 	const prefix = "Bearer "
@@ -519,7 +530,7 @@ func TestWSUnsubscribeACK(t *testing.T) {
 
 func TestWSTypingFanoutTwoConnections(t *testing.T) {
 	t.Parallel()
-	hub := newWSHub()
+	hub := permitAllTestSubscriptions(newWSHub())
 	v := staticTokenValidator{
 		"t1": {UserID: "a", ProfileID: "p1"},
 		"t2": {UserID: "b", ProfileID: "p2"},
@@ -681,6 +692,107 @@ func TestWSTypingThrottleAndIdleStop(t *testing.T) {
 	}
 	if body.Kind != "stop" {
 		t.Fatalf("kind = %q, want stop", body.Kind)
+	}
+}
+
+// UUID wire spelling is not an identity boundary: a client may send the same
+// RFC4122 chat ID in a different case without escaping the per-chat typing
+// throttle or creating a second idle timer.
+func TestWSTypingThrottleAndIdleStopUseCanonicalChatID(t *testing.T) {
+	oldIdle := typingIdleTimeout
+	typingIdleTimeout = 150 * time.Millisecond
+	t.Cleanup(func() { typingIdleTimeout = oldIdle })
+
+	expectedChatID := "123e4567-e89b-42d3-a456-426614174000"
+	uppercaseChatID := strings.ToUpper(expectedChatID)
+	srv := httptest.NewServer(testRealtimeHandler(staticTokenValidator{
+		"sender": {UserID: "sender-account", ProfileID: "sender-profile"},
+		"peer":   {UserID: "peer-account", ProfileID: "peer-profile"},
+	}, nil))
+	t.Cleanup(srv.Close)
+
+	dial := func(token, profileID string) *websocket.Conn {
+		t.Helper()
+		headers := wsUpgradeHeaders(token)
+		headers.Set("X-Profile-Id", profileID)
+		conn, _, err := websocket.DefaultDialer.Dial(wsEndpoint(t, srv), headers)
+		if err != nil {
+			t.Fatalf("dial %s: %v", token, err)
+		}
+		t.Cleanup(func() { _ = conn.Close() })
+		return conn
+	}
+	read := func(conn *websocket.Conn) wsEnvelope {
+		t.Helper()
+		_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+		_, data, err := conn.ReadMessage()
+		if err != nil {
+			t.Fatalf("read websocket message: %v", err)
+		}
+		var env wsEnvelope
+		if err := json.Unmarshal(data, &env); err != nil {
+			t.Fatalf("decode websocket message: %v", err)
+		}
+		return env
+	}
+	readTyping := func(conn *websocket.Conn) struct {
+		ChatID string
+		Kind   string
+	} {
+		t.Helper()
+		env := read(conn)
+		if env.Op != "typing" {
+			t.Fatalf("fan-out op = %+v, want typing", env)
+		}
+		var body struct {
+			ChatID string `json:"chat_id"`
+			Kind   string `json:"kind"`
+		}
+		if err := json.Unmarshal(env.D, &body); err != nil {
+			t.Fatalf("decode typing body: %v", err)
+		}
+		return struct {
+			ChatID string
+			Kind   string
+		}{ChatID: body.ChatID, Kind: body.Kind}
+	}
+
+	sender := dial("sender", "sender-profile")
+	peer := dial("peer", "peer-profile")
+	if got := read(sender); got.Op != "hello" {
+		t.Fatalf("sender hello = %+v", got)
+	}
+	if got := read(peer); got.Op != "hello" {
+		t.Fatalf("peer hello = %+v", got)
+	}
+	for _, conn := range []*websocket.Conn{sender, peer} {
+		if err := conn.WriteJSON(map[string]any{"op": "subscribe", "d": map[string]any{"chat_id": expectedChatID}}); err != nil {
+			t.Fatalf("subscribe: %v", err)
+		}
+		if got := read(conn); got.Op != "subscribe_ack" {
+			t.Fatalf("subscribe ack = %+v", got)
+		}
+	}
+
+	if err := sender.WriteJSON(map[string]any{"op": "typing_start", "d": map[string]any{"chat_id": expectedChatID}}); err != nil {
+		t.Fatalf("canonical typing_start: %v", err)
+	}
+	if got := readTyping(peer); got.Kind != "start" || canonicalChatID(got.ChatID) != expectedChatID {
+		t.Fatalf("first typing body = %+v, want start for UUID %q", got, expectedChatID)
+	}
+	if err := sender.WriteJSON(map[string]any{"op": "typing_start", "d": map[string]any{"chat_id": uppercaseChatID}}); err != nil {
+		t.Fatalf("uppercase typing_start: %v", err)
+	}
+	// The next and only fan-out must be the renewed idle stop. A second start
+	// means the upper-case spelling allocated an independent throttle/timer key.
+	if got := readTyping(peer); got.Kind != "stop" {
+		t.Fatalf("second typing kind = %q, want only idle stop", got.Kind)
+	} else if canonicalChatID(got.ChatID) != expectedChatID {
+		t.Fatalf("idle typing chat_id = %q, want UUID-equivalent %q", got.ChatID, expectedChatID)
+	}
+	_ = peer.SetReadDeadline(time.Now().Add(typingIdleTimeout + 150*time.Millisecond))
+	if _, _, err := peer.ReadMessage(); err == nil {
+		t.Fatal("received more than one idle stop for UUID-equivalent typing starts")
 	}
 }
 

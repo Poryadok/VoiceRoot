@@ -7,6 +7,7 @@ global:
   - .github/workflows/**
   - .github/ci/**
   - scripts/ci/**
+  - src/backend/scripts/docker-go-mod-download.sh
   - scripts/staging/**
   - scripts/prod/**
   - docker-compose.yml
@@ -15,6 +16,30 @@ global:
   - buf.yaml
   - buf.lock
   - buf.gen*.yaml
+
+a1_e2e:
+  - Makefile
+  - .github/workflows/ci.yml
+  - .github/ci/path-filters.yml
+  - .github/ci/e2e-features.yml
+  - src/backend/auth/**
+  - src/backend/user/**
+  - src/backend/chat/**
+  - src/backend/messaging/**
+  - src/backend/social/**
+  - src/backend/file/**
+  - src/backend/gateway/**
+  - src/backend/realtime/**
+  - src/backend/pkg/**
+  - src/frontend/**
+  - src/backend/migrations/**
+  - src/backend/scripts/**
+  - protos/**
+  - docker/**
+  - docker-compose*.yml
+  - scripts/ci/compose-a1*
+  - scripts/ci/compose-file-attachment-restart-proof.sh
+  - scripts/ci/e2e-manifest*
 
 staging_infra:
   - deploy/staging/infra.yaml
@@ -37,6 +62,7 @@ frontend:
 
 auth:
   - src/backend/auth/**
+  - src/backend/migrations/auth_db/**
 
 developer-portal:
   - src/developer-portal/**

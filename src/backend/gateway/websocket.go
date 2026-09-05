@@ -24,7 +24,8 @@ func (g *gateway) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	var claims tokenClaims
 	var upstreamToken string
-	if ticket := strings.TrimSpace(r.URL.Query().Get("ticket")); ticket != "" {
+	ticket := strings.TrimSpace(r.URL.Query().Get("ticket"))
+	if ticket != "" {
 		record, ok, err := g.consumeWsTicket(r.Context(), ticket)
 		if err != nil {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "ws_ticket_unavailable"})
@@ -34,8 +35,23 @@ func (g *gateway) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_ticket"})
 			return
 		}
-		claims = record.claims()
-		upstreamToken = record.UpstreamToken
+		upstreamToken = strings.TrimSpace(record.UpstreamToken)
+		authRequest := r.Clone(r.Context())
+		authRequest.Header = r.Header.Clone()
+		if authRequest.Header == nil {
+			authRequest.Header = make(http.Header)
+		}
+		authRequest.Header.Set("Authorization", "Bearer "+upstreamToken)
+		var code string
+		claims, code = g.authenticate(authRequest)
+		if code != "" {
+			status := http.StatusUnauthorized
+			if code == "auth_unavailable" {
+				status = http.StatusServiceUnavailable
+			}
+			writeJSON(w, status, map[string]string{"error": code})
+			return
+		}
 	} else {
 		prepareWebSocketUpstreamAuth(r)
 		var code string
@@ -50,7 +66,14 @@ func (g *gateway) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		}
 		upstreamToken = voicejwt.BearerToken(r)
 	}
-	setWebSocketUpstreamAuth(r, upstreamToken)
+	if ticket != "" {
+		if r.Header == nil {
+			r.Header = make(http.Header)
+		}
+		r.Header.Set("Authorization", "Bearer "+upstreamToken)
+	} else {
+		setWebSocketUpstreamAuth(r, upstreamToken)
+	}
 	applyClaims(r, claims)
 	if g.config.realtimeUpstream == nil {
 		http.NotFound(w, r)

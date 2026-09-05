@@ -48,41 +48,54 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 	if w == nil || w.Games == nil || w.Queue == nil || w.Sessions == nil || w.Matches == nil {
 		return nil
 	}
-	res, err := w.Games.List(ctx, store.ListGamesParams{PageSize: 100, Status: store.StatusActive})
-	if err != nil {
-		return err
-	}
-	spaceIDs, err := w.Sessions.ListDistinctSearchingSpaceIDs(ctx)
-	if err != nil {
-		return err
-	}
-	for _, game := range res.Games {
-		cfg, err := config.Parse(game.ConfigRaw)
+	var spaceIDs []uuid.UUID
+	spaceIDsLoaded := false
+	cursor := ""
+	for {
+		res, err := w.Games.List(ctx, store.ListGamesParams{Cursor: cursor, PageSize: 100, Status: store.StatusActive})
 		if err != nil {
-			continue
+			return err
 		}
-		for _, mode := range cfg.Modes {
-			for _, region := range cfg.Regions {
-				if err := w.tryMatchQueue(ctx, nil, game.ID, mode, region, cfg); err != nil && w.Logger != nil {
-					w.Logger.Warn("matcher queue pass failed",
-						slog.String("game_id", game.ID.String()),
-						slog.String("mode", mode.Name),
-						slog.String("region", region),
-						slog.Any("error", err))
-				}
-				for i := range spaceIDs {
-					spaceID := spaceIDs[i]
-					if err := w.tryMatchQueue(ctx, &spaceID, game.ID, mode, region, cfg); err != nil && w.Logger != nil {
-						w.Logger.Warn("matcher space queue pass failed",
-							slog.String("space_id", spaceID.String()),
+		if !spaceIDsLoaded {
+			spaceIDs, err = w.Sessions.ListDistinctSearchingSpaceIDs(ctx)
+			if err != nil {
+				return err
+			}
+			spaceIDsLoaded = true
+		}
+		for _, game := range res.Games {
+			cfg, err := config.Parse(game.ConfigRaw)
+			if err != nil {
+				continue
+			}
+			for _, mode := range cfg.Modes {
+				for _, region := range cfg.Regions {
+					if err := w.tryMatchQueue(ctx, nil, game.ID, mode, region, cfg); err != nil && w.Logger != nil {
+						w.Logger.Warn("matcher queue pass failed",
 							slog.String("game_id", game.ID.String()),
 							slog.String("mode", mode.Name),
 							slog.String("region", region),
 							slog.Any("error", err))
 					}
+					for i := range spaceIDs {
+						spaceID := spaceIDs[i]
+						if err := w.tryMatchQueue(ctx, &spaceID, game.ID, mode, region, cfg); err != nil && w.Logger != nil {
+							w.Logger.Warn("matcher space queue pass failed",
+								slog.String("space_id", spaceID.String()),
+								slog.String("game_id", game.ID.String()),
+								slog.String("mode", mode.Name),
+								slog.String("region", region),
+								slog.Any("error", err))
+						}
+					}
 				}
 			}
 		}
+		nextCursor := res.NextCursor
+		if nextCursor == "" || nextCursor == cursor {
+			break
+		}
+		cursor = nextCursor
 	}
 	return nil
 }

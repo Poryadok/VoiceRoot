@@ -109,24 +109,6 @@ if ! docker compose exec -T redis redis-cli ping 2>/dev/null | grep -q PONG; the
   exit 1
 fi
 
-if ! docker compose exec -T postgres psql -U voice -d user_db -tAc "SELECT to_regclass('public.profiles')" | grep -q profiles; then
-  echo "Applying user_db schema for smoke..."
-  applied=0
-  for _ in $(seq 1 10); do
-    if cat "$ROOT/docker/postgres/user_db_init.sql.snippet" \
-      | docker compose exec -T postgres psql -U voice -d user_db -v ON_ERROR_STOP=1 -f -; then
-      applied=1
-      break
-    fi
-    sleep 3
-  done
-  if [[ "$applied" -ne 1 ]]; then
-    echo "Failed to apply user_db schema" >&2
-    docker compose logs postgres --tail 80 >&2 || true
-    exit 1
-  fi
-fi
-
 POSTGRES_CID=$(docker compose ps -q postgres)
 NETWORK=$(docker inspect "$POSTGRES_CID" --format '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{"\n"}}{{end}}' | head -1)
 if [[ -z "$NETWORK" ]]; then
@@ -143,9 +125,7 @@ docker run -d --name "$CONTAINER_NAME" --network "$NETWORK" \
   -e SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/auth_db \
   -e SPRING_DATASOURCE_USERNAME=voice \
   -e SPRING_DATASOURCE_PASSWORD=voice \
-  -e AUTH_USER_DB_JDBC_URL=jdbc:postgresql://postgres:5432/user_db \
-  -e AUTH_USER_DB_USERNAME=voice \
-  -e AUTH_USER_DB_PASSWORD=voice \
+  -e USER_GRPC_ADDR=user:9090 \
   -e SPRING_DATA_REDIS_HOST=redis \
   -e SPRING_DATA_REDIS_PORT=6379 \
   -e AUTH_JWT_PRIVATE_KEY_LOCATION=file:/run/jwt.pem \

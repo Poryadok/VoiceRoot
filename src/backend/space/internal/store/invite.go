@@ -14,11 +14,11 @@ import (
 )
 
 var (
-	ErrInviteNotFound      = errors.New("invite not found")
-	ErrInviteRevoked       = errors.New("invite revoked")
-	ErrInviteExpired       = errors.New("invite expired")
-	ErrInviteMaxUses       = errors.New("invite max uses reached")
-	ErrAlreadySpaceMember  = errors.New("already a space member")
+	ErrInviteNotFound     = errors.New("invite not found")
+	ErrInviteRevoked      = errors.New("invite revoked")
+	ErrInviteExpired      = errors.New("invite expired")
+	ErrInviteMaxUses      = errors.New("invite max uses reached")
+	ErrAlreadySpaceMember = errors.New("already a space member")
 )
 
 // InviteRow is a row from invites.
@@ -151,22 +151,47 @@ WHERE id = $1
 `, inviteID))
 }
 
-// RevokeInvite sets revoked_at on an invite.
-func (s *SpaceStore) RevokeInvite(ctx context.Context, inviteID uuid.UUID) error {
+// RevokeInvite revokes an invite and records the administrative action atomically.
+func (s *SpaceStore) RevokeInvite(ctx context.Context, inviteID, actorProfileID uuid.UUID) error {
 	if s == nil || s.Pool == nil {
 		return errors.New("space store: pool not configured")
 	}
-	tag, err := s.Pool.Exec(ctx, `
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var spaceID uuid.UUID
+	err = tx.QueryRow(ctx, `
+SELECT space_id
+FROM invites
+WHERE id = $1 AND revoked_at IS NULL
+FOR UPDATE
+`, inviteID).Scan(&spaceID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrInviteNotFound
+	}
+	if err != nil {
+		return err
+	}
+	tag, err := tx.Exec(ctx, `
 UPDATE invites SET revoked_at = now()
 WHERE id = $1 AND revoked_at IS NULL
 `, inviteID)
 	if err != nil {
 		return err
 	}
-	if tag.RowsAffected() == 0 {
+	if tag.RowsAffected() != 1 {
 		return ErrInviteNotFound
 	}
-	return nil
+	if _, err := tx.Exec(ctx, `
+INSERT INTO audit_log (space_id, actor_profile_id, action, target_type, target_id, details)
+VALUES ($1, $2, 'invite_revoked', 'invite', $3, '{}')
+`, spaceID, actorProfileID, inviteID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // MembershipRow is a space_members row.

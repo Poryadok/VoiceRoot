@@ -137,45 +137,42 @@ void main() {
   testWidgets('E2E image attachment decrypts thumb via provider chain', (
     tester,
   ) async {
-    await tester.runAsync(() async {
-      await tester.pumpWidget(
-        attachmentApp(
-          client: clientForMessages(
-            fileId: imageFileId,
-            ciphertext: imageCiphertext,
-            messages: [
-              {
-                'id': 'msg-e2e-1',
-                'chat': {'id': chatId},
-                'sender_profile_id': fixture.peerProfileId,
-                'content': '',
-                'attachments_json': jsonEncode([
-                  {
-                    'file_id': imageFileId,
-                    'type': 'image',
-                    'name': 'secret.png',
-                    'e2e_key_wire': imageKeyWire,
-                  },
-                ]),
-                'created_at': '2024-01-01T00:00:00Z',
-              },
-            ],
-          ),
-          extraOverrides: [
-            e2eDecryptedAttachmentThumbProvider.overrideWith(
-              (ref, request) async {
-                if (request.fileId == imageFileId) return imageThumbBytes;
-                return null;
-              },
-            ),
+    await tester.pumpWidget(
+      attachmentApp(
+        client: clientForMessages(
+          fileId: imageFileId,
+          ciphertext: imageCiphertext,
+          messages: [
+            {
+              'id': 'msg-e2e-1',
+              'chat': {'id': chatId},
+              'sender_profile_id': fixture.peerProfileId,
+              'content': '',
+              'attachments_json': jsonEncode([
+                {
+                  'file_id': imageFileId,
+                  'type': 'image',
+                  'name': 'secret.png',
+                  'e2e_key_wire': imageKeyWire,
+                },
+              ]),
+              'created_at': '2024-01-01T00:00:00Z',
+            },
           ],
         ),
-      );
-      for (var i = 0; i < 40; i++) {
-        await tester.pump(const Duration(milliseconds: 100));
-      }
-    });
+        extraOverrides: [
+          e2eDecryptedAttachmentThumbProvider.overrideWith((
+            ref,
+            request,
+          ) async {
+            if (request.fileId == imageFileId) return imageThumbBytes;
+            return null;
+          }),
+        ],
+      ),
+    );
     await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(
       find.byKey(ChatRoomPanel.attachmentPreviewKey(imageFileId)),

@@ -8,7 +8,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	"voice/backend/pkg/httpserver"
 	voicelog "voice/backend/pkg/logging"
 	"voice/backend/pkg/runtimeconfig"
 )
@@ -20,11 +19,13 @@ func main() {
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
 		addr = v
 	}
-	server := &http.Server{
-		Addr:    addr,
-		Handler: handler(),
+	server, err := newGatewayServerFromEnv(addr, func(h http.Handler) *http.Server {
+		return &http.Server{Addr: addr, Handler: h}
+	})
+	if err != nil {
+		logger.Error("invalid gateway configuration", slog.Any("error", err))
+		os.Exit(1)
 	}
-	httpserver.ApplyHTTPServerTimeouts(server)
 	errCh := make(chan error, 1)
 	logger.Info("listening", slog.String("addr", addr))
 	go func() {

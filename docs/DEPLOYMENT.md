@@ -203,6 +203,7 @@ PKCE OAuth for the Developer Portal is enabled in local compose (`developer-port
 | `AUTH_OAUTH_DEVELOPER_PORTAL_REDIRECT_URIS` | Comma-separated HTTPS callback URLs (e.g. `https://developers.voice.app/callback`) |
 | `AUTH_OAUTH_PUBLIC_API_BASE_URL` | Public Gateway URL used in authorize links |
 | `AUTH_OAUTH_AUTHORIZATION_CODE_TTL` | Authorization code lifetime (ISO-8601 duration, default `PT60S`) |
+| `ACCOUNT_DELETE_TOKEN_SECRET` | Required dedicated HMAC secret for account-delete restore tokens; at least 32 UTF-8 bytes, stored in `voice-app-secrets`, never reuse JWT/TOTP keys |
 
 Compose reference: [`docker-compose.yml`](../docker-compose.yml) `auth` service; template [`.env.example`](../.env.example) (`DEVELOPER_PORTAL_OAUTH_*`).
 

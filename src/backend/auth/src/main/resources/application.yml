@@ -1,6 +1,6 @@
 spring:
   datasource:
-    # Tests set voice.auth.jdbc.url (avoids PropertySource ordering clashes with auth.user-db.jdbc-url).
+    # Tests may override the Auth-owned database without changing deployment env.
     url: "${voice.auth.jdbc.url:${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/auth_db}}"
     username: ${SPRING_DATASOURCE_USERNAME:voice}
     password: ${SPRING_DATASOURCE_PASSWORD:voice}
@@ -17,10 +17,6 @@ spring:
 
 auth:
   persistence: jdbc
-  user-db:
-    jdbc-url: "${AUTH_USER_DB_JDBC_URL:jdbc:postgresql://localhost:5432/user_db}"
-    username: "${AUTH_USER_DB_USERNAME:${SPRING_DATASOURCE_USERNAME:voice}}"
-    password: "${AUTH_USER_DB_PASSWORD:${SPRING_DATASOURCE_PASSWORD:voice}}"
   jwt:
     issuer: voice-auth
     audience: voice-client
@@ -30,12 +26,18 @@ auth:
     private-key-location: "${AUTH_JWT_PRIVATE_KEY_LOCATION:}"
   refresh:
     ttl: P30D
+  account-deletion:
+    token-secret: "${ACCOUNT_DELETE_TOKEN_SECRET:}"
+    recovery:
+      enabled: ${AUTH_ACCOUNT_DELETION_RECOVERY_ENABLED:true}
+      interval: ${AUTH_ACCOUNT_DELETION_RECOVERY_INTERVAL:PT5S}
   redis:
     blacklist-prefix: "jwt:blacklist:"
   grpc:
     port: 9090
   user-grpc:
     addr: "${USER_GRPC_ADDR:}"
+    deadline: "${AUTH_USER_GRPC_DEADLINE:PT15S}"
   oauth:
     public-api-base-url: "${AUTH_OAUTH_PUBLIC_API_BASE_URL:http://127.0.0.1:18080}"
     twitch:

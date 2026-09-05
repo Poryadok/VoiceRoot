@@ -18,16 +18,16 @@ import (
 // ChatGRPC implements ChatService RPCs backed by chat_db (app stack: DM).
 type ChatGRPC struct {
 	chatv1.UnimplementedChatServiceServer
-	DM         DMStore
-	Profiles   UserProfileLookup
-	Blocks     AccountBlockChecker
-	Privacy    PrivacyChecker
-	Friends    ProfileFriendChecker
-	Contacts   ProfileContactChecker
+	DM                DMStore
+	Profiles          UserProfileLookup
+	Blocks            AccountBlockChecker
+	Privacy           PrivacyChecker
+	Friends           ProfileFriendChecker
+	Contacts          ProfileContactChecker
 	SpaceCoMembership SpaceCoMembershipChecker
-	ListEnrich ListChatsEnrichment // optional; Messaging S2S for preview + unread
-	DeletedAccounts AccountDeletedChecker // optional; Auth S2S hides DMs with deleted peer accounts
-	E2EPreKeyGate E2EPreKeyGate     // required for EnableChatE2E; Messaging S2S pre-key check (fail-closed)
+	ListEnrich        ListChatsEnrichment   // optional; Messaging S2S for preview + unread
+	DeletedAccounts   AccountDeletedChecker // mandatory for DM list/open gates; Auth S2S reports deleted peer accounts
+	E2EPreKeyGate     E2EPreKeyGate         // required for EnableChatE2E; Messaging S2S pre-key check (fail-closed)
 	// ChatEvents is optional; when set, new DM creation publishes to NATS JetStream (stream chat_events, subjects chat.*).
 	ChatEvents chatevents.Publisher
 	// Roles is optional; space channel slow mode checks TEXT_CHAT_SET_SLOW_MODE when set.

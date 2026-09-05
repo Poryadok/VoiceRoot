@@ -38,6 +38,6 @@ func (r *profilesVerificationEventsRecorder) PublishVerified(_ context.Context, 
 	return nil
 }
 
-func (r *profilesVerificationEventsRecorder) PublishPresenceChanged(_ context.Context, _, _ string) error {
+func (r *profilesVerificationEventsRecorder) PublishPresenceChanged(_ context.Context, _, _, _ string) error {
 	return nil
 }

@@ -18,8 +18,9 @@ import (
 )
 
 	const (
-		streamName                = "user_events"
-		subjectProfileCreated     = "user.profile_created"
+	streamName                = "user_events"
+	subjectAccountDeleted     = "user.account_deleted"
+	subjectProfileCreated     = "user.profile_created"
 		subjectProfileUpdated     = "user.profile_updated"
 		subjectProfileSwitched    = "user.profile_switched"
 		subjectProfileVerified    = "user.verified"
@@ -65,6 +66,7 @@ func NewJetStreamPublisher(natsURL string) (*JetStreamPublisher, error) {
 		}
 		p.ensureOnce.Do(func() {
 			subjects := []string{
+				subjectAccountDeleted,
 				subjectProfileCreated,
 				subjectProfileUpdated,
 				subjectProfileSwitched,
@@ -193,19 +195,24 @@ func (p *JetStreamPublisher) PublishProfileSwitched(ctx context.Context, account
 		return p.publishProto(ctx, subjectProfileVerified, env)
 	}
 
-	// PublishPresenceChanged emits user.presence_changed (docs/microservices/user-service.md).
-	func (p *JetStreamPublisher) PublishPresenceChanged(ctx context.Context, profileID, status string) error {
-		env := &eventsv1.UserStreamEvent{
+	func newPresenceChangedEvent(profileID, oldStatus, newStatus string) *eventsv1.UserStreamEvent {
+		return &eventsv1.UserStreamEvent{
 			EventId:    uuid.NewString(),
 			OccurredAt: timestamppb.New(time.Now().UTC()),
 			Payload: &eventsv1.UserStreamEvent_PresenceChange{
 				PresenceChange: &eventsv1.PresenceChange{
 					ProfileId: profileID,
-					Status:    status,
+					Status:    newStatus,
+					OldStatus: oldStatus,
+					NewStatus: newStatus,
 				},
 			},
 		}
-		return p.publishProto(ctx, subjectPresenceChanged, env)
+	}
+
+	// PublishPresenceChanged emits user.presence_changed (docs/microservices/user-service.md).
+	func (p *JetStreamPublisher) PublishPresenceChanged(ctx context.Context, profileID, oldStatus, newStatus string) error {
+		return p.publishProto(ctx, subjectPresenceChanged, newPresenceChangedEvent(profileID, oldStatus, newStatus))
 	}
 
 	// Close drains the underlying NATS connection.

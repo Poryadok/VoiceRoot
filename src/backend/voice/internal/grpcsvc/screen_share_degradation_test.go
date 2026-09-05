@@ -26,6 +26,10 @@ func (failingRoleChecker) EnsureVoiceJoin(context.Context, string, string, strin
 	return nil
 }
 
+func (failingRoleChecker) EnsureVoiceSpeak(context.Context, string, string, string) error {
+	return errors.New("role service unavailable")
+}
+
 func (failingRoleChecker) EnsureMuteOthers(context.Context, string, string, string) error {
 	return nil
 }
