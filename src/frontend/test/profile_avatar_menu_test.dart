@@ -14,6 +14,7 @@ import 'package:voice_frontend/routing/app_router.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
+import 'package:voice_frontend/state/profile_switch_coordinator.dart';
 import 'package:voice_frontend/state/subscription_providers.dart';
 import 'package:voice_frontend/ui/chat/chat_archive_screen.dart';
 import 'package:voice_frontend/ui/profile/profile_avatar_menu.dart';
@@ -32,6 +33,15 @@ class _MemoryAuthStorage implements AuthSessionStorage {
 
   @override
   Future<void> write(AuthSession session) async => _session = session;
+}
+
+class _NoopProfileSwitchRealtimeBoundary
+    implements ProfileSwitchRealtimeBoundary {
+  @override
+  Set<String> get activeSubscriptions => const {};
+
+  @override
+  Future<void> retireAndReconnect(ProfileSwitchHandoff handoff) async {}
 }
 
 void main() {
@@ -106,6 +116,9 @@ void main() {
         httpClientProvider.overrideWithValue(mock),
         authSessionStorageProvider.overrideWithValue(storage),
         realtimeAutoConnectProvider.overrideWithValue(false),
+        profileSwitchRealtimeBoundaryProvider.overrideWithValue(
+          _NoopProfileSwitchRealtimeBoundary(),
+        ),
       ],
     );
     addTearDown(container.dispose);
