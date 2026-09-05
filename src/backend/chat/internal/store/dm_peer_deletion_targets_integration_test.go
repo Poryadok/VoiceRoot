@@ -4,6 +4,7 @@ import (
 	"context"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -43,12 +44,27 @@ func callDMPeerDeletionTargets(
 		if item.Kind() == reflect.Pointer {
 			item = item.Elem()
 		}
+		require.Equal(t, reflect.Struct, item.Kind(), "target must be a struct")
 		chatID := item.FieldByName("ChatID")
 		survivorID := item.FieldByName("SurvivingProfileID")
 		require.True(t, chatID.IsValid(), "target must expose ChatID")
 		require.True(t, survivorID.IsValid(), "target must expose SurvivingProfileID")
 		require.Equal(t, reflect.TypeOf(uuid.UUID{}), chatID.Type())
 		require.Equal(t, reflect.TypeOf(uuid.UUID{}), survivorID.Type())
+		publicFields := make([]string, 0, item.NumField())
+		for fieldIndex := 0; fieldIndex < item.NumField(); fieldIndex++ {
+			field := item.Type().Field(fieldIndex)
+			if field.PkgPath == "" {
+				publicFields = append(publicFields, field.Name)
+			}
+		}
+		require.ElementsMatch(t, []string{"ChatID", "SurvivingProfileID"}, publicFields,
+			"target must not expose deleted-account/profile identity")
+		for _, fieldName := range publicFields {
+			lower := strings.ToLower(fieldName)
+			require.NotContains(t, lower, "deleted")
+			require.NotContains(t, lower, "account")
+		}
 		out = append(out, dmPeerDeletionTargetForTest{
 			ChatID:             chatID.Interface().(uuid.UUID),
 			SurvivingProfileID: survivorID.Interface().(uuid.UUID),
@@ -116,7 +132,6 @@ VALUES ($1, $2, 'member', 'main')
 		dm,
 		[]uuid.UUID{deletedProfileB, deletedProfileA},
 	)
-	sortDMPeerDeletionTargets(got)
 
 	expected := []dmPeerDeletionTargetForTest{
 		{ChatID: dmA.ID, SurvivingProfileID: survivorA},
@@ -130,8 +145,8 @@ VALUES ($1, $2, 'member', 'main')
 }
 
 // TestListDMPeerDeletionTargets_DuplicateUnorderedProfilesReturnStableUniqueRows
-// requires deterministic ordering and set semantics for the account profile
-// resolution result. It also prevents duplicate live fanout targets.
+// requires the same canonical order for duplicate/unordered account profile
+// inputs. It also prevents duplicate live fanout targets.
 func TestListDMPeerDeletionTargets_DuplicateUnorderedProfilesReturnStableUniqueRows(t *testing.T) {
 	if testing.Short() {
 		t.Skip("requires PostgreSQL")
@@ -169,8 +184,6 @@ func TestListDMPeerDeletionTargets_DuplicateUnorderedProfilesReturnStableUniqueR
 		{ChatID: dmB.ID, SurvivingProfileID: survivorB},
 	}
 	sortDMPeerDeletionTargets(expected)
-	sortDMPeerDeletionTargets(first)
-	sortDMPeerDeletionTargets(second)
 	require.Equal(t, expected, first)
 	require.Equal(t, expected, second)
 }
