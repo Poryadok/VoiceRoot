@@ -22,9 +22,9 @@ import (
 
 // TestComposeFileAttachmentRestartProof_live is deliberately split into two
 // externally orchestrated phases. The compose runner executes "prepare",
-// restarts only the File container, then executes "verify" using the state
-// file left by prepare. This test must remain an HTTP client and must never
-// invoke Docker itself.
+// restarts File and Messaging, then executes "verify" using the state file
+// left by prepare. This test must remain an HTTP client and must never invoke
+// Docker itself.
 //
 // Required runner environment:
 //

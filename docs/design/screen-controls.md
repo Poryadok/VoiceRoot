@@ -354,7 +354,7 @@ Persistent strip directly under chat header (above timeline):
 
 ### 3.3 Message bubbles
 
-**Penpot:** bubbles on `Screen / Chat / Room`; system rows (missed call, user deleted) as `Screen / Chat / Room` system-bubble variants
+**Penpot:** bubbles on `Screen / Chat / Room`; missed-call rows use `Screen / Chat / Room` system-bubble variants. Account deletion uses the local terminal marker in #18, not a `Message` or system row.
 
 | # | Control | Layout | Visible when | Tap action |
 |---|---------|--------|-------------|------------|
@@ -380,7 +380,7 @@ Persistent strip directly under chat header (above timeline):
 | 15 | Forwarded-from attribution | H+V | Message was forwarded with attribution enabled | — (display banner: "Forwarded from [Name]"; if source account deleted -> "Deleted account") |
 | 16 | Sender premium badge ★ | H+V | Sender profile has personal subscription | — (visual indicator near sender name in contexts where sender name is shown) |
 | 17 | Missed-call system bubble | H+V | DM, unanswered incoming call timed out | — (display system row: "Пропущенный звонок") |
-| 18 | User-deleted system bubble | H+V | Counterpart account deleted | — (display system row: "Пользователь удалён") |
+| 18 | User-deleted terminal marker | H+V | Already loaded selected DM; `dm_peer_state=DELETED` or targeted live event | — (display exactly one local, non-persisted terminal marker: "Пользователь удалён"; not a `Message` or system row) |
 | 19 | Bot deferred placeholder | H+V | Bot acknowledged slash/command with deferred response | — (display: "обрабатываю…" placeholder until async reply arrives) |
 | 20 | Ephemeral bot reply | H+V | Bot reply marked ephemeral (visible only to invoking user) | — (visual: ephemeral-only styling; not shown to other members) |
 | 21 | Posted-as-chat author label | H+V | Message has `posted_as_chat` | — (display: authored as chat/channel name, not user profile) |
