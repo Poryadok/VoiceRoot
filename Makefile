@@ -278,6 +278,7 @@ ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test bu
 	$(BASH) "$(ROOT)/scripts/ci/check-auth-testcontainers-reports_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/compose-a1-multi-account-proof_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/compose-a1-flutter-profile-handoff_test.sh"
+	$(BASH) "$(ROOT)/scripts/ci/compose-file-attachment-restart-proof_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/a1-flutter-profile-handoff-ci-reachability_test.sh"
 
 e2e-manifest-helper-test:

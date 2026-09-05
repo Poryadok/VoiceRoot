@@ -144,7 +144,15 @@ wait_gateway() {
 
 echo "A1 restart proof project=${project} gateway=${VOICE_API_BASE_URL}"
 compose --profile app config --quiet
+set +e
 compose --profile app up -d --build
+initial_up_status=$?
+set -e
+if (( initial_up_status != 0 )); then
+  compose ps --all >&2 || true
+  compose logs --no-color --timestamps compose-db-init >&2 || true
+  exit "$initial_up_status"
+fi
 wait_healthy file
 wait_healthy gateway
 wait_gateway
