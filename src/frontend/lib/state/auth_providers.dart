@@ -415,6 +415,14 @@ class AuthController extends StateNotifier<AuthState> {
       await _notifyAuthenticated();
       return null;
     }
+    if (verified is GuestConversionOtpAccepted &&
+        !await _markGuestConversionPromotionPending(
+          current,
+          _profileSwitchGeneration,
+        )) {
+      _convertingGuest = false;
+      return 'not_authenticated';
+    }
     return _refreshGuestConversionUntilRegular(
       current,
       _profileSwitchGeneration,
@@ -544,6 +552,21 @@ class AuthController extends StateNotifier<AuthState> {
     return generation == _profileSwitchGeneration &&
         state.session?.refreshToken == session.refreshToken &&
         !state.isGuest;
+  }
+
+  Future<bool> _markGuestConversionPromotionPending(
+    AuthSession expected,
+    int generation,
+  ) async {
+    if (!_isGuestConversionCurrent(expected, generation)) return false;
+    await _guestCredentialsStorage.setGuestConversionPromotionPending(true);
+    if (!_isGuestConversionCurrent(expected, generation)) return false;
+    state = state.copyWith(
+      isGuest: true,
+      isGuestConversionPromotionPending: true,
+      clearError: true,
+    );
+    return true;
   }
 
   Future<void> login({

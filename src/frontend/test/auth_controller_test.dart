@@ -385,6 +385,78 @@ void main() {
     expect(container.read(authControllerProvider).isGuest, isFalse);
   });
 
+  test('recreated controller resumes a 204 promotion with refresh status only', () async {
+    final firstRefreshRequested = Completer<void>();
+    final neverCompletes = Completer<http.Response>();
+    final guestStorage = InMemoryGuestCredentialsStorage();
+    await guestStorage.writePassword('guest-auto-password-1');
+    await guestStorage.writePendingConversionEmail('guest@example.com');
+    final storage = InMemoryAuthSessionStorage();
+    const guest = AuthSession(
+      accessToken: 'guest-access',
+      refreshToken: 'guest-refresh',
+      accountId: 'acc-1',
+      activeProfileId: 'prof-1',
+      expiresInSeconds: 900,
+      accountType: 'guest',
+    );
+    await storage.write(guest);
+    var verifies = 0;
+    var refreshes = 0;
+    final mock = MockClient((req) async {
+      if (req.url.path == '/api/v1/auth/otp/verify') {
+        verifies++;
+        return http.Response('', 204);
+      }
+      if (req.url.path == '/api/v1/auth/refresh') {
+        refreshes++;
+        if (refreshes == 1) {
+          firstRefreshRequested.complete();
+          return neverCompletes.future;
+        }
+        if (refreshes == 2) {
+          return http.Response(jsonEncode({'session': guest.toJson()}), 200);
+        }
+        return http.Response(jsonEncode({'session': {...guest.toJson(), 'access_token': 'regular-access', 'refresh_token': 'regular-refresh', 'account_type': 'regular'}}), 200);
+      }
+      return http.Response('not found', 404);
+    });
+    final first = buildContainer(
+      mock: mock,
+      storage: storage,
+      guestStorage: guestStorage,
+    );
+    addTearDown(first.dispose);
+    final firstController = first.read(authControllerProvider.notifier);
+    firstController.state = const AuthState(
+      session: guest,
+      isGuest: true,
+      pendingGuestConversionEmail: 'guest@example.com',
+    );
+
+    unawaited(firstController.verifyGuestConversionEmail('123456'));
+    await firstRefreshRequested.future;
+    expect(await guestStorage.isGuestConversionPromotionPending(), isTrue);
+
+    final recreated = buildContainer(
+      mock: mock,
+      storage: storage,
+      guestStorage: guestStorage,
+    );
+    addTearDown(recreated.dispose);
+    final recreatedController = recreated.read(authControllerProvider.notifier);
+    await recreatedController.restore();
+    expect(recreated.read(authControllerProvider).isGuestConversionPromotionPending, isTrue);
+    expect(
+      await recreatedController.resumeGuestConversionPromotion(),
+      isNull,
+    );
+
+    expect(verifies, 1);
+    expect(refreshes, 3);
+    expect(recreated.read(authControllerProvider).isGuest, isFalse);
+  });
+
   test('restore preserves promotion-pending guest conversion without replaying OTP', () async {
     final guestStorage = InMemoryGuestCredentialsStorage();
     await guestStorage.writePassword('guest-auto-password-1');
