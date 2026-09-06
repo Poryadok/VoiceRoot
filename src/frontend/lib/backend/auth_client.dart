@@ -183,11 +183,7 @@ class VoiceAuthClient {
   }) {
     return _postSession(
       '/api/v1/auth/register',
-      auth_pb.RegisterRequest(
-        email: email,
-        password: password,
-        guest: false,
-      ),
+      auth_pb.RegisterRequest(email: email, password: password, guest: false),
       auth_pb.RegisterResponse.create,
       (response) => response.session,
     );
@@ -196,10 +192,7 @@ class VoiceAuthClient {
   Future<AuthSessionResult> registerGuest({required String password}) {
     return _postSession(
       '/api/v1/auth/register',
-      auth_pb.RegisterRequest(
-        password: password,
-        guest: true,
-      ),
+      auth_pb.RegisterRequest(password: password, guest: true),
       auth_pb.RegisterResponse.create,
       (response) => response.session,
     );
@@ -212,10 +205,7 @@ class VoiceAuthClient {
   }) {
     return _postSession(
       '/api/v1/auth/convert-guest',
-      auth_pb.ConvertGuestRequest(
-        email: email,
-        password: password,
-      ),
+      auth_pb.ConvertGuestRequest(email: email, password: password),
       auth_pb.ConvertGuestResponse.create,
       (response) => response.session,
       authorization: session.authorizationHeader,
@@ -297,10 +287,7 @@ class VoiceAuthClient {
     final result = await _gateway.postJson(
       uri: _gateway.resolve('/api/v1/auth/switch-profile'),
       authorization: session.authorizationHeader,
-      body: {
-        'profile_id': profileId,
-        'device_info_json': _deviceInfoJson,
-      },
+      body: {'profile_id': profileId, 'device_info_json': _deviceInfoJson},
     );
     return switch (result) {
       GatewayHttpOk(:final data) => AuthSessionOk(
@@ -322,9 +309,7 @@ class VoiceAuthClient {
       authorization: session.authorizationHeader,
     );
     return switch (result) {
-      GatewayHttpOk(:final data) => AuthApiOk(
-        linkedAccountsFromJson(data),
-      ),
+      GatewayHttpOk(:final data) => AuthApiOk(linkedAccountsFromJson(data)),
       GatewayHttpFailure(:final error) => AuthApiFailure(
         message: GatewayApiResultMapper.failureMessage(error),
         errorCode: GatewayApiResultMapper.failureCode(error),
@@ -368,7 +353,9 @@ class VoiceAuthClient {
   }
 
   /// Server cadence for guest save-account reminder; null when unavailable.
-  Future<bool?> getGuestReminderShouldShow({required String authorization}) async {
+  Future<bool?> getGuestReminderShouldShow({
+    required String authorization,
+  }) async {
     final result = await _gateway.getJson(
       _gateway.resolve('/api/v1/auth/guest-reminder'),
       authorization: authorization,
@@ -423,8 +410,9 @@ class VoiceAuthClient {
     );
     return switch (result) {
       GatewayHttpOk<void>() => null,
-      GatewayHttpFailure(:final error) =>
-        GatewayApiResultMapper.failureMessage(error),
+      GatewayHttpFailure(:final error) => GatewayApiResultMapper.failureMessage(
+        error,
+      ),
     };
   }
 
@@ -470,10 +458,54 @@ class VoiceAuthClient {
   }) async {
     final result = await _gateway.postEmpty(
       uri: _gateway.resolve('/api/v1/auth/otp/send'),
-      jsonBody: {
-        'email': email,
-        'otp_type': 'password_reset',
-      },
+      jsonBody: {'email': email, 'otp_type': 'password_reset'},
+    );
+    return switch (result) {
+      GatewayHttpOk<void>() => const AuthApiOk(null),
+      GatewayHttpFailure(:final error) => AuthApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+
+  /// Sends the email verification OTP for a pending guest conversion.
+  Future<AuthApiResult<void>> sendGuestConversionEmailOtp({
+    required AuthSession session,
+    required String email,
+  }) => _sendOtp(session: session, email: email, otpType: 'email_verify');
+
+  /// Verifies the email OTP for a pending guest conversion.
+  Future<AuthApiResult<void>> verifyGuestConversionEmailOtp({
+    required AuthSession session,
+    required String email,
+    required String code,
+  }) async {
+    final result = await _gateway.postEmpty(
+      uri: _gateway.resolve('/api/v1/auth/otp/verify'),
+      authorization: session.authorizationHeader,
+      jsonBody: {'email': email, 'code': code, 'otp_type': 'email_verify'},
+    );
+    return switch (result) {
+      GatewayHttpOk<void>() => const AuthApiOk(null),
+      GatewayHttpFailure(:final error) => AuthApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+
+  Future<AuthApiResult<void>> _sendOtp({
+    required AuthSession session,
+    required String email,
+    required String otpType,
+  }) async {
+    final result = await _gateway.postEmpty(
+      uri: _gateway.resolve('/api/v1/auth/otp/send'),
+      authorization: session.authorizationHeader,
+      jsonBody: {'email': email, 'otp_type': otpType},
     );
     return switch (result) {
       GatewayHttpOk<void>() => const AuthApiOk(null),
@@ -493,11 +525,7 @@ class VoiceAuthClient {
   }) async {
     final result = await _gateway.postEmpty(
       uri: _gateway.resolve('/api/v1/auth/password/reset'),
-      jsonBody: {
-        'email': email,
-        'code': code,
-        'new_password': newPassword,
-      },
+      jsonBody: {'email': email, 'code': code, 'new_password': newPassword},
     );
     return switch (result) {
       GatewayHttpOk<void>() => const AuthApiOk(null),

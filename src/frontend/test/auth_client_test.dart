@@ -332,6 +332,59 @@ void main() {
     });
   });
 
+  group('VoiceAuthClient.guestConversionOtp', () {
+    test(
+      'sends and verifies email_verify OTP with the guest session',
+      () async {
+        var sent = false;
+        var verified = false;
+        final mock = MockClient((req) async {
+          expect(req.headers['authorization'], 'Bearer guest-access');
+          final body = jsonDecode(req.body) as Map<String, dynamic>;
+          expect(body['email'], 'guest@example.com');
+          expect(body['otp_type'], 'email_verify');
+          if (req.url.path == '/api/v1/auth/otp/send') {
+            sent = true;
+            return http.Response('', 204);
+          }
+          expect(req.url.path, '/api/v1/auth/otp/verify');
+          expect(body['code'], '123456');
+          verified = true;
+          return http.Response('', 204);
+        });
+        final client = VoiceAuthClient(
+          gateway: gatewayHttpForTest(mock, config: config),
+        );
+        const guest = AuthSession(
+          accessToken: 'guest-access',
+          refreshToken: 'guest-refresh',
+          accountId: 'acc-1',
+          activeProfileId: 'prof-1',
+          expiresInSeconds: 900,
+          accountType: 'guest',
+        );
+
+        expect(
+          await client.sendGuestConversionEmailOtp(
+            session: guest,
+            email: 'guest@example.com',
+          ),
+          isA<AuthApiOk<void>>(),
+        );
+        expect(
+          await client.verifyGuestConversionEmailOtp(
+            session: guest,
+            email: 'guest@example.com',
+            code: '123456',
+          ),
+          isA<AuthApiOk<void>>(),
+        );
+        expect(sent, isTrue);
+        expect(verified, isTrue);
+      },
+    );
+  });
+
   group('VoiceAuthClient.revokeSession', () {
     test('POST /api/v1/auth/sessions/{id}/revoke', () async {
       var revokeCalled = false;

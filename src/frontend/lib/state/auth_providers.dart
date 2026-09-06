@@ -29,6 +29,7 @@ class AuthState {
     this.pendingDiscoverHint = false,
     this.isGuest = false,
     this.needsGuestNickname = false,
+    this.pendingGuestConversionEmail,
   });
 
   final AuthSession? session;
@@ -47,6 +48,9 @@ class AuthState {
   /// Guest must set a nickname before entering the main shell.
   final bool needsGuestNickname;
 
+  /// Email awaiting verification after a guest conversion submission.
+  final String? pendingGuestConversionEmail;
+
   bool get isAuthenticated => session != null;
 
   String? get activeProfileId => session?.activeProfileId;
@@ -64,6 +68,8 @@ class AuthState {
     bool clearGuest = false,
     bool? needsGuestNickname,
     bool clearGuestNickname = false,
+    String? pendingGuestConversionEmail,
+    bool clearPendingGuestConversionEmail = false,
   }) {
     return AuthState(
       session: clearSession ? null : (session ?? this.session),
@@ -77,6 +83,9 @@ class AuthState {
       needsGuestNickname: clearGuestNickname
           ? false
           : (needsGuestNickname ?? this.needsGuestNickname),
+      pendingGuestConversionEmail: clearPendingGuestConversionEmail
+          ? null
+          : (pendingGuestConversionEmail ?? this.pendingGuestConversionEmail),
     );
   }
 }
@@ -87,10 +96,11 @@ final authSessionStorageProvider = Provider<AuthSessionStorage>((ref) {
   );
 });
 
-final guestCredentialsStorageProvider = Provider<GuestCredentialsStorage>((ref) {
+final guestCredentialsStorageProvider = Provider<GuestCredentialsStorage>((
+  ref,
+) {
   return InMemoryGuestCredentialsStorage();
 });
-
 
 class AuthController extends StateNotifier<AuthState> {
   AuthController({
@@ -137,7 +147,8 @@ class AuthController extends StateNotifier<AuthState> {
 
   Future<void> _finishRestoreWithSavedSession(AuthSession saved) async {
     final isGuest = await _resolveIsGuest(saved);
-    final needsGuestNickname = isGuest &&
+    final needsGuestNickname =
+        isGuest &&
         !await _guestCredentialsStorage.isNicknameCompleted(saved.accountId);
     state = state.copyWith(
       session: saved,
@@ -146,6 +157,9 @@ class AuthController extends StateNotifier<AuthState> {
       clearDiscoverHint: true,
       isGuest: isGuest,
       needsGuestNickname: needsGuestNickname,
+      pendingGuestConversionEmail: isGuest
+          ? await _guestCredentialsStorage.readPendingConversionEmail()
+          : null,
     );
     if (!needsGuestNickname) {
       await _notifyAuthenticated();
@@ -166,7 +180,8 @@ class AuthController extends StateNotifier<AuthState> {
       case AuthSessionOk(:final session):
         await _persist(session);
         final isGuest = await _resolveIsGuest(session);
-        final needsGuestNickname = isGuest &&
+        final needsGuestNickname =
+            isGuest &&
             !await _guestCredentialsStorage.isNicknameCompleted(
               session.accountId,
             );
@@ -177,11 +192,18 @@ class AuthController extends StateNotifier<AuthState> {
           clearDiscoverHint: true,
           isGuest: isGuest,
           needsGuestNickname: needsGuestNickname,
+          pendingGuestConversionEmail: isGuest
+              ? await _guestCredentialsStorage.readPendingConversionEmail()
+              : null,
         );
         if (!needsGuestNickname) {
           await _notifyAuthenticated();
         }
-      case AuthSessionFailure(:final message, :final errorCode, :final statusCode):
+      case AuthSessionFailure(
+        :final message,
+        :final errorCode,
+        :final statusCode,
+      ):
         if (_isDefinitiveAuthRejection(
           AuthSessionFailure(
             message: message,
@@ -272,17 +294,111 @@ class AuthController extends StateNotifier<AuthState> {
           _convertingGuest = false;
           return AuthErrorKeys.validationFailed;
         }
+        await _guestCredentialsStorage.writePendingConversionEmail(email);
+        state = state.copyWith(
+          session: session,
+          isGuest: true,
+          pendingGuestConversionEmail: email,
+          clearError: true,
+        );
+        await _persist(session);
+        final sent = await _authClient.sendGuestConversionEmailOtp(
+          session: session,
+          email: email,
+        );
+        _convertingGuest = false;
+        return switch (sent) {
+          AuthApiOk<void>() => null,
+          AuthApiFailure(:final message, :final errorCode, :final statusCode) =>
+            resolveAuthErrorKey(
+                  errorCode: errorCode,
+                  statusCode: statusCode,
+                  message: message,
+                ) ??
+                message,
+        };
+      case AuthSessionFailure(
+        :final message,
+        :final errorCode,
+        :final statusCode,
+      ):
+        _convertingGuest = false;
+        return resolveAuthErrorKey(
+              errorCode: errorCode,
+              statusCode: statusCode,
+              message: message,
+            ) ??
+            message;
+    }
+  }
+
+  Future<String?> resendGuestConversionEmailOtp() async {
+    final current = state.session;
+    final email = state.pendingGuestConversionEmail;
+    if (current == null || email == null || email.isEmpty) {
+      return 'not_authenticated';
+    }
+    final result = await _authClient.sendGuestConversionEmailOtp(
+      session: current,
+      email: email,
+    );
+    return switch (result) {
+      AuthApiOk<void>() => null,
+      AuthApiFailure(:final message, :final errorCode, :final statusCode) =>
+        resolveAuthErrorKey(
+              errorCode: errorCode,
+              statusCode: statusCode,
+              message: message,
+            ) ??
+            message,
+    };
+  }
+
+  Future<String?> verifyGuestConversionEmail(String code) async {
+    final current = state.session;
+    final email = state.pendingGuestConversionEmail;
+    if (current == null || email == null || email.isEmpty) {
+      return 'not_authenticated';
+    }
+    _convertingGuest = true;
+    final verified = await _authClient.verifyGuestConversionEmailOtp(
+      session: current,
+      email: email,
+      code: code,
+    );
+    if (verified case AuthApiFailure(
+      :final message,
+      :final errorCode,
+      :final statusCode,
+    )) {
+      _convertingGuest = false;
+      return resolveAuthErrorKey(
+            errorCode: errorCode,
+            statusCode: statusCode,
+            message: message,
+          ) ??
+          message;
+    }
+    final refreshed = await _authClient.refresh(
+      refreshToken: current.refreshToken,
+    );
+    switch (refreshed) {
+      case AuthSessionOk(:final session) when _isRegularSession(session):
+        await _persist(session);
+        await _guestCredentialsStorage.clear();
         state = state.copyWith(
           session: session,
           clearGuest: true,
           clearGuestNickname: true,
+          clearPendingGuestConversionEmail: true,
           clearError: true,
         );
-        await _persist(session);
-        await _guestCredentialsStorage.clear();
         _convertingGuest = false;
         await _notifyAuthenticated();
         return null;
+      case AuthSessionOk():
+        _convertingGuest = false;
+        return 'auth_unavailable';
       case AuthSessionFailure(
         :final message,
         :final errorCode,
@@ -303,11 +419,8 @@ class AuthController extends StateNotifier<AuthState> {
     required String password,
     String? totpCode,
   }) => _authenticate(
-    () => _authClient.login(
-      email: email,
-      password: password,
-      totpCode: totpCode,
-    ),
+    () =>
+        _authClient.login(email: email, password: password, totpCode: totpCode),
   );
 
   Future<void> applySession(AuthSession session) async {
@@ -433,15 +546,13 @@ class AuthController extends StateNotifier<AuthState> {
         return;
       }
 
-      if (_terminatedProfileSessionGeneration ==
-              _profileSwitchGeneration &&
+      if (_terminatedProfileSessionGeneration == _profileSwitchGeneration &&
           generation < _profileSwitchGeneration) {
         await _storage.clear();
         return;
       }
 
-      final repair = _latestProfileSessionGeneration ==
-              _profileSwitchGeneration
+      final repair = _latestProfileSessionGeneration == _profileSwitchGeneration
           ? _latestProfileSession
           : state.session;
       if (repair != null) {
@@ -488,7 +599,11 @@ class AuthController extends StateNotifier<AuthState> {
           ),
         );
         return true;
-      case AuthSessionFailure(:final message, :final errorCode, :final statusCode):
+      case AuthSessionFailure(
+        :final message,
+        :final errorCode,
+        :final statusCode,
+      ):
         if (_convertingGuest) return false;
         if (generation != _profileSwitchGeneration) return false;
         if (_isDefinitiveAuthRejection(
@@ -506,6 +621,12 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
+  bool _isRegularSession(AuthSession session) {
+    final type =
+        session.accountType ?? accountTypeFromAccessToken(session.accessToken);
+    return type == 'regular';
+  }
+
   void _scheduleProactiveRefresh() {
     _refreshTimer?.cancel();
     final session = state.session;
@@ -520,7 +641,10 @@ class AuthController extends StateNotifier<AuthState> {
   String _generateGuestPassword() {
     const chars =
         'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    return List.generate(32, (_) => chars[_random.nextInt(chars.length)]).join();
+    return List.generate(
+      32,
+      (_) => chars[_random.nextInt(chars.length)],
+    ).join();
   }
 
   Future<bool> _resolveIsGuest(AuthSession session) async {
@@ -557,7 +681,9 @@ final StateNotifierProvider<AuthController, AuthState> authControllerProvider =
         storage: ref.watch(authSessionStorageProvider),
         guestCredentialsStorage: ref.watch(guestCredentialsStorageProvider),
         onAuthenticated: () async {
-          await ref.read(deepLinkControllerProvider.notifier).flushPendingAfterAuth();
+          await ref
+              .read(deepLinkControllerProvider.notifier)
+              .flushPendingAfterAuth();
         },
       );
     });

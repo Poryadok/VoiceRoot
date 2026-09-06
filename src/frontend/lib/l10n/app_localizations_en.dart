@@ -2312,6 +2312,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get guestConvertSubmit => 'Create account';
 
   @override
+  String guestConvertVerificationSubtitle(Object email) {
+    return 'Enter the code sent to $email. Your guest access stays active until it is verified.';
+  }
+
+  @override
+  String get guestConvertCodeLabel => 'Verification code';
+
+  @override
+  String get guestConvertVerify => 'Verify email';
+
+  @override
+  String get guestConvertResend => 'Resend code';
+
+  @override
   String get guestSaveAccountReminder =>
       'Register your account so you do not lose access.';
 

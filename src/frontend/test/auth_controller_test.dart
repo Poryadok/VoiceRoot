@@ -198,6 +198,9 @@ void main() {
           200,
         );
       }
+      if (req.url.path == '/api/v1/auth/otp/send') {
+        return http.Response('', 204);
+      }
       return http.Response('not found', 404);
     });
     final container = ProviderContainer(
@@ -230,6 +233,90 @@ void main() {
     expect(convertBody, isNotNull);
     expect(convertBody, contains(userPassword));
     expect(convertBody, isNot(contains(guestPassword)));
+  });
+
+  test('guest conversion keeps guest credentials until OTP verification refreshes regular session', () async {
+    final guestStorage = InMemoryGuestCredentialsStorage();
+    await guestStorage.writePassword('guest-auto-password-1');
+    final storage = InMemoryAuthSessionStorage();
+    final mock = MockClient((req) async {
+      if (req.url.path == '/api/v1/auth/convert-guest') {
+        return http.Response(
+          jsonEncode({
+            'session': {
+              ...(sessionJson()['session'] as Map<String, dynamic>),
+              'access_token': 'guest-converted-access',
+              'refresh_token': 'guest-converted-refresh',
+              'account_type': 'guest',
+            },
+          }),
+          200,
+        );
+      }
+      if (req.url.path == '/api/v1/auth/otp/send' ||
+          req.url.path == '/api/v1/auth/otp/verify') {
+        return http.Response('', 204);
+      }
+      if (req.url.path == '/api/v1/auth/refresh') {
+        expect(jsonDecode(req.body)['refresh_token'], 'guest-converted-refresh');
+        return http.Response(
+          jsonEncode({
+            'session': {
+              ...(sessionJson()['session'] as Map<String, dynamic>),
+              'access_token': 'regular-access',
+              'refresh_token': 'regular-refresh',
+              'account_type': 'regular',
+            },
+          }),
+          200,
+        );
+      }
+      return http.Response('not found', 404);
+    });
+    final container = ProviderContainer(
+      overrides: [
+        gatewayConfigProvider.overrideWithValue(config),
+        httpClientProvider.overrideWithValue(mock),
+        authSessionStorageProvider.overrideWithValue(storage),
+        guestCredentialsStorageProvider.overrideWithValue(guestStorage),
+      ],
+    );
+    addTearDown(container.dispose);
+    final controller = container.read(authControllerProvider.notifier);
+    controller.state = const AuthState(
+      session: AuthSession(
+        accessToken: 'guest-access',
+        refreshToken: 'guest-refresh',
+        accountId: 'acc-1',
+        activeProfileId: 'prof-1',
+        expiresInSeconds: 900,
+        accountType: 'guest',
+      ),
+      isGuest: true,
+    );
+
+    expect(
+      await controller.convertGuest(
+        email: 'guest@example.com',
+        password: 'user-password1',
+      ),
+      isNull,
+    );
+    expect(container.read(authControllerProvider).isGuest, isTrue);
+    expect(
+      container.read(authControllerProvider).pendingGuestConversionEmail,
+      'guest@example.com',
+    );
+    expect(await guestStorage.readPassword(), 'guest-auto-password-1');
+
+    expect(await controller.verifyGuestConversionEmail('123456'), isNull);
+    expect(container.read(authControllerProvider).isGuest, isFalse);
+    expect(
+      container.read(authControllerProvider).pendingGuestConversionEmail,
+      isNull,
+    );
+    expect(await guestStorage.readPassword(), isNull);
+    expect((await storage.read())?.accountType, 'regular');
   });
 
   test('restore keeps session on network_error refresh failure', () async {
@@ -299,6 +386,9 @@ void main() {
           }),
           200,
         );
+      }
+      if (req.url.path == '/api/v1/auth/otp/send') {
+        return http.Response('', 204);
       }
       if (req.url.path == '/api/v1/auth/refresh') {
         refreshCalls++;
