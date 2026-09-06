@@ -41,23 +41,32 @@ class FlutterGuestCredentialsStorage implements GuestCredentialsStorage {
 
   final FlutterSecureStorage _storage;
   final SharedPreferences? _prefs;
+  Future<void> _operations = Future<void>.value();
+
+  Future<T> _serialize<T>(Future<T> Function() operation) {
+    final result = _operations.then((_) => operation());
+    _operations = result.then<void>((_) {}, onError: (_, __) {});
+    return result;
+  }
 
   String _nicknameKey(String accountId) => '$_nicknameKeyPrefix$accountId';
 
   @override
   Future<void> clear() async {
-    await _storage.delete(key: _passwordKey);
-    await _storage.delete(key: _pendingConversionEmailKey);
-    await _storage.delete(key: _pendingConversionPromotionKey);
-    final prefs = _prefs;
-    if (prefs == null) return;
-    final keys = prefs
-        .getKeys()
-        .where((key) => key.startsWith(_nicknameKeyPrefix))
-        .toList();
-    for (final key in keys) {
-      await prefs.remove(key);
-    }
+    await _serialize(() async {
+      await _storage.delete(key: _passwordKey);
+      await _storage.delete(key: _pendingConversionEmailKey);
+      await _storage.delete(key: _pendingConversionPromotionKey);
+      final prefs = _prefs;
+      if (prefs == null) return;
+      final keys = prefs
+          .getKeys()
+          .where((key) => key.startsWith(_nicknameKeyPrefix))
+          .toList();
+      for (final key in keys) {
+        await prefs.remove(key);
+      }
+    });
   }
 
   @override
@@ -71,32 +80,42 @@ class FlutterGuestCredentialsStorage implements GuestCredentialsStorage {
   }
 
   @override
-  Future<String?> readPassword() => _storage.read(key: _passwordKey);
+  Future<String?> readPassword() =>
+      _serialize(() => _storage.read(key: _passwordKey));
 
   @override
   Future<String?> readPendingConversionEmail() =>
-      _storage.read(key: _pendingConversionEmailKey);
+      _serialize(() => _storage.read(key: _pendingConversionEmailKey));
 
   @override
-  Future<void> writePendingConversionEmail(String email) =>
-      _storage.write(key: _pendingConversionEmailKey, value: email);
+  Future<void> writePendingConversionEmail(String email) => _serialize(
+    () => _storage.write(key: _pendingConversionEmailKey, value: email),
+  );
 
   @override
   Future<void> clearPendingConversionEmail() =>
-      _storage.delete(key: _pendingConversionEmailKey);
+      _serialize(() => _storage.delete(key: _pendingConversionEmailKey));
 
   @override
   Future<bool> isGuestConversionPromotionPending() async =>
-      await _storage.read(key: _pendingConversionPromotionKey) == 'true';
+      await _serialize(
+        () => _storage.read(key: _pendingConversionPromotionKey),
+      ) ==
+      'true';
 
   @override
   Future<void> setGuestConversionPromotionPending(bool pending) => pending
-      ? _storage.write(key: _pendingConversionPromotionKey, value: 'true')
-      : _storage.delete(key: _pendingConversionPromotionKey);
+      ? _serialize(
+          () => _storage.write(
+            key: _pendingConversionPromotionKey,
+            value: 'true',
+          ),
+        )
+      : _serialize(() => _storage.delete(key: _pendingConversionPromotionKey));
 
   @override
   Future<void> writePassword(String password) =>
-      _storage.write(key: _passwordKey, value: password);
+      _serialize(() => _storage.write(key: _passwordKey, value: password));
 }
 
 class InMemoryGuestCredentialsStorage implements GuestCredentialsStorage {
@@ -104,52 +123,62 @@ class InMemoryGuestCredentialsStorage implements GuestCredentialsStorage {
   String? _pendingConversionEmail;
   var _pendingConversionPromotion = false;
   final Map<String, bool> _nicknameCompleted = {};
+  Future<void> _operations = Future<void>.value();
+
+  Future<T> _serialize<T>(Future<T> Function() operation) {
+    final result = _operations.then((_) => operation());
+    _operations = result.then<void>((_) {}, onError: (_, __) {});
+    return result;
+  }
 
   @override
-  Future<void> clear() async {
+  Future<void> clear() => _serialize(() async {
     _password = null;
     _pendingConversionEmail = null;
     _pendingConversionPromotion = false;
     _nicknameCompleted.clear();
-  }
+  });
 
   @override
-  Future<bool> isNicknameCompleted(String accountId) async {
+  Future<bool> isNicknameCompleted(String accountId) => _serialize(() async {
     return _nicknameCompleted[accountId] ?? false;
-  }
+  });
 
   @override
-  Future<void> markNicknameCompleted(String accountId) async {
+  Future<void> markNicknameCompleted(String accountId) => _serialize(() async {
     _nicknameCompleted[accountId] = true;
-  }
+  });
 
   @override
-  Future<String?> readPassword() async => _password;
+  Future<String?> readPassword() => _serialize(() async => _password);
 
   @override
-  Future<String?> readPendingConversionEmail() async => _pendingConversionEmail;
+  Future<String?> readPendingConversionEmail() =>
+      _serialize(() async => _pendingConversionEmail);
 
   @override
-  Future<void> writePendingConversionEmail(String email) async {
-    _pendingConversionEmail = email;
-  }
+  Future<void> writePendingConversionEmail(String email) =>
+      _serialize(() async {
+        _pendingConversionEmail = email;
+      });
 
   @override
-  Future<void> clearPendingConversionEmail() async {
+  Future<void> clearPendingConversionEmail() => _serialize(() async {
     _pendingConversionEmail = null;
-  }
+  });
 
   @override
-  Future<bool> isGuestConversionPromotionPending() async =>
-      _pendingConversionPromotion;
+  Future<bool> isGuestConversionPromotionPending() =>
+      _serialize(() async => _pendingConversionPromotion);
 
   @override
-  Future<void> setGuestConversionPromotionPending(bool pending) async {
-    _pendingConversionPromotion = pending;
-  }
+  Future<void> setGuestConversionPromotionPending(bool pending) =>
+      _serialize(() async {
+        _pendingConversionPromotion = pending;
+      });
 
   @override
-  Future<void> writePassword(String password) async {
+  Future<void> writePassword(String password) => _serialize(() async {
     _password = password;
-  }
+  });
 }
