@@ -19,7 +19,6 @@ const messageEventsStreamName = "message_events"
 
 type messageActivityStore interface {
 	TouchLastMessageAt(ctx context.Context, chatID uuid.UUID, at time.Time) error
-	AutoUnarchiveDMRecipients(ctx context.Context, chatID, senderProfileID uuid.UUID) error
 	PromoteDeclinedDMRecipients(ctx context.Context, chatID, senderProfileID uuid.UUID) error
 }
 
@@ -55,33 +54,36 @@ func messageActivityFromEvent(data []byte, now func() time.Time) (uuid.UUID, uui
 	return chatID, senderID, at, true
 }
 
+func handleMessageActivity(ctx context.Context, store messageActivityStore, msg *nats.Msg, logger *slog.Logger) {
+	if msg == nil {
+		natslog.LogConsume(logger, msg, slog.LevelWarn, "unknown message activity payload")
+		return
+	}
+	chatID, senderID, at, ok := messageActivityFromEvent(msg.Data, time.Now)
+	if !ok {
+		natslog.LogConsume(logger, msg, slog.LevelWarn, "unknown message activity payload")
+		return
+	}
+	attrs := []slog.Attr{slog.String("chat_id", chatID.String())}
+	if err := store.TouchLastMessageAt(ctx, chatID, at); err != nil {
+		attrs = append(attrs, slog.String("error", err.Error()))
+		natslog.LogConsume(logger, msg, slog.LevelWarn, "message activity touch failed", attrs...)
+		return
+	}
+	if err := store.PromoteDeclinedDMRecipients(ctx, chatID, senderID); err != nil {
+		attrs = append(attrs, slog.String("error", err.Error()))
+		natslog.LogConsume(logger, msg, slog.LevelWarn, "message activity recontact failed", attrs...)
+		return
+	}
+	natslog.LogConsume(logger, msg, slog.LevelInfo, "message activity touched", attrs...)
+}
+
 func subscribeMessageActivity(ctx context.Context, js nats.JetStreamContext, store messageActivityStore, instanceID string, logger *slog.Logger) (*nats.Subscription, error) {
 	if store == nil {
 		return nil, fmt.Errorf("message activity store not configured")
 	}
 	handler := func(msg *nats.Msg) {
-		chatID, senderID, at, ok := messageActivityFromEvent(msg.Data, time.Now)
-		if !ok {
-			natslog.LogConsume(logger, msg, slog.LevelWarn, "unknown message activity payload")
-			return
-		}
-		attrs := []slog.Attr{slog.String("chat_id", chatID.String())}
-		if err := store.TouchLastMessageAt(ctx, chatID, at); err != nil {
-			attrs = append(attrs, slog.String("error", err.Error()))
-			natslog.LogConsume(logger, msg, slog.LevelWarn, "message activity touch failed", attrs...)
-			return
-		}
-		if err := store.AutoUnarchiveDMRecipients(ctx, chatID, senderID); err != nil {
-			attrs = append(attrs, slog.String("error", err.Error()))
-			natslog.LogConsume(logger, msg, slog.LevelWarn, "message activity unarchive failed", attrs...)
-			return
-		}
-		if err := store.PromoteDeclinedDMRecipients(ctx, chatID, senderID); err != nil {
-			attrs = append(attrs, slog.String("error", err.Error()))
-			natslog.LogConsume(logger, msg, slog.LevelWarn, "message activity recontact failed", attrs...)
-			return
-		}
-		natslog.LogConsume(logger, msg, slog.LevelInfo, "message activity touched", attrs...)
+		handleMessageActivity(ctx, store, msg, logger)
 	}
 	sub, err := js.Subscribe("message.sent", handler,
 		nats.Durable(chatActivityDurableName(instanceID)),
