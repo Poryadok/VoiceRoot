@@ -438,9 +438,7 @@ public class AuthService {
     TokenClaims claims = validate(accessToken);
     Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
     ensureActive(account);
-    if (!"guest".equals(account.type())) {
-      throw new AuthException("validation_failed");
-    }
+    ensureAnonymousGuest(account);
     if (command.password() == null || command.password().length() < 8) {
       throw new AuthException("validation_failed");
     }
@@ -651,9 +649,7 @@ public class AuthService {
   public GuestReminderState getGuestReminder(String accessToken) {
     TokenClaims claims = validate(accessToken);
     Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
-    if (!"guest".equals(account.type())) {
-      throw new AuthException("validation_failed");
-    }
+    ensureAnonymousGuest(account);
     Instant lastShown = accounts.getGuestReminderLastShownAt(account.id()).orElse(null);
     boolean shouldShow = lastShown == null || lastShown.isBefore(Instant.now(clock).minus(Duration.ofHours(24)));
     return new GuestReminderState(lastShown, shouldShow);
@@ -662,9 +658,7 @@ public class AuthService {
   public GuestReminderState markGuestReminderShown(String accessToken) {
     TokenClaims claims = validate(accessToken);
     Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
-    if (!"guest".equals(account.type())) {
-      throw new AuthException("validation_failed");
-    }
+    ensureAnonymousGuest(account);
     Instant now = Instant.now(clock);
     accounts.markGuestReminderShown(account.id(), now);
     return new GuestReminderState(now, false);
@@ -790,6 +784,14 @@ public class AuthService {
   private void ensureActive(Account account) {
     if (!"active".equals(account.status())) {
       throw new AuthException("account_inactive");
+    }
+  }
+
+  /** Pending email registrations retain guest-level chat restrictions but are no longer anonymous guests. */
+  private void ensureAnonymousGuest(Account account) {
+    if (!"guest".equals(account.type())
+        || accounts.isRegularEmailVerificationPending(account.id())) {
+      throw new AuthException("validation_failed");
     }
   }
 
