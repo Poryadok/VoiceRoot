@@ -480,5 +480,6 @@ Gateway REST (sketch): `GET /api/v1/sticker-packs`, `POST /api/v1/sticker-packs/
 - **Social Service** — проверка блокировок при создании DM
 - **User Service** — public получение профилей участников; отдельный internal owner lookup для lifecycle filtering свежего `ListChats` snapshot
 - **Messaging Service** — для `ListChats`: превью последнего сообщения и `unread_count` по данным `messaging_db` (S2S, см. раздел «ListChats»); без интеграции список возвращается без этих полей
+  - также единственный trusted S2S caller `ListDMReceiptVisibilityTargets`: paginated `chat_id` + peer profile для symmetric read-receipt revoke. RPC не маршрутизируется через Gateway; включает `main`, `requests` и `archive` DM, исключая group/channel и некорректные DMs не с двумя участниками.
 - **Subscription Service** — лимиты на количество участников группы
 - **Space Service** — при создании текстового чата (`group` \| `channel`) в спейсе: узел **`space_tree_nodes`** (`kind=text_chat`) после создания строки `chats`
