@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	"voice/backend/messaging/internal/store"
@@ -36,6 +37,38 @@ func (g *GRPCChatGuard) dmMembers(ctx context.Context, chatID uuid.UUID) ([]*cha
 		return nil, err
 	}
 	return resp.GetMemberList().GetMembers(), nil
+}
+
+// DMReceiptVisibilityTargets lists every durable DM for a profile. It uses
+// Chat's dedicated Messaging-only RPC, never the caller-scoped ListChats API.
+func (g *GRPCChatGuard) DMReceiptVisibilityTargets(ctx context.Context, profileID uuid.UUID) (map[uuid.UUID]uuid.UUID, error) {
+	if g == nil || g.Client == nil {
+		return nil, status.Error(codes.FailedPrecondition, "chat service not configured")
+	}
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs("x-voice-internal-caller", "messaging"))
+	out := map[uuid.UUID]uuid.UUID{}
+	cursor := ""
+	for {
+		resp, err := g.Client.ListDMReceiptVisibilityTargets(ctx, &chatv1.ListDMReceiptVisibilityTargetsRequest{ProfileId: profileID.String(), Page: &commonv1.CursorPageRequest{Cursor: cursor, PageSize: 500}})
+		if err != nil {
+			return nil, err
+		}
+		for _, target := range resp.GetTargets() {
+			chatID, err := uuid.Parse(target.GetChatId())
+			if err != nil {
+				return nil, status.Error(codes.Internal, "invalid chat receipt target")
+			}
+			peerID, err := uuid.Parse(target.GetPeerProfileId())
+			if err != nil {
+				return nil, status.Error(codes.Internal, "invalid peer receipt target")
+			}
+			out[chatID] = peerID
+		}
+		cursor = resp.GetNextCursor()
+		if cursor == "" {
+			return out, nil
+		}
+	}
 }
 
 func (g *GRPCChatGuard) EnsureMember(ctx context.Context, chatID, profileID uuid.UUID) error {

@@ -253,8 +253,14 @@ func main() {
 			if revoker, ok := msgEvents.(interface {
 				PublishReadReceiptRevoked(context.Context, string, string, string, string) error
 			}); ok {
+				targets, ok := chatGuard.(interface {
+					DMReceiptVisibilityTargets(context.Context, uuid.UUID) (map[uuid.UUID]uuid.UUID, error)
+				})
+				if !ok {
+					log.Fatalf("chat receipt visibility targets not configured")
+				}
 				go func() {
-					if err := runReceiptPrivacyConsumer(context.Background(), natsURL, instanceID, &store.MessagesStore{Pool: pool}, chatGuard, revoker, logger); err != nil {
+					if err := runReceiptPrivacyConsumer(context.Background(), natsURL, instanceID, &store.MessagesStore{Pool: pool}, targets, revoker, logger); err != nil {
 						logger.Error("receipt privacy consumer exited", slog.String("error", err.Error()))
 					}
 				}()
