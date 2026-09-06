@@ -22,6 +22,12 @@ type UserProfileLookup interface {
 	AccountIDByProfileID(ctx context.Context, profileID uuid.UUID) (uuid.UUID, error)
 }
 
+// GuestProfileLookup is the User-owned account-type lookup needed for guest admission.
+// It is deliberately separate from lifecycle lookups, which do not expose profile state.
+type GuestProfileLookup interface {
+	IsGuestProfile(ctx context.Context, profileID uuid.UUID) (bool, error)
+}
+
 // LifecycleOwnerLookup resolves profile ownership for the ListChats deleted-peer gate.
 // Unlike UserProfileLookup, it is an internal lifecycle seam and includes soft-deleted
 // profiles without exposing public Profile data.
@@ -107,21 +113,9 @@ type UserGRPCProfiles struct {
 }
 
 func (u *UserGRPCProfiles) AccountIDByProfileID(ctx context.Context, profileID uuid.UUID) (uuid.UUID, error) {
-	if u == nil || u.Client == nil {
-		return uuid.Nil, status.Error(codes.FailedPrecondition, "user service not configured")
-	}
-	resp, err := u.Client.GetProfile(ctx, &userv1.GetProfileRequest{
-		By: &userv1.GetProfileRequest_ProfileId{ProfileId: profileID.String()},
-	})
+	p, err := u.profileByID(ctx, profileID)
 	if err != nil {
-		if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
-			return uuid.Nil, status.Error(codes.NotFound, "profile not found")
-		}
 		return uuid.Nil, err
-	}
-	p := resp.GetProfile()
-	if p == nil {
-		return uuid.Nil, status.Error(codes.NotFound, "profile not found")
 	}
 	aid := strings.TrimSpace(p.GetAccountId())
 	if aid == "" {
@@ -132,4 +126,34 @@ func (u *UserGRPCProfiles) AccountIDByProfileID(ctx context.Context, profileID u
 		return uuid.Nil, status.Error(codes.Internal, "invalid account_id on profile")
 	}
 	return out, nil
+}
+
+// IsGuestProfile reads User's authoritative guest marker. A lookup failure must
+// deny a guest admission rather than silently treating an unknown profile as regular.
+func (u *UserGRPCProfiles) IsGuestProfile(ctx context.Context, profileID uuid.UUID) (bool, error) {
+	p, err := u.profileByID(ctx, profileID)
+	if err != nil {
+		return false, err
+	}
+	return p.GetIsGuestAccount(), nil
+}
+
+func (u *UserGRPCProfiles) profileByID(ctx context.Context, profileID uuid.UUID) (*userv1.Profile, error) {
+	if u == nil || u.Client == nil {
+		return nil, status.Error(codes.FailedPrecondition, "user service not configured")
+	}
+	resp, err := u.Client.GetProfile(ctx, &userv1.GetProfileRequest{
+		By: &userv1.GetProfileRequest_ProfileId{ProfileId: profileID.String()},
+	})
+	if err != nil {
+		if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
+			return nil, status.Error(codes.NotFound, "profile not found")
+		}
+		return nil, err
+	}
+	p := resp.GetProfile()
+	if p == nil {
+		return nil, status.Error(codes.NotFound, "profile not found")
+	}
+	return p, nil
 }

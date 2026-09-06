@@ -218,7 +218,7 @@ func TestUpdateGroupChat_PersistsAvatar(t *testing.T) {
 	require.NoError(t, err)
 
 	avatar := "https://cdn.voice.gg/groups/store.webp"
-	updated, err := store.UpdateGroupChat(ctx, row.ID, nil, &avatar, nil, nil, nil, nil)
+	updated, err := store.UpdateGroupChat(ctx, row.ID, nil, &avatar, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 	require.NotNil(t, updated.AvatarURL)
 	require.Equal(t, avatar, *updated.AvatarURL)

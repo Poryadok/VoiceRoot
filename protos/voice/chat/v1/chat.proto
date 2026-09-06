@@ -72,6 +72,8 @@ message Chat {
   bool threads_enabled = 12;
   bool allow_user_main_feed = 13;
   bool e2e_enabled = 14;
+  // Guest admission is explicit and defaults to false for standalone chats.
+  bool allow_guests = 15;
 }
 
 message CreateDMRequest {
@@ -97,6 +99,7 @@ message UpdateChatRequest {
   optional string avatar_url = 5;
   optional bool threads_enabled = 6;
   optional bool allow_user_main_feed = 7;
+  optional bool allow_guests = 8;
 }
 
 message DeleteChatRequest {
