@@ -111,6 +111,12 @@ INSERT INTO chat_members (chat_id, profile_id, role) VALUES
 
 func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire) (messagingv1.MessagingServiceClient, func()) {
 	t.Helper()
+	if w.Blocks == nil {
+		w.Blocks = boolBlocks(false)
+	}
+	if w.Privacy == nil {
+		w.Privacy = dmPrivacyStub{}
+	}
 	if w.ChatTypeResolver == nil && !w.RequireChatTypeResolver {
 		w.ChatTypeResolver = sqlTestAuthoritativeChatTypeResolver{pool: pool}
 	}
@@ -830,6 +836,8 @@ func TestMessagingChatMembershipViaGRPC(t *testing.T) {
 
 	chatCli, chatCleanup := testchat.NewBufconnChatClient(t, pool, testchat.ChatDeps{
 		DeletedAccounts: explicitDeletedAccounts{},
+		Blocks:          testchat.AllowAllBlocks{},
+		Privacy:         testchat.AllowAllPrivacy{},
 	})
 	t.Cleanup(chatCleanup)
 
@@ -865,6 +873,8 @@ func TestChatMessagingIntegration_CreateDM_SendGetMessagesCursor(t *testing.T) {
 	chatCli, chatCleanup := testchat.NewBufconnChatClientWith(t, pool, testchat.ChatDeps{
 		Profiles:        pmap,
 		DeletedAccounts: explicitDeletedAccounts{},
+		Blocks:          testchat.AllowAllBlocks{},
+		Privacy:         testchat.AllowAllPrivacy{},
 	})
 	t.Cleanup(chatCleanup)
 
@@ -944,6 +954,8 @@ func TestChatMessagingIntegration_CreateDM_DeletedPeerGate(t *testing.T) {
 		chatCli, cleanup := testchat.NewBufconnChatClientWith(t, pool, testchat.ChatDeps{
 			Profiles:        pmap,
 			DeletedAccounts: explicitDeletedAccounts{},
+			Blocks:          testchat.AllowAllBlocks{},
+			Privacy:         testchat.AllowAllPrivacy{},
 		})
 		t.Cleanup(cleanup)
 
@@ -959,6 +971,8 @@ func TestChatMessagingIntegration_CreateDM_DeletedPeerGate(t *testing.T) {
 			DeletedAccounts: explicitDeletedAccounts{
 				acctDeleted: {},
 			},
+			Blocks:  testchat.AllowAllBlocks{},
+			Privacy: testchat.AllowAllPrivacy{},
 		})
 		t.Cleanup(cleanup)
 
@@ -975,6 +989,8 @@ func TestChatMessagingIntegration_CreateDM_DeletedPeerGate(t *testing.T) {
 		chatCli, cleanup := testchat.NewBufconnChatClientWith(t, pool, testchat.ChatDeps{
 			Profiles:        pmap,
 			DeletedAccounts: unavailableDeletedAccounts{},
+			Blocks:          testchat.AllowAllBlocks{},
+			Privacy:         testchat.AllowAllPrivacy{},
 		})
 		t.Cleanup(cleanup)
 
@@ -1004,6 +1020,8 @@ func TestChatMessagingIntegration_SendDeniedWhenSocialBlocks(t *testing.T) {
 	chatCli, chatCleanup := testchat.NewBufconnChatClientWith(t, pool, testchat.ChatDeps{
 		Profiles:        pmap,
 		DeletedAccounts: explicitDeletedAccounts{},
+		Blocks:          testchat.AllowAllBlocks{},
+		Privacy:         testchat.AllowAllPrivacy{},
 	})
 	t.Cleanup(chatCleanup)
 
