@@ -95,10 +95,8 @@
 ### Auth
 
 
-- [ ] **[A1/T-056 Auth/Chat] Minimum account soft-delete contract** — revoke all sessions immediately, deny new DM send in both directions, hide deleted peer/DM in fresh snapshots, and keep already loaded history with one terminal «Пользователь удалён» marker. Owner decision recorded; code WIP unblocked. — [PLAN.md](../PLAN.md) A1, [auth-and-contacts.md](../features/auth-and-contacts.md), `tmp/fleet/plans/A1-daily-messaging.md`.
 - [ ] **[A4 Auth/User/Chat/File/Search] Complete account erasure lifecycle** — password+2FA confirmation, 30-day restore, then idempotent PII/credential/profile-media erasure or pseudonymization; retain messages with non-public author tombstone and isolate minimal legal/anti-abuse records by production retention policy. Existing `DeleteAccount`/`RestoreAccount` and ListChats deleted-peer filter are partial. — [auth-and-contacts.md](../features/auth-and-contacts.md), [client.md](client.md).
-- [x] **[Auth] Email signup and convert-guest verification gate** — pending identity preserves session/history and guest-level restrictions; successful email verification calls User `MarkAccountRegular`, promotes Auth to `regular`, then emits `user.guest_converted`. Negative User-failure coverage is in the Auth contract tests. — [auth-and-contacts.md](../features/auth-and-contacts.md), `src/backend/auth/`.
-- [ ] **[Auth] Durable guest-conversion completion** — make the verified conversion workflow retry-safe across User `MarkAccountRegular`, Auth DB promotion, and `user.guest_converted` publication. The User RPC is idempotent but has no operation key, and Auth currently has no durable outbox/pending-promotion state, so partial failures can repeat the RPC or lose the best-effort NATS event. Add fault-injection coverage for Auth DB and event-publication failures.
+- [x] **[Auth] Email signup and convert-guest verification gate** — pending identity preserves session/history and guest-level restrictions; successful email verification durably queues conversion recovery, which retries User `MarkAccountRegular`, Auth-local promotion to `regular`, and `user.guest_converted` publication. Negative User-failure coverage is in the Auth contract tests. — [auth-and-contacts.md](../features/auth-and-contacts.md), `src/backend/auth/`.
 
 
 ## High
