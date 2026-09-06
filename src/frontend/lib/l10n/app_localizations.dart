@@ -4280,6 +4280,18 @@ abstract class AppLocalizations {
   /// **'Resend code'**
   String get guestConvertResend;
 
+  /// No description provided for @guestConvertPromotionPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Your email is verified. We are finishing your account setup; your guest access stays active until then.'**
+  String get guestConvertPromotionPending;
+
+  /// No description provided for @guestConvertRefreshStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh account status'**
+  String get guestConvertRefreshStatus;
+
   /// No description provided for @guestSaveAccountReminder.
   ///
   /// In en, this message translates to:

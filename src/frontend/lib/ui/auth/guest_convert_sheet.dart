@@ -19,8 +19,9 @@ class GuestConvertSheet extends ConsumerStatefulWidget {
   static const Key codeFieldKey = Key('guest_convert_code');
   static const Key verifyButtonKey = Key('guest_convert_verify');
   static const Key resendButtonKey = Key('guest_convert_resend');
-  static const Key refreshPromotionButtonKey =
-      Key('guest_convert_refresh_promotion');
+  static const Key refreshPromotionButtonKey = Key(
+    'guest_convert_refresh_promotion',
+  );
 
   static Future<void> show(BuildContext context) {
     return showModalBottomSheet<void>(

@@ -2326,6 +2326,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get guestConvertResend => 'Resend code';
 
   @override
+  String get guestConvertPromotionPending =>
+      'Your email is verified. We are finishing your account setup; your guest access stays active until then.';
+
+  @override
+  String get guestConvertRefreshStatus => 'Refresh account status';
+
+  @override
   String get guestSaveAccountReminder =>
       'Register your account so you do not lose access.';
 
