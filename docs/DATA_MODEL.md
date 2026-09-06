@@ -29,13 +29,12 @@
 |------------------------------|----------------------------------------|------------------------------------------------------------------|
 | `user_id`                    | Идентификатор аккаунта (сквозная auth) | **`accounts.id`** = `account_id`; имя claim исторически короткое |
 | `profile_id`                 | Активный профиль для этого запроса     | **`profiles.id`** в `user_db`; момент появления первичного профиля и выдача JWT без «окна» без `profile_id` — [microservices/primary-profile-bootstrap.md](microservices/primary-profile-bootstrap.md) |
-| `session_epoch`               | Версия сессий аккаунта для отзыва всех сессий (staged T056-P1) | **`accounts.session_epoch`** в `auth_db`; положительный integer |
+| `session_epoch`               | Версия сессий аккаунта для отзыва всех сессий (T056-P1) | **`accounts.session_epoch`** в `auth_db`; положительный integer |
 | `roles`, `subscription_tier` | Кэш для Edge                           | Source of truth — Role / Subscription; без лишних дублей в БД    |
 
-#### T056-P1: отзыв всех сессий (staged/WIP)
+#### T056-P1: отзыв всех сессий
 
-Контракт ниже подготовлен до подключения потребителей и **не означает, что
-отзыв всех сессий уже shipped**. Источник истины — `auth_db.accounts.session_epoch`:
+Источник истины — `auth_db.accounts.session_epoch`:
 
 - `session_epoch BIGINT NOT NULL DEFAULT 1`; значение всегда положительное.
 - Auth увеличивает его атомарно при операции, которая отзывает все сессии
@@ -50,12 +49,12 @@
   отсутствие floor в strict-режиме отклоняются (missing floor **не** означает
   `1`).
 
-Переход выполняется `expand → seed → strict`: на expand старые JWT без claim и
-аккаунты без Redis floor допускаются только в compatibility-режиме; seed должен
-заполнить floor из Auth DB; после включения strict отсутствующий/неположительный
-claim и отсутствующий/невалидный floor — fail-closed. Gateway и Realtime обязаны
-завершить свои strict-проверки до переключения режима. Pub/Sub может ускорить
-закрытие конкретных сокетов, но не является механизмом корректности.
+В Compose strict-потребители Gateway и Realtime включены после Auth migration,
+startup seed и issuance preparation: отсутствующий/неположительный claim и
+отсутствующий/невалидный floor отклоняются fail-closed. Compatibility допустим
+только в явно настроенном окружении вне доказанного strict deployment. Compose
+strict proof не завершает rollout во всех окружениях; account-targeted закрытие
+через Redis Pub/Sub не реализовано.
 
 В **новых** миграциях Auth предпочтительно колонка **`account_id`** там, где логически ссылка на `accounts.id` (в т.ч. в `refresh_tokens`). В [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md) в примере таблицы указано имя `user_id` — при проектировании схемы трактуем его как **тот же идентификатор, что и `account_id`**, и выравниваем имя колонки к `account_id` ради однозначности.
 

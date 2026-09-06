@@ -12,7 +12,7 @@
 - Маршрутизация HTTP/REST запросов к соответствующим сервисам; текущая Go-реализация — HTTP reverse proxy, REST → gRPC transcoding добавляется вместе с целевыми сервисами
 - Проксирование WebSocket-соединений к Realtime Service
 - JWT-валидация (проверка access token, извлечение claims) и чтение Redis blacklist для отозванных access token
-- T056-P1 session-epoch enforcement (staged/WIP): чтение Auth-owned Redis floor и fail-closed проверка после rollout strict
+- T056-P1 session-epoch enforcement: чтение Auth-owned Redis floor и fail-closed strict-проверка
 - Rate limiting по правилам из конфигурации
 - CORS, request logging, Prometheus metrics (`/metrics`)
 - Версионирование API (`/api/v1/...`)
@@ -168,11 +168,11 @@ Send after pick — **Messaging** `POST /api/v1/messages/...` (not File attach).
 6. Сохраняет проверенные claims и upstream JWT в существующем auth context при проксировании `/ws` в Realtime; отдельный downstream header для `session_epoch` этим контрактом не вводится
 7. Публичные endpoints (login, register, OTP, version, health, metrics) — без JWT
 
-### T056-P1: session epoch (staged/WIP)
+### T056-P1: session epoch
 
-Это подготовленный контракт, а не утверждение о shipped enforcement. Auth DB
-хранит `accounts.session_epoch` как durable source of truth и выдаёт его новым
-access JWT положительным integer claim. Gateway в strict-режиме обязан проверить
+Auth DB хранит `accounts.session_epoch` как durable source of truth и выдаёт его
+новым access JWT положительным integer claim. В Compose после Auth migration,
+startup seed и issuance preparation включён strict Gateway. Он обязан проверить
 claim и Redis minimum-epoch floor: token допускается только при
 `session_epoch >= floor`. После успешной JWT проверки Gateway проверяет
 non-empty `jti` blacklist **до** floor. Отсутствующий/неположительный claim
@@ -191,9 +191,8 @@ Ping на startup. Для JWKS validator Gateway передаёт
 `WithSessionEpochRequired(strict)`: в compatibility legacy JWT без claim допустим,
 но присутствующий malformed/non-positive claim всё равно invalid.
 
-Rollout — `expand → seed → strict`: во время compatibility-этапа старый JWT без
-claim и не seeded floor допускаются, но strict включается только после миграции и
-seed из Auth DB **и готовности Realtime**. При обычном `/ws`, выпуске
+Compatibility допустим только в явно настроенном окружении вне доказанного strict
+deployment; Compose strict proof не завершает rollout во всех окружениях. При обычном `/ws`, выпуске
 `POST /api/v1/realtime/ws-ticket` и потреблении одноразового ticket Gateway
 применяет ту же JWT → `jti` → floor проверку. Consume атомарно забирает ticket,
 после чего заново валидирует сохранённый `record.UpstreamToken` и строит claims
@@ -225,7 +224,7 @@ blacklist-механизмом и не заменяется epoch.
 
 ## Зависимости
 
-- **Redis** — rate limiting (sliding window), чтение JWT blacklist и staged T056-P1 minimum-epoch floor. В strict-режиме ошибки/отсутствие floor fail-closed; зона ответственности с **Auth Service**: [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) (раздел «Redis: API Gateway и Auth Service»).
+- **Redis** — rate limiting (sliding window), чтение JWT blacklist и T056-P1 minimum-epoch floor. В strict-режиме ошибки/отсутствие floor fail-closed; зона ответственности с **Auth Service**: [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) (раздел «Redis: API Gateway и Auth Service»).
 - **Auth Service** — JWT public key (ротация через JWKS endpoint)
 - **Version config store** — таблица `client_versions` (или эквивалентный конфиг-стор) для `/api/v1/version`
 

@@ -16,7 +16,7 @@ WebSocket-шлюз для доставки событий в реальном в
 - Typing indicators
 - Reconnection support (exponential backoff на клиенте)
 - Нумерация событий **`s`** в рамках WebSocket-сессии, op **`resume`** с `last_s` после reconnect (см. ниже)
-- T056-P1 account session-epoch enforcement (staged/WIP): fail-closed upgrade/operation/fan-out checks and account-targeted close
+- T056-P1 account session-epoch enforcement: fail-closed upgrade/operation/fan-out checks
 - **Не хранит inbox или историю чатов**; после reconnect клиент делает глобальную REST-сверку inbox через Chat `ListChats`, а сообщения догружает через Messaging API (Gateway → REST/gRPC) только per selected `chat_id`, см. [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) (Reconnect)
 - Heartbeat / ping-pong для детекции разрыва
 - На client **`delivery_ack`**: ephemeral `message_delivered` fan-out **и** publish JetStream **`message.delivery_ack`** на `message.events` (Messaging consumer → durable cursor) — см. § `delivery_ack` op
@@ -31,20 +31,19 @@ Headers:
   X-Profile-Id: <active_profile_id>
 ```
 
-### T056-P1: session epoch (staged/WIP)
+### T056-P1: session epoch
 
-Realtime не считается реализовавшим этот контракт до готовности Auth migration /
-repository и Gateway strict consumer. После rollout `expand → seed → strict` он
-проверяет положительный JWT claim `session_epoch` и Auth-owned Redis
+В Compose после Auth migration, startup seed и issuance preparation включены
+strict-проверки Realtime. Он проверяет положительный JWT claim `session_epoch` и Auth-owned Redis
 minimum-epoch floor при upgrade, на каждой inbound operation и перед outbound
 fan-out. Stale/missing/corrupt claim или floor, а также Redis error, дают
 fail-closed; missing floor не преобразуется в epoch `1`.
 
-При увеличении epoch Auth/координатор может послать account-targeted close всем
-соединениям аккаунта. Redis Pub/Sub — только ускоритель доставки этого сигнала:
-если событие потеряно, повторная проверка floor всё равно не позволяет stale
-сокету отправлять или получать события. Это не заменяет `jti`-проверку Gateway
-для single-session logout и не вводит глобальный event replay.
+Account-targeted закрытие соединений через Redis Pub/Sub не реализовано.
+Проверка floor остаётся enforcement path для stale сокета; это не заменяет
+`jti`-проверку Gateway для single-session logout и не вводит глобальный event
+replay. Compose strict proof не завершает rollout во всех окружениях; compatibility
+допустим только в явно настроенном окружении вне доказанного strict deployment.
 
 ### Формат сообщений (JSON)
 
@@ -216,9 +215,8 @@ Realtime Instance A ──Redis Pub/Sub──► Realtime Instance B
    (typing event)                      (forward to subscribers)
 ```
 
-Для T056-P1 тот же Pub/Sub может ускорить account-targeted close, но floor в
-Redis и проверка JWT остаются correctness path; нельзя считать доставку Pub/Sub
-доказательством отзыва сессии.
+Для T056-P1 account-targeted close через Redis Pub/Sub не реализован. Floor в
+Redis и проверка JWT остаются correctness path.
 
 1. Сервис (Messaging, Voice, etc.) публикует событие в NATS
 2. Все инстансы Realtime подписаны на релевантные NATS subjects
@@ -250,7 +248,7 @@ Redis и проверка JWT остаются correctness path; нельзя с
 
 ## Зависимости
 
-- **Redis** — Pub/Sub, registry подключений `{profile_id → [instance_id, ws_conn_id]}` и staged minimum-epoch floor для fail-closed проверок аккаунта
+- **Redis** — Pub/Sub, registry подключений `{profile_id → [instance_id, ws_conn_id]}` и minimum-epoch floor для fail-closed проверок аккаунта
 - **NATS** — получение событий от всех сервисов
 
 Ни глобальная сверка inbox, ни догрузка пропущенных **сообщений** не проходят через Realtime: клиент обращается через API Gateway к Chat `ListChats`, затем при необходимости к Messaging Service `GetMessages` (без обязательного gRPC Realtime → Messaging для catch-up).
