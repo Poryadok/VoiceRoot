@@ -155,7 +155,7 @@ func TestInAppNotificationFanouts_ArchivedMentionAndReactionStayQuiet(t *testing
 	fanouts, ok := inAppNotificationFanouts(payload, nil, "", states)
 	require.True(t, ok)
 	require.Empty(t, fanouts)
-	require.Len(t, archiveActivityFanouts(payload, states), 1)
+	require.Empty(t, archiveActivityFanouts(payload, states))
 
 	reaction := &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_ReactionAdded{ReactionAdded: &eventsv1.ReactionAdded{
 		ChatId: chatID, MessageId: messageID, ProfileId: senderID, MessageAuthorProfileId: archivedID, Emoji: "👍",
@@ -165,7 +165,7 @@ func TestInAppNotificationFanouts_ArchivedMentionAndReactionStayQuiet(t *testing
 	fanouts, ok = inAppNotificationFanouts(payload, nil, "", states)
 	require.True(t, ok)
 	require.Empty(t, fanouts)
-	require.Len(t, archiveActivityFanouts(payload, states), 1)
+	require.Empty(t, archiveActivityFanouts(payload, states))
 }
 
 func TestDispatchMessageStreamEvent_LookupFailureKeepsChatBroadcastQuiet(t *testing.T) {
@@ -183,6 +183,33 @@ func TestDispatchMessageStreamEvent_LookupFailureKeepsChatBroadcastQuiet(t *test
 	require.NoError(t, err)
 	dispatchMessageStreamEvent(hub, payload, nil, nil, "")
 	require.Equal(t, []string{"message_create"}, drainFanoutOps(t, recipient, 50*time.Millisecond))
+}
+
+func TestDispatchMessageStreamEvent_ArchivedReactionAndMentionDoNotEmitArchiveActivity(t *testing.T) {
+	chatID, messageID := uuid.NewString(), uuid.NewString()
+	senderID, archivedID := uuid.NewString(), uuid.NewString()
+	states := map[string]chatMemberDeliveryState{archivedID: {IsArchived: true}}
+
+	for _, event := range []*eventsv1.MessageStreamEvent{
+		{Payload: &eventsv1.MessageStreamEvent_ReactionAdded{ReactionAdded: &eventsv1.ReactionAdded{
+			ChatId: chatID, MessageId: messageID, ProfileId: senderID, MessageAuthorProfileId: archivedID, Emoji: "👍",
+		}}},
+		{Payload: &eventsv1.MessageStreamEvent_MentionAdded{MentionAdded: &eventsv1.MentionAdded{
+			ChatId: chatID, MessageId: messageID, SenderProfileId: senderID, MentionedProfileIds: []string{archivedID},
+		}}},
+	} {
+		hub := newWSHub()
+		hub.memberInboxLister = staticMemberDeliveryLister{states: states}
+		archived := hub.attachConn("inst", uuid.NewString(), archivedID, 8)
+		hub.addChat(archived, chatID)
+		payload, err := proto.Marshal(event)
+		require.NoError(t, err)
+		dispatchMessageStreamEvent(hub, payload, nil, nil, "")
+		ops := drainFanoutOps(t, archived, 50*time.Millisecond)
+		require.NotContains(t, ops, "archive_activity")
+		require.NotContains(t, ops, "notification")
+		require.NotContains(t, ops, "mention")
+	}
 }
 
 func TestInAppNotificationFanouts_ReactionNotifiesAuthor(t *testing.T) {

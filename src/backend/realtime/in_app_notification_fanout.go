@@ -137,9 +137,10 @@ func reactionNotificationFanouts(ra *eventsv1.ReactionAdded, chatMemberProfileID
 	}}, true
 }
 
-// archiveActivityFanouts updates an open archived inbox without routing a
-// notification-center row or an in-app sound. It deliberately uses profile
-// fan-out, because archived chats are normally not chat-subscribed.
+// archiveActivityFanouts updates an open archived inbox for an incoming
+// message without routing a notification-center row or an in-app sound. It
+// deliberately uses profile fan-out, because archived chats are normally not
+// chat-subscribed. Reactions and mentions do not advance unread state.
 func archiveActivityFanouts(data []byte, recipientStates map[string]chatMemberDeliveryState) []profileFanout {
 	if len(recipientStates) == 0 {
 		return nil
@@ -148,44 +149,20 @@ func archiveActivityFanouts(data []byte, recipientStates map[string]chatMemberDe
 	if err := proto.Unmarshal(data, &event); err != nil {
 		return nil
 	}
-	chatID := ""
-	senderID := ""
-	var targets []string
-	switch p := event.GetPayload().(type) {
-	case *eventsv1.MessageStreamEvent_MessageSent:
-		if p.MessageSent == nil {
-			return nil
-		}
-		chatID, senderID = p.MessageSent.GetChatId(), p.MessageSent.GetSenderProfileId()
-		for profileID, state := range recipientStates {
-			if state.IsArchived && profileID != "" && profileID != senderID {
-				targets = append(targets, profileID)
-			}
-		}
-	case *eventsv1.MessageStreamEvent_ReactionAdded:
-		if p.ReactionAdded == nil {
-			return nil
-		}
-		chatID, senderID = p.ReactionAdded.GetChatId(), p.ReactionAdded.GetProfileId()
-		authorID := p.ReactionAdded.GetMessageAuthorProfileId()
-		if authorID != "" && authorID != senderID && recipientStates[authorID].IsArchived {
-			targets = append(targets, authorID)
-		}
-	case *eventsv1.MessageStreamEvent_MentionAdded:
-		if p.MentionAdded == nil {
-			return nil
-		}
-		chatID, senderID = p.MentionAdded.GetChatId(), p.MentionAdded.GetSenderProfileId()
-		for _, profileID := range p.MentionAdded.GetMentionedProfileIds() {
-			if profileID != "" && profileID != senderID && recipientStates[profileID].IsArchived {
-				targets = append(targets, profileID)
-			}
-		}
-	default:
+	message, ok := event.GetPayload().(*eventsv1.MessageStreamEvent_MessageSent)
+	if !ok || message.MessageSent == nil {
 		return nil
 	}
+	chatID := message.MessageSent.GetChatId()
+	senderID := message.MessageSent.GetSenderProfileId()
 	if chatID == "" {
 		return nil
+	}
+	var targets []string
+	for profileID, state := range recipientStates {
+		if state.IsArchived && profileID != "" && profileID != senderID {
+			targets = append(targets, profileID)
+		}
 	}
 	d, err := json.Marshal(map[string]string{"chat_id": chatID})
 	if err != nil {
