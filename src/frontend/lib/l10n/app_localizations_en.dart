@@ -2891,11 +2891,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get onboardingLater => 'Later';
 
   @override
-  String get onboardingSaveAccountTitle => 'Save your account';
+  String get onboardingSaveAccountTitle => 'Set up your profile';
 
   @override
   String get onboardingSaveAccountBody =>
-      'Set a nickname and add email — save your account so you do not lose access.';
+      'Choose a nickname and add an avatar so people can recognize you.';
 
   @override
   String get onboardingChatsNavTitle => 'Chats and navigation';
@@ -2909,10 +2909,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get onboardingSpacesBody =>
-      'Spaces are communities with channels and voice rooms. Find one for your game or create your own.';
+      'Spaces are communities with channels and voice rooms. Search for a space you know, join with a friend\'s invite, or create your own.';
 
   @override
-  String get onboardingSpacesFind => 'Find a space';
+  String get onboardingSpacesFind => 'Open search';
 
   @override
   String get onboardingMatchmakingTitle => 'Matchmaking';
