@@ -160,6 +160,8 @@ message ChatListItem {
   optional bool is_stranger = 5;
   // Other participant in a DM (for list titles / avatars); absent for non-DM or when unknown.
   optional string dm_peer_profile_id = 6;
+  // Per-folder pin state for this list result; absent outside folder-scoped lists.
+  optional bool is_pinned = 7;
 }
 
 message ChatList {

@@ -138,6 +138,9 @@ func (s *ChatGRPC) ListChats(ctx context.Context, req *chatv1.ListChatsRequest) 
 		}
 		item.Inbox = proto.String(row.InboxBucket)
 		item.IsStranger = proto.Bool(row.InboxBucket == "requests")
+		if folderID != nil {
+			item.IsPinned = proto.Bool(row.IsPinned)
+		}
 		if peerID, ok := peers[row.ID]; ok {
 			item.DmPeerProfileId = proto.String(peerID.String())
 		}

@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
+import 'package:voice_frontend/backend/proto_mappers.dart';
+import 'package:voice_frontend/gen/voice/chat/v1/chat.pb.dart' as chat_pb;
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/chat_navigation_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
@@ -15,6 +17,17 @@ import 'support/fake_voice_api_clients.dart';
 import 'support/voice_test_theme.dart';
 
 void main() {
+  test('folder ListChats mapping restores persisted pin after reload', () {
+    final item = chatListItemFromProto(
+      chat_pb.ChatListItem(
+        chat: chat_pb.Chat(id: 'chat-pin-1'),
+        isPinned: true,
+      ),
+    );
+
+    expect(item.isPinned, isTrue);
+  });
+
   testWidgets('Chat row actions show pin when folder selected', (tester) async {
     const folderId = 'folder-custom';
     const chatId = 'chat-pin-1';
@@ -47,11 +60,7 @@ void main() {
         chatFoldersProvider.overrideWith(
           (_) async => FolderListData(
             folders: [
-              VoiceFolder(
-                id: folderId,
-                name: 'Custom',
-                folderType: 'custom',
-              ),
+              VoiceFolder(id: folderId, name: 'Custom', folderType: 'custom'),
             ],
           ),
         ),
@@ -81,6 +90,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(ChatListBody.pinActionKey(chatId)), findsOneWidget);
-    expect(find.byKey(ChatListBody.quickAccessActionKey(chatId)), findsOneWidget);
+    expect(
+      find.byKey(ChatListBody.quickAccessActionKey(chatId)),
+      findsOneWidget,
+    );
   });
 }
