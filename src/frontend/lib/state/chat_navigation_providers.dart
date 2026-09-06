@@ -84,6 +84,50 @@ class FolderActions {
     };
   }
 
+  Future<String?> addChatToFolder({
+    required String folderId,
+    required String chatId,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final result = await _ref
+        .read(voiceChatsClientProvider)
+        .addChatToFolder(
+          authorization: auth,
+          folderId: folderId,
+          chatId: chatId,
+        );
+    return switch (result) {
+      ChatsApiOk() => _afterMembershipChange(),
+      ChatsApiFailure(:final message) => message,
+    };
+  }
+
+  Future<String?> removeChatFromFolder({
+    required String folderId,
+    required String chatId,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final result = await _ref
+        .read(voiceChatsClientProvider)
+        .removeChatFromFolder(
+          authorization: auth,
+          folderId: folderId,
+          chatId: chatId,
+        );
+    return switch (result) {
+      ChatsApiOk() => _afterMembershipChange(),
+      ChatsApiFailure(:final message) => message,
+    };
+  }
+
+  Future<String?> _afterMembershipChange() async {
+    _invalidate();
+    await _ref.read(chatListControllerProvider.notifier).loadInitial();
+    return null;
+  }
+
   String? _invalidate() {
     _ref.invalidate(quickAccessListProvider);
     _ref.invalidate(chatFoldersProvider);
