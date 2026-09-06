@@ -139,6 +139,33 @@ final folderActionsProvider = Provider<FolderActions>((ref) {
   return FolderActions(ref);
 });
 
+class QuickAccessActions {
+  QuickAccessActions(this._ref);
+
+  final Ref _ref;
+
+  Future<String?> reorder(List<String> chatIds) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final result = await _ref
+        .read(voiceChatsClientProvider)
+        .reorderQuickAccess(authorization: auth, chatIds: chatIds);
+    return switch (result) {
+      ChatsApiOk() => _invalidate(),
+      ChatsApiFailure(:final message) => message,
+    };
+  }
+
+  String? _invalidate() {
+    _ref.invalidate(quickAccessListProvider);
+    return null;
+  }
+}
+
+final quickAccessActionsProvider = Provider<QuickAccessActions>((ref) {
+  return QuickAccessActions(ref);
+});
+
 void invalidateChatNavigationData(WidgetRef ref) {
   ref.invalidate(quickAccessListProvider);
   ref.invalidate(chatFoldersProvider);
