@@ -40,7 +40,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceChatsClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceChatsClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.listChats(authorization: auth);
       expect(r, isA<ChatsApiOk<ChatListData>>());
       final data = (r as ChatsApiOk<ChatListData>).data;
@@ -63,7 +65,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceChatsClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceChatsClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.listChats(authorization: auth, inbox: 'requests');
       expect(r, isA<ChatsApiOk<ChatListData>>());
     });
@@ -78,7 +82,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceChatsClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceChatsClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.listChats(authorization: auth, inbox: 'archive');
       expect(r, isA<ChatsApiOk<ChatListData>>());
     });
@@ -102,7 +108,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceChatsClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceChatsClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.createDm(
         authorization: auth,
         otherProfileId: 'profile-b',
@@ -223,7 +231,10 @@ void main() {
 
       final list = await client.listQuickAccess(authorization: auth);
       expect(list, isA<ChatsApiOk<QuickAccessListData>>());
-      expect((list as ChatsApiOk<QuickAccessListData>).data.items, hasLength(1));
+      expect(
+        (list as ChatsApiOk<QuickAccessListData>).data.items,
+        hasLength(1),
+      );
       expect(
         await client.addQuickAccess(authorization: auth, chatId: 'chat-qa'),
         isA<ChatsApiOk<void>>(),
@@ -287,7 +298,9 @@ void main() {
           MockClient((req) async {
             expect(req.url.queryParameters['folder_id'], 'folder-dm');
             return http.Response(
-              jsonEncode({'chat_list': {'items': []}}),
+              jsonEncode({
+                'chat_list': {'items': []},
+              }),
               200,
             );
           }),
@@ -301,7 +314,7 @@ void main() {
       expect(result, isA<ChatsApiOk<ChatListData>>());
     });
 
-    test('pin/unpin/reorder folder chat routes', () async {
+    test('add/remove/pin/unpin/reorder folder chat routes', () async {
       final paths = <String>[];
       final methods = <String>[];
       final client = VoiceChatsClient(
@@ -315,6 +328,22 @@ void main() {
         ),
       );
 
+      expect(
+        await client.addChatToFolder(
+          authorization: auth,
+          folderId: 'f1',
+          chatId: 'c1',
+        ),
+        isA<ChatsApiOk<void>>(),
+      );
+      expect(
+        await client.removeChatFromFolder(
+          authorization: auth,
+          folderId: 'f1',
+          chatId: 'c1',
+        ),
+        isA<ChatsApiOk<void>>(),
+      );
       expect(
         await client.pinChatInFolder(
           authorization: auth,
@@ -339,8 +368,10 @@ void main() {
         ),
         isA<ChatsApiOk<void>>(),
       );
-      expect(methods, ['POST', 'DELETE', 'PUT']);
+      expect(methods, ['POST', 'DELETE', 'POST', 'DELETE', 'PUT']);
       expect(paths, [
+        '/api/v1/chats/folders/f1/chats',
+        '/api/v1/chats/folders/f1/chats/c1',
         '/api/v1/chats/folders/f1/chats/c1/pin',
         '/api/v1/chats/folders/f1/chats/c1/pin',
         '/api/v1/chats/folders/f1/chats/order',
@@ -355,7 +386,8 @@ void main() {
           MockClient((req) async {
             paths.add(req.url.path);
             methods.add(req.method);
-            if (req.method == 'POST' && req.url.path == '/api/v1/chats/folders') {
+            if (req.method == 'POST' &&
+                req.url.path == '/api/v1/chats/folders') {
               return http.Response(
                 jsonEncode({
                   'folder': {
@@ -387,7 +419,10 @@ void main() {
         ),
       );
 
-      final created = await client.createFolder(authorization: auth, name: 'Work');
+      final created = await client.createFolder(
+        authorization: auth,
+        name: 'Work',
+      );
       expect(created, isA<ChatsApiOk<VoiceFolder>>());
       expect((created as ChatsApiOk<VoiceFolder>).data.id, 'f-new');
 
