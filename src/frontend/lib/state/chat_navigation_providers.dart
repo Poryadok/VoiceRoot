@@ -4,14 +4,16 @@ import '../backend/chats_client.dart';
 import 'auth_providers.dart';
 import 'chat_providers.dart';
 
-final quickAccessListProvider = FutureProvider<QuickAccessListData>((ref) async {
+final quickAccessListProvider = FutureProvider<QuickAccessListData>((
+  ref,
+) async {
   final auth = ref.watch(authorizationHeaderProvider);
   if (auth == null) {
     throw StateError('not_authenticated');
   }
-  final result = await ref.watch(voiceChatsClientProvider).listQuickAccess(
-        authorization: auth,
-      );
+  final result = await ref
+      .watch(voiceChatsClientProvider)
+      .listQuickAccess(authorization: auth);
   return switch (result) {
     ChatsApiOk(:final data) => data,
     ChatsApiFailure(:final message) => throw Exception(message),
@@ -23,9 +25,9 @@ final chatFoldersProvider = FutureProvider<FolderListData>((ref) async {
   if (auth == null) {
     throw StateError('not_authenticated');
   }
-  final result = await ref.watch(voiceChatsClientProvider).listFolders(
-        authorization: auth,
-      );
+  final result = await ref
+      .watch(voiceChatsClientProvider)
+      .listFolders(authorization: auth);
   return switch (result) {
     ChatsApiOk(:final data) => data,
     ChatsApiFailure(:final message) => throw Exception(message),
@@ -40,10 +42,9 @@ class FolderActions {
   Future<String?> createFolder(String name) async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
-    final result = await _ref.read(voiceChatsClientProvider).createFolder(
-          authorization: auth,
-          name: name,
-        );
+    final result = await _ref
+        .read(voiceChatsClientProvider)
+        .createFolder(authorization: auth, name: name);
     return switch (result) {
       ChatsApiOk() => _invalidate(),
       ChatsApiFailure(:final message) => message,
@@ -57,7 +58,9 @@ class FolderActions {
   }) async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
-    final result = await _ref.read(voiceChatsClientProvider).updateFolder(
+    final result = await _ref
+        .read(voiceChatsClientProvider)
+        .updateFolder(
           authorization: auth,
           folderId: folderId,
           name: name,
@@ -72,14 +75,57 @@ class FolderActions {
   Future<String?> deleteFolder(String folderId) async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
-    final result = await _ref.read(voiceChatsClientProvider).deleteFolder(
-          authorization: auth,
-          folderId: folderId,
-        );
+    final result = await _ref
+        .read(voiceChatsClientProvider)
+        .deleteFolder(authorization: auth, folderId: folderId);
     return switch (result) {
       ChatsApiOk() => _invalidate(),
       ChatsApiFailure(:final message) => message,
     };
+  }
+
+  Future<String?> addChatToFolder({
+    required String folderId,
+    required String chatId,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final result = await _ref
+        .read(voiceChatsClientProvider)
+        .addChatToFolder(
+          authorization: auth,
+          folderId: folderId,
+          chatId: chatId,
+        );
+    return switch (result) {
+      ChatsApiOk() => _afterMembershipChange(),
+      ChatsApiFailure(:final message) => message,
+    };
+  }
+
+  Future<String?> removeChatFromFolder({
+    required String folderId,
+    required String chatId,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final result = await _ref
+        .read(voiceChatsClientProvider)
+        .removeChatFromFolder(
+          authorization: auth,
+          folderId: folderId,
+          chatId: chatId,
+        );
+    return switch (result) {
+      ChatsApiOk() => _afterMembershipChange(),
+      ChatsApiFailure(:final message) => message,
+    };
+  }
+
+  Future<String?> _afterMembershipChange() async {
+    _invalidate();
+    await _ref.read(chatListControllerProvider.notifier).loadInitial();
+    return null;
   }
 
   String? _invalidate() {
