@@ -11,6 +11,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/proto"
 
+	eventsv1 "voice.app/voice/events/v1"
 	"voice/backend/notification/internal/chatmembers"
 	"voice/backend/notification/internal/consumer"
 	"voice/backend/notification/internal/delivery"
@@ -20,7 +21,6 @@ import (
 	"voice/backend/notification/internal/pushenrich"
 	"voice/backend/notification/internal/store"
 	"voice/backend/pkg/natslog"
-	eventsv1 "voice.app/voice/events/v1"
 )
 
 const jsStreamMessageEvents = "message_events"
@@ -155,6 +155,7 @@ func routeMessageNotification(
 			decisions := enrichDecisions(ctx, pusher, map[string]delivery.DeliveryDecision{
 				profileID: baseDecision,
 			}, senderID, ev.GetChatId(), typ)
+			decisions = deliveryForMember(decisions, member)
 			titleFallback := "New message"
 			if typ == delivery.TypeMessageRequest {
 				titleFallback = "Message request"
@@ -231,6 +232,19 @@ func notificationTypeForInbox(inboxBucket string) delivery.NotificationType {
 		return delivery.TypeMessageRequest
 	}
 	return delivery.TypeNewMessage
+}
+
+// deliveryForMember preserves ordinary recipient routing while suppressing push
+// for archived chats. Realtime still handles unread and in-app activity.
+func deliveryForMember(base map[string]delivery.DeliveryDecision, member chatmembers.Member) map[string]delivery.DeliveryDecision {
+	if !member.IsArchived {
+		return base
+	}
+	for profileID, decision := range base {
+		decision.Push = false
+		base[profileID] = decision
+	}
+	return base
 }
 
 func enrichDecisions(

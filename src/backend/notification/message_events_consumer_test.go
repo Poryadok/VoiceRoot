@@ -7,13 +7,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	eventsv1 "voice.app/voice/events/v1"
 	"voice/backend/notification/internal/chatmembers"
 	"voice/backend/notification/internal/consumer"
 	"voice/backend/notification/internal/delivery"
 	"voice/backend/notification/internal/dispatch"
 	"voice/backend/notification/internal/grouping"
 	"voice/backend/notification/internal/pushenrich"
-	eventsv1 "voice.app/voice/events/v1"
 )
 
 type stubChatMembers struct {
@@ -83,4 +83,27 @@ func TestMessageEventsJetStreamSubjectPrefix(t *testing.T) {
 	t.Parallel()
 	// Messaging JetStreamPublisher uses message.sent, message.edited, … (not msg.*).
 	require.Equal(t, "message.>", jsSubjectMessageEvents)
+}
+
+func TestDeliveryForMember_ArchivedRecipientSuppressesPush(t *testing.T) {
+	for _, chatKind := range []string{"dm", "group", "channel"} {
+		t.Run(chatKind, func(t *testing.T) {
+			decision := deliveryForMember(map[string]delivery.DeliveryDecision{"recipient": {InApp: true, Push: true}}, chatmembers.Member{
+				ProfileID:  uuid.NewString(),
+				IsArchived: true,
+			})["recipient"]
+
+			require.True(t, decision.InApp, "archiving must not suppress unread/in-app handling")
+			require.False(t, decision.Push, "archived %s recipient must not receive push", chatKind)
+		})
+	}
+}
+
+func TestDeliveryForMember_ActiveRecipientPreservesRouting(t *testing.T) {
+	decision := deliveryForMember(map[string]delivery.DeliveryDecision{"recipient": {InApp: true, Push: true}}, chatmembers.Member{
+		ProfileID: uuid.NewString(),
+	})["recipient"]
+
+	require.True(t, decision.InApp)
+	require.True(t, decision.Push)
 }
