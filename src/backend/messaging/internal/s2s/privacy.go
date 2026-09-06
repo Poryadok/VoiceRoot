@@ -4,7 +4,9 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 
 	"voice/backend/pkg/privacy"
 
@@ -23,7 +25,7 @@ func privacyS2SContext(ctx context.Context) context.Context {
 
 func (u *GRPCUserPrivacy) AllowDMAudience(ctx context.Context, profileID uuid.UUID) (privacy.Audience, error) {
 	if u == nil || u.Client == nil {
-		return privacy.EveryoneWithGuests(), nil
+		return privacy.Audience{}, status.Error(codes.Unavailable, "user privacy unavailable")
 	}
 	resp, err := u.Client.GetPrivacySettings(privacyS2SContext(ctx), &userv1.GetPrivacySettingsRequest{
 		ProfileId: profileID.String(),
@@ -36,7 +38,7 @@ func (u *GRPCUserPrivacy) AllowDMAudience(ctx context.Context, profileID uuid.UU
 
 func (u *GRPCUserPrivacy) AllowGuestDM(ctx context.Context, profileID uuid.UUID) (bool, error) {
 	if u == nil || u.Client == nil {
-		return true, nil
+		return false, status.Error(codes.Unavailable, "user privacy unavailable")
 	}
 	resp, err := u.Client.GetPrivacySettings(privacyS2SContext(ctx), &userv1.GetPrivacySettingsRequest{
 		ProfileId: profileID.String(),

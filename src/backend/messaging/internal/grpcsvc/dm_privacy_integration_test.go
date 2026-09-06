@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	messagingv1 "voice.app/voice/messaging/v1"
+	"voice/backend/messaging/internal/s2s"
 	"voice/backend/pkg/privacy"
 )
 
@@ -125,4 +126,33 @@ func TestSendMessage_FriendsOnlyPrivacy_OwnerAllowed(t *testing.T) {
 		Content: "owner message allowed",
 	})
 	require.NoError(t, err)
+}
+
+// TestSendMessage_DMPrivacyClientUnavailableFailsClosed ensures a present but
+// unconfigured User privacy adapter cannot turn a DM policy into allow-all.
+func TestSendMessage_DMPrivacyClientUnavailableFailsClosed(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, "src/backend/migrations/chat_db/000001_init.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000001_init.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000002_client_message_id.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000011_last_delivered_message_id.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000012_messages_content_type.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/chat_db/000005_thread_settings.up.sql")
+
+	profileA, accountA := uuid.New(), uuid.New()
+	profileB := uuid.New()
+	chatID := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profileA, profileB)
+	client, cleanup := startMessagingServerWired(t, pool, messagingWire{Privacy: &s2s.GRPCUserPrivacy{}})
+	t.Cleanup(cleanup)
+
+	_, err := client.SendMessage(withProfileCtx(ctx, accountA, profileA), &messagingv1.SendMessageRequest{
+		Chat:    chatDMRef(chatID),
+		Content: "must not bypass privacy",
+	})
+	require.Equal(t, codes.Unavailable, status.Code(err))
 }
