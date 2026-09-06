@@ -58,6 +58,15 @@ func (r messageTokenRepo) ListByProfile(_ context.Context, profileID uuid.UUID) 
 
 func (messageTokenRepo) DeleteByToken(context.Context, string) error { return nil }
 
+type parentAuthorResolver struct {
+	pushenrich.NoopResolver
+	author string
+}
+
+func (r parentAuthorResolver) MessageAuthorProfileID(context.Context, string) (string, error) {
+	return r.author, nil
+}
+
 func TestRouteMessageNotification_MessageSent(t *testing.T) {
 	senderID := uuid.NewString()
 	recipientID := uuid.NewString()
@@ -119,7 +128,7 @@ func TestDeliveryForMember_ArchivedRecipientSuppressesPush(t *testing.T) {
 				IsArchived: true,
 			})["recipient"]
 
-			require.True(t, decision.InApp, "archiving must not suppress unread/in-app handling")
+			require.False(t, decision.InApp, "archiving must suppress notification-center delivery")
 			require.False(t, decision.Push, "archived %s recipient must not receive push", chatKind)
 		})
 	}
@@ -135,13 +144,6 @@ func TestRouteMessageNotification_ArchivedRecipientGetsNoPush(t *testing.T) {
 				{ProfileID: recipientID.String(), InboxBucket: "main", IsArchived: true},
 			}
 			handler := &consumer.MessageEventHandler{Router: delivery.DecideRouting}
-			raw := handler.HandleMessageSent(context.Background(), &eventsv1.MessageSent{
-				MessageId:       uuid.NewString(),
-				ChatId:          uuid.NewString(),
-				SenderProfileId: senderID.String(),
-			}, members)
-			require.True(t, raw[recipientID.String()].InApp, "archiving must preserve unread/in-app handling")
-
 			recorder := &recordingMessageFCM{}
 			env := &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MessageSent{
 				MessageSent: &eventsv1.MessageSent{
@@ -160,6 +162,52 @@ func TestRouteMessageNotification_ArchivedRecipientGetsNoPush(t *testing.T) {
 
 			require.NoError(t, err)
 			require.Empty(t, recorder.sent, "archived %s recipient must not receive push", chatKind)
+		})
+	}
+}
+
+func TestRouteMessageNotification_ArchivedReplyAndMentionSuppressNotificationDelivery(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		route func(t *testing.T, handler *consumer.MessageEventHandler, members chatmembers.Lister, pusher *dispatch.MessagePusher, resolver pushenrich.Resolver, senderID, recipientID string) error
+	}{
+		{
+			name: "thread reply",
+			route: func(_ *testing.T, handler *consumer.MessageEventHandler, members chatmembers.Lister, pusher *dispatch.MessagePusher, resolver pushenrich.Resolver, senderID, recipientID string) error {
+				return routeMessageNotification(context.Background(), handler, members, pusher, parentAuthorResolver{author: recipientID}, &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MessageSent{
+					MessageSent: &eventsv1.MessageSent{MessageId: uuid.NewString(), ChatId: "group-chat", SenderProfileId: senderID, ThreadParentId: "parent-message"},
+				}})
+			},
+		},
+		{
+			name: "mention",
+			route: func(_ *testing.T, handler *consumer.MessageEventHandler, members chatmembers.Lister, pusher *dispatch.MessagePusher, resolver pushenrich.Resolver, senderID, recipientID string) error {
+				return routeMessageNotification(context.Background(), handler, members, pusher, resolver, &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MentionAdded{
+					MentionAdded: &eventsv1.MentionAdded{MessageId: uuid.NewString(), ChatId: "channel-chat", SenderProfileId: senderID, MentionedProfileIds: []string{recipientID}},
+				}})
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			senderID := uuid.NewString()
+			recipientID := uuid.NewString()
+			recorder := &recordingMessageFCM{}
+			pusher := &dispatch.MessagePusher{
+				Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
+					uuid.MustParse(recipientID): {{Token: "recipient-token", PushService: "fcm"}},
+				}},
+				Pusher:   &dispatch.PushDispatcher{FCM: recorder},
+				Grouping: grouping.NewMemoryStore(),
+			}
+			members := stubChatMembers{rows: []chatmembers.Member{
+				{ProfileID: senderID, InboxBucket: "main"},
+				{ProfileID: recipientID, InboxBucket: "main", IsArchived: true},
+			}}
+
+			err := tc.route(t, &consumer.MessageEventHandler{Router: delivery.DecideRouting}, members, pusher, pushenrich.NoopResolver{}, senderID, recipientID)
+
+			require.NoError(t, err)
+			require.Empty(t, recorder.sent, "archived recipient must receive neither push nor notification-center delivery")
 		})
 	}
 }
