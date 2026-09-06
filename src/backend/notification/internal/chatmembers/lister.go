@@ -17,6 +17,7 @@ import (
 type Member struct {
 	ProfileID   string
 	InboxBucket string
+	IsArchived  bool
 }
 
 // Lister resolves chat members for push fan-out.
@@ -54,9 +55,12 @@ func (l *GRPCLister) ListMembers(ctx context.Context, chatID string) ([]Member, 
 	if err != nil {
 		return nil, err
 	}
-	list := resp.GetMemberList()
+	return membersFromList(resp.GetMemberList()), nil
+}
+
+func membersFromList(list *chatv1.MemberList) []Member {
 	if list == nil {
-		return nil, nil
+		return nil
 	}
 	out := make([]Member, 0, len(list.GetMembers()))
 	for _, m := range list.GetMembers() {
@@ -67,10 +71,11 @@ func (l *GRPCLister) ListMembers(ctx context.Context, chatID string) ([]Member, 
 			out = append(out, Member{
 				ProfileID:   pid,
 				InboxBucket: strings.TrimSpace(m.GetInboxBucket()),
+				IsArchived:  m.GetIsArchived(),
 			})
 		}
 	}
-	return out, nil
+	return out
 }
 
 func (l *GRPCLister) ListMemberProfileIDs(ctx context.Context, chatID string) ([]string, error) {
