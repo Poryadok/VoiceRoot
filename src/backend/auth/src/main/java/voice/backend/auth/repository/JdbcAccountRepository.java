@@ -82,25 +82,6 @@ public class JdbcAccountRepository implements AccountRepository {
   }
 
   @Override
-  public Account completeRegularEmailVerification(UUID accountId) {
-    try {
-      return jdbc.queryForObject(
-          """
-          UPDATE accounts
-          SET type = 'regular', regular_email_verification_pending = false, updated_at = now()
-          WHERE id = :id
-            AND type = 'guest'
-            AND regular_email_verification_pending = true
-          RETURNING id, email, phone, password_hash, type, status, totp_secret, totp_enabled, session_epoch, created_at, deleted_at
-          """,
-          new MapSqlParameterSource("id", accountId),
-          ROW_MAPPER);
-    } catch (org.springframework.dao.EmptyResultDataAccessException ex) {
-      throw new IllegalArgumentException("regular email verification is not pending", ex);
-    }
-  }
-
-  @Override
   public Optional<Account> findByEmail(String email) {
     if (email == null) {
       return Optional.empty();
@@ -221,7 +202,7 @@ public class JdbcAccountRepository implements AccountRepository {
       return jdbc.queryForObject(
           """
           UPDATE accounts
-          SET type = 'regular', updated_at = now()
+          SET type = 'regular', regular_email_verification_pending = false, updated_at = now()
           WHERE id = :id AND type = 'guest'
           RETURNING id, email, phone, password_hash, type, status, totp_secret, totp_enabled, session_epoch, created_at, deleted_at
           """,

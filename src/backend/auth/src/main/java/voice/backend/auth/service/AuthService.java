@@ -315,6 +315,21 @@ public class AuthService {
     return jwtService.accessTtl().toSeconds();
   }
 
+  /** Issues a replacement session only after the durable email-verification promotion is complete. */
+  public AuthSession issueVerifiedEmailSession(UUID accountId) {
+    Account account =
+        accounts
+            .findById(accountId.toString())
+            .orElseThrow(() -> new AuthException("invalid_token"));
+    ensureActive(account);
+    if (!"regular".equals(account.type())) {
+      throw new AuthException("verification_pending");
+    }
+    PreparedSessionEpoch prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
+    touchLastOnline(account);
+    return issueSession(account, prepared, "{}");
+  }
+
   public void setAccountStatus(String accountId, String status) {
     if (accountId == null || accountId.isBlank()) {
       throw new AuthException("invalid_account");

@@ -15,6 +15,9 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import voice.backend.auth.support.CapturingMailSender;
+import voice.backend.auth.repository.GuestConversionOperationRepository;
+import voice.backend.auth.repository.GuestConversionState;
+import voice.backend.auth.userdb.InMemoryPrimaryProfileProvisioner;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -23,17 +26,26 @@ class OtpRestIntegrationTest {
   @Autowired MockMvc mockMvc;
   @Autowired ObjectMapper objectMapper;
   @Autowired CapturingMailSender mailSender;
+  @Autowired GuestConversionOperationRepository operations;
+  @Autowired InMemoryPrimaryProfileProvisioner profiles;
 
   @Test
   void freshEmailRegistrationStaysGuestUntilEmailOtpVerificationThenBecomesRegular() throws Exception {
-    mockMvc
-        .perform(
-            post("/api/v1/auth/register")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(
-                    "{\"email\":\"pending-email@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}"))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.session.account_type").value("guest"));
+    JsonNode pending =
+        objectMapper.readTree(
+            mockMvc
+                .perform(
+                    post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(
+                            "{\"email\":\"pending-email@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.session.account_type").value("guest"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+    String accountId = pending.path("session").path("account_id").asText();
+    org.assertj.core.api.Assertions.assertThat(profiles.isGuestAccount(java.util.UUID.fromString(accountId))).isTrue();
 
     mailSender.clear();
     mockMvc
@@ -51,7 +63,15 @@ class OtpRestIntegrationTest {
                     "{\"email\":\"pending-email@example.com\",\"code\":\""
                         + mailSender.lastCode()
                         + "\",\"otp_type\":\"email_verify\"}"))
-        .andExpect(status().isNoContent());
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.session.account_type").value("regular"));
+
+    org.assertj.core.api.Assertions.assertThat(profiles.isGuestAccount(java.util.UUID.fromString(accountId))).isFalse();
+    org.assertj.core.api.Assertions.assertThat(
+            operations.findByAccountId(java.util.UUID.fromString(accountId)))
+        .get()
+        .extracting(operation -> operation.state())
+        .isEqualTo(GuestConversionState.PENDING_EVENT);
 
     mockMvc
         .perform(

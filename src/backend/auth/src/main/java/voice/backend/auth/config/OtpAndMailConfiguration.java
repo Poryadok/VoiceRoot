@@ -21,6 +21,7 @@ import voice.backend.auth.service.InMemoryOtpThrottle;
 import voice.backend.auth.service.OtpService;
 import voice.backend.auth.service.OtpThrottle;
 import voice.backend.auth.service.GuestConversionOtpAcceptance;
+import voice.backend.auth.service.GuestConversionPendingUserWorker;
 import voice.backend.auth.service.RedisAccountRestoreTokenStore;
 import voice.backend.auth.service.RedisOtpThrottle;
 import voice.backend.auth.support.CapturingMailSender;
@@ -75,6 +76,31 @@ public class OtpAndMailConfiguration {
   }
 
   @Bean
+  OtpService otpService(
+      AccountRepository accounts,
+      OtpCodeRepository otpCodes,
+      RefreshTokenRepository refreshTokens,
+      RefreshTokenCodec refreshTokenCodec,
+      BCryptPasswordHasher passwordHasher,
+      MailSender mailSender,
+      OtpThrottle throttle,
+      java.time.Clock clock,
+      GuestConversionOtpAcceptance guestConversionAcceptance,
+      GuestConversionPendingUserWorker pendingUserWorker) {
+    return new OtpService(
+        accounts,
+        otpCodes,
+        refreshTokens,
+        refreshTokenCodec,
+        passwordHasher,
+        mailSender,
+        throttle,
+        clock,
+        guestConversionAcceptance,
+        pendingUserWorker);
+  }
+
+  /** Compatibility factory for narrow configuration contract tests without a recovery worker. */
   OtpService otpService(
       AccountRepository accounts,
       OtpCodeRepository otpCodes,

@@ -13,9 +13,6 @@ public interface AccountRepository {
 
   boolean isRegularEmailVerificationPending(UUID accountId);
 
-  /** Atomically promotes a fresh verified email registration to regular authority. */
-  Account completeRegularEmailVerification(UUID accountId);
-
   Optional<Account> findByEmail(String email);
 
   Optional<Account> findByPhone(String phone);

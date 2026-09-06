@@ -71,14 +71,6 @@ public class InMemoryAccountRepository implements AccountRepository {
   }
 
   @Override
-  public synchronized Account completeRegularEmailVerification(UUID accountId) {
-    if (!regularEmailVerificationPending.remove(accountId)) {
-      throw new IllegalArgumentException("regular email verification is not pending");
-    }
-    return markGuestRegular(accountId);
-  }
-
-  @Override
   public Optional<Account> findByEmail(String email) {
     return Optional.ofNullable(email).map(byEmail::get).map(byId::get);
   }
@@ -188,6 +180,7 @@ public class InMemoryAccountRepository implements AccountRepository {
             existing.createdAt(),
             existing.deletedAt());
     byId.put(accountId, regular);
+    regularEmailVerificationPending.remove(accountId);
     return regular;
   }
 

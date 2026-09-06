@@ -25,6 +25,14 @@ public interface GuestConversionOperationRepository {
         .toList();
   }
 
+  /** Claims one due operation for a known account without leasing unrelated conversion work. */
+  default Optional<GuestConversionOperation> leaseDueForAccount(
+      GuestConversionState expectedState, UUID accountId, Instant now, Instant leaseUntil) {
+    Objects.requireNonNull(expectedState, "expectedState");
+    Objects.requireNonNull(accountId, "accountId");
+    return Optional.empty();
+  }
+
   /** Finds the one durable conversion operation for an account, if it exists. */
   default Optional<GuestConversionOperation> findByAccountId(UUID accountId) {
     Objects.requireNonNull(accountId, "accountId");

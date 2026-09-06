@@ -6,7 +6,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.Objects;
-import org.springframework.transaction.annotation.Transactional;
 import voice.backend.auth.mail.MailSender;
 import voice.backend.auth.repository.Account;
 import voice.backend.auth.repository.AccountRepository;
@@ -28,6 +27,7 @@ public class OtpService {
   private final OtpThrottle throttle;
   private final Clock clock;
   private final GuestConversionOtpAcceptance guestConversionAcceptance;
+  private final GuestConversionPendingUserWorker pendingUserWorker;
   private final SecureRandom random = new SecureRandom();
 
   public OtpService(
@@ -40,6 +40,30 @@ public class OtpService {
       OtpThrottle throttle,
       Clock clock,
       GuestConversionOtpAcceptance guestConversionAcceptance) {
+    this(
+        accounts,
+        otpCodes,
+        refreshTokens,
+        codec,
+        passwordHasher,
+        mailSender,
+        throttle,
+        clock,
+        guestConversionAcceptance,
+        null);
+  }
+
+  public OtpService(
+      AccountRepository accounts,
+      OtpCodeRepository otpCodes,
+      RefreshTokenRepository refreshTokens,
+      RefreshTokenCodec codec,
+      BCryptPasswordHasher passwordHasher,
+      MailSender mailSender,
+      OtpThrottle throttle,
+      Clock clock,
+      GuestConversionOtpAcceptance guestConversionAcceptance,
+      GuestConversionPendingUserWorker pendingUserWorker) {
     this.accounts = accounts;
     this.otpCodes = otpCodes;
     this.refreshTokens = refreshTokens;
@@ -49,6 +73,7 @@ public class OtpService {
     this.throttle = throttle;
     this.clock = clock;
     this.guestConversionAcceptance = Objects.requireNonNull(guestConversionAcceptance, "guestConversionAcceptance");
+    this.pendingUserWorker = pendingUserWorker;
   }
 
   public void sendOtp(SendOtpCommand command, AuthService authService) {
@@ -74,8 +99,7 @@ public class OtpService {
     throttle.recordSend(throttleKey);
   }
 
-  @Transactional
-  public void verifyOtp(VerifyOtpCommand command, AuthService authService) {
+  public AuthSession verifyOtp(VerifyOtpCommand command, AuthService authService) {
     String type = normalizeType(command.otpType());
     if (command.code() == null || command.code().isBlank()) {
       throw new AuthException("validation_failed");
@@ -94,14 +118,18 @@ public class OtpService {
     }
     if ("email_verify".equals(type) && "guest".equals(account.type())) {
       if (accounts.isRegularEmailVerificationPending(account.id())) {
-        otpCodes.markUsed(record.id(), now);
-        accounts.completeRegularEmailVerification(account.id());
-        return;
+        guestConversionAcceptance.acceptVerifiedGuestEmailOtp(account.id(), record, now);
+        if (pendingUserWorker == null
+            || !pendingUserWorker.processDueForAccount(account.id(), Duration.ofMinutes(1))) {
+          throw new AuthException("verification_pending");
+        }
+        return authService.issueVerifiedEmailSession(account.id());
       }
       guestConversionAcceptance.acceptVerifiedGuestEmailOtp(account.id(), record, now);
-      return;
+      return null;
     }
     otpCodes.markUsed(record.id(), now);
+    return null;
   }
 
   /** Verify password_reset OTP, set new password, revoke all refresh sessions. */
