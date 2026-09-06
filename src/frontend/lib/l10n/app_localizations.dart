@@ -872,6 +872,18 @@ abstract class AppLocalizations {
   /// **'Add to Quick Access'**
   String get chatListAddQuickAccess;
 
+  /// No description provided for @chatListAddToFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to folder'**
+  String get chatListAddToFolder;
+
+  /// No description provided for @chatListRemoveFromFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from folder'**
+  String get chatListRemoveFromFolder;
+
   /// No description provided for @chatNavigationMenu.
   ///
   /// In en, this message translates to:

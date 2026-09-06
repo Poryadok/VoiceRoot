@@ -443,6 +443,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatListAddQuickAccess => 'Add to Quick Access';
 
   @override
+  String get chatListAddToFolder => 'Добавить в папку';
+
+  @override
+  String get chatListRemoveFromFolder => 'Удалить из папки';
+
+  @override
   String get chatNavigationMenu => 'Navigation menu';
 
   @override

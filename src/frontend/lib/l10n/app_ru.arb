@@ -515,6 +515,8 @@
   "chatListMute": "Без звука",
   "chatListUnmute": "Включить звук",
   "chatListArchive": "В архив",
+  "chatListAddToFolder": "Добавить в папку",
+  "chatListRemoveFromFolder": "Удалить из папки",
   "chatArchiveTitle": "Архив чатов",
   "chatArchiveEmpty": "Нет архивных чатов",
   "chatArchiveEmptyHint": "Архивные чаты скрыты из основного списка, пока вы их не восстановите.",

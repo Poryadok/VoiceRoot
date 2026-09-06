@@ -205,6 +205,8 @@
   "chatListPin": "Pin",
   "chatListUnpin": "Unpin",
   "chatListAddQuickAccess": "Add to Quick Access",
+  "chatListAddToFolder": "Add to folder",
+  "chatListRemoveFromFolder": "Remove from folder",
   "chatNavigationMenu": "Navigation menu",
   "chatListEmpty": "No conversations yet",
   "chatListEmptyHint": "Find people in Search to start a direct message.",
