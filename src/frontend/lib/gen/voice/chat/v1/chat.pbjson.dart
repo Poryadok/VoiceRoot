@@ -983,6 +983,68 @@ final $typed_data.Uint8List disableChatE2ERequestDescriptor =
     $convert.base64Decode(
         'ChVEaXNhYmxlQ2hhdEUyRVJlcXVlc3QSFwoHY2hhdF9pZBgBIAEoCVIGY2hhdElk');
 
+@$core.Deprecated('Use listDMReceiptVisibilityTargetsRequestDescriptor instead')
+const ListDMReceiptVisibilityTargetsRequest$json = {
+  '1': 'ListDMReceiptVisibilityTargetsRequest',
+  '2': [
+    {'1': 'profile_id', '3': 1, '4': 1, '5': 9, '10': 'profileId'},
+    {
+      '1': 'page',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.CursorPageRequest',
+      '10': 'page'
+    },
+  ],
+};
+
+/// Descriptor for `ListDMReceiptVisibilityTargetsRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List listDMReceiptVisibilityTargetsRequestDescriptor =
+    $convert.base64Decode(
+        'CiVMaXN0RE1SZWNlaXB0VmlzaWJpbGl0eVRhcmdldHNSZXF1ZXN0Eh0KCnByb2ZpbGVfaWQYAS'
+        'ABKAlSCXByb2ZpbGVJZBI2CgRwYWdlGAIgASgLMiIudm9pY2UuY29tbW9uLnYxLkN1cnNvclBh'
+        'Z2VSZXF1ZXN0UgRwYWdl');
+
+@$core.Deprecated('Use dMReceiptVisibilityTargetDescriptor instead')
+const DMReceiptVisibilityTarget$json = {
+  '1': 'DMReceiptVisibilityTarget',
+  '2': [
+    {'1': 'chat_id', '3': 1, '4': 1, '5': 9, '10': 'chatId'},
+    {'1': 'peer_profile_id', '3': 2, '4': 1, '5': 9, '10': 'peerProfileId'},
+  ],
+};
+
+/// Descriptor for `DMReceiptVisibilityTarget`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List dMReceiptVisibilityTargetDescriptor =
+    $convert.base64Decode(
+        'ChlETVJlY2VpcHRWaXNpYmlsaXR5VGFyZ2V0EhcKB2NoYXRfaWQYASABKAlSBmNoYXRJZBImCg'
+        '9wZWVyX3Byb2ZpbGVfaWQYAiABKAlSDXBlZXJQcm9maWxlSWQ=');
+
+@$core
+    .Deprecated('Use listDMReceiptVisibilityTargetsResponseDescriptor instead')
+const ListDMReceiptVisibilityTargetsResponse$json = {
+  '1': 'ListDMReceiptVisibilityTargetsResponse',
+  '2': [
+    {
+      '1': 'targets',
+      '3': 1,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.chat.v1.DMReceiptVisibilityTarget',
+      '10': 'targets'
+    },
+    {'1': 'next_cursor', '3': 2, '4': 1, '5': 9, '10': 'nextCursor'},
+  ],
+};
+
+/// Descriptor for `ListDMReceiptVisibilityTargetsResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List listDMReceiptVisibilityTargetsResponseDescriptor =
+    $convert.base64Decode(
+        'CiZMaXN0RE1SZWNlaXB0VmlzaWJpbGl0eVRhcmdldHNSZXNwb25zZRJCCgd0YXJnZXRzGAEgAy'
+        'gLMigudm9pY2UuY2hhdC52MS5ETVJlY2VpcHRWaXNpYmlsaXR5VGFyZ2V0Ugd0YXJnZXRzEh8K'
+        'C25leHRfY3Vyc29yGAIgASgJUgpuZXh0Q3Vyc29y');
+
 @$core.Deprecated('Use chatRefDescriptor instead')
 const ChatRef$json = {
   '1': 'ChatRef',
