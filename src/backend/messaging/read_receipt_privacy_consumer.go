@@ -19,7 +19,7 @@ import (
 const privacySettingsStreamName = "user_events"
 
 type readReceiptRevocationPublisher interface {
-	PublishReadReceiptRevoked(ctx context.Context, messageID, chatID, profileID string) error
+	PublishReadReceiptRevoked(ctx context.Context, messageID, chatID, profileID, recipientProfileID string) error
 }
 
 type publicReceiptStore interface {
@@ -64,7 +64,7 @@ func subscribeReceiptPrivacy(ctx context.Context, js nats.JetStreamContext, rece
 			return
 		}
 		for _, row := range rows {
-			if err := events.PublishReadReceiptRevoked(ctx, row.MessageID.String(), row.ChatID.String(), row.ProfileID.String()); err != nil {
+			if err := events.PublishReadReceiptRevoked(ctx, row.MessageID.String(), row.ChatID.String(), row.ProfileID.String(), row.RecipientProfileID.String()); err != nil {
 				natslog.LogConsume(logger, msg, slog.LevelWarn, "receipt privacy revoke publish failed", slog.String("error", err.Error()))
 				_ = msg.Nak()
 				return

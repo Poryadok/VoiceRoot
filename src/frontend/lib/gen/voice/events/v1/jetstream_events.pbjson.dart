@@ -863,13 +863,21 @@ const ReadReceiptRevoked$json = {
     {'1': 'message_id', '3': 1, '4': 1, '5': 9, '10': 'messageId'},
     {'1': 'chat_id', '3': 2, '4': 1, '5': 9, '10': 'chatId'},
     {'1': 'profile_id', '3': 3, '4': 1, '5': 9, '10': 'profileId'},
+    {
+      '1': 'recipient_profile_id',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '10': 'recipientProfileId'
+    },
   ],
 };
 
 /// Descriptor for `ReadReceiptRevoked`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List readReceiptRevokedDescriptor = $convert.base64Decode(
     'ChJSZWFkUmVjZWlwdFJldm9rZWQSHQoKbWVzc2FnZV9pZBgBIAEoCVIJbWVzc2FnZUlkEhcKB2'
-    'NoYXRfaWQYAiABKAlSBmNoYXRJZBIdCgpwcm9maWxlX2lkGAMgASgJUglwcm9maWxlSWQ=');
+    'NoYXRfaWQYAiABKAlSBmNoYXRJZBIdCgpwcm9maWxlX2lkGAMgASgJUglwcm9maWxlSWQSMAoU'
+    'cmVjaXBpZW50X3Byb2ZpbGVfaWQYBCABKAlSEnJlY2lwaWVudFByb2ZpbGVJZA==');
 
 @$core.Deprecated('Use deliveryAckDescriptor instead')
 const DeliveryAck$json = {

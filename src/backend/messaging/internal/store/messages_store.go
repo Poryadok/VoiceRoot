@@ -526,9 +526,10 @@ WHERE chat_id = $1 AND profile_id = $2
 // and own read-state APIs; it is never exposed to a DM peer directly.
 // PublicReadReceipt is a receipt that was visible to the other DM participant.
 type PublicReadReceipt struct {
-	ChatID    uuid.UUID
-	ProfileID uuid.UUID
-	MessageID uuid.UUID
+	ChatID             uuid.UUID
+	ProfileID          uuid.UUID // receipt reader whose cursor was visible
+	MessageID          uuid.UUID
+	RecipientProfileID uuid.UUID // participant that must remove this rendered tick
 }
 
 // ClearPublicReadReceiptsForProfile revokes previously exposed DM receipt
@@ -537,21 +538,39 @@ func (s *MessagesStore) ClearPublicReadReceiptsForProfile(ctx context.Context, p
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("messages store: pool not configured")
 	}
-	// Lock and capture the old cursor before writing NULL: RETURNING sees the
-	// post-update value, which is intentionally NULL for a revoked receipt.
+	// DM-only symmetric revocation. Own public cursors are cleared and routed to
+	// the peer; a peer's existing cursor remains stored but is routed only to
+	// this newly opted-out viewer, so it cannot remain rendered for them.
 	rows, err := s.Pool.Query(ctx, `
-WITH revoked AS (
-  SELECT chat_id, profile_id, last_read_message_id
-  FROM read_receipts
-  WHERE profile_id = $1 AND last_read_message_id IS NOT NULL
+WITH dm_chats AS (
+  SELECT cm.chat_id
+  FROM chat_members cm
+  JOIN chats c ON c.id = cm.chat_id AND c.type = 'dm'
+  WHERE cm.profile_id = $1
+), own_before AS (
+  SELECT rr.chat_id, rr.profile_id, rr.last_read_message_id
+  FROM read_receipts rr
+  JOIN dm_chats dc ON dc.chat_id = rr.chat_id
+  WHERE rr.profile_id = $1 AND rr.last_read_message_id IS NOT NULL
   FOR UPDATE
 ), cleared AS (
-  UPDATE read_receipts AS rr
+  UPDATE read_receipts rr
   SET last_read_message_id = NULL, updated_at = now()
-  FROM revoked AS r
-  WHERE rr.chat_id = r.chat_id AND rr.profile_id = r.profile_id
+  FROM own_before ob
+  WHERE rr.chat_id = ob.chat_id AND rr.profile_id = ob.profile_id
+), own_revocations AS (
+  SELECT ob.chat_id, ob.profile_id, ob.last_read_message_id, cm.profile_id AS recipient_profile_id
+  FROM own_before ob
+  JOIN chat_members cm ON cm.chat_id = ob.chat_id AND cm.profile_id <> $1
+), peer_revocations AS (
+  SELECT rr.chat_id, rr.profile_id, rr.last_read_message_id, $1::uuid AS recipient_profile_id
+  FROM read_receipts rr
+  JOIN dm_chats dc ON dc.chat_id = rr.chat_id
+  WHERE rr.profile_id <> $1 AND rr.last_read_message_id IS NOT NULL
 )
-SELECT chat_id, profile_id, last_read_message_id FROM revoked
+SELECT chat_id, profile_id, last_read_message_id, recipient_profile_id FROM own_revocations
+UNION ALL
+SELECT chat_id, profile_id, last_read_message_id, recipient_profile_id FROM peer_revocations
 `, profileID)
 	if err != nil {
 		return nil, err
@@ -560,7 +579,7 @@ SELECT chat_id, profile_id, last_read_message_id FROM revoked
 	var out []PublicReadReceipt
 	for rows.Next() {
 		var r PublicReadReceipt
-		if err := rows.Scan(&r.ChatID, &r.ProfileID, &r.MessageID); err != nil {
+		if err := rows.Scan(&r.ChatID, &r.ProfileID, &r.MessageID, &r.RecipientProfileID); err != nil {
 			return nil, err
 		}
 		out = append(out, r)

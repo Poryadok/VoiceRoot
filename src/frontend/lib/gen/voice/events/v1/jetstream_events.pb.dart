@@ -2801,11 +2801,14 @@ class ReadReceiptRevoked extends $pb.GeneratedMessage {
     $core.String? messageId,
     $core.String? chatId,
     $core.String? profileId,
+    $core.String? recipientProfileId,
   }) {
     final result = create();
     if (messageId != null) result.messageId = messageId;
     if (chatId != null) result.chatId = chatId;
     if (profileId != null) result.profileId = profileId;
+    if (recipientProfileId != null)
+      result.recipientProfileId = recipientProfileId;
     return result;
   }
 
@@ -2826,6 +2829,7 @@ class ReadReceiptRevoked extends $pb.GeneratedMessage {
     ..aOS(1, _omitFieldNames ? '' : 'messageId')
     ..aOS(2, _omitFieldNames ? '' : 'chatId')
     ..aOS(3, _omitFieldNames ? '' : 'profileId')
+    ..aOS(4, _omitFieldNames ? '' : 'recipientProfileId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2873,6 +2877,16 @@ class ReadReceiptRevoked extends $pb.GeneratedMessage {
   $core.bool hasProfileId() => $_has(2);
   @$pb.TagNumber(3)
   void clearProfileId() => $_clearField(3);
+
+  /// When set, only this participant must remove the rendered tick.
+  @$pb.TagNumber(4)
+  $core.String get recipientProfileId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set recipientProfileId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasRecipientProfileId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearRecipientProfileId() => $_clearField(4);
 }
 
 class DeliveryAck extends $pb.GeneratedMessage {

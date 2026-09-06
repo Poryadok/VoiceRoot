@@ -103,7 +103,7 @@ func messageEventToFanout(data []byte, header nats.Header) (chatID string, env f
 		if rr == nil || rr.GetChatId() == "" || rr.GetMessageId() == "" || rr.GetProfileId() == "" {
 			return "", fanoutEnvelope{}, false
 		}
-		d, err := json.Marshal(map[string]string{"chat_id": rr.GetChatId(), "message_id": rr.GetMessageId(), "profile_id": rr.GetProfileId()})
+		d, err := json.Marshal(map[string]string{"chat_id": rr.GetChatId(), "message_id": rr.GetMessageId(), "profile_id": rr.GetProfileId(), "recipient_profile_id": rr.GetRecipientProfileId()})
 		if err != nil {
 			return "", fanoutEnvelope{}, false
 		}

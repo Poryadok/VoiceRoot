@@ -15,13 +15,26 @@ func TestClearPublicReadReceiptsForProfileReturnsPreUpdateCursor(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForStoreTest(t, ctx)
 	seedMessagingSchema(t, ctx, pool)
+	seedChatSchema(t, ctx, pool)
 	store := &MessagesStore{Pool: pool}
-	chatID, profileID, messageID := uuid.New(), uuid.New(), uuid.Must(uuid.NewV7())
+	chatID, profileID, peerID := uuid.New(), uuid.New(), uuid.New()
+	messageID, peerMessageID := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	_, err := pool.Exec(ctx, `INSERT INTO chats (id, type, creator_profile_id, slow_mode_seconds) VALUES ($1, 'dm', $2, 0)`, chatID, profileID)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO chat_members (chat_id, profile_id, role) VALUES ($1, $2, 'member'), ($1, $3, 'member')`, chatID, profileID, peerID)
+	require.NoError(t, err)
 	require.NoError(t, store.UpsertReadReceipt(ctx, chatID, profileID, messageID))
+	require.NoError(t, store.UpsertReadReceipt(ctx, chatID, peerID, peerMessageID))
 	revoked, err := store.ClearPublicReadReceiptsForProfile(ctx, profileID)
 	require.NoError(t, err)
-	require.Equal(t, []PublicReadReceipt{{ChatID: chatID, ProfileID: profileID, MessageID: messageID}}, revoked)
+	require.ElementsMatch(t, []PublicReadReceipt{
+		{ChatID: chatID, ProfileID: profileID, MessageID: messageID, RecipientProfileID: peerID},
+		{ChatID: chatID, ProfileID: peerID, MessageID: peerMessageID, RecipientProfileID: profileID},
+	}, revoked)
 	public, _, err := store.GetReadReceipt(ctx, chatID, profileID)
 	require.NoError(t, err)
 	require.Nil(t, public)
+	peerPublic, _, err := store.GetReadReceipt(ctx, chatID, peerID)
+	require.NoError(t, err)
+	require.Equal(t, peerMessageID, *peerPublic)
 }

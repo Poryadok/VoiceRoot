@@ -251,7 +251,7 @@ func main() {
 				}
 			}()
 			if revoker, ok := msgEvents.(interface {
-				PublishReadReceiptRevoked(context.Context, string, string, string) error
+				PublishReadReceiptRevoked(context.Context, string, string, string, string) error
 			}); ok {
 				go func() {
 					if err := runReceiptPrivacyConsumer(context.Background(), natsURL, instanceID, &store.MessagesStore{Pool: pool}, revoker, logger); err != nil {

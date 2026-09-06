@@ -320,8 +320,8 @@ func (p *JetStreamPublisher) PublishMessageDeleted(ctx context.Context, messageI
 }
 
 // PublishReadReceiptRevoked retracts a previously public receipt after a DM participant opts out.
-func (p *JetStreamPublisher) PublishReadReceiptRevoked(ctx context.Context, messageID, chatID, profileID string) error {
-	env := &eventsv1.MessageStreamEvent{EventId: uuid.NewString(), OccurredAt: timestamppb.New(time.Now().UTC()), Payload: &eventsv1.MessageStreamEvent_ReadReceiptRevoked{ReadReceiptRevoked: &eventsv1.ReadReceiptRevoked{MessageId: messageID, ChatId: chatID, ProfileId: profileID}}}
+func (p *JetStreamPublisher) PublishReadReceiptRevoked(ctx context.Context, messageID, chatID, profileID, recipientProfileID string) error {
+	env := &eventsv1.MessageStreamEvent{EventId: uuid.NewString(), OccurredAt: timestamppb.New(time.Now().UTC()), Payload: &eventsv1.MessageStreamEvent_ReadReceiptRevoked{ReadReceiptRevoked: &eventsv1.ReadReceiptRevoked{MessageId: messageID, ChatId: chatID, ProfileId: profileID, RecipientProfileId: recipientProfileID}}}
 	return p.publishProto(ctx, subjectReadReceiptRevoked, env)
 }
 
