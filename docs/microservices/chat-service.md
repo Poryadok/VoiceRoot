@@ -201,7 +201,7 @@ CREATE INDEX quick_access_profile_order_idx ON quick_access_chats (profile_id, s
 
 ### Deployed schema (migrations `000001`–`000011`) vs full spec
 
-**Shipped today** (`chat_db` migrations): DM + group + channel types; `chat_members.inbox_bucket`; `threads_enabled` / `allow_user_main_feed`; `e2e_enabled`; slow mode; chat-level `allow_guests` column (`000007`, deployed default `true` conflicts with the fail-closed target and enforcement is not yet wired); `folders` + `folder_chats`; `quick_access_chats`; per-profile `deleted_for_self` (`000011`). Folder membership/pin, `ListChats.folder_id` and `UpdateFolder`/`DeleteFolder` are implemented. Incoming-DM auto-unarchive is also implemented but now conflicts with the canonical badge-only archive policy and must be removed.
+**Shipped today** (`chat_db` migrations): DM + group + channel types; `chat_members.inbox_bucket`; `threads_enabled` / `allow_user_main_feed`; `e2e_enabled`; slow mode; chat-level `allow_guests` column (`000007`, deployed default `true` conflicts with the fail-closed target and enforcement is not yet wired); `folders` + `folder_chats`; `quick_access_chats`; per-profile `deleted_for_self` (`000011`). Folder membership/pin, `ListChats.folder_id` and `UpdateFolder`/`DeleteFolder` are implemented. Incoming message activity keeps archived chats in the archive and only updates their unread badge.
 
 ### Guest admission
 

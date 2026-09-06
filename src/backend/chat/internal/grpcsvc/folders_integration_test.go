@@ -3,6 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -155,8 +156,9 @@ func TestDeleteFolder_CustomFolder(t *testing.T) {
 	require.Len(t, list.GetFolderList().GetFolders(), 5)
 }
 
-// TestAutoUnarchiveIncomingDM documents text-chat.md § incoming DM auto-unarchive side-effect.
-func TestAutoUnarchiveIncomingDM(t *testing.T) {
+// TestArchivedIncomingDMActivityRemainsArchive documents text-chat.md §Архивирование:
+// incoming activity updates the archived chat badge without returning it to the main inbox.
+func TestArchivedIncomingDMActivityRemainsArchive(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -191,15 +193,15 @@ func TestAutoUnarchiveIncomingDM(t *testing.T) {
 	require.Len(t, archiveList.GetChatList().GetItems(), 1)
 
 	store := &store.DMStore{Pool: pool}
-	require.NoError(t, store.AutoUnarchiveDMRecipients(ctx, uuid.MustParse(chatID), profB))
+	require.NoError(t, store.TouchLastMessageAt(ctx, uuid.MustParse(chatID), time.Now().UTC()))
 
 	mainList, err := client.ListChats(ctxA, &chatv1.ListChatsRequest{})
 	require.NoError(t, err)
-	require.Len(t, mainList.GetChatList().GetItems(), 1)
+	require.Empty(t, mainList.GetChatList().GetItems())
 
 	archiveList, err = client.ListChats(ctxA, &chatv1.ListChatsRequest{Inbox: &inboxArchive})
 	require.NoError(t, err)
-	require.Empty(t, archiveList.GetChatList().GetItems())
+	require.Len(t, archiveList.GetChatList().GetItems(), 1)
 }
 
 // TestArchiveChat_RemovesQuickAccess documents chat-service.md § Archive side-effect on Quick Access.
