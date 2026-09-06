@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -12,6 +14,15 @@ import (
 
 	eventsv1 "voice.app/voice/events/v1"
 )
+
+type staticMemberDeliveryLister struct {
+	states map[string]chatMemberDeliveryState
+	err    error
+}
+
+func (l staticMemberDeliveryLister) RecipientDeliveryStates(_ context.Context, _ string) (map[string]chatMemberDeliveryState, error) {
+	return l.states, l.err
+}
 
 func notificationPayload(t *testing.T, env fanoutEnvelope) map[string]string {
 	t.Helper()
@@ -97,8 +108,8 @@ func TestInAppNotificationFanouts_MessageRequestForRequestsInbox(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fanouts, ok := inAppNotificationFanouts(b, []string{senderID, recipientID}, "", map[string]string{
-		recipientID: "requests",
+	fanouts, ok := inAppNotificationFanouts(b, []string{senderID, recipientID}, "", map[string]chatMemberDeliveryState{
+		recipientID: {InboxBucket: "requests"},
 	})
 	if !ok {
 		t.Fatal("expected ok")
@@ -107,6 +118,97 @@ func TestInAppNotificationFanouts_MessageRequestForRequestsInbox(t *testing.T) {
 	d := notificationPayload(t, fanouts[0].Envelope)
 	if d["type"] != "message_request" {
 		t.Fatalf("type=%q want message_request", d["type"])
+	}
+}
+
+func TestInAppNotificationFanouts_ArchivedRecipientsStayQuiet(t *testing.T) {
+	chatID, messageID := uuid.NewString(), uuid.NewString()
+	senderID, activeID, archivedID := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	messageEvent := &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MessageSent{MessageSent: &eventsv1.MessageSent{
+		ChatId: chatID, MessageId: messageID, SenderProfileId: senderID,
+	}}}
+	payload, err := proto.Marshal(messageEvent)
+	require.NoError(t, err)
+	states := map[string]chatMemberDeliveryState{
+		activeID:   {},
+		archivedID: {IsArchived: true},
+	}
+	fanouts, ok := inAppNotificationFanouts(payload, []string{senderID, activeID, archivedID}, "", states)
+	require.True(t, ok)
+	require.Len(t, fanouts, 1)
+	require.Equal(t, activeID, fanouts[0].ProfileID)
+	quiet := archiveActivityFanouts(payload, states)
+	require.Len(t, quiet, 1)
+	require.Equal(t, archivedID, quiet[0].ProfileID)
+	require.Equal(t, "archive_activity", quiet[0].Envelope.Op)
+}
+
+func TestInAppNotificationFanouts_ArchivedMentionAndReactionStayQuiet(t *testing.T) {
+	chatID, messageID := uuid.NewString(), uuid.NewString()
+	senderID, archivedID := uuid.NewString(), uuid.NewString()
+	states := map[string]chatMemberDeliveryState{archivedID: {IsArchived: true}}
+	mention := &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MentionAdded{MentionAdded: &eventsv1.MentionAdded{
+		ChatId: chatID, MessageId: messageID, SenderProfileId: senderID, MentionedProfileIds: []string{archivedID},
+	}}}
+	payload, err := proto.Marshal(mention)
+	require.NoError(t, err)
+	fanouts, ok := inAppNotificationFanouts(payload, nil, "", states)
+	require.True(t, ok)
+	require.Empty(t, fanouts)
+	require.Empty(t, archiveActivityFanouts(payload, states))
+
+	reaction := &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_ReactionAdded{ReactionAdded: &eventsv1.ReactionAdded{
+		ChatId: chatID, MessageId: messageID, ProfileId: senderID, MessageAuthorProfileId: archivedID, Emoji: "👍",
+	}}}
+	payload, err = proto.Marshal(reaction)
+	require.NoError(t, err)
+	fanouts, ok = inAppNotificationFanouts(payload, nil, "", states)
+	require.True(t, ok)
+	require.Empty(t, fanouts)
+	require.Empty(t, archiveActivityFanouts(payload, states))
+}
+
+func TestDispatchMessageStreamEvent_LookupFailureKeepsChatBroadcastQuiet(t *testing.T) {
+	chatID, messageID := uuid.NewString(), uuid.NewString()
+	senderID, recipientID := uuid.NewString(), uuid.NewString()
+	hub := newWSHub()
+	hub.memberInboxLister = staticMemberDeliveryLister{err: errors.New("chat unavailable")}
+	sender := hub.attachConn("inst", "sender", senderID, 8)
+	recipient := hub.attachConn("inst", "recipient", recipientID, 8)
+	hub.addChat(sender, chatID)
+	hub.addChat(recipient, chatID)
+	payload, err := proto.Marshal(&eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MessageSent{MessageSent: &eventsv1.MessageSent{
+		ChatId: chatID, MessageId: messageID, SenderProfileId: senderID,
+	}}})
+	require.NoError(t, err)
+	dispatchMessageStreamEvent(hub, payload, nil, nil, "")
+	require.Equal(t, []string{"message_create"}, drainFanoutOps(t, recipient, 50*time.Millisecond))
+}
+
+func TestDispatchMessageStreamEvent_ArchivedReactionAndMentionDoNotEmitArchiveActivity(t *testing.T) {
+	chatID, messageID := uuid.NewString(), uuid.NewString()
+	senderID, archivedID := uuid.NewString(), uuid.NewString()
+	states := map[string]chatMemberDeliveryState{archivedID: {IsArchived: true}}
+
+	for _, event := range []*eventsv1.MessageStreamEvent{
+		{Payload: &eventsv1.MessageStreamEvent_ReactionAdded{ReactionAdded: &eventsv1.ReactionAdded{
+			ChatId: chatID, MessageId: messageID, ProfileId: senderID, MessageAuthorProfileId: archivedID, Emoji: "👍",
+		}}},
+		{Payload: &eventsv1.MessageStreamEvent_MentionAdded{MentionAdded: &eventsv1.MentionAdded{
+			ChatId: chatID, MessageId: messageID, SenderProfileId: senderID, MentionedProfileIds: []string{archivedID},
+		}}},
+	} {
+		hub := newWSHub()
+		hub.memberInboxLister = staticMemberDeliveryLister{states: states}
+		archived := hub.attachConn("inst", uuid.NewString(), archivedID, 8)
+		hub.addChat(archived, chatID)
+		payload, err := proto.Marshal(event)
+		require.NoError(t, err)
+		dispatchMessageStreamEvent(hub, payload, nil, nil, "")
+		ops := drainFanoutOps(t, archived, 50*time.Millisecond)
+		require.NotContains(t, ops, "archive_activity")
+		require.NotContains(t, ops, "notification")
+		require.NotContains(t, ops, "mention")
 	}
 }
 

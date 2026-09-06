@@ -764,6 +764,19 @@ class ChatArchiveListController extends StateNotifier<ChatListState> {
     }
   }
 
+  /// Quiet activity for an archived chat: update its badge only. The Realtime
+  /// `archive_activity` frame intentionally has no notification-center or
+  /// sound semantics (text-chat.md §Архивирование).
+  void bumpUnread(String chatId, {int delta = 1}) {
+    if (delta <= 0) return;
+    final index = state.items.indexWhere((item) => item.chatId == chatId);
+    if (index < 0) return;
+    final item = state.items[index];
+    final items = [...state.items];
+    items[index] = item.copyWith(unreadCount: item.unreadCount + delta);
+    state = state.copyWith(items: items);
+  }
+
   bool _matchesSession(String? profileId, String authorization) {
     final session = _ref.read(authControllerProvider).session;
     return session?.activeProfileId == profileId &&
@@ -1080,6 +1093,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       _ref.read(realtimeHubProvider).ensureSubscribed(chatId);
     });
   }
+
   String? _loadedHistoryProfileId;
   var _historyGeneration = 0;
   var _loadGeneration = 0;
@@ -1279,8 +1293,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         return;
       }
       _applyDmPeerState(data.dmPeerState);
-      if (data.dmPeerState ==
-          messaging_pb.DmPeerState.DM_PEER_STATE_DELETED) {
+      if (data.dmPeerState == messaging_pb.DmPeerState.DM_PEER_STATE_DELETED) {
         return;
       }
       if (data.messages.isEmpty) return;
@@ -1541,20 +1554,20 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         .read(messageCacheStoreProvider)
         .getMessages(profileId: profileId, chatId: chatId);
     if (!_isCurrentInitialLoad(
-      profileId: profileId,
-      authorization: authorization,
-      generation: _loadGeneration,
-    ) ||
+          profileId: profileId,
+          authorization: authorization,
+          generation: _loadGeneration,
+        ) ||
         _historyGeneration != historyGeneration) {
       return false;
     }
     if (cached.isEmpty) return false;
     final sorted = await _finalizeMessages(_sortMessages(cached));
     if (!_isCurrentInitialLoad(
-      profileId: profileId,
-      authorization: authorization,
-      generation: _loadGeneration,
-    ) ||
+          profileId: profileId,
+          authorization: authorization,
+          generation: _loadGeneration,
+        ) ||
         _historyGeneration != historyGeneration) {
       return false;
     }
@@ -2696,8 +2709,7 @@ final groupMembersProvider = FutureProvider.family<MemberListData, String>((
       .listGroupMembers(authorization: auth, chatId: chatId);
   return switch (result) {
     ChatsApiOk(:final data) => data,
-    ChatsApiFailure(:final statusCode)
-        when isBackendUnavailable(statusCode) =>
+    ChatsApiFailure(:final statusCode) when isBackendUnavailable(statusCode) =>
       throw const BackendUnavailableException(),
     ChatsApiFailure(:final message) => throw Exception(message),
   };
