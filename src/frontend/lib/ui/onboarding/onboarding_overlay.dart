@@ -23,16 +23,31 @@ class OnboardingOverlay extends ConsumerStatefulWidget {
 class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
   var _loaded = false;
   var _saveAccountModalOpen = false;
+  late final ProviderSubscription<NavigationSection> _navigationSubscription;
   OverlayEntry? _coachMark;
 
   @override
   void initState() {
     super.initState();
+    _navigationSubscription = ref.listenManual(navigationSectionProvider, (
+      previous,
+      next,
+    ) {
+      if (previous == NavigationSection.social ||
+          next != NavigationSection.social) {
+        return;
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _maybeShowStep();
+      });
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadOnboarding());
   }
 
   @override
   void dispose() {
+    _navigationSubscription.close();
     _clearCoachMark();
     super.dispose();
   }
@@ -53,7 +68,7 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
     }
   }
 
-  void _maybeShowStep() {
+  Future<void> _maybeShowStep() async {
     final onboarding = ref.read(onboardingControllerProvider);
     if (!onboarding.shouldShowHints) return;
     final step = onboarding.currentStep;
@@ -63,7 +78,12 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
 
     if (step == OnboardingStep.saveAccount &&
         ref.read(authControllerProvider).isGuest) {
-      ref.read(onboardingControllerProvider.notifier).completeCurrentStep();
+      await _completeCurrentStepAndShowNext(retryOnFailure: false);
+      return;
+    }
+
+    if (step == OnboardingStep.matchmaking &&
+        ref.read(navigationSectionProvider) != NavigationSection.social) {
       return;
     }
 
@@ -76,8 +96,7 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
           title: l10n.onboardingChatsNavTitle,
           body: l10n.onboardingChatsNavBody,
           continueLabel: l10n.onboardingGotIt,
-          onContinue: () =>
-              ref.read(onboardingControllerProvider.notifier).completeCurrentStep(),
+          onContinue: _completeCurrentStepAndShowNext,
         );
       case OnboardingStep.spaces:
         _showCoachMark(
@@ -86,20 +105,16 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
           body: l10n.onboardingSpacesBody,
           continueLabel: l10n.onboardingLater,
           secondaryLabel: l10n.onboardingSpacesFind,
-          onSecondary: () {
+          onSecondary: () async {
             ref.read(shellNavigationProvider).setNavigationSection(
               NavigationSection.chats,
             );
             ref.read(globalSearchFocusRequestProvider.notifier).state++;
-            ref.read(onboardingControllerProvider.notifier).completeCurrentStep();
+            await _completeCurrentStepAndShowNext();
           },
-          onContinue: () =>
-              ref.read(onboardingControllerProvider.notifier).completeCurrentStep(),
+          onContinue: _completeCurrentStepAndShowNext,
         );
       case OnboardingStep.matchmaking:
-        ref.read(shellNavigationProvider).setNavigationSection(
-          NavigationSection.social,
-        );
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           _showCoachMark(
@@ -108,32 +123,42 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
             body: l10n.onboardingMatchmakingBody,
             continueLabel: l10n.onboardingLater,
             secondaryLabel: l10n.onboardingMatchmakingTry,
-            onSecondary: () {
-              ref.read(onboardingControllerProvider.notifier).completeCurrentStep();
-            },
-            onContinue: () =>
-                ref.read(onboardingControllerProvider.notifier).completeCurrentStep(),
+            onSecondary: _completeCurrentStepAndShowNext,
+            onContinue: _completeCurrentStepAndShowNext,
           );
         });
       case OnboardingStep.wrapUp:
         _showHintDialog(
           title: l10n.onboardingWrapUpTitle,
           body: l10n.onboardingWrapUpBody,
-          onContinue: () =>
-              ref.read(onboardingControllerProvider.notifier).completeCurrentStep(),
+          onContinue: _completeCurrentStepAndShowNext,
           continueLabel: l10n.onboardingWrapUpStart,
         );
     }
+  }
+
+  Future<void> _completeCurrentStepAndShowNext({
+    bool retryOnFailure = true,
+  }) async {
+    final currentStep = ref.read(onboardingControllerProvider).currentStep;
+    if (currentStep == null) return;
+
+    await ref.read(onboardingControllerProvider.notifier).completeCurrentStep();
+    if (!mounted) return;
+
+    final nextStep = ref.read(onboardingControllerProvider).currentStep;
+    if (!retryOnFailure && nextStep == currentStep) return;
+    await _maybeShowStep();
   }
 
   void _showCoachMark({
     required GlobalKey anchorKey,
     required String title,
     required String body,
-    required VoidCallback onContinue,
+    required Future<void> Function() onContinue,
     String? continueLabel,
     String? secondaryLabel,
-    VoidCallback? onSecondary,
+    Future<void> Function()? onSecondary,
   }) {
     final l10n = AppLocalizations.of(context)!;
     _clearCoachMark();
@@ -143,10 +168,9 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
       anchorKey: anchorKey,
       title: title,
       body: body,
-      onContinue: () {
+      onContinue: () async {
         _clearCoachMark();
-        onContinue();
-        _maybeShowStep();
+        await onContinue();
       },
       onSkip: () {
         _clearCoachMark();
@@ -157,9 +181,9 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
       secondaryLabel: secondaryLabel,
       onSecondary: onSecondary == null
           ? null
-          : () {
+          : () async {
               _clearCoachMark();
-              onSecondary();
+              await onSecondary();
             },
     );
   }
@@ -205,13 +229,13 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
     } finally {
       _saveAccountModalOpen = false;
     }
-    if (mounted) _maybeShowStep();
+    if (mounted) await _maybeShowStep();
   }
 
   Future<void> _showHintDialog({
     required String title,
     required String body,
-    required VoidCallback onContinue,
+    required Future<void> Function() onContinue,
     required String continueLabel,
   }) async {
     final l10n = AppLocalizations.of(context)!;
@@ -230,10 +254,10 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
             child: Text(l10n.onboardingSkip),
           ),
           FilledButton(
-            onPressed: () {
-              onContinue();
+          onPressed: () async {
+              await onContinue();
+              if (!ctx.mounted) return;
               Navigator.of(ctx).pop();
-              _maybeShowStep();
             },
             child: Text(continueLabel),
           ),
