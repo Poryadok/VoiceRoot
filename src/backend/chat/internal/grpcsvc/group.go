@@ -29,6 +29,11 @@ func (s *ChatGRPC) CreateChat(ctx context.Context, req *chatv1.CreateChatRequest
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
 	}
+	// Guests may participate only after a regular member explicitly invites them
+	// to a standalone chat that opted in. They must never create a chat themselves.
+	if err := authctx.RequireRegular(ctx); err != nil {
+		return nil, err
+	}
 	name := strings.TrimSpace(req.GetName())
 	if name == "" {
 		return nil, status.Error(codes.InvalidArgument, "name is required")
