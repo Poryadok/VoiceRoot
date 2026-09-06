@@ -319,6 +319,54 @@ void main() {
     expect((await storage.read())?.accountType, 'regular');
   });
 
+  test('guest conversion polls guest refreshes without replaying accepted OTP', () async {
+    final guestStorage = InMemoryGuestCredentialsStorage();
+    await guestStorage.writePassword('guest-auto-password-1');
+    var refreshes = 0;
+    var verifies = 0;
+    final mock = MockClient((req) async {
+      if (req.url.path == '/api/v1/auth/convert-guest') {
+        return http.Response(jsonEncode({'session': {...(sessionJson()['session'] as Map<String, dynamic>), 'account_type': 'guest'}}), 200);
+      }
+      if (req.url.path == '/api/v1/auth/otp/send') return http.Response('', 204);
+      if (req.url.path == '/api/v1/auth/otp/verify') {
+        verifies++;
+        return http.Response('', 204);
+      }
+      if (req.url.path == '/api/v1/auth/refresh') {
+        refreshes++;
+        final type = refreshes < 4 ? 'guest' : 'regular';
+        return http.Response(jsonEncode({'session': {...(sessionJson()['session'] as Map<String, dynamic>), 'account_type': type}}), 200);
+      }
+      return http.Response('not found', 404);
+    });
+    final container = ProviderContainer(overrides: [
+      gatewayConfigProvider.overrideWithValue(config),
+      httpClientProvider.overrideWithValue(mock),
+      authSessionStorageProvider.overrideWithValue(InMemoryAuthSessionStorage()),
+      guestCredentialsStorageProvider.overrideWithValue(guestStorage),
+    ]);
+    addTearDown(container.dispose);
+    final controller = container.read(authControllerProvider.notifier);
+    controller.state = const AuthState(
+      session: AuthSession(
+        accessToken: 'guest-access',
+        refreshToken: 'guest-refresh',
+        accountId: 'acc-1',
+        activeProfileId: 'prof-1',
+        expiresInSeconds: 900,
+        accountType: 'guest',
+      ),
+      isGuest: true,
+    );
+
+    await controller.convertGuest(email: 'guest@example.com', password: 'user-password1');
+    expect(await controller.verifyGuestConversionEmail('123456'), isNull);
+    expect(refreshes, 4);
+    expect(verifies, 1);
+    expect(container.read(authControllerProvider).isGuest, isFalse);
+  });
+
   test('restore keeps session on network_error refresh failure', () async {
     final mock = MockClient((req) async {
       if (req.url.path == '/api/v1/auth/refresh') {

@@ -19,6 +19,8 @@ class GuestConvertSheet extends ConsumerStatefulWidget {
   static const Key codeFieldKey = Key('guest_convert_code');
   static const Key verifyButtonKey = Key('guest_convert_verify');
   static const Key resendButtonKey = Key('guest_convert_resend');
+  static const Key refreshPromotionButtonKey =
+      Key('guest_convert_refresh_promotion');
 
   static Future<void> show(BuildContext context) {
     return showModalBottomSheet<void>(
@@ -108,6 +110,25 @@ class _GuestConvertSheetState extends ConsumerState<GuestConvertSheet> {
     });
   }
 
+  Future<void> _refreshPromotion() async {
+    setState(() {
+      _submitting = true;
+      _apiErrorKey = null;
+    });
+    final err = await ref
+        .read(authControllerProvider.notifier)
+        .resumeGuestConversionPromotion();
+    if (!mounted) return;
+    if (err == null) {
+      Navigator.of(context).pop();
+      return;
+    }
+    setState(() {
+      _submitting = false;
+      _apiErrorKey = err;
+    });
+  }
+
   String? _emailValidator(String? value, AppLocalizations l10n) {
     if (value == null || value.trim().isEmpty) {
       return l10n.authErrorEmptyFields;
@@ -132,6 +153,11 @@ class _GuestConvertSheetState extends ConsumerState<GuestConvertSheet> {
     final pendingEmail = ref.watch(
       authControllerProvider.select(
         (state) => state.pendingGuestConversionEmail,
+      ),
+    );
+    final promotionPending = ref.watch(
+      authControllerProvider.select(
+        (state) => state.isGuestConversionPromotionPending,
       ),
     );
     return SafeArea(
@@ -188,6 +214,15 @@ class _GuestConvertSheetState extends ConsumerState<GuestConvertSheet> {
                   onPressed: _submitting ? null : _submit,
                   isLoading: _submitting,
                   child: Text(l10n.guestConvertSubmit),
+                ),
+              ] else if (promotionPending) ...[
+                Text(l10n.guestConvertPromotionPending),
+                const SizedBox(height: 20),
+                VoicePrimaryButton(
+                  key: GuestConvertSheet.refreshPromotionButtonKey,
+                  onPressed: _submitting ? null : _refreshPromotion,
+                  isLoading: _submitting,
+                  child: Text(l10n.guestConvertRefreshStatus),
                 ),
               ] else ...[
                 TextFormField(
