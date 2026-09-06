@@ -677,6 +677,8 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   void _terminateProfileSession() {
+    _refreshTimer?.cancel();
+    _refreshTimer = null;
     _profileSwitchGeneration++;
     _latestProfileSession = null;
     _latestProfileSessionGeneration = -1;

@@ -24,11 +24,15 @@ class GuestConvertSheet extends ConsumerStatefulWidget {
   );
 
   static Future<void> show(BuildContext context) {
+    final container = ProviderScope.containerOf(context, listen: false);
     return showModalBottomSheet<void>(
       context: context,
       useRootNavigator: true,
       isScrollControlled: true,
-      builder: (_) => const VoiceFocusTrap(child: GuestConvertSheet()),
+      builder: (_) => UncontrolledProviderScope(
+        container: container,
+        child: const VoiceFocusTrap(child: GuestConvertSheet()),
+      ),
     );
   }
 
