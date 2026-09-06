@@ -84,7 +84,7 @@ class AuthGrpcIntegrationTest {
   }
 
   @org.junit.jupiter.api.Test
-  void registerGuestJwtContainsAccountTypeGuestAndValidateReturnsIt() throws Exception {
+  void guestAndPendingEmailJwtContainGuestAccountTypeAndValidateReturnsIt() throws Exception {
     String serverName = InProcessServerBuilder.generateName();
     Server server = InProcessServerBuilder.forName(serverName).directExecutor().addService(grpcService).build().start();
     ManagedChannel channel = InProcessChannelBuilder.forName(serverName).directExecutor().build();
@@ -104,19 +104,19 @@ class AuthGrpcIntegrationTest {
       assertThat(guestAccountTypeField).as("TokenClaims.account_type proto field").isNotNull();
       assertThat(guestClaims.getField(guestAccountTypeField)).isEqualTo("guest");
 
-      var regular = client.register(RegisterRequest.newBuilder()
+      var pendingEmail = client.register(RegisterRequest.newBuilder()
           .setEmail("regular-grpc@example.com")
           .setPassword("Correct horse battery staple")
           .build()).getSession();
-      var regularJwt = SignedJWT.parse(regular.getAccessToken()).getJWTClaimsSet();
-      assertThat(regularJwt.getStringClaim("account_type")).isEqualTo("regular");
+      var pendingEmailJwt = SignedJWT.parse(pendingEmail.getAccessToken()).getJWTClaimsSet();
+      assertThat(pendingEmailJwt.getStringClaim("account_type")).isEqualTo("guest");
 
-      var regularClaims = client.validateToken(ValidateTokenRequest.newBuilder()
-          .setAccessToken(regular.getAccessToken())
+      var pendingEmailClaims = client.validateToken(ValidateTokenRequest.newBuilder()
+          .setAccessToken(pendingEmail.getAccessToken())
           .build()).getClaims();
-      var regularAccountTypeField = regularClaims.getDescriptor().findFieldByName("account_type");
-      assertThat(regularAccountTypeField).as("TokenClaims.account_type proto field").isNotNull();
-      assertThat(regularClaims.getField(regularAccountTypeField)).isEqualTo("regular");
+      var pendingEmailAccountTypeField = pendingEmailClaims.getDescriptor().findFieldByName("account_type");
+      assertThat(pendingEmailAccountTypeField).as("TokenClaims.account_type proto field").isNotNull();
+      assertThat(pendingEmailClaims.getField(pendingEmailAccountTypeField)).isEqualTo("guest");
     } finally {
       channel.shutdownNow();
       server.shutdownNow();

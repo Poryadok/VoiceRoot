@@ -181,17 +181,22 @@ public class AuthService {
       throw new AuthException("validation_failed");
     }
     String passwordHash = passwordHasher.hash(command.password());
-    String type = command.guest() ? "guest" : "regular";
+    boolean regularEmailVerificationPending = !command.guest() && email != null && phone == null;
+    String type = command.guest() || regularEmailVerificationPending ? "guest" : "regular";
     Account account;
     PreparedSessionEpoch prepared;
     try {
       if (registrationSessionEpochPreparer != null) {
         RegistrationSessionEpochPreparer.PreparedRegistration registration =
-            registrationSessionEpochPreparer.prepare(email, phone, passwordHash, type);
+            registrationSessionEpochPreparer.prepare(
+                email, phone, passwordHash, type, regularEmailVerificationPending);
         account = registration.account();
         prepared = registration.preparedEpoch();
       } else {
-        account = accounts.create(email, phone, passwordHash, type);
+        account =
+            regularEmailVerificationPending
+                ? accounts.createRegularEmailPending(email, passwordHash)
+                : accounts.create(email, phone, passwordHash, type);
         prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
       }
     } catch (IllegalArgumentException ex) {

@@ -6,6 +6,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.Objects;
+import org.springframework.transaction.annotation.Transactional;
 import voice.backend.auth.mail.MailSender;
 import voice.backend.auth.repository.Account;
 import voice.backend.auth.repository.AccountRepository;
@@ -73,6 +74,7 @@ public class OtpService {
     throttle.recordSend(throttleKey);
   }
 
+  @Transactional
   public void verifyOtp(VerifyOtpCommand command, AuthService authService) {
     String type = normalizeType(command.otpType());
     if (command.code() == null || command.code().isBlank()) {
@@ -91,6 +93,11 @@ public class OtpService {
       throw new AuthException("invalid_otp");
     }
     if ("email_verify".equals(type) && "guest".equals(account.type())) {
+      if (accounts.isRegularEmailVerificationPending(account.id())) {
+        otpCodes.markUsed(record.id(), now);
+        accounts.completeRegularEmailVerification(account.id());
+        return;
+      }
       guestConversionAcceptance.acceptVerifiedGuestEmailOtp(account.id(), record, now);
       return;
     }

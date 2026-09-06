@@ -8,6 +8,14 @@ import java.util.UUID;
 public interface AccountRepository {
   Account create(String email, String phone, String passwordHash, String type);
 
+  /** Creates a fresh email registration with guest-level authority until email verification. */
+  Account createRegularEmailPending(String email, String passwordHash);
+
+  boolean isRegularEmailVerificationPending(UUID accountId);
+
+  /** Atomically promotes a fresh verified email registration to regular authority. */
+  Account completeRegularEmailVerification(UUID accountId);
+
   Optional<Account> findByEmail(String email);
 
   Optional<Account> findByPhone(String phone);

@@ -20,11 +20,15 @@ public final class RegistrationSessionEpochPreparer {
     this.gate = Objects.requireNonNull(gate, "gate");
   }
 
-  public PreparedRegistration prepare(String email, String phone, String passwordHash, String type) {
+  public PreparedRegistration prepare(
+      String email, String phone, String passwordHash, String type, boolean regularEmailVerificationPending) {
     return Objects.requireNonNull(
         transactions.execute(
             ignored -> {
-              Account account = accounts.create(email, phone, passwordHash, type);
+              Account account =
+                  regularEmailVerificationPending
+                      ? accounts.createRegularEmailPending(email, passwordHash)
+                      : accounts.create(email, phone, passwordHash, type);
               return new PreparedRegistration(account, gate.prepare(account.id(), account.sessionEpoch()));
             }),
         "registration transaction result");

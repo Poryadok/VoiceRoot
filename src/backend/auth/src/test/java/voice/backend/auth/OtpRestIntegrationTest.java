@@ -2,6 +2,7 @@ package voice.backend.auth;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -22,6 +23,45 @@ class OtpRestIntegrationTest {
   @Autowired MockMvc mockMvc;
   @Autowired ObjectMapper objectMapper;
   @Autowired CapturingMailSender mailSender;
+
+  @Test
+  void freshEmailRegistrationStaysGuestUntilEmailOtpVerificationThenBecomesRegular() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/v1/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"email\":\"pending-email@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.session.account_type").value("guest"));
+
+    mailSender.clear();
+    mockMvc
+        .perform(
+            post("/api/v1/auth/otp/send")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"pending-email@example.com\",\"otp_type\":\"email_verify\"}"))
+        .andExpect(status().isNoContent());
+
+    mockMvc
+        .perform(
+            post("/api/v1/auth/otp/verify")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"email\":\"pending-email@example.com\",\"code\":\""
+                        + mailSender.lastCode()
+                        + "\",\"otp_type\":\"email_verify\"}"))
+        .andExpect(status().isNoContent());
+
+    mockMvc
+        .perform(
+            post("/api/v1/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"email\":\"pending-email@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.session.account_type").value("regular"));
+  }
 
   @Test
   void sendAndVerifyPasswordResetOtp() throws Exception {
