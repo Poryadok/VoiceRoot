@@ -11,6 +11,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/proto"
 
+	eventsv1 "voice.app/voice/events/v1"
 	"voice/backend/notification/internal/chatmembers"
 	"voice/backend/notification/internal/consumer"
 	"voice/backend/notification/internal/delivery"
@@ -20,7 +21,6 @@ import (
 	"voice/backend/notification/internal/pushenrich"
 	"voice/backend/notification/internal/store"
 	"voice/backend/pkg/natslog"
-	eventsv1 "voice.app/voice/events/v1"
 )
 
 const jsStreamMessageEvents = "message_events"
@@ -112,6 +112,10 @@ func routeMessageNotification(
 		if ev == nil {
 			return nil
 		}
+		memberRows, err := listChatMembers(ctx, members, ev.GetChatId())
+		if err != nil {
+			return err
+		}
 		senderID, _ := uuid.Parse(ev.GetSenderProfileId())
 		if ev.GetThreadParentId() != "" {
 			parentAuthor, err := parentMessageAuthor(ctx, enrich, ev.GetThreadParentId())
@@ -120,6 +124,7 @@ func routeMessageNotification(
 			}
 			raw := handler.HandleMessageReply(ctx, ev, parentAuthor)
 			decisions := enrichDecisions(ctx, pusher, raw, senderID, ev.GetChatId(), delivery.TypeReply)
+			decisions = deliveryForMember(decisions, memberByProfileID(memberRows, parentAuthor))
 			preview, senderLabel := pushCopyFields(ctx, enrich, ev.GetMessageId(), ev.GetSenderProfileId())
 			deepLink := messagePushDeepLink(ev.GetChatId(), ev.GetMessageId())
 			payload := push.Payload{
@@ -139,10 +144,6 @@ func routeMessageNotification(
 				Type:            delivery.TypeReply,
 			}, payload, payload.Body)
 		}
-		memberRows, err := listChatMembers(ctx, members, ev.GetChatId())
-		if err != nil {
-			return err
-		}
 		if len(memberRows) == 0 {
 			return nil
 		}
@@ -155,6 +156,7 @@ func routeMessageNotification(
 			decisions := enrichDecisions(ctx, pusher, map[string]delivery.DeliveryDecision{
 				profileID: baseDecision,
 			}, senderID, ev.GetChatId(), typ)
+			decisions = deliveryForMember(decisions, member)
 			titleFallback := "New message"
 			if typ == delivery.TypeMessageRequest {
 				titleFallback = "Message request"
@@ -187,6 +189,16 @@ func routeMessageNotification(
 		raw := handler.HandleMentionAdded(ctx, ev)
 		senderID, _ := uuid.Parse(ev.GetSenderProfileId())
 		decisions := enrichDecisions(ctx, pusher, raw, senderID, ev.GetChatId(), delivery.TypeMention)
+		memberRows, err := listChatMembers(ctx, members, ev.GetChatId())
+		if err != nil {
+			return err
+		}
+		for profileID, decision := range decisions {
+			decisions[profileID] = deliveryForMember(
+				map[string]delivery.DeliveryDecision{profileID: decision},
+				memberByProfileID(memberRows, profileID),
+			)[profileID]
+		}
 		preview, senderLabel := pushCopyFields(ctx, enrich, ev.GetMessageId(), ev.GetSenderProfileId())
 		deepLink := messagePushDeepLink(ev.GetChatId(), ev.GetMessageId())
 		payload := push.Payload{
@@ -231,6 +243,20 @@ func notificationTypeForInbox(inboxBucket string) delivery.NotificationType {
 		return delivery.TypeMessageRequest
 	}
 	return delivery.TypeNewMessage
+}
+
+// deliveryForMember suppresses notification delivery for archived chats. Chat
+// remains responsible for unread counters and archive membership state.
+func deliveryForMember(base map[string]delivery.DeliveryDecision, member chatmembers.Member) map[string]delivery.DeliveryDecision {
+	if !member.IsArchived {
+		return base
+	}
+	for profileID, decision := range base {
+		decision.Push = false
+		decision.InApp = false
+		base[profileID] = decision
+	}
+	return base
 }
 
 func enrichDecisions(
