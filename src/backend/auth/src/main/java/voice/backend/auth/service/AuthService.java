@@ -686,20 +686,10 @@ public class AuthService {
     }
   }
 
-  private AuthSession issueSession(Account account, String deviceInfoJson) {
-    String profileId = primaryProfileProvisioner.ensurePrimaryProfile(
-        account.id(), displayHint(account), "guest".equals(account.type()));
-    return issueSessionForProfile(account, profileId, deviceInfoJson);
-  }
-
   private AuthSession issueSession(Account account, PreparedSessionEpoch prepared, String deviceInfoJson) {
     String profileId = primaryProfileProvisioner.ensurePrimaryProfile(
         account.id(), displayHint(account), "guest".equals(account.type()));
     return issueSessionForProfile(account, prepared, profileId, deviceInfoJson);
-  }
-
-  private AuthSession issueSessionForProfile(Account account, String profileId, String deviceInfoJson) {
-    return issueSessionForProfile(account, new PreparedSessionEpoch(account.id(), account.sessionEpoch()), profileId, deviceInfoJson);
   }
 
   private AuthSession issueSessionForProfile(

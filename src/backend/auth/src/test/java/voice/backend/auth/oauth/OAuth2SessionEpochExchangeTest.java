@@ -49,6 +49,8 @@ class OAuth2SessionEpochExchangeTest {
   void floorFailureLeavesCodeForHealthyRedisAheadRetryAndDirectIssuerFailsClosed() throws Exception {
     Harness harness = new Harness(new RecordingCodeStore());
     var session = harness.auth.register(new RegisterCommand("oauth-epoch@example.com", null, "Correct horse battery staple", false, "{}"));
+    harness.floor.calls = 0;
+    harness.accounts.advanceCalls = 0;
     OAuthAuthorizationCode record = harness.record("code-1", session.accountId(), session.profileId());
     harness.codes.save(record, Duration.ofMinutes(1));
     harness.floor.failure = new IllegalStateException("redis down");
@@ -67,22 +69,36 @@ class OAuth2SessionEpochExchangeTest {
     assertThat(claims.getLongClaim("session_epoch")).isEqualTo(7L);
     assertThat(claims.getStringClaim("user_id")).isEqualTo(session.accountId());
     assertThat(claims.getStringClaim("profile_id")).isEqualTo(session.profileId());
+    assertThat(claims.getStringClaim("account_type")).isEqualTo(session.accountType());
+    var validatedRetry = harness.auth.validate(retry.accessToken());
+    assertThat(validatedRetry.userId()).isEqualTo(session.accountId());
+    assertThat(validatedRetry.profileId()).isEqualTo(session.profileId());
+    assertThat(validatedRetry.normalizedAccountType()).isEqualTo(session.accountType());
     assertThat(harness.floor.calls).isEqualTo(1);
     assertThat(harness.accounts.findById(session.accountId()).orElseThrow().sessionEpoch()).isEqualTo(7L);
     assertThat(harness.accounts.advanceCalls).isEqualTo(1);
 
     harness.codes.save(harness.record("code-2", session.accountId(), session.profileId()), Duration.ofMinutes(1));
+    harness.floor.calls = 0;
     harness.floor.failure = new IllegalStateException("redis down");
     assertThatThrownBy(() -> harness.auth.issueOAuthAccessToken(session.accountId(), session.profileId()))
         .isInstanceOf(SessionEpochFloorUnavailableException.class);
-    assertThat(harness.floor.calls).isEqualTo(2);
+    assertThat(harness.floor.calls).isEqualTo(1);
 
     harness.floor.failure = null;
     harness.floor.result = 9L;
     harness.floor.calls = 0;
     harness.accounts.advanceCalls = 0;
     String direct = harness.auth.issueOAuthAccessToken(session.accountId(), session.profileId());
-    assertThat(com.nimbusds.jwt.SignedJWT.parse(direct).getJWTClaimsSet().getLongClaim("session_epoch")).isEqualTo(9L);
+    var directClaims = com.nimbusds.jwt.SignedJWT.parse(direct).getJWTClaimsSet();
+    assertThat(directClaims.getLongClaim("session_epoch")).isEqualTo(9L);
+    assertThat(directClaims.getStringClaim("user_id")).isEqualTo(session.accountId());
+    assertThat(directClaims.getStringClaim("profile_id")).isEqualTo(session.profileId());
+    assertThat(directClaims.getStringClaim("account_type")).isEqualTo(session.accountType());
+    var validatedDirect = harness.auth.validate(direct);
+    assertThat(validatedDirect.userId()).isEqualTo(session.accountId());
+    assertThat(validatedDirect.profileId()).isEqualTo(session.profileId());
+    assertThat(validatedDirect.normalizedAccountType()).isEqualTo(session.accountType());
     assertThat(harness.floor.calls).isEqualTo(1);
     assertThat(harness.accounts.advanceCalls).isEqualTo(1);
   }
