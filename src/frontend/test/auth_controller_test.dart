@@ -410,6 +410,65 @@ void main() {
     expect(await guestStorage.readPendingConversionEmail(), isNull);
   });
 
+  test('delayed promotion refresh cannot restore a session after logout', () async {
+    final refreshRequested = Completer<void>();
+    final refreshResponse = Completer<http.Response>();
+    final storage = InMemoryAuthSessionStorage();
+    final mock = MockClient((req) async {
+      if (req.url.path == '/api/v1/auth/refresh') {
+        refreshRequested.complete();
+        return refreshResponse.future;
+      }
+      if (req.url.path == '/api/v1/auth/logout') return http.Response('', 204);
+      return http.Response('not found', 404);
+    });
+    final container = buildContainer(mock: mock, storage: storage);
+    addTearDown(container.dispose);
+    final controller = container.read(authControllerProvider.notifier);
+    controller.state = const AuthState(
+      session: AuthSession(accessToken: 'guest-access', refreshToken: 'guest-refresh', accountId: 'acc-1', activeProfileId: 'prof-1', expiresInSeconds: 900, accountType: 'guest'),
+      isGuest: true,
+      pendingGuestConversionEmail: 'guest@example.com',
+      isGuestConversionPromotionPending: true,
+    );
+    final resume = controller.resumeGuestConversionPromotion();
+    await refreshRequested.future;
+    await controller.logout();
+    refreshResponse.complete(http.Response(jsonEncode({'session': {...(sessionJson()['session'] as Map<String, dynamic>), 'account_type': 'regular'}}), 200));
+    expect(await resume, 'not_authenticated');
+    expect(container.read(authControllerProvider).session, isNull);
+    expect(await storage.read(), isNull);
+  });
+
+  test('delayed promotion refresh cannot overwrite a profile switch', () async {
+    final refreshRequested = Completer<void>();
+    final refreshResponse = Completer<http.Response>();
+    const switched = AuthSession(accessToken: 'profile-b-access', refreshToken: 'profile-b-refresh', accountId: 'acc-1', activeProfileId: 'profile-b', expiresInSeconds: 900, accountType: 'guest');
+    final mock = MockClient((req) async {
+      if (req.url.path == '/api/v1/auth/refresh') {
+        refreshRequested.complete();
+        return refreshResponse.future;
+      }
+      if (req.url.path == '/api/v1/auth/switch-profile') return http.Response(jsonEncode(switched.toJson()), 200);
+      return http.Response('not found', 404);
+    });
+    final container = buildContainer(mock: mock);
+    addTearDown(container.dispose);
+    final controller = container.read(authControllerProvider.notifier);
+    controller.state = const AuthState(
+      session: AuthSession(accessToken: 'guest-access', refreshToken: 'guest-refresh', accountId: 'acc-1', activeProfileId: 'prof-1', expiresInSeconds: 900, accountType: 'guest'),
+      isGuest: true,
+      pendingGuestConversionEmail: 'guest@example.com',
+      isGuestConversionPromotionPending: true,
+    );
+    final resume = controller.resumeGuestConversionPromotion();
+    await refreshRequested.future;
+    expect(await controller.switchActiveProfile('profile-b'), isNull);
+    refreshResponse.complete(http.Response(jsonEncode({'session': {...(sessionJson()['session'] as Map<String, dynamic>), 'account_type': 'regular'}}), 200));
+    expect(await resume, 'not_authenticated');
+    expect(container.read(authControllerProvider).session, switched);
+  });
+
   test('restore keeps session on network_error refresh failure', () async {
     final mock = MockClient((req) async {
       if (req.url.path == '/api/v1/auth/refresh') {
