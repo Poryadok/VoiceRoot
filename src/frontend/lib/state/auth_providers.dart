@@ -385,7 +385,7 @@ class AuthController extends StateNotifier<AuthState> {
       email: email,
       code: code,
     );
-    if (verified case AuthSessionFailure(
+    if (verified case GuestConversionOtpFailure(
       :final message,
       :final errorCode,
       :final statusCode,
@@ -398,7 +398,7 @@ class AuthController extends StateNotifier<AuthState> {
           ) ??
           message;
     }
-    if (verified case AuthSessionOk(
+    if (verified case GuestConversionOtpSession(
       :final session,
     ) when _isRegularSession(session)) {
       final completed = await _finishGuestConversion(

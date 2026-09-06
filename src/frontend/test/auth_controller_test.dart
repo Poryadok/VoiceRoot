@@ -347,9 +347,9 @@ void main() {
         return http.Response(jsonEncode({'session': {...(sessionJson()['session'] as Map<String, dynamic>), 'account_type': 'guest'}}), 200);
       }
       if (req.url.path == '/api/v1/auth/otp/send') return http.Response('', 204);
-        if (req.url.path == '/api/v1/auth/otp/verify') {
-          verifies++;
-          return http.Response(jsonEncode({'session': {...(sessionJson()['session'] as Map<String, dynamic>), 'account_type': 'guest'}}), 200);
+      if (req.url.path == '/api/v1/auth/otp/verify') {
+        verifies++;
+        return http.Response('', 204);
       }
       if (req.url.path == '/api/v1/auth/refresh') {
         refreshes++;

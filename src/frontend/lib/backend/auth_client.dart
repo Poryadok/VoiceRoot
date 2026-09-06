@@ -13,6 +13,33 @@ sealed class AuthSessionResult {
   const AuthSessionResult();
 }
 
+sealed class GuestConversionOtpResult {
+  const GuestConversionOtpResult();
+}
+
+/// The deployed endpoint accepted the OTP without replacing the session.
+final class GuestConversionOtpAccepted extends GuestConversionOtpResult {
+  const GuestConversionOtpAccepted();
+}
+
+/// A newer endpoint can return the promoted session immediately.
+final class GuestConversionOtpSession extends GuestConversionOtpResult {
+  const GuestConversionOtpSession(this.session);
+  final AuthSession session;
+}
+
+final class GuestConversionOtpFailure extends GuestConversionOtpResult {
+  const GuestConversionOtpFailure({
+    required this.message,
+    this.errorCode,
+    this.statusCode,
+  });
+
+  final String message;
+  final String? errorCode;
+  final int? statusCode;
+}
+
 final class AuthSessionOk extends AuthSessionResult {
   const AuthSessionOk(this.session);
   final AuthSession session;
@@ -477,7 +504,7 @@ class VoiceAuthClient {
   }) => _sendOtp(session: session, email: email, otpType: 'email_verify');
 
   /// Verifies the email OTP for a pending guest conversion.
-  Future<AuthSessionResult> verifyGuestConversionEmailOtp({
+  Future<GuestConversionOtpResult> verifyGuestConversionEmailOtp({
     required AuthSession session,
     required String email,
     required String code,
@@ -486,12 +513,18 @@ class VoiceAuthClient {
       uri: _gateway.resolve('/api/v1/auth/otp/verify'),
       authorization: session.authorizationHeader,
       body: {'email': email, 'code': code, 'otp_type': 'email_verify'},
+      allowNoContent: true,
     );
     return switch (result) {
-      GatewayHttpOk(:final data) => AuthSessionOk(
-        AuthSession.fromAuthResponse(data),
+      GatewayHttpOk(statusCode: 204) => const GuestConversionOtpAccepted(),
+      GatewayHttpOk(:final data) when data.isNotEmpty =>
+        GuestConversionOtpSession(AuthSession.fromAuthResponse(data)),
+      GatewayHttpOk(:final statusCode) => GuestConversionOtpFailure(
+        message: 'expected session envelope',
+        errorCode: 'invalid_response',
+        statusCode: statusCode,
       ),
-      GatewayHttpFailure(:final error) => AuthSessionFailure(
+      GatewayHttpFailure(:final error) => GuestConversionOtpFailure(
         message: GatewayApiResultMapper.failureMessage(error),
         errorCode: GatewayApiResultMapper.failureCode(error),
         statusCode: GatewayApiResultMapper.failureStatus(error),
