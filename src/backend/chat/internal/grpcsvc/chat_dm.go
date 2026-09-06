@@ -61,14 +61,15 @@ func (s *ChatGRPC) ensureDM(ctx context.Context, otherProfileRaw string) (*store
 		return nil, err
 	}
 
-	if s.Blocks != nil {
-		blocked, err := s.Blocks.AccountPairBlocked(ctx, accountID, otherAccount)
-		if err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
-		if blocked {
-			return nil, status.Error(codes.PermissionDenied, "dm not allowed between blocked accounts")
-		}
+	if s.Blocks == nil {
+		return nil, status.Error(codes.Unavailable, "dm block status unavailable")
+	}
+	blocked, err := s.Blocks.AccountPairBlocked(ctx, accountID, otherAccount)
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "dm block status unavailable")
+	}
+	if blocked {
+		return nil, status.Error(codes.PermissionDenied, "dm not allowed between blocked accounts")
 	}
 	if err := s.ensureDMPrivacy(ctx, callerProfile, otherProfile); err != nil {
 		return nil, err
@@ -104,11 +105,11 @@ func (s *ChatGRPC) ensureDM(ctx context.Context, otherProfileRaw string) (*store
 
 func (s *ChatGRPC) ensureDMPrivacy(ctx context.Context, callerProfile, recipientProfile uuid.UUID) error {
 	if s == nil || s.Privacy == nil {
-		return nil
+		return status.Error(codes.Unavailable, "dm privacy unavailable")
 	}
 	audience, err := s.Privacy.AllowDMAudience(ctx, recipientProfile)
 	if err != nil {
-		return status.Error(codes.Internal, err.Error())
+		return status.Error(codes.Unavailable, "dm privacy unavailable")
 	}
 	return ensureAudienceAllowed(ctx, recipientProfile, callerProfile, audience, s.Friends, s.SpaceCoMembership, "dm blocked by recipient privacy settings")
 }

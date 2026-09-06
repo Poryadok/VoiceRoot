@@ -126,10 +126,10 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 	if err := s.checkDeletedDMWrite(ctx, chatType, chatID, profileID); err != nil {
 		return nil, err
 	}
-	if err := s.checkDMBlocksForSend(ctx, chatID, profileID); err != nil {
+	if err := s.checkDMBlocksForSend(ctx, chatType, chatID, profileID); err != nil {
 		return nil, err
 	}
-	if err := s.checkDMPrivacyForSend(ctx, chatID, profileID); err != nil {
+	if err := s.checkDMPrivacyForSend(ctx, chatType, chatID, profileID); err != nil {
 		return nil, err
 	}
 	if err := s.checkSpaceSendPermission(ctx, chatID, profileID); err != nil {
@@ -416,9 +416,12 @@ func (s *MessagingGRPC) validateFileBackedAttachments(ctx context.Context, chatI
 	return len(attachments), nil
 }
 
-func (s *MessagingGRPC) checkDMBlocksForSend(ctx context.Context, chatID, profileID uuid.UUID) error {
-	if s.Blocks == nil || s.UserProfiles == nil || s.ChatGuard == nil {
+func (s *MessagingGRPC) checkDMBlocksForSend(ctx context.Context, chatType chatv1.ChatType, chatID, profileID uuid.UUID) error {
+	if chatType != chatv1.ChatType_CHAT_TYPE_DM {
 		return nil
+	}
+	if s == nil || isNilDependency(s.Blocks) || isNilDependency(s.UserProfiles) || isNilDependency(s.ChatGuard) {
+		return status.Error(codes.Unavailable, "dm block status unavailable")
 	}
 	accountID, ok := authctx.AccountID(ctx)
 	if !ok {
@@ -429,21 +432,15 @@ func (s *MessagingGRPC) checkDMBlocksForSend(ctx context.Context, chatID, profil
 		if errors.Is(err, store.ErrNotChatMember) {
 			return status.Error(codes.PermissionDenied, "not a chat member")
 		}
-		if st, ok := status.FromError(err); ok && st.Code() == codes.FailedPrecondition {
-			return nil
-		}
-		if strings.Contains(err.Error(), "dm must have exactly two members") {
-			return nil
-		}
-		return status.Error(codes.Internal, err.Error())
+		return status.Error(codes.Unavailable, "dm block status unavailable")
 	}
 	peerAcct, err := s.UserProfiles.AccountIDByProfileID(ctx, peer)
 	if err != nil {
-		return err
+		return status.Error(codes.Unavailable, "dm block status unavailable")
 	}
 	blocked, err := s.Blocks.AccountPairBlocked(ctx, accountID, peerAcct)
 	if err != nil {
-		return status.Error(codes.Internal, err.Error())
+		return status.Error(codes.Unavailable, "dm block status unavailable")
 	}
 	if blocked {
 		return status.Error(codes.PermissionDenied, "cannot send messages between blocked accounts")
@@ -567,26 +564,23 @@ func (s *MessagingGRPC) checkSpaceSendPermission(ctx context.Context, chatID, pr
 	return nil
 }
 
-func (s *MessagingGRPC) checkDMPrivacyForSend(ctx context.Context, chatID, senderProfileID uuid.UUID) error {
-	if s.Privacy == nil || s.ChatGuard == nil {
+func (s *MessagingGRPC) checkDMPrivacyForSend(ctx context.Context, chatType chatv1.ChatType, chatID, senderProfileID uuid.UUID) error {
+	if chatType != chatv1.ChatType_CHAT_TYPE_DM {
 		return nil
+	}
+	if s == nil || isNilDependency(s.Privacy) || isNilDependency(s.ChatGuard) {
+		return status.Error(codes.Unavailable, "dm privacy unavailable")
 	}
 	recipientProfileID, err := s.ChatGuard.DMOtherProfileID(ctx, chatID, senderProfileID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotChatMember) {
 			return status.Error(codes.PermissionDenied, "not a chat member")
 		}
-		if st, ok := status.FromError(err); ok && st.Code() == codes.FailedPrecondition {
-			return nil
-		}
-		if strings.Contains(err.Error(), "dm must have exactly two members") {
-			return nil
-		}
-		return status.Error(codes.Internal, err.Error())
+		return status.Error(codes.Unavailable, "dm privacy unavailable")
 	}
 	allowDMAudience, err := s.Privacy.AllowDMAudience(ctx, recipientProfileID)
 	if err != nil {
-		return status.Error(codes.Internal, err.Error())
+		return status.Error(codes.Unavailable, "dm privacy unavailable")
 	}
 	matcher := privacy.Matcher{Social: s.Friends, Space: s.SpaceCoMembership}
 	if err := privacy.CheckAllowed(matcher, ctx, recipientProfileID, senderProfileID, allowDMAudience, guestguard.IsGuest(ctx)); err != nil {
@@ -1232,10 +1226,10 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 
 	withoutAttribution := req.GetWithoutAttribution()
 
-	if err := s.checkDMBlocksForSend(ctx, targetChatID, profileID); err != nil {
+	if err := s.checkDMBlocksForSend(ctx, targetChatType, targetChatID, profileID); err != nil {
 		return nil, err
 	}
-	if err := s.checkDMPrivacyForSend(ctx, targetChatID, profileID); err != nil {
+	if err := s.checkDMPrivacyForSend(ctx, targetChatType, targetChatID, profileID); err != nil {
 		return nil, err
 	}
 	// FW-03 copy-as-new stays available when allow_forward=false (screen-controls: Always).
