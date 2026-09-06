@@ -167,6 +167,9 @@ class AuthController extends StateNotifier<AuthState> {
       pendingGuestConversionEmail: isGuest
           ? await _guestCredentialsStorage.readPendingConversionEmail()
           : null,
+      isGuestConversionPromotionPending:
+          isGuest &&
+          await _guestCredentialsStorage.isGuestConversionPromotionPending(),
     );
     if (!needsGuestNickname) {
       await _notifyAuthenticated();
@@ -202,6 +205,10 @@ class AuthController extends StateNotifier<AuthState> {
           pendingGuestConversionEmail: isGuest
               ? await _guestCredentialsStorage.readPendingConversionEmail()
               : null,
+          isGuestConversionPromotionPending:
+              isGuest &&
+              await _guestCredentialsStorage
+                  .isGuestConversionPromotionPending(),
         );
         if (!needsGuestNickname) {
           await _notifyAuthenticated();
@@ -302,6 +309,9 @@ class AuthController extends StateNotifier<AuthState> {
           return AuthErrorKeys.validationFailed;
         }
         await _guestCredentialsStorage.writePendingConversionEmail(email);
+        await _guestCredentialsStorage.setGuestConversionPromotionPending(
+          false,
+        );
         state = state.copyWith(
           session: session,
           isGuest: true,
@@ -387,7 +397,10 @@ class AuthController extends StateNotifier<AuthState> {
           ) ??
           message;
     }
-    return _refreshGuestConversionUntilRegular(current);
+    return _refreshGuestConversionUntilRegular(
+      current,
+      _profileSwitchGeneration,
+    );
   }
 
   /// Rechecks promotion after an accepted OTP without replaying that OTP.
@@ -397,17 +410,25 @@ class AuthController extends StateNotifier<AuthState> {
       return 'not_authenticated';
     }
     _convertingGuest = true;
-    return _refreshGuestConversionUntilRegular(current);
+    return _refreshGuestConversionUntilRegular(
+      current,
+      _profileSwitchGeneration,
+    );
   }
 
   Future<String?> _refreshGuestConversionUntilRegular(
     AuthSession initialSession,
+    int generation,
   ) async {
     var current = initialSession;
     for (var attempt = 0; attempt < 4; attempt++) {
       final refreshed = await _authClient.refresh(
         refreshToken: current.refreshToken,
       );
+      if (!_isGuestConversionCurrent(current, generation)) {
+        _convertingGuest = false;
+        return 'not_authenticated';
+      }
       switch (refreshed) {
         case AuthSessionOk(:final session) when _isRegularSession(session):
           await _persist(session);
@@ -426,6 +447,9 @@ class AuthController extends StateNotifier<AuthState> {
         case AuthSessionOk(:final session):
           current = session;
           await _persist(current);
+          await _guestCredentialsStorage.setGuestConversionPromotionPending(
+            true,
+          );
           state = state.copyWith(
             session: current,
             isGuest: true,
@@ -436,9 +460,7 @@ class AuthController extends StateNotifier<AuthState> {
             await Future<void>.delayed(
               Duration(milliseconds: 150 * (attempt + 1)),
             );
-            if (state.session?.refreshToken != current.refreshToken ||
-                !state.isGuest ||
-                state.pendingGuestConversionEmail == null) {
+            if (!_isGuestConversionCurrent(current, generation)) {
               _convertingGuest = false;
               return 'not_authenticated';
             }
@@ -672,6 +694,13 @@ class AuthController extends StateNotifier<AuthState> {
     final type =
         session.accountType ?? accountTypeFromAccessToken(session.accessToken);
     return type == 'regular';
+  }
+
+  bool _isGuestConversionCurrent(AuthSession expected, int generation) {
+    return generation == _profileSwitchGeneration &&
+        state.session?.refreshToken == expected.refreshToken &&
+        state.isGuest &&
+        state.pendingGuestConversionEmail != null;
   }
 
   void _scheduleProactiveRefresh() {

@@ -367,6 +367,49 @@ void main() {
     expect(container.read(authControllerProvider).isGuest, isFalse);
   });
 
+  test('restore preserves promotion-pending guest conversion without replaying OTP', () async {
+    final guestStorage = InMemoryGuestCredentialsStorage();
+    await guestStorage.writePassword('guest-auto-password-1');
+    await guestStorage.writePendingConversionEmail('guest@example.com');
+    await guestStorage.setGuestConversionPromotionPending(true);
+    final storage = InMemoryAuthSessionStorage();
+    await storage.write(const AuthSession(
+      accessToken: 'guest-access',
+      refreshToken: 'guest-refresh',
+      accountId: 'acc-1',
+      activeProfileId: 'prof-1',
+      expiresInSeconds: 900,
+      accountType: 'guest',
+    ));
+    var refreshes = 0;
+    final mock = MockClient((req) async {
+      if (req.url.path != '/api/v1/auth/refresh') {
+        return http.Response('not found', 404);
+      }
+      refreshes++;
+      return http.Response(jsonEncode({'session': {
+        ...(sessionJson()['session'] as Map<String, dynamic>),
+        'account_type': refreshes < 2 ? 'guest' : 'regular',
+      }}), 200);
+    });
+    final container = ProviderContainer(overrides: [
+      gatewayConfigProvider.overrideWithValue(config),
+      httpClientProvider.overrideWithValue(mock),
+      authSessionStorageProvider.overrideWithValue(storage),
+      guestCredentialsStorageProvider.overrideWithValue(guestStorage),
+    ]);
+    addTearDown(container.dispose);
+    final controller = container.read(authControllerProvider.notifier);
+
+    await controller.restore();
+    expect(container.read(authControllerProvider).isGuestConversionPromotionPending, isTrue);
+    expect(container.read(authControllerProvider).pendingGuestConversionEmail, 'guest@example.com');
+    expect(await controller.resumeGuestConversionPromotion(), isNull);
+    expect(refreshes, 2);
+    expect(container.read(authControllerProvider).isGuest, isFalse);
+    expect(await guestStorage.readPendingConversionEmail(), isNull);
+  });
+
   test('restore keeps session on network_error refresh failure', () async {
     final mock = MockClient((req) async {
       if (req.url.path == '/api/v1/auth/refresh') {

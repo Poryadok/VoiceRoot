@@ -9,6 +9,8 @@ abstract class GuestCredentialsStorage {
   Future<String?> readPendingConversionEmail();
   Future<void> writePendingConversionEmail(String email);
   Future<void> clearPendingConversionEmail();
+  Future<bool> isGuestConversionPromotionPending();
+  Future<void> setGuestConversionPromotionPending(bool pending);
   Future<bool> isNicknameCompleted(String accountId);
   Future<void> markNicknameCompleted(String accountId);
   Future<void> clear();
@@ -33,6 +35,8 @@ class FlutterGuestCredentialsStorage implements GuestCredentialsStorage {
   static const _passwordKey = 'voice.auth.guest_password';
   static const _pendingConversionEmailKey =
       'voice.auth.guest_pending_conversion_email';
+  static const _pendingConversionPromotionKey =
+      'voice.auth.guest_pending_conversion_promotion';
   static const _nicknameKeyPrefix = 'voice.auth.guest_nickname_done.';
 
   final FlutterSecureStorage _storage;
@@ -44,6 +48,7 @@ class FlutterGuestCredentialsStorage implements GuestCredentialsStorage {
   Future<void> clear() async {
     await _storage.delete(key: _passwordKey);
     await _storage.delete(key: _pendingConversionEmailKey);
+    await _storage.delete(key: _pendingConversionPromotionKey);
     final prefs = _prefs;
     if (prefs == null) return;
     final keys = prefs
@@ -81,6 +86,15 @@ class FlutterGuestCredentialsStorage implements GuestCredentialsStorage {
       _storage.delete(key: _pendingConversionEmailKey);
 
   @override
+  Future<bool> isGuestConversionPromotionPending() async =>
+      await _storage.read(key: _pendingConversionPromotionKey) == 'true';
+
+  @override
+  Future<void> setGuestConversionPromotionPending(bool pending) => pending
+      ? _storage.write(key: _pendingConversionPromotionKey, value: 'true')
+      : _storage.delete(key: _pendingConversionPromotionKey);
+
+  @override
   Future<void> writePassword(String password) =>
       _storage.write(key: _passwordKey, value: password);
 }
@@ -88,12 +102,14 @@ class FlutterGuestCredentialsStorage implements GuestCredentialsStorage {
 class InMemoryGuestCredentialsStorage implements GuestCredentialsStorage {
   String? _password;
   String? _pendingConversionEmail;
+  var _pendingConversionPromotion = false;
   final Map<String, bool> _nicknameCompleted = {};
 
   @override
   Future<void> clear() async {
     _password = null;
     _pendingConversionEmail = null;
+    _pendingConversionPromotion = false;
     _nicknameCompleted.clear();
   }
 
@@ -121,6 +137,15 @@ class InMemoryGuestCredentialsStorage implements GuestCredentialsStorage {
   @override
   Future<void> clearPendingConversionEmail() async {
     _pendingConversionEmail = null;
+  }
+
+  @override
+  Future<bool> isGuestConversionPromotionPending() async =>
+      _pendingConversionPromotion;
+
+  @override
+  Future<void> setGuestConversionPromotionPending(bool pending) async {
+    _pendingConversionPromotion = pending;
   }
 
   @override
