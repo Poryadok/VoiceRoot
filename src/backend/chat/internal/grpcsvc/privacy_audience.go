@@ -23,7 +23,7 @@ func privacyS2SContext(ctx context.Context) context.Context {
 
 func (u *UserGRPCPrivacy) AllowDMAudience(ctx context.Context, profileID uuid.UUID) (privacy.Audience, error) {
 	if u == nil || u.Client == nil {
-		return privacy.EveryoneWithGuests(), nil
+		return privacy.Audience{}, status.Error(codes.Unavailable, "user privacy unavailable")
 	}
 	resp, err := u.Client.GetPrivacySettings(privacyS2SContext(ctx), &userv1.GetPrivacySettingsRequest{
 		ProfileId: profileID.String(),

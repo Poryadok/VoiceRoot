@@ -102,10 +102,11 @@ func TestCheckDMBlocksForSend(t *testing.T) {
 	selfAcct := uuid.New()
 	peerAcct := uuid.New()
 
-	t.Run("skipped when deps nil", func(t *testing.T) {
+	t.Run("missing dependencies fail closed", func(t *testing.T) {
 		t.Parallel()
 		s := &MessagingGRPC{}
-		require.NoError(t, s.checkDMBlocksForSend(context.Background(), chatID, selfProf))
+		err := s.checkDMBlocksForSend(context.Background(), chatv1.ChatType_CHAT_TYPE_DM, chatID, selfProf)
+		require.Equal(t, codes.Unavailable, status.Code(err))
 	})
 
 	t.Run("missing account", func(t *testing.T) {
@@ -115,7 +116,7 @@ func TestCheckDMBlocksForSend(t *testing.T) {
 			UserProfiles: stubProfiles{acct: peerAcct},
 			Blocks:       stubBlocks{},
 		}
-		err := s.checkDMBlocksForSend(context.Background(), chatID, selfProf)
+		err := s.checkDMBlocksForSend(context.Background(), chatv1.ChatType_CHAT_TYPE_DM, chatID, selfProf)
 		require.Equal(t, codes.Unauthenticated, status.Code(err))
 	})
 
@@ -127,8 +128,8 @@ func TestCheckDMBlocksForSend(t *testing.T) {
 			Blocks:       stubBlocks{},
 		}
 		ctx := profileCtx(selfAcct, selfProf)
-		err := s.checkDMBlocksForSend(ctx, chatID, selfProf)
-		require.Equal(t, codes.Internal, status.Code(err))
+		err := s.checkDMBlocksForSend(ctx, chatv1.ChatType_CHAT_TYPE_DM, chatID, selfProf)
+		require.Equal(t, codes.Unavailable, status.Code(err))
 	})
 
 	t.Run("peer not member", func(t *testing.T) {
@@ -139,7 +140,7 @@ func TestCheckDMBlocksForSend(t *testing.T) {
 			Blocks:       stubBlocks{},
 		}
 		ctx := profileCtx(selfAcct, selfProf)
-		err := s.checkDMBlocksForSend(ctx, chatID, selfProf)
+		err := s.checkDMBlocksForSend(ctx, chatv1.ChatType_CHAT_TYPE_DM, chatID, selfProf)
 		require.Equal(t, codes.PermissionDenied, status.Code(err))
 	})
 
@@ -151,8 +152,8 @@ func TestCheckDMBlocksForSend(t *testing.T) {
 			Blocks:       stubBlocks{},
 		}
 		ctx := profileCtx(selfAcct, selfProf)
-		err := s.checkDMBlocksForSend(ctx, chatID, selfProf)
-		require.Equal(t, codes.NotFound, status.Code(err))
+		err := s.checkDMBlocksForSend(ctx, chatv1.ChatType_CHAT_TYPE_DM, chatID, selfProf)
+		require.Equal(t, codes.Unavailable, status.Code(err))
 	})
 
 	t.Run("blocks error", func(t *testing.T) {
@@ -163,8 +164,8 @@ func TestCheckDMBlocksForSend(t *testing.T) {
 			Blocks:       stubBlocks{err: errors.New("social down")},
 		}
 		ctx := profileCtx(selfAcct, selfProf)
-		err := s.checkDMBlocksForSend(ctx, chatID, selfProf)
-		require.Equal(t, codes.Internal, status.Code(err))
+		err := s.checkDMBlocksForSend(ctx, chatv1.ChatType_CHAT_TYPE_DM, chatID, selfProf)
+		require.Equal(t, codes.Unavailable, status.Code(err))
 	})
 
 	t.Run("blocked", func(t *testing.T) {
@@ -175,7 +176,7 @@ func TestCheckDMBlocksForSend(t *testing.T) {
 			Blocks:       stubBlocks{blocked: true},
 		}
 		ctx := profileCtx(selfAcct, selfProf)
-		err := s.checkDMBlocksForSend(ctx, chatID, selfProf)
+		err := s.checkDMBlocksForSend(ctx, chatv1.ChatType_CHAT_TYPE_DM, chatID, selfProf)
 		require.Equal(t, codes.PermissionDenied, status.Code(err))
 	})
 
@@ -187,7 +188,7 @@ func TestCheckDMBlocksForSend(t *testing.T) {
 			Blocks:       stubBlocks{blocked: false},
 		}
 		ctx := profileCtx(selfAcct, selfProf)
-		require.NoError(t, s.checkDMBlocksForSend(ctx, chatID, selfProf))
+		require.NoError(t, s.checkDMBlocksForSend(ctx, chatv1.ChatType_CHAT_TYPE_DM, chatID, selfProf))
 	})
 }
 
