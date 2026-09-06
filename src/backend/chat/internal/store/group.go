@@ -411,6 +411,81 @@ WHERE m.chat_id = c.id AND c.type = 'group'
 	return nil
 }
 
+// RemoveStandaloneGroupMember removes a member after checking the standalone
+// group hierarchy in the same transaction as the delete.  The chat row is
+// locked first, which serializes this with admission, role changes, and owner
+// transfer; member rows are then locked in UUID order to avoid a lock cycle
+// between concurrent moderation requests.
+func (s *DMStore) RemoveStandaloneGroupMember(ctx context.Context, chatID, actorID, targetID uuid.UUID) error {
+	if s == nil || s.Pool == nil {
+		return errors.New("dm store: pool not configured")
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var chatType string
+	var spaceID *uuid.UUID
+	if err := tx.QueryRow(ctx, `SELECT type, space_id FROM chats WHERE id = $1 FOR UPDATE`, chatID).Scan(&chatType, &spaceID); err != nil {
+		return err
+	}
+	if chatType != "group" || spaceID != nil {
+		return ErrRoleChangeInvalid
+	}
+
+	rows, err := tx.Query(ctx, `
+SELECT profile_id, role
+FROM chat_members
+WHERE chat_id = $1 AND profile_id = ANY($2::uuid[])
+ORDER BY profile_id
+FOR UPDATE
+`, chatID, []uuid.UUID{actorID, targetID})
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	roles := make(map[uuid.UUID]string, 2)
+	for rows.Next() {
+		var profileID uuid.UUID
+		var role string
+		if err := rows.Scan(&profileID, &role); err != nil {
+			return err
+		}
+		roles[profileID] = role
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	actorRole, actorOK := roles[actorID]
+	targetRole, targetOK := roles[targetID]
+	if !actorOK || !targetOK {
+		return ErrNotGroupMember
+	}
+	if actorRole != "owner" && actorRole != "admin" {
+		return ErrRoleChangeForbidden
+	}
+	if targetRole == "owner" {
+		return ErrCannotRemoveOwner
+	}
+	if actorRole == "admin" && targetRole != "member" {
+		return ErrRoleChangeForbidden
+	}
+
+	var memberCount int
+	if err := tx.QueryRow(ctx, `SELECT COUNT(*)::int FROM chat_members WHERE chat_id = $1`, chatID).Scan(&memberCount); err != nil {
+		return err
+	}
+	if memberCount-1 < MinGroupMembers {
+		return ErrGroupTooFewMembers
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM chat_members WHERE chat_id = $1 AND profile_id = $2`, chatID, targetID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
 // LeaveGroupChat removes the caller from a standalone group. Owners must transfer ownership first.
 func (s *DMStore) LeaveGroupChat(ctx context.Context, chatID, profileID uuid.UUID) error {
 	if s == nil || s.Pool == nil {
@@ -476,18 +551,14 @@ func (s *DMStore) SetStandaloneGroupMemberRole(ctx context.Context, chatID, acto
 		return ErrRoleChangeInvalid
 	}
 
-	var actorRole, targetRole string
-	if err := tx.QueryRow(ctx, `SELECT role FROM chat_members WHERE chat_id = $1 AND profile_id = $2 FOR UPDATE`, chatID, actorID).Scan(&actorRole); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotGroupMember
-		}
+	roles, err := lockGroupMemberRoles(ctx, tx, chatID, actorID, targetID)
+	if err != nil {
 		return err
 	}
-	if err := tx.QueryRow(ctx, `SELECT role FROM chat_members WHERE chat_id = $1 AND profile_id = $2 FOR UPDATE`, chatID, targetID).Scan(&targetRole); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotGroupMember
-		}
-		return err
+	actorRole, actorOK := roles[actorID]
+	targetRole, targetOK := roles[targetID]
+	if !actorOK || !targetOK {
+		return ErrNotGroupMember
 	}
 	if targetRole == "owner" {
 		return ErrRoleChangeInvalid
@@ -534,19 +605,19 @@ func (s *DMStore) TransferGroupOwnership(ctx context.Context, chatID, ownerID, n
 	if chatType != "group" || spaceID != nil {
 		return ErrNotGroupOwner
 	}
-	var ownerRole, newOwnerRole string
-	if err := tx.QueryRow(ctx, `SELECT role FROM chat_members WHERE chat_id = $1 AND profile_id = $2 FOR UPDATE`, chatID, ownerID).Scan(&ownerRole); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotGroupOwner
-		}
+	roles, err := lockGroupMemberRoles(ctx, tx, chatID, ownerID, newOwnerID)
+	if err != nil {
 		return err
+	}
+	ownerRole, ownerOK := roles[ownerID]
+	newOwnerRole, newOwnerOK := roles[newOwnerID]
+	if !ownerOK || !newOwnerOK {
+		return pgx.ErrNoRows
 	}
 	if ownerRole != "owner" {
 		return ErrNotGroupOwner
 	}
-	if err := tx.QueryRow(ctx, `SELECT role FROM chat_members WHERE chat_id = $1 AND profile_id = $2 FOR UPDATE`, chatID, newOwnerID).Scan(&newOwnerRole); err != nil {
-		return err
-	}
+	_ = newOwnerRole
 	if _, err := tx.Exec(ctx, `UPDATE chat_members SET role = 'member' WHERE chat_id = $1 AND profile_id = $2`, chatID, ownerID); err != nil {
 		return err
 	}
@@ -554,6 +625,35 @@ func (s *DMStore) TransferGroupOwnership(ctx context.Context, chatID, ownerID, n
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+// lockGroupMemberRoles takes membership locks in a deterministic order.  All
+// standalone role mutations call it only after locking the chat row.
+func lockGroupMemberRoles(ctx context.Context, tx pgx.Tx, chatID uuid.UUID, ids ...uuid.UUID) (map[uuid.UUID]string, error) {
+	rows, err := tx.Query(ctx, `
+SELECT profile_id, role
+FROM chat_members
+WHERE chat_id = $1 AND profile_id = ANY($2::uuid[])
+ORDER BY profile_id
+FOR UPDATE
+`, chatID, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	roles := make(map[uuid.UUID]string, len(ids))
+	for rows.Next() {
+		var profileID uuid.UUID
+		var role string
+		if err := rows.Scan(&profileID, &role); err != nil {
+			return nil, err
+		}
+		roles[profileID] = role
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return roles, nil
 }
 
 // UpdateGroupChat updates mutable group/channel fields.

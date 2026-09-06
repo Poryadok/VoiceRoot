@@ -233,9 +233,9 @@ func (t *transcoder) serveChats(w http.ResponseWriter, r *http.Request, rest str
 			writeGRPCError(w, err)
 			return true
 		}
-		if req.ChatId == "" {
-			req.ChatId = chatID
-		}
+		// The resource comes from the authenticated route, never from a JSON
+		// field which could otherwise address a different group.
+		req.ChatId = chatID
 		_, err := t.clients.chat.TransferGroupOwnership(ctx, req)
 		if err != nil {
 			writeGRPCError(w, err)
@@ -254,12 +254,10 @@ func (t *transcoder) serveChats(w http.ResponseWriter, r *http.Request, rest str
 			writeGRPCError(w, err)
 			return true
 		}
-		if req.ChatId == "" {
-			req.ChatId = parts[0]
-		}
-		if req.ProfileId == "" {
-			req.ProfileId = parts[1]
-		}
+		// Keep both resource identifiers bound to the route.  The caller identity
+		// itself is injected by Gateway auth into the gRPC context.
+		req.ChatId = parts[0]
+		req.ProfileId = parts[1]
 		if _, err := t.clients.chat.SetGroupMemberRole(ctx, req); err != nil {
 			writeGRPCError(w, err)
 			return true

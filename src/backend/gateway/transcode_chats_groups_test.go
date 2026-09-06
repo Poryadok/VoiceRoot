@@ -194,6 +194,24 @@ func TestTranscodeChatsSetMemberRole(t *testing.T) {
 	}
 }
 
+func TestTranscodeChatsSetMemberRole_BindsResourceToRoute(t *testing.T) {
+	t.Parallel()
+	rec := &recordingChatsSetMemberRole{}
+	conn, cleanup := startBufconnChatConn(t, rec)
+	t.Cleanup(cleanup)
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"}},
+		transcoder:  &transcoder{clients: grpcClients{chat: chatv1.NewChatServiceClient(conn)}},
+	})
+	resp := performRequest(h, http.MethodPatch, "/api/v1/chats/group-1/members/profile-b/role", `{"chat_id":"other-group","profile_id":"other-profile","role":"admin"}`, map[string]string{"Authorization": "Bearer valid-user-token"})
+	if resp.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d; body=%q", resp.Code, http.StatusNoContent, resp.Body.String())
+	}
+	if rec.last == nil || rec.last.GetChatId() != "group-1" || rec.last.GetProfileId() != "profile-b" {
+		t.Fatalf("SetGroupMemberRole must bind path IDs, got %+v", rec.last)
+	}
+}
+
 // TestTranscodeChatsUpdateGroupAvatar documents PATCH /api/v1/chats/{chatId} with avatar_url.
 func TestTranscodeChatsUpdateGroupAvatar(t *testing.T) {
 	t.Parallel()

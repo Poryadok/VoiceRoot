@@ -198,7 +198,7 @@ func (s *ChatGRPC) AddMembers(ctx context.Context, req *chatv1.AddMembersRequest
 				return nil, perr
 			}
 		}
-	if err := s.ensureInvitePrivacy(ctx, caller, pid); err != nil {
+		if err := s.ensureInvitePrivacy(ctx, caller, pid); err != nil {
 			if !authctx.IsInternalService(ctx) {
 				return nil, err
 			}
@@ -258,26 +258,28 @@ func (s *ChatGRPC) RemoveMember(ctx context.Context, req *chatv1.RemoveMemberReq
 	if row.Type != "group" {
 		return nil, status.Error(codes.InvalidArgument, "remove member only supported for groups")
 	}
-	role, err := s.DM.GetMemberRole(ctx, chatID, caller)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+	// Space membership policy is owned by the Space role model.  Preserve the
+	// existing chat-level owner rule here; standalone groups use the atomic
+	// owner/admin hierarchy below.
+	var removeErr error
+	if row.SpaceID != nil {
+		role, roleErr := s.DM.GetMemberRole(ctx, chatID, caller)
+		if roleErr != nil {
+			return nil, status.Error(codes.Internal, roleErr.Error())
+		}
+		if role != "owner" {
+			return nil, status.Error(codes.PermissionDenied, "only the group owner can remove members")
+		}
+		removeErr = s.DM.RemoveGroupMember(ctx, chatID, targetID)
+	} else {
+		removeErr = s.DM.RemoveStandaloneGroupMember(ctx, chatID, caller, targetID)
 	}
-	if role != "owner" && role != "admin" {
-		return nil, status.Error(codes.PermissionDenied, "only a group owner or admin can remove members")
-	}
-	targetRole, err := s.DM.GetMemberRole(ctx, chatID, targetID)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-	if targetRole == "" {
-		return nil, status.Error(codes.NotFound, "member not found")
-	}
-	if role == "admin" && targetRole != "member" {
-		return nil, status.Error(codes.PermissionDenied, "an admin cannot remove an owner or admin")
-	}
-	if err := s.DM.RemoveGroupMember(ctx, chatID, targetID); err != nil {
+	if err := removeErr; err != nil {
 		if errors.Is(err, store.ErrCannotRemoveOwner) {
 			return nil, status.Error(codes.FailedPrecondition, err.Error())
+		}
+		if errors.Is(err, store.ErrRoleChangeForbidden) {
+			return nil, status.Error(codes.PermissionDenied, err.Error())
 		}
 		if errors.Is(err, store.ErrGroupTooFewMembers) {
 			return nil, status.Error(codes.InvalidArgument, err.Error())
