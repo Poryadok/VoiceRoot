@@ -56,6 +56,22 @@ class _DeferredAuthSessionStorage implements AuthSessionStorage {
   }
 }
 
+class _DeferredGuestCredentialsStorage extends InMemoryGuestCredentialsStorage {
+  final clearStarted = Completer<void>();
+  final clearGate = Completer<void>();
+  var _firstClear = true;
+
+  @override
+  Future<void> clear() async {
+    if (_firstClear) {
+      _firstClear = false;
+      clearStarted.complete();
+      await clearGate.future;
+    }
+    await super.clear();
+  }
+}
+
 void main() {
   const config = GatewayConfig(baseUrl: 'http://api.test');
 
@@ -72,6 +88,7 @@ void main() {
   ProviderContainer buildContainer({
     required MockClient mock,
     AuthSessionStorage? storage,
+    GuestCredentialsStorage? guestStorage,
   }) {
     return ProviderContainer(
       overrides: [
@@ -81,7 +98,7 @@ void main() {
           storage ?? InMemoryAuthSessionStorage(),
         ),
         guestCredentialsStorageProvider.overrideWithValue(
-          InMemoryGuestCredentialsStorage(),
+          guestStorage ?? InMemoryGuestCredentialsStorage(),
         ),
       ],
     );
@@ -465,6 +482,45 @@ void main() {
     await refreshRequested.future;
     expect(await controller.switchActiveProfile('profile-b'), isNull);
     refreshResponse.complete(http.Response(jsonEncode({'session': {...(sessionJson()['session'] as Map<String, dynamic>), 'account_type': 'regular'}}), 200));
+    expect(await resume, 'not_authenticated');
+    expect(container.read(authControllerProvider).session, switched);
+  });
+
+  test('logout during guest storage clear cannot restore regular promotion', () async {
+    final guestStorage = _DeferredGuestCredentialsStorage();
+    final mock = MockClient((req) async {
+      if (req.url.path == '/api/v1/auth/refresh') return http.Response(jsonEncode({'session': {...(sessionJson()['session'] as Map<String, dynamic>), 'account_type': 'regular'}}), 200);
+      if (req.url.path == '/api/v1/auth/logout') return http.Response('', 204);
+      return http.Response('not found', 404);
+    });
+    final container = buildContainer(mock: mock, guestStorage: guestStorage);
+    addTearDown(container.dispose);
+    final controller = container.read(authControllerProvider.notifier);
+    controller.state = const AuthState(session: AuthSession(accessToken: 'guest-access', refreshToken: 'guest-refresh', accountId: 'acc-1', activeProfileId: 'prof-1', expiresInSeconds: 900, accountType: 'guest'), isGuest: true, pendingGuestConversionEmail: 'guest@example.com', isGuestConversionPromotionPending: true);
+    final resume = controller.resumeGuestConversionPromotion();
+    await guestStorage.clearStarted.future;
+    await controller.logout();
+    guestStorage.clearGate.complete();
+    expect(await resume, 'not_authenticated');
+    expect(container.read(authControllerProvider).session, isNull);
+  });
+
+  test('profile switch during guest storage clear cannot be overwritten', () async {
+    final guestStorage = _DeferredGuestCredentialsStorage();
+    const switched = AuthSession(accessToken: 'profile-b-access', refreshToken: 'profile-b-refresh', accountId: 'acc-1', activeProfileId: 'profile-b', expiresInSeconds: 900, accountType: 'guest');
+    final mock = MockClient((req) async {
+      if (req.url.path == '/api/v1/auth/refresh') return http.Response(jsonEncode({'session': {...(sessionJson()['session'] as Map<String, dynamic>), 'account_type': 'regular'}}), 200);
+      if (req.url.path == '/api/v1/auth/switch-profile') return http.Response(jsonEncode(switched.toJson()), 200);
+      return http.Response('not found', 404);
+    });
+    final container = buildContainer(mock: mock, guestStorage: guestStorage);
+    addTearDown(container.dispose);
+    final controller = container.read(authControllerProvider.notifier);
+    controller.state = const AuthState(session: AuthSession(accessToken: 'guest-access', refreshToken: 'guest-refresh', accountId: 'acc-1', activeProfileId: 'prof-1', expiresInSeconds: 900, accountType: 'guest'), isGuest: true, pendingGuestConversionEmail: 'guest@example.com', isGuestConversionPromotionPending: true);
+    final resume = controller.resumeGuestConversionPromotion();
+    await guestStorage.clearStarted.future;
+    expect(await controller.switchActiveProfile('profile-b'), isNull);
+    guestStorage.clearGate.complete();
     expect(await resume, 'not_authenticated');
     expect(container.read(authControllerProvider).session, switched);
   });

@@ -431,31 +431,58 @@ class AuthController extends StateNotifier<AuthState> {
       }
       switch (refreshed) {
         case AuthSessionOk(:final session) when _isRegularSession(session):
-          await _persist(session);
           await _guestCredentialsStorage.clear();
-          state = state.copyWith(
+          if (!_isGuestConversionCurrent(current, generation)) {
+            _convertingGuest = false;
+            return 'not_authenticated';
+          }
+          await _commitProfileSession(
             session: session,
-            clearGuest: true,
-            clearGuestNickname: true,
-            clearPendingGuestConversionEmail: true,
-            isGuestConversionPromotionPending: false,
-            clearError: true,
+            generation: generation,
+            nextState: (currentState) => currentState.copyWith(
+              session: session,
+              clearGuest: true,
+              clearGuestNickname: true,
+              clearPendingGuestConversionEmail: true,
+              isGuestConversionPromotionPending: false,
+              clearError: true,
+            ),
           );
+          if (generation != _profileSwitchGeneration) {
+            _convertingGuest = false;
+            return 'not_authenticated';
+          }
           _convertingGuest = false;
           await _notifyAuthenticated();
           return null;
         case AuthSessionOk(:final session):
-          current = session;
-          await _persist(current);
+          final previous = current;
+          if (!_isGuestConversionCurrent(previous, generation)) {
+            _convertingGuest = false;
+            return 'not_authenticated';
+          }
           await _guestCredentialsStorage.setGuestConversionPromotionPending(
             true,
           );
-          state = state.copyWith(
+          if (!_isGuestConversionCurrent(previous, generation)) {
+            _convertingGuest = false;
+            return 'not_authenticated';
+          }
+          current = session;
+          await _commitProfileSession(
             session: current,
-            isGuest: true,
-            isGuestConversionPromotionPending: true,
-            clearError: true,
+            generation: generation,
+            nextState: (currentState) => currentState.copyWith(
+              session: current,
+              isGuest: true,
+              isGuestConversionPromotionPending: true,
+              clearError: true,
+            ),
           );
+          if (generation != _profileSwitchGeneration) {
+            _convertingGuest = false;
+            return 'not_authenticated';
+          }
           if (attempt < 3) {
             await Future<void>.delayed(
               Duration(milliseconds: 150 * (attempt + 1)),
