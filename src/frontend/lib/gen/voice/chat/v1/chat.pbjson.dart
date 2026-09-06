@@ -510,12 +510,22 @@ const ChatListItem$json = {
       '10': 'dmPeerProfileId',
       '17': true
     },
+    {
+      '1': 'is_pinned',
+      '3': 7,
+      '4': 1,
+      '5': 8,
+      '9': 4,
+      '10': 'isPinned',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_last_message_preview'},
     {'1': '_inbox'},
     {'1': '_is_stranger'},
     {'1': '_dm_peer_profile_id'},
+    {'1': '_is_pinned'},
   ],
 };
 
@@ -525,9 +535,9 @@ final $typed_data.Uint8List chatListItemDescriptor = $convert.base64Decode(
     'I1ChRsYXN0X21lc3NhZ2VfcHJldmlldxgCIAEoCUgAUhJsYXN0TWVzc2FnZVByZXZpZXeIAQES'
     'IQoMdW5yZWFkX2NvdW50GAMgASgDUgt1bnJlYWRDb3VudBIZCgVpbmJveBgEIAEoCUgBUgVpbm'
     'JveIgBARIkCgtpc19zdHJhbmdlchgFIAEoCEgCUgppc1N0cmFuZ2VyiAEBEjAKEmRtX3BlZXJf'
-    'cHJvZmlsZV9pZBgGIAEoCUgDUg9kbVBlZXJQcm9maWxlSWSIAQFCFwoVX2xhc3RfbWVzc2FnZV'
-    '9wcmV2aWV3QggKBl9pbmJveEIOCgxfaXNfc3RyYW5nZXJCFQoTX2RtX3BlZXJfcHJvZmlsZV9p'
-    'ZA==');
+    'cHJvZmlsZV9pZBgGIAEoCUgDUg9kbVBlZXJQcm9maWxlSWSIAQESIAoJaXNfcGlubmVkGAcgAS'
+    'gISARSCGlzUGlubmVkiAEBQhcKFV9sYXN0X21lc3NhZ2VfcHJldmlld0IICgZfaW5ib3hCDgoM'
+    'X2lzX3N0cmFuZ2VyQhUKE19kbV9wZWVyX3Byb2ZpbGVfaWRCDAoKX2lzX3Bpbm5lZA==');
 
 @$core.Deprecated('Use chatListDescriptor instead')
 const ChatList$json = {
