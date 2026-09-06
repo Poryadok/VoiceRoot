@@ -19,6 +19,8 @@ service ChatService {
   rpc AddMembers(AddMembersRequest) returns (AddMembersResponse);
   rpc RemoveMember(RemoveMemberRequest) returns (RemoveMemberResponse);
   rpc LeaveChat(LeaveChatRequest) returns (LeaveChatResponse);
+  // Standalone group only. An admin can promote a member; only the owner can demote an admin.
+  rpc SetGroupMemberRole(SetGroupMemberRoleRequest) returns (SetGroupMemberRoleResponse);
   rpc TransferGroupOwnership(TransferGroupOwnershipRequest) returns (TransferGroupOwnershipResponse);
   rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);
 
@@ -115,6 +117,12 @@ message RemoveMemberRequest {
 
 message LeaveChatRequest {
   string chat_id = 1;
+}
+
+message SetGroupMemberRoleRequest {
+  string chat_id = 1;
+  string profile_id = 2;
+  string role = 3; // admin | member; owner is assigned only by TransferGroupOwnership
 }
 
 message TransferGroupOwnershipRequest {
@@ -301,6 +309,7 @@ message DeleteChatResponse {}
 message AddMembersResponse {}
 message RemoveMemberResponse {}
 message LeaveChatResponse {}
+message SetGroupMemberRoleResponse {}
 message ListMembersResponse {
   MemberList member_list = 1;
 }

@@ -93,7 +93,9 @@ type DMStore interface {
 	CreateSpaceChannelChat(ctx context.Context, creatorProfileID, spaceID uuid.UUID, name string, topic *string) (*store.ChatRow, error)
 	AddGroupMembers(ctx context.Context, chatID uuid.UUID, profileIDs []uuid.UUID) ([]uuid.UUID, error)
 	RemoveGroupMember(ctx context.Context, chatID, profileID uuid.UUID) error
+	RemoveStandaloneGroupMember(ctx context.Context, chatID, actorID, targetID uuid.UUID) error
 	LeaveGroupChat(ctx context.Context, chatID, profileID uuid.UUID) error
+	SetStandaloneGroupMemberRole(ctx context.Context, chatID, actorID, targetID uuid.UUID, role string) error
 	TransferGroupOwnership(ctx context.Context, chatID, ownerID, newOwnerID uuid.UUID) error
 	UpdateGroupChat(ctx context.Context, chatID uuid.UUID, name, avatarURL, topic *string, slowModeSeconds *int32, threadsEnabled, allowUserMainFeed *bool) (*store.ChatRow, error)
 	GetMemberRole(ctx context.Context, chatID, profileID uuid.UUID) (string, error)

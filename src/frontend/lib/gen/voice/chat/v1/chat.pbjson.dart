@@ -312,6 +312,22 @@ const LeaveChatRequest$json = {
 final $typed_data.Uint8List leaveChatRequestDescriptor = $convert.base64Decode(
     'ChBMZWF2ZUNoYXRSZXF1ZXN0EhcKB2NoYXRfaWQYASABKAlSBmNoYXRJZA==');
 
+@$core.Deprecated('Use setGroupMemberRoleRequestDescriptor instead')
+const SetGroupMemberRoleRequest$json = {
+  '1': 'SetGroupMemberRoleRequest',
+  '2': [
+    {'1': 'chat_id', '3': 1, '4': 1, '5': 9, '10': 'chatId'},
+    {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
+    {'1': 'role', '3': 3, '4': 1, '5': 9, '10': 'role'},
+  ],
+};
+
+/// Descriptor for `SetGroupMemberRoleRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List setGroupMemberRoleRequestDescriptor =
+    $convert.base64Decode(
+        'ChlTZXRHcm91cE1lbWJlclJvbGVSZXF1ZXN0EhcKB2NoYXRfaWQYASABKAlSBmNoYXRJZBIdCg'
+        'pwcm9maWxlX2lkGAIgASgJUglwcm9maWxlSWQSEgoEcm9sZRgDIAEoCVIEcm9sZQ==');
+
 @$core.Deprecated('Use transferGroupOwnershipRequestDescriptor instead')
 const TransferGroupOwnershipRequest$json = {
   '1': 'TransferGroupOwnershipRequest',
@@ -1124,6 +1140,15 @@ const LeaveChatResponse$json = {
 /// Descriptor for `LeaveChatResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List leaveChatResponseDescriptor =
     $convert.base64Decode('ChFMZWF2ZUNoYXRSZXNwb25zZQ==');
+
+@$core.Deprecated('Use setGroupMemberRoleResponseDescriptor instead')
+const SetGroupMemberRoleResponse$json = {
+  '1': 'SetGroupMemberRoleResponse',
+};
+
+/// Descriptor for `SetGroupMemberRoleResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List setGroupMemberRoleResponseDescriptor =
+    $convert.base64Decode('ChpTZXRHcm91cE1lbWJlclJvbGVSZXNwb25zZQ==');
 
 @$core.Deprecated('Use listMembersResponseDescriptor instead')
 const ListMembersResponse$json = {
