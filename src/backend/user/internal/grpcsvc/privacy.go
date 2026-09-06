@@ -112,6 +112,14 @@ func (s *UserGRPC) UpdatePrivacySettings(ctx context.Context, req *userv1.Update
 	} else if existing != nil {
 		allowForward = existing.AllowForward
 	}
+	showReadReceipts := true
+	if in.ShowReadReceipts != nil {
+		showReadReceipts = in.GetShowReadReceipts()
+	} else if existing, err := privacyStore.GetByProfileID(ctx, profileID); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	} else if existing != nil {
+		showReadReceipts = existing.ShowReadReceipts
+	}
 	saved, err := privacyStore.Upsert(ctx, store.PrivacyRow{
 		ProfileID:             profileID,
 		Preset:                strings.TrimSpace(in.GetPreset()),
@@ -129,6 +137,7 @@ func (s *UserGRPC) UpdatePrivacySettings(ctx context.Context, req *userv1.Update
 		AllowFriendRequests:   privacy.FromProto(in.GetAllowFriendRequests()),
 		AllowGuestDM:          in.GetAllowGuestDm(),
 		AllowForward:          allowForward,
+		ShowReadReceipts:      showReadReceipts,
 	})
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -208,6 +217,7 @@ func privacyRowToProto(row *store.PrivacyRow) *userv1.PrivacySettings {
 		AllowFriendRequests:   privacy.ToProto(row.AllowFriendRequests),
 		AllowGuestDm:          row.AllowGuestDM,
 		AllowForward:          proto.Bool(row.AllowForward),
+		ShowReadReceipts:      proto.Bool(row.ShowReadReceipts),
 		UpdatedAt:             timestamppb.New(row.UpdatedAt.UTC()),
 	}
 }

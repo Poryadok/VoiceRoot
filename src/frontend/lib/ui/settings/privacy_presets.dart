@@ -6,7 +6,10 @@ class PrivacyPresetDefaults {
 
   static const presets = ['personal', 'gaming', 'work'];
 
-  static VoicePrivacySettings forPreset(String preset, {required String profileId}) {
+  static VoicePrivacySettings forPreset(
+    String preset, {
+    required String profileId,
+  }) {
     return switch (preset) {
       'personal' => VoicePrivacySettings(
         profileId: profileId,
@@ -25,6 +28,7 @@ class PrivacyPresetDefaults {
         allowFriendRequests: VoicePrivacyAudience.everyoneWithGuests,
         allowGuestDm: false,
         allowForward: true,
+        showReadReceipts: true,
       ),
       'work' => VoicePrivacySettings(
         profileId: profileId,
@@ -43,6 +47,7 @@ class PrivacyPresetDefaults {
         allowFriendRequests: VoicePrivacyAudience.spaceMembersOnly,
         allowGuestDm: false,
         allowForward: true,
+        showReadReceipts: true,
       ),
       _ => VoicePrivacySettings(
         profileId: profileId,
@@ -61,6 +66,7 @@ class PrivacyPresetDefaults {
         allowFriendRequests: VoicePrivacyAudience.everyoneWithGuests,
         allowGuestDm: true,
         allowForward: true,
+        showReadReceipts: true,
       ),
     };
   }

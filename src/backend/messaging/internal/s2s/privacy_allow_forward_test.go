@@ -55,3 +55,23 @@ func TestGRPCUserPrivacy_AllowForward_nilClientFailsOpen(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, ok)
 }
+
+func TestGRPCUserPrivacy_ShowReadReceipts_defaultsTrueWhenUnset(t *testing.T) {
+	u := &GRPCUserPrivacy{Client: &privacyAllowForwardClient{
+		resp: &userv1.GetPrivacySettingsResponse{PrivacySettings: &userv1.PrivacySettings{}},
+	}}
+	ok, err := u.ShowReadReceipts(context.Background(), uuid.New())
+	require.NoError(t, err)
+	require.True(t, ok, "older unset settings keep the documented true default")
+}
+
+func TestGRPCUserPrivacy_ShowReadReceipts_false(t *testing.T) {
+	u := &GRPCUserPrivacy{Client: &privacyAllowForwardClient{
+		resp: &userv1.GetPrivacySettingsResponse{PrivacySettings: &userv1.PrivacySettings{
+			ShowReadReceipts: proto.Bool(false),
+		}},
+	}}
+	ok, err := u.ShowReadReceipts(context.Background(), uuid.New())
+	require.NoError(t, err)
+	require.False(t, ok)
+}

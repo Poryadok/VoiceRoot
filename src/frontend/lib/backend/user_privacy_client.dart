@@ -132,7 +132,9 @@ bool _listEquals(List<String> a, List<String> b) {
   return true;
 }
 
-VoicePrivacyAudience voicePrivacyAudienceFromProto(user_pb.PrivacyAudience proto) {
+VoicePrivacyAudience voicePrivacyAudienceFromProto(
+  user_pb.PrivacyAudience proto,
+) {
   return VoicePrivacyAudience(
     friends: proto.friends,
     friendsOfFriends: proto.friendsOfFriends,
@@ -148,7 +150,8 @@ VoicePrivacyAudience voicePrivacyAudienceFromJson(Map<String, dynamic>? json) {
     friends: json['friends'] == true,
     friendsOfFriends: json['friends_of_friends'] == true,
     spaceMembers: json['space_members'] == true,
-    spaceIds: (json['space_ids'] as List<dynamic>?)
+    spaceIds:
+        (json['space_ids'] as List<dynamic>?)
             ?.map((e) => e.toString())
             .toList() ??
         const [],
@@ -174,6 +177,7 @@ class VoicePrivacySettings {
     required this.allowFiles,
     required this.allowVoiceMessages,
     this.allowForward = true,
+    this.showReadReceipts = true,
   });
 
   final String profileId;
@@ -192,6 +196,7 @@ class VoicePrivacySettings {
   final VoicePrivacyAudience allowFiles;
   final VoicePrivacyAudience allowVoiceMessages;
   final bool allowForward;
+  final bool showReadReceipts;
 
   user_pb.PrivacySettings toProto() {
     return user_pb.PrivacySettings(
@@ -211,6 +216,7 @@ class VoicePrivacySettings {
       allowFiles: allowFiles.toProto(),
       allowVoiceMessages: allowVoiceMessages.toProto(),
       allowForward: allowForward,
+      showReadReceipts: showReadReceipts,
     );
   }
 
@@ -230,6 +236,7 @@ class VoicePrivacySettings {
     VoicePrivacyAudience? allowFiles,
     VoicePrivacyAudience? allowVoiceMessages,
     bool? allowForward,
+    bool? showReadReceipts,
   }) {
     return VoicePrivacySettings(
       profileId: profileId,
@@ -249,6 +256,7 @@ class VoicePrivacySettings {
       allowFiles: allowFiles ?? this.allowFiles,
       allowVoiceMessages: allowVoiceMessages ?? this.allowVoiceMessages,
       allowForward: allowForward ?? this.allowForward,
+      showReadReceipts: showReadReceipts ?? this.showReadReceipts,
     );
   }
 }
@@ -295,6 +303,9 @@ VoicePrivacySettings voicePrivacyFromProto(user_pb.PrivacySettings proto) {
         ? voicePrivacyAudienceFromProto(proto.allowVoiceMessages)
         : VoicePrivacyAudience.nobody,
     allowForward: proto.hasAllowForward() ? proto.allowForward : true,
+    showReadReceipts: proto.hasShowReadReceipts()
+        ? proto.showReadReceipts
+        : true,
   );
 }
 

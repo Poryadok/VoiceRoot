@@ -2068,6 +2068,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get privacyAllowForward => 'Allow others to forward my messages';
 
   @override
+  String get privacyShowReadReceipts => 'Read receipts';
+
+  @override
   String get privacyVisibilityTitle => 'Visibility';
 
   @override

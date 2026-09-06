@@ -2077,6 +2077,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get privacyAllowForward => 'Разрешить пересылку моих сообщений';
 
   @override
+  String get privacyShowReadReceipts => 'Квитанции о прочтении';
+
+  @override
   String get privacyVisibilityTitle => 'Видимость';
 
   @override

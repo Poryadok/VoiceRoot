@@ -31,7 +31,86 @@ Map<String, dynamic> _audience({
 }
 
 void main() {
-  testWidgets('privacy preset selector applies gaming defaults', (tester) async {
+  testWidgets('read receipt toggle defaults on and saves an explicit opt-out', (
+    tester,
+  ) async {
+    Map<String, dynamic>? saved;
+    final client = MockClient((req) async {
+      if (req.url.path == '/api/v1/users/me/privacy' && req.method == 'GET') {
+        return http.Response(
+          jsonEncode({
+            'privacy_settings': {
+              'profile_id': 'prof-test',
+              'preset': 'gaming',
+              'show_online': _audience(includeGuests: true),
+              'show_game_status': _audience(includeGuests: true),
+              'show_mm_rating': _audience(includeGuests: true),
+              'show_phone': _audience(),
+              'show_stories': _audience(includeGuests: true),
+              'allow_dm': _audience(includeGuests: true),
+              'allow_friend_requests': _audience(includeGuests: true),
+              'allow_guest_dm': true,
+              'allow_phone_search': _audience(friends: true),
+              'allow_calls': _audience(friends: true),
+              'allow_chat_space_invites': _audience(friends: true),
+              'allow_files': _audience(friends: true),
+              'allow_voice_messages': _audience(friends: true),
+            },
+          }),
+          200,
+        );
+      }
+      if (req.url.path == '/api/v1/users/me/privacy' && req.method == 'PATCH') {
+        saved = jsonDecode(req.body) as Map<String, dynamic>;
+        return http.Response(
+          jsonEncode({'privacy_settings': saved!['settings']}),
+          200,
+        );
+      }
+      return http.Response('Not Found', 404);
+    });
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          discoverHintStorageProvider.overrideWithValue(
+            testDiscoverHintStorage,
+          ),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          httpClientProvider.overrideWithValue(client),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const PrivacySettingsScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final toggle = find.byKey(PrivacySettingsScreen.showReadReceiptsKey);
+    expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+    await tester.ensureVisible(toggle);
+    await tester.tap(toggle);
+    final save = find.byKey(PrivacySettingsScreen.saveButtonKey);
+    await tester.ensureVisible(save);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+
+    expect(saved?['settings']['show_read_receipts'], isFalse);
+  });
+
+  testWidgets('privacy preset selector applies gaming defaults', (
+    tester,
+  ) async {
     final client = MockClient((req) async {
       if (req.url.path == '/api/v1/users/me/privacy' && req.method == 'GET') {
         return http.Response(
@@ -41,7 +120,10 @@ void main() {
               'preset': 'personal',
               'show_online': _audience(friends: true),
               'show_game_status': _audience(friends: true),
-              'show_mm_rating': _audience(friends: true, friendsOfFriends: true),
+              'show_mm_rating': _audience(
+                friends: true,
+                friendsOfFriends: true,
+              ),
               'show_phone': _audience(),
               'show_stories': _audience(friends: true, friendsOfFriends: true),
               'allow_dm': _audience(friends: true, friendsOfFriends: true),

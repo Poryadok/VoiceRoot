@@ -19,8 +19,8 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"voice/backend/pkg/integrationtest"
-	"voice/backend/user/internal/authctx"
 	"voice/backend/pkg/privacy"
+	"voice/backend/user/internal/authctx"
 	"voice/backend/user/internal/store"
 
 	userv1 "voice.app/voice/user/v1"
@@ -166,7 +166,7 @@ VALUES ($1, $2, 'gamer', '4242', 'Gamer', true)`,
 
 // TestUpdatePrivacySettings_AllowForwardRoundTrip documents privacy.md binary allow_forward
 // (forward-messages.md): default true, Update false persists, Get + S2S read see false.
-func TestUpdatePrivacySettings_AllowForwardRoundTrip(t *testing.T) {
+func TestUpdatePrivacySettings_BinaryPrivacyRoundTrip(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -197,6 +197,7 @@ VALUES ($1, $2, 'nofwd', '5555', 'NoFwd', true)`,
 	require.True(t, before.GetPrivacySettings().GetAllowForward())
 
 	allowForward := false
+	showReadReceipts := false
 	_, err = cli.UpdatePrivacySettings(withUserAuthCtx(ctx, accountID, profileID), &userv1.UpdatePrivacySettingsRequest{
 		ProfileId: profileID.String(),
 		Settings: &userv1.PrivacySettings{
@@ -211,6 +212,7 @@ VALUES ($1, $2, 'nofwd', '5555', 'NoFwd', true)`,
 			AllowFriendRequests: privacy.ToProto(privacy.EveryoneWithGuests()),
 			AllowGuestDm:        true,
 			AllowForward:        &allowForward,
+			ShowReadReceipts:    &showReadReceipts,
 		},
 	})
 	require.NoError(t, err)
@@ -219,12 +221,16 @@ VALUES ($1, $2, 'nofwd', '5555', 'NoFwd', true)`,
 	err = pool.QueryRow(ctx, `SELECT allow_forward FROM privacy_settings WHERE profile_id = $1`, profileID).Scan(&stored)
 	require.NoError(t, err)
 	require.False(t, stored)
+	err = pool.QueryRow(ctx, `SELECT show_read_receipts FROM privacy_settings WHERE profile_id = $1`, profileID).Scan(&stored)
+	require.NoError(t, err)
+	require.False(t, stored)
 
 	after, err := cli.GetPrivacySettings(withUserAuthCtx(ctx, accountID, profileID), &userv1.GetPrivacySettingsRequest{
 		ProfileId: profileID.String(),
 	})
 	require.NoError(t, err)
 	require.False(t, after.GetPrivacySettings().GetAllowForward())
+	require.False(t, after.GetPrivacySettings().GetShowReadReceipts())
 
 	s2sCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderInternalCaller, "messaging")
 	s2s, err := cli.GetPrivacySettings(s2sCtx, &userv1.GetPrivacySettingsRequest{
@@ -233,6 +239,8 @@ VALUES ($1, $2, 'nofwd', '5555', 'NoFwd', true)`,
 	require.NoError(t, err)
 	require.False(t, s2s.GetPrivacySettings().GetAllowForward(),
 		"Messaging S2S GetPrivacySettings must expose allow_forward for FW-04 enforce")
+	require.False(t, s2s.GetPrivacySettings().GetShowReadReceipts(),
+		"Messaging S2S GetPrivacySettings must expose the DM receipt opt-out")
 }
 
 // TestGetPrivacySettings_PersonalPresetDefaults documents personal preset DM audience defaults.

@@ -720,10 +720,20 @@ const PrivacySettings$json = {
       '10': 'allowForward',
       '17': true
     },
+    {
+      '1': 'show_read_receipts',
+      '3': 20,
+      '4': 1,
+      '5': 8,
+      '9': 2,
+      '10': 'showReadReceipts',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_preset_enum'},
     {'1': '_allow_forward'},
+    {'1': '_show_read_receipts'},
   ],
 };
 
@@ -749,8 +759,9 @@ final $typed_data.Uint8List privacySettingsDescriptor = $convert.base64Decode(
     'VJbnZpdGVzEj8KC2FsbG93X2ZpbGVzGBEgASgLMh4udm9pY2UudXNlci52MS5Qcml2YWN5QXVk'
     'aWVuY2VSCmFsbG93RmlsZXMSUAoUYWxsb3dfdm9pY2VfbWVzc2FnZXMYEiABKAsyHi52b2ljZS'
     '51c2VyLnYxLlByaXZhY3lBdWRpZW5jZVISYWxsb3dWb2ljZU1lc3NhZ2VzEigKDWFsbG93X2Zv'
-    'cndhcmQYEyABKAhIAVIMYWxsb3dGb3J3YXJkiAEBQg4KDF9wcmVzZXRfZW51bUIQCg5fYWxsb3'
-    'dfZm9yd2FyZA==');
+    'cndhcmQYEyABKAhIAVIMYWxsb3dGb3J3YXJkiAEBEjEKEnNob3dfcmVhZF9yZWNlaXB0cxgUIA'
+    'EoCEgCUhBzaG93UmVhZFJlY2VpcHRziAEBQg4KDF9wcmVzZXRfZW51bUIQCg5fYWxsb3dfZm9y'
+    'd2FyZEIVChNfc2hvd19yZWFkX3JlY2VpcHRz');
 
 @$core.Deprecated('Use updatePresenceRequestDescriptor instead')
 const UpdatePresenceRequest$json = {

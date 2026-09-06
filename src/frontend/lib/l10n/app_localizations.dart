@@ -3794,6 +3794,12 @@ abstract class AppLocalizations {
   /// **'Allow others to forward my messages'**
   String get privacyAllowForward;
 
+  /// No description provided for @privacyShowReadReceipts.
+  ///
+  /// In en, this message translates to:
+  /// **'Read receipts'**
+  String get privacyShowReadReceipts;
+
   /// No description provided for @privacyVisibilityTitle.
   ///
   /// In en, this message translates to:
