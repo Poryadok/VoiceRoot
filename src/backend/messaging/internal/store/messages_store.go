@@ -461,7 +461,7 @@ INSERT INTO read_receipts (chat_id, profile_id, last_read_message_id, last_deliv
 VALUES ($1, $2, $3, $3, now())
 ON CONFLICT (chat_id, profile_id) DO UPDATE SET
   last_read_message_id = CASE
-    WHEN read_receipts.last_read_message_id < EXCLUDED.last_read_message_id THEN EXCLUDED.last_read_message_id
+    WHEN read_receipts.last_read_message_id IS NULL OR read_receipts.last_read_message_id < EXCLUDED.last_read_message_id THEN EXCLUDED.last_read_message_id
     ELSE read_receipts.last_read_message_id
   END,
   last_delivered_message_id = CASE
@@ -469,7 +469,7 @@ ON CONFLICT (chat_id, profile_id) DO UPDATE SET
     ELSE read_receipts.last_delivered_message_id
   END,
   updated_at = CASE
-    WHEN read_receipts.last_read_message_id < EXCLUDED.last_read_message_id THEN now()
+    WHEN read_receipts.last_read_message_id IS NULL OR read_receipts.last_read_message_id < EXCLUDED.last_read_message_id THEN now()
     ELSE read_receipts.updated_at
   END
 `, chatID, profileID, lastReadMessageID)
