@@ -254,7 +254,7 @@ func main() {
 				PublishReadReceiptRevoked(context.Context, string, string, string, string) error
 			}); ok {
 				go func() {
-					if err := runReceiptPrivacyConsumer(context.Background(), natsURL, instanceID, &store.MessagesStore{Pool: pool}, revoker, logger); err != nil {
+					if err := runReceiptPrivacyConsumer(context.Background(), natsURL, instanceID, &store.MessagesStore{Pool: pool}, chatGuard, revoker, logger); err != nil {
 						logger.Error("receipt privacy consumer exited", slog.String("error", err.Error()))
 					}
 				}()

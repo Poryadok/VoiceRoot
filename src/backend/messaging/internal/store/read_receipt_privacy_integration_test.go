@@ -25,10 +25,10 @@ func TestClearPublicReadReceiptsForProfileReturnsPreUpdateCursor(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, store.UpsertReadReceipt(ctx, chatID, profileID, messageID))
 	require.NoError(t, store.UpsertReadReceipt(ctx, chatID, peerID, peerMessageID))
-	revoked, err := store.ClearPublicReadReceiptsForProfile(ctx, profileID)
+	revoked, err := store.ClearPublicReadReceiptsForProfile(ctx, profileID, []uuid.UUID{chatID})
 	require.NoError(t, err)
 	require.ElementsMatch(t, []PublicReadReceipt{
-		{ChatID: chatID, ProfileID: profileID, MessageID: messageID, RecipientProfileID: peerID},
+		{ChatID: chatID, ProfileID: profileID, MessageID: messageID, RecipientProfileID: profileID},
 		{ChatID: chatID, ProfileID: peerID, MessageID: peerMessageID, RecipientProfileID: profileID},
 	}, revoked)
 	public, _, err := store.GetReadReceipt(ctx, chatID, profileID)

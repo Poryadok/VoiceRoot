@@ -532,26 +532,44 @@ type PublicReadReceipt struct {
 	RecipientProfileID uuid.UUID // participant that must remove this rendered tick
 }
 
-// ClearPublicReadReceiptsForProfile revokes previously exposed DM receipt
-// cursors after a participant opts out. Private read_positions remain intact.
-func (s *MessagesStore) ClearPublicReadReceiptsForProfile(ctx context.Context, profileID uuid.UUID) ([]PublicReadReceipt, error) {
+// ReadReceiptChatIDsForProfile returns candidate chat IDs from Messaging-owned
+// receipt state. Callers must resolve which candidates are DMs via Chat.
+func (s *MessagesStore) ReadReceiptChatIDsForProfile(ctx context.Context, profileID uuid.UUID) ([]uuid.UUID, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("messages store: pool not configured")
 	}
-	// DM-only symmetric revocation. Own public cursors are cleared and routed to
-	// the peer; a peer's existing cursor remains stored but is routed only to
-	// this newly opted-out viewer, so it cannot remain rendered for them.
+	rows, err := s.Pool.Query(ctx, `SELECT DISTINCT chat_id FROM read_receipts WHERE profile_id = $1`, profileID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// ClearPublicReadReceiptsForProfile revokes previously exposed DM receipt
+// cursors after a participant opts out. Private read_positions remain intact.
+func (s *MessagesStore) ClearPublicReadReceiptsForProfile(ctx context.Context, profileID uuid.UUID, chatIDs []uuid.UUID) ([]PublicReadReceipt, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("messages store: pool not configured")
+	}
+	if len(chatIDs) == 0 {
+		return nil, nil
+	}
+	// chatIDs were resolved through Chat/S2S by the caller. Messaging owns only
+	// receipt rows and must not join chat_db tables here.
 	rows, err := s.Pool.Query(ctx, `
-WITH dm_chats AS (
-  SELECT cm.chat_id
-  FROM chat_members cm
-  JOIN chats c ON c.id = cm.chat_id AND c.type = 'dm'
-  WHERE cm.profile_id = $1
-), own_before AS (
+WITH own_before AS (
   SELECT rr.chat_id, rr.profile_id, rr.last_read_message_id
   FROM read_receipts rr
-  JOIN dm_chats dc ON dc.chat_id = rr.chat_id
-  WHERE rr.profile_id = $1 AND rr.last_read_message_id IS NOT NULL
+  WHERE rr.profile_id = $1 AND rr.chat_id = ANY($2) AND rr.last_read_message_id IS NOT NULL
   FOR UPDATE
 ), cleared AS (
   UPDATE read_receipts rr
@@ -559,19 +577,17 @@ WITH dm_chats AS (
   FROM own_before ob
   WHERE rr.chat_id = ob.chat_id AND rr.profile_id = ob.profile_id
 ), own_revocations AS (
-  SELECT ob.chat_id, ob.profile_id, ob.last_read_message_id, cm.profile_id AS recipient_profile_id
+  SELECT ob.chat_id, ob.profile_id, ob.last_read_message_id, $1::uuid AS recipient_profile_id
   FROM own_before ob
-  JOIN chat_members cm ON cm.chat_id = ob.chat_id AND cm.profile_id <> $1
 ), peer_revocations AS (
   SELECT rr.chat_id, rr.profile_id, rr.last_read_message_id, $1::uuid AS recipient_profile_id
   FROM read_receipts rr
-  JOIN dm_chats dc ON dc.chat_id = rr.chat_id
-  WHERE rr.profile_id <> $1 AND rr.last_read_message_id IS NOT NULL
+  WHERE rr.profile_id <> $1 AND rr.chat_id = ANY($2) AND rr.last_read_message_id IS NOT NULL
 )
 SELECT chat_id, profile_id, last_read_message_id, recipient_profile_id FROM own_revocations
 UNION ALL
 SELECT chat_id, profile_id, last_read_message_id, recipient_profile_id FROM peer_revocations
-`, profileID)
+`, profileID, chatIDs)
 	if err != nil {
 		return nil, err
 	}
