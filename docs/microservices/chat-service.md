@@ -238,7 +238,7 @@ CREATE INDEX quick_access_profile_order_idx ON quick_access_chats (profile_id, s
 
 `ListChats` — durable control plane для глобальной сверки списка после reconnect, не WebSocket. Клиент запрашивает paginated snapshot `main`, `requests` и `archive`; первую страницу может отрисовать сразу, но продолжает каждый scope до `next_cursor == ""` в фоне. Пока scope не завершён успешно, клиент не удаляет старые cache rows и не заменяет их пустым ответом/нулевым `unread_count`; неуспешная страница повторяется. `Chat` остаётся owner membership, inbox bucket, archive и сортировки, а Messaging S2S обогащает каждую строку preview/unread/delivery metadata. Полные сообщения не возвращаются: после snapshot клиент вызывает `Messaging.GetMessages` только для открытого, notification-target или иного выбранного `chat_id`.
 
-После account delete успешный новый snapshot не включает DM-строку surviving участника с удалённым peer. Это не меняет правило failed-page: ошибка page не является доказательством удаления строки. Уже выбранная локально загруженная история восстанавливает terminal state только через `Messaging.GetMessages.dm_peer_state`, не через `ListChats` и не через раскрытие deleted profile.
+После account delete успешный новый snapshot не включает DM-строку surviving участника с удалённым peer. Для этого snapshot-only фильтра Chat вызывает User `ResolveAccountIDForProfile` как exact internal caller `chat`: lookup возвращает owner даже для soft-deleted profile и не заменяется public `GetProfile`, который сохраняет visibility semantics для group/privacy/DM creation paths. Затем Chat проверяет lifecycle account через Auth. Ошибка owner или Auth dependency делает page `UNAVAILABLE`, а не доказывает удаление строки. Уже выбранная локально загруженная история восстанавливает terminal state только через `Messaging.GetMessages.dm_peer_state`, не через `ListChats` и не через раскрытие deleted profile.
 
 ### Timestamp ownership (`chats.last_message_at`)
 
@@ -478,7 +478,7 @@ Gateway REST (sketch): `GET /api/v1/sticker-packs`, `POST /api/v1/sticker-packs/
 ## Зависимости
 
 - **Social Service** — проверка блокировок при создании DM
-- **User Service** — получение профилей участников
+- **User Service** — public получение профилей участников; отдельный internal owner lookup для lifecycle filtering свежего `ListChats` snapshot
 - **Messaging Service** — для `ListChats`: превью последнего сообщения и `unread_count` по данным `messaging_db` (S2S, см. раздел «ListChats»); без интеграции список возвращается без этих полей
 - **Subscription Service** — лимиты на количество участников группы
 - **Space Service** — при создании текстового чата (`group` \| `channel`) в спейсе: узел **`space_tree_nodes`** (`kind=text_chat`) после создания строки `chats`

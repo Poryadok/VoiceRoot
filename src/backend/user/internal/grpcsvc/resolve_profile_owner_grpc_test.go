@@ -16,8 +16,8 @@ import (
 	userv1 "voice.app/voice/user/v1"
 )
 
-// TestResolveAccountIDForProfile_InternalOwnerLookup exercises the Messaging-only
-// ownership seam over a real bufconn gRPC boundary.  Visibility lookups must not
+// TestResolveAccountIDForProfile_InternalOwnerLookup exercises the exact internal
+// ownership seam over a real bufconn gRPC boundary. Visibility lookups must not
 // replace this: a soft-deleted profile still resolves to its owning account.
 func TestResolveAccountIDForProfile_InternalOwnerLookup(t *testing.T) {
 	if testing.Short() {
@@ -37,17 +37,30 @@ func TestResolveAccountIDForProfile_InternalOwnerLookup(t *testing.T) {
 	resp, err := cli.ResolveAccountIDForProfile(messaging, &userv1.ResolveAccountIDForProfileRequest{ProfileId: profileID})
 	require.NoError(t, err)
 	require.Equal(t, accountID.String(), resp.GetAccountId())
+
+	chat := metadata.AppendToOutgoingContext(ctx, authctx.HeaderInternalCaller, "chat")
+	resp, err = cli.ResolveAccountIDForProfile(chat, &userv1.ResolveAccountIDForProfileRequest{ProfileId: profileID})
+	require.NoError(t, err)
+	require.Equal(t, accountID.String(), resp.GetAccountId())
+
 	_, err = pool.Exec(ctx, "UPDATE profiles SET deleted_at = now() WHERE id = $1", uuid.MustParse(profileID))
 	require.NoError(t, err)
 	resp, err = cli.ResolveAccountIDForProfile(messaging, &userv1.ResolveAccountIDForProfileRequest{ProfileId: profileID})
+	require.NoError(t, err)
+	require.Equal(t, accountID.String(), resp.GetAccountId())
+	resp, err = cli.ResolveAccountIDForProfile(chat, &userv1.ResolveAccountIDForProfileRequest{ProfileId: profileID})
 	require.NoError(t, err)
 	require.Equal(t, accountID.String(), resp.GetAccountId())
 
 	for _, caller := range []context.Context{
 		ctx,
 		metadata.AppendToOutgoingContext(ctx, authctx.HeaderInternalCaller, "auth"),
+		metadata.AppendToOutgoingContext(ctx, authctx.HeaderInternalCaller, "Chat"),
 		metadata.AppendToOutgoingContext(ctx, authctx.HeaderInternalCaller, " messaging "),
+		metadata.AppendToOutgoingContext(ctx, authctx.HeaderInternalCaller, "chat "),
 		metadata.AppendToOutgoingContext(ctx, authctx.HeaderInternalCaller, "messaging", authctx.HeaderInternalCaller, "messaging"),
+		metadata.AppendToOutgoingContext(ctx, authctx.HeaderInternalCaller, "chat", authctx.HeaderInternalCaller, "chat"),
+		metadata.AppendToOutgoingContext(ctx, authctx.HeaderInternalCaller, "chat", authctx.HeaderInternalCaller, "messaging"),
 	} {
 		_, err := cli.ResolveAccountIDForProfile(caller, &userv1.ResolveAccountIDForProfileRequest{ProfileId: profileID})
 		require.Equal(t, codes.PermissionDenied, status.Code(err))

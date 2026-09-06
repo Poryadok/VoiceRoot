@@ -66,11 +66,11 @@ func (s *UserGRPC) EnsurePrimaryProfile(ctx context.Context, req *userv1.EnsureP
 	return &userv1.EnsurePrimaryProfileResponse{Profile: rowToProto(row)}, nil
 }
 
-// ResolveAccountIDForProfile resolves profile ownership for Messaging DM lifecycle checks.
+// ResolveAccountIDForProfile resolves profile ownership for Messaging and Chat DM lifecycle checks.
 // It intentionally bypasses public profile visibility because it returns no Profile data.
 func (s *UserGRPC) ResolveAccountIDForProfile(ctx context.Context, req *userv1.ResolveAccountIDForProfileRequest) (*userv1.ResolveAccountIDForProfileResponse, error) {
-	if !isMessagingInternalCaller(ctx) {
-		return nil, status.Error(codes.PermissionDenied, "internal messaging only")
+	if !isLifecycleOwnerInternalCaller(ctx) {
+		return nil, status.Error(codes.PermissionDenied, "internal lifecycle caller only")
 	}
 	if s.Profiles == nil {
 		return nil, status.Error(codes.FailedPrecondition, "profile store not configured")
@@ -89,13 +89,13 @@ func (s *UserGRPC) ResolveAccountIDForProfile(ctx context.Context, req *userv1.R
 	return &userv1.ResolveAccountIDForProfileResponse{AccountId: row.AccountID.String()}, nil
 }
 
-func isMessagingInternalCaller(ctx context.Context) bool {
+func isLifecycleOwnerInternalCaller(ctx context.Context) bool {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		return false
 	}
 	callers := md.Get(authctx.HeaderInternalCaller)
-	return len(callers) == 1 && callers[0] == "messaging"
+	return len(callers) == 1 && (callers[0] == "messaging" || callers[0] == "chat")
 }
 
 // ListProfileIDsForAccount returns profile ids for an account (Social block cascade S2S).
