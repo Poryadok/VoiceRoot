@@ -70,9 +70,8 @@ func TestSocialGRPCBlocks_AccountPairBlocked(t *testing.T) {
 	t.Run("nil client", func(t *testing.T) {
 		t.Parallel()
 		var b *SocialGRPCBlocks
-		ok, err := b.AccountPairBlocked(context.Background(), viewer, other)
-		require.NoError(t, err)
-		require.False(t, ok)
+		_, err := b.AccountPairBlocked(context.Background(), viewer, other)
+		require.Equal(t, codes.Unavailable, status.Code(err))
 	})
 
 	t.Run("same account", func(t *testing.T) {
