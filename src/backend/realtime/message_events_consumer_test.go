@@ -552,6 +552,16 @@ func TestRunMessageEventsConsumer_InAppNotificationOnMessageSent(t *testing.T) {
 
 // TestRunMessageEventsConsumer_MessageReadNoInAppNotification documents text-chat.md:
 // MessageRead (mark_read sync) fans out message_read only — no personal notification op.
+func TestMessageEventToFanout_ReadReceiptRevoked(t *testing.T) {
+	chatID, messageID, profileID := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	data, err := proto.Marshal(&eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_ReadReceiptRevoked{ReadReceiptRevoked: &eventsv1.ReadReceiptRevoked{ChatId: chatID, MessageId: messageID, ProfileId: profileID}}})
+	require.NoError(t, err)
+	gotChat, env, ok := messageEventBytesToFanout(data)
+	require.True(t, ok)
+	require.Equal(t, chatID, gotChat)
+	require.Equal(t, "message_read_revoked", env.Op)
+}
+
 func TestRunMessageEventsConsumer_MessageReadNoInAppNotification(t *testing.T) {
 	s := startRealtimeJSTestServer(t)
 	natsURL := s.ClientURL()

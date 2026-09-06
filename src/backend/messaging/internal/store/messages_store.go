@@ -537,11 +537,21 @@ func (s *MessagesStore) ClearPublicReadReceiptsForProfile(ctx context.Context, p
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("messages store: pool not configured")
 	}
+	// Lock and capture the old cursor before writing NULL: RETURNING sees the
+	// post-update value, which is intentionally NULL for a revoked receipt.
 	rows, err := s.Pool.Query(ctx, `
-UPDATE read_receipts
-SET last_read_message_id = NULL, updated_at = now()
-WHERE profile_id = $1 AND last_read_message_id IS NOT NULL
-RETURNING chat_id, profile_id, last_read_message_id
+WITH revoked AS (
+  SELECT chat_id, profile_id, last_read_message_id
+  FROM read_receipts
+  WHERE profile_id = $1 AND last_read_message_id IS NOT NULL
+  FOR UPDATE
+), cleared AS (
+  UPDATE read_receipts AS rr
+  SET last_read_message_id = NULL, updated_at = now()
+  FROM revoked AS r
+  WHERE rr.chat_id = r.chat_id AND rr.profile_id = r.profile_id
+)
+SELECT chat_id, profile_id, last_read_message_id FROM revoked
 `, profileID)
 	if err != nil {
 		return nil, err

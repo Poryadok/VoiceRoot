@@ -13,7 +13,7 @@ WHERE rr.last_read_message_id IS NULL;
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM read_receipts WHERE last_read_message_id IS NULL) THEN
-    RAISE EXCEPTION 'cannot safely roll back 000012: delivery-only read_receipts row has no cursor';
+    RAISE EXCEPTION 'cannot safely roll back 000013: delivery-only read_receipts row has no cursor';
   END IF;
 END $$;
 
