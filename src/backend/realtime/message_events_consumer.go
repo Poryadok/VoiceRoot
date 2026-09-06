@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	jsStreamMessageEvents  = "message_events"
+	jsStreamMessageEvents    = "message_events"
 	natsHeaderThreadParentID = "X-Voice-Thread-Parent-Id"
 )
 
@@ -98,6 +98,16 @@ func messageEventToFanout(data []byte, header nats.Header) (chatID string, env f
 			return "", fanoutEnvelope{}, false
 		}
 		return mr.GetChatId(), fanoutEnvelope{Op: "message_read", D: d}, true
+	case *eventsv1.MessageStreamEvent_ReadReceiptRevoked:
+		rr := p.ReadReceiptRevoked
+		if rr == nil || rr.GetChatId() == "" || rr.GetMessageId() == "" || rr.GetProfileId() == "" {
+			return "", fanoutEnvelope{}, false
+		}
+		d, err := json.Marshal(map[string]string{"chat_id": rr.GetChatId(), "message_id": rr.GetMessageId(), "profile_id": rr.GetProfileId()})
+		if err != nil {
+			return "", fanoutEnvelope{}, false
+		}
+		return rr.GetChatId(), fanoutEnvelope{Op: "message_read_revoked", D: d}, true
 	case *eventsv1.MessageStreamEvent_ReactionAdded:
 		ra := p.ReactionAdded
 		if ra == nil || ra.GetChatId() == "" || ra.GetMessageId() == "" || ra.GetProfileId() == "" || ra.GetEmoji() == "" {
@@ -151,9 +161,9 @@ func messageEventToFanout(data []byte, header nats.Header) (chatID string, env f
 			return "", fanoutEnvelope{}, false
 		}
 		d, err := json.Marshal(map[string]string{
-			"chat_id":      mu.GetChatId(),
-			"message_id":   mu.GetMessageId(),
-			"unpinned_by":  mu.GetUnpinnedBy(),
+			"chat_id":     mu.GetChatId(),
+			"message_id":  mu.GetMessageId(),
+			"unpinned_by": mu.GetUnpinnedBy(),
 		})
 		if err != nil {
 			return "", fanoutEnvelope{}, false

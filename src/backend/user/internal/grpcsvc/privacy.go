@@ -104,19 +104,19 @@ func (s *UserGRPC) UpdatePrivacySettings(ctx context.Context, req *userv1.Update
 	if privacyStore == nil {
 		return nil, status.Error(codes.FailedPrecondition, "privacy store not configured")
 	}
+	existing, err := privacyStore.GetByProfileID(ctx, profileID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
 	allowForward := true
 	if in.AllowForward != nil {
 		allowForward = in.GetAllowForward()
-	} else if existing, err := privacyStore.GetByProfileID(ctx, profileID); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
 	} else if existing != nil {
 		allowForward = existing.AllowForward
 	}
 	showReadReceipts := true
 	if in.ShowReadReceipts != nil {
 		showReadReceipts = in.GetShowReadReceipts()
-	} else if existing, err := privacyStore.GetByProfileID(ctx, profileID); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
 	} else if existing != nil {
 		showReadReceipts = existing.ShowReadReceipts
 	}
@@ -141,6 +141,19 @@ func (s *UserGRPC) UpdatePrivacySettings(ctx context.Context, req *userv1.Update
 	})
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
+	}
+	// A transition to disabled revokes any already-public DM ticks asynchronously.
+	// The event is emitted only after the authoritative User row is committed.
+	if !saved.ShowReadReceipts {
+		publisher, ok := s.Events.(interface {
+			PublishSettingsChanged(context.Context, string, string) error
+		})
+		if !ok || publisher == nil {
+			return nil, status.Error(codes.Unavailable, "privacy receipt revocation publisher not configured")
+		}
+		if err := publisher.PublishSettingsChanged(ctx, profileID.String(), `[{"key":"show_read_receipts","value":false}]`); err != nil {
+			return nil, status.Error(codes.Unavailable, "privacy receipt revocation enqueue failed")
+		}
 	}
 	return &userv1.UpdatePrivacySettingsResponse{PrivacySettings: privacyRowToProto(saved)}, nil
 }

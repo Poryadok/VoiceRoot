@@ -250,6 +250,15 @@ func main() {
 					logger.Error("delivery ack consumer exited", slog.String("error", err.Error()))
 				}
 			}()
+			if revoker, ok := msgEvents.(interface {
+				PublishReadReceiptRevoked(context.Context, string, string, string) error
+			}); ok {
+				go func() {
+					if err := runReceiptPrivacyConsumer(context.Background(), natsURL, instanceID, &store.MessagesStore{Pool: pool}, revoker, logger); err != nil {
+						logger.Error("receipt privacy consumer exited", slog.String("error", err.Error()))
+					}
+				}()
+			}
 		}
 
 		var platformMod grpcsvc.PlatformModerationChecker

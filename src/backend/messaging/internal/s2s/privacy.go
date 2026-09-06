@@ -2,6 +2,7 @@ package s2s
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/metadata"
@@ -96,7 +97,7 @@ func (u *GRPCUserPrivacy) AllowForward(ctx context.Context, profileID uuid.UUID)
 // field is true for older records, matching the documented default.
 func (u *GRPCUserPrivacy) ShowReadReceipts(ctx context.Context, profileID uuid.UUID) (bool, error) {
 	if u == nil || u.Client == nil {
-		return true, nil
+		return false, fmt.Errorf("user privacy client not configured")
 	}
 	resp, err := u.Client.GetPrivacySettings(privacyS2SContext(ctx), &userv1.GetPrivacySettingsRequest{
 		ProfileId: profileID.String(),
@@ -105,7 +106,11 @@ func (u *GRPCUserPrivacy) ShowReadReceipts(ctx context.Context, profileID uuid.U
 		return false, err
 	}
 	ps := resp.GetPrivacySettings()
-	if ps == nil || ps.ShowReadReceipts == nil {
+	if ps == nil {
+		return false, fmt.Errorf("user privacy response missing settings")
+	}
+	// A missing optional field is an old, but authoritative, settings record.
+	if ps.ShowReadReceipts == nil {
 		return true, nil
 	}
 	return *ps.ShowReadReceipts, nil

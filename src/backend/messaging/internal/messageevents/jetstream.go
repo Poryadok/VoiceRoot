@@ -19,19 +19,20 @@ import (
 )
 
 const (
-	streamName            = "message_events"
-	subjectMessageSent    = "message.sent"
-	subjectMessageEdited  = "message.edited"
-	subjectMessageDeleted = "message.deleted"
-	subjectMessageRead       = "message.read"
-	subjectReactionAdded     = "message.reaction_added"
-	subjectReactionRemoved   = "message.reaction_removed"
-	subjectMentionAdded      = "message.mention_added"
-	subjectMessagePinned     = "message.pinned"
-	subjectMessageUnpinned   = "message.unpinned"
-	subjectMessageForwarded  = "message.forwarded"
+	streamName                = "message_events"
+	subjectMessageSent        = "message.sent"
+	subjectMessageEdited      = "message.edited"
+	subjectMessageDeleted     = "message.deleted"
+	subjectMessageRead        = "message.read"
+	subjectReadReceiptRevoked = "message.read_receipt_revoked"
+	subjectReactionAdded      = "message.reaction_added"
+	subjectReactionRemoved    = "message.reaction_removed"
+	subjectMentionAdded       = "message.mention_added"
+	subjectMessagePinned      = "message.pinned"
+	subjectMessageUnpinned    = "message.unpinned"
+	subjectMessageForwarded   = "message.forwarded"
 	subjectMessageDeliveryAck = "message.delivery_ack"
-	natsHeaderThreadParentID = "X-Voice-Thread-Parent-Id"
+	natsHeaderThreadParentID  = "X-Voice-Thread-Parent-Id"
 )
 
 // JetStreamPublisher publishes MessageStreamEvent payloads to NATS JetStream.
@@ -80,6 +81,7 @@ func messageEventStreamSubjects() []string {
 		subjectMessageEdited,
 		subjectMessageDeleted,
 		subjectMessageRead,
+		subjectReadReceiptRevoked,
 		subjectReactionAdded,
 		subjectReactionRemoved,
 		subjectMentionAdded,
@@ -175,6 +177,10 @@ func messageEventLogAttrs(env *eventsv1.MessageStreamEvent) []slog.Attr {
 		}
 	case *eventsv1.MessageStreamEvent_MessageRead:
 		if r := p.MessageRead; r != nil {
+			attrs = append(attrs, slog.String("message_id", r.GetMessageId()), slog.String("chat_id", r.GetChatId()), slog.String("profile_id", r.GetProfileId()))
+		}
+	case *eventsv1.MessageStreamEvent_ReadReceiptRevoked:
+		if r := p.ReadReceiptRevoked; r != nil {
 			attrs = append(attrs, slog.String("message_id", r.GetMessageId()), slog.String("chat_id", r.GetChatId()), slog.String("profile_id", r.GetProfileId()))
 		}
 	case *eventsv1.MessageStreamEvent_ReactionAdded:
@@ -311,6 +317,12 @@ func (p *JetStreamPublisher) PublishMessageDeleted(ctx context.Context, messageI
 		},
 	}
 	return p.publishProto(ctx, subjectMessageDeleted, env)
+}
+
+// PublishReadReceiptRevoked retracts a previously public receipt after a DM participant opts out.
+func (p *JetStreamPublisher) PublishReadReceiptRevoked(ctx context.Context, messageID, chatID, profileID string) error {
+	env := &eventsv1.MessageStreamEvent{EventId: uuid.NewString(), OccurredAt: timestamppb.New(time.Now().UTC()), Payload: &eventsv1.MessageStreamEvent_ReadReceiptRevoked{ReadReceiptRevoked: &eventsv1.ReadReceiptRevoked{MessageId: messageID, ChatId: chatID, ProfileId: profileID}}}
+	return p.publishProto(ctx, subjectReadReceiptRevoked, env)
 }
 
 // PublishReactionAdded implements MessageEventsPublisher.

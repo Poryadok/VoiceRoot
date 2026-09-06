@@ -466,6 +466,17 @@ void main() {
 
       state = container.read(chatRoomControllerProvider('chat-1'));
       expect(state.readMessageIds, contains('msg-mine'));
+
+      hub.addFrame(
+        const RealtimeFrame(
+          op: 'message_read_revoked',
+          data: {'chat_id': 'chat-1', 'message_id': 'msg-mine'},
+        ),
+      );
+      await pumpEventQueue();
+      state = container.read(chatRoomControllerProvider('chat-1'));
+      expect(state.readMessageIds, isNot(contains('msg-mine')));
+      expect(state.deliveredMessageIds, contains('msg-mine'));
     });
 
     test(

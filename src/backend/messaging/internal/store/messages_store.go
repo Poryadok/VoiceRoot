@@ -524,6 +524,40 @@ WHERE chat_id = $1 AND profile_id = $2
 
 // GetReadPosition returns the caller's private cursor for unread calculation
 // and own read-state APIs; it is never exposed to a DM peer directly.
+// PublicReadReceipt is a receipt that was visible to the other DM participant.
+type PublicReadReceipt struct {
+	ChatID    uuid.UUID
+	ProfileID uuid.UUID
+	MessageID uuid.UUID
+}
+
+// ClearPublicReadReceiptsForProfile revokes previously exposed DM receipt
+// cursors after a participant opts out. Private read_positions remain intact.
+func (s *MessagesStore) ClearPublicReadReceiptsForProfile(ctx context.Context, profileID uuid.UUID) ([]PublicReadReceipt, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("messages store: pool not configured")
+	}
+	rows, err := s.Pool.Query(ctx, `
+UPDATE read_receipts
+SET last_read_message_id = NULL, updated_at = now()
+WHERE profile_id = $1 AND last_read_message_id IS NOT NULL
+RETURNING chat_id, profile_id, last_read_message_id
+`, profileID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []PublicReadReceipt
+	for rows.Next() {
+		var r PublicReadReceipt
+		if err := rows.Scan(&r.ChatID, &r.ProfileID, &r.MessageID); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 func (s *MessagesStore) GetReadPosition(ctx context.Context, chatID, profileID uuid.UUID) (lastRead *uuid.UUID, updatedAt *time.Time, err error) {
 	if s == nil || s.Pool == nil {
 		return nil, nil, errors.New("messages store: pool not configured")

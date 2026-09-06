@@ -666,6 +666,15 @@ const MessageStreamEvent$json = {
       '9': 0,
       '10': 'deliveryAck'
     },
+    {
+      '1': 'read_receipt_revoked',
+      '3': 21,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.ReadReceiptRevoked',
+      '9': 0,
+      '10': 'readReceiptRevoked'
+    },
   ],
   '8': [
     {'1': 'payload'},
@@ -690,7 +699,9 @@ final $typed_data.Uint8List messageStreamEventDescriptor = $convert.base64Decode
     'V2ZW50cy52MS5NZXNzYWdlVW5waW5uZWRIAFIPbWVzc2FnZVVucGlubmVkElAKEW1lc3NhZ2Vf'
     'Zm9yd2FyZGVkGBMgASgLMiEudm9pY2UuZXZlbnRzLnYxLk1lc3NhZ2VGb3J3YXJkZWRIAFIQbW'
     'Vzc2FnZUZvcndhcmRlZBJBCgxkZWxpdmVyeV9hY2sYFCABKAsyHC52b2ljZS5ldmVudHMudjEu'
-    'RGVsaXZlcnlBY2tIAFILZGVsaXZlcnlBY2tCCQoHcGF5bG9hZA==');
+    'RGVsaXZlcnlBY2tIAFILZGVsaXZlcnlBY2sSVwoUcmVhZF9yZWNlaXB0X3Jldm9rZWQYFSABKA'
+    'syIy52b2ljZS5ldmVudHMudjEuUmVhZFJlY2VpcHRSZXZva2VkSABSEnJlYWRSZWNlaXB0UmV2'
+    'b2tlZEIJCgdwYXlsb2Fk');
 
 @$core.Deprecated('Use messageSentDescriptor instead')
 const MessageSent$json = {
@@ -844,6 +855,21 @@ const MessageRead$json = {
 final $typed_data.Uint8List messageReadDescriptor = $convert.base64Decode(
     'CgtNZXNzYWdlUmVhZBIdCgptZXNzYWdlX2lkGAEgASgJUgltZXNzYWdlSWQSFwoHY2hhdF9pZB'
     'gCIAEoCVIGY2hhdElkEh0KCnByb2ZpbGVfaWQYAyABKAlSCXByb2ZpbGVJZA==');
+
+@$core.Deprecated('Use readReceiptRevokedDescriptor instead')
+const ReadReceiptRevoked$json = {
+  '1': 'ReadReceiptRevoked',
+  '2': [
+    {'1': 'message_id', '3': 1, '4': 1, '5': 9, '10': 'messageId'},
+    {'1': 'chat_id', '3': 2, '4': 1, '5': 9, '10': 'chatId'},
+    {'1': 'profile_id', '3': 3, '4': 1, '5': 9, '10': 'profileId'},
+  ],
+};
+
+/// Descriptor for `ReadReceiptRevoked`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List readReceiptRevokedDescriptor = $convert.base64Decode(
+    'ChJSZWFkUmVjZWlwdFJldm9rZWQSHQoKbWVzc2FnZV9pZBgBIAEoCVIJbWVzc2FnZUlkEhcKB2'
+    'NoYXRfaWQYAiABKAlSBmNoYXRJZBIdCgpwcm9maWxlX2lkGAMgASgJUglwcm9maWxlSWQ=');
 
 @$core.Deprecated('Use deliveryAckDescriptor instead')
 const DeliveryAck$json = {

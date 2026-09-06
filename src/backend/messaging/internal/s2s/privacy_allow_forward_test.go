@@ -56,6 +56,13 @@ func TestGRPCUserPrivacy_AllowForward_nilClientFailsOpen(t *testing.T) {
 	require.True(t, ok)
 }
 
+func TestGRPCUserPrivacy_ShowReadReceipts_nilClientFailsClosed(t *testing.T) {
+	t.Parallel()
+	ok, err := (&GRPCUserPrivacy{}).ShowReadReceipts(context.Background(), uuid.New())
+	require.Error(t, err)
+	require.False(t, ok)
+}
+
 func TestGRPCUserPrivacy_ShowReadReceipts_defaultsTrueWhenUnset(t *testing.T) {
 	u := &GRPCUserPrivacy{Client: &privacyAllowForwardClient{
 		resp: &userv1.GetPrivacySettingsResponse{PrivacySettings: &userv1.PrivacySettings{}},

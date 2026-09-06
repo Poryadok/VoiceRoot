@@ -17,20 +17,21 @@ import (
 	"voice/backend/pkg/natslog"
 )
 
-	const (
-	streamName                = "user_events"
-	subjectAccountDeleted     = "user.account_deleted"
-	subjectProfileCreated     = "user.profile_created"
-		subjectProfileUpdated     = "user.profile_updated"
-		subjectProfileSwitched    = "user.profile_switched"
-		subjectProfileVerified    = "user.verified"
-		subjectPresenceChanged    = "user.presence_changed"
-	)
+const (
+	streamName             = "user_events"
+	subjectAccountDeleted  = "user.account_deleted"
+	subjectProfileCreated  = "user.profile_created"
+	subjectProfileUpdated  = "user.profile_updated"
+	subjectProfileSwitched = "user.profile_switched"
+	subjectProfileVerified = "user.verified"
+	subjectPresenceChanged = "user.presence_changed"
+	subjectSettingsChanged = "user.settings_changed"
+)
 
 // JetStreamPublisher publishes UserStreamEvent payloads to NATS JetStream.
 type JetStreamPublisher struct {
-	nc *nats.Conn
-	js nats.JetStreamContext
+	nc     *nats.Conn
+	js     nats.JetStreamContext
 	Logger *slog.Logger
 
 	ensureOnce sync.Once
@@ -60,58 +61,59 @@ func NewJetStreamPublisher(natsURL string) (*JetStreamPublisher, error) {
 	return &JetStreamPublisher{nc: nc, js: js}, nil
 }
 
-	func (p *JetStreamPublisher) ensureStream() error {
-		if p == nil || p.js == nil {
-			return fmt.Errorf("jetstream publisher not initialized")
+func (p *JetStreamPublisher) ensureStream() error {
+	if p == nil || p.js == nil {
+		return fmt.Errorf("jetstream publisher not initialized")
+	}
+	p.ensureOnce.Do(func() {
+		subjects := []string{
+			subjectAccountDeleted,
+			subjectProfileCreated,
+			subjectProfileUpdated,
+			subjectProfileSwitched,
+			subjectProfileVerified,
+			subjectPresenceChanged,
+			subjectSettingsChanged,
 		}
-		p.ensureOnce.Do(func() {
-			subjects := []string{
-				subjectAccountDeleted,
-				subjectProfileCreated,
-				subjectProfileUpdated,
-				subjectProfileSwitched,
-				subjectProfileVerified,
-				subjectPresenceChanged,
-			}
-			if info, err := p.js.StreamInfo(streamName); err == nil {
-				for _, subj := range subjects {
-					if !streamHasSubject(info, subj) {
-						cfg := info.Config
-						cfg.Subjects = append(cfg.Subjects, subj)
-						_, p.ensureErr = p.js.UpdateStream(&cfg)
-						if p.ensureErr != nil {
-							return
-						}
-						info, p.ensureErr = p.js.StreamInfo(streamName)
-						if p.ensureErr != nil {
-							return
-						}
+		if info, err := p.js.StreamInfo(streamName); err == nil {
+			for _, subj := range subjects {
+				if !streamHasSubject(info, subj) {
+					cfg := info.Config
+					cfg.Subjects = append(cfg.Subjects, subj)
+					_, p.ensureErr = p.js.UpdateStream(&cfg)
+					if p.ensureErr != nil {
+						return
+					}
+					info, p.ensureErr = p.js.StreamInfo(streamName)
+					if p.ensureErr != nil {
+						return
 					}
 				}
-				return
 			}
-			_, p.ensureErr = p.js.AddStream(&nats.StreamConfig{
-				Name:      streamName,
-				Subjects:  subjects,
-				Retention: nats.LimitsPolicy,
-				MaxAge:    7 * 24 * time.Hour,
-				Storage:   nats.FileStorage,
-			})
+			return
+		}
+		_, p.ensureErr = p.js.AddStream(&nats.StreamConfig{
+			Name:      streamName,
+			Subjects:  subjects,
+			Retention: nats.LimitsPolicy,
+			MaxAge:    7 * 24 * time.Hour,
+			Storage:   nats.FileStorage,
 		})
-		return p.ensureErr
-	}
+	})
+	return p.ensureErr
+}
 
-	func streamHasSubject(info *nats.StreamInfo, subject string) bool {
-		if info == nil {
-			return false
-		}
-		for _, s := range info.Config.Subjects {
-			if s == subject {
-				return true
-			}
-		}
+func streamHasSubject(info *nats.StreamInfo, subject string) bool {
+	if info == nil {
 		return false
 	}
+	for _, s := range info.Config.Subjects {
+		if s == subject {
+			return true
+		}
+	}
+	return false
+}
 
 func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, env *eventsv1.UserStreamEvent) error {
 	if err := p.ensureStream(); err != nil {
@@ -179,44 +181,53 @@ func (p *JetStreamPublisher) PublishProfileSwitched(ctx context.Context, account
 	return p.publishProto(ctx, subjectProfileSwitched, env)
 }
 
-	// PublishVerified emits user.verified.
-	func (p *JetStreamPublisher) PublishVerified(ctx context.Context, profileID, accountID, verificationType string) error {
-		env := &eventsv1.UserStreamEvent{
-			EventId:    uuid.NewString(),
-			OccurredAt: timestamppb.New(time.Now().UTC()),
-			Payload: &eventsv1.UserStreamEvent_ProfileCreated{
-				ProfileCreated: &eventsv1.ProfileCreated{
-					ProfileId: profileID,
-					AccountId: accountID,
-				},
+// PublishVerified emits user.verified.
+func (p *JetStreamPublisher) PublishVerified(ctx context.Context, profileID, accountID, verificationType string) error {
+	env := &eventsv1.UserStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.UserStreamEvent_ProfileCreated{
+			ProfileCreated: &eventsv1.ProfileCreated{
+				ProfileId: profileID,
+				AccountId: accountID,
 			},
-		}
-		_ = verificationType
-		return p.publishProto(ctx, subjectProfileVerified, env)
+		},
 	}
+	_ = verificationType
+	return p.publishProto(ctx, subjectProfileVerified, env)
+}
 
-	func newPresenceChangedEvent(profileID, oldStatus, newStatus string) *eventsv1.UserStreamEvent {
-		return &eventsv1.UserStreamEvent{
-			EventId:    uuid.NewString(),
-			OccurredAt: timestamppb.New(time.Now().UTC()),
-			Payload: &eventsv1.UserStreamEvent_PresenceChange{
-				PresenceChange: &eventsv1.PresenceChange{
-					ProfileId: profileID,
-					Status:    newStatus,
-					OldStatus: oldStatus,
-					NewStatus: newStatus,
-				},
+func newPresenceChangedEvent(profileID, oldStatus, newStatus string) *eventsv1.UserStreamEvent {
+	return &eventsv1.UserStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.UserStreamEvent_PresenceChange{
+			PresenceChange: &eventsv1.PresenceChange{
+				ProfileId: profileID,
+				Status:    newStatus,
+				OldStatus: oldStatus,
+				NewStatus: newStatus,
 			},
-		}
+		},
 	}
+}
 
-	// PublishPresenceChanged emits user.presence_changed (docs/microservices/user-service.md).
-	func (p *JetStreamPublisher) PublishPresenceChanged(ctx context.Context, profileID, oldStatus, newStatus string) error {
-		return p.publishProto(ctx, subjectPresenceChanged, newPresenceChangedEvent(profileID, oldStatus, newStatus))
+// PublishPresenceChanged emits user.presence_changed (docs/microservices/user-service.md).
+func (p *JetStreamPublisher) PublishPresenceChanged(ctx context.Context, profileID, oldStatus, newStatus string) error {
+	return p.publishProto(ctx, subjectPresenceChanged, newPresenceChangedEvent(profileID, oldStatus, newStatus))
+}
+
+// PublishSettingsChanged emits user.settings_changed after a committed settings update.
+func (p *JetStreamPublisher) PublishSettingsChanged(ctx context.Context, profileID, changedKeysJSON string) error {
+	env := &eventsv1.UserStreamEvent{
+		EventId: uuid.NewString(), OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.UserStreamEvent_SettingsChanged{SettingsChanged: &eventsv1.SettingsChanged{ProfileId: profileID, ChangedKeysJson: changedKeysJSON}},
 	}
+	return p.publishProto(ctx, subjectSettingsChanged, env)
+}
 
-	// Close drains the underlying NATS connection.
-	func (p *JetStreamPublisher) Close() error {
+// Close drains the underlying NATS connection.
+func (p *JetStreamPublisher) Close() error {
 	if p == nil || p.nc == nil {
 		return nil
 	}

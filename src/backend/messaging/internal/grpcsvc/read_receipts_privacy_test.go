@@ -80,3 +80,21 @@ func TestShouldPublishReadReceipt_leavesGroupsUnaffected(t *testing.T) {
 	}
 	require.True(t, s.shouldPublishReadReceipt(context.Background(), uuid.New(), uuid.New()))
 }
+
+func TestShouldPublishReadReceipt_failsClosedWhenDMDependenciesAreMissing(t *testing.T) {
+	t.Parallel()
+	chat, reader := uuid.New(), uuid.New()
+	resolver := faultingTestAuthoritativeChatTypeResolver{typ: chatv1.ChatType_CHAT_TYPE_DM}
+	for _, tc := range []struct {
+		name   string
+		server *MessagingGRPC
+	}{
+		{"resolver missing", &MessagingGRPC{}},
+		{"guard missing", &MessagingGRPC{ChatTypeResolver: resolver}},
+		{"privacy missing", &MessagingGRPC{ChatTypeResolver: resolver, ChatGuard: stubChatGuard{peer: uuid.New()}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.False(t, tc.server.shouldPublishReadReceipt(context.Background(), chat, reader))
+		})
+	}
+}

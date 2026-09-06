@@ -2,51 +2,37 @@ package grpcsvc
 
 import (
 	"context"
-	"errors"
-	"strings"
 
 	"github.com/google/uuid"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
-	"voice/backend/messaging/internal/store"
 
 	chatv1 "voice.app/voice/chat/v1"
 )
 
 // shouldPublishReadReceipt implements privacy.md's symmetric DM opt-out.
-// It deliberately returns false for a failing policy dependency: MarkRead still
-// persists the caller's private cursor, but no public receipt or event leaks.
-// A non-DM has no peer receipt and remains unaffected by this toggle.
+// The private cursor is written independently. Public receipt state is emitted
+// only after an authoritative chat-type lookup and both DM participants' policy
+// reads succeed. Any missing or failing DM dependency therefore fails closed.
 func (s *MessagingGRPC) shouldPublishReadReceipt(ctx context.Context, chatID, readerProfileID uuid.UUID) bool {
-	if s == nil || s.ChatGuard == nil {
+	if s == nil || s.ChatTypeResolver == nil {
+		return false
+	}
+	chatType, err := s.ChatTypeResolver.ResolveChatType(ctx, chatID, readerProfileID)
+	if err != nil {
+		return false
+	}
+	if chatType != chatv1.ChatType_CHAT_TYPE_DM {
 		return true
 	}
-	if s.ChatTypeResolver != nil {
-		chatType, err := s.ChatTypeResolver.ResolveChatType(ctx, chatID, readerProfileID)
-		if err != nil {
-			return false
-		}
-		if chatType != chatv1.ChatType_CHAT_TYPE_DM {
-			return true
-		}
+	if s.ChatGuard == nil {
+		return false
 	}
 	peerProfileID, err := s.ChatGuard.DMOtherProfileID(ctx, chatID, readerProfileID)
 	if err != nil {
-		if errors.Is(err, store.ErrNotChatMember) {
-			return false
-		}
-		if st, ok := status.FromError(err); ok && st.Code() == codes.FailedPrecondition {
-			return true
-		}
-		if strings.Contains(err.Error(), "dm must have exactly two members") {
-			return true
-		}
 		return false
 	}
 	checker, ok := s.Privacy.(ReadReceiptPrivacyChecker)
-	if !ok {
-		return true
+	if !ok || checker == nil {
+		return false
 	}
 	readerEnabled, err := checker.ShowReadReceipts(ctx, readerProfileID)
 	if err != nil || !readerEnabled {
