@@ -36,4 +36,11 @@ grep -q 'TRUNCATE TABLE account_deletion_operations' "$TMP/log"
 grep -q 'TRUNCATE TABLE organization_verification_requests' "$TMP/log"
 if run "$SCRIPT" --dry-run --project production >"$TMP/project-out" 2>&1; then echo 'non-Voice project unexpectedly succeeded' >&2; exit 1; fi
 grep -q 'refusing non-Voice' "$TMP/project-out"
+for unsafe_project in voice-prod voice-production voice-stage voice-staging; do
+  if run "$SCRIPT" --dry-run --project "$unsafe_project" >"$TMP/unsafe-project-out" 2>&1; then
+    echo "unsafe project unexpectedly succeeded: $unsafe_project" >&2
+    exit 1
+  fi
+  grep -q 'refusing staging or production-like' "$TMP/unsafe-project-out"
+done
 echo 'All reset-a1-test-accounts tests passed.'

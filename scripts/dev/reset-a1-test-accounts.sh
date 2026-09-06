@@ -41,6 +41,10 @@ done
 [[ "$project" =~ ^voice(-[a-z0-9][a-z0-9-]*)?$ ]] || {
   echo "refusing non-Voice local Compose project: $project" >&2; exit 2;
 }
+project_lower="${project,,}"
+case "$project_lower" in *prod*|*stage*)
+  echo "refusing staging or production-like Compose project: $project" >&2; exit 2 ;;
+esac
 case "${VOICE_DEPLOYMENT_ENV:-}" in production|prod|staging)
   echo "refusing deployment environment: ${VOICE_DEPLOYMENT_ENV}" >&2; exit 2 ;;
 esac
