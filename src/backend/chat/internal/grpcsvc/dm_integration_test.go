@@ -25,6 +25,7 @@ import (
 	"voice/backend/chat/internal/authctx"
 	"voice/backend/chat/internal/chatevents"
 	"voice/backend/chat/internal/store"
+	"voice/backend/pkg/privacy"
 
 	chatv1 "voice.app/voice/chat/v1"
 )
@@ -99,6 +100,26 @@ func (s stubBlocks) AccountPairBlocked(context.Context, uuid.UUID, uuid.UUID) (b
 	return s.blocked, s.err
 }
 
+type allowDMPrivacyChecker struct{}
+
+func (allowDMPrivacyChecker) AllowDMAudience(context.Context, uuid.UUID) (privacy.Audience, error) {
+	return privacy.EveryoneWithGuests(), nil
+}
+
+func (allowDMPrivacyChecker) AllowChatSpaceInvitesAudience(context.Context, uuid.UUID) (privacy.Audience, error) {
+	return privacy.EveryoneWithGuests(), nil
+}
+
+type unavailableDMPrivacyChecker struct{}
+
+func (unavailableDMPrivacyChecker) AllowDMAudience(context.Context, uuid.UUID) (privacy.Audience, error) {
+	return privacy.Audience{}, status.Error(codes.Unavailable, "user unavailable")
+}
+
+func (unavailableDMPrivacyChecker) AllowChatSpaceInvitesAudience(context.Context, uuid.UUID) (privacy.Audience, error) {
+	return privacy.EveryoneWithGuests(), nil
+}
+
 type chatServerOption func(*ChatGRPC)
 
 func WithDMStore(d DMStore) chatServerOption {
@@ -123,6 +144,10 @@ func WithPrivacyChecker(p PrivacyChecker) chatServerOption {
 	return func(c *ChatGRPC) { c.Privacy = p }
 }
 
+func WithBlockChecker(b AccountBlockChecker) chatServerOption {
+	return func(c *ChatGRPC) { c.Blocks = b }
+}
+
 func WithFriendChecker(f ProfileFriendChecker) chatServerOption {
 	return func(c *ChatGRPC) { c.Friends = f }
 }
@@ -137,6 +162,9 @@ func WithLogger(l *slog.Logger) chatServerOption {
 
 func startChatGRPCTestServer(t *testing.T, pool *pgxpool.Pool, profiles UserProfileLookup, blocks AccountBlockChecker, enrich ListChatsEnrichment, opts ...chatServerOption) (chatv1.ChatServiceClient, func()) {
 	t.Helper()
+	if blocks == nil {
+		blocks = stubBlocks{}
+	}
 	const bufSize = 1 << 20
 	lis := bufconn.Listen(bufSize)
 	srv := grpc.NewServer()
@@ -150,6 +178,9 @@ func startChatGRPCTestServer(t *testing.T, pool *pgxpool.Pool, profiles UserProf
 	}
 	for _, o := range opts {
 		o(svc)
+	}
+	if svc.Privacy == nil {
+		svc.Privacy = allowDMPrivacyChecker{}
 	}
 	chatv1.RegisterChatServiceServer(srv, svc)
 	go func() {
@@ -332,6 +363,44 @@ func TestCreateDM_BlockedPair_PermissionDenied(t *testing.T) {
 	_, err := client.CreateDM(ctxA, &chatv1.CreateDMRequest{OtherProfileId: profB.String()})
 	require.Error(t, err)
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+// TestCreateDM_BlockStatusUnavailableFailsClosed prevents a missing Social
+// dependency from creating a DM whose block state cannot be checked.
+func TestCreateDM_BlockStatusUnavailableFailsClosed(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	accountA, accountB := uuid.New(), uuid.New()
+	profileA, profileB := uuid.New(), uuid.New()
+	client, cleanup := startChatGRPCTestServer(t, pool, mapProfileAccounts{profileA: accountA, profileB: accountB}, nil, nil, WithBlockChecker(nil))
+	t.Cleanup(cleanup)
+
+	_, err := client.CreateDM(withAccountProfileCtx(ctx, accountA, profileA), &chatv1.CreateDMRequest{OtherProfileId: profileB.String()})
+	require.Equal(t, codes.Unavailable, status.Code(err))
+}
+
+// TestCreateDM_PrivacyUnavailableFailsClosed prevents a missing User privacy
+// dependency from bypassing the recipient's allow_dm policy.
+func TestCreateDM_PrivacyUnavailableFailsClosed(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	accountA, accountB := uuid.New(), uuid.New()
+	profileA, profileB := uuid.New(), uuid.New()
+	client, cleanup := startChatGRPCTestServer(t, pool, mapProfileAccounts{profileA: accountA, profileB: accountB}, stubBlocks{}, nil, WithPrivacyChecker(unavailableDMPrivacyChecker{}))
+	t.Cleanup(cleanup)
+
+	_, err := client.CreateDM(withAccountProfileCtx(ctx, accountA, profileA), &chatv1.CreateDMRequest{OtherProfileId: profileB.String()})
+	require.Equal(t, codes.Unavailable, status.Code(err))
 }
 
 // TestGetDM_BlockedPair_PermissionDenied documents chat-service.md: Social blocks gate DM; GetDM uses the same path as CreateDM.
