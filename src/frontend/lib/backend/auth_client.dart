@@ -477,19 +477,21 @@ class VoiceAuthClient {
   }) => _sendOtp(session: session, email: email, otpType: 'email_verify');
 
   /// Verifies the email OTP for a pending guest conversion.
-  Future<AuthApiResult<void>> verifyGuestConversionEmailOtp({
+  Future<AuthSessionResult> verifyGuestConversionEmailOtp({
     required AuthSession session,
     required String email,
     required String code,
   }) async {
-    final result = await _gateway.postEmpty(
+    final result = await _gateway.postJson(
       uri: _gateway.resolve('/api/v1/auth/otp/verify'),
       authorization: session.authorizationHeader,
       jsonBody: {'email': email, 'code': code, 'otp_type': 'email_verify'},
     );
     return switch (result) {
-      GatewayHttpOk<void>() => const AuthApiOk(null),
-      GatewayHttpFailure(:final error) => AuthApiFailure(
+      GatewayHttpOk(:final data) => AuthSessionOk(
+        AuthSession.fromAuthResponse(data),
+      ),
+      GatewayHttpFailure(:final error) => AuthSessionFailure(
         message: GatewayApiResultMapper.failureMessage(error),
         errorCode: GatewayApiResultMapper.failureCode(error),
         statusCode: GatewayApiResultMapper.failureStatus(error),

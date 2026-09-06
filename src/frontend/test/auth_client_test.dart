@@ -350,7 +350,7 @@ void main() {
           expect(req.url.path, '/api/v1/auth/otp/verify');
           expect(body['code'], '123456');
           verified = true;
-          return http.Response('', 204);
+          return http.Response(jsonEncode(sessionJson()), 200);
         });
         final client = VoiceAuthClient(
           gateway: gatewayHttpForTest(mock, config: config),
@@ -369,7 +369,7 @@ void main() {
             session: guest,
             email: 'guest@example.com',
           ),
-          isA<AuthApiOk<void>>(),
+          isA<AuthSessionOk>(),
         );
         expect(
           await client.verifyGuestConversionEmailOtp(

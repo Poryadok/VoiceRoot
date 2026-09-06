@@ -384,7 +384,7 @@ class AuthController extends StateNotifier<AuthState> {
       email: email,
       code: code,
     );
-    if (verified case AuthApiFailure(
+    if (verified case AuthSessionFailure(
       :final message,
       :final errorCode,
       :final statusCode,
@@ -397,10 +397,25 @@ class AuthController extends StateNotifier<AuthState> {
           ) ??
           message;
     }
-    return _refreshGuestConversionUntilRegular(
-      current,
-      _profileSwitchGeneration,
-    );
+    if (verified case AuthSessionOk(:final session) when _isRegularSession(session)) {
+      await _commitProfileSession(
+        session: session,
+        generation: _profileSwitchGeneration,
+        nextState: (currentState) => currentState.copyWith(
+          session: session,
+          clearGuest: true,
+          clearGuestNickname: true,
+          clearPendingGuestConversionEmail: true,
+          isGuestConversionPromotionPending: false,
+          clearError: true,
+        ),
+      );
+      await _guestCredentialsStorage.clear();
+      _convertingGuest = false;
+      await _notifyAuthenticated();
+      return null;
+    }
+    return _refreshGuestConversionUntilRegular(current, _profileSwitchGeneration);
   }
 
   /// Rechecks promotion after an accepted OTP without replaying that OTP.
