@@ -12,12 +12,16 @@ import (
 	"voice/backend/notification/internal/consumer"
 	"voice/backend/notification/internal/delivery"
 	"voice/backend/notification/internal/dispatch"
+	"voice/backend/notification/internal/fcm"
 	"voice/backend/notification/internal/grouping"
+	"voice/backend/notification/internal/push"
 	"voice/backend/notification/internal/pushenrich"
+	"voice/backend/notification/internal/store"
 )
 
 type stubChatMembers struct {
-	ids []string
+	ids  []string
+	rows []chatmembers.Member
 }
 
 func (s stubChatMembers) ListMemberProfileIDs(context.Context, string) ([]string, error) {
@@ -25,12 +29,34 @@ func (s stubChatMembers) ListMemberProfileIDs(context.Context, string) ([]string
 }
 
 func (s stubChatMembers) ListMembers(_ context.Context, _ string) ([]chatmembers.Member, error) {
+	if s.rows != nil {
+		return s.rows, nil
+	}
 	out := make([]chatmembers.Member, 0, len(s.ids))
 	for _, id := range s.ids {
 		out = append(out, chatmembers.Member{ProfileID: id, InboxBucket: "main"})
 	}
 	return out, nil
 }
+
+type recordingMessageFCM struct {
+	sent []push.Payload
+}
+
+func (r *recordingMessageFCM) Send(_ context.Context, _ uuid.UUID, _ store.DeviceToken, payload fcm.PushPayload) error {
+	r.sent = append(r.sent, push.Payload(payload))
+	return nil
+}
+
+type messageTokenRepo struct {
+	byProfile map[uuid.UUID][]store.DeviceToken
+}
+
+func (r messageTokenRepo) ListByProfile(_ context.Context, profileID uuid.UUID) ([]store.DeviceToken, error) {
+	return r.byProfile[profileID], nil
+}
+
+func (messageTokenRepo) DeleteByToken(context.Context, string) error { return nil }
 
 func TestRouteMessageNotification_MessageSent(t *testing.T) {
 	senderID := uuid.NewString()
@@ -95,6 +121,45 @@ func TestDeliveryForMember_ArchivedRecipientSuppressesPush(t *testing.T) {
 
 			require.True(t, decision.InApp, "archiving must not suppress unread/in-app handling")
 			require.False(t, decision.Push, "archived %s recipient must not receive push", chatKind)
+		})
+	}
+}
+
+func TestRouteMessageNotification_ArchivedRecipientGetsNoPush(t *testing.T) {
+	for _, chatKind := range []string{"dm", "group", "channel"} {
+		t.Run(chatKind, func(t *testing.T) {
+			senderID := uuid.New()
+			recipientID := uuid.New()
+			members := []chatmembers.Member{
+				{ProfileID: senderID.String(), InboxBucket: "main"},
+				{ProfileID: recipientID.String(), InboxBucket: "main", IsArchived: true},
+			}
+			handler := &consumer.MessageEventHandler{Router: delivery.DecideRouting}
+			raw := handler.HandleMessageSent(context.Background(), &eventsv1.MessageSent{
+				MessageId:       uuid.NewString(),
+				ChatId:          uuid.NewString(),
+				SenderProfileId: senderID.String(),
+			}, members)
+			require.True(t, raw[recipientID.String()].InApp, "archiving must preserve unread/in-app handling")
+
+			recorder := &recordingMessageFCM{}
+			env := &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MessageSent{
+				MessageSent: &eventsv1.MessageSent{
+					MessageId:       uuid.NewString(),
+					ChatId:          uuid.NewString(),
+					SenderProfileId: senderID.String(),
+				},
+			}}
+			err := routeMessageNotification(context.Background(), handler, stubChatMembers{rows: members}, &dispatch.MessagePusher{
+				Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
+					recipientID: {{Token: "recipient-token", PushService: "fcm"}},
+				}},
+				Pusher:   &dispatch.PushDispatcher{FCM: recorder},
+				Grouping: grouping.NewMemoryStore(),
+			}, pushenrich.NoopResolver{}, env)
+
+			require.NoError(t, err)
+			require.Empty(t, recorder.sent, "archived %s recipient must not receive push", chatKind)
 		})
 	}
 }
