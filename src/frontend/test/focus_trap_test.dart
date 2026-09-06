@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/testing.dart';
+import 'package:voice_frontend/backend/auth_session_storage.dart';
+import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
+import 'package:voice_frontend/state/auth_providers.dart';
+import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/ui/a11y/focus_trap.dart';
 import 'package:voice_frontend/ui/auth/guest_convert_sheet.dart';
 import 'package:voice_frontend/ui/call/call_modal_overlay.dart';
@@ -16,10 +22,7 @@ void main() {
           body: VoiceFocusTrap(
             child: Column(
               children: [
-                TextButton(
-                  onPressed: () {},
-                  child: const Text('inside'),
-                ),
+                TextButton(onPressed: () {}, child: const Text('inside')),
               ],
             ),
           ),
@@ -37,26 +40,22 @@ void main() {
     expect(scope.autofocus, isTrue);
   });
 
-  testWidgets('CallModalOverlay traps focus inside overlay card', (tester) async {
+  testWidgets('CallModalOverlay traps focus inside overlay card', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: Stack(
             children: [
-              TextButton(
-                onPressed: () {},
-                child: const Text('background'),
-              ),
+              TextButton(onPressed: () {}, child: const Text('background')),
               CallModalOverlay(
                 overlayKey: const Key('trap_overlay'),
                 title: 'Incoming call',
                 subtitle: 'Audio',
                 avatarLabel: 'Peer',
                 actions: [
-                  FilledButton(
-                    onPressed: () {},
-                    child: const Text('Accept'),
-                  ),
+                  FilledButton(onPressed: () {}, child: const Text('Accept')),
                 ],
               ),
             ],
@@ -95,18 +94,33 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
-        theme: voiceTestTheme(),
-        locale: const Locale('en'),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Builder(
-          builder: (context) {
-            return FilledButton(
-              onPressed: () => GuestConvertSheet.show(context),
-              child: const Text('open'),
-            );
-          },
+      ProviderScope(
+        overrides: [
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          httpClientProvider.overrideWithValue(
+            MockClient((_) async {
+              throw StateError('unexpected request');
+            }),
+          ),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Builder(
+            builder: (context) {
+              return FilledButton(
+                onPressed: () => GuestConvertSheet.show(context),
+                child: const Text('open'),
+              );
+            },
+          ),
         ),
       ),
     );
@@ -125,5 +139,4 @@ void main() {
       findsOneWidget,
     );
   });
-
 }

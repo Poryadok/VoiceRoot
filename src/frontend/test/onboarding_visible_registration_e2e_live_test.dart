@@ -153,7 +153,6 @@ void main() {
       ],
     );
     addTearDown(() async {
-      await container.read(authControllerProvider.notifier).logout();
       container.dispose();
       client.close();
     });

@@ -4268,6 +4268,42 @@ abstract class AppLocalizations {
   /// **'Create account'**
   String get guestConvertSubmit;
 
+  /// No description provided for @guestConvertVerificationSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter the code sent to {email}. Your guest access stays active until it is verified.'**
+  String guestConvertVerificationSubtitle(Object email);
+
+  /// No description provided for @guestConvertCodeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Verification code'**
+  String get guestConvertCodeLabel;
+
+  /// No description provided for @guestConvertVerify.
+  ///
+  /// In en, this message translates to:
+  /// **'Verify email'**
+  String get guestConvertVerify;
+
+  /// No description provided for @guestConvertResend.
+  ///
+  /// In en, this message translates to:
+  /// **'Resend code'**
+  String get guestConvertResend;
+
+  /// No description provided for @guestConvertPromotionPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Your email is verified. We are finishing your account setup; your guest access stays active until then.'**
+  String get guestConvertPromotionPending;
+
+  /// No description provided for @guestConvertRefreshStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh account status'**
+  String get guestConvertRefreshStatus;
+
   /// No description provided for @guestSaveAccountReminder.
   ///
   /// In en, this message translates to:
