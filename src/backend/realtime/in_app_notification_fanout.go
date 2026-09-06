@@ -274,15 +274,6 @@ func dispatchMentionAdded(hub *wsHub, ma *eventsv1.MentionAdded, recipientStates
 	}
 }
 
-func isMessageSentEvent(data []byte) bool {
-	var e eventsv1.MessageStreamEvent
-	if err := proto.Unmarshal(data, &e); err != nil {
-		return false
-	}
-	_, ok := e.GetPayload().(*eventsv1.MessageStreamEvent_MessageSent)
-	return ok
-}
-
 func isReactionAddedEvent(data []byte) bool {
 	var e eventsv1.MessageStreamEvent
 	if err := proto.Unmarshal(data, &e); err != nil {

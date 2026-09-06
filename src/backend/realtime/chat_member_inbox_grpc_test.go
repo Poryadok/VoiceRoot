@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
 
 	chatv1 "voice.app/voice/chat/v1"
@@ -39,9 +40,9 @@ func TestGRPCChatMemberInboxListerPagesAllMembers(t *testing.T) {
 	go func() { _ = grpcServer.Serve(lis) }()
 	t.Cleanup(grpcServer.Stop)
 
-	conn, err := grpc.NewClient("bufnet", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+	conn, err := grpc.NewClient("passthrough:///bufnet", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
 		return lis.Dial()
-	}), grpc.WithInsecure())
+	}), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
 
