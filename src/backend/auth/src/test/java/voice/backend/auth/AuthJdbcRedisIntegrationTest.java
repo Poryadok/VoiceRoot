@@ -244,7 +244,7 @@ class AuthJdbcRedisIntegrationTest {
             call -> {
               assertThat(call.accountId()).isEqualTo(accountId);
               assertThat(call.displayHint()).isEqualTo("jdbc@example.com");
-              assertThat(call.guestAccount()).isFalse();
+              assertThat(call.guestAccount()).isTrue();
               assertThat(call.profileId()).isEqualTo(profileId);
             });
 

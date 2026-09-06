@@ -56,6 +56,32 @@ public class JdbcAccountRepository implements AccountRepository {
   }
 
   @Override
+  public Account createRegularEmailPending(String email, String passwordHash) {
+    try {
+      return jdbc.queryForObject(
+          """
+          INSERT INTO accounts (email, password_hash, type, status, regular_email_verification_pending)
+          VALUES (:email, :passwordHash, 'guest', 'active', true)
+          RETURNING id, email, phone, password_hash, type, status, totp_secret, totp_enabled, session_epoch, created_at, deleted_at
+          """,
+          new MapSqlParameterSource().addValue("email", email).addValue("passwordHash", passwordHash),
+          ROW_MAPPER);
+    } catch (DuplicateKeyException ex) {
+      throw new IllegalArgumentException("duplicate account identifier", ex);
+    }
+  }
+
+  @Override
+  public boolean isRegularEmailVerificationPending(UUID accountId) {
+    Boolean pending =
+        jdbc.queryForObject(
+            "SELECT regular_email_verification_pending FROM accounts WHERE id = :id",
+            new MapSqlParameterSource("id", accountId),
+            Boolean.class);
+    return Boolean.TRUE.equals(pending);
+  }
+
+  @Override
   public Optional<Account> findByEmail(String email) {
     if (email == null) {
       return Optional.empty();
@@ -176,7 +202,7 @@ public class JdbcAccountRepository implements AccountRepository {
       return jdbc.queryForObject(
           """
           UPDATE accounts
-          SET type = 'regular', updated_at = now()
+          SET type = 'regular', regular_email_verification_pending = false, updated_at = now()
           WHERE id = :id AND type = 'guest'
           RETURNING id, email, phone, password_hash, type, status, totp_secret, totp_enabled, session_epoch, created_at, deleted_at
           """,

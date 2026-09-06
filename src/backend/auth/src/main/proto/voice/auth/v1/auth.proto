@@ -143,7 +143,10 @@ message Verify2FAResponse {
   AuthSession session = 1;
 }
 
-message VerifyOTPResponse {}
+message VerifyOTPResponse {
+  // Set only when email verification synchronously completes a pending registration.
+  AuthSession session = 1;
+}
 
 message ConvertGuestResponse {
   AuthSession session = 1;

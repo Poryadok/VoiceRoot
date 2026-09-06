@@ -95,6 +95,44 @@ public class JdbcGuestConversionOperationRepository implements GuestConversionOp
     return leaseDueInternal(expectedState, batchSize, now, leaseUntil);
   }
 
+  @Override
+  public java.util.Optional<GuestConversionOperation> leaseDueForAccount(
+      GuestConversionState expectedState, UUID accountId, Instant now, Instant leaseUntil) {
+    Objects.requireNonNull(expectedState, "expectedState");
+    Objects.requireNonNull(accountId, "accountId");
+    Objects.requireNonNull(now, "now");
+    Objects.requireNonNull(leaseUntil, "leaseUntil");
+    if (!leaseUntil.isAfter(now)) {
+      throw new IllegalArgumentException("leaseUntil must be after now");
+    }
+    return jdbc
+        .query(
+            """
+            UPDATE guest_conversion_operations
+            SET locked_until = :leaseUntil
+            WHERE operation_id = (
+                SELECT operation_id
+                FROM guest_conversion_operations
+                WHERE account_id = :accountId
+                  AND state = :expectedState
+                  AND next_attempt_at <= :now
+                  AND (locked_until IS NULL OR locked_until <= :now)
+                FOR UPDATE SKIP LOCKED
+            )
+            RETURNING operation_id, account_id, otp_code_id, state, attempt_count,
+                      next_attempt_at, locked_until, last_error_code, user_marked_at,
+                      auth_promoted_at, event_published_at, created_at, updated_at
+            """,
+            new MapSqlParameterSource()
+                .addValue("accountId", accountId)
+                .addValue("expectedState", expectedState.name())
+                .addValue("now", Timestamp.from(now))
+                .addValue("leaseUntil", Timestamp.from(leaseUntil)),
+            ROW_MAPPER)
+        .stream()
+        .findFirst();
+  }
+
   private java.util.List<GuestConversionOperation> leaseDueInternal(
       GuestConversionState expectedState, int batchSize, Instant now, Instant leaseUntil) {
     if (batchSize <= 0) {

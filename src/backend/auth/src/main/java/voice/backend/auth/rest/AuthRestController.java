@@ -114,14 +114,16 @@ public class AuthRestController {
   }
 
   @PostMapping("/otp/verify")
-  public ResponseEntity<Void> verifyOtp(
+  public ResponseEntity<?> verifyOtp(
       @RequestHeader(name = "Authorization", required = false) String authorization,
       @Valid @RequestBody VerifyOtpRequest request) {
-    otpService.verifyOtp(
+    AuthSession verifiedSession = otpService.verifyOtp(
         new VerifyOtpCommand(
             request.email(), request.phone(), request.code(), request.otpType(), authorization),
         authService);
-    return ResponseEntity.noContent().build();
+    return verifiedSession == null
+        ? ResponseEntity.noContent().build()
+        : ResponseEntity.ok(SessionEnvelope.from(verifiedSession));
   }
 
   @PostMapping("/password/reset")
@@ -287,7 +289,7 @@ public class AuthRestController {
     HttpStatus status = switch (ex.getMessage()) {
       case "validation_failed", "registration_conflict" -> HttpStatus.BAD_REQUEST;
       case "otp_rate_limited" -> HttpStatus.TOO_MANY_REQUESTS;
-      case "auth_unavailable", "oauth_unavailable" -> HttpStatus.SERVICE_UNAVAILABLE;
+      case "auth_unavailable", "oauth_unavailable", "verification_pending" -> HttpStatus.SERVICE_UNAVAILABLE;
       case "not_found" -> HttpStatus.NOT_FOUND;
       case "verification_denied" -> HttpStatus.FORBIDDEN;
       case "oauth_failed" -> HttpStatus.BAD_REQUEST;

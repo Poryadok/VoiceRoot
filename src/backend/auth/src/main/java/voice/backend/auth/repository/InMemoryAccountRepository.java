@@ -16,6 +16,7 @@ public class InMemoryAccountRepository implements AccountRepository {
   private final Map<String, UUID> byEmail = new ConcurrentHashMap<>();
   private final Map<String, UUID> byPhone = new ConcurrentHashMap<>();
   private final Map<UUID, Instant> guestReminderShownAt = new ConcurrentHashMap<>();
+  private final java.util.Set<UUID> regularEmailVerificationPending = ConcurrentHashMap.newKeySet();
   private final Clock clock;
 
   public InMemoryAccountRepository() {
@@ -55,6 +56,18 @@ public class InMemoryAccountRepository implements AccountRepository {
       byPhone.put(phone, account.id());
     }
     return account;
+  }
+
+  @Override
+  public synchronized Account createRegularEmailPending(String email, String passwordHash) {
+    Account account = create(email, null, passwordHash, "guest");
+    regularEmailVerificationPending.add(account.id());
+    return account;
+  }
+
+  @Override
+  public synchronized boolean isRegularEmailVerificationPending(UUID accountId) {
+    return regularEmailVerificationPending.contains(accountId);
   }
 
   @Override
@@ -167,6 +180,7 @@ public class InMemoryAccountRepository implements AccountRepository {
             existing.createdAt(),
             existing.deletedAt());
     byId.put(accountId, regular);
+    regularEmailVerificationPending.remove(accountId);
     return regular;
   }
 
