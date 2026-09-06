@@ -29,10 +29,14 @@ func (s *ChatGRPC) CreateChat(ctx context.Context, req *chatv1.CreateChatRequest
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
 	}
+	spaceIDRaw := strings.TrimSpace(req.GetSpaceId())
 	// Guests may participate only after a regular member explicitly invites them
-	// to a standalone chat that opted in. They must never create a chat themselves.
-	if err := authctx.RequireRegular(ctx); err != nil {
-		return nil, err
+	// to a standalone chat that opted in. Space creation remains owned by the
+	// existing Space and Role policy path.
+	if spaceIDRaw == "" {
+		if err := authctx.RequireRegular(ctx); err != nil {
+			return nil, err
+		}
 	}
 	name := strings.TrimSpace(req.GetName())
 	if name == "" {
@@ -46,7 +50,6 @@ func (s *ChatGRPC) CreateChat(ctx context.Context, req *chatv1.CreateChatRequest
 
 	var row *store.ChatRow
 	var err error
-	spaceIDRaw := strings.TrimSpace(req.GetSpaceId())
 	if chatType == chatv1.ChatType_CHAT_TYPE_CHANNEL {
 		if spaceIDRaw == "" {
 			row, err = s.DM.CreateChannelChat(ctx, caller, name, topic)
