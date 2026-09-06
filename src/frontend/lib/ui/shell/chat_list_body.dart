@@ -49,6 +49,10 @@ class ChatListBody extends ConsumerStatefulWidget {
       Key('chat_list_quick_access_$chatId');
   static Key archiveActionKey(String chatId) =>
       Key('chat_list_archive_$chatId');
+  static Key addToFolderActionKey(String chatId) =>
+      Key('chat_list_add_to_folder_$chatId');
+  static Key removeFromFolderActionKey(String chatId) =>
+      Key('chat_list_remove_from_folder_$chatId');
 
   final bool showHeader;
   final void Function(String chatId)? onChatSelected;
@@ -501,6 +505,13 @@ Future<void> _showChatRowActions(
 }) async {
   final muted = ref.read(chatMutedUntilProvider)[item.chatId] != null;
   final qaAsync = ref.read(quickAccessListProvider);
+  final foldersAsync = ref.read(chatFoldersProvider);
+  final isCustomFolder =
+      folderId != null &&
+      (foldersAsync.valueOrNull?.folders.any(
+            (folder) => folder.id == folderId && !folder.isSystem,
+          ) ??
+          false);
   final inQuickAccess =
       qaAsync.valueOrNull?.items.any((entry) => entry.chatId == item.chatId) ??
       false;
@@ -523,6 +534,23 @@ Future<void> _showChatRowActions(
                 onTap: () =>
                     Navigator.pop(ctx, item.isPinned ? 'unpin' : 'pin'),
               ),
+            if (isCustomFolder)
+              ListTile(
+                key: ChatListBody.removeFromFolderActionKey(item.chatId),
+                leading: const Icon(Icons.folder_off_outlined),
+                title: Text(l10n.chatListRemoveFromFolder),
+                onTap: () => Navigator.pop(ctx, 'remove_from_folder'),
+              )
+            else if ((foldersAsync.valueOrNull?.folders.any(
+                  (folder) => !folder.isSystem,
+                ) ??
+                false))
+              ListTile(
+                key: ChatListBody.addToFolderActionKey(item.chatId),
+                leading: const Icon(Icons.create_new_folder_outlined),
+                title: Text(l10n.chatListAddToFolder),
+                onTap: () => Navigator.pop(ctx, 'add_to_folder'),
+              ),
             if (!inQuickAccess)
               ListTile(
                 key: ChatListBody.quickAccessActionKey(item.chatId),
@@ -538,13 +566,12 @@ Future<void> _showChatRowActions(
               title: Text(muted ? l10n.chatListUnmute : l10n.chatListMute),
               onTap: () => Navigator.pop(ctx, muted ? 'unmute' : 'mute'),
             ),
-            if (item.chat.isDm)
-              ListTile(
-                key: ChatListBody.archiveActionKey(item.chatId),
-                leading: const Icon(Icons.archive_outlined),
-                title: Text(l10n.chatListArchive),
-                onTap: () => Navigator.pop(ctx, 'archive'),
-              ),
+            ListTile(
+              key: ChatListBody.archiveActionKey(item.chatId),
+              leading: const Icon(Icons.archive_outlined),
+              title: Text(l10n.chatListArchive),
+              onTap: () => Navigator.pop(ctx, 'archive'),
+            ),
           ],
         ),
       );
@@ -571,6 +598,24 @@ Future<void> _showChatRowActions(
       }
     case 'quick_access':
       await addChatToQuickAccess(context, ref, chatId: item.chatId);
+    case 'add_to_folder':
+      final folder = await _pickCustomFolder(
+        context,
+        foldersAsync.valueOrNull?.folders ?? const [],
+      );
+      if (folder == null || !context.mounted) return;
+      final err = await ref
+          .read(folderActionsProvider)
+          .addChatToFolder(folderId: folder.id, chatId: item.chatId);
+      if (!context.mounted || err == null) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+    case 'remove_from_folder':
+      if (folderId == null || !isCustomFolder) return;
+      final err = await ref
+          .read(folderActionsProvider)
+          .removeChatFromFolder(folderId: folderId, chatId: item.chatId);
+      if (!context.mounted || err == null) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
     case 'mute':
       final until = DateTime.utc(9999, 12, 31);
       final err = await controller.muteChat(item.chatId, mutedUntil: until);
@@ -591,12 +636,52 @@ Future<void> _showChatRowActions(
         });
       }
     case 'archive':
-      await controller.archiveChat(
+      final err = await controller.archiveChat(
         item.chatId,
         archived: true,
         sourceItem: item,
       );
+      if (!context.mounted || err == null || err == kChatActionStaleContext) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
   }
+}
+
+Future<VoiceFolder?> _pickCustomFolder(
+  BuildContext context,
+  List<VoiceFolder> folders,
+) {
+  final l10n = AppLocalizations.of(context)!;
+  final custom = folders.where((folder) => !folder.isSystem).toList();
+  return showModalBottomSheet<VoiceFolder>(
+    context: context,
+    builder: (ctx) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                l10n.chatListAddToFolder,
+                style: Theme.of(ctx).textTheme.titleMedium,
+              ),
+            ),
+          ),
+          ...custom.map(
+            (folder) => ListTile(
+              key: Key('chat_list_add_to_folder_${folder.id}'),
+              leading: const Icon(Icons.folder_outlined),
+              title: Text(folder.name),
+              onTap: () => Navigator.pop(ctx, folder),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _ChatListTrailing extends StatelessWidget {
