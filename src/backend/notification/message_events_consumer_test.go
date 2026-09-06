@@ -67,6 +67,8 @@ func (r parentAuthorResolver) MessageAuthorProfileID(context.Context, string) (s
 	return r.author, nil
 }
 
+func stringPtr(value string) *string { return &value }
+
 func TestRouteMessageNotification_MessageSent(t *testing.T) {
 	senderID := uuid.NewString()
 	recipientID := uuid.NewString()
@@ -175,7 +177,7 @@ func TestRouteMessageNotification_ArchivedReplyAndMentionSuppressNotificationDel
 			name: "thread reply",
 			route: func(_ *testing.T, handler *consumer.MessageEventHandler, members chatmembers.Lister, pusher *dispatch.MessagePusher, resolver pushenrich.Resolver, senderID, recipientID string) error {
 				return routeMessageNotification(context.Background(), handler, members, pusher, parentAuthorResolver{author: recipientID}, &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MessageSent{
-					MessageSent: &eventsv1.MessageSent{MessageId: uuid.NewString(), ChatId: "group-chat", SenderProfileId: senderID, ThreadParentId: "parent-message"},
+					MessageSent: &eventsv1.MessageSent{MessageId: uuid.NewString(), ChatId: "group-chat", SenderProfileId: senderID, ThreadParentId: stringPtr("parent-message")},
 				}})
 			},
 		},
