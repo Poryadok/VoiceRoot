@@ -2354,9 +2354,16 @@ class ReconnectBannerController extends Notifier<bool> {
       _disposed = true;
       _cancelTimers();
     });
+    final initialStatus = ref.read(realtimeLinkStatusProvider);
+    if (initialStatus == RealtimeLinkStatus.connected) {
+      _wasConnected = true;
+    } else if (_isUnhealthy(initialStatus)) {
+      _scheduleShow();
+    }
+
     ref.listen<RealtimeLinkStatus>(realtimeLinkStatusProvider, (prev, next) {
       _onLinkStatusChanged(prev, next);
-    }, fireImmediately: true);
+    });
     return false;
   }
 
