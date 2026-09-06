@@ -168,9 +168,78 @@ void main() {
 
     await tester.longPress(find.text('Group Target'));
     await tester.pumpAndSettle();
+    chats.archiveError = 'archive failed';
     await tester.tap(find.byKey(ChatListBody.archiveActionKey(chatId)));
     await tester.pumpAndSettle();
-    expect(chats.archived, [chatId]);
+    expect(find.text('archive failed'), findsOneWidget);
+  });
+
+  testWidgets('System folder row cannot remove implicit membership', (
+    tester,
+  ) async {
+    const folderId = 'folder-dm';
+    const chatId = 'chat-dm-1';
+    final container = ProviderContainer(
+      overrides: [
+        ...voiceAppTestOverrides(
+          client: MockClient((_) async => throw UnimplementedError()),
+        ),
+        onboardingControllerProvider.overrideWith(
+          TestCompletedOnboardingController.new,
+        ),
+        voiceChatsClientProvider.overrideWith(
+          (ref) => FakeVoiceChatsClient(
+            pages: [
+              ChatListData(
+                items: [
+                  ChatListItem(
+                    chat: VoiceChat(
+                      id: chatId,
+                      type: 'CHAT_TYPE_GROUP',
+                      creatorProfileId: 'p1',
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        chatFoldersProvider.overrideWith(
+          (_) async => FolderListData(
+            folders: [
+              VoiceFolder(id: folderId, name: 'DMs', folderType: 'system'),
+            ],
+          ),
+        ),
+        quickAccessListProvider.overrideWith(
+          (_) async => const QuickAccessListData(items: []),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    container.read(selectedChatFolderIdProvider.notifier).state = folderId;
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: ChatListBody(showHeader: false)),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.byKey(ChatListBody.tileKey(chatId)));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(ChatListBody.removeFromFolderActionKey(chatId)),
+      findsNothing,
+    );
   });
 }
 
@@ -179,6 +248,7 @@ class _TrackingVoiceChatsClient extends FakeVoiceChatsClient {
 
   final List<(String, String)> added = [];
   final List<String> archived = [];
+  String? archiveError;
 
   @override
   Future<ChatsApiResult<void>> addChatToFolder({
@@ -196,6 +266,9 @@ class _TrackingVoiceChatsClient extends FakeVoiceChatsClient {
     required String chatId,
     required bool archived,
   }) async {
+    if (archiveError case final error?) {
+      return ChatsApiFailure(message: error);
+    }
     if (archived) this.archived.add(chatId);
     return const ChatsApiOk(null);
   }

@@ -529,7 +529,7 @@ Future<void> _showChatRowActions(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (isCustomFolder)
+            if (folderId != null)
               ListTile(
                 key: ChatListBody.pinActionKey(item.chatId),
                 leading: Icon(
@@ -541,7 +541,7 @@ Future<void> _showChatRowActions(
                 onTap: () =>
                     Navigator.pop(ctx, item.isPinned ? 'unpin' : 'pin'),
               ),
-            if (folderId != null)
+            if (isCustomFolder)
               ListTile(
                 key: ChatListBody.removeFromFolderActionKey(item.chatId),
                 leading: const Icon(Icons.folder_off_outlined),
@@ -643,11 +643,15 @@ Future<void> _showChatRowActions(
         });
       }
     case 'archive':
-      await controller.archiveChat(
+      final err = await controller.archiveChat(
         item.chatId,
         archived: true,
         sourceItem: item,
       );
+      if (!context.mounted || err == null || err == kChatActionStaleContext) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
   }
 }
 
