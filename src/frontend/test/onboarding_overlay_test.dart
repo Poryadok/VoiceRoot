@@ -239,7 +239,7 @@ void main() {
     final overlayElement = tester.element(find.byType(OnboardingOverlay));
     final container = ProviderScope.containerOf(overlayElement);
     expect(container.read(globalSearchFocusRequestProvider), greaterThan(0));
-    expect(container.read(navigationSectionProvider), NavigationSection.social);
+    expect(container.read(navigationSectionProvider), NavigationSection.chats);
   });
 
   testWidgets('coach-mark skip dismisses onboarding', (tester) async {
@@ -283,7 +283,7 @@ void main() {
     expect(recording.state.completed, isTrue);
   });
 
-  testWidgets('coach-mark tour steps through chats, spaces, matchmaking, wrap-up', (
+  testWidgets('coach-mark tour defers matchmaking until its navigation trigger', (
     tester,
   ) async {
     final l10n = AppLocalizationsEn();
@@ -316,13 +316,10 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.text(l10n.onboardingMatchmakingTitle), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilledButton, l10n.onboardingLater));
-    await tester.pumpAndSettle();
-
-    expect(find.text(l10n.onboardingWrapUpTitle), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilledButton, l10n.onboardingWrapUpStart));
-    await tester.pumpAndSettle();
+    final overlayElement = tester.element(find.byType(OnboardingOverlay));
+    final container = ProviderScope.containerOf(overlayElement);
+    expect(container.read(navigationSectionProvider), NavigationSection.chats);
+    expect(find.text(l10n.onboardingMatchmakingTitle), findsNothing);
 
     expect(
       recording.completedSteps,
@@ -330,12 +327,41 @@ void main() {
         'save_account',
         'chats_nav',
         'spaces',
-        'matchmaking',
-        'wrap_up',
       ],
     );
     expect(recording.state.completed, isFalse);
-    expect(recording.state.currentStep, isNull);
+    expect(recording.state.currentStep, OnboardingStep.matchmaking);
+  });
+
+  testWidgets('matchmaking coach-mark appears when social navigation is active', (
+    tester,
+  ) async {
+    final l10n = AppLocalizationsEn();
+    await tester.binding.setSurfaceSize(const Size(1280, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = _DelayedOnboardingController(
+      completedSteps: ['save_account', 'chats_nav', 'spaces'],
+      delayedStep: 'matchmaking',
+    );
+
+    await tester.pumpWidget(
+      _onboardingTestApp(
+        overrides: [
+          ...voiceAppTestOverrides(
+            client: MockClient((_) async => http.Response('{}', 404)),
+          ),
+          navigationSectionProvider.overrideWith(
+            (ref) => NavigationSection.social,
+          ),
+          onboardingControllerProvider.overrideWith(() => controller),
+        ],
+        child: _onboardingAnchorsScaffold(),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text(l10n.onboardingMatchmakingTitle), findsOneWidget);
   });
 
   testWidgets('coach-mark waits for delayed completion before showing next step', (
@@ -436,7 +462,11 @@ void main() {
     delayed.completion.complete();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
-    expect(find.text(l10n.onboardingMatchmakingTitle), findsOneWidget);
+    expect(find.text(l10n.onboardingMatchmakingTitle), findsNothing);
+
+    final overlayElement = tester.element(find.byType(OnboardingOverlay));
+    final container = ProviderScope.containerOf(overlayElement);
+    expect(container.read(navigationSectionProvider), NavigationSection.chats);
   });
 
   testWidgets('guest auto-skip does not retry a failed completion', (tester) async {

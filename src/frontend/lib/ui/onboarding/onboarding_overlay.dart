@@ -23,16 +23,31 @@ class OnboardingOverlay extends ConsumerStatefulWidget {
 class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
   var _loaded = false;
   var _saveAccountModalOpen = false;
+  late final ProviderSubscription<NavigationSection> _navigationSubscription;
   OverlayEntry? _coachMark;
 
   @override
   void initState() {
     super.initState();
+    _navigationSubscription = ref.listenManual(navigationSectionProvider, (
+      previous,
+      next,
+    ) {
+      if (previous == NavigationSection.social ||
+          next != NavigationSection.social) {
+        return;
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _maybeShowStep();
+      });
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadOnboarding());
   }
 
   @override
   void dispose() {
+    _navigationSubscription.close();
     _clearCoachMark();
     super.dispose();
   }
@@ -67,6 +82,11 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
       return;
     }
 
+    if (step == OnboardingStep.matchmaking &&
+        ref.read(navigationSectionProvider) != NavigationSection.social) {
+      return;
+    }
+
     switch (step) {
       case OnboardingStep.saveAccount:
         _showSaveAccountModal(l10n);
@@ -95,9 +115,6 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
           onContinue: _completeCurrentStepAndShowNext,
         );
       case OnboardingStep.matchmaking:
-        ref.read(shellNavigationProvider).setNavigationSection(
-          NavigationSection.social,
-        );
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           _showCoachMark(
