@@ -370,9 +370,9 @@ message ReorderQuickAccessRequest {
 | `ListChats` main inbox | **Implemented** — excludes `is_archived=true` |
 | `ListChats` with `inbox=archive` | **Implemented (Batch 15)** — archived `dm` / `group` / `channel`; ignores `folder_id` |
 | Side-effect: remove Quick Access on archive | **Implemented (Batch 18)** — `ArchiveChat(archived=true)` calls `RemoveQuickAccess` |
-| Incoming message keeps chat archived | **Spec target; code gap** — remove Batch 20 `AutoUnarchiveDMRecipients`; preserve `is_archived=true` and update unread metadata only |
+| Incoming message keeps chat archived | **Implemented** — `message.sent` updates activity but preserves per-member `is_archived=true`; unread metadata remains owned by Messaging |
 
-**Spec:** archive write/list and Quick Access side-effect are implemented (Batch 15/18). Group/channel use the same per-member `is_archived` column and are returned by `inbox=archive`. Incoming-DM auto-unarchive from Batch 20 is obsolete against the canonical badge-only policy and remains an implementation gap; client UX status is tracked separately in [todo/client.md](../todo/client.md).
+**Spec:** archive write/list and Quick Access side-effect are implemented (Batch 15/18). Group/channel use the same per-member `is_archived` column and are returned by `inbox=archive`. Message activity preserves the archived state under the canonical badge-only policy; client UX status is tracked separately in [todo/client.md](../todo/client.md).
 
 Unarchive semantics: [GLOSSARY.md](../GLOSSARY.md) § «Архив чата», [text-chat.md](../features/text-chat.md) § «Архивирование».
 

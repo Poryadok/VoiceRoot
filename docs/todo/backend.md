@@ -267,7 +267,8 @@
 - [x] **[Chat] Migration: `quick_access_chats`** — `000010_quick_access_chats.up.sql` per chat-service.md sketch (**Batch 17**).
 - [x] **[Chat] Handlers: Quick Access** — enforce limit 15; `AddQuickAccess` idempotent; integration test reorder (**Batch 17**: `quick_access.go`, store + gRPC tests).
 - [x] **[Chat] Archive removes Quick Access** — `ArchiveChat(archived=true)` calls `RemoveQuickAccess` (**Batch 18**).
-- [ ] **[Chat/Notification] Incoming message for archived chat must be badge-only** — remove obsolete DM `AutoUnarchiveDMRecipients`, keep `is_archived=true` for DM/group/channel, suppress push and notification-center row, update unread badge, and replace the Batch 20 auto-unarchive test with main/archive inbox + routing regressions. Canon: [text-chat.md](../features/text-chat.md) § «Архивирование», [notifications.md](../features/notifications.md) § «Архивированные чаты».
+- [x] **[Chat] Incoming message keeps an archived chat archived** — removed obsolete DM `AutoUnarchiveDMRecipients`; `message.sent` preserves `is_archived=true` while retaining activity and declined-DM re-contact handling; main/archive inbox regressions cover the contract. Canon: [text-chat.md](../features/text-chat.md) § «Архивирование».
+- [ ] **[Notification] Archived-chat message suppression** — suppress push and notification-center row while retaining the unread badge. Canon: [notifications.md](../features/notifications.md) § «Архивированные чаты».
 - [x] **[Chat] Gateway REST** — folder RPCs + `GET /chats?folder_id=` (**Batch 19**): `GET/POST /api/v1/chats/folders`, `PATCH/DELETE …/folders/{id}`, `POST/DELETE …/folders/{id}/chats`, `PUT …/chats/order`, `POST/DELETE …/chats/{chatId}/pin`; Quick Access REST — **done (Batch 17)**; `inbox=archive` on `GET /chats` — **done Batch 15**.
 
 ### Telegram-parity audit — open CODE (2026-08-28)
