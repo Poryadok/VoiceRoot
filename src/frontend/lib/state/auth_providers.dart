@@ -379,6 +379,7 @@ class AuthController extends StateNotifier<AuthState> {
       return 'not_authenticated';
     }
     _convertingGuest = true;
+    final credentials = await _guestCredentialsStorage.snapshot();
     final verified = await _authClient.verifyGuestConversionEmailOtp(
       session: current,
       email: email,
@@ -397,25 +398,27 @@ class AuthController extends StateNotifier<AuthState> {
           ) ??
           message;
     }
-    if (verified case AuthSessionOk(:final session) when _isRegularSession(session)) {
-      await _commitProfileSession(
+    if (verified case AuthSessionOk(
+      :final session,
+    ) when _isRegularSession(session)) {
+      final completed = await _finishGuestConversion(
         session: session,
+        expected: current,
         generation: _profileSwitchGeneration,
-        nextState: (currentState) => currentState.copyWith(
-          session: session,
-          clearGuest: true,
-          clearGuestNickname: true,
-          clearPendingGuestConversionEmail: true,
-          isGuestConversionPromotionPending: false,
-          clearError: true,
-        ),
+        credentials: credentials,
       );
-      await _guestCredentialsStorage.clear();
+      if (!completed) {
+        _convertingGuest = false;
+        return 'not_authenticated';
+      }
       _convertingGuest = false;
       await _notifyAuthenticated();
       return null;
     }
-    return _refreshGuestConversionUntilRegular(current, _profileSwitchGeneration);
+    return _refreshGuestConversionUntilRegular(
+      current,
+      _profileSwitchGeneration,
+    );
   }
 
   /// Rechecks promotion after an accepted OTP without replaying that OTP.
@@ -437,6 +440,7 @@ class AuthController extends StateNotifier<AuthState> {
   ) async {
     var current = initialSession;
     for (var attempt = 0; attempt < 4; attempt++) {
+      final credentials = await _guestCredentialsStorage.snapshot();
       final refreshed = await _authClient.refresh(
         refreshToken: current.refreshToken,
       );
@@ -446,24 +450,13 @@ class AuthController extends StateNotifier<AuthState> {
       }
       switch (refreshed) {
         case AuthSessionOk(:final session) when _isRegularSession(session):
-          await _guestCredentialsStorage.clear();
-          if (!_isGuestConversionCurrent(current, generation)) {
-            _convertingGuest = false;
-            return 'not_authenticated';
-          }
-          await _commitProfileSession(
+          final completed = await _finishGuestConversion(
             session: session,
+            expected: current,
             generation: generation,
-            nextState: (currentState) => currentState.copyWith(
-              session: session,
-              clearGuest: true,
-              clearGuestNickname: true,
-              clearPendingGuestConversionEmail: true,
-              isGuestConversionPromotionPending: false,
-              clearError: true,
-            ),
+            credentials: credentials,
           );
-          if (generation != _profileSwitchGeneration) {
+          if (!completed) {
             _convertingGuest = false;
             return 'not_authenticated';
           }
@@ -523,6 +516,34 @@ class AuthController extends StateNotifier<AuthState> {
     }
     _convertingGuest = false;
     return 'guest_conversion_pending';
+  }
+
+  Future<bool> _finishGuestConversion({
+    required AuthSession session,
+    required AuthSession expected,
+    required int generation,
+    required GuestCredentialsSnapshot credentials,
+  }) async {
+    if (!_isGuestConversionCurrent(expected, generation)) return false;
+    if (!await _guestCredentialsStorage.clearIfUnchanged(credentials)) {
+      return false;
+    }
+    if (!_isGuestConversionCurrent(expected, generation)) return false;
+    await _commitProfileSession(
+      session: session,
+      generation: generation,
+      nextState: (currentState) => currentState.copyWith(
+        session: session,
+        clearGuest: true,
+        clearGuestNickname: true,
+        clearPendingGuestConversionEmail: true,
+        isGuestConversionPromotionPending: false,
+        clearError: true,
+      ),
+    );
+    return generation == _profileSwitchGeneration &&
+        state.session?.refreshToken == session.refreshToken &&
+        !state.isGuest;
   }
 
   Future<void> login({

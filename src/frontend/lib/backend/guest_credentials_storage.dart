@@ -13,7 +13,35 @@ abstract class GuestCredentialsStorage {
   Future<void> setGuestConversionPromotionPending(bool pending);
   Future<bool> isNicknameCompleted(String accountId);
   Future<void> markNicknameCompleted(String accountId);
+  Future<GuestCredentialsSnapshot> snapshot();
+  Future<bool> clearIfUnchanged(GuestCredentialsSnapshot snapshot);
   Future<void> clear();
+}
+
+/// The mutable credentials that identify the guest conversion currently in
+/// progress. A promotion only clears this snapshot, so a newer guest flow is
+/// never erased by a delayed earlier promotion.
+class GuestCredentialsSnapshot {
+  const GuestCredentialsSnapshot({
+    required this.password,
+    required this.pendingConversionEmail,
+    required this.promotionPending,
+  });
+
+  final String? password;
+  final String? pendingConversionEmail;
+  final bool promotionPending;
+
+  @override
+  bool operator ==(Object other) =>
+      other is GuestCredentialsSnapshot &&
+      password == other.password &&
+      pendingConversionEmail == other.pendingConversionEmail &&
+      promotionPending == other.promotionPending;
+
+  @override
+  int get hashCode =>
+      Object.hash(password, pendingConversionEmail, promotionPending);
 }
 
 /// True when the profile still has the server-assigned placeholder display name.
@@ -45,7 +73,7 @@ class FlutterGuestCredentialsStorage implements GuestCredentialsStorage {
 
   Future<T> _serialize<T>(Future<T> Function() operation) {
     final result = _operations.then((_) => operation());
-    _operations = result.then<void>((_) {}, onError: (_, __) {});
+    _operations = result.then<void>((_) {}, onError: (error, stackTrace) {});
     return result;
   }
 
@@ -68,6 +96,47 @@ class FlutterGuestCredentialsStorage implements GuestCredentialsStorage {
       }
     });
   }
+
+  @override
+  Future<bool> clearIfUnchanged(GuestCredentialsSnapshot snapshot) =>
+      _serialize(() async {
+        final current = GuestCredentialsSnapshot(
+          password: await _storage.read(key: _passwordKey),
+          pendingConversionEmail: await _storage.read(
+            key: _pendingConversionEmailKey,
+          ),
+          promotionPending:
+              await _storage.read(key: _pendingConversionPromotionKey) ==
+              'true',
+        );
+        if (current != snapshot) return false;
+        await _storage.delete(key: _passwordKey);
+        await _storage.delete(key: _pendingConversionEmailKey);
+        await _storage.delete(key: _pendingConversionPromotionKey);
+        final prefs = _prefs;
+        if (prefs != null) {
+          final keys = prefs
+              .getKeys()
+              .where((key) => key.startsWith(_nicknameKeyPrefix))
+              .toList();
+          for (final key in keys) {
+            await prefs.remove(key);
+          }
+        }
+        return true;
+      });
+
+  @override
+  Future<GuestCredentialsSnapshot> snapshot() => _serialize(() async {
+    return GuestCredentialsSnapshot(
+      password: await _storage.read(key: _passwordKey),
+      pendingConversionEmail: await _storage.read(
+        key: _pendingConversionEmailKey,
+      ),
+      promotionPending:
+          await _storage.read(key: _pendingConversionPromotionKey) == 'true',
+    );
+  });
 
   @override
   Future<bool> isNicknameCompleted(String accountId) async {
@@ -127,7 +196,7 @@ class InMemoryGuestCredentialsStorage implements GuestCredentialsStorage {
 
   Future<T> _serialize<T>(Future<T> Function() operation) {
     final result = _operations.then((_) => operation());
-    _operations = result.then<void>((_) {}, onError: (_, __) {});
+    _operations = result.then<void>((_) {}, onError: (error, stackTrace) {});
     return result;
   }
 
@@ -138,6 +207,22 @@ class InMemoryGuestCredentialsStorage implements GuestCredentialsStorage {
     _pendingConversionPromotion = false;
     _nicknameCompleted.clear();
   });
+
+  @override
+  Future<bool> clearIfUnchanged(GuestCredentialsSnapshot snapshot) =>
+      _serialize(() async {
+        final current = GuestCredentialsSnapshot(
+          password: _password,
+          pendingConversionEmail: _pendingConversionEmail,
+          promotionPending: _pendingConversionPromotion,
+        );
+        if (current != snapshot) return false;
+        _password = null;
+        _pendingConversionEmail = null;
+        _pendingConversionPromotion = false;
+        _nicknameCompleted.clear();
+        return true;
+      });
 
   @override
   Future<bool> isNicknameCompleted(String accountId) => _serialize(() async {
@@ -180,5 +265,14 @@ class InMemoryGuestCredentialsStorage implements GuestCredentialsStorage {
   @override
   Future<void> writePassword(String password) => _serialize(() async {
     _password = password;
+  });
+
+  @override
+  Future<GuestCredentialsSnapshot> snapshot() => _serialize(() async {
+    return GuestCredentialsSnapshot(
+      password: _password,
+      pendingConversionEmail: _pendingConversionEmail,
+      promotionPending: _pendingConversionPromotion,
+    );
   });
 }

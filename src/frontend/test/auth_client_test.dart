@@ -369,16 +369,15 @@ void main() {
             session: guest,
             email: 'guest@example.com',
           ),
-          isA<AuthSessionOk>(),
-        );
-        expect(
-          await client.verifyGuestConversionEmailOtp(
-            session: guest,
-            email: 'guest@example.com',
-            code: '123456',
-          ),
           isA<AuthApiOk<void>>(),
         );
+        final verificationResult = await client.verifyGuestConversionEmailOtp(
+          session: guest,
+          email: 'guest@example.com',
+          code: '123456',
+        );
+        expect(verificationResult, isA<AuthSessionOk>());
+        expect((verificationResult as AuthSessionOk).session.accessToken, 'access-abc');
         expect(sent, isTrue);
         expect(verified, isTrue);
       },

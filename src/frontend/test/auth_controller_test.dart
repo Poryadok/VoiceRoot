@@ -62,13 +62,13 @@ class _DeferredGuestCredentialsStorage extends InMemoryGuestCredentialsStorage {
   var _firstClear = true;
 
   @override
-  Future<void> clear() async {
+  Future<bool> clearIfUnchanged(GuestCredentialsSnapshot snapshot) async {
     if (_firstClear) {
       _firstClear = false;
       clearStarted.complete();
       await clearGate.future;
     }
-    await super.clear();
+    return super.clearIfUnchanged(snapshot);
   }
 }
 
@@ -252,7 +252,7 @@ void main() {
     expect(convertBody, isNot(contains(guestPassword)));
   });
 
-  test('guest conversion keeps guest credentials until OTP verification refreshes regular session', () async {
+  test('guest conversion persists the verified regular SessionEnvelope and clears guest state', () async {
     final guestStorage = InMemoryGuestCredentialsStorage();
     await guestStorage.writePassword('guest-auto-password-1');
     final storage = InMemoryAuthSessionStorage();
@@ -270,12 +270,10 @@ void main() {
           200,
         );
       }
-      if (req.url.path == '/api/v1/auth/otp/send' ||
-          req.url.path == '/api/v1/auth/otp/verify') {
+      if (req.url.path == '/api/v1/auth/otp/send') {
         return http.Response('', 204);
       }
-      if (req.url.path == '/api/v1/auth/refresh') {
-        expect(jsonDecode(req.body)['refresh_token'], 'guest-converted-refresh');
+      if (req.url.path == '/api/v1/auth/otp/verify') {
         return http.Response(
           jsonEncode({
             'session': {
@@ -327,12 +325,15 @@ void main() {
     expect(await guestStorage.readPassword(), 'guest-auto-password-1');
 
     expect(await controller.verifyGuestConversionEmail('123456'), isNull);
-    expect(container.read(authControllerProvider).isGuest, isFalse);
-    expect(
-      container.read(authControllerProvider).pendingGuestConversionEmail,
-      isNull,
-    );
+    final state = container.read(authControllerProvider);
+    expect(state.isGuest, isFalse);
+    expect(state.pendingGuestConversionEmail, isNull);
+    expect(state.isGuestConversionPromotionPending, isFalse);
     expect(await guestStorage.readPassword(), isNull);
+    expect(await guestStorage.readPendingConversionEmail(), isNull);
+    expect(await guestStorage.isGuestConversionPromotionPending(), isFalse);
+    expect((await storage.read())?.accessToken, 'regular-access');
+    expect((await storage.read())?.refreshToken, 'regular-refresh');
     expect((await storage.read())?.accountType, 'regular');
   });
 
@@ -346,9 +347,9 @@ void main() {
         return http.Response(jsonEncode({'session': {...(sessionJson()['session'] as Map<String, dynamic>), 'account_type': 'guest'}}), 200);
       }
       if (req.url.path == '/api/v1/auth/otp/send') return http.Response('', 204);
-      if (req.url.path == '/api/v1/auth/otp/verify') {
-        verifies++;
-        return http.Response('', 204);
+        if (req.url.path == '/api/v1/auth/otp/verify') {
+          verifies++;
+          return http.Response(jsonEncode({'session': {...(sessionJson()['session'] as Map<String, dynamic>), 'account_type': 'guest'}}), 200);
       }
       if (req.url.path == '/api/v1/auth/refresh') {
         refreshes++;
@@ -488,6 +489,9 @@ void main() {
 
   test('logout during guest storage clear cannot restore regular promotion', () async {
     final guestStorage = _DeferredGuestCredentialsStorage();
+    await guestStorage.writePassword('old-guest-password');
+    await guestStorage.writePendingConversionEmail('old@example.com');
+    await guestStorage.setGuestConversionPromotionPending(true);
     final mock = MockClient((req) async {
       if (req.url.path == '/api/v1/auth/refresh') return http.Response(jsonEncode({'session': {...(sessionJson()['session'] as Map<String, dynamic>), 'account_type': 'regular'}}), 200);
       if (req.url.path == '/api/v1/auth/logout') return http.Response('', 204);
@@ -500,13 +504,22 @@ void main() {
     final resume = controller.resumeGuestConversionPromotion();
     await guestStorage.clearStarted.future;
     await controller.logout();
+    await guestStorage.writePassword('new-guest-password');
+    await guestStorage.writePendingConversionEmail('new@example.com');
+    await guestStorage.setGuestConversionPromotionPending(true);
     guestStorage.clearGate.complete();
     expect(await resume, 'not_authenticated');
     expect(container.read(authControllerProvider).session, isNull);
+    expect(await guestStorage.readPassword(), 'new-guest-password');
+    expect(await guestStorage.readPendingConversionEmail(), 'new@example.com');
+    expect(await guestStorage.isGuestConversionPromotionPending(), isTrue);
   });
 
   test('profile switch during guest storage clear cannot be overwritten', () async {
     final guestStorage = _DeferredGuestCredentialsStorage();
+    await guestStorage.writePassword('old-guest-password');
+    await guestStorage.writePendingConversionEmail('old@example.com');
+    await guestStorage.setGuestConversionPromotionPending(true);
     const switched = AuthSession(accessToken: 'profile-b-access', refreshToken: 'profile-b-refresh', accountId: 'acc-1', activeProfileId: 'profile-b', expiresInSeconds: 900, accountType: 'guest');
     final mock = MockClient((req) async {
       if (req.url.path == '/api/v1/auth/refresh') return http.Response(jsonEncode({'session': {...(sessionJson()['session'] as Map<String, dynamic>), 'account_type': 'regular'}}), 200);
@@ -520,9 +533,15 @@ void main() {
     final resume = controller.resumeGuestConversionPromotion();
     await guestStorage.clearStarted.future;
     expect(await controller.switchActiveProfile('profile-b'), isNull);
+    await guestStorage.writePassword('profile-b-guest-password');
+    await guestStorage.writePendingConversionEmail('profile-b@example.com');
+    await guestStorage.setGuestConversionPromotionPending(true);
     guestStorage.clearGate.complete();
     expect(await resume, 'not_authenticated');
     expect(container.read(authControllerProvider).session, switched);
+    expect(await guestStorage.readPassword(), 'profile-b-guest-password');
+    expect(await guestStorage.readPendingConversionEmail(), 'profile-b@example.com');
+    expect(await guestStorage.isGuestConversionPromotionPending(), isTrue);
   });
 
   test('restore keeps session on network_error refresh failure', () async {

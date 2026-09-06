@@ -485,7 +485,7 @@ class VoiceAuthClient {
     final result = await _gateway.postJson(
       uri: _gateway.resolve('/api/v1/auth/otp/verify'),
       authorization: session.authorizationHeader,
-      jsonBody: {'email': email, 'code': code, 'otp_type': 'email_verify'},
+      body: {'email': email, 'code': code, 'otp_type': 'email_verify'},
     );
     return switch (result) {
       GatewayHttpOk(:final data) => AuthSessionOk(
