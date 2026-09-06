@@ -172,6 +172,113 @@ func TestListChats_HidesDeletedPeerDMsFromEveryInbox(t *testing.T) {
 	require.NotEqual(t, main.ID, active.ID)
 }
 
+// TestListChats_DeletedPeerSnapshotUsesLifecycleOwnerLookup proves the snapshot
+// path does not fall back to public GetProfile, which intentionally hides a
+// soft-deleted peer. Every ListChats scope must omit that peer only after the
+// internal lifecycle owner lookup and Auth gate complete successfully.
+func TestListChats_DeletedPeerSnapshotUsesLifecycleOwnerLookup(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	accountA, profileA := uuid.New(), uuid.New()
+	accountDeleted, profileDeleted := uuid.New(), uuid.New()
+	accountRequest, profileRequest := uuid.New(), uuid.New()
+	accountActive, profileActive := uuid.New(), uuid.New()
+	main := seedDMForDeletedPeerTest(t, ctx, pool, profileA, profileDeleted, store.InboxMain)
+	seedDMForDeletedPeerTest(t, ctx, pool, profileRequest, profileA, store.InboxRequests)
+	active := seedDMForDeletedPeerTest(t, ctx, pool, profileA, profileActive, store.InboxMain)
+	archive := seedDMForDeletedPeerTest(t, ctx, pool, profileA, uuid.New(), store.InboxMain)
+	archivePeer := mustDMPeer(t, ctx, pool, archive.ID, profileA)
+	folderDM := seedDMForDeletedPeerTest(t, ctx, pool, profileA, uuid.New(), store.InboxMain)
+	folderPeer := mustDMPeer(t, ctx, pool, folderDM.ID, profileA)
+
+	owners := mapLifecycleOwners{
+		profileDeleted: accountDeleted,
+		profileRequest: accountRequest,
+		profileActive:  accountActive,
+		archivePeer:    uuid.New(),
+		folderPeer:     uuid.New(),
+	}
+	deleted := mapDeletedAccounts{
+		accountDeleted:      {},
+		accountRequest:      {},
+		owners[archivePeer]: {},
+		owners[folderPeer]:  {},
+	}
+	client, cleanup := startChatGRPCTestServer(t, pool, unavailableProfileLookup{}, nil, nil,
+		WithLifecycleOwnerLookup(owners),
+		WithAccountDeletedChecker(deleted),
+	)
+	t.Cleanup(cleanup)
+	caller := withAccountProfileCtx(ctx, accountA, profileA)
+
+	_, err := client.ArchiveChat(caller, &chatv1.ArchiveChatRequest{ChatId: archive.ID.String(), Archived: true})
+	require.NoError(t, err)
+	folder, err := client.CreateFolder(caller, &chatv1.CreateFolderRequest{Name: "deleted lifecycle peer"})
+	require.NoError(t, err)
+	folderID := folder.GetFolder().GetId()
+	_, err = client.AddChatToFolder(caller, &chatv1.AddChatToFolderRequest{FolderId: folderID, ChatId: folderDM.ID.String()})
+	require.NoError(t, err)
+
+	mainList, err := client.ListChats(caller, &chatv1.ListChatsRequest{})
+	require.NoError(t, err)
+	require.Len(t, mainList.GetChatList().GetItems(), 1)
+	require.Equal(t, active.ID.String(), mainList.GetChatList().GetItems()[0].GetChat().GetId())
+
+	requestsInbox := "requests"
+	requestsList, err := client.ListChats(caller, &chatv1.ListChatsRequest{Inbox: &requestsInbox})
+	require.NoError(t, err)
+	require.Empty(t, requestsList.GetChatList().GetItems())
+
+	archiveInbox := "archive"
+	archiveList, err := client.ListChats(caller, &chatv1.ListChatsRequest{Inbox: &archiveInbox})
+	require.NoError(t, err)
+	require.Empty(t, archiveList.GetChatList().GetItems())
+
+	folderList, err := client.ListChats(caller, &chatv1.ListChatsRequest{FolderId: &folderID})
+	require.NoError(t, err)
+	require.Empty(t, folderList.GetChatList().GetItems())
+
+	require.NotEqual(t, main.ID, active.ID)
+}
+
+func TestListChats_DeletedPeerLifecycleOwnerDependencyFailureIsUnavailable(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	accountCaller, profileCaller := uuid.New(), uuid.New()
+	accountPeer, profilePeer := uuid.New(), uuid.New()
+	seedDMForDeletedPeerTest(t, ctx, pool, profileCaller, profilePeer, store.InboxMain)
+	publicProfiles := mapProfileAccounts{profileCaller: accountCaller, profilePeer: accountPeer}
+	client, cleanup := startChatGRPCTestServer(t, pool, publicProfiles, nil, nil,
+		WithLifecycleOwnerLookup(unavailableProfileLookup{}),
+		WithAccountDeletedChecker(mapDeletedAccounts{}),
+	)
+	t.Cleanup(cleanup)
+
+	response, err := client.ListChats(withAccountProfileCtx(ctx, accountCaller, profileCaller), &chatv1.ListChatsRequest{})
+	require.Error(t, err)
+	require.Nil(t, response, "lifecycle owner failure must not become an unfiltered or empty snapshot")
+	require.Equal(t, codes.Unavailable, status.Code(err))
+}
+
+func mustDMPeer(t *testing.T, ctx context.Context, pool *pgxpool.Pool, chatID, viewerID uuid.UUID) uuid.UUID {
+	t.Helper()
+	peers, err := (&store.DMStore{Pool: pool}).DMPeerProfileIDs(ctx, viewerID, []uuid.UUID{chatID})
+	require.NoError(t, err)
+	peerID, ok := peers[chatID]
+	require.True(t, ok)
+	return peerID
+}
+
 func TestListChats_DeletedPeerFilteringPreservesActiveDMGroupAndChannel(t *testing.T) {
 	if testing.Short() {
 		t.Skip()

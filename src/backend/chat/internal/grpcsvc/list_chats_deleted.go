@@ -95,7 +95,7 @@ func (s *ChatGRPC) filterListChatsDeletedPeerDMs(
 	if s == nil {
 		return nil, errDeletedAccountGateUnavailable
 	}
-	return filterDeletedPeerDMRows(ctx, rows, peers, s.Profiles, s.DeletedAccounts)
+	return filterDeletedPeerDMRows(ctx, rows, peers, s.LifecycleOwners, s.DeletedAccounts)
 }
 
 func (s *ChatGRPC) requireActiveDMPeer(ctx context.Context, profileID uuid.UUID) (uuid.UUID, error) {

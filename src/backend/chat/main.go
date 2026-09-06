@@ -96,6 +96,7 @@ func main() {
 		}
 
 		var profiles grpcsvc.UserProfileLookup
+		var lifecycleOwners grpcsvc.LifecycleOwnerLookup
 		var privacy grpcsvc.PrivacyChecker
 		var spaceCoMembership grpcsvc.SpaceCoMembershipChecker
 		var accountProfiles accountDeletedProfileLister
@@ -126,6 +127,7 @@ func main() {
 			defer func() { _ = uconn.Close() }()
 			userClient := userv1.NewUserServiceClient(uconn)
 			profiles = &grpcsvc.UserGRPCProfiles{Client: userClient}
+			lifecycleOwners = &grpcsvc.UserGRPCLifecycleOwners{Client: userClient}
 			privacy = &grpcsvc.UserGRPCPrivacy{Client: userClient}
 			accountProfiles = grpcsvc.NewUserGRPCAccountProfiles(userClient)
 		}
@@ -221,6 +223,7 @@ func main() {
 		chatv1.RegisterChatServiceServer(grpcSrv, &grpcsvc.ChatGRPC{
 			DM:                dmStore,
 			Profiles:          profiles,
+			LifecycleOwners:   lifecycleOwners,
 			Blocks:            blocks,
 			Privacy:           privacy,
 			Friends:           friends,

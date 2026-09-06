@@ -27,6 +27,7 @@ const defaultBufSize = 1 << 20
 // fail-closed deleted-peer gate.
 type ChatDeps struct {
 	Profiles        chatgrpc.UserProfileLookup
+	LifecycleOwners chatgrpc.LifecycleOwnerLookup
 	Blocks          chatgrpc.AccountBlockChecker
 	ListEnrich      chatgrpc.ListChatsEnrichment
 	DeletedAccounts chatgrpc.AccountDeletedChecker
@@ -49,6 +50,7 @@ func NewBufconnChatClientWith(t *testing.T, pool *pgxpool.Pool, deps ChatDeps) (
 	chatv1.RegisterChatServiceServer(srv, &chatgrpc.ChatGRPC{
 		DM:              &chatstore.DMStore{Pool: pool},
 		Profiles:        deps.Profiles,
+		LifecycleOwners: deps.LifecycleOwners,
 		Blocks:          deps.Blocks,
 		ListEnrich:      deps.ListEnrich,
 		DeletedAccounts: deps.DeletedAccounts,

@@ -20,6 +20,7 @@ type ChatGRPC struct {
 	chatv1.UnimplementedChatServiceServer
 	DM                DMStore
 	Profiles          UserProfileLookup
+	LifecycleOwners   LifecycleOwnerLookup
 	Blocks            AccountBlockChecker
 	Privacy           PrivacyChecker
 	Friends           ProfileFriendChecker

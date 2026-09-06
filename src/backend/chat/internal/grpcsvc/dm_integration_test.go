@@ -74,6 +74,16 @@ func (m mapProfileAccounts) AccountIDByProfileID(_ context.Context, profileID uu
 	return a, nil
 }
 
+type mapLifecycleOwners map[uuid.UUID]uuid.UUID
+
+func (m mapLifecycleOwners) AccountIDByProfileID(_ context.Context, profileID uuid.UUID) (uuid.UUID, error) {
+	accountID, ok := m[profileID]
+	if !ok {
+		return uuid.Nil, status.Error(codes.NotFound, "profile owner not found")
+	}
+	return accountID, nil
+}
+
 type allowDeletedAccounts struct{}
 
 func (allowDeletedAccounts) DeletedAmong(context.Context, []uuid.UUID) (map[uuid.UUID]struct{}, error) {
@@ -93,6 +103,10 @@ type chatServerOption func(*ChatGRPC)
 
 func WithDMStore(d DMStore) chatServerOption {
 	return func(c *ChatGRPC) { c.DM = d }
+}
+
+func WithLifecycleOwnerLookup(owners LifecycleOwnerLookup) chatServerOption {
+	return func(c *ChatGRPC) { c.LifecycleOwners = owners }
 }
 
 // WithChatEventsPublisher wires optional NATS chat.events publisher for integration tests.
@@ -129,6 +143,7 @@ func startChatGRPCTestServer(t *testing.T, pool *pgxpool.Pool, profiles UserProf
 	svc := &ChatGRPC{
 		DM:              &store.DMStore{Pool: pool},
 		Profiles:        profiles,
+		LifecycleOwners: profiles,
 		Blocks:          blocks,
 		ListEnrich:      enrich,
 		DeletedAccounts: allowDeletedAccounts{},
