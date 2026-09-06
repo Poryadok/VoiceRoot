@@ -5333,13 +5333,13 @@ abstract class AppLocalizations {
   /// No description provided for @onboardingSaveAccountTitle.
   ///
   /// In en, this message translates to:
-  /// **'Save your account'**
+  /// **'Set up your profile'**
   String get onboardingSaveAccountTitle;
 
   /// No description provided for @onboardingSaveAccountBody.
   ///
   /// In en, this message translates to:
-  /// **'Set a nickname and add email — save your account so you do not lose access.'**
+  /// **'Choose a nickname and add an avatar so people can recognize you.'**
   String get onboardingSaveAccountBody;
 
   /// No description provided for @onboardingChatsNavTitle.
@@ -5363,13 +5363,13 @@ abstract class AppLocalizations {
   /// No description provided for @onboardingSpacesBody.
   ///
   /// In en, this message translates to:
-  /// **'Spaces are communities with channels and voice rooms. Find one for your game or create your own.'**
+  /// **'Spaces are communities with channels and voice rooms. Search for a space you know, join with a friend\'s invite, or create your own.'**
   String get onboardingSpacesBody;
 
   /// No description provided for @onboardingSpacesFind.
   ///
   /// In en, this message translates to:
-  /// **'Find a space'**
+  /// **'Open search'**
   String get onboardingSpacesFind;
 
   /// No description provided for @onboardingMatchmakingTitle.

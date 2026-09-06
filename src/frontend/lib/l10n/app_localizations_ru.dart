@@ -2915,11 +2915,11 @@ class AppLocalizationsRu extends AppLocalizations {
   String get onboardingLater => 'Позже';
 
   @override
-  String get onboardingSaveAccountTitle => 'Сохрани аккаунт';
+  String get onboardingSaveAccountTitle => 'Настрой профиль';
 
   @override
   String get onboardingSaveAccountBody =>
-      'Укажи ник, добавь email — сохрани аккаунт, чтобы не потерять доступ.';
+      'Укажи ник и добавь аватар, чтобы тебя было легко узнать.';
 
   @override
   String get onboardingChatsNavTitle => 'Чаты и навигация';
@@ -2933,10 +2933,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get onboardingSpacesBody =>
-      'Спейсы — это сообщества с каналами и войс-чатами. Найди спейс по своей игре или создай свой.';
+      'Спейсы — это сообщества с каналами и войс-чатами. Ищи знакомые спейсы в поиске, вступай по инвайту от друга или создай свой.';
 
   @override
-  String get onboardingSpacesFind => 'Найти спейс';
+  String get onboardingSpacesFind => 'Открыть поиск';
 
   @override
   String get onboardingMatchmakingTitle => 'Матчмейкинг';
