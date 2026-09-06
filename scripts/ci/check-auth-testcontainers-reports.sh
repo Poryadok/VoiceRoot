@@ -14,15 +14,19 @@ required_suites=(
   "voice.backend.auth.AccountDeletionOperationRepositoryJdbcIntegrationTest"
   "voice.backend.auth.AuthJdbcRedisIntegrationTest"
   "voice.backend.auth.E2EKeyBackupJdbcIntegrationTest"
+  "voice.backend.auth.RegistrationSessionEpochJdbcIntegrationTest"
   "voice.backend.auth.GuestAccountSweeperJdbcIntegrationTest"
   "voice.backend.auth.GuestConversionDurabilityJdbcIntegrationTest"
   "voice.backend.auth.GuestConversionLocalPromotionJdbcIntegrationTest"
   "voice.backend.auth.GuestConversionOperationRepositoryJdbcIntegrationTest"
   "voice.backend.auth.GuestConversionOtpAcceptanceJdbcIntegrationTest"
   "voice.backend.auth.ProfilesVerificationIntegrationTest"
+  "voice.backend.auth.SessionEpochRepositoryJdbcIntegrationTest"
   "voice.backend.auth.SetAccountStatusIntegrationTest"
   "voice.backend.auth.service.RedisAccountRestoreTokenStoreIntegrationTest"
   "voice.backend.auth.sessionepoch.RedisSessionEpochFloorStoreIntegrationTest"
+  "voice.backend.auth.sessionepoch.SessionEpochFloorStartupLifecycleJdbcIntegrationTest"
+  "voice.backend.auth.oauth.RedisOAuthAuthorizationCodeStoreIntegrationTest"
 )
 
 attribute_value() {
