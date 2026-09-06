@@ -201,7 +201,7 @@ CREATE INDEX quick_access_profile_order_idx ON quick_access_chats (profile_id, s
 
 ### Deployed schema (migrations `000001`–`000011`) vs full spec
 
-**Shipped today** (`chat_db` migrations): DM + group + channel types; `chat_members.inbox_bucket`; `threads_enabled` / `allow_user_main_feed`; `e2e_enabled`; slow mode; chat-level `allow_guests` column (`000007`, deployed default `true` conflicts with the fail-closed target and enforcement is not yet wired); `folders` + `folder_chats`; `quick_access_chats`; per-profile `deleted_for_self` (`000011`). Folder membership/pin, `ListChats.folder_id` and `UpdateFolder`/`DeleteFolder` are implemented. Incoming-DM auto-unarchive is also implemented but now conflicts with the canonical badge-only archive policy and must be removed.
+**Shipped today** (`chat_db` migrations): DM + group + channel types; `chat_members.inbox_bucket`; `threads_enabled` / `allow_user_main_feed`; `e2e_enabled`; slow mode; chat-level `allow_guests` column (`000007`, deployed default `true` conflicts with the fail-closed target and enforcement is not yet wired); `folders` + `folder_chats`; `quick_access_chats`; per-profile `deleted_for_self` (`000011`). Folder membership/pin, `ListChats.folder_id` and `UpdateFolder`/`DeleteFolder` are implemented. Incoming message activity keeps archived chats in the archive and only updates their unread badge.
 
 ### Guest admission
 
@@ -370,9 +370,9 @@ message ReorderQuickAccessRequest {
 | `ListChats` main inbox | **Implemented** — excludes `is_archived=true` |
 | `ListChats` with `inbox=archive` | **Implemented (Batch 15)** — archived `dm` / `group` / `channel`; ignores `folder_id` |
 | Side-effect: remove Quick Access on archive | **Implemented (Batch 18)** — `ArchiveChat(archived=true)` calls `RemoveQuickAccess` |
-| Incoming message keeps chat archived | **Spec target; code gap** — remove Batch 20 `AutoUnarchiveDMRecipients`; preserve `is_archived=true` and update unread metadata only |
+| Incoming message keeps chat archived | **Implemented** — `message.sent` updates activity but preserves per-member `is_archived=true`; unread metadata remains owned by Messaging |
 
-**Spec:** archive write/list and Quick Access side-effect are implemented (Batch 15/18). Group/channel use the same per-member `is_archived` column and are returned by `inbox=archive`. Incoming-DM auto-unarchive from Batch 20 is obsolete against the canonical badge-only policy and remains an implementation gap; client UX status is tracked separately in [todo/client.md](../todo/client.md).
+**Spec:** archive write/list and Quick Access side-effect are implemented (Batch 15/18). Group/channel use the same per-member `is_archived` column and are returned by `inbox=archive`. Message activity preserves the archived state under the canonical badge-only policy; client UX status is tracked separately in [todo/client.md](../todo/client.md).
 
 Unarchive semantics: [GLOSSARY.md](../GLOSSARY.md) § «Архив чата», [text-chat.md](../features/text-chat.md) § «Архивирование».
 
