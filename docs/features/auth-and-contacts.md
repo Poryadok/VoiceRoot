@@ -157,3 +157,9 @@ email действуют guest-level ограничения. После успе
   verification нельзя.
 - Повторная отправка verification не создаёт новый аккаунт и не меняет identity IDs.
 - Только подтверждение email открывает regular-возможности и завершает conversion.
+- Перед включением этого gate в alpha очищается существующий локальный тестовый
+  корпус: в нём нет сохраняемых пользовательских аккаунтов, поэтому отдельная
+  legacy-migration/grandfathering политика не нужна. Для disposable Docker
+  Compose окружения используется `scripts/dev/reset-a1-test-accounts.sh`; он
+  намеренно отказывается работать вне local Compose и не является production
+  migration.
