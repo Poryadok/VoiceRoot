@@ -89,7 +89,7 @@ fan-out.
 - **Между инстансами Realtime**: Redis Pub/Sub
 - **Прочитанное (dual path)**: (1) **persist** — `Messaging.MarkRead` (REST/gRPC) пишет `read_receipts`, публикует `message.read`; (2) **fan-out** — Realtime WS `mark_read` (client) и NATS `message.read` → op `message_read` на подписчиков чата и другие устройства профиля. Список чатов и тики доставки — durable metadata из Messaging, не из WS alone.
 - **Доставлено (dual path)**: WS `delivery_ack` (client) → ephemeral `message_delivered` отправителю (+ Redis cross-instance в `redis_fanout.go`) **и** JetStream `message.delivery_ack` (publisher: Realtime) → Messaging consumer → `read_receipts.last_delivered_message_id`; durable `last_message_delivery_state` для list preview — Messaging ([messaging-service.md](microservices/messaging-service.md) § Durable delivery derivation).
-- **Shipped vs spec (durable delivery / list ticks):** ephemeral WS path **shipped**; `last_delivered_message_id`, `message.delivery_ack` consumer, `GetChatListMetadata.last_message_delivery_state` — **not yet in proto/code** ([todo/backend.md](todo/backend.md) § Durable delivery). Не полагаться на architecture-only чтение как на готовый wire-контракт.
+- **Shipped scope (durable delivery):** ephemeral WS path and the durable DM **Messaging-internal** metadata path are **shipped**: `last_delivered_message_id`, JetStream `message.delivery_ack` consumer, and `GetChatListMetadata` persistence/derivation of `last_message_delivery_state`. Exposure through the Chat list and client delivery ticks remains pending.
 - **Typing indicator**: WebSocket, throttle отправки — не чаще 1 раза в 3 сек; гасить через 5 сек без обновления
 - **UX при потере соединения**: баннер "Переподключение..." появляется через 2 сек после разрыва; исчезает через 1 сек после успешного reconnect
 - **Аутентификация WS (web)**: браузерный WebSocket API не позволяет задать заголовок `Authorization`. **Web-клиент** запрашивает short-lived ticket через `POST /api/v1/realtime/ws-ticket` (JWT только в заголовке REST) и подключается к `/ws?ticket=…`. Gateway валидирует ticket (Redis, single-use, TTL ~60s), подставляет claims и upstream JWT для Realtime. **Нативные клиенты** используют `Authorization: Bearer` на upgrade без query. Legacy `access_token` query на `/ws` остаётся для совместимости, но web не использует.
@@ -112,7 +112,7 @@ fan-out.
 **4. Durable read / delivery (Messaging, REST — не WebSocket)**
 Тики ✓/✓✎ в списке чатов и read cursor — **только** из Messaging (`MarkRead` REST/gRPC → `read_receipts`; `GetChatListMetadata` → `last_message_delivery_state`). После reconnect клиент **обязан** перезапросить `ListChats` / metadata — WS `mark_read` и `message_read` **не** заменяют REST persist. См. [messaging-service.md](microservices/messaging-service.md) § MarkRead, § Durable delivery derivation.
 
-**Shipped scope:** `MarkRead` / durable read cursor validation — **DM today**; group/channel read parity — backlog. List delivery ticks (`last_message_delivery_state`) — spec complete, **not yet in proto/code** (same P0 chain as durable delivery above).
+**Shipped scope:** `MarkRead` / durable read cursor validation — **DM today**; group/channel read parity — backlog. DM `last_message_delivery_state` persistence/derivation is shipped inside Messaging; Chat-list and client tick exposure remain pending.
 
 ### WS vs REST — граница ответственности
 
