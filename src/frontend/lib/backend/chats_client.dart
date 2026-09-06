@@ -286,7 +286,10 @@ class VoiceChatsClient {
     required String chatId,
     required String profileId,
   }) {
-    return _deleteEmpty('/api/v1/chats/$chatId/members/$profileId', authorization);
+    return _deleteEmpty(
+      '/api/v1/chats/$chatId/members/$profileId',
+      authorization,
+    );
   }
 
   Future<ChatsApiResult<MemberListData>> listGroupMembers({
@@ -346,9 +349,7 @@ class VoiceChatsClient {
       authorization,
       jsonBody: mutedUntil == null
           ? const <String, dynamic>{}
-          : {
-              'muted_until': mutedUntil.toUtc().toIso8601String(),
-            },
+          : {'muted_until': mutedUntil.toUtc().toIso8601String()},
     );
   }
 
@@ -374,7 +375,8 @@ class VoiceChatsClient {
     );
     return _map(
       result,
-      (data) => quickAccessListFromProto(data as chat_pb.ListQuickAccessResponse),
+      (data) =>
+          quickAccessListFromProto(data as chat_pb.ListQuickAccessResponse),
     );
   }
 
@@ -451,6 +453,29 @@ class VoiceChatsClient {
       allowNoContent: true,
     );
     return _mapJsonEmpty(result);
+  }
+
+  Future<ChatsApiResult<void>> addChatToFolder({
+    required String authorization,
+    required String folderId,
+    required String chatId,
+  }) {
+    return _postEmpty(
+      '/api/v1/chats/folders/$folderId/chats',
+      authorization,
+      jsonBody: {'chat_id': chatId},
+    );
+  }
+
+  Future<ChatsApiResult<void>> removeChatFromFolder({
+    required String authorization,
+    required String folderId,
+    required String chatId,
+  }) {
+    return _deleteEmpty(
+      '/api/v1/chats/folders/$folderId/chats/$chatId',
+      authorization,
+    );
   }
 
   Future<ChatsApiResult<FolderListData>> listFolders({
@@ -596,7 +621,9 @@ class VoiceChatsClient {
     };
   }
 
-  ChatsApiResult<void> _mapJsonEmpty(GatewayHttpResult<Map<String, dynamic>> result) {
+  ChatsApiResult<void> _mapJsonEmpty(
+    GatewayHttpResult<Map<String, dynamic>> result,
+  ) {
     return switch (result) {
       GatewayHttpOk() => const ChatsApiOk(null),
       GatewayHttpFailure(:final error) => ChatsApiFailure(
