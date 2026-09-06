@@ -22,69 +22,141 @@ import 'support/gateway_test_client.dart';
 /// Production: [InAppNotificationController] in `lib/state/in_app_notifications.dart`.
 void main() {
   group('InAppNotificationController', () {
-    test('notification for non-selected chat bumps unread and plays sound', () async {
-      final sound = _RecordingSoundPlayer();
-      final hub = _FakeRealtimeHub();
-      final container = _container(sound: sound, hub: hub);
-      addTearDown(container.dispose);
+    test(
+      'notification for non-selected chat bumps unread and plays sound',
+      () async {
+        final sound = _RecordingSoundPlayer();
+        final hub = _FakeRealtimeHub();
+        final container = _container(sound: sound, hub: hub);
+        addTearDown(container.dispose);
 
-      container.read(chatListControllerProvider);
-      await pumpEventQueue();
+        container.read(chatListControllerProvider);
+        await pumpEventQueue();
 
-      container.read(selectedChatIdProvider.notifier).state = 'chat-open';
-      container.read(inAppNotificationControllerProvider);
+        container.read(selectedChatIdProvider.notifier).state = 'chat-open';
+        container.read(inAppNotificationControllerProvider);
 
-      hub.emit(
-        const RealtimeFrame(
-          op: 'notification',
-          data: {
-            'type': 'new_message',
-            'chat_id': 'chat-other',
-            'message_id': 'msg-1',
-            'sender_profile_id': 'peer-1',
-          },
-        ),
-      );
-      await pumpEventQueue();
+        hub.emit(
+          const RealtimeFrame(
+            op: 'notification',
+            data: {
+              'type': 'new_message',
+              'chat_id': 'chat-other',
+              'message_id': 'msg-1',
+              'sender_profile_id': 'peer-1',
+            },
+          ),
+        );
+        await pumpEventQueue();
 
-      final item = container
-          .read(chatListControllerProvider)
-          .items
-          .firstWhere((row) => row.chatId == 'chat-other');
-      expect(item.unreadCount, 1);
-      expect(sound.newMessagePlays, 1);
-    });
+        final item = container
+            .read(chatListControllerProvider)
+            .items
+            .firstWhere((row) => row.chatId == 'chat-other');
+        expect(item.unreadCount, 1);
+        expect(sound.newMessagePlays, 1);
+      },
+    );
 
-    test('message_create alone does not bump unread (notification is canonical)', () async {
-      final sound = _RecordingSoundPlayer();
-      final hub = _FakeRealtimeHub();
-      final container = _container(sound: sound, hub: hub);
-      addTearDown(container.dispose);
+    test(
+      'message_create alone does not bump unread (notification is canonical)',
+      () async {
+        final sound = _RecordingSoundPlayer();
+        final hub = _FakeRealtimeHub();
+        final container = _container(sound: sound, hub: hub);
+        addTearDown(container.dispose);
 
-      container.read(chatListControllerProvider);
-      await pumpEventQueue();
-      container.read(selectedChatIdProvider.notifier).state = 'chat-open';
-      container.read(inAppNotificationControllerProvider);
+        container.read(chatListControllerProvider);
+        await pumpEventQueue();
+        container.read(selectedChatIdProvider.notifier).state = 'chat-open';
+        container.read(inAppNotificationControllerProvider);
 
-      hub.emit(
-        const RealtimeFrame(
-          op: 'message_create',
-          data: {
-            'chat_id': 'chat-other',
-            'message_id': 'msg-2',
-            'sender_profile_id': 'peer-1',
-          },
-        ),
-      );
-      await pumpEventQueue();
+        hub.emit(
+          const RealtimeFrame(
+            op: 'message_create',
+            data: {
+              'chat_id': 'chat-other',
+              'message_id': 'msg-2',
+              'sender_profile_id': 'peer-1',
+            },
+          ),
+        );
+        await pumpEventQueue();
 
-      final item = container
-          .read(chatListControllerProvider)
-          .items
-          .firstWhere((row) => row.chatId == 'chat-other');
-      expect(item.unreadCount, 0);
-      expect(sound.newMessagePlays, 0);
-    });
+        final item = container
+            .read(chatListControllerProvider)
+            .items
+            .firstWhere((row) => row.chatId == 'chat-other');
+        expect(item.unreadCount, 0);
+        expect(sound.newMessagePlays, 0);
+      },
+    );
+
+    test(
+      'archive activity bumps only the archived badge without sound',
+      () async {
+        final sound = _RecordingSoundPlayer();
+        final hub = _FakeRealtimeHub();
+        final chats = _FakeChatsClient(
+          pages: const [
+            ChatListData(
+              items: [
+                ChatListItem(
+                  chat: VoiceChat(
+                    id: 'chat-other',
+                    type: 'CHAT_TYPE_DM',
+                    creatorProfileId: 'peer-1',
+                  ),
+                ),
+              ],
+            ),
+            ChatListData(
+              items: [
+                ChatListItem(
+                  chat: VoiceChat(
+                    id: 'chat-archived',
+                    type: 'CHAT_TYPE_DM',
+                    creatorProfileId: 'peer-archive',
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+        final container = _container(sound: sound, hub: hub, chats: chats);
+        addTearDown(container.dispose);
+
+        container.read(chatListControllerProvider);
+        await pumpEventQueue();
+        final archiveSubscription = container.listen<ChatListState>(
+          chatArchiveListControllerProvider,
+          (_, _) {},
+          fireImmediately: true,
+        );
+        addTearDown(archiveSubscription.close);
+        await container
+            .read(chatArchiveListControllerProvider.notifier)
+            .loadInitial();
+        container.read(inAppNotificationControllerProvider);
+
+        hub.emit(
+          const RealtimeFrame(
+            op: 'archive_activity',
+            data: {'chat_id': 'chat-archived'},
+          ),
+        );
+        await pumpEventQueue();
+
+        final archived = container
+            .read(chatArchiveListControllerProvider)
+            .items
+            .single;
+        expect(archived.unreadCount, 1);
+        expect(sound.newMessagePlays, 0);
+        expect(sound.reactionPlays, 0);
+        expect(sound.mentionPlays, 0);
+      },
+    );
 
     test('notification then message_create does not double bump', () async {
       final sound = _RecordingSoundPlayer();
@@ -457,11 +529,7 @@ void main() {
     test('global mute disables sound but badge still updates', () async {
       final sound = _RecordingSoundPlayer();
       final hub = _FakeRealtimeHub();
-      final container = _container(
-        sound: sound,
-        hub: hub,
-        soundEnabled: false,
-      );
+      final container = _container(sound: sound, hub: hub, soundEnabled: false);
       addTearDown(container.dispose);
 
       container.read(chatListControllerProvider);
@@ -539,7 +607,9 @@ ProviderContainer _container({
       voiceMessagesClientProvider.overrideWithValue(_FakeMessagesClient()),
       realtimeHubProvider.overrideWithValue(hub),
       notificationSoundPlayerProvider.overrideWithValue(sound),
-      inAppNotificationsSoundEnabledProvider.overrideWith((ref) => soundEnabled),
+      inAppNotificationsSoundEnabledProvider.overrideWith(
+        (ref) => soundEnabled,
+      ),
     ],
   );
 }

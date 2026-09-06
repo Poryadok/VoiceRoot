@@ -17,24 +17,24 @@ type profileFanout struct {
 	Envelope  fanoutEnvelope
 }
 
-func inAppNotificationFanouts(data []byte, chatMemberProfileIDs []string, reactionMessageAuthorProfileID string, recipientInboxBuckets map[string]string) ([]profileFanout, bool) {
+func inAppNotificationFanouts(data []byte, chatMemberProfileIDs []string, reactionMessageAuthorProfileID string, recipientStates map[string]chatMemberDeliveryState) ([]profileFanout, bool) {
 	var e eventsv1.MessageStreamEvent
 	if err := proto.Unmarshal(data, &e); err != nil {
 		return nil, false
 	}
 	switch p := e.GetPayload().(type) {
 	case *eventsv1.MessageStreamEvent_MessageSent:
-		return newMessageNotificationFanouts(p.MessageSent, chatMemberProfileIDs, recipientInboxBuckets)
+		return newMessageNotificationFanouts(p.MessageSent, chatMemberProfileIDs, recipientStates)
 	case *eventsv1.MessageStreamEvent_ReactionAdded:
-		return reactionNotificationFanouts(p.ReactionAdded, chatMemberProfileIDs, reactionMessageAuthorProfileID)
+		return reactionNotificationFanouts(p.ReactionAdded, chatMemberProfileIDs, reactionMessageAuthorProfileID, recipientStates)
 	case *eventsv1.MessageStreamEvent_MentionAdded:
-		return mentionNotificationFanouts(p.MentionAdded)
+		return mentionNotificationFanouts(p.MentionAdded, recipientStates)
 	default:
 		return nil, false
 	}
 }
 
-func mentionNotificationFanouts(ma *eventsv1.MentionAdded) ([]profileFanout, bool) {
+func mentionNotificationFanouts(ma *eventsv1.MentionAdded, recipientStates map[string]chatMemberDeliveryState) ([]profileFanout, bool) {
 	if ma == nil || ma.GetChatId() == "" || ma.GetMessageId() == "" {
 		return nil, false
 	}
@@ -42,6 +42,9 @@ func mentionNotificationFanouts(ma *eventsv1.MentionAdded) ([]profileFanout, boo
 	var fanouts []profileFanout
 	for _, profileID := range ma.GetMentionedProfileIds() {
 		if profileID == "" || profileID == senderID {
+			continue
+		}
+		if recipientStates != nil && recipientStates[profileID].IsArchived {
 			continue
 		}
 		d, err := json.Marshal(map[string]string{
@@ -61,7 +64,7 @@ func mentionNotificationFanouts(ma *eventsv1.MentionAdded) ([]profileFanout, boo
 	return fanouts, true
 }
 
-func newMessageNotificationFanouts(ms *eventsv1.MessageSent, chatMemberProfileIDs []string, recipientInboxBuckets map[string]string) ([]profileFanout, bool) {
+func newMessageNotificationFanouts(ms *eventsv1.MessageSent, chatMemberProfileIDs []string, recipientStates map[string]chatMemberDeliveryState) ([]profileFanout, bool) {
 	if ms == nil || ms.GetChatId() == "" || ms.GetMessageId() == "" {
 		return nil, false
 	}
@@ -71,8 +74,11 @@ func newMessageNotificationFanouts(ms *eventsv1.MessageSent, chatMemberProfileID
 		if profileID == "" || profileID == senderID {
 			continue
 		}
+		if recipientStates != nil && recipientStates[profileID].IsArchived {
+			continue
+		}
 		notifType := "new_message"
-		if recipientInboxBuckets != nil && recipientInboxBuckets[profileID] == "requests" {
+		if recipientStates != nil && recipientStates[profileID].InboxBucket == "requests" {
 			notifType = "message_request"
 		}
 		d, err := json.Marshal(map[string]string{
@@ -92,7 +98,7 @@ func newMessageNotificationFanouts(ms *eventsv1.MessageSent, chatMemberProfileID
 	return fanouts, true
 }
 
-func reactionNotificationFanouts(ra *eventsv1.ReactionAdded, chatMemberProfileIDs []string, reactionMessageAuthorProfileID string) ([]profileFanout, bool) {
+func reactionNotificationFanouts(ra *eventsv1.ReactionAdded, chatMemberProfileIDs []string, reactionMessageAuthorProfileID string, recipientStates map[string]chatMemberDeliveryState) ([]profileFanout, bool) {
 	if ra == nil || ra.GetChatId() == "" || ra.GetMessageId() == "" || ra.GetProfileId() == "" || ra.GetEmoji() == "" {
 		return nil, false
 	}
@@ -112,6 +118,9 @@ func reactionNotificationFanouts(ra *eventsv1.ReactionAdded, chatMemberProfileID
 	if authorID == "" || authorID == reactorID {
 		return nil, true
 	}
+	if recipientStates != nil && recipientStates[authorID].IsArchived {
+		return nil, true
+	}
 	d, err := json.Marshal(map[string]string{
 		"type":               "reaction",
 		"chat_id":            ra.GetChatId(),
@@ -128,24 +137,119 @@ func reactionNotificationFanouts(ra *eventsv1.ReactionAdded, chatMemberProfileID
 	}}, true
 }
 
-func dispatchMessageStreamEvent(hub *wsHub, data []byte, header nats.Header, logger *slog.Logger, requestID string) {
-	if ma := mentionAddedFromBytes(data); ma != nil {
-		dispatchMentionAdded(hub, ma, data, logger, requestID)
-		return
+// archiveActivityFanouts updates an open archived inbox without routing a
+// notification-center row or an in-app sound. It deliberately uses profile
+// fan-out, because archived chats are normally not chat-subscribed.
+func archiveActivityFanouts(data []byte, recipientStates map[string]chatMemberDeliveryState) []profileFanout {
+	if len(recipientStates) == 0 {
+		return nil
 	}
+	var event eventsv1.MessageStreamEvent
+	if err := proto.Unmarshal(data, &event); err != nil {
+		return nil
+	}
+	chatID := ""
+	senderID := ""
+	var targets []string
+	switch p := event.GetPayload().(type) {
+	case *eventsv1.MessageStreamEvent_MessageSent:
+		if p.MessageSent == nil {
+			return nil
+		}
+		chatID, senderID = p.MessageSent.GetChatId(), p.MessageSent.GetSenderProfileId()
+		for profileID, state := range recipientStates {
+			if state.IsArchived && profileID != "" && profileID != senderID {
+				targets = append(targets, profileID)
+			}
+		}
+	case *eventsv1.MessageStreamEvent_ReactionAdded:
+		if p.ReactionAdded == nil {
+			return nil
+		}
+		chatID, senderID = p.ReactionAdded.GetChatId(), p.ReactionAdded.GetProfileId()
+		authorID := p.ReactionAdded.GetMessageAuthorProfileId()
+		if authorID != "" && authorID != senderID && recipientStates[authorID].IsArchived {
+			targets = append(targets, authorID)
+		}
+	case *eventsv1.MessageStreamEvent_MentionAdded:
+		if p.MentionAdded == nil {
+			return nil
+		}
+		chatID, senderID = p.MentionAdded.GetChatId(), p.MentionAdded.GetSenderProfileId()
+		for _, profileID := range p.MentionAdded.GetMentionedProfileIds() {
+			if profileID != "" && profileID != senderID && recipientStates[profileID].IsArchived {
+				targets = append(targets, profileID)
+			}
+		}
+	default:
+		return nil
+	}
+	if chatID == "" {
+		return nil
+	}
+	d, err := json.Marshal(map[string]string{"chat_id": chatID})
+	if err != nil {
+		return nil
+	}
+	fanouts := make([]profileFanout, 0, len(targets))
+	for _, profileID := range targets {
+		fanouts = append(fanouts, profileFanout{ProfileID: profileID, Envelope: fanoutEnvelope{Op: "archive_activity", D: d}})
+	}
+	return fanouts
+}
+
+func dispatchMessageStreamEvent(hub *wsHub, data []byte, header nats.Header, logger *slog.Logger, requestID string) {
 	chatID, fe, ok := messageEventToFanout(data, header)
 	if !ok || chatID == "" {
+		if mentionAddedFromBytes(data) == nil {
+			return
+		}
+		chatID = mentionAddedFromBytes(data).GetChatId()
+		if chatID == "" {
+			return
+		}
+		// Mention has personal delivery only, but needs the same archive policy.
+		fe = fanoutEnvelope{}
+		ok = true
+	}
+	if !ok {
 		return
 	}
-	var recipientInboxBuckets map[string]string
-	if hub != nil && hub.memberInboxLister != nil && isMessageSentEvent(data) {
-		if buckets, err := hub.memberInboxLister.RecipientInboxBuckets(context.Background(), chatID); err == nil {
-			recipientInboxBuckets = buckets
+	var recipientStates map[string]chatMemberDeliveryState
+	// A nil lister is a local/unit-test configuration with no Chat dependency.
+	// A configured lister that returns an error is fail-safe below.
+	lookupOK := hub != nil && hub.memberInboxLister == nil
+	if hub != nil && hub.memberInboxLister != nil {
+		if states, err := hub.memberInboxLister.RecipientDeliveryStates(context.Background(), chatID); err == nil {
+			recipientStates = states
+			lookupOK = true
 		} else if logger != nil {
 			logger.Warn("chat member inbox lookup failed", slog.String("chat_id", chatID), slog.Any("error", err))
 		}
 	}
-	fanouts, notifyOk := inAppNotificationFanouts(data, hub.profileIDsSubscribedToChat(chatID), "", recipientInboxBuckets)
+	// A missing/failed Chat lookup must fail safe for personal notifications;
+	// the chat-scoped message/reaction broadcast remains available.
+	var fanouts []profileFanout
+	notifyOK := false
+	if lookupOK {
+		fanouts, notifyOK = inAppNotificationFanouts(data, hub.profileIDsSubscribedToChat(chatID), "", recipientStates)
+	}
+	if lookupOK {
+		for _, f := range archiveActivityFanouts(data, recipientStates) {
+			hub.broadcastToProfile(f.ProfileID, f.Envelope, logger, requestID)
+		}
+	}
+	if mentionAddedFromBytes(data) != nil {
+		if lookupOK {
+			dispatchMentionAdded(hub, mentionAddedFromBytes(data), recipientStates, logger, requestID)
+		}
+		if notifyOK {
+			for _, f := range fanouts {
+				hub.broadcastToProfile(f.ProfileID, f.Envelope, logger, requestID)
+			}
+		}
+		return
+	}
 	notifyFirst := isReactionAddedEvent(data)
 	if notifyFirst && notifyOk {
 		for _, f := range fanouts {
@@ -172,10 +276,13 @@ func mentionAddedFromBytes(data []byte) *eventsv1.MentionAdded {
 	return ma.MentionAdded
 }
 
-func dispatchMentionAdded(hub *wsHub, ma *eventsv1.MentionAdded, data []byte, logger *slog.Logger, requestID string) {
+func dispatchMentionAdded(hub *wsHub, ma *eventsv1.MentionAdded, recipientStates map[string]chatMemberDeliveryState, logger *slog.Logger, requestID string) {
 	senderID := ma.GetSenderProfileId()
 	for _, profileID := range ma.GetMentionedProfileIds() {
 		if profileID == "" || profileID == senderID {
+			continue
+		}
+		if recipientStates[profileID].IsArchived {
 			continue
 		}
 		d, err := json.Marshal(map[string]string{
@@ -187,12 +294,6 @@ func dispatchMentionAdded(hub *wsHub, ma *eventsv1.MentionAdded, data []byte, lo
 			continue
 		}
 		hub.broadcastToProfile(profileID, fanoutEnvelope{Op: "mention", D: d}, logger, requestID)
-	}
-	fanouts, ok := inAppNotificationFanouts(data, nil, "", nil)
-	if ok {
-		for _, f := range fanouts {
-			hub.broadcastToProfile(f.ProfileID, f.Envelope, logger, requestID)
-		}
 	}
 }
 
