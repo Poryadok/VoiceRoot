@@ -32,10 +32,12 @@ func TestComposeWiring_yaml(t *testing.T) {
 
 	require.Contains(t, yml, "GATEWAY_REALTIME_UPSTREAM_URL:")
 	require.Contains(t, yml, "http://realtime:8080")
+	require.Contains(t, yml, "GATEWAY_SESSION_EPOCH_STRICT: \"true\"")
 
 	require.Contains(t, yml, "\n  realtime:\n")
 	require.Contains(t, yml, "REALTIME_REDIS_ADDR:")
 	require.Contains(t, yml, "REALTIME_JWKS_URL:")
+	require.Contains(t, yml, "REALTIME_SESSION_EPOCH_STRICT: \"true\"")
 	require.Contains(t, yml, "REALTIME_CHAT_GRPC_ADDR: chat:9090")
 	require.Contains(t, yml, "REALTIME_USER_GRPC_ADDR: user:9090")
 	require.Contains(t, yml, "REALTIME_SOCIAL_GRPC_ADDR: social:9090")
