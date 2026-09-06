@@ -19,9 +19,8 @@
 - **Восстановление пароля**: через email (ссылка или код)
 - **Удаление аккаунта**: soft delete, поле **`deleted_at`** на таблице **`accounts`** в `auth_db` (антискам + 152-ФЗ); детали модели — [microservices/auth-service.md](microservices/auth-service.md)
 
-### T056-P1: epoch для отзыва всех сессий (staged/WIP)
+### T056-P1: epoch для отзыва всех сессий
 
-Контракт подготовлен до rollout потребителей и не описывает shipped-поведение.
 Auth DB остаётся источником истины: `accounts.session_epoch BIGINT NOT NULL
 DEFAULT 1`, положительный и монотонный; операция отзыва всех сессий увеличивает
 его атомарно и никогда не уменьшает. Новый access JWT обязан содержать
@@ -42,13 +41,13 @@ Gateway сначала проверяет non-empty `jti` blacklist, затем 
 ограничен 2 секундами. В strict missing/corrupt floor либо ошибка/timeout Redis
 на Gateway boundary дают `auth_unavailable`, а не fallback к epoch `1`.
 
-Rollout: `expand` (колонка + выпуск claim) → `seed` floor из Auth DB → `strict`
-проверки Gateway и Realtime. До strict compatibility-режим допускает legacy JWT
-без claim и не seeded floor; переключение strict разрешено только после готовности
-обоих потребителей. Realtime закрывает сокеты, адресованные аккаунту, при
-изменении epoch; Redis Pub/Sub — лишь ускорение этого закрытия, не correctness
-path. Проверка остаётся обязательной на upgrade, каждой inbound operation и
-outbound fan-out.
+В Compose включены strict-потребители Gateway и Realtime после Auth migration,
+startup seed и issuance preparation. Это локальный integration gate, а не
+завершение rollout во всех окружениях. Compatibility допустим только в явно
+настроенном окружении вне доказанного strict deployment. Немедленное
+account-targeted закрытие через Redis Pub/Sub не реализовано; обязательными
+остаются strict JWT/floor проверки на upgrade, inbound operations и outbound
+fan-out.
 
 ---
 
@@ -74,8 +73,8 @@ outbound fan-out.
 
 | Компонент        | Redis: что делает                                                                                                                                                                                                                                                                                                                                                                                              |
 |------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **API Gateway**  | Счётчики **сквозных** лимитов из таблицы выше (например `ratelimit:{user_id}:{endpoint_group}`, где **`user_id` в ключе** = subject JWT, то есть **`accounts.id`** / логическое `account_id`; см. [DATA_MODEL.md](DATA_MODEL.md); для лимитов по IP — ключи с IP в составе). **Чтение** blacklist access token: ключ = `jti`, TTL = оставшееся время жизни токена; чтение minimum-epoch floor — staged T056-P1, strict fail-closed. |
-| **Auth Service** | **Запись** в blacklist при logout и сценариях отзыва одного access token; публикация/поддержание minimum-epoch floor (staged T056-P1); состояние OTP / throttling верификации. HTTP-лимиты из таблицы (в т.ч. вход с одного IP) обрабатывает **Gateway** — дублирующие счётчики в Auth для тех же лимитов не заводим. |
+| **API Gateway**  | Счётчики **сквозных** лимитов из таблицы выше (например `ratelimit:{user_id}:{endpoint_group}`, где **`user_id` в ключе** = subject JWT, то есть **`accounts.id`** / логическое `account_id`; см. [DATA_MODEL.md](DATA_MODEL.md); для лимитов по IP — ключи с IP в составе). **Чтение** blacklist access token: ключ = `jti`, TTL = оставшееся время жизни токена; чтение minimum-epoch floor — strict fail-closed. |
+| **Auth Service** | **Запись** в blacklist при logout и сценариях отзыва одного access token; публикация/поддержание minimum-epoch floor; состояние OTP / throttling верификации. HTTP-лимиты из таблицы (в т.ч. вход с одного IP) обрабатывает **Gateway** — дублирующие счётчики в Auth для тех же лимитов не заводим. |
 
 ### Версии клиента
 

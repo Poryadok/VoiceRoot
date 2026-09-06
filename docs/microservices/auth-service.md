@@ -14,7 +14,7 @@
 - Логин / логаут
 - JWT access token (15 мин) + opaque refresh token (30 дней)
 - Refresh token rotation (одноразовые)
-- Отзыв всех сессий через Auth-owned `session_epoch` (staged/WIP; потребители ещё не в strict)
+- Отзыв всех сессий через Auth-owned `session_epoch`; strict-потребители Gateway и Realtime проверяют floor fail-closed
 - 2FA (TOTP — Google Authenticator и аналоги)
 - JWT blacklist (Redis, для логаута и ротации)
 - Гостевые аккаунты (30-дневный TTL, ограниченные права)
@@ -92,7 +92,7 @@ accounts
 ├── password_hash (bcrypt)
 ├── type (regular | guest)
 ├── status (active | suspended | deleted)
-├── session_epoch (positive monotonic floor, default 1; staged/WIP)
+├── session_epoch (положительный монотонный durable epoch, default 1)
 ├── email_verified_at (nullable; null = restricted pending identity)
 ├── totp_secret (encrypted, nullable)
 ├── totp_enabled (bool)
@@ -211,7 +211,7 @@ currently deployed schema/code; see [todo/backend.md](../todo/backend.md).
   Если переменная **отсутствует**, используется `PT15S`; явные пустое, malformed, zero или negative
   значения являются ошибкой конфигурации и останавливают startup. Deadline создаётся при создании
   каждого `ClientCall`, а не один раз при создании Spring singleton stub.
-- **Redis** — JWT blacklist (запись при logout и отзыве одного access token), OTP throttling и staged T056-P1 minimum-epoch floor без TTL. Floor обновляется только вверх из Auth DB; Gateway и Realtime читают его fail-closed в strict-режиме. Сквозные HTTP rate limits (в т.ч. лимит попыток входа с одного IP) — на **API Gateway**; те же лимиты вторым слоем в Auth не дублируем. Подробнее: [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) («Redis: API Gateway и Auth Service»).
+- **Redis** — JWT blacklist (запись при logout и отзыве одного access token), OTP throttling и T056-P1 minimum-epoch floor без TTL. Auth записывает floor операцией `max` без TTL, а Gateway и Realtime в strict-режиме читают его fail-closed. Сквозные HTTP rate limits (в т.ч. лимит попыток входа с одного IP) — на **API Gateway**; те же лимиты вторым слоем в Auth не дублируем. Подробнее: [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) («Redis: API Gateway и Auth Service»).
 - **Resend** — отправка email (верификация, password reset)
 - **NATS** — публикация событий
 
@@ -223,34 +223,35 @@ currently deployed schema/code; see [todo/backend.md](../todo/backend.md).
 - Нет SMS 2FA (v1) — только TOTP
 - IP logging для аудита
 
-### T056-P1: session epoch (staged/WIP)
+### T056-P1: session epoch
 
-`accounts.session_epoch` — durable источник истины, `BIGINT NOT NULL DEFAULT
-1`, положительный и монотонный. Auth атомарно увеличивает его при отзыве всех
-сессий и никогда не уменьшает. Новый access JWT получает обязательный
-положительный integer claim `session_epoch`; `jti` остаётся per-session claim для
-узкого logout/отзыва одного токена.
+`accounts.session_epoch` — положительный монотонный durable source of truth
+Auth. Auth атомарно увеличивает его для отзыва всех сессий и никогда не
+уменьшает. Каждый access JWT, выпущенный Auth, содержит положительный integer
+claim `session_epoch`; `jti` остаётся per-session механизмом logout/отзыва.
 
-До завершения зависимостей работает только rollout-контракт `expand → seed →
-strict`: миграция и repository/transactional revocation в Auth, заполнение
-Redis floor, затем strict-проверки Gateway и Realtime. Legacy JWT без claim и
-не seeded floor допустимы только в явно включённом compatibility-режиме; в
-strict missing/corrupt claim или floor, а также Redis error — fail-closed.
-Redis Pub/Sub не является correctness mechanism для отзыва и лишь ускоряет
-адресное закрытие сокетов в Realtime. Текущий staged claim сам по себе не
-означает, что отзыв всех существующих access/refresh сессий уже реализован.
-
-Auth producer этого floor всё ещё staged/WIP: после реализации он остаётся
-единственным writer фиксированного ключа
-`auth:session:min_epoch:<account_id>` со значением положительного `int64` без
-TTL и обновляет его только вверх. Gateway и Realtime являются read-only
-consumers; их strict rollout не заменяет Auth migration, seed и готовность
-Realtime consumer.
+Auth — единственный writer ключа `auth:session:min_epoch:<account_id>` со
+значением положительного `int64` без TTL; запись выполняется только операцией
+`max`. Перед каждым прямым выпуском JWT/session — registration (regular и guest),
+login, refresh, OAuth exchange, 2FA reissue, profile switch, guest conversion
+и restore — Auth подготавливает durable epoch относительно floor. Redis-ahead
+значение reconcile-ится только вверх; ошибка floor, невалидное значение или
+неуспешный reconcile дают fail-closed. При ошибке подготовки epoch
+JDBC-транзакция create+prepare откатывается до User RPC; успешная транзакция
+завершается до RPC. Memory profile этот rollback не моделирует.
 
 При `auth.persistence=jdbc` startup Auth до запуска любого `SmartLifecycle`
 постранично seed-ит и сверяет Redis floor с durable `accounts.session_epoch`.
 `auth.session-epoch.seed.page-size` задаёт положительный размер страницы и по
 умолчанию равен `256`. Hook зависит от инициализации БД, но не от конкретного
 Flyway bean: он работает и с внешними миграциями, а недоступный Redis или
-отсутствующая schema завершают startup ошибкой. Strict-проверки и issuance
-claim на этом этапе ещё не включены.
+отсутствующая schema завершают startup ошибкой.
+
+В Compose включены strict-проверки Gateway и Realtime: они отклоняют
+missing/corrupt claim/floor и ошибку чтения Redis; Gateway проверяет non-empty
+`jti` blacklist до floor, а Realtime — на upgrade, inbound operations и
+outbound fan-out.
+
+Compose strict proof не завершает rollout для всех окружений: требуется отдельная
+operational acceptance. Immediate account-targeted close через Redis Pub/Sub пока
+не реализован; authority остаются strict JWT/floor проверки.
