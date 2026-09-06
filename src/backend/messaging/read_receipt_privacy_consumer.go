@@ -74,18 +74,6 @@ func subscribeReceiptPrivacy(ctx context.Context, js nats.JetStreamContext, rece
 		}
 		rows, err := receipts.ClearPublicReadReceiptsForProfile(ctx, profileID, dmChats)
 		if err != nil {
-			natslog.LogConsume(logger, msg, slog.LevelWarn, "receipt privacy candidates failed", slog.String("error", err.Error()))
-			_ = msg.Nak()
-			return
-		}
-		var dmChats []uuid.UUID
-		for _, chatID := range candidateChats {
-			if _, err := peers.DMOtherProfileID(ctx, chatID, profileID); err == nil {
-				dmChats = append(dmChats, chatID)
-			}
-		}
-		rows, err := receipts.ClearPublicReadReceiptsForProfile(ctx, profileID, dmChats)
-		if err != nil {
 			natslog.LogConsume(logger, msg, slog.LevelWarn, "receipt privacy revoke failed", slog.String("error", err.Error()))
 			_ = msg.Nak()
 			return
