@@ -207,7 +207,7 @@ func (s *DMStore) FindChatByID(ctx context.Context, chatID uuid.UUID) (*ChatRow,
 	}
 	return scanChatRow(s.Pool.QueryRow(ctx, `
 SELECT id, type, space_id, name, avatar_url, topic, creator_profile_id, slow_mode_seconds,
-       last_message_at, created_at, updated_at, threads_enabled, allow_user_main_feed, e2e_enabled
+       last_message_at, created_at, updated_at, threads_enabled, allow_user_main_feed, e2e_enabled, allow_guests
 FROM chats
 WHERE id = $1
 `, chatID))
@@ -221,9 +221,9 @@ func scanChatRow(row pgx.Row) (*ChatRow, error) {
 	var slowMode int32
 	var lastMsg sql.NullTime
 	var createdAt, updatedAt time.Time
-	var threadsEnabled, allowUserMainFeed, e2eEnabled bool
+	var threadsEnabled, allowUserMainFeed, e2eEnabled, allowGuests bool
 	err := row.Scan(&id, &chatType, &spaceID, &name, &avatarURL, &topic, &creator, &slowMode,
-		&lastMsg, &createdAt, &updatedAt, &threadsEnabled, &allowUserMainFeed, &e2eEnabled)
+		&lastMsg, &createdAt, &updatedAt, &threadsEnabled, &allowUserMainFeed, &e2eEnabled, &allowGuests)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -240,6 +240,7 @@ func scanChatRow(row pgx.Row) (*ChatRow, error) {
 		ThreadsEnabled:    threadsEnabled,
 		AllowUserMainFeed: allowUserMainFeed,
 		E2EEnabled:        e2eEnabled,
+		AllowGuests:       allowGuests,
 	}
 	if spaceID.Valid {
 		if sid, perr := uuid.Parse(spaceID.String); perr == nil {
@@ -328,8 +329,8 @@ func (s *DMStore) AddGroupMembers(ctx context.Context, chatID uuid.UUID, profile
 	if err != nil {
 		return nil, err
 	}
-	if chatType != "group" {
-		return nil, fmt.Errorf("add members only supported for group chats")
+	if chatType != "group" && chatType != "channel" {
+		return nil, fmt.Errorf("add members only supported for group or channel chats")
 	}
 
 	var current int
@@ -353,7 +354,7 @@ SELECT 1 FROM chat_members WHERE chat_id = $1 AND profile_id = $2
 	}
 
 	projected := current + len(added)
-	if projected < groupAddMinMembers(ctx) {
+	if chatType == "group" && projected < groupAddMinMembers(ctx) {
 		return nil, ErrGroupTooFewMembers
 	}
 	if projected > GroupMemberLimit {
@@ -499,11 +500,11 @@ WHERE chat_id = $1 AND profile_id = $2
 }
 
 // UpdateGroupChat updates mutable group/channel fields.
-func (s *DMStore) UpdateGroupChat(ctx context.Context, chatID uuid.UUID, name, avatarURL, topic *string, slowModeSeconds *int32, threadsEnabled, allowUserMainFeed *bool) (*ChatRow, error) {
+func (s *DMStore) UpdateGroupChat(ctx context.Context, chatID uuid.UUID, name, avatarURL, topic *string, slowModeSeconds *int32, threadsEnabled, allowUserMainFeed, allowGuests *bool) (*ChatRow, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("dm store: pool not configured")
 	}
-	if name == nil && avatarURL == nil && topic == nil && slowModeSeconds == nil && threadsEnabled == nil && allowUserMainFeed == nil {
+	if name == nil && avatarURL == nil && topic == nil && slowModeSeconds == nil && threadsEnabled == nil && allowUserMainFeed == nil && allowGuests == nil {
 		return s.FindChatByID(ctx, chatID)
 	}
 	sets := make([]string, 0, 8)
@@ -539,6 +540,11 @@ func (s *DMStore) UpdateGroupChat(ctx context.Context, chatID uuid.UUID, name, a
 		args = append(args, *allowUserMainFeed)
 		argN++
 	}
+	if allowGuests != nil {
+		sets = append(sets, fmt.Sprintf("allow_guests = $%d", argN))
+		args = append(args, *allowGuests)
+		argN++
+	}
 	sets = append(sets, "updated_at = now()")
 	args = append(args, chatID)
 	q := fmt.Sprintf(`
@@ -546,7 +552,7 @@ UPDATE chats
 SET %s
 WHERE id = $%d AND type IN ('group', 'channel')
 RETURNING id, type, space_id, name, avatar_url, topic, creator_profile_id, slow_mode_seconds,
-          last_message_at, created_at, updated_at, threads_enabled, allow_user_main_feed, e2e_enabled
+          last_message_at, created_at, updated_at, threads_enabled, allow_user_main_feed, e2e_enabled, allow_guests
 `, strings.Join(sets, ", "), argN)
 	return scanChatRow(s.Pool.QueryRow(ctx, q, args...))
 }

@@ -111,7 +111,7 @@ chats
 ├── last_message_at (activity sort — см. § Timestamp ownership)
 ├── threads_enabled (bool, default false; channels default true)
 ├── allow_user_main_feed (bool, default true; channels default false)
-├── allow_guests (bool, target default false — explicit chat-level guest admission; enforcement not yet wired)
+├── allow_guests (bool, default false — explicit chat-level guest admission)
 ├── e2e_enabled (bool, default false — DM opt-in E2E)
 ├── created_at
 └── updated_at
@@ -201,7 +201,7 @@ CREATE INDEX quick_access_profile_order_idx ON quick_access_chats (profile_id, s
 
 ### Deployed schema (migrations `000001`–`000011`) vs full spec
 
-**Shipped today** (`chat_db` migrations): DM + group + channel types; `chat_members.inbox_bucket`; `threads_enabled` / `allow_user_main_feed`; `e2e_enabled`; slow mode; chat-level `allow_guests` column (`000007`, deployed default `true` conflicts with the fail-closed target and enforcement is not yet wired); `folders` + `folder_chats`; `quick_access_chats`; per-profile `deleted_for_self` (`000011`). Folder membership/pin, `ListChats.folder_id` and `UpdateFolder`/`DeleteFolder` are implemented. Incoming message activity keeps archived chats in the archive and only updates their unread badge.
+**Shipped today** (`chat_db` migrations): DM + group + channel types; `chat_members.inbox_bucket`; `threads_enabled` / `allow_user_main_feed`; `e2e_enabled`; slow mode; chat-level `allow_guests` (`000007`, default hardened to `false` by `000012`); `folders` + `folder_chats`; `quick_access_chats`; per-profile `deleted_for_self` (`000011`). Standalone group/channel owners and existing admins configure future guest admission through `UpdateChat`; admission is checked against User's guest marker fail-closed, and disabling it preserves current memberships. Folder membership/pin, `ListChats.folder_id` and `UpdateFolder`/`DeleteFolder` are implemented. Incoming message activity keeps archived chats in the archive and only updates their unread badge.
 
 ### Guest admission
 

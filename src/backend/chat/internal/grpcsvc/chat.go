@@ -95,7 +95,7 @@ type DMStore interface {
 	RemoveGroupMember(ctx context.Context, chatID, profileID uuid.UUID) error
 	LeaveGroupChat(ctx context.Context, chatID, profileID uuid.UUID) error
 	TransferGroupOwnership(ctx context.Context, chatID, ownerID, newOwnerID uuid.UUID) error
-	UpdateGroupChat(ctx context.Context, chatID uuid.UUID, name, avatarURL, topic *string, slowModeSeconds *int32, threadsEnabled, allowUserMainFeed *bool) (*store.ChatRow, error)
+	UpdateGroupChat(ctx context.Context, chatID uuid.UUID, name, avatarURL, topic *string, slowModeSeconds *int32, threadsEnabled, allowUserMainFeed, allowGuests *bool) (*store.ChatRow, error)
 	GetMemberRole(ctx context.Context, chatID, profileID uuid.UUID) (string, error)
 	SetChatE2EEnabled(ctx context.Context, chatID uuid.UUID, enabled bool) error
 }

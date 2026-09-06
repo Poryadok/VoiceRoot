@@ -107,6 +107,7 @@ const Chat$json = {
       '10': 'allowUserMainFeed'
     },
     {'1': 'e2e_enabled', '3': 14, '4': 1, '5': 8, '10': 'e2eEnabled'},
+    {'1': 'allow_guests', '3': 15, '4': 1, '5': 8, '10': 'allowGuests'},
   ],
   '8': [
     {'1': '_space_id'},
@@ -129,8 +130,9 @@ final $typed_data.Uint8List chatDescriptor = $convert.base64Decode(
     '5UaW1lc3RhbXBSCWNyZWF0ZWRBdBI5Cgp1cGRhdGVkX2F0GAsgASgLMhouZ29vZ2xlLnByb3Rv'
     'YnVmLlRpbWVzdGFtcFIJdXBkYXRlZEF0EicKD3RocmVhZHNfZW5hYmxlZBgMIAEoCFIOdGhyZW'
     'Fkc0VuYWJsZWQSLwoUYWxsb3dfdXNlcl9tYWluX2ZlZWQYDSABKAhSEWFsbG93VXNlck1haW5G'
-    'ZWVkEh8KC2UyZV9lbmFibGVkGA4gASgIUgplMmVFbmFibGVkQgsKCV9zcGFjZV9pZEIHCgVfbm'
-    'FtZUINCgtfYXZhdGFyX3VybEIICgZfdG9waWNCEgoQX2xhc3RfbWVzc2FnZV9hdA==');
+    'ZWVkEh8KC2UyZV9lbmFibGVkGA4gASgIUgplMmVFbmFibGVkEiEKDGFsbG93X2d1ZXN0cxgPIA'
+    'EoCFILYWxsb3dHdWVzdHNCCwoJX3NwYWNlX2lkQgcKBV9uYW1lQg0KC19hdmF0YXJfdXJsQggK'
+    'Bl90b3BpY0ISChBfbGFzdF9tZXNzYWdlX2F0');
 
 @$core.Deprecated('Use createDMRequestDescriptor instead')
 const CreateDMRequest$json = {
@@ -239,6 +241,15 @@ const UpdateChatRequest$json = {
       '10': 'allowUserMainFeed',
       '17': true
     },
+    {
+      '1': 'allow_guests',
+      '3': 8,
+      '4': 1,
+      '5': 8,
+      '9': 6,
+      '10': 'allowGuests',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_name'},
@@ -247,6 +258,7 @@ const UpdateChatRequest$json = {
     {'1': '_avatar_url'},
     {'1': '_threads_enabled'},
     {'1': '_allow_user_main_feed'},
+    {'1': '_allow_guests'},
   ],
 };
 
@@ -257,8 +269,9 @@ final $typed_data.Uint8List updateChatRequestDescriptor = $convert.base64Decode(
     'ZWNvbmRzGAQgASgFSAJSD3Nsb3dNb2RlU2Vjb25kc4gBARIiCgphdmF0YXJfdXJsGAUgASgJSA'
     'NSCWF2YXRhclVybIgBARIsCg90aHJlYWRzX2VuYWJsZWQYBiABKAhIBFIOdGhyZWFkc0VuYWJs'
     'ZWSIAQESNAoUYWxsb3dfdXNlcl9tYWluX2ZlZWQYByABKAhIBVIRYWxsb3dVc2VyTWFpbkZlZW'
-    'SIAQFCBwoFX25hbWVCCAoGX3RvcGljQhQKEl9zbG93X21vZGVfc2Vjb25kc0INCgtfYXZhdGFy'
-    'X3VybEISChBfdGhyZWFkc19lbmFibGVkQhcKFV9hbGxvd191c2VyX21haW5fZmVlZA==');
+    'SIAQESJgoMYWxsb3dfZ3Vlc3RzGAggASgISAZSC2FsbG93R3Vlc3RziAEBQgcKBV9uYW1lQggK'
+    'Bl90b3BpY0IUChJfc2xvd19tb2RlX3NlY29uZHNCDQoLX2F2YXRhcl91cmxCEgoQX3RocmVhZH'
+    'NfZW5hYmxlZEIXChVfYWxsb3dfdXNlcl9tYWluX2ZlZWRCDwoNX2FsbG93X2d1ZXN0cw==');
 
 @$core.Deprecated('Use deleteChatRequestDescriptor instead')
 const DeleteChatRequest$json = {

@@ -29,6 +29,15 @@ func (s *ChatGRPC) CreateChat(ctx context.Context, req *chatv1.CreateChatRequest
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
 	}
+	spaceIDRaw := strings.TrimSpace(req.GetSpaceId())
+	// Guests may participate only after a regular member explicitly invites them
+	// to a standalone chat that opted in. Space creation remains owned by the
+	// existing Space and Role policy path.
+	if spaceIDRaw == "" {
+		if err := authctx.RequireRegular(ctx); err != nil {
+			return nil, err
+		}
+	}
 	name := strings.TrimSpace(req.GetName())
 	if name == "" {
 		return nil, status.Error(codes.InvalidArgument, "name is required")
@@ -41,7 +50,6 @@ func (s *ChatGRPC) CreateChat(ctx context.Context, req *chatv1.CreateChatRequest
 
 	var row *store.ChatRow
 	var err error
-	spaceIDRaw := strings.TrimSpace(req.GetSpaceId())
 	if chatType == chatv1.ChatType_CHAT_TYPE_CHANNEL {
 		if spaceIDRaw == "" {
 			row, err = s.DM.CreateChannelChat(ctx, caller, name, topic)
@@ -110,7 +118,7 @@ func (s *ChatGRPC) UpdateChat(ctx context.Context, req *chatv1.UpdateChatRequest
 
 	var name, avatar, topic *string
 	var slowMode *int32
-	var threadsEnabled, allowUserMainFeed *bool
+	var threadsEnabled, allowUserMainFeed, allowGuests *bool
 	if req.Name != nil {
 		n := strings.TrimSpace(req.GetName())
 		name = &n
@@ -135,17 +143,24 @@ func (s *ChatGRPC) UpdateChat(ctx context.Context, req *chatv1.UpdateChatRequest
 		v := req.GetAllowUserMainFeed()
 		allowUserMainFeed = &v
 	}
+	if req.AllowGuests != nil {
+		v := req.GetAllowGuests()
+		allowGuests = &v
+	}
 
-	slowModeOnly := slowMode != nil && name == nil && avatar == nil && topic == nil && threadsEnabled == nil && allowUserMainFeed == nil
+	slowModeOnly := slowMode != nil && name == nil && avatar == nil && topic == nil && threadsEnabled == nil && allowUserMainFeed == nil && allowGuests == nil
 	if row.SpaceID != nil && slowModeOnly && s.Roles != nil {
 		if err := canSetSpaceChatSlowMode(ctx, s.Roles, *row.SpaceID, caller); err != nil {
 			return nil, err
 		}
-	} else if role != "owner" {
-		return nil, status.Error(codes.PermissionDenied, "only the chat owner can update the chat")
+	} else if role != "owner" && role != "admin" {
+		return nil, status.Error(codes.PermissionDenied, "only the chat owner or an admin can update the chat")
 	}
 
-	updated, err := s.DM.UpdateGroupChat(ctx, chatID, name, avatar, topic, slowMode, threadsEnabled, allowUserMainFeed)
+	if row.SpaceID != nil && allowGuests != nil {
+		return nil, status.Error(codes.FailedPrecondition, "space chat guest admission is owned by Space and Role services")
+	}
+	updated, err := s.DM.UpdateGroupChat(ctx, chatID, name, avatar, topic, slowMode, threadsEnabled, allowUserMainFeed, allowGuests)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -175,7 +190,15 @@ func (s *ChatGRPC) AddMembers(ctx context.Context, req *chatv1.AddMembersRequest
 		return nil, status.Error(codes.NotFound, "chat not found")
 	}
 	if row.Type != "group" {
-		return nil, status.Error(codes.InvalidArgument, "add members only supported for groups")
+		if row.Type != "channel" || row.SpaceID != nil {
+			return nil, status.Error(codes.InvalidArgument, "add members only supported for standalone groups and channels")
+		}
+	}
+	if row.SpaceID != nil {
+		return nil, status.Error(codes.FailedPrecondition, "space chat membership is owned by Space and Role services")
+	}
+	if err := authctx.RequireRegular(ctx); err != nil {
+		return nil, err
 	}
 	member, err := s.DM.IsChatMember(ctx, chatID, caller)
 	if err != nil {
@@ -195,8 +218,21 @@ func (s *ChatGRPC) AddMembers(ctx context.Context, req *chatv1.AddMembersRequest
 			if _, perr := s.Profiles.AccountIDByProfileID(ctx, pid); perr != nil {
 				return nil, perr
 			}
+			guestProfiles, ok := s.Profiles.(GuestProfileLookup)
+			if !ok {
+				return nil, status.Error(codes.FailedPrecondition, "guest profile lookup not configured")
+			}
+			guest, perr := guestProfiles.IsGuestProfile(ctx, pid)
+			if perr != nil {
+				return nil, status.Error(codes.Unavailable, "guest profile lookup unavailable")
+			}
+			if guest && !row.AllowGuests {
+				return nil, status.Error(codes.PermissionDenied, "guest admission is disabled for this chat")
+			}
+		} else {
+			return nil, status.Error(codes.FailedPrecondition, "profile service not configured")
 		}
-	if err := s.ensureInvitePrivacy(ctx, caller, pid); err != nil {
+		if err := s.ensureInvitePrivacy(ctx, caller, pid); err != nil {
 			if !authctx.IsInternalService(ctx) {
 				return nil, err
 			}

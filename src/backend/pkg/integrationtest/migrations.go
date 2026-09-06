@@ -44,5 +44,7 @@ func ApplySQLFile(t *testing.T, ctx context.Context, pool *pgxpool.Pool, repoRoo
 		ApplySQLFile(t, ctx, pool, repoRoot, filepath.Join("src", "backend", "migrations", "chat_db", "000003_groups.up.sql"))
 		ApplySQLFile(t, ctx, pool, repoRoot, filepath.Join("src", "backend", "migrations", "chat_db", "000005_thread_settings.up.sql"))
 		ApplySQLFile(t, ctx, pool, repoRoot, filepath.Join("src", "backend", "migrations", "chat_db", "000006_e2e_enabled.up.sql"))
+		ApplySQLFile(t, ctx, pool, repoRoot, filepath.Join("src", "backend", "migrations", "chat_db", "000007_allow_guests.up.sql"))
+		ApplySQLFile(t, ctx, pool, repoRoot, filepath.Join("src", "backend", "migrations", "chat_db", "000012_allow_guests_fail_closed.up.sql"))
 	}
 }
