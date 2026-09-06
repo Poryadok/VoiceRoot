@@ -228,13 +228,13 @@ func dispatchMessageStreamEvent(hub *wsHub, data []byte, header nats.Header, log
 		return
 	}
 	notifyFirst := isReactionAddedEvent(data)
-	if notifyFirst && notifyOk {
+	if notifyFirst && notifyOK {
 		for _, f := range fanouts {
 			hub.broadcastToProfile(f.ProfileID, f.Envelope, logger, requestID)
 		}
 	}
 	hub.broadcastToChat(chatID, fe, logger, requestID)
-	if !notifyFirst && notifyOk {
+	if !notifyFirst && notifyOK {
 		for _, f := range fanouts {
 			hub.broadcastToProfile(f.ProfileID, f.Envelope, logger, requestID)
 		}
