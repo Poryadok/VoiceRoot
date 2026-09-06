@@ -27,6 +27,7 @@ const (
 	ChatService_AddMembers_FullMethodName             = "/voice.chat.v1.ChatService/AddMembers"
 	ChatService_RemoveMember_FullMethodName           = "/voice.chat.v1.ChatService/RemoveMember"
 	ChatService_LeaveChat_FullMethodName              = "/voice.chat.v1.ChatService/LeaveChat"
+	ChatService_SetGroupMemberRole_FullMethodName     = "/voice.chat.v1.ChatService/SetGroupMemberRole"
 	ChatService_TransferGroupOwnership_FullMethodName = "/voice.chat.v1.ChatService/TransferGroupOwnership"
 	ChatService_ListMembers_FullMethodName            = "/voice.chat.v1.ChatService/ListMembers"
 	ChatService_ListChats_FullMethodName              = "/voice.chat.v1.ChatService/ListChats"
@@ -66,6 +67,8 @@ type ChatServiceClient interface {
 	AddMembers(ctx context.Context, in *AddMembersRequest, opts ...grpc.CallOption) (*AddMembersResponse, error)
 	RemoveMember(ctx context.Context, in *RemoveMemberRequest, opts ...grpc.CallOption) (*RemoveMemberResponse, error)
 	LeaveChat(ctx context.Context, in *LeaveChatRequest, opts ...grpc.CallOption) (*LeaveChatResponse, error)
+	// Standalone group only. An admin can promote a member; only the owner can demote an admin.
+	SetGroupMemberRole(ctx context.Context, in *SetGroupMemberRoleRequest, opts ...grpc.CallOption) (*SetGroupMemberRoleResponse, error)
 	TransferGroupOwnership(ctx context.Context, in *TransferGroupOwnershipRequest, opts ...grpc.CallOption) (*TransferGroupOwnershipResponse, error)
 	ListMembers(ctx context.Context, in *ListMembersRequest, opts ...grpc.CallOption) (*ListMembersResponse, error)
 	ListChats(ctx context.Context, in *ListChatsRequest, opts ...grpc.CallOption) (*ListChatsResponse, error)
@@ -174,6 +177,16 @@ func (c *chatServiceClient) LeaveChat(ctx context.Context, in *LeaveChatRequest,
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(LeaveChatResponse)
 	err := c.cc.Invoke(ctx, ChatService_LeaveChat_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) SetGroupMemberRole(ctx context.Context, in *SetGroupMemberRoleRequest, opts ...grpc.CallOption) (*SetGroupMemberRoleResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetGroupMemberRoleResponse)
+	err := c.cc.Invoke(ctx, ChatService_SetGroupMemberRole_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -424,6 +437,8 @@ type ChatServiceServer interface {
 	AddMembers(context.Context, *AddMembersRequest) (*AddMembersResponse, error)
 	RemoveMember(context.Context, *RemoveMemberRequest) (*RemoveMemberResponse, error)
 	LeaveChat(context.Context, *LeaveChatRequest) (*LeaveChatResponse, error)
+	// Standalone group only. An admin can promote a member; only the owner can demote an admin.
+	SetGroupMemberRole(context.Context, *SetGroupMemberRoleRequest) (*SetGroupMemberRoleResponse, error)
 	TransferGroupOwnership(context.Context, *TransferGroupOwnershipRequest) (*TransferGroupOwnershipResponse, error)
 	ListMembers(context.Context, *ListMembersRequest) (*ListMembersResponse, error)
 	ListChats(context.Context, *ListChatsRequest) (*ListChatsResponse, error)
@@ -481,6 +496,9 @@ func (UnimplementedChatServiceServer) RemoveMember(context.Context, *RemoveMembe
 }
 func (UnimplementedChatServiceServer) LeaveChat(context.Context, *LeaveChatRequest) (*LeaveChatResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LeaveChat not implemented")
+}
+func (UnimplementedChatServiceServer) SetGroupMemberRole(context.Context, *SetGroupMemberRoleRequest) (*SetGroupMemberRoleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetGroupMemberRole not implemented")
 }
 func (UnimplementedChatServiceServer) TransferGroupOwnership(context.Context, *TransferGroupOwnershipRequest) (*TransferGroupOwnershipResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method TransferGroupOwnership not implemented")
@@ -712,6 +730,24 @@ func _ChatService_LeaveChat_Handler(srv interface{}, ctx context.Context, dec fu
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ChatServiceServer).LeaveChat(ctx, req.(*LeaveChatRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_SetGroupMemberRole_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetGroupMemberRoleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).SetGroupMemberRole(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_SetGroupMemberRole_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).SetGroupMemberRole(ctx, req.(*SetGroupMemberRoleRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1168,6 +1204,10 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "LeaveChat",
 			Handler:    _ChatService_LeaveChat_Handler,
+		},
+		{
+			MethodName: "SetGroupMemberRole",
+			Handler:    _ChatService_SetGroupMemberRole_Handler,
 		},
 		{
 			MethodName: "TransferGroupOwnership",

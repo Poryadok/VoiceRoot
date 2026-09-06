@@ -244,6 +244,29 @@ func (t *transcoder) serveChats(w http.ResponseWriter, r *http.Request, rest str
 		w.WriteHeader(http.StatusNoContent)
 		return true
 
+	case r.Method == http.MethodPatch && strings.Contains(rest, "/members/") && strings.HasSuffix(rest, "/role"):
+		parts := strings.SplitN(strings.TrimSuffix(rest, "/role"), "/members/", 2)
+		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+			return false
+		}
+		req := &chatv1.SetGroupMemberRoleRequest{ChatId: parts[0], ProfileId: parts[1]}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		if req.ChatId == "" {
+			req.ChatId = parts[0]
+		}
+		if req.ProfileId == "" {
+			req.ProfileId = parts[1]
+		}
+		if _, err := t.clients.chat.SetGroupMemberRole(ctx, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return true
+
 	case r.Method == http.MethodPost && strings.HasSuffix(rest, "/members"):
 		chatID := strings.TrimSuffix(rest, "/members")
 		chatID = strings.Trim(chatID, "/")

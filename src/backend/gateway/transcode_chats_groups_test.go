@@ -45,6 +45,16 @@ type recordingChatsRemoveMember struct {
 	last *chatv1.RemoveMemberRequest
 }
 
+type recordingChatsSetMemberRole struct {
+	chatv1.UnimplementedChatServiceServer
+	last *chatv1.SetGroupMemberRoleRequest
+}
+
+func (s *recordingChatsSetMemberRole) SetGroupMemberRole(_ context.Context, req *chatv1.SetGroupMemberRoleRequest) (*chatv1.SetGroupMemberRoleResponse, error) {
+	s.last = req
+	return &chatv1.SetGroupMemberRoleResponse{}, nil
+}
+
 func (s *recordingChatsRemoveMember) RemoveMember(_ context.Context, req *chatv1.RemoveMemberRequest) (*chatv1.RemoveMemberResponse, error) {
 	s.last = req
 	return &chatv1.RemoveMemberResponse{}, nil
@@ -163,6 +173,24 @@ func TestTranscodeChatsRemoveMember(t *testing.T) {
 	}
 	if grpcRec.last == nil || grpcRec.last.GetChatId() != "group-1" || grpcRec.last.GetProfileId() != "profile-b" {
 		t.Fatalf("RemoveMember request = %+v", grpcRec.last)
+	}
+}
+
+func TestTranscodeChatsSetMemberRole(t *testing.T) {
+	t.Parallel()
+	rec := &recordingChatsSetMemberRole{}
+	conn, cleanup := startBufconnChatConn(t, rec)
+	t.Cleanup(cleanup)
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"}},
+		transcoder:  &transcoder{clients: grpcClients{chat: chatv1.NewChatServiceClient(conn)}},
+	})
+	resp := performRequest(h, http.MethodPatch, "/api/v1/chats/group-1/members/profile-b/role", `{"role":"admin"}`, map[string]string{"Authorization": "Bearer valid-user-token"})
+	if resp.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d; body=%q", resp.Code, http.StatusNoContent, resp.Body.String())
+	}
+	if rec.last == nil || rec.last.GetChatId() != "group-1" || rec.last.GetProfileId() != "profile-b" || rec.last.GetRole() != "admin" {
+		t.Fatalf("SetGroupMemberRole request = %+v", rec.last)
 	}
 }
 

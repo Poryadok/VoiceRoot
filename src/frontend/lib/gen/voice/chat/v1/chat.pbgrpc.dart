@@ -89,6 +89,14 @@ class ChatServiceClient extends $grpc.Client {
     return $createUnaryCall(_$leaveChat, request, options: options);
   }
 
+  /// Standalone group only. An admin can promote a member; only the owner can demote an admin.
+  $grpc.ResponseFuture<$0.SetGroupMemberRoleResponse> setGroupMemberRole(
+    $0.SetGroupMemberRoleRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$setGroupMemberRole, request, options: options);
+  }
+
   $grpc.ResponseFuture<$0.TransferGroupOwnershipResponse>
       transferGroupOwnership(
     $0.TransferGroupOwnershipRequest request, {
@@ -294,6 +302,11 @@ class ChatServiceClient extends $grpc.Client {
           '/voice.chat.v1.ChatService/LeaveChat',
           ($0.LeaveChatRequest value) => value.writeToBuffer(),
           $0.LeaveChatResponse.fromBuffer);
+  static final _$setGroupMemberRole = $grpc.ClientMethod<
+          $0.SetGroupMemberRoleRequest, $0.SetGroupMemberRoleResponse>(
+      '/voice.chat.v1.ChatService/SetGroupMemberRole',
+      ($0.SetGroupMemberRoleRequest value) => value.writeToBuffer(),
+      $0.SetGroupMemberRoleResponse.fromBuffer);
   static final _$transferGroupOwnership = $grpc.ClientMethod<
           $0.TransferGroupOwnershipRequest, $0.TransferGroupOwnershipResponse>(
       '/voice.chat.v1.ChatService/TransferGroupOwnership',
@@ -474,6 +487,15 @@ abstract class ChatServiceBase extends $grpc.Service {
         false,
         ($core.List<$core.int> value) => $0.LeaveChatRequest.fromBuffer(value),
         ($0.LeaveChatResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.SetGroupMemberRoleRequest,
+            $0.SetGroupMemberRoleResponse>(
+        'SetGroupMemberRole',
+        setGroupMemberRole_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.SetGroupMemberRoleRequest.fromBuffer(value),
+        ($0.SetGroupMemberRoleResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.TransferGroupOwnershipRequest,
             $0.TransferGroupOwnershipResponse>(
         'TransferGroupOwnership',
@@ -741,6 +763,15 @@ abstract class ChatServiceBase extends $grpc.Service {
 
   $async.Future<$0.LeaveChatResponse> leaveChat(
       $grpc.ServiceCall call, $0.LeaveChatRequest request);
+
+  $async.Future<$0.SetGroupMemberRoleResponse> setGroupMemberRole_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.SetGroupMemberRoleRequest> $request) async {
+    return setGroupMemberRole($call, await $request);
+  }
+
+  $async.Future<$0.SetGroupMemberRoleResponse> setGroupMemberRole(
+      $grpc.ServiceCall call, $0.SetGroupMemberRoleRequest request);
 
   $async.Future<$0.TransferGroupOwnershipResponse> transferGroupOwnership_Pre(
       $grpc.ServiceCall $call,

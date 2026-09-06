@@ -141,7 +141,9 @@ func (s *ChatGRPC) UpdateChat(ctx context.Context, req *chatv1.UpdateChatRequest
 		if err := canSetSpaceChatSlowMode(ctx, s.Roles, *row.SpaceID, caller); err != nil {
 			return nil, err
 		}
-	} else if role != "owner" {
+	} else if row.SpaceID == nil && role != "owner" && role != "admin" {
+		return nil, status.Error(codes.PermissionDenied, "only a standalone group owner or admin can update the chat")
+	} else if row.SpaceID != nil && role != "owner" {
 		return nil, status.Error(codes.PermissionDenied, "only the chat owner can update the chat")
 	}
 
@@ -260,8 +262,18 @@ func (s *ChatGRPC) RemoveMember(ctx context.Context, req *chatv1.RemoveMemberReq
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	if role != "owner" {
-		return nil, status.Error(codes.PermissionDenied, "only the group owner can remove members")
+	if role != "owner" && role != "admin" {
+		return nil, status.Error(codes.PermissionDenied, "only a group owner or admin can remove members")
+	}
+	targetRole, err := s.DM.GetMemberRole(ctx, chatID, targetID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if targetRole == "" {
+		return nil, status.Error(codes.NotFound, "member not found")
+	}
+	if role == "admin" && targetRole != "member" {
+		return nil, status.Error(codes.PermissionDenied, "an admin cannot remove an owner or admin")
 	}
 	if err := s.DM.RemoveGroupMember(ctx, chatID, targetID); err != nil {
 		if errors.Is(err, store.ErrCannotRemoveOwner) {
@@ -325,6 +337,59 @@ func (s *ChatGRPC) LeaveChat(ctx context.Context, req *chatv1.LeaveChatRequest) 
 	return &chatv1.LeaveChatResponse{}, nil
 }
 
+// SetGroupMemberRole changes a standalone group member between member and admin.
+// Admins may promote members; only the owner may demote an admin. Ownership moves
+// exclusively through TransferGroupOwnership.
+func (s *ChatGRPC) SetGroupMemberRole(ctx context.Context, req *chatv1.SetGroupMemberRoleRequest) (*chatv1.SetGroupMemberRoleResponse, error) {
+	if s == nil || s.DM == nil {
+		return nil, status.Error(codes.FailedPrecondition, "chat persistence not configured")
+	}
+	caller, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
+	chatID, err := parseUUIDField("chat_id", req.GetChatId())
+	if err != nil {
+		return nil, err
+	}
+	targetID, err := parseUUIDField("profile_id", req.GetProfileId())
+	if err != nil {
+		return nil, err
+	}
+	role := strings.TrimSpace(req.GetRole())
+	if role != "admin" && role != "member" {
+		return nil, status.Error(codes.InvalidArgument, "role must be admin or member")
+	}
+	row, err := s.DM.FindChatByID(ctx, chatID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if row == nil {
+		return nil, status.Error(codes.NotFound, "chat not found")
+	}
+	if row.Type != "group" || row.SpaceID != nil {
+		return nil, status.Error(codes.InvalidArgument, "role changes are supported only for standalone groups")
+	}
+	if err := s.DM.SetStandaloneGroupMemberRole(ctx, chatID, caller, targetID, role); err != nil {
+		if errors.Is(err, store.ErrNotGroupMember) || errors.Is(err, pgx.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "group member not found")
+		}
+		if errors.Is(err, store.ErrRoleChangeForbidden) {
+			return nil, status.Error(codes.PermissionDenied, err.Error())
+		}
+		if errors.Is(err, store.ErrRoleChangeInvalid) {
+			return nil, status.Error(codes.FailedPrecondition, err.Error())
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if s.ChatEvents != nil {
+		if err := s.ChatEvents.PublishChatMemberChanged(ctx, chatID.String(), targetID.String(), "role_changed"); err != nil {
+			s.logPublishError(ctx, "chat.member_changed", err, slog.String("chat_id", chatID.String()), slog.String("profile_id", targetID.String()))
+		}
+	}
+	return &chatv1.SetGroupMemberRoleResponse{}, nil
+}
+
 func (s *ChatGRPC) TransferGroupOwnership(ctx context.Context, req *chatv1.TransferGroupOwnershipRequest) (*chatv1.TransferGroupOwnershipResponse, error) {
 	if s == nil || s.DM == nil {
 		return nil, status.Error(codes.FailedPrecondition, "chat persistence not configured")
@@ -348,8 +413,8 @@ func (s *ChatGRPC) TransferGroupOwnership(ctx context.Context, req *chatv1.Trans
 	if row == nil {
 		return nil, status.Error(codes.NotFound, "chat not found")
 	}
-	if row.Type != "group" {
-		return nil, status.Error(codes.InvalidArgument, "transfer only supported for groups")
+	if row.Type != "group" || row.SpaceID != nil {
+		return nil, status.Error(codes.InvalidArgument, "transfer only supported for standalone groups")
 	}
 	if err := s.DM.TransferGroupOwnership(ctx, chatID, caller, newOwner); err != nil {
 		if errors.Is(err, store.ErrNotGroupOwner) {
