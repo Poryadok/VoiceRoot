@@ -63,10 +63,7 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
 
     if (step == OnboardingStep.saveAccount &&
         ref.read(authControllerProvider).isGuest) {
-      await ref
-          .read(onboardingControllerProvider.notifier)
-          .completeCurrentStep();
-      if (mounted) await _maybeShowStep();
+      await _completeCurrentStepAndShowNext(retryOnFailure: false);
       return;
     }
 
@@ -79,9 +76,7 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
           title: l10n.onboardingChatsNavTitle,
           body: l10n.onboardingChatsNavBody,
           continueLabel: l10n.onboardingGotIt,
-          onContinue: () => ref
-              .read(onboardingControllerProvider.notifier)
-              .completeCurrentStep(),
+          onContinue: _completeCurrentStepAndShowNext,
         );
       case OnboardingStep.spaces:
         _showCoachMark(
@@ -91,22 +86,18 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
           continueLabel: l10n.onboardingLater,
           secondaryLabel: l10n.onboardingSpacesFind,
           onSecondary: () async {
-            ref
-                .read(shellNavigationProvider)
-                .setNavigationSection(NavigationSection.chats);
+            ref.read(shellNavigationProvider).setNavigationSection(
+              NavigationSection.chats,
+            );
             ref.read(globalSearchFocusRequestProvider.notifier).state++;
-            await ref
-                .read(onboardingControllerProvider.notifier)
-                .completeCurrentStep();
+            await _completeCurrentStepAndShowNext();
           },
-          onContinue: () => ref
-              .read(onboardingControllerProvider.notifier)
-              .completeCurrentStep(),
+          onContinue: _completeCurrentStepAndShowNext,
         );
       case OnboardingStep.matchmaking:
-        ref
-            .read(shellNavigationProvider)
-            .setNavigationSection(NavigationSection.social);
+        ref.read(shellNavigationProvider).setNavigationSection(
+          NavigationSection.social,
+        );
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           _showCoachMark(
@@ -115,26 +106,32 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
             body: l10n.onboardingMatchmakingBody,
             continueLabel: l10n.onboardingLater,
             secondaryLabel: l10n.onboardingMatchmakingTry,
-            onSecondary: () async {
-              await ref
-                  .read(onboardingControllerProvider.notifier)
-                  .completeCurrentStep();
-            },
-            onContinue: () => ref
-                .read(onboardingControllerProvider.notifier)
-                .completeCurrentStep(),
+            onSecondary: _completeCurrentStepAndShowNext,
+            onContinue: _completeCurrentStepAndShowNext,
           );
         });
       case OnboardingStep.wrapUp:
         _showHintDialog(
           title: l10n.onboardingWrapUpTitle,
           body: l10n.onboardingWrapUpBody,
-          onContinue: () => ref
-              .read(onboardingControllerProvider.notifier)
-              .completeCurrentStep(),
+          onContinue: _completeCurrentStepAndShowNext,
           continueLabel: l10n.onboardingWrapUpStart,
         );
     }
+  }
+
+  Future<void> _completeCurrentStepAndShowNext({
+    bool retryOnFailure = true,
+  }) async {
+    final currentStep = ref.read(onboardingControllerProvider).currentStep;
+    if (currentStep == null) return;
+
+    await ref.read(onboardingControllerProvider.notifier).completeCurrentStep();
+    if (!mounted) return;
+
+    final nextStep = ref.read(onboardingControllerProvider).currentStep;
+    if (!retryOnFailure && nextStep == currentStep) return;
+    await _maybeShowStep();
   }
 
   void _showCoachMark({
@@ -157,7 +154,6 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
       onContinue: () async {
         _clearCoachMark();
         await onContinue();
-        if (mounted) await _maybeShowStep();
       },
       onSkip: () {
         _clearCoachMark();
@@ -205,9 +201,7 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
                   isScrollControlled: true,
                   builder: (_) => ProfileEditSheet(profile: profile),
                 );
-                await ref
-                    .read(onboardingControllerProvider.notifier)
-                    .completeCurrentStep();
+                await ref.read(onboardingControllerProvider.notifier).completeCurrentStep();
                 _maybeShowStep();
               },
               child: Text(l10n.commonSave),
@@ -243,11 +237,10 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
             child: Text(l10n.onboardingSkip),
           ),
           FilledButton(
-            onPressed: () async {
+          onPressed: () async {
               await onContinue();
               if (!ctx.mounted) return;
               Navigator.of(ctx).pop();
-              if (mounted) await _maybeShowStep();
             },
             child: Text(continueLabel),
           ),
