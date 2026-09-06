@@ -6,15 +6,17 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 COMPOSE_FILE_PATH="${ROOT}/docker-compose.yml"
 MANIFEST_PATH="${ROOT}/.github/ci/e2e-features.yml"
-A1_TEST_REGEX='^TestComposeA1(TwoAccountsFoundation|DailyMessagingREST|GroupReadIsolation|ChannelReadIsolation|BlockDMDenyBothDirections)_live$'
+A1_TEST_REGEX='^TestComposeA1(TwoAccountsFoundation|DailyMessagingREST|GroupReadIsolation|ChannelReadIsolation|BlockDMDenyBothDirections|SessionEpochRealtime)_live$'
 A1_EXPECTED_TESTS=(
   TestComposeA1TwoAccountsFoundation_live
   TestComposeA1DailyMessagingREST_live
   TestComposeA1GroupReadIsolation_live
   TestComposeA1ChannelReadIsolation_live
   TestComposeA1BlockDMDenyBothDirections_live
+  TestComposeA1SessionEpochRealtime_live
 )
 umask 077
+unset VOICE_A1_SESSION_EPOCH_ISOLATED
 
 manifest_entries="$(bash "${ROOT}/scripts/ci/e2e-manifest.sh" "${MANIFEST_PATH}" a1_multi_account_gateway)" || {
   echo "failed to read a1_multi_account_gateway from ${MANIFEST_PATH}" >&2
@@ -26,7 +28,7 @@ if [[ -z "${manifest_entries}" ]]; then
 fi
 mapfile -t manifest_tests <<<"${manifest_entries}"
 if [[ "${#manifest_tests[@]}" -ne "${#A1_EXPECTED_TESTS[@]}" ]]; then
-  echo "a1_multi_account_gateway must contain exactly five tests" >&2
+  echo "a1_multi_account_gateway must contain exactly six tests" >&2
   exit 2
 fi
 for index in "${!A1_EXPECTED_TESTS[@]}"; do
@@ -171,7 +173,7 @@ wait_gateway
 set +e
 (
   cd "$ROOT/src/backend/gateway"
-  go test -count=1 -parallel 1 -timeout 20m \
+  VOICE_A1_SESSION_EPOCH_ISOLATED=true go test -count=1 -parallel 1 -timeout 20m \
     -run "$A1_TEST_REGEX" ./...
 )
 test_status=$?

@@ -69,11 +69,13 @@ a1_multi_account_gateway:
   - TestComposeA1GroupReadIsolation_live
   - TestComposeA1ChannelReadIsolation_live
   - TestComposeA1BlockDMDenyBothDirections_live
+  - TestComposeA1SessionEpochRealtime_live
 
 # Deliberate isolated runner only: the T-055 Flutter handoff opens a real
 # Gateway/Realtime connection and must not attach to a developer compose stack.
 a1_flutter_profile_handoff:
   - test/t055_profile_switch_reconnect_inbox_e2e_live_test.dart
+  - test/t106_account_soft_delete_e2e_live_test.dart
 
 full_flutter:
   - test/gateway_dm_ws_live_integration_test.dart

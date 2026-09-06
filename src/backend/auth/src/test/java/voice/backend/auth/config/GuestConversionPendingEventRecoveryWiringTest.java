@@ -4,12 +4,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -20,10 +22,12 @@ import voice.backend.auth.repository.GuestConversionOperation;
 import voice.backend.auth.repository.GuestConversionOperationRepository;
 import voice.backend.auth.repository.GuestConversionState;
 import voice.backend.auth.repository.InMemoryGuestConversionOperationRepository;
+import voice.backend.auth.repository.AccountSessionEpoch;
 import voice.backend.auth.service.GuestConversionEventPublisher;
 import voice.backend.auth.service.GuestConversionPendingEventRecoveryRunner;
 import voice.backend.auth.service.GuestConversionPendingEventWorker;
 import voice.backend.auth.sessionepoch.SessionEpochFloorConfiguration;
+import voice.backend.auth.sessionepoch.DurableAccountEpochSource;
 import voice.backend.auth.service.UnavailableGuestConversionEventPublisher;
 import voice.backend.auth.userdb.PrimaryProfileProvisioner;
 
@@ -209,6 +213,23 @@ class GuestConversionPendingEventRecoveryWiringTest {
     @Bean
     AuthProperties authProperties() {
       return new AuthProperties();
+    }
+
+    /** Isolates recovery wiring from epoch data; the real startup scan is covered by lifecycle integration tests. */
+    @Bean
+    @Primary
+    DurableAccountEpochSource emptyDurableAccountEpochSource() {
+      return new DurableAccountEpochSource() {
+        @Override
+        public List<AccountSessionEpoch> pageSessionEpochsAfter(UUID exclusiveAfter, int limit) {
+          return List.of();
+        }
+
+        @Override
+        public long advanceSessionEpochAtLeast(UUID accountId, long requestedEpoch) {
+          throw new AssertionError("empty epoch source must not advance durable state");
+        }
+      };
     }
   }
 

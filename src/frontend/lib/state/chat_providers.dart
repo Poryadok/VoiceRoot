@@ -2054,10 +2054,19 @@ class RealtimeHub {
   bool _isActive(_RealtimeHubBinding binding, RealtimeTransport connection) =>
       _isCurrent(binding) && identical(_connection, connection);
 
-  Future<void> _connect(_RealtimeHubBinding binding, String baseUrl) async {
+  Future<void> _connect(
+    _RealtimeHubBinding binding,
+    String baseUrl, {
+    bool isReconnectAttempt = false,
+  }) async {
     if (!_isCurrent(binding)) return;
     _connectingBinding = binding;
-    _setStatus(RealtimeLinkStatus.connecting, binding: binding);
+    _setStatus(
+      isReconnectAttempt
+          ? RealtimeLinkStatus.reconnecting
+          : RealtimeLinkStatus.connecting,
+      binding: binding,
+    );
     final uri = gatewayWebSocketUri(baseUrl);
     VoiceRealtimeConnection? connection;
     StreamSubscription<RealtimeFrame>? frameSub;
@@ -2177,9 +2186,9 @@ class RealtimeHub {
 
   void _scheduleReconnect(
     _RealtimeHubBinding binding,
-    RealtimeTransport? connection,
-    {bool requiresActiveConnection = true}
-  ) {
+    RealtimeTransport? connection, {
+    bool requiresActiveConnection = true,
+  }) {
     if (!_isCurrent(binding)) return;
     if (requiresActiveConnection &&
         (connection == null || !_isActive(binding, connection))) {
@@ -2203,7 +2212,7 @@ class RealtimeHub {
       if (!_isCurrent(binding)) return;
       final config = _ref.read(gatewayConfigProvider);
       if (!config.hasBaseUrl) return;
-      await _connect(binding, config.baseUrl);
+      await _connect(binding, config.baseUrl, isReconnectAttempt: true);
     });
   }
 
@@ -2345,9 +2354,16 @@ class ReconnectBannerController extends Notifier<bool> {
       _disposed = true;
       _cancelTimers();
     });
+    final initialStatus = ref.read(realtimeLinkStatusProvider);
+    if (initialStatus == RealtimeLinkStatus.connected) {
+      _wasConnected = true;
+    } else if (_isUnhealthy(initialStatus)) {
+      _scheduleShow();
+    }
+
     ref.listen<RealtimeLinkStatus>(realtimeLinkStatusProvider, (prev, next) {
       _onLinkStatusChanged(prev, next);
-    }, fireImmediately: true);
+    });
     return false;
   }
 

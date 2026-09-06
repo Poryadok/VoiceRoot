@@ -58,12 +58,12 @@ class AccountRestoreExpiryTest {
     assertThat(unchanged.deletedAt()).isEqualTo(deletedAt);
     assertThat(refreshTokens.createCount).isZero();
     verifyNoInteractions(events);
-    assertThat(restoreTokens.consumeCount).isEqualTo(1);
+    assertThat(restoreTokens.consumeCount).isZero();
 
     assertThatThrownBy(() -> service.restoreAccount("restore-token"))
         .isInstanceOf(AuthException.class)
-        .hasMessage("invalid_token");
-    assertThat(restoreTokens.consumeCount).isEqualTo(2);
+        .hasMessage("account_inactive");
+    assertThat(restoreTokens.consumeCount).isZero();
     assertThat(accounts.findById(account.id().toString()).orElseThrow().status())
         .isEqualTo("deleted");
     verifyNoInteractions(events);
@@ -137,6 +137,11 @@ class AccountRestoreExpiryTest {
 
     @Override
     public void store(String token, UUID accountId, Duration ttl) {}
+
+    @Override
+    public synchronized Optional<UUID> peek(String token) {
+      return available ? Optional.of(accountId) : Optional.empty();
+    }
 
     @Override
     public synchronized Optional<UUID> consume(String token) {

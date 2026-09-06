@@ -26,11 +26,16 @@ if [[ -z "${manifest_entries}" ]]; then
   exit 2
 fi
 mapfile -t flutter_tests <<<"${manifest_entries}"
-if [[ "${#flutter_tests[@]}" -ne 1 ]] || [[ -z "${flutter_tests[0]}" ]] || [[ "${flutter_tests[0]}" != test/*.dart ]]; then
-  echo "a1_flutter_profile_handoff must contain exactly one relative Dart test path" >&2
+expected_flutter_tests=(
+  'test/t055_profile_switch_reconnect_inbox_e2e_live_test.dart'
+  'test/t106_account_soft_delete_e2e_live_test.dart'
+)
+if [[ "${#flutter_tests[@]}" -ne "${#expected_flutter_tests[@]}" ]] ||
+  [[ "${flutter_tests[0]:-}" != "${expected_flutter_tests[0]}" ]] ||
+  [[ "${flutter_tests[1]:-}" != "${expected_flutter_tests[1]}" ]]; then
+  echo "a1_flutter_profile_handoff must contain exactly the ordered T055 and T106 relative Dart test paths" >&2
   exit 2
 fi
-flutter_test="${flutter_tests[0]}"
 
 port_base="${VOICE_A1_FLUTTER_PROFILE_HANDOFF_PORT_BASE:-$((26000 + RANDOM % 1000))}"
 if [[ ! "$port_base" =~ ^[0-9]+$ ]] || (( port_base < 20000 || port_base > 65000 )); then
@@ -144,7 +149,7 @@ wait_gateway() {
   return 1
 }
 
-echo "A1 Flutter profile-handoff project=${project} gateway=${VOICE_API_BASE_URL} test=${flutter_test}"
+echo "A1 Flutter profile-handoff project=${project} gateway=${VOICE_API_BASE_URL} tests=${flutter_tests[*]}"
 compose config --quiet
 compose up -d --build
 wait_healthy realtime
@@ -154,7 +159,7 @@ wait_gateway
 set +e
 (
   cd "${ROOT}/src/frontend"
-  flutter test --concurrency=1 "$flutter_test" \
+  flutter test --concurrency=1 "${flutter_tests[@]}" \
     --dart-define=VOICE_RUN_LIVE_INTEGRATION=true \
     --dart-define=VOICE_API_BASE_URL="${VOICE_API_BASE_URL}"
 )

@@ -1,13 +1,18 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:voice_frontend/backend/auth_client.dart';
+import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/backend/gateway_http.dart';
+import 'package:voice_frontend/backend/gateway_request_id.dart';
 import 'package:voice_frontend/backend/guest_credentials_storage.dart';
+import 'package:voice_frontend/backend/messages_client.dart';
+import 'package:voice_frontend/backend/realtime_client.dart';
 import 'package:voice_frontend/backend/users_client.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
@@ -25,8 +30,10 @@ import 'support/live_gateway_harness.dart';
 /// that InboxReconciler cannot start B REST reconciliation before RealtimeHub
 /// has accepted B's real `hello` frame.
 ///
-/// It intentionally does not claim cursor catch-up, a reconnect transition, or
-/// deterministic late responses; those are separate contracts.
+/// It records the real opaque ListChats cursors, including a complete second
+/// page for every inbox. A transparent local relay closes one real client
+/// transport so the production Hub proves reconnect history catch-up from a
+/// second Gateway `hello` without fabricated frames or link state.
 void main() {
   test(
     'profile switch accepts real B hello before B inbox REST, then selected history only',
@@ -63,12 +70,88 @@ void main() {
       final stranger = await ctx.registerUser('t055-stranger');
       final chats = ctx.chatsClient();
 
+      final createdMainAlt = await users.createProfile(
+        authorization: mainPeer.authorizationHeader,
+        displayName: 'T055 Main Alt',
+      );
+      expect(
+        createdMainAlt,
+        isA<UsersApiOk<VoiceProfile>>(),
+        reason: '$createdMainAlt',
+      );
+      final mainAltProfileId =
+          (createdMainAlt as UsersApiOk<VoiceProfile>).data.id;
+      final createdArchiveAlt = await users.createProfile(
+        authorization: archivePeer.authorizationHeader,
+        displayName: 'T055 Archive Alt',
+      );
+      expect(
+        createdArchiveAlt,
+        isA<UsersApiOk<VoiceProfile>>(),
+        reason: '$createdArchiveAlt',
+      );
+      final archiveAltProfileId =
+          (createdArchiveAlt as UsersApiOk<VoiceProfile>).data.id;
+      final createdStrangerAlt = await users.createProfile(
+        authorization: stranger.authorizationHeader,
+        displayName: 'T055 Stranger Alt',
+      );
+      expect(
+        createdStrangerAlt,
+        isA<UsersApiOk<VoiceProfile>>(),
+        reason: '$createdStrangerAlt',
+      );
+      final strangerAltProfileId =
+          (createdStrangerAlt as UsersApiOk<VoiceProfile>).data.id;
+
+      // Privacy settings are profile-owned. Open the two additional targets
+      // through the same public session-switch flow used by the application.
+      final rawMainAltResult = await ctx.authClient().switchActiveProfile(
+        session: mainPeer,
+        profileId: mainAltProfileId,
+      );
+      expect(
+        rawMainAltResult,
+        isA<AuthSessionOk>(),
+        reason: '$rawMainAltResult',
+      );
+      final rawMainAlt = (rawMainAltResult as AuthSessionOk).session;
+      await ctx.allowOpenGamingPrivacy(rawMainAlt);
+      final rawMainPeerResult = await ctx.authClient().switchActiveProfile(
+        session: rawMainAlt,
+        profileId: mainPeer.activeProfileId,
+      );
+      expect(
+        rawMainPeerResult,
+        isA<AuthSessionOk>(),
+        reason: '$rawMainPeerResult',
+      );
+      final rawMainPeer = (rawMainPeerResult as AuthSessionOk).session;
+      final rawArchiveAltResult = await ctx.authClient().switchActiveProfile(
+        session: archivePeer,
+        profileId: archiveAltProfileId,
+      );
+      expect(
+        rawArchiveAltResult,
+        isA<AuthSessionOk>(),
+        reason: '$rawArchiveAltResult',
+      );
+      await ctx.allowOpenGamingPrivacy(
+        (rawArchiveAltResult as AuthSessionOk).session,
+      );
+
       final selectedDm = await chats.createDm(
         authorization: rawB.authorizationHeader,
         otherProfileId: mainPeer.activeProfileId,
       );
       expect(selectedDm, isA<ChatsApiOk<VoiceChat>>(), reason: '$selectedDm');
       final selectedChatId = (selectedDm as ChatsApiOk<VoiceChat>).data.id;
+      final mainAltDm = await chats.createDm(
+        authorization: rawB.authorizationHeader,
+        otherProfileId: mainAltProfileId,
+      );
+      expect(mainAltDm, isA<ChatsApiOk<VoiceChat>>(), reason: '$mainAltDm');
+      final mainAltChatId = (mainAltDm as ChatsApiOk<VoiceChat>).data.id;
 
       final archivedDm = await chats.createDm(
         authorization: rawB.authorizationHeader,
@@ -76,12 +159,29 @@ void main() {
       );
       expect(archivedDm, isA<ChatsApiOk<VoiceChat>>(), reason: '$archivedDm');
       final archivedChatId = (archivedDm as ChatsApiOk<VoiceChat>).data.id;
+      final archivedAltDm = await chats.createDm(
+        authorization: rawB.authorizationHeader,
+        otherProfileId: archiveAltProfileId,
+      );
+      expect(
+        archivedAltDm,
+        isA<ChatsApiOk<VoiceChat>>(),
+        reason: '$archivedAltDm',
+      );
+      final archivedAltChatId =
+          (archivedAltDm as ChatsApiOk<VoiceChat>).data.id;
       final archive = await chats.archiveChat(
         authorization: rawB.authorizationHeader,
         chatId: archivedChatId,
         archived: true,
       );
       expect(archive, isA<ChatsApiOk<void>>(), reason: '$archive');
+      final archiveAlt = await chats.archiveChat(
+        authorization: rawB.authorizationHeader,
+        chatId: archivedAltChatId,
+        archived: true,
+      );
+      expect(archiveAlt, isA<ChatsApiOk<void>>(), reason: '$archiveAlt');
 
       final requestDm = await chats.createDm(
         authorization: stranger.authorizationHeader,
@@ -89,26 +189,63 @@ void main() {
       );
       expect(requestDm, isA<ChatsApiOk<VoiceChat>>(), reason: '$requestDm');
       final requestChatId = (requestDm as ChatsApiOk<VoiceChat>).data.id;
+      final rawStrangerAltResult = await ctx.authClient().switchActiveProfile(
+        session: stranger,
+        profileId: strangerAltProfileId,
+      );
+      expect(
+        rawStrangerAltResult,
+        isA<AuthSessionOk>(),
+        reason: '$rawStrangerAltResult',
+      );
+      final rawStrangerAlt = (rawStrangerAltResult as AuthSessionOk).session;
+      final requestAltDm = await chats.createDm(
+        authorization: rawStrangerAlt.authorizationHeader,
+        otherProfileId: bProfileId,
+      );
+      expect(
+        requestAltDm,
+        isA<ChatsApiOk<VoiceChat>>(),
+        reason: '$requestAltDm',
+      );
+      final requestAltChatId = (requestAltDm as ChatsApiOk<VoiceChat>).data.id;
 
-      // Prove the public fixture has exactly one first page in every scope
-      // before starting the production-side recorder.
-      await _expectSingleInboxItem(
+      final baseline = await ctx.messagesClient().sendMessage(
+        authorization: rawMainPeer.authorizationHeader,
+        chatId: selectedChatId,
+        content: 't055-reconnect-baseline',
+        clientMessageId: qaClientMessageId(),
+      );
+      expect(baseline, isA<MessagesApiOk<VoiceMessage>>(), reason: '$baseline');
+      final baselineMessageId =
+          (baseline as MessagesApiOk<VoiceMessage>).data.id;
+      expect(
+        baselineMessageId,
+        isNotEmpty,
+        reason: 'selected history baseline',
+      );
+
+      // Validate the public fixture over two actual one-row pages before
+      // starting the production-side recorder. The opaque cursors become the
+      // exact values expected from the production reconciler below.
+      final expectedCursors = <String, String>{};
+      expectedCursors['main'] = await _expectTwoInboxItems(
         chats: chats,
         authorization: rawB.authorizationHeader,
         inbox: 'main',
-        chatId: selectedChatId,
+        chatIds: {selectedChatId, mainAltChatId},
       );
-      await _expectSingleInboxItem(
+      expectedCursors['requests'] = await _expectTwoInboxItems(
         chats: chats,
         authorization: rawB.authorizationHeader,
         inbox: 'requests',
-        chatId: requestChatId,
+        chatIds: {requestChatId, requestAltChatId},
       );
-      await _expectSingleInboxItem(
+      expectedCursors['archive'] = await _expectTwoInboxItems(
         chats: chats,
         authorization: rawB.authorizationHeader,
         inbox: 'archive',
-        chatId: archivedChatId,
+        chatIds: {archivedChatId, archivedAltChatId},
       );
 
       // The setup switch from A to B rotates A's session. Return to A only
@@ -122,13 +259,12 @@ void main() {
       final rawA = (rawAResult as AuthSessionOk).session;
 
       final recorder = _RecordingHttpClient(ctx.httpClient);
+      final relay = await _LiveWebSocketRelay.bind();
+      addTearDown(relay.dispose);
       final storage = InMemoryAuthSessionStorage();
       final controller = AuthController(
         authClient: VoiceAuthClient(
-          gateway: GatewayHttpClient(
-            httpClient: recorder,
-            config: ctx.config,
-          ),
+          gateway: GatewayHttpClient(httpClient: recorder, config: ctx.config),
         ),
         storage: storage,
         guestCredentialsStorage: InMemoryGuestCredentialsStorage(),
@@ -140,19 +276,32 @@ void main() {
           guestCredentialsStorageProvider.overrideWithValue(
             InMemoryGuestCredentialsStorage(),
           ),
-          gatewayConfigProvider.overrideWithValue(
-            ctx.config,
-          ),
+          gatewayConfigProvider.overrideWithValue(ctx.config),
           httpClientProvider.overrideWithValue(recorder),
-          // The default production factory remains in use. Suppressing only
-          // automatic initial-A connection makes the explicit coordinator
-          // handoff the sole live WS action in this test.
+          inboxReconcilerProvider.overrideWith(
+            (ref) => _TaggedInboxReconcilerController(ref),
+          ),
+          realtimeTransportFactoryProvider.overrideWithValue(
+            _RelayRealtimeTransportFactory(relay),
+          ),
+          // Suppressing only automatic initial-A connection makes the
+          // coordinator handoff the sole initial live WS action in this test.
           realtimeAutoConnectProvider.overrideWithValue(false),
         ],
       );
-      addTearDown(container.dispose);
+      addTearDown(() async {
+        await recorder.settle().timeout(
+          const Duration(seconds: 3),
+          onTimeout: () => throw TestFailure(
+            'timed out draining recorder: ${recorder.settleDiagnostic}',
+          ),
+        );
+        container.dispose();
+      });
 
-      final bHello = Completer<RealtimeHelloBinding>();
+      final initialBHello = Completer<RealtimeHelloBinding>();
+      final reconnectBHello = Completer<RealtimeHelloBinding>();
+      var initialHelloGeneration = 0;
       final helloSubscription = container.listen<RealtimeHelloBinding?>(
         realtimeHelloBindingProvider,
         (_, next) {
@@ -161,25 +310,49 @@ void main() {
                   container
                       .read(authControllerProvider)
                       .session
-                      ?.authorizationHeader &&
-              !bHello.isCompleted) {
-            recorder.bHelloObserved = true;
-            bHello.complete(next);
+                      ?.authorizationHeader) {
+            if (!initialBHello.isCompleted) {
+              recorder.bHelloObserved = true;
+              initialHelloGeneration = next!.generation;
+              initialBHello.complete(next);
+            } else if (next!.generation > initialHelloGeneration &&
+                !reconnectBHello.isCompleted) {
+              reconnectBHello.complete(next);
+            }
           }
         },
         fireImmediately: true,
       );
       addTearDown(helloSubscription.close);
 
-      final inboxDone = Completer<void>();
+      final initialInboxDone = Completer<void>();
+      final reconnectInboxBegan = Completer<void>();
+      final reconnectInboxDone = Completer<void>();
+      var waitingForReconnectSnapshot = false;
+      var reconnectChatResponsesRequired = -1;
       final inboxSubscription = container.listen<InboxReconcilerState>(
         inboxReconcilerProvider,
         (_, state) {
           final snapshot = state.snapshotFor(bProfileId);
-          if (snapshot != null &&
-              InboxScope.values.every((scope) => snapshot[scope].isComplete) &&
-              !inboxDone.isCompleted) {
-            inboxDone.complete();
+          if (snapshot == null) return;
+          final complete = InboxScope.values.every(
+            (scope) => snapshot[scope].isComplete,
+          );
+          if (complete && !initialInboxDone.isCompleted) {
+            initialInboxDone.complete();
+          }
+          if (waitingForReconnectSnapshot && !complete) {
+            if (!reconnectInboxBegan.isCompleted) {
+              reconnectInboxBegan.complete();
+            }
+          }
+          if (waitingForReconnectSnapshot &&
+              reconnectInboxBegan.isCompleted &&
+              complete &&
+              recorder.responseStartedChatRequests.length >=
+                  reconnectChatResponsesRequired &&
+              !reconnectInboxDone.isCompleted) {
+            reconnectInboxDone.complete();
           }
         },
         fireImmediately: true,
@@ -200,7 +373,7 @@ void main() {
         },
       );
 
-      final acceptedBHello = await bHello.future.timeout(
+      final acceptedBHello = await initialBHello.future.timeout(
         const Duration(seconds: 12),
         onTimeout: () =>
             throw TestFailure('timed out waiting for accepted B hello'),
@@ -209,7 +382,7 @@ void main() {
       expect(recorder.chatRequestsBeforeBHello, isEmpty);
       expect(recorder.messageRequestsBeforeBHello, isEmpty);
 
-      await inboxDone.future.timeout(
+      await initialInboxDone.future.timeout(
         const Duration(seconds: 12),
         onTimeout: () =>
             throw TestFailure('timed out waiting for B inbox snapshot'),
@@ -218,40 +391,73 @@ void main() {
           .read(authControllerProvider)
           .session!
           .authorizationHeader;
-      expect(recorder.chatRequests, hasLength(3));
       final bInboxRequests = recorder.chatRequests
-          .where((request) => request.authorization == bAuthorization)
+          .where(
+            (request) =>
+                request.isInboxReconciliation &&
+                request.authorization == bAuthorization,
+          )
           .toList(growable: false);
-      expect(bInboxRequests, hasLength(3));
+      expect(bInboxRequests, hasLength(6));
       expect(bInboxRequests.map((request) => request.inbox).toSet(), {
         'main',
         'requests',
         'archive',
       });
-      expect(
-        bInboxRequests.every(
-          (request) => request.uri.queryParameters['cursor'] == null,
-        ),
-        isTrue,
-      );
+      for (final inbox in expectedCursors.keys) {
+        final pageRequests = bInboxRequests
+            .where((request) => request.inbox == inbox)
+            .toList(growable: false);
+        expect(pageRequests, hasLength(2));
+        expect(
+          pageRequests.map((request) => request.uri.queryParameters['cursor']),
+          containsAllInOrder([null, expectedCursors[inbox]]),
+        );
+        expect(
+          pageRequests.every(
+            (request) => request.uri.queryParameters['page_size'] == '1',
+          ),
+          isTrue,
+        );
+      }
       expect(recorder.messageRequests, isEmpty);
       final bSnapshot = container
           .read(inboxReconcilerProvider)
           .snapshotFor(bProfileId)!;
-      expect(bSnapshot[InboxScope.main].items.map((item) => item.chatId), [
-        selectedChatId,
-      ]);
-      expect(bSnapshot[InboxScope.requests].items.map((item) => item.chatId), [
-        requestChatId,
-      ]);
-      expect(bSnapshot[InboxScope.archive].items.map((item) => item.chatId), [
-        archivedChatId,
-      ]);
+      expect(bSnapshot[InboxScope.main].items, hasLength(2));
+      expect(
+        bSnapshot[InboxScope.main].items.map((item) => item.chatId).toSet(),
+        {selectedChatId, mainAltChatId},
+      );
+      expect(bSnapshot[InboxScope.requests].items, hasLength(2));
+      expect(
+        bSnapshot[InboxScope.requests].items.map((item) => item.chatId).toSet(),
+        {requestChatId, requestAltChatId},
+      );
+      expect(bSnapshot[InboxScope.archive].items, hasLength(2));
+      expect(
+        bSnapshot[InboxScope.archive].items.map((item) => item.chatId).toSet(),
+        {archivedChatId, archivedAltChatId},
+      );
 
       container.read(selectedChatIdProvider.notifier).state = selectedChatId;
+      final selectedBaselineLoaded = Completer<void>();
+      final selectedDeltaLoaded = Completer<void>();
+      String? offlineMessageId;
       final selectedRoom = container.listen<ChatRoomState>(
         chatRoomControllerProvider(selectedChatId),
-        (previous, next) {},
+        (_, next) {
+          if (next.messages.any((message) => message.id == baselineMessageId) &&
+              !selectedBaselineLoaded.isCompleted) {
+            selectedBaselineLoaded.complete();
+          }
+          final deltaId = offlineMessageId;
+          if (deltaId != null &&
+              next.messages.any((message) => message.id == deltaId) &&
+              !selectedDeltaLoaded.isCompleted) {
+            selectedDeltaLoaded.complete();
+          }
+        },
         fireImmediately: true,
       );
       addTearDown(selectedRoom.close);
@@ -273,10 +479,212 @@ void main() {
       expect(history.single.uri.queryParameters['chat_id'], selectedChatId);
       expect(history.single.uri.queryParameters['cursor'], isNull);
       expect(history.single.uri.queryParameters['after_message_id'], isNull);
+      expect(history.single.uri.queryParameters['last_message_id'], isNull);
       expect(
         history.single.uri.queryParameters['chat_id'],
         isNot(archivedChatId),
         reason: 'mounted passive room must not request history',
+      );
+      await selectedBaselineLoaded.future.timeout(
+        const Duration(seconds: 12),
+        onTimeout: () =>
+            throw TestFailure('timed out loading selected baseline'),
+      );
+      expect(
+        container
+            .read(chatRoomControllerProvider(selectedChatId))
+            .lastMessageId,
+        baselineMessageId,
+      );
+      await recorder
+          .waitForCompletedReadResponses(1)
+          .timeout(
+            const Duration(seconds: 12),
+            onTimeout: () => throw TestFailure(
+              'timed out completing selected baseline read',
+            ),
+          );
+
+      final requestCountBeforeTransportLoss = recorder.requests.length;
+      final completedReadsBeforeReconnect = recorder.completedReadResponses;
+      waitingForReconnectSnapshot = true;
+      reconnectChatResponsesRequired =
+          recorder.responseStartedInboxReconciliationChatRequests.length + 6;
+      await relay.dropInitialClientTransport();
+      await relay.secondUpgradeRequested.timeout(
+        const Duration(seconds: 12),
+        onTimeout: () =>
+            throw TestFailure('timed out waiting for reconnect transport'),
+      );
+
+      final offlineDelta = await ctx.messagesClient().sendMessage(
+        authorization: rawMainPeer.authorizationHeader,
+        chatId: selectedChatId,
+        content: 't055-reconnect-delta',
+        clientMessageId: qaClientMessageId(),
+      );
+      expect(
+        offlineDelta,
+        isA<MessagesApiOk<VoiceMessage>>(),
+        reason: '$offlineDelta',
+      );
+      offlineMessageId = (offlineDelta as MessagesApiOk<VoiceMessage>).data.id;
+      expect(offlineMessageId, isNotEmpty, reason: 'offline selected delta');
+
+      final reconnectCursors = <String, String>{};
+      reconnectCursors['main'] = await _expectTwoInboxItems(
+        chats: chats,
+        authorization: bAuthorization,
+        inbox: 'main',
+        chatIds: {selectedChatId, mainAltChatId},
+      );
+      reconnectCursors['requests'] = await _expectTwoInboxItems(
+        chats: chats,
+        authorization: bAuthorization,
+        inbox: 'requests',
+        chatIds: {requestChatId, requestAltChatId},
+      );
+      reconnectCursors['archive'] = await _expectTwoInboxItems(
+        chats: chats,
+        authorization: bAuthorization,
+        inbox: 'archive',
+        chatIds: {archivedChatId, archivedAltChatId},
+      );
+
+      relay.releaseSecondUpgrade();
+      final acceptedReconnectHello = await reconnectBHello.future.timeout(
+        const Duration(seconds: 12),
+        onTimeout: () =>
+            throw TestFailure('timed out waiting for accepted reconnect hello'),
+      );
+      expect(
+        acceptedReconnectHello.generation,
+        greaterThan(acceptedBHello.generation),
+      );
+      expect(
+        acceptedReconnectHello.bindingGeneration,
+        acceptedBHello.bindingGeneration,
+      );
+      await reconnectInboxBegan.future.timeout(
+        const Duration(seconds: 12),
+        onTimeout: () =>
+            throw TestFailure('timed out starting reconnect inbox snapshot'),
+      );
+      await reconnectInboxDone.future.timeout(
+        const Duration(seconds: 12),
+        onTimeout: () =>
+            throw TestFailure('timed out completing reconnect inbox snapshot'),
+      );
+      await selectedDeltaLoaded.future.timeout(
+        const Duration(seconds: 12),
+        onTimeout: () =>
+            throw TestFailure('timed out loading selected reconnect delta'),
+      );
+      await recorder
+          .waitForCompletedReadResponses(completedReadsBeforeReconnect + 1)
+          .timeout(
+            const Duration(seconds: 12),
+            onTimeout: () => throw TestFailure(
+              'timed out completing selected reconnect read',
+            ),
+          );
+      final currentReconnectHello = container.read(
+        realtimeHelloBindingProvider,
+      );
+      expect(currentReconnectHello, isNotNull);
+      expect(
+        currentReconnectHello!.generation,
+        acceptedReconnectHello.generation,
+      );
+      expect(
+        currentReconnectHello.bindingGeneration,
+        acceptedReconnectHello.bindingGeneration,
+      );
+      expect(currentReconnectHello.profileId, bProfileId);
+      expect(currentReconnectHello.authorization, bAuthorization);
+
+      final reconnectRequests = recorder.requests
+          .skip(requestCountBeforeTransportLoss)
+          .toList(growable: false);
+      final reconnectInboxRequests = reconnectRequests
+          .where(
+            (request) =>
+                request.method == 'GET' &&
+                request.uri.path == '/api/v1/chats' &&
+                request.isInboxReconciliation &&
+                request.authorization == bAuthorization,
+          )
+          .toList(growable: false);
+      expect(
+        reconnectInboxRequests,
+        hasLength(6),
+        reason: _reconnectRequestDiagnostic(reconnectRequests),
+      );
+      for (final inbox in reconnectCursors.keys) {
+        final pageRequests = reconnectInboxRequests
+            .where((request) => request.inbox == inbox)
+            .toList(growable: false);
+        expect(pageRequests, hasLength(2));
+        expect(
+          pageRequests.map((request) => request.uri.queryParameters['cursor']),
+          containsAllInOrder([null, reconnectCursors[inbox]]),
+        );
+      }
+      final reconnectSnapshot = container
+          .read(inboxReconcilerProvider)
+          .snapshotFor(bProfileId)!;
+      expect(reconnectSnapshot[InboxScope.main].items, hasLength(2));
+      expect(
+        reconnectSnapshot[InboxScope.main].items
+            .map((item) => item.chatId)
+            .toSet(),
+        {selectedChatId, mainAltChatId},
+      );
+      expect(reconnectSnapshot[InboxScope.requests].items, hasLength(2));
+      expect(
+        reconnectSnapshot[InboxScope.requests].items
+            .map((item) => item.chatId)
+            .toSet(),
+        {requestChatId, requestAltChatId},
+      );
+      expect(reconnectSnapshot[InboxScope.archive].items, hasLength(2));
+      expect(
+        reconnectSnapshot[InboxScope.archive].items
+            .map((item) => item.chatId)
+            .toSet(),
+        {archivedChatId, archivedAltChatId},
+      );
+      final reconnectHistory = reconnectRequests
+          .where(
+            (request) =>
+                request.method == 'GET' &&
+                request.uri.path == '/api/v1/messages',
+          )
+          .toList(growable: false);
+      expect(reconnectHistory, hasLength(1));
+      expect(
+        reconnectHistory.single.uri.queryParameters['chat_id'],
+        selectedChatId,
+      );
+      expect(
+        reconnectHistory.single.uri.queryParameters['last_message_id'],
+        baselineMessageId,
+      );
+      expect(reconnectHistory.single.authorization, bAuthorization);
+      expect(reconnectHistory.single.uri.queryParameters['cursor'], isNull);
+      expect(
+        reconnectHistory.single.uri.queryParameters['after_message_id'],
+        isNull,
+      );
+      expect(
+        reconnectHistory
+            .where(
+              (request) =>
+                  request.uri.queryParameters['chat_id'] == archivedChatId,
+            )
+            .isEmpty,
+        isTrue,
+        reason: 'mounted passive room must not catch up after reconnect',
       );
     },
     skip: runLiveIntegration
@@ -285,20 +693,63 @@ void main() {
   );
 }
 
-Future<void> _expectSingleInboxItem({
+Future<String> _expectTwoInboxItems({
   required VoiceChatsClient chats,
   required String authorization,
   required String inbox,
-  required String chatId,
+  required Set<String> chatIds,
 }) async {
-  final listed = await chats.listChats(
+  final first = await chats.listChats(
     authorization: authorization,
     inbox: inbox,
+    pageSize: 1,
   );
-  expect(listed, isA<ChatsApiOk<ChatListData>>(), reason: '$listed');
-  final data = (listed as ChatsApiOk<ChatListData>).data;
-  expect(data.nextCursor, isNull, reason: '$inbox must fit one page');
-  expect(data.items.map((item) => item.chatId), [chatId]);
+  expect(first, isA<ChatsApiOk<ChatListData>>(), reason: '$first');
+  final firstPage = (first as ChatsApiOk<ChatListData>).data;
+  expect(firstPage.items, hasLength(1));
+  final cursor = firstPage.nextCursor;
+  expect(cursor, isNotNull, reason: '$inbox first cursor');
+  expect(cursor, isNotEmpty, reason: '$inbox first cursor');
+
+  final second = await chats.listChats(
+    authorization: authorization,
+    inbox: inbox,
+    pageSize: 1,
+    cursor: cursor,
+  );
+  expect(second, isA<ChatsApiOk<ChatListData>>(), reason: '$second');
+  final secondPage = (second as ChatsApiOk<ChatListData>).data;
+  expect(secondPage.items, hasLength(1));
+  expect(secondPage.nextCursor, isNull, reason: '$inbox second cursor');
+  expect({
+    ...firstPage.items.map((item) => item.chatId),
+    ...secondPage.items.map((item) => item.chatId),
+  }, chatIds);
+  return cursor!;
+}
+
+const _inboxReconciliationZoneKey = #t055InboxReconciliation;
+
+String _reconnectRequestDiagnostic(Iterable<_RecordedRequest> requests) {
+  final paths = requests
+      .map(
+        (request) =>
+            '${request.requestOrigin}:${request.uri.path}?inbox=${request.inbox}&cursor=${request.uri.queryParameters['cursor']}',
+      )
+      .join(', ');
+  return 'reconnect inbox requests: $paths';
+}
+
+class _TaggedInboxReconcilerController extends InboxReconcilerController {
+  _TaggedInboxReconcilerController(super.ref);
+
+  @override
+  Future<void> reconcile() {
+    return runZoned(
+      () => super.reconcile(),
+      zoneValues: {_inboxReconciliationZoneKey: true},
+    );
+  }
 }
 
 class _RecordedRequest {
@@ -307,14 +758,19 @@ class _RecordedRequest {
     required this.uri,
     required this.authorization,
     required this.beforeBHello,
+    required this.isInboxReconciliation,
   });
 
   final String method;
   final Uri uri;
   final String? authorization;
   final bool beforeBHello;
+  final bool isInboxReconciliation;
 
   String? get inbox => uri.queryParameters['inbox'];
+
+  String get requestOrigin =>
+      isInboxReconciliation ? 'inbox-reconciler' : 'other';
 }
 
 class _RecordingHttpClient extends http.BaseClient {
@@ -322,7 +778,13 @@ class _RecordingHttpClient extends http.BaseClient {
 
   final http.Client _delegate;
   final requests = <_RecordedRequest>[];
+  final responseStartedRequests = <_RecordedRequest>[];
+  final responseCompletedRequests = <_RecordedRequest>[];
   final firstMessageRequest = Completer<void>();
+  final _readResponseWaiters = <Completer<void>>[];
+  final _pendingReadResponseCompletions = <Object>{};
+  final _settleWaiters = <Completer<void>>[];
+  var _activeRequests = 0;
   var bHelloObserved = false;
 
   Iterable<_RecordedRequest> get chatRequests => requests.where(
@@ -340,20 +802,145 @@ class _RecordingHttpClient extends http.BaseClient {
   Iterable<_RecordedRequest> get messageRequestsBeforeBHello =>
       messageRequests.where((request) => request.beforeBHello);
 
-  @override
-  Future<http.StreamedResponse> send(http.BaseRequest request) {
-    requests.add(
-      _RecordedRequest(
-        method: request.method,
-        uri: request.url,
-        authorization: _header(request.headers, 'Authorization'),
-        beforeBHello: !bHelloObserved,
-      ),
-    );
-    if (request.method == 'GET' && request.url.path == '/api/v1/messages') {
-      if (!firstMessageRequest.isCompleted) firstMessageRequest.complete();
+  Iterable<_RecordedRequest> get responseStartedChatRequests =>
+      responseStartedRequests.where(
+        (request) =>
+            request.method == 'GET' && request.uri.path == '/api/v1/chats',
+      );
+
+  Iterable<_RecordedRequest>
+  get responseStartedInboxReconciliationChatRequests =>
+      responseStartedChatRequests.where(
+        (request) => request.isInboxReconciliation,
+      );
+
+  int get completedReadResponses => responseCompletedRequests
+      .where(
+        (request) =>
+            request.method == 'POST' &&
+            request.uri.path == '/api/v1/messages/read',
+      )
+      .length;
+
+  String get settleDiagnostic =>
+      'active=$_activeRequests pending_read=${_pendingReadResponseCompletions.length}';
+
+  Future<void> waitForCompletedReadResponses(int requiredCount) async {
+    while (completedReadResponses < requiredCount) {
+      final waiter = Completer<void>();
+      _readResponseWaiters.add(waiter);
+      await waiter.future;
     }
-    return _delegate.send(request);
+  }
+
+  Future<void> settle() async {
+    while (_activeRequests > 0 || _pendingReadResponseCompletions.isNotEmpty) {
+      final waiter = Completer<void>();
+      _settleWaiters.add(waiter);
+      await waiter.future;
+    }
+    await Future<void>.microtask(() {});
+  }
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    _activeRequests++;
+    try {
+      final effectiveRequest = _withOneRowInboxPage(request);
+      final recorded = _RecordedRequest(
+        method: effectiveRequest.method,
+        uri: effectiveRequest.url,
+        authorization: _header(effectiveRequest.headers, 'Authorization'),
+        beforeBHello: !bHelloObserved,
+        isInboxReconciliation:
+            Zone.current[_inboxReconciliationZoneKey] == true,
+      );
+      requests.add(recorded);
+      if (effectiveRequest.method == 'GET' &&
+          effectiveRequest.url.path == '/api/v1/messages') {
+        if (!firstMessageRequest.isCompleted) firstMessageRequest.complete();
+      }
+      final response = await _delegate.send(effectiveRequest);
+      responseStartedRequests.add(recorded);
+      if (recorded.method != 'POST' ||
+          recorded.uri.path != '/api/v1/messages/read') {
+        return response;
+      }
+      final readResponse = Object();
+      _pendingReadResponseCompletions.add(readResponse);
+      return http.StreamedResponse(
+        response.stream.transform(
+          StreamTransformer.fromHandlers(
+            handleDone: (sink) {
+              _finishReadResponse(recorded, readResponse);
+              sink.close();
+            },
+            handleError: (error, stackTrace, sink) {
+              _finishReadResponse(
+                recorded,
+                readResponse,
+                error: error,
+                stackTrace: stackTrace,
+              );
+              sink.addError(error, stackTrace);
+            },
+          ),
+        ),
+        response.statusCode,
+        contentLength: response.contentLength,
+        request: response.request,
+        headers: response.headers,
+        isRedirect: response.isRedirect,
+        persistentConnection: response.persistentConnection,
+        reasonPhrase: response.reasonPhrase,
+      );
+    } finally {
+      _activeRequests--;
+      _notifySettled();
+    }
+  }
+
+  void _notifySettled() {
+    if (_activeRequests > 0 || _pendingReadResponseCompletions.isNotEmpty) {
+      return;
+    }
+    for (final waiter in _settleWaiters) {
+      if (!waiter.isCompleted) waiter.complete();
+    }
+    _settleWaiters.clear();
+  }
+
+  void _finishReadResponse(
+    _RecordedRequest recorded,
+    Object readResponse, {
+    Object? error,
+    StackTrace? stackTrace,
+  }) {
+    if (!_pendingReadResponseCompletions.remove(readResponse)) return;
+    if (error == null) {
+      responseCompletedRequests.add(recorded);
+      for (final waiter in _readResponseWaiters) {
+        if (!waiter.isCompleted) waiter.complete();
+      }
+    } else {
+      for (final waiter in _readResponseWaiters) {
+        if (!waiter.isCompleted) waiter.completeError(error, stackTrace);
+      }
+    }
+    _readResponseWaiters.clear();
+    _notifySettled();
+  }
+
+  http.BaseRequest _withOneRowInboxPage(http.BaseRequest request) {
+    if (request.method != 'GET' || request.url.path != '/api/v1/chats') {
+      return request;
+    }
+    return http.Request(
+      request.method,
+      request.url.replace(
+        queryParameters: {...request.url.queryParameters, 'page_size': '1'},
+      ),
+    )..headers.addAll(request.headers);
   }
 
   // The shared live harness owns the underlying client for this test.
@@ -365,5 +952,256 @@ class _RecordingHttpClient extends http.BaseClient {
       if (entry.key.toLowerCase() == name.toLowerCase()) return entry.value;
     }
     return null;
+  }
+}
+
+/// A VM-only relay. It does not inspect or synthesize WebSocket frames: each
+/// accepted client socket gets a real Gateway upstream and both directions are
+/// forwarded unchanged. Holding the second *upgrade* keeps the Hub offline
+/// while the fixture writes its missed durable message.
+class _LiveWebSocketRelay {
+  _LiveWebSocketRelay._(this._server) {
+    _requests = _server.listen((request) {
+      final handler = _handle(request);
+      _handlers.add(handler);
+      unawaited(
+        handler.catchError((Object _) {}).whenComplete(() {
+          _handlers.remove(handler);
+        }),
+      );
+    });
+  }
+
+  static const _teardownTimeout = Duration(seconds: 3);
+  final HttpServer _server;
+  late final StreamSubscription<HttpRequest> _requests;
+  final _firstPair = Completer<_RelaySocketPair>();
+  final _secondUpgradeRequested = Completer<void>();
+  final _releaseSecondUpgrade = Completer<void>();
+  final _pairs = <_RelaySocketPair>[];
+  final _handlers = <Future<void>>[];
+  Uri? _upstreamUri;
+  var _connectionAttempts = 0;
+
+  static Future<_LiveWebSocketRelay> bind() async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    return _LiveWebSocketRelay._(server);
+  }
+
+  Uri get clientUri => Uri(
+    scheme: 'ws',
+    host: InternetAddress.loopbackIPv4.address,
+    port: _server.port,
+    path: '/ws',
+  );
+
+  Future<void> get secondUpgradeRequested => _secondUpgradeRequested.future;
+
+  void setUpstream(Uri uri) {
+    final current = _upstreamUri;
+    if (current != null && current != uri) {
+      throw StateError(
+        'relay upstream changed during one test: $current -> $uri',
+      );
+    }
+    _upstreamUri = uri;
+  }
+
+  Future<void> dropInitialClientTransport() async {
+    final pair = await _firstPair.future;
+    await pair.closeClientTransport();
+  }
+
+  void releaseSecondUpgrade() {
+    if (!_releaseSecondUpgrade.isCompleted) _releaseSecondUpgrade.complete();
+  }
+
+  Future<void> _handle(HttpRequest request) async {
+    if (!WebSocketTransformer.isUpgradeRequest(request)) {
+      request.response.statusCode = HttpStatus.badRequest;
+      await request.response.close();
+      return;
+    }
+    final attempt = ++_connectionAttempts;
+    if (attempt == 2) {
+      if (!_secondUpgradeRequested.isCompleted) {
+        _secondUpgradeRequested.complete();
+      }
+      await _releaseSecondUpgrade.future;
+    }
+    final upstreamUri = _upstreamUri;
+    if (upstreamUri == null) {
+      request.response.statusCode = HttpStatus.serviceUnavailable;
+      await request.response.close();
+      return;
+    }
+    final client = await WebSocketTransformer.upgrade(request);
+    WebSocket upstream;
+    try {
+      upstream = await WebSocket.connect(
+        upstreamUri.toString(),
+        headers: _forwardedHeaders(request.headers),
+      );
+    } on Object {
+      await _settle(
+        client.close(
+          WebSocketStatus.internalServerError,
+          'relay upstream unavailable',
+        ),
+      );
+      rethrow;
+    }
+    final pair = _RelaySocketPair(client: client, upstream: upstream);
+    _pairs.add(pair);
+    pair.start();
+    if (attempt == 1 && !_firstPair.isCompleted) _firstPair.complete(pair);
+  }
+
+  Map<String, String> _forwardedHeaders(HttpHeaders headers) {
+    const names = ['authorization', 'x-voice-profile-id', 'x-request-id'];
+    return {
+      for (final name in names)
+        if (headers[name] case final values? when values.isNotEmpty)
+          name: values.join(','),
+    };
+  }
+
+  Future<void> dispose() async {
+    releaseSecondUpgrade();
+    await _requests.cancel();
+    await _server.close(force: true);
+    await _settle(Future.wait(_handlers.toList(growable: false)));
+    await _settle(
+      Future.wait([
+        for (final pair in _pairs.toList(growable: false)) pair.dispose(),
+      ]),
+    );
+  }
+
+  static Future<void> _settle(Future<void> future) async {
+    try {
+      await future.timeout(_teardownTimeout);
+    } on TimeoutException {
+      // Teardown must not leave a held reconnect upgrade blocking this test.
+    } on Object {
+      // Socket shutdown after an intentional transport loss is best-effort.
+    }
+  }
+}
+
+class _RelayRealtimeTransportFactory implements RealtimeTransportFactory {
+  _RelayRealtimeTransportFactory(this._relay);
+
+  final _LiveWebSocketRelay _relay;
+
+  @override
+  Future<VoiceRealtimeConnection> open({
+    required Uri uri,
+    required AuthSession session,
+  }) async {
+    _relay.setUpstream(uri);
+    return VoiceRealtimeConnection(
+      uri: _relay.clientUri,
+      headers: {
+        'Authorization': session.authorizationHeader,
+        'X-Voice-Profile-Id': session.activeProfileId,
+        'X-Request-Id': newGatewayRequestId(),
+      },
+    );
+  }
+}
+
+class _RelaySocketPair {
+  _RelaySocketPair({required this.client, required this.upstream});
+
+  final WebSocket client;
+  final WebSocket upstream;
+  final clientClosed = Completer<void>();
+  StreamSubscription<dynamic>? _clientFrames;
+  StreamSubscription<dynamic>? _upstreamFrames;
+  var _disposed = false;
+  var _clientTerminated = false;
+  var _upstreamTerminated = false;
+  var _clientCloseInitiated = false;
+  var _upstreamCloseInitiated = false;
+
+  void start() {
+    _clientFrames = client.listen(
+      _forwardToUpstream,
+      onDone: _onClientTerminal,
+      onError: (_, _) => _onClientTerminal(),
+    );
+    _upstreamFrames = upstream.listen(
+      _forwardToClient,
+      onDone: _onUpstreamTerminal,
+      onError: (_, _) => _onUpstreamTerminal(),
+    );
+  }
+
+  void _forwardToUpstream(dynamic frame) {
+    if (_disposed || _upstreamTerminated || _upstreamCloseInitiated) return;
+    try {
+      upstream.add(frame);
+    } on StateError {
+      _onUpstreamTerminal();
+    }
+  }
+
+  void _forwardToClient(dynamic frame) {
+    if (_disposed || _clientTerminated || _clientCloseInitiated) return;
+    try {
+      client.add(frame);
+    } on StateError {
+      _onClientTerminal();
+    }
+  }
+
+  void _onClientTerminal() {
+    if (_clientTerminated) return;
+    _clientTerminated = true;
+    if (!clientClosed.isCompleted) clientClosed.complete();
+    // A WebSocket can close synchronously while the first subscription is
+    // being installed. Defer peer shutdown until start() installs both sides.
+    scheduleMicrotask(() => unawaited(_closeUpstream()));
+  }
+
+  void _onUpstreamTerminal() {
+    if (_upstreamTerminated) return;
+    _upstreamTerminated = true;
+    scheduleMicrotask(() => unawaited(_closeClient()));
+  }
+
+  Future<void> _closeUpstream() async {
+    if (_disposed || _upstreamCloseInitiated) return;
+    _upstreamCloseInitiated = true;
+    await _LiveWebSocketRelay._settle(upstream.close());
+  }
+
+  Future<void> _closeClient() async {
+    if (_disposed || _clientCloseInitiated) return;
+    _clientCloseInitiated = true;
+    await _LiveWebSocketRelay._settle(client.close());
+  }
+
+  Future<void> closeClientTransport() async {
+    await client.close(WebSocketStatus.goingAway, 'test transport loss');
+    await clientClosed.future;
+  }
+
+  Future<void> dispose() async {
+    if (_disposed) return;
+    _disposed = true;
+    _clientTerminated = true;
+    _upstreamTerminated = true;
+    _clientCloseInitiated = true;
+    _upstreamCloseInitiated = true;
+    await _LiveWebSocketRelay._settle(
+      Future.wait([
+        _clientFrames?.cancel() ?? Future<void>.value(),
+        _upstreamFrames?.cancel() ?? Future<void>.value(),
+      ]),
+    );
+    await _LiveWebSocketRelay._settle(client.close());
+    await _LiveWebSocketRelay._settle(upstream.close());
   }
 }

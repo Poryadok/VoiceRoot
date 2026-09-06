@@ -88,6 +88,8 @@ class AccountDeletionEpochFloorJdbcIntegrationTest {
     assertThat(guestConversionLocalPromotion)
         .isInstanceOf(TransactionalGuestConversionLocalPromotion.class);
     assertThat(guestConversionPendingUserWorker).isNotNull();
+    org.mockito.Mockito.when(sessionEpochFloors.recordAtLeast(any(), anyLong()))
+        .thenAnswer(invocation -> invocation.getArgument(1));
     var session =
         authService.register(
             new RegisterCommand(

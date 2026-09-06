@@ -83,13 +83,17 @@ func prepareComposeFileAttachmentRestartProof(t *testing.T, client *http.Client,
 		t.Skip("object storage not configured (MinIO/R2); set FILE_R2_* in .env for compose app profile")
 	}
 
+	sendComposeFriendInvitation(t, client, base, sessA.AccessToken, sessB.ProfileID)
+	acceptComposeFriendInvitation(t, client, base, sessB.AccessToken, sessA.ProfileID)
 	chatID := createComposeDMBetween(t, client, base, sessA, sessB)
 	// A second message makes the following page's cursor meaningful; verify must
 	// consume that cursor after finding the attachment reference in fresh history.
 	sendComposeMessage(t, client, base, sessA.AccessToken, chatID, "attachment-restart-baseline")
 
 	content := []byte("attachment-restart-proof: deterministic text bytes\n")
-	fileID, fileType := composeUploadTextFile(t, client, base, sessA.AccessToken, chatID, "restart-proof.txt", content)
+	objectClient := composeRestartProofDownloadClient()
+	t.Cleanup(objectClient.CloseIdleConnections)
+	fileID, fileType := composeUploadTextFile(t, objectClient, base, sessA.AccessToken, chatID, "restart-proof.txt", content)
 	attachments, err := json.Marshal([]map[string]string{{"file_id": fileID, "type": fileType}})
 	require.NoError(t, err)
 	messageID := sendComposeMessageWithAttachmentsJSON(t, client, base, sessA.AccessToken, chatID, string(attachments))

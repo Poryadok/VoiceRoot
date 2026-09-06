@@ -1,6 +1,7 @@
 package voice.backend.auth.repository;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.dao.DuplicateKeyException;
@@ -303,6 +304,65 @@ public class JdbcAccountRepository implements AccountRepository {
     } catch (org.springframework.dao.EmptyResultDataAccessException ex) {
       throw new IllegalArgumentException("account not found", ex);
     }
+  }
+
+  @Override
+  public long advanceSessionEpochAtLeast(UUID accountId, long requestedEpoch) {
+    if (requestedEpoch <= 0) {
+      throw new IllegalArgumentException("session epoch must be positive");
+    }
+    try {
+      Long epoch =
+          jdbc.queryForObject(
+              """
+              UPDATE accounts
+              SET session_epoch = GREATEST(session_epoch, :requestedEpoch)
+              WHERE id = :id
+              RETURNING session_epoch
+              """,
+              new MapSqlParameterSource()
+                  .addValue("id", accountId)
+                  .addValue("requestedEpoch", requestedEpoch),
+              Long.class);
+      if (epoch == null || epoch <= 0) {
+        throw new IllegalStateException("invalid session epoch");
+      }
+      return epoch;
+    } catch (org.springframework.dao.EmptyResultDataAccessException ex) {
+      throw new IllegalArgumentException("account not found", ex);
+    }
+  }
+
+  @Override
+  public List<AccountSessionEpoch> pageSessionEpochsAfter(UUID exclusiveAfter, int limit) {
+    if (limit <= 0) {
+      throw new IllegalArgumentException("limit must be positive");
+    }
+    MapSqlParameterSource parameters = new MapSqlParameterSource("limit", limit);
+    String query;
+    if (exclusiveAfter == null) {
+      query =
+          """
+          SELECT id, session_epoch
+          FROM accounts
+          ORDER BY id
+          LIMIT :limit
+          """;
+    } else {
+      query =
+          """
+          SELECT id, session_epoch
+          FROM accounts
+          WHERE id > :exclusiveAfter
+          ORDER BY id
+          LIMIT :limit
+          """;
+      parameters.addValue("exclusiveAfter", exclusiveAfter);
+    }
+    return jdbc.query(
+        query,
+        parameters,
+        (rs, rowNum) -> new AccountSessionEpoch(rs.getObject("id", UUID.class), rs.getLong("session_epoch")));
   }
 
   @Override

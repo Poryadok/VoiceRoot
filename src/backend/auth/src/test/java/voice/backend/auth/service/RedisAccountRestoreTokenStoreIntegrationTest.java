@@ -9,6 +9,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -69,6 +70,36 @@ class RedisAccountRestoreTokenStoreIntegrationTest {
     } finally {
       workers.shutdownNow();
     }
+  }
+
+  @Test
+  void realRedisPeekIsRepeatableBeforeTheExistingAtomicConsume() {
+    RedisAccountRestoreTokenStore first = new RedisAccountRestoreTokenStore(template(firstConnection));
+    RedisAccountRestoreTokenStore second = new RedisAccountRestoreTokenStore(template(secondConnection));
+    UUID accountId = UUID.randomUUID();
+    String token = "real-redis-restore-peek-token";
+    first.store(token, accountId, Duration.ofMinutes(1));
+    String key = "account:restore:" + AccountRestoreTokenHash.of(token);
+    long beforePeekTtlMillis = template(firstConnection).getExpire(key, TimeUnit.MILLISECONDS);
+    assertThat(beforePeekTtlMillis).isBetween(1L, Duration.ofMinutes(2).toMillis());
+
+    assertThat(first.peek(token)).contains(accountId);
+    assertThat(second.peek(token)).contains(accountId);
+    long afterPeekTtlMillis = template(firstConnection).getExpire(key, TimeUnit.MILLISECONDS);
+    assertThat(afterPeekTtlMillis).isGreaterThan(0L).isLessThanOrEqualTo(beforePeekTtlMillis);
+    assertThat(first.consume(token)).contains(accountId);
+    assertThat(second.peek(token)).isEmpty();
+  }
+
+  @Test
+  void realRedisPeekRejectsMissingAndExpiredTokensWithoutSleep() {
+    RedisAccountRestoreTokenStore store = new RedisAccountRestoreTokenStore(template(firstConnection));
+    assertThat(store.peek("missing-restore-token")).isEmpty();
+    String expired = "real-redis-expired-restore-token";
+    store.store(expired, UUID.randomUUID(), Duration.ofMinutes(1));
+    assertThat(template(firstConnection).expire("account:restore:" + AccountRestoreTokenHash.of(expired), Duration.ZERO)).isTrue();
+    assertThat(store.peek(expired)).isEmpty();
+    assertThat(store.consume(expired)).isEmpty();
   }
 
   private static java.util.Optional<UUID> consumeWhenStarted(

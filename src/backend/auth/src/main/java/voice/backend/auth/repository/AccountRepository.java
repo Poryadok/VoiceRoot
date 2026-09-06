@@ -1,6 +1,7 @@
 package voice.backend.auth.repository;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -43,6 +44,12 @@ public interface AccountRepository {
 
   /** Atomically advances the account-wide session epoch and returns the new positive value. */
   long incrementSessionEpoch(UUID accountId);
+
+  /** Raises the account-wide session epoch to at least the requested positive value. */
+  long advanceSessionEpochAtLeast(UUID accountId, long requestedEpoch);
+
+  /** Returns one bounded, deleted-inclusive page after the exclusive account id cursor. */
+  List<AccountSessionEpoch> pageSessionEpochsAfter(UUID exclusiveAfter, int limit);
 
   Optional<Instant> getGuestReminderLastShownAt(UUID accountId);
 

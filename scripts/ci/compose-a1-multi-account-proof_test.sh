@@ -5,7 +5,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 SCRIPT="${ROOT}/scripts/ci/compose-a1-multi-account-proof.sh"
-T055_REGEX='^TestComposeA1(TwoAccountsFoundation|DailyMessagingREST|GroupReadIsolation|ChannelReadIsolation|BlockDMDenyBothDirections)_live$'
+T055_REGEX='^TestComposeA1(TwoAccountsFoundation|DailyMessagingREST|GroupReadIsolation|ChannelReadIsolation|BlockDMDenyBothDirections|SessionEpochRealtime)_live$'
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 assert_file() { [[ -f "$1" ]] || fail "missing file: $1"; }
@@ -83,6 +83,7 @@ done
 printf 'env_COMPOSE_PROJECT_NAME=%s\n' "${COMPOSE_PROJECT_NAME:-}" >>"${log}"
 printf 'env_COMPOSE_PROFILES=%s\n' "${COMPOSE_PROFILES:-}" >>"${log}"
 printf 'env_COMPOSE_FILE=%s\n' "${COMPOSE_FILE:-}" >>"${log}"
+printf 'env_VOICE_A1_SESSION_EPOCH_ISOLATED=%s\n' "${VOICE_A1_SESSION_EPOCH_ISOLATED:-}" >>"${log}"
 if [[ "${1:-}" == ps ]]; then
   has_all=0
   has_quiet=0
@@ -125,7 +126,7 @@ set -euo pipefail
 log="${FAKE_LOG:?FAKE_LOG required}"
 printf 'go cwd=%s' "$PWD" >>"${log}"
 for arg in "$@"; do printf ' <%s>' "$arg" >>"${log}"; done
-printf '\n' >>"${log}"
+printf ' env_VOICE_A1_SESSION_EPOCH_ISOLATED=%s\n' "${VOICE_A1_SESSION_EPOCH_ISOLATED:-}" >>"${log}"
 exit "${FAKE_GO_RC:-0}"
 EOF
   cat >"${bin}/curl" <<'EOF'
@@ -172,13 +173,14 @@ TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/a1-runner-tests.XXXXXXXX")"
 trap 'rm -rf -- "$TEST_TMP"' EXIT
 assert_file "$SCRIPT"
 
-echo '== T055 regex matches exactly the five current tests =='
+echo '== T055 regex matches exactly the six current tests =='
 for test_name in \
   TestComposeA1TwoAccountsFoundation_live \
   TestComposeA1DailyMessagingREST_live \
   TestComposeA1GroupReadIsolation_live \
   TestComposeA1ChannelReadIsolation_live \
-  TestComposeA1BlockDMDenyBothDirections_live; do
+  TestComposeA1BlockDMDenyBothDirections_live \
+  TestComposeA1SessionEpochRealtime_live; do
   printf '%s\n' "$test_name" | grep -Eq -- "$T055_REGEX" || fail "regex did not match ${test_name}"
 done
 if printf '%s\n' TestComposeAuthLifecycle_live | grep -Eq -- "$T055_REGEX"; then
@@ -230,7 +232,7 @@ done
 
 echo '== config/up/health and exact Go regex =='
 case_dir="$(new_case happy)"
-run_runner "$case_dir"
+VOICE_A1_SESSION_EPOCH_ISOLATED=hostile run_runner "$case_dir"
 assert_eq "$(cat "${case_dir}/rc")" 0
 assert_contains "${case_dir}/commands.log" 'compose.*<--profile> <app> <config> <--quiet>'
 assert_contains "${case_dir}/commands.log" 'compose.*<--profile> <app> <up> <-d> <--build>'
@@ -242,6 +244,10 @@ assert_contains "${case_dir}/commands.log" 'go cwd=.*/src/backend/gateway.*<-cou
 assert_not_contains "${case_dir}/commands.log" '^go .*(<-tags> <live>|<-tags=live>)'
 go_run_regex="$(sed -n 's/.* <-run> <\([^>]*\)> <.*/\1/p' "${case_dir}/commands.log" | head -1)"
 assert_eq "$go_run_regex" "$T055_REGEX"
+assert_contains "${case_dir}/commands.log" 'env_VOICE_A1_SESSION_EPOCH_ISOLATED='
+assert_not_contains "${case_dir}/commands.log" '^env_VOICE_A1_SESSION_EPOCH_ISOLATED=.+$'
+go_epoch_line="$(grep '^go .*env_VOICE_A1_SESSION_EPOCH_ISOLATED=' "${case_dir}/commands.log" | head -1)"
+assert_contains <(printf '%s\n' "$go_epoch_line") 'env_VOICE_A1_SESSION_EPOCH_ISOLATED=true$'
 assert_isolated_make_target
 
 echo '== every compose path is absolute and env file is zero-byte =='
@@ -270,9 +276,10 @@ logs_line="$(grep -n 'compose.*<logs>' "${case_dir}/commands.log" | head -1 | cu
 (( ps_line > go_line && logs_line > ps_line )) || fail 'diagnostics must follow Go failure in ps then logs order'
 
 case_dir="$(new_case cleanup)"
-VOICE_A1_MULTI_ACCOUNT_CLEANUP=true run_runner "$case_dir"
+VOICE_A1_SESSION_EPOCH_ISOLATED=hostile VOICE_A1_MULTI_ACCOUNT_CLEANUP=true run_runner "$case_dir"
 assert_eq "$(cat "${case_dir}/rc")" 0
 assert_contains "${case_dir}/commands.log" 'compose.*<down> <--remove-orphans>'
 assert_not_contains "${case_dir}/commands.log" '--volumes|<-v>|volume prune|system prune'
+assert_not_contains "${case_dir}/commands.log" '^env_VOICE_A1_SESSION_EPOCH_ISOLATED=.+$'
 
 echo 'All compose-a1-multi-account-proof tests passed.'

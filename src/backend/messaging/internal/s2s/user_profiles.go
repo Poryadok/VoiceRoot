@@ -3,15 +3,21 @@ package s2s
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+
+	"voice/backend/pkg/correlation"
 
 	userv1 "voice.app/voice/user/v1"
 )
 
-// UserGRPCProfiles resolves profile_id → account_id via UserService.GetProfile.
+const profileOwnerLookupTimeout = 2 * time.Second
+
+// UserGRPCProfiles resolves profile_id → account_id via UserService's internal ownership RPC.
 type UserGRPCProfiles struct {
 	Client userv1.UserServiceClient
 }
@@ -20,27 +26,27 @@ func (u *UserGRPCProfiles) AccountIDByProfileID(ctx context.Context, profileID u
 	if u == nil || u.Client == nil {
 		return uuid.Nil, status.Error(codes.FailedPrecondition, "user service not configured")
 	}
-	ctx = ForwardIncomingMetadata(ctx)
-	resp, err := u.Client.GetProfile(ctx, &userv1.GetProfileRequest{
-		By: &userv1.GetProfileRequest_ProfileId{ProfileId: profileID.String()},
-	})
+	callCtx, cancel := context.WithTimeout(ctx, profileOwnerLookupTimeout)
+	defer cancel()
+	callMD := metadata.Pairs("x-voice-internal-caller", "messaging")
+	if requestID := correlation.FromGRPC(ctx); requestID != "" {
+		callMD.Append(correlation.GRPCMetadataKey, requestID)
+	}
+	callCtx = metadata.NewOutgoingContext(callCtx, callMD)
+	resp, err := u.Client.ResolveAccountIDForProfile(callCtx, &userv1.ResolveAccountIDForProfileRequest{ProfileId: profileID.String()})
 	if err != nil {
-		if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
-			return uuid.Nil, status.Error(codes.NotFound, "profile not found")
-		}
 		return uuid.Nil, err
 	}
-	p := resp.GetProfile()
-	if p == nil {
-		return uuid.Nil, status.Error(codes.NotFound, "profile not found")
+	if resp == nil {
+		return uuid.Nil, status.Error(codes.Internal, "profile owner response missing account_id")
 	}
-	aid := strings.TrimSpace(p.GetAccountId())
+	aid := strings.TrimSpace(resp.GetAccountId())
 	if aid == "" {
-		return uuid.Nil, status.Error(codes.Internal, "profile missing account_id")
+		return uuid.Nil, status.Error(codes.Internal, "profile owner response missing account_id")
 	}
 	out, err := uuid.Parse(aid)
 	if err != nil {
-		return uuid.Nil, status.Error(codes.Internal, "invalid account_id on profile")
+		return uuid.Nil, status.Error(codes.Internal, "invalid account_id on profile owner response")
 	}
 	return out, nil
 }

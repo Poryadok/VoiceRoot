@@ -6,6 +6,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 SCRIPT="$ROOT/scripts/ci/compose-a1-flutter-profile-handoff.sh"
 T055_TEST='test/t055_profile_switch_reconnect_inbox_e2e_live_test.dart'
+T106_TEST='test/t106_account_soft_delete_e2e_live_test.dart'
+DEFAULT_MANIFEST_RESULT="$(printf '%s\n%s' "$T055_TEST" "$T106_TEST")"
 REAL_BASH="${BASH:-$(command -v bash)}"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
@@ -57,7 +59,11 @@ make_fake_tools() {
 #!/bin/sh
 set -eu
 if [ "${1:-}" = "${FAKE_MANIFEST_SCRIPT:-}" ]; then
-  printf '%s\n' "${FAKE_MANIFEST_RESULT:?FAKE_MANIFEST_RESULT required}"
+  if [ "${FAKE_MANIFEST_RESULT+x}" != x ]; then
+    echo 'FAKE_MANIFEST_RESULT required' >&2
+    exit 2
+  fi
+  printf '%s' "$FAKE_MANIFEST_RESULT"
   exit 0
 fi
 exec "${REAL_BASH:?REAL_BASH required}" "$@"
@@ -172,7 +178,7 @@ run_runner() {
       FAKE_DOCKER_MODE="${FAKE_DOCKER_MODE:-}" FAKE_FLUTTER_RC="${FAKE_FLUTTER_RC:-0}" \
       FAKE_HEALTH_MODE="${FAKE_HEALTH_MODE:-}" FAKE_HEALTH_COUNT_FILE="${work}/health-count" \
       FAKE_MANIFEST_SCRIPT="${ROOT}/scripts/ci/e2e-manifest.sh" \
-      FAKE_MANIFEST_RESULT="${FAKE_MANIFEST_RESULT:-$T055_TEST}" REAL_BASH="$REAL_BASH" \
+      FAKE_MANIFEST_RESULT="${FAKE_MANIFEST_RESULT-$DEFAULT_MANIFEST_RESULT}" REAL_BASH="$REAL_BASH" \
       TMPDIR="${work}/tmp with spaces" VOICE_A1_FLUTTER_PROFILE_HANDOFF_PORT_BASE=25000 \
       "$@" "$REAL_BASH" "$SCRIPT" >"${work}/stdout" 2>"${work}/stderr"
   )
@@ -213,9 +219,38 @@ FAKE_DOCKER_MODE=occupied run_runner "$case_dir"
 assert_eq "$(cat "${case_dir}/rc")" 2
 assert_contains "${case_dir}/stderr" 'occupied Docker host port: 25003'
 
-echo '== config/up/health and exactly one constrained Flutter test =='
+echo '== manifest allowlist rejects invalid entry sets before Docker =='
+declare -a invalid_manifest_cases=(empty one three blank absolute non-dart duplicate reversed wrong-paths)
+for manifest_case in "${invalid_manifest_cases[@]}"; do
+  case_dir="$(new_case "invalid-${manifest_case}")"
+  case "$manifest_case" in
+    empty) FAKE_MANIFEST_RESULT='' ;;
+    one) FAKE_MANIFEST_RESULT="$T055_TEST" ;;
+    three) FAKE_MANIFEST_RESULT="$T055_TEST
+$T106_TEST
+test/other_profile_test.dart" ;;
+    blank) FAKE_MANIFEST_RESULT=$'\n' ;;
+    absolute) FAKE_MANIFEST_RESULT="/tmp/t055_profile_switch_reconnect_inbox_e2e_live_test.dart
+$T106_TEST" ;;
+    non-dart) FAKE_MANIFEST_RESULT="test/t055_profile_switch_reconnect_inbox_e2e_live_test.txt
+$T106_TEST" ;;
+    duplicate) FAKE_MANIFEST_RESULT="$T055_TEST
+$T055_TEST" ;;
+    reversed) FAKE_MANIFEST_RESULT="$T106_TEST
+$T055_TEST" ;;
+    wrong-paths) FAKE_MANIFEST_RESULT='test/other_profile_test.dart
+test/another_profile_test.dart' ;;
+  esac
+  FAKE_MANIFEST_RESULT="$FAKE_MANIFEST_RESULT" run_runner "$case_dir"
+  assert_eq "$(cat "${case_dir}/rc")" 2
+  [[ ! -s "${case_dir}/commands.log" ]] || fail "${manifest_case} manifest must be rejected before Docker"
+done
+unset FAKE_MANIFEST_RESULT
+
+echo '== config/up/health and exactly two constrained Flutter tests =='
 case_dir="$(new_case happy)"
-FAKE_HEALTH_MODE=delayed run_runner "$case_dir"
+FAKE_HEALTH_MODE=delayed FAKE_MANIFEST_RESULT="$T055_TEST
+$T106_TEST" run_runner "$case_dir"
 assert_eq "$(cat "${case_dir}/rc")" 0
 assert_contains "${case_dir}/commands.log" 'compose.*<--profile> <app> <config> <--quiet>'
 assert_contains "${case_dir}/commands.log" 'compose.*<--profile> <app> <up> <-d> <--build>'
@@ -227,25 +262,18 @@ assert_contains "${case_dir}/commands.log" 'curl.*<http://127.0.0.1:25012/health
 assert_full_port_env "${case_dir}/commands.log"
 flutter_count="$(grep -c '^flutter ' "${case_dir}/commands.log" || true)"
 assert_eq "$flutter_count" 1
-assert_contains "${case_dir}/commands.log" "flutter cwd=.*/src/frontend.*<test>.*<${T055_TEST}>"
+flutter_line="$(grep '^flutter ' "${case_dir}/commands.log")"
+mapfile -t flutter_dart_args < <(grep -oE '<test/[^>]+\.dart>' <<<"$flutter_line")
+assert_eq "${#flutter_dart_args[@]}" 2
+assert_eq "${flutter_dart_args[0]}" "<${T055_TEST}>"
+assert_eq "${flutter_dart_args[1]}" "<${T106_TEST}>"
+assert_contains "${case_dir}/commands.log" "flutter cwd=.*/src/frontend.*<test>.*<${T055_TEST}>.*<${T106_TEST}>"
 assert_contains "${case_dir}/commands.log" 'flutter.*<--concurrency=1>'
 assert_contains "${case_dir}/commands.log" 'flutter.*<--dart-define=VOICE_RUN_LIVE_INTEGRATION=true>'
 assert_contains "${case_dir}/commands.log" 'flutter.*<--dart-define=VOICE_API_BASE_URL=http://127.0.0.1:25012>'
 assert_contains "${case_dir}/commands.log" '^env_VOICE_RUN_LIVE_INTEGRATION=true$'
 assert_contains "${case_dir}/commands.log" '^env_VOICE_API_BASE_URL=http://127.0.0.1:25012$'
 assert_isolated_make_target
-
-echo '== parser-selected path is the sole Flutter test argument =='
-case_dir="$(new_case manifest-selection)"
-FAKE_MANIFEST_RESULT='test/manifest-selected.dart' run_runner "$case_dir"
-assert_eq "$(cat "${case_dir}/rc")" 0
-flutter_count="$(grep -c '^flutter ' "${case_dir}/commands.log" || true)"
-assert_eq "$flutter_count" 1
-flutter_line="$(grep '^flutter ' "${case_dir}/commands.log")"
-mapfile -t flutter_dart_args < <(grep -oE '<[^>]+\.dart>' <<<"$flutter_line")
-[[ "${#flutter_dart_args[@]}" -eq 1 ]] || fail 'parser-selected run must have exactly one Dart test argument'
-assert_eq "${flutter_dart_args[0]}" '<test/manifest-selected.dart>'
-assert_not_contains "${case_dir}/commands.log" "<${T055_TEST}>"
 
 echo '== every Compose path is absolute and env file is empty =='
 compose_line="$(grep -m1 '^docker <compose> ' "${case_dir}/commands.log")"

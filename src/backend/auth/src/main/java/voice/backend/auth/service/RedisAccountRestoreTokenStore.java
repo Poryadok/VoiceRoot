@@ -20,6 +20,15 @@ public class RedisAccountRestoreTokenStore implements AccountRestoreTokenStore {
   }
 
   @Override
+  public Optional<UUID> peek(String token) {
+    String accountId = redis.opsForValue().get(PREFIX + AccountRestoreTokenHash.of(token));
+    if (accountId == null) {
+      return Optional.empty();
+    }
+    return Optional.of(UUID.fromString(accountId));
+  }
+
+  @Override
   public Optional<UUID> consume(String token) {
     String key = PREFIX + AccountRestoreTokenHash.of(token);
     String accountId = redis.opsForValue().getAndDelete(key);

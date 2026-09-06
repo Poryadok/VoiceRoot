@@ -22,6 +22,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/encoding/protojson"
+
+	chatv1 "voice.app/voice/chat/v1"
+	spacev1 "voice.app/voice/space/v1"
 )
 
 func formatComposeEmail(prefix string, n int64) string {
@@ -1190,12 +1194,12 @@ func blockComposeAccount(t *testing.T, client *http.Client, base, accessToken, b
 }
 
 type composeChatListItem struct {
-	ChatID           string
-	LastPreview      string
-	UnreadCount      int
-	Inbox            string
-	IsStranger       bool
-	DMPeerProfileID  string
+	ChatID          string
+	LastPreview     string
+	UnreadCount     int64
+	Inbox           string
+	IsStranger      bool
+	DMPeerProfileID string
 }
 
 func listComposeChats(t *testing.T, client *http.Client, base, accessToken, inbox string) []composeChatListItem {
@@ -1213,30 +1217,18 @@ func listComposeChats(t *testing.T, client *http.Client, base, accessToken, inbo
 	body, _ := io.ReadAll(resp.Body)
 	require.Equal(t, http.StatusOK, resp.StatusCode, "list chats body=%s", string(body))
 
-	var parsed struct {
-		ChatList struct {
-			Items []struct {
-				Chat struct {
-					ID string `json:"id"`
-				} `json:"chat"`
-				LastMessagePreview  string `json:"last_message_preview"`
-				UnreadCount         int    `json:"unread_count"`
-				Inbox               string `json:"inbox"`
-				IsStranger          bool   `json:"is_stranger"`
-				DMPeerProfileID     string `json:"dm_peer_profile_id"`
-			} `json:"items"`
-		} `json:"chat_list"`
-	}
-	require.NoError(t, json.Unmarshal(body, &parsed))
-	var out []composeChatListItem
-	for _, item := range parsed.ChatList.Items {
+	var parsed chatv1.ListChatsResponse
+	require.NoError(t, protojson.Unmarshal(body, &parsed))
+	items := parsed.GetChatList().GetItems()
+	out := make([]composeChatListItem, 0, len(items))
+	for _, item := range items {
 		out = append(out, composeChatListItem{
-			ChatID:          item.Chat.ID,
-			LastPreview:     item.LastMessagePreview,
-			UnreadCount:     item.UnreadCount,
-			Inbox:           item.Inbox,
-			IsStranger:      item.IsStranger,
-			DMPeerProfileID: item.DMPeerProfileID,
+			ChatID:          item.GetChat().GetId(),
+			LastPreview:     item.GetLastMessagePreview(),
+			UnreadCount:     item.GetUnreadCount(),
+			Inbox:           item.GetInbox(),
+			IsStranger:      item.GetIsStranger(),
+			DMPeerProfileID: item.GetDmPeerProfileId(),
 		})
 	}
 	return out
@@ -1851,24 +1843,11 @@ func createComposeSpaceChannel(t *testing.T, client *http.Client, base, accessTo
 	body, _ := io.ReadAll(resp.Body)
 	require.Equal(t, http.StatusOK, resp.StatusCode, "POST channel body=%s", string(body))
 
-	var parsed struct {
-		SpaceTreeNode struct {
-			ID           string `json:"id"`
-			LinkedChatID string `json:"linked_chat_id"`
-		} `json:"space_tree_node"`
-	}
-	require.NoError(t, json.Unmarshal(body, &parsed))
-	if parsed.SpaceTreeNode.LinkedChatID != "" {
-		return parsed.SpaceTreeNode.LinkedChatID
-	}
-	tree := getComposeSpaceTree(t, client, base, accessToken, spaceID)
-	for _, node := range tree.Nodes {
-		if node.ID == parsed.SpaceTreeNode.ID && node.LinkedChatID != "" {
-			return node.LinkedChatID
-		}
-	}
-	t.Fatalf("channel node missing linked_chat_id: %s", string(body))
-	return ""
+	var parsed spacev1.UpsertTreeNodeResponse
+	require.NoError(t, protojson.Unmarshal(body, &parsed))
+	linkedChatID := parsed.GetSpaceTreeNode().GetLinkedChat().GetId()
+	require.NotEmpty(t, linkedChatID, "channel node missing linked_chat.id: %s", string(body))
+	return linkedChatID
 }
 
 func composeRoleIDByName(t *testing.T, client *http.Client, base, accessToken, spaceID, name string) string {
@@ -1928,6 +1907,7 @@ func sendComposeMessageStatus(t *testing.T, client *http.Client, base, accessTok
 	if mentionsJSON == "" {
 		mentionsJSON = "[]"
 	}
+	requestID := composeClientMessageID()
 	payload, err := json.Marshal(map[string]any{
 		"chat":              map[string]string{"id": chatID},
 		"content":           content,
@@ -1939,10 +1919,36 @@ func sendComposeMessageStatus(t *testing.T, client *http.Client, base, accessTok
 	require.NoError(t, err)
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Request-Id", requestID)
 	resp, err := client.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
+	if resp.StatusCode >= http.StatusBadRequest {
+		var failure struct {
+			ErrorCode string `json:"error_code"`
+			Message   string `json:"message"`
+		}
+		_ = json.NewDecoder(io.LimitReader(resp.Body, 64*1024)).Decode(&failure)
+		if responseRequestID := resp.Header.Get("X-Request-Id"); responseRequestID != "" {
+			requestID = responseRequestID
+		}
+		t.Logf("message send failure status=%d grpc_code=%q request_id=%q error_code=%q message=%q",
+			resp.StatusCode,
+			resp.Header.Get("X-Voice-GRPC-Code"),
+			requestID,
+			truncateComposeFailureDetail(failure.ErrorCode),
+			truncateComposeFailureDetail(failure.Message),
+		)
+	}
 	return resp.StatusCode
+}
+
+func truncateComposeFailureDetail(value string) string {
+	const maxLength = 512
+	if len(value) > maxLength {
+		return value[:maxLength]
+	}
+	return value
 }
 
 func forwardComposeMessageStatus(t *testing.T, client *http.Client, base, accessToken, sourceMessageID, targetChatID, commentary string) (int, []byte) {

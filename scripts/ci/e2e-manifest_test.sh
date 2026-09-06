@@ -58,6 +58,7 @@ a1_expected=(
   TestComposeA1GroupReadIsolation_live
   TestComposeA1ChannelReadIsolation_live
   TestComposeA1BlockDMDenyBothDirections_live
+  TestComposeA1SessionEpochRealtime_live
 )
 a1_output_file="$(mktemp)"
 a1_error_file="$(mktemp)"
@@ -73,14 +74,17 @@ fi
 mapfile -t a1_actual < "${a1_output_file}"
 rm -f "${a1_output_file}" "${a1_error_file}"
 [[ "${#a1_actual[@]}" -eq "${#a1_expected[@]}" ]] || \
-  fail "a1_multi_account_gateway must contain exactly five tests, got ${#a1_actual[@]}"
+  fail "a1_multi_account_gateway must contain exactly six tests, got ${#a1_actual[@]}"
 for i in "${!a1_expected[@]}"; do
   [[ "${a1_actual[$i]}" == "${a1_expected[$i]}" ]] || \
     fail "a1_multi_account_gateway order drift at index ${i}: expected ${a1_expected[$i]}, got ${a1_actual[$i]}"
 done
 
-echo "== T055 Flutter profile-handoff section is exact =="
-t055_expected='test/t055_profile_switch_reconnect_inbox_e2e_live_test.dart'
+echo "== T055/T106 Flutter profile-handoff section is exact =="
+profile_handoff_expected=(
+  'test/t055_profile_switch_reconnect_inbox_e2e_live_test.dart'
+  'test/t106_account_soft_delete_e2e_live_test.dart'
+)
 t055_output_file="$(mktemp)"
 t055_error_file="$(mktemp)"
 set +e
@@ -92,12 +96,14 @@ if [[ "${t055_parser_rc}" -ne 0 ]]; then
   rm -f "${t055_output_file}" "${t055_error_file}"
   fail "e2e manifest parser must support a1_flutter_profile_handoff before exact-content checks"
 fi
-mapfile -t t055_actual < "${t055_output_file}"
+mapfile -t profile_handoff_actual < "${t055_output_file}"
 rm -f "${t055_output_file}" "${t055_error_file}"
-[[ "${#t055_actual[@]}" -eq 1 ]] || \
-  fail "a1_flutter_profile_handoff must contain exactly one test, got ${#t055_actual[@]}"
-[[ "${t055_actual[0]}" == "${t055_expected}" ]] || \
-  fail "a1_flutter_profile_handoff drift: expected ${t055_expected}, got ${t055_actual[0]:-<empty>}"
+[[ "${#profile_handoff_actual[@]}" -eq "${#profile_handoff_expected[@]}" ]] || \
+  fail "a1_flutter_profile_handoff must contain exactly two tests, got ${#profile_handoff_actual[@]}"
+for i in "${!profile_handoff_expected[@]}"; do
+  [[ "${profile_handoff_actual[$i]}" == "${profile_handoff_expected[$i]}" ]] || \
+    fail "a1_flutter_profile_handoff order drift at index ${i}: expected ${profile_handoff_expected[$i]}, got ${profile_handoff_actual[$i]:-<empty>}"
+done
 
 if bash "${SCRIPT}" "${MANIFEST}" missing_section >/dev/null 2>&1; then
   fail "expected failure for missing section"
