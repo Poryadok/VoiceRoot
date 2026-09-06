@@ -9,7 +9,7 @@ cd "$ROOT"
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/dev/reset-a1-test-accounts.sh --dry-run [--project NAME]
+  scripts/dev/reset-a1-test-accounts.sh [--dry-run] [--project NAME]
   VOICE_LOCAL_TEST_ACCOUNT_RESET=DELETE_GENERATED_TEST_ACCOUNTS \
     scripts/dev/reset-a1-test-accounts.sh --apply [--project NAME]
 
@@ -20,6 +20,8 @@ the Compose app stack so they rebuild caches from the empty identity stores.
 EOF
 }
 
+# Inspection is the safe default. Applying a reset always needs --apply and
+# the exact acknowledgement below.
 mode=""
 project="${VOICE_TEST_ACCOUNT_RESET_PROJECT:-voice}"
 while (($#)); do
@@ -37,18 +39,22 @@ while (($#)); do
   shift
 done
 
-[[ -n "$mode" ]] || { usage >&2; exit 2; }
+[[ -n "$mode" ]] || mode="--dry-run"
 [[ "$project" =~ ^voice(-[a-z0-9][a-z0-9-]*)?$ ]] || {
   echo "refusing non-Voice local Compose project: $project" >&2; exit 2;
 }
 project_lower="${project,,}"
-case "$project_lower" in *prod*|*stage*)
+case "$project_lower" in *prod*|*stag*)
   echo "refusing staging or production-like Compose project: $project" >&2; exit 2 ;;
 esac
-case "${VOICE_DEPLOYMENT_ENV:-}" in production|prod|staging)
-  echo "refusing deployment environment: ${VOICE_DEPLOYMENT_ENV}" >&2; exit 2 ;;
+deployment_env_lower="${VOICE_DEPLOYMENT_ENV:-}"
+deployment_env_lower="${deployment_env_lower,,}"
+case "$deployment_env_lower" in *prod*|*stag*)
+  echo "refusing production or staging-like deployment environment: ${VOICE_DEPLOYMENT_ENV}" >&2; exit 2 ;;
 esac
-[[ -z "${KUBERNETES_SERVICE_HOST:-}" ]] || { echo "refusing Kubernetes environment" >&2; exit 2; }
+[[ -z "${KUBERNETES_SERVICE_HOST:-}" && -z "${KUBERNETES_SERVICE_PORT:-}" && -z "${KUBECONFIG:-}" ]] || {
+  echo "refusing Kubernetes environment" >&2; exit 2;
+}
 
 compose=(docker compose --project-name "$project" --project-directory "$ROOT" -f "$ROOT/docker-compose.yml")
 postgres_id="$("${compose[@]}" ps -q postgres 2>/dev/null || true)"
