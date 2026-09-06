@@ -12,6 +12,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
@@ -250,6 +251,21 @@ func main() {
 					logger.Error("delivery ack consumer exited", slog.String("error", err.Error()))
 				}
 			}()
+			if revoker, ok := msgEvents.(interface {
+				PublishReadReceiptRevoked(context.Context, string, string, string, string) error
+			}); ok {
+				targets, ok := chatGuard.(interface {
+					DMReceiptVisibilityTargets(context.Context, uuid.UUID) (map[uuid.UUID]uuid.UUID, error)
+				})
+				if !ok {
+					log.Fatalf("chat receipt visibility targets not configured")
+				}
+				go func() {
+					if err := runReceiptPrivacyConsumer(context.Background(), natsURL, instanceID, &store.MessagesStore{Pool: pool}, targets, revoker, logger); err != nil {
+						logger.Error("receipt privacy consumer exited", slog.String("error", err.Error()))
+					}
+				}()
+			}
 		}
 
 		var platformMod grpcsvc.PlatformModerationChecker

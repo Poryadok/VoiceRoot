@@ -18,41 +18,43 @@ func PresetSettings(preset string) (showOnline, showGameStatus, showMmRating, sh
 
 // Settings holds all privacy audience fields for a profile row.
 type Settings struct {
-	Preset               string
-	ShowOnline           Audience
-	ShowGameStatus       Audience
-	ShowMmRating         Audience
-	ShowPhone            Audience
-	ShowStories          Audience
-	AllowPhoneSearch     Audience
-	AllowDM              Audience
-	AllowCalls           Audience
+	Preset                string
+	ShowOnline            Audience
+	ShowGameStatus        Audience
+	ShowMmRating          Audience
+	ShowPhone             Audience
+	ShowStories           Audience
+	AllowPhoneSearch      Audience
+	AllowDM               Audience
+	AllowCalls            Audience
 	AllowChatSpaceInvites Audience
-	AllowFiles           Audience
-	AllowVoiceMessages   Audience
-		AllowFriendRequests  Audience
-		AllowGuestDM         bool
-		AllowForward         bool // binary; default true (privacy.md / forward-messages.md)
-	}
+	AllowFiles            Audience
+	AllowVoiceMessages    Audience
+	AllowFriendRequests   Audience
+	AllowGuestDM          bool
+	AllowForward          bool // binary; default true (privacy.md / forward-messages.md)
+	ShowReadReceipts      bool // binary DM-only; default true (privacy.md)
+}
 
-	func SettingsForPreset(preset string) Settings {
-		showOnline, showGameStatus, showMmRating, showPhone, showStories,
-			allowPhoneSearch, allowDM, allowCalls, allowInvites, allowFiles, allowVoice, allowFriendRequests := PresetSettings(preset)
-		return Settings{
-			Preset:               preset,
-			ShowOnline:           showOnline,
-			ShowGameStatus:       showGameStatus,
-			ShowMmRating:         showMmRating,
-			ShowPhone:            showPhone,
-			ShowStories:          showStories,
-			AllowPhoneSearch:     allowPhoneSearch,
-			AllowDM:              allowDM,
-			AllowCalls:           allowCalls,
-			AllowChatSpaceInvites: allowInvites,
-			AllowFiles:           allowFiles,
-			AllowVoiceMessages:   allowVoice,
-			AllowFriendRequests:  allowFriendRequests,
-			AllowGuestDM:         preset == "gaming",
-			AllowForward:         true,
-		}
+func SettingsForPreset(preset string) Settings {
+	showOnline, showGameStatus, showMmRating, showPhone, showStories,
+		allowPhoneSearch, allowDM, allowCalls, allowInvites, allowFiles, allowVoice, allowFriendRequests := PresetSettings(preset)
+	return Settings{
+		Preset:                preset,
+		ShowOnline:            showOnline,
+		ShowGameStatus:        showGameStatus,
+		ShowMmRating:          showMmRating,
+		ShowPhone:             showPhone,
+		ShowStories:           showStories,
+		AllowPhoneSearch:      allowPhoneSearch,
+		AllowDM:               allowDM,
+		AllowCalls:            allowCalls,
+		AllowChatSpaceInvites: allowInvites,
+		AllowFiles:            allowFiles,
+		AllowVoiceMessages:    allowVoice,
+		AllowFriendRequests:   allowFriendRequests,
+		AllowGuestDM:          preset == "gaming",
+		AllowForward:          true,
+		ShowReadReceipts:      true,
 	}
+}

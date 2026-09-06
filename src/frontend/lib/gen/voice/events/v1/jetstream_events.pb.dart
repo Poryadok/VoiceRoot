@@ -1861,6 +1861,7 @@ enum MessageStreamEvent_Payload {
   messageUnpinned,
   messageForwarded,
   deliveryAck,
+  readReceiptRevoked,
   notSet
 }
 
@@ -1879,6 +1880,7 @@ class MessageStreamEvent extends $pb.GeneratedMessage {
     MessageUnpinned? messageUnpinned,
     MessageForwarded? messageForwarded,
     DeliveryAck? deliveryAck,
+    ReadReceiptRevoked? readReceiptRevoked,
   }) {
     final result = create();
     if (eventId != null) result.eventId = eventId;
@@ -1894,6 +1896,8 @@ class MessageStreamEvent extends $pb.GeneratedMessage {
     if (messageUnpinned != null) result.messageUnpinned = messageUnpinned;
     if (messageForwarded != null) result.messageForwarded = messageForwarded;
     if (deliveryAck != null) result.deliveryAck = deliveryAck;
+    if (readReceiptRevoked != null)
+      result.readReceiptRevoked = readReceiptRevoked;
     return result;
   }
 
@@ -1919,6 +1923,7 @@ class MessageStreamEvent extends $pb.GeneratedMessage {
     18: MessageStreamEvent_Payload.messageUnpinned,
     19: MessageStreamEvent_Payload.messageForwarded,
     20: MessageStreamEvent_Payload.deliveryAck,
+    21: MessageStreamEvent_Payload.readReceiptRevoked,
     0: MessageStreamEvent_Payload.notSet
   };
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
@@ -1926,7 +1931,7 @@ class MessageStreamEvent extends $pb.GeneratedMessage {
       package:
           const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
       createEmptyInstance: create)
-    ..oo(0, [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20])
+    ..oo(0, [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21])
     ..aOS(1, _omitFieldNames ? '' : 'eventId')
     ..aOM<$0.Timestamp>(2, _omitFieldNames ? '' : 'occurredAt',
         subBuilder: $0.Timestamp.create)
@@ -1952,6 +1957,8 @@ class MessageStreamEvent extends $pb.GeneratedMessage {
         subBuilder: MessageForwarded.create)
     ..aOM<DeliveryAck>(20, _omitFieldNames ? '' : 'deliveryAck',
         subBuilder: DeliveryAck.create)
+    ..aOM<ReadReceiptRevoked>(21, _omitFieldNames ? '' : 'readReceiptRevoked',
+        subBuilder: ReadReceiptRevoked.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1984,6 +1991,7 @@ class MessageStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(18)
   @$pb.TagNumber(19)
   @$pb.TagNumber(20)
+  @$pb.TagNumber(21)
   MessageStreamEvent_Payload whichPayload() =>
       _MessageStreamEvent_PayloadByTag[$_whichOneof(0)]!;
   @$pb.TagNumber(10)
@@ -1997,6 +2005,7 @@ class MessageStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(18)
   @$pb.TagNumber(19)
   @$pb.TagNumber(20)
+  @$pb.TagNumber(21)
   void clearPayload() => $_clearField($_whichOneof(0));
 
   @$pb.TagNumber(1)
@@ -2139,6 +2148,17 @@ class MessageStreamEvent extends $pb.GeneratedMessage {
   void clearDeliveryAck() => $_clearField(20);
   @$pb.TagNumber(20)
   DeliveryAck ensureDeliveryAck() => $_ensure(12);
+
+  @$pb.TagNumber(21)
+  ReadReceiptRevoked get readReceiptRevoked => $_getN(13);
+  @$pb.TagNumber(21)
+  set readReceiptRevoked(ReadReceiptRevoked value) => $_setField(21, value);
+  @$pb.TagNumber(21)
+  $core.bool hasReadReceiptRevoked() => $_has(13);
+  @$pb.TagNumber(21)
+  void clearReadReceiptRevoked() => $_clearField(21);
+  @$pb.TagNumber(21)
+  ReadReceiptRevoked ensureReadReceiptRevoked() => $_ensure(13);
 }
 
 class MessageSent extends $pb.GeneratedMessage {
@@ -2776,6 +2796,99 @@ class MessageRead extends $pb.GeneratedMessage {
 }
 
 /// Published by Realtime when a client sends WS delivery_ack (recipient profile).
+class ReadReceiptRevoked extends $pb.GeneratedMessage {
+  factory ReadReceiptRevoked({
+    $core.String? messageId,
+    $core.String? chatId,
+    $core.String? profileId,
+    $core.String? recipientProfileId,
+  }) {
+    final result = create();
+    if (messageId != null) result.messageId = messageId;
+    if (chatId != null) result.chatId = chatId;
+    if (profileId != null) result.profileId = profileId;
+    if (recipientProfileId != null)
+      result.recipientProfileId = recipientProfileId;
+    return result;
+  }
+
+  ReadReceiptRevoked._();
+
+  factory ReadReceiptRevoked.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ReadReceiptRevoked.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ReadReceiptRevoked',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'messageId')
+    ..aOS(2, _omitFieldNames ? '' : 'chatId')
+    ..aOS(3, _omitFieldNames ? '' : 'profileId')
+    ..aOS(4, _omitFieldNames ? '' : 'recipientProfileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ReadReceiptRevoked clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ReadReceiptRevoked copyWith(void Function(ReadReceiptRevoked) updates) =>
+      super.copyWith((message) => updates(message as ReadReceiptRevoked))
+          as ReadReceiptRevoked;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ReadReceiptRevoked create() => ReadReceiptRevoked._();
+  @$core.override
+  ReadReceiptRevoked createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ReadReceiptRevoked getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ReadReceiptRevoked>(create);
+  static ReadReceiptRevoked? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get messageId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set messageId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasMessageId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearMessageId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get chatId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set chatId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasChatId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearChatId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get profileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set profileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearProfileId() => $_clearField(3);
+
+  /// When set, only this participant must remove the rendered tick.
+  @$pb.TagNumber(4)
+  $core.String get recipientProfileId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set recipientProfileId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasRecipientProfileId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearRecipientProfileId() => $_clearField(4);
+}
+
 class DeliveryAck extends $pb.GeneratedMessage {
   factory DeliveryAck({
     $core.String? messageId,

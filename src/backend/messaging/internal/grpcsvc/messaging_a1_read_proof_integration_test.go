@@ -186,12 +186,16 @@ func TestMessagingGetChatListMetadata_durablePreviewContentAndDeliveryForBothMem
 	fileID := uuid.New().String()
 	seedDMChat(t, ctx, pool, chatID, sender, receiver)
 
-	client, _ := startMessagingServerWired(t, pool, messagingWire{Files: fileMetadataMap{
-		fileID: {
-			Id: fileID, UploaderProfileId: sender.String(), OriginalName: "proof.png", MimeType: "image/png", SizeBytes: 1024,
-			Status: "ready", FileType: "image", ScanResult: "clean", Chat: chatDMRef(chatID),
-		},
-	}})
+	events := &spyMessageEvents{}
+	client, _ := startMessagingServerWired(t, pool, messagingWire{
+		Privacy:       receiptPrivacyStub{enabled: map[uuid.UUID]bool{sender: true, receiver: true}},
+		MessageEvents: events,
+		Files: fileMetadataMap{
+			fileID: {
+				Id: fileID, UploaderProfileId: sender.String(), OriginalName: "proof.png", MimeType: "image/png", SizeBytes: 1024,
+				Status: "ready", FileType: "image", ScanResult: "clean", Chat: chatDMRef(chatID),
+			},
+		}})
 	attachments := mustAttachmentJSON(t, []map[string]any{{"file_id": fileID, "type": "image"}})
 	sent, err := client.SendMessage(withProfileCtx(ctx, senderAccount, sender), &messagingv1.SendMessageRequest{
 		Chat: chatDMRef(chatID), Content: "durable photo preview", AttachmentsJson: attachments, MentionsJson: "[]",
@@ -221,6 +225,10 @@ func TestMessagingGetChatListMetadata_durablePreviewContentAndDeliveryForBothMem
 	require.NoError(t, err)
 	senderMeta = getA1ProofMetadata(t, ctx, client, senderAccount, sender, chatID)
 	require.Equal(t, messagingv1.LastMessageDeliveryState_LAST_MESSAGE_DELIVERY_STATE_READ, senderMeta.GetLastMessageDeliveryState())
+	events.mu.Lock()
+	reads := append([][3]string(nil), events.read...)
+	events.mu.Unlock()
+	require.Equal(t, [][3]string{{sent.GetMessage().GetId(), chatID.String(), receiver.String()}}, reads)
 	receiverMeta = getA1ProofMetadata(t, ctx, client, receiverAccount, receiver, chatID)
 	require.Equal(t, int64(0), receiverMeta.GetUnreadCount())
 }

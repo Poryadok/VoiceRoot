@@ -461,7 +461,7 @@ INSERT INTO read_receipts (chat_id, profile_id, last_read_message_id, last_deliv
 VALUES ($1, $2, $3, $3, now())
 ON CONFLICT (chat_id, profile_id) DO UPDATE SET
   last_read_message_id = CASE
-    WHEN read_receipts.last_read_message_id < EXCLUDED.last_read_message_id THEN EXCLUDED.last_read_message_id
+    WHEN read_receipts.last_read_message_id IS NULL OR read_receipts.last_read_message_id < EXCLUDED.last_read_message_id THEN EXCLUDED.last_read_message_id
     ELSE read_receipts.last_read_message_id
   END,
   last_delivered_message_id = CASE
@@ -469,8 +469,31 @@ ON CONFLICT (chat_id, profile_id) DO UPDATE SET
     ELSE read_receipts.last_delivered_message_id
   END,
   updated_at = CASE
-    WHEN read_receipts.last_read_message_id < EXCLUDED.last_read_message_id THEN now()
+    WHEN read_receipts.last_read_message_id IS NULL OR read_receipts.last_read_message_id < EXCLUDED.last_read_message_id THEN now()
     ELSE read_receipts.updated_at
+  END
+`, chatID, profileID, lastReadMessageID)
+	return err
+}
+
+// UpsertReadPosition records the reader's private progress. Unlike a public
+// read receipt it is always updated, because unread badges must still clear
+// when the reader opts out of DM receipt visibility.
+func (s *MessagesStore) UpsertReadPosition(ctx context.Context, chatID, profileID, lastReadMessageID uuid.UUID) error {
+	if s == nil || s.Pool == nil {
+		return errors.New("messages store: pool not configured")
+	}
+	_, err := s.Pool.Exec(ctx, `
+INSERT INTO read_positions (chat_id, profile_id, last_read_message_id, updated_at)
+VALUES ($1, $2, $3, now())
+ON CONFLICT (chat_id, profile_id) DO UPDATE SET
+  last_read_message_id = CASE
+    WHEN read_positions.last_read_message_id < EXCLUDED.last_read_message_id THEN EXCLUDED.last_read_message_id
+    ELSE read_positions.last_read_message_id
+  END,
+  updated_at = CASE
+    WHEN read_positions.last_read_message_id < EXCLUDED.last_read_message_id THEN now()
+    ELSE read_positions.updated_at
   END
 `, chatID, profileID, lastReadMessageID)
 	return err
@@ -480,10 +503,114 @@ func (s *MessagesStore) GetReadReceipt(ctx context.Context, chatID, profileID uu
 	if s == nil || s.Pool == nil {
 		return nil, nil, errors.New("messages store: pool not configured")
 	}
-	var lid uuid.UUID
+	var lid *uuid.UUID
 	var upd time.Time
 	qerr := s.Pool.QueryRow(ctx, `
 SELECT last_read_message_id, updated_at FROM read_receipts
+WHERE chat_id = $1 AND profile_id = $2
+`, chatID, profileID).Scan(&lid, &upd)
+	if errors.Is(qerr, pgx.ErrNoRows) {
+		return nil, nil, nil
+	}
+	if qerr != nil {
+		return nil, nil, qerr
+	}
+	if lid == nil {
+		return nil, nil, nil
+	}
+	u := upd.UTC()
+	return lid, &u, nil
+}
+
+// GetReadPosition returns the caller's private cursor for unread calculation
+// and own read-state APIs; it is never exposed to a DM peer directly.
+// PublicReadReceipt is a receipt that was visible to the other DM participant.
+type PublicReadReceipt struct {
+	ChatID             uuid.UUID
+	ProfileID          uuid.UUID // receipt reader whose cursor was visible
+	MessageID          uuid.UUID
+	RecipientProfileID uuid.UUID // participant that must remove this rendered tick
+}
+
+// ReadReceiptChatIDsForProfile returns candidate chat IDs from Messaging-owned
+// receipt state. Callers must resolve which candidates are DMs via Chat.
+func (s *MessagesStore) ReadReceiptChatIDsForProfile(ctx context.Context, profileID uuid.UUID) ([]uuid.UUID, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("messages store: pool not configured")
+	}
+	rows, err := s.Pool.Query(ctx, `SELECT DISTINCT chat_id FROM read_receipts WHERE profile_id = $1`, profileID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// ClearPublicReadReceiptsForProfile revokes previously exposed DM receipt
+// cursors after a participant opts out. Private read_positions remain intact.
+func (s *MessagesStore) ClearPublicReadReceiptsForProfile(ctx context.Context, profileID uuid.UUID, chatIDs []uuid.UUID) ([]PublicReadReceipt, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("messages store: pool not configured")
+	}
+	if len(chatIDs) == 0 {
+		return nil, nil
+	}
+	// chatIDs were resolved through Chat/S2S by the caller. Messaging owns only
+	// receipt rows and must not join chat_db tables here.
+	rows, err := s.Pool.Query(ctx, `
+WITH own_before AS (
+  SELECT rr.chat_id, rr.profile_id, rr.last_read_message_id
+  FROM read_receipts rr
+  WHERE rr.profile_id = $1 AND rr.chat_id = ANY($2) AND rr.last_read_message_id IS NOT NULL
+  FOR UPDATE
+), cleared AS (
+  UPDATE read_receipts rr
+  SET last_read_message_id = NULL, updated_at = now()
+  FROM own_before ob
+  WHERE rr.chat_id = ob.chat_id AND rr.profile_id = ob.profile_id
+), own_revocations AS (
+  SELECT ob.chat_id, ob.profile_id, ob.last_read_message_id, $1::uuid AS recipient_profile_id
+  FROM own_before ob
+), peer_revocations AS (
+  SELECT rr.chat_id, rr.profile_id, rr.last_read_message_id, $1::uuid AS recipient_profile_id
+  FROM read_receipts rr
+  WHERE rr.profile_id <> $1 AND rr.chat_id = ANY($2) AND rr.last_read_message_id IS NOT NULL
+)
+SELECT chat_id, profile_id, last_read_message_id, recipient_profile_id FROM own_revocations
+UNION ALL
+SELECT chat_id, profile_id, last_read_message_id, recipient_profile_id FROM peer_revocations
+`, profileID, chatIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []PublicReadReceipt
+	for rows.Next() {
+		var r PublicReadReceipt
+		if err := rows.Scan(&r.ChatID, &r.ProfileID, &r.MessageID, &r.RecipientProfileID); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+func (s *MessagesStore) GetReadPosition(ctx context.Context, chatID, profileID uuid.UUID) (lastRead *uuid.UUID, updatedAt *time.Time, err error) {
+	if s == nil || s.Pool == nil {
+		return nil, nil, errors.New("messages store: pool not configured")
+	}
+	var lid uuid.UUID
+	var upd time.Time
+	qerr := s.Pool.QueryRow(ctx, `
+SELECT last_read_message_id, updated_at FROM read_positions
 WHERE chat_id = $1 AND profile_id = $2
 `, chatID, profileID).Scan(&lid, &upd)
 	if errors.Is(qerr, pgx.ErrNoRows) {
@@ -512,7 +639,7 @@ ON CONFLICT (chat_id, profile_id) DO UPDATE SET
     WHEN read_receipts.last_delivered_message_id IS NULL OR read_receipts.last_delivered_message_id < EXCLUDED.last_delivered_message_id THEN now()
     ELSE read_receipts.updated_at
   END
-`, chatID, profileID, uuid.Nil, messageID)
+`, chatID, profileID, nil, messageID)
 	return err
 }
 
@@ -576,7 +703,7 @@ WITH latest AS (
 ), unread AS (
   SELECT count(*)::bigint AS unread_count
   FROM messages m
-  LEFT JOIN read_receipts rr
+  LEFT JOIN read_positions rr
     ON rr.chat_id = m.chat_id AND rr.profile_id = $2
   WHERE m.chat_id = $1
     AND m.deleted_at IS NULL

@@ -224,6 +224,9 @@ message PrivacySettings {
   // Binary: allow others to forward this profile's messages (privacy.md; default true).
   // optional so omit on Update preserves existing / defaults to true.
   optional bool allow_forward = 19;
+  // Binary DM-only read receipt visibility. Unset values from older clients
+  // default to true; false suppresses this profile's public read cursor.
+  optional bool show_read_receipts = 20;
 }
 
 message UpdatePresenceRequest {

@@ -983,6 +983,23 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
               readMessageIds: {...state.readMessageIds, messageId},
             );
           }
+        } else if (frame.op == 'message_read_revoked') {
+          final chatId = frame.data?['chat_id'] as String?;
+          final messageId = frame.data?['message_id'] as String?;
+          final recipientProfileId =
+              frame.data?['recipient_profile_id'] as String?;
+          final activeProfileId = _ref
+              .read(authControllerProvider)
+              .activeProfileId;
+          if (chatId == this.chatId &&
+              messageId != null &&
+              (recipientProfileId == null ||
+                  recipientProfileId.isEmpty ||
+                  recipientProfileId == activeProfileId)) {
+            final read = {...state.readMessageIds}..remove(messageId);
+            state = state.copyWith(readMessageIds: read);
+            _ref.invalidate(chatListProvider);
+          }
         } else if (frame.op == 'message_update' ||
             frame.op == 'message_delete') {
           final chatId = frame.data?['chat_id'] as String?;
@@ -1080,6 +1097,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       _ref.read(realtimeHubProvider).ensureSubscribed(chatId);
     });
   }
+
   String? _loadedHistoryProfileId;
   var _historyGeneration = 0;
   var _loadGeneration = 0;
@@ -1279,8 +1297,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         return;
       }
       _applyDmPeerState(data.dmPeerState);
-      if (data.dmPeerState ==
-          messaging_pb.DmPeerState.DM_PEER_STATE_DELETED) {
+      if (data.dmPeerState == messaging_pb.DmPeerState.DM_PEER_STATE_DELETED) {
         return;
       }
       if (data.messages.isEmpty) return;
@@ -1541,20 +1558,20 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         .read(messageCacheStoreProvider)
         .getMessages(profileId: profileId, chatId: chatId);
     if (!_isCurrentInitialLoad(
-      profileId: profileId,
-      authorization: authorization,
-      generation: _loadGeneration,
-    ) ||
+          profileId: profileId,
+          authorization: authorization,
+          generation: _loadGeneration,
+        ) ||
         _historyGeneration != historyGeneration) {
       return false;
     }
     if (cached.isEmpty) return false;
     final sorted = await _finalizeMessages(_sortMessages(cached));
     if (!_isCurrentInitialLoad(
-      profileId: profileId,
-      authorization: authorization,
-      generation: _loadGeneration,
-    ) ||
+          profileId: profileId,
+          authorization: authorization,
+          generation: _loadGeneration,
+        ) ||
         _historyGeneration != historyGeneration) {
       return false;
     }
@@ -2696,8 +2713,7 @@ final groupMembersProvider = FutureProvider.family<MemberListData, String>((
       .listGroupMembers(authorization: auth, chatId: chatId);
   return switch (result) {
     ChatsApiOk(:final data) => data,
-    ChatsApiFailure(:final statusCode)
-        when isBackendUnavailable(statusCode) =>
+    ChatsApiFailure(:final statusCode) when isBackendUnavailable(statusCode) =>
       throw const BackendUnavailableException(),
     ChatsApiFailure(:final message) => throw Exception(message),
   };

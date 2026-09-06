@@ -977,6 +977,7 @@
   "privacyAllowDm": "Who can message you",
   "privacyAllowGuestDm": "Allow guest accounts in DMs",
   "privacyAllowForward": "Allow others to forward my messages",
+  "privacyShowReadReceipts": "Read receipts",
   "privacyVisibilityTitle": "Visibility",
   "privacyShowOnline": "Online status",
   "privacyShowGameStatus": "In-game status",

@@ -48,6 +48,11 @@ service ChatService {
   // DM-only opt-in E2E encryption — docs/features/encryption.md.
   rpc EnableChatE2E(EnableChatE2ERequest) returns (EnableChatE2EResponse);
   rpc DisableChatE2E(DisableChatE2ERequest) returns (DisableChatE2EResponse);
+
+  // Internal-only: Messaging uses this to revoke symmetric DM read-receipt
+  // visibility after a profile disables show_read_receipts. It has no Gateway
+  // route and requires the trusted Messaging service identity.
+  rpc ListDMReceiptVisibilityTargets(ListDMReceiptVisibilityTargetsRequest) returns (ListDMReceiptVisibilityTargetsResponse);
 }
 
 enum ChatType {
@@ -277,6 +282,21 @@ message EnableChatE2ERequest {
 
 message DisableChatE2ERequest {
   string chat_id = 1;
+}
+
+message ListDMReceiptVisibilityTargetsRequest {
+  string profile_id = 1;
+  voice.common.v1.CursorPageRequest page = 2;
+}
+
+message DMReceiptVisibilityTarget {
+  string chat_id = 1;
+  string peer_profile_id = 2;
+}
+
+message ListDMReceiptVisibilityTargetsResponse {
+  repeated DMReceiptVisibilityTarget targets = 1;
+  string next_cursor = 2;
 }
 
 // Cross-service pointer to chat_db.chats (docs/DATA_MODEL.md). Use in other packages instead of parallel chat_id + chat_type strings.
