@@ -251,6 +251,7 @@ ChatListItem chatListItemFromProto(chat_pb.ChatListItem item) {
     dmPeerProfileId: item.hasDmPeerProfileId()
         ? emptyToNull(item.dmPeerProfileId)
         : null,
+    isPinned: item.hasIsPinned() && item.isPinned,
   );
 }
 
