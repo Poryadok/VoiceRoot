@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
@@ -8,12 +9,15 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"math/big"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"google.golang.org/grpc"
 )
 
 func TestGatewaySessionEpochStrictConfigDefaultsToCompatibility(t *testing.T) {
@@ -118,6 +122,199 @@ func TestGatewayBootstrapRejectsInvalidStrictConfigBeforeServerConstruction(t *t
 				t.Fatalf("server constructor calls = %d, want 0", serverConstructed)
 			}
 		})
+	}
+}
+
+func TestGatewayBootstrapRejectsInvalidGRPCUpstreamsBeforeServerConstruction(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		raw  string
+	}{
+		{name: "malformed JSON", raw: `{"users":`},
+		{name: "non-string upstream value", raw: `{"users":123}`},
+		{name: "null upstream value", raw: `{"users":null}`},
+		{name: "empty upstream address", raw: `{"users":""}`},
+		{name: "whitespace upstream address", raw: `{"users":" \t "}`},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			configureSessionEpochEnv(t, configString("false"), "")
+			t.Setenv("GATEWAY_USERS_GRPC_ADDR", "")
+			t.Setenv("GATEWAY_GRPC_UPSTREAMS_JSON", tc.raw)
+
+			serverConstructed := 0
+			server, err := newGatewayServerFromEnv(":8080", func(handler http.Handler) *http.Server {
+				serverConstructed++
+				return &http.Server{Addr: ":8080", Handler: handler}
+			})
+			if err == nil {
+				t.Fatal("invalid gRPC upstream configuration unexpectedly bootstrapped a server")
+			}
+			if !strings.Contains(err.Error(), "GATEWAY_GRPC_UPSTREAMS_JSON") {
+				t.Fatalf("bootstrap error = %v, want GATEWAY_GRPC_UPSTREAMS_JSON context", err)
+			}
+			if server != nil {
+				t.Fatalf("server = %#v, want nil on startup config error", server)
+			}
+			if serverConstructed != 0 {
+				t.Fatalf("server constructor calls = %d, want 0", serverConstructed)
+			}
+		})
+	}
+}
+
+func TestGatewayBootstrapAllowsFutureGRPCNamespace(t *testing.T) {
+	configureSessionEpochEnv(t, configString("false"), "")
+	t.Setenv("GATEWAY_GRPC_UPSTREAMS_JSON", `{"future-service":"future:9090"}`)
+
+	serverConstructed := 0
+	server, err := newGatewayServerFromEnv(":8080", func(handler http.Handler) *http.Server {
+		serverConstructed++
+		return &http.Server{Addr: ":8080", Handler: handler}
+	})
+	if err != nil {
+		t.Fatalf("future namespace must remain forward-compatible: %v", err)
+	}
+	if serverConstructed != 1 {
+		t.Fatalf("server constructor calls = %d, want 1", serverConstructed)
+	}
+	if err := server.Close(); err != nil {
+		t.Fatalf("close server: %v", err)
+	}
+}
+
+func TestGatewayBootstrapWaitsForConfiguredUserGRPCBeforeServerConstruction(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve unavailable grpc address: %v", err)
+	}
+	addr := listener.Addr().String()
+	if err := listener.Close(); err != nil {
+		t.Fatalf("close reserved grpc address: %v", err)
+	}
+
+	t.Setenv("GATEWAY_SESSION_EPOCH_STRICT", "false")
+	t.Setenv("GATEWAY_REDIS_ADDR", "")
+	t.Setenv("GATEWAY_USERS_GRPC_ADDR", "")
+	t.Setenv("GATEWAY_GRPC_UPSTREAMS_JSON", `{"users":"`+addr+`"}`)
+	t.Setenv("GRPC_DIAL_TIMEOUT", "100ms")
+
+	serverConstructed := 0
+	server, err := newGatewayServerFromEnv(":8080", func(handler http.Handler) *http.Server {
+		serverConstructed++
+		return &http.Server{Addr: ":8080", Handler: handler}
+	})
+	if err == nil {
+		if server != nil {
+			_ = server.Close()
+		}
+		t.Fatal("unavailable user grpc unexpectedly bootstrapped a server")
+	}
+	if server != nil {
+		t.Fatalf("server = %#v, want nil when user grpc is unavailable", server)
+	}
+	if serverConstructed != 0 {
+		t.Fatalf("server constructor calls = %d, want 0 before User gRPC readiness", serverConstructed)
+	}
+}
+
+func TestGatewayBootstrapAcceptsReadyConfiguredUserGRPC(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen for user grpc: %v", err)
+	}
+	grpcServer := grpc.NewServer()
+	go func() { _ = grpcServer.Serve(listener) }()
+	t.Cleanup(func() {
+		grpcServer.Stop()
+		_ = listener.Close()
+	})
+
+	t.Setenv("GATEWAY_SESSION_EPOCH_STRICT", "false")
+	t.Setenv("GATEWAY_REDIS_ADDR", "")
+	t.Setenv("GATEWAY_USERS_GRPC_ADDR", "")
+	t.Setenv("GATEWAY_GRPC_UPSTREAMS_JSON", `{"users":"`+listener.Addr().String()+`"}`)
+	t.Setenv("GRPC_DIAL_TIMEOUT", time.Second.String())
+
+	server, err := newGatewayServerFromEnv(":8080", func(handler http.Handler) *http.Server {
+		return &http.Server{Addr: ":8080", Handler: handler}
+	})
+	if err != nil {
+		t.Fatalf("bootstrap ready User gRPC: %v", err)
+	}
+	if server == nil {
+		t.Fatal("server = nil after User gRPC becomes ready")
+	}
+	if err := server.Shutdown(context.Background()); err != nil {
+		t.Fatalf("shutdown server: %v", err)
+	}
+}
+
+func TestGatewayServerShutdownDrainsHandlersBeforeClosingUpstreams(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen gateway: %v", err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+
+	handlerStarted := make(chan struct{})
+	releaseHandler := make(chan struct{})
+	upstreamsClosed := make(chan struct{})
+	shutdownStarted := make(chan struct{})
+	server := &gatewayServer{
+		Server: &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			close(handlerStarted)
+			<-releaseHandler
+			w.WriteHeader(http.StatusNoContent)
+		})},
+		closeClients: func() { close(upstreamsClosed) },
+	}
+	server.RegisterOnShutdown(func() { close(shutdownStarted) })
+	go func() { _ = server.Serve(listener) }()
+
+	responseDone := make(chan error, 1)
+	go func() {
+		response, err := http.Get("http://" + listener.Addr().String())
+		if err == nil {
+			err = response.Body.Close()
+		}
+		responseDone <- err
+	}()
+	select {
+	case <-handlerStarted:
+	case <-time.After(time.Second):
+		t.Fatal("gateway handler did not start")
+	}
+
+	shutdownDone := make(chan error, 1)
+	go func() { shutdownDone <- server.Shutdown(context.Background()) }()
+	select {
+	case <-shutdownStarted:
+	case <-time.After(time.Second):
+		t.Fatal("http shutdown did not begin")
+	}
+	select {
+	case <-upstreamsClosed:
+		t.Fatal("gRPC upstreams closed before the active HTTP handler drained")
+	default:
+	}
+
+	close(releaseHandler)
+	select {
+	case err := <-shutdownDone:
+		if err != nil {
+			t.Fatalf("shutdown gateway: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("gateway shutdown did not finish after handler drained")
+	}
+	if err := <-responseDone; err != nil {
+		t.Fatalf("gateway response: %v", err)
+	}
+	select {
+	case <-upstreamsClosed:
+	case <-time.After(time.Second):
+		t.Fatal("gRPC upstreams were not closed after gateway shutdown")
 	}
 }
 

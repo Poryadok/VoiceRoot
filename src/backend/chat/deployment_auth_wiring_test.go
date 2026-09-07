@@ -42,6 +42,11 @@ func TestChatAuthGRPCAddrDeploymentWiring(t *testing.T) {
 
 	compose := readComposeSpec(t, filepath.Join(root, "docker-compose.yml"))
 	require.Equal(t, "auth:9090", compose.Services["chat"].Environment["AUTH_GRPC_ADDR"])
+	_, authDependsOnUser := compose.Services["auth"].DependsOn["user"]
+	require.False(t, authDependsOnUser,
+		"Auth must start independently: User waits for Auth gRPC before serving")
+	require.Equal(t, "service_healthy", compose.Services["user"].DependsOn["auth"].Condition,
+		"User must not start its required Auth gRPC probe until Auth is healthy")
 }
 
 func chatRepoRoot(t *testing.T) string {
@@ -151,7 +156,12 @@ type composeSpec struct {
 }
 
 type composeService struct {
-	Environment map[string]string `yaml:"environment"`
+	Environment map[string]string            `yaml:"environment"`
+	DependsOn   map[string]composeDependency `yaml:"depends_on"`
+}
+
+type composeDependency struct {
+	Condition string `yaml:"condition"`
 }
 
 func readComposeSpec(t *testing.T, path string) composeSpec {

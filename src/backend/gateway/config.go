@@ -1,17 +1,21 @@
 package main
 
 import (
+	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	voicecfg "voice/backend/pkg/config"
+	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/httpserver"
 	voicejwt "voice/backend/pkg/jwt"
 	voicelog "voice/backend/pkg/logging"
@@ -32,12 +36,38 @@ func loadGatewayConfigFromEnvChecked() (gatewayConfig, error) {
 	if err != nil {
 		return gatewayConfig{}, err
 	}
+	if err := validateGRPCUpstreamsFromEnv(); err != nil {
+		return gatewayConfig{}, err
+	}
 	if strict {
 		if strings.TrimSpace(os.Getenv("GATEWAY_REDIS_ADDR")) == "" {
 			return gatewayConfig{}, errors.New("GATEWAY_REDIS_ADDR is required when GATEWAY_SESSION_EPOCH_STRICT=true")
 		}
 	}
 	return loadGatewayConfigFromEnvMode(strict), nil
+}
+
+// validateGRPCUpstreamsFromEnv rejects a configured but unusable upstream map
+// during bootstrap. The legacy loader logs invalid JSON and proceeds with an
+// empty map, which would otherwise silently omit configured public routes.
+func validateGRPCUpstreamsFromEnv() error {
+	raw := strings.TrimSpace(os.Getenv("GATEWAY_GRPC_UPSTREAMS_JSON"))
+	if raw == "" {
+		return nil
+	}
+	var upstreams map[string]string
+	if err := json.Unmarshal([]byte(raw), &upstreams); err != nil {
+		return fmt.Errorf("GATEWAY_GRPC_UPSTREAMS_JSON must be a JSON object with string values: %w", err)
+	}
+	if upstreams == nil {
+		return errors.New("GATEWAY_GRPC_UPSTREAMS_JSON must be a JSON object with string values")
+	}
+	for namespace, addr := range upstreams {
+		if strings.TrimSpace(addr) == "" {
+			return fmt.Errorf("GATEWAY_GRPC_UPSTREAMS_JSON namespace %q must have a nonempty address", namespace)
+		}
+	}
+	return nil
 }
 
 func sessionEpochStrictFromEnv() (bool, error) {
@@ -117,23 +147,66 @@ func loadGatewayConfigFromEnvMode(strict bool) gatewayConfig {
 	return config
 }
 
-func newGatewayServerFromEnv(addr string, factory func(http.Handler) *http.Server) (*http.Server, error) {
+// gatewayServer owns the Gateway's HTTP server and its gRPC upstream clients.
+// The upstream clients must remain usable while http.Server.Shutdown drains
+// in-flight HTTP handlers, so they are closed only after the drain succeeds.
+type gatewayServer struct {
+	*http.Server
+	closeClients     func()
+	closeClientsOnce sync.Once
+}
+
+func (s *gatewayServer) closeUpstreams() {
+	if s != nil && s.closeClients != nil {
+		s.closeClientsOnce.Do(s.closeClients)
+	}
+}
+
+func (s *gatewayServer) Shutdown(ctx context.Context) error {
+	err := s.Server.Shutdown(ctx)
+	if err == nil {
+		s.closeUpstreams()
+	}
+	return err
+}
+
+func (s *gatewayServer) Close() error {
+	err := s.Server.Close()
+	s.closeUpstreams()
+	return err
+}
+
+func newGatewayServerFromEnv(addr string, factory func(http.Handler) *http.Server) (*gatewayServer, error) {
 	config, err := loadGatewayConfigFromEnvChecked()
 	if err != nil {
 		return nil, err
 	}
+	closeClients := func() {
+		if config.transcoder != nil {
+			config.transcoder.close()
+		}
+	}
 	if factory == nil {
+		closeClients()
 		return nil, errors.New("gateway server factory is nil")
+	}
+	readinessCtx, cancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
+	err = config.transcoder.waitForRequiredUserReady(readinessCtx)
+	cancel()
+	if err != nil {
+		closeClients()
+		return nil, err
 	}
 	server := factory(newGateway(config))
 	if server == nil {
+		closeClients()
 		return nil, errors.New("gateway server factory returned nil")
 	}
 	if server.Addr == "" {
 		server.Addr = addr
 	}
 	httpserver.ApplyHTTPServerTimeouts(server)
-	return server, nil
+	return &gatewayServer{Server: server, closeClients: closeClients}, nil
 }
 
 func loadJSONEnv(logger *slog.Logger, name string, dst any) {

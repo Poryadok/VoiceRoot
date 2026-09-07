@@ -387,7 +387,35 @@ class LiveGatewayContext {
       'regular',
       reason: 'verified email account',
     );
+    await _waitForAccountVisibility(regularSession);
     return regularSession;
+  }
+
+  Future<void> _waitForAccountVisibility(AuthSession session) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 30));
+    final gateway = gatewayHttp();
+    while (true) {
+      final result = await gateway.getJson(
+        gateway.resolve('/api/v1/users/me'),
+        authorization: session.authorizationHeader,
+      );
+      if (result is GatewayHttpOk) {
+        return;
+      }
+
+      final error = (result as GatewayHttpFailure).error;
+      final isVisibilityTransient =
+          error.statusCode == HttpStatus.serviceUnavailable &&
+          error.errorCode == 'unavailable' &&
+          error.message == 'account visibility unavailable';
+      if (!isVisibilityTransient || !DateTime.now().isBefore(deadline)) {
+        fail(
+          'verified account did not become visible: '
+          '${error.errorCode} (${error.message}, HTTP ${error.statusCode})',
+        );
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
   }
 
   void _expectSameLiveIdentity(AuthSession before, AuthSession after) {
