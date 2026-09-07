@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Isolated T-055 Flutter profile-switch handoff proof. This runner owns one
-# generated Compose project and never touches a caller's shared `voice` stack.
+# Isolated T-055/T-106/T-107 Flutter A1 proof. This runner owns one generated
+# Compose project and never touches a caller's shared `voice` stack.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
@@ -29,11 +29,13 @@ mapfile -t flutter_tests <<<"${manifest_entries}"
 expected_flutter_tests=(
   'test/t055_profile_switch_reconnect_inbox_e2e_live_test.dart'
   'test/t106_account_soft_delete_e2e_live_test.dart'
+  'test/t107_folders_quick_access_e2e_live_test.dart'
 )
 if [[ "${#flutter_tests[@]}" -ne "${#expected_flutter_tests[@]}" ]] ||
   [[ "${flutter_tests[0]:-}" != "${expected_flutter_tests[0]}" ]] ||
-  [[ "${flutter_tests[1]:-}" != "${expected_flutter_tests[1]}" ]]; then
-  echo "a1_flutter_profile_handoff must contain exactly the ordered T055 and T106 relative Dart test paths" >&2
+  [[ "${flutter_tests[1]:-}" != "${expected_flutter_tests[1]}" ]] ||
+  [[ "${flutter_tests[2]:-}" != "${expected_flutter_tests[2]}" ]]; then
+  echo "a1_flutter_profile_handoff must contain exactly the ordered T055, T106, and T107 relative Dart test paths" >&2
   exit 2
 fi
 

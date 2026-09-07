@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Read .github/ci/e2e-features.yml (smoke_gateway / smoke_flutter / full_flutter / restart_proof_gateway / a1_multi_account_gateway / a1_flutter_profile_handoff sections).
+# Read .github/ci/e2e-features.yml (smoke_gateway / smoke_flutter / full_flutter / restart_proof_gateway / a1_multi_account_gateway / a1_flutter_profile_handoff sections, including T055/T106/T107).
 set -euo pipefail
 
 MANIFEST="${1:?manifest path}"
