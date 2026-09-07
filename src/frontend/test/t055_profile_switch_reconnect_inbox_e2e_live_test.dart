@@ -835,10 +835,16 @@ class _TaggedInboxReconcilerController extends InboxReconcilerController {
 
   @override
   Future<void> reconcile() {
-    return runZoned(
-      () => super.reconcile(),
-      zoneValues: {_inboxReconciliationZoneKey: true},
-    );
+    return _runTagged(super.reconcile);
+  }
+
+  @override
+  Future<void> retry(InboxScope scope) {
+    return _runTagged(() => super.retry(scope));
+  }
+
+  Future<void> _runTagged(Future<void> Function() action) {
+    return runZoned(action, zoneValues: {_inboxReconciliationZoneKey: true});
   }
 }
 
