@@ -1,10 +1,11 @@
-// Compose-only IdP/DNS fixture for verification.md VR-02/03 live tests.
-// Not used in staging/prod. Helix partner + YPP allowed + seeded TXT.
+// Compose-only IdP/DNS/email fixture for live tests. Not used in staging/prod.
+// Helix partner + YPP allowed + seeded TXT + recipient-scoped Resend mail capture.
 import http from "node:http";
 import { randomUUID } from "node:crypto";
 import { URL } from "node:url";
 
 const dns = new Map();
+const emails = new Map();
 
 function send(res, code, body, type = "application/json") {
   const data = typeof body === "string" ? body : JSON.stringify(body);
@@ -70,6 +71,20 @@ const server = http.createServer(async (req, res) => {
     send(res, 200, { records: dns.get(domain) || [] });
     return;
   }
+  if (req.method === "GET" && u.pathname === "/emails/latest") {
+    const recipient = (u.searchParams.get("to") || "").trim().toLowerCase();
+    if (!recipient) {
+      send(res, 400, { error: "recipient_required" });
+      return;
+    }
+    const message = emails.get(recipient);
+    if (!message) {
+      send(res, 404, { error: "email_not_found" });
+      return;
+    }
+    send(res, 200, message);
+    return;
+  }
   if (req.method === "POST" && u.pathname === "/oauth2/token") {
     const suffix = randomUUID().replace(/-/g, "").slice(0, 12);
     send(res, 200, {
@@ -102,7 +117,37 @@ const server = http.createServer(async (req, res) => {
     send(res, 200, { domain, records: list });
     return;
   }
+  if (req.method === "POST" && u.pathname === "/emails") {
+    let body;
+    try {
+      body = JSON.parse((await readBody(req)) || "{}");
+    } catch {
+      send(res, 400, { error: "invalid_json" });
+      return;
+    }
+    const recipients = Array.isArray(body.to)
+      ? body.to.map((value) => String(value).trim()).filter(Boolean)
+      : [];
+    if (recipients.length === 0) {
+      send(res, 400, { error: "recipient_required" });
+      return;
+    }
+    const message = {
+      id: `re_${randomUUID().replace(/-/g, "")}`,
+      to: recipients,
+      subject: String(body.subject || ""),
+      text: String(body.text || ""),
+    };
+    for (const recipient of recipients) {
+      emails.set(recipient.toLowerCase(), message);
+    }
+    send(res, 200, { id: message.id });
+    return;
+  }
   send(res, 404, { error: "not_found" });
 });
 
-server.listen(4180, "0.0.0.0");
+const port = Number.parseInt(process.env.PORT || "4180", 10);
+server.listen(port, "0.0.0.0", () => {
+  console.log(`verification-stub listening ${server.address().port}`);
+});
