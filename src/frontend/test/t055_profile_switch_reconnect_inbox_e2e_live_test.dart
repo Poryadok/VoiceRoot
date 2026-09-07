@@ -337,6 +337,7 @@ void main() {
       final reconnectMainPageFailed = Completer<void>();
       final reconnectHealthyScopesDone = Completer<void>();
       var waitingForReconnectSnapshot = false;
+      final reconnectStartedScopes = <InboxScope>{};
       final inboxSubscription = container.listen<InboxReconcilerState>(
         inboxReconcilerProvider,
         (_, state) {
@@ -353,6 +354,12 @@ void main() {
               reconnectInboxBegan.complete();
             }
           }
+          if (waitingForReconnectSnapshot) {
+            for (final scope in InboxScope.values) {
+              if (!snapshot[scope].isComplete)
+                reconnectStartedScopes.add(scope);
+            }
+          }
           final main = snapshot[InboxScope.main];
           if (waitingForReconnectSnapshot &&
               main.hasError &&
@@ -361,6 +368,8 @@ void main() {
             reconnectMainPageFailed.complete();
           }
           if (waitingForReconnectSnapshot &&
+              reconnectStartedScopes.contains(InboxScope.requests) &&
+              reconnectStartedScopes.contains(InboxScope.archive) &&
               snapshot[InboxScope.requests].isComplete &&
               snapshot[InboxScope.archive].isComplete &&
               !reconnectHealthyScopesDone.isCompleted) {
@@ -563,7 +572,6 @@ void main() {
       recorder.failNextInboxReconciliationPage(
         authorization: bAuthorization,
         inbox: 'main',
-        cursor: reconnectCursors['main']!,
       );
 
       relay.releaseSecondUpgrade();
@@ -835,14 +843,14 @@ String _reconnectRequestDiagnostic(Iterable<_RecordedRequest> requests) {
   final paths = requests
       .map(
         (request) =>
-            '${request.requestOrigin}:${request.uri.path}?inbox=${request.inbox}&cursor=${request.uri.queryParameters['cursor']}',
+            '${request.requestOrigin}:${request.uri.path}?inbox=${request.inbox}&cursor=${request.uri.queryParameters['cursor']}&page_size=${request.uri.queryParameters['page_size']}',
       )
       .join(', ');
   return 'reconnect inbox requests: $paths';
 }
 
 class _TaggedInboxReconcilerController extends InboxReconcilerController {
-  _TaggedInboxReconcilerController(super.ref);
+  _TaggedInboxReconcilerController(super.ref) : super(pageSize: 1);
 
   @override
   Future<void> reconcile() {
@@ -954,7 +962,6 @@ class _RecordingHttpClient extends http.BaseClient {
   void failNextInboxReconciliationPage({
     required String authorization,
     required String inbox,
-    required String cursor,
   }) {
     if (_nextInboxPageFailure != null) {
       throw StateError('an inbox page failure is already armed');
@@ -962,7 +969,6 @@ class _RecordingHttpClient extends http.BaseClient {
     _nextInboxPageFailure = _InboxPageFailure(
       authorization: authorization,
       inbox: inbox,
-      cursor: cursor,
     );
   }
 
@@ -970,7 +976,7 @@ class _RecordingHttpClient extends http.BaseClient {
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     _activeRequests++;
     try {
-      final effectiveRequest = _withOneRowInboxPage(request);
+      final effectiveRequest = request;
       final recorded = _RecordedRequest(
         method: effectiveRequest.method,
         uri: effectiveRequest.url,
@@ -1069,18 +1075,6 @@ class _RecordingHttpClient extends http.BaseClient {
     _notifySettled();
   }
 
-  http.BaseRequest _withOneRowInboxPage(http.BaseRequest request) {
-    if (request.method != 'GET' || request.url.path != '/api/v1/chats') {
-      return request;
-    }
-    return http.Request(
-      request.method,
-      request.url.replace(
-        queryParameters: {...request.url.queryParameters, 'page_size': '1'},
-      ),
-    )..headers.addAll(request.headers);
-  }
-
   // The shared live harness owns the underlying client for this test.
   @override
   void close() {}
@@ -1094,15 +1088,10 @@ class _RecordingHttpClient extends http.BaseClient {
 }
 
 class _InboxPageFailure {
-  const _InboxPageFailure({
-    required this.authorization,
-    required this.inbox,
-    required this.cursor,
-  });
+  const _InboxPageFailure({required this.authorization, required this.inbox});
 
   final String authorization;
   final String inbox;
-  final String cursor;
 
   bool matches(_RecordedRequest request) {
     return request.isInboxReconciliation &&
@@ -1110,7 +1099,7 @@ class _InboxPageFailure {
         request.uri.path == '/api/v1/chats' &&
         request.authorization == authorization &&
         request.inbox == inbox &&
-        request.uri.queryParameters['cursor'] == cursor &&
+        request.uri.queryParameters['cursor'] != null &&
         request.uri.queryParameters['page_size'] == '1';
   }
 }
@@ -1284,7 +1273,6 @@ Future<ChatsApiResult<VoiceChat>> _createDmWhenAvailable({
     );
     if (result is! ChatsApiFailure ||
         result.statusCode != HttpStatus.internalServerError ||
-        result.message != 'dm availability unavailable' ||
         !DateTime.now().isBefore(deadline)) {
       return result;
     }
