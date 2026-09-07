@@ -206,6 +206,31 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
     );
   }
 
+  /// Applies an archive-only activity badge without changing inbox placement
+  /// or creating a notification. A missing cached row is left for the next
+  /// authoritative archive snapshot rather than synthesising partial metadata.
+  void bumpArchiveUnread(String chatId) {
+    final profileId = _ref.read(authControllerProvider).activeProfileId;
+    if (profileId == null || chatId.isEmpty) return;
+    final profile = state.profileSnapshots[profileId];
+    final archive = profile?[InboxScope.archive];
+    if (profile == null || archive == null) return;
+    final index = archive.items.indexWhere((item) => item.chatId == chatId);
+    if (index < 0) return;
+    final items = [...archive.items];
+    final item = items[index];
+    items[index] = item.copyWith(unreadCount: item.unreadCount + 1);
+    state = state.copyWith(
+      profileSnapshots: {
+        ...state.profileSnapshots,
+        profileId: profile.withScope(
+          InboxScope.archive,
+          archive.copyWith(items: items),
+        ),
+      },
+    );
+  }
+
   /// Applies a successful Chat mutation to the visible authoritative snapshot.
   /// The mutation itself remains owned by the existing action controller.
   void removeChat(
