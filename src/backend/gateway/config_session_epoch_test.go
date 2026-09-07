@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
@@ -8,12 +9,15 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"math/big"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"google.golang.org/grpc"
 )
 
 func TestGatewaySessionEpochStrictConfigDefaultsToCompatibility(t *testing.T) {
@@ -118,6 +122,73 @@ func TestGatewayBootstrapRejectsInvalidStrictConfigBeforeServerConstruction(t *t
 				t.Fatalf("server constructor calls = %d, want 0", serverConstructed)
 			}
 		})
+	}
+}
+
+func TestGatewayBootstrapWaitsForConfiguredUserGRPCBeforeServerConstruction(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve unavailable grpc address: %v", err)
+	}
+	addr := listener.Addr().String()
+	if err := listener.Close(); err != nil {
+		t.Fatalf("close reserved grpc address: %v", err)
+	}
+
+	t.Setenv("GATEWAY_SESSION_EPOCH_STRICT", "false")
+	t.Setenv("GATEWAY_REDIS_ADDR", "")
+	t.Setenv("GATEWAY_USERS_GRPC_ADDR", "")
+	t.Setenv("GATEWAY_GRPC_UPSTREAMS_JSON", `{"users":"`+addr+`"}`)
+	t.Setenv("GRPC_DIAL_TIMEOUT", "100ms")
+
+	serverConstructed := 0
+	server, err := newGatewayServerFromEnv(":8080", func(handler http.Handler) *http.Server {
+		serverConstructed++
+		return &http.Server{Addr: ":8080", Handler: handler}
+	})
+	if err == nil {
+		if server != nil {
+			_ = server.Close()
+		}
+		t.Fatal("unavailable user grpc unexpectedly bootstrapped a server")
+	}
+	if server != nil {
+		t.Fatalf("server = %#v, want nil when user grpc is unavailable", server)
+	}
+	if serverConstructed != 0 {
+		t.Fatalf("server constructor calls = %d, want 0 before User gRPC readiness", serverConstructed)
+	}
+}
+
+func TestGatewayBootstrapAcceptsReadyConfiguredUserGRPC(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen for user grpc: %v", err)
+	}
+	grpcServer := grpc.NewServer()
+	go func() { _ = grpcServer.Serve(listener) }()
+	t.Cleanup(func() {
+		grpcServer.Stop()
+		_ = listener.Close()
+	})
+
+	t.Setenv("GATEWAY_SESSION_EPOCH_STRICT", "false")
+	t.Setenv("GATEWAY_REDIS_ADDR", "")
+	t.Setenv("GATEWAY_USERS_GRPC_ADDR", "")
+	t.Setenv("GATEWAY_GRPC_UPSTREAMS_JSON", `{"users":"`+listener.Addr().String()+`"}`)
+	t.Setenv("GRPC_DIAL_TIMEOUT", time.Second.String())
+
+	server, err := newGatewayServerFromEnv(":8080", func(handler http.Handler) *http.Server {
+		return &http.Server{Addr: ":8080", Handler: handler}
+	})
+	if err != nil {
+		t.Fatalf("bootstrap ready User gRPC: %v", err)
+	}
+	if server == nil {
+		t.Fatal("server = nil after User gRPC becomes ready")
+	}
+	if err := server.Shutdown(context.Background()); err != nil {
+		t.Fatalf("shutdown server: %v", err)
 	}
 }
 

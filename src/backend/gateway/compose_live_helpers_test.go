@@ -1264,15 +1264,27 @@ func sendComposeFriendInvitation(t *testing.T, client *http.Client, base, access
 	t.Helper()
 	payload, err := json.Marshal(map[string]string{"target_profile_id": targetProfileID})
 	require.NoError(t, err)
-	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/friends/invitations", bytes.NewReader(payload))
-	require.NoError(t, err)
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := client.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	require.Equal(t, http.StatusOK, resp.StatusCode, "friend invitation body=%s", string(body))
+	deadline := time.Now().Add(30 * time.Second)
+	var responseStatus int
+	var responseBody []byte
+	for {
+		req, err := http.NewRequest(http.MethodPost, base+"/api/v1/friends/invitations", bytes.NewReader(payload))
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer "+accessToken)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		responseBody, _ = io.ReadAll(resp.Body)
+		responseStatus = resp.StatusCode
+		resp.Body.Close()
+		if responseStatus != http.StatusServiceUnavailable ||
+			!strings.Contains(string(responseBody), "account visibility unavailable") ||
+			!time.Now().Before(deadline) {
+			break
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	require.Equal(t, http.StatusOK, responseStatus, "friend invitation body=%s", string(responseBody))
 }
 
 func acceptComposeFriendInvitation(t *testing.T, client *http.Client, base, accessToken, requesterProfileID string) {

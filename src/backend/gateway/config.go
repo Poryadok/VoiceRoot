@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	voicecfg "voice/backend/pkg/config"
+	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/httpserver"
 	voicejwt "voice/backend/pkg/jwt"
 	voicelog "voice/backend/pkg/logging"
@@ -122,17 +124,32 @@ func newGatewayServerFromEnv(addr string, factory func(http.Handler) *http.Serve
 	if err != nil {
 		return nil, err
 	}
+	closeClients := func() {
+		if config.transcoder != nil {
+			config.transcoder.close()
+		}
+	}
 	if factory == nil {
+		closeClients()
 		return nil, errors.New("gateway server factory is nil")
+	}
+	readinessCtx, cancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
+	err = config.transcoder.waitForRequiredUserReady(readinessCtx)
+	cancel()
+	if err != nil {
+		closeClients()
+		return nil, err
 	}
 	server := factory(newGateway(config))
 	if server == nil {
+		closeClients()
 		return nil, errors.New("gateway server factory returned nil")
 	}
 	if server.Addr == "" {
 		server.Addr = addr
 	}
 	httpserver.ApplyHTTPServerTimeouts(server)
+	server.RegisterOnShutdown(closeClients)
 	return server, nil
 }
 

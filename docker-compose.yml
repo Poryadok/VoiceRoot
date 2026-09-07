@@ -225,8 +225,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      user:
-        condition: service_healthy
       nats:
         condition: service_started
       verification-stub:
@@ -293,6 +291,10 @@ services:
       nats:
         condition: service_healthy
       social:
+        condition: service_healthy
+      # User's fail-closed deleted-account visibility gate needs Auth gRPC
+      # before User can serve its own health endpoint.
+      auth:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully

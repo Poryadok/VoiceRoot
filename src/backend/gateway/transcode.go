@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -13,43 +15,47 @@ import (
 
 	"voice/backend/pkg/grpcclient"
 
+	analyticsv1 "voice.app/voice/analytics/v1"
+	authv1 "voice.app/voice/auth/v1"
+	botv1 "voice.app/voice/bot/v1"
 	callsv1 "voice.app/voice/calls/v1"
 	chatv1 "voice.app/voice/chat/v1"
 	filev1 "voice.app/voice/file/v1"
-	messagingv1 "voice.app/voice/messaging/v1"
-	socialv1 "voice.app/voice/social/v1"
 	matchmakingv1 "voice.app/voice/matchmaking/v1"
+	messagingv1 "voice.app/voice/messaging/v1"
 	moderationv1 "voice.app/voice/moderation/v1"
 	notificationv1 "voice.app/voice/notification/v1"
 	rolev1 "voice.app/voice/role/v1"
 	searchv1 "voice.app/voice/search/v1"
-	subscriptionv1 "voice.app/voice/subscription/v1"
-	analyticsv1 "voice.app/voice/analytics/v1"
-	botv1 "voice.app/voice/bot/v1"
-	storyv1 "voice.app/voice/story/v1"
+	socialv1 "voice.app/voice/social/v1"
 	spacev1 "voice.app/voice/space/v1"
+	storyv1 "voice.app/voice/story/v1"
+	subscriptionv1 "voice.app/voice/subscription/v1"
 	userv1 "voice.app/voice/user/v1"
-	authv1 "voice.app/voice/auth/v1"
 )
 
 type grpcClients struct {
-	user      userv1.UserServiceClient
-	social    socialv1.SocialServiceClient
-	chat      chatv1.ChatServiceClient
-	messaging messagingv1.MessagingServiceClient
-	voice     callsv1.VoiceServiceClient
-	file      filev1.FileServiceClient
-	space        spacev1.SpaceServiceClient
-	role         rolev1.RoleServiceClient
-	notification notificationv1.NotificationServiceClient
-	matchmaking  matchmakingv1.MatchmakingServiceClient
-	moderation   moderationv1.ModerationServiceClient
-	subscription subscriptionv1.SubscriptionServiceClient
-	bot          botv1.BotServiceClient
-	story        storyv1.StoryServiceClient
-	search       searchv1.SearchServiceClient
-	auth         authv1.AuthServiceClient
-	analytics    analyticsv1.AnalyticsQueryServiceClient
+	connections    []*grpc.ClientConn
+	userConn       *grpc.ClientConn
+	userRequired   bool
+	userConnectErr error
+	user           userv1.UserServiceClient
+	social         socialv1.SocialServiceClient
+	chat           chatv1.ChatServiceClient
+	messaging      messagingv1.MessagingServiceClient
+	voice          callsv1.VoiceServiceClient
+	file           filev1.FileServiceClient
+	space          spacev1.SpaceServiceClient
+	role           rolev1.RoleServiceClient
+	notification   notificationv1.NotificationServiceClient
+	matchmaking    matchmakingv1.MatchmakingServiceClient
+	moderation     moderationv1.ModerationServiceClient
+	subscription   subscriptionv1.SubscriptionServiceClient
+	bot            botv1.BotServiceClient
+	story          storyv1.StoryServiceClient
+	search         searchv1.SearchServiceClient
+	auth           authv1.AuthServiceClient
+	analytics      analyticsv1.AnalyticsQueryServiceClient
 }
 
 type transcoder struct {
@@ -67,18 +73,27 @@ func grpcClientsFromEnv(logger *slog.Logger) *grpcClients {
 		return strings.TrimSpace(urls[namespace])
 	}
 
+	clients := &grpcClients{}
 	dial := func(addr string) (*grpc.ClientConn, error) {
 		addr = grpcclient.DialTarget(addr)
 		if addr == "" {
 			return nil, nil
 		}
-		return grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			return nil, err
+		}
+		clients.connections = append(clients.connections, conn)
+		return conn, nil
 	}
 
-	clients := &grpcClients{}
-	if conn, err := dial(addrFor("users")); err != nil {
+	userAddr := addrFor("users")
+	clients.userRequired = strings.TrimSpace(userAddr) != ""
+	if conn, err := dial(userAddr); err != nil {
+		clients.userConnectErr = err
 		logGRPCDialError(logger, "users", err)
 	} else if conn != nil {
+		clients.userConn = conn
 		clients.user = userv1.NewUserServiceClient(conn)
 	}
 	if conn, err := dial(addrFor("friends")); err != nil {
@@ -167,6 +182,38 @@ func grpcClientsFromEnv(logger *slog.Logger) *grpcClients {
 	return clients
 }
 
+// waitForRequiredUserReady makes the mandatory User dependency ready before
+// Gateway begins serving. grpc.NewClient is lazy, so merely constructing the
+// generated client would otherwise defer a cold connection failure to the
+// first profile request.
+func (c *grpcClients) waitForRequiredUserReady(ctx context.Context) error {
+	if c == nil || !c.userRequired {
+		return nil
+	}
+	if c.userConnectErr != nil {
+		return fmt.Errorf("user grpc connection: %w", c.userConnectErr)
+	}
+	if c.userConn == nil {
+		return fmt.Errorf("user grpc connection is not configured")
+	}
+	c.userConn.Connect()
+	if err := grpcclient.WaitForReady(ctx, c.userConn); err != nil {
+		return fmt.Errorf("user grpc readiness: %w", err)
+	}
+	return nil
+}
+
+func (c *grpcClients) close() {
+	if c == nil {
+		return
+	}
+	for _, conn := range c.connections {
+		if conn != nil {
+			_ = conn.Close()
+		}
+	}
+}
+
 func logGRPCDialError(logger *slog.Logger, namespace string, err error) {
 	if logger != nil {
 		logger.Warn("gateway grpc dial failed", slog.String("namespace", namespace), slog.Any("error", err))
@@ -178,6 +225,19 @@ func newTranscoder(clients *grpcClients) *transcoder {
 		return nil
 	}
 	return &transcoder{clients: *clients}
+}
+
+func (t *transcoder) waitForRequiredUserReady(ctx context.Context) error {
+	if t == nil {
+		return nil
+	}
+	return t.clients.waitForRequiredUserReady(ctx)
+}
+
+func (t *transcoder) close() {
+	if t != nil {
+		t.clients.close()
+	}
 }
 
 func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, namespace string) bool {

@@ -142,6 +142,38 @@ log="${FAKE_LOG:?FAKE_LOG required}"
 printf 'curl' >>"${log}"
 for arg in "$@"; do printf ' <%s>' "$arg" >>"${log}"; done
 printf '\n' >>"${log}"
+output=''
+for ((i = 1; i <= $#; i += 1)); do
+  if [[ "${!i}" == --output || "${!i}" == -o ]]; then
+    next=$((i + 1))
+    output="${!next}"
+  fi
+done
+url=''
+for arg in "$@"; do
+  [[ "$arg" == http://* || "$arg" == https://* ]] && url="$arg"
+done
+status=200
+body='{}'
+if [[ "$url" == */api/v1/auth/register ]]; then
+  body='{"session":{"access_token":"fake-a1-readiness-token"}}'
+elif [[ "$url" == */api/v1/users/me ]]; then
+  count_file="${FAKE_VISIBILITY_COUNT_FILE:?FAKE_VISIBILITY_COUNT_FILE required}"
+  count=0
+  [[ -f "$count_file" ]] && count="$(cat "$count_file")"
+  count=$((count + 1))
+  printf '%s' "$count" >"$count_file"
+  if [[ "${FAKE_VISIBILITY_MODE:-}" == delayed && "$count" -eq 1 ]]; then
+    status=503
+    body='{"error":"unavailable","message":"account visibility unavailable"}'
+  elif [[ "${FAKE_VISIBILITY_MODE:-}" == invalid ]]; then
+    status=503
+    body='{"error":"other_unavailable"}'
+  fi
+fi
+body="$(printf '%s' "$body" | tr -d '\\')"
+[[ -z "$output" ]] || printf '%s' "$body" >"$output"
+printf '%s' "$status"
 exit "${FAKE_CURL_RC:-0}"
 EOF
   cat >"${bin}/flutter" <<'EOF'
@@ -181,6 +213,7 @@ run_runner() {
       FAKE_DOCKER_MODE="${FAKE_DOCKER_MODE:-}" FAKE_FLUTTER_RC="${FAKE_FLUTTER_RC:-0}" \
       FAKE_REAL_SLEEP="${FAKE_REAL_SLEEP:-}" \
       FAKE_HEALTH_MODE="${FAKE_HEALTH_MODE:-}" FAKE_HEALTH_COUNT_FILE="${work}/health-count" \
+      FAKE_VISIBILITY_MODE="${FAKE_VISIBILITY_MODE:-}" FAKE_VISIBILITY_COUNT_FILE="${work}/visibility-count" \
       FAKE_MANIFEST_SCRIPT="${ROOT}/scripts/ci/e2e-manifest.sh" \
       FAKE_MANIFEST_RESULT="${FAKE_MANIFEST_RESULT-$DEFAULT_MANIFEST_RESULT}" REAL_BASH="$REAL_BASH" \
       TMPDIR="${work}/tmp with spaces" VOICE_A1_FLUTTER_PROFILE_HANDOFF_PORT_BASE=25000 \
@@ -269,6 +302,8 @@ assert_contains "${case_dir}/commands.log" 'compose.*<ps> <-q> <gateway>'
 inspect_count="$(grep -c '^docker <inspect>' "${case_dir}/commands.log" || true)"
 [[ "$inspect_count" -ge 4 ]] || fail 'runner must retry non-healthy realtime and gateway containers'
 assert_contains "${case_dir}/commands.log" 'curl.*<http://127.0.0.1:25012/health>'
+assert_contains "${case_dir}/commands.log" 'curl.*api/v1/auth/register'
+assert_contains "${case_dir}/commands.log" 'curl.*api/v1/users/me'
 assert_full_port_env "${case_dir}/commands.log"
 flutter_count="$(grep -c '^flutter ' "${case_dir}/commands.log" || true)"
 assert_eq "$flutter_count" 1
@@ -285,6 +320,18 @@ assert_contains "${case_dir}/commands.log" 'flutter.*<--dart-define=VOICE_API_BA
 assert_contains "${case_dir}/commands.log" '^env_VOICE_RUN_LIVE_INTEGRATION=true$'
 assert_contains "${case_dir}/commands.log" '^env_VOICE_API_BASE_URL=http://127.0.0.1:25012$'
 assert_isolated_make_target
+
+echo '== account visibility waits only for its documented transient =='
+case_dir="$(new_case visibility-delayed)"
+FAKE_VISIBILITY_MODE=delayed run_runner "$case_dir"
+assert_eq "$(cat "${case_dir}/rc")" 0
+assert_eq "$(cat "${case_dir}/visibility-count")" 2
+case_dir="$(new_case visibility-invalid)"
+FAKE_VISIBILITY_MODE=invalid run_runner "$case_dir"
+assert_eq "$(cat "${case_dir}/rc")" 1
+assert_eq "$(cat "${case_dir}/visibility-count")" 1
+flutter_count="$(grep -c '^flutter ' "${case_dir}/commands.log" || true)"
+assert_eq "$flutter_count" 0
 
 echo '== every Compose path is absolute and env file is empty =='
 compose_line="$(grep -m1 '^docker <compose> ' "${case_dir}/commands.log")"

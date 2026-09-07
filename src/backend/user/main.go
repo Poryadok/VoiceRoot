@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"log/slog"
 	"net"
@@ -33,6 +34,17 @@ import (
 )
 
 const serviceName = "user"
+
+// waitForRequiredGRPCReady establishes a required S2S connection before this
+// service exposes its health endpoint. Lazy gRPC connections otherwise make a
+// healthy User instance fail closed on its first deleted-account lookup.
+func waitForRequiredGRPCReady(ctx context.Context, conn *grpc.ClientConn) error {
+	if conn == nil {
+		return errors.New("required grpc connection is nil")
+	}
+	conn.Connect()
+	return grpcclient.WaitForReady(ctx, conn)
+}
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
@@ -133,6 +145,13 @@ func main() {
 		if err != nil {
 			log.Fatalf("auth grpc: %v", err)
 		}
+		waitCtx, waitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
+		if err := waitForRequiredGRPCReady(waitCtx, authConn); err != nil {
+			waitCancel()
+			_ = authConn.Close()
+			log.Fatalf("auth grpc dial: %v", err)
+		}
+		waitCancel()
 		defer func() { _ = authConn.Close() }()
 		deletedAccounts = grpcsvc.NewAuthGRPCDeletedAccounts(authConn)
 
