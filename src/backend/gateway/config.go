@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
@@ -119,7 +120,36 @@ func loadGatewayConfigFromEnvMode(strict bool) gatewayConfig {
 	return config
 }
 
-func newGatewayServerFromEnv(addr string, factory func(http.Handler) *http.Server) (*http.Server, error) {
+// gatewayServer owns the Gateway's HTTP server and its gRPC upstream clients.
+// The upstream clients must remain usable while http.Server.Shutdown drains
+// in-flight HTTP handlers, so they are closed only after the drain succeeds.
+type gatewayServer struct {
+	*http.Server
+	closeClients     func()
+	closeClientsOnce sync.Once
+}
+
+func (s *gatewayServer) closeUpstreams() {
+	if s != nil && s.closeClients != nil {
+		s.closeClientsOnce.Do(s.closeClients)
+	}
+}
+
+func (s *gatewayServer) Shutdown(ctx context.Context) error {
+	err := s.Server.Shutdown(ctx)
+	if err == nil {
+		s.closeUpstreams()
+	}
+	return err
+}
+
+func (s *gatewayServer) Close() error {
+	err := s.Server.Close()
+	s.closeUpstreams()
+	return err
+}
+
+func newGatewayServerFromEnv(addr string, factory func(http.Handler) *http.Server) (*gatewayServer, error) {
 	config, err := loadGatewayConfigFromEnvChecked()
 	if err != nil {
 		return nil, err
@@ -149,8 +179,7 @@ func newGatewayServerFromEnv(addr string, factory func(http.Handler) *http.Serve
 		server.Addr = addr
 	}
 	httpserver.ApplyHTTPServerTimeouts(server)
-	server.RegisterOnShutdown(closeClients)
-	return server, nil
+	return &gatewayServer{Server: server, closeClients: closeClients}, nil
 }
 
 func loadJSONEnv(logger *slog.Logger, name string, dst any) {

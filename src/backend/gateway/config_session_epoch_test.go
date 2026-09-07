@@ -192,6 +192,74 @@ func TestGatewayBootstrapAcceptsReadyConfiguredUserGRPC(t *testing.T) {
 	}
 }
 
+func TestGatewayServerShutdownDrainsHandlersBeforeClosingUpstreams(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen gateway: %v", err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+
+	handlerStarted := make(chan struct{})
+	releaseHandler := make(chan struct{})
+	upstreamsClosed := make(chan struct{})
+	shutdownStarted := make(chan struct{})
+	server := &gatewayServer{
+		Server: &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			close(handlerStarted)
+			<-releaseHandler
+			w.WriteHeader(http.StatusNoContent)
+		})},
+		closeClients: func() { close(upstreamsClosed) },
+	}
+	server.RegisterOnShutdown(func() { close(shutdownStarted) })
+	go func() { _ = server.Serve(listener) }()
+
+	responseDone := make(chan error, 1)
+	go func() {
+		response, err := http.Get("http://" + listener.Addr().String())
+		if err == nil {
+			err = response.Body.Close()
+		}
+		responseDone <- err
+	}()
+	select {
+	case <-handlerStarted:
+	case <-time.After(time.Second):
+		t.Fatal("gateway handler did not start")
+	}
+
+	shutdownDone := make(chan error, 1)
+	go func() { shutdownDone <- server.Shutdown(context.Background()) }()
+	select {
+	case <-shutdownStarted:
+	case <-time.After(time.Second):
+		t.Fatal("http shutdown did not begin")
+	}
+	select {
+	case <-upstreamsClosed:
+		t.Fatal("gRPC upstreams closed before the active HTTP handler drained")
+	default:
+	}
+
+	close(releaseHandler)
+	select {
+	case err := <-shutdownDone:
+		if err != nil {
+			t.Fatalf("shutdown gateway: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("gateway shutdown did not finish after handler drained")
+	}
+	if err := <-responseDone; err != nil {
+		t.Fatalf("gateway response: %v", err)
+	}
+	select {
+	case <-upstreamsClosed:
+	case <-time.After(time.Second):
+		t.Fatal("gRPC upstreams were not closed after gateway shutdown")
+	}
+}
+
 func TestGatewayMainUsesCheckedConfigBootstrap(t *testing.T) {
 	mainSource, err := os.ReadFile("main.go")
 	if err != nil {
