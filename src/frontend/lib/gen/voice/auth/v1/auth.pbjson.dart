@@ -373,11 +373,22 @@ final $typed_data.Uint8List verify2FAResponseDescriptor = $convert.base64Decode(
 @$core.Deprecated('Use verifyOTPResponseDescriptor instead')
 const VerifyOTPResponse$json = {
   '1': 'VerifyOTPResponse',
+  '2': [
+    {
+      '1': 'session',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.auth.v1.AuthSession',
+      '10': 'session'
+    },
+  ],
 };
 
 /// Descriptor for `VerifyOTPResponse`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List verifyOTPResponseDescriptor =
-    $convert.base64Decode('ChFWZXJpZnlPVFBSZXNwb25zZQ==');
+final $typed_data.Uint8List verifyOTPResponseDescriptor = $convert.base64Decode(
+    'ChFWZXJpZnlPVFBSZXNwb25zZRI0CgdzZXNzaW9uGAEgASgLMhoudm9pY2UuYXV0aC52MS5BdX'
+    'RoU2Vzc2lvblIHc2Vzc2lvbg==');
 
 @$core.Deprecated('Use convertGuestResponseDescriptor instead')
 const ConvertGuestResponse$json = {
