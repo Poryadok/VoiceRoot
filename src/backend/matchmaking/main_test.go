@@ -29,9 +29,13 @@ func TestGRPCReadinessWaitsUseIndependentTimeoutContexts(t *testing.T) {
 			return true
 		}
 		readinessWaits++
-		ctx, ok := call.Args[0].(*ast.Ident)
-		definition, ok := timeoutContextDefinitionForUse(timeoutContexts, ctx)
-		if !ok {
+		contextName, isContextName := call.Args[0].(*ast.Ident)
+		if !isContextName {
+			t.Errorf("waitForGRPCReady must receive a context created with context.WithTimeout(..., grpcclient.DialTimeoutFromEnv())")
+			return true
+		}
+		definition, found := timeoutContextDefinitionForUse(timeoutContexts, contextName)
+		if !found {
 			t.Errorf("waitForGRPCReady must receive a context created with context.WithTimeout(..., grpcclient.DialTimeoutFromEnv())")
 			return true
 		}
