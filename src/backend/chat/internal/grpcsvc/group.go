@@ -29,6 +29,15 @@ func (s *ChatGRPC) CreateChat(ctx context.Context, req *chatv1.CreateChatRequest
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
 	}
+	spaceIDRaw := strings.TrimSpace(req.GetSpaceId())
+	// Guests may participate only after a regular member explicitly invites them
+	// to a standalone chat that opted in. Space creation remains owned by the
+	// existing Space and Role policy path.
+	if spaceIDRaw == "" {
+		if err := authctx.RequireRegular(ctx); err != nil {
+			return nil, err
+		}
+	}
 	name := strings.TrimSpace(req.GetName())
 	if name == "" {
 		return nil, status.Error(codes.InvalidArgument, "name is required")
@@ -41,7 +50,6 @@ func (s *ChatGRPC) CreateChat(ctx context.Context, req *chatv1.CreateChatRequest
 
 	var row *store.ChatRow
 	var err error
-	spaceIDRaw := strings.TrimSpace(req.GetSpaceId())
 	if chatType == chatv1.ChatType_CHAT_TYPE_CHANNEL {
 		if spaceIDRaw == "" {
 			row, err = s.DM.CreateChannelChat(ctx, caller, name, topic)
@@ -110,7 +118,7 @@ func (s *ChatGRPC) UpdateChat(ctx context.Context, req *chatv1.UpdateChatRequest
 
 	var name, avatar, topic *string
 	var slowMode *int32
-	var threadsEnabled, allowUserMainFeed *bool
+	var threadsEnabled, allowUserMainFeed, allowGuests *bool
 	if req.Name != nil {
 		n := strings.TrimSpace(req.GetName())
 		name = &n
@@ -135,8 +143,12 @@ func (s *ChatGRPC) UpdateChat(ctx context.Context, req *chatv1.UpdateChatRequest
 		v := req.GetAllowUserMainFeed()
 		allowUserMainFeed = &v
 	}
+	if req.AllowGuests != nil {
+		v := req.GetAllowGuests()
+		allowGuests = &v
+	}
 
-	slowModeOnly := slowMode != nil && name == nil && avatar == nil && topic == nil && threadsEnabled == nil && allowUserMainFeed == nil
+	slowModeOnly := slowMode != nil && name == nil && avatar == nil && topic == nil && threadsEnabled == nil && allowUserMainFeed == nil && allowGuests == nil
 	if row.SpaceID != nil && slowModeOnly && s.Roles != nil {
 		if err := canSetSpaceChatSlowMode(ctx, s.Roles, *row.SpaceID, caller); err != nil {
 			return nil, err
@@ -147,7 +159,10 @@ func (s *ChatGRPC) UpdateChat(ctx context.Context, req *chatv1.UpdateChatRequest
 		return nil, status.Error(codes.PermissionDenied, "only the chat owner can update the chat")
 	}
 
-	updated, err := s.DM.UpdateGroupChat(ctx, chatID, name, avatar, topic, slowMode, threadsEnabled, allowUserMainFeed)
+	if row.SpaceID != nil && allowGuests != nil {
+		return nil, status.Error(codes.FailedPrecondition, "space chat guest admission is owned by Space and Role services")
+	}
+	updated, err := s.DM.UpdateGroupChat(ctx, chatID, name, avatar, topic, slowMode, threadsEnabled, allowUserMainFeed, allowGuests)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -177,7 +192,15 @@ func (s *ChatGRPC) AddMembers(ctx context.Context, req *chatv1.AddMembersRequest
 		return nil, status.Error(codes.NotFound, "chat not found")
 	}
 	if row.Type != "group" {
-		return nil, status.Error(codes.InvalidArgument, "add members only supported for groups")
+		if row.Type != "channel" || row.SpaceID != nil {
+			return nil, status.Error(codes.InvalidArgument, "add members only supported for standalone groups and channels")
+		}
+	}
+	if row.SpaceID != nil {
+		return nil, status.Error(codes.FailedPrecondition, "space chat membership is owned by Space and Role services")
+	}
+	if err := authctx.RequireRegular(ctx); err != nil {
+		return nil, err
 	}
 	member, err := s.DM.IsChatMember(ctx, chatID, caller)
 	if err != nil {
@@ -188,6 +211,7 @@ func (s *ChatGRPC) AddMembers(ctx context.Context, req *chatv1.AddMembersRequest
 	}
 
 	ids := make([]uuid.UUID, 0, len(req.GetProfileIds()))
+	guestIDs := make([]uuid.UUID, 0, len(req.GetProfileIds()))
 	for _, raw := range req.GetProfileIds() {
 		pid, perr := parseUUIDField("profile_id", raw)
 		if perr != nil {
@@ -197,6 +221,19 @@ func (s *ChatGRPC) AddMembers(ctx context.Context, req *chatv1.AddMembersRequest
 			if _, perr := s.Profiles.AccountIDByProfileID(ctx, pid); perr != nil {
 				return nil, perr
 			}
+			guestProfiles, ok := s.Profiles.(GuestProfileLookup)
+			if !ok {
+				return nil, status.Error(codes.FailedPrecondition, "guest profile lookup not configured")
+			}
+			guest, perr := guestProfiles.IsGuestProfile(ctx, pid)
+			if perr != nil {
+				return nil, status.Error(codes.Unavailable, "guest profile lookup unavailable")
+			}
+			if guest {
+				guestIDs = append(guestIDs, pid)
+			}
+		} else {
+			return nil, status.Error(codes.FailedPrecondition, "profile service not configured")
 		}
 		if err := s.ensureInvitePrivacy(ctx, caller, pid); err != nil {
 			if !authctx.IsInternalService(ctx) {
@@ -209,12 +246,15 @@ func (s *ChatGRPC) AddMembers(ctx context.Context, req *chatv1.AddMembersRequest
 	if authctx.IsInternalService(ctx) {
 		ctx = store.WithGroupMinMembers(ctx, 2)
 	}
-	added, err := s.DM.AddGroupMembers(ctx, chatID, ids)
+	added, err := s.DM.AddGroupMembersWithGuestAdmission(ctx, chatID, ids, guestIDs)
 	if errors.Is(err, store.ErrGroupTooFewMembers) {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	if errors.Is(err, store.ErrGroupMemberLimit) {
 		return nil, status.Error(codes.ResourceExhausted, err.Error())
+	}
+	if errors.Is(err, store.ErrGuestAdmissionDisabled) {
+		return nil, status.Error(codes.PermissionDenied, err.Error())
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, status.Error(codes.NotFound, "chat not found")
@@ -255,25 +295,13 @@ func (s *ChatGRPC) RemoveMember(ctx context.Context, req *chatv1.RemoveMemberReq
 	if row == nil {
 		return nil, status.Error(codes.NotFound, "chat not found")
 	}
-	if row.Type != "group" {
-		return nil, status.Error(codes.InvalidArgument, "remove member only supported for groups")
+	if (row.Type != "group" && row.Type != "channel") || row.SpaceID != nil {
+		return nil, status.Error(codes.InvalidArgument, "remove member only supported for standalone groups and channels")
 	}
 	// Space membership policy is owned by the Space role model.  Preserve the
 	// existing chat-level owner rule here; standalone groups use the atomic
 	// owner/admin hierarchy below.
-	var removeErr error
-	if row.SpaceID != nil {
-		role, roleErr := s.DM.GetMemberRole(ctx, chatID, caller)
-		if roleErr != nil {
-			return nil, status.Error(codes.Internal, roleErr.Error())
-		}
-		if role != "owner" {
-			return nil, status.Error(codes.PermissionDenied, "only the group owner can remove members")
-		}
-		removeErr = s.DM.RemoveGroupMember(ctx, chatID, targetID)
-	} else {
-		removeErr = s.DM.RemoveStandaloneGroupMember(ctx, chatID, caller, targetID)
-	}
+	removeErr := s.DM.RemoveStandaloneGroupMember(ctx, chatID, caller, targetID)
 	if err := removeErr; err != nil {
 		if errors.Is(err, store.ErrCannotRemoveOwner) {
 			return nil, status.Error(codes.FailedPrecondition, err.Error())
@@ -316,8 +344,8 @@ func (s *ChatGRPC) LeaveChat(ctx context.Context, req *chatv1.LeaveChatRequest) 
 	if row == nil {
 		return nil, status.Error(codes.NotFound, "chat not found")
 	}
-	if row.Type != "group" {
-		return nil, status.Error(codes.InvalidArgument, "leave only supported for groups")
+	if (row.Type != "group" && row.Type != "channel") || row.SpaceID != nil {
+		return nil, status.Error(codes.InvalidArgument, "leave only supported for standalone groups and channels")
 	}
 	if err := s.DM.LeaveGroupChat(ctx, chatID, caller); err != nil {
 		if errors.Is(err, store.ErrOwnerMustTransfer) {

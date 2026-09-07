@@ -40,6 +40,7 @@ class Chat extends $pb.GeneratedMessage {
     $core.bool? threadsEnabled,
     $core.bool? allowUserMainFeed,
     $core.bool? e2eEnabled,
+    $core.bool? allowGuests,
   }) {
     final result = create();
     if (id != null) result.id = id;
@@ -56,6 +57,7 @@ class Chat extends $pb.GeneratedMessage {
     if (threadsEnabled != null) result.threadsEnabled = threadsEnabled;
     if (allowUserMainFeed != null) result.allowUserMainFeed = allowUserMainFeed;
     if (e2eEnabled != null) result.e2eEnabled = e2eEnabled;
+    if (allowGuests != null) result.allowGuests = allowGuests;
     return result;
   }
 
@@ -90,6 +92,7 @@ class Chat extends $pb.GeneratedMessage {
     ..aOB(12, _omitFieldNames ? '' : 'threadsEnabled')
     ..aOB(13, _omitFieldNames ? '' : 'allowUserMainFeed')
     ..aOB(14, _omitFieldNames ? '' : 'e2eEnabled')
+    ..aOB(15, _omitFieldNames ? '' : 'allowGuests')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -241,6 +244,16 @@ class Chat extends $pb.GeneratedMessage {
   $core.bool hasE2eEnabled() => $_has(13);
   @$pb.TagNumber(14)
   void clearE2eEnabled() => $_clearField(14);
+
+  /// Guest admission is explicit and defaults to false for standalone chats.
+  @$pb.TagNumber(15)
+  $core.bool get allowGuests => $_getBF(14);
+  @$pb.TagNumber(15)
+  set allowGuests($core.bool value) => $_setBool(14, value);
+  @$pb.TagNumber(15)
+  $core.bool hasAllowGuests() => $_has(14);
+  @$pb.TagNumber(15)
+  void clearAllowGuests() => $_clearField(15);
 }
 
 class CreateDMRequest extends $pb.GeneratedMessage {
@@ -451,6 +464,7 @@ class UpdateChatRequest extends $pb.GeneratedMessage {
     $core.String? avatarUrl,
     $core.bool? threadsEnabled,
     $core.bool? allowUserMainFeed,
+    $core.bool? allowGuests,
   }) {
     final result = create();
     if (chatId != null) result.chatId = chatId;
@@ -460,6 +474,7 @@ class UpdateChatRequest extends $pb.GeneratedMessage {
     if (avatarUrl != null) result.avatarUrl = avatarUrl;
     if (threadsEnabled != null) result.threadsEnabled = threadsEnabled;
     if (allowUserMainFeed != null) result.allowUserMainFeed = allowUserMainFeed;
+    if (allowGuests != null) result.allowGuests = allowGuests;
     return result;
   }
 
@@ -483,6 +498,7 @@ class UpdateChatRequest extends $pb.GeneratedMessage {
     ..aOS(5, _omitFieldNames ? '' : 'avatarUrl')
     ..aOB(6, _omitFieldNames ? '' : 'threadsEnabled')
     ..aOB(7, _omitFieldNames ? '' : 'allowUserMainFeed')
+    ..aOB(8, _omitFieldNames ? '' : 'allowGuests')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -566,6 +582,15 @@ class UpdateChatRequest extends $pb.GeneratedMessage {
   $core.bool hasAllowUserMainFeed() => $_has(6);
   @$pb.TagNumber(7)
   void clearAllowUserMainFeed() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $core.bool get allowGuests => $_getBF(7);
+  @$pb.TagNumber(8)
+  set allowGuests($core.bool value) => $_setBool(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasAllowGuests() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearAllowGuests() => $_clearField(8);
 }
 
 class DeleteChatRequest extends $pb.GeneratedMessage {
