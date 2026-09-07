@@ -346,7 +346,9 @@ void main() {
       if (req.url.path == '/api/v1/auth/convert-guest') {
         return http.Response(jsonEncode({'session': {...(sessionJson()['session'] as Map<String, dynamic>), 'account_type': 'guest'}}), 200);
       }
-      if (req.url.path == '/api/v1/auth/otp/send') return http.Response('', 204);
+      if (req.url.path == '/api/v1/auth/otp/send') {
+        return http.Response('', 204);
+      }
       if (req.url.path == '/api/v1/auth/otp/verify') {
         verifies++;
         return http.Response('', 204);
@@ -509,7 +511,9 @@ void main() {
         refreshRequested.complete();
         return refreshResponse.future;
       }
-      if (req.url.path == '/api/v1/auth/logout') return http.Response('', 204);
+      if (req.url.path == '/api/v1/auth/logout') {
+        return http.Response('', 204);
+      }
       return http.Response('not found', 404);
     });
     final container = buildContainer(mock: mock, storage: storage);
@@ -539,7 +543,9 @@ void main() {
         refreshRequested.complete();
         return refreshResponse.future;
       }
-      if (req.url.path == '/api/v1/auth/switch-profile') return http.Response(jsonEncode(switched.toJson()), 200);
+      if (req.url.path == '/api/v1/auth/switch-profile') {
+        return http.Response(jsonEncode(switched.toJson()), 200);
+      }
       return http.Response('not found', 404);
     });
     final container = buildContainer(mock: mock);
@@ -565,8 +571,12 @@ void main() {
     await guestStorage.writePendingConversionEmail('old@example.com');
     await guestStorage.setGuestConversionPromotionPending(true);
     final mock = MockClient((req) async {
-      if (req.url.path == '/api/v1/auth/refresh') return http.Response(jsonEncode({'session': {...(sessionJson()['session'] as Map<String, dynamic>), 'account_type': 'regular'}}), 200);
-      if (req.url.path == '/api/v1/auth/logout') return http.Response('', 204);
+      if (req.url.path == '/api/v1/auth/refresh') {
+        return http.Response(jsonEncode({'session': {...(sessionJson()['session'] as Map<String, dynamic>), 'account_type': 'regular'}}), 200);
+      }
+      if (req.url.path == '/api/v1/auth/logout') {
+        return http.Response('', 204);
+      }
       return http.Response('not found', 404);
     });
     final container = buildContainer(mock: mock, guestStorage: guestStorage);
@@ -594,8 +604,12 @@ void main() {
     await guestStorage.setGuestConversionPromotionPending(true);
     const switched = AuthSession(accessToken: 'profile-b-access', refreshToken: 'profile-b-refresh', accountId: 'acc-1', activeProfileId: 'profile-b', expiresInSeconds: 900, accountType: 'guest');
     final mock = MockClient((req) async {
-      if (req.url.path == '/api/v1/auth/refresh') return http.Response(jsonEncode({'session': {...(sessionJson()['session'] as Map<String, dynamic>), 'account_type': 'regular'}}), 200);
-      if (req.url.path == '/api/v1/auth/switch-profile') return http.Response(jsonEncode(switched.toJson()), 200);
+      if (req.url.path == '/api/v1/auth/refresh') {
+        return http.Response(jsonEncode({'session': {...(sessionJson()['session'] as Map<String, dynamic>), 'account_type': 'regular'}}), 200);
+      }
+      if (req.url.path == '/api/v1/auth/switch-profile') {
+        return http.Response(jsonEncode(switched.toJson()), 200);
+      }
       return http.Response('not found', 404);
     });
     final container = buildContainer(mock: mock, guestStorage: guestStorage);
