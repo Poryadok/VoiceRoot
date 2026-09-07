@@ -63,6 +63,29 @@ public final class InMemoryGuestConversionOperationRepository
     return leaseDueInternal(expectedState, batchSize, now, leaseUntil);
   }
 
+  @Override
+  public synchronized Optional<GuestConversionOperation> leaseDueForAccount(
+      GuestConversionState expectedState, UUID accountId, Instant now, Instant leaseUntil) {
+    requireNonNull(expectedState, "expectedState");
+    requireNonNull(accountId, "accountId");
+    requireNonNull(now, "now");
+    requireNonNull(leaseUntil, "leaseUntil");
+    if (!leaseUntil.isAfter(now)) {
+      throw new IllegalArgumentException("leaseUntil must be after now");
+    }
+    UUID operationId = operationIdByAccountId.get(accountId);
+    GuestConversionOperation operation = operationId == null ? null : byOperationId.get(operationId);
+    if (operation == null
+        || operation.state() != expectedState
+        || operation.nextAttemptAt().isAfter(now)
+        || (operation.lockedUntil() != null && operation.lockedUntil().isAfter(now))) {
+      return Optional.empty();
+    }
+    GuestConversionOperation leased = withLease(operation, leaseUntil, now);
+    byOperationId.put(leased.operationId(), leased);
+    return Optional.of(leased);
+  }
+
   private List<GuestConversionOperation> leaseDueInternal(
       GuestConversionState expectedState, int batchSize, Instant now, Instant leaseUntil) {
     if (batchSize <= 0) {
