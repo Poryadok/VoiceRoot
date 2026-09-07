@@ -1727,6 +1727,15 @@ func (s *MessagingGRPC) MarkRead(ctx context.Context, req *messagingv1.MarkReadR
 	if !okMsg {
 		return nil, status.Error(codes.NotFound, "message not found in chat")
 	}
+	// A private read position always advances: it drives this reader's unread
+	// counter and must not be coupled to receipt visibility.
+	if err := s.Messages.UpsertReadPosition(ctx, chatID, profileID, lastRead); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	publishReceipt := s.shouldPublishReadReceipt(ctx, chatID, profileID)
+	if !publishReceipt {
+		return &messagingv1.MarkReadResponse{}, nil
+	}
 	if err := s.Messages.UpsertReadReceipt(ctx, chatID, profileID, lastRead); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -1761,7 +1770,7 @@ func (s *MessagingGRPC) GetReadState(ctx context.Context, req *messagingv1.GetRe
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 	}
-	lid, upd, err := s.Messages.GetReadReceipt(ctx, chatID, profileID)
+	lid, upd, err := s.Messages.GetReadPosition(ctx, chatID, profileID)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -1792,7 +1801,7 @@ func (s *MessagingGRPC) GetBulkReadState(ctx context.Context, req *messagingv1.G
 	}
 	out := make(map[string]*messagingv1.ReadState, len(chatIDs))
 	for _, chatID := range chatIDs {
-		lid, upd, err := s.Messages.GetReadReceipt(ctx, chatID, profileID)
+		lid, upd, err := s.Messages.GetReadPosition(ctx, chatID, profileID)
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
@@ -1832,6 +1841,11 @@ func (s *MessagingGRPC) GetChatListMetadata(ctx context.Context, req *messagingv
 	out := make(map[string]*messagingv1.ChatListMetadata, len(rows))
 	for _, chatID := range chatIDs {
 		row := rows[chatID]
+		// A previously published receipt must also disappear from the durable
+		// list response after either DM participant opts out. Delivery remains.
+		if row.LastMessageDeliveryState == "read" && !s.shouldPublishReadReceipt(ctx, chatID, profileID) {
+			row.LastMessageDeliveryState = "delivered"
+		}
 		ref := refByID[chatID]
 		if ref == nil {
 			ref = chatRefFromID(chatID, "dm")

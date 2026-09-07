@@ -29,6 +29,7 @@ type PrivacyRow struct {
 	AllowFriendRequests   privacy.Audience
 	AllowGuestDM          bool
 	AllowForward          bool
+	ShowReadReceipts      bool
 	UpdatedAt             time.Time
 }
 
@@ -51,7 +52,7 @@ SELECT profile_id, preset,
        show_online_audience, show_game_status_audience, show_mm_rating_audience, show_phone_audience, show_stories_audience,
        allow_phone_search_audience, allow_dm_audience, allow_calls_audience, allow_chat_space_invites_audience,
        allow_files_audience, allow_voice_messages_audience, allow_friend_requests_audience,
-       allow_guest_dm, allow_forward, updated_at
+       allow_guest_dm, allow_forward, show_read_receipts, updated_at
 FROM privacy_settings
 WHERE profile_id = $1`, profileID))
 	if err != nil {
@@ -99,6 +100,7 @@ func PrivacyRowFromSettings(profileID uuid.UUID, s privacy.Settings) PrivacyRow 
 		AllowFriendRequests:   s.AllowFriendRequests,
 		AllowGuestDM:          s.AllowGuestDM,
 		AllowForward:          s.AllowForward,
+		ShowReadReceipts:      s.ShowReadReceipts,
 	}
 }
 
@@ -160,8 +162,8 @@ INSERT INTO privacy_settings (
   show_online_audience, show_game_status_audience, show_mm_rating_audience, show_phone_audience, show_stories_audience,
   allow_phone_search_audience, allow_dm_audience, allow_calls_audience, allow_chat_space_invites_audience,
   allow_files_audience, allow_voice_messages_audience, allow_friend_requests_audience,
-  allow_guest_dm, allow_forward
-) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+  allow_guest_dm, allow_forward, show_read_receipts
+) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
 ON CONFLICT (profile_id) DO UPDATE SET
   preset = EXCLUDED.preset,
   show_online_audience = EXCLUDED.show_online_audience,
@@ -178,16 +180,17 @@ ON CONFLICT (profile_id) DO UPDATE SET
   allow_friend_requests_audience = EXCLUDED.allow_friend_requests_audience,
   allow_guest_dm = EXCLUDED.allow_guest_dm,
   allow_forward = EXCLUDED.allow_forward,
+  show_read_receipts = EXCLUDED.show_read_receipts,
   updated_at = now()
 RETURNING profile_id, preset,
   show_online_audience, show_game_status_audience, show_mm_rating_audience, show_phone_audience, show_stories_audience,
   allow_phone_search_audience, allow_dm_audience, allow_calls_audience, allow_chat_space_invites_audience,
   allow_files_audience, allow_voice_messages_audience, allow_friend_requests_audience,
-  allow_guest_dm, allow_forward, updated_at`,
+  allow_guest_dm, allow_forward, show_read_receipts, updated_at`,
 		row.ProfileID, row.Preset,
 		showOnline, showGameStatus, showMmRating, showPhone, showStories,
 		allowPhoneSearch, allowDM, allowCalls, allowInvites, allowFiles, allowVoice, allowFriendRequests,
-		row.AllowGuestDM, row.AllowForward,
+		row.AllowGuestDM, row.AllowForward, row.ShowReadReceipts,
 	))
 }
 
@@ -202,6 +205,7 @@ func scanPrivacy(row pgx.Row) (*PrivacyRow, error) {
 		&allowPhoneSearch, &allowDM, &allowCalls, &allowInvites, &allowFiles, &allowVoice, &allowFriendRequests,
 		&out.AllowGuestDM,
 		&out.AllowForward,
+		&out.ShowReadReceipts,
 		&out.UpdatedAt,
 	); err != nil {
 		return nil, err

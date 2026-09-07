@@ -2074,6 +2074,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get privacyAllowForward => 'Allow others to forward my messages';
 
   @override
+  String get privacyShowReadReceipts => 'Read receipts';
+
+  @override
   String get privacyVisibilityTitle => 'Visibility';
 
   @override
@@ -2316,6 +2319,27 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get guestConvertSubmit => 'Create account';
+
+  @override
+  String guestConvertVerificationSubtitle(Object email) {
+    return 'Enter the code sent to $email. Your guest access stays active until it is verified.';
+  }
+
+  @override
+  String get guestConvertCodeLabel => 'Verification code';
+
+  @override
+  String get guestConvertVerify => 'Verify email';
+
+  @override
+  String get guestConvertResend => 'Resend code';
+
+  @override
+  String get guestConvertPromotionPending =>
+      'Your email is verified. We are finishing your account setup; your guest access stays active until then.';
+
+  @override
+  String get guestConvertRefreshStatus => 'Refresh account status';
 
   @override
   String get guestSaveAccountReminder =>

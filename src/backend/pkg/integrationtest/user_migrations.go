@@ -22,6 +22,7 @@ var UserDBMigrationFiles = []string{
 	"000008_notification_prefs.up.sql",
 	"000009_profile_is_guest_account.up.sql",
 	"000010_privacy_allow_forward.up.sql",
+	"000011_privacy_show_read_receipts.up.sql",
 }
 
 // ApplyUserDBMigrations runs all user_db *.up.sql migrations in order.

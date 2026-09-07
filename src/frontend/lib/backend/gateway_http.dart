@@ -19,8 +19,9 @@ sealed class GatewayHttpResult<T> {
 }
 
 final class GatewayHttpOk<T> extends GatewayHttpResult<T> {
-  const GatewayHttpOk(this.data);
+  const GatewayHttpOk(this.data, {this.statusCode});
   final T data;
+  final int? statusCode;
 }
 
 final class GatewayHttpFailure extends GatewayHttpResult<Never> {
@@ -383,16 +384,22 @@ class GatewayHttpClient {
         }
       }
       if (response.statusCode == 204 && allowNoContent) {
-        return const GatewayHttpOk(<String, dynamic>{});
+        return GatewayHttpOk(
+          const <String, dynamic>{},
+          statusCode: response.statusCode,
+        );
       }
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final raw = _responseBodyUtf8(response);
         if (raw.trim().isEmpty) {
-          return const GatewayHttpOk(<String, dynamic>{});
+          return GatewayHttpOk(
+            const <String, dynamic>{},
+            statusCode: response.statusCode,
+          );
         }
         final decoded = jsonDecode(raw);
         if (decoded is Map<String, dynamic>) {
-          return GatewayHttpOk(decoded);
+          return GatewayHttpOk(decoded, statusCode: response.statusCode);
         }
         return GatewayHttpFailure(
           GatewayApiError(

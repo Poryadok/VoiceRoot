@@ -44,6 +44,7 @@ func TestJetStreamPublisher_ChatCreatedRoundTrip(t *testing.T) {
 
 	sub, err := nc.SubscribeSync(subjectChatCreated)
 	require.NoError(t, err)
+	require.NoError(t, nc.Flush())
 	t.Cleanup(func() { _ = sub.Unsubscribe() })
 
 	pub, err := NewJetStreamPublisher(url)
@@ -76,6 +77,7 @@ func TestJetStreamPublisher_ChatMemberChangedRoundTrip(t *testing.T) {
 
 	sub, err := nc.SubscribeSync(subjectChatMemberChanged)
 	require.NoError(t, err)
+	require.NoError(t, nc.Flush())
 	t.Cleanup(func() { _ = sub.Unsubscribe() })
 
 	pub, err := NewJetStreamPublisher(url)
