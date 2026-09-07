@@ -73,7 +73,7 @@
 | Таблица | Примечание |
 |---------|------------|
 | `chats`, `chat_members` | Shipped — DM/group/channel, `is_archived`, `inbox_bucket` |
-| `folders`, `folder_chats` | Backlog — navigation IA; **0 DDL** |
+| `folders`, `folder_chats` | **Shipped** — migrations `000008`/`000009`; folder CRUD and membership handlers are implemented |
 | `quick_access_chats` | **Shipped** — migration `000010` (Batch 17) |
 | `sticker_packs` | Catalog metadata (`is_system`, `is_premium`, `creator_profile_id`) — **0 code** |
 | `stickers` | Rows per asset; `file_id` → File `intent=sticker` |
