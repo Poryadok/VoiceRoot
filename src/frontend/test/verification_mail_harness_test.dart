@@ -136,7 +136,7 @@ void main() {
   );
 
   test(
-    'account visibility failure omits server response fields from diagnostics',
+    'account visibility failure omits JSON error_code and message from diagnostics',
     () async {
       const sensitiveErrorCode = 'visibility_denied_token_must_not_appear';
       const sensitiveMessage = 'Bearer access-token-must-not-appear';
@@ -169,7 +169,7 @@ void main() {
           case '/api/v1/users/me':
             return http.Response(
               jsonEncode({
-                'error': sensitiveErrorCode,
+                'error_code': sensitiveErrorCode,
                 'message': sensitiveMessage,
               }),
               403,
