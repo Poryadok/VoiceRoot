@@ -1250,6 +1250,7 @@ class ChatListItem extends $pb.GeneratedMessage {
     $core.String? inbox,
     $core.bool? isStranger,
     $core.String? dmPeerProfileId,
+    $core.bool? isPinned,
   }) {
     final result = create();
     if (chat != null) result.chat = chat;
@@ -1259,6 +1260,7 @@ class ChatListItem extends $pb.GeneratedMessage {
     if (inbox != null) result.inbox = inbox;
     if (isStranger != null) result.isStranger = isStranger;
     if (dmPeerProfileId != null) result.dmPeerProfileId = dmPeerProfileId;
+    if (isPinned != null) result.isPinned = isPinned;
     return result;
   }
 
@@ -1281,6 +1283,7 @@ class ChatListItem extends $pb.GeneratedMessage {
     ..aOS(4, _omitFieldNames ? '' : 'inbox')
     ..aOB(5, _omitFieldNames ? '' : 'isStranger')
     ..aOS(6, _omitFieldNames ? '' : 'dmPeerProfileId')
+    ..aOB(7, _omitFieldNames ? '' : 'isPinned')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1360,6 +1363,16 @@ class ChatListItem extends $pb.GeneratedMessage {
   $core.bool hasDmPeerProfileId() => $_has(5);
   @$pb.TagNumber(6)
   void clearDmPeerProfileId() => $_clearField(6);
+
+  /// Per-folder pin state for this list result; absent outside folder-scoped lists.
+  @$pb.TagNumber(7)
+  $core.bool get isPinned => $_getBF(6);
+  @$pb.TagNumber(7)
+  set isPinned($core.bool value) => $_setBool(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasIsPinned() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearIsPinned() => $_clearField(7);
 }
 
 class ChatList extends $pb.GeneratedMessage {

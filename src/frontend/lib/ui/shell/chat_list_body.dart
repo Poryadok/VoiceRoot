@@ -27,7 +27,6 @@ import '../space/join_space_invite_sheet.dart';
 import '../chat/create_group_sheet.dart';
 import '../onboarding/onboarding_anchor_keys.dart';
 import '../../state/chat_navigation_providers.dart';
-import '../../state/folder_pin_providers.dart';
 import 'quick_access_actions.dart';
 
 /// Reusable chat list content for navigation column and legacy middle column.
@@ -274,12 +273,6 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
                   final presence = peerId != null
                       ? ref.watch(presenceProvider(peerId))
                       : null;
-                  final pinned =
-                      item.isPinned ||
-                      isChatPinnedInFolder(ref, selectedFolderId, item.chatId);
-                  final displayItem = pinned
-                      ? item.copyWith(isPinned: true)
-                      : item;
                   return Column(
                     key: ChatListBody.tileKey(item.chatId),
                     mainAxisSize: MainAxisSize.min,
@@ -331,7 +324,7 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
                         trailing: _ChatListTrailing(
                           l10n: l10n,
                           inbox: inbox,
-                          item: displayItem,
+                          item: item,
                           muted:
                               ref.watch(chatMutedUntilProvider)[item.chatId] !=
                               null,
@@ -387,7 +380,7 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
                                 context,
                                 ref,
                                 l10n,
-                                displayItem,
+                                item,
                                 folderId: selectedFolderId,
                               ),
                       ),
