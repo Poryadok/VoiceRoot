@@ -685,17 +685,19 @@ void main() {
       );
 
       await Future<void>.microtask(() {});
+      final mainCursorsBeforeExplicitRetry = recorder.requests
+          .skip(requestCountBeforeTransportLoss)
+          .where(
+            (request) =>
+                request.isInboxReconciliation &&
+                request.authorization == bAuthorization &&
+                request.inbox == 'main',
+          )
+          .map((request) => request.uri.queryParameters['cursor'])
+          .toList(growable: false);
       expect(
-        recorder.requests
-            .skip(requestCountBeforeTransportLoss)
-            .where(
-              (request) =>
-                  request.isInboxReconciliation &&
-                  request.authorization == bAuthorization &&
-                  request.inbox == 'main',
-            )
-            .map((request) => request.uri.queryParameters['cursor']),
-        containsAllInOrder([null, reconnectCursors['main']]),
+        mainCursorsBeforeExplicitRetry,
+        orderedEquals([null, reconnectCursors['main']]),
         reason: 'a failed page must not retry before explicit user action',
       );
 
@@ -715,17 +717,19 @@ void main() {
       expect(completedMain.hasError, isFalse);
       expect(completedMain.nextCursor, isNull);
       expect(completedMain.failedCursor, isNull);
+      final mainCursorsAfterExplicitRetry = recorder.requests
+          .skip(requestCountBeforeTransportLoss)
+          .where(
+            (request) =>
+                request.isInboxReconciliation &&
+                request.authorization == bAuthorization &&
+                request.inbox == 'main',
+          )
+          .map((request) => request.uri.queryParameters['cursor'])
+          .toList(growable: false);
       expect(
-        recorder.requests
-            .skip(requestCountBeforeTransportLoss)
-            .where(
-              (request) =>
-                  request.isInboxReconciliation &&
-                  request.authorization == bAuthorization &&
-                  request.inbox == 'main',
-            )
-            .map((request) => request.uri.queryParameters['cursor']),
-        containsAllInOrder([
+        mainCursorsAfterExplicitRetry,
+        orderedEquals([
           null,
           reconnectCursors['main'],
           reconnectCursors['main'],
