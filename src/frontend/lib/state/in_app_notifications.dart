@@ -6,6 +6,7 @@ import '../backend/realtime_client.dart';
 import 'deep_link_navigation.dart';
 import 'auth_providers.dart';
 import 'chat_providers.dart';
+import 'inbox_reconciler.dart';
 import 'matchmaking_match_controller.dart';
 import 'matchmaking_search_controller.dart';
 import 'push_notification_handler.dart';
@@ -56,17 +57,20 @@ class InAppNotificationController {
   void onPushNotificationData(
     Map<String, dynamic>? data, {
     bool navigateToChat = false,
-  }) =>
-      _onNotification(data, navigateToChat: navigateToChat);
+  }) => _onNotification(data, navigateToChat: navigateToChat);
 
   void _onFrame(RealtimeFrame frame) {
     switch (frame.op) {
       case 'notification':
         _onNotification(frame.data);
       case 'match_found':
-        _ref.read(matchmakingMatchControllerProvider.notifier).onPushNotificationData(frame.data);
+        _ref
+            .read(matchmakingMatchControllerProvider.notifier)
+            .onPushNotificationData(frame.data);
       case 'mark_read':
         _onMarkRead(frame.data);
+      case 'archive_activity':
+        _onArchiveActivity(frame.data);
       default:
         break;
     }
@@ -79,11 +83,15 @@ class InAppNotificationController {
     if (data == null) return;
     final type = data['type'] as String?;
     if (type == 'match_found') {
-      _ref.read(matchmakingMatchControllerProvider.notifier).onPushNotificationData(data);
+      _ref
+          .read(matchmakingMatchControllerProvider.notifier)
+          .onPushNotificationData(data);
       return;
     }
     if (type == 'search_nudge' || type == 'search_timeout') {
-      _ref.read(matchmakingSearchControllerProvider.notifier).onPushNotificationData(data);
+      _ref
+          .read(matchmakingSearchControllerProvider.notifier)
+          .onPushNotificationData(data);
       return;
     }
 
@@ -130,6 +138,13 @@ class InAppNotificationController {
     final chatId = data?['chat_id'] as String?;
     if (chatId == null || chatId.isEmpty) return;
     unawaited(_ref.read(chatListControllerProvider.notifier).loadInitial());
+  }
+
+  void _onArchiveActivity(Map<String, dynamic>? data) {
+    final chatId = data?['chat_id'] as String?;
+    if (chatId == null || chatId.isEmpty) return;
+    _ref.read(chatArchiveListControllerProvider.notifier).bumpUnread(chatId);
+    _ref.read(inboxReconcilerProvider.notifier).bumpArchiveUnread(chatId);
   }
 
   void _handleIncomingActivity({
