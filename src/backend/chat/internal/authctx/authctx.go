@@ -11,10 +11,10 @@ import (
 
 // Metadata keys aligned with Gateway downstream headers (see gateway applyClaims).
 const (
-	HeaderUserID          = "x-voice-user-id"    // JWT claim user_id == account_id
-	HeaderProfileID       = "x-voice-profile-id" // active profile_id
-	HeaderInternalCaller  = "x-voice-internal-caller"
-	HeaderAccountType     = guestguard.HeaderAccountType
+	HeaderUserID         = "x-voice-user-id"    // JWT claim user_id == account_id
+	HeaderProfileID      = "x-voice-profile-id" // active profile_id
+	HeaderInternalCaller = "x-voice-internal-caller"
+	HeaderAccountType    = guestguard.HeaderAccountType
 )
 
 // AccountID returns the caller's account UUID from incoming gRPC metadata, if present and valid.
@@ -69,4 +69,16 @@ func IsInternalService(ctx context.Context) bool {
 	}
 	vals := md.Get(HeaderInternalCaller)
 	return len(vals) > 0 && strings.TrimSpace(vals[0]) != ""
+}
+
+// IsInternalCaller reports whether a trusted S2S caller identified itself as
+// exactly serviceName. It deliberately rejects missing, empty, and multiple
+// caller values so a forwarded or ambiguous header cannot grant access.
+func IsInternalCaller(ctx context.Context, serviceName string) bool {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok || strings.TrimSpace(serviceName) == "" {
+		return false
+	}
+	vals := md.Get(HeaderInternalCaller)
+	return len(vals) == 1 && strings.TrimSpace(vals[0]) == serviceName
 }
