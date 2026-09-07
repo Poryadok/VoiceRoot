@@ -239,7 +239,7 @@ final class LiveGatewayUnavailable extends LiveGatewayProbe {
 
 String _sanitizedGatewayFailure(GatewayHttpFailure failure) {
   final error = failure.error;
-  return '${error.errorCode} (HTTP ${error.statusCode})';
+  return 'HTTP ${error.statusCode}';
 }
 
 /// Probes Gateway + Auth upstream (call only when [runLiveIntegration] is true).

@@ -136,8 +136,9 @@ void main() {
   );
 
   test(
-    'account visibility failure omits response message from diagnostics',
+    'account visibility failure omits server response fields from diagnostics',
     () async {
+      const sensitiveErrorCode = 'visibility_denied_token_must_not_appear';
       const sensitiveMessage = 'Bearer access-token-must-not-appear';
       final client = MockClient((request) async {
         switch (request.url.path) {
@@ -168,7 +169,7 @@ void main() {
           case '/api/v1/users/me':
             return http.Response(
               jsonEncode({
-                'error': 'visibility_denied',
+                'error': sensitiveErrorCode,
                 'message': sensitiveMessage,
               }),
               403,
@@ -201,7 +202,7 @@ void main() {
               .having(
                 (failure) => failure.message,
                 'message',
-                contains('visibility_denied'),
+                isNot(contains(sensitiveErrorCode)),
               )
               .having(
                 (failure) => failure.message,
