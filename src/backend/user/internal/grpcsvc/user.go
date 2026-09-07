@@ -43,7 +43,8 @@ type UserGRPC struct {
 	// Events optional JetStream publisher for user.events.
 	Events UserEventsPublisher
 	// DeletedAccounts synchronously hides profiles for Auth-deleted accounts.
-	// Main configures it; nil keeps isolated unit fixtures backwards-compatible.
+	// It is required for any non-empty profile visibility result and fails closed
+	// when unavailable, so Auth-deleted accounts cannot leak from User reads.
 	DeletedAccounts DeletedAccountsChecker
 }
 

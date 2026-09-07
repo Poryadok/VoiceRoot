@@ -40,6 +40,7 @@ func startUserGRPCWithPrivacy(t *testing.T, profiles *store.ProfileStore, privac
 		Profiles:            profiles,
 		Privacy:             privacyStore,
 		Presence:            store.NewPresenceStore(rdb),
+		DeletedAccounts:     &deletedAccountCheckerStub{},
 		AvatarPresigner:     stubAvatarPresigner{},
 		AvatarPublicBaseURL: "https://cdn-test.example",
 	})

@@ -54,6 +54,7 @@ func startUserGRPCForPhase13WithDNS(
 	userv1.RegisterUserServiceServer(srv, &UserGRPC{
 		Profiles:            profiles,
 		Presence:            store.NewPresenceStore(rdb),
+		DeletedAccounts:     &deletedAccountCheckerStub{},
 		Events:              eventsPub,
 		DNSResolver:         dns,
 		AvatarPresigner:     stubAvatarPresigner{},

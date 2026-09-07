@@ -36,9 +36,10 @@ func startUserPrivacyTestServer(t *testing.T, pool *store.ProfileStore, privacy 
 	lis := bufconn.Listen(1024 * 1024)
 	t.Cleanup(func() { _ = lis.Close() })
 	svc := &UserGRPC{
-		Profiles: pool,
-		Privacy:  privacy,
-		Presence: store.NewPresenceStore(rdb),
+		Profiles:        pool,
+		Privacy:         privacy,
+		Presence:        store.NewPresenceStore(rdb),
+		DeletedAccounts: &deletedAccountCheckerStub{},
 	}
 	for _, opt := range opts {
 		opt(svc)
