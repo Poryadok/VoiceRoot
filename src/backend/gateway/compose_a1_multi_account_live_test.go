@@ -109,15 +109,23 @@ func TestComposeA1TwoAccountsFoundation_live(t *testing.T) {
 	require.NotEmpty(t, messageTwoID)
 	require.NotEqual(t, messageOneID, messageTwoID)
 
-	mainB := listComposeChats(t, client, base, sessB.AccessToken, "main")
 	var mainItem *composeChatListItem
-	for i := range mainB {
-		if mainB[i].ChatID == chatID {
-			mainItem = &mainB[i]
+	unreadDeadline := time.Now().Add(30 * time.Second)
+	for {
+		mainB := listComposeChats(t, client, base, sessB.AccessToken, "main")
+		mainItem = nil
+		for i := range mainB {
+			if mainB[i].ChatID == chatID {
+				mainItem = &mainB[i]
+				break
+			}
+		}
+		if (mainItem != nil && mainItem.UnreadCount == 2) || !time.Now().Before(unreadDeadline) {
 			break
 		}
+		time.Sleep(250 * time.Millisecond)
 	}
-	require.NotNil(t, mainItem, "B main inbox must contain the DM: %+v", mainB)
+	require.NotNil(t, mainItem, "B main inbox must contain the DM")
 	require.Equal(t, sessA.ProfileID, mainItem.DMPeerProfileID)
 	require.Equal(t, "main", mainItem.Inbox)
 	require.False(t, mainItem.IsStranger)
