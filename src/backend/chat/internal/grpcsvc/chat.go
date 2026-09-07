@@ -63,6 +63,7 @@ type DMStore interface {
 	ListChatsPageByFolder(ctx context.Context, viewerProfileID, folderID uuid.UUID, cursor string, limit int, spaceIDs []uuid.UUID) (*store.ListChatsPage, error)
 	ListSpaceChatsForProfile(ctx context.Context, viewerProfileID uuid.UUID, spaceIDs []uuid.UUID) ([]*store.ChatRow, error)
 	DMPeerProfileIDs(ctx context.Context, viewerProfileID uuid.UUID, chatIDs []uuid.UUID) (map[uuid.UUID]uuid.UUID, error)
+	ListDMReceiptVisibilityTargets(ctx context.Context, profileID uuid.UUID, cursor string, limit int) ([]store.DMReceiptVisibilityTarget, string, error)
 	FindDMChatByID(ctx context.Context, chatID uuid.UUID) (*store.ChatRow, error)
 	FindChatByID(ctx context.Context, chatID uuid.UUID) (*store.ChatRow, error)
 	IsChatMember(ctx context.Context, chatID, profileID uuid.UUID) (bool, error)

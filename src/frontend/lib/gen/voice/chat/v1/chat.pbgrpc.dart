@@ -261,6 +261,18 @@ class ChatServiceClient extends $grpc.Client {
     return $createUnaryCall(_$disableChatE2E, request, options: options);
   }
 
+  /// Internal-only: Messaging uses this to revoke symmetric DM read-receipt
+  /// visibility after a profile disables show_read_receipts. It has no Gateway
+  /// route and requires the trusted Messaging service identity.
+  $grpc.ResponseFuture<$0.ListDMReceiptVisibilityTargetsResponse>
+      listDMReceiptVisibilityTargets(
+    $0.ListDMReceiptVisibilityTargetsRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$listDMReceiptVisibilityTargets, request,
+        options: options);
+  }
+
   // method descriptors
 
   static final _$createDM =
@@ -422,6 +434,12 @@ class ChatServiceClient extends $grpc.Client {
           '/voice.chat.v1.ChatService/DisableChatE2E',
           ($0.DisableChatE2ERequest value) => value.writeToBuffer(),
           $0.DisableChatE2EResponse.fromBuffer);
+  static final _$listDMReceiptVisibilityTargets = $grpc.ClientMethod<
+          $0.ListDMReceiptVisibilityTargetsRequest,
+          $0.ListDMReceiptVisibilityTargetsResponse>(
+      '/voice.chat.v1.ChatService/ListDMReceiptVisibilityTargets',
+      ($0.ListDMReceiptVisibilityTargetsRequest value) => value.writeToBuffer(),
+      $0.ListDMReceiptVisibilityTargetsResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.chat.v1.ChatService')
@@ -697,6 +715,16 @@ abstract class ChatServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.DisableChatE2ERequest.fromBuffer(value),
         ($0.DisableChatE2EResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ListDMReceiptVisibilityTargetsRequest,
+            $0.ListDMReceiptVisibilityTargetsResponse>(
+        'ListDMReceiptVisibilityTargets',
+        listDMReceiptVisibilityTargets_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ListDMReceiptVisibilityTargetsRequest.fromBuffer(value),
+        ($0.ListDMReceiptVisibilityTargetsResponse value) =>
+            value.writeToBuffer()));
   }
 
   $async.Future<$0.CreateDMResponse> createDM_Pre($grpc.ServiceCall $call,
@@ -973,4 +1001,16 @@ abstract class ChatServiceBase extends $grpc.Service {
 
   $async.Future<$0.DisableChatE2EResponse> disableChatE2E(
       $grpc.ServiceCall call, $0.DisableChatE2ERequest request);
+
+  $async.Future<$0.ListDMReceiptVisibilityTargetsResponse>
+      listDMReceiptVisibilityTargets_Pre(
+          $grpc.ServiceCall $call,
+          $async.Future<$0.ListDMReceiptVisibilityTargetsRequest>
+              $request) async {
+    return listDMReceiptVisibilityTargets($call, await $request);
+  }
+
+  $async.Future<$0.ListDMReceiptVisibilityTargetsResponse>
+      listDMReceiptVisibilityTargets($grpc.ServiceCall call,
+          $0.ListDMReceiptVisibilityTargetsRequest request);
 }
