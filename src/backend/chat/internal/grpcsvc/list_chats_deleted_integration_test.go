@@ -46,6 +46,10 @@ func (unavailableProfileLookup) AccountIDByProfileID(context.Context, uuid.UUID)
 	return uuid.Nil, errors.New("profile lookup unavailable")
 }
 
+func (unavailableProfileLookup) IsGuestProfile(context.Context, uuid.UUID) (bool, error) {
+	return false, status.Error(codes.Unavailable, "profile lookup unavailable")
+}
+
 type peerLookupDMStore struct {
 	DMStore
 	peers map[uuid.UUID]uuid.UUID
