@@ -36,6 +36,17 @@ import (
 
 const serviceName = "chat"
 
+// waitForRequiredGRPCReady establishes a required S2S connection before this
+// service exposes its health endpoint. Lazy gRPC connections otherwise make a
+// healthy Chat instance fail closed on its first deleted-account lookup.
+func waitForRequiredGRPCReady(ctx context.Context, conn *grpc.ClientConn) error {
+	if conn == nil {
+		return errors.New("required grpc connection is nil")
+	}
+	conn.Connect()
+	return grpcclient.WaitForReady(ctx, conn)
+}
+
 func main() {
 	logger := httpserver.NewLogger(serviceName)
 	metricsReg := prometheus.NewRegistry()
@@ -158,6 +169,13 @@ func main() {
 			if err != nil {
 				log.Fatalf("auth grpc: %v", err)
 			}
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
+			if err := waitForRequiredGRPCReady(waitCtx, aconn); err != nil {
+				waitCancel()
+				_ = aconn.Close()
+				log.Fatalf("auth grpc dial: %v", err)
+			}
+			waitCancel()
 			defer func() { _ = aconn.Close() }()
 			deletedAccounts = grpcsvc.NewAuthGRPCDeletedAccounts(authv1.NewAuthServiceClient(aconn))
 		}

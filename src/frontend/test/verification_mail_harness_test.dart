@@ -54,6 +54,7 @@ void main() {
       var sendCalls = 0;
       var verifyCalls = 0;
       var refreshCalls = 0;
+      var visibilityCalls = 0;
       final refreshTokens = <String>[];
       final client = MockClient((request) async {
         switch (request.url.path) {
@@ -95,6 +96,10 @@ void main() {
               }),
               200,
             );
+          case '/api/v1/users/me':
+            visibilityCalls += 1;
+            expect(request.headers['Authorization'], 'Bearer access-2');
+            return http.Response(jsonEncode({'id': 'profile-1'}), 200);
           default:
             return http.Response('not found', 404);
         }
@@ -125,6 +130,7 @@ void main() {
       expect(sendCalls, 1);
       expect(verifyCalls, 1);
       expect(refreshCalls, 2);
+      expect(visibilityCalls, 1);
       expect(refreshTokens, ['pending-refresh', 'refresh-1']);
     },
   );

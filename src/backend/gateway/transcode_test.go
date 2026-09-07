@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"testing"
@@ -343,6 +344,30 @@ func startBufconnUserConn(t *testing.T, impl userv1.UserServiceServer) (grpc.Cli
 		srv.Stop()
 		_ = lis.Close()
 	}
+}
+
+func TestGRPCClientsWaitForRequiredUserReadyBeforeServing(t *testing.T) {
+	connInterface, cleanup := startBufconnUserConn(t, &recordingUserGRPC{})
+	defer cleanup()
+
+	conn, ok := connInterface.(*grpc.ClientConn)
+	if !ok {
+		t.Fatalf("user connection = %T, want *grpc.ClientConn", connInterface)
+	}
+	clients := &grpcClients{userConn: conn, userRequired: true}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	require.NoError(t, clients.waitForRequiredUserReady(ctx))
+}
+
+func TestGRPCClientsRejectConfiguredUserConnectionConstructionFailure(t *testing.T) {
+	clients := &grpcClients{
+		userRequired:   true,
+		userConnectErr: errors.New("resolver configuration invalid"),
+	}
+
+	require.ErrorContains(t, clients.waitForRequiredUserReady(context.Background()), "resolver configuration invalid")
 }
 
 func startBufconnSocialConn(t *testing.T, impl socialv1.SocialServiceServer) (grpc.ClientConnInterface, func()) {

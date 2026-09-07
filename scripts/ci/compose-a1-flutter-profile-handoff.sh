@@ -152,6 +152,53 @@ wait_gateway() {
   return 1
 }
 
+# `/health` only proves that Gateway is listening.  A1 additionally needs the
+# fail-closed User -> Auth deleted-account visibility path used by profiles and
+# DM admission.  Exercise it with a disposable public account before Flutter
+# starts; retry only its documented transient response.
+wait_account_visibility() {
+  local deadline=$((SECONDS + 30)) email register_body visibility_body status access_token
+  email="a1-readiness-${proof_id}@voice.test"
+  register_body="${state_dir}/a1-readiness-register.json"
+  visibility_body="${state_dir}/a1-readiness-user.json"
+
+  status="$(curl --silent --show-error --output "$register_body" --write-out '%{http_code}' \
+    --max-time 15 --request POST "${VOICE_API_BASE_URL}/api/v1/auth/register" \
+    --header 'Content-Type: application/json' \
+    --data "{\"email\":\"${email}\",\"password\":\"VoiceQaTest1!\",\"guest\":false,\"device_info_json\":\"{\\\"platform\\\":\\\"a1-readiness\\\"}\"}")" || {
+    echo "A1 account-visibility readiness registration request failed" >&2
+    return 1
+  }
+  if [[ "$status" != "200" ]]; then
+    echo "A1 account-visibility readiness registration returned HTTP ${status}: $(cat "$register_body")" >&2
+    return 1
+  fi
+  access_token="$(sed -nE 's/.*"access_token"[[:space:]]*:[[:space:]]*"([^" ]+)".*/\1/p' "$register_body" | head -n 1)"
+  if [[ -z "$access_token" ]]; then
+    echo "A1 account-visibility readiness registration omitted access_token" >&2
+    return 1
+  fi
+
+  while (( SECONDS < deadline )); do
+    status="$(curl --silent --show-error --output "$visibility_body" --write-out '%{http_code}' \
+      --max-time 15 --header "Authorization: Bearer ${access_token}" \
+      "${VOICE_API_BASE_URL}/api/v1/users/me")" || {
+      echo "A1 account-visibility readiness user request failed" >&2
+      return 1
+    }
+    if [[ "$status" == "200" ]]; then
+      return 0
+    fi
+    if [[ "$status" != "503" ]] || ! grep -Fq 'account visibility unavailable' "$visibility_body"; then
+      echo "A1 account-visibility readiness returned HTTP ${status}: $(cat "$visibility_body")" >&2
+      return 1
+    fi
+    sleep 1
+  done
+  echo "timed out waiting for A1 account visibility readiness" >&2
+  return 1
+}
+
 # Each isolated live test creates several disposable email identities. Gateway's
 # production OTP bucket intentionally applies to their shared loopback client
 # IP, so disable it only for this generated Compose fixture.
@@ -163,6 +210,7 @@ compose up -d --build
 wait_healthy realtime
 wait_healthy gateway
 wait_gateway
+wait_account_visibility
 
 set +e
 (
