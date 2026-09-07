@@ -119,3 +119,30 @@ LIMIT 1
 	}
 	return strings.TrimSpace(role), nil
 }
+
+// DMReceiptVisibilityTargets resolves every two-member DM for a profile from
+// chat_db. It mirrors Chat's internal S2S visibility-target contract.
+func (g *SQLChatGuard) DMReceiptVisibilityTargets(ctx context.Context, profileID uuid.UUID) (map[uuid.UUID]uuid.UUID, error) {
+	if g == nil || g.Pool == nil {
+		return nil, errors.New("chat guard: pool not configured")
+	}
+	rows, err := g.Pool.Query(ctx, `
+SELECT c.id, peer.profile_id
+FROM chats c
+JOIN chat_members self ON self.chat_id = c.id AND self.profile_id = $1
+JOIN chat_members peer ON peer.chat_id = c.id AND peer.profile_id <> $1
+WHERE c.type = 'dm' AND (SELECT count(*) FROM chat_members m WHERE m.chat_id = c.id) = 2`, profileID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[uuid.UUID]uuid.UUID{}
+	for rows.Next() {
+		var chatID, peerID uuid.UUID
+		if err := rows.Scan(&chatID, &peerID); err != nil {
+			return nil, err
+		}
+		out[chatID] = peerID
+	}
+	return out, rows.Err()
+}

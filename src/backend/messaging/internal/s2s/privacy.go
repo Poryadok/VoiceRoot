@@ -2,6 +2,7 @@ package s2s
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
@@ -92,4 +93,27 @@ func (u *GRPCUserPrivacy) AllowForward(ctx context.Context, profileID uuid.UUID)
 		return true, nil
 	}
 	return *ps.AllowForward, nil
+}
+
+// ShowReadReceipts reports a profile's DM receipt opt-in. The optional wire
+// field is true for older records, matching the documented default.
+func (u *GRPCUserPrivacy) ShowReadReceipts(ctx context.Context, profileID uuid.UUID) (bool, error) {
+	if u == nil || u.Client == nil {
+		return false, fmt.Errorf("user privacy client not configured")
+	}
+	resp, err := u.Client.GetPrivacySettings(privacyS2SContext(ctx), &userv1.GetPrivacySettingsRequest{
+		ProfileId: profileID.String(),
+	})
+	if err != nil {
+		return false, err
+	}
+	ps := resp.GetPrivacySettings()
+	if ps == nil {
+		return false, fmt.Errorf("user privacy response missing settings")
+	}
+	// A missing optional field is an old, but authoritative, settings record.
+	if ps.ShowReadReceipts == nil {
+		return true, nil
+	}
+	return *ps.ShowReadReceipts, nil
 }
