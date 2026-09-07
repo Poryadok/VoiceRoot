@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -35,12 +36,33 @@ func loadGatewayConfigFromEnvChecked() (gatewayConfig, error) {
 	if err != nil {
 		return gatewayConfig{}, err
 	}
+	if err := validateGRPCUpstreamsFromEnv(); err != nil {
+		return gatewayConfig{}, err
+	}
 	if strict {
 		if strings.TrimSpace(os.Getenv("GATEWAY_REDIS_ADDR")) == "" {
 			return gatewayConfig{}, errors.New("GATEWAY_REDIS_ADDR is required when GATEWAY_SESSION_EPOCH_STRICT=true")
 		}
 	}
 	return loadGatewayConfigFromEnvMode(strict), nil
+}
+
+// validateGRPCUpstreamsFromEnv rejects a configured but unusable upstream map
+// during bootstrap. The legacy loader logs invalid JSON and proceeds with an
+// empty map, which would otherwise silently omit configured public routes.
+func validateGRPCUpstreamsFromEnv() error {
+	raw := strings.TrimSpace(os.Getenv("GATEWAY_GRPC_UPSTREAMS_JSON"))
+	if raw == "" {
+		return nil
+	}
+	var upstreams map[string]string
+	if err := json.Unmarshal([]byte(raw), &upstreams); err != nil {
+		return fmt.Errorf("GATEWAY_GRPC_UPSTREAMS_JSON must be a JSON object with string values: %w", err)
+	}
+	if upstreams == nil {
+		return errors.New("GATEWAY_GRPC_UPSTREAMS_JSON must be a JSON object with string values")
+	}
+	return nil
 }
 
 func sessionEpochStrictFromEnv() (bool, error) {
