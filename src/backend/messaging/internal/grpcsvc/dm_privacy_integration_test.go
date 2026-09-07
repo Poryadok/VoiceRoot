@@ -47,6 +47,12 @@ func (s dmPrivacyStub) AllowForward(_ context.Context, _ uuid.UUID) (bool, error
 	return true, nil
 }
 
+// ShowReadReceipts preserves the documented enabled-by-default policy in
+// integration tests that do not exercise a privacy opt-out.
+func (s dmPrivacyStub) ShowReadReceipts(context.Context, uuid.UUID) (bool, error) {
+	return true, nil
+}
+
 type noFriendsStub struct{}
 
 func (noFriendsStub) AreFriends(context.Context, uuid.UUID, uuid.UUID) (bool, error) {

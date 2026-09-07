@@ -57,6 +57,13 @@ type PrivacyChecker interface {
 	AllowForward(ctx context.Context, profileID uuid.UUID) (bool, error)
 }
 
+// ReadReceiptPrivacyChecker is intentionally separate from PrivacyChecker so
+// existing action-policy test doubles stay valid while this new policy rolls
+// out. Production GRPCUserPrivacy implements it.
+type ReadReceiptPrivacyChecker interface {
+	ShowReadReceipts(ctx context.Context, profileID uuid.UUID) (bool, error)
+}
+
 // SpaceCoMembershipChecker checks shared space membership for privacy audiences.
 type SpaceCoMembershipChecker interface {
 	AreCoMembers(ctx context.Context, profileA, profileB uuid.UUID, spaceIDs []string) (bool, error)

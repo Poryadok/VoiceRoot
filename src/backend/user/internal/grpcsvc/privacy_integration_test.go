@@ -19,8 +19,8 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"voice/backend/pkg/integrationtest"
-	"voice/backend/user/internal/authctx"
 	"voice/backend/pkg/privacy"
+	"voice/backend/user/internal/authctx"
 	"voice/backend/user/internal/store"
 
 	userv1 "voice.app/voice/user/v1"
@@ -58,6 +58,37 @@ func startUserPrivacyTestServer(t *testing.T, pool *store.ProfileStore, privacy 
 }
 
 type alwaysFriendsGraph struct{}
+
+type receiptRevocationEventsRecorder struct {
+	profileID       string
+	changedKeysJSON string
+}
+
+func (r *receiptRevocationEventsRecorder) PublishProfileCreated(context.Context, string, string) error {
+	return nil
+}
+
+func (r *receiptRevocationEventsRecorder) PublishProfileUpdated(context.Context, string, string, string) error {
+	return nil
+}
+
+func (r *receiptRevocationEventsRecorder) PublishProfileSwitched(context.Context, string, string, string) error {
+	return nil
+}
+
+func (r *receiptRevocationEventsRecorder) PublishVerified(context.Context, string, string, string) error {
+	return nil
+}
+
+func (r *receiptRevocationEventsRecorder) PublishPresenceChanged(context.Context, string, string, string) error {
+	return nil
+}
+
+func (r *receiptRevocationEventsRecorder) PublishSettingsChanged(_ context.Context, profileID, changedKeysJSON string) error {
+	r.profileID = profileID
+	r.changedKeysJSON = changedKeysJSON
+	return nil
+}
 
 func (alwaysFriendsGraph) AreFriends(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
 	return true, nil
@@ -166,7 +197,7 @@ VALUES ($1, $2, 'gamer', '4242', 'Gamer', true)`,
 
 // TestUpdatePrivacySettings_AllowForwardRoundTrip documents privacy.md binary allow_forward
 // (forward-messages.md): default true, Update false persists, Get + S2S read see false.
-func TestUpdatePrivacySettings_AllowForwardRoundTrip(t *testing.T) {
+func TestUpdatePrivacySettings_BinaryPrivacyRoundTrip(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -188,7 +219,10 @@ VALUES ($1, $2, 'nofwd', '5555', 'NoFwd', true)`,
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
 
-	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb)
+	events := &receiptRevocationEventsRecorder{}
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb,
+		func(s *UserGRPC) { s.Events = events },
+	)
 
 	before, err := cli.GetPrivacySettings(withUserAuthCtx(ctx, accountID, profileID), &userv1.GetPrivacySettingsRequest{
 		ProfileId: profileID.String(),
@@ -197,6 +231,7 @@ VALUES ($1, $2, 'nofwd', '5555', 'NoFwd', true)`,
 	require.True(t, before.GetPrivacySettings().GetAllowForward())
 
 	allowForward := false
+	showReadReceipts := false
 	_, err = cli.UpdatePrivacySettings(withUserAuthCtx(ctx, accountID, profileID), &userv1.UpdatePrivacySettingsRequest{
 		ProfileId: profileID.String(),
 		Settings: &userv1.PrivacySettings{
@@ -211,6 +246,7 @@ VALUES ($1, $2, 'nofwd', '5555', 'NoFwd', true)`,
 			AllowFriendRequests: privacy.ToProto(privacy.EveryoneWithGuests()),
 			AllowGuestDm:        true,
 			AllowForward:        &allowForward,
+			ShowReadReceipts:    &showReadReceipts,
 		},
 	})
 	require.NoError(t, err)
@@ -219,12 +255,18 @@ VALUES ($1, $2, 'nofwd', '5555', 'NoFwd', true)`,
 	err = pool.QueryRow(ctx, `SELECT allow_forward FROM privacy_settings WHERE profile_id = $1`, profileID).Scan(&stored)
 	require.NoError(t, err)
 	require.False(t, stored)
+	err = pool.QueryRow(ctx, `SELECT show_read_receipts FROM privacy_settings WHERE profile_id = $1`, profileID).Scan(&stored)
+	require.NoError(t, err)
+	require.False(t, stored)
 
 	after, err := cli.GetPrivacySettings(withUserAuthCtx(ctx, accountID, profileID), &userv1.GetPrivacySettingsRequest{
 		ProfileId: profileID.String(),
 	})
 	require.NoError(t, err)
 	require.False(t, after.GetPrivacySettings().GetAllowForward())
+	require.False(t, after.GetPrivacySettings().GetShowReadReceipts())
+	require.Equal(t, profileID.String(), events.profileID)
+	require.Equal(t, `[{"key":"show_read_receipts","value":false}]`, events.changedKeysJSON)
 
 	s2sCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderInternalCaller, "messaging")
 	s2s, err := cli.GetPrivacySettings(s2sCtx, &userv1.GetPrivacySettingsRequest{
@@ -233,6 +275,8 @@ VALUES ($1, $2, 'nofwd', '5555', 'NoFwd', true)`,
 	require.NoError(t, err)
 	require.False(t, s2s.GetPrivacySettings().GetAllowForward(),
 		"Messaging S2S GetPrivacySettings must expose allow_forward for FW-04 enforce")
+	require.False(t, s2s.GetPrivacySettings().GetShowReadReceipts(),
+		"Messaging S2S GetPrivacySettings must expose the DM receipt opt-out")
 }
 
 // TestGetPrivacySettings_PersonalPresetDefaults documents personal preset DM audience defaults.

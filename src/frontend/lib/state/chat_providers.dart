@@ -986,6 +986,23 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
               readMessageIds: {...state.readMessageIds, messageId},
             );
           }
+        } else if (frame.op == 'message_read_revoked') {
+          final chatId = frame.data?['chat_id'] as String?;
+          final messageId = frame.data?['message_id'] as String?;
+          final recipientProfileId =
+              frame.data?['recipient_profile_id'] as String?;
+          final activeProfileId = _ref
+              .read(authControllerProvider)
+              .activeProfileId;
+          if (chatId == this.chatId &&
+              messageId != null &&
+              (recipientProfileId == null ||
+                  recipientProfileId.isEmpty ||
+                  recipientProfileId == activeProfileId)) {
+            final read = {...state.readMessageIds}..remove(messageId);
+            state = state.copyWith(readMessageIds: read);
+            _ref.invalidate(chatListProvider);
+          }
         } else if (frame.op == 'message_update' ||
             frame.op == 'message_delete') {
           final chatId = frame.data?['chat_id'] as String?;

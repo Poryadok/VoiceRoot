@@ -498,7 +498,6 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 					"profile_id": claims.ProfileID,
 				})
 				hub.broadcastMarkReadSameProfileExcept(claims.ProfileID, instanceID, connID, d)
-				hub.broadcastToChat(cid, fanoutEnvelope{Op: "message_read", D: d}, svcLogger, "")
 				if rf != nil {
 					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 					if err := rf.PublishMarkRead(ctx, claims.ProfileID, cid, mid, connID); err != nil {
