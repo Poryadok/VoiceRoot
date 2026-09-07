@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -14,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -28,12 +30,221 @@ import (
 	spacev1 "voice.app/voice/space/v1"
 )
 
+var composeVerificationCodePattern = regexp.MustCompile(`\b(\d{6})\b`)
+
 func formatComposeEmail(prefix string, n int64) string {
 	return fmt.Sprintf("%s-%d@voice-qa.test", prefix, n)
 }
 
 func composeClientMessageID() string {
 	return uuid.NewString()
+}
+
+// composeMailStubBaseURL resolves the loopback-only Compose mail fixture used
+// by live tests. The explicit URL is passed by isolated runners; the port
+// fallback keeps the helper usable with a manually started compose stack.
+func composeMailStubBaseURL() string {
+	if configured := strings.TrimSpace(os.Getenv("VOICE_AUTH_MAIL_STUB_URL")); configured != "" {
+		return strings.TrimRight(configured, "/")
+	}
+	port := strings.TrimSpace(os.Getenv("VERIFICATION_STUB_PORT"))
+	if port == "" {
+		port = "14180"
+	}
+	return "http://127.0.0.1:" + port
+}
+
+func composeVerificationCodeFromMail(email string, raw []byte) (string, error) {
+	var message struct {
+		To   []string `json:"to"`
+		Text string   `json:"text"`
+	}
+	if err := json.Unmarshal(raw, &message); err != nil {
+		return "", fmt.Errorf("decode verification mail: %w", err)
+	}
+	wantRecipient := strings.TrimSpace(strings.ToLower(email))
+	for _, recipient := range message.To {
+		if strings.TrimSpace(strings.ToLower(recipient)) != wantRecipient {
+			continue
+		}
+		match := composeVerificationCodePattern.FindStringSubmatch(message.Text)
+		if match == nil {
+			return "", errors.New("verification mail did not contain a six-digit code")
+		}
+		return match[1], nil
+	}
+	return "", errors.New("verification mail was addressed to a different recipient")
+}
+
+func waitComposeVerificationCode(
+	ctx context.Context,
+	client *http.Client,
+	stubBaseURL, email string,
+	maxAttempts int,
+	pollInterval time.Duration,
+) (string, error) {
+	if maxAttempts < 1 {
+		return "", errors.New("verification polling requires at least one attempt")
+	}
+	base, err := url.Parse(strings.TrimRight(stubBaseURL, "/") + "/")
+	if err != nil {
+		return "", fmt.Errorf("parse mail stub URL: %w", err)
+	}
+	endpoint := base.ResolveReference(&url.URL{Path: "emails/latest"})
+	query := endpoint.Query()
+	query.Set("to", email)
+	endpoint.RawQuery = query.Encode()
+
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
+		if err != nil {
+			return "", fmt.Errorf("create verification mail lookup: %w", err)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			return "", fmt.Errorf("lookup verification mail: %w", err)
+		}
+		raw, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if readErr != nil {
+			return "", fmt.Errorf("read verification mail: %w", readErr)
+		}
+		if resp.StatusCode == http.StatusOK {
+			return composeVerificationCodeFromMail(email, raw)
+		}
+		if resp.StatusCode != http.StatusNotFound {
+			return "", fmt.Errorf("verification mail lookup status=%d body=%s", resp.StatusCode, string(raw))
+		}
+		if attempt+1 < maxAttempts {
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-time.After(pollInterval):
+			}
+		}
+	}
+	return "", fmt.Errorf("verification mail was not delivered for %s", email)
+}
+
+func registerComposeUser(t *testing.T, client *http.Client, base, email, password string) authSessionResponse {
+	t.Helper()
+	// Each email account performs one OTP send and one OTP verify. The production
+	// IP bucket intentionally permits only three OTP calls per 10 minutes, while
+	// a multi-account Compose scenario needs independent disposable identities.
+	// Clear only the local Compose test fixture before starting the next account.
+	clearLiveComposeAuthRateLimit(t)
+	payload, err := json.Marshal(map[string]any{
+		"email":            email,
+		"password":         password,
+		"guest":            false,
+		"device_info_json": `{"platform":"go-live-test"}`,
+	})
+	require.NoError(t, err)
+
+	resp, err := client.Post(base+"/api/v1/auth/register", "application/json", bytes.NewReader(payload))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode,
+		"register %s: status=%d body=%s", email, resp.StatusCode, string(raw))
+
+	var envelope authSessionEnvelope
+	require.NoError(t, json.Unmarshal(raw, &envelope))
+	pending := envelope.Session
+	require.NotEmpty(t, pending.AccessToken, "register %s: body=%s", email, string(raw))
+	require.NotEmpty(t, pending.RefreshToken, "register %s: body=%s", email, string(raw))
+	require.NotEmpty(t, pending.ProfileID, "register %s: body=%s", email, string(raw))
+	require.Equal(t, "guest", pending.AccountType, "email registration must remain restricted until verification")
+
+	return completeComposeEmailVerification(t, client, base, email, pending)
+}
+
+func completeComposeEmailVerification(
+	t *testing.T,
+	client *http.Client,
+	base, email string,
+	pending authSessionResponse,
+) authSessionResponse {
+	t.Helper()
+	payload, err := json.Marshal(map[string]string{"email": email, "otp_type": "email_verify"})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/auth/otp/send", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+pending.AccessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	raw, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	require.Equal(t, http.StatusNoContent, resp.StatusCode, "send verification OTP body=%s", string(raw))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	code, err := waitComposeVerificationCode(ctx, client, composeMailStubBaseURL(), email, 100, 100*time.Millisecond)
+	require.NoError(t, err)
+
+	verifyPayload, err := json.Marshal(map[string]string{"email": email, "code": code, "otp_type": "email_verify"})
+	require.NoError(t, err)
+	verifyReq, err := http.NewRequest(http.MethodPost, base+"/api/v1/auth/otp/verify", bytes.NewReader(verifyPayload))
+	require.NoError(t, err)
+	verifyReq.Header.Set("Authorization", "Bearer "+pending.AccessToken)
+	verifyReq.Header.Set("Content-Type", "application/json")
+	verifyResp, err := client.Do(verifyReq)
+	require.NoError(t, err)
+	verifyRaw, _ := io.ReadAll(verifyResp.Body)
+	verifyResp.Body.Close()
+
+	var verified authSessionResponse
+	switch verifyResp.StatusCode {
+	case http.StatusOK:
+		var envelope authSessionEnvelope
+		require.NoError(t, json.Unmarshal(verifyRaw, &envelope))
+		verified = envelope.Session
+	case http.StatusServiceUnavailable:
+		var failure struct {
+			Error string `json:"error"`
+		}
+		require.NoError(t, json.Unmarshal(verifyRaw, &failure))
+		require.Equal(t, "verification_pending", failure.Error, "verify email OTP body=%s", string(verifyRaw))
+		verified = waitComposeRegularSession(t, client, base, pending)
+	default:
+		require.Failf(t, "verify email OTP", "status=%d body=%s", verifyResp.StatusCode, string(verifyRaw))
+	}
+	require.Equal(t, pending.AccountID, verified.AccountID, "verification must preserve account identity")
+	require.Equal(t, pending.ProfileID, verified.ProfileID, "verification must preserve primary profile identity")
+	require.Equal(t, "regular", verified.AccountType, "verified email account must become regular")
+	require.NotEmpty(t, verified.AccessToken)
+	require.NotEmpty(t, verified.RefreshToken)
+	return verified
+}
+
+func waitComposeRegularSession(t *testing.T, client *http.Client, base string, pending authSessionResponse) authSessionResponse {
+	t.Helper()
+	current := pending
+	for attempt := 0; attempt < 24; attempt++ {
+		time.Sleep(5 * time.Second)
+		payload, err := json.Marshal(map[string]string{
+			"refresh_token":    current.RefreshToken,
+			"device_info_json": `{"platform":"go-live-test"}`,
+		})
+		require.NoError(t, err)
+		resp, err := client.Post(base+"/api/v1/auth/refresh", "application/json", bytes.NewReader(payload))
+		require.NoError(t, err)
+		raw, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusServiceUnavailable {
+			continue
+		}
+		require.Equal(t, http.StatusOK, resp.StatusCode, "refresh verified session body=%s", string(raw))
+		var envelope authSessionEnvelope
+		require.NoError(t, json.Unmarshal(raw, &envelope))
+		current = envelope.Session
+		if current.AccountType == "regular" {
+			return current
+		}
+	}
+	t.Fatalf("email verification remained pending after recovery window")
+	return authSessionResponse{}
 }
 
 type composeWSFrame struct {
