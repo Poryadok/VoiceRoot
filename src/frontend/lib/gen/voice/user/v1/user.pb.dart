@@ -1641,6 +1641,7 @@ class PrivacySettings extends $pb.GeneratedMessage {
     PrivacyAudience? allowFiles,
     PrivacyAudience? allowVoiceMessages,
     $core.bool? allowForward,
+    $core.bool? showReadReceipts,
   }) {
     final result = create();
     if (profileId != null) result.profileId = profileId;
@@ -1664,6 +1665,7 @@ class PrivacySettings extends $pb.GeneratedMessage {
     if (allowVoiceMessages != null)
       result.allowVoiceMessages = allowVoiceMessages;
     if (allowForward != null) result.allowForward = allowForward;
+    if (showReadReceipts != null) result.showReadReceipts = showReadReceipts;
     return result;
   }
 
@@ -1712,6 +1714,7 @@ class PrivacySettings extends $pb.GeneratedMessage {
     ..aOM<PrivacyAudience>(18, _omitFieldNames ? '' : 'allowVoiceMessages',
         subBuilder: PrivacyAudience.create)
     ..aOB(19, _omitFieldNames ? '' : 'allowForward')
+    ..aOB(20, _omitFieldNames ? '' : 'showReadReceipts')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1922,6 +1925,17 @@ class PrivacySettings extends $pb.GeneratedMessage {
   $core.bool hasAllowForward() => $_has(17);
   @$pb.TagNumber(19)
   void clearAllowForward() => $_clearField(19);
+
+  /// Binary DM-only read receipt visibility. Unset values from older clients
+  /// default to true; false suppresses this profile's public read cursor.
+  @$pb.TagNumber(20)
+  $core.bool get showReadReceipts => $_getBF(18);
+  @$pb.TagNumber(20)
+  set showReadReceipts($core.bool value) => $_setBool(18, value);
+  @$pb.TagNumber(20)
+  $core.bool hasShowReadReceipts() => $_has(18);
+  @$pb.TagNumber(20)
+  void clearShowReadReceipts() => $_clearField(20);
 }
 
 class UpdatePresenceRequest extends $pb.GeneratedMessage {

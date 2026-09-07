@@ -173,6 +173,7 @@ message MessageStreamEvent {
     MessageUnpinned message_unpinned = 18;
     MessageForwarded message_forwarded = 19;
     DeliveryAck delivery_ack = 20;
+    ReadReceiptRevoked read_receipt_revoked = 21;
   }
 }
 
@@ -227,6 +228,14 @@ message MessageRead {
 }
 
 // Published by Realtime when a client sends WS delivery_ack (recipient profile).
+message ReadReceiptRevoked {
+  string message_id = 1;
+  string chat_id = 2;
+  string profile_id = 3;
+  // When set, only this participant must remove the rendered tick.
+  string recipient_profile_id = 4;
+}
+
 message DeliveryAck {
   string message_id = 1;
   string chat_id = 2;
