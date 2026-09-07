@@ -40,6 +40,7 @@ class Chat extends $pb.GeneratedMessage {
     $core.bool? threadsEnabled,
     $core.bool? allowUserMainFeed,
     $core.bool? e2eEnabled,
+    $core.bool? allowGuests,
   }) {
     final result = create();
     if (id != null) result.id = id;
@@ -56,6 +57,7 @@ class Chat extends $pb.GeneratedMessage {
     if (threadsEnabled != null) result.threadsEnabled = threadsEnabled;
     if (allowUserMainFeed != null) result.allowUserMainFeed = allowUserMainFeed;
     if (e2eEnabled != null) result.e2eEnabled = e2eEnabled;
+    if (allowGuests != null) result.allowGuests = allowGuests;
     return result;
   }
 
@@ -90,6 +92,7 @@ class Chat extends $pb.GeneratedMessage {
     ..aOB(12, _omitFieldNames ? '' : 'threadsEnabled')
     ..aOB(13, _omitFieldNames ? '' : 'allowUserMainFeed')
     ..aOB(14, _omitFieldNames ? '' : 'e2eEnabled')
+    ..aOB(15, _omitFieldNames ? '' : 'allowGuests')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -241,6 +244,16 @@ class Chat extends $pb.GeneratedMessage {
   $core.bool hasE2eEnabled() => $_has(13);
   @$pb.TagNumber(14)
   void clearE2eEnabled() => $_clearField(14);
+
+  /// Guest admission is explicit and defaults to false for standalone chats.
+  @$pb.TagNumber(15)
+  $core.bool get allowGuests => $_getBF(14);
+  @$pb.TagNumber(15)
+  set allowGuests($core.bool value) => $_setBool(14, value);
+  @$pb.TagNumber(15)
+  $core.bool hasAllowGuests() => $_has(14);
+  @$pb.TagNumber(15)
+  void clearAllowGuests() => $_clearField(15);
 }
 
 class CreateDMRequest extends $pb.GeneratedMessage {
@@ -451,6 +464,7 @@ class UpdateChatRequest extends $pb.GeneratedMessage {
     $core.String? avatarUrl,
     $core.bool? threadsEnabled,
     $core.bool? allowUserMainFeed,
+    $core.bool? allowGuests,
   }) {
     final result = create();
     if (chatId != null) result.chatId = chatId;
@@ -460,6 +474,7 @@ class UpdateChatRequest extends $pb.GeneratedMessage {
     if (avatarUrl != null) result.avatarUrl = avatarUrl;
     if (threadsEnabled != null) result.threadsEnabled = threadsEnabled;
     if (allowUserMainFeed != null) result.allowUserMainFeed = allowUserMainFeed;
+    if (allowGuests != null) result.allowGuests = allowGuests;
     return result;
   }
 
@@ -483,6 +498,7 @@ class UpdateChatRequest extends $pb.GeneratedMessage {
     ..aOS(5, _omitFieldNames ? '' : 'avatarUrl')
     ..aOB(6, _omitFieldNames ? '' : 'threadsEnabled')
     ..aOB(7, _omitFieldNames ? '' : 'allowUserMainFeed')
+    ..aOB(8, _omitFieldNames ? '' : 'allowGuests')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -566,6 +582,15 @@ class UpdateChatRequest extends $pb.GeneratedMessage {
   $core.bool hasAllowUserMainFeed() => $_has(6);
   @$pb.TagNumber(7)
   void clearAllowUserMainFeed() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $core.bool get allowGuests => $_getBF(7);
+  @$pb.TagNumber(8)
+  set allowGuests($core.bool value) => $_setBool(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasAllowGuests() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearAllowGuests() => $_clearField(8);
 }
 
 class DeleteChatRequest extends $pb.GeneratedMessage {
@@ -800,6 +825,85 @@ class LeaveChatRequest extends $pb.GeneratedMessage {
   $core.bool hasChatId() => $_has(0);
   @$pb.TagNumber(1)
   void clearChatId() => $_clearField(1);
+}
+
+class SetGroupMemberRoleRequest extends $pb.GeneratedMessage {
+  factory SetGroupMemberRoleRequest({
+    $core.String? chatId,
+    $core.String? profileId,
+    $core.String? role,
+  }) {
+    final result = create();
+    if (chatId != null) result.chatId = chatId;
+    if (profileId != null) result.profileId = profileId;
+    if (role != null) result.role = role;
+    return result;
+  }
+
+  SetGroupMemberRoleRequest._();
+
+  factory SetGroupMemberRoleRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SetGroupMemberRoleRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SetGroupMemberRoleRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'chatId')
+    ..aOS(2, _omitFieldNames ? '' : 'profileId')
+    ..aOS(3, _omitFieldNames ? '' : 'role')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetGroupMemberRoleRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetGroupMemberRoleRequest copyWith(
+          void Function(SetGroupMemberRoleRequest) updates) =>
+      super.copyWith((message) => updates(message as SetGroupMemberRoleRequest))
+          as SetGroupMemberRoleRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SetGroupMemberRoleRequest create() => SetGroupMemberRoleRequest._();
+  @$core.override
+  SetGroupMemberRoleRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SetGroupMemberRoleRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SetGroupMemberRoleRequest>(create);
+  static SetGroupMemberRoleRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get chatId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set chatId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasChatId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearChatId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get profileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set profileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProfileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get role => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set role($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasRole() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearRole() => $_clearField(3);
 }
 
 class TransferGroupOwnershipRequest extends $pb.GeneratedMessage {
@@ -3583,6 +3687,46 @@ class LeaveChatResponse extends $pb.GeneratedMessage {
   static LeaveChatResponse getDefault() => _defaultInstance ??=
       $pb.GeneratedMessage.$_defaultFor<LeaveChatResponse>(create);
   static LeaveChatResponse? _defaultInstance;
+}
+
+class SetGroupMemberRoleResponse extends $pb.GeneratedMessage {
+  factory SetGroupMemberRoleResponse() => create();
+
+  SetGroupMemberRoleResponse._();
+
+  factory SetGroupMemberRoleResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SetGroupMemberRoleResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SetGroupMemberRoleResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetGroupMemberRoleResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetGroupMemberRoleResponse copyWith(
+          void Function(SetGroupMemberRoleResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as SetGroupMemberRoleResponse))
+          as SetGroupMemberRoleResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SetGroupMemberRoleResponse create() => SetGroupMemberRoleResponse._();
+  @$core.override
+  SetGroupMemberRoleResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SetGroupMemberRoleResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SetGroupMemberRoleResponse>(create);
+  static SetGroupMemberRoleResponse? _defaultInstance;
 }
 
 class ListMembersResponse extends $pb.GeneratedMessage {

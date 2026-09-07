@@ -44,7 +44,7 @@ func startChatPostgresForTest(t *testing.T, ctx context.Context) *pgxpool.Pool {
 
 func applyChatMigration(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
-	for _, name := range []string{"000001_init.up.sql", "000002_dm_requests.up.sql", "000003_groups.up.sql", "000004_slow_mode.up.sql", "000005_thread_settings.up.sql", "000006_e2e_enabled.up.sql", "000008_folders.up.sql", "000009_folder_chats.up.sql", "000010_quick_access_chats.up.sql", "000011_deleted_for_self.up.sql"} {
+	for _, name := range []string{"000001_init.up.sql", "000002_dm_requests.up.sql", "000003_groups.up.sql", "000004_slow_mode.up.sql", "000005_thread_settings.up.sql", "000006_e2e_enabled.up.sql", "000007_allow_guests.up.sql", "000008_folders.up.sql", "000009_folder_chats.up.sql", "000010_quick_access_chats.up.sql", "000011_deleted_for_self.up.sql", "000012_allow_guests_fail_closed.up.sql"} {
 		migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "chat_db", name)
 		sqlBytes, err := os.ReadFile(migrationPath)
 		require.NoError(t, err)
@@ -73,6 +73,13 @@ func (m mapProfileAccounts) AccountIDByProfileID(_ context.Context, profileID uu
 		return uuid.Nil, status.Error(codes.NotFound, "profile not found")
 	}
 	return a, nil
+}
+
+func (m mapProfileAccounts) IsGuestProfile(_ context.Context, profileID uuid.UUID) (bool, error) {
+	if _, ok := m[profileID]; !ok {
+		return false, status.Error(codes.NotFound, "profile not found")
+	}
+	return false, nil
 }
 
 type mapLifecycleOwners map[uuid.UUID]uuid.UUID
