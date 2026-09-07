@@ -37,7 +37,7 @@ _Пока пусто — критичные клиентские блокеры 
 
 ### Auth UI (REST есть, экранов нет)
 
-- [ ] **AuthScreen: телефон + OTP** — спека [auth-and-contacts.md](../features/auth-and-contacts.md): телефон default; `auth_screen.dart` только email.
+- [ ] **AuthScreen: email registration + OTP** — email is the alpha default in [auth-and-contacts.md](../features/auth-and-contacts.md), but `auth_screen.dart` currently only submits registration and has no pending-email verification UI. The product contract still needs an owner decision for the initial OTP send, dismissing and re-entering the pending state, reload recovery, and login recovery; do not infer those transitions from the backend API.
 - [x] **Auth UI: password-reset** — `PasswordResetScreen` (email OTP → new password); forgot-password on `AuthScreen`; `VoiceAuthClient.sendPasswordResetOtp` / `resetPassword` (**Batch 30a**). **Sessions/revoke UI shipped** (`ActiveSessionsScreen`, Security settings, **Batch 29b**).
 - [x] **Auth UI: delete-account** — `SecuritySettingsScreen` confirm+password → `POST /api/v1/auth/delete-account`; guest blocked; logout on success (**Batch 28b**). Restore-account UI deferred.
 
