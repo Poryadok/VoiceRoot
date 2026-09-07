@@ -196,7 +196,8 @@ TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/profile-handoff-runner-tests.XXXXXXXX")"
 trap 'rm -rf -- "$TEST_TMP"' EXIT
 assert_file "$SCRIPT"
 assert_contains "$SCRIPT" 'e2e-manifest\.sh.*a1_flutter_profile_handoff'
-assert_contains "$SCRIPT" "ratelimit:OTP:\*"
+assert_contains "$SCRIPT" 'GATEWAY_RATE_LIMIT_RULES_JSON='
+assert_contains "$SCRIPT" '"OTP":\{"limit":0'
 
 echo '== caller Compose selectors are rejected before Docker =='
 case_dir="$(new_case ambient-project)"

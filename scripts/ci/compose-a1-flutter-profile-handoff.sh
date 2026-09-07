@@ -85,10 +85,6 @@ compose() {
 
 cleanup() {
   local status=$?
-  if [[ -n "${otp_rate_limit_reset_pid:-}" ]]; then
-    kill "$otp_rate_limit_reset_pid" 2>/dev/null || true
-    wait "$otp_rate_limit_reset_pid" 2>/dev/null || true
-  fi
   if [[ "${VOICE_A1_FLUTTER_PROFILE_HANDOFF_CLEANUP:-false}" == "true" ]]; then
     compose down --remove-orphans || true
   fi
@@ -158,14 +154,8 @@ wait_gateway() {
 
 # Each isolated live test creates several disposable email identities. Gateway's
 # production OTP bucket intentionally applies to their shared loopback client
-# IP, so keep only this generated Compose fixture free of previous identities.
-clear_fixture_otp_rate_limit() {
-  local key
-  while IFS= read -r key; do
-    [[ -n "$key" ]] || continue
-    compose exec -T redis redis-cli DEL "$key" >/dev/null || true
-  done < <(compose exec -T redis redis-cli --scan --pattern 'ratelimit:OTP:*' 2>/dev/null || true)
-}
+# IP, so disable it only for this generated Compose fixture.
+export GATEWAY_RATE_LIMIT_RULES_JSON='{"Auth":{"limit":0,"window":"15m"},"OTP":{"limit":0,"window":"10m"}}'
 
 echo "A1 Flutter profile-handoff project=${project} gateway=${VOICE_API_BASE_URL} tests=${flutter_tests[*]}"
 compose config --quiet
@@ -173,14 +163,6 @@ compose up -d --build
 wait_healthy realtime
 wait_healthy gateway
 wait_gateway
-clear_fixture_otp_rate_limit
-(
-  while true; do
-    sleep 1
-    clear_fixture_otp_rate_limit
-  done
-) &
-otp_rate_limit_reset_pid=$!
 
 set +e
 (
@@ -191,9 +173,6 @@ set +e
 )
 test_status=$?
 set -e
-kill "$otp_rate_limit_reset_pid" 2>/dev/null || true
-wait "$otp_rate_limit_reset_pid" 2>/dev/null || true
-otp_rate_limit_reset_pid=""
 
 if (( test_status != 0 )); then
   echo "A1 Flutter profile-handoff proof failed with status ${test_status}; diagnostics follow" >&2
