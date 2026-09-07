@@ -118,6 +118,7 @@ Two producers may emit WS `notification` for the same message; clients **dedupe*
 | `unsubscribe_ack`    | Подтверждение `unsubscribe`: `d.chat_id`                          |
 | `error`              | Ошибка клиентской операции: malformed UUID сохраняет `invalid_subscribe` / `invalid_unsubscribe`; valid lazy `subscribe`, который Chat не разрешил или не смог проверить, возвращает generic `d.code=permission_denied`, `d.message=chat subscription denied`, `d.chat_id` |
 | `message_create`     | Новое сообщение                                                     |
+| `archive_activity`   | Тихий badge update для archived chat: `d.chat_id`; только incoming `message.sent`, без notification-center row, навигации или звука |
 | `message_update`     | Сообщение отредактировано                                           |
 | `message_delete`     | Сообщение удалено                                                   |
 | `message_read`       | Прочитано до `message_id` (`message.read` NATS или client `mark_read`) |
