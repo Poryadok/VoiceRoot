@@ -12,7 +12,6 @@ import voice.backend.auth.service.GuestConversionPendingUserRecoveryRunner;
 import voice.backend.auth.service.GuestConversionPendingUserWorker;
 
 @Configuration
-@EnableScheduling
 @EnableConfigurationProperties({
     GuestConversionPendingUserRecoveryProperties.class,
     GuestConversionPendingEventRecoveryProperties.class
@@ -31,3 +30,10 @@ public class GuestLifecycleConfiguration {
     return new GuestConversionPendingUserRecoveryRunner(worker, properties);
   }
 }
+
+/** Enables Auth recovery scheduling unless the surrounding environment explicitly disables it. */
+@Configuration(proxyBeanMethods = false)
+@ConditionalOnProperty(
+    name = "spring.task.scheduling.enabled", havingValue = "true", matchIfMissing = true)
+@EnableScheduling
+class AuthSchedulingConfiguration {}

@@ -27,6 +27,15 @@ public class ResendMailSender implements MailSender {
     this(apiKey, from, HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build(), new ObjectMapper(), DEFAULT_ENDPOINT);
   }
 
+  public ResendMailSender(String apiKey, String from, String endpoint) {
+    this(
+        apiKey,
+        from,
+        HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build(),
+        new ObjectMapper(),
+        endpoint == null || endpoint.isBlank() ? DEFAULT_ENDPOINT : URI.create(endpoint));
+  }
+
   ResendMailSender(
       String apiKey, String from, HttpClient httpClient, ObjectMapper objectMapper, URI endpoint) {
     if (apiKey == null || apiKey.isBlank()) {
