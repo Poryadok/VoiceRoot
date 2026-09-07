@@ -72,6 +72,7 @@ auth:
   resend:
     api-key: "${AUTH_RESEND_API_KEY:}"
     from: "${AUTH_RESEND_FROM:Voice <onboarding@resend.dev>}"
+    endpoint: "${AUTH_RESEND_ENDPOINT:https://api.resend.com/emails}"
 
 server:
   port: ${SERVER_PORT:8080}
