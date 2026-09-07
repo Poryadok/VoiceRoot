@@ -39,7 +39,7 @@ public class OtpAndMailConfiguration {
       if (from == null || from.isBlank()) {
         from = "Voice <onboarding@resend.dev>";
       }
-      return new ResendMailSender(apiKey, from);
+      return new ResendMailSender(apiKey, from, resend.getEndpoint());
     }
     return new NoopMailSender();
   }

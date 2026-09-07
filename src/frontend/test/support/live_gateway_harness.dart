@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
@@ -43,6 +44,60 @@ String qaUniqueEmail(String prefix) {
 }
 
 const qaPassword = 'VoiceQaTest1!';
+
+Uri liveAuthMailStubBaseUrl() {
+  final configured = Platform.environment['VOICE_AUTH_MAIL_STUB_URL']?.trim();
+  if (configured != null && configured.isNotEmpty) {
+    return Uri.parse(configured);
+  }
+  final port = Platform.environment['VERIFICATION_STUB_PORT']?.trim();
+  return Uri.parse(
+    'http://127.0.0.1:${port?.isNotEmpty == true ? port : '14180'}',
+  );
+}
+
+Future<String> waitForLiveVerificationCode({
+  required http.Client httpClient,
+  required Uri stubBaseUrl,
+  required String email,
+  Duration pollInterval = const Duration(milliseconds: 100),
+  int maxAttempts = 50,
+}) async {
+  final uri = stubBaseUrl
+      .resolve('/emails/latest')
+      .replace(queryParameters: {'to': email});
+  for (var attempt = 0; attempt < maxAttempts; attempt += 1) {
+    final response = await httpClient.get(uri);
+    if (response.statusCode == 404) {
+      if (attempt + 1 < maxAttempts) {
+        await Future<void>.delayed(pollInterval);
+      }
+      continue;
+    }
+    if (response.statusCode != 200) {
+      throw TestFailure(
+        'verification mail lookup failed for $email: HTTP ${response.statusCode}',
+      );
+    }
+    final body = jsonDecode(response.body);
+    if (body is! Map<String, dynamic>) {
+      throw TestFailure('verification mail lookup returned an invalid body');
+    }
+    final recipients = body['to'];
+    if (recipients is! List ||
+        !recipients.map((value) => '$value').contains(email)) {
+      throw TestFailure(
+        'verification mail lookup returned the wrong recipient',
+      );
+    }
+    final match = RegExp(r'\b(\d{6})\b').firstMatch('${body['text'] ?? ''}');
+    if (match == null) {
+      throw TestFailure('verification mail did not contain a six-digit code');
+    }
+    return match.group(1)!;
+  }
+  throw TestFailure('verification mail was not delivered for $email');
+}
 
 /// RFC 4122 v4 UUID for [client_message_id] (Messaging rejects non-UUID values).
 String qaClientMessageId() {
@@ -231,17 +286,121 @@ class LiveGatewayContext {
   );
 
   Future<AuthSession> registerUser(String prefix) async {
+    final email = qaUniqueEmail(prefix);
     final result = await authClient().register(
-      email: qaUniqueEmail(prefix),
+      email: email,
       password: qaPassword,
     );
     expect(result, isA<AuthSessionOk>(), reason: 'register $prefix');
-    final session = (result as AuthSessionOk).session;
+    final pendingSession = (result as AuthSessionOk).session;
+    expect(
+      pendingSession.accountType,
+      'guest',
+      reason: 'pending email account',
+    );
+    final session = await completeEmailVerification(
+      email: email,
+      pendingSession: pendingSession,
+    );
     // Default gaming preset blocks chat/space invites from non-friends
     // (docs/TESTING.md). Live E2E users are strangers unless a test tightens
     // privacy afterwards (e.g. privacy_actions).
     await allowOpenGamingPrivacy(session);
     return session;
+  }
+
+  Future<AuthSession> completeEmailVerification({
+    required String email,
+    required AuthSession pendingSession,
+    Duration pendingRefreshInterval = const Duration(seconds: 5),
+    int maxPendingRefreshAttempts = 24,
+  }) async {
+    final gateway = gatewayHttp();
+    final sent = await gateway.postEmpty(
+      uri: gateway.resolve('/api/v1/auth/otp/send'),
+      authorization: pendingSession.authorizationHeader,
+      jsonBody: {'email': email, 'otp_type': 'email_verify'},
+    );
+    expect(
+      sent,
+      isA<GatewayHttpOk<void>>(),
+      reason: 'send email verification OTP',
+    );
+
+    final code = await waitForLiveVerificationCode(
+      httpClient: httpClient,
+      stubBaseUrl: liveAuthMailStubBaseUrl(),
+      email: email,
+    );
+    final verified = await gateway.postJson(
+      uri: gateway.resolve('/api/v1/auth/otp/verify'),
+      authorization: pendingSession.authorizationHeader,
+      body: {'email': email, 'code': code, 'otp_type': 'email_verify'},
+    );
+
+    AuthSession? regularSession;
+    switch (verified) {
+      case GatewayHttpOk(:final data):
+        regularSession = AuthSession.fromAuthResponse(data);
+      case GatewayHttpFailure(:final error)
+          when error.statusCode == 503 &&
+              error.errorCode == 'verification_pending':
+        var current = pendingSession;
+        for (
+          var attempt = 0;
+          attempt < maxPendingRefreshAttempts;
+          attempt += 1
+        ) {
+          await Future<void>.delayed(pendingRefreshInterval);
+          final refreshed = await authClient().refresh(
+            refreshToken: current.refreshToken,
+          );
+          if (refreshed case AuthSessionOk(:final session)) {
+            _expectSameLiveIdentity(pendingSession, session);
+            current = session;
+            if (session.accountType == 'regular') {
+              regularSession = session;
+              break;
+            }
+            continue;
+          }
+          if (refreshed case AuthSessionFailure(
+            :final errorCode,
+            :final statusCode,
+          ) when statusCode == 503 && errorCode == 'verification_pending') {
+            continue;
+          }
+          fail('refresh after verification_pending failed: $refreshed');
+        }
+      case GatewayHttpFailure(:final error):
+        fail(
+          'verify email OTP failed: ${error.errorCode} (HTTP ${error.statusCode})',
+        );
+    }
+
+    if (regularSession == null) {
+      fail('email verification remained pending after worker recovery window');
+    }
+    _expectSameLiveIdentity(pendingSession, regularSession);
+    expect(
+      regularSession.accountType,
+      'regular',
+      reason: 'verified email account',
+    );
+    return regularSession;
+  }
+
+  void _expectSameLiveIdentity(AuthSession before, AuthSession after) {
+    expect(
+      after.accountId,
+      before.accountId,
+      reason: 'verified account identity',
+    );
+    expect(
+      after.activeProfileId,
+      before.activeProfileId,
+      reason: 'verified primary profile identity',
+    );
   }
 
   Future<AuthSession> refreshSession(AuthSession session) async {
@@ -263,11 +422,9 @@ class LiveGatewayContext {
 
   VoiceChatsClient chatsClient() => VoiceChatsClient(gateway: gatewayHttp());
 
-  VoiceSpacesClient spacesClient() =>
-      VoiceSpacesClient(gateway: gatewayHttp());
+  VoiceSpacesClient spacesClient() => VoiceSpacesClient(gateway: gatewayHttp());
 
-  VoiceRolesClient rolesClient() =>
-      VoiceRolesClient(gateway: gatewayHttp());
+  VoiceRolesClient rolesClient() => VoiceRolesClient(gateway: gatewayHttp());
 
   VoiceMessagesClient messagesClient() =>
       VoiceMessagesClient(gateway: gatewayHttp());
@@ -304,7 +461,9 @@ class LiveGatewayContext {
     expect(result, isA<UserPrivacyApiOk<VoicePrivacySettings>>());
   }
 
-  Future<void> allowOpenGamingPrivacyMany(Iterable<AuthSession> sessions) async {
+  Future<void> allowOpenGamingPrivacyMany(
+    Iterable<AuthSession> sessions,
+  ) async {
     for (final session in sessions) {
       await allowOpenGamingPrivacy(session);
     }

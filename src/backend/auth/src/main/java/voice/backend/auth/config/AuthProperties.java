@@ -111,6 +111,7 @@ public class AuthProperties {
   public static class Resend {
     private String apiKey = "";
     private String from = "Voice <onboarding@resend.dev>";
+    private String endpoint = "https://api.resend.com/emails";
 
     public String getApiKey() {
       return apiKey;
@@ -126,6 +127,14 @@ public class AuthProperties {
 
     public void setFrom(String from) {
       this.from = from;
+    }
+
+    public String getEndpoint() {
+      return endpoint;
+    }
+
+    public void setEndpoint(String endpoint) {
+      this.endpoint = endpoint;
     }
   }
 
