@@ -181,17 +181,22 @@ public class AuthService {
       throw new AuthException("validation_failed");
     }
     String passwordHash = passwordHasher.hash(command.password());
-    String type = command.guest() ? "guest" : "regular";
+    boolean regularEmailVerificationPending = !command.guest() && email != null && phone == null;
+    String type = command.guest() || regularEmailVerificationPending ? "guest" : "regular";
     Account account;
     PreparedSessionEpoch prepared;
     try {
       if (registrationSessionEpochPreparer != null) {
         RegistrationSessionEpochPreparer.PreparedRegistration registration =
-            registrationSessionEpochPreparer.prepare(email, phone, passwordHash, type);
+            registrationSessionEpochPreparer.prepare(
+                email, phone, passwordHash, type, regularEmailVerificationPending);
         account = registration.account();
         prepared = registration.preparedEpoch();
       } else {
-        account = accounts.create(email, phone, passwordHash, type);
+        account =
+            regularEmailVerificationPending
+                ? accounts.createRegularEmailPending(email, passwordHash)
+                : accounts.create(email, phone, passwordHash, type);
         prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
       }
     } catch (IllegalArgumentException ex) {
@@ -310,6 +315,21 @@ public class AuthService {
     return jwtService.accessTtl().toSeconds();
   }
 
+  /** Issues a replacement session only after the durable email-verification promotion is complete. */
+  public AuthSession issueVerifiedEmailSession(UUID accountId) {
+    Account account =
+        accounts
+            .findById(accountId.toString())
+            .orElseThrow(() -> new AuthException("invalid_token"));
+    ensureActive(account);
+    if (!"regular".equals(account.type())) {
+      throw new AuthException("verification_pending");
+    }
+    PreparedSessionEpoch prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
+    touchLastOnline(account);
+    return issueSession(account, prepared, "{}");
+  }
+
   public void setAccountStatus(String accountId, String status) {
     if (accountId == null || accountId.isBlank()) {
       throw new AuthException("invalid_account");
@@ -418,9 +438,7 @@ public class AuthService {
     TokenClaims claims = validate(accessToken);
     Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
     ensureActive(account);
-    if (!"guest".equals(account.type())) {
-      throw new AuthException("validation_failed");
-    }
+    ensureAnonymousGuest(account);
     if (command.password() == null || command.password().length() < 8) {
       throw new AuthException("validation_failed");
     }
@@ -631,9 +649,7 @@ public class AuthService {
   public GuestReminderState getGuestReminder(String accessToken) {
     TokenClaims claims = validate(accessToken);
     Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
-    if (!"guest".equals(account.type())) {
-      throw new AuthException("validation_failed");
-    }
+    ensureAnonymousGuest(account);
     Instant lastShown = accounts.getGuestReminderLastShownAt(account.id()).orElse(null);
     boolean shouldShow = lastShown == null || lastShown.isBefore(Instant.now(clock).minus(Duration.ofHours(24)));
     return new GuestReminderState(lastShown, shouldShow);
@@ -642,9 +658,7 @@ public class AuthService {
   public GuestReminderState markGuestReminderShown(String accessToken) {
     TokenClaims claims = validate(accessToken);
     Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
-    if (!"guest".equals(account.type())) {
-      throw new AuthException("validation_failed");
-    }
+    ensureAnonymousGuest(account);
     Instant now = Instant.now(clock);
     accounts.markGuestReminderShown(account.id(), now);
     return new GuestReminderState(now, false);
@@ -770,6 +784,14 @@ public class AuthService {
   private void ensureActive(Account account) {
     if (!"active".equals(account.status())) {
       throw new AuthException("account_inactive");
+    }
+  }
+
+  /** Pending email registrations retain guest-level chat restrictions but are no longer anonymous guests. */
+  private void ensureAnonymousGuest(Account account) {
+    if (!"guest".equals(account.type())
+        || accounts.isRegularEmailVerificationPending(account.id())) {
+      throw new AuthException("validation_failed");
     }
   }
 

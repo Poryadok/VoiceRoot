@@ -134,6 +134,7 @@ class ChatRailQuickAccessSection extends ConsumerWidget {
   const ChatRailQuickAccessSection({super.key});
 
   static const sectionKey = Key('chat_rail_quick_access');
+  static const reorderListKey = Key('chat_rail_quick_access_reorder');
   static Key itemKey(String chatId) => Key('chat_rail_qa_$chatId');
 
   @override
@@ -154,22 +155,62 @@ class ChatRailQuickAccessSection extends ConsumerWidget {
               message: l10n.chatQuickAccessTitle,
               child: Padding(
                 padding: const EdgeInsets.only(top: 4, bottom: 2),
-                child: Icon(Icons.star_outline, size: 14, color: voice.textSecondary),
+                child: Icon(
+                  Icons.star_outline,
+                  size: 14,
+                  color: voice.textSecondary,
+                ),
               ),
             ),
-            for (final item in data.items)
-              _QuickAccessRailButton(
-                key: itemKey(item.chatId),
-                item: item,
-                onTap: () => shellNav.selectChatFromHome(item.chatId),
-                onLongPress: () => _removeQuickAccess(context, ref, item.chatId),
+            ReorderableListView.builder(
+              key: reorderListKey,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              buildDefaultDragHandles: data.items.length > 1,
+              itemCount: data.items.length,
+              onReorder: (oldIndex, newIndex) => _reorderQuickAccess(
+                context,
+                ref,
+                data.items,
+                oldIndex,
+                newIndex,
               ),
+              itemBuilder: (context, index) {
+                final item = data.items[index];
+                return _QuickAccessRailButton(
+                  key: itemKey(item.chatId),
+                  item: item,
+                  onTap: () => shellNav.selectChatFromHome(item.chatId),
+                  onLongPress: () =>
+                      _removeQuickAccess(context, ref, item.chatId),
+                );
+              },
+            ),
           ],
         );
       },
       loading: () => const SizedBox.shrink(),
       error: (_, _) => const SizedBox.shrink(),
     );
+  }
+
+  Future<void> _reorderQuickAccess(
+    BuildContext context,
+    WidgetRef ref,
+    List<VoiceQuickAccessItem> items,
+    int oldIndex,
+    int newIndex,
+  ) async {
+    if (newIndex > oldIndex) newIndex -= 1;
+    final chatIds = items.map((item) => item.chatId).toList();
+    final moved = chatIds.removeAt(oldIndex);
+    chatIds.insert(newIndex, moved);
+    final message = await ref.read(quickAccessActionsProvider).reorder(chatIds);
+    if (message != null && context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    }
   }
 
   Future<void> _removeQuickAccess(
@@ -179,16 +220,17 @@ class ChatRailQuickAccessSection extends ConsumerWidget {
   ) async {
     final auth = ref.read(authorizationHeaderProvider);
     if (auth == null) return;
-    final result = await ref.read(voiceChatsClientProvider).removeQuickAccess(
-          authorization: auth,
-          chatId: chatId,
-        );
+    final result = await ref
+        .read(voiceChatsClientProvider)
+        .removeQuickAccess(authorization: auth, chatId: chatId);
     if (!context.mounted) return;
     switch (result) {
       case ChatsApiOk<void>():
         invalidateChatNavigationData(ref);
       case ChatsApiFailure(:final message):
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
     }
   }
 }
@@ -222,8 +264,9 @@ class _QuickAccessRailButton extends StatelessWidget {
             child: CircleAvatar(
               radius: 14,
               backgroundColor: voice.elevated,
-              backgroundImage:
-                  chat?.avatarUrl != null ? NetworkImage(chat!.avatarUrl!) : null,
+              backgroundImage: chat?.avatarUrl != null
+                  ? NetworkImage(chat!.avatarUrl!)
+                  : null,
               child: chat?.avatarUrl == null
                   ? Icon(Icons.star, size: 14, color: voice.profileAccent)
                   : null,

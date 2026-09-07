@@ -45,12 +45,21 @@ func TestFolderMembershipGRPC_CustomFolderFlow(t *testing.T) {
 	list, err := client.ListChats(ctxProf, &chatv1.ListChatsRequest{FolderId: &folderID})
 	require.NoError(t, err)
 	require.Len(t, list.GetChatList().GetItems(), 1)
+	require.False(t, list.GetChatList().GetItems()[0].GetIsPinned())
+	require.NotNil(t, list.GetChatList().GetItems()[0].IsPinned)
 
 	_, err = client.PinChatInFolder(ctxProf, &chatv1.PinChatInFolderRequest{
 		FolderId: folderID,
 		ChatId:   dm.GetChat().GetId(),
 	})
 	require.NoError(t, err)
+
+	// A fresh ListChats response is the source of truth after a client restart.
+	list, err = client.ListChats(ctxProf, &chatv1.ListChatsRequest{FolderId: &folderID})
+	require.NoError(t, err)
+	require.Len(t, list.GetChatList().GetItems(), 1)
+	require.True(t, list.GetChatList().GetItems()[0].GetIsPinned())
+	require.NotNil(t, list.GetChatList().GetItems()[0].IsPinned)
 
 	folders, err := client.ListFolders(ctxProf, &chatv1.ListFoldersRequest{})
 	require.NoError(t, err)
@@ -61,6 +70,12 @@ func TestFolderMembershipGRPC_CustomFolderFlow(t *testing.T) {
 		ChatId:   dm.GetChat().GetId(),
 	})
 	require.NoError(t, err)
+
+	list, err = client.ListChats(ctxProf, &chatv1.ListChatsRequest{FolderId: &folderID})
+	require.NoError(t, err)
+	require.Len(t, list.GetChatList().GetItems(), 1)
+	require.False(t, list.GetChatList().GetItems()[0].GetIsPinned())
+	require.NotNil(t, list.GetChatList().GetItems()[0].IsPinned)
 
 	_, err = client.RemoveChatFromFolder(ctxProf, &chatv1.RemoveChatFromFolderRequest{
 		FolderId: folderID,
