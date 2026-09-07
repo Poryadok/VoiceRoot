@@ -2329,6 +2329,27 @@ class AppLocalizationsRu extends AppLocalizations {
   String get guestConvertSubmit => 'Создать аккаунт';
 
   @override
+  String guestConvertVerificationSubtitle(Object email) {
+    return 'Введите код, отправленный на $email. Гостевой доступ сохранится до подтверждения.';
+  }
+
+  @override
+  String get guestConvertCodeLabel => 'Код подтверждения';
+
+  @override
+  String get guestConvertVerify => 'Подтвердить email';
+
+  @override
+  String get guestConvertResend => 'Отправить код повторно';
+
+  @override
+  String get guestConvertPromotionPending =>
+      'Email подтверждён. Мы завершаем создание аккаунта; до этого сохранится гостевой доступ.';
+
+  @override
+  String get guestConvertRefreshStatus => 'Обновить статус аккаунта';
+
+  @override
   String get guestSaveAccountReminder =>
       'Зарегистрируйте аккаунт, чтобы не потерять доступ.';
 
