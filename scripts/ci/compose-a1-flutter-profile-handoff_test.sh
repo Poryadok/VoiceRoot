@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Offline shim tests for the isolated T-055 Flutter profile-handoff runner.
+# Offline shim tests for the isolated T-055/T-106/T-107 Flutter A1 runner.
 # No command here reaches Docker, Flutter, curl, or the network.
 set -euo pipefail
 
@@ -7,7 +7,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 SCRIPT="$ROOT/scripts/ci/compose-a1-flutter-profile-handoff.sh"
 T055_TEST='test/t055_profile_switch_reconnect_inbox_e2e_live_test.dart'
 T106_TEST='test/t106_account_soft_delete_e2e_live_test.dart'
-DEFAULT_MANIFEST_RESULT="$(printf '%s\n%s' "$T055_TEST" "$T106_TEST")"
+T107_TEST='test/t107_folders_quick_access_e2e_live_test.dart'
+DEFAULT_MANIFEST_RESULT="$(printf '%s\n%s\n%s' "$T055_TEST" "$T106_TEST" "$T107_TEST")"
 REAL_BASH="${BASH:-$(command -v bash)}"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
@@ -220,14 +221,17 @@ assert_eq "$(cat "${case_dir}/rc")" 2
 assert_contains "${case_dir}/stderr" 'occupied Docker host port: 25003'
 
 echo '== manifest allowlist rejects invalid entry sets before Docker =='
-declare -a invalid_manifest_cases=(empty one three blank absolute non-dart duplicate reversed wrong-paths)
+declare -a invalid_manifest_cases=(empty one two four blank absolute non-dart duplicate reversed wrong-paths)
 for manifest_case in "${invalid_manifest_cases[@]}"; do
   case_dir="$(new_case "invalid-${manifest_case}")"
   case "$manifest_case" in
     empty) FAKE_MANIFEST_RESULT='' ;;
     one) FAKE_MANIFEST_RESULT="$T055_TEST" ;;
-    three) FAKE_MANIFEST_RESULT="$T055_TEST
+    two) FAKE_MANIFEST_RESULT="$T055_TEST
+$T106_TEST" ;;
+    four) FAKE_MANIFEST_RESULT="$T055_TEST
 $T106_TEST
+    $T107_TEST
 test/other_profile_test.dart" ;;
     blank) FAKE_MANIFEST_RESULT=$'\n' ;;
     absolute) FAKE_MANIFEST_RESULT="/tmp/t055_profile_switch_reconnect_inbox_e2e_live_test.dart
@@ -247,10 +251,11 @@ test/another_profile_test.dart' ;;
 done
 unset FAKE_MANIFEST_RESULT
 
-echo '== config/up/health and exactly two constrained Flutter tests =='
+echo '== config/up/health and exactly three constrained Flutter tests =='
 case_dir="$(new_case happy)"
 FAKE_HEALTH_MODE=delayed FAKE_MANIFEST_RESULT="$T055_TEST
-$T106_TEST" run_runner "$case_dir"
+$T106_TEST
+$T107_TEST" run_runner "$case_dir"
 assert_eq "$(cat "${case_dir}/rc")" 0
 assert_contains "${case_dir}/commands.log" 'compose.*<--profile> <app> <config> <--quiet>'
 assert_contains "${case_dir}/commands.log" 'compose.*<--profile> <app> <up> <-d> <--build>'
@@ -264,10 +269,11 @@ flutter_count="$(grep -c '^flutter ' "${case_dir}/commands.log" || true)"
 assert_eq "$flutter_count" 1
 flutter_line="$(grep '^flutter ' "${case_dir}/commands.log")"
 mapfile -t flutter_dart_args < <(grep -oE '<test/[^>]+\.dart>' <<<"$flutter_line")
-assert_eq "${#flutter_dart_args[@]}" 2
+assert_eq "${#flutter_dart_args[@]}" 3
 assert_eq "${flutter_dart_args[0]}" "<${T055_TEST}>"
 assert_eq "${flutter_dart_args[1]}" "<${T106_TEST}>"
-assert_contains "${case_dir}/commands.log" "flutter cwd=.*/src/frontend.*<test>.*<${T055_TEST}>.*<${T106_TEST}>"
+assert_eq "${flutter_dart_args[2]}" "<${T107_TEST}>"
+assert_contains "${case_dir}/commands.log" "flutter cwd=.*/src/frontend.*<test>.*<${T055_TEST}>.*<${T106_TEST}>.*<${T107_TEST}>"
 assert_contains "${case_dir}/commands.log" 'flutter.*<--concurrency=1>'
 assert_contains "${case_dir}/commands.log" 'flutter.*<--dart-define=VOICE_RUN_LIVE_INTEGRATION=true>'
 assert_contains "${case_dir}/commands.log" 'flutter.*<--dart-define=VOICE_API_BASE_URL=http://127.0.0.1:25012>'

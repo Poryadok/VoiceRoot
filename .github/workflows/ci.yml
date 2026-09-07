@@ -1207,7 +1207,7 @@ jobs:
           cache: true
       - name: Prefetch sqlite3mc native assets
         run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
-      - name: T055 Flutter profile handoff
+      - name: T055/T106/T107 Flutter A1 live proof
         env:
           VOICE_A1_FLUTTER_PROFILE_HANDOFF_CLEANUP: "true"
         run: make compose-a1-flutter-profile-handoff
