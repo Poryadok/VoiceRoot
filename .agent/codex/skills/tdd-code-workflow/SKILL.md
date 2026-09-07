@@ -18,7 +18,15 @@ Throughout this document, **delegation** means any supported mechanism: Cursor T
 
 In Voice, apply the scope and exceptions in `docs/TESTING.md`: use TDD for new nontrivial behavior and behavior-changing fixes. Documentation-only or mechanical edits and behavior-preserving refactoring need proportionate validation, not artificial red tests. Outside Voice, follow the repository's documented workflow. Analysis-only and review-only requests do not authorize implementation.
 
-Explicit user instructions take precedence over skill guidelines. Do not infer additional approval gates from an exception. If this skill causes a pause, link the exact file read, quote the applicable rule, and explain the unresolved decision; continue independent authorized work.
+Apply the repository's general autonomy, instruction precedence, and approval rules (in Voice, `.agent/AGENTS.md`). Workflow exceptions determine the method of work; they do not create an approval gate.
+
+### Execution And Completion
+
+For implementation or fix requests, continue from the plan through code, relevant documentation, and verification within the authorized scope. A written plan or completed test phase is an intermediate artifact, not a reason to end the task or ask whether to implement. Analysis-only and review-only requests retain their original scope.
+
+Choose routine implementation details from repository conventions and proceed. Escalate unresolved product or contract decisions as described below; do not treat ordinary local edits, isolated worktrees, or required test runs as new approval gates. Preserve unrelated work.
+
+When a required check fails, investigate and fix causes within scope, then rerun the affected checks. If completion depends on unavailable infrastructure, credentials, or a user decision, finish independent work and report the exact blocker and unverified behavior. Do not claim completion from a partial green test run or keep retrying an unchanged external blocker without new evidence.
 
 ### Strict mode when the user invokes this workflow
 
@@ -228,7 +236,9 @@ Before final response, perform a last local check:
 - Confirm every plan item is complete or explicitly explained.
 - Confirm every documented expectation is covered by tests or a justified verification method.
 - Confirm each documented behavior went through an explicit red-green-refactor cycle, or explain why it could not.
-- Complete the agreed checks for the affected scope. Reuse passing results for unchanged code; repeat or broaden checks when edits, failures, or new concerns justify it.
+- Select checks from the repository requirements for the changed components and the behavior at risk; in Voice, use `docs/TESTING.md`. Complete required checks, including affected contract or integration checks. A small diff alone does not justify skipping them.
+- For documentation or mechanical changes, validate the affected artifact without artificial behavior tests. For behavior-preserving refactoring, use relevant existing tests and add coverage only for a concrete gap.
+- Reuse passing results while the relevant code, configuration, and environment remain unchanged. Repeat or broaden checks when changes, failures, or a concrete unresolved concern justify it; do not run whole-repository verification merely to make a scoped task look more thorough.
 - Confirm tests pass, or report exact failures and blockers.
 - Inspect the final diff for unrelated edits.
 - Confirm implementation, tests, documentation, and user request are consistent.
