@@ -293,6 +293,14 @@ SELECT role FROM chat_members WHERE chat_id = $1 AND profile_id = $2
 
 // AddGroupMembers inserts new members into a standalone group chat.
 func (s *DMStore) AddGroupMembers(ctx context.Context, chatID uuid.UUID, profileIDs []uuid.UUID) ([]uuid.UUID, error) {
+	return s.AddGroupMembersWithGuestAdmission(ctx, chatID, profileIDs, nil)
+}
+
+// AddGroupMembersWithGuestAdmission admits new guest members only while the
+// locked chat row still allows guests. Existing members are excluded before the
+// admission decision, so a guest admitted before a later disable remains an
+// idempotent AddMembers target.
+func (s *DMStore) AddGroupMembersWithGuestAdmission(ctx context.Context, chatID uuid.UUID, profileIDs, guestProfileIDs []uuid.UUID) ([]uuid.UUID, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("dm store: pool not configured")
 	}
@@ -322,7 +330,8 @@ func (s *DMStore) AddGroupMembers(ctx context.Context, chatID uuid.UUID, profile
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	var chatType string
-	err = tx.QueryRow(ctx, `SELECT type FROM chats WHERE id = $1 FOR UPDATE`, chatID).Scan(&chatType)
+	var allowGuests bool
+	err = tx.QueryRow(ctx, `SELECT type, allow_guests FROM chats WHERE id = $1 FOR UPDATE`, chatID).Scan(&chatType, &allowGuests)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, pgx.ErrNoRows
 	}
@@ -331,6 +340,10 @@ func (s *DMStore) AddGroupMembers(ctx context.Context, chatID uuid.UUID, profile
 	}
 	if chatType != "group" && chatType != "channel" {
 		return nil, fmt.Errorf("add members only supported for group or channel chats")
+	}
+	guestSet := make(map[uuid.UUID]struct{}, len(guestProfileIDs))
+	for _, profileID := range guestProfileIDs {
+		guestSet[profileID] = struct{}{}
 	}
 
 	var current int
@@ -351,6 +364,13 @@ SELECT 1 FROM chat_members WHERE chat_id = $1 AND profile_id = $2
 			return nil, err
 		}
 		added = append(added, pid)
+	}
+	if !allowGuests {
+		for _, profileID := range added {
+			if _, guest := guestSet[profileID]; guest {
+				return nil, ErrGuestAdmissionDisabled
+			}
+		}
 	}
 
 	projected := current + len(added)
@@ -432,7 +452,7 @@ func (s *DMStore) RemoveStandaloneGroupMember(ctx context.Context, chatID, actor
 	if err := tx.QueryRow(ctx, `SELECT type, space_id FROM chats WHERE id = $1 FOR UPDATE`, chatID).Scan(&chatType, &spaceID); err != nil {
 		return err
 	}
-	if chatType != "group" || spaceID != nil {
+	if (chatType != "group" && chatType != "channel") || spaceID != nil {
 		return ErrRoleChangeInvalid
 	}
 
@@ -478,7 +498,7 @@ FOR UPDATE
 	if err := tx.QueryRow(ctx, `SELECT COUNT(*)::int FROM chat_members WHERE chat_id = $1`, chatID).Scan(&memberCount); err != nil {
 		return err
 	}
-	if memberCount-1 < MinGroupMembers {
+	if chatType == "group" && memberCount-1 < MinGroupMembers {
 		return ErrGroupTooFewMembers
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM chat_members WHERE chat_id = $1 AND profile_id = $2`, chatID, targetID); err != nil {
@@ -487,7 +507,7 @@ FOR UPDATE
 	return tx.Commit(ctx)
 }
 
-// LeaveGroupChat removes the caller from a standalone group. Owners must transfer ownership first.
+// LeaveGroupChat removes the caller from a standalone group or channel. Owners must transfer ownership first.
 func (s *DMStore) LeaveGroupChat(ctx context.Context, chatID, profileID uuid.UUID) error {
 	if s == nil || s.Pool == nil {
 		return errors.New("dm store: pool not configured")
@@ -502,17 +522,23 @@ func (s *DMStore) LeaveGroupChat(ctx context.Context, chatID, profileID uuid.UUI
 	if role == "owner" {
 		return ErrOwnerMustTransfer
 	}
-	count, err := s.CountChatMembers(ctx, chatID)
-	if err != nil {
+	var chatType string
+	if err := s.Pool.QueryRow(ctx, `SELECT type FROM chats WHERE id = $1`, chatID).Scan(&chatType); err != nil {
 		return err
 	}
-	if count-1 < MinGroupMembers {
-		return ErrGroupTooFewMembers
+	if chatType == "group" {
+		count, err := s.CountChatMembers(ctx, chatID)
+		if err != nil {
+			return err
+		}
+		if count-1 < MinGroupMembers {
+			return ErrGroupTooFewMembers
+		}
 	}
 	ct, err := s.Pool.Exec(ctx, `
 DELETE FROM chat_members m
 USING chats c
-WHERE m.chat_id = c.id AND c.type = 'group'
+WHERE m.chat_id = c.id AND c.type IN ('group', 'channel') AND c.space_id IS NULL
   AND m.chat_id = $1 AND m.profile_id = $2
 `, chatID, profileID)
 	if err != nil {
@@ -738,12 +764,13 @@ func optionalTopicPtr(topic *string) *string {
 }
 
 var (
-	ErrGroupTooFewMembers  = errors.New("group must have at least 3 members")
-	ErrGroupMemberLimit    = errors.New("group member limit is 500")
-	ErrCannotRemoveOwner   = errors.New("cannot remove group owner")
-	ErrNotGroupOwner       = errors.New("caller is not group owner")
-	ErrOwnerMustTransfer   = errors.New("group owner must transfer ownership before leaving")
-	ErrNotGroupMember      = errors.New("group member not found")
-	ErrRoleChangeForbidden = errors.New("caller cannot make this group role change")
-	ErrRoleChangeInvalid   = errors.New("invalid group role change")
+	ErrGroupTooFewMembers     = errors.New("group must have at least 3 members")
+	ErrGroupMemberLimit       = errors.New("group member limit is 500")
+	ErrCannotRemoveOwner      = errors.New("cannot remove group owner")
+	ErrNotGroupOwner          = errors.New("caller is not group owner")
+	ErrOwnerMustTransfer      = errors.New("group owner must transfer ownership before leaving")
+	ErrNotGroupMember         = errors.New("group member not found")
+	ErrRoleChangeForbidden    = errors.New("caller cannot make this group role change")
+	ErrRoleChangeInvalid      = errors.New("invalid group role change")
+	ErrGuestAdmissionDisabled = errors.New("guest admission is disabled for this chat")
 )

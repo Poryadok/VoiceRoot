@@ -93,6 +93,7 @@ type DMStore interface {
 	CreateSpaceGroupChat(ctx context.Context, creatorProfileID, spaceID uuid.UUID, name string, topic *string) (*store.ChatRow, error)
 	CreateSpaceChannelChat(ctx context.Context, creatorProfileID, spaceID uuid.UUID, name string, topic *string) (*store.ChatRow, error)
 	AddGroupMembers(ctx context.Context, chatID uuid.UUID, profileIDs []uuid.UUID) ([]uuid.UUID, error)
+	AddGroupMembersWithGuestAdmission(ctx context.Context, chatID uuid.UUID, profileIDs, guestProfileIDs []uuid.UUID) ([]uuid.UUID, error)
 	RemoveGroupMember(ctx context.Context, chatID, profileID uuid.UUID) error
 	RemoveStandaloneGroupMember(ctx context.Context, chatID, actorID, targetID uuid.UUID) error
 	LeaveGroupChat(ctx context.Context, chatID, profileID uuid.UUID) error

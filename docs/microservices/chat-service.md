@@ -202,15 +202,17 @@ CREATE INDEX quick_access_profile_order_idx ON quick_access_chats (profile_id, s
 
 ### Deployed schema (migrations `000001`–`000011`) vs full spec
 
-**Shipped today** (`chat_db` migrations): DM + group + channel types; `chat_members.inbox_bucket`; `threads_enabled` / `allow_user_main_feed`; `e2e_enabled`; slow mode; chat-level `allow_guests` (`000007`, default hardened to `false` by `000012`); `folders` + `folder_chats`; `quick_access_chats`; per-profile `deleted_for_self` (`000011`). Standalone group/channel owners and existing admins configure future guest admission through `UpdateChat`; admission is checked against User's guest marker fail-closed, and disabling it preserves current memberships. Folder membership/pin, `ListChats.folder_id` and `UpdateFolder`/`DeleteFolder` are implemented. Incoming message activity keeps archived chats in the archive and only updates their unread badge.
+**Shipped today** (`chat_db` migrations): DM + group + channel types; `chat_members.inbox_bucket`; `threads_enabled` / `allow_user_main_feed`; `e2e_enabled`; slow mode; chat-level `allow_guests` (`000007`, default hardened to `false` and legacy standalone group/channel rows backfilled by `000012`); `folders` + `folder_chats`; `quick_access_chats`; per-profile `deleted_for_self` (`000011`). Standalone group/channel owners and existing admins configure future guest admission through `UpdateChat`; admission is checked against User's guest marker fail-closed, and disabling it preserves current memberships. Folder membership/pin, `ListChats.folder_id` and `UpdateFolder`/`DeleteFolder` are implemented. Incoming message activity keeps archived chats in the archive and only updates their unread badge.
 
 ### Guest admission
 
 - Default is `allow_guests=false`; creating a chat must not silently admit guests.
 - `allow_guests=true` permits an invited guest to join/use that chat but does not let
   a guest initiate a DM/call, self-discover the chat, or bypass an invite.
-- For a Space-attached chat, effective access is fail-closed: both the Space and the
-  chat must allow guests, and ordinary membership/role checks still apply.
+- For a Space-attached chat, the full effective-access contract (Space and chat
+  opt-in plus membership/role checks) remains owned by Space/Role and is not
+  implemented by this standalone admission slice. Chat does not write a
+  standalone `allow_guests` decision for Space chats.
 - DM ignores this flag because guests cannot initiate DM; receiving an allowed DM is
   governed by the guest/privacy rules in [auth-and-contacts.md](../features/auth-and-contacts.md).
 
