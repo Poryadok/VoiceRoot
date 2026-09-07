@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,6 +13,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 )
+
+var liveComposeRateLimitPatterns = []string{
+	"ratelimit:AuthLogin:*",
+	"ratelimit:AuthRegister:*",
+	"ratelimit:Auth:*",
+	"ratelimit:OTP:*",
+	"ratelimit:FileUpload:*",
+}
 
 func liveComposeEnabled() bool {
 	v := strings.TrimSpace(os.Getenv("VOICE_RUN_LIVE_COMPOSE"))
@@ -35,7 +42,7 @@ func clearLiveComposeAuthRateLimit(t *testing.T) {
 		return
 	}
 	root := repoRootFromTest(t)
-	for _, pattern := range []string{"ratelimit:AuthLogin:*", "ratelimit:AuthRegister:*", "ratelimit:Auth:*", "ratelimit:FileUpload:*"} {
+	for _, pattern := range liveComposeRateLimitPatterns {
 		cmd := exec.Command("docker", "compose", "exec", "-T", "redis", "redis-cli", "--scan", "--pattern", pattern)
 		cmd.Dir = root
 		out, err := cmd.Output()
@@ -60,6 +67,7 @@ type authSessionResponse struct {
 	RefreshToken string `json:"refresh_token"`
 	ProfileID    string `json:"profile_id"`
 	AccountID    string `json:"account_id"`
+	AccountType  string `json:"account_type"`
 }
 
 type authSessionEnvelope struct {
@@ -125,29 +133,4 @@ func TestComposeUsersSearch_live(t *testing.T) {
 		}
 	}
 	require.True(t, found, "search results should include profile B by display_name/email hint; body=%s", string(body))
-}
-
-func registerComposeUser(t *testing.T, client *http.Client, base, email, password string) authSessionResponse {
-	t.Helper()
-	payload, err := json.Marshal(map[string]any{
-		"email":            email,
-		"password":         password,
-		"guest":            false,
-		"device_info_json": `{"platform":"go-live-test"}`,
-	})
-	require.NoError(t, err)
-
-	resp, err := client.Post(base+"/api/v1/auth/register", "application/json", bytes.NewReader(payload))
-	require.NoError(t, err)
-	defer resp.Body.Close()
-	raw, _ := io.ReadAll(resp.Body)
-	require.Equal(t, http.StatusOK, resp.StatusCode,
-		"register %s: status=%d body=%s", email, resp.StatusCode, string(raw))
-
-	var envelope authSessionEnvelope
-	require.NoError(t, json.Unmarshal(raw, &envelope))
-	sess := envelope.Session
-	require.NotEmpty(t, sess.AccessToken, "register %s: body=%s", email, string(raw))
-	require.NotEmpty(t, sess.ProfileID, "register %s: body=%s", email, string(raw))
-	return sess
 }

@@ -122,6 +122,7 @@ export ADMIN_PORT="$((port_base + 15))"
 export VERIFICATION_STUB_PORT="$((port_base + 16))"
 export VOICE_RUN_LIVE_COMPOSE=true
 export VOICE_API_BASE_URL="http://127.0.0.1:${GATEWAY_PORT}"
+export VOICE_AUTH_MAIL_STUB_URL="http://127.0.0.1:${VERIFICATION_STUB_PORT}"
 
 compose() {
   docker compose \

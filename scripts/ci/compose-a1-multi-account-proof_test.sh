@@ -84,6 +84,7 @@ printf 'env_COMPOSE_PROJECT_NAME=%s\n' "${COMPOSE_PROJECT_NAME:-}" >>"${log}"
 printf 'env_COMPOSE_PROFILES=%s\n' "${COMPOSE_PROFILES:-}" >>"${log}"
 printf 'env_COMPOSE_FILE=%s\n' "${COMPOSE_FILE:-}" >>"${log}"
 printf 'env_VOICE_A1_SESSION_EPOCH_ISOLATED=%s\n' "${VOICE_A1_SESSION_EPOCH_ISOLATED:-}" >>"${log}"
+printf 'env_VOICE_AUTH_MAIL_STUB_URL=%s\n' "${VOICE_AUTH_MAIL_STUB_URL:-}" >>"${log}"
 if [[ "${1:-}" == ps ]]; then
   has_all=0
   has_quiet=0
@@ -240,6 +241,7 @@ assert_contains "${case_dir}/commands.log" 'compose.*<ps> <-q> <gateway>'
 assert_contains "${case_dir}/commands.log" 'compose.*<ps> <-q> <file>'
 assert_contains "${case_dir}/commands.log" 'curl.*<http://127.0.0.1:25012/health>'
 assert_full_port_env "${case_dir}/commands.log"
+assert_contains "${case_dir}/commands.log" '^env_VOICE_AUTH_MAIL_STUB_URL=http://127\.0\.0\.1:25016$'
 assert_contains "${case_dir}/commands.log" 'go cwd=.*/src/backend/gateway.*<-count=1> <-parallel> <1> <-timeout> <20m> <-run>'
 assert_not_contains "${case_dir}/commands.log" '^go .*(<-tags> <live>|<-tags=live>)'
 go_run_regex="$(sed -n 's/.* <-run> <\([^>]*\)> <.*/\1/p' "${case_dir}/commands.log" | head -1)"
