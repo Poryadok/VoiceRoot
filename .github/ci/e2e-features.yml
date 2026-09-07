@@ -1,4 +1,4 @@
-# E2E feature catalog — smoke (CI tier 2) vs full (compose-e2e-live).
+# E2E feature catalog â€” smoke (CI tier 2) vs full (compose-e2e-live).
 # Parsed by scripts/ci/e2e-manifest.sh (line-oriented, no external YAML deps).
 
 smoke_gateway:
@@ -70,6 +70,7 @@ a1_multi_account_gateway:
   - TestComposeA1ChannelReadIsolation_live
   - TestComposeA1BlockDMDenyBothDirections_live
   - TestComposeA1SessionEpochRealtime_live
+  - TestComposeThreadsDMReply_live
 
 # Deliberate isolated runner only: T-055/T-106/T-107 use live Gateway state
 # and must not attach to a developer compose stack.
