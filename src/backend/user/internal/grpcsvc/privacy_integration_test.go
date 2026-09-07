@@ -59,6 +59,37 @@ func startUserPrivacyTestServer(t *testing.T, pool *store.ProfileStore, privacy 
 
 type alwaysFriendsGraph struct{}
 
+type receiptRevocationEventsRecorder struct {
+	profileID       string
+	changedKeysJSON string
+}
+
+func (r *receiptRevocationEventsRecorder) PublishProfileCreated(context.Context, string, string) error {
+	return nil
+}
+
+func (r *receiptRevocationEventsRecorder) PublishProfileUpdated(context.Context, string, string, string) error {
+	return nil
+}
+
+func (r *receiptRevocationEventsRecorder) PublishProfileSwitched(context.Context, string, string, string) error {
+	return nil
+}
+
+func (r *receiptRevocationEventsRecorder) PublishVerified(context.Context, string, string, string) error {
+	return nil
+}
+
+func (r *receiptRevocationEventsRecorder) PublishPresenceChanged(context.Context, string, string, string) error {
+	return nil
+}
+
+func (r *receiptRevocationEventsRecorder) PublishSettingsChanged(_ context.Context, profileID, changedKeysJSON string) error {
+	r.profileID = profileID
+	r.changedKeysJSON = changedKeysJSON
+	return nil
+}
+
 func (alwaysFriendsGraph) AreFriends(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
 	return true, nil
 }
@@ -188,7 +219,10 @@ VALUES ($1, $2, 'nofwd', '5555', 'NoFwd', true)`,
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
 
-	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb)
+	events := &receiptRevocationEventsRecorder{}
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb,
+		func(s *UserGRPC) { s.Events = events },
+	)
 
 	before, err := cli.GetPrivacySettings(withUserAuthCtx(ctx, accountID, profileID), &userv1.GetPrivacySettingsRequest{
 		ProfileId: profileID.String(),
@@ -231,6 +265,8 @@ VALUES ($1, $2, 'nofwd', '5555', 'NoFwd', true)`,
 	require.NoError(t, err)
 	require.False(t, after.GetPrivacySettings().GetAllowForward())
 	require.False(t, after.GetPrivacySettings().GetShowReadReceipts())
+	require.Equal(t, profileID.String(), events.profileID)
+	require.Equal(t, `[{"key":"show_read_receipts","value":false}]`, events.changedKeysJSON)
 
 	s2sCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderInternalCaller, "messaging")
 	s2s, err := cli.GetPrivacySettings(s2sCtx, &userv1.GetPrivacySettingsRequest{
