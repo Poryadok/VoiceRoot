@@ -19,19 +19,9 @@ func TestGRPCReadinessWaitsUseIndependentTimeoutContexts(t *testing.T) {
 		t.Fatalf("parse main.go: %v", err)
 	}
 
-	timeoutContexts := make(map[*ast.Object]bool)
-	ast.Inspect(file, func(node ast.Node) bool {
-		assign, ok := node.(*ast.AssignStmt)
-		if !ok || len(assign.Lhs) == 0 || len(assign.Rhs) == 0 || !isGRPCDialTimeoutContext(assign.Rhs[0]) {
-			return true
-		}
-		if ctx, ok := assign.Lhs[0].(*ast.Ident); ok && ctx.Obj != nil {
-			timeoutContexts[ctx.Obj] = true
-		}
-		return true
-	})
+	timeoutContexts := grpcDialTimeoutContextDefinitions(file)
 
-	uses := make(map[*ast.Object]int)
+	uses := make(map[token.Pos]int)
 	readinessWaits := 0
 	ast.Inspect(file, func(node ast.Node) bool {
 		call, ok := node.(*ast.CallExpr)
@@ -40,11 +30,12 @@ func TestGRPCReadinessWaitsUseIndependentTimeoutContexts(t *testing.T) {
 		}
 		readinessWaits++
 		ctx, ok := call.Args[0].(*ast.Ident)
-		if !ok || ctx.Obj == nil || !timeoutContexts[ctx.Obj] {
+		definition, ok := timeoutContextDefinitionForUse(timeoutContexts, ctx)
+		if !ok {
 			t.Errorf("waitForGRPCReady must receive a context created with context.WithTimeout(..., grpcclient.DialTimeoutFromEnv())")
 			return true
 		}
-		uses[ctx.Obj]++
+		uses[definition.position]++
 		return true
 	})
 	if readinessWaits != 5 {
@@ -56,6 +47,56 @@ func TestGRPCReadinessWaitsUseIndependentTimeoutContexts(t *testing.T) {
 			t.Errorf("a GRPC_DIAL_TIMEOUT context is shared by %d readiness waits; each dependency needs its own timeout", count)
 		}
 	}
+}
+
+type timeoutContextDefinition struct {
+	name       string
+	position   token.Pos
+	blockStart token.Pos
+	blockEnd   token.Pos
+}
+
+func grpcDialTimeoutContextDefinitions(file *ast.File) []timeoutContextDefinition {
+	var definitions []timeoutContextDefinition
+	ast.Inspect(file, func(node ast.Node) bool {
+		block, ok := node.(*ast.BlockStmt)
+		if !ok {
+			return true
+		}
+		for _, statement := range block.List {
+			assign, ok := statement.(*ast.AssignStmt)
+			if !ok || len(assign.Lhs) == 0 || len(assign.Rhs) == 0 || !isGRPCDialTimeoutContext(assign.Rhs[0]) {
+				continue
+			}
+			contextName, ok := assign.Lhs[0].(*ast.Ident)
+			if !ok {
+				continue
+			}
+			definitions = append(definitions, timeoutContextDefinition{
+				name:       contextName.Name,
+				position:   contextName.Pos(),
+				blockStart: block.Pos(),
+				blockEnd:   block.End(),
+			})
+		}
+		return true
+	})
+	return definitions
+}
+
+func timeoutContextDefinitionForUse(definitions []timeoutContextDefinition, contextName *ast.Ident) (timeoutContextDefinition, bool) {
+	var closest timeoutContextDefinition
+	found := false
+	for _, definition := range definitions {
+		if definition.name != contextName.Name || contextName.Pos() < definition.blockStart || contextName.Pos() > definition.blockEnd {
+			continue
+		}
+		if !found || definition.blockEnd-definition.blockStart < closest.blockEnd-closest.blockStart {
+			closest = definition
+			found = true
+		}
+	}
+	return closest, found
 }
 
 func isGRPCDialTimeoutContext(expr ast.Expr) bool {
