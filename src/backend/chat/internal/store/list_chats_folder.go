@@ -351,6 +351,7 @@ func scanFolderListChatRow(rows pgx.Rows) (*ChatRow, folderPinState, error) {
 		ThreadsEnabled:    threadsEnabled,
 		AllowUserMainFeed: allowMainFeed,
 		E2EEnabled:        e2eEnabled,
+		IsPinned:          isPinned,
 	}
 	if name.Valid {
 		n := name.String

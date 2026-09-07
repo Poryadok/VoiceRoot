@@ -19,7 +19,6 @@ import '../e2e/e2e_image_thumb.dart';
 import '../gen/voice/messaging/v1/messaging.pb.dart' as messaging_pb;
 import 'auth_providers.dart';
 import 'inbox_reconciler.dart';
-import 'folder_pin_providers.dart';
 import 'bot_deferred_providers.dart';
 import 'connectivity_providers.dart';
 import 'gateway_providers.dart';
@@ -547,11 +546,7 @@ class ChatListController extends StateNotifier<ChatListState> {
             chatId: chatId,
           );
     return switch (result) {
-      ChatsApiOk<void>() => await _afterFolderPinAction(
-        folderId,
-        chatId,
-        pinned,
-      ),
+      ChatsApiOk<void>() => await _afterFolderPinAction(),
       ChatsApiFailure(:final message) => message,
     };
   }
@@ -584,12 +579,7 @@ class ChatListController extends StateNotifier<ChatListState> {
     };
   }
 
-  Future<String?> _afterFolderPinAction(
-    String folderId,
-    String chatId,
-    bool pinned,
-  ) async {
-    markChatPinnedInFolder(_ref, folderId, chatId, pinned);
+  Future<String?> _afterFolderPinAction() async {
     await loadInitial();
     return null;
   }
