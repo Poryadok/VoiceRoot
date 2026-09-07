@@ -187,12 +187,20 @@ printf 'env_VOICE_RUN_LIVE_INTEGRATION=%s\n' "${VOICE_RUN_LIVE_INTEGRATION:-}" >
 printf 'env_VOICE_API_BASE_URL=%s\n' "${VOICE_API_BASE_URL:-}" >>"${log}"
 exit "${FAKE_FLUTTER_RC:-0}"
 EOF
+  cat >"${bin}/make" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+log="${FAKE_LOG:?FAKE_LOG required}"
+printf 'make' >>"${log}"
+for arg in "$@"; do printf ' <%s>' "$arg" >>"${log}"; done
+printf '\n' >>"${log}"
+EOF
 cat >"${bin}/sleep" <<'EOF'
 #!/usr/bin/env bash
 if [[ "${FAKE_REAL_SLEEP:-}" == true ]]; then exec /bin/sleep "$@"; fi
 exit 0
 EOF
-  chmod +x "${bin}/bash" "${bin}/docker" "${bin}/curl" "${bin}/flutter" "${bin}/sleep"
+  chmod +x "${bin}/bash" "${bin}/docker" "${bin}/curl" "${bin}/flutter" "${bin}/make" "${bin}/sleep"
 }
 
 new_case() {
@@ -296,6 +304,9 @@ $T106_TEST
 $T107_TEST" run_runner "$case_dir"
 assert_eq "$(cat "${case_dir}/rc")" 0
 assert_contains "${case_dir}/commands.log" 'compose.*<--profile> <app> <config> <--quiet>'
+assert_contains "${case_dir}/commands.log" "^make <-C> <${ROOT}> <flutter-windows-prefetch-sqlite3> <flutter-linux-prefetch-sqlite3>$"
+first_command="$(head -n 1 "${case_dir}/commands.log")"
+assert_eq "$first_command" "make <-C> <${ROOT}> <flutter-windows-prefetch-sqlite3> <flutter-linux-prefetch-sqlite3>"
 assert_contains "${case_dir}/commands.log" 'compose.*<--profile> <app> <up> <-d> <--build>'
 assert_contains "${case_dir}/commands.log" 'compose.*<ps> <-q> <realtime>'
 assert_contains "${case_dir}/commands.log" 'compose.*<ps> <-q> <gateway>'

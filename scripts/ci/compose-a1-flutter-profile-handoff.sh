@@ -39,6 +39,12 @@ if [[ "${#flutter_tests[@]}" -ne "${#expected_flutter_tests[@]}" ]] ||
   exit 2
 fi
 
+# The sqlite3mc pub hook needs the host native asset before the first Flutter
+# invocation.  This runner can be started directly on a clean Windows checkout,
+# so it must not rely on a prior `make flutter-ci` having seeded that asset.
+# Each non-host target is a no-op in the Makefile.
+make -C "$ROOT" flutter-windows-prefetch-sqlite3 flutter-linux-prefetch-sqlite3
+
 port_base="${VOICE_A1_FLUTTER_PROFILE_HANDOFF_PORT_BASE:-$((26000 + RANDOM % 1000))}"
 if [[ ! "$port_base" =~ ^[0-9]+$ ]] || (( port_base < 20000 || port_base > 65000 )); then
   echo "VOICE_A1_FLUTTER_PROFILE_HANDOFF_PORT_BASE must be an integer from 20000 through 65000" >&2
