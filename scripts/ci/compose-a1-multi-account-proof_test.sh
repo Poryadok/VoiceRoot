@@ -5,7 +5,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 SCRIPT="${ROOT}/scripts/ci/compose-a1-multi-account-proof.sh"
-T055_REGEX='^TestComposeA1(TwoAccountsFoundation|DailyMessagingREST|GroupReadIsolation|ChannelReadIsolation|BlockDMDenyBothDirections|SessionEpochRealtime)_live$'
+A1_TEST_REGEX='^TestCompose(A1(TwoAccountsFoundation|DailyMessagingREST|GroupReadIsolation|ChannelReadIsolation|BlockDMDenyBothDirections|SessionEpochRealtime)|ThreadsDMReply)_live$'
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 assert_file() { [[ -f "$1" ]] || fail "missing file: $1"; }
@@ -174,23 +174,24 @@ TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/a1-runner-tests.XXXXXXXX")"
 trap 'rm -rf -- "$TEST_TMP"' EXIT
 assert_file "$SCRIPT"
 
-echo '== T055 regex matches exactly the six current tests =='
+echo '== A1 regex matches exactly the seven current tests =='
 for test_name in \
   TestComposeA1TwoAccountsFoundation_live \
   TestComposeA1DailyMessagingREST_live \
   TestComposeA1GroupReadIsolation_live \
   TestComposeA1ChannelReadIsolation_live \
   TestComposeA1BlockDMDenyBothDirections_live \
-  TestComposeA1SessionEpochRealtime_live; do
-  printf '%s\n' "$test_name" | grep -Eq -- "$T055_REGEX" || fail "regex did not match ${test_name}"
+  TestComposeA1SessionEpochRealtime_live \
+  TestComposeThreadsDMReply_live; do
+  printf '%s\n' "$test_name" | grep -Eq -- "$A1_TEST_REGEX" || fail "regex did not match ${test_name}"
 done
-if printf '%s\n' TestComposeAuthLifecycle_live | grep -Eq -- "$T055_REGEX"; then
+if printf '%s\n' TestComposeAuthLifecycle_live | grep -Eq -- "$A1_TEST_REGEX"; then
   fail 'T055 regex matched an unrelated live test'
 fi
-if printf '%s\n' TestComposeA1GroupReadIsolation_liveExtra | grep -Eq -- "$T055_REGEX"; then
+if printf '%s\n' TestComposeA1GroupReadIsolation_liveExtra | grep -Eq -- "$A1_TEST_REGEX"; then
   fail 'T055 regex matched a near-miss test name'
 fi
-if printf '%s\n' TestComposeA1BlockDMDenyBothDirections_liveExtra | grep -Eq -- "$T055_REGEX"; then
+if printf '%s\n' TestComposeA1BlockDMDenyBothDirections_liveExtra | grep -Eq -- "$A1_TEST_REGEX"; then
   fail 'T055 regex matched the BlockDM near-miss test name'
 fi
 
@@ -245,7 +246,7 @@ assert_contains "${case_dir}/commands.log" '^env_VOICE_AUTH_MAIL_STUB_URL=http:/
 assert_contains "${case_dir}/commands.log" 'go cwd=.*/src/backend/gateway.*<-count=1> <-parallel> <1> <-timeout> <20m> <-run>'
 assert_not_contains "${case_dir}/commands.log" '^go .*(<-tags> <live>|<-tags=live>)'
 go_run_regex="$(sed -n 's/.* <-run> <\([^>]*\)> <.*/\1/p' "${case_dir}/commands.log" | head -1)"
-assert_eq "$go_run_regex" "$T055_REGEX"
+assert_eq "$go_run_regex" "$A1_TEST_REGEX"
 assert_contains "${case_dir}/commands.log" 'env_VOICE_A1_SESSION_EPOCH_ISOLATED='
 assert_not_contains "${case_dir}/commands.log" '^env_VOICE_A1_SESSION_EPOCH_ISOLATED=.+$'
 go_epoch_line="$(grep '^go .*env_VOICE_A1_SESSION_EPOCH_ISOLATED=' "${case_dir}/commands.log" | head -1)"
