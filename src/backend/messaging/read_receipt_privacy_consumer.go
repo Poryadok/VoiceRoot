@@ -126,7 +126,11 @@ func runReceiptPrivacyConsumerOnce(ctx context.Context, natsURL, instanceID stri
 	if err != nil {
 		return fmt.Errorf("nats connect: %w", err)
 	}
-	defer nc.Drain()
+	defer func() {
+		if drainErr := nc.Drain(); drainErr != nil && logger != nil {
+			logger.Warn("receipt privacy consumer drain", slog.String("error", drainErr.Error()))
+		}
+	}()
 	js, err := nc.JetStream()
 	if err != nil {
 		return fmt.Errorf("jetstream: %w", err)
@@ -135,7 +139,11 @@ func runReceiptPrivacyConsumerOnce(ctx context.Context, natsURL, instanceID stri
 	if err != nil {
 		return err
 	}
-	defer sub.Unsubscribe()
+	defer func() {
+		if unsubscribeErr := sub.Unsubscribe(); unsubscribeErr != nil && logger != nil {
+			logger.Warn("receipt privacy consumer unsubscribe", slog.String("error", unsubscribeErr.Error()))
+		}
+	}()
 	<-ctx.Done()
 	return ctx.Err()
 }

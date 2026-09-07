@@ -522,8 +522,6 @@ WHERE chat_id = $1 AND profile_id = $2
 	return lid, &u, nil
 }
 
-// GetReadPosition returns the caller's private cursor for unread calculation
-// and own read-state APIs; it is never exposed to a DM peer directly.
 // PublicReadReceipt is a receipt that was visible to the other DM participant.
 type PublicReadReceipt struct {
 	ChatID             uuid.UUID
@@ -603,6 +601,8 @@ SELECT chat_id, profile_id, last_read_message_id, recipient_profile_id FROM peer
 	return out, rows.Err()
 }
 
+// GetReadPosition returns the caller's private cursor for unread calculation
+// and own read-state APIs; it is never exposed to a DM peer directly.
 func (s *MessagesStore) GetReadPosition(ctx context.Context, chatID, profileID uuid.UUID) (lastRead *uuid.UUID, updatedAt *time.Time, err error) {
 	if s == nil || s.Pool == nil {
 		return nil, nil, errors.New("messages store: pool not configured")
