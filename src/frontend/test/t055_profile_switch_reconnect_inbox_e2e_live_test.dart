@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -327,9 +328,9 @@ void main() {
 
       final initialInboxDone = Completer<void>();
       final reconnectInboxBegan = Completer<void>();
-      final reconnectInboxDone = Completer<void>();
+      final reconnectMainPageFailed = Completer<void>();
+      final reconnectHealthyScopesDone = Completer<void>();
       var waitingForReconnectSnapshot = false;
-      var reconnectChatResponsesRequired = -1;
       final inboxSubscription = container.listen<InboxReconcilerState>(
         inboxReconcilerProvider,
         (_, state) {
@@ -346,13 +347,18 @@ void main() {
               reconnectInboxBegan.complete();
             }
           }
+          final main = snapshot[InboxScope.main];
           if (waitingForReconnectSnapshot &&
-              reconnectInboxBegan.isCompleted &&
-              complete &&
-              recorder.responseStartedChatRequests.length >=
-                  reconnectChatResponsesRequired &&
-              !reconnectInboxDone.isCompleted) {
-            reconnectInboxDone.complete();
+              main.hasError &&
+              main.errorStatusCode == HttpStatus.serviceUnavailable &&
+              !reconnectMainPageFailed.isCompleted) {
+            reconnectMainPageFailed.complete();
+          }
+          if (waitingForReconnectSnapshot &&
+              snapshot[InboxScope.requests].isComplete &&
+              snapshot[InboxScope.archive].isComplete &&
+              !reconnectHealthyScopesDone.isCompleted) {
+            reconnectHealthyScopesDone.complete();
           }
         },
         fireImmediately: true,
@@ -508,8 +514,6 @@ void main() {
       final requestCountBeforeTransportLoss = recorder.requests.length;
       final completedReadsBeforeReconnect = recorder.completedReadResponses;
       waitingForReconnectSnapshot = true;
-      reconnectChatResponsesRequired =
-          recorder.responseStartedInboxReconciliationChatRequests.length + 6;
       await relay.dropInitialClientTransport();
       await relay.secondUpgradeRequested.timeout(
         const Duration(seconds: 12),
@@ -550,6 +554,11 @@ void main() {
         inbox: 'archive',
         chatIds: {archivedChatId, archivedAltChatId},
       );
+      recorder.failNextInboxReconciliationPage(
+        authorization: bAuthorization,
+        inbox: 'main',
+        cursor: reconnectCursors['main']!,
+      );
 
       relay.releaseSecondUpgrade();
       final acceptedReconnectHello = await reconnectBHello.future.timeout(
@@ -570,24 +579,17 @@ void main() {
         onTimeout: () =>
             throw TestFailure('timed out starting reconnect inbox snapshot'),
       );
-      await reconnectInboxDone.future.timeout(
+      await reconnectMainPageFailed.future.timeout(
         const Duration(seconds: 12),
         onTimeout: () =>
-            throw TestFailure('timed out completing reconnect inbox snapshot'),
+            throw TestFailure('timed out failing reconnect main page 2'),
       );
-      await selectedDeltaLoaded.future.timeout(
+      await reconnectHealthyScopesDone.future.timeout(
         const Duration(seconds: 12),
-        onTimeout: () =>
-            throw TestFailure('timed out loading selected reconnect delta'),
+        onTimeout: () => throw TestFailure(
+          'timed out completing healthy reconnect inbox scopes',
+        ),
       );
-      await recorder
-          .waitForCompletedReadResponses(completedReadsBeforeReconnect + 1)
-          .timeout(
-            const Duration(seconds: 12),
-            onTimeout: () => throw TestFailure(
-              'timed out completing selected reconnect read',
-            ),
-          );
       final currentReconnectHello = container.read(
         realtimeHelloBindingProvider,
       );
@@ -620,7 +622,15 @@ void main() {
         hasLength(6),
         reason: _reconnectRequestDiagnostic(reconnectRequests),
       );
-      for (final inbox in reconnectCursors.keys) {
+      expect(
+        reconnectInboxRequests.every(
+          (request) => request.uri.queryParameters['page_size'] == '1',
+        ),
+        isTrue,
+      );
+      for (final inbox in reconnectCursors.keys.where(
+        (inbox) => inbox != 'main',
+      )) {
         final pageRequests = reconnectInboxRequests
             .where((request) => request.inbox == inbox)
             .toList(growable: false);
@@ -630,30 +640,110 @@ void main() {
           containsAllInOrder([null, reconnectCursors[inbox]]),
         );
       }
-      final reconnectSnapshot = container
+      final reconnectMainRequests = reconnectInboxRequests
+          .where((request) => request.inbox == 'main')
+          .toList(growable: false);
+      expect(
+        reconnectMainRequests.map(
+          (request) => request.uri.queryParameters['cursor'],
+        ),
+        containsAllInOrder([null, reconnectCursors['main']]),
+      );
+      expect(recorder.injectedInboxFailures, 1);
+      final failedReconnectSnapshot = container
           .read(inboxReconcilerProvider)
           .snapshotFor(bProfileId)!;
-      expect(reconnectSnapshot[InboxScope.main].items, hasLength(2));
+      final failedMain = failedReconnectSnapshot[InboxScope.main];
+      expect(failedMain.items, hasLength(2));
+      expect(failedMain.items.map((item) => item.chatId).toSet(), {
+        selectedChatId,
+        mainAltChatId,
+      });
+      expect(failedMain.isLoading, isFalse);
+      expect(failedMain.isComplete, isFalse);
+      expect(failedMain.hasError, isTrue);
+      expect(failedMain.errorStatusCode, HttpStatus.serviceUnavailable);
+      expect(failedMain.failedCursor, reconnectCursors['main']);
+      expect(failedMain.nextCursor, reconnectCursors['main']);
+      expect(failedReconnectSnapshot[InboxScope.requests].isComplete, isTrue);
+      expect(failedReconnectSnapshot[InboxScope.requests].hasError, isFalse);
+      expect(failedReconnectSnapshot[InboxScope.archive].isComplete, isTrue);
+      expect(failedReconnectSnapshot[InboxScope.archive].hasError, isFalse);
+      expect(failedReconnectSnapshot[InboxScope.requests].items, hasLength(2));
       expect(
-        reconnectSnapshot[InboxScope.main].items
-            .map((item) => item.chatId)
-            .toSet(),
-        {selectedChatId, mainAltChatId},
-      );
-      expect(reconnectSnapshot[InboxScope.requests].items, hasLength(2));
-      expect(
-        reconnectSnapshot[InboxScope.requests].items
+        failedReconnectSnapshot[InboxScope.requests].items
             .map((item) => item.chatId)
             .toSet(),
         {requestChatId, requestAltChatId},
       );
-      expect(reconnectSnapshot[InboxScope.archive].items, hasLength(2));
+      expect(failedReconnectSnapshot[InboxScope.archive].items, hasLength(2));
       expect(
-        reconnectSnapshot[InboxScope.archive].items
+        failedReconnectSnapshot[InboxScope.archive].items
             .map((item) => item.chatId)
             .toSet(),
         {archivedChatId, archivedAltChatId},
       );
+
+      await Future<void>.microtask(() {});
+      expect(
+        recorder.requests
+            .skip(requestCountBeforeTransportLoss)
+            .where(
+              (request) =>
+                  request.isInboxReconciliation &&
+                  request.authorization == bAuthorization &&
+                  request.inbox == 'main',
+            )
+            .map((request) => request.uri.queryParameters['cursor']),
+        containsAllInOrder([null, reconnectCursors['main']]),
+        reason: 'a failed page must not retry before explicit user action',
+      );
+
+      await container
+          .read(inboxReconcilerProvider.notifier)
+          .retry(InboxScope.main);
+      final completedReconnectSnapshot = container
+          .read(inboxReconcilerProvider)
+          .snapshotFor(bProfileId)!;
+      final completedMain = completedReconnectSnapshot[InboxScope.main];
+      expect(completedMain.items, hasLength(2));
+      expect(completedMain.items.map((item) => item.chatId).toSet(), {
+        selectedChatId,
+        mainAltChatId,
+      });
+      expect(completedMain.isComplete, isTrue);
+      expect(completedMain.hasError, isFalse);
+      expect(completedMain.nextCursor, isNull);
+      expect(completedMain.failedCursor, isNull);
+      expect(
+        recorder.requests
+            .skip(requestCountBeforeTransportLoss)
+            .where(
+              (request) =>
+                  request.isInboxReconciliation &&
+                  request.authorization == bAuthorization &&
+                  request.inbox == 'main',
+            )
+            .map((request) => request.uri.queryParameters['cursor']),
+        containsAllInOrder([
+          null,
+          reconnectCursors['main'],
+          reconnectCursors['main'],
+        ]),
+      );
+      await selectedDeltaLoaded.future.timeout(
+        const Duration(seconds: 12),
+        onTimeout: () =>
+            throw TestFailure('timed out loading selected reconnect delta'),
+      );
+      await recorder
+          .waitForCompletedReadResponses(completedReadsBeforeReconnect + 1)
+          .timeout(
+            const Duration(seconds: 12),
+            onTimeout: () => throw TestFailure(
+              'timed out completing selected reconnect read',
+            ),
+          );
       final reconnectHistory = reconnectRequests
           .where(
             (request) =>
@@ -784,8 +874,10 @@ class _RecordingHttpClient extends http.BaseClient {
   final _readResponseWaiters = <Completer<void>>[];
   final _pendingReadResponseCompletions = <Object>{};
   final _settleWaiters = <Completer<void>>[];
+  _InboxPageFailure? _nextInboxPageFailure;
   var _activeRequests = 0;
   var bHelloObserved = false;
+  var injectedInboxFailures = 0;
 
   Iterable<_RecordedRequest> get chatRequests => requests.where(
     (request) => request.method == 'GET' && request.uri.path == '/api/v1/chats',
@@ -842,6 +934,21 @@ class _RecordingHttpClient extends http.BaseClient {
     await Future<void>.microtask(() {});
   }
 
+  void failNextInboxReconciliationPage({
+    required String authorization,
+    required String inbox,
+    required String cursor,
+  }) {
+    if (_nextInboxPageFailure != null) {
+      throw StateError('an inbox page failure is already armed');
+    }
+    _nextInboxPageFailure = _InboxPageFailure(
+      authorization: authorization,
+      inbox: inbox,
+      cursor: cursor,
+    );
+  }
+
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     _activeRequests++;
@@ -859,6 +966,20 @@ class _RecordingHttpClient extends http.BaseClient {
       if (effectiveRequest.method == 'GET' &&
           effectiveRequest.url.path == '/api/v1/messages') {
         if (!firstMessageRequest.isCompleted) firstMessageRequest.complete();
+      }
+      final pendingFailure = _nextInboxPageFailure;
+      if (pendingFailure != null && pendingFailure.matches(recorded)) {
+        _nextInboxPageFailure = null;
+        injectedInboxFailures++;
+        responseStartedRequests.add(recorded);
+        return http.StreamedResponse(
+          http.ByteStream.fromBytes(
+            utf8.encode('{"error":"t055 injected page failure"}'),
+          ),
+          HttpStatus.serviceUnavailable,
+          request: effectiveRequest,
+          headers: const {'content-type': 'application/json'},
+        );
       }
       final response = await _delegate.send(effectiveRequest);
       responseStartedRequests.add(recorded);
@@ -952,6 +1073,28 @@ class _RecordingHttpClient extends http.BaseClient {
       if (entry.key.toLowerCase() == name.toLowerCase()) return entry.value;
     }
     return null;
+  }
+}
+
+class _InboxPageFailure {
+  const _InboxPageFailure({
+    required this.authorization,
+    required this.inbox,
+    required this.cursor,
+  });
+
+  final String authorization;
+  final String inbox;
+  final String cursor;
+
+  bool matches(_RecordedRequest request) {
+    return request.isInboxReconciliation &&
+        request.method == 'GET' &&
+        request.uri.path == '/api/v1/chats' &&
+        request.authorization == authorization &&
+        request.inbox == inbox &&
+        request.uri.queryParameters['cursor'] == cursor &&
+        request.uri.queryParameters['page_size'] == '1';
   }
 }
 
