@@ -176,8 +176,8 @@ wait_gateway
 clear_fixture_otp_rate_limit
 (
   while true; do
-    clear_fixture_otp_rate_limit
     sleep 1
+    clear_fixture_otp_rate_limit
   done
 ) &
 otp_rate_limit_reset_pid=$!
