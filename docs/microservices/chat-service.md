@@ -37,6 +37,7 @@ service ChatService {
   rpc AddMembers(AddMembersRequest) returns (AddMembersResponse);       // ✓
   rpc RemoveMember(RemoveMemberRequest) returns (RemoveMemberResponse); // ✓
   rpc LeaveChat(LeaveChatRequest) returns (LeaveChatResponse);           // ✓
+  rpc SetGroupMemberRole(...) returns (...);                              // ✓ standalone groups: admin promotion; owner demotion
   rpc TransferGroupOwnership(...) returns (...);                       // ✓
   rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);     // ✓
 

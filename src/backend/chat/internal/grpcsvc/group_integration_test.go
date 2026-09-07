@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -14,6 +15,7 @@ import (
 
 	chatv1 "voice.app/voice/chat/v1"
 	commonv1 "voice.app/voice/common/v1"
+	"voice/backend/chat/internal/store"
 )
 
 const (
@@ -273,6 +275,89 @@ func TestCreateGroup_RemoveMember_NonOwnerForbidden(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+func TestCreateGroup_SetMemberRole_HierarchyAndOwnershipTransfer(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	profiles := profileMap(uuid.New(), uuid.New(), uuid.New(), uuid.New())
+	ids := make([]uuid.UUID, 0, len(profiles))
+	for id := range profiles {
+		ids = append(ids, id)
+	}
+	owner, admin, member, another := ids[0], ids[1], ids[2], ids[3]
+	pool := startChatPostgresForTest(t, context.Background())
+	applyChatMigration(t, context.Background(), pool)
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil)
+	t.Cleanup(cleanup)
+	chat := createStandaloneGroup(t, client, profiles, owner, "Roles", admin, member, another)
+
+	setRole := func(actor, target uuid.UUID, role string) error {
+		_, err := client.SetGroupMemberRole(ctxFor(t, profiles, actor), &chatv1.SetGroupMemberRoleRequest{ChatId: chat.GetId(), ProfileId: target.String(), Role: role})
+		return err
+	}
+	require.NoError(t, setRole(owner, admin, "admin"))
+	renamed := "Roles updated by admin"
+	_, err := client.UpdateChat(ctxFor(t, profiles, admin), &chatv1.UpdateChatRequest{ChatId: chat.GetId(), Name: &renamed})
+	require.NoError(t, err, "an admin can update standalone group settings")
+	_, err = client.RemoveMember(ctxFor(t, profiles, admin), &chatv1.RemoveMemberRequest{ChatId: chat.GetId(), ProfileId: another.String()})
+	require.NoError(t, err, "an admin can remove a regular member")
+	require.NoError(t, setRole(admin, member, "admin"), "an admin can promote a member")
+	err = setRole(admin, member, "member")
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err), "an admin cannot demote another admin")
+	_, err = client.RemoveMember(ctxFor(t, profiles, admin), &chatv1.RemoveMemberRequest{ChatId: chat.GetId(), ProfileId: member.String()})
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err), "an admin cannot remove another admin")
+	require.NoError(t, setRole(owner, member, "member"), "the owner can demote an admin")
+	require.NoError(t, setRole(admin, member, "admin"))
+
+	_, err = client.TransferGroupOwnership(ctxFor(t, profiles, owner), &chatv1.TransferGroupOwnershipRequest{ChatId: chat.GetId(), NewOwnerProfileId: member.String()})
+	require.NoError(t, err)
+	chatID := uuid.MustParse(chat.GetId())
+	roles := &store.DMStore{Pool: pool}
+	oldRole, err := roles.GetMemberRole(context.Background(), chatID, owner)
+	require.NoError(t, err)
+	newRole, err := roles.GetMemberRole(context.Background(), chatID, member)
+	require.NoError(t, err)
+	require.Equal(t, "member", oldRole)
+	require.Equal(t, "owner", newRole)
+}
+
+func TestCreateGroup_RoleChangeAndOwnershipTransferRemainSingleOwnerUnderConcurrency(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	profiles := profileMap(uuid.New(), uuid.New(), uuid.New(), uuid.New())
+	ids := make([]uuid.UUID, 0, len(profiles))
+	for id := range profiles {
+		ids = append(ids, id)
+	}
+	owner, admin, newOwner, member := ids[0], ids[1], ids[2], ids[3]
+	pool := startChatPostgresForTest(t, context.Background())
+	applyChatMigration(t, context.Background(), pool)
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil)
+	t.Cleanup(cleanup)
+	chat := createStandaloneGroup(t, client, profiles, owner, "Concurrent roles", admin, newOwner, member)
+	_, err := client.SetGroupMemberRole(ctxFor(t, profiles, owner), &chatv1.SetGroupMemberRoleRequest{ChatId: chat.GetId(), ProfileId: admin.String(), Role: "admin"})
+	require.NoError(t, err)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		_, _ = client.SetGroupMemberRole(ctxFor(t, profiles, admin), &chatv1.SetGroupMemberRoleRequest{ChatId: chat.GetId(), ProfileId: member.String(), Role: "admin"})
+	}()
+	go func() {
+		defer wg.Done()
+		_, _ = client.TransferGroupOwnership(ctxFor(t, profiles, owner), &chatv1.TransferGroupOwnershipRequest{ChatId: chat.GetId(), NewOwnerProfileId: newOwner.String()})
+	}()
+	wg.Wait()
+	var owners int
+	err = pool.QueryRow(context.Background(), `SELECT count(*) FROM chat_members WHERE chat_id = $1 AND role = 'owner'`, uuid.MustParse(chat.GetId())).Scan(&owners)
+	require.NoError(t, err)
+	require.Equal(t, 1, owners)
 }
 
 // TestCreateGroup_UpdateChat_Avatar documents text-chat.md group avatar via UpdateChat.avatar_url.
