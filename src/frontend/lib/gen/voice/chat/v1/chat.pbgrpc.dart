@@ -89,6 +89,14 @@ class ChatServiceClient extends $grpc.Client {
     return $createUnaryCall(_$leaveChat, request, options: options);
   }
 
+  /// Standalone group only. An admin can promote a member; only the owner can demote an admin.
+  $grpc.ResponseFuture<$0.SetGroupMemberRoleResponse> setGroupMemberRole(
+    $0.SetGroupMemberRoleRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$setGroupMemberRole, request, options: options);
+  }
+
   $grpc.ResponseFuture<$0.TransferGroupOwnershipResponse>
       transferGroupOwnership(
     $0.TransferGroupOwnershipRequest request, {
@@ -253,6 +261,18 @@ class ChatServiceClient extends $grpc.Client {
     return $createUnaryCall(_$disableChatE2E, request, options: options);
   }
 
+  /// Internal-only: Messaging uses this to revoke symmetric DM read-receipt
+  /// visibility after a profile disables show_read_receipts. It has no Gateway
+  /// route and requires the trusted Messaging service identity.
+  $grpc.ResponseFuture<$0.ListDMReceiptVisibilityTargetsResponse>
+      listDMReceiptVisibilityTargets(
+    $0.ListDMReceiptVisibilityTargetsRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$listDMReceiptVisibilityTargets, request,
+        options: options);
+  }
+
   // method descriptors
 
   static final _$createDM =
@@ -294,6 +314,11 @@ class ChatServiceClient extends $grpc.Client {
           '/voice.chat.v1.ChatService/LeaveChat',
           ($0.LeaveChatRequest value) => value.writeToBuffer(),
           $0.LeaveChatResponse.fromBuffer);
+  static final _$setGroupMemberRole = $grpc.ClientMethod<
+          $0.SetGroupMemberRoleRequest, $0.SetGroupMemberRoleResponse>(
+      '/voice.chat.v1.ChatService/SetGroupMemberRole',
+      ($0.SetGroupMemberRoleRequest value) => value.writeToBuffer(),
+      $0.SetGroupMemberRoleResponse.fromBuffer);
   static final _$transferGroupOwnership = $grpc.ClientMethod<
           $0.TransferGroupOwnershipRequest, $0.TransferGroupOwnershipResponse>(
       '/voice.chat.v1.ChatService/TransferGroupOwnership',
@@ -409,6 +434,12 @@ class ChatServiceClient extends $grpc.Client {
           '/voice.chat.v1.ChatService/DisableChatE2E',
           ($0.DisableChatE2ERequest value) => value.writeToBuffer(),
           $0.DisableChatE2EResponse.fromBuffer);
+  static final _$listDMReceiptVisibilityTargets = $grpc.ClientMethod<
+          $0.ListDMReceiptVisibilityTargetsRequest,
+          $0.ListDMReceiptVisibilityTargetsResponse>(
+      '/voice.chat.v1.ChatService/ListDMReceiptVisibilityTargets',
+      ($0.ListDMReceiptVisibilityTargetsRequest value) => value.writeToBuffer(),
+      $0.ListDMReceiptVisibilityTargetsResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.chat.v1.ChatService')
@@ -474,6 +505,15 @@ abstract class ChatServiceBase extends $grpc.Service {
         false,
         ($core.List<$core.int> value) => $0.LeaveChatRequest.fromBuffer(value),
         ($0.LeaveChatResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.SetGroupMemberRoleRequest,
+            $0.SetGroupMemberRoleResponse>(
+        'SetGroupMemberRole',
+        setGroupMemberRole_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.SetGroupMemberRoleRequest.fromBuffer(value),
+        ($0.SetGroupMemberRoleResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.TransferGroupOwnershipRequest,
             $0.TransferGroupOwnershipResponse>(
         'TransferGroupOwnership',
@@ -675,6 +715,16 @@ abstract class ChatServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.DisableChatE2ERequest.fromBuffer(value),
         ($0.DisableChatE2EResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ListDMReceiptVisibilityTargetsRequest,
+            $0.ListDMReceiptVisibilityTargetsResponse>(
+        'ListDMReceiptVisibilityTargets',
+        listDMReceiptVisibilityTargets_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ListDMReceiptVisibilityTargetsRequest.fromBuffer(value),
+        ($0.ListDMReceiptVisibilityTargetsResponse value) =>
+            value.writeToBuffer()));
   }
 
   $async.Future<$0.CreateDMResponse> createDM_Pre($grpc.ServiceCall $call,
@@ -741,6 +791,15 @@ abstract class ChatServiceBase extends $grpc.Service {
 
   $async.Future<$0.LeaveChatResponse> leaveChat(
       $grpc.ServiceCall call, $0.LeaveChatRequest request);
+
+  $async.Future<$0.SetGroupMemberRoleResponse> setGroupMemberRole_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.SetGroupMemberRoleRequest> $request) async {
+    return setGroupMemberRole($call, await $request);
+  }
+
+  $async.Future<$0.SetGroupMemberRoleResponse> setGroupMemberRole(
+      $grpc.ServiceCall call, $0.SetGroupMemberRoleRequest request);
 
   $async.Future<$0.TransferGroupOwnershipResponse> transferGroupOwnership_Pre(
       $grpc.ServiceCall $call,
@@ -942,4 +1001,16 @@ abstract class ChatServiceBase extends $grpc.Service {
 
   $async.Future<$0.DisableChatE2EResponse> disableChatE2E(
       $grpc.ServiceCall call, $0.DisableChatE2ERequest request);
+
+  $async.Future<$0.ListDMReceiptVisibilityTargetsResponse>
+      listDMReceiptVisibilityTargets_Pre(
+          $grpc.ServiceCall $call,
+          $async.Future<$0.ListDMReceiptVisibilityTargetsRequest>
+              $request) async {
+    return listDMReceiptVisibilityTargets($call, await $request);
+  }
+
+  $async.Future<$0.ListDMReceiptVisibilityTargetsResponse>
+      listDMReceiptVisibilityTargets($grpc.ServiceCall call,
+          $0.ListDMReceiptVisibilityTargetsRequest request);
 }

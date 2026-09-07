@@ -63,6 +63,7 @@ type DMStore interface {
 	ListChatsPageByFolder(ctx context.Context, viewerProfileID, folderID uuid.UUID, cursor string, limit int, spaceIDs []uuid.UUID) (*store.ListChatsPage, error)
 	ListSpaceChatsForProfile(ctx context.Context, viewerProfileID uuid.UUID, spaceIDs []uuid.UUID) ([]*store.ChatRow, error)
 	DMPeerProfileIDs(ctx context.Context, viewerProfileID uuid.UUID, chatIDs []uuid.UUID) (map[uuid.UUID]uuid.UUID, error)
+	ListDMReceiptVisibilityTargets(ctx context.Context, profileID uuid.UUID, cursor string, limit int) ([]store.DMReceiptVisibilityTarget, string, error)
 	FindDMChatByID(ctx context.Context, chatID uuid.UUID) (*store.ChatRow, error)
 	FindChatByID(ctx context.Context, chatID uuid.UUID) (*store.ChatRow, error)
 	IsChatMember(ctx context.Context, chatID, profileID uuid.UUID) (bool, error)
@@ -93,7 +94,9 @@ type DMStore interface {
 	CreateSpaceChannelChat(ctx context.Context, creatorProfileID, spaceID uuid.UUID, name string, topic *string) (*store.ChatRow, error)
 	AddGroupMembers(ctx context.Context, chatID uuid.UUID, profileIDs []uuid.UUID) ([]uuid.UUID, error)
 	RemoveGroupMember(ctx context.Context, chatID, profileID uuid.UUID) error
+	RemoveStandaloneGroupMember(ctx context.Context, chatID, actorID, targetID uuid.UUID) error
 	LeaveGroupChat(ctx context.Context, chatID, profileID uuid.UUID) error
+	SetStandaloneGroupMemberRole(ctx context.Context, chatID, actorID, targetID uuid.UUID, role string) error
 	TransferGroupOwnership(ctx context.Context, chatID, ownerID, newOwnerID uuid.UUID) error
 	UpdateGroupChat(ctx context.Context, chatID uuid.UUID, name, avatarURL, topic *string, slowModeSeconds *int32, threadsEnabled, allowUserMainFeed, allowGuests *bool) (*store.ChatRow, error)
 	GetMemberRole(ctx context.Context, chatID, profileID uuid.UUID) (string, error)

@@ -19,37 +19,39 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ChatService_CreateDM_FullMethodName               = "/voice.chat.v1.ChatService/CreateDM"
-	ChatService_GetDM_FullMethodName                  = "/voice.chat.v1.ChatService/GetDM"
-	ChatService_CreateChat_FullMethodName             = "/voice.chat.v1.ChatService/CreateChat"
-	ChatService_UpdateChat_FullMethodName             = "/voice.chat.v1.ChatService/UpdateChat"
-	ChatService_DeleteChat_FullMethodName             = "/voice.chat.v1.ChatService/DeleteChat"
-	ChatService_AddMembers_FullMethodName             = "/voice.chat.v1.ChatService/AddMembers"
-	ChatService_RemoveMember_FullMethodName           = "/voice.chat.v1.ChatService/RemoveMember"
-	ChatService_LeaveChat_FullMethodName              = "/voice.chat.v1.ChatService/LeaveChat"
-	ChatService_TransferGroupOwnership_FullMethodName = "/voice.chat.v1.ChatService/TransferGroupOwnership"
-	ChatService_ListMembers_FullMethodName            = "/voice.chat.v1.ChatService/ListMembers"
-	ChatService_ListChats_FullMethodName              = "/voice.chat.v1.ChatService/ListChats"
-	ChatService_GetChat_FullMethodName                = "/voice.chat.v1.ChatService/GetChat"
-	ChatService_ListQuickAccess_FullMethodName        = "/voice.chat.v1.ChatService/ListQuickAccess"
-	ChatService_AddQuickAccess_FullMethodName         = "/voice.chat.v1.ChatService/AddQuickAccess"
-	ChatService_RemoveQuickAccess_FullMethodName      = "/voice.chat.v1.ChatService/RemoveQuickAccess"
-	ChatService_ReorderQuickAccess_FullMethodName     = "/voice.chat.v1.ChatService/ReorderQuickAccess"
-	ChatService_ListFolders_FullMethodName            = "/voice.chat.v1.ChatService/ListFolders"
-	ChatService_CreateFolder_FullMethodName           = "/voice.chat.v1.ChatService/CreateFolder"
-	ChatService_UpdateFolder_FullMethodName           = "/voice.chat.v1.ChatService/UpdateFolder"
-	ChatService_DeleteFolder_FullMethodName           = "/voice.chat.v1.ChatService/DeleteFolder"
-	ChatService_AddChatToFolder_FullMethodName        = "/voice.chat.v1.ChatService/AddChatToFolder"
-	ChatService_RemoveChatFromFolder_FullMethodName   = "/voice.chat.v1.ChatService/RemoveChatFromFolder"
-	ChatService_ReorderFolderChats_FullMethodName     = "/voice.chat.v1.ChatService/ReorderFolderChats"
-	ChatService_PinChatInFolder_FullMethodName        = "/voice.chat.v1.ChatService/PinChatInFolder"
-	ChatService_UnpinChatInFolder_FullMethodName      = "/voice.chat.v1.ChatService/UnpinChatInFolder"
-	ChatService_AcceptDMRequest_FullMethodName        = "/voice.chat.v1.ChatService/AcceptDMRequest"
-	ChatService_DeclineDMRequest_FullMethodName       = "/voice.chat.v1.ChatService/DeclineDMRequest"
-	ChatService_MuteChat_FullMethodName               = "/voice.chat.v1.ChatService/MuteChat"
-	ChatService_ArchiveChat_FullMethodName            = "/voice.chat.v1.ChatService/ArchiveChat"
-	ChatService_EnableChatE2E_FullMethodName          = "/voice.chat.v1.ChatService/EnableChatE2E"
-	ChatService_DisableChatE2E_FullMethodName         = "/voice.chat.v1.ChatService/DisableChatE2E"
+	ChatService_CreateDM_FullMethodName                       = "/voice.chat.v1.ChatService/CreateDM"
+	ChatService_GetDM_FullMethodName                          = "/voice.chat.v1.ChatService/GetDM"
+	ChatService_CreateChat_FullMethodName                     = "/voice.chat.v1.ChatService/CreateChat"
+	ChatService_UpdateChat_FullMethodName                     = "/voice.chat.v1.ChatService/UpdateChat"
+	ChatService_DeleteChat_FullMethodName                     = "/voice.chat.v1.ChatService/DeleteChat"
+	ChatService_AddMembers_FullMethodName                     = "/voice.chat.v1.ChatService/AddMembers"
+	ChatService_RemoveMember_FullMethodName                   = "/voice.chat.v1.ChatService/RemoveMember"
+	ChatService_LeaveChat_FullMethodName                      = "/voice.chat.v1.ChatService/LeaveChat"
+	ChatService_SetGroupMemberRole_FullMethodName             = "/voice.chat.v1.ChatService/SetGroupMemberRole"
+	ChatService_TransferGroupOwnership_FullMethodName         = "/voice.chat.v1.ChatService/TransferGroupOwnership"
+	ChatService_ListMembers_FullMethodName                    = "/voice.chat.v1.ChatService/ListMembers"
+	ChatService_ListChats_FullMethodName                      = "/voice.chat.v1.ChatService/ListChats"
+	ChatService_GetChat_FullMethodName                        = "/voice.chat.v1.ChatService/GetChat"
+	ChatService_ListQuickAccess_FullMethodName                = "/voice.chat.v1.ChatService/ListQuickAccess"
+	ChatService_AddQuickAccess_FullMethodName                 = "/voice.chat.v1.ChatService/AddQuickAccess"
+	ChatService_RemoveQuickAccess_FullMethodName              = "/voice.chat.v1.ChatService/RemoveQuickAccess"
+	ChatService_ReorderQuickAccess_FullMethodName             = "/voice.chat.v1.ChatService/ReorderQuickAccess"
+	ChatService_ListFolders_FullMethodName                    = "/voice.chat.v1.ChatService/ListFolders"
+	ChatService_CreateFolder_FullMethodName                   = "/voice.chat.v1.ChatService/CreateFolder"
+	ChatService_UpdateFolder_FullMethodName                   = "/voice.chat.v1.ChatService/UpdateFolder"
+	ChatService_DeleteFolder_FullMethodName                   = "/voice.chat.v1.ChatService/DeleteFolder"
+	ChatService_AddChatToFolder_FullMethodName                = "/voice.chat.v1.ChatService/AddChatToFolder"
+	ChatService_RemoveChatFromFolder_FullMethodName           = "/voice.chat.v1.ChatService/RemoveChatFromFolder"
+	ChatService_ReorderFolderChats_FullMethodName             = "/voice.chat.v1.ChatService/ReorderFolderChats"
+	ChatService_PinChatInFolder_FullMethodName                = "/voice.chat.v1.ChatService/PinChatInFolder"
+	ChatService_UnpinChatInFolder_FullMethodName              = "/voice.chat.v1.ChatService/UnpinChatInFolder"
+	ChatService_AcceptDMRequest_FullMethodName                = "/voice.chat.v1.ChatService/AcceptDMRequest"
+	ChatService_DeclineDMRequest_FullMethodName               = "/voice.chat.v1.ChatService/DeclineDMRequest"
+	ChatService_MuteChat_FullMethodName                       = "/voice.chat.v1.ChatService/MuteChat"
+	ChatService_ArchiveChat_FullMethodName                    = "/voice.chat.v1.ChatService/ArchiveChat"
+	ChatService_EnableChatE2E_FullMethodName                  = "/voice.chat.v1.ChatService/EnableChatE2E"
+	ChatService_DisableChatE2E_FullMethodName                 = "/voice.chat.v1.ChatService/DisableChatE2E"
+	ChatService_ListDMReceiptVisibilityTargets_FullMethodName = "/voice.chat.v1.ChatService/ListDMReceiptVisibilityTargets"
 )
 
 // ChatServiceClient is the client API for ChatService service.
@@ -66,6 +68,8 @@ type ChatServiceClient interface {
 	AddMembers(ctx context.Context, in *AddMembersRequest, opts ...grpc.CallOption) (*AddMembersResponse, error)
 	RemoveMember(ctx context.Context, in *RemoveMemberRequest, opts ...grpc.CallOption) (*RemoveMemberResponse, error)
 	LeaveChat(ctx context.Context, in *LeaveChatRequest, opts ...grpc.CallOption) (*LeaveChatResponse, error)
+	// Standalone group only. An admin can promote a member; only the owner can demote an admin.
+	SetGroupMemberRole(ctx context.Context, in *SetGroupMemberRoleRequest, opts ...grpc.CallOption) (*SetGroupMemberRoleResponse, error)
 	TransferGroupOwnership(ctx context.Context, in *TransferGroupOwnershipRequest, opts ...grpc.CallOption) (*TransferGroupOwnershipResponse, error)
 	ListMembers(ctx context.Context, in *ListMembersRequest, opts ...grpc.CallOption) (*ListMembersResponse, error)
 	ListChats(ctx context.Context, in *ListChatsRequest, opts ...grpc.CallOption) (*ListChatsResponse, error)
@@ -90,6 +94,10 @@ type ChatServiceClient interface {
 	// DM-only opt-in E2E encryption — docs/features/encryption.md.
 	EnableChatE2E(ctx context.Context, in *EnableChatE2ERequest, opts ...grpc.CallOption) (*EnableChatE2EResponse, error)
 	DisableChatE2E(ctx context.Context, in *DisableChatE2ERequest, opts ...grpc.CallOption) (*DisableChatE2EResponse, error)
+	// Internal-only: Messaging uses this to revoke symmetric DM read-receipt
+	// visibility after a profile disables show_read_receipts. It has no Gateway
+	// route and requires the trusted Messaging service identity.
+	ListDMReceiptVisibilityTargets(ctx context.Context, in *ListDMReceiptVisibilityTargetsRequest, opts ...grpc.CallOption) (*ListDMReceiptVisibilityTargetsResponse, error)
 }
 
 type chatServiceClient struct {
@@ -174,6 +182,16 @@ func (c *chatServiceClient) LeaveChat(ctx context.Context, in *LeaveChatRequest,
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(LeaveChatResponse)
 	err := c.cc.Invoke(ctx, ChatService_LeaveChat_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) SetGroupMemberRole(ctx context.Context, in *SetGroupMemberRoleRequest, opts ...grpc.CallOption) (*SetGroupMemberRoleResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetGroupMemberRoleResponse)
+	err := c.cc.Invoke(ctx, ChatService_SetGroupMemberRole_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -410,6 +428,16 @@ func (c *chatServiceClient) DisableChatE2E(ctx context.Context, in *DisableChatE
 	return out, nil
 }
 
+func (c *chatServiceClient) ListDMReceiptVisibilityTargets(ctx context.Context, in *ListDMReceiptVisibilityTargetsRequest, opts ...grpc.CallOption) (*ListDMReceiptVisibilityTargetsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListDMReceiptVisibilityTargetsResponse)
+	err := c.cc.Invoke(ctx, ChatService_ListDMReceiptVisibilityTargets_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ChatServiceServer is the server API for ChatService service.
 // All implementations must embed UnimplementedChatServiceServer
 // for forward compatibility.
@@ -424,6 +452,8 @@ type ChatServiceServer interface {
 	AddMembers(context.Context, *AddMembersRequest) (*AddMembersResponse, error)
 	RemoveMember(context.Context, *RemoveMemberRequest) (*RemoveMemberResponse, error)
 	LeaveChat(context.Context, *LeaveChatRequest) (*LeaveChatResponse, error)
+	// Standalone group only. An admin can promote a member; only the owner can demote an admin.
+	SetGroupMemberRole(context.Context, *SetGroupMemberRoleRequest) (*SetGroupMemberRoleResponse, error)
 	TransferGroupOwnership(context.Context, *TransferGroupOwnershipRequest) (*TransferGroupOwnershipResponse, error)
 	ListMembers(context.Context, *ListMembersRequest) (*ListMembersResponse, error)
 	ListChats(context.Context, *ListChatsRequest) (*ListChatsResponse, error)
@@ -448,6 +478,10 @@ type ChatServiceServer interface {
 	// DM-only opt-in E2E encryption — docs/features/encryption.md.
 	EnableChatE2E(context.Context, *EnableChatE2ERequest) (*EnableChatE2EResponse, error)
 	DisableChatE2E(context.Context, *DisableChatE2ERequest) (*DisableChatE2EResponse, error)
+	// Internal-only: Messaging uses this to revoke symmetric DM read-receipt
+	// visibility after a profile disables show_read_receipts. It has no Gateway
+	// route and requires the trusted Messaging service identity.
+	ListDMReceiptVisibilityTargets(context.Context, *ListDMReceiptVisibilityTargetsRequest) (*ListDMReceiptVisibilityTargetsResponse, error)
 	mustEmbedUnimplementedChatServiceServer()
 }
 
@@ -481,6 +515,9 @@ func (UnimplementedChatServiceServer) RemoveMember(context.Context, *RemoveMembe
 }
 func (UnimplementedChatServiceServer) LeaveChat(context.Context, *LeaveChatRequest) (*LeaveChatResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LeaveChat not implemented")
+}
+func (UnimplementedChatServiceServer) SetGroupMemberRole(context.Context, *SetGroupMemberRoleRequest) (*SetGroupMemberRoleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetGroupMemberRole not implemented")
 }
 func (UnimplementedChatServiceServer) TransferGroupOwnership(context.Context, *TransferGroupOwnershipRequest) (*TransferGroupOwnershipResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method TransferGroupOwnership not implemented")
@@ -550,6 +587,9 @@ func (UnimplementedChatServiceServer) EnableChatE2E(context.Context, *EnableChat
 }
 func (UnimplementedChatServiceServer) DisableChatE2E(context.Context, *DisableChatE2ERequest) (*DisableChatE2EResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DisableChatE2E not implemented")
+}
+func (UnimplementedChatServiceServer) ListDMReceiptVisibilityTargets(context.Context, *ListDMReceiptVisibilityTargetsRequest) (*ListDMReceiptVisibilityTargetsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListDMReceiptVisibilityTargets not implemented")
 }
 func (UnimplementedChatServiceServer) mustEmbedUnimplementedChatServiceServer() {}
 func (UnimplementedChatServiceServer) testEmbeddedByValue()                     {}
@@ -712,6 +752,24 @@ func _ChatService_LeaveChat_Handler(srv interface{}, ctx context.Context, dec fu
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ChatServiceServer).LeaveChat(ctx, req.(*LeaveChatRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_SetGroupMemberRole_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetGroupMemberRoleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).SetGroupMemberRole(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_SetGroupMemberRole_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).SetGroupMemberRole(ctx, req.(*SetGroupMemberRoleRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1130,6 +1188,24 @@ func _ChatService_DisableChatE2E_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChatService_ListDMReceiptVisibilityTargets_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListDMReceiptVisibilityTargetsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).ListDMReceiptVisibilityTargets(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_ListDMReceiptVisibilityTargets_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).ListDMReceiptVisibilityTargets(ctx, req.(*ListDMReceiptVisibilityTargetsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ChatService_ServiceDesc is the grpc.ServiceDesc for ChatService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1168,6 +1244,10 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "LeaveChat",
 			Handler:    _ChatService_LeaveChat_Handler,
+		},
+		{
+			MethodName: "SetGroupMemberRole",
+			Handler:    _ChatService_SetGroupMemberRole_Handler,
 		},
 		{
 			MethodName: "TransferGroupOwnership",
@@ -1260,6 +1340,10 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DisableChatE2E",
 			Handler:    _ChatService_DisableChatE2E_Handler,
+		},
+		{
+			MethodName: "ListDMReceiptVisibilityTargets",
+			Handler:    _ChatService_ListDMReceiptVisibilityTargets_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

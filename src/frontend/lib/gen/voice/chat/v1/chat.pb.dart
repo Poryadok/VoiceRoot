@@ -827,6 +827,85 @@ class LeaveChatRequest extends $pb.GeneratedMessage {
   void clearChatId() => $_clearField(1);
 }
 
+class SetGroupMemberRoleRequest extends $pb.GeneratedMessage {
+  factory SetGroupMemberRoleRequest({
+    $core.String? chatId,
+    $core.String? profileId,
+    $core.String? role,
+  }) {
+    final result = create();
+    if (chatId != null) result.chatId = chatId;
+    if (profileId != null) result.profileId = profileId;
+    if (role != null) result.role = role;
+    return result;
+  }
+
+  SetGroupMemberRoleRequest._();
+
+  factory SetGroupMemberRoleRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SetGroupMemberRoleRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SetGroupMemberRoleRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'chatId')
+    ..aOS(2, _omitFieldNames ? '' : 'profileId')
+    ..aOS(3, _omitFieldNames ? '' : 'role')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetGroupMemberRoleRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetGroupMemberRoleRequest copyWith(
+          void Function(SetGroupMemberRoleRequest) updates) =>
+      super.copyWith((message) => updates(message as SetGroupMemberRoleRequest))
+          as SetGroupMemberRoleRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SetGroupMemberRoleRequest create() => SetGroupMemberRoleRequest._();
+  @$core.override
+  SetGroupMemberRoleRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SetGroupMemberRoleRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SetGroupMemberRoleRequest>(create);
+  static SetGroupMemberRoleRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get chatId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set chatId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasChatId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearChatId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get profileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set profileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProfileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get role => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set role($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasRole() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearRole() => $_clearField(3);
+}
+
 class TransferGroupOwnershipRequest extends $pb.GeneratedMessage {
   factory TransferGroupOwnershipRequest({
     $core.String? chatId,
@@ -2960,6 +3039,213 @@ class DisableChatE2ERequest extends $pb.GeneratedMessage {
   void clearChatId() => $_clearField(1);
 }
 
+class ListDMReceiptVisibilityTargetsRequest extends $pb.GeneratedMessage {
+  factory ListDMReceiptVisibilityTargetsRequest({
+    $core.String? profileId,
+    $2.CursorPageRequest? page,
+  }) {
+    final result = create();
+    if (profileId != null) result.profileId = profileId;
+    if (page != null) result.page = page;
+    return result;
+  }
+
+  ListDMReceiptVisibilityTargetsRequest._();
+
+  factory ListDMReceiptVisibilityTargetsRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ListDMReceiptVisibilityTargetsRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ListDMReceiptVisibilityTargetsRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'profileId')
+    ..aOM<$2.CursorPageRequest>(2, _omitFieldNames ? '' : 'page',
+        subBuilder: $2.CursorPageRequest.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListDMReceiptVisibilityTargetsRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListDMReceiptVisibilityTargetsRequest copyWith(
+          void Function(ListDMReceiptVisibilityTargetsRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as ListDMReceiptVisibilityTargetsRequest))
+          as ListDMReceiptVisibilityTargetsRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ListDMReceiptVisibilityTargetsRequest create() =>
+      ListDMReceiptVisibilityTargetsRequest._();
+  @$core.override
+  ListDMReceiptVisibilityTargetsRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ListDMReceiptVisibilityTargetsRequest getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          ListDMReceiptVisibilityTargetsRequest>(create);
+  static ListDMReceiptVisibilityTargetsRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get profileId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set profileId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProfileId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProfileId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $2.CursorPageRequest get page => $_getN(1);
+  @$pb.TagNumber(2)
+  set page($2.CursorPageRequest value) => $_setField(2, value);
+  @$pb.TagNumber(2)
+  $core.bool hasPage() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearPage() => $_clearField(2);
+  @$pb.TagNumber(2)
+  $2.CursorPageRequest ensurePage() => $_ensure(1);
+}
+
+class DMReceiptVisibilityTarget extends $pb.GeneratedMessage {
+  factory DMReceiptVisibilityTarget({
+    $core.String? chatId,
+    $core.String? peerProfileId,
+  }) {
+    final result = create();
+    if (chatId != null) result.chatId = chatId;
+    if (peerProfileId != null) result.peerProfileId = peerProfileId;
+    return result;
+  }
+
+  DMReceiptVisibilityTarget._();
+
+  factory DMReceiptVisibilityTarget.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory DMReceiptVisibilityTarget.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'DMReceiptVisibilityTarget',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'chatId')
+    ..aOS(2, _omitFieldNames ? '' : 'peerProfileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DMReceiptVisibilityTarget clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DMReceiptVisibilityTarget copyWith(
+          void Function(DMReceiptVisibilityTarget) updates) =>
+      super.copyWith((message) => updates(message as DMReceiptVisibilityTarget))
+          as DMReceiptVisibilityTarget;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static DMReceiptVisibilityTarget create() => DMReceiptVisibilityTarget._();
+  @$core.override
+  DMReceiptVisibilityTarget createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static DMReceiptVisibilityTarget getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<DMReceiptVisibilityTarget>(create);
+  static DMReceiptVisibilityTarget? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get chatId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set chatId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasChatId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearChatId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get peerProfileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set peerProfileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasPeerProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearPeerProfileId() => $_clearField(2);
+}
+
+class ListDMReceiptVisibilityTargetsResponse extends $pb.GeneratedMessage {
+  factory ListDMReceiptVisibilityTargetsResponse({
+    $core.Iterable<DMReceiptVisibilityTarget>? targets,
+    $core.String? nextCursor,
+  }) {
+    final result = create();
+    if (targets != null) result.targets.addAll(targets);
+    if (nextCursor != null) result.nextCursor = nextCursor;
+    return result;
+  }
+
+  ListDMReceiptVisibilityTargetsResponse._();
+
+  factory ListDMReceiptVisibilityTargetsResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ListDMReceiptVisibilityTargetsResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ListDMReceiptVisibilityTargetsResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..pPM<DMReceiptVisibilityTarget>(1, _omitFieldNames ? '' : 'targets',
+        subBuilder: DMReceiptVisibilityTarget.create)
+    ..aOS(2, _omitFieldNames ? '' : 'nextCursor')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListDMReceiptVisibilityTargetsResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListDMReceiptVisibilityTargetsResponse copyWith(
+          void Function(ListDMReceiptVisibilityTargetsResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as ListDMReceiptVisibilityTargetsResponse))
+          as ListDMReceiptVisibilityTargetsResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ListDMReceiptVisibilityTargetsResponse create() =>
+      ListDMReceiptVisibilityTargetsResponse._();
+  @$core.override
+  ListDMReceiptVisibilityTargetsResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ListDMReceiptVisibilityTargetsResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          ListDMReceiptVisibilityTargetsResponse>(create);
+  static ListDMReceiptVisibilityTargetsResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $pb.PbList<DMReceiptVisibilityTarget> get targets => $_getList(0);
+
+  @$pb.TagNumber(2)
+  $core.String get nextCursor => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set nextCursor($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasNextCursor() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearNextCursor() => $_clearField(2);
+}
+
 /// Cross-service pointer to chat_db.chats (docs/DATA_MODEL.md). Use in other packages instead of parallel chat_id + chat_type strings.
 class ChatRef extends $pb.GeneratedMessage {
   factory ChatRef({
@@ -3401,6 +3687,46 @@ class LeaveChatResponse extends $pb.GeneratedMessage {
   static LeaveChatResponse getDefault() => _defaultInstance ??=
       $pb.GeneratedMessage.$_defaultFor<LeaveChatResponse>(create);
   static LeaveChatResponse? _defaultInstance;
+}
+
+class SetGroupMemberRoleResponse extends $pb.GeneratedMessage {
+  factory SetGroupMemberRoleResponse() => create();
+
+  SetGroupMemberRoleResponse._();
+
+  factory SetGroupMemberRoleResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SetGroupMemberRoleResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SetGroupMemberRoleResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetGroupMemberRoleResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetGroupMemberRoleResponse copyWith(
+          void Function(SetGroupMemberRoleResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as SetGroupMemberRoleResponse))
+          as SetGroupMemberRoleResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SetGroupMemberRoleResponse create() => SetGroupMemberRoleResponse._();
+  @$core.override
+  SetGroupMemberRoleResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SetGroupMemberRoleResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SetGroupMemberRoleResponse>(create);
+  static SetGroupMemberRoleResponse? _defaultInstance;
 }
 
 class ListMembersResponse extends $pb.GeneratedMessage {

@@ -1231,7 +1231,13 @@ class Verify2FAResponse extends $pb.GeneratedMessage {
 }
 
 class VerifyOTPResponse extends $pb.GeneratedMessage {
-  factory VerifyOTPResponse() => create();
+  factory VerifyOTPResponse({
+    AuthSession? session,
+  }) {
+    final result = create();
+    if (session != null) result.session = session;
+    return result;
+  }
 
   VerifyOTPResponse._();
 
@@ -1246,6 +1252,8 @@ class VerifyOTPResponse extends $pb.GeneratedMessage {
       _omitMessageNames ? '' : 'VerifyOTPResponse',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
       createEmptyInstance: create)
+    ..aOM<AuthSession>(1, _omitFieldNames ? '' : 'session',
+        subBuilder: AuthSession.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1266,6 +1274,18 @@ class VerifyOTPResponse extends $pb.GeneratedMessage {
   static VerifyOTPResponse getDefault() => _defaultInstance ??=
       $pb.GeneratedMessage.$_defaultFor<VerifyOTPResponse>(create);
   static VerifyOTPResponse? _defaultInstance;
+
+  /// Set only when email verification synchronously completes a pending registration.
+  @$pb.TagNumber(1)
+  AuthSession get session => $_getN(0);
+  @$pb.TagNumber(1)
+  set session(AuthSession value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSession() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSession() => $_clearField(1);
+  @$pb.TagNumber(1)
+  AuthSession ensureSession() => $_ensure(0);
 }
 
 class ConvertGuestResponse extends $pb.GeneratedMessage {
