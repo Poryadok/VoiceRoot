@@ -175,8 +175,13 @@ e2e_key_backups ([encryption.md](../features/encryption.md), Flyway V4__e2e_key_
 - `INDEX refresh_tokens_token_hash_idx (token_hash)`
 - `INDEX otp_codes_account_type_idx (account_id, type, expires_at DESC)`
 
-`email_verified_at` and verification-gated promotion are target contract gaps in the
-currently deployed schema/code; see [todo/backend.md](../todo/backend.md).
+`email_verified_at` and the verification-gated promotion are shipped for email
+registration and `convert-guest` (PR #180): Auth creates a restricted pending
+session, accepts bearer-scoped `POST /api/v1/auth/otp/send` and `otp/verify`, and
+promotes the account to `regular` only after successful verification, with durable
+recovery for the User sync and conversion event. Remaining client UX and live-provider
+acceptance are tracked in [todo/client.md](../todo/client.md) and
+[todo/backend.md](../todo/backend.md).
 
 Правило статуса удаления:
 - source of truth для логического удаления — `deleted_at`.
