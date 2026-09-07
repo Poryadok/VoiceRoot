@@ -28,6 +28,7 @@ type ChatRow struct {
 	ThreadsEnabled    bool
 	AllowUserMainFeed bool
 	E2EEnabled        bool
+	AllowGuests       bool
 	// IsPinned is populated only for folder-scoped ListChats results.
 	IsPinned bool
 }

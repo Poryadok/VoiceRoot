@@ -19,6 +19,8 @@ service ChatService {
   rpc AddMembers(AddMembersRequest) returns (AddMembersResponse);
   rpc RemoveMember(RemoveMemberRequest) returns (RemoveMemberResponse);
   rpc LeaveChat(LeaveChatRequest) returns (LeaveChatResponse);
+  // Standalone group only. An admin can promote a member; only the owner can demote an admin.
+  rpc SetGroupMemberRole(SetGroupMemberRoleRequest) returns (SetGroupMemberRoleResponse);
   rpc TransferGroupOwnership(TransferGroupOwnershipRequest) returns (TransferGroupOwnershipResponse);
   rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);
 
@@ -77,6 +79,8 @@ message Chat {
   bool threads_enabled = 12;
   bool allow_user_main_feed = 13;
   bool e2e_enabled = 14;
+  // Guest admission is explicit and defaults to false for standalone chats.
+  bool allow_guests = 15;
 }
 
 message CreateDMRequest {
@@ -102,6 +106,7 @@ message UpdateChatRequest {
   optional string avatar_url = 5;
   optional bool threads_enabled = 6;
   optional bool allow_user_main_feed = 7;
+  optional bool allow_guests = 8;
 }
 
 message DeleteChatRequest {
@@ -120,6 +125,12 @@ message RemoveMemberRequest {
 
 message LeaveChatRequest {
   string chat_id = 1;
+}
+
+message SetGroupMemberRoleRequest {
+  string chat_id = 1;
+  string profile_id = 2;
+  string role = 3; // admin | member; owner is assigned only by TransferGroupOwnership
 }
 
 message TransferGroupOwnershipRequest {
@@ -323,6 +334,7 @@ message DeleteChatResponse {}
 message AddMembersResponse {}
 message RemoveMemberResponse {}
 message LeaveChatResponse {}
+message SetGroupMemberRoleResponse {}
 message ListMembersResponse {
   MemberList member_list = 1;
 }
