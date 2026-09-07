@@ -190,7 +190,7 @@ Widget _onboardingAnchorsScaffold() {
 }
 
 void main() {
-  testWidgets('spaces step Find a space opens global search catalog', (
+  testWidgets('spaces step opens search for a known space', (
     tester,
   ) async {
     final l10n = AppLocalizationsEn();
@@ -522,5 +522,26 @@ void main() {
     expect(find.text(l10n.onboardingSpacesBody), findsOneWidget);
     expect(find.widgetWithText(TextButton, l10n.onboardingSkip), findsOneWidget);
     expect(find.widgetWithText(FilledButton, l10n.onboardingLater), findsOneWidget);
+  });
+
+  test('onboarding copy describes the profile and invite-only space flow', () {
+    expect(
+      AppLocalizationsEn().onboardingSaveAccountBody,
+      'Choose a nickname and add an avatar so people can recognize you.',
+    );
+    expect(
+      AppLocalizationsEn().onboardingSpacesBody,
+      "Spaces are communities with channels and voice rooms. Search for a space you know, join with a friend's invite, or create your own.",
+    );
+    expect(AppLocalizationsEn().onboardingSpacesFind, 'Open search');
+    expect(
+      AppLocalizationsRu().onboardingSaveAccountBody,
+      'Укажи ник и добавь аватар, чтобы тебя было легко узнать.',
+    );
+    expect(
+      AppLocalizationsRu().onboardingSpacesBody,
+      'Спейсы — это сообщества с каналами и войс-чатами. Ищи знакомые спейсы в поиске, вступай по инвайту от друга или создай свой.',
+    );
+    expect(AppLocalizationsRu().onboardingSpacesFind, 'Открыть поиск');
   });
 }
