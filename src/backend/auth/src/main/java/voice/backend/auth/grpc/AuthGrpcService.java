@@ -132,7 +132,7 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
   @Override
   public void verifyOTP(VerifyOTPRequest request, StreamObserver<VerifyOTPResponse> responseObserver) {
     run(responseObserver, () -> {
-      otpService.verifyOtp(
+      voice.backend.auth.service.AuthSession session = otpService.verifyOtp(
           new VerifyOtpCommand(
               null,
               null,
@@ -140,7 +140,11 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
               request.getOtpType(),
               resolveAccessToken()),
           authService);
-      return VerifyOTPResponse.getDefaultInstance();
+      if (session == null) {
+        return VerifyOTPResponse.getDefaultInstance();
+      }
+      rememberAccess(session.accessToken());
+      return VerifyOTPResponse.newBuilder().setSession(toProto(session)).build();
     });
   }
 
