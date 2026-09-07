@@ -98,8 +98,11 @@ func (c *AuthGRPCDeletedAccounts) DeletedAmong(ctx context.Context, accountIDs [
 }
 
 func (s *UserGRPC) filterDeletedAccountProfiles(ctx context.Context, rows []*store.ProfileRow) ([]*store.ProfileRow, error) {
-	if len(rows) == 0 || s.DeletedAccounts == nil {
+	if len(rows) == 0 {
 		return rows, nil
+	}
+	if s.DeletedAccounts == nil {
+		return nil, fmt.Errorf("auth deleted-account checker is not configured")
 	}
 	accountIDs := make([]uuid.UUID, 0, len(rows))
 	requested := make(map[uuid.UUID]struct{}, len(rows))

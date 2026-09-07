@@ -52,9 +52,8 @@ func (c *deletedAccountCheckerStub) DeletedAmong(_ context.Context, ids []uuid.U
 	return out, nil
 }
 
-// setDeletedAccountChecker is intentionally reflective while UserGRPC lacks
-// the new injection point. It keeps this RED suite compiling on the current
-// train, then enforces the small internal contract once GREEN adds it.
+// setDeletedAccountChecker keeps the narrow Auth visibility dependency explicit
+// in this transport-level suite.
 func setDeletedAccountChecker(t *testing.T, svc *UserGRPC, checker any) {
 	t.Helper()
 	field := reflect.ValueOf(svc).Elem().FieldByName("DeletedAccounts")
@@ -64,7 +63,15 @@ func setDeletedAccountChecker(t *testing.T, svc *UserGRPC, checker any) {
 	if !field.CanSet() {
 		t.Fatalf("UserGRPC.DeletedAccounts must be injectable")
 	}
+	if checker == nil {
+		field.SetZero()
+		return
+	}
 	checkerValue := reflect.ValueOf(checker)
+	if checkerValue.Kind() == reflect.Ptr && checkerValue.IsNil() {
+		field.SetZero()
+		return
+	}
 	if !checkerValue.Type().AssignableTo(field.Type()) {
 		t.Fatalf("UserGRPC.DeletedAccounts must accept DeletedAmong checker, got %s", field.Type())
 	}
@@ -299,4 +306,30 @@ func TestDeletedAccountCheckerFailuresFailClosed(t *testing.T) {
 		require.Error(t, err)
 		require.Equal(t, codes.Unavailable, status.Code(err))
 	}
+}
+
+func TestDeletedAccountCheckerMissingFailsClosed(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	accountID, profileID := uuid.New(), uuid.New()
+	viewerAccount, viewerProfile := uuid.New(), uuid.New()
+	ctx, profiles, _, client := startDeletedAccountVisibilityServer(t, nil)
+	insertVisibleProfile(t, ctx, profiles, profileID, accountID, "missingchecker", "0001", true)
+	insertVisibleProfile(t, ctx, profiles, viewerProfile, viewerAccount, "missingview", "0002", true)
+
+	_, err := client.GetProfile(ctx, &userv1.GetProfileRequest{By: &userv1.GetProfileRequest_ProfileId{ProfileId: profileID.String()}})
+	require.Equal(t, codes.Unavailable, status.Code(err))
+
+	_, err = client.GetProfiles(ctx, &userv1.GetProfilesRequest{ProfileIds: []string{profileID.String()}})
+	require.Equal(t, codes.Unavailable, status.Code(err))
+
+	_, err = client.SearchProfiles(withUserAuthCtx(ctx, viewerAccount, viewerProfile), &userv1.SearchProfilesRequest{Query: "missingchecker"})
+	require.Equal(t, codes.Unavailable, status.Code(err))
+
+	_, err = client.GetPresence(withUserAuthCtx(ctx, viewerAccount, viewerProfile), &userv1.GetPresenceRequest{ProfileId: profileID.String()})
+	require.Equal(t, codes.Unavailable, status.Code(err))
+
+	_, err = client.GetBulkPresence(withUserAuthCtx(ctx, viewerAccount, viewerProfile), &userv1.GetBulkPresenceRequest{ProfileIds: []string{profileID.String()}})
+	require.Equal(t, codes.Unavailable, status.Code(err))
 }
