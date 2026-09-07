@@ -1,4 +1,4 @@
-# E2E feature catalog â€” smoke (CI tier 2) vs full (compose-e2e-live).
+# E2E feature catalog — smoke (CI tier 2) vs full (compose-e2e-live).
 # Parsed by scripts/ci/e2e-manifest.sh (line-oriented, no external YAML deps).
 
 smoke_gateway:
