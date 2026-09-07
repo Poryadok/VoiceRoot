@@ -33,8 +33,8 @@ import (
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
-	pkgruntimeconfig "voice/backend/pkg/runtimeconfig"
 	voiceprom "voice/backend/pkg/promhttp"
+	pkgruntimeconfig "voice/backend/pkg/runtimeconfig"
 
 	callsv1 "voice.app/voice/calls/v1"
 	chatv1 "voice.app/voice/chat/v1"
@@ -129,16 +129,18 @@ func main() {
 				log.Fatalf("voice grpc: %v", err)
 			}
 			defer func() { _ = vconn.Close() }()
-			waitCtx, waitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
-			if err := waitForGRPCReady(waitCtx, cconn); err != nil {
-				waitCancel()
+			chatWaitCtx, chatWaitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
+			if err := waitForGRPCReady(chatWaitCtx, cconn); err != nil {
+				chatWaitCancel()
 				log.Fatalf("chat grpc dial: %v", err)
 			}
-			if err := waitForGRPCReady(waitCtx, vconn); err != nil {
-				waitCancel()
+			chatWaitCancel()
+			voiceWaitCtx, voiceWaitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
+			if err := waitForGRPCReady(voiceWaitCtx, vconn); err != nil {
+				voiceWaitCancel()
 				log.Fatalf("voice grpc dial: %v", err)
 			}
-			waitCancel()
+			voiceWaitCancel()
 			squadProvisioner = &squad.Provisioner{
 				Chat:  &squad.GRPCChatClient{Client: chatv1.NewChatServiceClient(cconn)},
 				Voice: &squad.GRPCVoiceClient{Client: callsv1.NewVoiceServiceClient(vconn)},
