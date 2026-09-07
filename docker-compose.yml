@@ -894,7 +894,7 @@ services:
       GATEWAY_JWT_ISSUER: voice-auth
       GATEWAY_JWT_AUDIENCE: voice-client
       # Compose dev: disable shared auth bucket (login/register) for local iteration.
-      GATEWAY_RATE_LIMIT_RULES_JSON: '{"Auth":{"limit":0,"window":"15m"}}'
+      GATEWAY_RATE_LIMIT_RULES_JSON: '${GATEWAY_RATE_LIMIT_RULES_JSON:-{"Auth":{"limit":0,"window":"15m"}}}'
       # Compose dev only: Flutter web may use any localhost port as Origin.
       GATEWAY_CORS_ALLOWED_ORIGINS: "*"
       GATEWAY_DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/gateway_db?sslmode=disable

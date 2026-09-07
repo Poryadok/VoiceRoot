@@ -73,6 +73,7 @@ EOF
 #!/usr/bin/env bash
 set -euo pipefail
 log="${FAKE_LOG:?FAKE_LOG required}"
+if [[ "$*" == *'ratelimit:OTP:'* ]]; then exit 0; fi
 printf 'docker' >>"${log}"
 for arg in "$@"; do printf ' <%s>' "$arg" >>"${log}"; done
 printf '\n' >>"${log}"
@@ -154,8 +155,9 @@ printf 'env_VOICE_RUN_LIVE_INTEGRATION=%s\n' "${VOICE_RUN_LIVE_INTEGRATION:-}" >
 printf 'env_VOICE_API_BASE_URL=%s\n' "${VOICE_API_BASE_URL:-}" >>"${log}"
 exit "${FAKE_FLUTTER_RC:-0}"
 EOF
-  cat >"${bin}/sleep" <<'EOF'
+cat >"${bin}/sleep" <<'EOF'
 #!/usr/bin/env bash
+if [[ "${FAKE_REAL_SLEEP:-}" == true ]]; then exec /bin/sleep "$@"; fi
 exit 0
 EOF
   chmod +x "${bin}/bash" "${bin}/docker" "${bin}/curl" "${bin}/flutter" "${bin}/sleep"
@@ -177,6 +179,7 @@ run_runner() {
     cd "${work}/tmp with spaces"
     env PATH="${work}/bin:${PATH}" FAKE_LOG="${work}/commands.log" \
       FAKE_DOCKER_MODE="${FAKE_DOCKER_MODE:-}" FAKE_FLUTTER_RC="${FAKE_FLUTTER_RC:-0}" \
+      FAKE_REAL_SLEEP="${FAKE_REAL_SLEEP:-}" \
       FAKE_HEALTH_MODE="${FAKE_HEALTH_MODE:-}" FAKE_HEALTH_COUNT_FILE="${work}/health-count" \
       FAKE_MANIFEST_SCRIPT="${ROOT}/scripts/ci/e2e-manifest.sh" \
       FAKE_MANIFEST_RESULT="${FAKE_MANIFEST_RESULT-$DEFAULT_MANIFEST_RESULT}" REAL_BASH="$REAL_BASH" \
@@ -193,6 +196,8 @@ TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/profile-handoff-runner-tests.XXXXXXXX")"
 trap 'rm -rf -- "$TEST_TMP"' EXIT
 assert_file "$SCRIPT"
 assert_contains "$SCRIPT" 'e2e-manifest\.sh.*a1_flutter_profile_handoff'
+assert_contains "$SCRIPT" 'GATEWAY_RATE_LIMIT_RULES_JSON='
+assert_contains "$SCRIPT" '"OTP":\{"limit":0'
 
 echo '== caller Compose selectors are rejected before Docker =='
 case_dir="$(new_case ambient-project)"
@@ -253,7 +258,7 @@ unset FAKE_MANIFEST_RESULT
 
 echo '== config/up/health and exactly three constrained Flutter tests =='
 case_dir="$(new_case happy)"
-FAKE_HEALTH_MODE=delayed FAKE_MANIFEST_RESULT="$T055_TEST
+FAKE_REAL_SLEEP=true FAKE_HEALTH_MODE=delayed FAKE_MANIFEST_RESULT="$T055_TEST
 $T106_TEST
 $T107_TEST" run_runner "$case_dir"
 assert_eq "$(cat "${case_dir}/rc")" 0

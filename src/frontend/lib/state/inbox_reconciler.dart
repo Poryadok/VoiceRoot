@@ -105,7 +105,9 @@ class InboxReconcilerState {
 /// This deliberately owns only Chat `ListChats` pagination. Message history is
 /// still owned by the selected [ChatRoomController].
 class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
-  InboxReconcilerController(this._ref) : super(const InboxReconcilerState()) {
+  InboxReconcilerController(this._ref, {int? pageSize})
+    : _pageSize = pageSize,
+      super(const InboxReconcilerState()) {
     _helloSub = _ref.listen<RealtimeHelloBinding?>(
       realtimeHelloBindingProvider,
       (_, hello) {
@@ -145,6 +147,7 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
   }
 
   final Ref _ref;
+  final int? _pageSize;
   ProviderSubscription<RealtimeHelloBinding?>? _helloSub;
   ProviderSubscription<AuthState>? _authSub;
   int _generation = 0;
@@ -454,6 +457,7 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
           .listChats(
             authorization: authorization,
             cursor: requestedCursor,
+            pageSize: _pageSize,
             inbox: scope.name,
           );
       if (!_isCurrent(generation, profileId)) return;

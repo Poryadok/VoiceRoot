@@ -113,10 +113,39 @@ func (s *DMStore) RemoveQuickAccess(ctx context.Context, profileID, chatID uuid.
 	if s == nil || s.Pool == nil {
 		return errors.New("dm store: pool not configured")
 	}
-	_, err := s.Pool.Exec(ctx, `
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	var removedOrder int32
+	err = tx.QueryRow(ctx, `
+SELECT sort_order
+FROM quick_access_chats
+WHERE profile_id = $1 AND chat_id = $2
+FOR UPDATE
+`, profileID, chatID).Scan(&removedOrder)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return tx.Commit(ctx)
+	}
+	if err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `
 DELETE FROM quick_access_chats WHERE profile_id = $1 AND chat_id = $2
-`, profileID, chatID)
-	return err
+`, profileID, chatID); err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `
+UPDATE quick_access_chats
+SET sort_order = sort_order - 1
+WHERE profile_id = $1 AND sort_order > $2
+`, profileID, removedOrder)
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // ReorderQuickAccess replaces the sort order for the caller's quick-access list.

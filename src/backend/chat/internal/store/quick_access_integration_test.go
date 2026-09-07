@@ -64,6 +64,9 @@ func TestQuickAccess_AddListReorderLimit(t *testing.T) {
 	list, err = store.ListQuickAccess(ctx, profileID)
 	require.NoError(t, err)
 	require.Len(t, list, 14)
+	for i, row := range list {
+		require.Equal(t, int32(i), row.SortOrder)
+	}
 }
 
 func TestQuickAccess_RequiresMembership(t *testing.T) {

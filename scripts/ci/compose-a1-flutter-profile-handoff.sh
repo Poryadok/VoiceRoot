@@ -152,6 +152,11 @@ wait_gateway() {
   return 1
 }
 
+# Each isolated live test creates several disposable email identities. Gateway's
+# production OTP bucket intentionally applies to their shared loopback client
+# IP, so disable it only for this generated Compose fixture.
+export GATEWAY_RATE_LIMIT_RULES_JSON='{"Auth":{"limit":0,"window":"15m"},"OTP":{"limit":0,"window":"10m"}}'
+
 echo "A1 Flutter profile-handoff project=${project} gateway=${VOICE_API_BASE_URL} tests=${flutter_tests[*]}"
 compose config --quiet
 compose up -d --build
