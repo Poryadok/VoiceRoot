@@ -52,19 +52,28 @@ func TestComposeA1TwoAccountsFoundation_live(t *testing.T) {
 	setComposePrivacyAllowDmEveryone(t, client, base, sessB.AccessToken)
 
 	searchToken := strings.TrimSuffix(emailB, "@voice-qa.test")
-	searchReq, err := http.NewRequest(
-		http.MethodGet,
-		base+"/api/v1/users/search?q="+url.QueryEscape(searchToken),
-		nil,
-	)
-	require.NoError(t, err)
-	searchReq.Header.Set("Authorization", "Bearer "+sessA.AccessToken)
-	searchResp, err := client.Do(searchReq)
-	require.NoError(t, err)
-	searchBody, err := io.ReadAll(searchResp.Body)
-	searchResp.Body.Close()
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, searchResp.StatusCode, "profile search body=%s", string(searchBody))
+	searchURL := base + "/api/v1/users/search?q=" + url.QueryEscape(searchToken)
+	searchDeadline := time.Now().Add(30 * time.Second)
+	var searchStatus int
+	var searchBody []byte
+	for {
+		searchReq, err := http.NewRequest(http.MethodGet, searchURL, nil)
+		require.NoError(t, err)
+		searchReq.Header.Set("Authorization", "Bearer "+sessA.AccessToken)
+		searchResp, err := client.Do(searchReq)
+		require.NoError(t, err)
+		searchBody, err = io.ReadAll(searchResp.Body)
+		searchResp.Body.Close()
+		require.NoError(t, err)
+		searchStatus = searchResp.StatusCode
+		if searchStatus != http.StatusServiceUnavailable ||
+			!strings.Contains(string(searchBody), "account visibility unavailable") ||
+			!time.Now().Before(searchDeadline) {
+			break
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	require.Equal(t, http.StatusOK, searchStatus, "profile search body=%s", string(searchBody))
 	var search struct {
 		ProfileList struct {
 			Profiles []struct {
