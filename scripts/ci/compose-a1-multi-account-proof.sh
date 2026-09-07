@@ -85,12 +85,7 @@ compose_env="${state_dir}/compose-empty.env"
 cleanup() {
   local status=$?
   if [[ "${VOICE_A1_MULTI_ACCOUNT_CLEANUP:-false}" == "true" ]]; then
-    docker compose \
-      --env-file "$compose_env" \
-      --project-name "$project" \
-      --project-directory "$ROOT" \
-      -f "$COMPOSE_FILE_PATH" \
-      down --remove-orphans || true
+    compose down --remove-orphans || true
   fi
   case "$state_dir" in
     "$tmp_parent"/voice-a1-multi-account-proof.*) rm -rf -- "$state_dir" ;;
@@ -131,6 +126,7 @@ compose() {
     --project-name "$project" \
     --project-directory "$ROOT" \
     -f "$COMPOSE_FILE_PATH" \
+    --profile app \
     "$@"
 }
 
@@ -166,8 +162,8 @@ wait_gateway() {
 }
 
 echo "A1 multi-account proof project=${project} gateway=${VOICE_API_BASE_URL}"
-compose --profile app config --quiet
-compose --profile app up -d --build
+compose config --quiet
+compose up -d --build
 wait_healthy gateway
 wait_healthy file
 wait_gateway

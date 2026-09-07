@@ -57,7 +57,7 @@ cleanup() {
   local status=$?
   if [[ "${VOICE_FILE_ATTACHMENT_RESTART_CLEANUP:-false}" == "true" ]]; then
     # Exact generated project only; never delete named volumes.
-    docker compose --env-file "$compose_env" --project-name "$project" --project-directory "$ROOT" -f "$ROOT/docker-compose.yml" down --remove-orphans || true
+    compose down --remove-orphans || true
   fi
   [[ "$state_dir" == "$tmp_parent"/voice-file-restart-proof.* ]] || {
     echo "refusing unsafe state cleanup path: $state_dir" >&2
@@ -108,7 +108,7 @@ fi
 restart_test="${restart_tests[0]}"
 
 compose() {
-  docker compose --env-file "$compose_env" --project-name "$project" --project-directory "$ROOT" -f "$ROOT/docker-compose.yml" "$@"
+  docker compose --env-file "$compose_env" --project-name "$project" --project-directory "$ROOT" -f "$ROOT/docker-compose.yml" --profile app "$@"
 }
 
 wait_healthy() {
@@ -143,9 +143,9 @@ wait_gateway() {
 }
 
 echo "A1 restart proof project=${project} gateway=${VOICE_API_BASE_URL}"
-compose --profile app config --quiet
+compose config --quiet
 set +e
-compose --profile app up -d --build
+compose up -d --build
 initial_up_status=$?
 set -e
 if (( initial_up_status != 0 )); then

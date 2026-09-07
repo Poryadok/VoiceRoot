@@ -263,6 +263,9 @@ assert_contains "${case_dir}/commands.log" 'env_size=0'
 assert_contains "${case_dir}/commands.log" 'compose.*<--project-name> <voice-a1-multi-[a-z0-9-]+>'
 project_count="$(grep '^docker <compose> ' "${case_dir}/commands.log" | sed -n 's/.* <--project-name> <\([^>]*\)>.*/\1/p' | sort -u | wc -l | tr -d '[:space:]')"
 assert_eq "$project_count" 1
+while IFS= read -r compose_line; do
+  [[ "$compose_line" == *' <--profile> <app> '* ]] || fail 'startup Compose path omitted app profile'
+done < <(grep '^docker <compose> ' "${case_dir}/commands.log")
 
 echo '== failure diagnostics preserve status and cleanup is opt-in =='
 case_dir="$(new_case failure)"
@@ -281,7 +284,7 @@ logs_line="$(grep -n 'compose.*<logs>' "${case_dir}/commands.log" | head -1 | cu
 case_dir="$(new_case cleanup)"
 VOICE_A1_SESSION_EPOCH_ISOLATED=hostile VOICE_A1_MULTI_ACCOUNT_CLEANUP=true run_runner "$case_dir"
 assert_eq "$(cat "${case_dir}/rc")" 0
-assert_contains "${case_dir}/commands.log" 'compose.*<down> <--remove-orphans>'
+assert_contains "${case_dir}/commands.log" 'compose.*<--profile> <app> <down> <--remove-orphans>'
 assert_not_contains "${case_dir}/commands.log" '--volumes|<-v>|volume prune|system prune'
 assert_not_contains "${case_dir}/commands.log" '^env_VOICE_A1_SESSION_EPOCH_ISOLATED=.+$'
 

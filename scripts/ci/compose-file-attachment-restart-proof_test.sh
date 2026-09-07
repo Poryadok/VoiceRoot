@@ -119,7 +119,7 @@ echo '== initial Compose failure preserves exact status and emits diagnostics ==
 case_dir="$(new_case startup-failure)"
 FAKE_UP_RC=37 run_runner "$case_dir"
 assert_eq "$(cat "$case_dir/rc")" 37
-assert_contains "$case_dir/commands.log" 'compose.*<up> <-d> <--build>'
+assert_contains "$case_dir/commands.log" 'compose.*<--profile> <app> <up> <-d> <--build>'
 assert_contains "$case_dir/commands.log" 'compose.*<ps> <--all>'
 assert_contains "$case_dir/commands.log" 'compose.*<logs> <--no-color> <--timestamps> <compose-db-init>'
 ps_line="$(grep -n 'compose.*<ps> <--all>' "$case_dir/commands.log" | cut -d: -f1)"
@@ -133,7 +133,7 @@ FAKE_UP_RC=37 FAKE_PS_RC=71 FAKE_LOGS_RC=72 FAKE_DOWN_RC=73 SECRET_SENTINEL='do-
 assert_eq "$(cat "$case_dir/rc")" 37
 assert_contains "$case_dir/commands.log" 'compose.*<ps> <--all>'
 assert_contains "$case_dir/commands.log" 'compose.*<logs> <--no-color> <--timestamps> <compose-db-init>'
-assert_contains "$case_dir/commands.log" 'compose.*<down> <--remove-orphans>'
+assert_contains "$case_dir/commands.log" 'compose.*<--profile> <app> <down> <--remove-orphans>'
 assert_not_contains "$case_dir/commands.log" '--volumes|<-v>|volume prune|system prune'
 assert_not_contains "$case_dir/stdout" 'do-not-leak-attachment-secret'
 assert_not_contains "$case_dir/stderr" 'do-not-leak-attachment-secret'
@@ -154,6 +154,7 @@ IFS='|' read -r identity_env identity_project identity_directory identity_file <
 [[ "$identity_project" != voice ]] || fail 'Compose calls must never target shared voice project'
 while IFS= read -r compose_line; do
   [[ "$(identity_fields "$compose_line")" == "$identity" ]] || fail 'Compose identity changed between startup, diagnostics, and cleanup'
+  [[ "$compose_line" == *' <--profile> <app> '* ]] || fail 'Compose profile changed between startup, diagnostics, and cleanup'
 done < <(grep '^docker <compose> ' "$case_dir/commands.log")
 
 echo '== cleanup is disabled by default =='
