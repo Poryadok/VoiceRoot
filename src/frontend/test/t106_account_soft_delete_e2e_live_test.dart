@@ -81,6 +81,10 @@ void main() {
         );
         expect(registeredA, isA<AuthSessionOk>(), reason: '$registeredA');
         firstA = (registeredA as AuthSessionOk).session;
+        firstA = await ctx.completeEmailVerification(
+          email: emailA,
+          pendingSession: firstA,
+        );
         await ctx.allowOpenGamingPrivacy(firstA);
 
         final loggedInA = await authClient.login(

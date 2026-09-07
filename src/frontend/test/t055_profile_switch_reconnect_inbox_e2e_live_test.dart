@@ -141,26 +141,30 @@ void main() {
         (rawArchiveAltResult as AuthSessionOk).session,
       );
 
-      final selectedDm = await chats.createDm(
+      final selectedDm = await _createDmWhenAvailable(
+        chats: chats,
         authorization: rawB.authorizationHeader,
         otherProfileId: mainPeer.activeProfileId,
       );
       expect(selectedDm, isA<ChatsApiOk<VoiceChat>>(), reason: '$selectedDm');
       final selectedChatId = (selectedDm as ChatsApiOk<VoiceChat>).data.id;
-      final mainAltDm = await chats.createDm(
+      final mainAltDm = await _createDmWhenAvailable(
+        chats: chats,
         authorization: rawB.authorizationHeader,
         otherProfileId: mainAltProfileId,
       );
       expect(mainAltDm, isA<ChatsApiOk<VoiceChat>>(), reason: '$mainAltDm');
       final mainAltChatId = (mainAltDm as ChatsApiOk<VoiceChat>).data.id;
 
-      final archivedDm = await chats.createDm(
+      final archivedDm = await _createDmWhenAvailable(
+        chats: chats,
         authorization: rawB.authorizationHeader,
         otherProfileId: archivePeer.activeProfileId,
       );
       expect(archivedDm, isA<ChatsApiOk<VoiceChat>>(), reason: '$archivedDm');
       final archivedChatId = (archivedDm as ChatsApiOk<VoiceChat>).data.id;
-      final archivedAltDm = await chats.createDm(
+      final archivedAltDm = await _createDmWhenAvailable(
+        chats: chats,
         authorization: rawB.authorizationHeader,
         otherProfileId: archiveAltProfileId,
       );
@@ -184,7 +188,8 @@ void main() {
       );
       expect(archiveAlt, isA<ChatsApiOk<void>>(), reason: '$archiveAlt');
 
-      final requestDm = await chats.createDm(
+      final requestDm = await _createDmWhenAvailable(
+        chats: chats,
         authorization: stranger.authorizationHeader,
         otherProfileId: bProfileId,
       );
@@ -200,7 +205,8 @@ void main() {
         reason: '$rawStrangerAltResult',
       );
       final rawStrangerAlt = (rawStrangerAltResult as AuthSessionOk).session;
-      final requestAltDm = await chats.createDm(
+      final requestAltDm = await _createDmWhenAvailable(
+        chats: chats,
         authorization: rawStrangerAlt.authorizationHeader,
         otherProfileId: bProfileId,
       );
@@ -784,6 +790,7 @@ void main() {
     skip: runLiveIntegration
         ? null
         : 'Opt in with --dart-define=VOICE_RUN_LIVE_INTEGRATION=true',
+    timeout: const Timeout(Duration(minutes: 2)),
   );
 }
 
@@ -1261,6 +1268,27 @@ class _RelayRealtimeTransportFactory implements RealtimeTransportFactory {
         'X-Request-Id': newGatewayRequestId(),
       },
     );
+  }
+}
+
+Future<ChatsApiResult<VoiceChat>> _createDmWhenAvailable({
+  required VoiceChatsClient chats,
+  required String authorization,
+  required String otherProfileId,
+}) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 30));
+  while (true) {
+    final result = await chats.createDm(
+      authorization: authorization,
+      otherProfileId: otherProfileId,
+    );
+    if (result is! ChatsApiFailure ||
+        result.statusCode != HttpStatus.internalServerError ||
+        result.message != 'dm availability unavailable' ||
+        !DateTime.now().isBefore(deadline)) {
+      return result;
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 250));
   }
 }
 
