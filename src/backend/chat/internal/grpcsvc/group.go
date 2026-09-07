@@ -301,8 +301,7 @@ func (s *ChatGRPC) RemoveMember(ctx context.Context, req *chatv1.RemoveMemberReq
 	// Space membership policy is owned by the Space role model.  Preserve the
 	// existing chat-level owner rule here; standalone groups use the atomic
 	// owner/admin hierarchy below.
-	var removeErr error
-	removeErr = s.DM.RemoveStandaloneGroupMember(ctx, chatID, caller, targetID)
+	removeErr := s.DM.RemoveStandaloneGroupMember(ctx, chatID, caller, targetID)
 	if err := removeErr; err != nil {
 		if errors.Is(err, store.ErrCannotRemoveOwner) {
 			return nil, status.Error(codes.FailedPrecondition, err.Error())
