@@ -219,7 +219,7 @@ blacklist-механизмом и не заменяется epoch.
 | `GATEWAY_TRUSTED_PROXY_CIDRS` | CIDR/IP список proxy, от которых принимается `X-Forwarded-For` |
 | `GATEWAY_CORS_ALLOWED_ORIGINS` | CSV allowlist browser origins; default deny |
 | `GATEWAY_REST_UPSTREAMS_JSON` / `GATEWAY_<NAMESPACE>_UPSTREAM_URL` | REST upstream routes |
-| `GATEWAY_GRPC_UPSTREAMS_JSON` / `GATEWAY_<NAMESPACE>_GRPC_ADDR` | JSON-объект gRPC-адресов по namespace; значение per-namespace перекрывает карту. Непустая malformed-карта или любое нестроковое значение — startup error до создания HTTP listener. |
+| `GATEWAY_GRPC_UPSTREAMS_JSON` / `GATEWAY_<NAMESPACE>_GRPC_ADDR` | JSON-объект непустых gRPC-адресов по namespace; значение per-namespace перекрывает карту. Непустая malformed-карта, `null`, нестроковое или пустое/whitespace значение — startup error до создания HTTP listener. |
 | `GATEWAY_REALTIME_UPSTREAM_URL` | `/ws` upstream Realtime Service |
 | `GATEWAY_VERSION_CONFIGS_JSON`, `GATEWAY_FORCE_UPDATE_JSON` | Version policy |
 

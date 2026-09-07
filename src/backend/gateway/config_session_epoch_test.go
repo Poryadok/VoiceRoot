@@ -132,6 +132,9 @@ func TestGatewayBootstrapRejectsInvalidGRPCUpstreamsBeforeServerConstruction(t *
 	}{
 		{name: "malformed JSON", raw: `{"users":`},
 		{name: "non-string upstream value", raw: `{"users":123}`},
+		{name: "null upstream value", raw: `{"users":null}`},
+		{name: "empty upstream address", raw: `{"users":""}`},
+		{name: "whitespace upstream address", raw: `{"users":" \t "}`},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
@@ -157,6 +160,26 @@ func TestGatewayBootstrapRejectsInvalidGRPCUpstreamsBeforeServerConstruction(t *
 				t.Fatalf("server constructor calls = %d, want 0", serverConstructed)
 			}
 		})
+	}
+}
+
+func TestGatewayBootstrapAllowsFutureGRPCNamespace(t *testing.T) {
+	configureSessionEpochEnv(t, configString("false"), "")
+	t.Setenv("GATEWAY_GRPC_UPSTREAMS_JSON", `{"future-service":"future:9090"}`)
+
+	serverConstructed := 0
+	server, err := newGatewayServerFromEnv(":8080", func(handler http.Handler) *http.Server {
+		serverConstructed++
+		return &http.Server{Addr: ":8080", Handler: handler}
+	})
+	if err != nil {
+		t.Fatalf("future namespace must remain forward-compatible: %v", err)
+	}
+	if serverConstructed != 1 {
+		t.Fatalf("server constructor calls = %d, want 1", serverConstructed)
+	}
+	if err := server.Close(); err != nil {
+		t.Fatalf("close server: %v", err)
 	}
 }
 

@@ -62,6 +62,11 @@ func validateGRPCUpstreamsFromEnv() error {
 	if upstreams == nil {
 		return errors.New("GATEWAY_GRPC_UPSTREAMS_JSON must be a JSON object with string values")
 	}
+	for namespace, addr := range upstreams {
+		if strings.TrimSpace(addr) == "" {
+			return fmt.Errorf("GATEWAY_GRPC_UPSTREAMS_JSON namespace %q must have a nonempty address", namespace)
+		}
+	}
 	return nil
 }
 
