@@ -135,6 +135,7 @@ func chatRowToProto(r *store.ChatRow) *chatv1.Chat {
 		ThreadsEnabled:    r.ThreadsEnabled,
 		AllowUserMainFeed: r.AllowUserMainFeed,
 		E2EEnabled:        r.E2EEnabled,
+		AllowGuests:       r.AllowGuests,
 	}
 	if r.SpaceID != nil {
 		sid := r.SpaceID.String()

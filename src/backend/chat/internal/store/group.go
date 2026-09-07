@@ -207,7 +207,7 @@ func (s *DMStore) FindChatByID(ctx context.Context, chatID uuid.UUID) (*ChatRow,
 	}
 	return scanChatRow(s.Pool.QueryRow(ctx, `
 SELECT id, type, space_id, name, avatar_url, topic, creator_profile_id, slow_mode_seconds,
-       last_message_at, created_at, updated_at, threads_enabled, allow_user_main_feed, e2e_enabled
+       last_message_at, created_at, updated_at, threads_enabled, allow_user_main_feed, e2e_enabled, allow_guests
 FROM chats
 WHERE id = $1
 `, chatID))
@@ -221,9 +221,9 @@ func scanChatRow(row pgx.Row) (*ChatRow, error) {
 	var slowMode int32
 	var lastMsg sql.NullTime
 	var createdAt, updatedAt time.Time
-	var threadsEnabled, allowUserMainFeed, e2eEnabled bool
+	var threadsEnabled, allowUserMainFeed, e2eEnabled, allowGuests bool
 	err := row.Scan(&id, &chatType, &spaceID, &name, &avatarURL, &topic, &creator, &slowMode,
-		&lastMsg, &createdAt, &updatedAt, &threadsEnabled, &allowUserMainFeed, &e2eEnabled)
+		&lastMsg, &createdAt, &updatedAt, &threadsEnabled, &allowUserMainFeed, &e2eEnabled, &allowGuests)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -240,6 +240,7 @@ func scanChatRow(row pgx.Row) (*ChatRow, error) {
 		ThreadsEnabled:    threadsEnabled,
 		AllowUserMainFeed: allowUserMainFeed,
 		E2EEnabled:        e2eEnabled,
+		AllowGuests:       allowGuests,
 	}
 	if spaceID.Valid {
 		if sid, perr := uuid.Parse(spaceID.String); perr == nil {
@@ -292,6 +293,14 @@ SELECT role FROM chat_members WHERE chat_id = $1 AND profile_id = $2
 
 // AddGroupMembers inserts new members into a standalone group chat.
 func (s *DMStore) AddGroupMembers(ctx context.Context, chatID uuid.UUID, profileIDs []uuid.UUID) ([]uuid.UUID, error) {
+	return s.AddGroupMembersWithGuestAdmission(ctx, chatID, profileIDs, nil)
+}
+
+// AddGroupMembersWithGuestAdmission admits new guest members only while the
+// locked chat row still allows guests. Existing members are excluded before the
+// admission decision, so a guest admitted before a later disable remains an
+// idempotent AddMembers target.
+func (s *DMStore) AddGroupMembersWithGuestAdmission(ctx context.Context, chatID uuid.UUID, profileIDs, guestProfileIDs []uuid.UUID) ([]uuid.UUID, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("dm store: pool not configured")
 	}
@@ -321,15 +330,20 @@ func (s *DMStore) AddGroupMembers(ctx context.Context, chatID uuid.UUID, profile
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	var chatType string
-	err = tx.QueryRow(ctx, `SELECT type FROM chats WHERE id = $1 FOR UPDATE`, chatID).Scan(&chatType)
+	var allowGuests bool
+	err = tx.QueryRow(ctx, `SELECT type, allow_guests FROM chats WHERE id = $1 FOR UPDATE`, chatID).Scan(&chatType, &allowGuests)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, pgx.ErrNoRows
 	}
 	if err != nil {
 		return nil, err
 	}
-	if chatType != "group" {
-		return nil, fmt.Errorf("add members only supported for group chats")
+	if chatType != "group" && chatType != "channel" {
+		return nil, fmt.Errorf("add members only supported for group or channel chats")
+	}
+	guestSet := make(map[uuid.UUID]struct{}, len(guestProfileIDs))
+	for _, profileID := range guestProfileIDs {
+		guestSet[profileID] = struct{}{}
 	}
 
 	var current int
@@ -351,9 +365,16 @@ SELECT 1 FROM chat_members WHERE chat_id = $1 AND profile_id = $2
 		}
 		added = append(added, pid)
 	}
+	if !allowGuests {
+		for _, profileID := range added {
+			if _, guest := guestSet[profileID]; guest {
+				return nil, ErrGuestAdmissionDisabled
+			}
+		}
+	}
 
 	projected := current + len(added)
-	if projected < groupAddMinMembers(ctx) {
+	if chatType == "group" && projected < groupAddMinMembers(ctx) {
 		return nil, ErrGroupTooFewMembers
 	}
 	if projected > GroupMemberLimit {
@@ -411,7 +432,82 @@ WHERE m.chat_id = c.id AND c.type = 'group'
 	return nil
 }
 
-// LeaveGroupChat removes the caller from a standalone group. Owners must transfer ownership first.
+// RemoveStandaloneGroupMember removes a member after checking the standalone
+// group hierarchy in the same transaction as the delete.  The chat row is
+// locked first, which serializes this with admission, role changes, and owner
+// transfer; member rows are then locked in UUID order to avoid a lock cycle
+// between concurrent moderation requests.
+func (s *DMStore) RemoveStandaloneGroupMember(ctx context.Context, chatID, actorID, targetID uuid.UUID) error {
+	if s == nil || s.Pool == nil {
+		return errors.New("dm store: pool not configured")
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var chatType string
+	var spaceID *uuid.UUID
+	if err := tx.QueryRow(ctx, `SELECT type, space_id FROM chats WHERE id = $1 FOR UPDATE`, chatID).Scan(&chatType, &spaceID); err != nil {
+		return err
+	}
+	if (chatType != "group" && chatType != "channel") || spaceID != nil {
+		return ErrRoleChangeInvalid
+	}
+
+	rows, err := tx.Query(ctx, `
+SELECT profile_id, role
+FROM chat_members
+WHERE chat_id = $1 AND profile_id = ANY($2::uuid[])
+ORDER BY profile_id
+FOR UPDATE
+`, chatID, []uuid.UUID{actorID, targetID})
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	roles := make(map[uuid.UUID]string, 2)
+	for rows.Next() {
+		var profileID uuid.UUID
+		var role string
+		if err := rows.Scan(&profileID, &role); err != nil {
+			return err
+		}
+		roles[profileID] = role
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	actorRole, actorOK := roles[actorID]
+	targetRole, targetOK := roles[targetID]
+	if !actorOK || !targetOK {
+		return ErrNotGroupMember
+	}
+	if actorRole != "owner" && actorRole != "admin" {
+		return ErrRoleChangeForbidden
+	}
+	if targetRole == "owner" {
+		return ErrCannotRemoveOwner
+	}
+	if actorRole == "admin" && targetRole != "member" {
+		return ErrRoleChangeForbidden
+	}
+
+	var memberCount int
+	if err := tx.QueryRow(ctx, `SELECT COUNT(*)::int FROM chat_members WHERE chat_id = $1`, chatID).Scan(&memberCount); err != nil {
+		return err
+	}
+	if chatType == "group" && memberCount-1 < MinGroupMembers {
+		return ErrGroupTooFewMembers
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM chat_members WHERE chat_id = $1 AND profile_id = $2`, chatID, targetID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// LeaveGroupChat removes the caller from a standalone group or channel. Owners must transfer ownership first.
 func (s *DMStore) LeaveGroupChat(ctx context.Context, chatID, profileID uuid.UUID) error {
 	if s == nil || s.Pool == nil {
 		return errors.New("dm store: pool not configured")
@@ -426,17 +522,23 @@ func (s *DMStore) LeaveGroupChat(ctx context.Context, chatID, profileID uuid.UUI
 	if role == "owner" {
 		return ErrOwnerMustTransfer
 	}
-	count, err := s.CountChatMembers(ctx, chatID)
-	if err != nil {
+	var chatType string
+	if err := s.Pool.QueryRow(ctx, `SELECT type FROM chats WHERE id = $1`, chatID).Scan(&chatType); err != nil {
 		return err
 	}
-	if count-1 < MinGroupMembers {
-		return ErrGroupTooFewMembers
+	if chatType == "group" {
+		count, err := s.CountChatMembers(ctx, chatID)
+		if err != nil {
+			return err
+		}
+		if count-1 < MinGroupMembers {
+			return ErrGroupTooFewMembers
+		}
 	}
 	ct, err := s.Pool.Exec(ctx, `
 DELETE FROM chat_members m
 USING chats c
-WHERE m.chat_id = c.id AND c.type = 'group'
+WHERE m.chat_id = c.id AND c.type IN ('group', 'channel') AND c.space_id IS NULL
   AND m.chat_id = $1 AND m.profile_id = $2
 `, chatID, profileID)
 	if err != nil {
@@ -448,6 +550,67 @@ WHERE m.chat_id = c.id AND c.type = 'group'
 	return nil
 }
 
+// SetStandaloneGroupMemberRole mutates a standalone group membership role while
+// holding the chat and both membership rows. This serializes concurrent role
+// changes with ownership transfers.
+func (s *DMStore) SetStandaloneGroupMemberRole(ctx context.Context, chatID, actorID, targetID uuid.UUID, role string) error {
+	if s == nil || s.Pool == nil {
+		return errors.New("dm store: pool not configured")
+	}
+	if role != "admin" && role != "member" {
+		return ErrRoleChangeInvalid
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var chatType string
+	var spaceID *uuid.UUID
+	if err := tx.QueryRow(ctx, `SELECT type, space_id FROM chats WHERE id = $1 FOR UPDATE`, chatID).Scan(&chatType, &spaceID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return pgx.ErrNoRows
+		}
+		return err
+	}
+	if chatType != "group" || spaceID != nil {
+		return ErrRoleChangeInvalid
+	}
+
+	roles, err := lockGroupMemberRoles(ctx, tx, chatID, actorID, targetID)
+	if err != nil {
+		return err
+	}
+	actorRole, actorOK := roles[actorID]
+	targetRole, targetOK := roles[targetID]
+	if !actorOK || !targetOK {
+		return ErrNotGroupMember
+	}
+	if targetRole == "owner" {
+		return ErrRoleChangeInvalid
+	}
+	if role == "admin" {
+		if targetRole != "member" {
+			return ErrRoleChangeInvalid
+		}
+		if actorRole != "owner" && actorRole != "admin" {
+			return ErrRoleChangeForbidden
+		}
+	} else {
+		if targetRole != "admin" {
+			return ErrRoleChangeInvalid
+		}
+		if actorRole != "owner" {
+			return ErrRoleChangeForbidden
+		}
+	}
+	if _, err := tx.Exec(ctx, `UPDATE chat_members SET role = $3 WHERE chat_id = $1 AND profile_id = $2`, chatID, targetID, role); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
 // TransferGroupOwnership moves the owner role to another member.
 func (s *DMStore) TransferGroupOwnership(ctx context.Context, chatID, ownerID, newOwnerID uuid.UUID) error {
 	if s == nil || s.Pool == nil {
@@ -456,54 +619,76 @@ func (s *DMStore) TransferGroupOwnership(ctx context.Context, chatID, ownerID, n
 	if ownerID == newOwnerID {
 		return errors.New("new owner must differ from current owner")
 	}
-	role, err := s.GetMemberRole(ctx, chatID, ownerID)
-	if err != nil {
-		return err
-	}
-	if role != "owner" {
-		return ErrNotGroupOwner
-	}
-	newRole, err := s.GetMemberRole(ctx, chatID, newOwnerID)
-	if err != nil {
-		return err
-	}
-	if newRole == "" {
-		return pgx.ErrNoRows
-	}
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	ct, err := tx.Exec(ctx, `
-UPDATE chat_members SET role = 'member'
-WHERE chat_id = $1 AND profile_id = $2 AND role = 'owner'
-`, chatID, ownerID)
-	if err != nil {
+	var chatType string
+	var spaceID *uuid.UUID
+	if err := tx.QueryRow(ctx, `SELECT type, space_id FROM chats WHERE id = $1 FOR UPDATE`, chatID).Scan(&chatType, &spaceID); err != nil {
 		return err
 	}
-	if ct.RowsAffected() == 0 {
+	if chatType != "group" || spaceID != nil {
 		return ErrNotGroupOwner
 	}
-	ct, err = tx.Exec(ctx, `
-UPDATE chat_members SET role = 'owner'
-WHERE chat_id = $1 AND profile_id = $2
-`, chatID, newOwnerID)
+	roles, err := lockGroupMemberRoles(ctx, tx, chatID, ownerID, newOwnerID)
 	if err != nil {
 		return err
 	}
-	if ct.RowsAffected() == 0 {
+	ownerRole, ownerOK := roles[ownerID]
+	newOwnerRole, newOwnerOK := roles[newOwnerID]
+	if !ownerOK || !newOwnerOK {
 		return pgx.ErrNoRows
+	}
+	if ownerRole != "owner" {
+		return ErrNotGroupOwner
+	}
+	_ = newOwnerRole
+	if _, err := tx.Exec(ctx, `UPDATE chat_members SET role = 'member' WHERE chat_id = $1 AND profile_id = $2`, chatID, ownerID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE chat_members SET role = 'owner' WHERE chat_id = $1 AND profile_id = $2`, chatID, newOwnerID); err != nil {
+		return err
 	}
 	return tx.Commit(ctx)
 }
 
+// lockGroupMemberRoles takes membership locks in a deterministic order.  All
+// standalone role mutations call it only after locking the chat row.
+func lockGroupMemberRoles(ctx context.Context, tx pgx.Tx, chatID uuid.UUID, ids ...uuid.UUID) (map[uuid.UUID]string, error) {
+	rows, err := tx.Query(ctx, `
+SELECT profile_id, role
+FROM chat_members
+WHERE chat_id = $1 AND profile_id = ANY($2::uuid[])
+ORDER BY profile_id
+FOR UPDATE
+`, chatID, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	roles := make(map[uuid.UUID]string, len(ids))
+	for rows.Next() {
+		var profileID uuid.UUID
+		var role string
+		if err := rows.Scan(&profileID, &role); err != nil {
+			return nil, err
+		}
+		roles[profileID] = role
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return roles, nil
+}
+
 // UpdateGroupChat updates mutable group/channel fields.
-func (s *DMStore) UpdateGroupChat(ctx context.Context, chatID uuid.UUID, name, avatarURL, topic *string, slowModeSeconds *int32, threadsEnabled, allowUserMainFeed *bool) (*ChatRow, error) {
+func (s *DMStore) UpdateGroupChat(ctx context.Context, chatID uuid.UUID, name, avatarURL, topic *string, slowModeSeconds *int32, threadsEnabled, allowUserMainFeed, allowGuests *bool) (*ChatRow, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("dm store: pool not configured")
 	}
-	if name == nil && avatarURL == nil && topic == nil && slowModeSeconds == nil && threadsEnabled == nil && allowUserMainFeed == nil {
+	if name == nil && avatarURL == nil && topic == nil && slowModeSeconds == nil && threadsEnabled == nil && allowUserMainFeed == nil && allowGuests == nil {
 		return s.FindChatByID(ctx, chatID)
 	}
 	sets := make([]string, 0, 8)
@@ -539,6 +724,11 @@ func (s *DMStore) UpdateGroupChat(ctx context.Context, chatID uuid.UUID, name, a
 		args = append(args, *allowUserMainFeed)
 		argN++
 	}
+	if allowGuests != nil {
+		sets = append(sets, fmt.Sprintf("allow_guests = $%d", argN))
+		args = append(args, *allowGuests)
+		argN++
+	}
 	sets = append(sets, "updated_at = now()")
 	args = append(args, chatID)
 	q := fmt.Sprintf(`
@@ -546,7 +736,7 @@ UPDATE chats
 SET %s
 WHERE id = $%d AND type IN ('group', 'channel')
 RETURNING id, type, space_id, name, avatar_url, topic, creator_profile_id, slow_mode_seconds,
-          last_message_at, created_at, updated_at, threads_enabled, allow_user_main_feed, e2e_enabled
+          last_message_at, created_at, updated_at, threads_enabled, allow_user_main_feed, e2e_enabled, allow_guests
 `, strings.Join(sets, ", "), argN)
 	return scanChatRow(s.Pool.QueryRow(ctx, q, args...))
 }
@@ -574,9 +764,13 @@ func optionalTopicPtr(topic *string) *string {
 }
 
 var (
-	ErrGroupTooFewMembers = errors.New("group must have at least 3 members")
-	ErrGroupMemberLimit   = errors.New("group member limit is 500")
-	ErrCannotRemoveOwner  = errors.New("cannot remove group owner")
-	ErrNotGroupOwner      = errors.New("caller is not group owner")
-	ErrOwnerMustTransfer  = errors.New("group owner must transfer ownership before leaving")
+	ErrGroupTooFewMembers     = errors.New("group must have at least 3 members")
+	ErrGroupMemberLimit       = errors.New("group member limit is 500")
+	ErrCannotRemoveOwner      = errors.New("cannot remove group owner")
+	ErrNotGroupOwner          = errors.New("caller is not group owner")
+	ErrOwnerMustTransfer      = errors.New("group owner must transfer ownership before leaving")
+	ErrNotGroupMember         = errors.New("group member not found")
+	ErrRoleChangeForbidden    = errors.New("caller cannot make this group role change")
+	ErrRoleChangeInvalid      = errors.New("invalid group role change")
+	ErrGuestAdmissionDisabled = errors.New("guest admission is disabled for this chat")
 )
