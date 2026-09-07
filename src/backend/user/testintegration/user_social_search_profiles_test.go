@@ -53,6 +53,15 @@ func (m integrationAccountProfiles) ProfileIDsForAccount(_ context.Context, acco
 	return m[accountID], nil
 }
 
+// allowDeletedAccountsChecker is the healthy Auth deletion-checker contract
+// for this User/Social integration fixture. Deletion behavior is covered by
+// grpcsvc's dedicated visibility tests.
+type allowDeletedAccountsChecker struct{}
+
+func (allowDeletedAccountsChecker) DeletedAmong(context.Context, []uuid.UUID) (map[uuid.UUID]struct{}, error) {
+	return map[uuid.UUID]struct{}{}, nil
+}
+
 type stubAvatarPresigner struct{}
 
 func (stubAvatarPresigner) PresignPut(_ context.Context, objectKey, contentType string, contentLength int64) (string, map[string]string, time.Time, error) {
@@ -111,6 +120,7 @@ func TestSearchProfiles_UserSocialIntegration(t *testing.T) {
 	userv1.RegisterUserServiceServer(userGRPCSrv, &grpcsvc.UserGRPC{
 		Profiles:            store.NewProfileStore(userPool),
 		Presence:            store.NewPresenceStore(rdb),
+		DeletedAccounts:     allowDeletedAccountsChecker{},
 		Blocks:              grpcsvc.NewSocialGRPCBlocks(socialConn),
 		AvatarPresigner:     stubAvatarPresigner{},
 		AvatarPublicBaseURL: "https://cdn-test.example",

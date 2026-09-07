@@ -98,6 +98,7 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 		Profiles:            store.NewProfileStore(pool),
 		Privacy:             privacyStore,
 		Presence:            store.NewPresenceStore(rdb),
+		DeletedAccounts:     &deletedAccountCheckerStub{},
 		Blocks:              blocker,
 		AvatarPresigner:     stubAvatarPresigner{},
 		AvatarPublicBaseURL: "https://cdn-test.example",

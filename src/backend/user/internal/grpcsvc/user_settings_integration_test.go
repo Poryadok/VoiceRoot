@@ -37,9 +37,10 @@ func startUserSettingsTestServer(t *testing.T, profiles *store.ProfileStore, pri
 	t.Cleanup(func() { _ = lis.Close() })
 	srv := grpc.NewServer()
 	userv1.RegisterUserServiceServer(srv, &UserGRPC{
-		Profiles: profiles,
-		Privacy:  privacy,
-		Presence: store.NewPresenceStore(rdb),
+		Profiles:        profiles,
+		Privacy:         privacy,
+		Presence:        store.NewPresenceStore(rdb),
+		DeletedAccounts: &deletedAccountCheckerStub{},
 	})
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(srv.Stop)

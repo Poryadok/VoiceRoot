@@ -49,6 +49,7 @@ func startUserGRPCForSubscriptionTests(t *testing.T, profiles *store.ProfileStor
 	userv1.RegisterUserServiceServer(srv, &UserGRPC{
 		Profiles:            profiles,
 		Presence:            store.NewPresenceStore(rdb),
+		DeletedAccounts:     &deletedAccountCheckerStub{},
 		AvatarPresigner:     stubAvatarPresigner{},
 		AvatarPublicBaseURL: "https://cdn-test.example",
 	})
