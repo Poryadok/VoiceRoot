@@ -237,6 +237,11 @@ final class LiveGatewayUnavailable extends LiveGatewayProbe {
   final String reason;
 }
 
+String _sanitizedGatewayFailure(GatewayHttpFailure failure) {
+  final error = failure.error;
+  return '${error.errorCode} (HTTP ${error.statusCode})';
+}
+
 /// Probes Gateway + Auth upstream (call only when [runLiveIntegration] is true).
 Future<LiveGatewayProbe> probeLiveGateway() async {
   await clearLiveAuthRateLimit();
@@ -403,7 +408,8 @@ class LiveGatewayContext {
         return;
       }
 
-      final error = (result as GatewayHttpFailure).error;
+      final failure = result as GatewayHttpFailure;
+      final error = failure.error;
       final isVisibilityTransient =
           error.statusCode == HttpStatus.serviceUnavailable &&
           error.errorCode == 'unavailable' &&
@@ -411,7 +417,7 @@ class LiveGatewayContext {
       if (!isVisibilityTransient || !DateTime.now().isBefore(deadline)) {
         fail(
           'verified account did not become visible: '
-          '${error.errorCode} (${error.message}, HTTP ${error.statusCode})',
+          '${_sanitizedGatewayFailure(failure)}',
         );
       }
       await Future<void>.delayed(const Duration(milliseconds: 250));

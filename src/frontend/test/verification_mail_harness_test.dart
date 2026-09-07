@@ -134,4 +134,82 @@ void main() {
       expect(refreshTokens, ['pending-refresh', 'refresh-1']);
     },
   );
+
+  test(
+    'account visibility failure omits response message from diagnostics',
+    () async {
+      const sensitiveMessage = 'Bearer access-token-must-not-appear';
+      final client = MockClient((request) async {
+        switch (request.url.path) {
+          case '/api/v1/auth/otp/send':
+            return http.Response('', 204);
+          case '/emails/latest':
+            return http.Response(
+              jsonEncode({
+                'to': ['failure@voice-qa.test'],
+                'text': 'Your Voice verification code is 654321.',
+              }),
+              200,
+            );
+          case '/api/v1/auth/otp/verify':
+            return http.Response(
+              jsonEncode({
+                'session': {
+                  'access_token': 'verified-access',
+                  'refresh_token': 'verified-refresh',
+                  'expires_in_seconds': 900,
+                  'account_id': 'account-1',
+                  'profile_id': 'profile-1',
+                  'account_type': 'regular',
+                },
+              }),
+              200,
+            );
+          case '/api/v1/users/me':
+            return http.Response(
+              jsonEncode({
+                'error': 'visibility_denied',
+                'message': sensitiveMessage,
+              }),
+              403,
+            );
+          default:
+            return http.Response('not found', 404);
+        }
+      });
+      final context = LiveGatewayContext(
+        config: const GatewayConfig(baseUrl: 'http://gateway.test'),
+        httpClient: client,
+      );
+      const pending = AuthSession(
+        accessToken: 'pending-access',
+        refreshToken: 'pending-refresh',
+        accountId: 'account-1',
+        activeProfileId: 'profile-1',
+        expiresInSeconds: 900,
+        accountType: 'guest',
+      );
+
+      await expectLater(
+        context.completeEmailVerification(
+          email: 'failure@voice-qa.test',
+          pendingSession: pending,
+        ),
+        throwsA(
+          isA<TestFailure>()
+              .having((failure) => failure.message, 'message', contains('403'))
+              .having(
+                (failure) => failure.message,
+                'message',
+                contains('visibility_denied'),
+              )
+              .having(
+                (failure) => failure.message,
+                'message',
+                isNot(contains(sensitiveMessage)),
+              ),
+        ),
+      );
+    },
+  );
 }
