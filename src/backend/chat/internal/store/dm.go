@@ -29,6 +29,8 @@ type ChatRow struct {
 	AllowUserMainFeed bool
 	E2EEnabled        bool
 	AllowGuests       bool
+	// IsPinned is populated only for folder-scoped ListChats results.
+	IsPinned bool
 }
 
 // DMStore persists DM chats and membership (app stack).

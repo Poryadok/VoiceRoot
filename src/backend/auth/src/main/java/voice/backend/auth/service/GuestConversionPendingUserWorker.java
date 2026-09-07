@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import voice.backend.auth.repository.GuestConversionAdvanceResult;
 import voice.backend.auth.repository.GuestConversionOperation;
 import voice.backend.auth.repository.GuestConversionOperationRepository;
@@ -67,16 +68,33 @@ public final class GuestConversionPendingUserWorker {
     }
   }
 
-  private void process(GuestConversionOperation operation, Instant now) {
+  /** Completes the User-policy and Auth-local stages for one just-accepted conversion. */
+  public boolean processDueForAccount(UUID accountId, Duration leaseDuration) {
+    Objects.requireNonNull(accountId, "accountId");
+    Objects.requireNonNull(leaseDuration, "leaseDuration");
+    if (leaseDuration.isZero() || leaseDuration.isNegative()) {
+      throw new IllegalArgumentException("leaseDuration must be positive");
+    }
+    Instant now = Instant.now(clock);
+    return operations
+        .leaseDueForAccount(
+            GuestConversionState.PENDING_USER, accountId, now, now.plus(leaseDuration))
+        .map(operation -> process(operation, Instant.now(clock)))
+        .orElse(false);
+  }
+
+  private boolean process(GuestConversionOperation operation, Instant now) {
     try {
       primaryProfiles.clearGuestAccountFlag(operation.accountId());
       GuestConversionAdvanceResult result =
           localPromotion.promoteAndAdvance(operation, Instant.now(clock));
       if (result == GuestConversionAdvanceResult.APPLIED
-          || result == GuestConversionAdvanceResult.ALREADY_APPLIED
-          || result == GuestConversionAdvanceResult.LEASE_LOST
+          || result == GuestConversionAdvanceResult.ALREADY_APPLIED) {
+        return true;
+      }
+      if (result == GuestConversionAdvanceResult.LEASE_LOST
           || result == GuestConversionAdvanceResult.NOT_FOUND) {
-        return;
+        return false;
       }
       throw new IllegalStateException("unsupported guest conversion advance result");
     } catch (RuntimeException failure) {
@@ -91,6 +109,7 @@ public final class GuestConversionPendingUserWorker {
           failureCode(failure),
           nextAttemptAt,
           failureNow);
+      return false;
     }
   }
 

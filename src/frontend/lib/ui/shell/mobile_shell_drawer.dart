@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../backend/chats_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/chat_navigation_providers.dart';
 import '../../state/message_requests_providers.dart';
@@ -12,10 +13,7 @@ import 'message_requests_folder.dart';
 
 /// Mobile drawer stub (R2-A04 incremental): folders, Quick Access, settings entry.
 class MobileShellDrawer extends ConsumerWidget {
-  const MobileShellDrawer({
-    super.key,
-    required this.onOpenSettings,
-  });
+  const MobileShellDrawer({super.key, required this.onOpenSettings});
 
   static const drawerKey = Key('mobile_shell_drawer');
 
@@ -40,9 +38,9 @@ class MobileShellDrawer extends ConsumerWidget {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
               child: Text(
                 l10n.chatFoldersTitle,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: voice.textSecondary,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(color: voice.textSecondary),
               ),
             ),
             foldersAsync.when(
@@ -64,8 +62,7 @@ class MobileShellDrawer extends ConsumerWidget {
                       },
                     ),
                   MessageRequestsFolderDrawerTile(
-                    selected:
-                        isMessageRequestsFolderSelected(selectedFolderId),
+                    selected: isMessageRequestsFolderSelected(selectedFolderId),
                     onTap: () {
                       final current = ref.read(selectedChatFolderIdProvider);
                       selectChatFolder(
@@ -89,18 +86,16 @@ class MobileShellDrawer extends ConsumerWidget {
                 ],
               ),
               loading: () => const LinearProgressIndicator(minHeight: 2),
-              error: (_, _) => ListTile(
-                title: Text(l10n.backendUnavailable),
-              ),
+              error: (_, _) => ListTile(title: Text(l10n.backendUnavailable)),
             ),
             const Divider(),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
               child: Text(
                 l10n.chatQuickAccessTitle,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: voice.textSecondary,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(color: voice.textSecondary),
               ),
             ),
             qaAsync.when(
@@ -113,19 +108,31 @@ class MobileShellDrawer extends ConsumerWidget {
                     ),
                   );
                 }
-                return Column(
-                  children: [
-                    for (final item in data.items)
-                      ListTile(
-                        key: ChatRailQuickAccessSection.itemKey(item.chatId),
-                        leading: const Icon(Icons.star_outline),
-                        title: Text(item.chat?.name ?? item.chatId),
-                        onTap: () {
-                          shellNav.selectChatFromHome(item.chatId);
-                          Navigator.of(context).pop();
-                        },
-                      ),
-                  ],
+                return ReorderableListView.builder(
+                  key: const Key('mobile_drawer_quick_access_reorder'),
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  buildDefaultDragHandles: data.items.length > 1,
+                  itemCount: data.items.length,
+                  onReorder: (oldIndex, newIndex) => _reorderQuickAccess(
+                    context,
+                    ref,
+                    data.items,
+                    oldIndex,
+                    newIndex,
+                  ),
+                  itemBuilder: (context, index) {
+                    final item = data.items[index];
+                    return ListTile(
+                      key: ChatRailQuickAccessSection.itemKey(item.chatId),
+                      leading: const Icon(Icons.star_outline),
+                      title: Text(item.chat?.name ?? item.chatId),
+                      onTap: () {
+                        shellNav.selectChatFromHome(item.chatId);
+                        Navigator.of(context).pop();
+                      },
+                    );
+                  },
                 );
               },
               loading: () => const LinearProgressIndicator(minHeight: 2),
@@ -145,5 +152,24 @@ class MobileShellDrawer extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _reorderQuickAccess(
+    BuildContext context,
+    WidgetRef ref,
+    List<VoiceQuickAccessItem> items,
+    int oldIndex,
+    int newIndex,
+  ) async {
+    if (newIndex > oldIndex) newIndex -= 1;
+    final chatIds = items.map((item) => item.chatId).toList();
+    final moved = chatIds.removeAt(oldIndex);
+    chatIds.insert(newIndex, moved);
+    final message = await ref.read(quickAccessActionsProvider).reorder(chatIds);
+    if (message != null && context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    }
   }
 }
