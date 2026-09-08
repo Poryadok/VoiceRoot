@@ -27,6 +27,7 @@ func TestVoiceGRPCVoiceRoom_freeRejects33rdParticipant(t *testing.T) {
 	}
 	svc := newTestVoiceService(fixedVoiceNow(), &recordingEvents{})
 	svc.SpaceMembers = &mapSpaceMembers{members: members}
+	svc.VoiceRoomAccessResolver = fixtureCanonicalVoiceRoomResolver{rooms: map[string]string{voiceRoomID: spaceID}, members: members}
 	join := &callsv1.JoinVoiceRoomRequest{
 		VoiceRoomId: voiceRoomID,
 		Space:       &spacev1.SpaceRef{Id: spaceID},
@@ -52,6 +53,7 @@ func TestVoiceGRPCVoiceRoom_spaceProAllows33rdParticipant(t *testing.T) {
 	}
 	svc := newTestVoiceService(fixedVoiceNow(), &recordingEvents{})
 	svc.SpaceMembers = &mapSpaceMembers{members: members}
+	svc.VoiceRoomAccessResolver = fixtureCanonicalVoiceRoomResolver{rooms: map[string]string{voiceRoomID: spaceID}, members: members}
 	svc.SpacePro = staticSpacePro{spaces: map[string]bool{spaceID: true}}
 	join := &callsv1.JoinVoiceRoomRequest{
 		VoiceRoomId: voiceRoomID,

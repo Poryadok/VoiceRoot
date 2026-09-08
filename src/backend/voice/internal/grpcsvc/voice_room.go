@@ -36,9 +36,14 @@ func (s *VoiceGRPC) JoinVoiceRoom(ctx context.Context, req *callsv1.JoinVoiceRoo
 	if _, err := uuid.Parse(spaceID); err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid space id")
 	}
-	if err := s.ensureSpaceMember(ctx, spaceID, profileID); err != nil {
+	access, err := s.resolveCanonicalVoiceRoomAccess(ctx, voiceRoomID, profileID)
+	if err != nil {
 		return nil, err
 	}
+	if access.SpaceID != spaceID {
+		return nil, status.Error(codes.PermissionDenied, "space assertion does not match canonical voice room owner")
+	}
+	spaceID = access.SpaceID
 	if err := s.ensureVoiceJoinPermission(ctx, spaceID, profileID, voiceRoomID); err != nil {
 		return nil, err
 	}
@@ -65,6 +70,8 @@ func (s *VoiceGRPC) JoinVoiceRoom(ctx context.Context, req *callsv1.JoinVoiceRoo
 		s.publishVoiceMemberJoined(ctx, call, profileID)
 	} else if err != nil {
 		return nil, storeErr(err)
+	} else if call.SpaceID != access.SpaceID {
+		return nil, status.Error(codes.PermissionDenied, "stored voice room space does not match canonical owner")
 	}
 
 	if !call.IsParticipant(profileID) {

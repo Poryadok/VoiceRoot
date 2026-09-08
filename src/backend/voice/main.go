@@ -17,12 +17,12 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	grpcsvc "voice/backend/voice/internal/grpcsvc"
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
-	"voice/backend/pkg/runtimeconfig"
 	voiceprom "voice/backend/pkg/promhttp"
+	"voice/backend/pkg/runtimeconfig"
+	grpcsvc "voice/backend/voice/internal/grpcsvc"
 	"voice/backend/voice/internal/livekit"
 	"voice/backend/voice/internal/s2s"
 	voicestore "voice/backend/voice/internal/store"
@@ -31,9 +31,9 @@ import (
 	callsv1 "voice.app/voice/calls/v1"
 	chatv1 "voice.app/voice/chat/v1"
 	rolev1 "voice.app/voice/role/v1"
+	spacev1 "voice.app/voice/space/v1"
 	subscriptionv1 "voice.app/voice/subscription/v1"
 	userv1 "voice.app/voice/user/v1"
-	spacev1 "voice.app/voice/space/v1"
 )
 
 const serviceName = "voice"
@@ -95,6 +95,7 @@ func main() {
 	var callFriends grpcsvc.CallProfileFriendChecker
 	var callSpaceCoMembership grpcsvc.CallSpaceCoMembershipChecker
 	var spaceMembers grpcsvc.SpaceMembership
+	var voiceRoomAccessResolver grpcsvc.AuthoritativeVoiceRoomAccessResolver
 	var spacePro grpcsvc.SpaceProLookup
 	var rolePerms grpcsvc.RolePermissionChecker
 	if userAddr := strings.TrimSpace(os.Getenv("USER_GRPC_ADDR")); userAddr != "" {
@@ -122,6 +123,7 @@ func main() {
 		spaceCli := spacev1.NewSpaceServiceClient(spconn)
 		callSpaceCoMembership = s2s.NewGRPCSpaceCoMembership(spconn)
 		spaceMembers = s2s.NewGRPCSpaceMembership(spaceCli)
+		voiceRoomAccessResolver = s2s.NewGRPCVoiceRoomAccessResolver(spaceCli, os.Getenv("SPACE_VOICE_S2S_TOKEN"))
 	}
 	if subAddr := strings.TrimSpace(os.Getenv("SUBSCRIPTION_GRPC_ADDR")); subAddr != "" {
 		subconn, err := grpc.NewClient(grpcclient.DialTarget(subAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -142,14 +144,15 @@ func main() {
 
 	tokenTTL := time.Hour
 	voiceSvc := &grpcsvc.VoiceGRPC{
-		Calls:             callStore,
-		ChatMembers:       chatMembers,
-		SpaceMembers:      spaceMembers,
-		SpacePro:          spacePro,
-		Roles:             rolePerms,
-		Privacy:           callPrivacy,
-		Friends:           callFriends,
-		SpaceCoMembership: callSpaceCoMembership,
+		Calls:                   callStore,
+		ChatMembers:             chatMembers,
+		SpaceMembers:            spaceMembers,
+		VoiceRoomAccessResolver: voiceRoomAccessResolver,
+		SpacePro:                spacePro,
+		Roles:                   rolePerms,
+		Privacy:                 callPrivacy,
+		Friends:                 callFriends,
+		SpaceCoMembership:       callSpaceCoMembership,
 		Tokens: livekit.NewHS256TokenIssuer(
 			strings.TrimSpace(os.Getenv("LIVEKIT_API_KEY")),
 			strings.TrimSpace(os.Getenv("LIVEKIT_API_SECRET")),
