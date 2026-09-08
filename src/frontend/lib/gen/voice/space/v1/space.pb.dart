@@ -6327,6 +6327,160 @@ class AreCoMembersResponse extends $pb.GeneratedMessage {
   void clearCoMembers() => $_clearField(1);
 }
 
+/// ResolveVoiceRoomAccessRequest is intentionally independent of caller-forwarded
+/// identity metadata: Voice supplies the actor it is authorizing explicitly.
+class ResolveVoiceRoomAccessRequest extends $pb.GeneratedMessage {
+  factory ResolveVoiceRoomAccessRequest({
+    $core.String? voiceRoomId,
+    $core.String? profileId,
+  }) {
+    final result = create();
+    if (voiceRoomId != null) result.voiceRoomId = voiceRoomId;
+    if (profileId != null) result.profileId = profileId;
+    return result;
+  }
+
+  ResolveVoiceRoomAccessRequest._();
+
+  factory ResolveVoiceRoomAccessRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ResolveVoiceRoomAccessRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ResolveVoiceRoomAccessRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'voiceRoomId')
+    ..aOS(2, _omitFieldNames ? '' : 'profileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolveVoiceRoomAccessRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolveVoiceRoomAccessRequest copyWith(
+          void Function(ResolveVoiceRoomAccessRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as ResolveVoiceRoomAccessRequest))
+          as ResolveVoiceRoomAccessRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ResolveVoiceRoomAccessRequest create() =>
+      ResolveVoiceRoomAccessRequest._();
+  @$core.override
+  ResolveVoiceRoomAccessRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ResolveVoiceRoomAccessRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ResolveVoiceRoomAccessRequest>(create);
+  static ResolveVoiceRoomAccessRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get voiceRoomId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set voiceRoomId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasVoiceRoomId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearVoiceRoomId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get profileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set profileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProfileId() => $_clearField(2);
+}
+
+/// ResolveVoiceRoomAccessResponse gives Voice canonical room ownership and the
+/// current exact membership evidence. A room is active while it exists.
+class ResolveVoiceRoomAccessResponse extends $pb.GeneratedMessage {
+  factory ResolveVoiceRoomAccessResponse({
+    $core.String? spaceId,
+    $core.bool? member,
+    $core.bool? active,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (member != null) result.member = member;
+    if (active != null) result.active = active;
+    return result;
+  }
+
+  ResolveVoiceRoomAccessResponse._();
+
+  factory ResolveVoiceRoomAccessResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ResolveVoiceRoomAccessResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ResolveVoiceRoomAccessResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOB(2, _omitFieldNames ? '' : 'member')
+    ..aOB(3, _omitFieldNames ? '' : 'active')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolveVoiceRoomAccessResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolveVoiceRoomAccessResponse copyWith(
+          void Function(ResolveVoiceRoomAccessResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as ResolveVoiceRoomAccessResponse))
+          as ResolveVoiceRoomAccessResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ResolveVoiceRoomAccessResponse create() =>
+      ResolveVoiceRoomAccessResponse._();
+  @$core.override
+  ResolveVoiceRoomAccessResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ResolveVoiceRoomAccessResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ResolveVoiceRoomAccessResponse>(create);
+  static ResolveVoiceRoomAccessResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.bool get member => $_getBF(1);
+  @$pb.TagNumber(2)
+  set member($core.bool value) => $_setBool(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasMember() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearMember() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.bool get active => $_getBF(2);
+  @$pb.TagNumber(3)
+  set active($core.bool value) => $_setBool(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasActive() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearActive() => $_clearField(3);
+}
+
 class SyncSpaceProSubscriptionRequest extends $pb.GeneratedMessage {
   factory SyncSpaceProSubscriptionRequest({
     $core.String? spaceId,

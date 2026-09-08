@@ -59,6 +59,7 @@ const (
 	SpaceService_CreateFromTemplate_FullMethodName       = "/voice.space.v1.SpaceService/CreateFromTemplate"
 	SpaceService_GetAuditLog_FullMethodName              = "/voice.space.v1.SpaceService/GetAuditLog"
 	SpaceService_AreCoMembers_FullMethodName             = "/voice.space.v1.SpaceService/AreCoMembers"
+	SpaceService_ResolveVoiceRoomAccess_FullMethodName   = "/voice.space.v1.SpaceService/ResolveVoiceRoomAccess"
 	SpaceService_SyncSpaceProSubscription_FullMethodName = "/voice.space.v1.SpaceService/SyncSpaceProSubscription"
 )
 
@@ -111,6 +112,9 @@ type SpaceServiceClient interface {
 	GetAuditLog(ctx context.Context, in *GetAuditLogRequest, opts ...grpc.CallOption) (*GetAuditLogResponse, error)
 	// S2S: privacy audience "space members" — shared membership between two profiles.
 	AreCoMembers(ctx context.Context, in *AreCoMembersRequest, opts ...grpc.CallOption) (*AreCoMembersResponse, error)
+	// S2S: canonical owner and exact membership evidence for Voice authorization.
+	// This endpoint is restricted to the verified Voice service identity.
+	ResolveVoiceRoomAccess(ctx context.Context, in *ResolveVoiceRoomAccessRequest, opts ...grpc.CallOption) (*ResolveVoiceRoomAccessResponse, error)
 	// S2S: Subscription Service syncs Space Pro entitlement cache after webhook.
 	SyncSpaceProSubscription(ctx context.Context, in *SyncSpaceProSubscriptionRequest, opts ...grpc.CallOption) (*SyncSpaceProSubscriptionResponse, error)
 }
@@ -523,6 +527,16 @@ func (c *spaceServiceClient) AreCoMembers(ctx context.Context, in *AreCoMembersR
 	return out, nil
 }
 
+func (c *spaceServiceClient) ResolveVoiceRoomAccess(ctx context.Context, in *ResolveVoiceRoomAccessRequest, opts ...grpc.CallOption) (*ResolveVoiceRoomAccessResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResolveVoiceRoomAccessResponse)
+	err := c.cc.Invoke(ctx, SpaceService_ResolveVoiceRoomAccess_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *spaceServiceClient) SyncSpaceProSubscription(ctx context.Context, in *SyncSpaceProSubscriptionRequest, opts ...grpc.CallOption) (*SyncSpaceProSubscriptionResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SyncSpaceProSubscriptionResponse)
@@ -582,6 +596,9 @@ type SpaceServiceServer interface {
 	GetAuditLog(context.Context, *GetAuditLogRequest) (*GetAuditLogResponse, error)
 	// S2S: privacy audience "space members" — shared membership between two profiles.
 	AreCoMembers(context.Context, *AreCoMembersRequest) (*AreCoMembersResponse, error)
+	// S2S: canonical owner and exact membership evidence for Voice authorization.
+	// This endpoint is restricted to the verified Voice service identity.
+	ResolveVoiceRoomAccess(context.Context, *ResolveVoiceRoomAccessRequest) (*ResolveVoiceRoomAccessResponse, error)
 	// S2S: Subscription Service syncs Space Pro entitlement cache after webhook.
 	SyncSpaceProSubscription(context.Context, *SyncSpaceProSubscriptionRequest) (*SyncSpaceProSubscriptionResponse, error)
 	mustEmbedUnimplementedSpaceServiceServer()
@@ -713,6 +730,9 @@ func (UnimplementedSpaceServiceServer) GetAuditLog(context.Context, *GetAuditLog
 }
 func (UnimplementedSpaceServiceServer) AreCoMembers(context.Context, *AreCoMembersRequest) (*AreCoMembersResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AreCoMembers not implemented")
+}
+func (UnimplementedSpaceServiceServer) ResolveVoiceRoomAccess(context.Context, *ResolveVoiceRoomAccessRequest) (*ResolveVoiceRoomAccessResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResolveVoiceRoomAccess not implemented")
 }
 func (UnimplementedSpaceServiceServer) SyncSpaceProSubscription(context.Context, *SyncSpaceProSubscriptionRequest) (*SyncSpaceProSubscriptionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SyncSpaceProSubscription not implemented")
@@ -1458,6 +1478,24 @@ func _SpaceService_AreCoMembers_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SpaceService_ResolveVoiceRoomAccess_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveVoiceRoomAccessRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).ResolveVoiceRoomAccess(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_ResolveVoiceRoomAccess_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).ResolveVoiceRoomAccess(ctx, req.(*ResolveVoiceRoomAccessRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _SpaceService_SyncSpaceProSubscription_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SyncSpaceProSubscriptionRequest)
 	if err := dec(in); err != nil {
@@ -1642,6 +1680,10 @@ var SpaceService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AreCoMembers",
 			Handler:    _SpaceService_AreCoMembers_Handler,
+		},
+		{
+			MethodName: "ResolveVoiceRoomAccess",
+			Handler:    _SpaceService_ResolveVoiceRoomAccess_Handler,
 		},
 		{
 			MethodName: "SyncSpaceProSubscription",
