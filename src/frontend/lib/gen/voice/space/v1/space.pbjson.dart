@@ -1995,6 +1995,37 @@ const AreCoMembersResponse$json = {
 final $typed_data.Uint8List areCoMembersResponseDescriptor = $convert.base64Decode(
     'ChRBcmVDb01lbWJlcnNSZXNwb25zZRIdCgpjb19tZW1iZXJzGAEgASgIUgljb01lbWJlcnM=');
 
+@$core.Deprecated('Use resolveVoiceRoomAccessRequestDescriptor instead')
+const ResolveVoiceRoomAccessRequest$json = {
+  '1': 'ResolveVoiceRoomAccessRequest',
+  '2': [
+    {'1': 'voice_room_id', '3': 1, '4': 1, '5': 9, '10': 'voiceRoomId'},
+    {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
+  ],
+};
+
+/// Descriptor for `ResolveVoiceRoomAccessRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List resolveVoiceRoomAccessRequestDescriptor =
+    $convert.base64Decode(
+        'Ch1SZXNvbHZlVm9pY2VSb29tQWNjZXNzUmVxdWVzdBIiCg12b2ljZV9yb29tX2lkGAEgASgJUg'
+        't2b2ljZVJvb21JZBIdCgpwcm9maWxlX2lkGAIgASgJUglwcm9maWxlSWQ=');
+
+@$core.Deprecated('Use resolveVoiceRoomAccessResponseDescriptor instead')
+const ResolveVoiceRoomAccessResponse$json = {
+  '1': 'ResolveVoiceRoomAccessResponse',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'member', '3': 2, '4': 1, '5': 8, '10': 'member'},
+    {'1': 'active', '3': 3, '4': 1, '5': 8, '10': 'active'},
+  ],
+};
+
+/// Descriptor for `ResolveVoiceRoomAccessResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List resolveVoiceRoomAccessResponseDescriptor =
+    $convert.base64Decode(
+        'Ch5SZXNvbHZlVm9pY2VSb29tQWNjZXNzUmVzcG9uc2USGQoIc3BhY2VfaWQYASABKAlSB3NwYW'
+        'NlSWQSFgoGbWVtYmVyGAIgASgIUgZtZW1iZXISFgoGYWN0aXZlGAMgASgIUgZhY3RpdmU=');
+
 @$core.Deprecated('Use syncSpaceProSubscriptionRequestDescriptor instead')
 const SyncSpaceProSubscriptionRequest$json = {
   '1': 'SyncSpaceProSubscriptionRequest',

@@ -316,6 +316,17 @@ class SpaceServiceClient extends $grpc.Client {
     return $createUnaryCall(_$areCoMembers, request, options: options);
   }
 
+  /// S2S: canonical owner and exact membership evidence for Voice authorization.
+  /// This endpoint is restricted to the verified Voice service identity.
+  $grpc.ResponseFuture<$0.ResolveVoiceRoomAccessResponse>
+      resolveVoiceRoomAccess(
+    $0.ResolveVoiceRoomAccessRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$resolveVoiceRoomAccess, request,
+        options: options);
+  }
+
   /// S2S: Subscription Service syncs Space Pro entitlement cache after webhook.
   $grpc.ResponseFuture<$0.SyncSpaceProSubscriptionResponse>
       syncSpaceProSubscription(
@@ -528,6 +539,11 @@ class SpaceServiceClient extends $grpc.Client {
           '/voice.space.v1.SpaceService/AreCoMembers',
           ($0.AreCoMembersRequest value) => value.writeToBuffer(),
           $0.AreCoMembersResponse.fromBuffer);
+  static final _$resolveVoiceRoomAccess = $grpc.ClientMethod<
+          $0.ResolveVoiceRoomAccessRequest, $0.ResolveVoiceRoomAccessResponse>(
+      '/voice.space.v1.SpaceService/ResolveVoiceRoomAccess',
+      ($0.ResolveVoiceRoomAccessRequest value) => value.writeToBuffer(),
+      $0.ResolveVoiceRoomAccessResponse.fromBuffer);
   static final _$syncSpaceProSubscription = $grpc.ClientMethod<
           $0.SyncSpaceProSubscriptionRequest,
           $0.SyncSpaceProSubscriptionResponse>(
@@ -887,6 +903,15 @@ abstract class SpaceServiceBase extends $grpc.Service {
             ($core.List<$core.int> value) =>
                 $0.AreCoMembersRequest.fromBuffer(value),
             ($0.AreCoMembersResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ResolveVoiceRoomAccessRequest,
+            $0.ResolveVoiceRoomAccessResponse>(
+        'ResolveVoiceRoomAccess',
+        resolveVoiceRoomAccess_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ResolveVoiceRoomAccessRequest.fromBuffer(value),
+        ($0.ResolveVoiceRoomAccessResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.SyncSpaceProSubscriptionRequest,
             $0.SyncSpaceProSubscriptionResponse>(
         'SyncSpaceProSubscription',
@@ -1242,6 +1267,15 @@ abstract class SpaceServiceBase extends $grpc.Service {
 
   $async.Future<$0.AreCoMembersResponse> areCoMembers(
       $grpc.ServiceCall call, $0.AreCoMembersRequest request);
+
+  $async.Future<$0.ResolveVoiceRoomAccessResponse> resolveVoiceRoomAccess_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ResolveVoiceRoomAccessRequest> $request) async {
+    return resolveVoiceRoomAccess($call, await $request);
+  }
+
+  $async.Future<$0.ResolveVoiceRoomAccessResponse> resolveVoiceRoomAccess(
+      $grpc.ServiceCall call, $0.ResolveVoiceRoomAccessRequest request);
 
   $async.Future<$0.SyncSpaceProSubscriptionResponse>
       syncSpaceProSubscription_Pre($grpc.ServiceCall $call,
