@@ -4,12 +4,12 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,7 +22,7 @@ import (
 
 // TestComposeVoiceCallBidirectionalAudio_live joins both call parties to LiveKit using
 // production JWTs from GET /api/v1/voice/calls/{room}/token, publishes synthetic PCM audio,
-// and asserts each side subscribes to the other's audio track.
+// and asserts each side receives the other's RTP audio packets.
 //
 // Opt-in (same as signaling live tests; requires LiveKit published on the host):
 //
@@ -58,8 +58,8 @@ func TestComposeVoiceCallBidirectionalAudio_live(t *testing.T) {
 	peerB := newLivekitCallPeer(ctx, t, livekitURL, tokenB.JWT, sessA.ProfileID)
 	defer peerB.close()
 
-	require.NoError(t, peerA.waitRemoteAudio(45*time.Second), "caller did not receive callee audio")
-	require.NoError(t, peerB.waitRemoteAudio(45*time.Second), "callee did not receive caller audio")
+	require.NoError(t, peerA.waitRemoteAudioRTP(45*time.Second), "caller did not receive callee RTP audio")
+	require.NoError(t, peerB.waitRemoteAudioRTP(45*time.Second), "callee did not receive caller RTP audio")
 
 	endComposeCall(t, client, base, sessA.AccessToken, call.RoomID)
 }
@@ -124,13 +124,18 @@ type livekitCallPeer struct {
 	ctx            context.Context
 	room           *lksdk.Room
 	pcmTrack       *lkmedia.PCMLocalTrack
-	remoteAudio    atomic.Bool
+	remoteTrack    chan *webrtc.TrackRemote
 	expectedRemote string
 }
 
 func newLivekitCallPeer(ctx context.Context, t *testing.T, livekitURL, jwt, expectedRemoteProfileID string) *livekitCallPeer {
 	t.Helper()
-	peer := &livekitCallPeer{t: t, ctx: ctx, expectedRemote: expectedRemoteProfileID}
+	peer := &livekitCallPeer{
+		t:              t,
+		ctx:            ctx,
+		expectedRemote: expectedRemoteProfileID,
+		remoteTrack:    make(chan *webrtc.TrackRemote, 1),
+	}
 	trackSubscribed := make(chan struct{}, 4)
 	cb := &lksdk.RoomCallback{
 		ParticipantCallback: lksdk.ParticipantCallback{
@@ -141,7 +146,10 @@ func newLivekitCallPeer(ctx context.Context, t *testing.T, livekitURL, jwt, expe
 				if peer.expectedRemote != "" && rp.Identity() != peer.expectedRemote {
 					return
 				}
-				peer.remoteAudio.Store(true)
+				select {
+				case peer.remoteTrack <- track:
+				default:
+				}
 				select {
 				case trackSubscribed <- struct{}{}:
 				default:
@@ -205,15 +213,60 @@ func (p *livekitCallPeer) publishTone(ctx context.Context, track *lkmedia.PCMLoc
 	}
 }
 
-func (p *livekitCallPeer) waitRemoteAudio(timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if p.remoteAudio.Load() {
-			return nil
-		}
-		time.Sleep(100 * time.Millisecond)
+func (p *livekitCallPeer) waitRemoteAudioRTP(timeout time.Duration) error {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	var track *webrtc.TrackRemote
+	select {
+	case track = <-p.remoteTrack:
+	case <-timer.C:
+		return context.DeadlineExceeded
 	}
-	return context.DeadlineExceeded
+
+	const requiredPackets = 10
+	var previousSequence uint16
+	for received := 0; received < requiredPackets; received++ {
+		packetResult := make(chan rtpReadResult, 1)
+		go func() {
+			packet, _, err := track.ReadRTP()
+			result := rtpReadResult{err: err}
+			if packet != nil {
+				result.sequence = packet.SequenceNumber
+				result.payloadLength = len(packet.Payload)
+			}
+			packetResult <- result
+		}()
+
+		var result rtpReadResult
+		select {
+		case result = <-packetResult:
+		case <-timer.C:
+			return context.DeadlineExceeded
+		}
+		if result.err != nil {
+			return result.err
+		}
+		if result.payloadLength == 0 {
+			return fmt.Errorf("received empty RTP packet")
+		}
+		if received > 0 && !rtpSequenceFollows(result.sequence, previousSequence) {
+			return fmt.Errorf("RTP sequence did not move forward: got %d after %d", result.sequence, previousSequence)
+		}
+		previousSequence = result.sequence
+	}
+
+	return nil
+}
+
+func rtpSequenceFollows(current, previous uint16) bool {
+	return current != previous && uint16(current-previous) < 1<<15
+}
+
+type rtpReadResult struct {
+	sequence      uint16
+	payloadLength int
+	err           error
 }
 
 func (p *livekitCallPeer) close() {
