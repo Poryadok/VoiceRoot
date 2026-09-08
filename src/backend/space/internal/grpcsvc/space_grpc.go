@@ -17,16 +17,17 @@ import (
 // SpaceGRPC implements SpaceService RPCs backed by space_db.
 type SpaceGRPC struct {
 	spacev1.UnimplementedSpaceServiceServer
-	Store             *store.SpaceStore
-	SpaceEvents       spaceevents.Publisher // optional; CreateSpace publishes space.created
-	Roles             rolev1.RoleServiceClient
-	ProfileAccounts   ProfileAccountLookup // optional; resolves profile_id → account_id for bans
-	Chats             ChatLookup           // optional; enriches text_chat nodes in ListSpaceTree
-	Privacy           InvitePrivacyChecker
-	Friends           InviteProfileFriendChecker
-	SpaceCoMembership InviteSpaceCoMembershipChecker
-	Blocks            JoinAccountBlockChecker
-	MutationLocker    SpaceMutationLocker
+	Store                   *store.SpaceStore
+	voiceRoomAccessResolver voiceRoomAccessResolver // test seam; production uses Store
+	SpaceEvents             spaceevents.Publisher   // optional; CreateSpace publishes space.created
+	Roles                   rolev1.RoleServiceClient
+	ProfileAccounts         ProfileAccountLookup // optional; resolves profile_id → account_id for bans
+	Chats                   ChatLookup           // optional; enriches text_chat nodes in ListSpaceTree
+	Privacy                 InvitePrivacyChecker
+	Friends                 InviteProfileFriendChecker
+	SpaceCoMembership       InviteSpaceCoMembershipChecker
+	Blocks                  JoinAccountBlockChecker
+	MutationLocker          SpaceMutationLocker
 
 	// skipJoinBlockDefaults disables permissive join-block stubs in integration tests.
 	skipJoinBlockDefaults bool
@@ -40,6 +41,10 @@ type SpaceGRPC struct {
 	// ownershipTransfers serializes the full ownership transition per space.
 	// It deliberately does not serialize transfers for different spaces.
 	ownershipTransfers ownershipTransferLocker
+}
+
+type voiceRoomAccessResolver interface {
+	ResolveVoiceRoomAccess(context.Context, uuid.UUID, uuid.UUID) (*store.VoiceRoomAccessRow, error)
 }
 
 // SpaceMutationLocker coordinates mutations of one space across service

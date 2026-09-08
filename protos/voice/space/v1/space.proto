@@ -61,6 +61,10 @@ service SpaceService {
   // S2S: privacy audience "space members" — shared membership between two profiles.
   rpc AreCoMembers(AreCoMembersRequest) returns (AreCoMembersResponse);
 
+  // S2S: canonical owner and exact membership evidence for Voice authorization.
+  // This endpoint is restricted to the verified Voice service identity.
+  rpc ResolveVoiceRoomAccess(ResolveVoiceRoomAccessRequest) returns (ResolveVoiceRoomAccessResponse);
+
   // S2S: Subscription Service syncs Space Pro entitlement cache after webhook.
   rpc SyncSpaceProSubscription(SyncSpaceProSubscriptionRequest) returns (SyncSpaceProSubscriptionResponse);
 }
@@ -487,6 +491,21 @@ message AreCoMembersRequest {
 
 message AreCoMembersResponse {
   bool co_members = 1;
+}
+
+// ResolveVoiceRoomAccessRequest is intentionally independent of caller-forwarded
+// identity metadata: Voice supplies the actor it is authorizing explicitly.
+message ResolveVoiceRoomAccessRequest {
+  string voice_room_id = 1;
+  string profile_id = 2;
+}
+
+// ResolveVoiceRoomAccessResponse gives Voice canonical room ownership and the
+// current exact membership evidence. A room is active while it exists.
+message ResolveVoiceRoomAccessResponse {
+  string space_id = 1;
+  bool member = 2;
+  bool active = 3;
 }
 
 message SyncSpaceProSubscriptionRequest {

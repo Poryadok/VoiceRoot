@@ -22,6 +22,7 @@ import (
 	"voice/backend/pkg/httpserver"
 	voiceprom "voice/backend/pkg/promhttp"
 	"voice/backend/pkg/runtimeconfig"
+	"voice/backend/space/internal/authctx"
 	grpcsvc "voice/backend/space/internal/grpcsvc"
 	"voice/backend/space/internal/s2s"
 	"voice/backend/space/internal/spaceevents"
@@ -107,7 +108,11 @@ func main() {
 			roleClient = rolev1.NewRoleServiceClient(rconn)
 		}
 
-		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))...)
+		grpcOptions := grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))
+		grpcOptions = append(grpcOptions, grpc.ChainUnaryInterceptor(
+			authctx.VerifiedServiceIdentityUnaryInterceptor(os.Getenv("SPACE_VOICE_S2S_TOKEN")),
+		))
+		grpcSrv = grpc.NewServer(grpcOptions...)
 		spaceSvc := &grpcsvc.SpaceGRPC{
 			Store:             spaceStore,
 			SpaceEvents:       spaceEvents,
