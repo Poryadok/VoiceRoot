@@ -82,6 +82,7 @@ func startVoiceRoomFixture(t *testing.T) voiceRoomFixture {
 	}
 	svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), &recordingEvents{})
 	svc.SpaceMembers = &mapSpaceMembers{members: members}
+	svc.VoiceRoomAccessResolver = fixtureCanonicalVoiceRoomResolver{rooms: map[string]string{voiceRoomID: spaceID}, members: members}
 	return voiceRoomFixture{svc: svc, spaceID: spaceID, voiceRoomID: voiceRoomID}
 }
 
@@ -337,6 +338,7 @@ func TestVoiceGRPCVoiceRoom_max32Participants(t *testing.T) {
 	}
 	svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), &recordingEvents{})
 	svc.SpaceMembers = &mapSpaceMembers{members: members}
+	svc.VoiceRoomAccessResolver = fixtureCanonicalVoiceRoomResolver{rooms: map[string]string{voiceRoomID: spaceID}, members: members}
 	join := &callsv1.JoinVoiceRoomRequest{
 		VoiceRoomId: voiceRoomID,
 		Space:       &spacev1.SpaceRef{Id: spaceID},

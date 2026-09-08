@@ -20,15 +20,15 @@ import (
 )
 
 type recordingEvents struct {
-	incoming []*eventsv1.CallIncoming
-	accepted []*eventsv1.CallAccepted
-	declined []*eventsv1.CallDeclined
-	missed   []*eventsv1.CallMissed
-	ended    []*eventsv1.CallEnded
-	states   []*eventsv1.VoiceStateChanged
-	started  []*eventsv1.ScreenShareStarted
-	stopped  []*eventsv1.ScreenShareStopped
-	startedCall []*eventsv1.CallStarted
+	incoming     []*eventsv1.CallIncoming
+	accepted     []*eventsv1.CallAccepted
+	declined     []*eventsv1.CallDeclined
+	missed       []*eventsv1.CallMissed
+	ended        []*eventsv1.CallEnded
+	states       []*eventsv1.VoiceStateChanged
+	started      []*eventsv1.ScreenShareStarted
+	stopped      []*eventsv1.ScreenShareStopped
+	startedCall  []*eventsv1.CallStarted
 	memberJoined []*eventsv1.VoiceMemberJoined
 }
 
@@ -102,6 +102,16 @@ func newTestVoiceService(now time.Time, events *recordingEvents) *VoiceGRPC {
 		Now:         func() time.Time { return now },
 		RingTimeout: 30 * time.Second,
 	}
+}
+
+type fixtureCanonicalVoiceRoomResolver struct {
+	rooms   map[string]string
+	members map[string]map[string]bool
+}
+
+func (r fixtureCanonicalVoiceRoomResolver) ResolveVoiceRoomAccess(_ context.Context, voiceRoomID, profileID string) (CanonicalVoiceRoomAccess, error) {
+	spaceID, active := r.rooms[voiceRoomID]
+	return CanonicalVoiceRoomAccess{SpaceID: spaceID, Active: active, Member: r.members[spaceID][profileID]}, nil
 }
 
 func newTestGroupVoiceService(now time.Time, events *recordingEvents) *VoiceGRPC {
