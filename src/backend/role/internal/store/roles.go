@@ -243,6 +243,9 @@ func (s *RoleStore) GetEffectiveMask(ctx context.Context, spaceID, profileID uui
 	if err != nil {
 		return 0, err
 	}
+	if len(roles) == 0 {
+		return 0, nil
+	}
 	all, err := permissions.AllMask()
 	if err != nil {
 		return 0, err
