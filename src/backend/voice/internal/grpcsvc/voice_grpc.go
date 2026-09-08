@@ -31,18 +31,19 @@ type SpaceProLookup interface {
 type VoiceGRPC struct {
 	callsv1.UnimplementedVoiceServiceServer
 
-	Calls             voicestore.CallStore
-	ChatMembers       ChatMembership
-	SpaceMembers      SpaceMembership
-	SpacePro          SpaceProLookup
-	Roles             RolePermissionChecker
-	Privacy           CallPrivacyChecker
-	Friends           CallProfileFriendChecker
-	SpaceCoMembership CallSpaceCoMembershipChecker
-	Tokens            livekit.TokenIssuer
-	Events            voiceevents.Publisher
-	Now               func() time.Time
-	RingTimeout       time.Duration
+	Calls                   voicestore.CallStore
+	ChatMembers             ChatMembership
+	SpaceMembers            SpaceMembership
+	VoiceRoomAccessResolver AuthoritativeVoiceRoomAccessResolver
+	SpacePro                SpaceProLookup
+	Roles                   RolePermissionChecker
+	Privacy                 CallPrivacyChecker
+	Friends                 CallProfileFriendChecker
+	SpaceCoMembership       CallSpaceCoMembershipChecker
+	Tokens                  livekit.TokenIssuer
+	Events                  voiceevents.Publisher
+	Now                     func() time.Time
+	RingTimeout             time.Duration
 	// Logger emits structured nats_publish errors when JetStream publish fails after a successful RPC.
 	Logger *slog.Logger
 }
@@ -244,6 +245,18 @@ func (s *VoiceGRPC) GetJoinToken(ctx context.Context, req *callsv1.GetJoinTokenR
 	}
 	if s.Tokens == nil {
 		return nil, status.Error(codes.FailedPrecondition, "livekit token issuer not configured")
+	}
+	if call.IsVoiceRoom() {
+		access, err := s.resolveCanonicalVoiceRoomAccess(ctx, call.VoiceRoomID, profileID)
+		if err != nil {
+			return nil, err
+		}
+		if call.SpaceID != access.SpaceID {
+			return nil, status.Error(codes.PermissionDenied, "stored voice room space does not match canonical owner")
+		}
+		if err := s.ensureVoiceJoinPermission(ctx, access.SpaceID, profileID, call.VoiceRoomID); err != nil {
+			return nil, err
+		}
 	}
 	canPublish, err := s.voicePublishGrant(ctx, call, profileID)
 	if err != nil {
