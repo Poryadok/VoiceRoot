@@ -66,6 +66,56 @@ void main() {
     expect(recording.isActive, isFalse);
     expect(recording.callCount, greaterThanOrEqualTo(2));
   });
+
+  test(
+    'voice background session stays active through connect and stops at terminal state',
+    () async {
+      final recording = RecordingVoiceBackgroundSession();
+      voiceBackgroundSessionTestOverride = recording;
+      addTearDown(() => voiceBackgroundSessionTestOverride = null);
+
+      final container = ProviderContainer(
+        overrides: [
+          ...voiceAppTestOverrides(
+            client: MockClient((_) async => http.Response('{}', 200)),
+          ),
+          voiceBackgroundSessionProvider.overrideWithValue(recording),
+          liveKitRoomFactoryProvider.overrideWithValue(
+            () => _FakeLiveKitRoom(),
+          ),
+          realtimeHubProvider.overrideWith(_FakeRealtimeHub.new),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final controller = container.read(callControllerProvider.notifier);
+      controller.state = CallState(
+        phase: CallPhase.connecting,
+        session: const VoiceCallSession(
+          roomId: 'room-2',
+          livekitRoomName: 'lk-room-2',
+          chatId: 'chat-2',
+          initiatorProfileId: 'me',
+          calleeProfileId: 'peer',
+          mediaKind: VoiceCallMediaKind.audio,
+          status: VoiceCallStatus.active,
+        ),
+      );
+      await pumpEventQueue();
+      expect(recording.isActive, isTrue);
+      expect(recording.callCount, 1);
+
+      controller.state = controller.state.copyWith(phase: CallPhase.active);
+      await pumpEventQueue();
+      expect(recording.isActive, isTrue);
+      expect(recording.callCount, 1);
+
+      controller.state = controller.state.copyWith(phase: CallPhase.failed);
+      await pumpEventQueue();
+      expect(recording.isActive, isFalse);
+      expect(recording.callCount, 2);
+    },
+  );
 }
 
 class _FakeLiveKitRoom implements VoiceLiveKitRoom {
