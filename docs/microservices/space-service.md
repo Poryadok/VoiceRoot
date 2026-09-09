@@ -110,7 +110,7 @@ service SpaceService {
 | JoinSpace, LeaveSpace | ✓ | ✓ | Composable AND entry policy and invite-safe verifier pipeline remain backlog — [todo/backend.md](../todo/backend.md) |
 | KickMember, BanMember, UnbanMember, ListMembers, ListBans | ✓ | ✓ | |
 | TimeoutMember, RemoveMemberTimeout | ✓ | ✓ | |
-| TransferOwnership | ✓ | ✓ | Backend owner→member path; Owner role Assign/Revoke fail-closed when Roles wired; failed role or audit step compensates the Owner transition and database owner; audit/event only after success. Password/2FA confirmation and Gateway/Flutter lifecycle UX remain backlog |
+| TransferOwnership | ✓ | ✓ | Existing backend owner→member path is compensated; it **does not yet implement** the approved Auth proof, `operation_id` idempotency or trusted Owner-role path. Those must land before exposing it through Gateway/Flutter; see § Ownership-transfer contract. |
 | AddBotMember, RemoveBotMember | ✓ | ✓ | |
 | ListTemplates, CreateFromTemplate | ✓ | ✗ | |
 | GetAuditLog | ✓ | ✓ | `created_at DESC, id DESC`; opaque timestamp+UUID keyset cursor; default 50/max 100; exact `SPACE_VIEW_AUDIT_LOG` check, owner-only fallback only when Role Service is unwired. Filters and REST/Flutter surfaces remain backlog |
@@ -120,6 +120,39 @@ service SpaceService {
 `GetAuditLog` читает только строки запрошенного `space_id` и возвращает все поля `AuditLogEntry`. Ошибка Role Service закрывает доступ (`UNAVAILABLE`), явный deny даёт `PERMISSION_DENIED`, malformed cursor — `INVALID_ARGUMENT`. Наличие RPC не означает полноту аудита: writers для части действий, фильтры по actor/action и клиентские REST/Flutter поверхности остаются в [backend backlog](../todo/backend.md).
 
 **Invite permissions (code vs spec):** shipped handlers gate `RevokeInvite` / `ListInvites` on **space owner** only. Product spec allows admins with invite-management permission — align handlers when Role Service integration lands; until then document owner-only as **partial shipment**.
+
+## Ownership-transfer contract (target; not implemented)
+
+The current `TransferOwnershipRequest` only carries `space_id` and
+`new_owner_profile_id`; its handler remains an internal backend baseline and is
+not an approved public lifecycle path. The implementation change must add an
+opaque Auth proof and UUID `operation_id` without accepting caller-supplied actor
+identity.
+
+Space receives authenticated owner actor plus exact request bindings. It stores a
+durable idempotency record keyed by `(actor_profile_id, operation_id)` and the
+exact request body before performing the existing compensated transfer. Identical
+replay returns the saved outcome; changed body returns `ALREADY_EXISTS`. Before
+any owner, Role, audit or event mutation, Space calls the trusted Auth consume
+operation with actor/account/profile, `space_id`, new owner and `operation_id`.
+The Auth receipt must exactly match those bindings. Any consume error, receipt
+mismatch, timeout or unavailable dependency fails closed and leaves no transfer
+mutation.
+
+The only valid Owner-role mutation is the dedicated trusted transfer path. It
+retains Space-owned compensation, serialization and post-success audit/event
+behavior; Role must reject direct/public `Owner` assign, revoke or reassignment.
+The future authenticated Space→Role transfer operation must be bound to the same
+space, previous owner, new owner and operation ID; it is not a bypass for generic
+member-role RPCs.
+
+For client-visible errors, use the feature contract: proof/factor/binding failure
+is `PERMISSION_DENIED` without an oracle; malformed fields are
+`INVALID_ARGUMENT`; current owner/member preconditions are
+`FAILED_PRECONDITION`; same idempotency key with different body is
+`ALREADY_EXISTS`. Existing dependency failures remain fail-closed. The exact
+Auth semantics are in [auth-service.md](auth-service.md#ownership-transfer-step-up-proof-target-contract-not-implemented)
+and product contract in [spaces.md](../features/spaces.md#контракт-подтверждения-передачи-владения).
 
 ## Модель данных
 
