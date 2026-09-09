@@ -222,8 +222,8 @@ func TestListInvites_RequiresManageInvitesPermission(t *testing.T) {
 
 // TestRevokeInvite_RequiresManageInvitesPermission documents that a joined
 // member with SPACE_MANAGE_INVITES may revoke an invite. A member without the
-// permission remains denied, and a successful revoke is observable through
-// both the invite listing and failed subsequent redemption.
+// permission remains denied, and a successful revoke removes the invite from
+// the active list and rejects subsequent redemption.
 func TestRevokeInvite_RequiresManageInvitesPermission(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
@@ -271,14 +271,13 @@ func TestRevokeInvite_RequiresManageInvitesPermission(t *testing.T) {
 
 	list, err := spaceClient.ListInvites(ownerCtx, &spacev1.ListInvitesRequest{SpaceId: spaceID})
 	require.NoError(t, err)
-	var revoked *spacev1.Invite
+	var revoked bool
 	for _, invite := range list.GetInviteList().GetInvites() {
 		if invite.GetId() == target.GetInvite().GetId() {
-			revoked = invite
+			revoked = true
 		}
 	}
-	require.NotNil(t, revoked)
-	require.NotNil(t, revoked.GetRevokedAt())
+	require.False(t, revoked)
 
 	_, err = spaceClient.JoinByInvite(joinerCtx, &spacev1.JoinByInviteRequest{Code: target.GetInvite().GetCode()})
 	require.Equal(t, codes.NotFound, status.Code(err))
