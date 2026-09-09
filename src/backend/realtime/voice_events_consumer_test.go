@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"reflect"
+	"sort"
 	"testing"
 	"time"
 
@@ -144,6 +146,112 @@ func TestVoiceEventBytesToFanout_ScreenShare(t *testing.T) {
 	profiles, fe, ok = voiceEventBytesToFanout(b)
 	if !ok || fe.Op != "screen_share_stopped" || len(profiles) != 2 {
 		t.Fatalf("stopped ok=%v op=%q profiles=%v", ok, fe.Op, profiles)
+	}
+}
+
+// TestVoiceEventBytesToFanout_DeclinedAndMissedPayloads documents the published
+// Realtime wire contract in docs/microservices/realtime-service.md: a declined
+// call exposes its room, chat, deciding profile and participant profiles, while
+// a missed call exposes only its room, chat, initiator and callee identities.
+func TestVoiceEventBytesToFanout_DeclinedAndMissedPayloads(t *testing.T) {
+	roomID := uuid.NewString()
+	chatID := uuid.NewString()
+	caller := uuid.NewString()
+	callee := uuid.NewString()
+
+	declinedData, err := proto.Marshal(&eventsv1.VoiceStreamEvent{
+		EventId:    "voice-declined",
+		OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.VoiceStreamEvent_CallDeclined{
+			CallDeclined: &eventsv1.CallDeclined{
+				RoomId:              roomID,
+				ChatId:              chatID,
+				DeclinedByProfileId: callee,
+				ProfileIds:          []string{caller, callee},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, declined, ok := voiceEventBytesToFanout(declinedData)
+	if !ok || declined.Op != "call_declined" {
+		t.Fatalf("declined ok=%v op=%q", ok, declined.Op)
+	}
+	var declinedPayload map[string]any
+	if err := json.Unmarshal(declined.D, &declinedPayload); err != nil {
+		t.Fatal(err)
+	}
+	wantDeclinedKeys := map[string]struct{}{
+		"room_id": {}, "chat_id": {}, "declined_by_profile_id": {}, "profile_ids": {},
+	}
+	if len(declinedPayload) != len(wantDeclinedKeys) {
+		t.Fatalf("declined payload keys=%v, want exactly %v", declinedPayload, wantDeclinedKeys)
+	}
+	for key := range declinedPayload {
+		if _, ok := wantDeclinedKeys[key]; !ok {
+			t.Fatalf("unexpected declined payload key %q", key)
+		}
+	}
+	if got, want := declinedPayload["room_id"], roomID; got != want {
+		t.Fatalf("declined room_id=%v, want %q", got, want)
+	}
+	if got, want := declinedPayload["chat_id"], chatID; got != want {
+		t.Fatalf("declined chat_id=%v, want %q", got, want)
+	}
+	if got, want := declinedPayload["declined_by_profile_id"], callee; got != want {
+		t.Fatalf("declined_by_profile_id=%v, want %q", got, want)
+	}
+	rawProfileIDs, ok := declinedPayload["profile_ids"].([]any)
+	if !ok {
+		t.Fatalf("declined profile_ids=%T, want JSON array", declinedPayload["profile_ids"])
+	}
+	profileIDs := make([]string, 0, len(rawProfileIDs))
+	for _, profileID := range rawProfileIDs {
+		id, ok := profileID.(string)
+		if !ok {
+			t.Fatalf("declined profile_id=%T, want string", profileID)
+		}
+		profileIDs = append(profileIDs, id)
+	}
+	sort.Strings(profileIDs)
+	wantProfileIDs := []string{caller, callee}
+	sort.Strings(wantProfileIDs)
+	if !reflect.DeepEqual(profileIDs, wantProfileIDs) {
+		t.Fatalf("declined profile_ids=%v, want unordered collection %v", profileIDs, wantProfileIDs)
+	}
+
+	missedData, err := proto.Marshal(&eventsv1.VoiceStreamEvent{
+		EventId:    "voice-missed",
+		OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.VoiceStreamEvent_CallMissed{
+			CallMissed: &eventsv1.CallMissed{
+				RoomId:             roomID,
+				ChatId:             chatID,
+				InitiatorProfileId: caller,
+				CalleeProfileId:    callee,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, missed, ok := voiceEventBytesToFanout(missedData)
+	if !ok || missed.Op != "call_missed" {
+		t.Fatalf("missed ok=%v op=%q", ok, missed.Op)
+	}
+	var missedPayload map[string]any
+	if err := json.Unmarshal(missed.D, &missedPayload); err != nil {
+		t.Fatal(err)
+	}
+	wantMissed := map[string]any{
+		"room_id":              roomID,
+		"chat_id":              chatID,
+		"initiator_profile_id": caller,
+		"callee_profile_id":    callee,
+	}
+	if !reflect.DeepEqual(missedPayload, wantMissed) {
+		t.Fatalf("missed payload=%v, want %v", missedPayload, wantMissed)
 	}
 }
 
