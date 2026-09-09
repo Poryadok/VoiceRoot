@@ -113,10 +113,14 @@ request)` for identical replay and rejects changed request as `409 already_exist
 identity, `profile_id`, `room_id`, an authorization `epoch`, and the explicit
 join/publish/subscribe grants determined by Role. Voice re-resolves access before
 every issue/reissue. On membership, `VOICE_JOIN` or `VOICE_SPEAK` loss, self-hosted
-LiveKit is asked to revoke/eject active media within **2 s p95** and **5 s max**;
-new grant/reconnect is denied after revocation. Reconnect may retry for up to 30 s
-only while the same authenticated session and authorization epoch remain valid.
-No cloud media movement is a target: user grants remain self-hosted by default.
+LiveKit actively ejects the current participant/media within **2 s p95** and
+**5 s max**. Voice denies a fresh grant/reissue after the authorization change and
+the client retries reconnect for at most 30 s only while its authenticated session
+and epoch are unchanged. A previously issued bearer JWT can still reconnect until
+its ≤60-second expiry: without a LiveKit-side token verifier this is not a
+cryptographic deny-before-connect guarantee. Such stale reconnect is best-effort
+reconciliation followed by the same eject SLA. No cloud media movement is a target:
+user grants remain self-hosted by default.
 
 **Roster.** `SPACE_VIEW_MEMBER_LIST` permits full room roster fields
 `profile_id`, display snapshot, muted/deafened/video/speaking state; a Space member

@@ -195,13 +195,13 @@ interceptor ([ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md));
 `x-voice-profile-id` и похожие metadata не являются identity. Gateway передаёт
 только derived delegated-user principal для client surface.
 
-| Caller principal | Разрешённый scope | Subject/actor rule |
+| Caller principal | Exact allowed Role RPCs | Allowed actor / subject fields |
 |---|---|---|
-| `gateway` delegated user | role CRUD, member-role, overrides, default role; self/read route | actor только из derived claim; target subject — request data, ACL проверяет Role |
-| `space` service | bootstrap, join/leave default-role lifecycle, membership/role reads | может передать explicit member subject только для Space-owned lifecycle |
-| `space` trusted transfer | dedicated `TransferOwnerRole` (новый RPC) | exact old/new owner, `space_id`, `operation_id`; generic Owner mutation запрещена |
-| `voice`, `chat`, `messaging`, `bot` service | `CheckPermission` и только перечисленные read/cleanup RPC | explicit decision subject допустим лишь как data для разрешённого RPC |
-| `bot` service | bot-created-role cleanup and bot actor mutations | bot actor приходит в verified delegated context, не metadata |
+| `gateway` delegated user | `CreateRole`, `UpdateRole`, `DeleteRole`, `ListRoles`, `ReorderRoles`, `AssignRole`, `RevokeRole`, `GetMemberRoles`, `SetChatOverride`, `RemoveChatOverride`, `GetChatOverrides`, `SetVoiceRoomOverride`, `RemoveVoiceRoomOverride`, `GetVoiceRoomOverrides`, `SetDefaultJoinRole`, `GetDefaultJoinRole`, `GetEffectivePermissions` | actor is only derived `sub`/`profile_id`; request `profile_id` is a target subject where that RPC has one and is ACL-checked by Role |
+| `space` service | `BootstrapSpaceRoles`, `GetDefaultJoinRole`, `ListRoles`, `GetMemberRoles`, `AssignRole`, `RevokeRole` | `owner_profile_id` only for bootstrap; `profile_id` only for Space-owned join/leave lifecycle; `AssignRole`/`RevokeRole` must reject `Owner` |
+| `space` trusted transfer | `TransferOwnerRole` (**new dedicated RPC**) | exact `space_id`, `old_owner_profile_id`, `new_owner_profile_id`, `operation_id`; no generic Role RPC may mutate `Owner` |
+| `voice`, `chat`, `messaging` service | `CheckPermission` | explicit `profile_id` only as the decision subject, plus requested `space_id`/node scope; no actor mutation authority |
+| `bot` service | `CheckPermission`, `GetMemberRoles`, `RevokeRole`, `DeleteRolesCreatedByProfile` | explicit `profile_id` only for authorised bot lifecycle/decision data; `RevokeRole` must reject `Owner`; bot actor mutations use a Gateway delegated-user principal, never metadata |
 
 `Owner` нельзя назначить, снять или переназначить через generic client/member RPC.
 Только dedicated authenticated Space transfer lifecycle меняет Owner и обязан быть

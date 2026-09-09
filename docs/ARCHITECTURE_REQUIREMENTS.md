@@ -153,12 +153,18 @@ fan-out.
   expired/malformed JWT, TLS/verifier failure, недопустимый caller или RPC дают
   `UNAUTHENTICATED`/`PERMISSION_DENIED` и fail closed. Static bearer и произвольные
   `x-voice-internal-caller` не являются целевым credential.
-- Gateway после проверки client JWT создаёт отдельный derived delegated-user JWT для
-  downstream user-surface. Он содержит только verified `account_id`, `profile_id`,
-  `session_epoch`, request correlation/idempotency context и exact downstream
-  audience/RPC; Gateway не копирует клиентские identity headers и downstream не
-  принимает их как authority. S2S callers, которым нужен subject для decision/read,
-  передают его как data только после проверки собственной service principal.
+- Gateway после проверки client JWT создаёт **подписанный** derived delegated-user
+  JWT для downstream user-surface. Это отдельный credential с TTL не более **30 s**
+  и не длиннее остатка проверенной client session. Он обязан иметь `iss=gateway`,
+  `sub` = verified account ID, verified `profile_id`, `session_epoch`, `iat`, `nbf`,
+  `exp`, `jti`, `kid`, exact downstream `aud`, exact full `rpc` и binding к request
+  (`request_id` и canonical idempotency/request context). Gateway подписывает его
+  rotation-capable key, публикует JWKS; consumer проверяет signature/`kid`, все
+  temporal claims, issuer/audience/RPC/request binding и актуальность
+  `session_epoch` по Auth policy до handler. Он не копирует клиентские identity
+  headers и downstream не принимает их как authority. S2S callers, которым нужен
+  subject для decision/read, передают его как data только после проверки собственной
+  service principal.
 - Migration идёт сначала через dual-read verifier и audit-only telemetry для legacy
   metadata, затем per-caller cutover, allow-list enforcement и removal legacy path.
   Legacy metadata допустимы исключительно как временный migration input после
