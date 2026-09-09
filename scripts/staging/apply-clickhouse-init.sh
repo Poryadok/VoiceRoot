@@ -3,6 +3,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+# shellcheck source=scripts/staging/lib/kubectl-configmap.sh
+source "${ROOT}/scripts/staging/lib/kubectl-configmap.sh"
 NS="${VOICE_K8S_NAMESPACE:-voice-staging}"
 SQL_FILE="${ROOT}/docker/clickhouse/init/001_events.sql"
 JOB_NAME="voice-clickhouse-init"
@@ -94,9 +96,8 @@ if [ ! -f "${SQL_FILE}" ]; then
 fi
 
 echo "Applying ConfigMap ${CM_NAME} from ${SQL_FILE}"
-kubectl create configmap "${CM_NAME}" -n "${NS}" \
-  --from-file=001_events.sql="${SQL_FILE}" \
-  --dry-run=client -o yaml | kubectl apply -f -
+kubectl_apply_configmap "${CM_NAME}" "${NS}" \
+  --from-file=001_events.sql="${SQL_FILE}"
 
 if clickhouse_schema_ready; then
   echo "ClickHouse schema already present (voice.events); skipping DDL"

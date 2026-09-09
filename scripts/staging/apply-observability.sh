@@ -10,6 +10,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+# shellcheck source=scripts/staging/lib/kubectl-configmap.sh
+source "${ROOT}/scripts/staging/lib/kubectl-configmap.sh"
 OBS_DIR="${ROOT}/deploy/observability"
 PROFILE="${OBSERVABILITY_PROFILE:-k3s-lite}"
 NS="${VOICE_OBSERVABILITY_NAMESPACE:-voice-observability}"
@@ -42,22 +44,18 @@ cat "${OBS_DIR}/config/prometheus-base.yml" \
 
 kubectl apply -f "${PROFILE_DIR}/namespace.yaml"
 
-kubectl -n "${NS}" create configmap prometheus-config \
-  --from-file=prometheus.yml="${TMP}/prometheus.yml" \
-  --dry-run=client -o yaml | kubectl apply -f -
+kubectl_apply_configmap prometheus-config "${NS}" \
+  --from-file=prometheus.yml="${TMP}/prometheus.yml"
 
-kubectl -n "${NS}" create configmap prometheus-rules \
-  --from-file="${OBS_DIR}/prometheus/rules/" \
-  --dry-run=client -o yaml | kubectl apply -f -
+kubectl_apply_configmap prometheus-rules "${NS}" \
+  --from-file="${OBS_DIR}/prometheus/rules/"
 
 # --- Loki / Promtail ---
-kubectl -n "${NS}" create configmap loki-config \
-  --from-file=loki.yaml="${OBS_DIR}/config/loki.yaml" \
-  --dry-run=client -o yaml | kubectl apply -f -
+kubectl_apply_configmap loki-config "${NS}" \
+  --from-file=loki.yaml="${OBS_DIR}/config/loki.yaml"
 
-kubectl -n "${NS}" create configmap promtail-config \
-  --from-file=promtail.yaml="${OBS_DIR}/config/promtail.yaml" \
-  --dry-run=client -o yaml | kubectl apply -f -
+kubectl_apply_configmap promtail-config "${NS}" \
+  --from-file=promtail.yaml="${OBS_DIR}/config/promtail.yaml"
 
 # --- Alertmanager ---
 AM_CONFIG="${OBS_DIR}/alertmanager/config.yaml"
@@ -73,13 +71,11 @@ else
   echo "Alertmanager: null receiver (set NOTIFICATIONS_ENABLED=true after applying notification Secret)"
 fi
 
-kubectl -n "${NS}" create configmap alertmanager-config \
-  --from-file=alertmanager.yml="${AM_CONFIG}" \
-  --dry-run=client -o yaml | kubectl apply -f -
+kubectl_apply_configmap alertmanager-config "${NS}" \
+  --from-file=alertmanager.yml="${AM_CONFIG}"
 
-kubectl -n "${NS}" create configmap alertmanager-templates \
-  --from-file="${OBS_DIR}/alertmanager/templates/" \
-  --dry-run=client -o yaml | kubectl apply -f -
+kubectl_apply_configmap alertmanager-templates "${NS}" \
+  --from-file="${OBS_DIR}/alertmanager/templates/"
 
 # --- Grafana provisioning ---
 CH_PASSWORD="${STAGING_CLICKHOUSE_PASSWORD:-}"
@@ -94,17 +90,14 @@ sed -e "s|http://clickhouse:8123|http://voice-clickhouse.voice-staging.svc.clust
     -e "s|voice-clickhouse-dev|${CH_PASSWORD}|g" \
   "${OBS_DIR}/grafana/provisioning/datasources.yaml" > "${TMP}/datasources.yaml"
 
-kubectl -n "${NS}" create configmap grafana-datasources \
-  --from-file=datasources.yaml="${TMP}/datasources.yaml" \
-  --dry-run=client -o yaml | kubectl apply -f -
+kubectl_apply_configmap grafana-datasources "${NS}" \
+  --from-file=datasources.yaml="${TMP}/datasources.yaml"
 
-kubectl -n "${NS}" create configmap grafana-dashboards-provisioning \
-  --from-file=dashboards.yaml="${OBS_DIR}/grafana/provisioning/dashboards.yaml" \
-  --dry-run=client -o yaml | kubectl apply -f -
+kubectl_apply_configmap grafana-dashboards-provisioning "${NS}" \
+  --from-file=dashboards.yaml="${OBS_DIR}/grafana/provisioning/dashboards.yaml"
 
-kubectl -n "${NS}" create configmap grafana-dashboards \
-  --from-file="${OBS_DIR}/grafana/dashboards/" \
-  --dry-run=client -o yaml | kubectl apply -f -
+kubectl_apply_configmap grafana-dashboards "${NS}" \
+  --from-file="${OBS_DIR}/grafana/dashboards/"
 
 # --- Grafana admin secret (override with GRAFANA_ADMIN_PASSWORD) ---
 GRAFANA_PASS="${GRAFANA_ADMIN_PASSWORD:-changeme-voice-observability}"

@@ -4,6 +4,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+# shellcheck source=scripts/staging/lib/kubectl-configmap.sh
+source "${ROOT}/scripts/staging/lib/kubectl-configmap.sh"
 NS="${VOICE_K8S_NAMESPACE:-voice-staging}"
 PG_POD="${VOICE_POSTGRES_POD:-voice-postgres-0}"
 PG_USER="${POSTGRES_USER:-voice}"
@@ -54,9 +56,8 @@ migrate_db() {
   fi
 
   echo "==> migrate up: ${db}"
-  kubectl create configmap "${cm_name}" -n "${NS}" \
-    --from-file="${migrations_dir}" \
-    --dry-run=client -o yaml | kubectl apply -f -
+  kubectl_apply_configmap "${cm_name}" "${NS}" \
+    --from-file="${migrations_dir}"
 
   kubectl delete job "${job_name}" -n "${NS}" --ignore-not-found
 
