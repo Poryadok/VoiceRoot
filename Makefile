@@ -275,6 +275,7 @@ image-catalog-drift-check:
 ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test buf-generate-ci-local-template-check image-catalog-drift-check e2e-manifest-helper-test rollout-app-tier-order-test staging-kubectl-configmap-test
 	$(BASH) "$(ROOT)/scripts/ci/ci-script-tests-reachability_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/e2e-manifest_test.sh"
+	$(BASH) "$(ROOT)/scripts/ci/compose-e2e-smoke_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/check-auth-testcontainers-reports_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/compose-a1-multi-account-proof_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/compose-a1-flutter-profile-handoff_test.sh"
