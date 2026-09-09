@@ -802,6 +802,13 @@ Future<String> _expectTwoInboxItems({
   required String inbox,
   required Set<String> chatIds,
 }) async {
+  await _waitForInboxItems(
+    chats: chats,
+    authorization: authorization,
+    inbox: inbox,
+    chatIds: chatIds,
+  );
+
   final first = await chats.listChats(
     authorization: authorization,
     inbox: inbox,
@@ -829,6 +836,42 @@ Future<String> _expectTwoInboxItems({
     ...secondPage.items.map((item) => item.chatId),
   }, chatIds);
   return cursor!;
+}
+
+/// DM creation is accepted synchronously, but its inbox projection can become
+/// visible to ListChats shortly afterwards. Wait only for that projection,
+/// then let [_expectTwoInboxItems] retain the exact two-page cursor contract.
+Future<void> _waitForInboxItems({
+  required VoiceChatsClient chats,
+  required String authorization,
+  required String inbox,
+  required Set<String> chatIds,
+}) async {
+  const maxAttempts = 24;
+  ChatsApiResult<ChatListData>? lastResult;
+  Set<String> lastChatIds = const {};
+
+  for (var attempt = 0; attempt < maxAttempts; attempt += 1) {
+    final result = await chats.listChats(
+      authorization: authorization,
+      inbox: inbox,
+      pageSize: 100,
+    );
+    lastResult = result;
+    if (result case ChatsApiOk<ChatListData>(:final data)) {
+      lastChatIds = data.items.map((item) => item.chatId).toSet();
+      if (lastChatIds.containsAll(chatIds)) return;
+    }
+    if (attempt + 1 < maxAttempts) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+  }
+
+  fail(
+    'ListChats $inbox did not expose expected chats after '
+    '${maxAttempts * 250}ms: expected=$chatIds, observed=$lastChatIds, '
+    'last=$lastResult',
+  );
 }
 
 const _inboxReconciliationZoneKey = #t055InboxReconciliation;
