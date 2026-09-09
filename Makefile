@@ -293,6 +293,7 @@ staging-kubectl-configmap-test:
 
 staging-app-secrets-test:
 	$(BASH) "$(ROOT)/scripts/staging/ensure-app-secrets_test.sh"
+	$(BASH) "$(ROOT)/scripts/staging/ensure-app-secrets-dry-run_test.sh"
 
 generate-staging-services:
 	$(BASH) "$(ROOT)/scripts/ci/generate-staging-go-services.sh"

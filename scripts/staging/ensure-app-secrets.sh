@@ -70,7 +70,39 @@ ACCOUNT_DELETE_TOKEN_SECRET="$(generate_auth_secret)"
 
 echo "Bootstrapping ${SECRET_NAME} in ${NS} (Postgres user voice, test JWT key)"
 
-kubectl create secret generic "$SECRET_NAME" \
+kubectl_secret_dry_run_flag() {
+  if kubectl create secret generic --help 2>&1 | grep -Eq -- '--dry-run(=|[[:space:]]).*client'; then
+    printf '%s\n' '--dry-run=client'
+  else
+    printf '%s\n' '--dry-run'
+  fi
+}
+
+kubectl_apply_bootstrap_secret() {
+  local manifest
+  manifest="$(mktemp)"
+  if ! kubectl create secret generic "$@" "$(kubectl_secret_dry_run_flag)" -o yaml >"${manifest}"; then
+    rm -f "${manifest}"
+    return 1
+  fi
+
+  if [ ! -s "${manifest}" ]; then
+    echo "ERROR: kubectl generated an empty Secret manifest for ${SECRET_NAME}" >&2
+    rm -f "${manifest}"
+    return 1
+  fi
+
+  if kubectl apply -f "${manifest}"; then
+    rm -f "${manifest}"
+    return 0
+  else
+    local status=$?
+    rm -f "${manifest}"
+    return "${status}"
+  fi
+}
+
+kubectl_apply_bootstrap_secret "$SECRET_NAME" \
   --namespace="$NS" \
   --from-literal=POSTGRES_PASSWORD="$PG_PASS" \
   --from-literal=SOCIAL_DATABASE_URL="$(pg_url social_db)" \
@@ -110,7 +142,6 @@ kubectl create secret generic "$SECRET_NAME" \
   --from-literal=APNS_PRIVATE_KEY="" \
   --from-literal=APNS_BUNDLE_ID="voice.app" \
   --from-literal=APNS_VOIP_TOPIC="voice.app.voip" \
-  --from-literal=APNS_PRODUCTION="false" \
-  --dry-run=client -o yaml | kubectl apply -f -
+  --from-literal=APNS_PRODUCTION="false"
 
 echo "Created ${SECRET_NAME} in ${NS}"
