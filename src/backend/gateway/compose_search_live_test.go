@@ -87,6 +87,8 @@ func TestComposeSearchInChat_live(t *testing.T) {
 		req.Header.Set("Authorization", "Bearer "+sessA.AccessToken)
 		resp, err := client.Do(req)
 		if err != nil {
+			lastCode = 0
+			lastBody = ""
 			lastErr = err.Error()
 			return false
 		}
@@ -94,6 +96,7 @@ func TestComposeSearchInChat_live(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		lastBody = string(body)
 		lastCode = resp.StatusCode
+		lastErr = ""
 		if resp.StatusCode != http.StatusOK {
 			return false
 		}
