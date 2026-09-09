@@ -3,6 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -48,6 +49,32 @@ func TestListRoles_AfterBootstrap(t *testing.T) {
 	roles := resp.GetRoleList().GetRoles()
 	require.Len(t, roles, 5)
 	require.Equal(t, permissions.RoleOwner, roles[0].GetName())
+}
+
+func TestListRoles_UsesPersistedCreatedAt(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	s, cleanup := startRoleStoreTest(t)
+	defer cleanup()
+	client, stop := startRoleGRPCTestServer(t, s.Pool)
+	defer stop()
+
+	spaceID := uuid.New()
+	require.NoError(t, s.BootstrapSystemRoles(context.Background(), spaceID))
+	roles, err := s.ListRoles(context.Background(), spaceID)
+	require.NoError(t, err)
+	require.NotEmpty(t, roles)
+
+	persistedCreatedAt := time.Date(2024, time.November, 12, 13, 14, 15, 123456000, time.FixedZone("UTC+3", 3*60*60))
+	require.NoError(t, s.Pool.QueryRow(context.Background(), `
+UPDATE roles SET created_at = $3 WHERE id = $1 AND space_id = $2 RETURNING created_at
+`, roles[0].ID, spaceID, persistedCreatedAt).Scan(&persistedCreatedAt))
+
+	resp, err := client.ListRoles(context.Background(), &rolev1.ListRolesRequest{SpaceId: spaceID.String()})
+	require.NoError(t, err)
+	require.NotEmpty(t, resp.GetRoleList().GetRoles())
+	require.Equal(t, persistedCreatedAt.UTC(), resp.GetRoleList().GetRoles()[0].GetCreatedAt().AsTime())
 }
 
 // TestCreateRole_CustomRole documents custom roles with permissions_mask.
