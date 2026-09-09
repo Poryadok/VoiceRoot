@@ -186,7 +186,10 @@ void main() {
 
       expect(find.text(l10n.spaceBotsPrivilegedAck), findsOneWidget);
 
-      await tester.tap(find.byKey(const Key('bot_install_chat_chat-1')));
+      final chatCheckbox = find.byKey(const Key('bot_install_chat_chat-1'));
+      await tester.ensureVisible(chatCheckbox);
+      await tester.pumpAndSettle();
+      await tester.tap(chatCheckbox);
       await tester.pumpAndSettle();
 
       final installButton = tester.widget<FilledButton>(
