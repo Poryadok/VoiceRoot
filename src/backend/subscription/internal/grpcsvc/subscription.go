@@ -531,9 +531,18 @@ func (s *SubscriptionGRPC) GetBillingHistory(ctx context.Context, req *subscript
 }
 
 func (s *SubscriptionGRPC) ApplyDowngradeProfiles(ctx context.Context, req *subscriptionv1.ApplyDowngradeProfilesRequest) (*subscriptionv1.ApplyDowngradeProfilesResponse, error) {
-	accountID, err := parseAccountID(req.GetAccountId())
-	if err != nil {
-		return nil, err
+	accountID, ok := accountIDFromIncomingMetadata(ctx)
+	if !ok {
+		return nil, status.Error(codes.PermissionDenied, "account_id required")
+	}
+	if rawAccountID := strings.TrimSpace(req.GetAccountId()); rawAccountID != "" {
+		requestedAccountID, err := parseAccountID(rawAccountID)
+		if err != nil {
+			return nil, err
+		}
+		if requestedAccountID != accountID {
+			return nil, status.Error(codes.PermissionDenied, "account mismatch")
+		}
 	}
 	kept := make([]uuid.UUID, 0, len(req.GetKeptProfileIds()))
 	for _, raw := range req.GetKeptProfileIds() {
@@ -543,10 +552,14 @@ func (s *SubscriptionGRPC) ApplyDowngradeProfiles(ctx context.Context, req *subs
 		}
 		kept = append(kept, id)
 	}
-	if s.UserProfiles != nil {
-		if err := s.UserProfiles.ApplyDowngradeProfiles(ctx, accountID, kept); err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
+	if s.UserProfiles == nil {
+		return nil, status.Error(codes.FailedPrecondition, "user profile downgrade client not configured")
+	}
+	if err := s.UserProfiles.ApplyDowngradeProfiles(ctx, accountID, kept); err != nil {
+		if status.Code(err) == codes.FailedPrecondition {
+			return nil, err
 		}
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	return &subscriptionv1.ApplyDowngradeProfilesResponse{KeptProfileIds: req.GetKeptProfileIds()}, nil
 }

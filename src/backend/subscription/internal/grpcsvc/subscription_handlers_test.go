@@ -7,10 +7,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	subscriptionv1 "voice.app/voice/subscription/v1"
 	spacev1 "voice.app/voice/space/v1"
+	subscriptionv1 "voice.app/voice/subscription/v1"
 )
 
 func TestGetSubscription_emptyWhenNoRow(t *testing.T) {
@@ -282,6 +283,89 @@ func TestGetLimits_freeTierDefaults(t *testing.T) {
 	limits, err := client.GetLimits(ctx, &subscriptionv1.GetLimitsRequest{AccountId: uuid.NewString()})
 	require.NoError(t, err)
 	require.Contains(t, limits.GetLimits().GetLimitsJson(), "file_upload_bytes")
+}
+
+func TestApplyDowngradeProfiles_requiresUserProfileClient(t *testing.T) {
+	t.Parallel()
+
+	accountID := uuid.New()
+	svc := NewSubscriptionGRPC(nil)
+	_, err := svc.ApplyDowngradeProfiles(withIncomingAccountID(accountID), &subscriptionv1.ApplyDowngradeProfilesRequest{
+		AccountId:      accountID.String(),
+		KeptProfileIds: []string{uuid.NewString(), uuid.NewString()},
+	})
+
+	require.Error(t, err)
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+}
+
+func TestApplyDowngradeProfiles_rejectsTypedNilUserProfileClient(t *testing.T) {
+	t.Parallel()
+
+	accountID := uuid.New()
+	var typedNil *UserGRPCProfileDowngrade
+	svc := NewSubscriptionGRPC(nil)
+	svc.UserProfiles = typedNil
+	_, err := svc.ApplyDowngradeProfiles(withIncomingAccountID(accountID), &subscriptionv1.ApplyDowngradeProfilesRequest{
+		AccountId:      accountID.String(),
+		KeptProfileIds: []string{uuid.NewString(), uuid.NewString()},
+	})
+
+	require.Error(t, err)
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+}
+
+func TestApplyDowngradeProfiles_delegatesFreezeSelectionToUserService(t *testing.T) {
+	t.Parallel()
+
+	accountID := uuid.New()
+	kept := []uuid.UUID{uuid.New(), uuid.New()}
+	userProfiles := &recordingUserProfileDowngradeClient{}
+	svc := NewSubscriptionGRPC(nil)
+	svc.UserProfiles = userProfiles
+
+	_, err := svc.ApplyDowngradeProfiles(withIncomingAccountID(accountID), &subscriptionv1.ApplyDowngradeProfilesRequest{
+		AccountId:      accountID.String(),
+		KeptProfileIds: []string{kept[0].String(), kept[1].String()},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, accountID, userProfiles.accountID)
+	require.Equal(t, kept, userProfiles.keptProfileIDs)
+}
+
+func TestApplyDowngradeProfiles_rejectsMismatchedRequestAccountWithoutDelegation(t *testing.T) {
+	t.Parallel()
+
+	userProfiles := &recordingUserProfileDowngradeClient{}
+	svc := NewSubscriptionGRPC(nil)
+	svc.UserProfiles = userProfiles
+
+	_, err := svc.ApplyDowngradeProfiles(withIncomingAccountID(uuid.New()), &subscriptionv1.ApplyDowngradeProfilesRequest{
+		AccountId:      uuid.NewString(),
+		KeptProfileIds: []string{uuid.NewString(), uuid.NewString()},
+	})
+
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	require.Zero(t, userProfiles.calls)
+}
+
+type recordingUserProfileDowngradeClient struct {
+	accountID      uuid.UUID
+	keptProfileIDs []uuid.UUID
+	calls          int
+}
+
+func withIncomingAccountID(accountID uuid.UUID) context.Context {
+	return metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-voice-user-id", accountID.String()))
+}
+
+func (c *recordingUserProfileDowngradeClient) ApplyDowngradeProfiles(_ context.Context, accountID uuid.UUID, keptProfileIDs []uuid.UUID) error {
+	c.calls++
+	c.accountID = accountID
+	c.keptProfileIDs = append([]uuid.UUID(nil), keptProfileIDs...)
+	return nil
 }
 
 func TestCreateSpaceCheckoutSession_requiresSpace(t *testing.T) {

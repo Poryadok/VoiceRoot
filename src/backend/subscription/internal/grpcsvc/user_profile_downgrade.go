@@ -4,6 +4,9 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 
 	userv1 "voice.app/voice/user/v1"
 )
@@ -16,12 +19,13 @@ type UserGRPCProfileDowngrade struct {
 // ApplyDowngradeProfiles calls User.ApplyDowngradeProfiles over gRPC.
 func (c *UserGRPCProfileDowngrade) ApplyDowngradeProfiles(ctx context.Context, accountID uuid.UUID, keptProfileIDs []uuid.UUID) error {
 	if c == nil || c.Client == nil {
-		return nil
+		return status.Error(codes.FailedPrecondition, "user profile downgrade client not configured")
 	}
 	kept := make([]string, 0, len(keptProfileIDs))
 	for _, id := range keptProfileIDs {
 		kept = append(kept, id.String())
 	}
+	ctx = metadata.AppendToOutgoingContext(ctx, "x-voice-user-id", accountID.String())
 	_, err := c.Client.ApplyDowngradeProfiles(ctx, &userv1.ApplyDowngradeProfilesRequest{
 		AccountId:      accountID.String(),
 		KeptProfileIds: kept,
