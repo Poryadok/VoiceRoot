@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"testing"
 	"time"
 
@@ -144,6 +145,86 @@ func TestVoiceEventBytesToFanout_ScreenShare(t *testing.T) {
 	profiles, fe, ok = voiceEventBytesToFanout(b)
 	if !ok || fe.Op != "screen_share_stopped" || len(profiles) != 2 {
 		t.Fatalf("stopped ok=%v op=%q profiles=%v", ok, fe.Op, profiles)
+	}
+}
+
+// TestVoiceEventBytesToFanout_DeclinedAndMissedPayloads documents the published
+// Realtime wire contract in docs/microservices/realtime-service.md: a declined
+// call exposes its room, chat, deciding profile and participant profiles, while
+// a missed call exposes only its room, chat, initiator and callee identities.
+func TestVoiceEventBytesToFanout_DeclinedAndMissedPayloads(t *testing.T) {
+	roomID := uuid.NewString()
+	chatID := uuid.NewString()
+	caller := uuid.NewString()
+	callee := uuid.NewString()
+
+	declinedData, err := proto.Marshal(&eventsv1.VoiceStreamEvent{
+		EventId:    "voice-declined",
+		OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.VoiceStreamEvent_CallDeclined{
+			CallDeclined: &eventsv1.CallDeclined{
+				RoomId:              roomID,
+				ChatId:              chatID,
+				DeclinedByProfileId: callee,
+				ProfileIds:          []string{caller, callee},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, declined, ok := voiceEventBytesToFanout(declinedData)
+	if !ok || declined.Op != "call_declined" {
+		t.Fatalf("declined ok=%v op=%q", ok, declined.Op)
+	}
+	var declinedPayload map[string]any
+	if err := json.Unmarshal(declined.D, &declinedPayload); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := declinedPayload["room_id"], roomID; got != want {
+		t.Fatalf("declined room_id=%v, want %q", got, want)
+	}
+	if got, want := declinedPayload["chat_id"], chatID; got != want {
+		t.Fatalf("declined chat_id=%v, want %q", got, want)
+	}
+	if got, want := declinedPayload["declined_by_profile_id"], callee; got != want {
+		t.Fatalf("declined_by_profile_id=%v, want %q", got, want)
+	}
+	if got, want := declinedPayload["profile_ids"], []any{caller, callee}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("declined profile_ids=%v, want %v", got, want)
+	}
+
+	missedData, err := proto.Marshal(&eventsv1.VoiceStreamEvent{
+		EventId:    "voice-missed",
+		OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.VoiceStreamEvent_CallMissed{
+			CallMissed: &eventsv1.CallMissed{
+				RoomId:             roomID,
+				ChatId:             chatID,
+				InitiatorProfileId: caller,
+				CalleeProfileId:    callee,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, missed, ok := voiceEventBytesToFanout(missedData)
+	if !ok || missed.Op != "call_missed" {
+		t.Fatalf("missed ok=%v op=%q", ok, missed.Op)
+	}
+	var missedPayload map[string]any
+	if err := json.Unmarshal(missed.D, &missedPayload); err != nil {
+		t.Fatal(err)
+	}
+	wantMissed := map[string]any{
+		"room_id":              roomID,
+		"chat_id":              chatID,
+		"initiator_profile_id": caller,
+		"callee_profile_id":    callee,
+	}
+	if !reflect.DeepEqual(missedPayload, wantMissed) {
+		t.Fatalf("missed payload=%v, want %v", missedPayload, wantMissed)
 	}
 }
 
