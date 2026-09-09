@@ -96,7 +96,19 @@ Two producers may emit WS `notification` for the same message; clients **dedupe*
 
 **Normative rule:** Notification Service owns **routing policy** (which channel, sound, grouping). Realtime fast path is **latency optimization** for subscribed in-app sessions — must not bypass mute/type suppress. When both paths fire, client keeps one row per dedupe key. Payload schema — § **`notification` op payload** below. Push — always Notification Service (FCM/APNs), never Realtime direct.
 
-### Операции (Client → Server)
+### Phase-0 Space-room roster fan-out (target; не реализовано)
+
+Voice publishes versioned room lifecycle events only after its authoritative
+mutation commits. Realtime fans them out to authenticated Space watchers under the
+same roster audience policy as Voice: full `profile_id`/state only to
+`SPACE_VIEW_MEMBER_LIST`; other Space members get aggregate occupancy deltas only.
+No client-selected `space_id`, profile ID or subscription target can widen this
+audience. Each envelope has `room_id`, authorization `epoch`, monotonic `version`,
+`event_id` and a payload valid for that audience. Dedupe is by `event_id`; clients
+require contiguous versions and fetch the signed Voice snapshot on a gap, reconnect
+or epoch change. The ordinary WebSocket `s` remains connection-local and does not
+replace roster recovery.
+
 | op             | Описание                                              |
 |----------------|-------------------------------------------------------|
 | `heartbeat`    | Keepalive (каждые 30 сек)                             |
@@ -197,6 +209,8 @@ Routing rules (presence, quiet hours, `send_silent`, mute) — [notification-ser
 | Read cursor | REST `MarkRead` if chat was open; do not rely on WS-only `mark_read` |
 | Ephemeral delivery | Live `delivery_ack` only; list ✓✓ from durable metadata |
 | Live events | New `hello` + optional `resume` (new `s` stream; no event journal replay) |
+
+### Операции (Client → Server)
 
 ## Конфигурация (NATS / JetStream)
 

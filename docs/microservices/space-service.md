@@ -121,7 +121,21 @@ service SpaceService {
 
 **Invite permissions (code vs spec):** shipped handlers gate `RevokeInvite` / `ListInvites` on **space owner** only. Product spec allows admins with invite-management permission — align handlers when Role Service integration lands; until then document owner-only as **partial shipment**.
 
-## Ownership-transfer contract (target; not implemented)
+## Phase-0 Space audit ledger (target; not implemented)
+
+Space owns an immutable audit registry for every administrative mutation, including
+invite lifecycle, membership/moderation, role and owner transfer, tree/room changes
+and settings. The mutation transaction writes an outbox row with the same
+`audit_event_id`; the publisher delivers exactly once to the logical audit effect
+(idempotent consumers dedupe by that ID). A failed mutation produces no audit row.
+Records retain 365 days; `details` is canonical, redacted and capped at 4 KiB.
+Deletion/purge never cascades audit rows: it leaves the required minimal tombstone.
+
+`GetAuditLog` adds action/actor/time filters and uses an HMAC-signed cursor bound to
+`space_id` and the full filter set. A changed filter/cursor, invalid signature or
+expired cursor is `INVALID_ARGUMENT`; no cursor may be replayed against another
+Space or disclosure scope. Existing current RPC/storage do not yet meet this target.
+
 
 The current `TransferOwnershipRequest` only carries `space_id` and
 `new_owner_profile_id`; its handler remains an internal backend baseline and is
@@ -153,6 +167,8 @@ is `PERMISSION_DENIED` without an oracle; malformed fields are
 `ALREADY_EXISTS`. Existing dependency failures remain fail-closed. The exact
 Auth semantics are in [auth-service.md](auth-service.md#ownership-transfer-step-up-proof-target-contract-not-implemented)
 and product contract in [spaces.md](../features/spaces.md#контракт-подтверждения-передачи-владения).
+
+## Ownership-transfer contract (target; not implemented)
 
 ## Модель данных
 

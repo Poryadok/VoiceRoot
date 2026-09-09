@@ -188,7 +188,26 @@ voice_room_overrides
 5. Admin → все права кроме Owner-specific
 ```
 
-## Публикуемые события (→ NATS)
+## Phase-0 principal и caller matrix (target; не реализовано)
+
+Role принимает actor и service authority только из верифицированного Phase-0
+interceptor ([ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md));
+`x-voice-profile-id` и похожие metadata не являются identity. Gateway передаёт
+только derived delegated-user principal для client surface.
+
+| Caller principal | Разрешённый scope | Subject/actor rule |
+|---|---|---|
+| `gateway` delegated user | role CRUD, member-role, overrides, default role; self/read route | actor только из derived claim; target subject — request data, ACL проверяет Role |
+| `space` service | bootstrap, join/leave default-role lifecycle, membership/role reads | может передать explicit member subject только для Space-owned lifecycle |
+| `space` trusted transfer | dedicated `TransferOwnerRole` (новый RPC) | exact old/new owner, `space_id`, `operation_id`; generic Owner mutation запрещена |
+| `voice`, `chat`, `messaging`, `bot` service | `CheckPermission` и только перечисленные read/cleanup RPC | explicit decision subject допустим лишь как data для разрешённого RPC |
+| `bot` service | bot-created-role cleanup and bot actor mutations | bot actor приходит в verified delegated context, не metadata |
+
+`Owner` нельзя назначить, снять или переназначить через generic client/member RPC.
+Только dedicated authenticated Space transfer lifecycle меняет Owner и обязан быть
+idempotent по `operation_id`. Unknown caller/RPC, caller с неправильной audience
+или read, раскрывающий member data вне своей ACL, fail closed.
+
 
 Доменный поток JetStream: **`role.events`** (матрица: [CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)).
 
@@ -201,6 +220,8 @@ voice_room_overrides
 | `role.revoked`      | space_id, profile_id, role_id     |
 | `role.chat_override_set`  | chat_id, role_id       |
 | `role.voice_override_set` | voice_room_id, role_id |
+
+## Публикуемые события (→ NATS)
 
 ## Зависимости
 
