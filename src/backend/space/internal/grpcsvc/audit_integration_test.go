@@ -93,6 +93,36 @@ WHERE space_id = $1 AND action = 'invite_revoked'
 	require.JSONEq(t, `{}`, details)
 }
 
+// TestCreateInvite_DoesNotRecordAuditEntry characterizes the current writer
+// gap. The feature contract requires both invite creation and revocation to be
+// auditable; the implementation currently persists only revocation audit rows.
+// Keep this test narrow: it does not prescribe the missing action name,
+// target, details, or retention policy.
+func TestCreateInvite_DoesNotRecordAuditEntry(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	_, _, ownerCtx := profileFixture(t)
+	ctx := context.Background()
+	pool := startSpacePostgresForTest(t, ctx)
+	applySpaceMigration(t, ctx, pool)
+	client, cleanup := startSpaceGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Create invite audit gap"})
+	require.NoError(t, err)
+	spaceID := uuid.MustParse(created.GetSpace().GetId())
+
+	invite, err := client.CreateInvite(ownerCtx, &spacev1.CreateInviteRequest{SpaceId: spaceID.String()})
+	require.NoError(t, err)
+	require.NotNil(t, invite.GetInvite())
+
+	var count int
+	err = pool.QueryRow(ctx, `SELECT count(*) FROM audit_log WHERE space_id = $1`, spaceID).Scan(&count)
+	require.NoError(t, err)
+	require.Zero(t, count, "CreateInvite currently has no audit writer")
+}
+
 func TestGetAuditLog_MapsFieldsOrdersAndScopesToRequestedSpace(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
