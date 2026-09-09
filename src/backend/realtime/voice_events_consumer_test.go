@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
+	"sort"
 	"testing"
 	"time"
 
@@ -181,6 +182,17 @@ func TestVoiceEventBytesToFanout_DeclinedAndMissedPayloads(t *testing.T) {
 	if err := json.Unmarshal(declined.D, &declinedPayload); err != nil {
 		t.Fatal(err)
 	}
+	wantDeclinedKeys := map[string]struct{}{
+		"room_id": {}, "chat_id": {}, "declined_by_profile_id": {}, "profile_ids": {},
+	}
+	if len(declinedPayload) != len(wantDeclinedKeys) {
+		t.Fatalf("declined payload keys=%v, want exactly %v", declinedPayload, wantDeclinedKeys)
+	}
+	for key := range declinedPayload {
+		if _, ok := wantDeclinedKeys[key]; !ok {
+			t.Fatalf("unexpected declined payload key %q", key)
+		}
+	}
 	if got, want := declinedPayload["room_id"], roomID; got != want {
 		t.Fatalf("declined room_id=%v, want %q", got, want)
 	}
@@ -190,8 +202,23 @@ func TestVoiceEventBytesToFanout_DeclinedAndMissedPayloads(t *testing.T) {
 	if got, want := declinedPayload["declined_by_profile_id"], callee; got != want {
 		t.Fatalf("declined_by_profile_id=%v, want %q", got, want)
 	}
-	if got, want := declinedPayload["profile_ids"], []any{caller, callee}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("declined profile_ids=%v, want %v", got, want)
+	rawProfileIDs, ok := declinedPayload["profile_ids"].([]any)
+	if !ok {
+		t.Fatalf("declined profile_ids=%T, want JSON array", declinedPayload["profile_ids"])
+	}
+	profileIDs := make([]string, 0, len(rawProfileIDs))
+	for _, profileID := range rawProfileIDs {
+		id, ok := profileID.(string)
+		if !ok {
+			t.Fatalf("declined profile_id=%T, want string", profileID)
+		}
+		profileIDs = append(profileIDs, id)
+	}
+	sort.Strings(profileIDs)
+	wantProfileIDs := []string{caller, callee}
+	sort.Strings(wantProfileIDs)
+	if !reflect.DeepEqual(profileIDs, wantProfileIDs) {
+		t.Fatalf("declined profile_ids=%v, want unordered collection %v", profileIDs, wantProfileIDs)
 	}
 
 	missedData, err := proto.Marshal(&eventsv1.VoiceStreamEvent{
