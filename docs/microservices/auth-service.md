@@ -53,6 +53,38 @@ service AuthService {
 }
 ```
 
+### Ownership-transfer step-up proof (target contract; not implemented)
+
+The currently generated Auth proto contains no issue/consume RPC for this flow.
+The following is the normative contract for the future authenticated client issue
+surface and trusted Space-only consume surface; it must land together with
+proto, S2S principal enforcement, durable storage and contract tests.
+
+- Auth checks password on every request. If the account has 2FA enabled, it also
+  requires a valid TOTP or one unused backup code. It issues an opaque
+  high-entropy proof bound to `account_id`, active `profile_id`, `space_id`,
+  `new_owner_profile_id`, UUID `operation_id`, current `session_epoch`, and
+  verified-factor set. Plaintext is returned once; Auth persists only its hash.
+- The proof expires after five minutes and is revoked when session epoch, password,
+  2FA or other account security state changes. Validation/consume never treats a
+  missing, expired, revoked, mismatched or previously used proof as usable.
+- Only the authenticated Space service principal may call consume. Consume is
+  atomic and one-use; its durable receipt is keyed by `operation_id` and includes
+  the exact bound identities. A retried identical consume returns that receipt,
+  while a changed binding or another operation fails closed.
+- Auth owns factors, proof hash, revocation state and receipt. Space owns the
+  transfer request/idempotency record and no service other than Auth stores the
+  proof plaintext. Gateway derives actor only from verified claims, relays the opaque
+  proof to Space, redacts it from logs/traces/metrics, and neither creates, validates
+  nor persists it.
+- Public failure disclosure is deliberately coarse: no session is
+  `UNAUTHENTICATED`; a factor failure or unusable/mismatched proof is
+  `PERMISSION_DENIED`; malformed bindings are `INVALID_ARGUMENT`. Trusted caller
+  failure, store failure or unavailable Auth never permits a transfer.
+
+See [spaces.md](../features/spaces.md#контракт-подтверждения-передачи-владения)
+for the end-to-end request, Space idempotency and error contract.
+
 ### ConvertGuest (guest → regular)
 
 REST: `POST /api/v1/auth/convert-guest` (Gateway transcoding). Спека UX: [auth-and-contacts.md](../features/auth-and-contacts.md) § «Регистрация гостевого аккаунта».

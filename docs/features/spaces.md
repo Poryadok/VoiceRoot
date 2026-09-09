@@ -68,7 +68,54 @@ manual approval. Invite не обходит требования. Если вк�
 ## Каталог и управление
 
 - **Ранжирование в каталоге**: сначала верифицированные спейсы, затем по количеству участников
-- **Передача владения**: да, владелец может передать спейс другому участнику; требуется подтверждение (пароль/2FA)
+- **Передача владения**: владелец передаёт спейс только уже состоящему в нём участнику. До передачи обязательно подтверждается пароль; если на account включена 2FA, обязательны также TOTP **или** один backup code. Конкретный Auth→Space контракт, срок и защита от повторного использования заданы ниже.
+
+### Контракт подтверждения передачи владения
+
+Это утверждённый target-контракт для реализации; текущие proto и handlers его ещё не
+содержат. Клиент получает proof только у Auth через authenticated user surface, а
+не создаёт и не проверяет его в Gateway или Space.
+
+1. После проверки password и, для account с включённой 2FA, TOTP либо backup code,
+   Auth выпускает непрозрачный high-entropy proof. Его plaintext возвращается ровно
+   этому клиенту; в durable storage Auth хранит только криптографический hash.
+2. Proof привязан к account и active profile владельца, точным `space_id`,
+   `new_owner_profile_id`, UUID `operation_id`, текущему `session_epoch` и
+   фактически проверенным factors. TTL составляет пять минут. Auth отзывает proof
+   при изменении session epoch, пароля, 2FA или другого security state account.
+3. Публичный transfer request в Space содержит `space_id`, `new_owner_profile_id`,
+   `operation_id` и proof. `operation_id` — UUID, выбранный клиентом для одного
+   намерения передачи; proof из одного operation нельзя использовать для другого.
+   Gateway передаёт authenticated actor только из verified claims, relay-ит opaque proof в Space, redacts его из logs/traces/metrics и не создаёт, не валидирует, не хранит proof и не выводит из него actor.
+4. Space сначала проверяет actor как текущего owner и exact idempotency record по
+   `(actor_profile_id, operation_id)`. Первый запрос сохраняет exact request body.
+   Тот же body возвращает ранее сохранённый outcome; иной body с тем же ключом
+   завершается `ALREADY_EXISTS`. До существующей компенсируемой передачи Space
+   атомарно вызывает trusted Auth consume с этими exact bindings.
+5. Auth consume допускается только trusted Space principal, атомарно помечает proof
+   использованным и возвращает durable receipt, привязанный к `operation_id`.
+   Повтор того же consume после сетевого сбоя возвращает этот receipt, не выдаёт
+   второе разрешение и не расходует другой proof. Любая ошибка Auth/receipt или
+   несовпадение binding закрывает передачу до mutation.
+6. Только этот verified transfer path вправе менять системную роль `Owner`: Space
+   выполняет существующую компенсируемую transition owner/profile + Role, а
+   обычные member-role операции не могут выдать, снять или переназначить `Owner`.
+   Audit/event публикуются только после успешного завершения этой transition.
+
+Клиентские ошибки не раскрывают, существует ли proof и почему именно он не годен:
+отсутствующий/невалидный session → `UNAUTHENTICATED`; неверный password или
+second factor, отсутствующий/истёкший/отозванный/уже consumed proof, либо любой
+несовпавший binding → `PERMISSION_DENIED`; malformed/missing UUID fields →
+`INVALID_ARGUMENT`; actor не owner, self-transfer или target не member →
+`FAILED_PRECONDITION`; отсутствующий space → `NOT_FOUND`; повторный
+`operation_id` с изменённым телом → `ALREADY_EXISTS`. Internal Auth/Role
+unavailability остаётся `UNAVAILABLE`; остальные failure path fail closed.
+
+**Verification before shipment:** contract tests prove required factors by account
+state; all bindings and five-minute expiry; every revocation trigger; single consume
+and durable same-operation receipt; Space same-body replay and changed-body
+`ALREADY_EXISTS`; no mutation/audit/event on consume denial; and that direct Role
+member RPCs reject `Owner` mutation while the trusted compensated path succeeds.
 - **Бан участника**: забаненный не может зайти в спейс; его сообщения остаются (не удаляются); публичный контент спейса — не видит (как Discord)
 - **Slow mode для текстовых чатов** (`group` \| `channel`): настраиваемый интервал 5 сек – 6 ч (настраивается из rate limiting)
 - **Шаблоны при создании**: выбор темы — "Игровое" / "Рабочее" / "Общение"; влияет на дефолтные каналы и структуру, не на функциональность
