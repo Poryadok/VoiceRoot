@@ -26,6 +26,8 @@ type Runner struct {
 	Logger *slog.Logger
 }
 
+const subscriptionRetryInterval = time.Second
+
 func (r *Runner) Start(ctx context.Context, natsURL, instanceID string) error {
 	if r == nil || r.Buffer == nil {
 		return fmt.Errorf("analytics consumer: missing buffer")
@@ -98,17 +100,9 @@ func (r *Runner) Start(ctx context.Context, natsURL, instanceID string) error {
 			}
 			natslog.LogConsume(r.Logger, msg, slog.LevelInfo, "analytics event consumed")
 		}
-		sub, err := js.Subscribe(spec.subject, handler,
-			nats.Durable(durable),
-			nats.BindStream(spec.stream),
-			nats.DeliverNew(),
-			nats.ManualAck(),
-		)
+		sub, err := r.subscribe(ctx, js, spec.stream, spec.subject, durable, handler)
 		if err != nil {
-			sub, err = js.Subscribe("", handler, nats.Bind(spec.stream, durable), nats.ManualAck())
-			if err != nil {
-				return fmt.Errorf("subscribe %s: %w", spec.stream, err)
-			}
+			return err
 		}
 		go func(s *nats.Subscription) {
 			<-ctx.Done()
@@ -117,6 +111,54 @@ func (r *Runner) Start(ctx context.Context, natsURL, instanceID string) error {
 	}
 	<-ctx.Done()
 	return ctx.Err()
+}
+
+// subscribe waits for a publisher-owned stream instead of permanently stopping the
+// analytics consumer when Analytics starts before that publisher. Existing durable
+// consumers still bind by name after a restart.
+func (r *Runner) subscribe(ctx context.Context, js nats.JetStreamContext, stream, subject, durable string, handler nats.MsgHandler) (*nats.Subscription, error) {
+	var sub *nats.Subscription
+	waitingLogged := false
+	err := retryUntilContextDone(ctx, subscriptionRetryInterval, func() error {
+		var subscribeErr error
+		sub, subscribeErr = js.Subscribe(subject, handler,
+			nats.Durable(durable),
+			nats.BindStream(stream),
+			nats.DeliverNew(),
+			nats.ManualAck(),
+		)
+		if subscribeErr == nil {
+			return nil
+		}
+
+		sub, bindErr := js.Subscribe("", handler, nats.Bind(stream, durable), nats.ManualAck())
+		if bindErr == nil {
+			return nil
+		}
+		err := fmt.Errorf("create durable: %w; bind existing durable: %v", subscribeErr, bindErr)
+		if !waitingLogged && r.Logger != nil {
+			r.Logger.Warn("analytics subscription waiting for stream", slog.String("stream", stream), slog.Any("error", err))
+			waitingLogged = true
+		}
+		return err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("subscribe %s: %w", stream, err)
+	}
+	return sub, nil
+}
+
+func retryUntilContextDone(ctx context.Context, interval time.Duration, attempt func() error) error {
+	for {
+		if err := attempt(); err == nil {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(interval):
+		}
+	}
 }
 
 func ensureAnalyticsStream(js nats.JetStreamContext) error {
