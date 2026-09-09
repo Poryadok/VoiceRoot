@@ -368,7 +368,7 @@ Normative inbox classification для DM (`chat_members.inbox_bucket` per `profi
 | Bucket | Когда | `ListChats` filter | UI |
 |--------|-------|-------------------|-----|
 | **`main`** | Friend **или** contact **или** после `AcceptDMRequest` **или** инициатор DM | `inbox=main` (default) | Main chat list |
-| **`requests`** | Первый DM от **незнакомца** (не friend, не contact); privacy `allow_dm` passed | `inbox=requests` | Virtual folder «Запросы» в rail ([navigation.md](navigation.md)) |
+| **`requests`** | Первый DM от **незнакомца** (не friend, не contact); privacy `allow_dm` passed | `inbox=requests` | Virtual filter «Запросы» in desktop folder strip / mobile drawer ([navigation.md](navigation.md)) |
 | **`declined`** | Получатель вызвал `DeclineDMRequest` | **No list RPC** — hidden from `inbox=main` and `inbox=requests`; re-contact via new `SendMessage` → recipient returns to `requests` |
 
 **На CreateDM / EnsureDM:** инициатор → `main`; получатель → `requests` если stranger, иначе `main` для обоих.

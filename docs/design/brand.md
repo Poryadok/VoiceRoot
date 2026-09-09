@@ -43,7 +43,7 @@ app stack: inline / side panel / bottom sheet; full-screen только где �
 
 ## Layout Principles
 
-- **Desktop/Web:** основа — three-column shell из [navigation.md](../features/navigation.md): **rail** (nav + folders + quick access + profiles + ☰ settings), **список чатов**, **открытый чат** (+ optional side panel). Левая колонка не должна соревноваться с контентом: нейтральный фон, компактные строки, badge только где есть сигнал.
+- **Desktop/Web:** основа — three-column shell из [navigation.md](../features/navigation.md): **rail** (nav + Quick Access + profiles + ☰ settings), **список чатов** с compact folder strip, **открытый чат** (+ optional side panel). Rail не содержит папки или их edit/add controls. Левая колонка не должна соревноваться с контентом: нейтральный фон, компактные строки, badge только где есть сигнал.
 - **Mobile:** один главный фокус на экран. Навигация сворачивается, но пользователь не должен терять unread/status в других чатах (active strip).
 - **Density:** ближе к Telegram Desktop: много информации без ощущения тесноты. Вертикальные отступы списков держать компактными, но touch targets на mobile не меньше доступного минимума.
 - **No zero inset:** текст, заголовки и контролы не лижут край экрана или рамку колонки — минимум `space.16` (16 px). Исключения и AccentBar — [penpot-workflow.md](penpot-workflow.md) §1.5.
@@ -73,7 +73,8 @@ app stack: inline / side panel / bottom sheet; full-screen только где �
 - **Message grouping:** группировать соседние сообщения одного отправителя по времени; повторять avatar/name только при смене отправителя или значительной паузе.
 - **Unread:** unread badge в списках, separator в истории, быстрый переход к первому непрочитанному.
 - **Context actions:** reply/edit/delete/reaction/forward появляются по фазам из [PLAN.md](../PLAN.md); место под них проектировать через контекстное меню, не через постоянные кнопки на каждом сообщении.
-- **DM from strangers:** virtual folder «Запросы» в rail/drawer (badge-gated, visible when pending ≥1) — [navigation.md](../features/navigation.md) § «Message requests», [screen-controls.md](screen-controls.md) §1.1b #5; не segmented toggle в middle column.
+- **DM from strangers:** virtual filter «Запросы» в desktop folder strip / mobile drawer (badge-gated, visible when pending ≥1) — [navigation.md](../features/navigation.md) § «Message requests», [screen-controls.md](screen-controls.md) §1.1b #5; не отдельный segmented toggle main/requests.
+- **Lists and menus:** repeated rows use `1px color.divider.list` after the leading icon/avatar and before the right inset. Dropdowns divide semantic groups once; do not outline every row or wrap rows in cards.
 
 ## Voice UX
 

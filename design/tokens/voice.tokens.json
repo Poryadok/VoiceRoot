@@ -41,7 +41,7 @@
     "searchRowHeight": 44,
     "composerMinHeight": 52,
     "composerActionSize": 36,
-    "callBarHeight": 48,
+    "callBarHeight": 144,
     "badgeSize": 20,
     "badgeRailSize": 15,
     "badgeUnreadSize": 18,

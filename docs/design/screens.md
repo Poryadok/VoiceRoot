@@ -15,7 +15,7 @@ Viewer URL pattern: `https://design.penpot.app/#/viewer/{fileId}/{pageId}/{frame
 |-------------------------|-------------------------------|-------|
 | `Overlay/Matchmaking/MatchRating` | `Overlay/Matchmaking/Rating` | Same surface; prefer **Rating** as Screen ID |
 | `Overlay/Call/ScreenSharePicker` | *(GAP — see GAP inventory § Penpot · v3)* | Start picker for what to share (§33). **Keep both** with Panel — not an alias. Product: dual-frame inventory (picker + viewer) |
-| `Overlay/Call/MiniBar` | *(GAP — see GAP inventory § Penpot · v3)* | Persistent mini call bar when navigated away from call (§10.2b #19) |
+| `Overlay/Call/MiniBar` | *(GAP — see GAP inventory § Penpot · v3)* | Persistent docked call module when navigated away from call (§10.2b #19); legacy ID retained for inventory compatibility |
 | `Panel/Call/ScreenShare` | `Panel/Call/ScreenShare` | In-call share viewer/manage (local preview, stream switch, pause/stop). Companion to Overlay picker, not a substitute |
 | Settings detail labels `Security`, `Notifications`, `Subscription`, `Privacy` | `Screen/Settings/Security` etc. | Abbreviated Penpot labels = same Screen IDs |
 | Shell list column | `Screen/Chat/List` | Same controls as Shell §1.2–1.4 |
@@ -27,7 +27,7 @@ Viewer URL pattern: `https://design.penpot.app/#/viewer/{fileId}/{pageId}/{frame
 | Outgoing ringing UI | `Overlay/Call/Outgoing` | Distinct from Active / Incoming. Pre-connect mute required; cam required on video outgoing (§10.2a — Discord DM ringing UX) |
 | Empty / error / offline chrome | `State/Chat/Empty`, `State/Chat/Error`, `State/Network/Offline` | Desktop canons; mobile page `17_States_Mobile` reserved. Empty primary CTA = messenger compose/DM/invite (§54.1). Offline = dismissible non-blocking banner (§54.3) |
 | Chat archive list | `Screen/Chat/Archive` | **GAP** — no Penpot frame yet; §1.10 |
-| Folder rail zone | `Panel/Shell/Navigation` (folders slice) | **GAP** — system + custom folders in rail §1.1b |
+| Desktop folder filter strip | `Screen/Chat/List` header slice | **GAP** — compact system + custom filters above chat list §1.1b; no folders in rail |
 | Quick Access rail slots | `Panel/Shell/Navigation` (QA slice) | **GAP** — ≤15 slots §1.1c |
 | Attach popup | `Panel/Chat/AttachMenu` | **GAP** — §3.6a |
 | Emoji / Stickers / GIF panel | `Panel/Chat/EmojiPicker` | **GAP** — §3.6b |
@@ -35,7 +35,7 @@ Viewer URL pattern: `https://design.penpot.app/#/viewer/{fileId}/{pageId}/{frame
 | Pinned message bar | `Panel/Chat/PinnedMessageBar` | **GAP** — §3.1a (basic bar partial in Flutter) |
 | Video note bubble | `Screen/Chat/Room/VideoNoteBubble` | **GAP** — round player §3.3 #11; alias for prose «Room variant» |
 | Scheduled messages strip | `Panel/Chat/ScheduledStrip` | **GAP** — §3.6 #13–17 (composer pending schedule UI) |
-| Mini call bar | `Overlay/Call/MiniBar` | **GAP** — §10.2b #19; persistent in-call chrome when navigated away |
+| Mini call panel | `Overlay/Call/MiniBar` | **GAP** — §10.2b #19; docked below desktop chat list / top content slot on mobile |
 | Screen share start picker | `Overlay/Call/ScreenSharePicker` | **GAP** — §33; companion to `Panel/Call/ScreenShare` (both required) |
 
 Controls checklist (buttons per surface): [screen-controls.md](screen-controls.md).
@@ -126,10 +126,10 @@ Draft in Penpot as `Screen/… · v3` per [todo/design.md](../todo/design.md). D
 | `Panel/Shell/SideHost` · v3 | §1.9 | partial | Modes: info / members / thread / search (H drawer + V sheet/push) |
 | `Screen/Chat/List` · v3 | §1.2–1.4 | partial list | Row preview ticks, media labels, ctx actions (pin/mute/archive/mark read) |
 | `Panel/Chat/ComposerErrors` · v3 | §3.6f | — | Upload fail, processing fail, quota, schedule, sticker/GIF, optimistic retry variants |
-| `Overlay/Call/MiniBar` · v3 | §10.2b #19 | — | Floating in-call bar when navigated away from call screen |
+| `Overlay/Call/MiniBar` · v3 | §10.2b #19 | — | Desktop docked call module below chat list; mobile top content slot; never floating |
 | `Overlay/Call/ScreenSharePicker` · v3 | §33 | — | Start picker — keep with `Panel/Call/ScreenShare` (both required) |
 
-Rail slices (folders, Quick Access) ship inside `Panel/Shell/Navigation` **· v3** refresh — separate frame IDs optional.
+Quick Access and ProfileStack ship inside `Panel/Shell/Navigation` **· v3**. Folder filters ship in the `Screen/Chat/List` header area and never in rail.
 
 ## Penpot pages
 
