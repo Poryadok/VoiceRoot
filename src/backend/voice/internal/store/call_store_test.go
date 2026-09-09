@@ -68,6 +68,53 @@ func TestCallStore_groupVoiceJoinIsIdempotent(t *testing.T) {
 	require.Len(t, call.States, 2)
 }
 
+// TestCallStore_oneActiveVoicePerProfileUntilLeave characterizes the documented
+// Voice Service invariant: a profile, rather than a device connection, can
+// occupy only one active voice session.  A successful leave frees that profile
+// for another open voice session.
+func TestCallStore_oneActiveVoicePerProfileUntilLeave(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	s := NewMemoryCallStore()
+	voiceRoom := callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM
+
+	_, err := s.CreateCall(ctx, Call{
+		RoomID:             "room-first",
+		LivekitRoomName:    "lk-first",
+		VoiceRoomID:        "voice-room-first",
+		SessionKind:        voiceRoom,
+		InitiatorProfileID: "profile-shared",
+		MediaKind:          callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
+		Status:             callsv1.CallStatus_CALL_STATUS_ACTIVE,
+	})
+	require.NoError(t, err)
+
+	_, err = s.CreateCall(ctx, Call{
+		RoomID:             "room-second",
+		LivekitRoomName:    "lk-second",
+		VoiceRoomID:        "voice-room-second",
+		SessionKind:        voiceRoom,
+		InitiatorProfileID: "profile-shared",
+		MediaKind:          callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
+		Status:             callsv1.CallStatus_CALL_STATUS_ACTIVE,
+	})
+	require.ErrorIs(t, err, ErrActiveCall)
+
+	_, err = s.RemoveParticipant(ctx, "room-first", "profile-shared")
+	require.NoError(t, err)
+
+	_, err = s.CreateCall(ctx, Call{
+		RoomID:             "room-second",
+		LivekitRoomName:    "lk-second",
+		VoiceRoomID:        "voice-room-second",
+		SessionKind:        voiceRoom,
+		InitiatorProfileID: "profile-shared",
+		MediaKind:          callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
+		Status:             callsv1.CallStatus_CALL_STATUS_ACTIVE,
+	})
+	require.NoError(t, err)
+}
+
 func TestCallStore_GetActiveGroupCallForChat(t *testing.T) {
 	ctx := context.Background()
 	s := NewMemoryCallStore()
