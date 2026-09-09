@@ -25,10 +25,17 @@ type recordedRoleCreatedEvent struct {
 	name    string
 }
 
+type recordedOverrideSetEvent struct {
+	resourceID string
+	roleID     string
+}
+
 type recordingRoleEvents struct {
 	roleevents.NoopPublisher
-	mu      sync.Mutex
-	created []recordedRoleCreatedEvent
+	mu                sync.Mutex
+	created           []recordedRoleCreatedEvent
+	chatOverrideSets  []recordedOverrideSetEvent
+	voiceOverrideSets []recordedOverrideSetEvent
 }
 
 func (p *recordingRoleEvents) PublishRoleCreated(_ context.Context, spaceID, roleID, name string) error {
@@ -42,6 +49,32 @@ func (p *recordingRoleEvents) createdEvents() []recordedRoleCreatedEvent {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return append([]recordedRoleCreatedEvent(nil), p.created...)
+}
+
+func (p *recordingRoleEvents) PublishChatOverrideSet(_ context.Context, chatID, roleID string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.chatOverrideSets = append(p.chatOverrideSets, recordedOverrideSetEvent{resourceID: chatID, roleID: roleID})
+	return nil
+}
+
+func (p *recordingRoleEvents) PublishVoiceOverrideSet(_ context.Context, voiceRoomID, roleID string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.voiceOverrideSets = append(p.voiceOverrideSets, recordedOverrideSetEvent{resourceID: voiceRoomID, roleID: roleID})
+	return nil
+}
+
+func (p *recordingRoleEvents) chatOverrideSetEvents() []recordedOverrideSetEvent {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]recordedOverrideSetEvent(nil), p.chatOverrideSets...)
+}
+
+func (p *recordingRoleEvents) voiceOverrideSetEvents() []recordedOverrideSetEvent {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]recordedOverrideSetEvent(nil), p.voiceOverrideSets...)
 }
 
 func bootstrapRoleManagerAtPositionTwo(t *testing.T, s *store.RoleStore) (spaceID, ownerID, actorID uuid.UUID) {
@@ -124,6 +157,68 @@ func TestGetVoiceRoomOverrides_SetAndList(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, list.GetOverrideList().GetOverrides(), 1)
+}
+
+// TestSetChatOverride_PublishesCurrentSetEvent characterizes the documented
+// role.chat_override_set event. Removal intentionally has no parallel event:
+// that gap is tracked in docs/todo/backend.md.
+func TestSetChatOverride_PublishesCurrentSetEvent(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	s, cleanup := startRoleStoreTest(t)
+	defer cleanup()
+	events := &recordingRoleEvents{}
+	client, stop := startRoleGRPCTestServer(t, s.Pool, func(svc *RoleGRPC) { svc.Events = events })
+	defer stop()
+
+	spaceID := uuid.New()
+	ownerID := uuid.New()
+	chatID := uuid.New().String()
+	require.NoError(t, s.BootstrapSpaceRoles(context.Background(), spaceID, ownerID))
+	memberRoleID := roleIDsByName(t, s, spaceID)[permissions.RoleMember]
+	sendMask, err := permissions.MaskFor(permissions.TextChatSendMessages)
+	require.NoError(t, err)
+
+	_, err = client.SetChatOverride(ctxWithProfile(ownerID), &rolev1.SetChatOverrideRequest{
+		SpaceId:  spaceID.String(),
+		Chat:     &chatv1.ChatRef{Id: chatID},
+		RoleId:   memberRoleID.String(),
+		DenyMask: sendMask,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []recordedOverrideSetEvent{{resourceID: chatID, roleID: memberRoleID.String()}}, events.chatOverrideSetEvents())
+}
+
+// TestSetVoiceRoomOverride_PublishesCurrentSetEvent characterizes the
+// documented role.voice_override_set event without asserting consumer
+// audience, payload ordering, or invalidation behavior.
+func TestSetVoiceRoomOverride_PublishesCurrentSetEvent(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	s, cleanup := startRoleStoreTest(t)
+	defer cleanup()
+	events := &recordingRoleEvents{}
+	client, stop := startRoleGRPCTestServer(t, s.Pool, func(svc *RoleGRPC) { svc.Events = events })
+	defer stop()
+
+	spaceID := uuid.New()
+	ownerID := uuid.New()
+	voiceRoomID := uuid.New().String()
+	require.NoError(t, s.BootstrapSpaceRoles(context.Background(), spaceID, ownerID))
+	memberRoleID := roleIDsByName(t, s, spaceID)[permissions.RoleMember]
+	speakMask, err := permissions.MaskFor(permissions.VoiceSpeak)
+	require.NoError(t, err)
+
+	_, err = client.SetVoiceRoomOverride(ctxWithProfile(ownerID), &rolev1.SetVoiceRoomOverrideRequest{
+		SpaceId:     spaceID.String(),
+		VoiceRoomId: voiceRoomID,
+		RoleId:      memberRoleID.String(),
+		DenyMask:    speakMask,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []recordedOverrideSetEvent{{resourceID: voiceRoomID, roleID: memberRoleID.String()}}, events.voiceOverrideSetEvents())
 }
 
 func TestRemoveChatOverride_ClearsRow(t *testing.T) {
