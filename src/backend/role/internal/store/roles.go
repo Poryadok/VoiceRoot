@@ -336,6 +336,14 @@ func (s *RoleStore) CanManageRole(ctx context.Context, spaceID, actorProfileID, 
 	if err != nil || target == nil {
 		return false, err
 	}
+	// Owner is immutable through the ordinary member-role RPCs. Space owns the
+	// dedicated TransferOwnership transaction and calls the store mutation
+	// primitives directly so it can compensate a failed transfer. Letting an
+	// Owner pass the general hierarchy check here would make AssignRole and
+	// RevokeRole bypass that transaction.
+	if target.Name == permissions.RoleOwner {
+		return false, nil
+	}
 	assignMask, err := permissions.MaskFor(permissions.MemberAssignRoles)
 	if err != nil {
 		return false, err
