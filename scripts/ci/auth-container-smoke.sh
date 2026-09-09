@@ -121,6 +121,7 @@ docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
 
 echo "Starting auth container ($AUTH_IMAGE)..."
 # Deterministic ephemeral key for this isolated JDBC smoke; never a deploy secret or dev fallback.
+# Account deletion likewise uses a deterministic smoke-only HMAC key; production uses Kubernetes Secret.
 docker run -d --name "$CONTAINER_NAME" --network "$NETWORK" \
   -e SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/auth_db \
   -e SPRING_DATASOURCE_USERNAME=voice \
@@ -130,6 +131,7 @@ docker run -d --name "$CONTAINER_NAME" --network "$NETWORK" \
   -e SPRING_DATA_REDIS_PORT=6379 \
   -e AUTH_JWT_PRIVATE_KEY_LOCATION=file:/run/jwt.pem \
   -e AUTH_TOTP_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef \
+  -e ACCOUNT_DELETE_TOKEN_SECRET=auth-smoke-only-account-delete-token-secret-32b \
   -v "$JWT_DOCKER_VOL:/run/jwt.pem:ro" \
   -p "${HTTP_PORT}:8080" \
   -p "${GRPC_PORT}:9090" \
