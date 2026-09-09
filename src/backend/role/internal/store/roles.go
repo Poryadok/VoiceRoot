@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -61,12 +62,13 @@ func (s *RoleStore) bootstrapSystemRolesTx(ctx context.Context, tx pgx.Tx, space
 	for _, spec := range specs {
 		defaultJoin := spec.Name == permissions.RoleMember
 		var id uuid.UUID
+		var createdAt time.Time
 		err := tx.QueryRow(ctx, `
 INSERT INTO roles (space_id, name, is_system, position, permissions, is_default_join)
 VALUES ($1, $2, true, $3, $4, $5)
 
-RETURNING id
-`, spaceID, spec.Name, spec.Position, int64(spec.Mask), defaultJoin).Scan(&id)
+RETURNING id, created_at
+`, spaceID, spec.Name, spec.Position, int64(spec.Mask), defaultJoin).Scan(&id, &createdAt)
 		if err != nil {
 			return nil, fmt.Errorf("insert system role %q: %w", spec.Name, err)
 		}
@@ -77,6 +79,7 @@ RETURNING id
 			PermissionsMask: spec.Mask,
 			Position:        spec.Position,
 			Managed:         true,
+			CreatedAt:       createdAt,
 		})
 	}
 	return created, nil
@@ -129,7 +132,7 @@ func scanRoleRow(row pgx.Row) (RoleRow, error) {
 	var perms int64
 	var isSystem bool
 	var createdBy *uuid.UUID
-	err := row.Scan(&r.ID, &r.SpaceID, &r.Name, &isSystem, &r.Position, &perms, &createdBy)
+	err := row.Scan(&r.ID, &r.SpaceID, &r.Name, &isSystem, &r.Position, &perms, &createdBy, &r.CreatedAt)
 	if err != nil {
 		return RoleRow{}, err
 	}
@@ -145,7 +148,7 @@ type roleQueryer interface {
 
 func listRoles(ctx context.Context, queryer roleQueryer, spaceID uuid.UUID) ([]RoleRow, error) {
 	rows, err := queryer.Query(ctx, `
-SELECT id, space_id, name, is_system, position, permissions, created_by_profile_id
+SELECT id, space_id, name, is_system, position, permissions, created_by_profile_id, created_at
 FROM roles
 WHERE space_id = $1
 ORDER BY position DESC, name ASC
@@ -176,7 +179,7 @@ func (s *RoleStore) ListRoles(ctx context.Context, spaceID uuid.UUID) ([]RoleRow
 // GetRoleByID loads a single role.
 func (s *RoleStore) GetRoleByID(ctx context.Context, roleID uuid.UUID) (*RoleRow, error) {
 	row := s.Pool.QueryRow(ctx, `
-SELECT id, space_id, name, is_system, position, permissions, created_by_profile_id
+SELECT id, space_id, name, is_system, position, permissions, created_by_profile_id, created_at
 FROM roles WHERE id = $1
 `, roleID)
 	r, err := scanRoleRow(row)
@@ -216,7 +219,7 @@ func (s *RoleStore) GetMemberRoles(ctx context.Context, spaceID, profileID uuid.
 		return nil, errors.New("role store: pool not configured")
 	}
 	rows, err := s.Pool.Query(ctx, `
-SELECT r.id, r.space_id, r.name, r.is_system, r.position, r.permissions, r.created_by_profile_id
+SELECT r.id, r.space_id, r.name, r.is_system, r.position, r.permissions, r.created_by_profile_id, r.created_at
 FROM member_roles mr
 JOIN roles r ON r.id = mr.role_id
 WHERE mr.space_id = $1 AND mr.profile_id = $2
@@ -637,7 +640,7 @@ func (s *RoleStore) GetDefaultJoinRole(ctx context.Context, spaceID uuid.UUID) (
 		return nil, errors.New("role store: pool not configured")
 	}
 	row := s.Pool.QueryRow(ctx, `
-SELECT id, space_id, name, is_system, position, permissions, created_by_profile_id
+SELECT id, space_id, name, is_system, position, permissions, created_by_profile_id, created_at
 FROM roles WHERE space_id = $1 AND is_default_join = true
 LIMIT 1
 `, spaceID)
