@@ -898,8 +898,10 @@ services:
       GATEWAY_JWKS_URL: http://auth:8080/api/v1/auth/.well-known/jwks.json
       GATEWAY_JWT_ISSUER: voice-auth
       GATEWAY_JWT_AUDIENCE: voice-client
-      # Compose dev: disable shared auth bucket (login/register) for local iteration.
-      GATEWAY_RATE_LIMIT_RULES_JSON: '${GATEWAY_RATE_LIMIT_RULES_JSON:-{"Auth":{"limit":0,"window":"15m"}}}'
+      # Compose fixture: Flutter E2E creates many accounts from one loopback IP.
+      # Keep Auth's own Redis per-account OTP throttle enabled; only Gateway's
+      # shared-IP Auth and OTP buckets are disabled here.
+      GATEWAY_RATE_LIMIT_RULES_JSON: '${GATEWAY_RATE_LIMIT_RULES_JSON:-{"Auth":{"limit":0,"window":"15m"},"OTP":{"limit":0,"window":"10m"}}}'
       # Compose dev only: Flutter web may use any localhost port as Origin.
       GATEWAY_CORS_ALLOWED_ORIGINS: "*"
       GATEWAY_DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/gateway_db?sslmode=disable

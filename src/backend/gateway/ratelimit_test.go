@@ -74,6 +74,17 @@ func TestDefaultRateLimitRules_messagesSend(t *testing.T) {
 	}
 }
 
+func TestDefaultRateLimitRules_otpProductionLimit(t *testing.T) {
+	t.Parallel()
+	rule, ok := defaultRateLimitRules()["OTP"]
+	if !ok {
+		t.Fatal("missing OTP rule")
+	}
+	if rule.Limit != 3 || rule.Window != 10*time.Minute {
+		t.Fatalf("OTP rule = %#v, want limit 3 window 10m", rule)
+	}
+}
+
 func TestSlidingWindowLimiter_messagesSend_fivePerFiveSeconds(t *testing.T) {
 	t.Parallel()
 	now := time.Unix(1700, 0)
