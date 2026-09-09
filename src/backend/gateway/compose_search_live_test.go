@@ -7,9 +7,11 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -73,12 +75,20 @@ func TestComposeSearchInChat_live(t *testing.T) {
 	defer sendResp.Body.Close()
 	sendBody, _ := io.ReadAll(sendResp.Body)
 	require.Equal(t, http.StatusOK, sendResp.StatusCode, "body=%s", string(sendBody))
+	var sent struct {
+		Message struct {
+			ID string `json:"id"`
+		} `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal(sendBody, &sent))
+	require.NotEmpty(t, sent.Message.ID)
 
 	searchURL := fmt.Sprintf("%s/api/v1/search/in-chat?chat_id=%s&q=%s",
 		base, url.QueryEscape(dmParsed.Chat.ID), url.QueryEscape(token))
 	var lastBody string
 	var lastCode int
-	require.Eventually(t, func() bool {
+	var lastErr string
+	if !assert.Eventually(t, func() bool {
 		req, err := http.NewRequest(http.MethodGet, searchURL, nil)
 		if err != nil {
 			return false
@@ -86,17 +96,20 @@ func TestComposeSearchInChat_live(t *testing.T) {
 		req.Header.Set("Authorization", "Bearer "+sessA.AccessToken)
 		resp, err := client.Do(req)
 		if err != nil {
+			lastCode = 0
+			lastBody = ""
+			lastErr = err.Error()
 			return false
 		}
 		defer resp.Body.Close()
 		body, _ := io.ReadAll(resp.Body)
 		lastBody = string(body)
 		lastCode = resp.StatusCode
-		if resp.StatusCode != http.StatusOK {
-			return false
-		}
-		return bytes.Contains(body, []byte(token))
-	}, 45*time.Second, 2*time.Second, "search must return indexed message; last status=%d body=%s", lastCode, lastBody)
+		lastErr = ""
+		return resp.StatusCode == http.StatusOK && searchResponseContainsMessage(body, sent.Message.ID, token)
+	}, 45*time.Second, 2*time.Second) {
+		t.Fatalf("search must return indexed message; last status=%d body=%s transport_error=%s", lastCode, lastBody, lastErr)
+	}
 }
 
 // TestComposeSearchNamespace_live ensures /api/v1/search routes are wired (not 404).
@@ -119,4 +132,38 @@ func TestComposeSearchNamespace_live(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	require.NotEqual(t, http.StatusNotFound, resp.StatusCode,
 		"GET /api/v1/search/global must be wired when search upstream exists; body=%s", string(body))
+}
+
+func searchResponseContainsMessage(body []byte, messageID, token string) bool {
+	var parsed struct {
+		SearchResults struct {
+			Hits []struct {
+				MessageID string `json:"message_id"`
+				Snippet   string `json:"snippet"`
+			} `json:"hits"`
+		} `json:"search_results"`
+	}
+	if json.Unmarshal(body, &parsed) != nil {
+		return false
+	}
+	for _, hit := range parsed.SearchResults.Hits {
+		if hit.MessageID == messageID && strings.Contains(stripSearchHighlightTags(hit.Snippet), token) {
+			return true
+		}
+	}
+	return false
+}
+
+// stripSearchHighlightTags removes the <b> tags emitted by MessageSearchStore's ts_headline configuration.
+func stripSearchHighlightTags(snippet string) string {
+	return strings.NewReplacer("<b>", "", "</b>", "").Replace(snippet)
+}
+
+func TestSearchResponseContainsMessage(t *testing.T) {
+	body := []byte(`{"search_results":{"hits":[{"message_id":"message-1","snippet":"compose <b>search</b> unique <b>search</b>-<b>token</b>"}]}}`)
+
+	require.True(t, searchResponseContainsMessage(body, "message-1", "search-token"))
+	require.False(t, searchResponseContainsMessage(body, "other-message", "search-token"))
+	require.False(t, searchResponseContainsMessage(body, "message-1", "other-token"))
+	require.False(t, searchResponseContainsMessage([]byte(`not json`), "message-1", "search-token"))
 }
