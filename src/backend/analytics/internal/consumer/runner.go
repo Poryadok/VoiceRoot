@@ -2,6 +2,7 @@ package consumer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -25,8 +26,6 @@ type Runner struct {
 	Buffer *buffer.Accumulator
 	Logger *slog.Logger
 }
-
-const subscriptionRetryInterval = time.Second
 
 func (r *Runner) Start(ctx context.Context, natsURL, instanceID string) error {
 	if r == nil || r.Buffer == nil {
@@ -117,46 +116,75 @@ func (r *Runner) Start(ctx context.Context, natsURL, instanceID string) error {
 // analytics consumer when Analytics starts before that publisher. Existing durable
 // consumers still bind by name after a restart.
 func (r *Runner) subscribe(ctx context.Context, js nats.JetStreamContext, stream, subject, durable string, handler nats.MsgHandler) (*nats.Subscription, error) {
-	var sub *nats.Subscription
-	waitingLogged := false
-	err := retryUntilContextDone(ctx, subscriptionRetryInterval, func() error {
-		var subscribeErr error
-		sub, subscribeErr = js.Subscribe(subject, handler,
-			nats.Durable(durable),
-			nats.BindStream(stream),
-			nats.DeliverNew(),
-			nats.ManualAck(),
+	return subscribeJetStreamWithRetry(ctx, r.Logger, stream, func() (*nats.Subscription, error) {
+		return subscribeCreateOrBind(
+			func() (*nats.Subscription, error) {
+				return js.Subscribe(subject, handler,
+					nats.Durable(durable),
+					nats.BindStream(stream),
+					nats.DeliverNew(),
+					nats.ManualAck(),
+				)
+			},
+			func() (*nats.Subscription, error) {
+				return js.Subscribe("", handler, nats.Bind(stream, durable), nats.ManualAck())
+			},
 		)
-		if subscribeErr == nil {
-			return nil
-		}
-
-		sub, bindErr := js.Subscribe("", handler, nats.Bind(stream, durable), nats.ManualAck())
-		if bindErr == nil {
-			return nil
-		}
-		err := fmt.Errorf("create durable: %w; bind existing durable: %v", subscribeErr, bindErr)
-		if !waitingLogged && r.Logger != nil {
-			r.Logger.Warn("analytics subscription waiting for stream", slog.String("stream", stream), slog.Any("error", err))
-			waitingLogged = true
-		}
-		return err
 	})
-	if err != nil {
-		return nil, fmt.Errorf("subscribe %s: %w", stream, err)
-	}
-	return sub, nil
 }
 
-func retryUntilContextDone(ctx context.Context, interval time.Duration, attempt func() error) error {
+func isJetStreamNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, nats.ErrStreamNotFound) {
+		return true
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "stream not found")
+}
+
+// subscribeCreateOrBind creates a durable consumer, or binds to the durable one
+// created by an earlier Analytics process. A missing publisher stream must reach
+// the caller unchanged so it is the only retryable startup condition.
+func subscribeCreateOrBind(create, bind func() (*nats.Subscription, error)) (*nats.Subscription, error) {
+	sub, createErr := create()
+	if createErr == nil {
+		return sub, nil
+	}
+	if isJetStreamNotFound(createErr) {
+		return nil, createErr
+	}
+	sub, bindErr := bind()
+	if bindErr == nil {
+		return sub, nil
+	}
+	return nil, fmt.Errorf("create durable: %w; bind existing durable: %v", createErr, bindErr)
+}
+
+func subscribeJetStreamWithRetry(ctx context.Context, logger *slog.Logger, stream string, subscribe func() (*nats.Subscription, error)) (*nats.Subscription, error) {
+	delay := time.Second
 	for {
-		if err := attempt(); err == nil {
-			return nil
+		sub, err := subscribe()
+		if err == nil {
+			return sub, nil
+		}
+		if !isJetStreamNotFound(err) {
+			return nil, fmt.Errorf("subscribe %s: %w", stream, err)
+		}
+		if logger != nil {
+			logger.Info("analytics JetStream stream not ready, retrying",
+				slog.String("stream", stream),
+				slog.Duration("retry_in", delay),
+				slog.String("error", err.Error()),
+			)
 		}
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(interval):
+			return nil, fmt.Errorf("subscribe %s: %w", stream, ctx.Err())
+		case <-time.After(delay):
+		}
+		if delay < 30*time.Second {
+			delay *= 2
 		}
 	}
 }
