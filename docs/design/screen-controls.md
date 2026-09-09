@@ -40,14 +40,14 @@ Dedicated frame for the chat-list column (desktop middle column / mobile full li
 
 ### 1.1 Rail / Tab bar
 
-**Desktop rail (top → bottom):** Nav (Chats / Social / Match) → Folders zone (§1.1b) → Quick Access (§1.1c) → spacer → ProfileStack → ☰ Settings (bottom). **Settings tab removed** from top nav — only ☰ under ProfileStack.
+**Desktop rail (top → bottom):** Nav (Chats / Social / Match) → Quick Access (§1.1c) → spacer → ProfileStack (up to three visible profiles in the canonical shell) → ☰ Settings (bottom). Folders never occupy rail slots; on desktop they are compact filters above the chat list (§1.1b). **Settings tab removed** from top nav — only ☰ under ProfileStack.
 
 | # | Control | Layout | Visible when | Tap action |
 |---|---------|--------|-------------|------------|
 | 1 | Chats tab | H+V | Always | Show chat list |
 | 2 | Social / Friends tab | H+V | Always | Show social panel |
 | 3 | Matchmaking tab | H+V | Always | Open MM catalog |
-| 4 | Folders zone | H — rail; V — **drawer only** (§1.6a) | Always | See §1.1b |
+| 4 | Folder filters | H — above chat list; V — **drawer only** (§1.6a) | Always | See §1.1b |
 | 5 | Quick Access zone | H — rail; V — **drawer only** (§1.6a) | Always | See §1.1c |
 | 6 | Profile avatar | H — rail (ProfileStack); V — tab bar or header | Always | Open profile switcher menu (§1.1a); V: also swipe on avatar to switch profiles per multi-profile.md |
 | 7 | Stories ring | H+V | User has active story (overlay on profile avatar) | Open story viewer |
@@ -66,17 +66,17 @@ Opens from §1.1 #6 (ПКМ desktop / long-press mobile):
 | 5 | Create story | H+V | Always | Navigate to Screen / Stories / Create |
 | 6 | **Archive** | H+V | Always | Open `Screen / Chat / Archive` (§1.10) |
 
-### 1.1b Folder rail item
+### 1.1b Folder filter
 
-Each folder in rail scroll zone (system + custom):
+System and custom folders filter the chat list. On H they form one compact, horizontally scrollable strip below search; on V they live in the drawer. They do not create avatar-like rail blocks and do not add a plus button to rail.
 
 | # | Control | Layout | Visible when | Tap action |
 |---|---------|--------|-------------|------------|
-| 1 | Folder row (Все / ЛС / Группы / Каналы / Спейсы / custom) | H — rail; V — drawer | Always | Filter chat list by folder; no folder tabs in middle column |
+| 1 | Folder filter (Все / ЛС / Группы / Каналы / Спейсы / custom) | H — compact strip above chat list; V — drawer | Always | Filter chat list |
 | 2 | Unread badge on folder | H+V | Folder has unread chats | — (visual: aggregate unread count) |
-| 3 | Folder tooltip | H | Hover on folder | — (display folder name + unread summary) |
-| 4 | Edit folders | H — icon at bottom of folders zone; V — ctx / menu | Always | Manage / reorder / create custom folders |
-| 5 | Message requests | H+V | ≥1 pending DM in `inbox_bucket=requests`; **hidden when count = 0** | Open requests folder — [navigation.md](../features/navigation.md) § «Message requests» |
+| 3 | Folder tooltip | H | Compact icon-only item | — (display folder name + unread summary) |
+| 4 | Edit folders | H — trailing control in folder strip; V — ctx / menu | Always | Manage / reorder / create custom folders |
+| 5 | Message requests | H — item in the same folder strip; V — drawer | ≥1 pending DM in `inbox_bucket=requests`; **hidden when count = 0** | Open a dedicated requests workspace with Back, explicit title and explanatory empty/detail pane — [navigation.md](../features/navigation.md) § «Message requests» |
 
 Badge aggregation (dedup, muted, @mention) — [navigation.md](../features/navigation.md) § «Badge unread на папке».
 
@@ -104,9 +104,9 @@ Rail slots for pinned-profile chats (≠ folder pin, ≠ Friends favourites):
 | 5 | Create space (submenu) | H+V | From #2 | Open Panel / Space / Create |
 | 6 | Join space (submenu) | H+V | From #2 | Open Panel / Space / JoinInvite or catalog |
 
-### 1.3 Folder tabs — **Removed (deprecated tombstone)**
+### 1.3 Full-width folder tabs — **Removed (deprecated tombstone)**
 
-> **Do not draw.** Folder filter lives only in rail §1.1b. This subsection is a cross-ref tombstone only — controls moved to §1.1b #1 and #4.
+> **Do not draw a text-heavy full-width tab bar.** Use the compact folder strip from §1.1b on H or the drawer list on V. Do not put folders in rail and do not add a separate main/requests segmented control.
 
 ### 1.3a Message request row (inside requests folder)
 
@@ -273,8 +273,11 @@ Chrome host for right-side content (desktop). Not a product feature by itself �
 
 | # | Control | Layout | Visible when | Tap action |
 |---|---------|--------|-------------|------------|
-| 1 | Nickname field | H+V | Always | Input nickname |
-| 2 | Join as guest | H+V | Nickname filled | Create guest → main shell |
+| 1 | Back | V (app bar); H (form link) | Always | Return to Login without leaving the app |
+| 2 | Nickname field | H+V | Always | Input nickname |
+| 3 | Join as guest | H+V | Nickname filled | Create guest → main shell |
+
+On Web/Android, system/browser Back while this route is open is intercepted by the app router and performs the same in-app transition to Login. It must not navigate to the previous website or close the Voice flow.
 
 ### 2.3 Guest convert reminder (banner, not screen)
 
@@ -1057,8 +1060,7 @@ Entry: from Chat Info #9 (GRP) or SideHost members mode for a group chat. Distin
 | 2 | Member row (avatar + name + role/owner badge) | H+V | Always (per member) | Open `Panel / Social / ProfileDetail` |
 | 3 | Kick member | H+V | Admin/owner; not self | Kick (confirm) |
 | 4 | Transfer ownership | H+V | Owner; on another member | Transfer group ownership (confirm) |
-| 5 | Leave group | H+V | Always (member); owner needs transfer first | Leave group (confirm); owner sees hint if transfer required |
-| 6 | Add members | H+V | Has add-members right; under 500 cap | Open contact picker (same as Chat Info #10) |
+| 5 | Add members | H+V | Has add-members right; under 500 cap | Open contact picker (same as Chat Info #10) |
 
 ### 10.1b Panel / Chat / ChannelSettings
 
@@ -1134,7 +1136,7 @@ Entry: after initiator starts DM voice/video (or group temp voice) and before ca
 | 16a | Speaking indicator (per participant) | H+V | In call, participant speaking | — (visual: avatar highlight / glow animation) |
 | 17 | Accept call (incoming) | H+V | Incoming call overlay | Accept |
 | 18 | Decline call (incoming) | H+V | Incoming call overlay | Decline → "missed call" in DM |
-| 19 | Mini call bar (persistent) | H+V | In call, navigated away from call screen | Floating bar: avatar(s) + duration + mute + hang up; tap → return to call (`Overlay / Call / MiniBar`) |
+| 19 | Mini call panel (persistent) | H+V | In call, navigated away from call screen | **H:** docked ~144 px module below the chat list with call/room name, duration, ordered participant avatars, Mute, Deafen, Screen share and Hang up. **V:** normal top content slot, never floating. Speaking participant moves to the first visible position and receives an accent avatar ring. Tap non-control area → return to call (`Overlay / Call / MiniBar`) |
 | 20 | Hand-raise request list (organizer) | H+V | Organizer in raise-hand-enabled room | List of raised hands; per-row: Grant word / Deny |
 | 21 | Voice session conflict dialog | H+V | Switching profiles while in voice call | — (display: "Ты сейчас в войс-чате (Профиль A). Выйти из него и войти сюда?"); [Выйти и переключить] / [Отмена] |
 | 22 | In-call notification overlay | H+V | Notification arrives during voice chat | Inline overlay banner; tap opens related chat/thread without dropping voice |
@@ -1224,15 +1226,16 @@ Folder label uses GLOSSARY term **Спейс** (EN key: Space).
 |---|---------|--------|-------------|------------|
 | 1 | Skip / "Пропустить" | H+V | Any step | Skip all remaining steps |
 | 2 | Dismiss / "Понятно" | H+V | Info step | Advance to next step |
-| 3 | Step 1: Nickname field | H+V | Step 1 (after regular registration) | Input nickname (required) |
-| 4 | Step 1: Email field | H+V | Step 1 | Input email (optional, recommended) |
-| 5 | Step 1: Avatar upload | H+V | Step 1 | Upload avatar (optional) |
-| 6 | Step 1: "Сохранить" / "Пропустить" | H+V | Step 1 | Save or skip account setup |
-| 7 | Step 3: "Найти спейс" | H+V | Step 3 (discover spaces) | Open Screen / Space / Catalog |
-| 8 | Step 3: "Позже" | H+V | Step 3 | Skip space discovery step |
-| 9 | Step 4: "Попробовать" | H+V | Step 4 (matchmaking intro) | Open MM / try matchmaking |
-| 10 | Step 4: "Позже" | H+V | Step 4 | Skip MM intro step |
-| 11 | Step 5: "Начать" | H+V | Step 5 (finish) | Complete onboarding → main shell |
+| 3 | Step 1: Display name / nickname field | H+V | Step 1 (after regular registration) | Input visible profile name (required) |
+| 4 | Step 1: Profile tag field | H+V | Step 1 | Choose the `@myprofile` username base; show the resulting standard discriminator or clean-tag entitlement inline |
+| 5 | Step 1: Email field | H+V | Step 1 | Input email (optional, recommended) |
+| 6 | Step 1: Avatar upload | H+V | Step 1 | Upload avatar (optional) |
+| 7 | Step 1: "Сохранить" / "Пропустить" | H+V | Step 1 | Save or skip account setup |
+| 8 | Step 3: "Найти спейс" | H+V | Step 3 (discover spaces) | Open Screen / Space / Catalog |
+| 9 | Step 3: "Позже" | H+V | Step 3 | Skip space discovery step |
+| 10 | Step 4: "Попробовать" | H+V | Step 4 (matchmaking intro) | Open MM / try matchmaking |
+| 11 | Step 4: "Позже" | H+V | Step 4 | Skip MM intro step |
+| 12 | Step 5: "Начать" | H+V | Step 5 (finish) | Complete onboarding → main shell |
 
 ---
 
@@ -1343,12 +1346,13 @@ Entry: from profile switcher menu #2.
 |---|---------|--------|-------------|------------|
 | 1 | Close / Back | H+V | Always | Close panel |
 | 2 | Display name / nickname field | H+V | Always | Input profile nickname |
-| 3 | Avatar upload | H+V | Always | Pick image |
-| 4 | Additional phone field | H+V | Optional | Bind additional non-primary phone number |
-| 5 | Set as primary profile | H+V | Account has other profiles | Make this profile primary for phone search |
-| 6 | Privacy preset picker (Personal / Gaming / Work) | H+V | Always | Apply preset defaults for the new profile |
-| 7 | Create / Save | H+V | Required fields filled | Create profile |
-| 8 | Create rate-limit error | H+V | Anti-spam create/delete limit hit | — (display: cannot create profile yet; try later) |
+| 3 | Profile tag field | H+V | Always | Choose the `@myprofile` username base and preview the resulting identifier |
+| 4 | Avatar upload | H+V | Always | Pick image |
+| 5 | Additional phone field | H+V | Optional | Bind additional non-primary phone number |
+| 6 | Set as primary profile | H+V | Account has other profiles | Make this profile primary for phone search |
+| 7 | Privacy preset picker (Personal / Gaming / Work) | H+V | Always | Apply preset defaults for the new profile |
+| 8 | Create / Save | H+V | Required fields filled | Create profile |
+| 9 | Create rate-limit error | H+V | Anti-spam create/delete limit hit | — (display: cannot create profile yet; try later) |
 
 ---
 
@@ -1361,14 +1365,15 @@ Entry: from Login #8 "Register".
 
 | # | Control | Layout | Visible when | Tap action |
 |---|---------|--------|-------------|------------|
-| 1 | Display name field | H+V | Always | Input name |
-| 2 | Email field | H+V | Always | Input email |
-| 3 | Phone field | H+V | Always (tab or toggle) | Input phone number |
-| 4 | Password field | H+V | Always | Input password |
-| 5 | Confirm password field | H+V | Always | Confirm password |
-| 6 | Register | H+V | All required fields filled | Submit registration |
-| 7 | Back to login | H+V | Always | Switch to login form |
-| 8 | Account type: Personal / Organization | H+V | Always | Select personal vs organization account (org → verification DNS / manual flow) |
+| 1 | Account type: Personal / Organization | H+V | Always | Select profile semantics; organization changes display-name copy to Organization name and keeps a separate organization tag |
+| 2 | Display name / Organization name field | H+V | Always | Input visible profile or organization name |
+| 3 | Profile / Organization tag field | H+V | Always | Choose the `@myprofile` / `@organization` username base and preview the resulting identifier |
+| 4 | Email field | H+V | Always | Input email |
+| 5 | Phone field | H+V | Post-alpha only | Input phone number |
+| 6 | Password field | H+V | Always | Input password |
+| 7 | Confirm password field | H+V | Always | Confirm password |
+| 8 | Register | H+V | All required fields filled | Submit registration |
+| 9 | Back to login | H+V | Always | Switch to login form |
 
 ---
 
@@ -2159,7 +2164,7 @@ Not full product screens — reusable state chrome used inside Shell / Chat list
 
 | Area | Horizontal (desktop/web/tablet) | Vertical (mobile) |
 |------|---|----|
-| Shell | 3-column: rail (nav + folders + quick access + profiles + ☰) + list + room | **Normative:** bottom tab bar (Chats / Social / MM) + **drawer** for folders + Quick Access + Settings; list → room push; active strip when room open |
+| Shell | 3-column: rail (nav + Quick Access + profiles + ☰) + list with compact folder strip + room | **Normative:** bottom tab bar (Chats / Social / MM) + **drawer** for folders + Quick Access + Settings; list → room push; active strip when room open |
 | Profile switch | Click avatar → menu (§1.1a); Archive entry | Tap avatar → menu; swipe on avatar to switch profiles |
 | Chat header | Inline in room panel; side panel toggle; last seen in status | Full-width app bar with back arrow |
 | Message actions | Hover toolbar on bubble + ctx | Long-press ctx + bottom selection bar |
@@ -2172,7 +2177,7 @@ Not full product screens — reusable state chrome used inside Shell / Chat list
 | Composer format toolbar | Optional above composer; ПКМ formatting primary | Hidden behind toggle (toolbar button) |
 | Search | Panel or inline in header | Full-screen search overlay |
 | Thread panel | Right sidebar alongside room | Push screen |
-| Folders | Rail scroll zone (§1.1b); **no middle-column tabs** | **Drawer only** (§1.6a) — no persistent mini-rail on phone |
+| Folders | Compact strip above chat list (§1.1b); **never in rail** | **Drawer only** (§1.6a) — no persistent mini-rail on phone |
 | Archive | Profile avatar ctx → `Screen / Chat / Archive` | Same entry via profile menu |
 | Pinned messages | Persistent bar under header (§3.1a) | Same bar; full list in sheet |
 | Stories viewer | Modal overlay over content | Full-screen swipe-native overlay |

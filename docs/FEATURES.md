@@ -65,7 +65,7 @@
 
 | Фича                 | Файл                                          | Scope | Описание                                                                              |
 |----------------------|-----------------------------------------------|-------|---------------------------------------------------------------------------------------|
-| Навигация            | [navigation.md](features/navigation.md)       | partial | Rail IA: folders, Quick Access (≤15), ProfileStack, ☰ settings; archive via profile RC; mobile tab bar + drawer + active strip; virtual «Запросы» folder |
+| Навигация            | [navigation.md](features/navigation.md)       | partial | Desktop folder strip + rail Quick Access (≤15), ProfileStack, ☰ settings; archive via profile RC; mobile tab bar + drawer + active strip; contextual «Запросы» filter |
 | Поиск                | [search.md](features/search.md)               | current | Поиск внутри чата и глобальный поиск по контактам, спейсам, сообщениям                |
 | Deep links / Sharing | [deep-links.md](features/deep-links.md)       | current | Схема URL для ссылок на спейс, канал, сообщение, профиль                              |
 | Платформы            | [platforms.md](features/platforms.md)         | partial | Web → Windows → Mobile; Flutter, ограничения веб-версии                               |

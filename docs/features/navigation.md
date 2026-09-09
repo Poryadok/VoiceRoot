@@ -2,7 +2,7 @@
 
 **Канон контролов (Penpot / Flutter):** [screen-controls.md](../design/screen-controls.md) §1 (Shell), §1.1a–§1.1c (profile menu, folders, Quick Access), §1.6–§1.6a (mobile chrome), §1.10 (Archive), [H vs V summary](../design/screen-controls.md#h-vs-v-layout-differences-summary). Термины — [GLOSSARY.md](../GLOSSARY.md) § «Организация чатов в UI».
 
-**Product decisions (locked):** Quick Access = **`chat_id` only**, ≤15 per profile; **folders** in rail; **Settings below** ProfileStack; **Archive** via profile RC (нет folder «Archive» в rail); **нет Saved Messages**; federation-only — [federation.md](federation.md) (deferred, не в текущей навигации).
+**Product decisions (locked):** Quick Access = **`chat_id` only**, ≤15 per profile; desktop folders are compact filters above the chat list and **do not live in rail**; mobile folders live in the drawer; **Settings below** ProfileStack; **Archive** via profile RC; **нет Saved Messages**; federation-only — [federation.md](federation.md) (deferred, не в текущей навигации).
 
 ## Терминология
 
@@ -29,26 +29,28 @@
 [Rail]  [Chat list]  [Open chat (+ optional side panel)]
 ```
 
-Три колонки: **rail** (навигация и организация), **список чатов** (средняя колонка), **открытый чат** (основная область; опционально side panel справа — см. [text-chat.md](text-chat.md)).
+Три колонки: **rail** (разделы, Quick Access и профили), **список чатов** (средняя колонка с folder filters), **открытый чат** (основная область; опционально side panel справа — см. [text-chat.md](text-chat.md)).
 
 ### Rail (сверху вниз)
 
 Контролы — [screen-controls.md](../design/screen-controls.md) §1.1, §1.1a–§1.1c; внутри спейса — §1.8 #8–9 (space tree).
 
 1. **Nav:** Chats / Social (Friends) / Matchmaking
-2. **Folders** — system (Все, ЛС, Группы, Каналы, Спейсы) + custom; badge unread **на папке** (см. § «Badge unread на папке»); **Edit folders** (иконка или ctx внизу зоны папок)
-3. **Quick Access (Избранное)** — до **15** **`chat_id`** активного профиля (только чаты, не polymorphic space/node); добавление через ctx «В избранное» / drag (см. § «Quick Access»); **не** то же самое, что pin в папке (см. [GLOSSARY.md](../GLOSSARY.md), RPC — [chat-service.md](../microservices/chat-service.md) § Quick Access)
-4. Spacer
-5. **ProfileStack** (multi-profile) — ПКМ desktop / long-press mobile → меню §1.1a (switch profile, create profile, presence, custom status ★, create story, **Archive** = primary entry для архивных чатов; discoverability ниже отдельной rail-папки — принято, см. [GLOSSARY.md](../GLOSSARY.md) § «Архив чата»)
-6. **☰ Settings** — единственная точка входа в settings shell (`Panel/Settings/Sheet`); **ниже** ProfileStack
+2. **Quick Access (Избранное)** — до **15** **`chat_id`** активного профиля (только чаты, не polymorphic space/node); добавление через ctx «В избранное» / drag (см. § «Quick Access»)
+3. Spacer
+4. **ProfileStack** (multi-profile) — показывает до трёх профилей в каноническом shell; ПКМ desktop / long-press mobile → меню §1.1a
+5. **☰ Settings** — единственная точка входа в settings shell (`Panel/Settings/Sheet`); **ниже** ProfileStack
+
+Папки и кнопка их редактирования в rail не отображаются. Это правило относится и к system, и к custom folders.
 
 Rail **всегда виден**, не скрывается при открытии чата.
 
 ### Средняя колонка (Chat list)
 
 - Search + Compose (New DM / Create group / Create or join space)
+- Компактная строка folder filters: Все / ЛС / Группы / Каналы / Спейсы / custom; Edit folders находится в этой же зоне
 - Строки чатов с preview последнего сообщения
-- **Без folder tabs** и **без inbox segmented control** (main/requests) — фильтр задаётся выбранной папкой в rail/drawer; «Запросы» — virtual folder §1.1b #5, не toggle в middle column (§1.3 tombstone)
+- «Запросы» появляются в строке folder filters только при pending ≥1, с badge; открывают явно озаглавленный requests workspace с Back и пояснением, а не внезапный segmented control main/requests
 
 ### Убрано: колонка активных
 
@@ -106,7 +108,7 @@ Rail **всегда виден**, не скрывается при открыт�
 
 ## Вход в спейс
 
-- **Из папки «Спейсы» в rail** → как в десктоп Telegram: название спейса исчезает, остаётся только иконка + открывается колонка с деревом спейса (текстовые чаты и голос)
+- **Из фильтра «Спейсы» над chat list** → как в десктоп Telegram: открывается колонка с деревом выбранного спейса (текстовые чаты и голос), а его иконка остаётся в контексте списка/Quick Access
 - **Из Quick Access** → только если в избранное добавлен **конкретный `chat_id`** (текстовый чат спейса или standalone); **не** polymorphic «иконка спейса с деревом». Обзор спейса целиком — через folder «Спейсы» или mobile drawer
 
 ## Папки по умолчанию
@@ -126,7 +128,7 @@ Rail **всегда виден**, не скрывается при открыт�
 |-----|-----------------|------------------|------------|
 | **System** (Все, ЛС, Группы, Каналы, Спейсы) | **Запрещено** — immutable `folder_type=system` | Fixed in `filter_config_json` (predicate по `chat.type`, `space_id`, …); пользователь не меняет | Implicit — чат попадает по predicate; **не** строка в `folder_chats`, кроме pin overlay |
 | **Custom** | Rename + delete через Edit folders | User-defined rules в `filter_config_json` (тип чата, включённые/исключённые `chat_id`, …) | Explicit `folder_chats` rows + pin/order |
-| **Message requests** | N/A — **virtual folder в rail/drawer** ([screen-controls.md](../design/screen-controls.md) §1.1b #5; row **visible when** pending requests exist); **не** segmented toggle в middle column (§1.3 tombstone) | `ListChats` с `inbox=requests` | DM с `chat_members.inbox_bucket=requests` — см. [text-chat.md](text-chat.md) § «Запросы сообщений» |
+| **Message requests** | N/A — virtual filter в desktop folder strip / mobile drawer; visible only when pending requests exist; **не** segmented main/requests control | `ListChats` с `inbox=requests` | DM с `chat_members.inbox_bucket=requests` — см. [text-chat.md](text-chat.md) § «Запросы сообщений» |
 
 **Archived chats:** excluded из всех folder filters и Quick Access (`is_archived=true`); membership в `folder_chats` и pin overlay **сохраняются** в БД — после unarchive чат снова виден в matching folders. См. [GLOSSARY.md](../GLOSSARY.md) § «Архив чата».
 
@@ -160,14 +162,15 @@ Rail **всегда виден**, не скрывается при открыт�
 
 ### Message requests (virtual folder)
 
-Virtual folder «Запросы» в **folders zone** rail/drawer — **не** segmented toggle в middle column ([screen-controls.md](../design/screen-controls.md) §1.1b #5, §1.3 tombstone).
+Virtual folder «Запросы» находится в desktop folder strip над списком / mobile drawer. Она не является постоянной вкладкой или отдельным segmented toggle main/requests.
 
 | Правило | Контракт |
 |---------|----------|
-| **Visibility** | Row **скрыта**, когда pending requests = **0**; **появляется** в folders zone при ≥1 DM в `inbox_bucket=requests` |
-| **Badge** | Numeric badge на folder row когда `unread_count > 0` в requests inbox (отдельно от main inbox badge) |
+| **Visibility** | Filter **скрыт**, когда pending requests = **0**; появляется рядом с остальными folders при ≥1 DM в `inbox_bucket=requests` |
+| **Badge** | Numeric badge на filter item, отдельный от main inbox badge |
+| **Context** | Выбор открывает отдельный workspace с Back, заголовком «Запросы сообщений» и поясняющей detail/empty pane до строк Accept/Decline |
 | **Tap** | Открывает `ListChats` с `inbox=requests` — список request rows §1.3a |
-| **Empty state** | При последнем accept/decline folder row **исчезает** из rail/drawer без ручного dismiss |
+| **Empty state** | При последнем accept/decline filter item исчезает без ручного dismiss; пользователь возвращается в предыдущий folder filter |
 | **≠ Friends Pending** | Заявки в друзья — [friends.md](friends.md); не путать с DM message requests |
 
 Bucket semantics, Accept/Decline — [text-chat.md](text-chat.md) § «Запросы сообщений», [GLOSSARY.md](../GLOSSARY.md) § «Запросы сообщений».

@@ -59,7 +59,7 @@
 
 ### Папки чатов
 
-**Папки чатов** — фильтр списка чатов в rail (desktop) / drawer (mobile). **System** (Все, ЛС, Группы, Каналы, Спейсы): immutable, predicate в `filter_config_json`, pin overlay без `folder_chats` membership. **Custom**: explicit `folder_chats` + pin/order. **Virtual «Запросы»** — `inbox=requests`, в rail/drawer, не segmented toggle в middle column. Archived чаты excluded из всех folder filters. См. [navigation.md](features/navigation.md) § «Папки по умолчанию», [screen-controls.md](design/screen-controls.md) §1.1b.
+**Папки чатов** — фильтр списка чатов в compact strip над desktop chat list / drawer на mobile; папки не занимают slots в desktop rail. **System** (Все, ЛС, Группы, Каналы, Спейсы): immutable, predicate в `filter_config_json`, pin overlay без `folder_chats` membership. **Custom**: explicit `folder_chats` + pin/order. **Virtual «Запросы»** — `inbox=requests`, появляется в том же strip/drawer только при pending ≥1, не отдельный segmented toggle. Archived чаты excluded из всех folder filters. См. [navigation.md](features/navigation.md) § «Папки по умолчанию», [screen-controls.md](design/screen-controls.md) §1.1b.
 
 ### Active strip (mobile)
 
@@ -84,7 +84,7 @@
 
 ### Запросы сообщений
 
-**Запросы сообщений** — DM от **незнакомца** (не friend, не contact), попадающий в `chat_members.inbox_bucket=requests` у получателя. **UI entry:** virtual folder «Запросы» в **rail/drawer** ([screen-controls.md](design/screen-controls.md) §1.1b #5; visible when pending requests exist); `ListChats` с `inbox=requests`. **Запрещён** segmented toggle main/requests в middle column (§1.3 tombstone). Не путать с **Friends → Pending** (заявки в друзья).
+**Запросы сообщений** — DM от **незнакомца** (не friend, не contact), попадающий в `chat_members.inbox_bucket=requests` у получателя. **UI entry:** virtual filter «Запросы» в desktop folder strip / mobile drawer ([screen-controls.md](design/screen-controls.md) §1.1b #5; visible when pending requests exist); `ListChats` с `inbox=requests`. Он открывает отдельный workspace с Back, явным заголовком и поясняющей detail/empty pane. Не путать с **Friends → Pending** (заявки в друзья).
 
 | Bucket | Смысл |
 |--------|-------|
