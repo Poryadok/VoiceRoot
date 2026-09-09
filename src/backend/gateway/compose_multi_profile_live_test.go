@@ -50,7 +50,7 @@ func TestComposeMultiProfileDowngrade_live(t *testing.T) {
 	altToken2, altProfile2 := composeCreateAltProfile(t, client, base, altToken1, "Alt Two", "work")
 
 	// Each profile switch revokes the token used to start it.
-	require.Equal(t, http.StatusOK, composePostDowngradeProfiles(t, client, base, altToken2, []string{sess.ProfileID}))
+	require.Equal(t, http.StatusOK, composePostDowngradeProfiles(t, client, base, altToken2, []string{sess.ProfileID, altProfile1}))
 
 	status := composeSwitchProfileStatus(t, client, base, altToken2, altProfile2)
 	require.Equal(t, http.StatusPreconditionFailed, status, "switch to frozen profile must fail after downgrade")
@@ -58,5 +58,4 @@ func TestComposeMultiProfileDowngrade_live(t *testing.T) {
 	// Primary profile switch-back still works.
 	require.Equal(t, http.StatusOK, composeSwitchProfileStatus(t, client, base, altToken2, sess.ProfileID))
 
-	_ = altProfile1
 }

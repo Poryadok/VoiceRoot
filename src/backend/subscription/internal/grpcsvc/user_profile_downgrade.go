@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"google.golang.org/grpc/metadata"
 
 	userv1 "voice.app/voice/user/v1"
 )
@@ -22,6 +23,7 @@ func (c *UserGRPCProfileDowngrade) ApplyDowngradeProfiles(ctx context.Context, a
 	for _, id := range keptProfileIDs {
 		kept = append(kept, id.String())
 	}
+	ctx = metadata.AppendToOutgoingContext(ctx, "x-voice-user-id", accountID.String())
 	_, err := c.Client.ApplyDowngradeProfiles(ctx, &userv1.ApplyDowngradeProfilesRequest{
 		AccountId:      accountID.String(),
 		KeptProfileIds: kept,

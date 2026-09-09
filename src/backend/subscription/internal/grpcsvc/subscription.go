@@ -543,10 +543,11 @@ func (s *SubscriptionGRPC) ApplyDowngradeProfiles(ctx context.Context, req *subs
 		}
 		kept = append(kept, id)
 	}
-	if s.UserProfiles != nil {
-		if err := s.UserProfiles.ApplyDowngradeProfiles(ctx, accountID, kept); err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
+	if s.UserProfiles == nil {
+		return nil, status.Error(codes.FailedPrecondition, "user profile downgrade client not configured")
+	}
+	if err := s.UserProfiles.ApplyDowngradeProfiles(ctx, accountID, kept); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	return &subscriptionv1.ApplyDowngradeProfilesResponse{KeptProfileIds: req.GetKeptProfileIds()}, nil
 }

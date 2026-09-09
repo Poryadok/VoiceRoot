@@ -580,6 +580,7 @@ services:
       PADDLE_WEBHOOK_SECRET: ${PADDLE_WEBHOOK_SECRET:-test-webhook-secret}
       NATS_URL: nats://nats:4222
       ANALYTICS_ID_HASH_KEY: ${ANALYTICS_ID_HASH_KEY:-compose-dev-analytics-hash-key}
+      USER_GRPC_ADDR: user:9090
       SPACE_GRPC_ADDR: space:9090
     depends_on:
       postgres:
@@ -587,6 +588,8 @@ services:
       compose-db-init:
         condition: service_completed_successfully
       nats:
+        condition: service_healthy
+      user:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
