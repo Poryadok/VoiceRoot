@@ -141,7 +141,7 @@
 - [x] **[Space] T-009 stale implementation claim: `mm_config` / `entry_questions` already load and round-trip** through `SpaceRow`, `spaceRowToProto`, `UpdateSpace`, `GetSpace`, `ListMySpaces` and `UpdateSpaceMmConfig`; regression coverage locks this in. **Residual open:** execution of questions/captcha/manual entry requirements remains the Critical item above.
 - [ ] **[Space] Tree node Pro limit (500) not implemented — hardcoded `MaxTreeNodes = 50`, no entitlement check (unlike member cap)** — `src/backend/space/internal/store/tree.go`
 - [ ] **[Space] Catalog indexing fragile — Search hydrator calls `GetSpace` (member-only); `SearchPublicSpaces` Unimplemented; ranking verified-first нет; нет `space.updated` re-index** — `src/backend/search/internal/deps/deps.go`, `chat_space_indexer.go`
-- [ ] **[Space] NATS events incomplete vs spec** — join/leave/kick publish `space.member_joined` / `space.member_left`; update/delete publish `space.updated` / `space.deleted`. Remaining: `space.member_banned` is absent; voice-room created/deleted publisher methods are no-ops; membership/invite publish failures still pass through no-op `logInviteEventFailure`; Search does not reindex `space.updated` — `src/backend/space/internal/spaceevents/`, `src/backend/search/internal/indexer/chat_space_indexer.go`.
+- [ ] **[Space] NATS events incomplete and publish-failure contract undefined** — join/leave/kick publish `space.member_joined` / `space.member_left`; update/delete publish `space.updated` / `space.deleted`. Remaining: `space.member_banned` is absent; voice-room created/deleted publisher methods are no-ops; Search does not reindex `space.updated`. On a publication error, current mutations have inconsistent observability: invite/member paths persist the mutation and call no-op `logInviteEventFailure`, while tree and space paths persist it and log `nats_publish`. The canonical Space docs define the event/audit surface but do not specify atomicity with persistence, retry/outbox, durable delivery, recovery, audience, or ordering. **Unblock:** define that delivery/failure contract before adding a characterization that would freeze today's best-effort behavior. Sources: [space-service.md](../microservices/space-service.md), [spaces.md](../features/spaces.md), `src/backend/space/internal/grpcsvc/{invites,join,members,tree,space}.go`, `src/backend/space/internal/spaceevents/`.
 - [ ] **[Space] Member timeout not enforced downstream — `IsProfileTimedOut` exists, unused outside Space** — `src/backend/space/internal/store/moderation.go`
 - [ ] **[Voice] JoinVoiceRoom: `voice_room_id ∈ space_id` не проверяется** — `voice_room.go`
 
@@ -431,7 +431,6 @@
 - [ ] **[Space] Flutter client gaps — `spaces_client.dart` has no leave/join-public/transfer/audit/delete** — `src/frontend/lib/backend/spaces_client.dart`
 - [ ] **[Space] Test holes — no integration tests for unimplemented RPCs; tree update/delete/category update/voice update/delete/RemoveTreeNode thin coverage** — `src/backend/space/internal/grpcsvc/*_integration_test.go`
 - [ ] **[Space] Stale README still says “scaffold / out of scope”** — `src/backend/space/README.md`
-- [ ] **[Space] `logInviteEventFailure` no-op — publish failures silently dropped** — `src/backend/space/internal/grpcsvc/invites.go`
 
 ### Moderation
 
