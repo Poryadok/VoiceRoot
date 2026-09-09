@@ -86,7 +86,7 @@ Avatars — круг (`BorderRadius.circular(size/2)`), не отдельный 
 | `layout.searchRowHeight` | 44 | mobile shell search row |
 | `layout.composerMinHeight` | 52 | composer bar (desktop min; phone chrome = `bottomNavHeight`) |
 | `layout.composerActionSize` | 36 | action buttons в composer (emoji/attach/send/mic) |
-| `layout.callBarHeight` | 48 | voice/video call chrome bar |
+| `layout.callBarHeight` | 144 | desktop docked call module below chat list; mobile composes a smaller top slot |
 | `layout.badgeSize` | 20 | unread badge dot/counter |
 | `layout.badgeRailSize` | 15 | counter внутри 40 px rail hitbox |
 | `layout.badgeUnreadSize` | 18 | compact unread/missed-call counter в строках |

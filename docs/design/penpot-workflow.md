@@ -108,7 +108,7 @@ Content (`ChatList` / `Messages` / `Body`) — `verticalSizing = fill`, сумм
 | **Traceability** | PR / задача ссылается на Screen ID + viewer URL draft `· v3`; при закрытии GAP — viewer URL в shipped table |
 
 ```text
-y=0:   [ Chat/List — shipped ]  [ Chat/List · v2 ]  [ Chat/List · v3 — folders+QA rail slice ]
+y=0:   [ Chat/List — shipped ]  [ Chat/List · v2 ]  [ Chat/List · v3 — compact folder strip + canonical rail/QA ]
        ↑ x=0 read-only          ↑ polish batch      ↑ Telegram-parity audit batch
 ```
 

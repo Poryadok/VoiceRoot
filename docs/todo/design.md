@@ -10,9 +10,9 @@ Penpot, design tokens, screen frames, parity дизайн ↔ Flutter (`docs/des
 
 Naming and placement rules: [penpot-workflow.md](../design/penpot-workflow.md) § «Telegram-parity · v3 batch».
 
-- [ ] **Establish `· v3` frame registry** — Telegram-parity audit surfaces (Archive, folder rail, Quick Access, composer attach/emoji/send, PinnedMessageBar, ScheduledStrip, video note). Naming: `Screen / … · v3` / `Panel / … · v3` to the **right** of `· v2` drafts on the same Y row.
+- [ ] **Establish `· v3` frame registry** — Telegram-parity audit surfaces (Archive, desktop folder filter strip, Quick Access, composer attach/emoji/send, PinnedMessageBar, ScheduledStrip, video note). Naming: `Screen / … · v3` / `Panel / … · v3` to the **right** of `· v2` drafts on the same Y row.
 - [ ] **Update GAP table in [screens.md](../design/screens.md)** when each v3 frame is framed — viewer URL in PR.
-- [ ] **Shell · v3** — rail order: Nav → Folders → Quick Access → spacer → ProfileStack → ☰ Settings (§1.1); reconcile Flutter `desktop_shell_rail.dart` drift.
+- [ ] **Shell · v3** — rail order: Nav → Quick Access → spacer → ProfileStack → ☰ Settings; folders use the compact strip above chat list (§1.1); reconcile Flutter `desktop_shell_rail.dart` drift.
 - [ ] **SideHost · v3** — modes info / members / thread / search per [screen-controls.md](../design/screen-controls.md) §1.9 (H drawer + V sheet/push).
 - [ ] **Composer errors · v3** — frame variants for §3.6f matrix (upload fail, processing fail, quota, schedule validation, sticker/GIF fail, optimistic retry).
 - [ ] **R4-04-L04 — Emoji/GIF panel · v3 (§3.6b)** — `Panel/Chat/Emoji` Stickers/GIF tabs + send-vs-insert states; GAP row in [screens.md](../design/screens.md) when framed (audit deferred design-track, spec normative in screen-controls).
@@ -37,7 +37,7 @@ Naming and placement rules: [penpot-workflow.md](../design/penpot-workflow.md) �
 - [ ] **New chat / New DM**
 - [ ] **Create group** → `Panel / Chat / CreateGroup`
 - [ ] **Create / join space** → `Panel / Space / Create` / `JoinInvite`
-- [ ] **Folders in rail** — system + custom; badge unread; **no folder tabs in middle column** (§1.1b)
+- [ ] **Desktop folder filter strip** — compact system + custom filters above chat list with unread badge and trailing edit control; folders never live in rail (§1.1b)
 - [ ] **Quick Access in rail** — до 15 чатов; drag/ctx add (§1.1c)
 - [ ] **Edit folders** / manage custom folders
 - [ ] **☰ Settings at rail bottom** — not top nav tab (§1.1 #8)
