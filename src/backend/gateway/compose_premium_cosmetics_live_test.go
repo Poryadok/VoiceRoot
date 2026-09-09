@@ -55,8 +55,9 @@ func TestComposePremiumCosmetics_live(t *testing.T) {
 	bannerStatus := composePatchProfileBannerStatus(t, client, base, sess.AccessToken, banner)
 	require.Equal(t, http.StatusOK, bannerStatus, "premium profile banner")
 
-	_, _ = composeCreateAltProfile(t, client, base, sess.AccessToken, "Cosmetics Alt One", "personal")
-	thirdResp := composePostJSON(t, client, base+"/api/v1/users/profiles", sess.AccessToken,
+	altToken, _ := composeCreateAltProfile(t, client, base, sess.AccessToken, "Cosmetics Alt One", "personal")
+	// Switching profiles revokes the preceding token; create the third profile with the returned session.
+	thirdResp := composePostJSON(t, client, base+"/api/v1/users/profiles", altToken,
 		`{"display_name":"Cosmetics Alt Two"}`)
 	require.Equal(t, http.StatusOK, thirdResp.StatusCode, composeReadBody(t, thirdResp))
 }

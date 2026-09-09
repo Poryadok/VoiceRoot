@@ -3,6 +3,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+# shellcheck source=scripts/staging/lib/kubectl-configmap.sh
+source "${ROOT}/scripts/staging/lib/kubectl-configmap.sh"
 NS="${VOICE_K8S_NAMESPACE:-voice-staging}"
 MIGRATE_TAG="${VOICE_MIGRATE_IMAGE_TAG:-v4.18.1}"
 PG_USER="${POSTGRES_USER:-voice}"
@@ -61,9 +63,8 @@ apply_migrate() {
   echo "Applying migrations ConfigMap ${cm_name} from ${migrations_dir}"
   local content_hash
   content_hash="$(migration_content_hash "${migrations_dir}")"
-  kubectl create configmap "${cm_name}" -n "${NS}" \
-    --from-file="${migrations_dir}" \
-    --dry-run=client -o yaml | kubectl apply -f -
+  kubectl_apply_configmap "${cm_name}" "${NS}" \
+    --from-file="${migrations_dir}"
   kubectl annotate configmap "${cm_name}" -n "${NS}" \
     "voice.io/migration-content-hash=${content_hash}" --overwrite
 
