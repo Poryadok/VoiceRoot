@@ -1114,6 +1114,12 @@ jobs:
         run: |
           cp .env.example .env
           cat >> .env <<'EOF'
+          USER_R2_ENDPOINT=http://host.docker.internal:9000
+          USER_R2_REGION=us-east-1
+          USER_R2_ACCESS_KEY_ID=voice-minio
+          USER_R2_SECRET_ACCESS_KEY=voice-minio-dev
+          USER_R2_BUCKET=voice-dev-avatars
+          USER_R2_PUBLIC_BASE_URL=http://host.docker.internal:9000/voice-dev-avatars
           FILE_R2_ENDPOINT=http://host.docker.internal:9000
           FILE_R2_REGION=us-east-1
           FILE_R2_ACCESS_KEY_ID=voice-minio
