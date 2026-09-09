@@ -583,7 +583,6 @@
 
 
 - [x] **[Voice] `GetVoiceStates` populates commander/floor fields** — `is_commander`, `hand_raised`, `has_floor`, `is_broadcasting` in store + GetVoiceStates + state events (П.11 / VC-07).
-- [ ] **[Voice] `RedisCallStore` has zero unit/integration tests** — staging/prod use Redis (`VOICE_REDIS_ADDR`); all store tests hit `MemoryCallStore`.
 - [ ] **[Voice] Group voice cap mismatch in microservice doc** — `voice-service.md` mentions groups up to **500**; code hard-caps room at **32** (`MaxGroupVoiceParticipants`). Tests document 32 as intentional (`voice_grpc_group_test.go`); doc is stale.
 - [ ] **[Voice] E2E coverage gaps vs PLAN “shipped”** — present: DM signaling (`TestComposeVoiceCall1to1_live`), optional bidirectional audio (`compose_voice_call_media_live_test.go`), Flutter `group_voice` / `spaces_voice` / `screen_share` API tests. Missing: compose live test for **space** voice + screen share with Role guard; no staging **RTC/media** smoke; `group_voice` E2E never exercises `LeaveCall` multi-participant behavior.
 - [ ] **[Voice] `ListExpiredRinging` on Redis uses `KEYS`** — `voice:call:*` scan; risky under load.
