@@ -32,7 +32,7 @@ func TestServiceCredential_VerifiesExactBinding(t *testing.T) {
 func TestDelegatedUserCredential_VerifiesImmutableIdentity(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0).UTC()
 	issuer, key := testIssuer(t, now)
-	token, err := issuer.IssueDelegatedUser(DelegatedUserInput{Audience: "role", RPC: "/voice.role.v1.RoleService/CreateRole", RequestID: "req-1", RequestHash: "sha256:request", AccountID: "account-1", ProfileID: "profile-1", SessionEpoch: 7})
+	token, err := issuer.IssueDelegatedUser(DelegatedUserInput{Audience: "role", RPC: "/voice.role.v1.RoleService/CreateRole", RequestID: "req-1", RequestHash: "sha256:request", AccountID: "account-1", ProfileID: "profile-1", SessionEpoch: 7, ClientExpiresAt: now.Add(time.Minute)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func TestVerifier_FailsClosedForInvalidOrMismatchedCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	delegated, err := issuer.IssueDelegatedUser(DelegatedUserInput{Audience: "role", RPC: "/voice.role.v1.RoleService/CreateRole", RequestID: "req-1", RequestHash: "sha256:request", AccountID: "account-1", ProfileID: "profile-1", SessionEpoch: 7})
+	delegated, err := issuer.IssueDelegatedUser(DelegatedUserInput{Audience: "role", RPC: "/voice.role.v1.RoleService/CreateRole", RequestID: "req-1", RequestHash: "sha256:request", AccountID: "account-1", ProfileID: "profile-1", SessionEpoch: 7, ClientExpiresAt: now.Add(time.Minute)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestVerifier_InvokesFailClosedReplayAndEpochHooks(t *testing.T) {
 		t.Fatal("replayed service credential accepted")
 	}
 
-	delegated, err := issuer.IssueDelegatedUser(DelegatedUserInput{Audience: "role", RPC: "/voice.role.v1.RoleService/CreateRole", RequestID: "req-1", RequestHash: "sha256:request", AccountID: "account-1", ProfileID: "profile-1", SessionEpoch: 7})
+	delegated, err := issuer.IssueDelegatedUser(DelegatedUserInput{Audience: "role", RPC: "/voice.role.v1.RoleService/CreateRole", RequestID: "req-1", RequestHash: "sha256:request", AccountID: "account-1", ProfileID: "profile-1", SessionEpoch: 7, ClientExpiresAt: now.Add(time.Minute)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,8 +141,38 @@ func TestIssuer_RejectsIncompleteInputs(t *testing.T) {
 	if _, err := issuer.IssueService(ServiceInput{Audience: "role"}); err == nil {
 		t.Fatal("incomplete service input accepted")
 	}
-	if _, err := issuer.IssueDelegatedUser(DelegatedUserInput{Audience: "role", RPC: "rpc", RequestID: "request", RequestHash: "hash", AccountID: "account", ProfileID: "profile"}); err == nil {
+	if _, err := issuer.IssueDelegatedUser(DelegatedUserInput{Audience: "role", RPC: "rpc", RequestID: "request", RequestHash: "hash", AccountID: "account", ProfileID: "profile", ClientExpiresAt: now.Add(time.Minute)}); err == nil {
 		t.Fatal("zero session epoch accepted")
+	}
+}
+
+func TestDelegatedUserCredential_IsBoundToGatewayAndClientSessionExpiry(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0).UTC()
+	issuer, key := testIssuer(t, now)
+	input := DelegatedUserInput{Audience: "role", RPC: "/voice.role.v1.RoleService/CreateRole", RequestID: "req-1", RequestHash: "sha256:request", AccountID: "account-1", ProfileID: "profile-1", SessionEpoch: 7, ClientExpiresAt: now.Add(10 * time.Second)}
+	token, err := issuer.IssueDelegatedUser(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	principal, err := VerifyDelegatedUser(context.Background(), token, delegatedConfig(key, now))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := principal.ExpiresAt.Sub(principal.IssuedAt); got != 10*time.Second {
+		t.Fatalf("delegated TTL = %s, want 10s", got)
+	}
+	input.ClientExpiresAt = now
+	if _, err := issuer.IssueDelegatedUser(input); err == nil {
+		t.Fatal("expired client session accepted")
+	}
+
+	other, err := NewIssuer(IssuerConfig{Issuer: "space", KeyID: "current", PrivateKey: key, Clock: func() time.Time { return now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input.ClientExpiresAt = now.Add(time.Minute)
+	if _, err := other.IssueDelegatedUser(input); err == nil {
+		t.Fatal("non-gateway issuer accepted for delegated credential")
 	}
 }
 func testIssuer(t *testing.T, now time.Time) (*Issuer, *rsa.PrivateKey) {

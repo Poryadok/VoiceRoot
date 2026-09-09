@@ -56,6 +56,9 @@ func VerifyService(ctx context.Context, token string, config VerifyConfig) (Prin
 }
 
 func VerifyDelegatedUser(ctx context.Context, token string, config VerifyConfig) (Principal, error) {
+	if config.ExpectedIssuer != "gateway" {
+		return Principal{}, fmt.Errorf("delegated user credentials must be issued by gateway")
+	}
 	claims, err := verify(ctx, token, config, delegatedUserType)
 	if err != nil {
 		return Principal{}, err

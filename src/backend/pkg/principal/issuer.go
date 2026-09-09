@@ -33,6 +33,9 @@ type DelegatedUserInput struct {
 	AccountID    string
 	ProfileID    string
 	SessionEpoch int64
+	// ClientExpiresAt is the expiry of the verified upstream client session.
+	// A delegated credential can never outlive it.
+	ClientExpiresAt time.Time
 }
 
 type IssuerConfig struct {
@@ -56,7 +59,7 @@ func NewIssuer(config IssuerConfig) (*Issuer, error) {
 	if config.Clock == nil {
 		config.Clock = time.Now
 	}
-	return &Issuer{issuer: config.Issuer, keyID: config.KeyID, privateKey: config.PrivateKey, clock: config.Clock}, nil
+	return &Issuer{issuer: strings.TrimSpace(config.Issuer), keyID: strings.TrimSpace(config.KeyID), privateKey: config.PrivateKey, clock: config.Clock}, nil
 }
 
 func (i *Issuer) IssueService(input ServiceInput) (string, error) {
@@ -71,15 +74,25 @@ func (i *Issuer) IssueService(input ServiceInput) (string, error) {
 		RPC:         input.RPC,
 		RequestID:   input.RequestID,
 		RequestHash: input.RequestHash,
-	})
+	}, maxCredentialTTL)
 }
 
 func (i *Issuer) IssueDelegatedUser(input DelegatedUserInput) (string, error) {
 	if err := validateBinding(input.Audience, input.RPC, input.RequestID, input.RequestHash); err != nil {
 		return "", err
 	}
-	if strings.TrimSpace(input.AccountID) == "" || strings.TrimSpace(input.ProfileID) == "" || input.SessionEpoch <= 0 {
+	if i.issuer != "gateway" {
+		return "", fmt.Errorf("only gateway may issue delegated user credentials")
+	}
+	if strings.TrimSpace(input.AccountID) == "" || strings.TrimSpace(input.ProfileID) == "" || input.SessionEpoch <= 0 || input.ClientExpiresAt.IsZero() {
 		return "", fmt.Errorf("account id, profile id, and positive session epoch are required")
+	}
+	remaining := input.ClientExpiresAt.Sub(i.clock())
+	if remaining <= 0 {
+		return "", fmt.Errorf("verified client session is expired")
+	}
+	if remaining > maxCredentialTTL {
+		remaining = maxCredentialTTL
 	}
 	return i.issue(rawClaims{
 		Type:         delegatedUserType,
@@ -92,14 +105,14 @@ func (i *Issuer) IssueDelegatedUser(input DelegatedUserInput) (string, error) {
 		AccountID:    input.AccountID,
 		ProfileID:    input.ProfileID,
 		SessionEpoch: input.SessionEpoch,
-	})
+	}, remaining)
 }
 
-func (i *Issuer) issue(claims rawClaims) (string, error) {
+func (i *Issuer) issue(claims rawClaims, ttl time.Duration) (string, error) {
 	now := i.clock().UTC()
 	claims.IssuedAt = now.Unix()
 	claims.NotBefore = now.Unix()
-	claims.ExpiresAt = now.Add(maxCredentialTTL).Unix()
+	claims.ExpiresAt = now.Add(ttl).Unix()
 	jwtID, err := randomID()
 	if err != nil {
 		return "", err
