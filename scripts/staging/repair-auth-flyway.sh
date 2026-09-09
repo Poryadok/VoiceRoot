@@ -4,6 +4,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+# shellcheck source=scripts/staging/lib/kubectl-configmap.sh
+source "${ROOT}/scripts/staging/lib/kubectl-configmap.sh"
 NS="${VOICE_K8S_NAMESPACE:-voice-staging}"
 FLYWAY_TAG="${VOICE_FLYWAY_IMAGE_TAG:-flyway/flyway:11.3.0}"
 MIGRATIONS_DIR="${ROOT}/src/backend/auth/src/main/resources/db/migration"
@@ -36,9 +38,8 @@ fi
 bash "${ROOT}/scripts/staging/sync-postgres-password.sh"
 
 echo "Applying Flyway migrations ConfigMap ${CM_NAME} from ${MIGRATIONS_DIR}"
-kubectl create configmap "${CM_NAME}" -n "${NS}" \
-  --from-file="${MIGRATIONS_DIR}" \
-  --dry-run=client -o yaml | kubectl apply -f -
+kubectl_apply_configmap "${CM_NAME}" "${NS}" \
+  --from-file="${MIGRATIONS_DIR}"
 
 kubectl delete job "${JOB_NAME}" -n "${NS}" --ignore-not-found
 
