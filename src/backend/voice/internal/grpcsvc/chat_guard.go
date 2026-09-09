@@ -3,10 +3,20 @@ package grpcsvc
 import (
 	"context"
 	"errors"
+
+	chatv1 "voice.app/voice/chat/v1"
 )
 
 // ErrNotChatMember is returned when a profile is not a member of the chat.
 var ErrNotChatMember = errors.New("not a chat member")
+
+// ErrNotDirectChat is returned when a linked chat is not a direct message.
+var ErrNotDirectChat = errors.New("not a direct chat")
+
+// DirectChatValidator validates that a linked chat is an authoritative DM.
+type DirectChatValidator interface {
+	EnsureDirectChat(ctx context.Context, chatID string) error
+}
 
 // ChatMembership validates that a profile belongs to a chat (DM or group).
 type ChatMembership interface {
@@ -15,6 +25,7 @@ type ChatMembership interface {
 
 type mapChatMembers struct {
 	members map[string]map[string]bool
+	types   map[string]chatv1.ChatType
 }
 
 func (m *mapChatMembers) EnsureMember(_ context.Context, chatID, profileID string) error {
@@ -26,6 +37,13 @@ func (m *mapChatMembers) EnsureMember(_ context.Context, chatID, profileID strin
 		return ErrNotChatMember
 	}
 	return nil
+}
+
+func (m *mapChatMembers) EnsureDirectChat(_ context.Context, chatID string) error {
+	if m == nil || m.types == nil || m.types[chatID] == chatv1.ChatType_CHAT_TYPE_DM {
+		return nil
+	}
+	return ErrNotDirectChat
 }
 
 // ErrNotSpaceMember is returned when a profile is not a member of the space.

@@ -32,6 +32,26 @@ type recordingEvents struct {
 	memberJoined []*eventsv1.VoiceMemberJoined
 }
 
+type createCountingCallStore struct {
+	voicestore.CallStore
+	createCalls int
+}
+
+type allowAllChatMembers struct{}
+
+func (allowAllChatMembers) EnsureMember(context.Context, string, string) error {
+	return nil
+}
+
+func (allowAllChatMembers) EnsureDirectChat(context.Context, string) error {
+	return nil
+}
+
+func (s *createCountingCallStore) CreateCall(ctx context.Context, call voicestore.Call) (voicestore.Call, error) {
+	s.createCalls++
+	return s.CallStore.CreateCall(ctx, call)
+}
+
 func (r *recordingEvents) PublishCallIncoming(_ context.Context, ev *eventsv1.CallIncoming) error {
 	r.incoming = append(r.incoming, ev)
 	return nil
@@ -97,6 +117,7 @@ func mediaPtr(v callsv1.CallMediaKind) *callsv1.CallMediaKind {
 func newTestVoiceService(now time.Time, events *recordingEvents) *VoiceGRPC {
 	return &VoiceGRPC{
 		Calls:       voicestore.NewMemoryCallStore(),
+		ChatMembers: allowAllChatMembers{},
 		Tokens:      livekit.NewHS256TokenIssuer("dev-key", "dev-secret", "ws://livekit:7880", time.Hour),
 		Events:      events,
 		Now:         func() time.Time { return now },
@@ -241,6 +262,113 @@ func TestVoiceGRPCRejectsInvalidCallerAndParticipants(t *testing.T) {
 
 	_, err = svc.AcceptCall(voiceTestCtx("profile-c"), &callsv1.AcceptCallRequest{RoomId: start.GetCallSession().GetRoomId()})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+// TestVoiceGRPCStartCall_DMCallerMembership documents voice-service.md: Chat
+// validates DM participants before a call is persisted or signalled.
+func TestVoiceGRPCStartCall_DMCallerMembership(t *testing.T) {
+	now := time.Unix(1700000000, 0).UTC()
+
+	t.Run("non-member is denied before persistence or incoming signal", func(t *testing.T) {
+		events := &recordingEvents{}
+		svc := newTestVoiceService(now, events)
+		calls := &createCountingCallStore{CallStore: svc.Calls}
+		svc.Calls = calls
+		svc.ChatMembers = &mapChatMembers{members: map[string]map[string]bool{
+			"dm-chat-1": {"profile-member": true, "profile-callee": true},
+		}}
+
+		_, err := svc.StartCall(voiceTestCtx("profile-outsider"), &callsv1.StartCallRequest{
+			LinkedChat:      &chatv1.ChatRef{Id: "dm-chat-1"},
+			CalleeProfileId: strPtr("profile-callee"),
+			MediaKind:       mediaPtr(callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO),
+		})
+		require.Equal(t, codes.PermissionDenied, status.Code(err))
+		require.Zero(t, calls.createCalls, "denied caller must not persist a call")
+		require.Empty(t, events.incoming, "denied caller must not signal an incoming call")
+
+		_, err = svc.Calls.GetActiveCall(t.Context(), "profile-outsider")
+		require.ErrorIs(t, err, voicestore.ErrNotFound, "denied caller must not persist a call")
+		_, err = svc.Calls.GetActiveCall(t.Context(), "profile-callee")
+		require.ErrorIs(t, err, voicestore.ErrNotFound, "denied caller must not create a callee-visible call")
+	})
+
+	t.Run("member retains DM call behavior", func(t *testing.T) {
+		events := &recordingEvents{}
+		svc := newTestVoiceService(now, events)
+		calls := &createCountingCallStore{CallStore: svc.Calls}
+		svc.Calls = calls
+		svc.ChatMembers = &mapChatMembers{members: map[string]map[string]bool{
+			"dm-chat-1": {"profile-member": true, "profile-callee": true},
+		}}
+
+		start, err := svc.StartCall(voiceTestCtx("profile-member"), &callsv1.StartCallRequest{
+			LinkedChat:      &chatv1.ChatRef{Id: "dm-chat-1"},
+			CalleeProfileId: strPtr("profile-callee"),
+			MediaKind:       mediaPtr(callsv1.CallMediaKind_CALL_MEDIA_KIND_VIDEO),
+		})
+		require.NoError(t, err)
+		require.Equal(t, 1, calls.createCalls)
+		require.Equal(t, callsv1.CallStatus_CALL_STATUS_RINGING, start.GetCallSession().GetStatus())
+		require.Equal(t, "dm-chat-1", start.GetCallSession().GetLinkedChat().GetId())
+		require.Len(t, events.incoming, 1)
+	})
+
+	t.Run("callee outside linked chat is denied before persistence or incoming signal", func(t *testing.T) {
+		events := &recordingEvents{}
+		svc := newTestVoiceService(now, events)
+		calls := &createCountingCallStore{CallStore: svc.Calls}
+		svc.Calls = calls
+		svc.ChatMembers = &mapChatMembers{members: map[string]map[string]bool{
+			"dm-chat-1": {"profile-member": true},
+		}}
+
+		_, err := svc.StartCall(voiceTestCtx("profile-member"), &callsv1.StartCallRequest{
+			LinkedChat:      &chatv1.ChatRef{Id: "dm-chat-1"},
+			CalleeProfileId: strPtr("profile-outsider"),
+			MediaKind:       mediaPtr(callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO),
+		})
+		require.Equal(t, codes.PermissionDenied, status.Code(err))
+		require.Zero(t, calls.createCalls, "unrelated callee must not persist a call")
+		require.Empty(t, events.incoming, "unrelated callee must not receive an incoming call")
+	})
+
+	t.Run("non-DM linked chat is denied before persistence or incoming signal", func(t *testing.T) {
+		events := &recordingEvents{}
+		svc := newTestVoiceService(now, events)
+		calls := &createCountingCallStore{CallStore: svc.Calls}
+		svc.Calls = calls
+		group := chatv1.ChatType_CHAT_TYPE_GROUP
+		svc.ChatMembers = &mapChatMembers{members: map[string]map[string]bool{
+			"shared-group-1": {"profile-member": true, "profile-callee": true},
+		}, types: map[string]chatv1.ChatType{"shared-group-1": group}}
+
+		_, err := svc.StartCall(voiceTestCtx("profile-member"), &callsv1.StartCallRequest{
+			LinkedChat:      &chatv1.ChatRef{Id: "shared-group-1"},
+			CalleeProfileId: strPtr("profile-callee"),
+			MediaKind:       mediaPtr(callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO),
+		})
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+		require.Zero(t, calls.createCalls, "non-DM chat must not persist a direct call")
+		require.Empty(t, events.incoming, "non-DM chat must not signal an incoming direct call")
+	})
+
+	t.Run("unconfigured membership check fails closed", func(t *testing.T) {
+		events := &recordingEvents{}
+		svc := newTestVoiceService(now, events)
+		calls := &createCountingCallStore{CallStore: svc.Calls}
+		svc.Calls = calls
+		svc.ChatMembers = nil
+
+		_, err := svc.StartCall(voiceTestCtx("profile-member"), &callsv1.StartCallRequest{
+			LinkedChat:      &chatv1.ChatRef{Id: "dm-chat-1"},
+			CalleeProfileId: strPtr("profile-callee"),
+			MediaKind:       mediaPtr(callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO),
+		})
+		require.Equal(t, codes.FailedPrecondition, status.Code(err))
+		require.Zero(t, calls.createCalls)
+		require.Empty(t, events.incoming)
+	})
 }
 
 func TestVoiceGRPCJoinLeaveAndGetActiveCall(t *testing.T) {
