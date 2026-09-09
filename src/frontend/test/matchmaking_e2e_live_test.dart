@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
+import 'support/live_gateway_harness.dart';
+
 /// Live compose e2e: two users match → accept → active squad with chat + voice ids.
 ///
 /// Run: `VOICE_RUN_LIVE_COMPOSE=true flutter test test/matchmaking_e2e_live_test.dart`
@@ -17,16 +19,21 @@ void main() {
       return;
     }
 
-    final base = String.fromEnvironment(
-      'VOICE_API_BASE_URL',
-      defaultValue: 'http://127.0.0.1:18080',
+    final probe = await probeLiveGateway();
+    expect(
+      probe,
+      isA<LiveGatewayReady>(),
+      reason: probe is LiveGatewayUnavailable ? probe.reason : null,
     );
-    final client = http.Client();
-    addTearDown(client.close);
+    final ctx = (probe as LiveGatewayReady).context;
+    final base = ctx.config.baseUrl;
+    final client = ctx.httpClient;
 
     final n = DateTime.now().millisecondsSinceEpoch;
-    final tokenA = await _register(client, base, 'mm-match-a-$n@voice.test');
-    final tokenB = await _register(client, base, 'mm-match-b-$n@voice.test');
+    final userA = await ctx.registerUser('mm-match-a-$n');
+    final userB = await ctx.registerUser('mm-match-b-$n');
+    final tokenA = userA.accessToken;
+    final tokenB = userB.accessToken;
 
     final gameId = await _findGameId(client, base, tokenA, 'MM Duo Live');
     const criteria = '{"region":"eu"}';
@@ -151,24 +158,6 @@ Future<Map<String, dynamic>> _playerRating(
   return body['playerRating'] as Map<String, dynamic>? ??
       body['player_rating'] as Map<String, dynamic>? ??
       body;
-}
-
-Future<String> _register(http.Client client, String base, String email) async {
-  final register = await client.post(
-    Uri.parse('$base/api/v1/auth/register'),
-    headers: {'Content-Type': 'application/json'},
-    body: jsonEncode({
-      'email': email,
-      'password': 'VoiceQaTest1!',
-      'display_name': 'MM Match E2E',
-    }),
-  );
-  expect(register.statusCode, isIn([200, 201]));
-  final regBody = jsonDecode(register.body) as Map<String, dynamic>;
-  final token = regBody['access_token'] as String? ??
-      (regBody['session'] as Map<String, dynamic>?)?['access_token'] as String?;
-  expect(token, isNotNull);
-  return token!;
 }
 
 Future<String> _findGameId(
