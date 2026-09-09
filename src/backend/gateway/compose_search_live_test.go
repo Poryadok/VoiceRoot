@@ -78,6 +78,7 @@ func TestComposeSearchInChat_live(t *testing.T) {
 		base, url.QueryEscape(dmParsed.Chat.ID), url.QueryEscape(token))
 	var lastBody string
 	var lastCode int
+	var lastErr string
 	require.Eventually(t, func() bool {
 		req, err := http.NewRequest(http.MethodGet, searchURL, nil)
 		if err != nil {
@@ -86,6 +87,7 @@ func TestComposeSearchInChat_live(t *testing.T) {
 		req.Header.Set("Authorization", "Bearer "+sessA.AccessToken)
 		resp, err := client.Do(req)
 		if err != nil {
+			lastErr = err.Error()
 			return false
 		}
 		defer resp.Body.Close()
@@ -96,7 +98,7 @@ func TestComposeSearchInChat_live(t *testing.T) {
 			return false
 		}
 		return bytes.Contains(body, []byte(token))
-	}, 45*time.Second, 2*time.Second, "search must return indexed message; last status=%d body=%s", lastCode, lastBody)
+	}, 45*time.Second, 2*time.Second, "search must return indexed message; last status=%d body=%s transport_error=%s", lastCode, lastBody, lastErr)
 }
 
 // TestComposeSearchNamespace_live ensures /api/v1/search routes are wired (not 404).
