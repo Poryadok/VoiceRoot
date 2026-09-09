@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -79,7 +80,7 @@ func TestComposeSearchInChat_live(t *testing.T) {
 	var lastBody string
 	var lastCode int
 	var lastErr string
-	require.Eventually(t, func() bool {
+	if !assert.Eventually(t, func() bool {
 		req, err := http.NewRequest(http.MethodGet, searchURL, nil)
 		if err != nil {
 			return false
@@ -101,7 +102,9 @@ func TestComposeSearchInChat_live(t *testing.T) {
 			return false
 		}
 		return bytes.Contains(body, []byte(token))
-	}, 45*time.Second, 2*time.Second, "search must return indexed message; last status=%d body=%s transport_error=%s", lastCode, lastBody, lastErr)
+	}, 45*time.Second, 2*time.Second) {
+		t.Fatalf("search must return indexed message; last status=%d body=%s transport_error=%s", lastCode, lastBody, lastErr)
+	}
 }
 
 // TestComposeSearchNamespace_live ensures /api/v1/search routes are wired (not 404).
