@@ -26,27 +26,31 @@ for d in voice-social voice-role voice-search voice-notification voice-bot voice
   wait_deploy "$d"
 done
 
-echo "Tier 2: user before space (break user<->space dial deadlock)"
+echo "Tier 2: auth before user"
+# apply-app-manifests scales Auth down for a full rollout. User waits for Auth
+# gRPC before exposing its HTTP health endpoint, so restore and wait for Auth
+# before restarting User.
+bash "${ROOT}/scripts/staging/repair-auth-flyway.sh"
+recreate_deploy voice-auth 900s
+
+echo "Tier 3: user before space (break user<->space dial deadlock)"
 kubectl scale deployment/voice-space -n "$NS" --replicas=0
 patch_user_skip_space
 kubectl rollout restart deployment/voice-user -n "$NS"
 wait_deploy voice-user
 
-echo "Tier 3: space"
+echo "Tier 4: space"
 kubectl scale deployment/voice-space -n "$NS" --replicas=1
 wait_deploy voice-space
 restore_user_space_addr
 kubectl rollout restart deployment/voice-user -n "$NS"
 wait_deploy voice-user
 
-echo "Tier 4: dependents"
+echo "Tier 5: dependents"
 for d in voice-chat voice-file voice-matchmaking voice-messaging voice-moderation voice-story; do
   kubectl scale deployment/"${d}" -n "$NS" --replicas=1
   kubectl rollout restart "deployment/${d}" -n "$NS"
   wait_deploy "$d"
 done
-
-bash "${ROOT}/scripts/staging/repair-auth-flyway.sh"
-recreate_deploy voice-auth 900s
 
 echo "Ordered rollout complete."
