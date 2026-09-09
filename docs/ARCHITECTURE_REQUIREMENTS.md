@@ -138,11 +138,49 @@ fan-out.
 - **Уточнение причин** для отладки, корреляции или i18n — опционально через **`google.rpc.Status`** и вложения (`ErrorInfo`, `LocalizedMessage`, …): см. пакет [`google.rpc`](https://github.com/googleapis/googleapis/tree/master/google/rpc). Отдельный общий `.proto` в монорепо для ошибок не обязателен, пока коды достаточны для клиента и наблюдаемости.
 - **REST через API Gateway**: маппинг gRPC→HTTP статусов и тела ошибки — ответственность Gateway; источник истины для маршрутов и префиксов — [microservices/api-gateway.md](microservices/api-gateway.md).
 
-## Email
+## Phase-0: межсервисные и edge principals (target; не реализовано)
+
+Это обязательный контракт для новых и мигрируемых внутренних вызовов. Он не делает
+существующие forwarded metadata доверенными до внедрения verifier/interceptor.
+
+- Каждый service-to-service RPC идёт только по TLS и несёт короткоживущий (TTL **30 s**)
+  service JWT. JWT подписан ключом issuer-сервиса, имеет `iss`, точный `aud` целевого
+  сервиса, `sub` = service principal, `rpc` = точное полное имя RPC, `iat`, `exp`,
+  `jti` и `kid`. Получатель проверяет signature/JWKS, issuer, audience, expiry,
+  `rpc`, replay policy и caller→method allow-list до handler.
+- Issuer публикует JWKS с `kid`; rotation перекрывает старый и новый public key не
+  меньше максимального TTL, private key не покидает issuer. Неизвестный `kid`,
+  expired/malformed JWT, TLS/verifier failure, недопустимый caller или RPC дают
+  `UNAUTHENTICATED`/`PERMISSION_DENIED` и fail closed. Static bearer и произвольные
+  `x-voice-internal-caller` не являются целевым credential.
+- Gateway после проверки client JWT создаёт **подписанный** derived delegated-user
+  JWT для downstream user-surface. Это отдельный credential с TTL не более **30 s**
+  и не длиннее остатка проверенной client session. Он обязан иметь `iss=gateway`,
+  `sub` = verified account ID, verified `profile_id`, `session_epoch`, `iat`, `nbf`,
+  `exp`, `jti`, `kid`, exact downstream `aud`, exact full `rpc` и binding к request
+  (`request_id` и canonical idempotency/request context). Gateway подписывает его
+  rotation-capable key, публикует JWKS; consumer проверяет signature/`kid`, все
+  temporal claims, issuer/audience/RPC/request binding и актуальность
+  `session_epoch` по Auth policy до handler. Он не копирует клиентские identity
+  headers и downstream не принимает их как authority. S2S callers, которым нужен
+  subject для decision/read, передают его как data только после проверки собственной
+  service principal.
+- Migration идёт сначала через dual-read verifier и audit-only telemetry для legacy
+  metadata, затем per-caller cutover, allow-list enforcement и removal legacy path.
+  Legacy metadata допустимы исключительно как временный migration input после
+  verified principal; сами по себе они никогда не создают actor/service identity.
+
+Перед включением каждого сервиса нужны: issuer/consumer key-rotation runbook,
+TLS ownership, exact caller/RPC matrix, отрицательные tests и observability для
+verify deny. Этот target распространяется и на нынешний narrow Space↔Voice bearer;
+его нельзя расширять или использовать как общий precedent.
+
 
 - **Провайдер**: Resend (до 3000 писем/мес бесплатно; $20/мес за 50k)
 - **Абстракция**: `EmailSender { Send(to, template, params) }` — провайдер сменяем без изменения логики
 - **Использование**: регистрация (верификация email), сброс пароля — **auth-only**; product event notifications **не** через email ([notification-service.md](microservices/notification-service.md))
+
+## Email
 
 ## Оффлайн-режим (мобильный клиент)
 

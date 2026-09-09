@@ -75,13 +75,25 @@
 
 Цифры могут скорректироваться под технические ограничения.
 
-## Технические характеристики
+## Phase-0 room authority (target; не реализовано)
+
+До реализации пользователь видит roster и присоединяется через авторитетный
+Space-room lifecycle, а не по client-supplied Space ID. Полный список участников
+и их voice state получают только роли с `SPACE_VIEW_MEMBER_LIST`; остальным
+участникам видна лишь численность. При потере access/membership/speak active media
+отзывается на self-hosted LiveKit в установленный сервисный срок, а reconnect
+допустим максимум 30 секунд при неизменной authenticated session. Полный API,
+disclosure, idempotency и snapshot/event recovery —
+[Voice Service](../microservices/voice-service.md#phase-0-space-room-media-roster-и-lifecycle-target-не-реализовано).
+
 
 - **SFU**: LiveKit, self-hosted (open source)
 - **TURN/STUN**: встроенный в LiveKit Server; свои TURN-серверы на старте — избыточно
 - **Кодеки**: голос — Opus 48kHz, ~32kbps, авто-адаптация по сети; видео — VP8/VP9, simulcast
 - **Входящий звонок в DM**: рингтон (push + звук), таймаут 30 сек; при неответе — "пропущенный звонок" в чате; voicemail — нет
 - **Уведомление о записи**: индикатор ⏺ показывается **только тому, кто ведёт запись** — в его собственном UI. Остальным участникам запись не индицируется.
+
+## Технические характеристики
 
 ## Ducking — реализация
 

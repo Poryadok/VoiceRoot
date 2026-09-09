@@ -87,7 +87,50 @@ Client ──LiveKit Client SDK──► LiveKit SFU (media streams)
 - Кодеки: Opus (32 kbps audio), VP8/VP9 (video)
 - LiveKit Simulcast для screen share (адаптивное качество)
 
-## Публикуемые события (→ NATS)
+## Phase-0 Space-room media, roster и lifecycle (target; не реализовано)
+
+**Public surface.** Gateway exposes Space room actions under
+`/api/v1/spaces/{space_id}/voice-rooms/{voice_room_id}`: `POST /join`,
+`POST /leave`, `GET /roster`, `POST /move` (self; destination `voice_room_id`),
+and `POST /participants/{profile_id}/move` (moderator). `space_id` is path-bound
+and never asserted by the client in a body/header. All actions use the Gateway
+derived delegated-user principal; no client-provided profile or Space identity is
+authoritative. The final proto must add a distinct moderator-move RPC; it must not
+reuse self move with an asserted actor.
+
+For this surface: unauthenticated is `401 unauthenticated`; absent Space/room is
+`404 not_found` only after a caller is entitled to discover it; a caller without
+Space membership/discovery receives `404 not_found`; a discoverable room denied by
+policy receives `403 permission_denied`; stale/inactive room, self-move impossible
+or conflicting active operation gives `409 failed_precondition`; resolver/Role/
+LiveKit dependency failure is `503 unavailable`. Every deny has no room session,
+roster or event side effect. Gateway freezes these `error_code` values instead of
+relaying arbitrary gRPC text. Mutations carry a client UUID `operation_id`; Voice
+keeps a 24-hour keyed ledger `(actor_profile_id, operation_id, method, canonical
+request)` for identical replay and rejects changed request as `409 already_exists`.
+
+**LiveKit grant.** A Space-room grant is a 60-second LiveKit JWT bound to server
+identity, `profile_id`, `room_id`, an authorization `epoch`, and the explicit
+join/publish/subscribe grants determined by Role. Voice re-resolves access before
+every issue/reissue. On membership, `VOICE_JOIN` or `VOICE_SPEAK` loss, self-hosted
+LiveKit actively ejects the current participant/media within **2 s p95** and
+**5 s max**. Voice denies a fresh grant/reissue after the authorization change and
+the client retries reconnect for at most 30 s only while its authenticated session
+and epoch are unchanged. A previously issued bearer JWT can still reconnect until
+its ≤60-second expiry: without a LiveKit-side token verifier this is not a
+cryptographic deny-before-connect guarantee. Such stale reconnect is best-effort
+reconciliation followed by the same eject SLA. No cloud media movement is a target:
+user grants remain self-hosted by default.
+
+**Roster.** `SPACE_VIEW_MEMBER_LIST` permits full room roster fields
+`profile_id`, display snapshot, muted/deafened/video/speaking state; a Space member
+without it receives a redacted occupancy response (`occupant_count`, no profile or
+state fields), not a member-list disclosure. The same audience rule applies to
+REST snapshot and Realtime events. Snapshot carries room authorization epoch,
+monotonic roster `version` and HMAC-signed filter-bound cursor. Clients buffer
+live events during snapshot, then apply contiguous versions; a gap/invalid cursor
+requires a new snapshot.
+
 
 Доменный поток JetStream: **`voice.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)).
 
@@ -104,6 +147,8 @@ Client ──LiveKit Client SDK──► LiveKit SFU (media streams)
 | `voice.state_changed`        | profile_id, changes (mute/deafen/video) |
 | `voice.screen_share_started` | room_id, profile_id                     |
 | `voice.screen_share_stopped` | room_id, profile_id                     |
+
+## Публикуемые события (→ NATS)
 
 ## Зависимости
 

@@ -67,6 +67,14 @@ POST /api/v1/realtime/ws-ticket → Gateway (short-lived WS ticket; JWT в за�
 
 **[user-profile.md](../features/user-profile.md) — presigned аватар (R2, User Service, без File Service):** `POST /api/v1/users/me/avatar/presigned-upload` (JWT). Тело JSON: `content_type`, `content_length`; `profile_id` опционален (по умолчанию активный профиль из JWT → `X-Voice-Profile-Id`). Ответ — поля `upload_url`, `http_method`, `required_headers`, `expires_at`, `public_url` / `object_key` для последующего `PUT` в R2 и сохранения URL через `PATCH /api/v1/users/me` (`UpdateProfile.avatar_url`). Обход REST: тот же контракт по **gRPC** `UserService.CreateAvatarPresignedUpload` на User Service (внутренний ingress, непубличные клиенты), если edge Gateway недоступен.
 
+**Phase-0 Space voice-room target routes (not implemented):** the canonical Space
+room surface is owned by Voice and is listed in
+[voice-service.md](voice-service.md#phase-0-space-room-media-roster-и-lifecycle-target-не-реализовано).
+Gateway binds `space_id` and `voice_room_id` from the path, derives the actor only
+from verified JWT, attaches its delegated-user credential, redacts it in logs, and
+preserves the frozen `401/404/403/409/503` + `error_code` disclosure mapping. It
+must not forward current client `space.id` assertions as authority.
+
 **[voice-chat.md](../features/voice-chat.md) — DM-звонки через Voice Service + LiveKit:** namespace `POST/GET /api/v1/voice/**` транскодится в `VoiceService` ([voice-service.md](voice-service.md)). Клиент не отправляет WebRTC `offer/answer/ICE` в Gateway: media signaling идёт внутри LiveKit SDK; Gateway управляет только lifecycle и выдачей токена. Минимальные публичные маршруты:
 
 | Method | Route | gRPC | Тело / параметры |

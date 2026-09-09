@@ -188,7 +188,26 @@ voice_room_overrides
 5. Admin → все права кроме Owner-specific
 ```
 
-## Публикуемые события (→ NATS)
+## Phase-0 principal и caller matrix (target; не реализовано)
+
+Role принимает actor и service authority только из верифицированного Phase-0
+interceptor ([ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md));
+`x-voice-profile-id` и похожие metadata не являются identity. Gateway передаёт
+только derived delegated-user principal для client surface.
+
+| Caller principal | Exact allowed Role RPCs | Allowed actor / subject fields |
+|---|---|---|
+| `gateway` delegated user | `CreateRole`, `UpdateRole`, `DeleteRole`, `ListRoles`, `ReorderRoles`, `AssignRole`, `RevokeRole`, `GetMemberRoles`, `SetChatOverride`, `RemoveChatOverride`, `GetChatOverrides`, `SetVoiceRoomOverride`, `RemoveVoiceRoomOverride`, `GetVoiceRoomOverrides`, `SetDefaultJoinRole`, `GetDefaultJoinRole`, `GetEffectivePermissions` | actor is only derived `sub`/`profile_id`; request `profile_id` is a target subject where that RPC has one and is ACL-checked by Role |
+| `space` service | `BootstrapSpaceRoles`, `GetDefaultJoinRole`, `ListRoles`, `GetMemberRoles`, `AssignRole`, `RevokeRole` | `owner_profile_id` only for bootstrap; `profile_id` only for Space-owned join/leave lifecycle; `AssignRole`/`RevokeRole` must reject `Owner` |
+| `space` trusted transfer | `TransferOwnerRole` (**new dedicated RPC**) | exact `space_id`, `old_owner_profile_id`, `new_owner_profile_id`, `operation_id`; no generic Role RPC may mutate `Owner` |
+| `voice`, `chat`, `messaging` service | `CheckPermission` | explicit `profile_id` only as the decision subject, plus requested `space_id`/node scope; no actor mutation authority |
+| `bot` service | `CheckPermission`, `GetMemberRoles`, `RevokeRole`, `DeleteRolesCreatedByProfile` | explicit `profile_id` only for authorised bot lifecycle/decision data; `RevokeRole` must reject `Owner`; bot actor mutations use a Gateway delegated-user principal, never metadata |
+
+`Owner` нельзя назначить, снять или переназначить через generic client/member RPC.
+Только dedicated authenticated Space transfer lifecycle меняет Owner и обязан быть
+idempotent по `operation_id`. Unknown caller/RPC, caller с неправильной audience
+или read, раскрывающий member data вне своей ACL, fail closed.
+
 
 Доменный поток JetStream: **`role.events`** (матрица: [CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)).
 
@@ -201,6 +220,8 @@ voice_room_overrides
 | `role.revoked`      | space_id, profile_id, role_id     |
 | `role.chat_override_set`  | chat_id, role_id       |
 | `role.voice_override_set` | voice_room_id, role_id |
+
+## Публикуемые события (→ NATS)
 
 ## Зависимости
 
