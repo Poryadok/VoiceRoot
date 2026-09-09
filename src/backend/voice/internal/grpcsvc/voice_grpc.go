@@ -73,6 +73,18 @@ func (s *VoiceGRPC) StartCall(ctx context.Context, req *callsv1.StartCallRequest
 	if calleeID == profileID {
 		return nil, status.Error(codes.InvalidArgument, "cannot call self")
 	}
+	if s.ChatMembers == nil {
+		return nil, status.Error(codes.FailedPrecondition, "chat membership check not configured")
+	}
+	if err := s.ensureChatMember(ctx, chatID, profileID); err != nil {
+		return nil, err
+	}
+	if err := s.ensureChatMember(ctx, chatID, calleeID); err != nil {
+		return nil, err
+	}
+	if err := s.ensureDirectChat(ctx, chatID); err != nil {
+		return nil, err
+	}
 	media := req.GetMediaKind()
 	if media == callsv1.CallMediaKind_CALL_MEDIA_KIND_UNSPECIFIED {
 		media = callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO
@@ -516,6 +528,23 @@ func (s *VoiceGRPC) ensureChatMember(ctx context.Context, chatID, profileID stri
 	if err := s.ChatMembers.EnsureMember(ctx, chatID, profileID); err != nil {
 		if errors.Is(err, ErrNotChatMember) {
 			return status.Error(codes.PermissionDenied, "not a chat member")
+		}
+		return status.Error(codes.Internal, err.Error())
+	}
+	return nil
+}
+
+func (s *VoiceGRPC) ensureDirectChat(ctx context.Context, chatID string) error {
+	validator, ok := s.ChatMembers.(DirectChatValidator)
+	if !ok || validator == nil {
+		return status.Error(codes.FailedPrecondition, "direct chat validation not configured")
+	}
+	if err := validator.EnsureDirectChat(ctx, chatID); err != nil {
+		if errors.Is(err, ErrNotChatMember) {
+			return status.Error(codes.PermissionDenied, "not a chat member")
+		}
+		if errors.Is(err, ErrNotDirectChat) {
+			return status.Error(codes.InvalidArgument, "linked chat must be a direct message")
 		}
 		return status.Error(codes.Internal, err.Error())
 	}
