@@ -1,6 +1,6 @@
 # Design tokens semantics
 
-Канон: [design/tokens/voice.tokens.json](../../design/tokens/voice.tokens.json) (`dsVersion` 0.2.1). Runtime: [src/frontend/assets/design/voice.tokens.json](../../src/frontend/assets/design/voice.tokens.json).
+Канон: [design/tokens/voice.tokens.json](../../design/tokens/voice.tokens.json) (`dsVersion` 0.3.0). Runtime: [src/frontend/assets/design/voice.tokens.json](../../src/frontend/assets/design/voice.tokens.json).
 
 **Стиль:** messaging surface ближе к Telegram / soft messenger (bubbles, pill search, тонкий app rail); **функция** shell для spaces — Discord-like (tree, members, voice), но без визуального шума. См. [brand.md](brand.md).
 
@@ -20,16 +20,21 @@
 | `color.background.surface` | Колонки, панели |
 | `color.background.elevated` | Приподнятые блоки |
 | `color.background.muted` | Приглушённые зоны |
+| `color.background.hoverSubtle` | Очень лёгкий hover без ощущения выбранного состояния |
 | `color.text.primary` | Основной текст |
 | `color.text.secondary` | Вторичный текст |
 | `color.text.disabled` | Неактивный текст |
 | `color.border.default` | Разделители |
 | `color.border.strong` | Акцентные границы (high contrast) |
+| `color.divider.list` | Полупрозрачный разделитель строк после leading content |
+| `color.divider.rail` | Короткий разделитель зон app rail |
 | `color.semantic.error` | Ошибки |
 | `color.semantic.success` | Успех, подтверждение доставки |
 | `color.semantic.warning` | Предупреждения, DND, slow mode |
 | `color.semantic.info` | Информационные подсказки, pinned messages |
+| `color.link` | Inline links и кликабельный источник pinned message |
 | `color.semantic.badge` | Фон unread badge |
+| `color.message.incoming` / `outgoing` | Фоны входящих и исходящих message bubbles |
 | `color.presence.online` | Presence: онлайн |
 | `color.presence.idle` | Presence: неактивен |
 | `color.presence.dnd` | Presence: не беспокоить |
@@ -65,6 +70,7 @@ Accent применяется к: `ColorScheme.primary`, primary `FilledButton`,
 | `radius.xl` | 12 | quote blocks, larger soft controls |
 | `radius.bubble` | 16 | message bubbles (no tails) |
 | `radius.pill` | 999 | search field, unread badge, toggles |
+| `radius.avatarGroup` | 10 | group/channel avatar; обычные avatars остаются круглыми |
 
 Avatars — круг (`BorderRadius.circular(size/2)`), не отдельный numeric token.
 
@@ -82,6 +88,8 @@ Avatars — круг (`BorderRadius.circular(size/2)`), не отдельный 
 | `layout.composerActionSize` | 36 | action buttons в composer (emoji/attach/send/mic) |
 | `layout.callBarHeight` | 48 | voice/video call chrome bar |
 | `layout.badgeSize` | 20 | unread badge dot/counter |
+| `layout.badgeRailSize` | 15 | counter внутри 40 px rail hitbox |
+| `layout.badgeUnreadSize` | 18 | compact unread/missed-call counter в строках |
 | `layout.listRowHeight` | 64 | DM chat list row |
 | `layout.channelRowHeight` | 34 | space channel tree row |
 | `layout.avatarSm` / `Md` / `Lg` | 32 / 40 / 80 | list / message / profile |

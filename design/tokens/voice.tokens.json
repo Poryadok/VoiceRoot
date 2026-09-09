@@ -1,5 +1,5 @@
 {
-  "dsVersion": "0.2.1",
+  "dsVersion": "0.3.0",
   "profileAccent": {
     "defaults": [
       "#7EC8E3",
@@ -29,7 +29,8 @@
     "lg": 8,
     "xl": 12,
     "bubble": 16,
-    "pill": 999
+    "pill": 999,
+    "avatarGroup": 10
   },
   "layout": {
     "railWidth": 56,
@@ -42,6 +43,8 @@
     "composerActionSize": 36,
     "callBarHeight": 48,
     "badgeSize": 20,
+    "badgeRailSize": 15,
+    "badgeUnreadSize": 18,
     "listRowHeight": 64,
     "channelRowHeight": 34,
     "avatarSm": 32,
@@ -53,13 +56,41 @@
     "bubbleMaxWidthFraction": 0.72
   },
   "type": {
-    "display": { "size": 20, "weight": 600, "lineHeight": 28 },
-    "title": { "size": 16, "weight": 600, "lineHeight": 22 },
-    "body": { "size": 15, "weight": 400, "lineHeight": 22 },
-    "bodyStrong": { "size": 15, "weight": 500, "lineHeight": 22 },
-    "label": { "size": 14, "weight": 500, "lineHeight": 20 },
-    "subtitle": { "size": 13, "weight": 400, "lineHeight": 18 },
-    "caption": { "size": 12, "weight": 400, "lineHeight": 16 },
+    "display": {
+      "size": 20,
+      "weight": 600,
+      "lineHeight": 28
+    },
+    "title": {
+      "size": 16,
+      "weight": 600,
+      "lineHeight": 22
+    },
+    "body": {
+      "size": 15,
+      "weight": 400,
+      "lineHeight": 22
+    },
+    "bodyStrong": {
+      "size": 15,
+      "weight": 500,
+      "lineHeight": 22
+    },
+    "label": {
+      "size": 14,
+      "weight": 500,
+      "lineHeight": 20
+    },
+    "subtitle": {
+      "size": 13,
+      "weight": 400,
+      "lineHeight": 18
+    },
+    "caption": {
+      "size": 12,
+      "weight": 400,
+      "lineHeight": 16
+    },
     "overline": {
       "size": 11,
       "weight": 500,
@@ -77,16 +108,22 @@
       "color.background.surface": "#F5F5F5",
       "color.background.elevated": "#EEEEEE",
       "color.background.muted": "#E8E8E8",
+      "color.background.hoverSubtle": "#FAFAFA",
       "color.text.primary": "#1A1A1A",
       "color.text.secondary": "#5C5C5C",
       "color.text.disabled": "#9E9E9E",
       "color.border.default": "#E0E0E0",
       "color.border.strong": "#1A1A1A",
+      "color.divider.list": "rgba(224,224,224,0.72)",
+      "color.divider.rail": "#C8C8C8",
       "color.semantic.error": "#C62828",
       "color.semantic.success": "#2E7D32",
       "color.semantic.warning": "#F9A825",
       "color.semantic.info": "#1565C0",
+      "color.link": "#168ACB",
       "color.semantic.badge": "#E53935",
+      "color.message.incoming": "#E9E9E9",
+      "color.message.outgoing": "#E1F3FB",
       "color.presence.online": "#43A047",
       "color.presence.idle": "#FBC02D",
       "color.presence.dnd": "#E53935",
@@ -99,16 +136,22 @@
       "color.background.surface": "#2B2B2B",
       "color.background.elevated": "#333333",
       "color.background.muted": "#252525",
+      "color.background.hoverSubtle": "#303030",
       "color.text.primary": "#F0F0F0",
       "color.text.secondary": "#A8A8A8",
       "color.text.disabled": "#6E6E6E",
       "color.border.default": "#3D3D3D",
       "color.border.strong": "#F0F0F0",
+      "color.divider.list": "rgba(61,61,61,0.72)",
+      "color.divider.rail": "#505050",
       "color.semantic.error": "#EF9A9A",
       "color.semantic.success": "#81C784",
       "color.semantic.warning": "#FFD54F",
       "color.semantic.info": "#64B5F6",
+      "color.link": "#64B5F6",
       "color.semantic.badge": "#EF5350",
+      "color.message.incoming": "#333333",
+      "color.message.outgoing": "#263B44",
       "color.presence.online": "#66BB6A",
       "color.presence.idle": "#FFCA28",
       "color.presence.dnd": "#EF5350",
@@ -121,16 +164,22 @@
       "color.background.surface": "#0D0D0D",
       "color.background.elevated": "#1A1A1A",
       "color.background.muted": "#141414",
+      "color.background.hoverSubtle": "#1A1A1A",
       "color.text.primary": "#FFFFFF",
       "color.text.secondary": "#E0E0E0",
       "color.text.disabled": "#9E9E9E",
       "color.border.default": "#FFFFFF",
       "color.border.strong": "#FFFFFF",
+      "color.divider.list": "rgba(255,255,255,0.72)",
+      "color.divider.rail": "#FFFFFF",
       "color.semantic.error": "#FF6B6B",
       "color.semantic.success": "#69F0AE",
       "color.semantic.warning": "#FFE082",
       "color.semantic.info": "#82B1FF",
+      "color.link": "#82B1FF",
       "color.semantic.badge": "#FF5252",
+      "color.message.incoming": "#1A1A1A",
+      "color.message.outgoing": "#0D2A36",
       "color.presence.online": "#69F0AE",
       "color.presence.idle": "#FFE082",
       "color.presence.dnd": "#FF5252",
