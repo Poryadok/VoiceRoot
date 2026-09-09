@@ -146,7 +146,7 @@ func (s *SpaceGRPC) RevokeInvite(ctx context.Context, req *spacev1.RevokeInviteR
 		return nil, err
 	}
 	defer release()
-	if err := s.requireSpaceOwner(ctx, inv.SpaceID); err != nil {
+	if err := s.requireSpacePermission(ctx, inv.SpaceID, permissions.SpaceManageInvites); err != nil {
 		return nil, err
 	}
 	caller, ok := authctx.ProfileID(ctx)
@@ -199,7 +199,7 @@ func (s *SpaceGRPC) ListInvites(ctx context.Context, req *spacev1.ListInvitesReq
 		return nil, err
 	}
 	defer release()
-	if err := s.requireSpaceOwner(ctx, spaceID); err != nil {
+	if err := s.requireSpacePermission(ctx, spaceID, permissions.SpaceManageInvites); err != nil {
 		return nil, err
 	}
 	rows, err := s.Store.ListInvites(ctx, spaceID)

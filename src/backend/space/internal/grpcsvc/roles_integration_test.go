@@ -159,3 +159,126 @@ func TestCreateInvite_RequiresManageInvitesPermission(t *testing.T) {
 	_, err = spaceClient.CreateInvite(delegateCtx, &spacev1.CreateInviteRequest{SpaceId: spaceID})
 	require.NoError(t, err)
 }
+
+func grantManageInvitesRole(t *testing.T, roleClient rolev1.RoleServiceClient, ownerCtx context.Context, spaceID, ownerProfileID, delegateProfileID string) {
+	t.Helper()
+	inviteMask, err := permissions.MaskFor(permissions.SpaceManageInvites)
+	require.NoError(t, err)
+	ownerRoleCtx := metadata.AppendToOutgoingContext(ownerCtx, authctx.HeaderProfileID, ownerProfileID)
+	role, err := roleClient.CreateRole(ownerRoleCtx, &rolev1.CreateRoleRequest{
+		SpaceId:         spaceID,
+		Name:            "Invite manager",
+		PermissionsMask: inviteMask,
+		Position:        2,
+	})
+	require.NoError(t, err)
+	_, err = roleClient.AssignRole(ownerRoleCtx, &rolev1.AssignRoleRequest{
+		SpaceId:   spaceID,
+		ProfileId: delegateProfileID,
+		RoleId:    role.GetRole().GetId(),
+	})
+	require.NoError(t, err)
+}
+
+// TestListInvites_RequiresManageInvitesPermission documents the canonical
+// invite-management contract: a joined member needs SPACE_MANAGE_INVITES, and
+// a member granted that permission may list the space's invites without being
+// its owner.
+func TestListInvites_RequiresManageInvitesPermission(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	_, _, ownerCtx := profileFixture(t)
+	delegateAccount, delegateProfile := uuid.New(), uuid.New()
+	delegateCtx := withAccountProfileCtx(context.Background(), delegateAccount, delegateProfile)
+
+	pool := startSpacePostgresForTest(t, context.Background())
+	applySpaceMigration(t, context.Background(), pool)
+	roleClient, roleCleanup := startSharedRoleClient(t)
+	t.Cleanup(roleCleanup)
+	spaceClient, cleanup := startSpaceGRPCTestServer(t, pool, withRoleClient(roleClient))
+	t.Cleanup(cleanup)
+
+	created, err := spaceClient.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Invite list delegates"})
+	require.NoError(t, err)
+	spaceID := created.GetSpace().GetId()
+
+	admission, err := spaceClient.CreateInvite(ownerCtx, &spacev1.CreateInviteRequest{SpaceId: spaceID})
+	require.NoError(t, err)
+	_, err = spaceClient.CreateInvite(ownerCtx, &spacev1.CreateInviteRequest{SpaceId: spaceID})
+	require.NoError(t, err)
+	_, err = spaceClient.JoinByInvite(delegateCtx, &spacev1.JoinByInviteRequest{Code: admission.GetInvite().GetCode()})
+	require.NoError(t, err)
+
+	_, err = spaceClient.ListInvites(delegateCtx, &spacev1.ListInvitesRequest{SpaceId: spaceID})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	grantManageInvitesRole(t, roleClient, ownerCtx, spaceID, created.GetSpace().GetOwnerProfileId(), delegateProfile.String())
+
+	list, err := spaceClient.ListInvites(delegateCtx, &spacev1.ListInvitesRequest{SpaceId: spaceID})
+	require.NoError(t, err)
+	require.Len(t, list.GetInviteList().GetInvites(), 2)
+}
+
+// TestRevokeInvite_RequiresManageInvitesPermission documents that a joined
+// member with SPACE_MANAGE_INVITES may revoke an invite. A member without the
+// permission remains denied, and a successful revoke removes the invite from
+// the active list and rejects subsequent redemption.
+func TestRevokeInvite_RequiresManageInvitesPermission(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	_, _, ownerCtx := profileFixture(t)
+	delegateAccount, delegateProfile := uuid.New(), uuid.New()
+	delegateCtx := withAccountProfileCtx(context.Background(), delegateAccount, delegateProfile)
+	joinerCtx := withAccountProfileCtx(context.Background(), uuid.New(), uuid.New())
+
+	pool := startSpacePostgresForTest(t, context.Background())
+	applySpaceMigration(t, context.Background(), pool)
+	roleClient, roleCleanup := startSharedRoleClient(t)
+	t.Cleanup(roleCleanup)
+	spaceClient, cleanup := startSpaceGRPCTestServer(t, pool, withRoleClient(roleClient))
+	t.Cleanup(cleanup)
+
+	created, err := spaceClient.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Invite revoke delegates"})
+	require.NoError(t, err)
+	spaceID := created.GetSpace().GetId()
+
+	admission, err := spaceClient.CreateInvite(ownerCtx, &spacev1.CreateInviteRequest{SpaceId: spaceID})
+	require.NoError(t, err)
+	target, err := spaceClient.CreateInvite(ownerCtx, &spacev1.CreateInviteRequest{SpaceId: spaceID})
+	require.NoError(t, err)
+	_, err = spaceClient.JoinByInvite(delegateCtx, &spacev1.JoinByInviteRequest{Code: admission.GetInvite().GetCode()})
+	require.NoError(t, err)
+
+	_, err = spaceClient.RevokeInvite(delegateCtx, &spacev1.RevokeInviteRequest{InviteId: target.GetInvite().GetId()})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	beforeGrant, err := spaceClient.ListInvites(ownerCtx, &spacev1.ListInvitesRequest{SpaceId: spaceID})
+	require.NoError(t, err)
+	var unrevoked *spacev1.Invite
+	for _, invite := range beforeGrant.GetInviteList().GetInvites() {
+		if invite.GetId() == target.GetInvite().GetId() {
+			unrevoked = invite
+		}
+	}
+	require.NotNil(t, unrevoked)
+	require.Nil(t, unrevoked.GetRevokedAt())
+
+	grantManageInvitesRole(t, roleClient, ownerCtx, spaceID, created.GetSpace().GetOwnerProfileId(), delegateProfile.String())
+
+	_, err = spaceClient.RevokeInvite(delegateCtx, &spacev1.RevokeInviteRequest{InviteId: target.GetInvite().GetId()})
+	require.NoError(t, err)
+
+	list, err := spaceClient.ListInvites(ownerCtx, &spacev1.ListInvitesRequest{SpaceId: spaceID})
+	require.NoError(t, err)
+	var revoked bool
+	for _, invite := range list.GetInviteList().GetInvites() {
+		if invite.GetId() == target.GetInvite().GetId() {
+			revoked = true
+		}
+	}
+	require.False(t, revoked)
+
+	_, err = spaceClient.JoinByInvite(joinerCtx, &spacev1.JoinByInviteRequest{Code: target.GetInvite().GetCode()})
+	require.Equal(t, codes.NotFound, status.Code(err))
+}
