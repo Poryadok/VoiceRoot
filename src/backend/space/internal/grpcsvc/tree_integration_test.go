@@ -195,4 +195,110 @@ func TestCreateCategory_NonOwnerDenied(t *testing.T) {
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
+func TestSpaceTree_OwnerCanUpdateAndDeleteCategory(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	_, _, ctx := profileFixture(t)
+	pool := startSpacePostgresForTest(t, context.Background())
+	applySpaceMigration(t, context.Background(), pool)
+	client, cleanup := startSpaceGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	created, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{Name: "Category lifecycle"})
+	require.NoError(t, err)
+	spaceID := created.GetSpace().GetId()
+
+	category, err := client.CreateCategory(ctx, &spacev1.CreateCategoryRequest{
+		SpaceId:   spaceID,
+		Name:      "Before",
+		SortOrder: 2,
+	})
+	require.NoError(t, err)
+
+	updated, err := client.UpdateCategory(ctx, &spacev1.UpdateCategoryRequest{
+		CategoryId: category.GetCategory().GetId(),
+		Name:       ptr("After"),
+		SortOrder:  ptrInt32(7),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "After", updated.GetCategory().GetName())
+	require.EqualValues(t, 7, updated.GetCategory().GetSortOrder())
+
+	_, err = client.DeleteCategory(ctx, &spacev1.DeleteCategoryRequest{CategoryId: category.GetCategory().GetId()})
+	require.NoError(t, err)
+
+	tree, err := client.ListSpaceTree(ctx, &spacev1.ListSpaceTreeRequest{SpaceId: spaceID})
+	require.NoError(t, err)
+	require.Empty(t, tree.GetCategories())
+}
+
+func TestSpaceTree_OwnerCanUpdateAndDeleteVoiceRoomWithTreeNode(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	_, _, ctx := profileFixture(t)
+	pool := startSpacePostgresForTest(t, context.Background())
+	applySpaceMigration(t, context.Background(), pool)
+	client, cleanup := startSpaceGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	created, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{Name: "Voice room lifecycle"})
+	require.NoError(t, err)
+	spaceID := created.GetSpace().GetId()
+
+	room, err := client.CreateVoiceRoom(ctx, &spacev1.CreateVoiceRoomRequest{SpaceId: spaceID, Name: "Before"})
+	require.NoError(t, err)
+	roomID := room.GetVoiceRoom().GetId()
+
+	updated, err := client.UpdateVoiceRoom(ctx, &spacev1.UpdateVoiceRoomRequest{
+		VoiceRoomId: roomID,
+		Name:        ptr("After"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "After", updated.GetVoiceRoom().GetName())
+
+	_, err = client.DeleteVoiceRoom(ctx, &spacev1.DeleteVoiceRoomRequest{VoiceRoomId: roomID})
+	require.NoError(t, err)
+
+	tree, err := client.ListSpaceTree(ctx, &spacev1.ListSpaceTreeRequest{SpaceId: spaceID})
+	require.NoError(t, err)
+	require.Empty(t, tree.GetVoiceRooms())
+	require.Empty(t, tree.GetNodes(), "deleting a voice room must cascade to its tree node")
+}
+
+func TestSpaceTree_OwnerCanRemoveTextNode(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	_, _, ctx := profileFixture(t)
+	pool := startSpacePostgresForTest(t, context.Background())
+	applySpaceMigration(t, context.Background(), pool)
+	client, cleanup := startSpaceGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	created, err := client.CreateSpace(ctx, &spacev1.CreateSpaceRequest{Name: "Text node lifecycle"})
+	require.NoError(t, err)
+	spaceID := created.GetSpace().GetId()
+	chatType := chatv1.ChatType_CHAT_TYPE_CHANNEL
+	node, err := client.UpsertTreeNode(ctx, &spacev1.UpsertTreeNodeRequest{
+		SpaceId:    spaceID,
+		Kind:       "text_chat",
+		LinkedChat: &chatv1.ChatRef{Id: uuid.New().String(), Type: &chatType},
+	})
+	require.NoError(t, err)
+
+	_, err = client.RemoveTreeNode(ctx, &spacev1.RemoveTreeNodeRequest{
+		SpaceId: spaceID,
+		NodeId:  node.GetSpaceTreeNode().GetId(),
+	})
+	require.NoError(t, err)
+
+	tree, err := client.ListSpaceTree(ctx, &spacev1.ListSpaceTreeRequest{SpaceId: spaceID})
+	require.NoError(t, err)
+	require.Empty(t, tree.GetNodes())
+}
+
 func ptr(s string) *string { return &s }
+
+func ptrInt32(v int32) *int32 { return &v }
