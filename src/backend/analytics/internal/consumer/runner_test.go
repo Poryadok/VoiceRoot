@@ -76,3 +76,32 @@ func TestSubscribeJetStreamWithRetryReturnsNonStreamErrorImmediately(t *testing.
 	require.ErrorIs(t, err, want)
 	require.Equal(t, 1, attempts)
 }
+
+func TestSubscribeCreateOrBindDoesNotRetryPermanentCreateErrorWhenBindSaysNotFound(t *testing.T) {
+	createErr := errors.New("permission denied")
+	_, err := subscribeCreateOrBind(
+		func() (*nats.Subscription, error) { return nil, createErr },
+		func() (*nats.Subscription, error) { return nil, nats.ErrStreamNotFound },
+	)
+
+	require.ErrorIs(t, err, createErr)
+	require.False(t, isJetStreamNotFound(err))
+}
+
+func TestSubscribeJetStreamWithRetryDoesNotRetryBindNotFoundAfterPermanentCreateError(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	attempts := 0
+	createErr := errors.New("permission denied")
+	_, err := subscribeJetStreamWithRetry(ctx, nil, "message_events", func() (*nats.Subscription, error) {
+		attempts++
+		return subscribeCreateOrBind(
+			func() (*nats.Subscription, error) { return nil, createErr },
+			func() (*nats.Subscription, error) { return nil, nats.ErrStreamNotFound },
+		)
+	})
+
+	require.ErrorIs(t, err, createErr)
+	require.Equal(t, 1, attempts)
+}

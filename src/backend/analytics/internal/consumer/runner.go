@@ -137,11 +137,29 @@ func isJetStreamNotFound(err error) bool {
 	if err == nil {
 		return false
 	}
+	var createBindErr *createBindSubscriptionError
+	if errors.As(err, &createBindErr) {
+		return isJetStreamNotFound(createBindErr.createErr)
+	}
 	if errors.Is(err, nats.ErrStreamNotFound) {
 		return true
 	}
 	return strings.Contains(strings.ToLower(err.Error()), "stream not found")
 }
+
+// createBindSubscriptionError retains the primary create failure as the only
+// retry-classification input. The bind error adds diagnostics but must never turn
+// a permanent create failure into a retryable one.
+type createBindSubscriptionError struct {
+	createErr error
+	bindErr   error
+}
+
+func (e *createBindSubscriptionError) Error() string {
+	return fmt.Sprintf("create durable: %v; bind existing durable: %v", e.createErr, e.bindErr)
+}
+
+func (e *createBindSubscriptionError) Unwrap() error { return e.createErr }
 
 // subscribeCreateOrBind creates a durable consumer, or binds to the durable one
 // created by an earlier Analytics process. A missing publisher stream must reach
@@ -158,7 +176,7 @@ func subscribeCreateOrBind(create, bind func() (*nats.Subscription, error)) (*na
 	if bindErr == nil {
 		return sub, nil
 	}
-	return nil, fmt.Errorf("create durable: %w; bind existing durable: %v", createErr, bindErr)
+	return nil, &createBindSubscriptionError{createErr: createErr, bindErr: bindErr}
 }
 
 func subscribeJetStreamWithRetry(ctx context.Context, logger *slog.Logger, stream string, subscribe func() (*nats.Subscription, error)) (*nats.Subscription, error) {
