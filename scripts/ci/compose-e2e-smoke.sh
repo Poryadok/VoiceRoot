@@ -33,6 +33,7 @@ for pattern in \
   "ratelimit:AuthLogin:*" \
   "ratelimit:AuthRegister:*" \
   "ratelimit:Auth:*" \
+  "ratelimit:OTP:*" \
   "ratelimit:FileUpload:*"; do
   mapfile -t _rl_keys < <(
     docker compose -f "${ROOT}/docker-compose.yml" exec -T redis redis-cli --scan --pattern "${pattern}" 2>/dev/null || true
