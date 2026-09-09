@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -80,6 +81,25 @@ func TestComposeAnalyticsIngest_live(t *testing.T) {
 	t.Fatalf("message_sent not observed in ClickHouse within 60s (baseline=%d)", baseline)
 }
 
+func TestParseClickHouseCount(t *testing.T) {
+	t.Run("quoted UInt64", func(t *testing.T) {
+		count, err := parseClickHouseCount([]byte(`{"data":[{"count()":"42"}]}`))
+		require.NoError(t, err)
+		require.Equal(t, uint64(42), count)
+	})
+
+	t.Run("unquoted UInt64", func(t *testing.T) {
+		count, err := parseClickHouseCount([]byte(`{"data":[{"count()":42}]}`))
+		require.NoError(t, err)
+		require.Equal(t, uint64(42), count)
+	})
+
+	t.Run("invalid value", func(t *testing.T) {
+		_, err := parseClickHouseCount([]byte(`{"data":[{"count()":"not-a-count"}]}`))
+		require.Error(t, err)
+	})
+}
+
 func clickhouseHTTPBase() string {
 	if u := strings.TrimSpace(os.Getenv("CLICKHOUSE_HTTP_URL")); u != "" {
 		return strings.TrimRight(u, "/")
@@ -116,14 +136,43 @@ func clickhouseEventCount(t *testing.T, eventType string, since time.Time) uint6
 	if resp.StatusCode != http.StatusOK {
 		t.Skipf("clickhouse query failed: status=%d body=%s", resp.StatusCode, string(body))
 	}
+	count, err := parseClickHouseCount(body)
+	require.NoError(t, err)
+	return count
+}
+
+// parseClickHouseCount accepts ClickHouse's default quoted UInt64 JSON output
+// and the unquoted form produced when output_format_json_quote_64bit_integers is disabled.
+func parseClickHouseCount(body []byte) (uint64, error) {
 	var parsed struct {
 		Data []struct {
-			Count uint64 `json:"count()"`
+			Count json.RawMessage `json:"count()"`
 		} `json:"data"`
 	}
-	require.NoError(t, json.Unmarshal(body, &parsed))
-	if len(parsed.Data) == 0 {
-		return 0
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return 0, fmt.Errorf("decode ClickHouse JSON response: %w", err)
 	}
-	return parsed.Data[0].Count
+	if len(parsed.Data) == 0 {
+		return 0, nil
+	}
+
+	raw := parsed.Data[0].Count
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return 0, fmt.Errorf("ClickHouse response missing count()")
+	}
+
+	var quoted string
+	if err := json.Unmarshal(raw, &quoted); err == nil {
+		count, parseErr := strconv.ParseUint(quoted, 10, 64)
+		if parseErr != nil {
+			return 0, fmt.Errorf("parse quoted ClickHouse count %q: %w", quoted, parseErr)
+		}
+		return count, nil
+	}
+
+	var count uint64
+	if err := json.Unmarshal(raw, &count); err != nil {
+		return 0, fmt.Errorf("decode ClickHouse count: %w", err)
+	}
+	return count, nil
 }
