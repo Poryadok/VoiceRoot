@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -350,8 +351,9 @@ void main() {
           }
           if (waitingForReconnectSnapshot) {
             for (final scope in InboxScope.values) {
-              if (!snapshot[scope].isComplete)
+              if (!snapshot[scope].isComplete) {
                 reconnectStartedScopes.add(scope);
+              }
             }
           }
           final main = snapshot[InboxScope.main];
@@ -544,25 +546,6 @@ void main() {
       offlineMessageId = (offlineDelta as MessagesApiOk<VoiceMessage>).data.id;
       expect(offlineMessageId, isNotEmpty, reason: 'offline selected delta');
 
-      final reconnectCursors = <String, String>{};
-      reconnectCursors['main'] = await _expectTwoInboxItems(
-        chats: chats,
-        authorization: bAuthorization,
-        inbox: 'main',
-        chatIds: {selectedChatId, mainAltChatId},
-      );
-      reconnectCursors['requests'] = await _expectTwoInboxItems(
-        chats: chats,
-        authorization: bAuthorization,
-        inbox: 'requests',
-        chatIds: {requestChatId, requestAltChatId},
-      );
-      reconnectCursors['archive'] = await _expectTwoInboxItems(
-        chats: chats,
-        authorization: bAuthorization,
-        inbox: 'archive',
-        chatIds: {archivedChatId, archivedAltChatId},
-      );
       recorder.failNextInboxReconciliationPage(
         authorization: bAuthorization,
         inbox: 'main',
@@ -636,27 +619,24 @@ void main() {
         ),
         isTrue,
       );
-      for (final inbox in reconnectCursors.keys.where(
-        (inbox) => inbox != 'main',
-      )) {
+      final reconnectCursors = <String, String>{};
+      for (final inbox in const ['main', 'requests', 'archive']) {
         final pageRequests = reconnectInboxRequests
             .where((request) => request.inbox == inbox)
             .toList(growable: false);
         expect(pageRequests, hasLength(2));
+        final cursor = pageRequests.first.responseNextCursor;
+        expect(cursor, isNotNull, reason: '$inbox first page cursor');
+        expect(cursor, isNotEmpty, reason: '$inbox first page cursor');
+        reconnectCursors[inbox] = cursor!;
         expect(
           pageRequests.map((request) => request.uri.queryParameters['cursor']),
-          containsAllInOrder([null, reconnectCursors[inbox]]),
+          orderedEquals([null, cursor]),
         );
+        if (inbox != 'main') {
+          expect(pageRequests.last.responseNextCursor, isNull);
+        }
       }
-      final reconnectMainRequests = reconnectInboxRequests
-          .where((request) => request.inbox == 'main')
-          .toList(growable: false);
-      expect(
-        reconnectMainRequests.map(
-          (request) => request.uri.queryParameters['cursor'],
-        ),
-        containsAllInOrder([null, reconnectCursors['main']]),
-      );
       expect(recorder.injectedInboxFailures, 1);
       final failedReconnectSnapshot = container
           .read(inboxReconcilerProvider)
@@ -905,7 +885,7 @@ class _TaggedInboxReconcilerController extends InboxReconcilerController {
 }
 
 class _RecordedRequest {
-  const _RecordedRequest({
+  _RecordedRequest({
     required this.method,
     required this.uri,
     required this.authorization,
@@ -918,6 +898,7 @@ class _RecordedRequest {
   final String? authorization;
   final bool beforeBHello;
   final bool isInboxReconciliation;
+  String? responseNextCursor;
 
   String? get inbox => uri.queryParameters['inbox'];
 
@@ -1043,6 +1024,10 @@ class _RecordingHttpClient extends http.BaseClient {
       }
       final response = await _delegate.send(effectiveRequest);
       responseStartedRequests.add(recorded);
+      if (effectiveRequest.method == 'GET' &&
+          effectiveRequest.url.path == '/api/v1/chats') {
+        return _recordChatListResponse(response, recorded);
+      }
       if (recorded.method != 'POST' ||
           recorded.uri.path != '/api/v1/messages/read') {
         return response;
@@ -1089,6 +1074,40 @@ class _RecordingHttpClient extends http.BaseClient {
       if (!waiter.isCompleted) waiter.complete();
     }
     _settleWaiters.clear();
+  }
+
+  http.StreamedResponse _recordChatListResponse(
+    http.StreamedResponse response,
+    _RecordedRequest recorded,
+  ) {
+    final bytes = BytesBuilder(copy: false);
+    return http.StreamedResponse(
+      response.stream.transform(
+        StreamTransformer.fromHandlers(
+          handleData: (data, sink) {
+            bytes.add(data);
+            sink.add(data);
+          },
+          handleDone: (sink) {
+            final decoded = jsonDecode(utf8.decode(bytes.takeBytes()));
+            if (decoded case {'chat_list': Map<String, dynamic> chatList}) {
+              final cursor = chatList['next_cursor'];
+              if (cursor is String && cursor.isNotEmpty) {
+                recorded.responseNextCursor = cursor;
+              }
+            }
+            sink.close();
+          },
+        ),
+      ),
+      response.statusCode,
+      contentLength: response.contentLength,
+      request: response.request,
+      headers: response.headers,
+      isRedirect: response.isRedirect,
+      persistentConnection: response.persistentConnection,
+      reasonPhrase: response.reasonPhrase,
+    );
   }
 
   void _finishReadResponse(
