@@ -39,7 +39,7 @@ func roleRowToProto(r *store.RoleRow) *rolev1.Role {
 		PermissionsMask: r.PermissionsMask,
 		Position:        r.Position,
 		Managed:         r.Managed,
-		CreatedAt:       timestamppb.Now(),
+		CreatedAt:       timestamppb.New(r.CreatedAt),
 	}
 	if r.CreatedByProfileID != nil && *r.CreatedByProfileID != uuid.Nil {
 		id := r.CreatedByProfileID.String()
