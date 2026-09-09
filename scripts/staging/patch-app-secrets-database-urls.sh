@@ -29,6 +29,28 @@ add_if_missing() {
   args+=(--from-literal="${key}=${value}")
 }
 
+# These keys are mandatory for the staging Auth deployment. Generate only when
+# a legacy Secret lacks the key; existing values must remain stable so TOTP
+# ciphertext and deletion restore tokens keep working across rollouts.
+generate_auth_secret() {
+  if ! command -v openssl >/dev/null 2>&1; then
+    echo "ERROR: openssl is required to generate required Auth secrets" >&2
+    exit 1
+  fi
+  openssl rand -base64 48 | tr -d '\n'
+}
+
+add_generated_if_missing() {
+  local key="$1"
+  if [ -n "$(secret_data_key "${key}")" ]; then
+    return 0
+  fi
+  add_if_missing "${key}" "$(generate_auth_secret)"
+}
+
+add_generated_if_missing AUTH_TOTP_ENCRYPTION_KEY
+add_generated_if_missing ACCOUNT_DELETE_TOKEN_SECRET
+
 # ClickHouse keys must be patched even when POSTGRES_PASSWORD is absent (StatefulSet
 # references CLICKHOUSE_PASSWORD via secretKeyRef since analytics staging).
 DEFAULT_CH_PASS="${VOICE_STAGING_CLICKHOUSE_PASSWORD:-voice-clickhouse-staging}"

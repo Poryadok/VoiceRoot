@@ -45,6 +45,17 @@ pg_url() {
   printf 'postgres://voice:%s@voice-postgres:5432/%s?sslmode=disable' "$PG_PASS" "$1"
 }
 
+# Auth runs with JDBC persistence in staging, so both of these secrets must be
+# independent, non-empty values before its Pod can start. Do not fall back to
+# the JWT key or a fixed development value.
+generate_auth_secret() {
+  if ! command -v openssl >/dev/null 2>&1; then
+    echo "ERROR: openssl is required to generate required Auth secrets" >&2
+    exit 1
+  fi
+  openssl rand -base64 48 | tr -d '\n'
+}
+
 USER_R2_ENDPOINT="${USER_R2_ENDPOINT:-}"
 USER_R2_ACCESS_KEY_ID="${USER_R2_ACCESS_KEY_ID:-}"
 USER_R2_SECRET_ACCESS_KEY="${USER_R2_SECRET_ACCESS_KEY:-}"
@@ -54,6 +65,8 @@ FILE_R2_ENDPOINT="${FILE_R2_ENDPOINT:-}"
 FILE_R2_ACCESS_KEY_ID="${FILE_R2_ACCESS_KEY_ID:-}"
 FILE_R2_SECRET_ACCESS_KEY="${FILE_R2_SECRET_ACCESS_KEY:-}"
 FILE_R2_BUCKET="${FILE_R2_BUCKET:-voice-staging-files}"
+AUTH_TOTP_ENCRYPTION_KEY="$(generate_auth_secret)"
+ACCOUNT_DELETE_TOKEN_SECRET="$(generate_auth_secret)"
 
 echo "Bootstrapping ${SECRET_NAME} in ${NS} (Postgres user voice, test JWT key)"
 
@@ -79,6 +92,8 @@ kubectl create secret generic "$SECRET_NAME" \
   --from-literal=CLICKHOUSE_DSN="clickhouse://default:${CH_PASS}@voice-clickhouse:9000/voice" \
   --from-literal=ANALYTICS_ID_HASH_KEY="change-me-staging-analytics-hash" \
   --from-file=AUTH_JWT_PRIVATE_KEY="$JWT_FILE" \
+  --from-literal=AUTH_TOTP_ENCRYPTION_KEY="$AUTH_TOTP_ENCRYPTION_KEY" \
+  --from-literal=ACCOUNT_DELETE_TOKEN_SECRET="$ACCOUNT_DELETE_TOKEN_SECRET" \
   --from-literal=USER_R2_ENDPOINT="$USER_R2_ENDPOINT" \
   --from-literal=USER_R2_ACCESS_KEY_ID="$USER_R2_ACCESS_KEY_ID" \
   --from-literal=USER_R2_SECRET_ACCESS_KEY="$USER_R2_SECRET_ACCESS_KEY" \
