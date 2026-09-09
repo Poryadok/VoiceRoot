@@ -203,6 +203,44 @@ func TestListInvites_Owner(t *testing.T) {
 	require.Len(t, list.GetInviteList().GetInvites(), 1)
 }
 
+// TestInviteManagement_NonOwnerDenied characterizes the currently shipped
+// owner-only gate for invite listing and revocation. The product target is a
+// role-based MANAGE_INVITES decision; do not widen this test to prescribe that
+// future Role mapping before its contract is integrated.
+func TestInviteManagement_NonOwnerDenied(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	_, _, ownerCtx := profileFixture(t)
+	memberAccount, memberProfile := uuid.New(), uuid.New()
+	memberCtx := withAccountProfileCtx(context.Background(), memberAccount, memberProfile)
+
+	pool := startSpacePostgresForTest(t, context.Background())
+	applySpaceMigration(t, context.Background(), pool)
+	client, cleanup := startSpaceGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Invite owner gate"})
+	require.NoError(t, err)
+	spaceID := created.GetSpace().GetId()
+
+	inv, err := client.CreateInvite(ownerCtx, &spacev1.CreateInviteRequest{SpaceId: spaceID})
+	require.NoError(t, err)
+	_, err = client.JoinByInvite(memberCtx, &spacev1.JoinByInviteRequest{Code: inv.GetInvite().GetCode()})
+	require.NoError(t, err)
+
+	_, err = client.ListInvites(memberCtx, &spacev1.ListInvitesRequest{SpaceId: spaceID})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	_, err = client.RevokeInvite(memberCtx, &spacev1.RevokeInviteRequest{InviteId: inv.GetInvite().GetId()})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	ownerList, err := client.ListInvites(ownerCtx, &spacev1.ListInvitesRequest{SpaceId: spaceID})
+	require.NoError(t, err)
+	require.Len(t, ownerList.GetInviteList().GetInvites(), 1)
+	require.Nil(t, ownerList.GetInviteList().GetInvites()[0].RevokedAt)
+}
+
 func TestJoinByInvite_Expired(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
