@@ -20,14 +20,15 @@ func TestComposeMultiProfileDelete_live(t *testing.T) {
 	n := time.Now().UnixNano()
 
 	sess := registerComposeUser(t, client, base, formatComposeEmail("mp-delete", n), "VoiceQaTest1!")
-	_, altProfileID := composeCreateAltProfile(t, client, base, sess.AccessToken, "Delete Me", "personal")
+	altToken, altProfileID := composeCreateAltProfile(t, client, base, sess.AccessToken, "Delete Me", "personal")
 
-	require.Equal(t, http.StatusNoContent, composeDeleteProfileStatus(t, client, base, sess.AccessToken, altProfileID))
+	// Switching profiles revokes the preceding token; continue with the returned session.
+	require.Equal(t, http.StatusNoContent, composeDeleteProfileStatus(t, client, base, altToken, altProfileID))
 
-	ids := composeListProfileIDs(t, client, base, sess.AccessToken)
+	ids := composeListProfileIDs(t, client, base, altToken)
 	require.NotContains(t, ids, altProfileID, "deleted profile must not appear in list")
 
-	status := composeSwitchProfileStatus(t, client, base, sess.AccessToken, altProfileID)
+	status := composeSwitchProfileStatus(t, client, base, altToken, altProfileID)
 	require.Equal(t, http.StatusPreconditionFailed, status, "switch to deleted profile must fail")
 }
 
@@ -46,15 +47,16 @@ func TestComposeMultiProfileDowngrade_live(t *testing.T) {
 	composeActivatePremiumWebhook(t, client, base, sess.AccountID)
 
 	altToken1, altProfile1 := composeCreateAltProfile(t, client, base, sess.AccessToken, "Alt One", "personal")
-	_, altProfile2 := composeCreateAltProfile(t, client, base, altToken1, "Alt Two", "work")
+	altToken2, altProfile2 := composeCreateAltProfile(t, client, base, altToken1, "Alt Two", "work")
 
-	require.Equal(t, http.StatusOK, composePostDowngradeProfiles(t, client, base, sess.AccessToken, []string{sess.ProfileID}))
+	// Each profile switch revokes the token used to start it.
+	require.Equal(t, http.StatusOK, composePostDowngradeProfiles(t, client, base, altToken2, []string{sess.ProfileID}))
 
-	status := composeSwitchProfileStatus(t, client, base, sess.AccessToken, altProfile2)
+	status := composeSwitchProfileStatus(t, client, base, altToken2, altProfile2)
 	require.Equal(t, http.StatusPreconditionFailed, status, "switch to frozen profile must fail after downgrade")
 
 	// Primary profile switch-back still works.
-	require.Equal(t, http.StatusOK, composeSwitchProfileStatus(t, client, base, sess.AccessToken, sess.ProfileID))
+	require.Equal(t, http.StatusOK, composeSwitchProfileStatus(t, client, base, altToken2, sess.ProfileID))
 
 	_ = altProfile1
 }
