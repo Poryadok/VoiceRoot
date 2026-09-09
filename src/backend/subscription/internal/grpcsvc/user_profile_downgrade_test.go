@@ -8,8 +8,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
 	userv1 "voice.app/voice/user/v1"
@@ -37,6 +39,16 @@ func TestUserGRPCProfileDowngrade_forwardsVerifiedAccountID(t *testing.T) {
 	client := &UserGRPCProfileDowngrade{Client: userv1.NewUserServiceClient(conn)}
 	require.NoError(t, client.ApplyDowngradeProfiles(context.Background(), accountID, []uuid.UUID{uuid.New(), uuid.New()}))
 	require.Equal(t, accountID.String(), recorder.accountID)
+}
+
+func TestUserGRPCProfileDowngrade_rejectsNilClient(t *testing.T) {
+	t.Parallel()
+
+	var typedNil *UserGRPCProfileDowngrade
+	err := typedNil.ApplyDowngradeProfiles(context.Background(), uuid.New(), []uuid.UUID{uuid.New(), uuid.New()})
+
+	require.Error(t, err)
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
 }
 
 type downgradeMetadataRecorder struct {
