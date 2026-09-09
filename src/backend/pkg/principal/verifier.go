@@ -59,6 +59,9 @@ func VerifyDelegatedUser(ctx context.Context, token string, config VerifyConfig)
 	if config.ExpectedIssuer != "gateway" {
 		return Principal{}, fmt.Errorf("delegated user credentials must be issued by gateway")
 	}
+	if config.SessionEpochChecker == nil {
+		return Principal{}, fmt.Errorf("session epoch checker is required for delegated user credentials")
+	}
 	claims, err := verify(ctx, token, config, delegatedUserType)
 	if err != nil {
 		return Principal{}, err
@@ -66,10 +69,8 @@ func VerifyDelegatedUser(ctx context.Context, token string, config VerifyConfig)
 	if claims.Subject == "" || claims.AccountID == "" || claims.ProfileID == "" || claims.Subject != claims.AccountID || claims.SessionEpoch <= 0 {
 		return Principal{}, fmt.Errorf("invalid delegated user identity")
 	}
-	if config.SessionEpochChecker != nil {
-		if err := config.SessionEpochChecker(ctx, claims.AccountID, claims.SessionEpoch); err != nil {
-			return Principal{}, fmt.Errorf("validate session epoch: %w", err)
-		}
+	if err := config.SessionEpochChecker(ctx, claims.AccountID, claims.SessionEpoch); err != nil {
+		return Principal{}, fmt.Errorf("validate session epoch: %w", err)
 	}
 	return principalFromClaims(claims), nil
 }

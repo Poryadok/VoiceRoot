@@ -71,6 +71,7 @@ func TestVerifier_FailsClosedForInvalidOrMismatchedCredentials(t *testing.T) {
 		{"expired", service, serviceConfig(key, now.Add(31*time.Second)), false},
 		{"service as delegated", service, delegatedConfig(key, now), true},
 		{"delegated as service", delegated, serviceConfig(key, now), false},
+		{"missing session epoch checker", delegated, altered(delegatedConfig(key, now), func(c *VerifyConfig) { c.SessionEpochChecker = nil }), true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -199,7 +200,9 @@ func serviceConfig(key *rsa.PrivateKey, now time.Time) VerifyConfig {
 	return baseConfig(key, now, "/voice.role.v1.RoleService/CheckPermission")
 }
 func delegatedConfig(key *rsa.PrivateKey, now time.Time) VerifyConfig {
-	return baseConfig(key, now, "/voice.role.v1.RoleService/CreateRole")
+	config := baseConfig(key, now, "/voice.role.v1.RoleService/CreateRole")
+	config.SessionEpochChecker = func(context.Context, string, int64) error { return nil }
+	return config
 }
 func altered(c VerifyConfig, change func(*VerifyConfig)) VerifyConfig { change(&c); return c }
 func signClaims(key *rsa.PrivateKey, keyID string, claims rawClaims) (string, error) {
