@@ -46,6 +46,11 @@ if [ "$1" = get ] && [ "$2" = secret ]; then
   exit 0
 fi
 
+if [ "$1" = create ] && [ "$2" = secret ] && [ "$3" = generic ] && [ "${4:-}" = --help ]; then
+  echo '  --dry-run=client: generate a manifest locally'
+  exit 0
+fi
+
 if [ "$1" = create ] && [ "$2" = secret ] && [ "$3" = generic ]; then
   touch "${state}/exists"
   for arg in "$@"; do
@@ -65,8 +70,8 @@ if [ "$1" = create ] && [ "$2" = secret ] && [ "$3" = generic ]; then
   exit 0
 fi
 
-if [ "$1" = apply ] && [ "$2" = -f ] && [ "$3" = - ]; then
-  cat >/dev/null
+if [ "$1" = apply ] && [ "$2" = -f ] && [ -f "${3:-}" ]; then
+  cat "$3" >/dev/null
   exit 0
 fi
 
