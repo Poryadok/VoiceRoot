@@ -2,6 +2,7 @@ package consumer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -98,17 +99,9 @@ func (r *Runner) Start(ctx context.Context, natsURL, instanceID string) error {
 			}
 			natslog.LogConsume(r.Logger, msg, slog.LevelInfo, "analytics event consumed")
 		}
-		sub, err := js.Subscribe(spec.subject, handler,
-			nats.Durable(durable),
-			nats.BindStream(spec.stream),
-			nats.DeliverNew(),
-			nats.ManualAck(),
-		)
+		sub, err := r.subscribe(ctx, js, spec.stream, spec.subject, durable, handler)
 		if err != nil {
-			sub, err = js.Subscribe("", handler, nats.Bind(spec.stream, durable), nats.ManualAck())
-			if err != nil {
-				return fmt.Errorf("subscribe %s: %w", spec.stream, err)
-			}
+			return err
 		}
 		go func(s *nats.Subscription) {
 			<-ctx.Done()
@@ -117,6 +110,101 @@ func (r *Runner) Start(ctx context.Context, natsURL, instanceID string) error {
 	}
 	<-ctx.Done()
 	return ctx.Err()
+}
+
+// subscribe waits for a publisher-owned stream instead of permanently stopping the
+// analytics consumer when Analytics starts before that publisher. Existing durable
+// consumers still bind by name after a restart.
+func (r *Runner) subscribe(ctx context.Context, js nats.JetStreamContext, stream, subject, durable string, handler nats.MsgHandler) (*nats.Subscription, error) {
+	return subscribeJetStreamWithRetry(ctx, r.Logger, stream, func() (*nats.Subscription, error) {
+		return subscribeCreateOrBind(
+			func() (*nats.Subscription, error) {
+				return js.Subscribe(subject, handler,
+					nats.Durable(durable),
+					nats.BindStream(stream),
+					nats.DeliverNew(),
+					nats.ManualAck(),
+				)
+			},
+			func() (*nats.Subscription, error) {
+				return js.Subscribe("", handler, nats.Bind(stream, durable), nats.ManualAck())
+			},
+		)
+	})
+}
+
+func isJetStreamNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	var createBindErr *createBindSubscriptionError
+	if errors.As(err, &createBindErr) {
+		return isJetStreamNotFound(createBindErr.createErr)
+	}
+	if errors.Is(err, nats.ErrStreamNotFound) {
+		return true
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "stream not found")
+}
+
+// createBindSubscriptionError retains the primary create failure as the only
+// retry-classification input. The bind error adds diagnostics but must never turn
+// a permanent create failure into a retryable one.
+type createBindSubscriptionError struct {
+	createErr error
+	bindErr   error
+}
+
+func (e *createBindSubscriptionError) Error() string {
+	return fmt.Sprintf("create durable: %v; bind existing durable: %v", e.createErr, e.bindErr)
+}
+
+func (e *createBindSubscriptionError) Unwrap() error { return e.createErr }
+
+// subscribeCreateOrBind creates a durable consumer, or binds to the durable one
+// created by an earlier Analytics process. A missing publisher stream must reach
+// the caller unchanged so it is the only retryable startup condition.
+func subscribeCreateOrBind(create, bind func() (*nats.Subscription, error)) (*nats.Subscription, error) {
+	sub, createErr := create()
+	if createErr == nil {
+		return sub, nil
+	}
+	if isJetStreamNotFound(createErr) {
+		return nil, createErr
+	}
+	sub, bindErr := bind()
+	if bindErr == nil {
+		return sub, nil
+	}
+	return nil, &createBindSubscriptionError{createErr: createErr, bindErr: bindErr}
+}
+
+func subscribeJetStreamWithRetry(ctx context.Context, logger *slog.Logger, stream string, subscribe func() (*nats.Subscription, error)) (*nats.Subscription, error) {
+	delay := time.Second
+	for {
+		sub, err := subscribe()
+		if err == nil {
+			return sub, nil
+		}
+		if !isJetStreamNotFound(err) {
+			return nil, fmt.Errorf("subscribe %s: %w", stream, err)
+		}
+		if logger != nil {
+			logger.Info("analytics JetStream stream not ready, retrying",
+				slog.String("stream", stream),
+				slog.Duration("retry_in", delay),
+				slog.String("error", err.Error()),
+			)
+		}
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("subscribe %s: %w", stream, ctx.Err())
+		case <-time.After(delay):
+		}
+		if delay < 30*time.Second {
+			delay *= 2
+		}
+	}
 }
 
 func ensureAnalyticsStream(js nats.JetStreamContext) error {
