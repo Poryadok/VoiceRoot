@@ -14,4 +14,3 @@ public record VerifiedPrincipal(
     return CONTEXT.get();
   }
 }
-
