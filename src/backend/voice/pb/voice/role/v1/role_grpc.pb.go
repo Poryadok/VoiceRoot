@@ -19,28 +19,32 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	RoleService_CreateRole_FullMethodName                  = "/voice.role.v1.RoleService/CreateRole"
-	RoleService_UpdateRole_FullMethodName                  = "/voice.role.v1.RoleService/UpdateRole"
-	RoleService_DeleteRole_FullMethodName                  = "/voice.role.v1.RoleService/DeleteRole"
-	RoleService_ListRoles_FullMethodName                   = "/voice.role.v1.RoleService/ListRoles"
-	RoleService_ReorderRoles_FullMethodName                = "/voice.role.v1.RoleService/ReorderRoles"
-	RoleService_AssignRole_FullMethodName                  = "/voice.role.v1.RoleService/AssignRole"
-	RoleService_RevokeRole_FullMethodName                  = "/voice.role.v1.RoleService/RevokeRole"
-	RoleService_GetMemberRoles_FullMethodName              = "/voice.role.v1.RoleService/GetMemberRoles"
-	RoleService_SetChatOverride_FullMethodName             = "/voice.role.v1.RoleService/SetChatOverride"
-	RoleService_RemoveChatOverride_FullMethodName          = "/voice.role.v1.RoleService/RemoveChatOverride"
-	RoleService_GetChatOverrides_FullMethodName            = "/voice.role.v1.RoleService/GetChatOverrides"
-	RoleService_SetVoiceRoomOverride_FullMethodName        = "/voice.role.v1.RoleService/SetVoiceRoomOverride"
-	RoleService_RemoveVoiceRoomOverride_FullMethodName     = "/voice.role.v1.RoleService/RemoveVoiceRoomOverride"
-	RoleService_GetVoiceRoomOverrides_FullMethodName       = "/voice.role.v1.RoleService/GetVoiceRoomOverrides"
-	RoleService_CheckPermission_FullMethodName             = "/voice.role.v1.RoleService/CheckPermission"
-	RoleService_GetEffectivePermissions_FullMethodName     = "/voice.role.v1.RoleService/GetEffectivePermissions"
-	RoleService_SetDefaultJoinRole_FullMethodName          = "/voice.role.v1.RoleService/SetDefaultJoinRole"
-	RoleService_GetDefaultJoinRole_FullMethodName          = "/voice.role.v1.RoleService/GetDefaultJoinRole"
-	RoleService_BootstrapSpaceRoles_FullMethodName         = "/voice.role.v1.RoleService/BootstrapSpaceRoles"
-	RoleService_DeleteRolesCreatedByProfile_FullMethodName = "/voice.role.v1.RoleService/DeleteRolesCreatedByProfile"
-	RoleService_ApplyOwnershipTransfer_FullMethodName      = "/voice.role.v1.RoleService/ApplyOwnershipTransfer"
-	RoleService_CompensateOwnershipTransfer_FullMethodName = "/voice.role.v1.RoleService/CompensateOwnershipTransfer"
+	RoleService_CreateRole_FullMethodName                       = "/voice.role.v1.RoleService/CreateRole"
+	RoleService_UpdateRole_FullMethodName                       = "/voice.role.v1.RoleService/UpdateRole"
+	RoleService_DeleteRole_FullMethodName                       = "/voice.role.v1.RoleService/DeleteRole"
+	RoleService_ListRoles_FullMethodName                        = "/voice.role.v1.RoleService/ListRoles"
+	RoleService_ReorderRoles_FullMethodName                     = "/voice.role.v1.RoleService/ReorderRoles"
+	RoleService_AssignRole_FullMethodName                       = "/voice.role.v1.RoleService/AssignRole"
+	RoleService_RevokeRole_FullMethodName                       = "/voice.role.v1.RoleService/RevokeRole"
+	RoleService_GetMemberRoles_FullMethodName                   = "/voice.role.v1.RoleService/GetMemberRoles"
+	RoleService_SetChatOverride_FullMethodName                  = "/voice.role.v1.RoleService/SetChatOverride"
+	RoleService_RemoveChatOverride_FullMethodName               = "/voice.role.v1.RoleService/RemoveChatOverride"
+	RoleService_GetChatOverrides_FullMethodName                 = "/voice.role.v1.RoleService/GetChatOverrides"
+	RoleService_SetVoiceRoomOverride_FullMethodName             = "/voice.role.v1.RoleService/SetVoiceRoomOverride"
+	RoleService_RemoveVoiceRoomOverride_FullMethodName          = "/voice.role.v1.RoleService/RemoveVoiceRoomOverride"
+	RoleService_GetVoiceRoomOverrides_FullMethodName            = "/voice.role.v1.RoleService/GetVoiceRoomOverrides"
+	RoleService_CheckPermission_FullMethodName                  = "/voice.role.v1.RoleService/CheckPermission"
+	RoleService_GetEffectivePermissions_FullMethodName          = "/voice.role.v1.RoleService/GetEffectivePermissions"
+	RoleService_SetDefaultJoinRole_FullMethodName               = "/voice.role.v1.RoleService/SetDefaultJoinRole"
+	RoleService_GetDefaultJoinRole_FullMethodName               = "/voice.role.v1.RoleService/GetDefaultJoinRole"
+	RoleService_BootstrapSpaceRoles_FullMethodName              = "/voice.role.v1.RoleService/BootstrapSpaceRoles"
+	RoleService_DeleteRolesCreatedByProfile_FullMethodName      = "/voice.role.v1.RoleService/DeleteRolesCreatedByProfile"
+	RoleService_GetOwnershipTransferCapabilities_FullMethodName = "/voice.role.v1.RoleService/GetOwnershipTransferCapabilities"
+	RoleService_PrepareOwnershipTransfer_FullMethodName         = "/voice.role.v1.RoleService/PrepareOwnershipTransfer"
+	RoleService_FinalizeOwnershipTransfer_FullMethodName        = "/voice.role.v1.RoleService/FinalizeOwnershipTransfer"
+	RoleService_AbortOwnershipTransfer_FullMethodName           = "/voice.role.v1.RoleService/AbortOwnershipTransfer"
+	RoleService_ApplyOwnershipTransfer_FullMethodName           = "/voice.role.v1.RoleService/ApplyOwnershipTransfer"
+	RoleService_CompensateOwnershipTransfer_FullMethodName      = "/voice.role.v1.RoleService/CompensateOwnershipTransfer"
 )
 
 // RoleServiceClient is the client API for RoleService service.
@@ -73,6 +77,12 @@ type RoleServiceClient interface {
 	// BOT-B: remove custom roles created by a profile (e.g. bot actor on uninstall).
 	DeleteRolesCreatedByProfile(ctx context.Context, in *DeleteRolesCreatedByProfileRequest, opts ...grpc.CallOption) (*DeleteRolesCreatedByProfileResponse, error)
 	// Trusted Space-only lifecycle operations. These are the sole Owner mutation path.
+	// Staged v2 contract: runtime activation requires the durable journal/freeze cutover.
+	// Trusted Space-only methods; never reinterpret the legacy Apply/Compensate pair.
+	GetOwnershipTransferCapabilities(ctx context.Context, in *GetOwnershipTransferCapabilitiesRequest, opts ...grpc.CallOption) (*GetOwnershipTransferCapabilitiesResponse, error)
+	PrepareOwnershipTransfer(ctx context.Context, in *PrepareOwnershipTransferRequest, opts ...grpc.CallOption) (*PrepareOwnershipTransferResponse, error)
+	FinalizeOwnershipTransfer(ctx context.Context, in *FinalizeOwnershipTransferRequest, opts ...grpc.CallOption) (*FinalizeOwnershipTransferResponse, error)
+	AbortOwnershipTransfer(ctx context.Context, in *AbortOwnershipTransferRequest, opts ...grpc.CallOption) (*AbortOwnershipTransferResponse, error)
 	ApplyOwnershipTransfer(ctx context.Context, in *ApplyOwnershipTransferRequest, opts ...grpc.CallOption) (*ApplyOwnershipTransferResponse, error)
 	CompensateOwnershipTransfer(ctx context.Context, in *CompensateOwnershipTransferRequest, opts ...grpc.CallOption) (*CompensateOwnershipTransferResponse, error)
 }
@@ -285,6 +295,46 @@ func (c *roleServiceClient) DeleteRolesCreatedByProfile(ctx context.Context, in 
 	return out, nil
 }
 
+func (c *roleServiceClient) GetOwnershipTransferCapabilities(ctx context.Context, in *GetOwnershipTransferCapabilitiesRequest, opts ...grpc.CallOption) (*GetOwnershipTransferCapabilitiesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetOwnershipTransferCapabilitiesResponse)
+	err := c.cc.Invoke(ctx, RoleService_GetOwnershipTransferCapabilities_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *roleServiceClient) PrepareOwnershipTransfer(ctx context.Context, in *PrepareOwnershipTransferRequest, opts ...grpc.CallOption) (*PrepareOwnershipTransferResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PrepareOwnershipTransferResponse)
+	err := c.cc.Invoke(ctx, RoleService_PrepareOwnershipTransfer_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *roleServiceClient) FinalizeOwnershipTransfer(ctx context.Context, in *FinalizeOwnershipTransferRequest, opts ...grpc.CallOption) (*FinalizeOwnershipTransferResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FinalizeOwnershipTransferResponse)
+	err := c.cc.Invoke(ctx, RoleService_FinalizeOwnershipTransfer_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *roleServiceClient) AbortOwnershipTransfer(ctx context.Context, in *AbortOwnershipTransferRequest, opts ...grpc.CallOption) (*AbortOwnershipTransferResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AbortOwnershipTransferResponse)
+	err := c.cc.Invoke(ctx, RoleService_AbortOwnershipTransfer_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *roleServiceClient) ApplyOwnershipTransfer(ctx context.Context, in *ApplyOwnershipTransferRequest, opts ...grpc.CallOption) (*ApplyOwnershipTransferResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ApplyOwnershipTransferResponse)
@@ -335,6 +385,12 @@ type RoleServiceServer interface {
 	// BOT-B: remove custom roles created by a profile (e.g. bot actor on uninstall).
 	DeleteRolesCreatedByProfile(context.Context, *DeleteRolesCreatedByProfileRequest) (*DeleteRolesCreatedByProfileResponse, error)
 	// Trusted Space-only lifecycle operations. These are the sole Owner mutation path.
+	// Staged v2 contract: runtime activation requires the durable journal/freeze cutover.
+	// Trusted Space-only methods; never reinterpret the legacy Apply/Compensate pair.
+	GetOwnershipTransferCapabilities(context.Context, *GetOwnershipTransferCapabilitiesRequest) (*GetOwnershipTransferCapabilitiesResponse, error)
+	PrepareOwnershipTransfer(context.Context, *PrepareOwnershipTransferRequest) (*PrepareOwnershipTransferResponse, error)
+	FinalizeOwnershipTransfer(context.Context, *FinalizeOwnershipTransferRequest) (*FinalizeOwnershipTransferResponse, error)
+	AbortOwnershipTransfer(context.Context, *AbortOwnershipTransferRequest) (*AbortOwnershipTransferResponse, error)
 	ApplyOwnershipTransfer(context.Context, *ApplyOwnershipTransferRequest) (*ApplyOwnershipTransferResponse, error)
 	CompensateOwnershipTransfer(context.Context, *CompensateOwnershipTransferRequest) (*CompensateOwnershipTransferResponse, error)
 	mustEmbedUnimplementedRoleServiceServer()
@@ -406,6 +462,18 @@ func (UnimplementedRoleServiceServer) BootstrapSpaceRoles(context.Context, *Boot
 }
 func (UnimplementedRoleServiceServer) DeleteRolesCreatedByProfile(context.Context, *DeleteRolesCreatedByProfileRequest) (*DeleteRolesCreatedByProfileResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteRolesCreatedByProfile not implemented")
+}
+func (UnimplementedRoleServiceServer) GetOwnershipTransferCapabilities(context.Context, *GetOwnershipTransferCapabilitiesRequest) (*GetOwnershipTransferCapabilitiesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetOwnershipTransferCapabilities not implemented")
+}
+func (UnimplementedRoleServiceServer) PrepareOwnershipTransfer(context.Context, *PrepareOwnershipTransferRequest) (*PrepareOwnershipTransferResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PrepareOwnershipTransfer not implemented")
+}
+func (UnimplementedRoleServiceServer) FinalizeOwnershipTransfer(context.Context, *FinalizeOwnershipTransferRequest) (*FinalizeOwnershipTransferResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method FinalizeOwnershipTransfer not implemented")
+}
+func (UnimplementedRoleServiceServer) AbortOwnershipTransfer(context.Context, *AbortOwnershipTransferRequest) (*AbortOwnershipTransferResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AbortOwnershipTransfer not implemented")
 }
 func (UnimplementedRoleServiceServer) ApplyOwnershipTransfer(context.Context, *ApplyOwnershipTransferRequest) (*ApplyOwnershipTransferResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ApplyOwnershipTransfer not implemented")
@@ -794,6 +862,78 @@ func _RoleService_DeleteRolesCreatedByProfile_Handler(srv interface{}, ctx conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RoleService_GetOwnershipTransferCapabilities_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetOwnershipTransferCapabilitiesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RoleServiceServer).GetOwnershipTransferCapabilities(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RoleService_GetOwnershipTransferCapabilities_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RoleServiceServer).GetOwnershipTransferCapabilities(ctx, req.(*GetOwnershipTransferCapabilitiesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RoleService_PrepareOwnershipTransfer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PrepareOwnershipTransferRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RoleServiceServer).PrepareOwnershipTransfer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RoleService_PrepareOwnershipTransfer_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RoleServiceServer).PrepareOwnershipTransfer(ctx, req.(*PrepareOwnershipTransferRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RoleService_FinalizeOwnershipTransfer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FinalizeOwnershipTransferRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RoleServiceServer).FinalizeOwnershipTransfer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RoleService_FinalizeOwnershipTransfer_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RoleServiceServer).FinalizeOwnershipTransfer(ctx, req.(*FinalizeOwnershipTransferRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RoleService_AbortOwnershipTransfer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AbortOwnershipTransferRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RoleServiceServer).AbortOwnershipTransfer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RoleService_AbortOwnershipTransfer_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RoleServiceServer).AbortOwnershipTransfer(ctx, req.(*AbortOwnershipTransferRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _RoleService_ApplyOwnershipTransfer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ApplyOwnershipTransferRequest)
 	if err := dec(in); err != nil {
@@ -916,6 +1056,22 @@ var RoleService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteRolesCreatedByProfile",
 			Handler:    _RoleService_DeleteRolesCreatedByProfile_Handler,
+		},
+		{
+			MethodName: "GetOwnershipTransferCapabilities",
+			Handler:    _RoleService_GetOwnershipTransferCapabilities_Handler,
+		},
+		{
+			MethodName: "PrepareOwnershipTransfer",
+			Handler:    _RoleService_PrepareOwnershipTransfer_Handler,
+		},
+		{
+			MethodName: "FinalizeOwnershipTransfer",
+			Handler:    _RoleService_FinalizeOwnershipTransfer_Handler,
+		},
+		{
+			MethodName: "AbortOwnershipTransfer",
+			Handler:    _RoleService_AbortOwnershipTransfer_Handler,
 		},
 		{
 			MethodName: "ApplyOwnershipTransfer",

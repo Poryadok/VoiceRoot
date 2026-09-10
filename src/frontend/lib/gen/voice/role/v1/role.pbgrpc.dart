@@ -183,6 +183,44 @@ class RoleServiceClient extends $grpc.Client {
   }
 
   /// Trusted Space-only lifecycle operations. These are the sole Owner mutation path.
+  /// Staged v2 contract: runtime activation requires the durable journal/freeze cutover.
+  /// Trusted Space-only methods; never reinterpret the legacy Apply/Compensate pair.
+  $grpc.ResponseFuture<$0.GetOwnershipTransferCapabilitiesResponse>
+      getOwnershipTransferCapabilities(
+    $0.GetOwnershipTransferCapabilitiesRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getOwnershipTransferCapabilities, request,
+        options: options);
+  }
+
+  $grpc.ResponseFuture<$0.PrepareOwnershipTransferResponse>
+      prepareOwnershipTransfer(
+    $0.PrepareOwnershipTransferRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$prepareOwnershipTransfer, request,
+        options: options);
+  }
+
+  $grpc.ResponseFuture<$0.FinalizeOwnershipTransferResponse>
+      finalizeOwnershipTransfer(
+    $0.FinalizeOwnershipTransferRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$finalizeOwnershipTransfer, request,
+        options: options);
+  }
+
+  $grpc.ResponseFuture<$0.AbortOwnershipTransferResponse>
+      abortOwnershipTransfer(
+    $0.AbortOwnershipTransferRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$abortOwnershipTransfer, request,
+        options: options);
+  }
+
   $grpc.ResponseFuture<$0.ApplyOwnershipTransferResponse>
       applyOwnershipTransfer(
     $0.ApplyOwnershipTransferRequest request, {
@@ -306,6 +344,30 @@ class RoleServiceClient extends $grpc.Client {
       '/voice.role.v1.RoleService/DeleteRolesCreatedByProfile',
       ($0.DeleteRolesCreatedByProfileRequest value) => value.writeToBuffer(),
       $0.DeleteRolesCreatedByProfileResponse.fromBuffer);
+  static final _$getOwnershipTransferCapabilities = $grpc.ClientMethod<
+          $0.GetOwnershipTransferCapabilitiesRequest,
+          $0.GetOwnershipTransferCapabilitiesResponse>(
+      '/voice.role.v1.RoleService/GetOwnershipTransferCapabilities',
+      ($0.GetOwnershipTransferCapabilitiesRequest value) =>
+          value.writeToBuffer(),
+      $0.GetOwnershipTransferCapabilitiesResponse.fromBuffer);
+  static final _$prepareOwnershipTransfer = $grpc.ClientMethod<
+          $0.PrepareOwnershipTransferRequest,
+          $0.PrepareOwnershipTransferResponse>(
+      '/voice.role.v1.RoleService/PrepareOwnershipTransfer',
+      ($0.PrepareOwnershipTransferRequest value) => value.writeToBuffer(),
+      $0.PrepareOwnershipTransferResponse.fromBuffer);
+  static final _$finalizeOwnershipTransfer = $grpc.ClientMethod<
+          $0.FinalizeOwnershipTransferRequest,
+          $0.FinalizeOwnershipTransferResponse>(
+      '/voice.role.v1.RoleService/FinalizeOwnershipTransfer',
+      ($0.FinalizeOwnershipTransferRequest value) => value.writeToBuffer(),
+      $0.FinalizeOwnershipTransferResponse.fromBuffer);
+  static final _$abortOwnershipTransfer = $grpc.ClientMethod<
+          $0.AbortOwnershipTransferRequest, $0.AbortOwnershipTransferResponse>(
+      '/voice.role.v1.RoleService/AbortOwnershipTransfer',
+      ($0.AbortOwnershipTransferRequest value) => value.writeToBuffer(),
+      $0.AbortOwnershipTransferResponse.fromBuffer);
   static final _$applyOwnershipTransfer = $grpc.ClientMethod<
           $0.ApplyOwnershipTransferRequest, $0.ApplyOwnershipTransferResponse>(
       '/voice.role.v1.RoleService/ApplyOwnershipTransfer',
@@ -493,6 +555,43 @@ abstract class RoleServiceBase extends $grpc.Service {
             $0.DeleteRolesCreatedByProfileRequest.fromBuffer(value),
         ($0.DeleteRolesCreatedByProfileResponse value) =>
             value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GetOwnershipTransferCapabilitiesRequest,
+            $0.GetOwnershipTransferCapabilitiesResponse>(
+        'GetOwnershipTransferCapabilities',
+        getOwnershipTransferCapabilities_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetOwnershipTransferCapabilitiesRequest.fromBuffer(value),
+        ($0.GetOwnershipTransferCapabilitiesResponse value) =>
+            value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.PrepareOwnershipTransferRequest,
+            $0.PrepareOwnershipTransferResponse>(
+        'PrepareOwnershipTransfer',
+        prepareOwnershipTransfer_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.PrepareOwnershipTransferRequest.fromBuffer(value),
+        ($0.PrepareOwnershipTransferResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.FinalizeOwnershipTransferRequest,
+            $0.FinalizeOwnershipTransferResponse>(
+        'FinalizeOwnershipTransfer',
+        finalizeOwnershipTransfer_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.FinalizeOwnershipTransferRequest.fromBuffer(value),
+        ($0.FinalizeOwnershipTransferResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.AbortOwnershipTransferRequest,
+            $0.AbortOwnershipTransferResponse>(
+        'AbortOwnershipTransfer',
+        abortOwnershipTransfer_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.AbortOwnershipTransferRequest.fromBuffer(value),
+        ($0.AbortOwnershipTransferResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.ApplyOwnershipTransferRequest,
             $0.ApplyOwnershipTransferResponse>(
         'ApplyOwnershipTransfer',
@@ -688,6 +787,45 @@ abstract class RoleServiceBase extends $grpc.Service {
   $async.Future<$0.DeleteRolesCreatedByProfileResponse>
       deleteRolesCreatedByProfile($grpc.ServiceCall call,
           $0.DeleteRolesCreatedByProfileRequest request);
+
+  $async.Future<$0.GetOwnershipTransferCapabilitiesResponse>
+      getOwnershipTransferCapabilities_Pre(
+          $grpc.ServiceCall $call,
+          $async.Future<$0.GetOwnershipTransferCapabilitiesRequest>
+              $request) async {
+    return getOwnershipTransferCapabilities($call, await $request);
+  }
+
+  $async.Future<$0.GetOwnershipTransferCapabilitiesResponse>
+      getOwnershipTransferCapabilities($grpc.ServiceCall call,
+          $0.GetOwnershipTransferCapabilitiesRequest request);
+
+  $async.Future<$0.PrepareOwnershipTransferResponse>
+      prepareOwnershipTransfer_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.PrepareOwnershipTransferRequest> $request) async {
+    return prepareOwnershipTransfer($call, await $request);
+  }
+
+  $async.Future<$0.PrepareOwnershipTransferResponse> prepareOwnershipTransfer(
+      $grpc.ServiceCall call, $0.PrepareOwnershipTransferRequest request);
+
+  $async.Future<$0.FinalizeOwnershipTransferResponse>
+      finalizeOwnershipTransfer_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.FinalizeOwnershipTransferRequest> $request) async {
+    return finalizeOwnershipTransfer($call, await $request);
+  }
+
+  $async.Future<$0.FinalizeOwnershipTransferResponse> finalizeOwnershipTransfer(
+      $grpc.ServiceCall call, $0.FinalizeOwnershipTransferRequest request);
+
+  $async.Future<$0.AbortOwnershipTransferResponse> abortOwnershipTransfer_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.AbortOwnershipTransferRequest> $request) async {
+    return abortOwnershipTransfer($call, await $request);
+  }
+
+  $async.Future<$0.AbortOwnershipTransferResponse> abortOwnershipTransfer(
+      $grpc.ServiceCall call, $0.AbortOwnershipTransferRequest request);
 
   $async.Future<$0.ApplyOwnershipTransferResponse> applyOwnershipTransfer_Pre(
       $grpc.ServiceCall $call,
