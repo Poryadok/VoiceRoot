@@ -31,6 +31,66 @@ type scopeExecutor interface {
 // db never falls back to Pool: scoped helpers must retain their transaction.
 func (s *RoleStore) db() scopeExecutor { return s.tx }
 
+// WithinRole discovers only a role's space before locking, then revalidates the
+// association inside that space's ordinary transaction before any callback.
+func (s *RoleStore) WithinRole(ctx context.Context, roleID uuid.UUID, fn func(*RoleStore) error) error {
+	if s == nil || fn == nil || (s.tx == nil && s.Pool == nil) {
+		return fmt.Errorf("%w: invalid role scope", ErrScopeUnavailable)
+	}
+	var discovery scopeExecutor = s.Pool
+	if s.tx != nil {
+		discovery = s.db()
+	}
+	var spaceID uuid.UUID
+	err := discovery.QueryRow(ctx, "SELECT space_id FROM roles WHERE id=$1", roleID).Scan(&spaceID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrRoleNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("%w: role space discovery: %w", ErrScopeUnavailable, err)
+	}
+	return s.WithinSpaces(ctx, []uuid.UUID{spaceID}, func(scoped *RoleStore) error {
+		var currentSpace uuid.UUID
+		err := scoped.db().QueryRow(ctx, "SELECT space_id FROM roles WHERE id=$1", roleID).Scan(&currentSpace)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrRoleNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("%w: role space revalidation: %w", ErrScopeUnavailable, err)
+		}
+		if currentSpace != spaceID {
+			return fmt.Errorf("%w: role changed space", ErrScopeUnavailable)
+		}
+		return fn(scoped)
+	})
+}
+
+// WithinSpaces serializes ordinary authorization and its resulting operation
+// against ownership transitions. Missing fence tables are dependency failures,
+// not evidence that a space is available.
+func (s *RoleStore) WithinSpaces(ctx context.Context, spaceIDs []uuid.UUID, fn func(*RoleStore) error) error {
+	if fn == nil {
+		return fmt.Errorf("%w: missing callback", ErrScopeUnavailable)
+	}
+	return s.withLockedTransaction(ctx, uuid.Nil, spaceIDs, func(scoped *RoleStore) error {
+		var retired, prepared bool
+		err := scoped.db().QueryRow(ctx, `
+SELECT EXISTS (SELECT 1 FROM role_space_lifecycle WHERE space_id = ANY($1) AND retired_at IS NOT NULL),
+       EXISTS (SELECT 1 FROM ownership_transfer_v2 WHERE space_id = ANY($1) AND state = 'prepared')
+`, spaceIDs).Scan(&retired, &prepared)
+		if err != nil {
+			return fmt.Errorf("%w: fence lookup: %w", ErrScopeUnavailable, err)
+		}
+		if retired {
+			return ErrSpaceRetired
+		}
+		if prepared {
+			return ErrSpaceFrozen
+		}
+		return fn(scoped)
+	})
+}
+
 func (s *RoleStore) withLockedTransaction(ctx context.Context, operationID uuid.UUID, spaceIDs []uuid.UUID, fn func(*RoleStore) error) error {
 	if s == nil || fn == nil || len(spaceIDs) == 0 {
 		return fmt.Errorf("%w: invalid transaction scope", ErrScopeUnavailable)

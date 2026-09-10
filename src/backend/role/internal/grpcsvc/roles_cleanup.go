@@ -9,7 +9,7 @@ import (
 	rolev1 "voice.app/voice/role/v1"
 )
 
-func (s *RoleGRPC) DeleteRolesCreatedByProfile(ctx context.Context, req *rolev1.DeleteRolesCreatedByProfileRequest) (*rolev1.DeleteRolesCreatedByProfileResponse, error) {
+func (s *RoleGRPC) deleteRolesCreatedByProfile(ctx context.Context, req *rolev1.DeleteRolesCreatedByProfileRequest) (*rolev1.DeleteRolesCreatedByProfileResponse, error) {
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "role persistence not configured")
 	}

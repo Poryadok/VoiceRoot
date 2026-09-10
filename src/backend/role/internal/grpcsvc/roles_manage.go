@@ -22,7 +22,7 @@ func (s *RoleGRPC) requireManageRoles(ctx context.Context, spaceID, actor uuid.U
 	}
 	eff, err := s.Store.GetEffectiveMask(ctx, spaceID, actor, nil, nil)
 	if err != nil {
-		return status.Error(codes.Internal, err.Error())
+		return ordinaryStoreError(err)
 	}
 	if eff&mask == 0 {
 		return status.Error(codes.PermissionDenied, "SPACE_MANAGE_ROLES required")
@@ -35,7 +35,7 @@ func (s *RoleGRPC) requireManageRoles(ctx context.Context, spaceID, actor uuid.U
 func (s *RoleGRPC) requireReorderRolesAuthorization(ctx context.Context, spaceID, actor uuid.UUID, targetPositions []int32) error {
 	actorRoles, err := s.Store.GetMemberRoles(ctx, spaceID, actor)
 	if err != nil {
-		return status.Error(codes.Internal, err.Error())
+		return ordinaryStoreError(err)
 	}
 	actorTop := int32(-1)
 	for _, role := range actorRoles {
@@ -55,7 +55,7 @@ func (s *RoleGRPC) requireReorderRolesAuthorization(ctx context.Context, spaceID
 	return nil
 }
 
-func (s *RoleGRPC) UpdateRole(ctx context.Context, req *rolev1.UpdateRoleRequest) (*rolev1.UpdateRoleResponse, error) {
+func (s *RoleGRPC) updateRole(ctx context.Context, req *rolev1.UpdateRoleRequest) (*rolev1.UpdateRoleResponse, error) {
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "role persistence not configured")
 	}
@@ -99,7 +99,7 @@ func (s *RoleGRPC) UpdateRole(ctx context.Context, req *rolev1.UpdateRoleRequest
 	return &rolev1.UpdateRoleResponse{Role: roleRowToProto(updated)}, nil
 }
 
-func (s *RoleGRPC) DeleteRole(ctx context.Context, req *rolev1.DeleteRoleRequest) (*rolev1.DeleteRoleResponse, error) {
+func (s *RoleGRPC) deleteRole(ctx context.Context, req *rolev1.DeleteRoleRequest) (*rolev1.DeleteRoleResponse, error) {
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "role persistence not configured")
 	}
@@ -134,7 +134,7 @@ func (s *RoleGRPC) DeleteRole(ctx context.Context, req *rolev1.DeleteRoleRequest
 	return &rolev1.DeleteRoleResponse{}, nil
 }
 
-func (s *RoleGRPC) ReorderRoles(ctx context.Context, req *rolev1.ReorderRolesRequest) (*rolev1.ReorderRolesResponse, error) {
+func (s *RoleGRPC) reorderRoles(ctx context.Context, req *rolev1.ReorderRolesRequest) (*rolev1.ReorderRolesResponse, error) {
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "role persistence not configured")
 	}
@@ -156,7 +156,7 @@ func (s *RoleGRPC) ReorderRoles(ctx context.Context, req *rolev1.ReorderRolesReq
 		if err != nil {
 			return nil, err
 		}
-		target, err := s.Store.GetRoleByID(ctx, id)
+		target, err := s.Store.GetRoleByIDInSpace(ctx, spaceID, id)
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
@@ -175,7 +175,7 @@ func (s *RoleGRPC) ReorderRoles(ctx context.Context, req *rolev1.ReorderRolesReq
 	return &rolev1.ReorderRolesResponse{}, nil
 }
 
-func (s *RoleGRPC) RemoveChatOverride(ctx context.Context, req *rolev1.RemoveChatOverrideRequest) (*rolev1.RemoveChatOverrideResponse, error) {
+func (s *RoleGRPC) removeChatOverride(ctx context.Context, req *rolev1.RemoveChatOverrideRequest) (*rolev1.RemoveChatOverrideResponse, error) {
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "role persistence not configured")
 	}
@@ -201,13 +201,20 @@ func (s *RoleGRPC) RemoveChatOverride(ctx context.Context, req *rolev1.RemoveCha
 	if err != nil {
 		return nil, err
 	}
+	row, err := s.Store.GetRoleByIDInSpace(ctx, spaceID, roleID)
+	if err != nil {
+		return nil, ordinaryStoreError(err)
+	}
+	if row == nil {
+		return nil, status.Error(codes.NotFound, "role not found")
+	}
 	if err := s.Store.RemoveChatOverride(ctx, chatID, roleID); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, ordinaryStoreError(err)
 	}
 	return &rolev1.RemoveChatOverrideResponse{}, nil
 }
 
-func (s *RoleGRPC) GetChatOverrides(ctx context.Context, req *rolev1.GetChatOverridesRequest) (*rolev1.GetChatOverridesResponse, error) {
+func (s *RoleGRPC) getChatOverrides(ctx context.Context, req *rolev1.GetChatOverridesRequest) (*rolev1.GetChatOverridesResponse, error) {
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "role persistence not configured")
 	}
@@ -240,7 +247,7 @@ func (s *RoleGRPC) GetChatOverrides(ctx context.Context, req *rolev1.GetChatOver
 	return &rolev1.GetChatOverridesResponse{OverrideList: &rolev1.OverrideList{Overrides: out}}, nil
 }
 
-func (s *RoleGRPC) SetVoiceRoomOverride(ctx context.Context, req *rolev1.SetVoiceRoomOverrideRequest) (*rolev1.SetVoiceRoomOverrideResponse, error) {
+func (s *RoleGRPC) setVoiceRoomOverride(ctx context.Context, req *rolev1.SetVoiceRoomOverrideRequest) (*rolev1.SetVoiceRoomOverrideResponse, error) {
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "role persistence not configured")
 	}
@@ -259,8 +266,11 @@ func (s *RoleGRPC) SetVoiceRoomOverride(ctx context.Context, req *rolev1.SetVoic
 	if err != nil {
 		return nil, err
 	}
-	row, err := s.Store.GetRoleByID(ctx, roleID)
-	if err != nil || row == nil || row.SpaceID != spaceID {
+	row, err := s.Store.GetRoleByIDInSpace(ctx, spaceID, roleID)
+	if err != nil {
+		return nil, ordinaryStoreError(err)
+	}
+	if row == nil {
 		return nil, status.Error(codes.NotFound, "role not found")
 	}
 	voiceRoomID, err := parseUUIDField("voice_room_id", req.GetVoiceRoomId())
@@ -268,7 +278,7 @@ func (s *RoleGRPC) SetVoiceRoomOverride(ctx context.Context, req *rolev1.SetVoic
 		return nil, err
 	}
 	if err := s.Store.SetVoiceRoomOverride(ctx, voiceRoomID, roleID, req.GetAllowMask(), req.GetDenyMask()); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, ordinaryStoreError(err)
 	}
 	if s.Events != nil {
 		_ = s.Events.PublishVoiceOverrideSet(ctx, voiceRoomID.String(), roleID.String())
@@ -276,7 +286,7 @@ func (s *RoleGRPC) SetVoiceRoomOverride(ctx context.Context, req *rolev1.SetVoic
 	return &rolev1.SetVoiceRoomOverrideResponse{}, nil
 }
 
-func (s *RoleGRPC) RemoveVoiceRoomOverride(ctx context.Context, req *rolev1.RemoveVoiceRoomOverrideRequest) (*rolev1.RemoveVoiceRoomOverrideResponse, error) {
+func (s *RoleGRPC) removeVoiceRoomOverride(ctx context.Context, req *rolev1.RemoveVoiceRoomOverrideRequest) (*rolev1.RemoveVoiceRoomOverrideResponse, error) {
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "role persistence not configured")
 	}
@@ -295,17 +305,24 @@ func (s *RoleGRPC) RemoveVoiceRoomOverride(ctx context.Context, req *rolev1.Remo
 	if err != nil {
 		return nil, err
 	}
+	row, err := s.Store.GetRoleByIDInSpace(ctx, spaceID, roleID)
+	if err != nil {
+		return nil, ordinaryStoreError(err)
+	}
+	if row == nil {
+		return nil, status.Error(codes.NotFound, "role not found")
+	}
 	voiceRoomID, err := parseUUIDField("voice_room_id", req.GetVoiceRoomId())
 	if err != nil {
 		return nil, err
 	}
 	if err := s.Store.RemoveVoiceRoomOverride(ctx, voiceRoomID, roleID); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, ordinaryStoreError(err)
 	}
 	return &rolev1.RemoveVoiceRoomOverrideResponse{}, nil
 }
 
-func (s *RoleGRPC) GetVoiceRoomOverrides(ctx context.Context, req *rolev1.GetVoiceRoomOverridesRequest) (*rolev1.GetVoiceRoomOverridesResponse, error) {
+func (s *RoleGRPC) getVoiceRoomOverrides(ctx context.Context, req *rolev1.GetVoiceRoomOverridesRequest) (*rolev1.GetVoiceRoomOverridesResponse, error) {
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "role persistence not configured")
 	}
@@ -339,7 +356,7 @@ func (s *RoleGRPC) GetVoiceRoomOverrides(ctx context.Context, req *rolev1.GetVoi
 	return &rolev1.GetVoiceRoomOverridesResponse{OverrideList: &rolev1.OverrideList{Overrides: out}}, nil
 }
 
-func (s *RoleGRPC) SetDefaultJoinRole(ctx context.Context, req *rolev1.SetDefaultJoinRoleRequest) (*rolev1.SetDefaultJoinRoleResponse, error) {
+func (s *RoleGRPC) setDefaultJoinRole(ctx context.Context, req *rolev1.SetDefaultJoinRoleRequest) (*rolev1.SetDefaultJoinRoleResponse, error) {
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "role persistence not configured")
 	}
@@ -358,13 +375,20 @@ func (s *RoleGRPC) SetDefaultJoinRole(ctx context.Context, req *rolev1.SetDefaul
 	if err != nil {
 		return nil, err
 	}
+	row, err := s.Store.GetRoleByIDInSpace(ctx, spaceID, roleID)
+	if err != nil {
+		return nil, ordinaryStoreError(err)
+	}
+	if row == nil {
+		return nil, status.Error(codes.NotFound, "role not found")
+	}
 	if err := s.Store.SetDefaultJoinRole(ctx, spaceID, roleID); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, ordinaryStoreError(err)
 	}
 	return &rolev1.SetDefaultJoinRoleResponse{}, nil
 }
 
-func (s *RoleGRPC) GetDefaultJoinRole(ctx context.Context, req *rolev1.GetDefaultJoinRoleRequest) (*rolev1.GetDefaultJoinRoleResponse, error) {
+func (s *RoleGRPC) getDefaultJoinRole(ctx context.Context, req *rolev1.GetDefaultJoinRoleRequest) (*rolev1.GetDefaultJoinRoleResponse, error) {
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "role persistence not configured")
 	}
