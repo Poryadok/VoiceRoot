@@ -623,6 +623,9 @@ VoiceSessionKind voiceSessionKindFromProto(
 VoiceCallSession voiceCallSessionFromProto(calls_pb.CallSession session) {
   return VoiceCallSession(
     roomId: session.roomId,
+    voiceRoomId: session.hasVoiceRoomId()
+        ? emptyToNull(session.voiceRoomId)
+        : null,
     livekitRoomName: session.livekitRoomName,
     chatId: session.hasLinkedChat() ? session.linkedChat.id : '',
     initiatorProfileId: session.initiatorProfileId,
