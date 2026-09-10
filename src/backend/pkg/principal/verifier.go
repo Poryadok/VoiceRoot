@@ -128,7 +128,7 @@ func verify(ctx context.Context, token string, config VerifyConfig, expectedType
 	if err := rsa.VerifyPKCS1v15(key, crypto.SHA256, digest[:], signature); err != nil {
 		return rawClaims{}, err
 	}
-	if claims.Type != expectedType || claims.Audience != config.ExpectedAudience || claims.RPC != config.ExpectedRPC || claims.RequestID != config.ExpectedRequestID || claims.RequestHash != config.ExpectedRequestHash {
+	if !isCanonicalRequestHash(claims.RequestHash) || !isCanonicalRequestHash(config.ExpectedRequestHash) || claims.Type != expectedType || claims.Audience != config.ExpectedAudience || claims.RPC != config.ExpectedRPC || claims.RequestID != config.ExpectedRequestID || claims.RequestHash != config.ExpectedRequestHash {
 		return rawClaims{}, fmt.Errorf("credential binding mismatch")
 	}
 	if err := validateTemporal(claims, config.Clock().UTC()); err != nil {

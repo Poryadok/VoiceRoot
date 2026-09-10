@@ -154,10 +154,23 @@ func randomID() (string, error) {
 }
 
 func validateBinding(audience, rpc, requestID, requestHash string) error {
-	if strings.TrimSpace(audience) == "" || strings.TrimSpace(rpc) == "" || strings.TrimSpace(requestID) == "" || strings.TrimSpace(requestHash) == "" {
+	if strings.TrimSpace(audience) == "" || strings.TrimSpace(rpc) == "" || strings.TrimSpace(requestID) == "" || !isCanonicalRequestHash(requestHash) {
 		return fmt.Errorf("audience, rpc, request id, and request hash are required")
 	}
 	return nil
+}
+
+func isCanonicalRequestHash(value string) bool {
+	const prefix = "sha256:"
+	if !strings.HasPrefix(value, prefix) || len(value) != len(prefix)+64 {
+		return false
+	}
+	for _, character := range value[len(prefix):] {
+		if !(character >= '0' && character <= '9') && !(character >= 'a' && character <= 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 type rawClaims struct {
