@@ -369,6 +369,22 @@ abort and retries v2 Role Abort; failure after commit decision retries
 Finalize and never switches to abort. Do not report a terminal result until both
 local state and the authoritative Role receipt confirm it.
 
+Terminal receipt validation canonicalizes the embedded intent and the receipt
+wrapper separately. After Prepare, every terminal receipt must retain the exact
+stored deterministic PREPARED intent bytes, including protobuf unknown fields and
+their ordering; adding, dropping, changing or reordering that intent evidence is
+rejected. For Abort before Prepare, Space reconstructs the current-schema
+protocol-2 intent from the immutable journal binding, and the receipt must match
+those deterministic bytes without unknown intent fields.
+
+On the first otherwise valid terminal receipt, unknown fields on the receipt
+wrapper are accepted only after every known protocol, intent, state and current
+owner field matches the immutable binding and selected decision. Space persists
+the exact deterministic wrapper bytes and their SHA-256 hash separately from the
+unchanged PREPARED evidence. Terminal replay must reproduce those bytes exactly,
+including wrapper unknown fields; any changed wrapper bytes conflict and cannot
+replace the stored terminal evidence.
+
 A pending journal blocks conflicting Space mutations and ownership-sensitive
 reads, including owner/role/member/audit and tree access, with `UNAVAILABLE`.
 Pending audit/outbox entries remain invisible until completion. Role's matching
@@ -376,14 +392,22 @@ prepared state denies new space-scoped ACL decisions rather than transiently
 granting Owner to either profile. Reads that cannot determine pending state fail
 closed. A process health check does not assert operation convergence.
 
+R20 exposes the outbox only through a bounded, deterministically ordered,
+read-only query of `ready=true` rows. It neither publishes, claims, acknowledges
+nor deletes rows; repeated reads return the same stable `event_id`. Unready rows
+are not dispatchable through this seam. The delivery, claim and acknowledgement
+protocol remains a later coordinator/dispatcher contract and is not an R20
+activation claim.
+
 A recovery worker resumes exact operations after restart, including crashes after
 journal reservation, Auth consume, ambiguous v2 Role Prepare, local commit decision,
-Role Finalize, local completion or outbox delivery. No timeout silently deletes a
-pending operation or clears its freeze. Audit/event delivery is idempotent; an
-abort publishes neither successful transfer audit nor event. Sustained dependency
-failure leaves a visible pending/unavailable outcome and operational alert, not
-fabricated rollback success. Space remains the owner authority and uses Role API
-receipts, never cross-service database access.
+Role Finalize or local completion. Once the later delivery protocol exists, its
+worker also resumes outbox delivery. No timeout silently deletes a pending operation
+or clears its freeze. Audit/event delivery is idempotent; an abort publishes neither
+successful transfer audit nor event. Sustained dependency failure leaves a visible
+pending/unavailable outcome and operational alert, not fabricated rollback success.
+Space remains the owner authority and uses Role API receipts, never cross-service
+database access.
 
 Acceptance requires injected response loss/unavailability at every boundary,
 restart recovery from each durable state, concurrent same-operation replay and
