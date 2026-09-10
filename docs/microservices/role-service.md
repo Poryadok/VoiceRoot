@@ -198,11 +198,56 @@ interceptor ([ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md));
 | Caller principal | Exact allowed Role RPCs | Allowed actor / subject fields |
 |---|---|---|
 | `gateway` delegated user | `CreateRole`, `UpdateRole`, `DeleteRole`, `ListRoles`, `ReorderRoles`, `AssignRole`, `RevokeRole`, `GetMemberRoles`, `SetChatOverride`, `RemoveChatOverride`, `GetChatOverrides`, `SetVoiceRoomOverride`, `RemoveVoiceRoomOverride`, `GetVoiceRoomOverrides`, `SetDefaultJoinRole`, `GetDefaultJoinRole`, `GetEffectivePermissions` | actor is only derived `sub`/`profile_id`; request `profile_id` is a target subject where that RPC has one and is ACL-checked by Role |
-| `space` service | `BootstrapSpaceRoles`, `GetDefaultJoinRole`, `ListRoles`, `GetMemberRoles`, `AssignRole`, `RevokeRole` | `owner_profile_id` only for bootstrap; `profile_id` only for Space-owned join/leave lifecycle; `AssignRole`/`RevokeRole` must reject `Owner` |
+| `space` service | `BootstrapSpaceRoles`, `GetDefaultJoinRole`, `ListRoles`, `GetMemberRoles`, `AssignRole`, `RevokeRole`, `CheckPermission` | `owner_profile_id` only for bootstrap; `profile_id` only for Space-owned join/leave lifecycle; `AssignRole`/`RevokeRole` must reject `Owner`. `CheckPermission` is limited to the global permission names enumerated below. |
 | `space` trusted transfer | `TransferOwnerRole` (**new dedicated RPC**) | exact `space_id`, `old_owner_profile_id`, `new_owner_profile_id`, `operation_id`; no generic Role RPC may mutate `Owner` |
 | `voice`, `chat`, `messaging` service | `CheckPermission` | explicit `profile_id` only as the decision subject, plus requested `space_id`/node scope; no actor mutation authority |
-| `bot` service | `CheckPermission`, `GetMemberRoles`, `RevokeRole`, `DeleteRolesCreatedByProfile` | explicit `profile_id` only for authorised bot lifecycle/decision data; `RevokeRole` must reject `Owner`; bot actor mutations use a Gateway delegated-user principal, never metadata |
+| `bot` signed `bot_actor` capability | `CreateRole`, `AssignRole`, `RevokeRole` | only the exact scope and claim-bound space below; no generic Gateway principal or metadata fallback; `Owner` and every system-role mutation are rejected |
 
+### Space `CheckPermission` decision contract
+
+Space may call only `/voice.role.v1.RoleService/CheckPermission` with a signed
+service JWT whose `principal_type=service`, `iss=space`, `sub=service:space`,
+`aud=role`, and `rpc` is that exact full RPC name. The credential also requires
+`iat`, `nbf`, `exp` (TTL at most **30 s**), `jti`, `kid`, `request_id` and
+`request_hash`. `request_hash` binds exactly `space_id`, `profile_id` and
+`permission_name`, and binds the absence of both a chat and a voice-room node.
+
+The verified Space principal may request only these global permission names:
+`SPACE_VIEW_AUDIT_LOG`, `SPACE_MANAGE_BOTS`, `SPACE_MANAGE_INVITES`,
+`MEMBER_KICK`, `MEMBER_BAN`, `MODERATION_TIMEOUT_MEMBERS`,
+`SPACE_MANAGE_SETTINGS`, and `TEXT_CHAT_CREATE_IN_SPACE`. `profile_id` remains
+decision data asserted by verified Space; it is never identity authority derived
+from request metadata.
+
+### Bot actor mutation contract
+
+A bot does not use a Gateway delegated-user principal for Role mutations. Bot
+Service issues a separate signed `bot_actor` capability with
+`iss=bot`, `sub=bot:<bot_id>`, `aud=role`, the exact `rpc` and request binding,
+`actor_profile_id`, `bot_id`, `space_id`, `installation_id`, `bot_scope`, and
+normal temporal/anti-replay claims (`iat`, `nbf`, `exp`, `jti`, `kid`). Role
+derives the actor solely from the verified `actor_profile_id` claim and requires
+`request.space_id == capability.space_id`.
+
+The capability permits only `CreateRole` when `bot_scope=SPACE_MANAGE_ROLES`,
+and `AssignRole` or `RevokeRole` when
+`bot_scope=MEMBER_ASSIGN_ROLES`. Existing hierarchy and permission checks still
+apply. Every attempt to mutate `Owner` or any system role is rejected, regardless
+of scope; a bot capability cannot call the dedicated ownership-transfer path.
+
+### Phase-0 errors and per-RPC migration
+
+Malformed requests return `INVALID_ARGUMENT`; invalid signature, temporal
+claims, audience, RPC or request binding return `UNAUTHENTICATED`; a verified
+caller with a wrong allowed caller, scope, actor or business ACL returns
+`PERMISSION_DENIED`; unavailable verifier dependencies return `UNAVAILABLE`.
+
+Migration is per exact RPC. Once a protected RPC has its signed-principal
+cutover, it has no header or metadata fallback. Bot generic mutations must move
+to `bot_actor` in the same cutover that enforces their Role allow-list.
+`CheckPermission` cannot become globally strict until every caller of that RPC
+uses a signed principal; each migrated caller is enforced independently while
+remaining callers follow the explicitly tracked migration path.
 `Owner` нельзя назначить, снять или переназначить через generic client/member RPC.
 Только dedicated authenticated Space transfer lifecycle меняет Owner и обязан быть
 idempotent по `operation_id`. Unknown caller/RPC, caller с неправильной audience

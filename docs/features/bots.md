@@ -164,6 +164,23 @@ commands:
 
 Scopes `SPACE_MANAGE_ROLES` и `TEXT_CHAT_READ_HISTORY` для бота — привилегированные: при установке пользователь видит явное предупреждение. `TEXT_CHAT_READ_HISTORY` предназначен для модерационных ботов; `SPACE_MANAGE_ROLES` — для ботов, которым нужно создавать определения ролей (назначение участникам — `MEMBER_ASSIGN_ROLES`). Имена совпадают с правами участника; политика проверки — в Bot Service / Gateway.
 
+### Phase-0: подписанная capability для role mutations (target; не реализовано)
+
+Для `CreateBotRole`, `AssignBotRole` и `RevokeBotRole` Bot Service передаёт в
+Role отдельную подписанную `bot_actor` capability, а не клиентский identity или
+metadata. В ней фиксированы `iss=bot`, `sub=bot:<bot_id>`, `aud=role`, точный
+RPC и binding запроса, `actor_profile_id`, `bot_id`, `space_id`,
+`installation_id`, `bot_scope`, `iat`, `nbf`, `exp` (не более 30 s), `jti` и
+`kid`. Role сопоставляет `space_id` запроса с capability и получает actor только
+из claim.
+
+`SPACE_MANAGE_ROLES` даёт только `CreateRole`; `MEMBER_ASSIGN_ROLES` даёт только
+`AssignRole`/`RevokeRole`. Обычная иерархия и permission checks остаются
+обязательными. Capability никогда не даёт назначить, снять или передать `Owner`,
+а также изменить любую system role. После cutover каждого из этих RPC legacy
+headers/metadata не принимаются; подробная Role matrix и error model находятся
+в [role-service.md](../microservices/role-service.md#phase-0-principal-и-caller-matrix-target-не-реализовано).
+
 ---
 
 ## Пост-v1 backlog
