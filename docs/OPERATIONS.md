@@ -107,6 +107,25 @@ Shared timeouts for Go HTTP services and Postgres bootstrap. Values are Go `time
 
 Staging overrides — `deploy/staging/configmap-app.yaml` (`GRPC_DIAL_TIMEOUT` is set; HTTP/Postgres keys are commented for optional tuning).
 
+## Phase-0 S2S key rotation and verifier incidents (target)
+
+Подготовить `next` signing key в issuer secret store и опубликовать его public JWK
+до переключения `S2S_SIGNING_KID`. После выдачи новых credentials новым ключом
+сохранить прежний public key минимум на 30 секунд; удалить только после этого
+окна. Private key никогда не попадает в ConfigMap, logs или JWKS.
+
+Consumer refreshes complete JWKS every 30 seconds and may serve only a complete
+last-good set for two minutes. A bad refresh does not overwrite that set. At hard
+expiry, unknown `kid`, JWKS failure or TLS failure protected RPCs return deny;
+they must not fall back to plaintext or legacy identity headers. Alert on a hard
+cache expiry, denied unknown-kid refresh bursts, signature/temporal failures and
+session-epoch lookup failures, tagging issuer, audience, RPC and request ID but
+never a bearer or private key.
+
+The TLS requirement applies in staging and production. Any plaintext gRPC profile
+must be named and isolated as local development/test; its deployment manifest
+cannot be promoted to staging or production.
+
 ---
 
 ## Bot Service (env)
@@ -129,5 +148,4 @@ Staging overrides — `deploy/staging/configmap-app.yaml` (`GRPC_DIAL_TIMEOUT` i
 - [DEPLOYMENT.md](DEPLOYMENT.md) — стенды, поток артефактов, первый выкат
 - [TESTING.md](TESTING.md) — тесты в CI перед выкатом
 - [CONTRIBUTING.md](CONTRIBUTING.md) — merge в `master`, review
-
 
