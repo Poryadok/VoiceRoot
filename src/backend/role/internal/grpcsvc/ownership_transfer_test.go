@@ -2,14 +2,13 @@ package grpcsvc
 
 import (
 	"context"
-	"crypto/sha256"
-	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"voice/backend/pkg/principal"
 	"voice/backend/role/internal/store"
@@ -18,13 +17,15 @@ import (
 	rolev1 "voice.app/voice/role/v1"
 )
 
-func ownershipTransferHash(spaceID, oldOwnerID, newOwnerID, operationID string) string {
-	input := fmt.Sprintf("space_id=%q&old_owner_profile_id=%q&new_owner_profile_id=%q&operation_id=%q", spaceID, oldOwnerID, newOwnerID, operationID)
-	digest := sha256.Sum256([]byte(input))
-	return fmt.Sprintf("sha256:%x", digest)
-}
-
 func trustedOwnershipTransferContext(ctx context.Context, rpc, spaceID, oldOwnerID, newOwnerID, operationID string) context.Context {
+	var req proto.Message = &rolev1.ApplyOwnershipTransferRequest{SpaceId: spaceID, OldOwnerProfileId: oldOwnerID, NewOwnerProfileId: newOwnerID, OperationId: operationID}
+	if rpc == compensateOwnershipTransferRPC {
+		req = &rolev1.CompensateOwnershipTransferRequest{SpaceId: spaceID, OldOwnerProfileId: oldOwnerID, NewOwnerProfileId: newOwnerID, OperationId: operationID}
+	}
+	hash, err := principal.RequestHash(req)
+	if err != nil {
+		panic(err)
+	}
 	return principal.WithVerified(ctx, principal.Principal{
 		Kind:        "service",
 		Issuer:      "space",
@@ -32,7 +33,7 @@ func trustedOwnershipTransferContext(ctx context.Context, rpc, spaceID, oldOwner
 		Audience:    "role",
 		RPC:         rpc,
 		RequestID:   "test-request",
-		RequestHash: ownershipTransferHash(spaceID, oldOwnerID, newOwnerID, operationID),
+		RequestHash: hash,
 	})
 }
 
@@ -49,22 +50,22 @@ func ownerRoleNames(t *testing.T, s *store.RoleStore, spaceID, profileID uuid.UU
 
 func TestApplyOwnershipTransfer_RequiresVerifiedSpacePrincipal(t *testing.T) {
 	spaceID, oldOwnerID, newOwnerID := uuid.New(), uuid.New(), uuid.New()
-	_, err := ownershipTransferInput(context.Background(), applyOwnershipTransferRPC, spaceID.String(), oldOwnerID.String(), newOwnerID.String(), uuid.NewString())
+	_, err := ownershipTransferInput(context.Background(), applyOwnershipTransferRPC, &rolev1.ApplyOwnershipTransferRequest{SpaceId: spaceID.String(), OldOwnerProfileId: oldOwnerID.String(), NewOwnerProfileId: newOwnerID.String(), OperationId: uuid.NewString()})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
 func TestOwnershipTransferInput_RequiresExactVerifiedBinding(t *testing.T) {
 	spaceID, oldOwnerID, newOwnerID, operationID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	ctx := trustedOwnershipTransferContext(context.Background(), applyOwnershipTransferRPC, spaceID, oldOwnerID, newOwnerID, operationID)
-	_, err := ownershipTransferInput(ctx, applyOwnershipTransferRPC, spaceID, oldOwnerID, newOwnerID, operationID)
+	_, err := ownershipTransferInput(ctx, applyOwnershipTransferRPC, &rolev1.ApplyOwnershipTransferRequest{SpaceId: spaceID, OldOwnerProfileId: oldOwnerID, NewOwnerProfileId: newOwnerID, OperationId: operationID})
 	require.NoError(t, err)
 
 	wrongRPC := trustedOwnershipTransferContext(context.Background(), compensateOwnershipTransferRPC, spaceID, oldOwnerID, newOwnerID, operationID)
-	_, err = ownershipTransferInput(wrongRPC, applyOwnershipTransferRPC, spaceID, oldOwnerID, newOwnerID, operationID)
+	_, err = ownershipTransferInput(wrongRPC, applyOwnershipTransferRPC, &rolev1.ApplyOwnershipTransferRequest{SpaceId: spaceID, OldOwnerProfileId: oldOwnerID, NewOwnerProfileId: newOwnerID, OperationId: operationID})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 
 	wrongBinding := principal.WithVerified(context.Background(), principal.Principal{Kind: "service", Issuer: "space", Subject: "service:space", Audience: "role", RPC: applyOwnershipTransferRPC, RequestID: "request", RequestHash: "sha256:not-the-request"})
-	_, err = ownershipTransferInput(wrongBinding, applyOwnershipTransferRPC, spaceID, oldOwnerID, newOwnerID, operationID)
+	_, err = ownershipTransferInput(wrongBinding, applyOwnershipTransferRPC, &rolev1.ApplyOwnershipTransferRequest{SpaceId: spaceID, OldOwnerProfileId: oldOwnerID, NewOwnerProfileId: newOwnerID, OperationId: operationID})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 

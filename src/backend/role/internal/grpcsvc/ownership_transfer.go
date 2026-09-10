@@ -2,12 +2,11 @@ package grpcsvc
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
-	"fmt"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"voice/backend/pkg/principal"
 	"voice/backend/role/internal/store"
@@ -20,13 +19,16 @@ const (
 	compensateOwnershipTransferRPC = "/voice.role.v1.RoleService/CompensateOwnershipTransfer"
 )
 
-func ownershipTransferRequestHash(spaceID, oldOwnerID, newOwnerID, operationID string) string {
-	input := fmt.Sprintf("space_id=%q&old_owner_profile_id=%q&new_owner_profile_id=%q&operation_id=%q", spaceID, oldOwnerID, newOwnerID, operationID)
-	digest := sha256.Sum256([]byte(input))
-	return fmt.Sprintf("sha256:%x", digest)
+type ownershipTransferRequest interface {
+	proto.Message
+	GetSpaceId() string
+	GetOldOwnerProfileId() string
+	GetNewOwnerProfileId() string
+	GetOperationId() string
 }
 
-func ownershipTransferInput(ctx context.Context, rpc, spaceRaw, oldRaw, newRaw, operationRaw string) (store.OwnershipTransferInput, error) {
+func ownershipTransferInput(ctx context.Context, rpc string, req ownershipTransferRequest) (store.OwnershipTransferInput, error) {
+	spaceRaw, oldRaw, newRaw, operationRaw := req.GetSpaceId(), req.GetOldOwnerProfileId(), req.GetNewOwnerProfileId(), req.GetOperationId()
 	spaceID, err := parseUUIDField("space_id", spaceRaw)
 	if err != nil {
 		return store.OwnershipTransferInput{}, err
@@ -50,7 +52,10 @@ func ownershipTransferInput(ctx context.Context, rpc, spaceRaw, oldRaw, newRaw, 
 	if !ok || verified.Kind != "service" || verified.Issuer != "space" || verified.Subject != "service:space" || verified.Audience != "role" || verified.RPC != rpc || verified.RequestID == "" {
 		return store.OwnershipTransferInput{}, status.Error(codes.PermissionDenied, "verified space principal required")
 	}
-	hash := ownershipTransferRequestHash(spaceRaw, oldRaw, newRaw, operationRaw)
+	hash, err := principal.RequestHash(req)
+	if err != nil {
+		return store.OwnershipTransferInput{}, status.Error(codes.InvalidArgument, "invalid ownership request")
+	}
 	if verified.RequestHash != hash {
 		return store.OwnershipTransferInput{}, status.Error(codes.PermissionDenied, "verified request binding required")
 	}
@@ -72,7 +77,7 @@ func (s *RoleGRPC) ApplyOwnershipTransfer(ctx context.Context, req *rolev1.Apply
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "role persistence not configured")
 	}
-	in, err := ownershipTransferInput(ctx, applyOwnershipTransferRPC, req.GetSpaceId(), req.GetOldOwnerProfileId(), req.GetNewOwnerProfileId(), req.GetOperationId())
+	in, err := ownershipTransferInput(ctx, applyOwnershipTransferRPC, req)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +92,7 @@ func (s *RoleGRPC) CompensateOwnershipTransfer(ctx context.Context, req *rolev1.
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "role persistence not configured")
 	}
-	in, err := ownershipTransferInput(ctx, compensateOwnershipTransferRPC, req.GetSpaceId(), req.GetOldOwnerProfileId(), req.GetNewOwnerProfileId(), req.GetOperationId())
+	in, err := ownershipTransferInput(ctx, compensateOwnershipTransferRPC, req)
 	if err != nil {
 		return nil, err
 	}
