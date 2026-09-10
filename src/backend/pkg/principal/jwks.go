@@ -163,6 +163,9 @@ func (r *JWKSResolver) Resolve(ctx context.Context, issuer, keyID string) (*rsa.
 		return key, nil
 	}
 	if r.unknownKIDCoolingDown(issuer) {
+		if key, _, usable := r.cached(issuer, keyID); key != nil && usable {
+			return key, nil
+		}
 		return nil, errors.New("jwks kid refresh is cooling down")
 	}
 	if err := r.refreshLocked(ctx, issuer); err != nil {

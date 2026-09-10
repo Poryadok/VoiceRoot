@@ -135,6 +135,35 @@ func TestJWKSResolver_CoolsDownColdCacheUnknownKidRefreshes(t *testing.T) {
 	}
 }
 
+func TestJWKSResolver_CooldownStillServesUsableKnownLastGoodKey(t *testing.T) {
+	current := testJWKSKey(t, "current")
+	valid, _ := json.Marshal(map[string]any{"keys": []any{current}})
+	now := time.Unix(1_700_000_000, 0).UTC()
+	var calls atomic.Int32
+	resolver, err := NewJWKSResolverWithConfig(JWKSResolverConfig{
+		Fetch: func(context.Context, string) ([]byte, error) {
+			if calls.Add(1) == 1 {
+				return valid, nil
+			}
+			return nil, errors.New("unavailable")
+		},
+		Clock: func() time.Time { return now }, RefreshAfter: time.Second, HardExpiry: time.Minute, UnknownKIDCooldown: time.Minute,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resolver.Resolve(context.Background(), "gateway", "current"); err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(2 * time.Second)
+	if _, err := resolver.Resolve(context.Background(), "gateway", "missing"); err == nil {
+		t.Fatal("unknown kid accepted")
+	}
+	if key, err := resolver.Resolve(context.Background(), "gateway", "current"); err != nil || key == nil {
+		t.Fatalf("usable known last-good key denied during issuer cooldown: %v", err)
+	}
+}
+
 func TestJWKSResolver_RetainsLastGoodSetAndRefreshesUnknownKid(t *testing.T) {
 	current := testJWKSKey(t, "current")
 	next := testJWKSKey(t, "next")
