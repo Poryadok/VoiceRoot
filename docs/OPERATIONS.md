@@ -109,10 +109,14 @@ Staging overrides — `deploy/staging/configmap-app.yaml` (`GRPC_DIAL_TIMEOUT` i
 
 ## Phase-0 S2S key rotation and verifier incidents (target)
 
-Подготовить `next` signing key в issuer secret store и опубликовать его public JWK
-до переключения `S2S_SIGNING_KID`. После выдачи новых credentials новым ключом
-сохранить прежний public key минимум на 30 секунд; удалить только после этого
-окна. Private key никогда не попадает в ConfigMap, logs или JWKS.
+Каждый issuer получает secret-mounted каталог
+`<SERVICE>_PRINCIPAL_SIGNING_KEYS_DIR` с ровно двумя unencrypted PKCS#8 RSA
+private keys `<kid>.pem` и выбирает active через
+`<SERVICE>_PRINCIPAL_ACTIVE_KID`; aliases `S2S_SIGNING_KEY_PEM` и
+`S2S_SIGNING_KID` запрещены. Для rotation подготовить peer `next` key,
+опубликовать его public JWK до переключения active kid, затем хранить прежний
+public key минимум 30 секунд после прекращения signing. Private key никогда не
+попадает в ConfigMap, logs или JWKS.
 
 Consumer refreshes complete JWKS every 30 seconds and may serve only a complete
 last-good set for two minutes. A bad refresh does not overwrite that set. At hard
@@ -148,4 +152,3 @@ cannot be promoted to staging or production.
 - [DEPLOYMENT.md](DEPLOYMENT.md) — стенды, поток артефактов, первый выкат
 - [TESTING.md](TESTING.md) — тесты в CI перед выкатом
 - [CONTRIBUTING.md](CONTRIBUTING.md) — merge в `master`, review
-

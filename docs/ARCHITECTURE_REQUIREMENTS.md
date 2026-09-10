@@ -172,8 +172,14 @@ request binding или authorization. Нельзя добавить второй
   после hard expiry verifier fail-closed. Для rotation новый public key появляется
   до выдачи им credential, старый остаётся не меньше 30 s после прекращения
   подписи.
-- `S2S_SIGNING_KEY_PEM` и `S2S_SIGNING_KID` являются secret/config issuer-а;
-  consumer получает issuer→HTTPS JWKS endpoint через `S2S_JWKS_URLS_JSON`.
+- Каждый issuer использует service-scoped secret/config:
+  `<SERVICE>_PRINCIPAL_SIGNING_KEYS_DIR` и
+  `<SERVICE>_PRINCIPAL_ACTIVE_KID`. Каталог содержит ровно два top-level
+  unencrypted PKCS#8 RSA private keys `<kid>.pem`: active и peer rotation key;
+  `kid` соответствует `[A-Za-z0-9][A-Za-z0-9._-]{0,127}`. Private keys остаются
+  только в secret store. Compatibility aliases, включая `S2S_SIGNING_KEY_PEM` и
+  `S2S_SIGNING_KID`, запрещены; partial/invalid config является startup error.
+  Consumer получает issuer→HTTPS JWKS endpoint через `S2S_JWKS_URLS_JSON`.
   `S2S_JWKS_REFRESH_AFTER`, `S2S_JWKS_HARD_EXPIRY` и
   `S2S_UNKNOWN_KID_COOLDOWN` используют соответственно defaults `30s`, `2m`,
   `5s`; пустое или некорректное значение — startup error. Эти имена — общий

@@ -153,6 +153,15 @@ func (g *gateway) handleWellKnown(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	switch r.URL.Path {
+	case "/.well-known/voice-principal-jwks.json":
+		if g.config.principalIssuer == nil || len(g.config.principalJWKS.Keys) == 0 {
+			return false
+		}
+		w.Header().Set("Content-Type", "application/jwk-set+json")
+		if err := json.NewEncoder(w).Encode(g.config.principalJWKS); err != nil {
+			http.Error(w, "well-known encode failed", http.StatusInternalServerError)
+		}
+		return true
 	case "/.well-known/apple-app-site-association":
 		writeWellKnownJSON(w, appleAppSiteAssociationJSON())
 		return true

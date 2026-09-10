@@ -44,7 +44,14 @@ func loadGatewayConfigFromEnvChecked() (gatewayConfig, error) {
 			return gatewayConfig{}, errors.New("GATEWAY_REDIS_ADDR is required when GATEWAY_SESSION_EPOCH_STRICT=true")
 		}
 	}
-	return loadGatewayConfigFromEnvMode(strict), nil
+	config := loadGatewayConfigFromEnvMode(strict)
+	issuer, jwks, err := loadGatewayPrincipalIssuerFromEnv()
+	if err != nil {
+		return gatewayConfig{}, err
+	}
+	config.principalIssuer = issuer
+	config.principalJWKS = jwks
+	return config, nil
 }
 
 // validateGRPCUpstreamsFromEnv rejects a configured but unusable upstream map
