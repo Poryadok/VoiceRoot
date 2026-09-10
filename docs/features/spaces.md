@@ -72,9 +72,11 @@ manual approval. Invite не обходит требования. Если вк�
 
 ### Контракт подтверждения передачи владения
 
-Это утверждённый target-контракт для реализации; текущие proto и handlers его ещё не
-содержат. Клиент получает proof только у Auth через authenticated user surface, а
-не создаёт и не проверяет его в Gateway или Space.
+Это утверждённый target-контракт публичной передачи. Auth уже содержит
+`IssueOwnershipTransferProof`, Space-only `ConsumeOwnershipTransferProof` и lookup
+durable receipt; публичный Space request, durable operation journal и Gateway /
+Flutter vertical ещё не реализованы. Клиент получает proof только у Auth через
+authenticated user surface, а не создаёт и не проверяет его в Gateway или Space.
 
 1. После проверки password и, для account с включённой 2FA, TOTP либо backup code,
    Auth выпускает непрозрачный high-entropy proof. Его plaintext возвращается ровно

@@ -106,7 +106,7 @@ service SpaceService {
 | Create/Update/Delete Category | ✓ | ✓ | |
 | PinTreeNode, UnpinTreeNode | ✓ | ✓ | Migration `000007_tree_pin`; handlers and event payload shipped |
 | CreateInvite, GetInvite, JoinByInvite | ✓ | ✓ | |
-| **RevokeInvite, ListInvites** | ✓ | ✓ | **Owner-only** today (`requireSpaceOwner`) — normative target: role with `MANAGE_INVITES` |
+| **RevokeInvite, ListInvites** | ✓ | ✓ | Exact `SPACE_MANAGE_INVITES` permission; owner retains the canonical Role bypass |
 | JoinSpace, LeaveSpace | ✓ | ✓ | Composable AND entry policy and invite-safe verifier pipeline remain backlog — [todo/backend.md](../todo/backend.md) |
 | KickMember, BanMember, UnbanMember, ListMembers, ListBans | ✓ | ✓ | |
 | TimeoutMember, RemoveMemberTimeout | ✓ | ✓ | |
@@ -133,7 +133,12 @@ permission subset и Owner lifecycle paths определены в
 
 `GetAuditLog` читает только строки запрошенного `space_id` и возвращает все поля `AuditLogEntry`. Ошибка Role Service закрывает доступ (`UNAVAILABLE`), явный deny даёт `PERMISSION_DENIED`, malformed cursor — `INVALID_ARGUMENT`. Наличие RPC не означает полноту аудита: writers для части действий, фильтры по actor/action и клиентские REST/Flutter поверхности остаются в [backend backlog](../todo/backend.md).
 
-**Invite permissions (code vs spec):** shipped handlers gate `RevokeInvite` / `ListInvites` on **space owner** only. Product spec allows admins with invite-management permission — align handlers when Role Service integration lands; until then document owner-only as **partial shipment**.
+**Invite permissions:** shipped `CreateInvite`, `RevokeInvite` and `ListInvites`
+handlers use the exact `SPACE_MANAGE_INVITES` decision. An unavailable configured
+Role Service fails closed. While Role is intentionally unwired, the shared
+`requireSpacePermission` compatibility path permits only the current Space owner;
+the A2 target does not retain this fallback after signed Role integration is
+required.
 
 ## Phase-0 Space audit ledger (target; not implemented)
 
