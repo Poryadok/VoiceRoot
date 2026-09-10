@@ -90,3 +90,23 @@
 Domain JetStream streams (`message_events`, `user_events`, …) are also consumed by **Analytics** via stream adapters (dual ingest). Subject pattern: `analytics.{service}.{event}`.
 
 Продуктовая аналитика дополнительно консьюмит subject’ы вида `analytics.*` (см. раздел «Аналитика» в [MICROSERVICES.md](MICROSERVICES.md)).
+
+## A2 Space target routes
+
+Canonical route/schema/ACL/error/retry table:
+[API Gateway A2 Space REST](microservices/api-gateway.md#a2-space-rest-contract-target).
+All rows below are target contract coverage, not shipment claims.
+
+| Route group | Owner / RPC boundary |
+|---|---|
+| `spaces/{space_id}/join`, `/leave`, `/transfer-ownership`; `DELETE spaces/{space_id}`; `/restore` | Space JoinSpace/LeaveSpace/TransferOwnership/DeleteSpace/RestoreSpace; delete schedules recovery |
+| `spaces/{space_id}/invites/**`, `invites/{code}`, `invites/{code}/join` | Space invite management/preview/redeem; safe authenticated preview |
+| `spaces/{space_id}/tree/**`, `/categories/**`, `/voice-rooms/{id}` entity CRUD | Space tree/category/room RPCs; media actions under the same room prefix still belong to Voice |
+| `spaces/{space_id}/chats` | Chat CreateChat then Space UpsertTreeNode; one resumable operation |
+| `spaces/{space_id}/audit-log` | Space GetAuditLog; signed filter-bound cursor |
+| `auth/ownership-transfer-proof` | Auth IssueOwnershipTransferProof; consume only Space→Auth |
+| `auth/space-deletion-proof` | Future Auth IssueSpaceDeletionProof; distinct space_delete purpose; consume only Space→Auth |
+
+No public route permits direct Owner-role reassignment or either Auth consume RPC.
+NATS ownership remains unchanged: Space audit/lifecycle effects use Space's
+transactional outbox in the existing domain stream; this table adds no new stream.

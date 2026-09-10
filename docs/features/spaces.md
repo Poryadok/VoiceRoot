@@ -87,8 +87,10 @@ manual approval. Invite не обходит требования. Если вк�
    `operation_id` и proof. `operation_id` — UUID, выбранный клиентом для одного
    намерения передачи; proof из одного operation нельзя использовать для другого.
    Gateway передаёт authenticated actor только из verified claims, relay-ит opaque proof в Space, redacts его из logs/traces/metrics и не создаёт, не валидирует, не хранит proof и не выводит из него actor.
-4. Space сначала проверяет actor как текущего owner и exact idempotency record по
-   `(actor_profile_id, operation_id)`. Первый запрос сохраняет exact request body.
+4. Space сначала аутентифицирует actor и проверяет exact idempotency record по
+   `(actor_profile_id, operation_id)`. Completed exact replay возвращает только
+   saved outcome исходному actor без повторной проверки current owner и без новых
+   данных или side effects. Для новой операции Space проверяет текущего owner. Первый запрос сохраняет canonical non-secret bindings и криптографический digest proof, без plaintext proof.
    Тот же body возвращает ранее сохранённый outcome; иной body с тем же ключом
    завершается `ALREADY_EXISTS`. До существующей компенсируемой передачи Space
    атомарно вызывает trusted Auth consume с этими exact bindings.
@@ -168,3 +170,13 @@ member RPCs reject `Owner` mutation while the trusted compensated path succeeds.
 - `space.deletion_scheduled` публикуется при начале окна, `space.restored` — при
   восстановлении, а `space.deleted` — только после завершённого purge. Частичный
   cross-service purge повторяется идемпотентно до convergence.
+
+### Публичный lifecycle contract A2
+
+Методы, JSON, ошибки и retry для leave/transfer/delete/restore, invites, tree и
+аудита зафиксированы в [API Gateway](../microservices/api-gateway.md#a2-space-rest-contract-target)
+как target. Удаление использует отдельный Auth proof purpose `space_delete`,
+связанный с точным именем Спейса и operation_id; proof передачи владельца для
+удаления непригоден. Factors, TTL и consume описаны в
+[Space Service](../microservices/space-service.md#a2-public-lifecycle-and-retry-contract-target).
+Это фиксация входов для следующей реализации, а не изменение статуса готовности.

@@ -12,6 +12,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 # shellcheck source=scripts/staging/lib/kubectl-configmap.sh
 source "${ROOT}/scripts/staging/lib/kubectl-configmap.sh"
+# shellcheck source=scripts/staging/lib/kubectl-secret.sh
+source "${ROOT}/scripts/staging/lib/kubectl-secret.sh"
 OBS_DIR="${ROOT}/deploy/observability"
 PROFILE="${OBSERVABILITY_PROFILE:-k3s-lite}"
 NS="${VOICE_OBSERVABILITY_NAMESPACE:-voice-observability}"
@@ -101,10 +103,9 @@ kubectl_apply_configmap grafana-dashboards "${NS}" \
 
 # --- Grafana admin secret (override with GRAFANA_ADMIN_PASSWORD) ---
 GRAFANA_PASS="${GRAFANA_ADMIN_PASSWORD:-changeme-voice-observability}"
-kubectl -n "${NS}" create secret generic grafana-admin \
+kubectl_apply_secret grafana-admin "${NS}" \
   --from-literal=admin-user=admin \
-  --from-literal=admin-password="${GRAFANA_PASS}" \
-  --dry-run=client -o yaml | kubectl apply -f -
+  --from-literal=admin-password="${GRAFANA_PASS}"
 
 # --- Infra exporters in voice-staging (Postgres, Redis, NATS) ---
 if ! kubectl get namespace voice-staging >/dev/null 2>&1; then
