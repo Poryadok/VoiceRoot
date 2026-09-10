@@ -178,11 +178,11 @@ func principalJWKSFromPrivateKeys(keys map[string]*rsa.PrivateKey) principalJWKS
 }
 
 func validPrincipalKeyID(value string) bool {
-	if len(value) == 0 || len(value) > 128 || !(value[0] >= 'a' && value[0] <= 'z' || value[0] >= 'A' && value[0] <= 'Z' || value[0] >= '0' && value[0] <= '9') {
+	if len(value) == 0 || len(value) > 128 || (value[0] < 'a' || value[0] > 'z') && (value[0] < 'A' || value[0] > 'Z') && (value[0] < '0' || value[0] > '9') {
 		return false
 	}
 	for _, character := range value {
-		if !(character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' || character >= '0' && character <= '9' || character == '.' || character == '_' || character == '-') {
+		if (character < 'a' || character > 'z') && (character < 'A' || character > 'Z') && (character < '0' || character > '9') && character != '.' && character != '_' && character != '-' {
 			return false
 		}
 	}
