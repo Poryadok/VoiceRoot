@@ -4,12 +4,16 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // RoleStore persists roles and member assignments in role_db.
 type RoleStore struct {
-	Pool *pgxpool.Pool
+	Pool           *pgxpool.Pool
+	tx             pgx.Tx
+	scopeSpaces    map[uuid.UUID]struct{}
+	scopeOperation uuid.UUID
 }
 
 // RoleRow is a roles table row.
