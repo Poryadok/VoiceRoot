@@ -48,7 +48,7 @@ func roleRowToProto(r *store.RoleRow) *rolev1.Role {
 	return out
 }
 
-func (s *RoleGRPC) BootstrapSpaceRoles(ctx context.Context, req *rolev1.BootstrapSpaceRolesRequest) (*rolev1.BootstrapSpaceRolesResponse, error) {
+func (s *RoleGRPC) bootstrapSpaceRoles(ctx context.Context, req *rolev1.BootstrapSpaceRolesRequest) (*rolev1.BootstrapSpaceRolesResponse, error) {
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "role persistence not configured")
 	}
@@ -72,7 +72,7 @@ func (s *RoleGRPC) BootstrapSpaceRoles(ctx context.Context, req *rolev1.Bootstra
 	return &rolev1.BootstrapSpaceRolesResponse{}, nil
 }
 
-func (s *RoleGRPC) ListRoles(ctx context.Context, req *rolev1.ListRolesRequest) (*rolev1.ListRolesResponse, error) {
+func (s *RoleGRPC) listRoles(ctx context.Context, req *rolev1.ListRolesRequest) (*rolev1.ListRolesResponse, error) {
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "role persistence not configured")
 	}
@@ -91,7 +91,7 @@ func (s *RoleGRPC) ListRoles(ctx context.Context, req *rolev1.ListRolesRequest) 
 	return &rolev1.ListRolesResponse{RoleList: &rolev1.RoleList{Roles: out}}, nil
 }
 
-func (s *RoleGRPC) CreateRole(ctx context.Context, req *rolev1.CreateRoleRequest) (*rolev1.CreateRoleResponse, error) {
+func (s *RoleGRPC) createRole(ctx context.Context, req *rolev1.CreateRoleRequest) (*rolev1.CreateRoleResponse, error) {
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "role persistence not configured")
 	}
@@ -127,7 +127,7 @@ func (s *RoleGRPC) CreateRole(ctx context.Context, req *rolev1.CreateRoleRequest
 	return &rolev1.CreateRoleResponse{Role: roleRowToProto(row)}, nil
 }
 
-func (s *RoleGRPC) AssignRole(ctx context.Context, req *rolev1.AssignRoleRequest) (*rolev1.AssignRoleResponse, error) {
+func (s *RoleGRPC) assignRole(ctx context.Context, req *rolev1.AssignRoleRequest) (*rolev1.AssignRoleResponse, error) {
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "role persistence not configured")
 	}
@@ -147,11 +147,11 @@ func (s *RoleGRPC) AssignRole(ctx context.Context, req *rolev1.AssignRoleRequest
 	if err != nil {
 		return nil, err
 	}
-	role, err := s.Store.GetRoleByID(ctx, roleID)
+	role, err := s.Store.GetRoleByIDInSpace(ctx, spaceID, roleID)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, ordinaryStoreError(err)
 	}
-	if role == nil || role.SpaceID != spaceID {
+	if role == nil {
 		return nil, status.Error(codes.NotFound, "role not found")
 	}
 	if role.Name == permissions.RoleOwner {
@@ -159,13 +159,13 @@ func (s *RoleGRPC) AssignRole(ctx context.Context, req *rolev1.AssignRoleRequest
 	}
 	can, err := s.Store.CanManageRole(ctx, spaceID, actor, roleID)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, ordinaryStoreError(err)
 	}
 	if !can {
 		return nil, status.Error(codes.PermissionDenied, "cannot assign this role")
 	}
 	if err := s.Store.AssignMemberRole(ctx, spaceID, profileID, roleID, actor); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, ordinaryStoreError(err)
 	}
 	if s.Events != nil {
 		_ = s.Events.PublishRoleAssigned(ctx, spaceID.String(), profileID.String(), roleID.String())
@@ -173,7 +173,7 @@ func (s *RoleGRPC) AssignRole(ctx context.Context, req *rolev1.AssignRoleRequest
 	return &rolev1.AssignRoleResponse{}, nil
 }
 
-func (s *RoleGRPC) RevokeRole(ctx context.Context, req *rolev1.RevokeRoleRequest) (*rolev1.RevokeRoleResponse, error) {
+func (s *RoleGRPC) revokeRole(ctx context.Context, req *rolev1.RevokeRoleRequest) (*rolev1.RevokeRoleResponse, error) {
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "role persistence not configured")
 	}
@@ -193,11 +193,11 @@ func (s *RoleGRPC) RevokeRole(ctx context.Context, req *rolev1.RevokeRoleRequest
 	if err != nil {
 		return nil, err
 	}
-	role, err := s.Store.GetRoleByID(ctx, roleID)
+	role, err := s.Store.GetRoleByIDInSpace(ctx, spaceID, roleID)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, ordinaryStoreError(err)
 	}
-	if role == nil || role.SpaceID != spaceID {
+	if role == nil {
 		return nil, status.Error(codes.NotFound, "role not found")
 	}
 	if role.Name == permissions.RoleOwner {
@@ -205,13 +205,13 @@ func (s *RoleGRPC) RevokeRole(ctx context.Context, req *rolev1.RevokeRoleRequest
 	}
 	can, err := s.Store.CanManageRole(ctx, spaceID, actor, roleID)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, ordinaryStoreError(err)
 	}
 	if !can {
 		return nil, status.Error(codes.PermissionDenied, "cannot revoke this role")
 	}
 	if err := s.Store.RevokeMemberRole(ctx, spaceID, profileID, roleID); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, ordinaryStoreError(err)
 	}
 	if s.Events != nil {
 		_ = s.Events.PublishRoleRevoked(ctx, spaceID.String(), profileID.String(), roleID.String())
@@ -219,7 +219,7 @@ func (s *RoleGRPC) RevokeRole(ctx context.Context, req *rolev1.RevokeRoleRequest
 	return &rolev1.RevokeRoleResponse{}, nil
 }
 
-func (s *RoleGRPC) GetMemberRoles(ctx context.Context, req *rolev1.GetMemberRolesRequest) (*rolev1.GetMemberRolesResponse, error) {
+func (s *RoleGRPC) getMemberRoles(ctx context.Context, req *rolev1.GetMemberRolesRequest) (*rolev1.GetMemberRolesResponse, error) {
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "role persistence not configured")
 	}
@@ -242,7 +242,7 @@ func (s *RoleGRPC) GetMemberRoles(ctx context.Context, req *rolev1.GetMemberRole
 	return &rolev1.GetMemberRolesResponse{RoleList: &rolev1.RoleList{Roles: out}}, nil
 }
 
-func (s *RoleGRPC) CheckPermission(ctx context.Context, req *rolev1.CheckPermissionRequest) (*rolev1.CheckPermissionResponse, error) {
+func (s *RoleGRPC) checkPermission(ctx context.Context, req *rolev1.CheckPermissionRequest) (*rolev1.CheckPermissionResponse, error) {
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "role persistence not configured")
 	}
@@ -280,7 +280,7 @@ func (s *RoleGRPC) CheckPermission(ctx context.Context, req *rolev1.CheckPermiss
 	return &rolev1.CheckPermissionResponse{Allowed: allowed}, nil
 }
 
-func (s *RoleGRPC) SetChatOverride(ctx context.Context, req *rolev1.SetChatOverrideRequest) (*rolev1.SetChatOverrideResponse, error) {
+func (s *RoleGRPC) setChatOverride(ctx context.Context, req *rolev1.SetChatOverrideRequest) (*rolev1.SetChatOverrideResponse, error) {
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "role persistence not configured")
 	}
@@ -306,12 +306,15 @@ func (s *RoleGRPC) SetChatOverride(ctx context.Context, req *rolev1.SetChatOverr
 	if err != nil {
 		return nil, err
 	}
-	row, err := s.Store.GetRoleByID(ctx, roleID)
-	if err != nil || row == nil || row.SpaceID != spaceID {
+	row, err := s.Store.GetRoleByIDInSpace(ctx, spaceID, roleID)
+	if err != nil {
+		return nil, ordinaryStoreError(err)
+	}
+	if row == nil {
 		return nil, status.Error(codes.NotFound, "role not found")
 	}
 	if err := s.Store.SetChatOverride(ctx, chatID, roleID, req.GetAllowMask(), req.GetDenyMask()); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, ordinaryStoreError(err)
 	}
 	if s.Events != nil {
 		_ = s.Events.PublishChatOverrideSet(ctx, chatID.String(), roleID.String())
@@ -319,7 +322,7 @@ func (s *RoleGRPC) SetChatOverride(ctx context.Context, req *rolev1.SetChatOverr
 	return &rolev1.SetChatOverrideResponse{}, nil
 }
 
-func (s *RoleGRPC) GetEffectivePermissions(ctx context.Context, req *rolev1.GetEffectivePermissionsRequest) (*rolev1.GetEffectivePermissionsResponse, error) {
+func (s *RoleGRPC) getEffectivePermissions(ctx context.Context, req *rolev1.GetEffectivePermissionsRequest) (*rolev1.GetEffectivePermissionsResponse, error) {
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "role persistence not configured")
 	}
