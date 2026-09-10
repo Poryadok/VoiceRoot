@@ -6,9 +6,11 @@ import (
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"math/big"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestParseJWKS_RejectsInvalidOrAmbiguousSets(t *testing.T) {
@@ -29,6 +31,87 @@ func TestParseJWKS_RejectsInvalidOrAmbiguousSets(t *testing.T) {
 	bad, _ := json.Marshal(map[string]any{"keys": []any{wrongAlgorithm}})
 	if _, err := ParseJWKS(bad); err == nil {
 		t.Fatal("wrong algorithm accepted")
+	}
+}
+
+func TestJWKSResolver_RefreshesAtSoftTTLAndExpiresLastGoodAtHardTTL(t *testing.T) {
+	current := testJWKSKey(t, "current")
+	valid, _ := json.Marshal(map[string]any{"keys": []any{current}})
+	now := time.Unix(1_700_000_000, 0).UTC()
+	var calls atomic.Int32
+	resolver, err := NewJWKSResolverWithConfig(JWKSResolverConfig{
+		Fetch: func(context.Context, string) ([]byte, error) {
+			calls.Add(1)
+			return valid, nil
+		},
+		Clock:        func() time.Time { return now },
+		RefreshAfter: 10 * time.Second,
+		HardExpiry:   20 * time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resolver.Resolve(context.Background(), "gateway", "current"); err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(11 * time.Second)
+	if _, err := resolver.Resolve(context.Background(), "gateway", "current"); err != nil {
+		t.Fatal(err)
+	}
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("soft TTL refresh calls = %d, want 2", got)
+	}
+
+	var attempts atomic.Int32
+	stale, err := NewJWKSResolverWithConfig(JWKSResolverConfig{
+		Fetch: func(context.Context, string) ([]byte, error) {
+			if attempts.Add(1) == 1 {
+				return valid, nil
+			}
+			return nil, errors.New("unavailable")
+		},
+		Clock: func() time.Time { return now }, RefreshAfter: 10 * time.Second, HardExpiry: 20 * time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now = time.Unix(1_700_000_000, 0).UTC()
+	if _, err := stale.Resolve(context.Background(), "gateway", "current"); err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(11 * time.Second)
+	if _, err := stale.Resolve(context.Background(), "gateway", "current"); err != nil {
+		t.Fatalf("last-good before hard TTL rejected: %v", err)
+	}
+	now = time.Unix(1_700_000_000, 0).UTC().Add(21 * time.Second)
+	if _, err := stale.Resolve(context.Background(), "gateway", "current"); err == nil {
+		t.Fatal("last-good key survived hard TTL")
+	}
+}
+
+func TestJWKSResolver_CoolsDownRepeatedUnknownKidRefreshes(t *testing.T) {
+	current := testJWKSKey(t, "current")
+	valid, _ := json.Marshal(map[string]any{"keys": []any{current}})
+	now := time.Unix(1_700_000_000, 0).UTC()
+	var calls atomic.Int32
+	resolver, err := NewJWKSResolverWithConfig(JWKSResolverConfig{
+		Fetch: func(context.Context, string) ([]byte, error) { calls.Add(1); return valid, nil },
+		Clock: func() time.Time { return now }, RefreshAfter: time.Minute, HardExpiry: time.Minute, UnknownKIDCooldown: 5 * time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resolver.Resolve(context.Background(), "gateway", "current"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resolver.Resolve(context.Background(), "gateway", "missing"); err == nil {
+		t.Fatal("unknown kid accepted")
+	}
+	if _, err := resolver.Resolve(context.Background(), "gateway", "missing"); err == nil {
+		t.Fatal("unknown kid accepted during cooldown")
+	}
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("unknown kid fetch calls = %d, want 2", got)
 	}
 }
 

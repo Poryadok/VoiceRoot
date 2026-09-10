@@ -66,7 +66,8 @@ func (i *Issuer) IssueService(input ServiceInput) (string, error) {
 	if err := validateBinding(input.Audience, input.RPC, input.RequestID, input.RequestHash); err != nil {
 		return "", err
 	}
-	return i.issue(rawClaims{
+	now := i.clock().UTC()
+	return i.issueAt(rawClaims{
 		Type:        serviceType,
 		Issuer:      i.issuer,
 		Subject:     "service:" + i.issuer,
@@ -74,7 +75,7 @@ func (i *Issuer) IssueService(input ServiceInput) (string, error) {
 		RPC:         input.RPC,
 		RequestID:   input.RequestID,
 		RequestHash: input.RequestHash,
-	}, maxCredentialTTL)
+	}, now, maxCredentialTTL, time.Time{})
 }
 
 func (i *Issuer) IssueDelegatedUser(input DelegatedUserInput) (string, error) {
@@ -87,14 +88,16 @@ func (i *Issuer) IssueDelegatedUser(input DelegatedUserInput) (string, error) {
 	if strings.TrimSpace(input.AccountID) == "" || strings.TrimSpace(input.ProfileID) == "" || input.SessionEpoch <= 0 || input.ClientExpiresAt.IsZero() {
 		return "", fmt.Errorf("account id, profile id, and positive session epoch are required")
 	}
-	remaining := input.ClientExpiresAt.Sub(i.clock())
+	now := i.clock().UTC()
+	clientExpiresAt := input.ClientExpiresAt.UTC()
+	remaining := clientExpiresAt.Sub(now)
 	if remaining <= 0 {
 		return "", fmt.Errorf("verified client session is expired")
 	}
 	if remaining > maxCredentialTTL {
 		remaining = maxCredentialTTL
 	}
-	return i.issue(rawClaims{
+	return i.issueAt(rawClaims{
 		Type:         delegatedUserType,
 		Issuer:       i.issuer,
 		Subject:      input.AccountID,
@@ -105,14 +108,20 @@ func (i *Issuer) IssueDelegatedUser(input DelegatedUserInput) (string, error) {
 		AccountID:    input.AccountID,
 		ProfileID:    input.ProfileID,
 		SessionEpoch: input.SessionEpoch,
-	}, remaining)
+	}, now, remaining, clientExpiresAt)
 }
 
-func (i *Issuer) issue(claims rawClaims, ttl time.Duration) (string, error) {
-	now := i.clock().UTC()
+func (i *Issuer) issueAt(claims rawClaims, now time.Time, ttl time.Duration, expiresLimit time.Time) (string, error) {
 	claims.IssuedAt = now.Unix()
 	claims.NotBefore = now.Unix()
-	claims.ExpiresAt = now.Add(ttl).Unix()
+	expiresAt := now.Add(ttl)
+	if !expiresLimit.IsZero() && expiresAt.After(expiresLimit) {
+		expiresAt = expiresLimit
+	}
+	claims.ExpiresAt = expiresAt.Unix()
+	if !time.Unix(claims.ExpiresAt, 0).After(now) {
+		return "", fmt.Errorf("credential expiry is not representable after issue time")
+	}
 	jwtID, err := randomID()
 	if err != nil {
 		return "", err

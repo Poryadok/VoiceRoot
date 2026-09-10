@@ -171,23 +171,23 @@ func TestVerifier_AllowsOnlyFixedFiveSecondTemporalSkew(t *testing.T) {
 	if _, err := VerifyService(context.Background(), token, serviceConfig(key, now)); err == nil {
 		t.Fatal("future credential beyond fixed skew accepted")
 	}
-	claims.IssuedAt = now.Add(-30 * time.Second).Unix()
-	claims.NotBefore = now.Add(-30 * time.Second).Unix()
-	claims.ExpiresAt = now.Add(-5 * time.Second).Unix()
+	claims.IssuedAt = now.Unix()
+	claims.NotBefore = now.Unix()
+	claims.ExpiresAt = now.Add(30 * time.Second).Unix()
 	token, err = signClaims(key, "current", claims)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := VerifyService(context.Background(), token, serviceConfig(key, now)); err != nil {
-		t.Fatalf("five-second expiry skew rejected: %v", err)
+	if _, err := VerifyService(context.Background(), token, serviceConfig(key, now.Add(31*time.Second))); err == nil {
+		t.Fatal("expiration skew extended a 30-second credential")
 	}
-	claims.ExpiresAt = now.Add(-6 * time.Second).Unix()
+	claims.ExpiresAt = now.Add(31 * time.Second).Unix()
 	token, err = signClaims(key, "current", claims)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := VerifyService(context.Background(), token, serviceConfig(key, now)); err == nil {
-		t.Fatal("expired credential beyond fixed skew accepted")
+		t.Fatal("credential with more than 30-second claim lifetime accepted")
 	}
 }
 
@@ -218,6 +218,40 @@ func TestDelegatedUserCredential_IsBoundToGatewayAndClientSessionExpiry(t *testi
 	input.ClientExpiresAt = now.Add(time.Minute)
 	if _, err := other.IssueDelegatedUser(input); err == nil {
 		t.Fatal("non-gateway issuer accepted for delegated credential")
+	}
+}
+
+func TestIssuer_ReadsClockOnceAndCapsDelegatedExpiryAtClientSession(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0).UTC()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reads := 0
+	issuer, err := NewIssuer(IssuerConfig{Issuer: "gateway", KeyID: "current", PrivateKey: key, Clock: func() time.Time {
+		reads++
+		if reads == 1 {
+			return now
+		}
+		return now.Add(10 * time.Second)
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	clientExpiry := now.Add(5 * time.Second)
+	token, err := issuer.IssueDelegatedUser(DelegatedUserInput{Audience: "role", RPC: "/voice.role.v1.RoleService/CreateRole", RequestID: "req-1", RequestHash: "sha256:request", AccountID: "account-1", ProfileID: "profile-1", SessionEpoch: 7, ClientExpiresAt: clientExpiry})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reads != 1 {
+		t.Fatalf("clock reads = %d, want one", reads)
+	}
+	principal, err := VerifyDelegatedUser(context.Background(), token, delegatedConfig(key, now))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if principal.ExpiresAt.After(clientExpiry) {
+		t.Fatalf("delegated expiry %s exceeds client expiry %s", principal.ExpiresAt, clientExpiry)
 	}
 }
 func testIssuer(t *testing.T, now time.Time) (*Issuer, *rsa.PrivateKey) {

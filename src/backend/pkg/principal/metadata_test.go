@@ -32,6 +32,9 @@ func TestIncomingMetadata_RejectsAmbiguousOrRawIdentityHeaders(t *testing.T) {
 		{name: "duplicate request id", pairs: []string{"authorization", "Bearer token", "x-request-id", "request-1", "x-request-id", "request-2"}},
 		{name: "raw profile", pairs: []string{"authorization", "Bearer token", "x-request-id", "request-1", "x-voice-profile-id", "attacker"}},
 		{name: "raw caller", pairs: []string{"authorization", "Bearer token", "x-request-id", "request-1", "x-voice-internal-caller", "attacker"}},
+		{name: "legacy internal", pairs: []string{"authorization", "Bearer token", "x-request-id", "request-1", "x-voice-internal", "true"}},
+		{name: "legacy account type", pairs: []string{"authorization", "Bearer token", "x-request-id", "request-1", "x-voice-account-type", "guest"}},
+		{name: "unprefixed raw identity", pairs: []string{"authorization", "Bearer token", "x-request-id", "request-1", "x-profile-id", "attacker"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -46,8 +46,9 @@ func IncomingMetadata(ctx context.Context) (TransportMetadata, error) {
 }
 
 func hasRawIdentityMetadata(md metadata.MD) bool {
-	for _, key := range []string{"x-voice-profile-id", "x-voice-account-id", "x-voice-user-id", "x-voice-internal-caller"} {
-		if len(md.Get(key)) != 0 {
+	for key := range md {
+		key = strings.ToLower(key)
+		if strings.HasPrefix(key, "x-voice-") || key == "x-profile-id" || key == "x-account-id" || key == "x-user-id" || key == "x-actor-id" || key == "x-internal-caller" {
 			return true
 		}
 	}
