@@ -879,3 +879,122 @@ const RevokeSessionResponse$json = {
 /// Descriptor for `RevokeSessionResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List revokeSessionResponseDescriptor =
     $convert.base64Decode('ChVSZXZva2VTZXNzaW9uUmVzcG9uc2U=');
+
+@$core.Deprecated('Use issueOwnershipTransferProofRequestDescriptor instead')
+const IssueOwnershipTransferProofRequest$json = {
+  '1': 'IssueOwnershipTransferProofRequest',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'new_owner_profile_id',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '10': 'newOwnerProfileId'
+    },
+    {'1': 'operation_id', '3': 3, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'password', '3': 4, '4': 1, '5': 9, '10': 'password'},
+    {'1': 'totp_code', '3': 5, '4': 1, '5': 9, '10': 'totpCode'},
+    {'1': 'backup_code', '3': 6, '4': 1, '5': 9, '10': 'backupCode'},
+  ],
+};
+
+/// Descriptor for `IssueOwnershipTransferProofRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List issueOwnershipTransferProofRequestDescriptor =
+    $convert.base64Decode(
+        'CiJJc3N1ZU93bmVyc2hpcFRyYW5zZmVyUHJvb2ZSZXF1ZXN0EhkKCHNwYWNlX2lkGAEgASgJUg'
+        'dzcGFjZUlkEi8KFG5ld19vd25lcl9wcm9maWxlX2lkGAIgASgJUhFuZXdPd25lclByb2ZpbGVJ'
+        'ZBIhCgxvcGVyYXRpb25faWQYAyABKAlSC29wZXJhdGlvbklkEhoKCHBhc3N3b3JkGAQgASgJUg'
+        'hwYXNzd29yZBIbCgl0b3RwX2NvZGUYBSABKAlSCHRvdHBDb2RlEh8KC2JhY2t1cF9jb2RlGAYg'
+        'ASgJUgpiYWNrdXBDb2Rl');
+
+@$core.Deprecated('Use issueOwnershipTransferProofResponseDescriptor instead')
+const IssueOwnershipTransferProofResponse$json = {
+  '1': 'IssueOwnershipTransferProofResponse',
+  '2': [
+    {'1': 'proof', '3': 1, '4': 1, '5': 9, '10': 'proof'},
+    {
+      '1': 'expires_at',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'expiresAt'
+    },
+  ],
+};
+
+/// Descriptor for `IssueOwnershipTransferProofResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List issueOwnershipTransferProofResponseDescriptor =
+    $convert.base64Decode(
+        'CiNJc3N1ZU93bmVyc2hpcFRyYW5zZmVyUHJvb2ZSZXNwb25zZRIUCgVwcm9vZhgBIAEoCVIFcH'
+        'Jvb2YSOQoKZXhwaXJlc19hdBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBSCWV4'
+        'cGlyZXNBdA==');
+
+@$core.Deprecated('Use consumeOwnershipTransferProofRequestDescriptor instead')
+const ConsumeOwnershipTransferProofRequest$json = {
+  '1': 'ConsumeOwnershipTransferProofRequest',
+  '2': [
+    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+    {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
+    {'1': 'space_id', '3': 3, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'new_owner_profile_id',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '10': 'newOwnerProfileId'
+    },
+    {'1': 'operation_id', '3': 5, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'session_epoch', '3': 6, '4': 1, '5': 3, '10': 'sessionEpoch'},
+    {'1': 'proof', '3': 7, '4': 1, '5': 9, '10': 'proof'},
+  ],
+};
+
+/// Descriptor for `ConsumeOwnershipTransferProofRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List consumeOwnershipTransferProofRequestDescriptor =
+    $convert.base64Decode(
+        'CiRDb25zdW1lT3duZXJzaGlwVHJhbnNmZXJQcm9vZlJlcXVlc3QSHQoKYWNjb3VudF9pZBgBIA'
+        'EoCVIJYWNjb3VudElkEh0KCnByb2ZpbGVfaWQYAiABKAlSCXByb2ZpbGVJZBIZCghzcGFjZV9p'
+        'ZBgDIAEoCVIHc3BhY2VJZBIvChRuZXdfb3duZXJfcHJvZmlsZV9pZBgEIAEoCVIRbmV3T3duZX'
+        'JQcm9maWxlSWQSIQoMb3BlcmF0aW9uX2lkGAUgASgJUgtvcGVyYXRpb25JZBIjCg1zZXNzaW9u'
+        'X2Vwb2NoGAYgASgDUgxzZXNzaW9uRXBvY2gSFAoFcHJvb2YYByABKAlSBXByb29m');
+
+@$core.Deprecated('Use consumeOwnershipTransferProofResponseDescriptor instead')
+const ConsumeOwnershipTransferProofResponse$json = {
+  '1': 'ConsumeOwnershipTransferProofResponse',
+  '2': [
+    {'1': 'receipt_id', '3': 1, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'account_id', '3': 2, '4': 1, '5': 9, '10': 'accountId'},
+    {'1': 'profile_id', '3': 3, '4': 1, '5': 9, '10': 'profileId'},
+    {'1': 'space_id', '3': 4, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'new_owner_profile_id',
+      '3': 5,
+      '4': 1,
+      '5': 9,
+      '10': 'newOwnerProfileId'
+    },
+    {'1': 'operation_id', '3': 6, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'session_epoch', '3': 7, '4': 1, '5': 3, '10': 'sessionEpoch'},
+    {
+      '1': 'consumed_at',
+      '3': 8,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'consumedAt'
+    },
+    {'1': 'verified_factors', '3': 9, '4': 3, '5': 9, '10': 'verifiedFactors'},
+  ],
+};
+
+/// Descriptor for `ConsumeOwnershipTransferProofResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List consumeOwnershipTransferProofResponseDescriptor = $convert.base64Decode(
+    'CiVDb25zdW1lT3duZXJzaGlwVHJhbnNmZXJQcm9vZlJlc3BvbnNlEh0KCnJlY2VpcHRfaWQYAS'
+    'ABKAlSCXJlY2VpcHRJZBIdCgphY2NvdW50X2lkGAIgASgJUglhY2NvdW50SWQSHQoKcHJvZmls'
+    'ZV9pZBgDIAEoCVIJcHJvZmlsZUlkEhkKCHNwYWNlX2lkGAQgASgJUgdzcGFjZUlkEi8KFG5ld1'
+    '9vd25lcl9wcm9maWxlX2lkGAUgASgJUhFuZXdPd25lclByb2ZpbGVJZBIhCgxvcGVyYXRpb25f'
+    'aWQYBiABKAlSC29wZXJhdGlvbklkEiMKDXNlc3Npb25fZXBvY2gYByABKANSDHNlc3Npb25FcG'
+    '9jaBI7Cgtjb25zdW1lZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBSCmNv'
+    'bnN1bWVkQXQSKQoQdmVyaWZpZWRfZmFjdG9ycxgJIAMoCVIPdmVyaWZpZWRGYWN0b3Jz');

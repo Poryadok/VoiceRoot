@@ -261,3 +261,203 @@ blacklist-механизмом и не заменяется epoch.
 ## Масштабирование
 
 Stateless, масштабируется горизонтально. За внешним Load Balancer (L4/L7).
+
+## A2 Space REST contract (target)
+
+This section freezes the next Gateway/Flutter contract. Existing route paths and
+response wrappers are preserved; the complete authorization, retry, lifecycle and
+audit semantics below are **target, not implemented**. New endpoints must remain
+unexposed until their service contracts and negative transport tests land.
+Space room **media** actions use the separate
+[Voice contract](voice-service.md#phase-0-space-room-media-roster-и-lifecycle-target-не-реализовано);
+room entity CRUD below still belongs to Space.
+
+### Common wire and authorization rules
+
+All routes below require a valid user JWT, including invite preview. Gateway
+uses verified account/profile/session epoch to issue the downstream delegated
+principal; raw identity headers and body actor fields confer no authority.
+Space checks canonical resource ownership and the route-specific ACL before any
+new mutation. Join/redeem and invite preview do not require existing membership;
+completed operation replay uses the original authenticated actor and saved binding,
+not a new membership/owner check. Restore uses recorded ownership while frozen.
+A path ID is authoritative: a supplied matching body ID is accepted for existing
+protobuf clients, but a different body ID is `400 invalid_argument`; a referenced
+node/category/invite/room from another Space is never operated on.
+
+JSON uses protobuf `snake_case` field names, UUID strings, RFC3339 UTC timestamps
+and existing response wrappers. Required fields are listed below; `?` means
+optional. Unknown fields, invalid UUID/timestamp, duplicate query keys or invalid
+integer ranges are `400 invalid_argument`. Empty optional strings are not IDs.
+Responses serialize the named protobuf type using the existing Gateway rules;
+`204` has no body. `Space`, `Invite`, `Category`, `VoiceRoom`, `SpaceTreeNode`,
+`SpaceMembership` and `AuditLogEntry` are defined by
+[Space proto](../../protos/voice/space/v1/space.proto); target additions are explicit.
+
+Common errors use `{"error_code":"<code>","message":"<safe text>"}`: `401
+unauthenticated` for absent/invalid session; `404 not_found` for missing or
+undiscoverable Space/resource (including foreign-Space resource IDs); `403
+permission_denied` for a discoverable action denied by policy; `409
+failed_precondition` for frozen/purged Space or invalid lifecycle/member state;
+`409 already_exists` for a reused operation key with different request; `429
+resource_exhausted` for a rate limit; `503 unavailable` for Auth/Role/store/service
+failure. Never expose gRPC internals or proof-factor distinctions. Failure before
+commit changes no membership, role, tree, audit or event state. A lost response
+after commit is recovered using the operation rules below.
+
+Except join/redeem, code-holder preview, recorded-owner restore and completed
+operation replay, protected reads/mutations require current membership plus the
+table ACL. Owner
+recognition and permission evaluation remain Role/Space contracts; an unavailable
+Role does not grant access. Frozen Space is hidden to members; the owner can read
+only `{space:{id,name,deletion_scheduled_at,purge_after}}` through existing
+`GET /api/v1/spaces/{space_id}` and restore. For a frozen Space, non-owners receive `404 not_found`; the recorded owner
+receives `409 failed_precondition` for normal operations other than the limited
+read and restore. Completed replay returns only its saved outcome and never fresh
+resource data; it cannot grant a new disclosure or mutation. No normal tree/invite/audit read is
+allowed while frozen. Audit tombstone retention does not create public access.
+
+### Lifecycle
+
+`S` below is `/api/v1/spaces/{space_id}`. Each new lifecycle mutation requires a
+UUID `operation_id` in JSON. `POST S/leave` remains compatible with its existing
+empty-body form; clients should supply the optional idempotency header below.
+
+| Method/path | Space RPC / ACL | JSON request | Success |
+|---|---|---|---|
+| `POST S/join` | `JoinSpace`; canonical visibility/entry policy, no invite-only bypass | Empty body | `200 {space_membership: SpaceMembership}` |
+| `POST S/leave` | `LeaveSpace`; current member, owner must transfer first | Empty body | `204` |
+| `POST S/transfer-ownership` | `TransferOwnership`; current owner, target is existing member | `{new_owner_profile_id,proof,operation_id}` | `204` |
+| `DELETE S` | `DeleteSpace` target schedule; current owner | `{confirmation_name,proof,operation_id}` | `204` (scheduled, never immediate purge) |
+| `POST S/restore` | `RestoreSpace` target; recorded owner before purge_after | `{operation_id}` | `200 {space: Space}` |
+
+The transfer issue route is `POST /api/v1/auth/ownership-transfer-proof` →
+Auth `IssueOwnershipTransferProof`, JWT required. Request:
+`{space_id,new_owner_profile_id,operation_id,password,totp_code?,backup_code?}`;
+response `200 {proof,expires_at}`. At most one second-factor field is supplied;
+Auth requires it when 2FA is enabled. Auth-only storage/consume semantics are in
+[auth-service.md](auth-service.md#ownership-transfer-step-up-proof-target-contract-not-implemented).
+`ConsumeOwnershipTransferProof` is Space-only and has no public route.
+Gateway redacts credentials and proof everywhere and never persists either.
+
+Deletion uses a **different purpose-bound proof**, specified in
+[Space lifecycle](space-service.md#a2-public-lifecycle-and-retry-contract-target).
+The UI must type the exact current Space name and complete Auth factors; restore
+does not require a fresh factor proof. At/after `purge_after`, restore returns
+`409 failed_precondition` to the recorded owner; others receive `404 not_found`.
+Concurrent restore/purge serialize so only one lifecycle transition can win.
+
+### Invites
+
+Management prefix is `S/invites`; lookup/redeem retain `/api/v1/invites/{code}`.
+Invite code is an opaque path segment, not a UUID. No credentials/codes are logged.
+
+| Method/path | RPC / ACL | Request | Success |
+|---|---|---|---|
+| `POST S/invites` | `CreateInvite`; `SPACE_MANAGE_INVITES` | `{max_uses?,expires_at?}`; max_uses integer >0, expiry in future; absence means no corresponding limit | `200 {invite: Invite}` |
+| `GET S/invites` | `ListInvites`; `SPACE_MANAGE_INVITES` | No query/body | `200 {invite_list:{invites:[Invite]}}` |
+| `DELETE S/invites/{invite_id}` | `RevokeInvite`; `SPACE_MANAGE_INVITES`, canonical invite belongs to S | Empty body | `204` |
+| `GET /api/v1/invites/{code}` | `GetInvite`; authenticated holder of valid code, no membership prerequisite | No query/body | `200 {invite:{code,space_id,expires_at?}}` safe preview |
+| `POST /api/v1/invites/{code}/join` | `JoinByInvite`; canonical entry policy and limits | Empty body | `200 {space_membership: SpaceMembership}` |
+
+Invalid/expired/revoked/exhausted code always gives `404 not_found` without
+revealing which check failed. Preview never exposes creator, usage counters,
+member identities or the administrative invite ID; the safe projection replaces
+current full-Invite disclosure only when the target capability is enabled.
+Manage-list retains its existing unpaged wrapper, ordered `created_at DESC,id
+DESC`, includes revoked/expired invites and never silently truncates. Pagination
+requires a separately versioned additive contract, not an undocumented cursor.
+Redeem consumes a use only after all entry requirements and approval succeed;
+a current member retry does not consume another use. Pending approval returns
+`409 failed_precondition` and no membership; the durable pending request is the
+only permitted intermediate effect of canonical entry-policy evaluation.
+
+### Tree, category and room entities
+
+Tree mutations require `TEXT_CHAT_CREATE_IN_SPACE`, the existing Space tree-manage
+permission (including pin); read requires membership. Chat creation additionally
+applies Chat's own create/limit policy. Child IDs must resolve to the path Space.
+
+| Method/path | RPC | JSON request | Success |
+|---|---|---|---|
+| `GET S/tree` | `ListSpaceTree` | None | `200 {categories:[Category],nodes:[SpaceTreeNode],voice_rooms:[VoiceRoom]}` |
+| `POST S/categories` | `CreateCategory` | `{name,sort_order?}` | `200 {category: Category}` |
+| `PATCH S/categories/{category_id}` | `UpdateCategory` | `{name?,sort_order?}`; at least one | `200 {category: Category}` |
+| `DELETE S/categories/{category_id}` | `DeleteCategory` | Empty | `204` |
+| `POST S/voice-rooms` | `CreateVoiceRoom` | `{name}` | `200 {voice_room: VoiceRoom}` |
+| `PATCH S/voice-rooms/{voice_room_id}` | `UpdateVoiceRoom` | `{name}` | `200 {voice_room: VoiceRoom}` |
+| `DELETE S/voice-rooms/{voice_room_id}` | `DeleteVoiceRoom` | Empty | `204` |
+| `POST S/tree/nodes` | `UpsertTreeNode` | `{node_id?,category_id?,kind,linked_chat?,voice_room_id?,sort_order?,is_system?}` | `200 {space_tree_node: SpaceTreeNode}` |
+| `DELETE S/tree/nodes/{node_id}` | `RemoveTreeNode` | Empty | `204` |
+| `POST S/tree/reorder` | `ReorderSpaceTree` | `{ordered_node_ids:[UUID]}` | `204` |
+| `POST S/tree/nodes/{node_id}/pin` | `PinTreeNode` | Empty | `200 {space_tree_node: SpaceTreeNode}` |
+| `DELETE S/tree/nodes/{node_id}/pin` | `UnpinTreeNode` | Empty | `200 {space_tree_node: SpaceTreeNode}` |
+| `POST S/chats` | Chat `CreateChat`, then Space `UpsertTreeNode` | Existing `CreateChatRequest` JSON excluding actor and path-bound space_id | `200 {space_tree_node: SpaceTreeNode}` |
+
+Names are nonempty after trimming and retain service-defined limits. Sort values
+are int32 >=0. Node kind is `text_chat` with `linked_chat:{id,type?}` or
+`voice_room` with `voice_room_id`, never both. New public nodes cannot request
+`is_system:true`; existing system nodes cannot be removed or converted. Reorder
+contains each current node once without duplicates and preserves the pin-group
+contract; stale/incomplete sets fail `409 failed_precondition`. Tree is an
+unpaged complete snapshot in canonical category/pin/sort order. Category deletion
+moves its nodes to root without deleting chats/rooms. Room deletion removes its
+tree node and follows the Voice cleanup contract. Chat->node creation must retain
+a durable operation record across both calls so retry cannot create a duplicate
+Chat; a failed node link is retried/compensated before success is exposed.
+
+### Audit read
+
+`GET S/audit-log` → `GetAuditLog`, membership and `SPACE_VIEW_AUDIT_LOG`.
+Query: `actor_profile_id?` (UUID), `action?` (exact nonempty action string),
+`from?` inclusive and `to?` exclusive (RFC3339 UTC, from < to), `page_size?`
+(integer 1..100, default50), `cursor?` (opaque). Unknown action is a valid filter
+with no matching rows. Success:
+`200 {audit_log_list:{entries:[AuditLogEntry],next_cursor:"..."}}`;
+an empty result uses `entries:[]`; the final page preserves all its returned
+entries and sets only `next_cursor` to the empty string. Order is
+`created_at DESC,id DESC`. `details_json` remains a redacted JSON **string**,
+not a second nested wire type. Filtering never bypasses Space/actor visibility.
+
+First page fixes an upper `(created_at,id)` snapshot ceiling. Subsequent pages use
+the same filters and page size; an HMAC-signed cursor binds Space, actor/access
+scope, normalized filters, ceiling, last key and expiry. Lifetime is 15 minutes
+from first page; current ACL is rechecked each page. Changed filter/page size,
+invalid/expired cursor is `400 invalid_argument`; access loss still denies even
+with a valid cursor. No cursor creates access to a frozen/purged Space. Durable
+ledger/outbox/retention semantics remain in
+[space-service.md](space-service.md#phase-0-space-audit-ledger-target-not-implemented).
+
+### Retry and activation
+
+Every non-lifecycle mutation above (existing or newly exposed), plus existing
+join/leave, accepts optional `Idempotency-Key: <UUID>`;
+new lifecycle routes use the mandatory body `operation_id`. Gateway copies the
+normalized key into a target protobuf `operation_id` before signing the deterministic
+request hash; it is not forwarded as an unsigned identity/operation metadata header.
+If both are present
+they must match. Without a key existing routes retain their characterized retry
+behavior and clients must reconcile with reads before retrying creates. For new
+non-lifecycle endpoints without a key, repeated PATCH applies the supplied values
+under current ACL; repeated entity DELETE after the resource is absent returns
+404 not_found; pinning an already pinned node or unpinning an unpinned node is a
+200 no-op returning the current node, without a new audit/event effect. A missing
+node still returns 404. New no-key requests never bypass current ACL or frozen
+state checks. Target
+Flutter always supplies a key. Space stores a durable canonical request digest
+and outcome for 30 days under `(actor_profile_id,operation_id)`, binding method,
+path Space and complete payload; proof uses a cryptographic digest, never plaintext.
+Identical completed replay by the original verified actor returns its saved
+outcome without new side effects; changed body/method/Space is `409 already_exists`.
+Concurrent in-progress replay returns `409 failed_precondition` and can be retried
+with the same key. Dependency failures leave resumable state, never a false success.
+Clients do not reuse keys after expiry and reconcile unknown outcomes rather than
+blindly reissue a destructive action. Transfer preserves its exact durable Auth
+receipt contract; successful retry works after the actor ceases to be owner.
+
+These changes require proto additions for lifecycle/proof/filter fields, signed
+transport binding for the protobuf operation fields, durable store/outbox migrations,
+Gateway schemas/error mapping and client contract tests. Legacy and target routes
+must not form an alternative authorization bypass: enable each vertical only
+after caller cutover and UI/REST/gRPC negative tests on the same SHA. This document
+freezes implementation inputs; it does not make the current endpoints production ready.
