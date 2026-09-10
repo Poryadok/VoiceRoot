@@ -45,6 +45,8 @@ type OwnershipJournal struct {
 	AuditID      uuid.UUID
 	EventID      uuid.UUID
 	AuthReceipt  *OwnershipAuthReceipt
+	RoleReceipt  *OwnershipRolePreparedReceipt
+	PendingAudit *OwnershipPendingAudit
 }
 
 // EncodeOwnershipBinding derives codec-v1 bytes and their digest exclusively
@@ -93,8 +95,7 @@ func (s *SpaceStore) ReserveOwnership(ctx context.Context, b OwnershipBinding) (
 	if err := lockOwnershipTransaction(ctx, tx, b.OperationID, b.SpaceID); err != nil {
 		return nil, err
 	}
-	existing, err := scanOwnershipJournal(tx.QueryRow(ctx,
-		`SELECT `+ownershipJournalColumns+` FROM ownership_journal WHERE operation_id=$1`, b.OperationID))
+	existing, err := loadOwnershipJournal(ctx, tx, b.OperationID)
 	if err == nil {
 		if !bytes.Equal(existing.BindingBytes, encoded) {
 			return nil, ErrOwnershipConflict
@@ -158,8 +159,7 @@ func (s *SpaceStore) LoadOwnership(ctx context.Context, operationID uuid.UUID) (
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("space store: pool not configured")
 	}
-	return scanOwnershipJournal(s.Pool.QueryRow(ctx,
-		`SELECT `+ownershipJournalColumns+` FROM ownership_journal WHERE operation_id=$1`, operationID))
+	return loadOwnershipJournal(ctx, s.Pool, operationID)
 }
 
 const ownershipJournalColumns = `operation_id,protocol_version,space_id,account_id,actor_profile_id,
@@ -167,7 +167,39 @@ const ownershipJournalColumns = `operation_id,protocol_version,space_id,account_
 	auth_receipt_id,auth_account_id,auth_profile_id,auth_space_id,auth_new_owner_profile_id,
 	auth_operation_id,auth_session_epoch,auth_consumed_at,auth_verified_factors`
 
+const ownershipJournalCommitColumns = ownershipJournalColumns + `,
+	role_receipt_bytes,role_receipt_hash,role_intent_bytes,role_intent_hash,
+	pending_audit_action,pending_audit_target_type,pending_audit_target_id,pending_audit_details::text`
+
+type ownershipJournalQuerier interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
+func loadOwnershipJournal(ctx context.Context, querier ownershipJournalQuerier, operationID uuid.UUID) (*OwnershipJournal, error) {
+	var hasCommitSchema bool
+	if err := querier.QueryRow(ctx, `SELECT EXISTS(
+		SELECT 1 FROM information_schema.columns
+		WHERE table_schema=current_schema() AND table_name='ownership_journal' AND column_name='role_receipt_bytes'
+	)`).Scan(&hasCommitSchema); err != nil {
+		return nil, err
+	}
+	if hasCommitSchema {
+		return scanOwnershipJournalCommit(querier.QueryRow(ctx,
+			`SELECT `+ownershipJournalCommitColumns+` FROM ownership_journal WHERE operation_id=$1`, operationID))
+	}
+	return scanOwnershipJournal(querier.QueryRow(ctx,
+		`SELECT `+ownershipJournalColumns+` FROM ownership_journal WHERE operation_id=$1`, operationID))
+}
+
 func scanOwnershipJournal(row pgx.Row) (*OwnershipJournal, error) {
+	return scanOwnershipJournalEvidence(row, false)
+}
+
+func scanOwnershipJournalCommit(row pgx.Row) (*OwnershipJournal, error) {
+	return scanOwnershipJournalEvidence(row, true)
+}
+
+func scanOwnershipJournalEvidence(row pgx.Row, includeCommit bool) (*OwnershipJournal, error) {
 	out := new(OwnershipJournal)
 	b := &out.Binding
 	var storedHash []byte
@@ -175,11 +207,19 @@ func scanOwnershipJournal(row pgx.Row) (*OwnershipJournal, error) {
 	var sessionEpoch *int64
 	var consumedAt *time.Time
 	var verifiedFactors []string
-	err := row.Scan(&b.OperationID, &b.ProtocolVersion, &b.SpaceID, &b.AccountID,
+	var roleReceiptBytes, roleReceiptHash, roleIntentBytes, roleIntentHash []byte
+	var pendingAction, pendingTargetType, pendingDetails *string
+	var pendingTargetID *uuid.UUID
+	destinations := []any{&b.OperationID, &b.ProtocolVersion, &b.SpaceID, &b.AccountID,
 		&b.ActorProfileID, &b.NewOwnerProfileID, &b.SessionEpoch, &b.ProofDigest,
 		&out.BindingBytes, &storedHash, &out.State, &out.AuditID, &out.EventID,
 		&receiptID, &accountID, &profileID, &spaceID, &newOwnerID, &operationID,
-		&sessionEpoch, &consumedAt, &verifiedFactors)
+		&sessionEpoch, &consumedAt, &verifiedFactors}
+	if includeCommit {
+		destinations = append(destinations, &roleReceiptBytes, &roleReceiptHash, &roleIntentBytes, &roleIntentHash,
+			&pendingAction, &pendingTargetType, &pendingTargetID, &pendingDetails)
+	}
+	err := row.Scan(destinations...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrOwnershipMissing
 	}
@@ -196,7 +236,8 @@ func scanOwnershipJournal(row pgx.Row) (*OwnershipJournal, error) {
 			operationID != nil || sessionEpoch != nil || consumedAt != nil || verifiedFactors != nil {
 			return nil, errors.New("ownership journal auth receipt evidence is incomplete")
 		}
-		return out, nil
+		return finishOwnershipCommitEvidence(out, includeCommit, roleReceiptBytes, roleReceiptHash, roleIntentBytes, roleIntentHash,
+			pendingAction, pendingTargetType, pendingTargetID, pendingDetails)
 	}
 	if accountID == nil || profileID == nil || spaceID == nil || newOwnerID == nil ||
 		operationID == nil || sessionEpoch == nil || consumedAt == nil || verifiedFactors == nil {
@@ -217,5 +258,61 @@ func scanOwnershipJournal(row pgx.Row) (*OwnershipJournal, error) {
 		return nil, errors.New("ownership journal auth receipt evidence is inconsistent")
 	}
 	out.AuthReceipt = &receipt
+	return finishOwnershipCommitEvidence(out, includeCommit, roleReceiptBytes, roleReceiptHash, roleIntentBytes, roleIntentHash,
+		pendingAction, pendingTargetType, pendingTargetID, pendingDetails)
+}
+
+func finishOwnershipCommitEvidence(out *OwnershipJournal, includeCommit bool, receiptBytes, receiptHash, intentBytes, intentHash []byte,
+	pendingAction, pendingTargetType *string, pendingTargetID *uuid.UUID, pendingDetails *string,
+) (*OwnershipJournal, error) {
+	if !includeCommit {
+		return out, nil
+	}
+	if receiptBytes == nil {
+		if receiptHash != nil || intentBytes != nil || intentHash != nil {
+			return nil, errors.New("ownership journal role receipt evidence is incomplete")
+		}
+	} else {
+		receiptDigest := sha256.Sum256(receiptBytes)
+		intentDigest := sha256.Sum256(intentBytes)
+		if len(receiptHash) != sha256.Size || intentBytes == nil || len(intentHash) != sha256.Size ||
+			!bytes.Equal(receiptHash, receiptDigest[:]) || !bytes.Equal(intentHash, intentDigest[:]) {
+			return nil, errors.New("ownership journal role receipt evidence is inconsistent")
+		}
+		var storedReceiptHash, storedIntentHash [32]byte
+		copy(storedReceiptHash[:], receiptHash)
+		copy(storedIntentHash[:], intentHash)
+		stored := &OwnershipRolePreparedReceipt{
+			ReceiptBytes: append([]byte(nil), receiptBytes...),
+			ReceiptHash:  storedReceiptHash,
+			IntentBytes:  append([]byte(nil), intentBytes...),
+			IntentHash:   storedIntentHash,
+		}
+		decoded, err := decodeOwnershipRolePreparedReceipt(out.Binding, stored.ReceiptBytes)
+		if err != nil || !ownershipRolePreparedReceiptsEqual(stored, decoded) {
+			return nil, errors.New("ownership journal role receipt evidence is inconsistent")
+		}
+		out.RoleReceipt = stored
+	}
+	if pendingAction == nil {
+		if pendingTargetType != nil || pendingTargetID != nil || pendingDetails != nil {
+			return nil, errors.New("ownership journal pending audit evidence is incomplete")
+		}
+		return out, nil
+	}
+	if out.RoleReceipt == nil || pendingTargetType == nil || pendingTargetID == nil || pendingDetails == nil ||
+		*pendingAction != "ownership_transferred" || *pendingTargetType != "profile" ||
+		*pendingTargetID != out.Binding.NewOwnerProfileID || *pendingDetails != "{}" {
+		return nil, errors.New("ownership journal pending audit evidence is inconsistent")
+	}
+	out.PendingAudit = &OwnershipPendingAudit{
+		ID:             out.AuditID,
+		SpaceID:        out.Binding.SpaceID,
+		ActorProfileID: out.Binding.ActorProfileID,
+		Action:         *pendingAction,
+		TargetType:     *pendingTargetType,
+		TargetID:       *pendingTargetID,
+		DetailsJSON:    *pendingDetails,
+	}
 	return out, nil
 }

@@ -85,8 +85,7 @@ func (s *SpaceStore) ConfirmOwnershipProof(ctx context.Context, binding Ownershi
 	if err := lockOwnershipTransaction(ctx, tx, binding.OperationID, binding.SpaceID); err != nil {
 		return nil, err
 	}
-	existing, err := scanOwnershipJournal(tx.QueryRow(ctx,
-		`SELECT `+ownershipJournalColumns+` FROM ownership_journal WHERE operation_id=$1`, binding.OperationID))
+	existing, err := loadOwnershipJournal(ctx, tx, binding.OperationID)
 	if err != nil {
 		return nil, err
 	}
@@ -143,8 +142,7 @@ func (s *SpaceStore) DecideOwnershipAbort(ctx context.Context, binding Ownership
 	if err := lockOwnershipTransaction(ctx, tx, binding.OperationID, binding.SpaceID); err != nil {
 		return nil, err
 	}
-	existing, err := scanOwnershipJournal(tx.QueryRow(ctx,
-		`SELECT `+ownershipJournalColumns+` FROM ownership_journal WHERE operation_id=$1`, binding.OperationID))
+	existing, err := loadOwnershipJournal(ctx, tx, binding.OperationID)
 	if err != nil {
 		return nil, err
 	}
@@ -154,14 +152,17 @@ func (s *SpaceStore) DecideOwnershipAbort(ctx context.Context, binding Ownership
 	switch existing.State {
 	case "abort_decided":
 		return existing, nil
-	case "reserved", "proof_confirmed":
-		aborted, err := scanOwnershipJournal(tx.QueryRow(ctx, `UPDATE ownership_journal
+	case "reserved", "proof_confirmed", "prepared":
+		command, err := tx.Exec(ctx, `UPDATE ownership_journal
 			SET state='abort_decided',updated_at=now()
-			WHERE operation_id=$1 AND state IN ('reserved','proof_confirmed')
-			RETURNING `+ownershipJournalColumns, binding.OperationID))
-		if errors.Is(err, ErrOwnershipMissing) {
+			WHERE operation_id=$1 AND state IN ('reserved','proof_confirmed','prepared')`, binding.OperationID)
+		if err != nil {
+			return nil, err
+		}
+		if command.RowsAffected() != 1 {
 			return nil, ErrOwnershipStateTransition
 		}
+		aborted, err := loadOwnershipJournal(ctx, tx, binding.OperationID)
 		if err != nil {
 			return nil, err
 		}
