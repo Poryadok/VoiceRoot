@@ -15,6 +15,24 @@ import 'dart:convert' as $convert;
 import 'dart:core' as $core;
 import 'dart:typed_data' as $typed_data;
 
+@$core.Deprecated('Use ownershipTransferStateDescriptor instead')
+const OwnershipTransferState$json = {
+  '1': 'OwnershipTransferState',
+  '2': [
+    {'1': 'OWNERSHIP_TRANSFER_STATE_UNSPECIFIED', '2': 0},
+    {'1': 'OWNERSHIP_TRANSFER_STATE_PREPARED', '2': 1},
+    {'1': 'OWNERSHIP_TRANSFER_STATE_FINALIZED', '2': 2},
+    {'1': 'OWNERSHIP_TRANSFER_STATE_ABORTED', '2': 3},
+  ],
+};
+
+/// Descriptor for `OwnershipTransferState`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List ownershipTransferStateDescriptor = $convert.base64Decode(
+    'ChZPd25lcnNoaXBUcmFuc2ZlclN0YXRlEigKJE9XTkVSU0hJUF9UUkFOU0ZFUl9TVEFURV9VTl'
+    'NQRUNJRklFRBAAEiUKIU9XTkVSU0hJUF9UUkFOU0ZFUl9TVEFURV9QUkVQQVJFRBABEiYKIk9X'
+    'TkVSU0hJUF9UUkFOU0ZFUl9TVEFURV9GSU5BTElaRUQQAhIkCiBPV05FUlNISVBfVFJBTlNGRV'
+    'JfU1RBVEVfQUJPUlRFRBAD');
+
 @$core.Deprecated('Use bootstrapSpaceRolesRequestDescriptor instead')
 const BootstrapSpaceRolesRequest$json = {
   '1': 'BootstrapSpaceRolesRequest',
@@ -171,6 +189,235 @@ final $typed_data.Uint8List compensateOwnershipTransferResponseDescriptor =
     $convert.base64Decode(
         'CiNDb21wZW5zYXRlT3duZXJzaGlwVHJhbnNmZXJSZXNwb25zZRI3ChhjdXJyZW50X293bmVyX3'
         'Byb2ZpbGVfaWQYASABKAlSFWN1cnJlbnRPd25lclByb2ZpbGVJZA==');
+
+@$core.Deprecated('Use ownershipTransferIntentDescriptor instead')
+const OwnershipTransferIntent$json = {
+  '1': 'OwnershipTransferIntent',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'space_id', '3': 2, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'old_owner_profile_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '10': 'oldOwnerProfileId'
+    },
+    {
+      '1': 'new_owner_profile_id',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '10': 'newOwnerProfileId'
+    },
+    {'1': 'operation_id', '3': 5, '4': 1, '5': 9, '10': 'operationId'},
+  ],
+};
+
+/// Descriptor for `OwnershipTransferIntent`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List ownershipTransferIntentDescriptor = $convert.base64Decode(
+    'ChdPd25lcnNoaXBUcmFuc2ZlckludGVudBIpChBwcm90b2NvbF92ZXJzaW9uGAEgASgNUg9wcm'
+    '90b2NvbFZlcnNpb24SGQoIc3BhY2VfaWQYAiABKAlSB3NwYWNlSWQSLwoUb2xkX293bmVyX3By'
+    'b2ZpbGVfaWQYAyABKAlSEW9sZE93bmVyUHJvZmlsZUlkEi8KFG5ld19vd25lcl9wcm9maWxlX2'
+    'lkGAQgASgJUhFuZXdPd25lclByb2ZpbGVJZBIhCgxvcGVyYXRpb25faWQYBSABKAlSC29wZXJh'
+    'dGlvbklk');
+
+@$core.Deprecated('Use ownershipTransferReceiptDescriptor instead')
+const OwnershipTransferReceipt$json = {
+  '1': 'OwnershipTransferReceipt',
+  '2': [
+    {
+      '1': 'intent',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.role.v1.OwnershipTransferIntent',
+      '10': 'intent'
+    },
+    {
+      '1': 'state',
+      '3': 2,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.role.v1.OwnershipTransferState',
+      '10': 'state'
+    },
+    {
+      '1': 'current_owner_profile_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '10': 'currentOwnerProfileId'
+    },
+  ],
+};
+
+/// Descriptor for `OwnershipTransferReceipt`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List ownershipTransferReceiptDescriptor = $convert.base64Decode(
+    'ChhPd25lcnNoaXBUcmFuc2ZlclJlY2VpcHQSPgoGaW50ZW50GAEgASgLMiYudm9pY2Uucm9sZS'
+    '52MS5Pd25lcnNoaXBUcmFuc2ZlckludGVudFIGaW50ZW50EjsKBXN0YXRlGAIgASgOMiUudm9p'
+    'Y2Uucm9sZS52MS5Pd25lcnNoaXBUcmFuc2ZlclN0YXRlUgVzdGF0ZRI3ChhjdXJyZW50X293bm'
+    'VyX3Byb2ZpbGVfaWQYAyABKAlSFWN1cnJlbnRPd25lclByb2ZpbGVJZA==');
+
+@$core
+    .Deprecated('Use getOwnershipTransferCapabilitiesRequestDescriptor instead')
+const GetOwnershipTransferCapabilitiesRequest$json = {
+  '1': 'GetOwnershipTransferCapabilitiesRequest',
+};
+
+/// Descriptor for `GetOwnershipTransferCapabilitiesRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getOwnershipTransferCapabilitiesRequestDescriptor =
+    $convert.base64Decode(
+        'CidHZXRPd25lcnNoaXBUcmFuc2ZlckNhcGFiaWxpdGllc1JlcXVlc3Q=');
+
+@$core.Deprecated(
+    'Use getOwnershipTransferCapabilitiesResponseDescriptor instead')
+const GetOwnershipTransferCapabilitiesResponse$json = {
+  '1': 'GetOwnershipTransferCapabilitiesResponse',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {
+      '1': 'supported_methods',
+      '3': 2,
+      '4': 3,
+      '5': 9,
+      '10': 'supportedMethods'
+    },
+  ],
+};
+
+/// Descriptor for `GetOwnershipTransferCapabilitiesResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getOwnershipTransferCapabilitiesResponseDescriptor =
+    $convert.base64Decode(
+        'CihHZXRPd25lcnNoaXBUcmFuc2ZlckNhcGFiaWxpdGllc1Jlc3BvbnNlEikKEHByb3RvY29sX3'
+        'ZlcnNpb24YASABKA1SD3Byb3RvY29sVmVyc2lvbhIrChFzdXBwb3J0ZWRfbWV0aG9kcxgCIAMo'
+        'CVIQc3VwcG9ydGVkTWV0aG9kcw==');
+
+@$core.Deprecated('Use prepareOwnershipTransferRequestDescriptor instead')
+const PrepareOwnershipTransferRequest$json = {
+  '1': 'PrepareOwnershipTransferRequest',
+  '2': [
+    {
+      '1': 'intent',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.role.v1.OwnershipTransferIntent',
+      '10': 'intent'
+    },
+  ],
+};
+
+/// Descriptor for `PrepareOwnershipTransferRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List prepareOwnershipTransferRequestDescriptor =
+    $convert.base64Decode(
+        'Ch9QcmVwYXJlT3duZXJzaGlwVHJhbnNmZXJSZXF1ZXN0Ej4KBmludGVudBgBIAEoCzImLnZvaW'
+        'NlLnJvbGUudjEuT3duZXJzaGlwVHJhbnNmZXJJbnRlbnRSBmludGVudA==');
+
+@$core.Deprecated('Use prepareOwnershipTransferResponseDescriptor instead')
+const PrepareOwnershipTransferResponse$json = {
+  '1': 'PrepareOwnershipTransferResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.role.v1.OwnershipTransferReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `PrepareOwnershipTransferResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List prepareOwnershipTransferResponseDescriptor =
+    $convert.base64Decode(
+        'CiBQcmVwYXJlT3duZXJzaGlwVHJhbnNmZXJSZXNwb25zZRJBCgdyZWNlaXB0GAEgASgLMicudm'
+        '9pY2Uucm9sZS52MS5Pd25lcnNoaXBUcmFuc2ZlclJlY2VpcHRSB3JlY2VpcHQ=');
+
+@$core.Deprecated('Use finalizeOwnershipTransferRequestDescriptor instead')
+const FinalizeOwnershipTransferRequest$json = {
+  '1': 'FinalizeOwnershipTransferRequest',
+  '2': [
+    {
+      '1': 'intent',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.role.v1.OwnershipTransferIntent',
+      '10': 'intent'
+    },
+  ],
+};
+
+/// Descriptor for `FinalizeOwnershipTransferRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List finalizeOwnershipTransferRequestDescriptor =
+    $convert.base64Decode(
+        'CiBGaW5hbGl6ZU93bmVyc2hpcFRyYW5zZmVyUmVxdWVzdBI+CgZpbnRlbnQYASABKAsyJi52b2'
+        'ljZS5yb2xlLnYxLk93bmVyc2hpcFRyYW5zZmVySW50ZW50UgZpbnRlbnQ=');
+
+@$core.Deprecated('Use finalizeOwnershipTransferResponseDescriptor instead')
+const FinalizeOwnershipTransferResponse$json = {
+  '1': 'FinalizeOwnershipTransferResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.role.v1.OwnershipTransferReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `FinalizeOwnershipTransferResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List finalizeOwnershipTransferResponseDescriptor =
+    $convert.base64Decode(
+        'CiFGaW5hbGl6ZU93bmVyc2hpcFRyYW5zZmVyUmVzcG9uc2USQQoHcmVjZWlwdBgBIAEoCzInLn'
+        'ZvaWNlLnJvbGUudjEuT3duZXJzaGlwVHJhbnNmZXJSZWNlaXB0UgdyZWNlaXB0');
+
+@$core.Deprecated('Use abortOwnershipTransferRequestDescriptor instead')
+const AbortOwnershipTransferRequest$json = {
+  '1': 'AbortOwnershipTransferRequest',
+  '2': [
+    {
+      '1': 'intent',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.role.v1.OwnershipTransferIntent',
+      '10': 'intent'
+    },
+  ],
+};
+
+/// Descriptor for `AbortOwnershipTransferRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List abortOwnershipTransferRequestDescriptor =
+    $convert.base64Decode(
+        'Ch1BYm9ydE93bmVyc2hpcFRyYW5zZmVyUmVxdWVzdBI+CgZpbnRlbnQYASABKAsyJi52b2ljZS'
+        '5yb2xlLnYxLk93bmVyc2hpcFRyYW5zZmVySW50ZW50UgZpbnRlbnQ=');
+
+@$core.Deprecated('Use abortOwnershipTransferResponseDescriptor instead')
+const AbortOwnershipTransferResponse$json = {
+  '1': 'AbortOwnershipTransferResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.role.v1.OwnershipTransferReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `AbortOwnershipTransferResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List abortOwnershipTransferResponseDescriptor =
+    $convert.base64Decode(
+        'Ch5BYm9ydE93bmVyc2hpcFRyYW5zZmVyUmVzcG9uc2USQQoHcmVjZWlwdBgBIAEoCzInLnZvaW'
+        'NlLnJvbGUudjEuT3duZXJzaGlwVHJhbnNmZXJSZWNlaXB0UgdyZWNlaXB0');
 
 @$core.Deprecated('Use roleDescriptor instead')
 const Role$json = {

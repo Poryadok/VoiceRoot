@@ -18,8 +18,11 @@ import 'package:protobuf/well_known_types/google/protobuf/timestamp.pb.dart'
     as $1;
 
 import '../../chat/v1/chat.pb.dart' as $2;
+import 'role.pbenum.dart';
 
 export 'package:protobuf/protobuf.dart' show GeneratedMessageGenericExtensions;
+
+export 'role.pbenum.dart';
 
 class BootstrapSpaceRolesRequest extends $pb.GeneratedMessage {
   factory BootstrapSpaceRolesRequest({
@@ -549,6 +552,693 @@ class CompensateOwnershipTransferResponse extends $pb.GeneratedMessage {
   $core.bool hasCurrentOwnerProfileId() => $_has(0);
   @$pb.TagNumber(1)
   void clearCurrentOwnerProfileId() => $_clearField(1);
+}
+
+/// Immutable cross-action identity. Missing intent and protocol_version other than 2
+/// are rejected before mutation. UUIDs retain the original old/new ordering.
+/// The ledger hashes and retains the deterministic encoding, INCLUDING unknown
+/// intent fields; receipts echo that exact intent rather than reconstructing IDs.
+/// Space separately binds account/session/proof data in its durable journal.
+class OwnershipTransferIntent extends $pb.GeneratedMessage {
+  factory OwnershipTransferIntent({
+    $core.int? protocolVersion,
+    $core.String? spaceId,
+    $core.String? oldOwnerProfileId,
+    $core.String? newOwnerProfileId,
+    $core.String? operationId,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (oldOwnerProfileId != null) result.oldOwnerProfileId = oldOwnerProfileId;
+    if (newOwnerProfileId != null) result.newOwnerProfileId = newOwnerProfileId;
+    if (operationId != null) result.operationId = operationId;
+    return result;
+  }
+
+  OwnershipTransferIntent._();
+
+  factory OwnershipTransferIntent.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory OwnershipTransferIntent.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'OwnershipTransferIntent',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(3, _omitFieldNames ? '' : 'oldOwnerProfileId')
+    ..aOS(4, _omitFieldNames ? '' : 'newOwnerProfileId')
+    ..aOS(5, _omitFieldNames ? '' : 'operationId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  OwnershipTransferIntent clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  OwnershipTransferIntent copyWith(
+          void Function(OwnershipTransferIntent) updates) =>
+      super.copyWith((message) => updates(message as OwnershipTransferIntent))
+          as OwnershipTransferIntent;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static OwnershipTransferIntent create() => OwnershipTransferIntent._();
+  @$core.override
+  OwnershipTransferIntent createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static OwnershipTransferIntent getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<OwnershipTransferIntent>(create);
+  static OwnershipTransferIntent? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get spaceId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set spaceId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasSpaceId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSpaceId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get oldOwnerProfileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set oldOwnerProfileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasOldOwnerProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearOldOwnerProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get newOwnerProfileId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set newOwnerProfileId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasNewOwnerProfileId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearNewOwnerProfileId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get operationId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set operationId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasOperationId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearOperationId() => $_clearField(5);
+}
+
+class OwnershipTransferReceipt extends $pb.GeneratedMessage {
+  factory OwnershipTransferReceipt({
+    OwnershipTransferIntent? intent,
+    OwnershipTransferState? state,
+    $core.String? currentOwnerProfileId,
+  }) {
+    final result = create();
+    if (intent != null) result.intent = intent;
+    if (state != null) result.state = state;
+    if (currentOwnerProfileId != null)
+      result.currentOwnerProfileId = currentOwnerProfileId;
+    return result;
+  }
+
+  OwnershipTransferReceipt._();
+
+  factory OwnershipTransferReceipt.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory OwnershipTransferReceipt.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'OwnershipTransferReceipt',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aOM<OwnershipTransferIntent>(1, _omitFieldNames ? '' : 'intent',
+        subBuilder: OwnershipTransferIntent.create)
+    ..aE<OwnershipTransferState>(2, _omitFieldNames ? '' : 'state',
+        enumValues: OwnershipTransferState.values)
+    ..aOS(3, _omitFieldNames ? '' : 'currentOwnerProfileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  OwnershipTransferReceipt clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  OwnershipTransferReceipt copyWith(
+          void Function(OwnershipTransferReceipt) updates) =>
+      super.copyWith((message) => updates(message as OwnershipTransferReceipt))
+          as OwnershipTransferReceipt;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static OwnershipTransferReceipt create() => OwnershipTransferReceipt._();
+  @$core.override
+  OwnershipTransferReceipt createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static OwnershipTransferReceipt getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<OwnershipTransferReceipt>(create);
+  static OwnershipTransferReceipt? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  OwnershipTransferIntent get intent => $_getN(0);
+  @$pb.TagNumber(1)
+  set intent(OwnershipTransferIntent value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasIntent() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearIntent() => $_clearField(1);
+  @$pb.TagNumber(1)
+  OwnershipTransferIntent ensureIntent() => $_ensure(0);
+
+  @$pb.TagNumber(2)
+  OwnershipTransferState get state => $_getN(1);
+  @$pb.TagNumber(2)
+  set state(OwnershipTransferState value) => $_setField(2, value);
+  @$pb.TagNumber(2)
+  $core.bool hasState() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearState() => $_clearField(2);
+
+  /// Empty while prepared; new owner when finalized; old owner when aborted.
+  @$pb.TagNumber(3)
+  $core.String get currentOwnerProfileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set currentOwnerProfileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasCurrentOwnerProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearCurrentOwnerProfileId() => $_clearField(3);
+}
+
+class GetOwnershipTransferCapabilitiesRequest extends $pb.GeneratedMessage {
+  factory GetOwnershipTransferCapabilitiesRequest() => create();
+
+  GetOwnershipTransferCapabilitiesRequest._();
+
+  factory GetOwnershipTransferCapabilitiesRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetOwnershipTransferCapabilitiesRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetOwnershipTransferCapabilitiesRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetOwnershipTransferCapabilitiesRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetOwnershipTransferCapabilitiesRequest copyWith(
+          void Function(GetOwnershipTransferCapabilitiesRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as GetOwnershipTransferCapabilitiesRequest))
+          as GetOwnershipTransferCapabilitiesRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetOwnershipTransferCapabilitiesRequest create() =>
+      GetOwnershipTransferCapabilitiesRequest._();
+  @$core.override
+  GetOwnershipTransferCapabilitiesRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetOwnershipTransferCapabilitiesRequest getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          GetOwnershipTransferCapabilitiesRequest>(create);
+  static GetOwnershipTransferCapabilitiesRequest? _defaultInstance;
+}
+
+/// An authenticated protocol 2 and all three exact full transition RPC paths are
+/// required before journal reservation. Missing/incompatible capability denies;
+/// no network-error or old-server fallback to v1 is permitted. Schema availability
+/// alone does not advertise support or activate the production ownership flow.
+class GetOwnershipTransferCapabilitiesResponse extends $pb.GeneratedMessage {
+  factory GetOwnershipTransferCapabilitiesResponse({
+    $core.int? protocolVersion,
+    $core.Iterable<$core.String>? supportedMethods,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (supportedMethods != null)
+      result.supportedMethods.addAll(supportedMethods);
+    return result;
+  }
+
+  GetOwnershipTransferCapabilitiesResponse._();
+
+  factory GetOwnershipTransferCapabilitiesResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetOwnershipTransferCapabilitiesResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetOwnershipTransferCapabilitiesResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..pPS(2, _omitFieldNames ? '' : 'supportedMethods')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetOwnershipTransferCapabilitiesResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetOwnershipTransferCapabilitiesResponse copyWith(
+          void Function(GetOwnershipTransferCapabilitiesResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as GetOwnershipTransferCapabilitiesResponse))
+          as GetOwnershipTransferCapabilitiesResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetOwnershipTransferCapabilitiesResponse create() =>
+      GetOwnershipTransferCapabilitiesResponse._();
+  @$core.override
+  GetOwnershipTransferCapabilitiesResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetOwnershipTransferCapabilitiesResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          GetOwnershipTransferCapabilitiesResponse>(create);
+  static GetOwnershipTransferCapabilitiesResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $pb.PbList<$core.String> get supportedMethods => $_getList(1);
+}
+
+/// Each action retains its first accepted full deterministic request hash,
+/// INCLUDING unknown wrapper fields, separately from the shared intent hash.
+/// JWT request_hash binds the full request; its rpc claim binds the exact action.
+/// Changed intent or same-action request conflicts with ALREADY_EXISTS.
+class PrepareOwnershipTransferRequest extends $pb.GeneratedMessage {
+  factory PrepareOwnershipTransferRequest({
+    OwnershipTransferIntent? intent,
+  }) {
+    final result = create();
+    if (intent != null) result.intent = intent;
+    return result;
+  }
+
+  PrepareOwnershipTransferRequest._();
+
+  factory PrepareOwnershipTransferRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory PrepareOwnershipTransferRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'PrepareOwnershipTransferRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aOM<OwnershipTransferIntent>(1, _omitFieldNames ? '' : 'intent',
+        subBuilder: OwnershipTransferIntent.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PrepareOwnershipTransferRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PrepareOwnershipTransferRequest copyWith(
+          void Function(PrepareOwnershipTransferRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as PrepareOwnershipTransferRequest))
+          as PrepareOwnershipTransferRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static PrepareOwnershipTransferRequest create() =>
+      PrepareOwnershipTransferRequest._();
+  @$core.override
+  PrepareOwnershipTransferRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static PrepareOwnershipTransferRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<PrepareOwnershipTransferRequest>(
+          create);
+  static PrepareOwnershipTransferRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  OwnershipTransferIntent get intent => $_getN(0);
+  @$pb.TagNumber(1)
+  set intent(OwnershipTransferIntent value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasIntent() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearIntent() => $_clearField(1);
+  @$pb.TagNumber(1)
+  OwnershipTransferIntent ensureIntent() => $_ensure(0);
+}
+
+class PrepareOwnershipTransferResponse extends $pb.GeneratedMessage {
+  factory PrepareOwnershipTransferResponse({
+    OwnershipTransferReceipt? receipt,
+  }) {
+    final result = create();
+    if (receipt != null) result.receipt = receipt;
+    return result;
+  }
+
+  PrepareOwnershipTransferResponse._();
+
+  factory PrepareOwnershipTransferResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory PrepareOwnershipTransferResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'PrepareOwnershipTransferResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aOM<OwnershipTransferReceipt>(1, _omitFieldNames ? '' : 'receipt',
+        subBuilder: OwnershipTransferReceipt.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PrepareOwnershipTransferResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PrepareOwnershipTransferResponse copyWith(
+          void Function(PrepareOwnershipTransferResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as PrepareOwnershipTransferResponse))
+          as PrepareOwnershipTransferResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static PrepareOwnershipTransferResponse create() =>
+      PrepareOwnershipTransferResponse._();
+  @$core.override
+  PrepareOwnershipTransferResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static PrepareOwnershipTransferResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<PrepareOwnershipTransferResponse>(
+          create);
+  static PrepareOwnershipTransferResponse? _defaultInstance;
+
+  /// Only PREPARED; terminal operations cannot be prepared again.
+  @$pb.TagNumber(1)
+  OwnershipTransferReceipt get receipt => $_getN(0);
+  @$pb.TagNumber(1)
+  set receipt(OwnershipTransferReceipt value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasReceipt() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearReceipt() => $_clearField(1);
+  @$pb.TagNumber(1)
+  OwnershipTransferReceipt ensureReceipt() => $_ensure(0);
+}
+
+/// Same immutable intent and per-action full request binding rules as Prepare.
+/// Only a durable Space commit decision may issue Finalize; absent/aborted denies.
+class FinalizeOwnershipTransferRequest extends $pb.GeneratedMessage {
+  factory FinalizeOwnershipTransferRequest({
+    OwnershipTransferIntent? intent,
+  }) {
+    final result = create();
+    if (intent != null) result.intent = intent;
+    return result;
+  }
+
+  FinalizeOwnershipTransferRequest._();
+
+  factory FinalizeOwnershipTransferRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory FinalizeOwnershipTransferRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'FinalizeOwnershipTransferRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aOM<OwnershipTransferIntent>(1, _omitFieldNames ? '' : 'intent',
+        subBuilder: OwnershipTransferIntent.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  FinalizeOwnershipTransferRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  FinalizeOwnershipTransferRequest copyWith(
+          void Function(FinalizeOwnershipTransferRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as FinalizeOwnershipTransferRequest))
+          as FinalizeOwnershipTransferRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static FinalizeOwnershipTransferRequest create() =>
+      FinalizeOwnershipTransferRequest._();
+  @$core.override
+  FinalizeOwnershipTransferRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static FinalizeOwnershipTransferRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<FinalizeOwnershipTransferRequest>(
+          create);
+  static FinalizeOwnershipTransferRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  OwnershipTransferIntent get intent => $_getN(0);
+  @$pb.TagNumber(1)
+  set intent(OwnershipTransferIntent value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasIntent() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearIntent() => $_clearField(1);
+  @$pb.TagNumber(1)
+  OwnershipTransferIntent ensureIntent() => $_ensure(0);
+}
+
+class FinalizeOwnershipTransferResponse extends $pb.GeneratedMessage {
+  factory FinalizeOwnershipTransferResponse({
+    OwnershipTransferReceipt? receipt,
+  }) {
+    final result = create();
+    if (receipt != null) result.receipt = receipt;
+    return result;
+  }
+
+  FinalizeOwnershipTransferResponse._();
+
+  factory FinalizeOwnershipTransferResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory FinalizeOwnershipTransferResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'FinalizeOwnershipTransferResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aOM<OwnershipTransferReceipt>(1, _omitFieldNames ? '' : 'receipt',
+        subBuilder: OwnershipTransferReceipt.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  FinalizeOwnershipTransferResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  FinalizeOwnershipTransferResponse copyWith(
+          void Function(FinalizeOwnershipTransferResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as FinalizeOwnershipTransferResponse))
+          as FinalizeOwnershipTransferResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static FinalizeOwnershipTransferResponse create() =>
+      FinalizeOwnershipTransferResponse._();
+  @$core.override
+  FinalizeOwnershipTransferResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static FinalizeOwnershipTransferResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<FinalizeOwnershipTransferResponse>(
+          create);
+  static FinalizeOwnershipTransferResponse? _defaultInstance;
+
+  /// Only FINALIZED, including identical terminal retries.
+  @$pb.TagNumber(1)
+  OwnershipTransferReceipt get receipt => $_getN(0);
+  @$pb.TagNumber(1)
+  set receipt(OwnershipTransferReceipt value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasReceipt() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearReceipt() => $_clearField(1);
+  @$pb.TagNumber(1)
+  OwnershipTransferReceipt ensureReceipt() => $_ensure(0);
+}
+
+/// Same immutable intent and per-action full request binding rules as Prepare.
+/// Only a durable Space abort decision may issue Abort; absent Abort fences delayed
+/// Prepare after sole-old-owner validation. A finalized operation cannot abort.
+class AbortOwnershipTransferRequest extends $pb.GeneratedMessage {
+  factory AbortOwnershipTransferRequest({
+    OwnershipTransferIntent? intent,
+  }) {
+    final result = create();
+    if (intent != null) result.intent = intent;
+    return result;
+  }
+
+  AbortOwnershipTransferRequest._();
+
+  factory AbortOwnershipTransferRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory AbortOwnershipTransferRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'AbortOwnershipTransferRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aOM<OwnershipTransferIntent>(1, _omitFieldNames ? '' : 'intent',
+        subBuilder: OwnershipTransferIntent.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AbortOwnershipTransferRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AbortOwnershipTransferRequest copyWith(
+          void Function(AbortOwnershipTransferRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as AbortOwnershipTransferRequest))
+          as AbortOwnershipTransferRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static AbortOwnershipTransferRequest create() =>
+      AbortOwnershipTransferRequest._();
+  @$core.override
+  AbortOwnershipTransferRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static AbortOwnershipTransferRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<AbortOwnershipTransferRequest>(create);
+  static AbortOwnershipTransferRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  OwnershipTransferIntent get intent => $_getN(0);
+  @$pb.TagNumber(1)
+  set intent(OwnershipTransferIntent value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasIntent() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearIntent() => $_clearField(1);
+  @$pb.TagNumber(1)
+  OwnershipTransferIntent ensureIntent() => $_ensure(0);
+}
+
+class AbortOwnershipTransferResponse extends $pb.GeneratedMessage {
+  factory AbortOwnershipTransferResponse({
+    OwnershipTransferReceipt? receipt,
+  }) {
+    final result = create();
+    if (receipt != null) result.receipt = receipt;
+    return result;
+  }
+
+  AbortOwnershipTransferResponse._();
+
+  factory AbortOwnershipTransferResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory AbortOwnershipTransferResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'AbortOwnershipTransferResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aOM<OwnershipTransferReceipt>(1, _omitFieldNames ? '' : 'receipt',
+        subBuilder: OwnershipTransferReceipt.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AbortOwnershipTransferResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AbortOwnershipTransferResponse copyWith(
+          void Function(AbortOwnershipTransferResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as AbortOwnershipTransferResponse))
+          as AbortOwnershipTransferResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static AbortOwnershipTransferResponse create() =>
+      AbortOwnershipTransferResponse._();
+  @$core.override
+  AbortOwnershipTransferResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static AbortOwnershipTransferResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<AbortOwnershipTransferResponse>(create);
+  static AbortOwnershipTransferResponse? _defaultInstance;
+
+  /// Only ABORTED, including identical terminal retries.
+  @$pb.TagNumber(1)
+  OwnershipTransferReceipt get receipt => $_getN(0);
+  @$pb.TagNumber(1)
+  set receipt(OwnershipTransferReceipt value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasReceipt() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearReceipt() => $_clearField(1);
+  @$pb.TagNumber(1)
+  OwnershipTransferReceipt ensureReceipt() => $_ensure(0);
 }
 
 class Role extends $pb.GeneratedMessage {
