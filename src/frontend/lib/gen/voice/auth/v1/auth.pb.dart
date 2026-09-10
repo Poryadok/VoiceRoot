@@ -2946,6 +2946,485 @@ class RevokeSessionResponse extends $pb.GeneratedMessage {
   static RevokeSessionResponse? _defaultInstance;
 }
 
+/// Actor account/profile/epoch are derived exclusively from the verified Gateway principal.
+class IssueOwnershipTransferProofRequest extends $pb.GeneratedMessage {
+  factory IssueOwnershipTransferProofRequest({
+    $core.String? spaceId,
+    $core.String? newOwnerProfileId,
+    $core.String? operationId,
+    $core.String? password,
+    $core.String? totpCode,
+    $core.String? backupCode,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (newOwnerProfileId != null) result.newOwnerProfileId = newOwnerProfileId;
+    if (operationId != null) result.operationId = operationId;
+    if (password != null) result.password = password;
+    if (totpCode != null) result.totpCode = totpCode;
+    if (backupCode != null) result.backupCode = backupCode;
+    return result;
+  }
+
+  IssueOwnershipTransferProofRequest._();
+
+  factory IssueOwnershipTransferProofRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory IssueOwnershipTransferProofRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'IssueOwnershipTransferProofRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'newOwnerProfileId')
+    ..aOS(3, _omitFieldNames ? '' : 'operationId')
+    ..aOS(4, _omitFieldNames ? '' : 'password')
+    ..aOS(5, _omitFieldNames ? '' : 'totpCode')
+    ..aOS(6, _omitFieldNames ? '' : 'backupCode')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  IssueOwnershipTransferProofRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  IssueOwnershipTransferProofRequest copyWith(
+          void Function(IssueOwnershipTransferProofRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as IssueOwnershipTransferProofRequest))
+          as IssueOwnershipTransferProofRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static IssueOwnershipTransferProofRequest create() =>
+      IssueOwnershipTransferProofRequest._();
+  @$core.override
+  IssueOwnershipTransferProofRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static IssueOwnershipTransferProofRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<IssueOwnershipTransferProofRequest>(
+          create);
+  static IssueOwnershipTransferProofRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get newOwnerProfileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set newOwnerProfileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasNewOwnerProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearNewOwnerProfileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get operationId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set operationId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasOperationId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearOperationId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get password => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set password($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasPassword() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearPassword() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get totpCode => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set totpCode($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasTotpCode() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearTotpCode() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get backupCode => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set backupCode($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasBackupCode() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearBackupCode() => $_clearField(6);
+}
+
+class IssueOwnershipTransferProofResponse extends $pb.GeneratedMessage {
+  factory IssueOwnershipTransferProofResponse({
+    $core.String? proof,
+    $1.Timestamp? expiresAt,
+  }) {
+    final result = create();
+    if (proof != null) result.proof = proof;
+    if (expiresAt != null) result.expiresAt = expiresAt;
+    return result;
+  }
+
+  IssueOwnershipTransferProofResponse._();
+
+  factory IssueOwnershipTransferProofResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory IssueOwnershipTransferProofResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'IssueOwnershipTransferProofResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'proof')
+    ..aOM<$1.Timestamp>(2, _omitFieldNames ? '' : 'expiresAt',
+        subBuilder: $1.Timestamp.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  IssueOwnershipTransferProofResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  IssueOwnershipTransferProofResponse copyWith(
+          void Function(IssueOwnershipTransferProofResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as IssueOwnershipTransferProofResponse))
+          as IssueOwnershipTransferProofResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static IssueOwnershipTransferProofResponse create() =>
+      IssueOwnershipTransferProofResponse._();
+  @$core.override
+  IssueOwnershipTransferProofResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static IssueOwnershipTransferProofResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          IssueOwnershipTransferProofResponse>(create);
+  static IssueOwnershipTransferProofResponse? _defaultInstance;
+
+  /// Opaque secret, returned once. Never persist or log outside Auth's hash-only store.
+  @$pb.TagNumber(1)
+  $core.String get proof => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set proof($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProof() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProof() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $1.Timestamp get expiresAt => $_getN(1);
+  @$pb.TagNumber(2)
+  set expiresAt($1.Timestamp value) => $_setField(2, value);
+  @$pb.TagNumber(2)
+  $core.bool hasExpiresAt() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearExpiresAt() => $_clearField(2);
+  @$pb.TagNumber(2)
+  $1.Timestamp ensureExpiresAt() => $_ensure(1);
+}
+
+/// Internal Space service principal only; actor identifiers are signed request data.
+class ConsumeOwnershipTransferProofRequest extends $pb.GeneratedMessage {
+  factory ConsumeOwnershipTransferProofRequest({
+    $core.String? accountId,
+    $core.String? profileId,
+    $core.String? spaceId,
+    $core.String? newOwnerProfileId,
+    $core.String? operationId,
+    $fixnum.Int64? sessionEpoch,
+    $core.String? proof,
+  }) {
+    final result = create();
+    if (accountId != null) result.accountId = accountId;
+    if (profileId != null) result.profileId = profileId;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (newOwnerProfileId != null) result.newOwnerProfileId = newOwnerProfileId;
+    if (operationId != null) result.operationId = operationId;
+    if (sessionEpoch != null) result.sessionEpoch = sessionEpoch;
+    if (proof != null) result.proof = proof;
+    return result;
+  }
+
+  ConsumeOwnershipTransferProofRequest._();
+
+  factory ConsumeOwnershipTransferProofRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ConsumeOwnershipTransferProofRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ConsumeOwnershipTransferProofRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'accountId')
+    ..aOS(2, _omitFieldNames ? '' : 'profileId')
+    ..aOS(3, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(4, _omitFieldNames ? '' : 'newOwnerProfileId')
+    ..aOS(5, _omitFieldNames ? '' : 'operationId')
+    ..aInt64(6, _omitFieldNames ? '' : 'sessionEpoch')
+    ..aOS(7, _omitFieldNames ? '' : 'proof')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ConsumeOwnershipTransferProofRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ConsumeOwnershipTransferProofRequest copyWith(
+          void Function(ConsumeOwnershipTransferProofRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as ConsumeOwnershipTransferProofRequest))
+          as ConsumeOwnershipTransferProofRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ConsumeOwnershipTransferProofRequest create() =>
+      ConsumeOwnershipTransferProofRequest._();
+  @$core.override
+  ConsumeOwnershipTransferProofRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ConsumeOwnershipTransferProofRequest getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          ConsumeOwnershipTransferProofRequest>(create);
+  static ConsumeOwnershipTransferProofRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get accountId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set accountId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAccountId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAccountId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get profileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set profileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProfileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get spaceId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set spaceId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasSpaceId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearSpaceId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get newOwnerProfileId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set newOwnerProfileId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasNewOwnerProfileId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearNewOwnerProfileId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get operationId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set operationId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasOperationId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearOperationId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $fixnum.Int64 get sessionEpoch => $_getI64(5);
+  @$pb.TagNumber(6)
+  set sessionEpoch($fixnum.Int64 value) => $_setInt64(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasSessionEpoch() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearSessionEpoch() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.String get proof => $_getSZ(6);
+  @$pb.TagNumber(7)
+  set proof($core.String value) => $_setString(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasProof() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearProof() => $_clearField(7);
+}
+
+class ConsumeOwnershipTransferProofResponse extends $pb.GeneratedMessage {
+  factory ConsumeOwnershipTransferProofResponse({
+    $core.String? receiptId,
+    $core.String? accountId,
+    $core.String? profileId,
+    $core.String? spaceId,
+    $core.String? newOwnerProfileId,
+    $core.String? operationId,
+    $fixnum.Int64? sessionEpoch,
+    $1.Timestamp? consumedAt,
+    $core.Iterable<$core.String>? verifiedFactors,
+  }) {
+    final result = create();
+    if (receiptId != null) result.receiptId = receiptId;
+    if (accountId != null) result.accountId = accountId;
+    if (profileId != null) result.profileId = profileId;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (newOwnerProfileId != null) result.newOwnerProfileId = newOwnerProfileId;
+    if (operationId != null) result.operationId = operationId;
+    if (sessionEpoch != null) result.sessionEpoch = sessionEpoch;
+    if (consumedAt != null) result.consumedAt = consumedAt;
+    if (verifiedFactors != null) result.verifiedFactors.addAll(verifiedFactors);
+    return result;
+  }
+
+  ConsumeOwnershipTransferProofResponse._();
+
+  factory ConsumeOwnershipTransferProofResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ConsumeOwnershipTransferProofResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ConsumeOwnershipTransferProofResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'receiptId')
+    ..aOS(2, _omitFieldNames ? '' : 'accountId')
+    ..aOS(3, _omitFieldNames ? '' : 'profileId')
+    ..aOS(4, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(5, _omitFieldNames ? '' : 'newOwnerProfileId')
+    ..aOS(6, _omitFieldNames ? '' : 'operationId')
+    ..aInt64(7, _omitFieldNames ? '' : 'sessionEpoch')
+    ..aOM<$1.Timestamp>(8, _omitFieldNames ? '' : 'consumedAt',
+        subBuilder: $1.Timestamp.create)
+    ..pPS(9, _omitFieldNames ? '' : 'verifiedFactors')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ConsumeOwnershipTransferProofResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ConsumeOwnershipTransferProofResponse copyWith(
+          void Function(ConsumeOwnershipTransferProofResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as ConsumeOwnershipTransferProofResponse))
+          as ConsumeOwnershipTransferProofResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ConsumeOwnershipTransferProofResponse create() =>
+      ConsumeOwnershipTransferProofResponse._();
+  @$core.override
+  ConsumeOwnershipTransferProofResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ConsumeOwnershipTransferProofResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          ConsumeOwnershipTransferProofResponse>(create);
+  static ConsumeOwnershipTransferProofResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get receiptId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set receiptId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasReceiptId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearReceiptId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get accountId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set accountId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasAccountId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearAccountId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get profileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set profileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get spaceId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set spaceId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasSpaceId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearSpaceId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get newOwnerProfileId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set newOwnerProfileId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasNewOwnerProfileId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearNewOwnerProfileId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get operationId => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set operationId($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasOperationId() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearOperationId() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $fixnum.Int64 get sessionEpoch => $_getI64(6);
+  @$pb.TagNumber(7)
+  set sessionEpoch($fixnum.Int64 value) => $_setInt64(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasSessionEpoch() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearSessionEpoch() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $1.Timestamp get consumedAt => $_getN(7);
+  @$pb.TagNumber(8)
+  set consumedAt($1.Timestamp value) => $_setField(8, value);
+  @$pb.TagNumber(8)
+  $core.bool hasConsumedAt() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearConsumedAt() => $_clearField(8);
+  @$pb.TagNumber(8)
+  $1.Timestamp ensureConsumedAt() => $_ensure(7);
+
+  @$pb.TagNumber(9)
+  $pb.PbList<$core.String> get verifiedFactors => $_getList(8);
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =

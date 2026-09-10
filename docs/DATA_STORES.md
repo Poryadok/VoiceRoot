@@ -62,6 +62,7 @@
 | Таблица | Примечание |
 |---------|------------|
 | `accounts` | учётная запись, 2FA, soft delete; `session_epoch` — durable Auth source |
+| `ownership_transfer_proofs` | Auth-only hash, resource/factor binding and atomic durable transfer receipt (Flyway V12); `accounts.security_revision` revokes pending proofs |
 | `refresh_tokens` | opaque refresh, rotation |
 | `otp_codes` | email verify / password reset |
 | `e2e_key_backups` | [encryption.md](features/encryption.md) — client-encrypted key backup blob (`V4__e2e_key_backups.sql`) |
