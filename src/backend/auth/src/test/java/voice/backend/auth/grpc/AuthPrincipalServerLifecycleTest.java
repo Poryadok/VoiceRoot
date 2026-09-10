@@ -28,17 +28,21 @@ class AuthPrincipalServerLifecycleTest {
   static final Struct REQUEST = Struct.getDefaultInstance();
   static final MethodDescriptor<Struct,Struct> ISSUE = method(AuthPrincipalServerInterceptor.ISSUE_RPC);
   static final MethodDescriptor<Struct,Struct> CONSUME = method(AuthPrincipalServerInterceptor.CONSUME_RPC);
+  static final MethodDescriptor<Struct,Struct> LOOKUP = method(AuthPrincipalServerInterceptor.LOOKUP_RPC);
   static final MethodDescriptor<Struct,Struct> LOGIN = method("/" + SERVICE + "/Login");
   final AuthGrpcService service = mock(AuthGrpcService.class);
   final AuthPrincipalVerifier verifier = mock(AuthPrincipalVerifier.class);
   final AtomicInteger proofCalls = new AtomicInteger(), loginCalls = new AtomicInteger();
   final AtomicReference<VerifiedPrincipal> observed = new AtomicReference<>();
   final VerifiedPrincipal principal = new VerifiedPrincipal("delegated_user", "gateway", UUID.randomUUID(), UUID.randomUUID(), 2);
+  final VerifiedPrincipal spacePrincipal = new VerifiedPrincipal("service", "space", null, null, 0);
   final AuthProperties properties = new AuthProperties();
 
   AuthPrincipalServerLifecycleTest() {
     properties.getGrpc().setPort(0);
     when(verifier.verify(anyString(), anyString(), anyString(), anyString())).thenReturn(principal);
+    when(verifier.verify(anyString(), eq(AuthPrincipalServerInterceptor.LOOKUP_RPC), anyString(), anyString()))
+        .thenReturn(spacePrincipal);
     when(service.bindService()).thenReturn(definition(true));
   }
 
@@ -52,6 +56,7 @@ class AuthPrincipalServerLifecycleTest {
       assertNotEquals(server.legacyPort(), server.principalPort());
       legacy = channel(server.legacyPort()); privateChannel = channel(server.principalPort());
       assertStatus(legacy, ISSUE, Status.Code.UNAUTHENTICATED);
+      assertStatus(legacy, LOOKUP, Status.Code.UNAUTHENTICATED);
       assertEquals(0, proofCalls.get());
       assertEquals(REQUEST, call(legacy, LOGIN));
       assertEquals(1, loginCalls.get());
@@ -59,13 +64,18 @@ class AuthPrincipalServerLifecycleTest {
       assertEquals(1, proofCalls.get()); assertEquals(principal, observed.get());
       verify(verifier).verify("test-credential", AuthPrincipalServerInterceptor.ISSUE_RPC,
           "lifecycle-request", AuthPrincipalServerInterceptor.requestHash(REQUEST));
+      assertEquals(REQUEST, call(privateChannel, LOOKUP));
+      assertEquals(2, proofCalls.get()); assertEquals(spacePrincipal, observed.get());
+      verify(verifier).verify("test-credential", AuthPrincipalServerInterceptor.LOOKUP_RPC,
+          "lifecycle-request", AuthPrincipalServerInterceptor.requestHash(REQUEST));
       assertStatus(privateChannel, LOGIN, Status.Code.UNIMPLEMENTED);
       assertEquals(1, loginCalls.get());
       server.stop();
       assertFalse(server.isRunning());
       assertStatus(legacy, LOGIN, Status.Code.UNAVAILABLE);
       assertStatus(privateChannel, ISSUE, Status.Code.UNAVAILABLE);
-      assertEquals(1, loginCalls.get()); assertEquals(1, proofCalls.get());
+      assertStatus(privateChannel, LOOKUP, Status.Code.UNAVAILABLE);
+      assertEquals(1, loginCalls.get()); assertEquals(2, proofCalls.get());
     } finally { server.stop(); close(legacy); close(privateChannel); }
   }
 
@@ -78,6 +88,7 @@ class AuthPrincipalServerLifecycleTest {
       legacy = channel(server.legacyPort());
       assertStatus(legacy, ISSUE, Status.Code.UNAUTHENTICATED);
       assertStatus(legacy, CONSUME, Status.Code.UNAUTHENTICATED);
+      assertStatus(legacy, LOOKUP, Status.Code.UNAUTHENTICATED);
       assertEquals(REQUEST, call(legacy, LOGIN));
       assertEquals(0, proofCalls.get()); assertEquals(1, loginCalls.get());
       verifyNoInteractions(verifier);
@@ -109,6 +120,10 @@ class AuthPrincipalServerLifecycleTest {
   ServerServiceDefinition definition(boolean includeConsume) {
     var definition = ServerServiceDefinition.builder(SERVICE)
         .addMethod(ISSUE, ServerCalls.asyncUnaryCall((request, observer) -> {
+          proofCalls.incrementAndGet(); observed.set(VerifiedPrincipal.current());
+          observer.onNext(request); observer.onCompleted();
+        }))
+        .addMethod(LOOKUP, ServerCalls.asyncUnaryCall((request, observer) -> {
           proofCalls.incrementAndGet(); observed.set(VerifiedPrincipal.current());
           observer.onNext(request); observer.onCompleted();
         }))

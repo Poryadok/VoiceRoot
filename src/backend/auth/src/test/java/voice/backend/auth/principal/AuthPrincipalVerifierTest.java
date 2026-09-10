@@ -146,6 +146,34 @@ class AuthPrincipalVerifierTest {
     c.put("iss","role"); c.put("sub","service:role");
     assertThrows(RuntimeException.class, () -> verifier.verify(token(c),AuthPrincipalServerInterceptor.CONSUME_RPC,"request-1","sha256:"+"0".repeat(64)));
   }
+  @Test void lookupRequiresSpaceServiceAndFreshReplayAdmissionWithoutAccountEpochLookup() {
+    var c = claims();
+    c.put("iss", "space"); c.put("sub", "service:space"); c.put("principal_type", "service");
+    c.put("rpc", AuthPrincipalServerInterceptor.LOOKUP_RPC);
+    c.remove("account_id"); c.remove("profile_id"); c.remove("session_epoch");
+    var recorded = new HashSet<String>();
+    var lookupVerifier = new AuthPrincipalVerifier((issuer, kid) -> (RSAPublicKey) KEY.getPublic(),
+        account -> { throw new AssertionError("historical service lookup must not check account epoch"); },
+        (issuer, jti, expires) -> { if (!recorded.add(issuer + ":" + jti)) throw new IllegalArgumentException("replay"); },
+        Clock.fixed(NOW, ZoneOffset.UTC));
+    var principal = lookupVerifier.verify(token(c), AuthPrincipalServerInterceptor.LOOKUP_RPC, "request-1", "sha256:" + "0".repeat(64));
+    assertEquals("space", principal.issuer()); assertEquals("service", principal.kind());
+    assertNull(principal.accountId()); assertNull(principal.profileId());
+    var replay = assertThrows(StatusRuntimeException.class, () -> lookupVerifier.verify(token(c),
+        AuthPrincipalServerInterceptor.LOOKUP_RPC, "request-1", "sha256:" + "0".repeat(64)));
+    assertEquals(Status.Code.UNAUTHENTICATED, replay.getStatus().getCode());
+    for (String kind : List.of("service", "delegated_user")) {
+      var forbidden = claims(); forbidden.put("rpc", AuthPrincipalServerInterceptor.LOOKUP_RPC);
+      forbidden.put("principal_type", kind);
+      if (kind.equals("service")) {
+        forbidden.put("sub", "service:gateway");
+        forbidden.remove("account_id"); forbidden.remove("profile_id"); forbidden.remove("session_epoch");
+      }
+      var failure = assertThrows(StatusRuntimeException.class, () -> verifier.verify(token(forbidden),
+          AuthPrincipalServerInterceptor.LOOKUP_RPC, "request-1", "sha256:" + "0".repeat(64)));
+      assertEquals(Status.Code.PERMISSION_DENIED, failure.getStatus().getCode());
+    }
+  }
   @Test void canonicalHashIgnoresProtobufMapInsertionOrder() {
     var a=Struct.newBuilder().putFields("z",Value.newBuilder().setStringValue("last").build()).putFields("a",Value.newBuilder().setNumberValue(1).build()).build();
     var b=Struct.newBuilder().putFields("a",Value.newBuilder().setNumberValue(1).build()).putFields("z",Value.newBuilder().setStringValue("last").build()).build();

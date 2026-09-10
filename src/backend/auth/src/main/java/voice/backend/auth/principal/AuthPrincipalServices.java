@@ -16,7 +16,8 @@ public final class AuthPrincipalServices {
       ServerServiceDefinition all, AuthPrincipalServerInterceptor verifier) {
     Set<String> allowed = Set.of(
         AuthPrincipalServerInterceptor.ISSUE_RPC.substring(1),
-        AuthPrincipalServerInterceptor.CONSUME_RPC.substring(1));
+        AuthPrincipalServerInterceptor.CONSUME_RPC.substring(1),
+        AuthPrincipalServerInterceptor.LOOKUP_RPC.substring(1));
     var proof = ServerServiceDefinition.builder(all.getServiceDescriptor().getName());
     int methods = 0;
     for (var method : all.getMethods()) {

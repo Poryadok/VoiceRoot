@@ -153,9 +153,9 @@ class AuthPrincipalServerInterceptorTest {
     assertNull(VerifiedPrincipal.current());
   }
 
-  @Test void absentVerifierFailsClosedForBothProtectedMethods() {
+  @Test void absentVerifierFailsClosedForAllThreeProtectedMethods() {
     var disabled = new AuthPrincipalServerInterceptor(null);
-    for (String rpc : List.of(AuthPrincipalServerInterceptor.ISSUE_RPC, AuthPrincipalServerInterceptor.CONSUME_RPC)) {
+    for (String rpc : List.of(AuthPrincipalServerInterceptor.ISSUE_RPC, AuthPrincipalServerInterceptor.CONSUME_RPC, AuthPrincipalServerInterceptor.LOOKUP_RPC)) {
       var call = new RecordingCall(rpc);
       var handlers = new AtomicInteger();
       var listener = disabled.interceptCall(call, validHeaders(), (c, h) -> {
@@ -167,6 +167,21 @@ class AuthPrincipalServerInterceptorTest {
     }
   }
 
+  @Test void lookupRejectsMissingDuplicateRawAndMismatchedAuthorityBeforeHandler() {
+    String rpc = AuthPrincipalServerInterceptor.LOOKUP_RPC;
+    var claims = AuthPrincipalVerifierTest.claims();
+    claims.put("rpc", rpc); claims.put("iss", "space"); claims.put("sub", "service:space"); claims.put("principal_type", "service");
+    claims.remove("account_id"); claims.remove("profile_id"); claims.remove("session_epoch");
+    assertDenied(interceptor, new Metadata(), request, rpc, Status.Code.UNAUTHENTICATED);
+    var duplicate = headers(claims); duplicate.put(AUTH, duplicate.get(AUTH));
+    assertDenied(interceptor, duplicate, request, rpc, Status.Code.UNAUTHENTICATED);
+    var raw = headers(claims);
+    raw.put(Metadata.Key.of("x-account-id", Metadata.ASCII_STRING_MARSHALLER), AuthPrincipalVerifierTest.ACCOUNT.toString());
+    assertDenied(interceptor, raw, request, rpc, Status.Code.UNAUTHENTICATED);
+    assertDenied(interceptor, headers(claims), Struct.getDefaultInstance(), rpc, Status.Code.UNAUTHENTICATED);
+    var delegated = AuthPrincipalVerifierTest.claims(); delegated.put("rpc", rpc);
+    assertDenied(interceptor, headers(delegated), request, rpc, Status.Code.PERMISSION_DENIED);
+  }
   @Test void unrelatedRpcPreservesExistingAuthenticationPath() {
     var call = new RecordingCall("/voice.auth.v1.AuthService/Login");
     var handlers = new AtomicInteger();

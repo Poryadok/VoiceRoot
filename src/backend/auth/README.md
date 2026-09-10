@@ -69,9 +69,10 @@ Canonical product spec: [docs/microservices/auth-service.md](../../../docs/micro
 ## Ownership-proof principal listener
 
 The legacy gRPC listener on `auth.grpc.port` (9090) always rejects
-`IssueOwnershipTransferProof` and `ConsumeOwnershipTransferProof`. Existing Auth
+`IssueOwnershipTransferProof`, `ConsumeOwnershipTransferProof`, and
+`GetOwnershipTransferReceipt`. Existing Auth
 RPCs keep their current listener. The dedicated principal listener exposes only
-these two proof methods, and only when `S2S_JWKS_URLS_JSON` is configured:
+these three proof methods, and only when `S2S_JWKS_URLS_JSON` is configured:
 
 | Setting | Contract |
 |---|---|

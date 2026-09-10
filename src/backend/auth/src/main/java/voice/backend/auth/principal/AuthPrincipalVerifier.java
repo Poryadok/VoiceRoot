@@ -92,7 +92,7 @@ public final class AuthPrincipalVerifier {
     }
     boolean allowed = AuthPrincipalServerInterceptor.ISSUE_RPC.equals(rpc)
         ? principal.kind().equals(VerifiedPrincipal.DELEGATED_USER) && principal.issuer().equals("gateway")
-        : AuthPrincipalServerInterceptor.CONSUME_RPC.equals(rpc)
+        : (AuthPrincipalServerInterceptor.CONSUME_RPC.equals(rpc) || AuthPrincipalServerInterceptor.LOOKUP_RPC.equals(rpc))
             && principal.kind().equals(VerifiedPrincipal.SERVICE) && principal.issuer().equals("space");
     if (!allowed) throw Status.PERMISSION_DENIED.withDescription("principal caller not permitted").asRuntimeException();
     try {
