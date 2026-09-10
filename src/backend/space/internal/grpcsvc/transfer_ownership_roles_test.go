@@ -21,240 +21,200 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	"voice/backend/pkg/principal"
 	"voice/backend/role/permissions"
-	"voice/backend/space/internal/authctx"
 	"voice/backend/space/internal/store"
 
 	rolev1 "voice.app/voice/role/v1"
 	spacev1 "voice.app/voice/space/v1"
 )
 
-// transferRoleStub wires Role Service for TransferOwnership fail-closed tests.
+// transferRoleStub models the dedicated atomic ownership transport and receipts.
 type transferRoleStub struct {
 	rolev1.RoleServiceClient
-
-	mu                          sync.Mutex
-	ownerRoleID                 string
-	memberRoleID                string
-	assignErr                   error
-	assignCommittedErrByProfile map[string]error
-	listErr                     error
-	revokeErrByProfile          map[string]error
-	// revokeCommittedErrByProfile simulates a Role transport result that is
-	// returned after the revoke mutation has committed remotely.
-	revokeCommittedErrByProfile map[string]error
-	cancelOnRevoke              map[string]context.CancelFunc
-	allowCanceled               map[string]bool
-	owners                      map[string]bool
-	enforceOwnerActor           bool
-
-	ownerAssignCalls    int
-	ownerRevokeCalls    int
-	ownerRevokeProfiles []string
-	ownerRoleCalls      []ownerRoleCall
+	mu                sync.Mutex
+	memberRoleID      string
+	applyErr          error
+	applyCommittedErr error
+	compensateErr     error
+	cancelOnApply     context.CancelFunc
+	owners            map[string]bool
+	receipts          map[string]ownerRoleRequest
+	terminal          map[string]ownerRoleRequest
+	ownerRoleCalls    []ownerRoleCall
 }
-
-type ownerRoleCall struct {
-	operation      string
-	spaceID        string
-	profileID      string
-	roleID         string
-	actorProfileID string
-	contextActive  bool
-	contextBounded bool
-}
-
 type ownerRoleRequest struct {
-	operation string
-	spaceID   string
-	profileID string
-	roleID    string
+	operation, spaceID, oldOwner, newOwner, operationID string
 }
-
-type contextObservation struct {
-	active  bool
-	bounded bool
+type ownerRoleCall struct {
+	ownerRoleRequest
+	contextActive, contextBounded bool
 }
-
-func outgoingActorProfileID(ctx context.Context) string {
-	md, _ := metadata.FromOutgoingContext(ctx)
-	values := md.Get(authctx.HeaderProfileID)
-	if len(values) == 0 {
-		return ""
-	}
-	return values[len(values)-1]
-}
+type contextObservation struct{ active, bounded bool }
 
 func newTransferRoleStub() *transferRoleStub {
-	return &transferRoleStub{
-		ownerRoleID:                 "role-owner",
-		memberRoleID:                "role-member",
-		assignCommittedErrByProfile: make(map[string]error),
-		revokeErrByProfile:          make(map[string]error),
-		revokeCommittedErrByProfile: make(map[string]error),
-		cancelOnRevoke:              make(map[string]context.CancelFunc),
-		allowCanceled:               make(map[string]bool),
-		owners:                      make(map[string]bool),
-	}
+	return &transferRoleStub{memberRoleID: "role-member", owners: map[string]bool{}, receipts: map[string]ownerRoleRequest{}, terminal: map[string]ownerRoleRequest{}}
 }
-
-type blockingListRolesStub struct {
-	*transferRoleStub
-
-	started     chan struct{}
-	release     chan struct{}
-	startedOnce sync.Once
-	releaseOnce sync.Once
-}
-
-func newBlockingListRolesStub() *blockingListRolesStub {
-	return &blockingListRolesStub{
-		transferRoleStub: newTransferRoleStub(),
-		started:          make(chan struct{}),
-		release:          make(chan struct{}),
-	}
-}
-
-func (s *blockingListRolesStub) ListRoles(ctx context.Context, req *rolev1.ListRolesRequest, opts ...grpc.CallOption) (*rolev1.ListRolesResponse, error) {
-	s.startedOnce.Do(func() { close(s.started) })
-	select {
-	case <-s.release:
-		return s.transferRoleStub.ListRoles(ctx, req, opts...)
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
-}
-
-func (s *blockingListRolesStub) unblock() {
-	s.releaseOnce.Do(func() { close(s.release) })
-}
-
 func (s *transferRoleStub) BootstrapSpaceRoles(context.Context, *rolev1.BootstrapSpaceRolesRequest, ...grpc.CallOption) (*rolev1.BootstrapSpaceRolesResponse, error) {
 	return &rolev1.BootstrapSpaceRolesResponse{}, nil
 }
-
 func (s *transferRoleStub) CheckPermission(context.Context, *rolev1.CheckPermissionRequest, ...grpc.CallOption) (*rolev1.CheckPermissionResponse, error) {
 	return &rolev1.CheckPermissionResponse{Allowed: true}, nil
 }
-
-func (s *transferRoleStub) ListRoles(context.Context, *rolev1.ListRolesRequest, ...grpc.CallOption) (*rolev1.ListRolesResponse, error) {
-	if s.listErr != nil {
-		return nil, s.listErr
-	}
-	return &rolev1.ListRolesResponse{RoleList: &rolev1.RoleList{Roles: []*rolev1.Role{
-		{Id: s.ownerRoleID, Name: permissions.RoleOwner, Position: 4},
-		{Id: s.memberRoleID, Name: permissions.RoleMember, Position: 1},
-	}}}, nil
-}
-
 func (s *transferRoleStub) GetDefaultJoinRole(context.Context, *rolev1.GetDefaultJoinRoleRequest, ...grpc.CallOption) (*rolev1.GetDefaultJoinRoleResponse, error) {
 	return &rolev1.GetDefaultJoinRoleResponse{Role: &rolev1.Role{Id: s.memberRoleID, Name: permissions.RoleMember}}, nil
 }
 
-func (s *transferRoleStub) AssignRole(ctx context.Context, req *rolev1.AssignRoleRequest, _ ...grpc.CallOption) (*rolev1.AssignRoleResponse, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if req.GetRoleId() == s.ownerRoleID {
-		_, bounded := ctx.Deadline()
-		s.ownerAssignCalls++
-		s.ownerRoleCalls = append(s.ownerRoleCalls, ownerRoleCall{
-			operation:      "assign",
-			spaceID:        req.GetSpaceId(),
-			profileID:      req.GetProfileId(),
-			roleID:         req.GetRoleId(),
-			actorProfileID: outgoingActorProfileID(ctx),
-			contextActive:  ctx.Err() == nil,
-			contextBounded: bounded,
-		})
-		if err := ctx.Err(); err != nil && !s.allowCanceled[req.GetProfileId()] {
-			return nil, err
-		}
-		if s.enforceOwnerActor && !s.owners[outgoingActorProfileID(ctx)] {
-			return nil, status.Error(codes.PermissionDenied, "owner role required")
-		}
-		if s.assignErr != nil {
-			return nil, s.assignErr
-		}
-		s.owners[req.GetProfileId()] = true
-		if err := s.assignCommittedErrByProfile[req.GetProfileId()]; err != nil {
-			return nil, err
-		}
+// Generic membership setup is permitted, but Owner mutation through it is forbidden.
+func (s *transferRoleStub) AssignRole(_ context.Context, req *rolev1.AssignRoleRequest, _ ...grpc.CallOption) (*rolev1.AssignRoleResponse, error) {
+	if req.GetRoleId() != s.memberRoleID {
+		return nil, status.Error(codes.PermissionDenied, "generic Owner mutation forbidden")
 	}
 	return &rolev1.AssignRoleResponse{}, nil
 }
-
-func (s *transferRoleStub) RevokeRole(ctx context.Context, req *rolev1.RevokeRoleRequest, _ ...grpc.CallOption) (*rolev1.RevokeRoleResponse, error) {
+func (s *transferRoleStub) ApplyOwnershipTransfer(ctx context.Context, req *rolev1.ApplyOwnershipTransferRequest, _ ...grpc.CallOption) (*rolev1.ApplyOwnershipTransferResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if req.GetRoleId() == s.ownerRoleID {
-		_, bounded := ctx.Deadline()
-		s.ownerRevokeCalls++
-		s.ownerRevokeProfiles = append(s.ownerRevokeProfiles, req.GetProfileId())
-		s.ownerRoleCalls = append(s.ownerRoleCalls, ownerRoleCall{
-			operation:      "revoke",
-			spaceID:        req.GetSpaceId(),
-			profileID:      req.GetProfileId(),
-			roleID:         req.GetRoleId(),
-			actorProfileID: outgoingActorProfileID(ctx),
-			contextActive:  ctx.Err() == nil,
-			contextBounded: bounded,
-		})
-		if err := ctx.Err(); err != nil && !s.allowCanceled[req.GetProfileId()] {
-			return nil, err
-		}
-		if s.enforceOwnerActor && !s.owners[outgoingActorProfileID(ctx)] {
-			return nil, status.Error(codes.PermissionDenied, "owner role required")
-		}
-		if cancel := s.cancelOnRevoke[req.GetProfileId()]; cancel != nil {
-			cancel()
-		}
-		if err := s.revokeErrByProfile[req.GetProfileId()]; err != nil {
-			return nil, err
-		}
-		delete(s.owners, req.GetProfileId())
-		if err := s.revokeCommittedErrByProfile[req.GetProfileId()]; err != nil {
-			return nil, err
-		}
+	call := ownerRoleRequest{"apply", req.GetSpaceId(), req.GetOldOwnerProfileId(), req.GetNewOwnerProfileId(), req.GetOperationId()}
+	_, bounded := ctx.Deadline()
+	s.ownerRoleCalls = append(s.ownerRoleCalls, ownerRoleCall{call, ctx.Err() == nil, bounded})
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
-	return &rolev1.RevokeRoleResponse{}, nil
+	if s.cancelOnApply != nil {
+		s.cancelOnApply()
+	}
+	if terminal, ok := s.terminal[call.operationID]; ok {
+		terminal.operation = "apply"
+		if terminal != call {
+			return nil, status.Error(codes.AlreadyExists, "operation tuple changed")
+		}
+		return nil, status.Error(codes.FailedPrecondition, "operation compensated")
+	}
+	if s.applyErr != nil {
+		return nil, s.applyErr
+	}
+	if previous, ok := s.receipts[call.operationID]; ok && previous != call {
+		return nil, status.Error(codes.FailedPrecondition, "operation tuple changed")
+	}
+	delete(s.owners, call.oldOwner)
+	s.owners[call.newOwner] = true
+	s.receipts[call.operationID] = call
+	if s.applyCommittedErr != nil {
+		return nil, s.applyCommittedErr
+	}
+	return &rolev1.ApplyOwnershipTransferResponse{CurrentOwnerProfileId: call.newOwner}, nil
 }
-
-func (s *transferRoleStub) setOwner(profileID uuid.UUID) {
+func (s *transferRoleStub) CompensateOwnershipTransfer(ctx context.Context, req *rolev1.CompensateOwnershipTransferRequest, _ ...grpc.CallOption) (*rolev1.CompensateOwnershipTransferResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.owners[profileID.String()] = true
+	call := ownerRoleRequest{"compensate", req.GetSpaceId(), req.GetOldOwnerProfileId(), req.GetNewOwnerProfileId(), req.GetOperationId()}
+	_, bounded := ctx.Deadline()
+	s.ownerRoleCalls = append(s.ownerRoleCalls, ownerRoleCall{call, ctx.Err() == nil, bounded})
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if s.compensateErr != nil {
+		return nil, s.compensateErr
+	}
+	if terminal, ok := s.terminal[call.operationID]; ok {
+		if terminal != call {
+			return nil, status.Error(codes.AlreadyExists, "operation tuple changed")
+		}
+		return &rolev1.CompensateOwnershipTransferResponse{CurrentOwnerProfileId: call.oldOwner}, nil
+	}
+	original := call
+	original.operation = "apply"
+	if receipt, ok := s.receipts[call.operationID]; ok {
+		if receipt != original {
+			return nil, status.Error(codes.AlreadyExists, "operation tuple changed")
+		}
+		if !s.owners[call.newOwner] || len(s.owners) != 1 {
+			return nil, status.Error(codes.FailedPrecondition, "ownership transfer state does not match")
+		}
+	} else if !s.owners[call.oldOwner] || len(s.owners) != 1 {
+		return nil, status.Error(codes.FailedPrecondition, "ownership transfer state does not match")
+	}
+	delete(s.owners, call.newOwner)
+	s.owners[call.oldOwner] = true
+	s.terminal[call.operationID] = call
+	return &rolev1.CompensateOwnershipTransferResponse{CurrentOwnerProfileId: call.oldOwner}, nil
 }
-
+func (s *transferRoleStub) setOwner(id uuid.UUID) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.owners[id.String()] = true
+}
 func (s *transferRoleStub) ownerRoleRequests() []ownerRoleRequest {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := make([]ownerRoleRequest, 0, len(s.ownerRoleCalls))
 	for _, call := range s.ownerRoleCalls {
-		out = append(out, ownerRoleRequest{
-			operation: call.operation,
-			spaceID:   call.spaceID,
-			profileID: call.profileID,
-			roleID:    call.roleID,
-		})
+		out = append(out, call.ownerRoleRequest)
 	}
 	return out
 }
-
 func (s *transferRoleStub) ownerRoleCall(index int) ownerRoleCall {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.ownerRoleCalls[index]
 }
-
 func (s *transferRoleStub) ownerProfiles() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := make([]string, 0, len(s.owners))
-	for profileID := range s.owners {
-		out = append(out, profileID)
+	out := []string{}
+	for id := range s.owners {
+		out = append(out, id)
 	}
 	return out
 }
+func requireOwnershipLifecycle(t *testing.T, s *transferRoleStub, spaceID string, oldOwner, newOwner uuid.UUID, compensated bool) {
+	t.Helper()
+	calls := s.ownerRoleRequests()
+	count := 1
+	if compensated {
+		count = 2
+	}
+	require.Len(t, calls, count)
+	operationID, err := uuid.Parse(calls[0].operationID)
+	require.NoError(t, err)
+	require.NotEqual(t, uuid.Nil, operationID)
+	expected := []ownerRoleRequest{{"apply", spaceID, oldOwner.String(), newOwner.String(), operationID.String()}}
+	if compensated {
+		expected = append(expected, ownerRoleRequest{"compensate", spaceID, oldOwner.String(), newOwner.String(), operationID.String()})
+	}
+	require.Equal(t, expected, calls, "compensation must retain exact original operation ID and old/new ordering")
+}
+func withOwnershipRoleClient(t *testing.T, client rolev1.RoleServiceClient) spaceServerOption {
+	t.Helper()
+	issuer, _ := newOwnershipTestIssuer(t)
+	return func(s *SpaceGRPC) { s.Roles = client; s.OwnershipRoles = client; s.PrincipalIssuer = issuer }
+}
+func ownershipTestIssuer(t *testing.T) *principal.Issuer {
+	t.Helper()
+	issuer, _ := newOwnershipTestIssuer(t)
+	return issuer
+}
+
+type blockingApplyRolesStub struct {
+	*transferRoleStub
+	started, release         chan struct{}
+	startedOnce, releaseOnce sync.Once
+}
+
+func newBlockingApplyRolesStub() *blockingApplyRolesStub {
+	return &blockingApplyRolesStub{transferRoleStub: newTransferRoleStub(), started: make(chan struct{}), release: make(chan struct{})}
+}
+func (s *blockingApplyRolesStub) ApplyOwnershipTransfer(ctx context.Context, req *rolev1.ApplyOwnershipTransferRequest, opts ...grpc.CallOption) (*rolev1.ApplyOwnershipTransferResponse, error) {
+	s.startedOnce.Do(func() { close(s.started) })
+	select {
+	case <-s.release:
+		return s.transferRoleStub.ApplyOwnershipTransfer(ctx, req, opts...)
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+func (s *blockingApplyRolesStub) unblock() { s.releaseOnce.Do(func() { close(s.release) }) }
 
 type ownershipUpdateContextTracer struct {
 	mu                           sync.Mutex
@@ -610,7 +570,7 @@ func setupTransferWithRoles(t *testing.T, stub *transferRoleStub, extraOpts ...s
 
 	pool = startSpacePostgresForTest(t, context.Background())
 	applySpaceMigration(t, context.Background(), pool)
-	opts := append([]spaceServerOption{withRoleClient(stub)}, extraOpts...)
+	opts := append([]spaceServerOption{withOwnershipRoleClient(t, stub)}, extraOpts...)
 	client, cleanup := startSpaceGRPCTestServer(t, pool, opts...)
 	t.Cleanup(cleanup)
 
@@ -636,13 +596,12 @@ SELECT count(*) FROM audit_log WHERE space_id = $1 AND action = 'ownership_trans
 	require.Equal(t, want, got)
 }
 
-// TestTransferOwnership_RoleAssignFails_RollsBackOwnership documents fail-closed when Assign Owner fails.
-func TestTransferOwnership_RoleAssignFails_RollsBackOwnership(t *testing.T) {
+func TestTransferOwnership_RoleApplyUnavailableBeforeCommit_RollsBackOwnership(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
 	stub := newTransferRoleStub()
-	stub.assignErr = status.Error(codes.Unavailable, "role assign down")
+	stub.applyErr = status.Error(codes.Unavailable, "ownership apply unavailable")
 	spy := &spySpaceEvents{}
 	client, owner, memberProfile, ownerCtx, spaceID, pool := setupTransferWithRoles(t, stub, withSpaceEventsPublisher(spy))
 
@@ -655,22 +614,20 @@ func TestTransferOwnership_RoleAssignFails_RollsBackOwnership(t *testing.T) {
 	got, err := client.GetSpace(ownerCtx, &spacev1.GetSpaceRequest{SpaceId: spaceID})
 	require.NoError(t, err)
 	require.Equal(t, owner.String(), got.GetSpace().GetOwnerProfileId())
-	require.Equal(t, 2, stub.ownerAssignCalls)
-	require.Equal(t, 1, stub.ownerRevokeCalls)
+	requireOwnershipLifecycle(t, stub, spaceID, owner, memberProfile, true)
+	require.ElementsMatch(t, []string{owner.String()}, stub.ownerProfiles())
 	requireOwnershipTransferAuditCount(t, pool, spaceID, 0)
 	require.Empty(t, spy.snapshotUpdated(), "failed transfer must not publish space.updated")
 }
 
-// TestTransferOwnership_RoleRevokeFails_CompensatesAndRollsBack documents role and DB compensation.
-func TestTransferOwnership_RoleRevokeFails_CompensatesAndRollsBack(t *testing.T) {
+func TestTransferOwnership_RoleApplyFailsBeforeCommit_CompensatesAndRollsBack(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
 	stub := newTransferRoleStub()
-	stub.enforceOwnerActor = true
 	spy := &spySpaceEvents{}
 	client, owner, memberProfile, ownerCtx, spaceID, pool := setupTransferWithRoles(t, stub, withSpaceEventsPublisher(spy))
-	stub.revokeErrByProfile[owner.String()] = status.Error(codes.Internal, "previous owner revoke failed")
+	stub.applyErr = status.Error(codes.Internal, "ownership apply failed")
 
 	_, err := client.TransferOwnership(ownerCtx, &spacev1.TransferOwnershipRequest{
 		SpaceId:           spaceID,
@@ -681,29 +638,20 @@ func TestTransferOwnership_RoleRevokeFails_CompensatesAndRollsBack(t *testing.T)
 	got, err := client.GetSpace(ownerCtx, &spacev1.GetSpaceRequest{SpaceId: spaceID})
 	require.NoError(t, err)
 	require.Equal(t, owner.String(), got.GetSpace().GetOwnerProfileId())
-	require.Equal(t, 2, stub.ownerAssignCalls)
-	require.Equal(t, 2, stub.ownerRevokeCalls)
-	require.Equal(t, []string{owner.String(), memberProfile.String()}, stub.ownerRevokeProfiles)
-	require.Equal(t, []ownerRoleRequest{
-		{operation: "assign", spaceID: spaceID, profileID: memberProfile.String(), roleID: stub.ownerRoleID},
-		{operation: "revoke", spaceID: spaceID, profileID: owner.String(), roleID: stub.ownerRoleID},
-		{operation: "assign", spaceID: spaceID, profileID: owner.String(), roleID: stub.ownerRoleID},
-		{operation: "revoke", spaceID: spaceID, profileID: memberProfile.String(), roleID: stub.ownerRoleID},
-	}, stub.ownerRoleRequests())
+	requireOwnershipLifecycle(t, stub, spaceID, owner, memberProfile, true)
 	require.ElementsMatch(t, []string{owner.String()}, stub.ownerProfiles(), "failed transition must leave the previous owner as the sole Owner")
 	requireOwnershipTransferAuditCount(t, pool, spaceID, 0)
 	require.Empty(t, spy.snapshotUpdated(), "failed transfer must not publish space.updated")
 }
 
-func TestTransferOwnership_RoleRevokeAmbiguousAfterCommit_RestoresExactOwnerRoles(t *testing.T) {
+func TestTransferOwnership_RoleApplyCommittedDeadline_RestoresExactOwnerRoles(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
 	stub := newTransferRoleStub()
-	stub.enforceOwnerActor = true
 	spy := &spySpaceEvents{}
 	client, owner, memberProfile, ownerCtx, spaceID, pool := setupTransferWithRoles(t, stub, withSpaceEventsPublisher(spy))
-	stub.revokeCommittedErrByProfile[owner.String()] = status.Error(codes.DeadlineExceeded, "previous owner revoke committed before deadline")
+	stub.applyCommittedErr = status.Error(codes.DeadlineExceeded, "ownership apply committed before deadline")
 
 	_, err := client.TransferOwnership(ownerCtx, &spacev1.TransferOwnershipRequest{
 		SpaceId:           spaceID,
@@ -714,32 +662,25 @@ func TestTransferOwnership_RoleRevokeAmbiguousAfterCommit_RestoresExactOwnerRole
 	got, getErr := client.GetSpace(ownerCtx, &spacev1.GetSpaceRequest{SpaceId: spaceID})
 	require.NoError(t, getErr)
 	require.Equal(t, owner.String(), got.GetSpace().GetOwnerProfileId())
-	require.Equal(t, []ownerRoleRequest{
-		{operation: "assign", spaceID: spaceID, profileID: memberProfile.String(), roleID: stub.ownerRoleID},
-		{operation: "revoke", spaceID: spaceID, profileID: owner.String(), roleID: stub.ownerRoleID},
-		{operation: "assign", spaceID: spaceID, profileID: owner.String(), roleID: stub.ownerRoleID},
-		{operation: "revoke", spaceID: spaceID, profileID: memberProfile.String(), roleID: stub.ownerRoleID},
-	}, stub.ownerRoleRequests())
-	require.ElementsMatch(t, []string{owner.String()}, stub.ownerProfiles(), "ambiguous revoke must restore the previous owner as the sole Owner")
-	for _, index := range []int{2, 3} {
+	requireOwnershipLifecycle(t, stub, spaceID, owner, memberProfile, true)
+	require.ElementsMatch(t, []string{owner.String()}, stub.ownerProfiles(), "ambiguous apply must restore the previous owner as the sole Owner")
+	for _, index := range []int{1} {
 		call := stub.ownerRoleCall(index)
 		require.True(t, call.contextActive)
 		require.True(t, call.contextBounded)
-		require.Equal(t, memberProfile.String(), call.actorProfileID, "new Owner must authorize ambiguous-revoke compensation")
 	}
 	requireOwnershipTransferAuditCount(t, pool, spaceID, 0)
 	require.Empty(t, spy.snapshotUpdated())
 }
 
-func TestTransferOwnership_RoleAssignAmbiguousAfterCommit_RestoresExactOwnerRoles(t *testing.T) {
+func TestTransferOwnership_RoleApplyCommittedCancellation_RestoresExactOwnerRoles(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
 	stub := newTransferRoleStub()
-	stub.enforceOwnerActor = true
 	spy := &spySpaceEvents{}
 	client, owner, memberProfile, ownerCtx, spaceID, pool := setupTransferWithRoles(t, stub, withSpaceEventsPublisher(spy))
-	stub.assignCommittedErrByProfile[memberProfile.String()] = status.Error(codes.DeadlineExceeded, "new owner assign committed before deadline")
+	stub.applyCommittedErr = status.Error(codes.Canceled, "ownership apply committed before cancellation")
 
 	_, err := client.TransferOwnership(ownerCtx, &spacev1.TransferOwnershipRequest{
 		SpaceId:           spaceID,
@@ -750,58 +691,44 @@ func TestTransferOwnership_RoleAssignAmbiguousAfterCommit_RestoresExactOwnerRole
 	got, getErr := client.GetSpace(ownerCtx, &spacev1.GetSpaceRequest{SpaceId: spaceID})
 	require.NoError(t, getErr)
 	require.Equal(t, owner.String(), got.GetSpace().GetOwnerProfileId())
-	require.Equal(t, []ownerRoleRequest{
-		{operation: "assign", spaceID: spaceID, profileID: memberProfile.String(), roleID: stub.ownerRoleID},
-		{operation: "assign", spaceID: spaceID, profileID: owner.String(), roleID: stub.ownerRoleID},
-		{operation: "revoke", spaceID: spaceID, profileID: memberProfile.String(), roleID: stub.ownerRoleID},
-	}, stub.ownerRoleRequests())
-	for _, index := range []int{1, 2} {
+	requireOwnershipLifecycle(t, stub, spaceID, owner, memberProfile, true)
+	for _, index := range []int{1} {
 		call := stub.ownerRoleCall(index)
 		require.True(t, call.contextActive)
 		require.True(t, call.contextBounded)
-		require.Equal(t, owner.String(), call.actorProfileID, "previous Owner must authorize ambiguous-assign compensation")
 	}
-	require.ElementsMatch(t, []string{owner.String()}, stub.ownerProfiles(), "ambiguous assign must restore the previous owner as the sole Owner")
+	require.ElementsMatch(t, []string{owner.String()}, stub.ownerProfiles(), "ambiguous apply must restore the previous owner as the sole Owner")
 	requireOwnershipTransferAuditCount(t, pool, spaceID, 0)
 	require.Empty(t, spy.snapshotUpdated())
 }
 
-// TestTransferOwnership_CompensationRevokeFails_ReportsBothAndRollsBackDB documents dual-error reporting.
-func TestTransferOwnership_CompensationRevokeFails_ReportsBothAndRollsBackDB(t *testing.T) {
+func TestTransferOwnership_CompensationFails_ReportsBothAndRollsBackDB(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
 	stub := newTransferRoleStub()
 	spy := &spySpaceEvents{}
 	client, owner, memberProfile, ownerCtx, spaceID, pool := setupTransferWithRoles(t, stub, withSpaceEventsPublisher(spy))
-	stub.revokeErrByProfile[owner.String()] = status.Error(codes.Internal, "previous owner revoke failed")
-	stub.revokeErrByProfile[memberProfile.String()] = status.Error(codes.Unavailable, "compensation revoke failed")
+	stub.applyErr = status.Error(codes.Internal, "ownership apply failed")
+	stub.compensateErr = status.Error(codes.Unavailable, "ownership compensation failed")
 
 	_, err := client.TransferOwnership(ownerCtx, &spacev1.TransferOwnershipRequest{
 		SpaceId:           spaceID,
 		NewOwnerProfileId: memberProfile.String(),
 	})
 	require.Equal(t, codes.Internal, status.Code(err))
-	require.ErrorContains(t, err, "previous owner revoke failed")
-	require.ErrorContains(t, err, "compensation revoke failed")
+	require.ErrorContains(t, err, "ownership apply failed")
+	require.ErrorContains(t, err, "ownership compensation failed")
 
 	got, getErr := client.GetSpace(ownerCtx, &spacev1.GetSpaceRequest{SpaceId: spaceID})
 	require.NoError(t, getErr)
 	require.Equal(t, owner.String(), got.GetSpace().GetOwnerProfileId())
-	require.Equal(t, 2, stub.ownerAssignCalls)
-	require.Equal(t, []string{owner.String(), memberProfile.String()}, stub.ownerRevokeProfiles)
-	require.Equal(t, []ownerRoleRequest{
-		{operation: "assign", spaceID: spaceID, profileID: memberProfile.String(), roleID: stub.ownerRoleID},
-		{operation: "revoke", spaceID: spaceID, profileID: owner.String(), roleID: stub.ownerRoleID},
-		{operation: "assign", spaceID: spaceID, profileID: owner.String(), roleID: stub.ownerRoleID},
-		{operation: "revoke", spaceID: spaceID, profileID: memberProfile.String(), roleID: stub.ownerRoleID},
-	}, stub.ownerRoleRequests())
+	requireOwnershipLifecycle(t, stub, spaceID, owner, memberProfile, true)
 	requireOwnershipTransferAuditCount(t, pool, spaceID, 0)
 	require.Empty(t, spy.snapshotUpdated(), "failed transfer must not publish space.updated")
 }
 
-// TestTransferOwnership_WithRoles_ReassignsOwnerRole documents Assign+Revoke Owner on success.
-func TestTransferOwnership_WithRoles_ReassignsOwnerRole(t *testing.T) {
+func TestTransferOwnership_WithRoles_AppliesOwnerTransfer(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -817,25 +744,19 @@ func TestTransferOwnership_WithRoles_ReassignsOwnerRole(t *testing.T) {
 	got, err := client.GetSpace(ownerCtx, &spacev1.GetSpaceRequest{SpaceId: spaceID})
 	require.NoError(t, err)
 	require.Equal(t, memberProfile.String(), got.GetSpace().GetOwnerProfileId())
-	require.Equal(t, 1, stub.ownerAssignCalls)
-	require.Equal(t, 1, stub.ownerRevokeCalls)
-	require.Equal(t, []ownerRoleRequest{
-		{operation: "assign", spaceID: spaceID, profileID: memberProfile.String(), roleID: stub.ownerRoleID},
-		{operation: "revoke", spaceID: spaceID, profileID: owner.String(), roleID: stub.ownerRoleID},
-	}, stub.ownerRoleRequests())
+	requireOwnershipLifecycle(t, stub, spaceID, owner, memberProfile, false)
 	require.ElementsMatch(t, []string{memberProfile.String()}, stub.ownerProfiles(), "successful transition must leave the new owner as the sole Owner")
 	requireOwnershipTransferAuditCount(t, pool, spaceID, 1)
 }
 
-// TestTransferOwnership_RoleListFails_RollsBackOwnership documents fail-closed when ListRoles fails.
-func TestTransferOwnership_RoleListFails_RollsBackOwnership(t *testing.T) {
+func TestTransferOwnership_RoleApplyTransportFails_RollsBackOwnership(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
 	stub := newTransferRoleStub()
 	spy := &spySpaceEvents{}
 	client, owner, memberProfile, ownerCtx, spaceID, pool := setupTransferWithRoles(t, stub, withSpaceEventsPublisher(spy))
-	stub.listErr = status.Error(codes.Unavailable, "role list down")
+	stub.applyErr = status.Error(codes.Unavailable, "ownership transport down")
 
 	_, err := client.TransferOwnership(ownerCtx, &spacev1.TransferOwnershipRequest{
 		SpaceId:           spaceID,
@@ -846,7 +767,8 @@ func TestTransferOwnership_RoleListFails_RollsBackOwnership(t *testing.T) {
 	got, err := client.GetSpace(ownerCtx, &spacev1.GetSpaceRequest{SpaceId: spaceID})
 	require.NoError(t, err)
 	require.Equal(t, owner.String(), got.GetSpace().GetOwnerProfileId())
-	require.Equal(t, 0, stub.ownerAssignCalls)
+	requireOwnershipLifecycle(t, stub, spaceID, owner, memberProfile, true)
+	require.ElementsMatch(t, []string{owner.String()}, stub.ownerProfiles())
 	requireOwnershipTransferAuditCount(t, pool, spaceID, 0)
 	require.Empty(t, spy.snapshotUpdated(), "failed transfer must not publish space.updated")
 }
@@ -860,27 +782,22 @@ func TestTransferOwnership_RequestCanceledByRoleFailure_UsesBoundedCleanupContex
 	_, owner, memberProfile, ownerCtx, spaceID, pool := setupTransferWithRoles(t, stub, withSpaceEventsPublisher(spy))
 	requestCtx, cancel := context.WithCancel(directServerContext(ownerCtx))
 	defer cancel()
-	stub.revokeErrByProfile[owner.String()] = status.Error(codes.Internal, "previous owner revoke failed")
-	stub.cancelOnRevoke[owner.String()] = cancel
+	stub.applyCommittedErr = status.Error(codes.Internal, "ownership apply failed")
+	stub.cancelOnApply = cancel
 
 	dbContexts := &ownershipUpdateContextTracer{}
 	tracedPool := tracedSpacePool(t, pool, dbContexts)
-	svc := &SpaceGRPC{Store: &store.SpaceStore{Pool: tracedPool}, Roles: stub, SpaceEvents: spy}
+	svc := &SpaceGRPC{allowLegacyOwnershipTransferForTest: true, Store: &store.SpaceStore{Pool: tracedPool}, Roles: stub, OwnershipRoles: stub, PrincipalIssuer: ownershipTestIssuer(t), SpaceEvents: spy}
 	_, err := svc.TransferOwnership(requestCtx, &spacev1.TransferOwnershipRequest{
 		SpaceId:           spaceID,
 		NewOwnerProfileId: memberProfile.String(),
 	})
 	require.Equal(t, codes.Internal, status.Code(err))
-	require.ErrorContains(t, err, "previous owner revoke failed", "cleanup must not replace the request-facing dependency error")
+	require.ErrorContains(t, err, "ownership apply failed", "cleanup must not replace the request-facing dependency error")
 	require.Error(t, requestCtx.Err())
 
-	require.Equal(t, []ownerRoleRequest{
-		{operation: "assign", spaceID: spaceID, profileID: memberProfile.String(), roleID: stub.ownerRoleID},
-		{operation: "revoke", spaceID: spaceID, profileID: owner.String(), roleID: stub.ownerRoleID},
-		{operation: "assign", spaceID: spaceID, profileID: owner.String(), roleID: stub.ownerRoleID},
-		{operation: "revoke", spaceID: spaceID, profileID: memberProfile.String(), roleID: stub.ownerRoleID},
-	}, stub.ownerRoleRequests())
-	for _, index := range []int{2, 3} {
+	requireOwnershipLifecycle(t, stub, spaceID, owner, memberProfile, true)
+	for _, index := range []int{1} {
 		roleCleanup := stub.ownerRoleCall(index)
 		require.True(t, roleCleanup.contextActive, "role compensation must detach from canceled request context")
 		require.True(t, roleCleanup.contextBounded, "role compensation must have a cleanup deadline")
@@ -905,21 +822,18 @@ func TestTransferOwnership_RequestCanceled_DBRollbackUsesBoundedCleanupContext(t
 	_, owner, memberProfile, ownerCtx, spaceID, pool := setupTransferWithRoles(t, stub)
 	requestCtx, cancel := context.WithCancel(directServerContext(ownerCtx))
 	defer cancel()
-	stub.revokeErrByProfile[owner.String()] = status.Error(codes.Internal, "previous owner revoke failed")
-	stub.cancelOnRevoke[owner.String()] = cancel
-	// Isolate DB rollback observability: the Role compensation is permitted to
-	// finish even when current production incorrectly reuses the canceled request.
-	stub.allowCanceled[memberProfile.String()] = true
+	stub.applyErr = status.Error(codes.Internal, "ownership apply failed")
+	stub.cancelOnApply = cancel
 
 	dbContexts := &ownershipUpdateContextTracer{}
 	tracedPool := tracedSpacePool(t, pool, dbContexts)
-	svc := &SpaceGRPC{Store: &store.SpaceStore{Pool: tracedPool}, Roles: stub}
+	svc := &SpaceGRPC{allowLegacyOwnershipTransferForTest: true, Store: &store.SpaceStore{Pool: tracedPool}, Roles: stub, OwnershipRoles: stub, PrincipalIssuer: ownershipTestIssuer(t)}
 	_, err := svc.TransferOwnership(requestCtx, &spacev1.TransferOwnershipRequest{
 		SpaceId:           spaceID,
 		NewOwnerProfileId: memberProfile.String(),
 	})
 	require.Equal(t, codes.Internal, status.Code(err))
-	require.ErrorContains(t, err, "previous owner revoke failed")
+	require.ErrorContains(t, err, "ownership apply failed")
 	require.Error(t, requestCtx.Err())
 
 	updates := dbContexts.snapshot()
@@ -942,7 +856,7 @@ func TestTransferOwnership_RequestCanceledAfterDBCommit_UsesDetachedCommitAndCom
 	defer cancel()
 	tracer := &ownershipUpdateContextTracer{cancelAfterCommit: cancel}
 	tracedPool := tracedSpacePool(t, pool, tracer)
-	svc := &SpaceGRPC{Store: &store.SpaceStore{Pool: tracedPool}, Roles: stub, SpaceEvents: spy}
+	svc := &SpaceGRPC{allowLegacyOwnershipTransferForTest: true, Store: &store.SpaceStore{Pool: tracedPool}, Roles: stub, OwnershipRoles: stub, PrincipalIssuer: ownershipTestIssuer(t), SpaceEvents: spy}
 
 	_, err := svc.TransferOwnership(requestCtx, &spacev1.TransferOwnershipRequest{
 		SpaceId:           spaceID,
@@ -975,7 +889,7 @@ func TestTransferOwnership_AmbiguousDBCommit_ReconcilesBeforeReleasingMutationLe
 	owner := uuid.New()
 	newOwner := uuid.New()
 	spaceID := createSpaceWithMembers(t, basePool, owner, newOwner)
-	roles := newBlockingListRolesStub()
+	roles := newBlockingApplyRolesStub()
 	roles.setOwner(owner)
 	t.Cleanup(roles.unblock)
 
@@ -983,9 +897,9 @@ func TestTransferOwnership_AmbiguousDBCommit_ReconcilesBeforeReleasingMutationLe
 	storePool := commitAmbiguitySpacePool(t, basePool, proxy)
 	serviceLockPool := independentSpacePool(t, basePool, 1)
 	observerLockPool := independentSpacePool(t, basePool, 1)
-	svc := &SpaceGRPC{
-		Store:          &store.SpaceStore{Pool: storePool},
-		Roles:          roles,
+	svc := &SpaceGRPC{allowLegacyOwnershipTransferForTest: true,
+		Store: &store.SpaceStore{Pool: storePool},
+		Roles: roles, OwnershipRoles: roles, PrincipalIssuer: ownershipTestIssuer(t),
 		MutationLocker: store.NewSpaceMutationLocker(serviceLockPool),
 	}
 	requestCtx := directServerContext(withAccountProfileCtx(ctx, uuid.New(), owner))
@@ -1098,7 +1012,7 @@ func TestTransferOwnership_AuditWriteCancellation_CompensatesWithoutFalseAuditOr
 		cancelOnAuditInsert: cancel,
 	}
 	tracedPool := tracedSpacePool(t, pool, dbContexts)
-	svc := &SpaceGRPC{Store: &store.SpaceStore{Pool: tracedPool}, Roles: roles, SpaceEvents: spy}
+	svc := &SpaceGRPC{allowLegacyOwnershipTransferForTest: true, Store: &store.SpaceStore{Pool: tracedPool}, Roles: roles, OwnershipRoles: roles, PrincipalIssuer: ownershipTestIssuer(t), SpaceEvents: spy}
 	_, err := svc.TransferOwnership(requestCtx, &spacev1.TransferOwnershipRequest{
 		SpaceId:           spaceID,
 		NewOwnerProfileId: memberProfile.String(),
@@ -1112,13 +1026,8 @@ func TestTransferOwnership_AuditWriteCancellation_CompensatesWithoutFalseAuditOr
 		t.Fatal("audit INSERT did not start before request cancellation")
 	}
 
-	require.Equal(t, []ownerRoleRequest{
-		{operation: "assign", spaceID: spaceID, profileID: memberProfile.String(), roleID: roles.ownerRoleID},
-		{operation: "revoke", spaceID: spaceID, profileID: owner.String(), roleID: roles.ownerRoleID},
-		{operation: "assign", spaceID: spaceID, profileID: owner.String(), roleID: roles.ownerRoleID},
-		{operation: "revoke", spaceID: spaceID, profileID: memberProfile.String(), roleID: roles.ownerRoleID},
-	}, roles.ownerRoleRequests(), "audit failure must perform the exact inverse Owner-role transition")
-	for _, index := range []int{2, 3} {
+	requireOwnershipLifecycle(t, roles, spaceID, owner, memberProfile, true)
+	for _, index := range []int{1} {
 		call := roles.ownerRoleCall(index)
 		require.True(t, call.contextActive, "%s Owner rollback must detach from the canceled request context", call.operation)
 		require.True(t, call.contextBounded, "%s Owner rollback must have a cleanup deadline", call.operation)
@@ -1149,7 +1058,7 @@ func TestTransferOwnership_AuditWriteCancellationAfterCommit_DeletesAmbiguousAud
 		cancelAfterAuditInsertCommit: cancel,
 	}
 	tracedPool := tracedSpacePool(t, pool, dbContexts)
-	svc := &SpaceGRPC{Store: &store.SpaceStore{Pool: tracedPool}, Roles: roles, SpaceEvents: spy}
+	svc := &SpaceGRPC{allowLegacyOwnershipTransferForTest: true, Store: &store.SpaceStore{Pool: tracedPool}, Roles: roles, OwnershipRoles: roles, PrincipalIssuer: ownershipTestIssuer(t), SpaceEvents: spy}
 	_, err := svc.TransferOwnership(requestCtx, &spacev1.TransferOwnershipRequest{
 		SpaceId:           spaceID,
 		NewOwnerProfileId: memberProfile.String(),
@@ -1163,12 +1072,7 @@ func TestTransferOwnership_AuditWriteCancellationAfterCommit_DeletesAmbiguousAud
 		t.Fatal("audit INSERT did not commit before request cancellation")
 	}
 
-	require.Equal(t, []ownerRoleRequest{
-		{operation: "assign", spaceID: spaceID, profileID: memberProfile.String(), roleID: roles.ownerRoleID},
-		{operation: "revoke", spaceID: spaceID, profileID: owner.String(), roleID: roles.ownerRoleID},
-		{operation: "assign", spaceID: spaceID, profileID: owner.String(), roleID: roles.ownerRoleID},
-		{operation: "revoke", spaceID: spaceID, profileID: memberProfile.String(), roleID: roles.ownerRoleID},
-	}, roles.ownerRoleRequests())
+	requireOwnershipLifecycle(t, roles, spaceID, owner, memberProfile, true)
 	require.ElementsMatch(t, []string{owner.String()}, roles.ownerProfiles())
 	got, getErr := svc.Store.GetSpace(context.Background(), uuid.MustParse(spaceID))
 	require.NoError(t, getErr)
@@ -1196,7 +1100,7 @@ func TestTransferOwnership_AuditFailure_BlocksConcurrentSpaceMutation(t *testing
 		cancelOnAuditInsert: cancelTransfer,
 	}
 	tracedPool := tracedSpacePool(t, pool, tracer)
-	svc := &SpaceGRPC{Store: &store.SpaceStore{Pool: tracedPool}}
+	svc := &SpaceGRPC{allowLegacyOwnershipTransferForTest: true, Store: &store.SpaceStore{Pool: tracedPool}}
 	transferResult := make(chan error, 1)
 	go func() {
 		_, err := svc.TransferOwnership(transferCtx, &spacev1.TransferOwnershipRequest{
@@ -1232,26 +1136,26 @@ func TestTransferOwnership_AuditFailure_BlocksConcurrentSpaceMutation(t *testing
 	requireOwnershipTransferAuditCount(t, pool, spaceID, 0)
 }
 
-type timeoutListRolesStub struct {
+type timeoutCompensateRolesStub struct {
 	rolev1.RoleServiceClient
 
-	mu      sync.Mutex
-	listCtx contextObservation
+	mu            sync.Mutex
+	compensateCtx contextObservation
 }
 
-func (s *timeoutListRolesStub) ListRoles(ctx context.Context, _ *rolev1.ListRolesRequest, _ ...grpc.CallOption) (*rolev1.ListRolesResponse, error) {
+func (s *timeoutCompensateRolesStub) CompensateOwnershipTransfer(ctx context.Context, _ *rolev1.CompensateOwnershipTransferRequest, _ ...grpc.CallOption) (*rolev1.CompensateOwnershipTransferResponse, error) {
 	_, bounded := ctx.Deadline()
 	s.mu.Lock()
-	s.listCtx = contextObservation{active: ctx.Err() == nil, bounded: bounded}
+	s.compensateCtx = contextObservation{active: ctx.Err() == nil, bounded: bounded}
 	s.mu.Unlock()
 	<-ctx.Done()
 	return nil, ctx.Err()
 }
 
-func (s *timeoutListRolesStub) snapshot() contextObservation {
+func (s *timeoutCompensateRolesStub) snapshot() contextObservation {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.listCtx
+	return s.compensateCtx
 }
 
 func TestTransferOwnership_AuditFailure_RoleCleanupTimeoutDoesNotSuppressDBRollback(t *testing.T) {
@@ -1264,11 +1168,11 @@ func TestTransferOwnership_AuditFailure_RoleCleanupTimeoutDoesNotSuppressDBRollb
 	st := &store.SpaceStore{Pool: pool}
 	require.NoError(t, st.TransferOwnership(context.Background(), spaceUUID, owner, memberProfile))
 
-	timeoutRoles := &timeoutListRolesStub{}
-	svc := &SpaceGRPC{Store: st, Roles: timeoutRoles}
+	timeoutRoles := &timeoutCompensateRolesStub{}
+	svc := &SpaceGRPC{allowLegacyOwnershipTransferForTest: true, Store: st, Roles: timeoutRoles, OwnershipRoles: timeoutRoles, PrincipalIssuer: ownershipTestIssuer(t)}
 	requestCtx, cancel := context.WithCancel(directServerContext(ownerCtx))
 	cancel()
-	roleErr, auditErr, dbErr := svc.rollbackOwnershipAfterAuditFailure(requestCtx, uuid.New(), spaceUUID, owner, memberProfile)
+	roleErr, auditErr, dbErr := svc.rollbackOwnershipAfterAuditFailure(requestCtx, uuid.New(), spaceUUID, owner, memberProfile, uuid.New())
 	require.Error(t, roleErr)
 	require.NoError(t, auditErr)
 	require.NoError(t, dbErr, "DB rollback must get a fresh cleanup context after Role cleanup times out")
@@ -1283,22 +1187,20 @@ func TestTransferOwnership_AuditFailure_RoleCleanupTimeoutDoesNotSuppressDBRollb
 type serializingRoleStub struct {
 	rolev1.RoleServiceClient
 
-	mu                sync.Mutex
-	ownerRoleID       string
-	owners            map[string]bool
-	listCalls         int
-	firstListEntered  chan struct{}
-	secondListEntered chan struct{}
-	releaseFirst      chan struct{}
+	mu                 sync.Mutex
+	owners             map[string]bool
+	applyCalls         int
+	firstApplyEntered  chan struct{}
+	secondApplyEntered chan struct{}
+	releaseFirst       chan struct{}
 }
 
 func newSerializingRoleStub(owner uuid.UUID) *serializingRoleStub {
 	return &serializingRoleStub{
-		ownerRoleID:       "role-owner",
-		owners:            map[string]bool{owner.String(): true},
-		firstListEntered:  make(chan struct{}),
-		secondListEntered: make(chan struct{}),
-		releaseFirst:      make(chan struct{}),
+		owners:             map[string]bool{owner.String(): true},
+		firstApplyEntered:  make(chan struct{}),
+		secondApplyEntered: make(chan struct{}),
+		releaseFirst:       make(chan struct{}),
 	}
 }
 
@@ -1318,43 +1220,33 @@ func (s *serializingRoleStub) GetMemberRoles(context.Context, *rolev1.GetMemberR
 	return &rolev1.GetMemberRolesResponse{}, nil
 }
 
-func (s *serializingRoleStub) ListRoles(ctx context.Context, _ *rolev1.ListRolesRequest, _ ...grpc.CallOption) (*rolev1.ListRolesResponse, error) {
+func (s *serializingRoleStub) ApplyOwnershipTransfer(ctx context.Context, req *rolev1.ApplyOwnershipTransferRequest, _ ...grpc.CallOption) (*rolev1.ApplyOwnershipTransferResponse, error) {
 	s.mu.Lock()
-	s.listCalls++
-	call := s.listCalls
+	s.applyCalls++
+	call := s.applyCalls
 	s.mu.Unlock()
 	switch call {
 	case 1:
-		close(s.firstListEntered)
+		close(s.firstApplyEntered)
 		select {
 		case <-s.releaseFirst:
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
 	case 2:
-		close(s.secondListEntered)
+		close(s.secondApplyEntered)
 	}
-	return &rolev1.ListRolesResponse{RoleList: &rolev1.RoleList{Roles: []*rolev1.Role{
-		{Id: s.ownerRoleID, Name: permissions.RoleOwner, Position: 4},
-	}}}, nil
+	s.mu.Lock()
+	delete(s.owners, req.GetOldOwnerProfileId())
+	s.owners[req.GetNewOwnerProfileId()] = true
+	s.mu.Unlock()
+	return &rolev1.ApplyOwnershipTransferResponse{CurrentOwnerProfileId: req.GetNewOwnerProfileId()}, nil
 }
-
 func (s *serializingRoleStub) AssignRole(_ context.Context, req *rolev1.AssignRoleRequest, _ ...grpc.CallOption) (*rolev1.AssignRoleResponse, error) {
-	if req.GetRoleId() == s.ownerRoleID {
-		s.mu.Lock()
-		s.owners[req.GetProfileId()] = true
-		s.mu.Unlock()
+	if req.GetRoleId() != "role-member" {
+		return nil, status.Error(codes.PermissionDenied, "generic Owner mutation forbidden")
 	}
 	return &rolev1.AssignRoleResponse{}, nil
-}
-
-func (s *serializingRoleStub) RevokeRole(_ context.Context, req *rolev1.RevokeRoleRequest, _ ...grpc.CallOption) (*rolev1.RevokeRoleResponse, error) {
-	if req.GetRoleId() == s.ownerRoleID {
-		s.mu.Lock()
-		delete(s.owners, req.GetProfileId())
-		s.mu.Unlock()
-	}
-	return &rolev1.RevokeRoleResponse{}, nil
 }
 
 func (s *serializingRoleStub) ownerProfiles() []string {
@@ -1375,7 +1267,7 @@ func TestTransferOwnership_ConcurrentSameSpace_DoesNotInterleaveRoleTransitions(
 	roles := newSerializingRoleStub(owner)
 	pool := startSpacePostgresForTest(t, context.Background())
 	applySpaceMigration(t, context.Background(), pool)
-	client, cleanup := startSpaceGRPCTestServer(t, pool, withRoleClient(roles))
+	client, cleanup := startSpaceGRPCTestServer(t, pool, withOwnershipRoleClient(t, roles))
 	t.Cleanup(cleanup)
 
 	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Concurrent transfer"})
@@ -1398,7 +1290,7 @@ func TestTransferOwnership_ConcurrentSameSpace_DoesNotInterleaveRoleTransitions(
 		firstDone <- transferErr
 	}()
 	select {
-	case <-roles.firstListEntered:
+	case <-roles.firstApplyEntered:
 	case <-time.After(3 * time.Second):
 		t.Fatal("first transfer did not reach Role Service")
 	}
@@ -1430,12 +1322,12 @@ func TestTransferOwnership_ConcurrentSameSpace_DoesNotInterleaveRoleTransitions(
 	interleaved := false
 	var preReleaseErr error
 	select {
-	case <-roles.secondListEntered:
+	case <-roles.secondApplyEntered:
 		interleaved = true
 		preReleaseErr = requireTransferResult(t, secondDone)
 	case preReleaseErr = <-secondDone:
 		select {
-		case <-roles.secondListEntered:
+		case <-roles.secondApplyEntered:
 			interleaved = true
 		default:
 		}
@@ -1541,14 +1433,14 @@ func TestTransferOwnership_CrossInstance_DoesNotInterleaveRoleTransitions(t *tes
 	svcBQueries.reset() // Ignore the test pool's readiness Ping.
 	lockPoolA := independentSpacePool(t, pool, 1)
 	lockPoolB := independentSpacePool(t, pool, 1)
-	svcA := &SpaceGRPC{
-		Store:          &store.SpaceStore{Pool: pool},
-		Roles:          roles,
+	svcA := &SpaceGRPC{allowLegacyOwnershipTransferForTest: true,
+		Store: &store.SpaceStore{Pool: pool},
+		Roles: roles, OwnershipRoles: roles, PrincipalIssuer: ownershipTestIssuer(t),
 		MutationLocker: store.NewSpaceMutationLocker(lockPoolA),
 	}
-	svcB := &SpaceGRPC{
-		Store:          &store.SpaceStore{Pool: svcBPool},
-		Roles:          roles,
+	svcB := &SpaceGRPC{allowLegacyOwnershipTransferForTest: true,
+		Store: &store.SpaceStore{Pool: svcBPool},
+		Roles: roles, OwnershipRoles: roles, PrincipalIssuer: ownershipTestIssuer(t),
 		MutationLocker: store.NewSpaceMutationLocker(lockPoolB),
 	}
 	ownerCtx := directServerContext(withAccountProfileCtx(ctx, uuid.New(), owner))
@@ -1563,7 +1455,7 @@ func TestTransferOwnership_CrossInstance_DoesNotInterleaveRoleTransitions(t *tes
 		firstDone <- err
 	}()
 	select {
-	case <-roles.firstListEntered:
+	case <-roles.firstApplyEntered:
 	case <-time.After(3 * time.Second):
 		t.Fatal("first instance did not reach the Role transition")
 	}
@@ -1583,7 +1475,7 @@ func TestTransferOwnership_CrossInstance_DoesNotInterleaveRoleTransitions(t *tes
 	})
 	secondReachedRoles := false
 	select {
-	case <-roles.secondListEntered:
+	case <-roles.secondApplyEntered:
 		secondReachedRoles = true
 	default:
 	}
@@ -1630,11 +1522,11 @@ func TestUpdateSpace_CrossInstance_WaitsThroughTransferAuditRollback(t *testing.
 	svcBQueries.reset() // Ignore the test pool's readiness Ping.
 	lockPoolA := independentSpacePool(t, pool, 1)
 	lockPoolB := independentSpacePool(t, pool, 1)
-	svcA := &SpaceGRPC{
+	svcA := &SpaceGRPC{allowLegacyOwnershipTransferForTest: true,
 		Store:          &store.SpaceStore{Pool: tracedPool},
 		MutationLocker: store.NewSpaceMutationLocker(lockPoolA),
 	}
-	svcB := &SpaceGRPC{
+	svcB := &SpaceGRPC{allowLegacyOwnershipTransferForTest: true,
 		Store:          &store.SpaceStore{Pool: svcBPool},
 		MutationLocker: store.NewSpaceMutationLocker(lockPoolB),
 	}
@@ -1680,4 +1572,74 @@ func TestUpdateSpace_CrossInstance_WaitsThroughTransferAuditRollback(t *testing.
 	require.Equal(t, owner, row.OwnerProfileID)
 	require.Equal(t, "before", row.Description, "the timed-out cross-instance update must not persist")
 	requireOwnershipTransferAuditCount(t, pool, spaceID.String(), 0)
+}
+
+// delayedOwnershipRoleClient returns a lost-response error while its already-issued
+// Apply remains pending remotely. Compensation must install a terminal receipt.
+type delayedOwnershipRoleClient struct {
+	*transferRoleStub
+	release    chan struct{}
+	done       chan struct{}
+	lateResult chan error
+}
+
+func (s *delayedOwnershipRoleClient) ApplyOwnershipTransfer(_ context.Context, req *rolev1.ApplyOwnershipTransferRequest, _ ...grpc.CallOption) (*rolev1.ApplyOwnershipTransferResponse, error) {
+	go func() {
+		defer close(s.done)
+		<-s.release
+		_, err := s.transferRoleStub.ApplyOwnershipTransfer(context.Background(), req)
+		s.lateResult <- err
+	}()
+	return nil, status.Error(codes.DeadlineExceeded, "Apply still in flight")
+}
+func TestTransferOwnership_DelayedApplyCannotResurrectCompensatedOwnership(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	roles := newTransferRoleStub()
+	_, owner, member, ownerCtx, spaceID, pool := setupTransferWithRoles(t, roles)
+	delayed := &delayedOwnershipRoleClient{transferRoleStub: roles, release: make(chan struct{}), done: make(chan struct{}), lateResult: make(chan error, 1)}
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(delayed.release) }) }
+	spy := &spySpaceEvents{}
+	svc := &SpaceGRPC{allowLegacyOwnershipTransferForTest: true, Store: &store.SpaceStore{Pool: pool}, Roles: roles, OwnershipRoles: delayed, PrincipalIssuer: ownershipTestIssuer(t), SpaceEvents: spy}
+	_, err := svc.TransferOwnership(directServerContext(ownerCtx), &spacev1.TransferOwnershipRequest{SpaceId: spaceID, NewOwnerProfileId: member.String()})
+	defer func() {
+		release()
+		select {
+		case <-delayed.done:
+		case <-time.After(3 * time.Second):
+			t.Error("late Apply goroutine did not finish")
+		}
+	}()
+	require.Error(t, err)
+	row, readErr := svc.Store.GetSpace(context.Background(), uuid.MustParse(spaceID))
+	require.NoError(t, readErr)
+	require.Equal(t, owner, row.OwnerProfileID)
+	calls := roles.ownerRoleRequests()
+	require.Len(t, calls, 1, "compensation must complete before delayed Apply enters Role")
+	require.Equal(t, "compensate", calls[0].operation)
+	require.Equal(t, spaceID, calls[0].spaceID)
+	require.Equal(t, owner.String(), calls[0].oldOwner)
+	require.Equal(t, member.String(), calls[0].newOwner)
+	require.NotEmpty(t, calls[0].operationID)
+	require.ElementsMatch(t, []string{owner.String()}, roles.ownerProfiles())
+	release()
+	select {
+	case lateErr := <-delayed.lateResult:
+		require.Equal(t, codes.FailedPrecondition, status.Code(lateErr))
+	case <-time.After(3 * time.Second):
+		t.Fatal("late Apply did not finish")
+	}
+	calls = roles.ownerRoleRequests()
+	require.Len(t, calls, 2)
+	expected := calls[0]
+	expected.operation = "apply"
+	require.Equal(t, expected, calls[1], "late Apply must encounter the exact operation's terminal barrier")
+	require.ElementsMatch(t, []string{owner.String()}, roles.ownerProfiles())
+	row, readErr = svc.Store.GetSpace(context.Background(), uuid.MustParse(spaceID))
+	require.NoError(t, readErr)
+	require.Equal(t, owner, row.OwnerProfileID)
+	requireOwnershipTransferAuditCount(t, pool, spaceID, 0)
+	require.Empty(t, spy.snapshotUpdated())
 }

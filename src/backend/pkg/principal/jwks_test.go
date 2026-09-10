@@ -210,3 +210,94 @@ func testJWKSKey(t *testing.T, kid string) map[string]any {
 		"e": base64.RawURLEncoding.EncodeToString(e),
 	}
 }
+
+func TestJWKSResolver_HardExpiryBoundaryRejectsLastGood(t *testing.T) {
+	current := testJWKSKey(t, "current")
+	next := testJWKSKey(t, "next")
+	document, err := json.Marshal(map[string]any{"keys": []any{current, next}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	initial := time.Unix(1_700_000_000, 0).UTC()
+	now := initial
+	unavailable := false
+	resolver, err := NewJWKSResolverWithConfig(JWKSResolverConfig{
+		Fetch: func(context.Context, string) ([]byte, error) {
+			if unavailable {
+				return nil, errors.New("JWKS unavailable")
+			}
+			return document, nil
+		},
+		Clock: func() time.Time { return now }, RefreshAfter: 30 * time.Second, HardExpiry: 2 * time.Minute, UnknownKIDCooldown: 5 * time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	initialKey, err := resolver.Resolve(context.Background(), "space", "current")
+	if err != nil || initialKey == nil {
+		t.Fatalf("startup key = %v, %v", initialKey, err)
+	}
+	unavailable = true
+	now = initial.Add(2*time.Minute - time.Nanosecond)
+	key, err := resolver.Resolve(context.Background(), "space", "current")
+	if err != nil || key == nil || key.N.Cmp(initialKey.N) != 0 {
+		t.Fatalf("last good must remain usable just before hard expiry: %v", err)
+	}
+	now = initial.Add(2 * time.Minute)
+	key, err = resolver.Resolve(context.Background(), "space", "current")
+	if err == nil || key != nil {
+		t.Fatalf("last good accepted at exact hard expiry: key present=%v, err=%v", key != nil, err)
+	}
+}
+
+func TestJWKSResolver_CooldownPreservesFailureCauseUntilSuccessfulRefresh(t *testing.T) {
+	current := testJWKSKey(t, "current")
+	next := testJWKSKey(t, "next")
+	document, err := json.Marshal(map[string]any{"keys": []any{current, next}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dependencyFailure := errors.New("typed dependency sentinel")
+	unavailable := true
+	now := time.Unix(1_700_000_000, 0).UTC()
+	calls := 0
+	resolver, err := NewJWKSResolverWithConfig(JWKSResolverConfig{
+		Fetch: func(context.Context, string) ([]byte, error) {
+			calls++
+			if unavailable {
+				return nil, dependencyFailure
+			}
+			return document, nil
+		},
+		Clock: func() time.Time { return now }, RefreshAfter: 30 * time.Second, HardExpiry: 2 * time.Minute, UnknownKIDCooldown: 5 * time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = resolver.Resolve(context.Background(), "space", "current")
+	if !errors.Is(err, dependencyFailure) {
+		t.Fatalf("initial failure lost dependency cause: %v", err)
+	}
+	_, err = resolver.Resolve(context.Background(), "space", "current")
+	if !errors.Is(err, dependencyFailure) {
+		t.Errorf("cooldown lost dependency cause: %v", err)
+	}
+	if calls != 1 {
+		t.Errorf("cooldown fetched again: calls=%d", calls)
+	}
+	unavailable = false
+	if err := resolver.Refresh(context.Background(), "space"); err != nil {
+		t.Fatal(err)
+	}
+	key, err := resolver.Resolve(context.Background(), "space", "current")
+	if err != nil || key == nil {
+		t.Fatalf("successful refresh failed to recover: %v", err)
+	}
+	_, err = resolver.Resolve(context.Background(), "space", "unpublished")
+	if err == nil {
+		t.Fatal("unknown key accepted after recovery")
+	}
+	if errors.Is(err, dependencyFailure) {
+		t.Fatalf("successful refresh retained stale dependency error: %v", err)
+	}
+}

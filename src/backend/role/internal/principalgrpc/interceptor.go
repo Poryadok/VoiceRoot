@@ -14,8 +14,7 @@ type Verifier interface {
 	Verify(context.Context, string, string, string, string) (principal.Principal, error)
 }
 
-// StrictUnaryInterceptor is intentionally unregistered until runtime deployment
-// supplies real JWKS, replay and session-epoch dependencies.
+// StrictUnaryInterceptor authenticates a protected RPC before its handler.
 func StrictUnaryInterceptor(verifier Verifier) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		if verifier == nil {
@@ -57,4 +56,18 @@ func verificationStatus(err error) error {
 		return status.Error(codes.Unavailable, "principal verifier unavailable")
 	}
 	return status.Error(codes.Unauthenticated, "invalid principal")
+}
+
+// OwnershipUnaryInterceptor migrates exactly the dedicated ownership methods.
+// A missing runtime verifier fails closed without changing unmigrated methods.
+func OwnershipUnaryInterceptor(verifier Verifier) grpc.UnaryServerInterceptor {
+	strict := StrictUnaryInterceptor(verifier)
+	return func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		switch info.FullMethod {
+		case "/voice.role.v1.RoleService/ApplyOwnershipTransfer", "/voice.role.v1.RoleService/CompensateOwnershipTransfer":
+			return strict(ctx, request, info, handler)
+		default:
+			return handler(ctx, request)
+		}
+	}
 }

@@ -38,6 +38,10 @@ service RoleService {
 
   // BOT-B: remove custom roles created by a profile (e.g. bot actor on uninstall).
   rpc DeleteRolesCreatedByProfile(DeleteRolesCreatedByProfileRequest) returns (DeleteRolesCreatedByProfileResponse);
+
+  // Trusted Space-only lifecycle operations. These are the sole Owner mutation path.
+  rpc ApplyOwnershipTransfer(ApplyOwnershipTransferRequest) returns (ApplyOwnershipTransferResponse);
+  rpc CompensateOwnershipTransfer(CompensateOwnershipTransferRequest) returns (CompensateOwnershipTransferResponse);
 }
 
 message BootstrapSpaceRolesRequest {
@@ -53,6 +57,28 @@ message DeleteRolesCreatedByProfileRequest {
 }
 
 message DeleteRolesCreatedByProfileResponse {}
+
+message ApplyOwnershipTransferRequest {
+  string space_id = 1;
+  string old_owner_profile_id = 2;
+  string new_owner_profile_id = 3;
+  string operation_id = 4;
+}
+
+message CompensateOwnershipTransferRequest {
+  string space_id = 1;
+  string old_owner_profile_id = 2;
+  string new_owner_profile_id = 3;
+  string operation_id = 4;
+}
+
+message ApplyOwnershipTransferResponse {
+  string current_owner_profile_id = 1;
+}
+
+message CompensateOwnershipTransferResponse {
+  string current_owner_profile_id = 1;
+}
 
 message Role {
   string id = 1;

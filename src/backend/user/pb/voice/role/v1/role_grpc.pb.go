@@ -39,6 +39,8 @@ const (
 	RoleService_GetDefaultJoinRole_FullMethodName          = "/voice.role.v1.RoleService/GetDefaultJoinRole"
 	RoleService_BootstrapSpaceRoles_FullMethodName         = "/voice.role.v1.RoleService/BootstrapSpaceRoles"
 	RoleService_DeleteRolesCreatedByProfile_FullMethodName = "/voice.role.v1.RoleService/DeleteRolesCreatedByProfile"
+	RoleService_ApplyOwnershipTransfer_FullMethodName      = "/voice.role.v1.RoleService/ApplyOwnershipTransfer"
+	RoleService_CompensateOwnershipTransfer_FullMethodName = "/voice.role.v1.RoleService/CompensateOwnershipTransfer"
 )
 
 // RoleServiceClient is the client API for RoleService service.
@@ -70,6 +72,9 @@ type RoleServiceClient interface {
 	BootstrapSpaceRoles(ctx context.Context, in *BootstrapSpaceRolesRequest, opts ...grpc.CallOption) (*BootstrapSpaceRolesResponse, error)
 	// BOT-B: remove custom roles created by a profile (e.g. bot actor on uninstall).
 	DeleteRolesCreatedByProfile(ctx context.Context, in *DeleteRolesCreatedByProfileRequest, opts ...grpc.CallOption) (*DeleteRolesCreatedByProfileResponse, error)
+	// Trusted Space-only lifecycle operations. These are the sole Owner mutation path.
+	ApplyOwnershipTransfer(ctx context.Context, in *ApplyOwnershipTransferRequest, opts ...grpc.CallOption) (*ApplyOwnershipTransferResponse, error)
+	CompensateOwnershipTransfer(ctx context.Context, in *CompensateOwnershipTransferRequest, opts ...grpc.CallOption) (*CompensateOwnershipTransferResponse, error)
 }
 
 type roleServiceClient struct {
@@ -280,6 +285,26 @@ func (c *roleServiceClient) DeleteRolesCreatedByProfile(ctx context.Context, in 
 	return out, nil
 }
 
+func (c *roleServiceClient) ApplyOwnershipTransfer(ctx context.Context, in *ApplyOwnershipTransferRequest, opts ...grpc.CallOption) (*ApplyOwnershipTransferResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplyOwnershipTransferResponse)
+	err := c.cc.Invoke(ctx, RoleService_ApplyOwnershipTransfer_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *roleServiceClient) CompensateOwnershipTransfer(ctx context.Context, in *CompensateOwnershipTransferRequest, opts ...grpc.CallOption) (*CompensateOwnershipTransferResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CompensateOwnershipTransferResponse)
+	err := c.cc.Invoke(ctx, RoleService_CompensateOwnershipTransfer_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // RoleServiceServer is the server API for RoleService service.
 // All implementations must embed UnimplementedRoleServiceServer
 // for forward compatibility.
@@ -309,6 +334,9 @@ type RoleServiceServer interface {
 	BootstrapSpaceRoles(context.Context, *BootstrapSpaceRolesRequest) (*BootstrapSpaceRolesResponse, error)
 	// BOT-B: remove custom roles created by a profile (e.g. bot actor on uninstall).
 	DeleteRolesCreatedByProfile(context.Context, *DeleteRolesCreatedByProfileRequest) (*DeleteRolesCreatedByProfileResponse, error)
+	// Trusted Space-only lifecycle operations. These are the sole Owner mutation path.
+	ApplyOwnershipTransfer(context.Context, *ApplyOwnershipTransferRequest) (*ApplyOwnershipTransferResponse, error)
+	CompensateOwnershipTransfer(context.Context, *CompensateOwnershipTransferRequest) (*CompensateOwnershipTransferResponse, error)
 	mustEmbedUnimplementedRoleServiceServer()
 }
 
@@ -378,6 +406,12 @@ func (UnimplementedRoleServiceServer) BootstrapSpaceRoles(context.Context, *Boot
 }
 func (UnimplementedRoleServiceServer) DeleteRolesCreatedByProfile(context.Context, *DeleteRolesCreatedByProfileRequest) (*DeleteRolesCreatedByProfileResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteRolesCreatedByProfile not implemented")
+}
+func (UnimplementedRoleServiceServer) ApplyOwnershipTransfer(context.Context, *ApplyOwnershipTransferRequest) (*ApplyOwnershipTransferResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApplyOwnershipTransfer not implemented")
+}
+func (UnimplementedRoleServiceServer) CompensateOwnershipTransfer(context.Context, *CompensateOwnershipTransferRequest) (*CompensateOwnershipTransferResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CompensateOwnershipTransfer not implemented")
 }
 func (UnimplementedRoleServiceServer) mustEmbedUnimplementedRoleServiceServer() {}
 func (UnimplementedRoleServiceServer) testEmbeddedByValue()                     {}
@@ -760,6 +794,42 @@ func _RoleService_DeleteRolesCreatedByProfile_Handler(srv interface{}, ctx conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RoleService_ApplyOwnershipTransfer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyOwnershipTransferRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RoleServiceServer).ApplyOwnershipTransfer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RoleService_ApplyOwnershipTransfer_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RoleServiceServer).ApplyOwnershipTransfer(ctx, req.(*ApplyOwnershipTransferRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RoleService_CompensateOwnershipTransfer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CompensateOwnershipTransferRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RoleServiceServer).CompensateOwnershipTransfer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RoleService_CompensateOwnershipTransfer_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RoleServiceServer).CompensateOwnershipTransfer(ctx, req.(*CompensateOwnershipTransferRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // RoleService_ServiceDesc is the grpc.ServiceDesc for RoleService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -846,6 +916,14 @@ var RoleService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteRolesCreatedByProfile",
 			Handler:    _RoleService_DeleteRolesCreatedByProfile_Handler,
+		},
+		{
+			MethodName: "ApplyOwnershipTransfer",
+			Handler:    _RoleService_ApplyOwnershipTransfer_Handler,
+		},
+		{
+			MethodName: "CompensateOwnershipTransfer",
+			Handler:    _RoleService_CompensateOwnershipTransfer_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

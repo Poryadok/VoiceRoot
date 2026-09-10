@@ -312,3 +312,127 @@ idempotent по `operation_id`. Unknown caller/RPC, caller с неправиль
 - **Chat Service** — валидация `chat_id` для текстового чата (`group` \| `channel`) при оверрайдах
 - **Federation Service** — синхронизация ролей при S2S (SyncSnapshot)
 
+
+### Ownership lifecycle principal runtime
+
+**Staged foundation:** production Space TransferOwnership is disabled before any
+lock, database or Role access, including when all signing/TLS settings exist or
+Role is absent. There is no environment setting to activate the v1 saga; only
+same-package test fixtures opt into its private test switch. Generic Role Owner
+assignment/revocation remains forbidden; bootstrap and non-Owner member behavior
+is unchanged. V2 durable convergence and Auth proof consumption must be enabled
+atomically before production transfer is exposed.
+
+
+The dedicated `ApplyOwnershipTransfer` and `CompensateOwnershipTransfer` paths
+verify `service:space` and the complete deterministic protobuf request hash,
+including unknown wire fields. The apply and compensating leg retain the same
+`operation_id` and original old/new owner ordering. Generic `AssignRole` and
+`RevokeRole` reject `Owner` mutations.
+
+The ordinary Role listener (`ROLE_GRPC_LISTEN`, default `:9090`) rejects both
+ownership RPCs even if a signed credential is supplied. A separate TLS listener
+(`ROLE_PRINCIPAL_GRPC_LISTEN`, default `:9091` when enabled) accepts only these two
+RPCs; unrelated methods are denied there. Other callers remain on their existing
+per-method migration path. See the exact runtime settings and activation order in
+[DEPLOYMENT.md](../DEPLOYMENT.md#ownership-lifecycle-principal-transport).
+
+This is the Role transport/receipt cutover, not completion of the Auth proof or
+public Space operation-idempotency contract.
+
+#### Terminal compensation and delayed apply
+
+A compensated ownership operation is terminal. Under the same operation lock,
+Role records a durable compensation receipt even when an in-flight Apply has not
+yet recorded its receipt, provided the expected old owner is still the sole
+Owner. This receipt is an abort barrier, not evidence that the remote Apply was
+canceled. Every later Apply for that operation is denied before mutation or
+replaying a stale successful Apply receipt. Identical compensation replays the
+recorded old-owner result; changed tuple or request binding conflicts. This
+prevents a timed-out Apply from changing Role ownership after Space has restored
+its database owner and released its mutation lease.
+
+#### Target durable ownership commit protocol (not implemented)
+
+The next ownership slice adds a disjoint v2 `PrepareOwnershipTransfer`,
+`FinalizeOwnershipTransfer` and `AbortOwnershipTransfer` surface with the same
+Space principal and exact operation/space/old/new binding. It must land atomically
+with the Space durable journal and caller, generated contracts, Role ACL freeze
+and recovery worker; the current two-method listener does not enable it.
+
+Role records one serialized operation state per tuple: `prepared`, `finalized`
+or `aborted`. In v2, Prepare records `prepared` and freezes
+space-scoped authorization without granting Owner to the new profile. Finalize
+atomically moves the sole Owner membership and records `finalized`; Abort
+records `aborted`, preserving/restoring the old owner. An abort before Prepare is
+a durable barrier. Terminal decisions cannot be reversed: late Prepare cannot
+resurrect abort, Finalize after abort and Abort after finalize are denied,
+and identical same-action retries replay the durable terminal outcome.
+
+While `prepared`, Role rejects space-scoped permission decisions and role/member
+reads or mutations with `UNAVAILABLE`; no Owner, Admin, bot or lifecycle shortcut
+may bypass the freeze. Only the exact trusted ownership lifecycle may resolve it.
+Authorization reads and state transitions must share a database serialization
+boundary so permission decisions cannot observe two effective Owners. Already
+authorized requests linearize at their completed permission decision; no new
+old-owner permission decision may pass after finalization. Missing state or
+lookup failure fails closed, never unfreezes via a timeout or process restart.
+
+Role never reads Space's database. Only a Space operation with a durable commit
+decision may invoke Finalize; a durable abort decision invokes Abort. Space
+must never issue both decisions. Replays/concurrency are serialized by the
+operation and space locks, including an absent-operation abort.
+
+
+##### V2 capability, durable state and rollout contract
+
+The current Apply/Compensate pair retains v1 immediate-mutation semantics and is
+never reinterpreted as provisional. V2 uses the disjoint RPCs above plus a trusted
+`GetOwnershipTransferCapabilities` read. Before reserving a new operation, Space
+requires the authenticated Role endpoint to advertise protocol 2 and all three
+v2 methods. Every v2 request and immutable receipt explicitly carries version 2;
+unknown versions or operation IDs belonging to v1 are denied before mutation.
+No old-server or network-error fallback to v1 is permitted.
+
+The Role ledger enforces one durable active prepared operation per space, in
+addition to the operation lock and immutable global operation tuple/hash/version.
+An unrelated operation cannot prepare, finalize or abort over that prepared
+operation. The complete v2 transition matrix is:
+
+| Existing state | Prepare, exact binding | Finalize, exact binding | Abort, exact binding |
+|---|---|---|---|
+| Absent | Validate sole old Owner and no active operation; persist prepared/freeze | `FAILED_PRECONDITION` | Validate sole old Owner and no active operation; persist aborted barrier |
+| Prepared | Replay prepared receipt | Atomically move sole Owner and persist finalized/unfreeze | Preserve old Owner and persist aborted/unfreeze |
+| Finalized | `FAILED_PRECONDITION` | Replay finalized receipt | `FAILED_PRECONDITION` |
+| Aborted | `FAILED_PRECONDITION` | `FAILED_PRECONDITION` | Replay aborted receipt |
+
+A changed tuple, canonical body or version for an existing operation returns
+`ALREADY_EXISTS` for every action. A normal absence of any active operation allows
+ordinary service; a failed active-state lookup returns `UNAVAILABLE`. Missing an
+expected receipt during recovery never implies success and never unlocks Space.
+Compact immutable terminal receipts remain for the lifetime of the space; hard
+space deletion must retain a retired-space fence so late calls cannot recreate
+roles or reuse old operation IDs. Timed receipt expiry is not an unlock mechanism.
+
+Freeze enforcement includes every Role RPC/store path: CheckPermission,
+GetEffectivePermissions, role/member/override/default-role reads and writes,
+BootstrapSpaceRoles, DeleteRolesCreatedByProfile, cleanup and batch paths, plus
+owner/admin/bot shortcuts. A request touching any frozen space fails atomically
+with `UNAVAILABLE`; it neither returns partial cached authority nor mutates the
+unfrozen subset. Reads and writes check the durable freeze in the same database
+serialization boundary as permission calculation/mutation. Caller caches cannot
+serve a new allow/Owner decision while this fence is uncertain; cached authority
+is disabled for the v2 decision path until a versioned invalidation fence is
+implemented. Clients must propagate `UNAVAILABLE`, never convert it to Owner or
+cached permission fallback.
+
+Rollout first deploys v2-capable Role and Space code without starting v2 transfers.
+Place ownership entrypoints in maintenance (`UNAVAILABLE`), drain generic/v1
+requests and their bounded RPC contexts/transactions, and prove current Space and
+Role owners converge through service-owned inspection. All old Space replicas
+must stop issuing generic/v1 mutations before v2 activation. Then enable v2 only
+after capability checks pass for the serving fleet and update exact caller and
+listener allow-lists atomically. Old v1 receipts keep their original semantics;
+only exact recovery/abort of preexisting v1 operations remains during drain, and
+new v1 Apply is rejected after cutover. A fleet unable to prove drain/convergence
+remains in maintenance rather than mixing ownership protocols.
