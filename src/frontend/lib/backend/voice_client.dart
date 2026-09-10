@@ -153,6 +153,8 @@ class VoiceCallsClient {
         final session = data['voice_session'];
         if (session is! Map<String, dynamic> ||
             session['voice_room_id'] != voiceRoomId ||
+            (session.containsKey('space_id') &&
+                session['space_id'] != spaceId) ||
             voiceRoomId.isEmpty ||
             session['room_id'] is! String ||
             (session['room_id'] as String).trim().isEmpty ||

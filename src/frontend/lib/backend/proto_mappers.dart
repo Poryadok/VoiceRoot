@@ -621,10 +621,17 @@ VoiceSessionKind voiceSessionKindFromProto(
 }
 
 VoiceCallSession voiceCallSessionFromProto(calls_pb.CallSession session) {
+  final kind = voiceSessionKindFromProto(
+    session.roomTypeEnum,
+    session.roomType,
+  );
   return VoiceCallSession(
     roomId: session.roomId,
     voiceRoomId: session.hasVoiceRoomId()
         ? emptyToNull(session.voiceRoomId)
+        : null,
+    spaceId: kind == VoiceSessionKind.voiceRoom
+        ? _persistedRoomSpaceId(session.voiceRoomId, session.spaceId)
         : null,
     livekitRoomName: session.livekitRoomName,
     chatId: session.hasLinkedChat() ? session.linkedChat.id : '',
@@ -632,10 +639,7 @@ VoiceCallSession voiceCallSessionFromProto(calls_pb.CallSession session) {
     calleeProfileId: session.calleeProfileId,
     mediaKind: voiceCallMediaKindFromProto(session.mediaKind),
     status: voiceCallStatusFromProto(session.status),
-    sessionKind: voiceSessionKindFromProto(
-      session.roomTypeEnum,
-      session.roomType,
-    ),
+    sessionKind: kind,
     expiresAt: protoTimestampToDateTime(
       session.hasExpiresAt() ? session.expiresAt : null,
     ),
@@ -957,6 +961,21 @@ SpaceTreeNodeData spaceTreeNodeFromJson(
   );
 }
 
+// Match backend UUID spellings without normalizing a persisted locator.
+final _persistedUuid = RegExp(
+  r'^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|\{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}|urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$',
+  caseSensitive: false,
+);
+
+String? _persistedRoomSpaceId(String roomId, Object? spaceId) {
+  if (spaceId is! String ||
+      _persistedUuid.stringMatch(roomId) != roomId ||
+      _persistedUuid.stringMatch(spaceId) != spaceId) {
+    return null;
+  }
+  return spaceId;
+}
+
 VoiceRoomSession voiceRoomSessionFromJson(Map<String, dynamic> data) {
   final session = data['voice_session'];
   if (session is! Map<String, dynamic>) {
@@ -970,6 +989,10 @@ VoiceRoomSession voiceRoomSessionFromJson(Map<String, dynamic> data) {
     roomId: session['room_id'] as String? ?? '',
     livekitRoomName: session['livekit_room_name'] as String? ?? '',
     voiceRoomId: session['voice_room_id'] as String? ?? '',
+    spaceId: _persistedRoomSpaceId(
+      session['voice_room_id'] as String? ?? '',
+      session['space_id'],
+    ),
   );
 }
 
