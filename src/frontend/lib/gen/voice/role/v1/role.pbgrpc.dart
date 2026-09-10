@@ -182,6 +182,25 @@ class RoleServiceClient extends $grpc.Client {
         options: options);
   }
 
+  /// Trusted Space-only lifecycle operations. These are the sole Owner mutation path.
+  $grpc.ResponseFuture<$0.ApplyOwnershipTransferResponse>
+      applyOwnershipTransfer(
+    $0.ApplyOwnershipTransferRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$applyOwnershipTransfer, request,
+        options: options);
+  }
+
+  $grpc.ResponseFuture<$0.CompensateOwnershipTransferResponse>
+      compensateOwnershipTransfer(
+    $0.CompensateOwnershipTransferRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$compensateOwnershipTransfer, request,
+        options: options);
+  }
+
   // method descriptors
 
   static final _$createRole =
@@ -287,6 +306,17 @@ class RoleServiceClient extends $grpc.Client {
       '/voice.role.v1.RoleService/DeleteRolesCreatedByProfile',
       ($0.DeleteRolesCreatedByProfileRequest value) => value.writeToBuffer(),
       $0.DeleteRolesCreatedByProfileResponse.fromBuffer);
+  static final _$applyOwnershipTransfer = $grpc.ClientMethod<
+          $0.ApplyOwnershipTransferRequest, $0.ApplyOwnershipTransferResponse>(
+      '/voice.role.v1.RoleService/ApplyOwnershipTransfer',
+      ($0.ApplyOwnershipTransferRequest value) => value.writeToBuffer(),
+      $0.ApplyOwnershipTransferResponse.fromBuffer);
+  static final _$compensateOwnershipTransfer = $grpc.ClientMethod<
+          $0.CompensateOwnershipTransferRequest,
+          $0.CompensateOwnershipTransferResponse>(
+      '/voice.role.v1.RoleService/CompensateOwnershipTransfer',
+      ($0.CompensateOwnershipTransferRequest value) => value.writeToBuffer(),
+      $0.CompensateOwnershipTransferResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.role.v1.RoleService')
@@ -462,6 +492,25 @@ abstract class RoleServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.DeleteRolesCreatedByProfileRequest.fromBuffer(value),
         ($0.DeleteRolesCreatedByProfileResponse value) =>
+            value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ApplyOwnershipTransferRequest,
+            $0.ApplyOwnershipTransferResponse>(
+        'ApplyOwnershipTransfer',
+        applyOwnershipTransfer_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ApplyOwnershipTransferRequest.fromBuffer(value),
+        ($0.ApplyOwnershipTransferResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.CompensateOwnershipTransferRequest,
+            $0.CompensateOwnershipTransferResponse>(
+        'CompensateOwnershipTransfer',
+        compensateOwnershipTransfer_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.CompensateOwnershipTransferRequest.fromBuffer(value),
+        ($0.CompensateOwnershipTransferResponse value) =>
             value.writeToBuffer()));
   }
 
@@ -639,4 +688,23 @@ abstract class RoleServiceBase extends $grpc.Service {
   $async.Future<$0.DeleteRolesCreatedByProfileResponse>
       deleteRolesCreatedByProfile($grpc.ServiceCall call,
           $0.DeleteRolesCreatedByProfileRequest request);
+
+  $async.Future<$0.ApplyOwnershipTransferResponse> applyOwnershipTransfer_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ApplyOwnershipTransferRequest> $request) async {
+    return applyOwnershipTransfer($call, await $request);
+  }
+
+  $async.Future<$0.ApplyOwnershipTransferResponse> applyOwnershipTransfer(
+      $grpc.ServiceCall call, $0.ApplyOwnershipTransferRequest request);
+
+  $async.Future<$0.CompensateOwnershipTransferResponse>
+      compensateOwnershipTransfer_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.CompensateOwnershipTransferRequest> $request) async {
+    return compensateOwnershipTransfer($call, await $request);
+  }
+
+  $async.Future<$0.CompensateOwnershipTransferResponse>
+      compensateOwnershipTransfer($grpc.ServiceCall call,
+          $0.CompensateOwnershipTransferRequest request);
 }
