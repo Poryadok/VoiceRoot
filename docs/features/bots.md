@@ -159,10 +159,10 @@ commands:
 | `SPACE_VIEW_MEMBER_LIST`    | Видеть список участников спейса                                               |
 | `MEMBER_ASSIGN_ROLES`       | Выдавать/забирать роли ниже бота по иерархии                                  |
 | `TEXT_CHAT_CREATE_IN_SPACE` | Создавать/архивировать текстовые чаты в спейсе (`group` \| `channel`)         |
-| `SPACE_MANAGE_ROLES` ⚠️     | Создавать и управлять ролями ниже бота по иерархии (привилегированный scope)  |
+| `SPACE_MANAGE_ROLES` ⚠️     | Создавать кастомные роли ниже бота по иерархии (привилегированный scope)      |
 | `TEXT_CHAT_READ_HISTORY` ⚠️ | Читать историю сообщений в разрешённых чатах (привилегированный scope)        |
 
-Scopes `SPACE_MANAGE_ROLES` и `TEXT_CHAT_READ_HISTORY` для бота — привилегированные: при установке пользователь видит явное предупреждение. `TEXT_CHAT_READ_HISTORY` предназначен для модерационных ботов; `SPACE_MANAGE_ROLES` — для ботов, которым нужно создавать определения ролей (назначение участникам — `MEMBER_ASSIGN_ROLES`). Имена совпадают с правами участника; политика проверки — в Bot Service / Gateway.
+Scopes `SPACE_MANAGE_ROLES` и `TEXT_CHAT_READ_HISTORY` для бота — привилегированные: при установке пользователь видит явное предупреждение. `TEXT_CHAT_READ_HISTORY` предназначен для модерационных ботов; `SPACE_MANAGE_ROLES` — для ботов, которым нужно создавать определения ролей; этот Phase-0 scope не даёт обновлять, удалять или reorder-ить роли (назначение участникам — `MEMBER_ASSIGN_ROLES`). Имена совпадают с правами участника; политика проверки — в Bot Service / Gateway.
 
 ### Phase-0: подписанная capability для role mutations (target; не реализовано)
 
