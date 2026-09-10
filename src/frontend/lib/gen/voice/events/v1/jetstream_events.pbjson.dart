@@ -510,6 +510,15 @@ const RoleStreamEvent$json = {
       '9': 0,
       '10': 'roleDefinitionChanged'
     },
+    {
+      '1': 'voice_room_policy_invalidated',
+      '3': 12,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.VoiceRoomPolicyInvalidated',
+      '9': 0,
+      '10': 'voiceRoomPolicyInvalidated'
+    },
   ],
   '8': [
     {'1': 'payload'},
@@ -523,7 +532,9 @@ final $typed_data.Uint8List roleStreamEventDescriptor = $convert.base64Decode(
     'bGVfYXNzaWdubWVudF9jaGFuZ2VkGAogASgLMiYudm9pY2UuZXZlbnRzLnYxLlJvbGVBc3NpZ2'
     '5tZW50Q2hhbmdlZEgAUhVyb2xlQXNzaWdubWVudENoYW5nZWQSYAoXcm9sZV9kZWZpbml0aW9u'
     'X2NoYW5nZWQYCyABKAsyJi52b2ljZS5ldmVudHMudjEuUm9sZURlZmluaXRpb25DaGFuZ2VkSA'
-    'BSFXJvbGVEZWZpbml0aW9uQ2hhbmdlZEIJCgdwYXlsb2Fk');
+    'BSFXJvbGVEZWZpbml0aW9uQ2hhbmdlZBJwCh12b2ljZV9yb29tX3BvbGljeV9pbnZhbGlkYXRl'
+    'ZBgMIAEoCzIrLnZvaWNlLmV2ZW50cy52MS5Wb2ljZVJvb21Qb2xpY3lJbnZhbGlkYXRlZEgAUh'
+    'p2b2ljZVJvb21Qb2xpY3lJbnZhbGlkYXRlZEIJCgdwYXlsb2Fk');
 
 @$core.Deprecated('Use roleAssignmentChangedDescriptor instead')
 const RoleAssignmentChanged$json = {
@@ -553,6 +564,44 @@ const RoleDefinitionChanged$json = {
 final $typed_data.Uint8List roleDefinitionChangedDescriptor = $convert.base64Decode(
     'ChVSb2xlRGVmaW5pdGlvbkNoYW5nZWQSGQoIc3BhY2VfaWQYASABKAlSB3NwYWNlSWQSFwoHcm'
     '9sZV9pZBgCIAEoCVIGcm9sZUlk');
+
+@$core.Deprecated('Use voiceRoomPolicyInvalidatedDescriptor instead')
+const VoiceRoomPolicyInvalidated$json = {
+  '1': 'VoiceRoomPolicyInvalidated',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'voice_room_id',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'voiceRoomId',
+      '17': true
+    },
+    {
+      '1': 'profile_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '9': 1,
+      '10': 'profileId',
+      '17': true
+    },
+    {'1': 'policy_epoch', '3': 4, '4': 1, '5': 4, '10': 'policyEpoch'},
+  ],
+  '8': [
+    {'1': '_voice_room_id'},
+    {'1': '_profile_id'},
+  ],
+};
+
+/// Descriptor for `VoiceRoomPolicyInvalidated`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List voiceRoomPolicyInvalidatedDescriptor = $convert.base64Decode(
+    'ChpWb2ljZVJvb21Qb2xpY3lJbnZhbGlkYXRlZBIZCghzcGFjZV9pZBgBIAEoCVIHc3BhY2VJZB'
+    'InCg12b2ljZV9yb29tX2lkGAIgASgJSABSC3ZvaWNlUm9vbUlkiAEBEiIKCnByb2ZpbGVfaWQY'
+    'AyABKAlIAVIJcHJvZmlsZUlkiAEBEiEKDHBvbGljeV9lcG9jaBgEIAEoBFILcG9saWN5RXBvY2'
+    'hCEAoOX3ZvaWNlX3Jvb21faWRCDQoLX3Byb2ZpbGVfaWQ=');
 
 @$core.Deprecated('Use messageStreamEventDescriptor instead')
 const MessageStreamEvent$json = {
@@ -1051,6 +1100,15 @@ const ChatStreamEvent$json = {
       '9': 0,
       '10': 'dmPeerDeleted'
     },
+    {
+      '1': 'voice_room_access_invalidated',
+      '3': 20,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.VoiceRoomAccessInvalidated',
+      '9': 0,
+      '10': 'voiceRoomAccessInvalidated'
+    },
   ],
   '8': [
     {'1': 'payload'},
@@ -1074,8 +1132,10 @@ final $typed_data.Uint8List chatStreamEventDescriptor = $convert.base64Decode(
     'EkQKDXNwYWNlX3VwZGF0ZWQYESABKAsyHS52b2ljZS5ldmVudHMudjEuU3BhY2VVcGRhdGVkSA'
     'BSDHNwYWNlVXBkYXRlZBJECg1zcGFjZV9kZWxldGVkGBIgASgLMh0udm9pY2UuZXZlbnRzLnYx'
     'LlNwYWNlRGVsZXRlZEgAUgxzcGFjZURlbGV0ZWQSSAoPZG1fcGVlcl9kZWxldGVkGBMgASgLMh'
-    '4udm9pY2UuZXZlbnRzLnYxLkRtUGVlckRlbGV0ZWRIAFINZG1QZWVyRGVsZXRlZEIJCgdwYXls'
-    'b2Fk');
+    '4udm9pY2UuZXZlbnRzLnYxLkRtUGVlckRlbGV0ZWRIAFINZG1QZWVyRGVsZXRlZBJwCh12b2lj'
+    'ZV9yb29tX2FjY2Vzc19pbnZhbGlkYXRlZBgUIAEoCzIrLnZvaWNlLmV2ZW50cy52MS5Wb2ljZV'
+    'Jvb21BY2Nlc3NJbnZhbGlkYXRlZEgAUhp2b2ljZVJvb21BY2Nlc3NJbnZhbGlkYXRlZEIJCgdw'
+    'YXlsb2Fk');
 
 @$core.Deprecated('Use chatCreatedDescriptor instead')
 const ChatCreated$json = {
@@ -1258,6 +1318,44 @@ const DmPeerDeleted$json = {
 final $typed_data.Uint8List dmPeerDeletedDescriptor = $convert.base64Decode(
     'Cg1EbVBlZXJEZWxldGVkEhcKB2NoYXRfaWQYASABKAlSBmNoYXRJZBIwChRyZWNpcGllbnRfcH'
     'JvZmlsZV9pZBgCIAEoCVIScmVjaXBpZW50UHJvZmlsZUlk');
+
+@$core.Deprecated('Use voiceRoomAccessInvalidatedDescriptor instead')
+const VoiceRoomAccessInvalidated$json = {
+  '1': 'VoiceRoomAccessInvalidated',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'voice_room_id',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'voiceRoomId',
+      '17': true
+    },
+    {
+      '1': 'profile_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '9': 1,
+      '10': 'profileId',
+      '17': true
+    },
+    {'1': 'access_epoch', '3': 4, '4': 1, '5': 4, '10': 'accessEpoch'},
+  ],
+  '8': [
+    {'1': '_voice_room_id'},
+    {'1': '_profile_id'},
+  ],
+};
+
+/// Descriptor for `VoiceRoomAccessInvalidated`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List voiceRoomAccessInvalidatedDescriptor = $convert.base64Decode(
+    'ChpWb2ljZVJvb21BY2Nlc3NJbnZhbGlkYXRlZBIZCghzcGFjZV9pZBgBIAEoCVIHc3BhY2VJZB'
+    'InCg12b2ljZV9yb29tX2lkGAIgASgJSABSC3ZvaWNlUm9vbUlkiAEBEiIKCnByb2ZpbGVfaWQY'
+    'AyABKAlIAVIJcHJvZmlsZUlkiAEBEiEKDGFjY2Vzc19lcG9jaBgEIAEoBFILYWNjZXNzRXBvY2'
+    'hCEAoOX3ZvaWNlX3Jvb21faWRCDQoLX3Byb2ZpbGVfaWQ=');
 
 @$core.Deprecated('Use voiceStreamEventDescriptor instead')
 const VoiceStreamEvent$json = {

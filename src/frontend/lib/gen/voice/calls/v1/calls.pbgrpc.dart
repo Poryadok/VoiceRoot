@@ -97,6 +97,15 @@ class VoiceServiceClient extends $grpc.Client {
     return $createUnaryCall(_$moveToVoiceRoom, request, options: options);
   }
 
+  $grpc.ResponseFuture<$0.MoveVoiceRoomParticipantResponse>
+      moveVoiceRoomParticipant(
+    $0.MoveVoiceRoomParticipantRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$moveVoiceRoomParticipant, request,
+        options: options);
+  }
+
   $grpc.ResponseFuture<$0.GetJoinTokenResponse> getJoinToken(
     $0.GetJoinTokenRequest request, {
     $grpc.CallOptions? options,
@@ -228,6 +237,12 @@ class VoiceServiceClient extends $grpc.Client {
           '/voice.calls.v1.VoiceService/MoveToVoiceRoom',
           ($0.MoveToVoiceRoomRequest value) => value.writeToBuffer(),
           $0.MoveToVoiceRoomResponse.fromBuffer);
+  static final _$moveVoiceRoomParticipant = $grpc.ClientMethod<
+          $0.MoveVoiceRoomParticipantRequest,
+          $0.MoveVoiceRoomParticipantResponse>(
+      '/voice.calls.v1.VoiceService/MoveVoiceRoomParticipant',
+      ($0.MoveVoiceRoomParticipantRequest value) => value.writeToBuffer(),
+      $0.MoveVoiceRoomParticipantResponse.fromBuffer);
   static final _$getJoinToken =
       $grpc.ClientMethod<$0.GetJoinTokenRequest, $0.GetJoinTokenResponse>(
           '/voice.calls.v1.VoiceService/GetJoinToken',
@@ -366,6 +381,15 @@ abstract class VoiceServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.MoveToVoiceRoomRequest.fromBuffer(value),
         ($0.MoveToVoiceRoomResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.MoveVoiceRoomParticipantRequest,
+            $0.MoveVoiceRoomParticipantResponse>(
+        'MoveVoiceRoomParticipant',
+        moveVoiceRoomParticipant_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.MoveVoiceRoomParticipantRequest.fromBuffer(value),
+        ($0.MoveVoiceRoomParticipantResponse value) => value.writeToBuffer()));
     $addMethod(
         $grpc.ServiceMethod<$0.GetJoinTokenRequest, $0.GetJoinTokenResponse>(
             'GetJoinToken',
@@ -544,6 +568,15 @@ abstract class VoiceServiceBase extends $grpc.Service {
 
   $async.Future<$0.MoveToVoiceRoomResponse> moveToVoiceRoom(
       $grpc.ServiceCall call, $0.MoveToVoiceRoomRequest request);
+
+  $async.Future<$0.MoveVoiceRoomParticipantResponse>
+      moveVoiceRoomParticipant_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.MoveVoiceRoomParticipantRequest> $request) async {
+    return moveVoiceRoomParticipant($call, await $request);
+  }
+
+  $async.Future<$0.MoveVoiceRoomParticipantResponse> moveVoiceRoomParticipant(
+      $grpc.ServiceCall call, $0.MoveVoiceRoomParticipantRequest request);
 
   $async.Future<$0.GetJoinTokenResponse> getJoinToken_Pre(
       $grpc.ServiceCall $call,

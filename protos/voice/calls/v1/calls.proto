@@ -31,6 +31,22 @@ enum CallStatus {
   CALL_STATUS_ENDED = 5;
 }
 
+enum VoiceRoomLifecycleMethod {
+  VOICE_ROOM_LIFECYCLE_METHOD_UNSPECIFIED = 0;
+  VOICE_ROOM_LIFECYCLE_METHOD_JOIN = 1;
+  VOICE_ROOM_LIFECYCLE_METHOD_LEAVE = 2;
+  VOICE_ROOM_LIFECYCLE_METHOD_SELF_MOVE = 3;
+  VOICE_ROOM_LIFECYCLE_METHOD_MODERATOR_MOVE = 4;
+}
+
+enum VoiceRoomLifecycleOutcome {
+  VOICE_ROOM_LIFECYCLE_OUTCOME_UNSPECIFIED = 0;
+  VOICE_ROOM_LIFECYCLE_OUTCOME_JOINED = 1;
+  VOICE_ROOM_LIFECYCLE_OUTCOME_LEFT = 2;
+  VOICE_ROOM_LIFECYCLE_OUTCOME_MOVED = 3;
+  VOICE_ROOM_LIFECYCLE_OUTCOME_NO_OP = 4;
+}
+
 // Voice / LiveKit orchestration. HTTP: /api/v1/voice/**.
 // Package voice.calls.v1 avoids path stutter voice/voice/v1; service name matches docs.
 service VoiceService {
@@ -44,6 +60,7 @@ service VoiceService {
   rpc JoinVoiceRoom(JoinVoiceRoomRequest) returns (JoinVoiceRoomResponse);
   rpc LeaveVoiceRoom(LeaveVoiceRoomRequest) returns (LeaveVoiceRoomResponse);
   rpc MoveToVoiceRoom(MoveToVoiceRoomRequest) returns (MoveToVoiceRoomResponse);
+  rpc MoveVoiceRoomParticipant(MoveVoiceRoomParticipantRequest) returns (MoveVoiceRoomParticipantResponse);
 
   rpc GetJoinToken(GetJoinTokenRequest) returns (GetJoinTokenResponse);
 
@@ -112,22 +129,54 @@ message CallSession {
 message JoinVoiceRoomRequest {
   string voice_room_id = 1;
   voice.space.v1.SpaceRef space = 2;
+  string operation_id = 3;
 }
 
 message LeaveVoiceRoomRequest {
   string voice_room_id = 1;
+  voice.space.v1.SpaceRef space = 2;
+  string operation_id = 3;
 }
 
 message MoveToVoiceRoomRequest {
   string from_voice_room_id = 1;
   string to_voice_room_id = 2;
   voice.space.v1.SpaceRef space = 3;
+  string operation_id = 4;
+}
+
+message MoveVoiceRoomParticipantRequest {
+  string from_voice_room_id = 1;
+  string to_voice_room_id = 2;
+  voice.space.v1.SpaceRef space = 3;
+  string participant_profile_id = 4;
+  string operation_id = 5;
 }
 
 message VoiceSession {
   string room_id = 1;
   string livekit_room_name = 2;
   string voice_room_id = 3;
+}
+
+// Immutable terminal history for one actor-bound lifecycle operation. It never
+// contains a bearer, credential, reusable permission or grant.
+message VoiceRoomLifecycleReceipt {
+  string operation_id = 1;
+  string actor_profile_id = 2;
+  string subject_profile_id = 3;
+  voice.space.v1.SpaceRef space = 4;
+  VoiceRoomLifecycleMethod method = 5;
+  VoiceRoomLifecycleOutcome outcome = 6;
+  optional string source_voice_room_id = 7;
+  optional string destination_voice_room_id = 8;
+  optional string room_id = 9;
+  optional uint64 source_roster_version = 10;
+  optional uint64 destination_roster_version = 11;
+  optional string media_epoch = 12;
+  optional uint64 space_access_epoch = 13;
+  optional uint64 role_policy_epoch = 14;
+  optional bytes authorization_digest = 15;
 }
 
 message GetJoinTokenRequest {
@@ -219,10 +268,17 @@ message LeaveCallResponse {}
 message EndCallResponse {}
 message JoinVoiceRoomResponse {
   VoiceSession voice_session = 1;
+  VoiceRoomLifecycleReceipt receipt = 2;
 }
-message LeaveVoiceRoomResponse {}
+message LeaveVoiceRoomResponse {
+  VoiceRoomLifecycleReceipt receipt = 1;
+}
 message MoveToVoiceRoomResponse {
   VoiceSession voice_session = 1;
+  VoiceRoomLifecycleReceipt receipt = 2;
+}
+message MoveVoiceRoomParticipantResponse {
+  VoiceRoomLifecycleReceipt receipt = 1;
 }
 
 // JWT and wall-clock expiry (UTC). Public API uses google.protobuf.Timestamp per docs/REPOSITORIES.md.
@@ -231,6 +287,10 @@ message GetJoinTokenResponse {
   google.protobuf.Timestamp expires_at = 2;
   // WebSocket URL for LiveKit SDK connect (public ingress; not the internal service URL).
   string livekit_url = 3;
+  string media_epoch = 4;
+  uint64 space_access_epoch = 5;
+  uint64 role_policy_epoch = 6;
+  bytes authorization_digest = 7;
 }
 message UpdateVoiceStateResponse {}
 message GetVoiceStatesResponse {

@@ -2980,6 +2980,325 @@ class CheckPermissionResponse extends $pb.GeneratedMessage {
   void clearAllowed() => $_clearField(1);
 }
 
+class ResolveVoiceRoomGrantsRequest extends $pb.GeneratedMessage {
+  factory ResolveVoiceRoomGrantsRequest({
+    $core.String? spaceId,
+    $core.String? voiceRoomId,
+    $core.String? profileId,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (voiceRoomId != null) result.voiceRoomId = voiceRoomId;
+    if (profileId != null) result.profileId = profileId;
+    return result;
+  }
+
+  ResolveVoiceRoomGrantsRequest._();
+
+  factory ResolveVoiceRoomGrantsRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ResolveVoiceRoomGrantsRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ResolveVoiceRoomGrantsRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'voiceRoomId')
+    ..aOS(3, _omitFieldNames ? '' : 'profileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolveVoiceRoomGrantsRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolveVoiceRoomGrantsRequest copyWith(
+          void Function(ResolveVoiceRoomGrantsRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as ResolveVoiceRoomGrantsRequest))
+          as ResolveVoiceRoomGrantsRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ResolveVoiceRoomGrantsRequest create() =>
+      ResolveVoiceRoomGrantsRequest._();
+  @$core.override
+  ResolveVoiceRoomGrantsRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ResolveVoiceRoomGrantsRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ResolveVoiceRoomGrantsRequest>(create);
+  static ResolveVoiceRoomGrantsRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get voiceRoomId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set voiceRoomId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasVoiceRoomId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearVoiceRoomId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get profileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set profileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearProfileId() => $_clearField(3);
+}
+
+class VoiceRoomGrants extends $pb.GeneratedMessage {
+  factory VoiceRoomGrants({
+    $core.bool? canJoin,
+    $core.bool? canPublishAudio,
+    $core.bool? canPublishVideo,
+    $core.bool? canPublishScreenShare,
+    $core.bool? canSubscribe,
+    $core.bool? canMuteOthers,
+    $core.bool? canDeafenOthers,
+    $core.bool? canMoveOthers,
+    $core.bool? canUsePtt,
+    $core.bool? prioritySpeaker,
+  }) {
+    final result = create();
+    if (canJoin != null) result.canJoin = canJoin;
+    if (canPublishAudio != null) result.canPublishAudio = canPublishAudio;
+    if (canPublishVideo != null) result.canPublishVideo = canPublishVideo;
+    if (canPublishScreenShare != null)
+      result.canPublishScreenShare = canPublishScreenShare;
+    if (canSubscribe != null) result.canSubscribe = canSubscribe;
+    if (canMuteOthers != null) result.canMuteOthers = canMuteOthers;
+    if (canDeafenOthers != null) result.canDeafenOthers = canDeafenOthers;
+    if (canMoveOthers != null) result.canMoveOthers = canMoveOthers;
+    if (canUsePtt != null) result.canUsePtt = canUsePtt;
+    if (prioritySpeaker != null) result.prioritySpeaker = prioritySpeaker;
+    return result;
+  }
+
+  VoiceRoomGrants._();
+
+  factory VoiceRoomGrants.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory VoiceRoomGrants.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'VoiceRoomGrants',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aOB(1, _omitFieldNames ? '' : 'canJoin')
+    ..aOB(2, _omitFieldNames ? '' : 'canPublishAudio')
+    ..aOB(3, _omitFieldNames ? '' : 'canPublishVideo')
+    ..aOB(4, _omitFieldNames ? '' : 'canPublishScreenShare')
+    ..aOB(5, _omitFieldNames ? '' : 'canSubscribe')
+    ..aOB(6, _omitFieldNames ? '' : 'canMuteOthers')
+    ..aOB(7, _omitFieldNames ? '' : 'canDeafenOthers')
+    ..aOB(8, _omitFieldNames ? '' : 'canMoveOthers')
+    ..aOB(9, _omitFieldNames ? '' : 'canUsePtt')
+    ..aOB(10, _omitFieldNames ? '' : 'prioritySpeaker')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  VoiceRoomGrants clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  VoiceRoomGrants copyWith(void Function(VoiceRoomGrants) updates) =>
+      super.copyWith((message) => updates(message as VoiceRoomGrants))
+          as VoiceRoomGrants;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static VoiceRoomGrants create() => VoiceRoomGrants._();
+  @$core.override
+  VoiceRoomGrants createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static VoiceRoomGrants getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<VoiceRoomGrants>(create);
+  static VoiceRoomGrants? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.bool get canJoin => $_getBF(0);
+  @$pb.TagNumber(1)
+  set canJoin($core.bool value) => $_setBool(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasCanJoin() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearCanJoin() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.bool get canPublishAudio => $_getBF(1);
+  @$pb.TagNumber(2)
+  set canPublishAudio($core.bool value) => $_setBool(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasCanPublishAudio() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearCanPublishAudio() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.bool get canPublishVideo => $_getBF(2);
+  @$pb.TagNumber(3)
+  set canPublishVideo($core.bool value) => $_setBool(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasCanPublishVideo() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearCanPublishVideo() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.bool get canPublishScreenShare => $_getBF(3);
+  @$pb.TagNumber(4)
+  set canPublishScreenShare($core.bool value) => $_setBool(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasCanPublishScreenShare() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearCanPublishScreenShare() => $_clearField(4);
+
+  /// Subscription uses the same canonical VOICE_JOIN decision as can_join.
+  @$pb.TagNumber(5)
+  $core.bool get canSubscribe => $_getBF(4);
+  @$pb.TagNumber(5)
+  set canSubscribe($core.bool value) => $_setBool(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasCanSubscribe() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearCanSubscribe() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.bool get canMuteOthers => $_getBF(5);
+  @$pb.TagNumber(6)
+  set canMuteOthers($core.bool value) => $_setBool(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasCanMuteOthers() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearCanMuteOthers() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.bool get canDeafenOthers => $_getBF(6);
+  @$pb.TagNumber(7)
+  set canDeafenOthers($core.bool value) => $_setBool(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasCanDeafenOthers() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearCanDeafenOthers() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $core.bool get canMoveOthers => $_getBF(7);
+  @$pb.TagNumber(8)
+  set canMoveOthers($core.bool value) => $_setBool(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasCanMoveOthers() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearCanMoveOthers() => $_clearField(8);
+
+  @$pb.TagNumber(9)
+  $core.bool get canUsePtt => $_getBF(8);
+  @$pb.TagNumber(9)
+  set canUsePtt($core.bool value) => $_setBool(8, value);
+  @$pb.TagNumber(9)
+  $core.bool hasCanUsePtt() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearCanUsePtt() => $_clearField(9);
+
+  @$pb.TagNumber(10)
+  $core.bool get prioritySpeaker => $_getBF(9);
+  @$pb.TagNumber(10)
+  set prioritySpeaker($core.bool value) => $_setBool(9, value);
+  @$pb.TagNumber(10)
+  $core.bool hasPrioritySpeaker() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearPrioritySpeaker() => $_clearField(10);
+}
+
+class ResolveVoiceRoomGrantsResponse extends $pb.GeneratedMessage {
+  factory ResolveVoiceRoomGrantsResponse({
+    VoiceRoomGrants? grants,
+    $fixnum.Int64? policyEpoch,
+  }) {
+    final result = create();
+    if (grants != null) result.grants = grants;
+    if (policyEpoch != null) result.policyEpoch = policyEpoch;
+    return result;
+  }
+
+  ResolveVoiceRoomGrantsResponse._();
+
+  factory ResolveVoiceRoomGrantsResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ResolveVoiceRoomGrantsResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ResolveVoiceRoomGrantsResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aOM<VoiceRoomGrants>(1, _omitFieldNames ? '' : 'grants',
+        subBuilder: VoiceRoomGrants.create)
+    ..a<$fixnum.Int64>(
+        2, _omitFieldNames ? '' : 'policyEpoch', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolveVoiceRoomGrantsResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolveVoiceRoomGrantsResponse copyWith(
+          void Function(ResolveVoiceRoomGrantsResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as ResolveVoiceRoomGrantsResponse))
+          as ResolveVoiceRoomGrantsResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ResolveVoiceRoomGrantsResponse create() =>
+      ResolveVoiceRoomGrantsResponse._();
+  @$core.override
+  ResolveVoiceRoomGrantsResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ResolveVoiceRoomGrantsResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ResolveVoiceRoomGrantsResponse>(create);
+  static ResolveVoiceRoomGrantsResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  VoiceRoomGrants get grants => $_getN(0);
+  @$pb.TagNumber(1)
+  set grants(VoiceRoomGrants value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasGrants() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearGrants() => $_clearField(1);
+  @$pb.TagNumber(1)
+  VoiceRoomGrants ensureGrants() => $_ensure(0);
+
+  @$pb.TagNumber(2)
+  $fixnum.Int64 get policyEpoch => $_getI64(1);
+  @$pb.TagNumber(2)
+  set policyEpoch($fixnum.Int64 value) => $_setInt64(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasPolicyEpoch() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearPolicyEpoch() => $_clearField(2);
+}
+
 class GetEffectivePermissionsRequest extends $pb.GeneratedMessage {
   factory GetEffectivePermissionsRequest({
     $core.String? spaceId,

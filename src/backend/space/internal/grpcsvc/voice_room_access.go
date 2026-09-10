@@ -32,11 +32,15 @@ func (s *SpaceGRPC) ResolveVoiceRoomAccess(ctx context.Context, req *spacev1.Res
 	if err != nil {
 		return nil, err
 	}
+	spaceID, err := parseUUIDField("space.id", req.GetSpace().GetId())
+	if err != nil {
+		return nil, err
+	}
 	resolver := voiceRoomAccessResolver(s.Store)
 	if s.voiceRoomAccessResolver != nil {
 		resolver = s.voiceRoomAccessResolver
 	}
-	access, err := resolver.ResolveVoiceRoomAccess(ctx, voiceRoomID, profileID)
+	access, err := resolver.ResolveVoiceRoomAccess(ctx, spaceID, voiceRoomID, profileID)
 	if errors.Is(err, store.ErrVoiceRoomNotFound) {
 		return nil, status.Error(codes.NotFound, err.Error())
 	}
@@ -44,8 +48,10 @@ func (s *SpaceGRPC) ResolveVoiceRoomAccess(ctx context.Context, req *spacev1.Res
 		return nil, status.Error(codes.Unavailable, "voice room access resolver unavailable")
 	}
 	return &spacev1.ResolveVoiceRoomAccessResponse{
-		SpaceId: access.SpaceID.String(),
-		Member:  access.Member,
-		Active:  access.Active,
+		SpaceId:      access.SpaceID.String(),
+		Member:       access.Member,
+		Active:       access.Active,
+		Discoverable: access.Discoverable,
+		AccessEpoch:  access.AccessEpoch,
 	}, nil
 }

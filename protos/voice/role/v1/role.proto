@@ -29,6 +29,8 @@ service RoleService {
 
   rpc CheckPermission(CheckPermissionRequest) returns (CheckPermissionResponse);
   rpc GetEffectivePermissions(GetEffectivePermissionsRequest) returns (GetEffectivePermissionsResponse);
+  // Trusted Voice-only decision. Role owns the explicit grants and policy epoch.
+  rpc ResolveVoiceRoomGrants(ResolveVoiceRoomGrantsRequest) returns (ResolveVoiceRoomGrantsResponse);
 
   rpc SetDefaultJoinRole(SetDefaultJoinRoleRequest) returns (SetDefaultJoinRoleResponse);
   rpc GetDefaultJoinRole(GetDefaultJoinRoleRequest) returns (GetDefaultJoinRoleResponse);
@@ -290,6 +292,31 @@ message CheckPermissionRequest {
 
 message CheckPermissionResponse {
   bool allowed = 1;
+}
+
+message ResolveVoiceRoomGrantsRequest {
+  string space_id = 1;
+  string voice_room_id = 2;
+  string profile_id = 3;
+}
+
+message VoiceRoomGrants {
+  bool can_join = 1;
+  bool can_publish_audio = 2;
+  bool can_publish_video = 3;
+  bool can_publish_screen_share = 4;
+  // Subscription uses the same canonical VOICE_JOIN decision as can_join.
+  bool can_subscribe = 5;
+  bool can_mute_others = 6;
+  bool can_deafen_others = 7;
+  bool can_move_others = 8;
+  bool can_use_ptt = 9;
+  bool priority_speaker = 10;
+}
+
+message ResolveVoiceRoomGrantsResponse {
+  VoiceRoomGrants grants = 1;
+  uint64 policy_epoch = 2;
 }
 
 message GetEffectivePermissionsRequest {

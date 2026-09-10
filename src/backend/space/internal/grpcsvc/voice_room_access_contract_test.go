@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"net"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/google/uuid"
@@ -24,8 +26,29 @@ import (
 
 type failingVoiceRoomAccessResolver struct{ err error }
 
-func (r failingVoiceRoomAccessResolver) ResolveVoiceRoomAccess(context.Context, uuid.UUID, uuid.UUID) (*store.VoiceRoomAccessRow, error) {
+func (r failingVoiceRoomAccessResolver) ResolveVoiceRoomAccess(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (*store.VoiceRoomAccessRow, error) {
 	return nil, r.err
+}
+
+type recordingVoiceRoomAccessResolver struct {
+	spaceID     uuid.UUID
+	voiceRoomID uuid.UUID
+	profileID   uuid.UUID
+	called      bool
+}
+
+func (r *recordingVoiceRoomAccessResolver) ResolveVoiceRoomAccess(_ context.Context, spaceID, voiceRoomID, profileID uuid.UUID) (*store.VoiceRoomAccessRow, error) {
+	r.spaceID = spaceID
+	r.voiceRoomID = voiceRoomID
+	r.profileID = profileID
+	r.called = true
+	return &store.VoiceRoomAccessRow{
+		SpaceID:      spaceID,
+		Member:       true,
+		Active:       true,
+		Discoverable: true,
+		AccessEpoch:  1,
+	}, nil
 }
 
 type verifiedVoiceCredentials struct{}
@@ -48,9 +71,24 @@ func startVoiceResolverGRPCTestServer(t *testing.T, pool *pgxpool.Pool) (spacev1
 	return spacev1.NewSpaceServiceClient(conn), func() { _ = conn.Close(); srv.Stop() }
 }
 
-func resolveAccess(t *testing.T, c spacev1.SpaceServiceClient, roomID, profileID string) *spacev1.ResolveVoiceRoomAccessResponse {
+func applyVoiceAccessEpochMigration(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
-	r, err := c.ResolveVoiceRoomAccess(context.Background(), &spacev1.ResolveVoiceRoomAccessRequest{VoiceRoomId: roomID, ProfileId: profileID}, grpc.PerRPCCredentials(verifiedVoiceCredentials{}))
+	for _, name := range []string{
+		"000008_ownership_journal.up.sql",
+		"000009_ownership_journal_decision.up.sql",
+		"000010_ownership_journal_commit.up.sql",
+		"000011_voice_access_epoch.up.sql",
+	} {
+		raw, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", name))
+		require.NoError(t, err)
+		_, err = pool.Exec(ctx, string(raw))
+		require.NoError(t, err)
+	}
+}
+
+func resolveAccess(t *testing.T, c spacev1.SpaceServiceClient, spaceID, roomID, profileID string) *spacev1.ResolveVoiceRoomAccessResponse {
+	t.Helper()
+	r, err := c.ResolveVoiceRoomAccess(context.Background(), &spacev1.ResolveVoiceRoomAccessRequest{VoiceRoomId: roomID, ProfileId: profileID, Space: &spacev1.SpaceRef{Id: spaceID}}, grpc.PerRPCCredentials(verifiedVoiceCredentials{}))
 	require.NoError(t, err)
 	return r
 }
@@ -62,6 +100,7 @@ func TestResolveVoiceRoomAccess_TrustedVoiceGetsCanonicalRoomAndExactMembership(
 	_, _, ownerCtx := profileFixture(t)
 	pool := startSpacePostgresForTest(t, context.Background())
 	applySpaceMigration(t, context.Background(), pool)
+	applyVoiceAccessEpochMigration(t, context.Background(), pool)
 	c, cleanup := startVoiceResolverGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 	created, err := c.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Exact membership"})
@@ -75,7 +114,7 @@ func TestResolveVoiceRoomAccess_TrustedVoiceGetsCanonicalRoomAndExactMembership(
 	}
 	_, err = pool.Exec(context.Background(), "INSERT INTO space_members (space_id, profile_id) VALUES ($1, $2)", created.GetSpace().GetId(), late)
 	require.NoError(t, err)
-	r := resolveAccess(t, c, room.GetVoiceRoom().GetId(), late.String())
+	r := resolveAccess(t, c, created.GetSpace().GetId(), room.GetVoiceRoom().GetId(), late.String())
 	require.Equal(t, created.GetSpace().GetId(), r.GetSpaceId())
 	require.True(t, r.GetMember())
 	require.True(t, r.GetActive())
@@ -85,27 +124,56 @@ func TestResolveVoiceRoomAccess_FailClosedBoundaryAndInputErrors(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
-	_, _, ownerCtx := profileFixture(t)
+	ownerProfile, _, ownerCtx := profileFixture(t)
 	pool := startSpacePostgresForTest(t, context.Background())
 	applySpaceMigration(t, context.Background(), pool)
+	applyVoiceAccessEpochMigration(t, context.Background(), pool)
 	c, cleanup := startVoiceResolverGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 	created, err := c.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Protected"})
 	require.NoError(t, err)
 	room, err := c.CreateVoiceRoom(ownerCtx, &spacev1.CreateVoiceRoomRequest{SpaceId: created.GetSpace().GetId(), Name: "Room"})
 	require.NoError(t, err)
-	for _, req := range []*spacev1.ResolveVoiceRoomAccessRequest{{VoiceRoomId: "bad", ProfileId: uuid.NewString()}, {VoiceRoomId: room.GetVoiceRoom().GetId(), ProfileId: "bad"}} {
+	foreign, err := c.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Foreign"})
+	require.NoError(t, err)
+	for _, req := range []*spacev1.ResolveVoiceRoomAccessRequest{
+		{VoiceRoomId: "bad", ProfileId: uuid.NewString(), Space: &spacev1.SpaceRef{Id: created.GetSpace().GetId()}},
+		{VoiceRoomId: room.GetVoiceRoom().GetId(), ProfileId: "bad", Space: &spacev1.SpaceRef{Id: created.GetSpace().GetId()}},
+		{VoiceRoomId: room.GetVoiceRoom().GetId(), ProfileId: uuid.NewString()},
+		{VoiceRoomId: room.GetVoiceRoom().GetId(), ProfileId: uuid.NewString(), Space: &spacev1.SpaceRef{Id: "bad"}},
+	} {
 		_, err = c.ResolveVoiceRoomAccess(context.Background(), req, grpc.PerRPCCredentials(verifiedVoiceCredentials{}))
 		require.Equal(t, codes.InvalidArgument, status.Code(err))
 	}
-	_, err = c.ResolveVoiceRoomAccess(metadata.AppendToOutgoingContext(context.Background(), "x-voice-service-id", "voice"), &spacev1.ResolveVoiceRoomAccessRequest{VoiceRoomId: room.GetVoiceRoom().GetId(), ProfileId: uuid.NewString()})
+	_, err = c.ResolveVoiceRoomAccess(metadata.AppendToOutgoingContext(context.Background(), "x-voice-service-id", "voice"), &spacev1.ResolveVoiceRoomAccessRequest{VoiceRoomId: room.GetVoiceRoom().GetId(), ProfileId: uuid.NewString(), Space: &spacev1.SpaceRef{Id: created.GetSpace().GetId()}})
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
-	r := resolveAccess(t, c, room.GetVoiceRoom().GetId(), uuid.NewString())
-	require.Equal(t, created.GetSpace().GetId(), r.GetSpaceId())
-	require.False(t, r.GetMember())
-	require.True(t, r.GetActive())
-	_, err = c.ResolveVoiceRoomAccess(context.Background(), &spacev1.ResolveVoiceRoomAccessRequest{VoiceRoomId: uuid.NewString(), ProfileId: uuid.NewString()}, grpc.PerRPCCredentials(verifiedVoiceCredentials{}))
+	_, err = c.ResolveVoiceRoomAccess(context.Background(), &spacev1.ResolveVoiceRoomAccessRequest{VoiceRoomId: room.GetVoiceRoom().GetId(), ProfileId: uuid.NewString(), Space: &spacev1.SpaceRef{Id: created.GetSpace().GetId()}}, grpc.PerRPCCredentials(verifiedVoiceCredentials{}))
 	require.Equal(t, codes.NotFound, status.Code(err))
+	_, err = c.ResolveVoiceRoomAccess(context.Background(), &spacev1.ResolveVoiceRoomAccessRequest{VoiceRoomId: uuid.NewString(), ProfileId: uuid.NewString(), Space: &spacev1.SpaceRef{Id: created.GetSpace().GetId()}}, grpc.PerRPCCredentials(verifiedVoiceCredentials{}))
+	require.Equal(t, codes.NotFound, status.Code(err))
+	_, err = c.ResolveVoiceRoomAccess(context.Background(), &spacev1.ResolveVoiceRoomAccessRequest{VoiceRoomId: room.GetVoiceRoom().GetId(), ProfileId: ownerProfile.String(), Space: &spacev1.SpaceRef{Id: foreign.GetSpace().GetId()}}, grpc.PerRPCCredentials(verifiedVoiceCredentials{}))
+	require.Equal(t, codes.NotFound, status.Code(err))
+}
+
+func TestResolveVoiceRoomAccess_ForwardsExactPathSpaceToResolver(t *testing.T) {
+	spaceID := uuid.New()
+	voiceRoomID := uuid.New()
+	profileID := uuid.New()
+	resolver := &recordingVoiceRoomAccessResolver{}
+	svc := &SpaceGRPC{voiceRoomAccessResolver: resolver}
+	ctx := authctx.WithVerifiedServiceIdentity(context.Background(), authctx.ServiceIdentityVoice)
+
+	resp, err := svc.ResolveVoiceRoomAccess(ctx, &spacev1.ResolveVoiceRoomAccessRequest{
+		VoiceRoomId: voiceRoomID.String(),
+		ProfileId:   profileID.String(),
+		Space:       &spacev1.SpaceRef{Id: spaceID.String()},
+	})
+	require.NoError(t, err)
+	require.True(t, resolver.called)
+	require.Equal(t, spaceID, resolver.spaceID)
+	require.Equal(t, voiceRoomID, resolver.voiceRoomID)
+	require.Equal(t, profileID, resolver.profileID)
+	require.Equal(t, spaceID.String(), resp.GetSpaceId())
 }
 
 func TestResolveVoiceRoomAccess_ResolverFailureIsUnavailable(t *testing.T) {
@@ -114,6 +182,7 @@ func TestResolveVoiceRoomAccess_ResolverFailureIsUnavailable(t *testing.T) {
 	resp, err := svc.ResolveVoiceRoomAccess(ctx, &spacev1.ResolveVoiceRoomAccessRequest{
 		VoiceRoomId: uuid.NewString(),
 		ProfileId:   uuid.NewString(),
+		Space:       &spacev1.SpaceRef{Id: uuid.NewString()},
 	})
 	require.Nil(t, resp)
 	require.Equal(t, codes.Unavailable, status.Code(err))

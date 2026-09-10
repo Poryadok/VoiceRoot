@@ -150,6 +150,16 @@ class RoleServiceClient extends $grpc.Client {
         options: options);
   }
 
+  /// Trusted Voice-only decision. Role owns the explicit grants and policy epoch.
+  $grpc.ResponseFuture<$0.ResolveVoiceRoomGrantsResponse>
+      resolveVoiceRoomGrants(
+    $0.ResolveVoiceRoomGrantsRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$resolveVoiceRoomGrants, request,
+        options: options);
+  }
+
   $grpc.ResponseFuture<$0.SetDefaultJoinRoleResponse> setDefaultJoinRole(
     $0.SetDefaultJoinRoleRequest request, {
     $grpc.CallOptions? options,
@@ -323,6 +333,11 @@ class RoleServiceClient extends $grpc.Client {
       '/voice.role.v1.RoleService/GetEffectivePermissions',
       ($0.GetEffectivePermissionsRequest value) => value.writeToBuffer(),
       $0.GetEffectivePermissionsResponse.fromBuffer);
+  static final _$resolveVoiceRoomGrants = $grpc.ClientMethod<
+          $0.ResolveVoiceRoomGrantsRequest, $0.ResolveVoiceRoomGrantsResponse>(
+      '/voice.role.v1.RoleService/ResolveVoiceRoomGrants',
+      ($0.ResolveVoiceRoomGrantsRequest value) => value.writeToBuffer(),
+      $0.ResolveVoiceRoomGrantsResponse.fromBuffer);
   static final _$setDefaultJoinRole = $grpc.ClientMethod<
           $0.SetDefaultJoinRoleRequest, $0.SetDefaultJoinRoleResponse>(
       '/voice.role.v1.RoleService/SetDefaultJoinRole',
@@ -518,6 +533,15 @@ abstract class RoleServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.GetEffectivePermissionsRequest.fromBuffer(value),
         ($0.GetEffectivePermissionsResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ResolveVoiceRoomGrantsRequest,
+            $0.ResolveVoiceRoomGrantsResponse>(
+        'ResolveVoiceRoomGrants',
+        resolveVoiceRoomGrants_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ResolveVoiceRoomGrantsRequest.fromBuffer(value),
+        ($0.ResolveVoiceRoomGrantsResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.SetDefaultJoinRoleRequest,
             $0.SetDefaultJoinRoleResponse>(
         'SetDefaultJoinRole',
@@ -750,6 +774,15 @@ abstract class RoleServiceBase extends $grpc.Service {
 
   $async.Future<$0.GetEffectivePermissionsResponse> getEffectivePermissions(
       $grpc.ServiceCall call, $0.GetEffectivePermissionsRequest request);
+
+  $async.Future<$0.ResolveVoiceRoomGrantsResponse> resolveVoiceRoomGrants_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ResolveVoiceRoomGrantsRequest> $request) async {
+    return resolveVoiceRoomGrants($call, await $request);
+  }
+
+  $async.Future<$0.ResolveVoiceRoomGrantsResponse> resolveVoiceRoomGrants(
+      $grpc.ServiceCall call, $0.ResolveVoiceRoomGrantsRequest request);
 
   $async.Future<$0.SetDefaultJoinRoleResponse> setDefaultJoinRole_Pre(
       $grpc.ServiceCall $call,

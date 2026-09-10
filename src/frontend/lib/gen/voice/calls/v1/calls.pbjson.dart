@@ -66,6 +66,46 @@ final $typed_data.Uint8List callStatusDescriptor = $convert.base64Decode(
     'NfUklOR0lORxABEhYKEkNBTExfU1RBVFVTX0FDVElWRRACEhgKFENBTExfU1RBVFVTX0RFQ0xJ'
     'TkVEEAMSFgoSQ0FMTF9TVEFUVVNfTUlTU0VEEAQSFQoRQ0FMTF9TVEFUVVNfRU5ERUQQBQ==');
 
+@$core.Deprecated('Use voiceRoomLifecycleMethodDescriptor instead')
+const VoiceRoomLifecycleMethod$json = {
+  '1': 'VoiceRoomLifecycleMethod',
+  '2': [
+    {'1': 'VOICE_ROOM_LIFECYCLE_METHOD_UNSPECIFIED', '2': 0},
+    {'1': 'VOICE_ROOM_LIFECYCLE_METHOD_JOIN', '2': 1},
+    {'1': 'VOICE_ROOM_LIFECYCLE_METHOD_LEAVE', '2': 2},
+    {'1': 'VOICE_ROOM_LIFECYCLE_METHOD_SELF_MOVE', '2': 3},
+    {'1': 'VOICE_ROOM_LIFECYCLE_METHOD_MODERATOR_MOVE', '2': 4},
+  ],
+};
+
+/// Descriptor for `VoiceRoomLifecycleMethod`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List voiceRoomLifecycleMethodDescriptor = $convert.base64Decode(
+    'ChhWb2ljZVJvb21MaWZlY3ljbGVNZXRob2QSKwonVk9JQ0VfUk9PTV9MSUZFQ1lDTEVfTUVUSE'
+    '9EX1VOU1BFQ0lGSUVEEAASJAogVk9JQ0VfUk9PTV9MSUZFQ1lDTEVfTUVUSE9EX0pPSU4QARIl'
+    'CiFWT0lDRV9ST09NX0xJRkVDWUNMRV9NRVRIT0RfTEVBVkUQAhIpCiVWT0lDRV9ST09NX0xJRk'
+    'VDWUNMRV9NRVRIT0RfU0VMRl9NT1ZFEAMSLgoqVk9JQ0VfUk9PTV9MSUZFQ1lDTEVfTUVUSE9E'
+    'X01PREVSQVRPUl9NT1ZFEAQ=');
+
+@$core.Deprecated('Use voiceRoomLifecycleOutcomeDescriptor instead')
+const VoiceRoomLifecycleOutcome$json = {
+  '1': 'VoiceRoomLifecycleOutcome',
+  '2': [
+    {'1': 'VOICE_ROOM_LIFECYCLE_OUTCOME_UNSPECIFIED', '2': 0},
+    {'1': 'VOICE_ROOM_LIFECYCLE_OUTCOME_JOINED', '2': 1},
+    {'1': 'VOICE_ROOM_LIFECYCLE_OUTCOME_LEFT', '2': 2},
+    {'1': 'VOICE_ROOM_LIFECYCLE_OUTCOME_MOVED', '2': 3},
+    {'1': 'VOICE_ROOM_LIFECYCLE_OUTCOME_NO_OP', '2': 4},
+  ],
+};
+
+/// Descriptor for `VoiceRoomLifecycleOutcome`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List voiceRoomLifecycleOutcomeDescriptor = $convert.base64Decode(
+    'ChlWb2ljZVJvb21MaWZlY3ljbGVPdXRjb21lEiwKKFZPSUNFX1JPT01fTElGRUNZQ0xFX09VVE'
+    'NPTUVfVU5TUEVDSUZJRUQQABInCiNWT0lDRV9ST09NX0xJRkVDWUNMRV9PVVRDT01FX0pPSU5F'
+    'RBABEiUKIVZPSUNFX1JPT01fTElGRUNZQ0xFX09VVENPTUVfTEVGVBACEiYKIlZPSUNFX1JPT0'
+    '1fTElGRUNZQ0xFX09VVENPTUVfTU9WRUQQAxImCiJWT0lDRV9ST09NX0xJRkVDWUNMRV9PVVRD'
+    'T01FX05PX09QEAQ=');
+
 @$core.Deprecated('Use startCallRequestDescriptor instead')
 const StartCallRequest$json = {
   '1': 'StartCallRequest',
@@ -335,26 +375,38 @@ const JoinVoiceRoomRequest$json = {
       '6': '.voice.space.v1.SpaceRef',
       '10': 'space'
     },
+    {'1': 'operation_id', '3': 3, '4': 1, '5': 9, '10': 'operationId'},
   ],
 };
 
 /// Descriptor for `JoinVoiceRoomRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List joinVoiceRoomRequestDescriptor = $convert.base64Decode(
     'ChRKb2luVm9pY2VSb29tUmVxdWVzdBIiCg12b2ljZV9yb29tX2lkGAEgASgJUgt2b2ljZVJvb2'
-    '1JZBIuCgVzcGFjZRgCIAEoCzIYLnZvaWNlLnNwYWNlLnYxLlNwYWNlUmVmUgVzcGFjZQ==');
+    '1JZBIuCgVzcGFjZRgCIAEoCzIYLnZvaWNlLnNwYWNlLnYxLlNwYWNlUmVmUgVzcGFjZRIhCgxv'
+    'cGVyYXRpb25faWQYAyABKAlSC29wZXJhdGlvbklk');
 
 @$core.Deprecated('Use leaveVoiceRoomRequestDescriptor instead')
 const LeaveVoiceRoomRequest$json = {
   '1': 'LeaveVoiceRoomRequest',
   '2': [
     {'1': 'voice_room_id', '3': 1, '4': 1, '5': 9, '10': 'voiceRoomId'},
+    {
+      '1': 'space',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.space.v1.SpaceRef',
+      '10': 'space'
+    },
+    {'1': 'operation_id', '3': 3, '4': 1, '5': 9, '10': 'operationId'},
   ],
 };
 
 /// Descriptor for `LeaveVoiceRoomRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List leaveVoiceRoomRequestDescriptor = $convert.base64Decode(
     'ChVMZWF2ZVZvaWNlUm9vbVJlcXVlc3QSIgoNdm9pY2Vfcm9vbV9pZBgBIAEoCVILdm9pY2VSb2'
-    '9tSWQ=');
+    '9tSWQSLgoFc3BhY2UYAiABKAsyGC52b2ljZS5zcGFjZS52MS5TcGFjZVJlZlIFc3BhY2USIQoM'
+    'b3BlcmF0aW9uX2lkGAMgASgJUgtvcGVyYXRpb25JZA==');
 
 @$core.Deprecated('Use moveToVoiceRoomRequestDescriptor instead')
 const MoveToVoiceRoomRequest$json = {
@@ -376,6 +428,7 @@ const MoveToVoiceRoomRequest$json = {
       '6': '.voice.space.v1.SpaceRef',
       '10': 'space'
     },
+    {'1': 'operation_id', '3': 4, '4': 1, '5': 9, '10': 'operationId'},
   ],
 };
 
@@ -383,7 +436,47 @@ const MoveToVoiceRoomRequest$json = {
 final $typed_data.Uint8List moveToVoiceRoomRequestDescriptor = $convert.base64Decode(
     'ChZNb3ZlVG9Wb2ljZVJvb21SZXF1ZXN0EisKEmZyb21fdm9pY2Vfcm9vbV9pZBgBIAEoCVIPZn'
     'JvbVZvaWNlUm9vbUlkEicKEHRvX3ZvaWNlX3Jvb21faWQYAiABKAlSDXRvVm9pY2VSb29tSWQS'
-    'LgoFc3BhY2UYAyABKAsyGC52b2ljZS5zcGFjZS52MS5TcGFjZVJlZlIFc3BhY2U=');
+    'LgoFc3BhY2UYAyABKAsyGC52b2ljZS5zcGFjZS52MS5TcGFjZVJlZlIFc3BhY2USIQoMb3Blcm'
+    'F0aW9uX2lkGAQgASgJUgtvcGVyYXRpb25JZA==');
+
+@$core.Deprecated('Use moveVoiceRoomParticipantRequestDescriptor instead')
+const MoveVoiceRoomParticipantRequest$json = {
+  '1': 'MoveVoiceRoomParticipantRequest',
+  '2': [
+    {
+      '1': 'from_voice_room_id',
+      '3': 1,
+      '4': 1,
+      '5': 9,
+      '10': 'fromVoiceRoomId'
+    },
+    {'1': 'to_voice_room_id', '3': 2, '4': 1, '5': 9, '10': 'toVoiceRoomId'},
+    {
+      '1': 'space',
+      '3': 3,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.space.v1.SpaceRef',
+      '10': 'space'
+    },
+    {
+      '1': 'participant_profile_id',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '10': 'participantProfileId'
+    },
+    {'1': 'operation_id', '3': 5, '4': 1, '5': 9, '10': 'operationId'},
+  ],
+};
+
+/// Descriptor for `MoveVoiceRoomParticipantRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List moveVoiceRoomParticipantRequestDescriptor = $convert.base64Decode(
+    'Ch9Nb3ZlVm9pY2VSb29tUGFydGljaXBhbnRSZXF1ZXN0EisKEmZyb21fdm9pY2Vfcm9vbV9pZB'
+    'gBIAEoCVIPZnJvbVZvaWNlUm9vbUlkEicKEHRvX3ZvaWNlX3Jvb21faWQYAiABKAlSDXRvVm9p'
+    'Y2VSb29tSWQSLgoFc3BhY2UYAyABKAsyGC52b2ljZS5zcGFjZS52MS5TcGFjZVJlZlIFc3BhY2'
+    'USNAoWcGFydGljaXBhbnRfcHJvZmlsZV9pZBgEIAEoCVIUcGFydGljaXBhbnRQcm9maWxlSWQS'
+    'IQoMb3BlcmF0aW9uX2lkGAUgASgJUgtvcGVyYXRpb25JZA==');
 
 @$core.Deprecated('Use voiceSessionDescriptor instead')
 const VoiceSession$json = {
@@ -400,6 +493,160 @@ final $typed_data.Uint8List voiceSessionDescriptor = $convert.base64Decode(
     'CgxWb2ljZVNlc3Npb24SFwoHcm9vbV9pZBgBIAEoCVIGcm9vbUlkEioKEWxpdmVraXRfcm9vbV'
     '9uYW1lGAIgASgJUg9saXZla2l0Um9vbU5hbWUSIgoNdm9pY2Vfcm9vbV9pZBgDIAEoCVILdm9p'
     'Y2VSb29tSWQ=');
+
+@$core.Deprecated('Use voiceRoomLifecycleReceiptDescriptor instead')
+const VoiceRoomLifecycleReceipt$json = {
+  '1': 'VoiceRoomLifecycleReceipt',
+  '2': [
+    {'1': 'operation_id', '3': 1, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'actor_profile_id', '3': 2, '4': 1, '5': 9, '10': 'actorProfileId'},
+    {
+      '1': 'subject_profile_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '10': 'subjectProfileId'
+    },
+    {
+      '1': 'space',
+      '3': 4,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.space.v1.SpaceRef',
+      '10': 'space'
+    },
+    {
+      '1': 'method',
+      '3': 5,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.calls.v1.VoiceRoomLifecycleMethod',
+      '10': 'method'
+    },
+    {
+      '1': 'outcome',
+      '3': 6,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.calls.v1.VoiceRoomLifecycleOutcome',
+      '10': 'outcome'
+    },
+    {
+      '1': 'source_voice_room_id',
+      '3': 7,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'sourceVoiceRoomId',
+      '17': true
+    },
+    {
+      '1': 'destination_voice_room_id',
+      '3': 8,
+      '4': 1,
+      '5': 9,
+      '9': 1,
+      '10': 'destinationVoiceRoomId',
+      '17': true
+    },
+    {
+      '1': 'room_id',
+      '3': 9,
+      '4': 1,
+      '5': 9,
+      '9': 2,
+      '10': 'roomId',
+      '17': true
+    },
+    {
+      '1': 'source_roster_version',
+      '3': 10,
+      '4': 1,
+      '5': 4,
+      '9': 3,
+      '10': 'sourceRosterVersion',
+      '17': true
+    },
+    {
+      '1': 'destination_roster_version',
+      '3': 11,
+      '4': 1,
+      '5': 4,
+      '9': 4,
+      '10': 'destinationRosterVersion',
+      '17': true
+    },
+    {
+      '1': 'media_epoch',
+      '3': 12,
+      '4': 1,
+      '5': 9,
+      '9': 5,
+      '10': 'mediaEpoch',
+      '17': true
+    },
+    {
+      '1': 'space_access_epoch',
+      '3': 13,
+      '4': 1,
+      '5': 4,
+      '9': 6,
+      '10': 'spaceAccessEpoch',
+      '17': true
+    },
+    {
+      '1': 'role_policy_epoch',
+      '3': 14,
+      '4': 1,
+      '5': 4,
+      '9': 7,
+      '10': 'rolePolicyEpoch',
+      '17': true
+    },
+    {
+      '1': 'authorization_digest',
+      '3': 15,
+      '4': 1,
+      '5': 12,
+      '9': 8,
+      '10': 'authorizationDigest',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_source_voice_room_id'},
+    {'1': '_destination_voice_room_id'},
+    {'1': '_room_id'},
+    {'1': '_source_roster_version'},
+    {'1': '_destination_roster_version'},
+    {'1': '_media_epoch'},
+    {'1': '_space_access_epoch'},
+    {'1': '_role_policy_epoch'},
+    {'1': '_authorization_digest'},
+  ],
+};
+
+/// Descriptor for `VoiceRoomLifecycleReceipt`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List voiceRoomLifecycleReceiptDescriptor = $convert.base64Decode(
+    'ChlWb2ljZVJvb21MaWZlY3ljbGVSZWNlaXB0EiEKDG9wZXJhdGlvbl9pZBgBIAEoCVILb3Blcm'
+    'F0aW9uSWQSKAoQYWN0b3JfcHJvZmlsZV9pZBgCIAEoCVIOYWN0b3JQcm9maWxlSWQSLAoSc3Vi'
+    'amVjdF9wcm9maWxlX2lkGAMgASgJUhBzdWJqZWN0UHJvZmlsZUlkEi4KBXNwYWNlGAQgASgLMh'
+    'gudm9pY2Uuc3BhY2UudjEuU3BhY2VSZWZSBXNwYWNlEkAKBm1ldGhvZBgFIAEoDjIoLnZvaWNl'
+    'LmNhbGxzLnYxLlZvaWNlUm9vbUxpZmVjeWNsZU1ldGhvZFIGbWV0aG9kEkMKB291dGNvbWUYBi'
+    'ABKA4yKS52b2ljZS5jYWxscy52MS5Wb2ljZVJvb21MaWZlY3ljbGVPdXRjb21lUgdvdXRjb21l'
+    'EjQKFHNvdXJjZV92b2ljZV9yb29tX2lkGAcgASgJSABSEXNvdXJjZVZvaWNlUm9vbUlkiAEBEj'
+    '4KGWRlc3RpbmF0aW9uX3ZvaWNlX3Jvb21faWQYCCABKAlIAVIWZGVzdGluYXRpb25Wb2ljZVJv'
+    'b21JZIgBARIcCgdyb29tX2lkGAkgASgJSAJSBnJvb21JZIgBARI3ChVzb3VyY2Vfcm9zdGVyX3'
+    'ZlcnNpb24YCiABKARIA1ITc291cmNlUm9zdGVyVmVyc2lvbogBARJBChpkZXN0aW5hdGlvbl9y'
+    'b3N0ZXJfdmVyc2lvbhgLIAEoBEgEUhhkZXN0aW5hdGlvblJvc3RlclZlcnNpb26IAQESJAoLbW'
+    'VkaWFfZXBvY2gYDCABKAlIBVIKbWVkaWFFcG9jaIgBARIxChJzcGFjZV9hY2Nlc3NfZXBvY2gY'
+    'DSABKARIBlIQc3BhY2VBY2Nlc3NFcG9jaIgBARIvChFyb2xlX3BvbGljeV9lcG9jaBgOIAEoBE'
+    'gHUg9yb2xlUG9saWN5RXBvY2iIAQESNgoUYXV0aG9yaXphdGlvbl9kaWdlc3QYDyABKAxICFIT'
+    'YXV0aG9yaXphdGlvbkRpZ2VzdIgBAUIXChVfc291cmNlX3ZvaWNlX3Jvb21faWRCHAoaX2Rlc3'
+    'RpbmF0aW9uX3ZvaWNlX3Jvb21faWRCCgoIX3Jvb21faWRCGAoWX3NvdXJjZV9yb3N0ZXJfdmVy'
+    'c2lvbkIdChtfZGVzdGluYXRpb25fcm9zdGVyX3ZlcnNpb25CDgoMX21lZGlhX2Vwb2NoQhUKE1'
+    '9zcGFjZV9hY2Nlc3NfZXBvY2hCFAoSX3JvbGVfcG9saWN5X2Vwb2NoQhcKFV9hdXRob3JpemF0'
+    'aW9uX2RpZ2VzdA==');
 
 @$core.Deprecated('Use getJoinTokenRequestDescriptor instead')
 const GetJoinTokenRequest$json = {
@@ -764,22 +1011,43 @@ const JoinVoiceRoomResponse$json = {
       '6': '.voice.calls.v1.VoiceSession',
       '10': 'voiceSession'
     },
+    {
+      '1': 'receipt',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.calls.v1.VoiceRoomLifecycleReceipt',
+      '10': 'receipt'
+    },
   ],
 };
 
 /// Descriptor for `JoinVoiceRoomResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List joinVoiceRoomResponseDescriptor = $convert.base64Decode(
     'ChVKb2luVm9pY2VSb29tUmVzcG9uc2USQQoNdm9pY2Vfc2Vzc2lvbhgBIAEoCzIcLnZvaWNlLm'
-    'NhbGxzLnYxLlZvaWNlU2Vzc2lvblIMdm9pY2VTZXNzaW9u');
+    'NhbGxzLnYxLlZvaWNlU2Vzc2lvblIMdm9pY2VTZXNzaW9uEkMKB3JlY2VpcHQYAiABKAsyKS52'
+    'b2ljZS5jYWxscy52MS5Wb2ljZVJvb21MaWZlY3ljbGVSZWNlaXB0UgdyZWNlaXB0');
 
 @$core.Deprecated('Use leaveVoiceRoomResponseDescriptor instead')
 const LeaveVoiceRoomResponse$json = {
   '1': 'LeaveVoiceRoomResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.calls.v1.VoiceRoomLifecycleReceipt',
+      '10': 'receipt'
+    },
+  ],
 };
 
 /// Descriptor for `LeaveVoiceRoomResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List leaveVoiceRoomResponseDescriptor =
-    $convert.base64Decode('ChZMZWF2ZVZvaWNlUm9vbVJlc3BvbnNl');
+    $convert.base64Decode(
+        'ChZMZWF2ZVZvaWNlUm9vbVJlc3BvbnNlEkMKB3JlY2VpcHQYASABKAsyKS52b2ljZS5jYWxscy'
+        '52MS5Wb2ljZVJvb21MaWZlY3ljbGVSZWNlaXB0UgdyZWNlaXB0');
 
 @$core.Deprecated('Use moveToVoiceRoomResponseDescriptor instead')
 const MoveToVoiceRoomResponse$json = {
@@ -793,14 +1061,43 @@ const MoveToVoiceRoomResponse$json = {
       '6': '.voice.calls.v1.VoiceSession',
       '10': 'voiceSession'
     },
+    {
+      '1': 'receipt',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.calls.v1.VoiceRoomLifecycleReceipt',
+      '10': 'receipt'
+    },
   ],
 };
 
 /// Descriptor for `MoveToVoiceRoomResponse`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List moveToVoiceRoomResponseDescriptor =
+final $typed_data.Uint8List moveToVoiceRoomResponseDescriptor = $convert.base64Decode(
+    'ChdNb3ZlVG9Wb2ljZVJvb21SZXNwb25zZRJBCg12b2ljZV9zZXNzaW9uGAEgASgLMhwudm9pY2'
+    'UuY2FsbHMudjEuVm9pY2VTZXNzaW9uUgx2b2ljZVNlc3Npb24SQwoHcmVjZWlwdBgCIAEoCzIp'
+    'LnZvaWNlLmNhbGxzLnYxLlZvaWNlUm9vbUxpZmVjeWNsZVJlY2VpcHRSB3JlY2VpcHQ=');
+
+@$core.Deprecated('Use moveVoiceRoomParticipantResponseDescriptor instead')
+const MoveVoiceRoomParticipantResponse$json = {
+  '1': 'MoveVoiceRoomParticipantResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.calls.v1.VoiceRoomLifecycleReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `MoveVoiceRoomParticipantResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List moveVoiceRoomParticipantResponseDescriptor =
     $convert.base64Decode(
-        'ChdNb3ZlVG9Wb2ljZVJvb21SZXNwb25zZRJBCg12b2ljZV9zZXNzaW9uGAEgASgLMhwudm9pY2'
-        'UuY2FsbHMudjEuVm9pY2VTZXNzaW9uUgx2b2ljZVNlc3Npb24=');
+        'CiBNb3ZlVm9pY2VSb29tUGFydGljaXBhbnRSZXNwb25zZRJDCgdyZWNlaXB0GAEgASgLMikudm'
+        '9pY2UuY2FsbHMudjEuVm9pY2VSb29tTGlmZWN5Y2xlUmVjZWlwdFIHcmVjZWlwdA==');
 
 @$core.Deprecated('Use getJoinTokenResponseDescriptor instead')
 const GetJoinTokenResponse$json = {
@@ -816,6 +1113,22 @@ const GetJoinTokenResponse$json = {
       '10': 'expiresAt'
     },
     {'1': 'livekit_url', '3': 3, '4': 1, '5': 9, '10': 'livekitUrl'},
+    {'1': 'media_epoch', '3': 4, '4': 1, '5': 9, '10': 'mediaEpoch'},
+    {
+      '1': 'space_access_epoch',
+      '3': 5,
+      '4': 1,
+      '5': 4,
+      '10': 'spaceAccessEpoch'
+    },
+    {'1': 'role_policy_epoch', '3': 6, '4': 1, '5': 4, '10': 'rolePolicyEpoch'},
+    {
+      '1': 'authorization_digest',
+      '3': 7,
+      '4': 1,
+      '5': 12,
+      '10': 'authorizationDigest'
+    },
   ],
 };
 
@@ -823,7 +1136,10 @@ const GetJoinTokenResponse$json = {
 final $typed_data.Uint8List getJoinTokenResponseDescriptor = $convert.base64Decode(
     'ChRHZXRKb2luVG9rZW5SZXNwb25zZRIQCgNqd3QYASABKAlSA2p3dBI5CgpleHBpcmVzX2F0GA'
     'IgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcFIJZXhwaXJlc0F0Eh8KC2xpdmVraXRf'
-    'dXJsGAMgASgJUgpsaXZla2l0VXJs');
+    'dXJsGAMgASgJUgpsaXZla2l0VXJsEh8KC21lZGlhX2Vwb2NoGAQgASgJUgptZWRpYUVwb2NoEi'
+    'wKEnNwYWNlX2FjY2Vzc19lcG9jaBgFIAEoBFIQc3BhY2VBY2Nlc3NFcG9jaBIqChFyb2xlX3Bv'
+    'bGljeV9lcG9jaBgGIAEoBFIPcm9sZVBvbGljeUVwb2NoEjEKFGF1dGhvcml6YXRpb25fZGlnZX'
+    'N0GAcgASgMUhNhdXRob3JpemF0aW9uRGlnZXN0');
 
 @$core.Deprecated('Use updateVoiceStateResponseDescriptor instead')
 const UpdateVoiceStateResponse$json = {

@@ -901,6 +901,80 @@ final $typed_data.Uint8List checkPermissionResponseDescriptor =
     $convert.base64Decode(
         'ChdDaGVja1Blcm1pc3Npb25SZXNwb25zZRIYCgdhbGxvd2VkGAEgASgIUgdhbGxvd2Vk');
 
+@$core.Deprecated('Use resolveVoiceRoomGrantsRequestDescriptor instead')
+const ResolveVoiceRoomGrantsRequest$json = {
+  '1': 'ResolveVoiceRoomGrantsRequest',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'voice_room_id', '3': 2, '4': 1, '5': 9, '10': 'voiceRoomId'},
+    {'1': 'profile_id', '3': 3, '4': 1, '5': 9, '10': 'profileId'},
+  ],
+};
+
+/// Descriptor for `ResolveVoiceRoomGrantsRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List resolveVoiceRoomGrantsRequestDescriptor =
+    $convert.base64Decode(
+        'Ch1SZXNvbHZlVm9pY2VSb29tR3JhbnRzUmVxdWVzdBIZCghzcGFjZV9pZBgBIAEoCVIHc3BhY2'
+        'VJZBIiCg12b2ljZV9yb29tX2lkGAIgASgJUgt2b2ljZVJvb21JZBIdCgpwcm9maWxlX2lkGAMg'
+        'ASgJUglwcm9maWxlSWQ=');
+
+@$core.Deprecated('Use voiceRoomGrantsDescriptor instead')
+const VoiceRoomGrants$json = {
+  '1': 'VoiceRoomGrants',
+  '2': [
+    {'1': 'can_join', '3': 1, '4': 1, '5': 8, '10': 'canJoin'},
+    {'1': 'can_publish_audio', '3': 2, '4': 1, '5': 8, '10': 'canPublishAudio'},
+    {'1': 'can_publish_video', '3': 3, '4': 1, '5': 8, '10': 'canPublishVideo'},
+    {
+      '1': 'can_publish_screen_share',
+      '3': 4,
+      '4': 1,
+      '5': 8,
+      '10': 'canPublishScreenShare'
+    },
+    {'1': 'can_subscribe', '3': 5, '4': 1, '5': 8, '10': 'canSubscribe'},
+    {'1': 'can_mute_others', '3': 6, '4': 1, '5': 8, '10': 'canMuteOthers'},
+    {'1': 'can_deafen_others', '3': 7, '4': 1, '5': 8, '10': 'canDeafenOthers'},
+    {'1': 'can_move_others', '3': 8, '4': 1, '5': 8, '10': 'canMoveOthers'},
+    {'1': 'can_use_ptt', '3': 9, '4': 1, '5': 8, '10': 'canUsePtt'},
+    {'1': 'priority_speaker', '3': 10, '4': 1, '5': 8, '10': 'prioritySpeaker'},
+  ],
+};
+
+/// Descriptor for `VoiceRoomGrants`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List voiceRoomGrantsDescriptor = $convert.base64Decode(
+    'Cg9Wb2ljZVJvb21HcmFudHMSGQoIY2FuX2pvaW4YASABKAhSB2NhbkpvaW4SKgoRY2FuX3B1Ym'
+    'xpc2hfYXVkaW8YAiABKAhSD2NhblB1Ymxpc2hBdWRpbxIqChFjYW5fcHVibGlzaF92aWRlbxgD'
+    'IAEoCFIPY2FuUHVibGlzaFZpZGVvEjcKGGNhbl9wdWJsaXNoX3NjcmVlbl9zaGFyZRgEIAEoCF'
+    'IVY2FuUHVibGlzaFNjcmVlblNoYXJlEiMKDWNhbl9zdWJzY3JpYmUYBSABKAhSDGNhblN1YnNj'
+    'cmliZRImCg9jYW5fbXV0ZV9vdGhlcnMYBiABKAhSDWNhbk11dGVPdGhlcnMSKgoRY2FuX2RlYW'
+    'Zlbl9vdGhlcnMYByABKAhSD2NhbkRlYWZlbk90aGVycxImCg9jYW5fbW92ZV9vdGhlcnMYCCAB'
+    'KAhSDWNhbk1vdmVPdGhlcnMSHgoLY2FuX3VzZV9wdHQYCSABKAhSCWNhblVzZVB0dBIpChBwcm'
+    'lvcml0eV9zcGVha2VyGAogASgIUg9wcmlvcml0eVNwZWFrZXI=');
+
+@$core.Deprecated('Use resolveVoiceRoomGrantsResponseDescriptor instead')
+const ResolveVoiceRoomGrantsResponse$json = {
+  '1': 'ResolveVoiceRoomGrantsResponse',
+  '2': [
+    {
+      '1': 'grants',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.role.v1.VoiceRoomGrants',
+      '10': 'grants'
+    },
+    {'1': 'policy_epoch', '3': 2, '4': 1, '5': 4, '10': 'policyEpoch'},
+  ],
+};
+
+/// Descriptor for `ResolveVoiceRoomGrantsResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List resolveVoiceRoomGrantsResponseDescriptor =
+    $convert.base64Decode(
+        'Ch5SZXNvbHZlVm9pY2VSb29tR3JhbnRzUmVzcG9uc2USNgoGZ3JhbnRzGAEgASgLMh4udm9pY2'
+        'Uucm9sZS52MS5Wb2ljZVJvb21HcmFudHNSBmdyYW50cxIhCgxwb2xpY3lfZXBvY2gYAiABKARS'
+        'C3BvbGljeUVwb2No');
+
 @$core.Deprecated('Use getEffectivePermissionsRequestDescriptor instead')
 const GetEffectivePermissionsRequest$json = {
   '1': 'GetEffectivePermissionsRequest',

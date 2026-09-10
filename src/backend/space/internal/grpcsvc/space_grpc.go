@@ -51,7 +51,7 @@ type SpaceGRPC struct {
 }
 
 type voiceRoomAccessResolver interface {
-	ResolveVoiceRoomAccess(context.Context, uuid.UUID, uuid.UUID) (*store.VoiceRoomAccessRow, error)
+	ResolveVoiceRoomAccess(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (*store.VoiceRoomAccessRow, error)
 }
 
 // SpaceMutationLocker coordinates mutations of one space across service

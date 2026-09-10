@@ -142,6 +142,7 @@ message RoleStreamEvent {
   oneof payload {
     RoleAssignmentChanged role_assignment_changed = 10;
     RoleDefinitionChanged role_definition_changed = 11;
+    VoiceRoomPolicyInvalidated voice_room_policy_invalidated = 12;
   }
 }
 
@@ -154,6 +155,15 @@ message RoleAssignmentChanged {
 message RoleDefinitionChanged {
   string space_id = 1;
   string role_id = 2;
+}
+
+message VoiceRoomPolicyInvalidated {
+  string space_id = 1;
+  // Absent means every voice room within space_id.
+  optional string voice_room_id = 2;
+  // Absent means every profile within space_id.
+  optional string profile_id = 3;
+  uint64 policy_epoch = 4;
 }
 
 // --- message.events (Messaging) ---
@@ -277,6 +287,7 @@ message ChatStreamEvent {
     SpaceUpdated space_updated = 17;
     SpaceDeleted space_deleted = 18;
     DmPeerDeleted dm_peer_deleted = 19;
+    VoiceRoomAccessInvalidated voice_room_access_invalidated = 20;
   }
 }
 
@@ -335,6 +346,15 @@ message SpaceDeleted {
 message DmPeerDeleted {
   string chat_id = 1;
   string recipient_profile_id = 2;
+}
+
+message VoiceRoomAccessInvalidated {
+  string space_id = 1;
+  // Absent means every voice room within space_id.
+  optional string voice_room_id = 2;
+  // Absent means every profile within space_id.
+  optional string profile_id = 3;
+  uint64 access_epoch = 4;
 }
 
 // --- voice.events ---
