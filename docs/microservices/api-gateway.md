@@ -236,8 +236,8 @@ blacklist-механизмом и не заменяется epoch.
 | `GATEWAY_REDIS_ADDR`, `GATEWAY_REDIS_PASSWORD` | Redis для rate limit и JWT blacklist |
 | `GATEWAY_SESSION_EPOCH_STRICT` | Только точное `true` включает strict; unset/точное `false` — compatibility; прочее не даёт Gateway стартовать |
 | `GATEWAY_JWT_BLACKLIST_PREFIX` | Prefix blacklist ключей; default `jwt:blacklist:` |
-| `S2S_SIGNING_KEY_PEM`, `S2S_SIGNING_KID` | Phase-0 Gateway delegated-principal signer; key только в secret store |
-| `S2S_JWKS_URLS_JSON`, `S2S_JWKS_REFRESH_AFTER`, `S2S_JWKS_HARD_EXPIRY`, `S2S_UNKNOWN_KID_COOLDOWN` | Phase-0 issuer JWKS endpoints и bounded verifier cache; общий contract с downstream services |
+| `S2S_SIGNING_KEY_PEM`, `S2S_SIGNING_KID` | **Target, not wired:** будущий Phase-0 Gateway delegated-principal signer; key только в secret store. Текущий Gateway эти vars не читает, до wiring они unused. |
+| `S2S_JWKS_URLS_JSON`, `S2S_JWKS_REFRESH_AFTER`, `S2S_JWKS_HARD_EXPIRY`, `S2S_UNKNOWN_KID_COOLDOWN` | **Target, not wired:** будущие Phase-0 issuer JWKS endpoints и bounded verifier cache; общий contract с downstream services. Текущий Gateway эти vars не читает, до wiring они unused. |
 | `GATEWAY_TRUSTED_PROXY_CIDRS` | CIDR/IP список proxy, от которых принимается `X-Forwarded-For` |
 | `GATEWAY_CORS_ALLOWED_ORIGINS` | CSV allowlist browser origins; default deny |
 | `GATEWAY_REST_UPSTREAMS_JSON` / `GATEWAY_<NAMESPACE>_UPSTREAM_URL` | REST upstream routes |
