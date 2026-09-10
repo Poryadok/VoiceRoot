@@ -44,6 +44,8 @@ class VoiceCallSession {
     required this.mediaKind,
     required this.status,
     this.sessionKind = VoiceSessionKind.dm,
+    this.voiceRoomId,
+    this.spaceId,
     this.expiresAt,
   });
 
@@ -55,17 +57,20 @@ class VoiceCallSession {
   final VoiceCallMediaKind mediaKind;
   final VoiceCallStatus status;
   final VoiceSessionKind sessionKind;
+
+  /// Space room identity, distinct from the active call's [roomId].
+  final String? voiceRoomId;
+
+  /// Known room context; absent from the current active-session protobuf.
+  /// This value alone does not establish canonical room authorization.
+  final String? spaceId;
   final DateTime? expiresAt;
 
   bool get isGroupVoice => sessionKind == VoiceSessionKind.groupVoice;
 }
 
 class VoiceJoinToken {
-  const VoiceJoinToken({
-    required this.jwt,
-    this.expiresAt,
-    this.livekitUrl,
-  });
+  const VoiceJoinToken({required this.jwt, this.expiresAt, this.livekitUrl});
 
   final String jwt;
   final DateTime? expiresAt;
@@ -77,11 +82,13 @@ class VoiceRoomSession {
     required this.roomId,
     required this.livekitRoomName,
     required this.voiceRoomId,
+    this.spaceId,
   });
 
   final String roomId;
   final String livekitRoomName;
   final String voiceRoomId;
+  final String? spaceId;
 }
 
 class VoiceRoomParticipantState {
@@ -109,9 +116,85 @@ class VoiceRoomParticipantState {
 }
 
 class VoiceCallsClient {
-  VoiceCallsClient({required GatewayHttpClient gateway}) : _gateway = gateway;
+  VoiceCallsClient({
+    required GatewayHttpClient gateway,
+    this.canonicalRoomLifecycleEnabled = false,
+  }) : _gateway = gateway;
 
   final GatewayHttpClient _gateway;
+
+  /// Staged client seam. Existing controllers do not enable canonical routing.
+  /// Backend authority, restore binding and operation-ledger proof are required
+  /// before an enabling change can set this to true outside contract tests.
+  final bool canonicalRoomLifecycleEnabled;
+
+  static const _canonicalRoomUnavailable = VoiceApiFailure(
+    message: 'voice_room_lifecycle_unavailable',
+    errorCode: 'voice_room_lifecycle_unavailable',
+  );
+
+  Future<VoiceApiResult<VoiceRoomSession>> joinSpaceVoiceRoom({
+    required String authorization,
+    required String spaceId,
+    required String voiceRoomId,
+    required String operationId,
+  }) async {
+    if (!canonicalRoomLifecycleEnabled) return _canonicalRoomUnavailable;
+    final result = await _gateway.postJson(
+      uri: _spaceRoomUri(spaceId, voiceRoomId, 'join'),
+      authorization: authorization,
+      body: {'operation_id': operationId},
+    );
+    final mapped = _mapJson(result, (data) => data);
+    switch (mapped) {
+      case VoiceApiFailure():
+        return mapped;
+      case VoiceApiOk(:final data):
+        final session = data['voice_session'];
+        if (session is! Map<String, dynamic> ||
+            session['voice_room_id'] != voiceRoomId ||
+            voiceRoomId.isEmpty ||
+            session['room_id'] is! String ||
+            (session['room_id'] as String).trim().isEmpty ||
+            session['livekit_room_name'] is! String ||
+            (session['livekit_room_name'] as String).trim().isEmpty) {
+          return const VoiceApiFailure(
+            message: 'invalid_voice_room_session',
+            errorCode: 'invalid_response',
+          );
+        }
+        return VoiceApiOk(
+          VoiceRoomSession(
+            roomId: session['room_id'] as String,
+            livekitRoomName: session['livekit_room_name'] as String,
+            voiceRoomId: voiceRoomId,
+            spaceId: spaceId,
+          ),
+        );
+    }
+  }
+
+  Future<VoiceApiResult<void>> leaveSpaceVoiceRoom({
+    required String authorization,
+    required String spaceId,
+    required String voiceRoomId,
+    required String operationId,
+  }) async {
+    if (!canonicalRoomLifecycleEnabled) return _canonicalRoomUnavailable;
+    final result = await _gateway.postJson(
+      uri: _spaceRoomUri(spaceId, voiceRoomId, 'leave'),
+      authorization: authorization,
+      body: {'operation_id': operationId},
+      allowNoContent: true,
+    );
+    return _mapEmpty(result);
+  }
+
+  Uri _spaceRoomUri(String spaceId, String voiceRoomId, String action) =>
+      _gateway.resolve(
+        '/api/v1/spaces/${Uri.encodeComponent(spaceId)}'
+        '/voice-rooms/${Uri.encodeComponent(voiceRoomId)}/$action',
+      );
 
   Future<VoiceApiResult<VoiceCallSession?>> getActiveCall({
     required String authorization,

@@ -390,6 +390,8 @@ class CallController extends StateNotifier<CallState> {
             mediaKind: VoiceCallMediaKind.audio,
             status: VoiceCallStatus.active,
             sessionKind: VoiceSessionKind.voiceRoom,
+            voiceRoomId: data.voiceRoomId,
+            spaceId: spaceId,
           );
           state = state.copyWith(session: session, clearOutgoingTarget: true);
           await _connectLiveKit(session);
