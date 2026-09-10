@@ -171,6 +171,24 @@ func TestVerifier_AllowsOnlyFixedFiveSecondTemporalSkew(t *testing.T) {
 	if _, err := VerifyService(context.Background(), token, serviceConfig(key, now)); err == nil {
 		t.Fatal("future credential beyond fixed skew accepted")
 	}
+	claims.IssuedAt = now.Add(-30 * time.Second).Unix()
+	claims.NotBefore = now.Add(-30 * time.Second).Unix()
+	claims.ExpiresAt = now.Add(-5 * time.Second).Unix()
+	token, err = signClaims(key, "current", claims)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifyService(context.Background(), token, serviceConfig(key, now)); err != nil {
+		t.Fatalf("five-second expiry skew rejected: %v", err)
+	}
+	claims.ExpiresAt = now.Add(-6 * time.Second).Unix()
+	token, err = signClaims(key, "current", claims)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifyService(context.Background(), token, serviceConfig(key, now)); err == nil {
+		t.Fatal("expired credential beyond fixed skew accepted")
+	}
 }
 
 func TestDelegatedUserCredential_IsBoundToGatewayAndClientSessionExpiry(t *testing.T) {

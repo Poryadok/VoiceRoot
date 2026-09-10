@@ -147,7 +147,7 @@ func validateTemporal(claims rawClaims, now time.Time) error {
 		return fmt.Errorf("required temporal claims missing")
 	}
 	issuedAt, notBefore, expiresAt := time.Unix(claims.IssuedAt, 0), time.Unix(claims.NotBefore, 0), time.Unix(claims.ExpiresAt, 0)
-	if notBefore.Before(issuedAt) || notBefore.After(now.Add(temporalSkew)) || issuedAt.After(now.Add(temporalSkew)) || !expiresAt.After(now.Add(-temporalSkew)) || expiresAt.Before(notBefore) || expiresAt.Sub(issuedAt) > maxCredentialTTL {
+	if notBefore.Before(issuedAt) || notBefore.After(now.Add(temporalSkew)) || issuedAt.After(now.Add(temporalSkew)) || expiresAt.Before(now.Add(-temporalSkew)) || !expiresAt.After(notBefore) || expiresAt.Sub(issuedAt) > maxCredentialTTL {
 		return fmt.Errorf("credential temporal claims invalid")
 	}
 	return nil
