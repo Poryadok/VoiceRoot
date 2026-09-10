@@ -197,4 +197,3 @@ FOR EACH ROW EXECUTE FUNCTION role_voice_policy_lifecycle_changed();
 CREATE TRIGGER role_voice_policy_outbox_no_change
 BEFORE UPDATE OR DELETE ON role_voice_policy_outbox
 FOR EACH ROW EXECUTE FUNCTION role_voice_policy_outbox_immutable();
-
