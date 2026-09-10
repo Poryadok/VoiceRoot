@@ -1,0 +1,63 @@
+# Opt-in LOCAL/CI fixture only. Generate PHASE0_FIXTURE_DIR before using it.
+services:
+  gateway:
+    user: "0:0"
+    environment:
+      GATEWAY_PRINCIPAL_SIGNING_KEYS_DIR: /run/phase0/gateway
+      GATEWAY_PRINCIPAL_ACTIVE_KID: current
+    volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/gateway:/run/phase0/gateway:ro
+  space:
+    user: "0:0"
+    environment:
+      SPACE_PRINCIPAL_SIGNING_KEYS_DIR: /run/phase0/space
+      SPACE_PRINCIPAL_ACTIVE_KID: current
+      ROLE_PRINCIPAL_GRPC_ADDR: role:9091
+      ROLE_PRINCIPAL_TLS_CA_FILE: /run/phase0/ca.crt
+    volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/space:/run/phase0/space:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+  role:
+    user: "0:0"
+    expose: ["9091"]
+    environment:
+      ROLE_PRINCIPAL_GRPC_LISTEN: :9091
+      ROLE_PRINCIPAL_TLS_CERT_FILE: /run/phase0/role.crt
+      ROLE_PRINCIPAL_TLS_KEY_FILE: /run/phase0/role.key
+      ROLE_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
+      S2S_JWKS_URLS_JSON: '{"space":"https://phase0-jwks:8443/space/jwks.json"}'
+      S2S_JWKS_CA_FILE: /run/phase0/ca.crt
+    depends_on:
+      redis:
+        condition: service_healthy
+      phase0-jwks:
+        condition: service_started
+    volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/role.crt:/run/phase0/role.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/role.key:/run/phase0/role.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+  auth:
+    user: "0:0"
+    expose: ["9091"]
+    environment:
+      AUTH_PRINCIPAL_GRPC_PORT: "9091"
+      AUTH_GRPC_TLS_CERT_FILE: /run/phase0/auth.crt
+      AUTH_GRPC_TLS_KEY_FILE: /run/phase0/auth.key
+      S2S_JWKS_URLS_JSON: '{"gateway":"https://phase0-jwks:8443/gateway/jwks.json","space":"https://phase0-jwks:8443/space/jwks.json"}'
+      JAVA_TOOL_OPTIONS: -Djavax.net.ssl.trustStore=/run/phase0/truststore.p12 -Djavax.net.ssl.trustStorePassword=phase0-fixture -Djavax.net.ssl.trustStoreType=PKCS12
+    depends_on:
+      phase0-jwks:
+        condition: service_started
+    volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/auth.crt:/run/phase0/auth.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/auth.key:/run/phase0/auth.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/truststore.p12:/run/phase0/truststore.p12:ro
+  phase0-jwks:
+    profiles: ["app"]
+    image: nginx:1.28-alpine
+    user: "0:0"
+    expose: ["8443"]
+    volumes:
+      - ./docker/phase0/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/proxy.crt:/run/phase0/proxy.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/proxy.key:/run/phase0/proxy.key:ro

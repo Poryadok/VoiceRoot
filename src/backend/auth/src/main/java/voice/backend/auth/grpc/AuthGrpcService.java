@@ -335,6 +335,83 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
     });
   }
 
+  private voice.backend.auth.ownershipproof.OwnershipTransferProofService ownershipProofs;
+
+  @org.springframework.beans.factory.annotation.Autowired(required = false)
+  public void configureOwnershipProofService(voice.backend.auth.ownershipproof.OwnershipTransferProofService service) {
+    this.ownershipProofs = service;
+  }
+
+  @Override
+  public void issueOwnershipTransferProof(app.voice.auth.v1.IssueOwnershipTransferProofRequest request,
+      StreamObserver<app.voice.auth.v1.IssueOwnershipTransferProofResponse> responseObserver) {
+    runProof(responseObserver, () -> {
+      var principal = requireProofPrincipal("delegated_user", "gateway");
+      var binding = new voice.backend.auth.ownershipproof.ProofBinding(principal.accountId(), principal.profileId(),
+          proofUuid(request.getSpaceId()), proofUuid(request.getNewOwnerProfileId()),
+          proofUuid(request.getOperationId()), principal.sessionEpoch());
+      var issued = requireProofService().issue(binding, request.getPassword(), request.getTotpCode(), request.getBackupCode());
+      return app.voice.auth.v1.IssueOwnershipTransferProofResponse.newBuilder()
+          .setProof(issued.proof()).setExpiresAt(toTimestamp(issued.expiresAt())).build();
+    });
+  }
+
+  @Override
+  public void consumeOwnershipTransferProof(app.voice.auth.v1.ConsumeOwnershipTransferProofRequest request,
+      StreamObserver<app.voice.auth.v1.ConsumeOwnershipTransferProofResponse> responseObserver) {
+    runProof(responseObserver, () -> {
+      requireProofPrincipal("service", "space");
+      var binding = new voice.backend.auth.ownershipproof.ProofBinding(proofUuid(request.getAccountId()),
+          proofUuid(request.getProfileId()), proofUuid(request.getSpaceId()), proofUuid(request.getNewOwnerProfileId()),
+          proofUuid(request.getOperationId()), request.getSessionEpoch());
+      var receipt = requireProofService().consume(binding, request.getProof());
+      var bound = receipt.binding();
+      return app.voice.auth.v1.ConsumeOwnershipTransferProofResponse.newBuilder()
+          .setReceiptId(receipt.receiptId().toString()).setAccountId(bound.accountId().toString())
+          .setProfileId(bound.profileId().toString()).setSpaceId(bound.spaceId().toString())
+          .setNewOwnerProfileId(bound.newOwnerProfileId().toString()).setOperationId(bound.operationId().toString())
+          .setSessionEpoch(bound.sessionEpoch()).setConsumedAt(toTimestamp(receipt.consumedAt()))
+          .addAllVerifiedFactors(receipt.factors()).build();
+    });
+  }
+
+  private static voice.backend.auth.principal.VerifiedPrincipal requireProofPrincipal(String kind, String issuer) {
+    var principal = voice.backend.auth.principal.VerifiedPrincipal.current();
+    if (principal == null) throw Status.UNAUTHENTICATED.withDescription("verified principal required").asRuntimeException();
+    if (!kind.equals(principal.kind()) || !issuer.equals(principal.issuer())) {
+      throw Status.PERMISSION_DENIED.withDescription("caller denied").asRuntimeException();
+    }
+    return principal;
+  }
+
+  private voice.backend.auth.ownershipproof.OwnershipTransferProofService requireProofService() {
+    if (ownershipProofs == null) throw Status.UNAVAILABLE.withDescription("ownership proof unavailable").asRuntimeException();
+    return ownershipProofs;
+  }
+
+  private static java.util.UUID proofUuid(String value) {
+    if (value == null || !value.matches("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")) {
+      throw new IllegalArgumentException("invalid proof binding");
+    }
+    return java.util.UUID.fromString(value);
+  }
+
+  private <T> void runProof(StreamObserver<T> observer, GrpcCall<T> call) {
+    try {
+      T result = call.execute();
+      observer.onNext(result);
+      observer.onCompleted();
+    } catch (voice.backend.auth.ownershipproof.ProofDeniedException denied) {
+      observer.onError(Status.PERMISSION_DENIED.withDescription("ownership proof denied").asRuntimeException());
+    } catch (io.grpc.StatusRuntimeException status) {
+      observer.onError(status);
+    } catch (IllegalArgumentException malformed) {
+      observer.onError(Status.INVALID_ARGUMENT.withDescription("invalid proof binding").asRuntimeException());
+    } catch (RuntimeException unavailable) {
+      // Never disclose factor/proof material, JDBC details or request payloads.
+      observer.onError(Status.UNAVAILABLE.withDescription("ownership proof unavailable").asRuntimeException());
+    }
+  }
   private <T> void run(StreamObserver<T> observer, GrpcCall<T> call) {
     try {
       observer.onNext(call.execute());
