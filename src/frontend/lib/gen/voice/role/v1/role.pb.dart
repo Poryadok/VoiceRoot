@@ -245,6 +245,312 @@ class DeleteRolesCreatedByProfileResponse extends $pb.GeneratedMessage {
   static DeleteRolesCreatedByProfileResponse? _defaultInstance;
 }
 
+class ApplyOwnershipTransferRequest extends $pb.GeneratedMessage {
+  factory ApplyOwnershipTransferRequest({
+    $core.String? spaceId,
+    $core.String? oldOwnerProfileId,
+    $core.String? newOwnerProfileId,
+    $core.String? operationId,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (oldOwnerProfileId != null) result.oldOwnerProfileId = oldOwnerProfileId;
+    if (newOwnerProfileId != null) result.newOwnerProfileId = newOwnerProfileId;
+    if (operationId != null) result.operationId = operationId;
+    return result;
+  }
+
+  ApplyOwnershipTransferRequest._();
+
+  factory ApplyOwnershipTransferRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ApplyOwnershipTransferRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ApplyOwnershipTransferRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'oldOwnerProfileId')
+    ..aOS(3, _omitFieldNames ? '' : 'newOwnerProfileId')
+    ..aOS(4, _omitFieldNames ? '' : 'operationId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyOwnershipTransferRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyOwnershipTransferRequest copyWith(
+          void Function(ApplyOwnershipTransferRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as ApplyOwnershipTransferRequest))
+          as ApplyOwnershipTransferRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ApplyOwnershipTransferRequest create() =>
+      ApplyOwnershipTransferRequest._();
+  @$core.override
+  ApplyOwnershipTransferRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ApplyOwnershipTransferRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ApplyOwnershipTransferRequest>(create);
+  static ApplyOwnershipTransferRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get oldOwnerProfileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set oldOwnerProfileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOldOwnerProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOldOwnerProfileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get newOwnerProfileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set newOwnerProfileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasNewOwnerProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearNewOwnerProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get operationId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set operationId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasOperationId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearOperationId() => $_clearField(4);
+}
+
+class CompensateOwnershipTransferRequest extends $pb.GeneratedMessage {
+  factory CompensateOwnershipTransferRequest({
+    $core.String? spaceId,
+    $core.String? oldOwnerProfileId,
+    $core.String? newOwnerProfileId,
+    $core.String? operationId,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (oldOwnerProfileId != null) result.oldOwnerProfileId = oldOwnerProfileId;
+    if (newOwnerProfileId != null) result.newOwnerProfileId = newOwnerProfileId;
+    if (operationId != null) result.operationId = operationId;
+    return result;
+  }
+
+  CompensateOwnershipTransferRequest._();
+
+  factory CompensateOwnershipTransferRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CompensateOwnershipTransferRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CompensateOwnershipTransferRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'oldOwnerProfileId')
+    ..aOS(3, _omitFieldNames ? '' : 'newOwnerProfileId')
+    ..aOS(4, _omitFieldNames ? '' : 'operationId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CompensateOwnershipTransferRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CompensateOwnershipTransferRequest copyWith(
+          void Function(CompensateOwnershipTransferRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as CompensateOwnershipTransferRequest))
+          as CompensateOwnershipTransferRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CompensateOwnershipTransferRequest create() =>
+      CompensateOwnershipTransferRequest._();
+  @$core.override
+  CompensateOwnershipTransferRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CompensateOwnershipTransferRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<CompensateOwnershipTransferRequest>(
+          create);
+  static CompensateOwnershipTransferRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get oldOwnerProfileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set oldOwnerProfileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOldOwnerProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOldOwnerProfileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get newOwnerProfileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set newOwnerProfileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasNewOwnerProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearNewOwnerProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get operationId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set operationId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasOperationId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearOperationId() => $_clearField(4);
+}
+
+class ApplyOwnershipTransferResponse extends $pb.GeneratedMessage {
+  factory ApplyOwnershipTransferResponse({
+    $core.String? currentOwnerProfileId,
+  }) {
+    final result = create();
+    if (currentOwnerProfileId != null)
+      result.currentOwnerProfileId = currentOwnerProfileId;
+    return result;
+  }
+
+  ApplyOwnershipTransferResponse._();
+
+  factory ApplyOwnershipTransferResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ApplyOwnershipTransferResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ApplyOwnershipTransferResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'currentOwnerProfileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyOwnershipTransferResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyOwnershipTransferResponse copyWith(
+          void Function(ApplyOwnershipTransferResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as ApplyOwnershipTransferResponse))
+          as ApplyOwnershipTransferResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ApplyOwnershipTransferResponse create() =>
+      ApplyOwnershipTransferResponse._();
+  @$core.override
+  ApplyOwnershipTransferResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ApplyOwnershipTransferResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ApplyOwnershipTransferResponse>(create);
+  static ApplyOwnershipTransferResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get currentOwnerProfileId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set currentOwnerProfileId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasCurrentOwnerProfileId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearCurrentOwnerProfileId() => $_clearField(1);
+}
+
+class CompensateOwnershipTransferResponse extends $pb.GeneratedMessage {
+  factory CompensateOwnershipTransferResponse({
+    $core.String? currentOwnerProfileId,
+  }) {
+    final result = create();
+    if (currentOwnerProfileId != null)
+      result.currentOwnerProfileId = currentOwnerProfileId;
+    return result;
+  }
+
+  CompensateOwnershipTransferResponse._();
+
+  factory CompensateOwnershipTransferResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CompensateOwnershipTransferResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CompensateOwnershipTransferResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'currentOwnerProfileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CompensateOwnershipTransferResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CompensateOwnershipTransferResponse copyWith(
+          void Function(CompensateOwnershipTransferResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as CompensateOwnershipTransferResponse))
+          as CompensateOwnershipTransferResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CompensateOwnershipTransferResponse create() =>
+      CompensateOwnershipTransferResponse._();
+  @$core.override
+  CompensateOwnershipTransferResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CompensateOwnershipTransferResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          CompensateOwnershipTransferResponse>(create);
+  static CompensateOwnershipTransferResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get currentOwnerProfileId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set currentOwnerProfileId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasCurrentOwnerProfileId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearCurrentOwnerProfileId() => $_clearField(1);
+}
+
 class Role extends $pb.GeneratedMessage {
   factory Role({
     $core.String? id,

@@ -288,3 +288,29 @@ func TestAssignRole_HierarchyDenied(t *testing.T) {
 	})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
+
+func TestGenericRoleMutations_RejectOwner(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	s, cleanup := startRoleStoreTest(t)
+	defer cleanup()
+	client, stop := startRoleGRPCTestServer(t, s.Pool)
+	defer stop()
+	spaceID, ownerID, targetID := uuid.New(), uuid.New(), uuid.New()
+	require.NoError(t, s.BootstrapSpaceRoles(context.Background(), spaceID, ownerID))
+	roles, err := s.ListRoles(context.Background(), spaceID)
+	require.NoError(t, err)
+	var ownerRoleID string
+	for _, role := range roles {
+		if role.Name == permissions.RoleOwner {
+			ownerRoleID = role.ID.String()
+		}
+	}
+	require.NotEmpty(t, ownerRoleID)
+	ctx := ctxWithProfile(ownerID)
+	_, err = client.AssignRole(ctx, &rolev1.AssignRoleRequest{SpaceId: spaceID.String(), ProfileId: targetID.String(), RoleId: ownerRoleID})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	_, err = client.RevokeRole(ctx, &rolev1.RevokeRoleRequest{SpaceId: spaceID.String(), ProfileId: ownerID.String(), RoleId: ownerRoleID})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+}
