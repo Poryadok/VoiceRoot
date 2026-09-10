@@ -202,15 +202,17 @@ func TestOrdinaryHandlerFences(t *testing.T) {
 	store.ApplyRoleMigrationsForStoreTest(t, ctx, pool)
 	cases := ordinaryHandlerCases()
 	// Enumerate the actual descriptor instead of silently losing coverage when an
-	// ordinary RPC is added. The six ownership RPCs have separate lifecycle tests.
+	// ordinary RPC is added. Ownership RPCs have separate lifecycle tests, while
+	// the trusted Voice-only decision remains unregistered and network-unavailable.
 	covered := make(map[string]bool)
 	for _, tc := range cases {
 		require.False(t, covered[tc.name])
 		covered[tc.name] = true
 	}
 	excluded := map[string]bool{"ApplyOwnershipTransfer": true, "CompensateOwnershipTransfer": true, "GetOwnershipTransferCapabilities": true, "PrepareOwnershipTransfer": true, "FinalizeOwnershipTransfer": true, "AbortOwnershipTransfer": true}
+	trustedUnregistered := map[string]bool{"ResolveVoiceRoomGrants": true}
 	for _, method := range rolev1.RoleService_ServiceDesc.Methods {
-		require.True(t, covered[method.MethodName] || excluded[method.MethodName], method.MethodName)
+		require.True(t, covered[method.MethodName] || excluded[method.MethodName] || trustedUnregistered[method.MethodName], method.MethodName)
 	}
 	f := newOrdinaryHandlerFixture(t, ctx, pool)
 	prepareOrdinaryHandlerFixture(t, ctx, pool, f)

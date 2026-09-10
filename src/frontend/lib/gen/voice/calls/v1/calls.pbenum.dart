@@ -96,5 +96,73 @@ class CallStatus extends $pb.ProtobufEnum {
   const CallStatus._(super.value, super.name);
 }
 
+class VoiceRoomLifecycleMethod extends $pb.ProtobufEnum {
+  static const VoiceRoomLifecycleMethod
+      VOICE_ROOM_LIFECYCLE_METHOD_UNSPECIFIED = VoiceRoomLifecycleMethod._(
+          0, _omitEnumNames ? '' : 'VOICE_ROOM_LIFECYCLE_METHOD_UNSPECIFIED');
+  static const VoiceRoomLifecycleMethod VOICE_ROOM_LIFECYCLE_METHOD_JOIN =
+      VoiceRoomLifecycleMethod._(
+          1, _omitEnumNames ? '' : 'VOICE_ROOM_LIFECYCLE_METHOD_JOIN');
+  static const VoiceRoomLifecycleMethod VOICE_ROOM_LIFECYCLE_METHOD_LEAVE =
+      VoiceRoomLifecycleMethod._(
+          2, _omitEnumNames ? '' : 'VOICE_ROOM_LIFECYCLE_METHOD_LEAVE');
+  static const VoiceRoomLifecycleMethod VOICE_ROOM_LIFECYCLE_METHOD_SELF_MOVE =
+      VoiceRoomLifecycleMethod._(
+          3, _omitEnumNames ? '' : 'VOICE_ROOM_LIFECYCLE_METHOD_SELF_MOVE');
+  static const VoiceRoomLifecycleMethod
+      VOICE_ROOM_LIFECYCLE_METHOD_MODERATOR_MOVE = VoiceRoomLifecycleMethod._(4,
+          _omitEnumNames ? '' : 'VOICE_ROOM_LIFECYCLE_METHOD_MODERATOR_MOVE');
+
+  static const $core.List<VoiceRoomLifecycleMethod> values =
+      <VoiceRoomLifecycleMethod>[
+    VOICE_ROOM_LIFECYCLE_METHOD_UNSPECIFIED,
+    VOICE_ROOM_LIFECYCLE_METHOD_JOIN,
+    VOICE_ROOM_LIFECYCLE_METHOD_LEAVE,
+    VOICE_ROOM_LIFECYCLE_METHOD_SELF_MOVE,
+    VOICE_ROOM_LIFECYCLE_METHOD_MODERATOR_MOVE,
+  ];
+
+  static final $core.List<VoiceRoomLifecycleMethod?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 4);
+  static VoiceRoomLifecycleMethod? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const VoiceRoomLifecycleMethod._(super.value, super.name);
+}
+
+class VoiceRoomLifecycleOutcome extends $pb.ProtobufEnum {
+  static const VoiceRoomLifecycleOutcome
+      VOICE_ROOM_LIFECYCLE_OUTCOME_UNSPECIFIED = VoiceRoomLifecycleOutcome._(
+          0, _omitEnumNames ? '' : 'VOICE_ROOM_LIFECYCLE_OUTCOME_UNSPECIFIED');
+  static const VoiceRoomLifecycleOutcome VOICE_ROOM_LIFECYCLE_OUTCOME_JOINED =
+      VoiceRoomLifecycleOutcome._(
+          1, _omitEnumNames ? '' : 'VOICE_ROOM_LIFECYCLE_OUTCOME_JOINED');
+  static const VoiceRoomLifecycleOutcome VOICE_ROOM_LIFECYCLE_OUTCOME_LEFT =
+      VoiceRoomLifecycleOutcome._(
+          2, _omitEnumNames ? '' : 'VOICE_ROOM_LIFECYCLE_OUTCOME_LEFT');
+  static const VoiceRoomLifecycleOutcome VOICE_ROOM_LIFECYCLE_OUTCOME_MOVED =
+      VoiceRoomLifecycleOutcome._(
+          3, _omitEnumNames ? '' : 'VOICE_ROOM_LIFECYCLE_OUTCOME_MOVED');
+  static const VoiceRoomLifecycleOutcome VOICE_ROOM_LIFECYCLE_OUTCOME_NO_OP =
+      VoiceRoomLifecycleOutcome._(
+          4, _omitEnumNames ? '' : 'VOICE_ROOM_LIFECYCLE_OUTCOME_NO_OP');
+
+  static const $core.List<VoiceRoomLifecycleOutcome> values =
+      <VoiceRoomLifecycleOutcome>[
+    VOICE_ROOM_LIFECYCLE_OUTCOME_UNSPECIFIED,
+    VOICE_ROOM_LIFECYCLE_OUTCOME_JOINED,
+    VOICE_ROOM_LIFECYCLE_OUTCOME_LEFT,
+    VOICE_ROOM_LIFECYCLE_OUTCOME_MOVED,
+    VOICE_ROOM_LIFECYCLE_OUTCOME_NO_OP,
+  ];
+
+  static final $core.List<VoiceRoomLifecycleOutcome?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 4);
+  static VoiceRoomLifecycleOutcome? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const VoiceRoomLifecycleOutcome._(super.value, super.name);
+}
+
 const $core.bool _omitEnumNames =
     $core.bool.fromEnvironment('protobuf.omit_enum_names');

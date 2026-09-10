@@ -12,6 +12,7 @@
 
 import 'dart:core' as $core;
 
+import 'package:fixnum/fixnum.dart' as $fixnum;
 import 'package:protobuf/protobuf.dart' as $pb;
 import 'package:protobuf/well_known_types/google/protobuf/timestamp.pb.dart'
     as $1;
@@ -6328,15 +6329,17 @@ class AreCoMembersResponse extends $pb.GeneratedMessage {
 }
 
 /// ResolveVoiceRoomAccessRequest is intentionally independent of caller-forwarded
-/// identity metadata: Voice supplies the actor it is authorizing explicitly.
+/// identity metadata: Voice supplies the subject and asserted path explicitly.
 class ResolveVoiceRoomAccessRequest extends $pb.GeneratedMessage {
   factory ResolveVoiceRoomAccessRequest({
     $core.String? voiceRoomId,
     $core.String? profileId,
+    SpaceRef? space,
   }) {
     final result = create();
     if (voiceRoomId != null) result.voiceRoomId = voiceRoomId;
     if (profileId != null) result.profileId = profileId;
+    if (space != null) result.space = space;
     return result;
   }
 
@@ -6355,6 +6358,8 @@ class ResolveVoiceRoomAccessRequest extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'voiceRoomId')
     ..aOS(2, _omitFieldNames ? '' : 'profileId')
+    ..aOM<SpaceRef>(3, _omitFieldNames ? '' : 'space',
+        subBuilder: SpaceRef.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -6396,20 +6401,38 @@ class ResolveVoiceRoomAccessRequest extends $pb.GeneratedMessage {
   $core.bool hasProfileId() => $_has(1);
   @$pb.TagNumber(2)
   void clearProfileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  SpaceRef get space => $_getN(2);
+  @$pb.TagNumber(3)
+  set space(SpaceRef value) => $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasSpace() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearSpace() => $_clearField(3);
+  @$pb.TagNumber(3)
+  SpaceRef ensureSpace() => $_ensure(2);
 }
 
 /// ResolveVoiceRoomAccessResponse gives Voice canonical room ownership and the
-/// current exact membership evidence. A room is active while it exists.
+/// current exact membership evidence from one Space-owned epoch. Only a
+/// discoverable current member receives a response. Existing but undiscoverable,
+/// absent, deleted/inactive and foreign-path rooms all return the same NOT_FOUND.
+/// In the current hard-delete model a room is active exactly while its row exists.
 class ResolveVoiceRoomAccessResponse extends $pb.GeneratedMessage {
   factory ResolveVoiceRoomAccessResponse({
     $core.String? spaceId,
     $core.bool? member,
     $core.bool? active,
+    $core.bool? discoverable,
+    $fixnum.Int64? accessEpoch,
   }) {
     final result = create();
     if (spaceId != null) result.spaceId = spaceId;
     if (member != null) result.member = member;
     if (active != null) result.active = active;
+    if (discoverable != null) result.discoverable = discoverable;
+    if (accessEpoch != null) result.accessEpoch = accessEpoch;
     return result;
   }
 
@@ -6429,6 +6452,10 @@ class ResolveVoiceRoomAccessResponse extends $pb.GeneratedMessage {
     ..aOS(1, _omitFieldNames ? '' : 'spaceId')
     ..aOB(2, _omitFieldNames ? '' : 'member')
     ..aOB(3, _omitFieldNames ? '' : 'active')
+    ..aOB(4, _omitFieldNames ? '' : 'discoverable')
+    ..a<$fixnum.Int64>(
+        5, _omitFieldNames ? '' : 'accessEpoch', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -6479,6 +6506,24 @@ class ResolveVoiceRoomAccessResponse extends $pb.GeneratedMessage {
   $core.bool hasActive() => $_has(2);
   @$pb.TagNumber(3)
   void clearActive() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.bool get discoverable => $_getBF(3);
+  @$pb.TagNumber(4)
+  set discoverable($core.bool value) => $_setBool(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasDiscoverable() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearDiscoverable() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $fixnum.Int64 get accessEpoch => $_getI64(4);
+  @$pb.TagNumber(5)
+  set accessEpoch($fixnum.Int64 value) => $_setInt64(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasAccessEpoch() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearAccessEpoch() => $_clearField(5);
 }
 
 class SyncSpaceProSubscriptionRequest extends $pb.GeneratedMessage {

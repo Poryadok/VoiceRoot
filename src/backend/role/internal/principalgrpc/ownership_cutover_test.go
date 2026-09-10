@@ -14,7 +14,7 @@ import (
 	"voice/backend/pkg/principal"
 )
 
-func TestOwnershipUnaryInterceptor_DrainsEveryOwnershipProtocolOnLegacyListener(t *testing.T) {
+func TestOwnershipUnaryInterceptor_DrainsEveryProtectedProtocolOnLegacyListener(t *testing.T) {
 	methods := []string{
 		rolev1.RoleService_GetOwnershipTransferCapabilities_FullMethodName,
 		rolev1.RoleService_PrepareOwnershipTransfer_FullMethodName,
@@ -22,6 +22,7 @@ func TestOwnershipUnaryInterceptor_DrainsEveryOwnershipProtocolOnLegacyListener(
 		rolev1.RoleService_AbortOwnershipTransfer_FullMethodName,
 		rolev1.RoleService_ApplyOwnershipTransfer_FullMethodName,
 		rolev1.RoleService_CompensateOwnershipTransfer_FullMethodName,
+		rolev1.RoleService_ResolveVoiceRoomGrants_FullMethodName,
 	}
 	for _, method := range methods {
 		t.Run(method, func(t *testing.T) {
@@ -35,6 +36,7 @@ func TestOwnershipUnaryInterceptor_DrainsEveryOwnershipProtocolOnLegacyListener(
 				return &emptypb.Empty{}, nil
 			})
 			require.Equal(t, codes.Unavailable, status.Code(err))
+			require.Equal(t, "protected method unavailable on ordinary listener", status.Convert(err).Message())
 			require.Zero(t, verified, "legacy ownership denial must not consume verifier dependencies")
 			require.Zero(t, handled, "legacy ownership denial must precede handler entry")
 		})

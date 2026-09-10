@@ -19,27 +19,28 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	VoiceService_StartCall_FullMethodName        = "/voice.calls.v1.VoiceService/StartCall"
-	VoiceService_AcceptCall_FullMethodName       = "/voice.calls.v1.VoiceService/AcceptCall"
-	VoiceService_DeclineCall_FullMethodName      = "/voice.calls.v1.VoiceService/DeclineCall"
-	VoiceService_JoinCall_FullMethodName         = "/voice.calls.v1.VoiceService/JoinCall"
-	VoiceService_LeaveCall_FullMethodName        = "/voice.calls.v1.VoiceService/LeaveCall"
-	VoiceService_EndCall_FullMethodName          = "/voice.calls.v1.VoiceService/EndCall"
-	VoiceService_JoinVoiceRoom_FullMethodName    = "/voice.calls.v1.VoiceService/JoinVoiceRoom"
-	VoiceService_LeaveVoiceRoom_FullMethodName   = "/voice.calls.v1.VoiceService/LeaveVoiceRoom"
-	VoiceService_MoveToVoiceRoom_FullMethodName  = "/voice.calls.v1.VoiceService/MoveToVoiceRoom"
-	VoiceService_GetJoinToken_FullMethodName     = "/voice.calls.v1.VoiceService/GetJoinToken"
-	VoiceService_UpdateVoiceState_FullMethodName = "/voice.calls.v1.VoiceService/UpdateVoiceState"
-	VoiceService_GetVoiceStates_FullMethodName   = "/voice.calls.v1.VoiceService/GetVoiceStates"
-	VoiceService_GetActiveCall_FullMethodName    = "/voice.calls.v1.VoiceService/GetActiveCall"
-	VoiceService_StartScreenShare_FullMethodName = "/voice.calls.v1.VoiceService/StartScreenShare"
-	VoiceService_StopScreenShare_FullMethodName  = "/voice.calls.v1.VoiceService/StopScreenShare"
-	VoiceService_SetCommanderMode_FullMethodName = "/voice.calls.v1.VoiceService/SetCommanderMode"
-	VoiceService_SetBroadcasting_FullMethodName  = "/voice.calls.v1.VoiceService/SetBroadcasting"
-	VoiceService_RaiseHand_FullMethodName        = "/voice.calls.v1.VoiceService/RaiseHand"
-	VoiceService_LowerHand_FullMethodName        = "/voice.calls.v1.VoiceService/LowerHand"
-	VoiceService_GrantFloor_FullMethodName       = "/voice.calls.v1.VoiceService/GrantFloor"
-	VoiceService_RevokeFloor_FullMethodName      = "/voice.calls.v1.VoiceService/RevokeFloor"
+	VoiceService_StartCall_FullMethodName                = "/voice.calls.v1.VoiceService/StartCall"
+	VoiceService_AcceptCall_FullMethodName               = "/voice.calls.v1.VoiceService/AcceptCall"
+	VoiceService_DeclineCall_FullMethodName              = "/voice.calls.v1.VoiceService/DeclineCall"
+	VoiceService_JoinCall_FullMethodName                 = "/voice.calls.v1.VoiceService/JoinCall"
+	VoiceService_LeaveCall_FullMethodName                = "/voice.calls.v1.VoiceService/LeaveCall"
+	VoiceService_EndCall_FullMethodName                  = "/voice.calls.v1.VoiceService/EndCall"
+	VoiceService_JoinVoiceRoom_FullMethodName            = "/voice.calls.v1.VoiceService/JoinVoiceRoom"
+	VoiceService_LeaveVoiceRoom_FullMethodName           = "/voice.calls.v1.VoiceService/LeaveVoiceRoom"
+	VoiceService_MoveToVoiceRoom_FullMethodName          = "/voice.calls.v1.VoiceService/MoveToVoiceRoom"
+	VoiceService_MoveVoiceRoomParticipant_FullMethodName = "/voice.calls.v1.VoiceService/MoveVoiceRoomParticipant"
+	VoiceService_GetJoinToken_FullMethodName             = "/voice.calls.v1.VoiceService/GetJoinToken"
+	VoiceService_UpdateVoiceState_FullMethodName         = "/voice.calls.v1.VoiceService/UpdateVoiceState"
+	VoiceService_GetVoiceStates_FullMethodName           = "/voice.calls.v1.VoiceService/GetVoiceStates"
+	VoiceService_GetActiveCall_FullMethodName            = "/voice.calls.v1.VoiceService/GetActiveCall"
+	VoiceService_StartScreenShare_FullMethodName         = "/voice.calls.v1.VoiceService/StartScreenShare"
+	VoiceService_StopScreenShare_FullMethodName          = "/voice.calls.v1.VoiceService/StopScreenShare"
+	VoiceService_SetCommanderMode_FullMethodName         = "/voice.calls.v1.VoiceService/SetCommanderMode"
+	VoiceService_SetBroadcasting_FullMethodName          = "/voice.calls.v1.VoiceService/SetBroadcasting"
+	VoiceService_RaiseHand_FullMethodName                = "/voice.calls.v1.VoiceService/RaiseHand"
+	VoiceService_LowerHand_FullMethodName                = "/voice.calls.v1.VoiceService/LowerHand"
+	VoiceService_GrantFloor_FullMethodName               = "/voice.calls.v1.VoiceService/GrantFloor"
+	VoiceService_RevokeFloor_FullMethodName              = "/voice.calls.v1.VoiceService/RevokeFloor"
 )
 
 // VoiceServiceClient is the client API for VoiceService service.
@@ -58,6 +59,7 @@ type VoiceServiceClient interface {
 	JoinVoiceRoom(ctx context.Context, in *JoinVoiceRoomRequest, opts ...grpc.CallOption) (*JoinVoiceRoomResponse, error)
 	LeaveVoiceRoom(ctx context.Context, in *LeaveVoiceRoomRequest, opts ...grpc.CallOption) (*LeaveVoiceRoomResponse, error)
 	MoveToVoiceRoom(ctx context.Context, in *MoveToVoiceRoomRequest, opts ...grpc.CallOption) (*MoveToVoiceRoomResponse, error)
+	MoveVoiceRoomParticipant(ctx context.Context, in *MoveVoiceRoomParticipantRequest, opts ...grpc.CallOption) (*MoveVoiceRoomParticipantResponse, error)
 	GetJoinToken(ctx context.Context, in *GetJoinTokenRequest, opts ...grpc.CallOption) (*GetJoinTokenResponse, error)
 	UpdateVoiceState(ctx context.Context, in *UpdateVoiceStateRequest, opts ...grpc.CallOption) (*UpdateVoiceStateResponse, error)
 	GetVoiceStates(ctx context.Context, in *GetVoiceStatesRequest, opts ...grpc.CallOption) (*GetVoiceStatesResponse, error)
@@ -164,6 +166,16 @@ func (c *voiceServiceClient) MoveToVoiceRoom(ctx context.Context, in *MoveToVoic
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(MoveToVoiceRoomResponse)
 	err := c.cc.Invoke(ctx, VoiceService_MoveToVoiceRoom_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *voiceServiceClient) MoveVoiceRoomParticipant(ctx context.Context, in *MoveVoiceRoomParticipantRequest, opts ...grpc.CallOption) (*MoveVoiceRoomParticipantResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MoveVoiceRoomParticipantResponse)
+	err := c.cc.Invoke(ctx, VoiceService_MoveVoiceRoomParticipant_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -306,6 +318,7 @@ type VoiceServiceServer interface {
 	JoinVoiceRoom(context.Context, *JoinVoiceRoomRequest) (*JoinVoiceRoomResponse, error)
 	LeaveVoiceRoom(context.Context, *LeaveVoiceRoomRequest) (*LeaveVoiceRoomResponse, error)
 	MoveToVoiceRoom(context.Context, *MoveToVoiceRoomRequest) (*MoveToVoiceRoomResponse, error)
+	MoveVoiceRoomParticipant(context.Context, *MoveVoiceRoomParticipantRequest) (*MoveVoiceRoomParticipantResponse, error)
 	GetJoinToken(context.Context, *GetJoinTokenRequest) (*GetJoinTokenResponse, error)
 	UpdateVoiceState(context.Context, *UpdateVoiceStateRequest) (*UpdateVoiceStateResponse, error)
 	GetVoiceStates(context.Context, *GetVoiceStatesRequest) (*GetVoiceStatesResponse, error)
@@ -354,6 +367,9 @@ func (UnimplementedVoiceServiceServer) LeaveVoiceRoom(context.Context, *LeaveVoi
 }
 func (UnimplementedVoiceServiceServer) MoveToVoiceRoom(context.Context, *MoveToVoiceRoomRequest) (*MoveToVoiceRoomResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MoveToVoiceRoom not implemented")
+}
+func (UnimplementedVoiceServiceServer) MoveVoiceRoomParticipant(context.Context, *MoveVoiceRoomParticipantRequest) (*MoveVoiceRoomParticipantResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MoveVoiceRoomParticipant not implemented")
 }
 func (UnimplementedVoiceServiceServer) GetJoinToken(context.Context, *GetJoinTokenRequest) (*GetJoinTokenResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetJoinToken not implemented")
@@ -570,6 +586,24 @@ func _VoiceService_MoveToVoiceRoom_Handler(srv interface{}, ctx context.Context,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(VoiceServiceServer).MoveToVoiceRoom(ctx, req.(*MoveToVoiceRoomRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VoiceService_MoveVoiceRoomParticipant_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MoveVoiceRoomParticipantRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VoiceServiceServer).MoveVoiceRoomParticipant(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VoiceService_MoveVoiceRoomParticipant_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VoiceServiceServer).MoveVoiceRoomParticipant(ctx, req.(*MoveVoiceRoomParticipantRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -832,6 +866,10 @@ var VoiceService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "MoveToVoiceRoom",
 			Handler:    _VoiceService_MoveToVoiceRoom_Handler,
+		},
+		{
+			MethodName: "MoveVoiceRoomParticipant",
+			Handler:    _VoiceService_MoveVoiceRoomParticipant_Handler,
 		},
 		{
 			MethodName: "GetJoinToken",

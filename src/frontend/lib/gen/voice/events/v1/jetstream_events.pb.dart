@@ -1583,6 +1583,7 @@ class UserBlocked extends $pb.GeneratedMessage {
 enum RoleStreamEvent_Payload {
   roleAssignmentChanged,
   roleDefinitionChanged,
+  voiceRoomPolicyInvalidated,
   notSet
 }
 
@@ -1592,6 +1593,7 @@ class RoleStreamEvent extends $pb.GeneratedMessage {
     $0.Timestamp? occurredAt,
     RoleAssignmentChanged? roleAssignmentChanged,
     RoleDefinitionChanged? roleDefinitionChanged,
+    VoiceRoomPolicyInvalidated? voiceRoomPolicyInvalidated,
   }) {
     final result = create();
     if (eventId != null) result.eventId = eventId;
@@ -1600,6 +1602,8 @@ class RoleStreamEvent extends $pb.GeneratedMessage {
       result.roleAssignmentChanged = roleAssignmentChanged;
     if (roleDefinitionChanged != null)
       result.roleDefinitionChanged = roleDefinitionChanged;
+    if (voiceRoomPolicyInvalidated != null)
+      result.voiceRoomPolicyInvalidated = voiceRoomPolicyInvalidated;
     return result;
   }
 
@@ -1616,6 +1620,7 @@ class RoleStreamEvent extends $pb.GeneratedMessage {
       _RoleStreamEvent_PayloadByTag = {
     10: RoleStreamEvent_Payload.roleAssignmentChanged,
     11: RoleStreamEvent_Payload.roleDefinitionChanged,
+    12: RoleStreamEvent_Payload.voiceRoomPolicyInvalidated,
     0: RoleStreamEvent_Payload.notSet
   };
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
@@ -1623,7 +1628,7 @@ class RoleStreamEvent extends $pb.GeneratedMessage {
       package:
           const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
       createEmptyInstance: create)
-    ..oo(0, [10, 11])
+    ..oo(0, [10, 11, 12])
     ..aOS(1, _omitFieldNames ? '' : 'eventId')
     ..aOM<$0.Timestamp>(2, _omitFieldNames ? '' : 'occurredAt',
         subBuilder: $0.Timestamp.create)
@@ -1633,6 +1638,9 @@ class RoleStreamEvent extends $pb.GeneratedMessage {
     ..aOM<RoleDefinitionChanged>(
         11, _omitFieldNames ? '' : 'roleDefinitionChanged',
         subBuilder: RoleDefinitionChanged.create)
+    ..aOM<VoiceRoomPolicyInvalidated>(
+        12, _omitFieldNames ? '' : 'voiceRoomPolicyInvalidated',
+        subBuilder: VoiceRoomPolicyInvalidated.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1656,10 +1664,12 @@ class RoleStreamEvent extends $pb.GeneratedMessage {
 
   @$pb.TagNumber(10)
   @$pb.TagNumber(11)
+  @$pb.TagNumber(12)
   RoleStreamEvent_Payload whichPayload() =>
       _RoleStreamEvent_PayloadByTag[$_whichOneof(0)]!;
   @$pb.TagNumber(10)
   @$pb.TagNumber(11)
+  @$pb.TagNumber(12)
   void clearPayload() => $_clearField($_whichOneof(0));
 
   @$pb.TagNumber(1)
@@ -1705,6 +1715,18 @@ class RoleStreamEvent extends $pb.GeneratedMessage {
   void clearRoleDefinitionChanged() => $_clearField(11);
   @$pb.TagNumber(11)
   RoleDefinitionChanged ensureRoleDefinitionChanged() => $_ensure(3);
+
+  @$pb.TagNumber(12)
+  VoiceRoomPolicyInvalidated get voiceRoomPolicyInvalidated => $_getN(4);
+  @$pb.TagNumber(12)
+  set voiceRoomPolicyInvalidated(VoiceRoomPolicyInvalidated value) =>
+      $_setField(12, value);
+  @$pb.TagNumber(12)
+  $core.bool hasVoiceRoomPolicyInvalidated() => $_has(4);
+  @$pb.TagNumber(12)
+  void clearVoiceRoomPolicyInvalidated() => $_clearField(12);
+  @$pb.TagNumber(12)
+  VoiceRoomPolicyInvalidated ensureVoiceRoomPolicyInvalidated() => $_ensure(4);
 }
 
 class RoleAssignmentChanged extends $pb.GeneratedMessage {
@@ -1847,6 +1869,103 @@ class RoleDefinitionChanged extends $pb.GeneratedMessage {
   $core.bool hasRoleId() => $_has(1);
   @$pb.TagNumber(2)
   void clearRoleId() => $_clearField(2);
+}
+
+class VoiceRoomPolicyInvalidated extends $pb.GeneratedMessage {
+  factory VoiceRoomPolicyInvalidated({
+    $core.String? spaceId,
+    $core.String? voiceRoomId,
+    $core.String? profileId,
+    $fixnum.Int64? policyEpoch,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (voiceRoomId != null) result.voiceRoomId = voiceRoomId;
+    if (profileId != null) result.profileId = profileId;
+    if (policyEpoch != null) result.policyEpoch = policyEpoch;
+    return result;
+  }
+
+  VoiceRoomPolicyInvalidated._();
+
+  factory VoiceRoomPolicyInvalidated.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory VoiceRoomPolicyInvalidated.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'VoiceRoomPolicyInvalidated',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'voiceRoomId')
+    ..aOS(3, _omitFieldNames ? '' : 'profileId')
+    ..a<$fixnum.Int64>(
+        4, _omitFieldNames ? '' : 'policyEpoch', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  VoiceRoomPolicyInvalidated clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  VoiceRoomPolicyInvalidated copyWith(
+          void Function(VoiceRoomPolicyInvalidated) updates) =>
+      super.copyWith(
+              (message) => updates(message as VoiceRoomPolicyInvalidated))
+          as VoiceRoomPolicyInvalidated;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static VoiceRoomPolicyInvalidated create() => VoiceRoomPolicyInvalidated._();
+  @$core.override
+  VoiceRoomPolicyInvalidated createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static VoiceRoomPolicyInvalidated getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<VoiceRoomPolicyInvalidated>(create);
+  static VoiceRoomPolicyInvalidated? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  /// Absent means every voice room within space_id.
+  @$pb.TagNumber(2)
+  $core.String get voiceRoomId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set voiceRoomId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasVoiceRoomId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearVoiceRoomId() => $_clearField(2);
+
+  /// Absent means every profile within space_id.
+  @$pb.TagNumber(3)
+  $core.String get profileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set profileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $fixnum.Int64 get policyEpoch => $_getI64(3);
+  @$pb.TagNumber(4)
+  set policyEpoch($fixnum.Int64 value) => $_setInt64(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasPolicyEpoch() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearPolicyEpoch() => $_clearField(4);
 }
 
 enum MessageStreamEvent_Payload {
@@ -3229,6 +3348,7 @@ enum ChatStreamEvent_Payload {
   spaceUpdated,
   spaceDeleted,
   dmPeerDeleted,
+  voiceRoomAccessInvalidated,
   notSet
 }
 
@@ -3246,6 +3366,7 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
     SpaceUpdated? spaceUpdated,
     SpaceDeleted? spaceDeleted,
     DmPeerDeleted? dmPeerDeleted,
+    VoiceRoomAccessInvalidated? voiceRoomAccessInvalidated,
   }) {
     final result = create();
     if (eventId != null) result.eventId = eventId;
@@ -3261,6 +3382,8 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
     if (spaceUpdated != null) result.spaceUpdated = spaceUpdated;
     if (spaceDeleted != null) result.spaceDeleted = spaceDeleted;
     if (dmPeerDeleted != null) result.dmPeerDeleted = dmPeerDeleted;
+    if (voiceRoomAccessInvalidated != null)
+      result.voiceRoomAccessInvalidated = voiceRoomAccessInvalidated;
     return result;
   }
 
@@ -3285,6 +3408,7 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
     17: ChatStreamEvent_Payload.spaceUpdated,
     18: ChatStreamEvent_Payload.spaceDeleted,
     19: ChatStreamEvent_Payload.dmPeerDeleted,
+    20: ChatStreamEvent_Payload.voiceRoomAccessInvalidated,
     0: ChatStreamEvent_Payload.notSet
   };
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
@@ -3292,7 +3416,7 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
       package:
           const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
       createEmptyInstance: create)
-    ..oo(0, [10, 11, 12, 13, 14, 15, 16, 17, 18, 19])
+    ..oo(0, [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20])
     ..aOS(1, _omitFieldNames ? '' : 'eventId')
     ..aOM<$0.Timestamp>(2, _omitFieldNames ? '' : 'occurredAt',
         subBuilder: $0.Timestamp.create)
@@ -3316,6 +3440,9 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
         subBuilder: SpaceDeleted.create)
     ..aOM<DmPeerDeleted>(19, _omitFieldNames ? '' : 'dmPeerDeleted',
         subBuilder: DmPeerDeleted.create)
+    ..aOM<VoiceRoomAccessInvalidated>(
+        20, _omitFieldNames ? '' : 'voiceRoomAccessInvalidated',
+        subBuilder: VoiceRoomAccessInvalidated.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3347,6 +3474,7 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(17)
   @$pb.TagNumber(18)
   @$pb.TagNumber(19)
+  @$pb.TagNumber(20)
   ChatStreamEvent_Payload whichPayload() =>
       _ChatStreamEvent_PayloadByTag[$_whichOneof(0)]!;
   @$pb.TagNumber(10)
@@ -3359,6 +3487,7 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(17)
   @$pb.TagNumber(18)
   @$pb.TagNumber(19)
+  @$pb.TagNumber(20)
   void clearPayload() => $_clearField($_whichOneof(0));
 
   @$pb.TagNumber(1)
@@ -3490,6 +3619,18 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
   void clearDmPeerDeleted() => $_clearField(19);
   @$pb.TagNumber(19)
   DmPeerDeleted ensureDmPeerDeleted() => $_ensure(11);
+
+  @$pb.TagNumber(20)
+  VoiceRoomAccessInvalidated get voiceRoomAccessInvalidated => $_getN(12);
+  @$pb.TagNumber(20)
+  set voiceRoomAccessInvalidated(VoiceRoomAccessInvalidated value) =>
+      $_setField(20, value);
+  @$pb.TagNumber(20)
+  $core.bool hasVoiceRoomAccessInvalidated() => $_has(12);
+  @$pb.TagNumber(20)
+  void clearVoiceRoomAccessInvalidated() => $_clearField(20);
+  @$pb.TagNumber(20)
+  VoiceRoomAccessInvalidated ensureVoiceRoomAccessInvalidated() => $_ensure(12);
 }
 
 class ChatCreated extends $pb.GeneratedMessage {
@@ -4223,6 +4364,103 @@ class DmPeerDeleted extends $pb.GeneratedMessage {
   $core.bool hasRecipientProfileId() => $_has(1);
   @$pb.TagNumber(2)
   void clearRecipientProfileId() => $_clearField(2);
+}
+
+class VoiceRoomAccessInvalidated extends $pb.GeneratedMessage {
+  factory VoiceRoomAccessInvalidated({
+    $core.String? spaceId,
+    $core.String? voiceRoomId,
+    $core.String? profileId,
+    $fixnum.Int64? accessEpoch,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (voiceRoomId != null) result.voiceRoomId = voiceRoomId;
+    if (profileId != null) result.profileId = profileId;
+    if (accessEpoch != null) result.accessEpoch = accessEpoch;
+    return result;
+  }
+
+  VoiceRoomAccessInvalidated._();
+
+  factory VoiceRoomAccessInvalidated.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory VoiceRoomAccessInvalidated.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'VoiceRoomAccessInvalidated',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'voiceRoomId')
+    ..aOS(3, _omitFieldNames ? '' : 'profileId')
+    ..a<$fixnum.Int64>(
+        4, _omitFieldNames ? '' : 'accessEpoch', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  VoiceRoomAccessInvalidated clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  VoiceRoomAccessInvalidated copyWith(
+          void Function(VoiceRoomAccessInvalidated) updates) =>
+      super.copyWith(
+              (message) => updates(message as VoiceRoomAccessInvalidated))
+          as VoiceRoomAccessInvalidated;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static VoiceRoomAccessInvalidated create() => VoiceRoomAccessInvalidated._();
+  @$core.override
+  VoiceRoomAccessInvalidated createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static VoiceRoomAccessInvalidated getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<VoiceRoomAccessInvalidated>(create);
+  static VoiceRoomAccessInvalidated? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  /// Absent means every voice room within space_id.
+  @$pb.TagNumber(2)
+  $core.String get voiceRoomId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set voiceRoomId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasVoiceRoomId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearVoiceRoomId() => $_clearField(2);
+
+  /// Absent means every profile within space_id.
+  @$pb.TagNumber(3)
+  $core.String get profileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set profileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $fixnum.Int64 get accessEpoch => $_getI64(3);
+  @$pb.TagNumber(4)
+  set accessEpoch($fixnum.Int64 value) => $_setInt64(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasAccessEpoch() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearAccessEpoch() => $_clearField(4);
 }
 
 enum VoiceStreamEvent_Payload {

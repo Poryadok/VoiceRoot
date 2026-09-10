@@ -12,6 +12,7 @@
 
 import 'dart:core' as $core;
 
+import 'package:fixnum/fixnum.dart' as $fixnum;
 import 'package:protobuf/protobuf.dart' as $pb;
 import 'package:protobuf/well_known_types/google/protobuf/timestamp.pb.dart'
     as $3;
@@ -646,10 +647,12 @@ class JoinVoiceRoomRequest extends $pb.GeneratedMessage {
   factory JoinVoiceRoomRequest({
     $core.String? voiceRoomId,
     $2.SpaceRef? space,
+    $core.String? operationId,
   }) {
     final result = create();
     if (voiceRoomId != null) result.voiceRoomId = voiceRoomId;
     if (space != null) result.space = space;
+    if (operationId != null) result.operationId = operationId;
     return result;
   }
 
@@ -669,6 +672,7 @@ class JoinVoiceRoomRequest extends $pb.GeneratedMessage {
     ..aOS(1, _omitFieldNames ? '' : 'voiceRoomId')
     ..aOM<$2.SpaceRef>(2, _omitFieldNames ? '' : 'space',
         subBuilder: $2.SpaceRef.create)
+    ..aOS(3, _omitFieldNames ? '' : 'operationId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -709,14 +713,27 @@ class JoinVoiceRoomRequest extends $pb.GeneratedMessage {
   void clearSpace() => $_clearField(2);
   @$pb.TagNumber(2)
   $2.SpaceRef ensureSpace() => $_ensure(1);
+
+  @$pb.TagNumber(3)
+  $core.String get operationId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set operationId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasOperationId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearOperationId() => $_clearField(3);
 }
 
 class LeaveVoiceRoomRequest extends $pb.GeneratedMessage {
   factory LeaveVoiceRoomRequest({
     $core.String? voiceRoomId,
+    $2.SpaceRef? space,
+    $core.String? operationId,
   }) {
     final result = create();
     if (voiceRoomId != null) result.voiceRoomId = voiceRoomId;
+    if (space != null) result.space = space;
+    if (operationId != null) result.operationId = operationId;
     return result;
   }
 
@@ -734,6 +751,9 @@ class LeaveVoiceRoomRequest extends $pb.GeneratedMessage {
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.calls.v1'),
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'voiceRoomId')
+    ..aOM<$2.SpaceRef>(2, _omitFieldNames ? '' : 'space',
+        subBuilder: $2.SpaceRef.create)
+    ..aOS(3, _omitFieldNames ? '' : 'operationId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -764,6 +784,26 @@ class LeaveVoiceRoomRequest extends $pb.GeneratedMessage {
   $core.bool hasVoiceRoomId() => $_has(0);
   @$pb.TagNumber(1)
   void clearVoiceRoomId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $2.SpaceRef get space => $_getN(1);
+  @$pb.TagNumber(2)
+  set space($2.SpaceRef value) => $_setField(2, value);
+  @$pb.TagNumber(2)
+  $core.bool hasSpace() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSpace() => $_clearField(2);
+  @$pb.TagNumber(2)
+  $2.SpaceRef ensureSpace() => $_ensure(1);
+
+  @$pb.TagNumber(3)
+  $core.String get operationId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set operationId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasOperationId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearOperationId() => $_clearField(3);
 }
 
 class MoveToVoiceRoomRequest extends $pb.GeneratedMessage {
@@ -771,11 +811,13 @@ class MoveToVoiceRoomRequest extends $pb.GeneratedMessage {
     $core.String? fromVoiceRoomId,
     $core.String? toVoiceRoomId,
     $2.SpaceRef? space,
+    $core.String? operationId,
   }) {
     final result = create();
     if (fromVoiceRoomId != null) result.fromVoiceRoomId = fromVoiceRoomId;
     if (toVoiceRoomId != null) result.toVoiceRoomId = toVoiceRoomId;
     if (space != null) result.space = space;
+    if (operationId != null) result.operationId = operationId;
     return result;
   }
 
@@ -796,6 +838,7 @@ class MoveToVoiceRoomRequest extends $pb.GeneratedMessage {
     ..aOS(2, _omitFieldNames ? '' : 'toVoiceRoomId')
     ..aOM<$2.SpaceRef>(3, _omitFieldNames ? '' : 'space',
         subBuilder: $2.SpaceRef.create)
+    ..aOS(4, _omitFieldNames ? '' : 'operationId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -846,6 +889,125 @@ class MoveToVoiceRoomRequest extends $pb.GeneratedMessage {
   void clearSpace() => $_clearField(3);
   @$pb.TagNumber(3)
   $2.SpaceRef ensureSpace() => $_ensure(2);
+
+  @$pb.TagNumber(4)
+  $core.String get operationId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set operationId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasOperationId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearOperationId() => $_clearField(4);
+}
+
+class MoveVoiceRoomParticipantRequest extends $pb.GeneratedMessage {
+  factory MoveVoiceRoomParticipantRequest({
+    $core.String? fromVoiceRoomId,
+    $core.String? toVoiceRoomId,
+    $2.SpaceRef? space,
+    $core.String? participantProfileId,
+    $core.String? operationId,
+  }) {
+    final result = create();
+    if (fromVoiceRoomId != null) result.fromVoiceRoomId = fromVoiceRoomId;
+    if (toVoiceRoomId != null) result.toVoiceRoomId = toVoiceRoomId;
+    if (space != null) result.space = space;
+    if (participantProfileId != null)
+      result.participantProfileId = participantProfileId;
+    if (operationId != null) result.operationId = operationId;
+    return result;
+  }
+
+  MoveVoiceRoomParticipantRequest._();
+
+  factory MoveVoiceRoomParticipantRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory MoveVoiceRoomParticipantRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'MoveVoiceRoomParticipantRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.calls.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'fromVoiceRoomId')
+    ..aOS(2, _omitFieldNames ? '' : 'toVoiceRoomId')
+    ..aOM<$2.SpaceRef>(3, _omitFieldNames ? '' : 'space',
+        subBuilder: $2.SpaceRef.create)
+    ..aOS(4, _omitFieldNames ? '' : 'participantProfileId')
+    ..aOS(5, _omitFieldNames ? '' : 'operationId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  MoveVoiceRoomParticipantRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  MoveVoiceRoomParticipantRequest copyWith(
+          void Function(MoveVoiceRoomParticipantRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as MoveVoiceRoomParticipantRequest))
+          as MoveVoiceRoomParticipantRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static MoveVoiceRoomParticipantRequest create() =>
+      MoveVoiceRoomParticipantRequest._();
+  @$core.override
+  MoveVoiceRoomParticipantRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static MoveVoiceRoomParticipantRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<MoveVoiceRoomParticipantRequest>(
+          create);
+  static MoveVoiceRoomParticipantRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get fromVoiceRoomId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set fromVoiceRoomId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasFromVoiceRoomId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearFromVoiceRoomId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get toVoiceRoomId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set toVoiceRoomId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasToVoiceRoomId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearToVoiceRoomId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $2.SpaceRef get space => $_getN(2);
+  @$pb.TagNumber(3)
+  set space($2.SpaceRef value) => $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasSpace() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearSpace() => $_clearField(3);
+  @$pb.TagNumber(3)
+  $2.SpaceRef ensureSpace() => $_ensure(2);
+
+  @$pb.TagNumber(4)
+  $core.String get participantProfileId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set participantProfileId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasParticipantProfileId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearParticipantProfileId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get operationId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set operationId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasOperationId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearOperationId() => $_clearField(5);
 }
 
 class VoiceSession extends $pb.GeneratedMessage {
@@ -924,6 +1086,249 @@ class VoiceSession extends $pb.GeneratedMessage {
   $core.bool hasVoiceRoomId() => $_has(2);
   @$pb.TagNumber(3)
   void clearVoiceRoomId() => $_clearField(3);
+}
+
+/// Immutable terminal history for one actor-bound lifecycle operation. It never
+/// contains a bearer, credential, reusable permission or grant.
+class VoiceRoomLifecycleReceipt extends $pb.GeneratedMessage {
+  factory VoiceRoomLifecycleReceipt({
+    $core.String? operationId,
+    $core.String? actorProfileId,
+    $core.String? subjectProfileId,
+    $2.SpaceRef? space,
+    VoiceRoomLifecycleMethod? method,
+    VoiceRoomLifecycleOutcome? outcome,
+    $core.String? sourceVoiceRoomId,
+    $core.String? destinationVoiceRoomId,
+    $core.String? roomId,
+    $fixnum.Int64? sourceRosterVersion,
+    $fixnum.Int64? destinationRosterVersion,
+    $core.String? mediaEpoch,
+    $fixnum.Int64? spaceAccessEpoch,
+    $fixnum.Int64? rolePolicyEpoch,
+    $core.List<$core.int>? authorizationDigest,
+  }) {
+    final result = create();
+    if (operationId != null) result.operationId = operationId;
+    if (actorProfileId != null) result.actorProfileId = actorProfileId;
+    if (subjectProfileId != null) result.subjectProfileId = subjectProfileId;
+    if (space != null) result.space = space;
+    if (method != null) result.method = method;
+    if (outcome != null) result.outcome = outcome;
+    if (sourceVoiceRoomId != null) result.sourceVoiceRoomId = sourceVoiceRoomId;
+    if (destinationVoiceRoomId != null)
+      result.destinationVoiceRoomId = destinationVoiceRoomId;
+    if (roomId != null) result.roomId = roomId;
+    if (sourceRosterVersion != null)
+      result.sourceRosterVersion = sourceRosterVersion;
+    if (destinationRosterVersion != null)
+      result.destinationRosterVersion = destinationRosterVersion;
+    if (mediaEpoch != null) result.mediaEpoch = mediaEpoch;
+    if (spaceAccessEpoch != null) result.spaceAccessEpoch = spaceAccessEpoch;
+    if (rolePolicyEpoch != null) result.rolePolicyEpoch = rolePolicyEpoch;
+    if (authorizationDigest != null)
+      result.authorizationDigest = authorizationDigest;
+    return result;
+  }
+
+  VoiceRoomLifecycleReceipt._();
+
+  factory VoiceRoomLifecycleReceipt.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory VoiceRoomLifecycleReceipt.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'VoiceRoomLifecycleReceipt',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.calls.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'operationId')
+    ..aOS(2, _omitFieldNames ? '' : 'actorProfileId')
+    ..aOS(3, _omitFieldNames ? '' : 'subjectProfileId')
+    ..aOM<$2.SpaceRef>(4, _omitFieldNames ? '' : 'space',
+        subBuilder: $2.SpaceRef.create)
+    ..aE<VoiceRoomLifecycleMethod>(5, _omitFieldNames ? '' : 'method',
+        enumValues: VoiceRoomLifecycleMethod.values)
+    ..aE<VoiceRoomLifecycleOutcome>(6, _omitFieldNames ? '' : 'outcome',
+        enumValues: VoiceRoomLifecycleOutcome.values)
+    ..aOS(7, _omitFieldNames ? '' : 'sourceVoiceRoomId')
+    ..aOS(8, _omitFieldNames ? '' : 'destinationVoiceRoomId')
+    ..aOS(9, _omitFieldNames ? '' : 'roomId')
+    ..a<$fixnum.Int64>(
+        10, _omitFieldNames ? '' : 'sourceRosterVersion', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..a<$fixnum.Int64>(11, _omitFieldNames ? '' : 'destinationRosterVersion',
+        $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOS(12, _omitFieldNames ? '' : 'mediaEpoch')
+    ..a<$fixnum.Int64>(
+        13, _omitFieldNames ? '' : 'spaceAccessEpoch', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..a<$fixnum.Int64>(
+        14, _omitFieldNames ? '' : 'rolePolicyEpoch', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..a<$core.List<$core.int>>(
+        15, _omitFieldNames ? '' : 'authorizationDigest', $pb.PbFieldType.OY)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  VoiceRoomLifecycleReceipt clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  VoiceRoomLifecycleReceipt copyWith(
+          void Function(VoiceRoomLifecycleReceipt) updates) =>
+      super.copyWith((message) => updates(message as VoiceRoomLifecycleReceipt))
+          as VoiceRoomLifecycleReceipt;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static VoiceRoomLifecycleReceipt create() => VoiceRoomLifecycleReceipt._();
+  @$core.override
+  VoiceRoomLifecycleReceipt createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static VoiceRoomLifecycleReceipt getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<VoiceRoomLifecycleReceipt>(create);
+  static VoiceRoomLifecycleReceipt? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get operationId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set operationId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasOperationId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearOperationId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get actorProfileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set actorProfileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasActorProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearActorProfileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get subjectProfileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set subjectProfileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasSubjectProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearSubjectProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $2.SpaceRef get space => $_getN(3);
+  @$pb.TagNumber(4)
+  set space($2.SpaceRef value) => $_setField(4, value);
+  @$pb.TagNumber(4)
+  $core.bool hasSpace() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearSpace() => $_clearField(4);
+  @$pb.TagNumber(4)
+  $2.SpaceRef ensureSpace() => $_ensure(3);
+
+  @$pb.TagNumber(5)
+  VoiceRoomLifecycleMethod get method => $_getN(4);
+  @$pb.TagNumber(5)
+  set method(VoiceRoomLifecycleMethod value) => $_setField(5, value);
+  @$pb.TagNumber(5)
+  $core.bool hasMethod() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearMethod() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  VoiceRoomLifecycleOutcome get outcome => $_getN(5);
+  @$pb.TagNumber(6)
+  set outcome(VoiceRoomLifecycleOutcome value) => $_setField(6, value);
+  @$pb.TagNumber(6)
+  $core.bool hasOutcome() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearOutcome() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.String get sourceVoiceRoomId => $_getSZ(6);
+  @$pb.TagNumber(7)
+  set sourceVoiceRoomId($core.String value) => $_setString(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasSourceVoiceRoomId() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearSourceVoiceRoomId() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $core.String get destinationVoiceRoomId => $_getSZ(7);
+  @$pb.TagNumber(8)
+  set destinationVoiceRoomId($core.String value) => $_setString(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasDestinationVoiceRoomId() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearDestinationVoiceRoomId() => $_clearField(8);
+
+  @$pb.TagNumber(9)
+  $core.String get roomId => $_getSZ(8);
+  @$pb.TagNumber(9)
+  set roomId($core.String value) => $_setString(8, value);
+  @$pb.TagNumber(9)
+  $core.bool hasRoomId() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearRoomId() => $_clearField(9);
+
+  @$pb.TagNumber(10)
+  $fixnum.Int64 get sourceRosterVersion => $_getI64(9);
+  @$pb.TagNumber(10)
+  set sourceRosterVersion($fixnum.Int64 value) => $_setInt64(9, value);
+  @$pb.TagNumber(10)
+  $core.bool hasSourceRosterVersion() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearSourceRosterVersion() => $_clearField(10);
+
+  @$pb.TagNumber(11)
+  $fixnum.Int64 get destinationRosterVersion => $_getI64(10);
+  @$pb.TagNumber(11)
+  set destinationRosterVersion($fixnum.Int64 value) => $_setInt64(10, value);
+  @$pb.TagNumber(11)
+  $core.bool hasDestinationRosterVersion() => $_has(10);
+  @$pb.TagNumber(11)
+  void clearDestinationRosterVersion() => $_clearField(11);
+
+  @$pb.TagNumber(12)
+  $core.String get mediaEpoch => $_getSZ(11);
+  @$pb.TagNumber(12)
+  set mediaEpoch($core.String value) => $_setString(11, value);
+  @$pb.TagNumber(12)
+  $core.bool hasMediaEpoch() => $_has(11);
+  @$pb.TagNumber(12)
+  void clearMediaEpoch() => $_clearField(12);
+
+  @$pb.TagNumber(13)
+  $fixnum.Int64 get spaceAccessEpoch => $_getI64(12);
+  @$pb.TagNumber(13)
+  set spaceAccessEpoch($fixnum.Int64 value) => $_setInt64(12, value);
+  @$pb.TagNumber(13)
+  $core.bool hasSpaceAccessEpoch() => $_has(12);
+  @$pb.TagNumber(13)
+  void clearSpaceAccessEpoch() => $_clearField(13);
+
+  @$pb.TagNumber(14)
+  $fixnum.Int64 get rolePolicyEpoch => $_getI64(13);
+  @$pb.TagNumber(14)
+  set rolePolicyEpoch($fixnum.Int64 value) => $_setInt64(13, value);
+  @$pb.TagNumber(14)
+  $core.bool hasRolePolicyEpoch() => $_has(13);
+  @$pb.TagNumber(14)
+  void clearRolePolicyEpoch() => $_clearField(14);
+
+  @$pb.TagNumber(15)
+  $core.List<$core.int> get authorizationDigest => $_getN(14);
+  @$pb.TagNumber(15)
+  set authorizationDigest($core.List<$core.int> value) => $_setBytes(14, value);
+  @$pb.TagNumber(15)
+  $core.bool hasAuthorizationDigest() => $_has(14);
+  @$pb.TagNumber(15)
+  void clearAuthorizationDigest() => $_clearField(15);
 }
 
 class GetJoinTokenRequest extends $pb.GeneratedMessage {
@@ -2186,9 +2591,11 @@ class EndCallResponse extends $pb.GeneratedMessage {
 class JoinVoiceRoomResponse extends $pb.GeneratedMessage {
   factory JoinVoiceRoomResponse({
     VoiceSession? voiceSession,
+    VoiceRoomLifecycleReceipt? receipt,
   }) {
     final result = create();
     if (voiceSession != null) result.voiceSession = voiceSession;
+    if (receipt != null) result.receipt = receipt;
     return result;
   }
 
@@ -2207,6 +2614,8 @@ class JoinVoiceRoomResponse extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOM<VoiceSession>(1, _omitFieldNames ? '' : 'voiceSession',
         subBuilder: VoiceSession.create)
+    ..aOM<VoiceRoomLifecycleReceipt>(2, _omitFieldNames ? '' : 'receipt',
+        subBuilder: VoiceRoomLifecycleReceipt.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2239,10 +2648,27 @@ class JoinVoiceRoomResponse extends $pb.GeneratedMessage {
   void clearVoiceSession() => $_clearField(1);
   @$pb.TagNumber(1)
   VoiceSession ensureVoiceSession() => $_ensure(0);
+
+  @$pb.TagNumber(2)
+  VoiceRoomLifecycleReceipt get receipt => $_getN(1);
+  @$pb.TagNumber(2)
+  set receipt(VoiceRoomLifecycleReceipt value) => $_setField(2, value);
+  @$pb.TagNumber(2)
+  $core.bool hasReceipt() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearReceipt() => $_clearField(2);
+  @$pb.TagNumber(2)
+  VoiceRoomLifecycleReceipt ensureReceipt() => $_ensure(1);
 }
 
 class LeaveVoiceRoomResponse extends $pb.GeneratedMessage {
-  factory LeaveVoiceRoomResponse() => create();
+  factory LeaveVoiceRoomResponse({
+    VoiceRoomLifecycleReceipt? receipt,
+  }) {
+    final result = create();
+    if (receipt != null) result.receipt = receipt;
+    return result;
+  }
 
   LeaveVoiceRoomResponse._();
 
@@ -2257,6 +2683,8 @@ class LeaveVoiceRoomResponse extends $pb.GeneratedMessage {
       _omitMessageNames ? '' : 'LeaveVoiceRoomResponse',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.calls.v1'),
       createEmptyInstance: create)
+    ..aOM<VoiceRoomLifecycleReceipt>(1, _omitFieldNames ? '' : 'receipt',
+        subBuilder: VoiceRoomLifecycleReceipt.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2278,14 +2706,27 @@ class LeaveVoiceRoomResponse extends $pb.GeneratedMessage {
   static LeaveVoiceRoomResponse getDefault() => _defaultInstance ??=
       $pb.GeneratedMessage.$_defaultFor<LeaveVoiceRoomResponse>(create);
   static LeaveVoiceRoomResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  VoiceRoomLifecycleReceipt get receipt => $_getN(0);
+  @$pb.TagNumber(1)
+  set receipt(VoiceRoomLifecycleReceipt value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasReceipt() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearReceipt() => $_clearField(1);
+  @$pb.TagNumber(1)
+  VoiceRoomLifecycleReceipt ensureReceipt() => $_ensure(0);
 }
 
 class MoveToVoiceRoomResponse extends $pb.GeneratedMessage {
   factory MoveToVoiceRoomResponse({
     VoiceSession? voiceSession,
+    VoiceRoomLifecycleReceipt? receipt,
   }) {
     final result = create();
     if (voiceSession != null) result.voiceSession = voiceSession;
+    if (receipt != null) result.receipt = receipt;
     return result;
   }
 
@@ -2304,6 +2745,8 @@ class MoveToVoiceRoomResponse extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOM<VoiceSession>(1, _omitFieldNames ? '' : 'voiceSession',
         subBuilder: VoiceSession.create)
+    ..aOM<VoiceRoomLifecycleReceipt>(2, _omitFieldNames ? '' : 'receipt',
+        subBuilder: VoiceRoomLifecycleReceipt.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2336,6 +2779,79 @@ class MoveToVoiceRoomResponse extends $pb.GeneratedMessage {
   void clearVoiceSession() => $_clearField(1);
   @$pb.TagNumber(1)
   VoiceSession ensureVoiceSession() => $_ensure(0);
+
+  @$pb.TagNumber(2)
+  VoiceRoomLifecycleReceipt get receipt => $_getN(1);
+  @$pb.TagNumber(2)
+  set receipt(VoiceRoomLifecycleReceipt value) => $_setField(2, value);
+  @$pb.TagNumber(2)
+  $core.bool hasReceipt() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearReceipt() => $_clearField(2);
+  @$pb.TagNumber(2)
+  VoiceRoomLifecycleReceipt ensureReceipt() => $_ensure(1);
+}
+
+class MoveVoiceRoomParticipantResponse extends $pb.GeneratedMessage {
+  factory MoveVoiceRoomParticipantResponse({
+    VoiceRoomLifecycleReceipt? receipt,
+  }) {
+    final result = create();
+    if (receipt != null) result.receipt = receipt;
+    return result;
+  }
+
+  MoveVoiceRoomParticipantResponse._();
+
+  factory MoveVoiceRoomParticipantResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory MoveVoiceRoomParticipantResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'MoveVoiceRoomParticipantResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.calls.v1'),
+      createEmptyInstance: create)
+    ..aOM<VoiceRoomLifecycleReceipt>(1, _omitFieldNames ? '' : 'receipt',
+        subBuilder: VoiceRoomLifecycleReceipt.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  MoveVoiceRoomParticipantResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  MoveVoiceRoomParticipantResponse copyWith(
+          void Function(MoveVoiceRoomParticipantResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as MoveVoiceRoomParticipantResponse))
+          as MoveVoiceRoomParticipantResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static MoveVoiceRoomParticipantResponse create() =>
+      MoveVoiceRoomParticipantResponse._();
+  @$core.override
+  MoveVoiceRoomParticipantResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static MoveVoiceRoomParticipantResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<MoveVoiceRoomParticipantResponse>(
+          create);
+  static MoveVoiceRoomParticipantResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  VoiceRoomLifecycleReceipt get receipt => $_getN(0);
+  @$pb.TagNumber(1)
+  set receipt(VoiceRoomLifecycleReceipt value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasReceipt() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearReceipt() => $_clearField(1);
+  @$pb.TagNumber(1)
+  VoiceRoomLifecycleReceipt ensureReceipt() => $_ensure(0);
 }
 
 /// JWT and wall-clock expiry (UTC). Public API uses google.protobuf.Timestamp per docs/REPOSITORIES.md.
@@ -2344,11 +2860,20 @@ class GetJoinTokenResponse extends $pb.GeneratedMessage {
     $core.String? jwt,
     $3.Timestamp? expiresAt,
     $core.String? livekitUrl,
+    $core.String? mediaEpoch,
+    $fixnum.Int64? spaceAccessEpoch,
+    $fixnum.Int64? rolePolicyEpoch,
+    $core.List<$core.int>? authorizationDigest,
   }) {
     final result = create();
     if (jwt != null) result.jwt = jwt;
     if (expiresAt != null) result.expiresAt = expiresAt;
     if (livekitUrl != null) result.livekitUrl = livekitUrl;
+    if (mediaEpoch != null) result.mediaEpoch = mediaEpoch;
+    if (spaceAccessEpoch != null) result.spaceAccessEpoch = spaceAccessEpoch;
+    if (rolePolicyEpoch != null) result.rolePolicyEpoch = rolePolicyEpoch;
+    if (authorizationDigest != null)
+      result.authorizationDigest = authorizationDigest;
     return result;
   }
 
@@ -2369,6 +2894,15 @@ class GetJoinTokenResponse extends $pb.GeneratedMessage {
     ..aOM<$3.Timestamp>(2, _omitFieldNames ? '' : 'expiresAt',
         subBuilder: $3.Timestamp.create)
     ..aOS(3, _omitFieldNames ? '' : 'livekitUrl')
+    ..aOS(4, _omitFieldNames ? '' : 'mediaEpoch')
+    ..a<$fixnum.Int64>(
+        5, _omitFieldNames ? '' : 'spaceAccessEpoch', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..a<$fixnum.Int64>(
+        6, _omitFieldNames ? '' : 'rolePolicyEpoch', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..a<$core.List<$core.int>>(
+        7, _omitFieldNames ? '' : 'authorizationDigest', $pb.PbFieldType.OY)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2419,6 +2953,42 @@ class GetJoinTokenResponse extends $pb.GeneratedMessage {
   $core.bool hasLivekitUrl() => $_has(2);
   @$pb.TagNumber(3)
   void clearLivekitUrl() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get mediaEpoch => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set mediaEpoch($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasMediaEpoch() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearMediaEpoch() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $fixnum.Int64 get spaceAccessEpoch => $_getI64(4);
+  @$pb.TagNumber(5)
+  set spaceAccessEpoch($fixnum.Int64 value) => $_setInt64(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasSpaceAccessEpoch() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearSpaceAccessEpoch() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $fixnum.Int64 get rolePolicyEpoch => $_getI64(5);
+  @$pb.TagNumber(6)
+  set rolePolicyEpoch($fixnum.Int64 value) => $_setInt64(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasRolePolicyEpoch() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearRolePolicyEpoch() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.List<$core.int> get authorizationDigest => $_getN(6);
+  @$pb.TagNumber(7)
+  set authorizationDigest($core.List<$core.int> value) => $_setBytes(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasAuthorizationDigest() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearAuthorizationDigest() => $_clearField(7);
 }
 
 class UpdateVoiceStateResponse extends $pb.GeneratedMessage {

@@ -2001,6 +2001,14 @@ const ResolveVoiceRoomAccessRequest$json = {
   '2': [
     {'1': 'voice_room_id', '3': 1, '4': 1, '5': 9, '10': 'voiceRoomId'},
     {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
+    {
+      '1': 'space',
+      '3': 3,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.space.v1.SpaceRef',
+      '10': 'space'
+    },
   ],
 };
 
@@ -2008,7 +2016,8 @@ const ResolveVoiceRoomAccessRequest$json = {
 final $typed_data.Uint8List resolveVoiceRoomAccessRequestDescriptor =
     $convert.base64Decode(
         'Ch1SZXNvbHZlVm9pY2VSb29tQWNjZXNzUmVxdWVzdBIiCg12b2ljZV9yb29tX2lkGAEgASgJUg'
-        't2b2ljZVJvb21JZBIdCgpwcm9maWxlX2lkGAIgASgJUglwcm9maWxlSWQ=');
+        't2b2ljZVJvb21JZBIdCgpwcm9maWxlX2lkGAIgASgJUglwcm9maWxlSWQSLgoFc3BhY2UYAyAB'
+        'KAsyGC52b2ljZS5zcGFjZS52MS5TcGFjZVJlZlIFc3BhY2U=');
 
 @$core.Deprecated('Use resolveVoiceRoomAccessResponseDescriptor instead')
 const ResolveVoiceRoomAccessResponse$json = {
@@ -2017,6 +2026,8 @@ const ResolveVoiceRoomAccessResponse$json = {
     {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
     {'1': 'member', '3': 2, '4': 1, '5': 8, '10': 'member'},
     {'1': 'active', '3': 3, '4': 1, '5': 8, '10': 'active'},
+    {'1': 'discoverable', '3': 4, '4': 1, '5': 8, '10': 'discoverable'},
+    {'1': 'access_epoch', '3': 5, '4': 1, '5': 4, '10': 'accessEpoch'},
   ],
 };
 
@@ -2024,7 +2035,9 @@ const ResolveVoiceRoomAccessResponse$json = {
 final $typed_data.Uint8List resolveVoiceRoomAccessResponseDescriptor =
     $convert.base64Decode(
         'Ch5SZXNvbHZlVm9pY2VSb29tQWNjZXNzUmVzcG9uc2USGQoIc3BhY2VfaWQYASABKAlSB3NwYW'
-        'NlSWQSFgoGbWVtYmVyGAIgASgIUgZtZW1iZXISFgoGYWN0aXZlGAMgASgIUgZhY3RpdmU=');
+        'NlSWQSFgoGbWVtYmVyGAIgASgIUgZtZW1iZXISFgoGYWN0aXZlGAMgASgIUgZhY3RpdmUSIgoM'
+        'ZGlzY292ZXJhYmxlGAQgASgIUgxkaXNjb3ZlcmFibGUSIQoMYWNjZXNzX2Vwb2NoGAUgASgEUg'
+        'thY2Nlc3NFcG9jaA==');
 
 @$core.Deprecated('Use syncSpaceProSubscriptionRequestDescriptor instead')
 const SyncSpaceProSubscriptionRequest$json = {

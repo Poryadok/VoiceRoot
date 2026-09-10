@@ -35,6 +35,7 @@ const (
 	RoleService_GetVoiceRoomOverrides_FullMethodName            = "/voice.role.v1.RoleService/GetVoiceRoomOverrides"
 	RoleService_CheckPermission_FullMethodName                  = "/voice.role.v1.RoleService/CheckPermission"
 	RoleService_GetEffectivePermissions_FullMethodName          = "/voice.role.v1.RoleService/GetEffectivePermissions"
+	RoleService_ResolveVoiceRoomGrants_FullMethodName           = "/voice.role.v1.RoleService/ResolveVoiceRoomGrants"
 	RoleService_SetDefaultJoinRole_FullMethodName               = "/voice.role.v1.RoleService/SetDefaultJoinRole"
 	RoleService_GetDefaultJoinRole_FullMethodName               = "/voice.role.v1.RoleService/GetDefaultJoinRole"
 	RoleService_BootstrapSpaceRoles_FullMethodName              = "/voice.role.v1.RoleService/BootstrapSpaceRoles"
@@ -70,6 +71,8 @@ type RoleServiceClient interface {
 	GetVoiceRoomOverrides(ctx context.Context, in *GetVoiceRoomOverridesRequest, opts ...grpc.CallOption) (*GetVoiceRoomOverridesResponse, error)
 	CheckPermission(ctx context.Context, in *CheckPermissionRequest, opts ...grpc.CallOption) (*CheckPermissionResponse, error)
 	GetEffectivePermissions(ctx context.Context, in *GetEffectivePermissionsRequest, opts ...grpc.CallOption) (*GetEffectivePermissionsResponse, error)
+	// Trusted Voice-only decision. Role owns the explicit grants and policy epoch.
+	ResolveVoiceRoomGrants(ctx context.Context, in *ResolveVoiceRoomGrantsRequest, opts ...grpc.CallOption) (*ResolveVoiceRoomGrantsResponse, error)
 	SetDefaultJoinRole(ctx context.Context, in *SetDefaultJoinRoleRequest, opts ...grpc.CallOption) (*SetDefaultJoinRoleResponse, error)
 	GetDefaultJoinRole(ctx context.Context, in *GetDefaultJoinRoleRequest, opts ...grpc.CallOption) (*GetDefaultJoinRoleResponse, error)
 	// Called by Space Service after CreateSpace — seeds system roles and assigns Owner.
@@ -255,6 +258,16 @@ func (c *roleServiceClient) GetEffectivePermissions(ctx context.Context, in *Get
 	return out, nil
 }
 
+func (c *roleServiceClient) ResolveVoiceRoomGrants(ctx context.Context, in *ResolveVoiceRoomGrantsRequest, opts ...grpc.CallOption) (*ResolveVoiceRoomGrantsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResolveVoiceRoomGrantsResponse)
+	err := c.cc.Invoke(ctx, RoleService_ResolveVoiceRoomGrants_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *roleServiceClient) SetDefaultJoinRole(ctx context.Context, in *SetDefaultJoinRoleRequest, opts ...grpc.CallOption) (*SetDefaultJoinRoleResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SetDefaultJoinRoleResponse)
@@ -378,6 +391,8 @@ type RoleServiceServer interface {
 	GetVoiceRoomOverrides(context.Context, *GetVoiceRoomOverridesRequest) (*GetVoiceRoomOverridesResponse, error)
 	CheckPermission(context.Context, *CheckPermissionRequest) (*CheckPermissionResponse, error)
 	GetEffectivePermissions(context.Context, *GetEffectivePermissionsRequest) (*GetEffectivePermissionsResponse, error)
+	// Trusted Voice-only decision. Role owns the explicit grants and policy epoch.
+	ResolveVoiceRoomGrants(context.Context, *ResolveVoiceRoomGrantsRequest) (*ResolveVoiceRoomGrantsResponse, error)
 	SetDefaultJoinRole(context.Context, *SetDefaultJoinRoleRequest) (*SetDefaultJoinRoleResponse, error)
 	GetDefaultJoinRole(context.Context, *GetDefaultJoinRoleRequest) (*GetDefaultJoinRoleResponse, error)
 	// Called by Space Service after CreateSpace — seeds system roles and assigns Owner.
@@ -450,6 +465,9 @@ func (UnimplementedRoleServiceServer) CheckPermission(context.Context, *CheckPer
 }
 func (UnimplementedRoleServiceServer) GetEffectivePermissions(context.Context, *GetEffectivePermissionsRequest) (*GetEffectivePermissionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetEffectivePermissions not implemented")
+}
+func (UnimplementedRoleServiceServer) ResolveVoiceRoomGrants(context.Context, *ResolveVoiceRoomGrantsRequest) (*ResolveVoiceRoomGrantsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResolveVoiceRoomGrants not implemented")
 }
 func (UnimplementedRoleServiceServer) SetDefaultJoinRole(context.Context, *SetDefaultJoinRoleRequest) (*SetDefaultJoinRoleResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetDefaultJoinRole not implemented")
@@ -790,6 +808,24 @@ func _RoleService_GetEffectivePermissions_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RoleService_ResolveVoiceRoomGrants_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveVoiceRoomGrantsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RoleServiceServer).ResolveVoiceRoomGrants(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RoleService_ResolveVoiceRoomGrants_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RoleServiceServer).ResolveVoiceRoomGrants(ctx, req.(*ResolveVoiceRoomGrantsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _RoleService_SetDefaultJoinRole_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SetDefaultJoinRoleRequest)
 	if err := dec(in); err != nil {
@@ -1040,6 +1076,10 @@ var RoleService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetEffectivePermissions",
 			Handler:    _RoleService_GetEffectivePermissions_Handler,
+		},
+		{
+			MethodName: "ResolveVoiceRoomGrants",
+			Handler:    _RoleService_ResolveVoiceRoomGrants_Handler,
 		},
 		{
 			MethodName: "SetDefaultJoinRole",

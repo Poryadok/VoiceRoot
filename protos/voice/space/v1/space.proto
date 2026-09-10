@@ -494,18 +494,24 @@ message AreCoMembersResponse {
 }
 
 // ResolveVoiceRoomAccessRequest is intentionally independent of caller-forwarded
-// identity metadata: Voice supplies the actor it is authorizing explicitly.
+// identity metadata: Voice supplies the subject and asserted path explicitly.
 message ResolveVoiceRoomAccessRequest {
   string voice_room_id = 1;
   string profile_id = 2;
+  SpaceRef space = 3;
 }
 
 // ResolveVoiceRoomAccessResponse gives Voice canonical room ownership and the
-// current exact membership evidence. A room is active while it exists.
+// current exact membership evidence from one Space-owned epoch. Only a
+// discoverable current member receives a response. Existing but undiscoverable,
+// absent, deleted/inactive and foreign-path rooms all return the same NOT_FOUND.
+// In the current hard-delete model a room is active exactly while its row exists.
 message ResolveVoiceRoomAccessResponse {
   string space_id = 1;
   bool member = 2;
   bool active = 3;
+  bool discoverable = 4;
+  uint64 access_epoch = 5;
 }
 
 message SyncSpaceProSubscriptionRequest {
