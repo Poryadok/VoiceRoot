@@ -121,6 +121,61 @@ Focused verification: `OwnershipTransferProofServiceTest`,
 cover factors, all bindings, expiry, revocation, rollback, concurrent consumers and
 security writers, coarse status disclosure and hash-only persistence. Proofs and
 factor material are never included in adapter errors or logs.
+
+#### Consumed-receipt recovery
+
+`GetOwnershipTransferReceipt` is an internal read-only recovery RPC for Space's
+durable ownership-transfer journal. It recovers a previously committed receipt
+after a consume response is lost, without storing or resending the opaque proof.
+It creates no grant and never consumes an issued proof. There is no public route.
+
+The request contains seven required fields: UUID `account_id`, `profile_id`
+(the original owner/actor), `space_id`, `new_owner_profile_id`, `operation_id`,
+positive original `session_epoch`, and `proof_digest` (exactly 64 lowercase hex
+characters encoding SHA-256 of the original opaque proof's UTF-8 bytes, with no
+prefix or whitespace). Every field must match the stored consumed proof.
+The response contains only `receipt_id`, the five bound UUID fields,
+`session_epoch`, `consumed_at`, and `verified_factors`, identical to the original
+consume receipt. Neither proof plaintext nor its digest is returned.
+
+Only a fresh verified Space service principal may call this RPC on the private
+Auth TLS listener. It uses the same Phase 0 audience, exact RPC, request hash,
+request ID, credential expiry and replay checks as consume. Gateway delegated
+users and other service callers cannot recover receipts. The legacy listener
+denies this method, including requests with signed service credentials.
+
+Missing or invalid credentials yield `UNAUTHENTICATED`; a verified wrong caller
+yields `PERMISSION_DENIED`. Malformed UUIDs, nonpositive epochs or malformed
+digests yield `INVALID_ARGUMENT`. Missing, unconsumed and mismatched records all
+yield the same coarse `PERMISSION_DENIED`; storage/configuration failure yields
+`UNAVAILABLE`. Errors do not disclose stored bindings, digest, factors or account
+state.
+
+Recovery matches the original epoch; it does not reauthorize against the current
+account, session floor, password, 2FA, security revision or proof expiry. A retained
+consumed receipt remains recoverable after account deletion, including physical
+removal of its account row. The store uses a separate read-only `READ_COMMITTED`
+transaction, suspending any caller transaction; an uncommitted consume cannot
+become recovery authority, even in the same thread. Lookup takes no account or
+proof row lock and changes no rows.
+
+An absent receipt is not evidence that an in-flight consume will never commit.
+Space must persist its immutable original bindings and proof digest before
+consume, and persist a confirmed receipt before advancing its transfer protocol.
+Once Space decides to abort, a late receipt must not revive that operation.
+
+Consumed receipts survive ordinary five-minute pending-proof cleanup. This slice
+adds no cleanup job or retention extension. The existing 30-day account-erasure
+policy and [data erasure rules](../DATA_MODEL.md) remain authoritative. Before
+activating receipt erasure or pseudonymization, Auth and Space must coordinate
+pending-journal settlement and durable terminal operation fences; historical
+lookup is not an exemption from erasure policy.
+
+`OwnershipTransferReceiptLookupTest` and
+`OwnershipTransferReceiptLookupJdbcIntegrationTest` cover exact binding/digest
+matching, historical and hard-deleted-account recovery, no state mutation, and
+uncommitted/rolled-back consume isolation on separate and ambient transactions.
+
 ### ConvertGuest (guest → regular)
 
 REST: `POST /api/v1/auth/convert-guest` (Gateway transcoding). Спека UX: [auth-and-contacts.md](../features/auth-and-contacts.md) § «Регистрация гостевого аккаунта».
