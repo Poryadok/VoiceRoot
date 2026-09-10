@@ -436,3 +436,27 @@ listener allow-lists atomically. Old v1 receipts keep their original semantics;
 only exact recovery/abort of preexisting v1 operations remains during drain, and
 new v1 Apply is rejected after cutover. A fleet unable to prove drain/convergence
 remains in maintenance rather than mixing ownership protocols.
+
+##### Ordinary-operation transaction boundary and scoped integrity
+
+The v2 ordinary-operation fence holds the same Role database transaction from
+actor permission/hierarchy evaluation through the resulting read or mutation.
+Nested store helpers reuse that transaction; a separate permission preflight
+followed by an independent write is insufficient. Prepared or retired spaces,
+and unavailable fence lookups, return `UNAVAILABLE` before Owner shortcuts,
+empty-member results, default-role fallback, bootstrap, cleanup or events.
+Events are emitted only after a successful transaction commit.
+
+A role ID supplied together with a space ID must resolve to that space under the
+same transaction before assignment, revocation, reordering or override mutation.
+Role-ID-only updates and deletes discover their space and revalidate the role
+under that space's fence. A foreign role ID must never authorize or mutate a
+different space through chat/voice override removal. Member-role reads cannot
+import authority from a role belonging to another space.
+
+Bootstrap is idempotent for an existing sole Owner with the same profile. It must
+not add a second Owner or replace an existing Owner through generic bootstrap;
+only the dedicated trusted ownership protocol can change that membership.
+Retired spaces cannot be recreated by bootstrap. These scoped-integrity rules
+also apply while transfer entrypoints remain disabled; implementing them does
+not activate the v2 ownership feature.
