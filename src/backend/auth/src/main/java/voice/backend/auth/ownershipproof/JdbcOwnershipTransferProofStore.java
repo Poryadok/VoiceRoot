@@ -11,18 +11,39 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /** PostgreSQL transaction serializes proof writes against every account security mutation. */
 public final class JdbcOwnershipTransferProofStore implements OwnershipTransferProofStore {
+  private static final org.springframework.jdbc.core.RowMapper<StoredProof> PROOF_ROW = (rs, row) -> new StoredProof(
+              new ProofBinding(rs.getObject("account_id", UUID.class), rs.getObject("profile_id", UUID.class),
+                  rs.getObject("space_id", UUID.class), rs.getObject("new_owner_profile_id", UUID.class),
+                  rs.getObject("operation_id", UUID.class), rs.getLong("session_epoch")),
+              rs.getString("proof_hash"), rs.getLong("security_revision"),
+              Arrays.asList(rs.getString("verified_factors").split(",")), rs.getTimestamp("expires_at").toInstant(),
+              rs.getObject("receipt_id", UUID.class),
+              rs.getTimestamp("consumed_at") == null ? null : rs.getTimestamp("consumed_at").toInstant());
+
   private final NamedParameterJdbcTemplate jdbc;
   private final TransactionTemplate transactions;
+  private final TransactionTemplate receiptReads;
 
   public JdbcOwnershipTransferProofStore(NamedParameterJdbcTemplate jdbc, PlatformTransactionManager manager) {
     this.jdbc = jdbc;
     this.transactions = new TransactionTemplate(manager);
+    this.receiptReads = new TransactionTemplate(manager);
+    this.receiptReads.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    this.receiptReads.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
+    this.receiptReads.setReadOnly(true);
   }
 
+  @Override public Optional<StoredProof> findConsumed(UUID operationId) {
+    // Suspend any caller transaction so its own uncommitted consume cannot become recovery authority.
+    return receiptReads.execute(status -> jdbc.query(
+        "SELECT * FROM ownership_transfer_proofs WHERE operation_id=:operation AND consumed_at IS NOT NULL",
+        Map.of("operation", operationId), PROOF_ROW).stream().findFirst());
+  }
   @Override public <T> T withAccount(UUID id, Function<Session, T> action) {
     try {
       return transactions.execute(status -> {
@@ -53,14 +74,7 @@ public final class JdbcOwnershipTransferProofStore implements OwnershipTransferP
 
     @Override public Optional<StoredProof> find(UUID operation) {
       return jdbc.query("SELECT * FROM ownership_transfer_proofs WHERE operation_id=:operation",
-          Map.of("operation", operation), (rs, row) -> new StoredProof(
-              new ProofBinding(rs.getObject("account_id", UUID.class), rs.getObject("profile_id", UUID.class),
-                  rs.getObject("space_id", UUID.class), rs.getObject("new_owner_profile_id", UUID.class),
-                  rs.getObject("operation_id", UUID.class), rs.getLong("session_epoch")),
-              rs.getString("proof_hash"), rs.getLong("security_revision"),
-              Arrays.asList(rs.getString("verified_factors").split(",")), rs.getTimestamp("expires_at").toInstant(),
-              rs.getObject("receipt_id", UUID.class),
-              rs.getTimestamp("consumed_at") == null ? null : rs.getTimestamp("consumed_at").toInstant()))
+          Map.of("operation", operation), PROOF_ROW)
           .stream().findFirst();
     }
 

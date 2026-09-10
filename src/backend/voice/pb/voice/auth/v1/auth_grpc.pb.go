@@ -21,6 +21,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	AuthService_IssueOwnershipTransferProof_FullMethodName   = "/voice.auth.v1.AuthService/IssueOwnershipTransferProof"
 	AuthService_ConsumeOwnershipTransferProof_FullMethodName = "/voice.auth.v1.AuthService/ConsumeOwnershipTransferProof"
+	AuthService_GetOwnershipTransferReceipt_FullMethodName   = "/voice.auth.v1.AuthService/GetOwnershipTransferReceipt"
 	AuthService_Register_FullMethodName                      = "/voice.auth.v1.AuthService/Register"
 	AuthService_Login_FullMethodName                         = "/voice.auth.v1.AuthService/Login"
 	AuthService_Logout_FullMethodName                        = "/voice.auth.v1.AuthService/Logout"
@@ -54,6 +55,8 @@ type AuthServiceClient interface {
 	// Protected Gateway delegated-user issue and Space-only atomic consume.
 	IssueOwnershipTransferProof(ctx context.Context, in *IssueOwnershipTransferProofRequest, opts ...grpc.CallOption) (*IssueOwnershipTransferProofResponse, error)
 	ConsumeOwnershipTransferProof(ctx context.Context, in *ConsumeOwnershipTransferProofRequest, opts ...grpc.CallOption) (*ConsumeOwnershipTransferProofResponse, error)
+	// Private Space-only read of an already committed receipt; never grants or consumes.
+	GetOwnershipTransferReceipt(ctx context.Context, in *GetOwnershipTransferReceiptRequest, opts ...grpc.CallOption) (*GetOwnershipTransferReceiptResponse, error)
 	Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterResponse, error)
 	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResponse, error)
 	Logout(ctx context.Context, in *LogoutRequest, opts ...grpc.CallOption) (*LogoutResponse, error)
@@ -109,6 +112,16 @@ func (c *authServiceClient) ConsumeOwnershipTransferProof(ctx context.Context, i
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ConsumeOwnershipTransferProofResponse)
 	err := c.cc.Invoke(ctx, AuthService_ConsumeOwnershipTransferProof_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) GetOwnershipTransferReceipt(ctx context.Context, in *GetOwnershipTransferReceiptRequest, opts ...grpc.CallOption) (*GetOwnershipTransferReceiptResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetOwnershipTransferReceiptResponse)
+	err := c.cc.Invoke(ctx, AuthService_GetOwnershipTransferReceipt_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -344,6 +357,8 @@ type AuthServiceServer interface {
 	// Protected Gateway delegated-user issue and Space-only atomic consume.
 	IssueOwnershipTransferProof(context.Context, *IssueOwnershipTransferProofRequest) (*IssueOwnershipTransferProofResponse, error)
 	ConsumeOwnershipTransferProof(context.Context, *ConsumeOwnershipTransferProofRequest) (*ConsumeOwnershipTransferProofResponse, error)
+	// Private Space-only read of an already committed receipt; never grants or consumes.
+	GetOwnershipTransferReceipt(context.Context, *GetOwnershipTransferReceiptRequest) (*GetOwnershipTransferReceiptResponse, error)
 	Register(context.Context, *RegisterRequest) (*RegisterResponse, error)
 	Login(context.Context, *LoginRequest) (*LoginResponse, error)
 	Logout(context.Context, *LogoutRequest) (*LogoutResponse, error)
@@ -390,6 +405,9 @@ func (UnimplementedAuthServiceServer) IssueOwnershipTransferProof(context.Contex
 }
 func (UnimplementedAuthServiceServer) ConsumeOwnershipTransferProof(context.Context, *ConsumeOwnershipTransferProofRequest) (*ConsumeOwnershipTransferProofResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ConsumeOwnershipTransferProof not implemented")
+}
+func (UnimplementedAuthServiceServer) GetOwnershipTransferReceipt(context.Context, *GetOwnershipTransferReceiptRequest) (*GetOwnershipTransferReceiptResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetOwnershipTransferReceipt not implemented")
 }
 func (UnimplementedAuthServiceServer) Register(context.Context, *RegisterRequest) (*RegisterResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Register not implemented")
@@ -510,6 +528,24 @@ func _AuthService_ConsumeOwnershipTransferProof_Handler(srv interface{}, ctx con
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AuthServiceServer).ConsumeOwnershipTransferProof(ctx, req.(*ConsumeOwnershipTransferProofRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_GetOwnershipTransferReceipt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetOwnershipTransferReceiptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).GetOwnershipTransferReceipt(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_GetOwnershipTransferReceipt_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).GetOwnershipTransferReceipt(ctx, req.(*GetOwnershipTransferReceiptRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -924,6 +960,10 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ConsumeOwnershipTransferProof",
 			Handler:    _AuthService_ConsumeOwnershipTransferProof_Handler,
+		},
+		{
+			MethodName: "GetOwnershipTransferReceipt",
+			Handler:    _AuthService_GetOwnershipTransferReceipt_Handler,
 		},
 		{
 			MethodName: "Register",

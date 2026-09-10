@@ -223,6 +223,7 @@ class OwnershipTransferProofJdbcIntegrationTest {
     var locked = new CountDownLatch(1);
     var release = new CountDownLatch(1);
     OwnershipTransferProofStore pausedStore = new OwnershipTransferProofStore() {
+      public Optional<StoredProof> findConsumed(UUID operation) { return store.findConsumed(operation); }
       @Override public <T> T withAccount(UUID id, Function<Session, T> action) {
         return store.withAccount(id, session -> {
           locked.countDown();
@@ -292,6 +293,7 @@ class OwnershipTransferProofJdbcIntegrationTest {
     var locked = new CountDownLatch(1);
     var release = new CountDownLatch(1);
     OwnershipTransferProofStore paused = new OwnershipTransferProofStore() {
+      public Optional<StoredProof> findConsumed(UUID operation) { return store.findConsumed(operation); }
       public <T> T withAccount(UUID id, Function<Session,T> action) {
         return store.withAccount(id, session -> {
           locked.countDown();
@@ -341,6 +343,7 @@ class OwnershipTransferProofJdbcIntegrationTest {
   /** Fail after an actual SQL write, inside the real store's transaction. */
   private OwnershipTransferProofStore failAfterWrite(boolean insert) {
     return new OwnershipTransferProofStore() {
+      public Optional<StoredProof> findConsumed(UUID operation) { return store.findConsumed(operation); }
       @Override public <T> T withAccount(UUID id, Function<Session, T> action) {
         return store.withAccount(id, session -> action.apply(new Session() {
           public ProofAccount account() { return session.account(); }

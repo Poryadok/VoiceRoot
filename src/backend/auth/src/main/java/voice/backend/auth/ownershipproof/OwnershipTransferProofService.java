@@ -90,6 +90,18 @@ public final class OwnershipTransferProofService {
     });
   }
 
+  /** Recovers an existing grant for trusted Space; never consumes a proof or reauthorizes it. */
+  public Receipt lookup(ProofBinding binding, String proofDigest) {
+    if (proofDigest == null || !proofDigest.matches("[0-9a-f]{64}")) {
+      throw new IllegalArgumentException("invalid proof digest");
+    }
+    StoredProof stored = store.findConsumed(binding.operationId()).orElseThrow(ProofDeniedException::new);
+    if (stored.consumedAt() == null || !stored.binding().equals(binding) || !MessageDigest.isEqual(
+        stored.proofHash().getBytes(StandardCharsets.US_ASCII), proofDigest.getBytes(StandardCharsets.US_ASCII))) {
+      throw new ProofDeniedException();
+    }
+    return receipt(stored);
+  }
   private void requireCurrent(ProofAccount account, ProofBinding binding) {
     if (account == null || !account.accountId().equals(binding.accountId()) || !account.active()
         || account.sessionEpoch() != binding.sessionEpoch() || account.securityRevision() <= 0) {

@@ -375,6 +375,26 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
     });
   }
 
+  @Override
+  public void getOwnershipTransferReceipt(app.voice.auth.v1.GetOwnershipTransferReceiptRequest request,
+      StreamObserver<app.voice.auth.v1.GetOwnershipTransferReceiptResponse> responseObserver) {
+    runProof(responseObserver, () -> {
+      requireProofPrincipal("service", "space");
+      var binding = new voice.backend.auth.ownershipproof.ProofBinding(proofUuid(request.getAccountId()),
+          proofUuid(request.getProfileId()), proofUuid(request.getSpaceId()), proofUuid(request.getNewOwnerProfileId()),
+          proofUuid(request.getOperationId()), request.getSessionEpoch());
+      if (!request.getProofDigest().matches("[0-9a-f]{64}")) throw new IllegalArgumentException("invalid proof digest");
+      var receipt = requireProofService().lookup(binding, request.getProofDigest());
+      var bound = receipt.binding();
+      return app.voice.auth.v1.GetOwnershipTransferReceiptResponse.newBuilder()
+          .setReceiptId(receipt.receiptId().toString()).setAccountId(bound.accountId().toString())
+          .setProfileId(bound.profileId().toString()).setSpaceId(bound.spaceId().toString())
+          .setNewOwnerProfileId(bound.newOwnerProfileId().toString()).setOperationId(bound.operationId().toString())
+          .setSessionEpoch(bound.sessionEpoch()).setConsumedAt(toTimestamp(receipt.consumedAt()))
+          .addAllVerifiedFactors(receipt.factors()).build();
+    });
+  }
+
   private static voice.backend.auth.principal.VerifiedPrincipal requireProofPrincipal(String kind, String issuer) {
     var principal = voice.backend.auth.principal.VerifiedPrincipal.current();
     if (principal == null) throw Status.UNAUTHENTICATED.withDescription("verified principal required").asRuntimeException();

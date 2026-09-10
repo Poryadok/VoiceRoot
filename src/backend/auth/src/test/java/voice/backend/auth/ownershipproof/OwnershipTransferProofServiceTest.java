@@ -147,6 +147,7 @@ class OwnershipTransferProofServiceTest {
     assertThat(store.rows).isEmpty();
   }
   static class MemoryStore implements OwnershipTransferProofStore {
+    public Optional<StoredProof> findConsumed(UUID operation) { return Optional.ofNullable(rows.get(operation)).filter(row -> row.consumedAt() != null); }
     ProofAccount security;
     final Map<UUID, StoredProof> rows = new HashMap<>();
     @Override public synchronized <T> T withAccount(UUID id, java.util.function.Function<Session, T> action) {

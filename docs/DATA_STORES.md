@@ -11,7 +11,7 @@
 | Сервис               | PostgreSQL        | Redis                     | Прочее                           |
 |----------------------|-------------------|---------------------------|----------------------------------|
 | API Gateway          | —                 | rate limit, JWT blacklist; session-epoch floor | —                  |
-| Auth Service         | `auth_db`         | blacklist, session-epoch floor, limits, OTP | —            |
+| Auth Service         | `auth_db`         | blacklist, session-epoch floor, principal replay, limits, OTP | —            |
 | User Service         | `user_db`         | presence cache            | —                                |
 | Social Service       | `social_db`       | —                         | —                                |
 | Chat Service         | `chat_db`         | —                         | —                                |
@@ -58,6 +58,13 @@
 ### `auth_db` (Auth Service)
 
 Инвентарь таблиц — [auth-service.md](microservices/auth-service.md); миграции Flyway в `src/backend/auth/src/main/resources/db/migration/`.
+
+Auth principal replay admission uses the existing Auth Redis connection:
+`auth:principal:replay:<issuer>:<SHA-256-of-jti>`, written atomically with SET NX
+and the credential's remaining lifetime as TTL. Missing/unavailable replay
+admission fails closed; this ephemeral key does not replace durable ownership
+proof receipts. Runtime configuration is documented in
+[Auth README](../src/backend/auth/README.md#ownership-proof-principal-listener).
 
 | Таблица | Примечание |
 |---------|------------|
