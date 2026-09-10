@@ -42,4 +42,3 @@ public final class RedisPrincipalReplayGuard implements AuthPrincipalVerifier.Re
 
   @Override public void close() { commands.shutdownNow(); }
 }
-
