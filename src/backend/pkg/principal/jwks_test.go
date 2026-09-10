@@ -203,7 +203,7 @@ func testJWKSKey(t *testing.T, kid string) map[string]any {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := big.NewInt(int64(key.PublicKey.E)).Bytes()
+	e := big.NewInt(int64(key.E)).Bytes()
 	return map[string]any{
 		"kty": "RSA", "kid": kid, "use": "sig", "alg": "RS256",
 		"n": base64.RawURLEncoding.EncodeToString(key.PublicKey.N.Bytes()),
