@@ -143,12 +143,15 @@ fan-out.
 Это обязательный контракт для новых и мигрируемых внутренних вызовов. Он не делает
 существующие forwarded metadata доверенными до внедрения verifier/interceptor.
 
-Каждый защищённый межсервисный RPC принимает ровно два transport metadata:
+Каждый защищённый межсервисный RPC принимает ровно один credential
 `authorization: Bearer <signed-principal>` и один непустой `x-request-id`.
-Повторный `authorization` или `x-request-id`, иной auth scheme и любые raw identity
-metadata (`x-voice-*`, `x-profile-id`, `x-account-id`, `x-user-id`, `x-actor-id`,
-`x-internal-caller`) отвергаются до handler. Нельзя добавить второй bearer как
-совместимый путь.
+Это единственные metadata, из которых может следовать principal или request
+binding. Повторный `authorization` или `x-request-id`, иной auth scheme и любые raw
+identity metadata (`x-voice-*`, `x-profile-id`, `x-account-id`, `x-user-id`,
+`x-actor-id`, `x-internal-caller`) отвергаются до handler. Обычные не-authority
+metadata, например tracing, допустимы, но не могут изменить identity, caller,
+request binding или authorization. Нельзя добавить второй bearer как совместимый
+путь.
 
 - Service JWT имеет TTL не более **30 s**, `iss`, `sub=service:<issuer>`, точный
   `aud` целевого сервиса, точный full RPC name в `rpc`, `request_id`,
