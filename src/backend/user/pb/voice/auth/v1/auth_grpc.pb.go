@@ -19,28 +19,30 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AuthService_Register_FullMethodName                = "/voice.auth.v1.AuthService/Register"
-	AuthService_Login_FullMethodName                   = "/voice.auth.v1.AuthService/Login"
-	AuthService_Logout_FullMethodName                  = "/voice.auth.v1.AuthService/Logout"
-	AuthService_RefreshToken_FullMethodName            = "/voice.auth.v1.AuthService/RefreshToken"
-	AuthService_Enable2FA_FullMethodName               = "/voice.auth.v1.AuthService/Enable2FA"
-	AuthService_Verify2FA_FullMethodName               = "/voice.auth.v1.AuthService/Verify2FA"
-	AuthService_VerifyOTP_FullMethodName               = "/voice.auth.v1.AuthService/VerifyOTP"
-	AuthService_ConvertGuest_FullMethodName            = "/voice.auth.v1.AuthService/ConvertGuest"
-	AuthService_DeleteAccount_FullMethodName           = "/voice.auth.v1.AuthService/DeleteAccount"
-	AuthService_RestoreAccount_FullMethodName          = "/voice.auth.v1.AuthService/RestoreAccount"
-	AuthService_ValidateToken_FullMethodName           = "/voice.auth.v1.AuthService/ValidateToken"
-	AuthService_GetJWKS_FullMethodName                 = "/voice.auth.v1.AuthService/GetJWKS"
-	AuthService_SwitchActiveProfile_FullMethodName     = "/voice.auth.v1.AuthService/SwitchActiveProfile"
-	AuthService_SetAccountStatus_FullMethodName        = "/voice.auth.v1.AuthService/SetAccountStatus"
-	AuthService_PutE2EKeyBackup_FullMethodName         = "/voice.auth.v1.AuthService/PutE2EKeyBackup"
-	AuthService_GetE2EKeyBackup_FullMethodName         = "/voice.auth.v1.AuthService/GetE2EKeyBackup"
-	AuthService_ResolvePhoneHashes_FullMethodName      = "/voice.auth.v1.AuthService/ResolvePhoneHashes"
-	AuthService_FilterDeletedAccountIDs_FullMethodName = "/voice.auth.v1.AuthService/FilterDeletedAccountIDs"
-	AuthService_GetGuestReminder_FullMethodName        = "/voice.auth.v1.AuthService/GetGuestReminder"
-	AuthService_MarkGuestReminderShown_FullMethodName  = "/voice.auth.v1.AuthService/MarkGuestReminderShown"
-	AuthService_ListSessions_FullMethodName            = "/voice.auth.v1.AuthService/ListSessions"
-	AuthService_RevokeSession_FullMethodName           = "/voice.auth.v1.AuthService/RevokeSession"
+	AuthService_IssueOwnershipTransferProof_FullMethodName   = "/voice.auth.v1.AuthService/IssueOwnershipTransferProof"
+	AuthService_ConsumeOwnershipTransferProof_FullMethodName = "/voice.auth.v1.AuthService/ConsumeOwnershipTransferProof"
+	AuthService_Register_FullMethodName                      = "/voice.auth.v1.AuthService/Register"
+	AuthService_Login_FullMethodName                         = "/voice.auth.v1.AuthService/Login"
+	AuthService_Logout_FullMethodName                        = "/voice.auth.v1.AuthService/Logout"
+	AuthService_RefreshToken_FullMethodName                  = "/voice.auth.v1.AuthService/RefreshToken"
+	AuthService_Enable2FA_FullMethodName                     = "/voice.auth.v1.AuthService/Enable2FA"
+	AuthService_Verify2FA_FullMethodName                     = "/voice.auth.v1.AuthService/Verify2FA"
+	AuthService_VerifyOTP_FullMethodName                     = "/voice.auth.v1.AuthService/VerifyOTP"
+	AuthService_ConvertGuest_FullMethodName                  = "/voice.auth.v1.AuthService/ConvertGuest"
+	AuthService_DeleteAccount_FullMethodName                 = "/voice.auth.v1.AuthService/DeleteAccount"
+	AuthService_RestoreAccount_FullMethodName                = "/voice.auth.v1.AuthService/RestoreAccount"
+	AuthService_ValidateToken_FullMethodName                 = "/voice.auth.v1.AuthService/ValidateToken"
+	AuthService_GetJWKS_FullMethodName                       = "/voice.auth.v1.AuthService/GetJWKS"
+	AuthService_SwitchActiveProfile_FullMethodName           = "/voice.auth.v1.AuthService/SwitchActiveProfile"
+	AuthService_SetAccountStatus_FullMethodName              = "/voice.auth.v1.AuthService/SetAccountStatus"
+	AuthService_PutE2EKeyBackup_FullMethodName               = "/voice.auth.v1.AuthService/PutE2EKeyBackup"
+	AuthService_GetE2EKeyBackup_FullMethodName               = "/voice.auth.v1.AuthService/GetE2EKeyBackup"
+	AuthService_ResolvePhoneHashes_FullMethodName            = "/voice.auth.v1.AuthService/ResolvePhoneHashes"
+	AuthService_FilterDeletedAccountIDs_FullMethodName       = "/voice.auth.v1.AuthService/FilterDeletedAccountIDs"
+	AuthService_GetGuestReminder_FullMethodName              = "/voice.auth.v1.AuthService/GetGuestReminder"
+	AuthService_MarkGuestReminderShown_FullMethodName        = "/voice.auth.v1.AuthService/MarkGuestReminderShown"
+	AuthService_ListSessions_FullMethodName                  = "/voice.auth.v1.AuthService/ListSessions"
+	AuthService_RevokeSession_FullMethodName                 = "/voice.auth.v1.AuthService/RevokeSession"
 )
 
 // AuthServiceClient is the client API for AuthService service.
@@ -49,6 +51,9 @@ const (
 //
 // Auth Service — registration, sessions, JWT, 2FA (Java). HTTP prefix: /api/v1/auth/** → Gateway.
 type AuthServiceClient interface {
+	// Protected Gateway delegated-user issue and Space-only atomic consume.
+	IssueOwnershipTransferProof(ctx context.Context, in *IssueOwnershipTransferProofRequest, opts ...grpc.CallOption) (*IssueOwnershipTransferProofResponse, error)
+	ConsumeOwnershipTransferProof(ctx context.Context, in *ConsumeOwnershipTransferProofRequest, opts ...grpc.CallOption) (*ConsumeOwnershipTransferProofResponse, error)
 	Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterResponse, error)
 	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResponse, error)
 	Logout(ctx context.Context, in *LogoutRequest, opts ...grpc.CallOption) (*LogoutResponse, error)
@@ -88,6 +93,26 @@ type authServiceClient struct {
 
 func NewAuthServiceClient(cc grpc.ClientConnInterface) AuthServiceClient {
 	return &authServiceClient{cc}
+}
+
+func (c *authServiceClient) IssueOwnershipTransferProof(ctx context.Context, in *IssueOwnershipTransferProofRequest, opts ...grpc.CallOption) (*IssueOwnershipTransferProofResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(IssueOwnershipTransferProofResponse)
+	err := c.cc.Invoke(ctx, AuthService_IssueOwnershipTransferProof_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) ConsumeOwnershipTransferProof(ctx context.Context, in *ConsumeOwnershipTransferProofRequest, opts ...grpc.CallOption) (*ConsumeOwnershipTransferProofResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ConsumeOwnershipTransferProofResponse)
+	err := c.cc.Invoke(ctx, AuthService_ConsumeOwnershipTransferProof_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *authServiceClient) Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterResponse, error) {
@@ -316,6 +341,9 @@ func (c *authServiceClient) RevokeSession(ctx context.Context, in *RevokeSession
 //
 // Auth Service — registration, sessions, JWT, 2FA (Java). HTTP prefix: /api/v1/auth/** → Gateway.
 type AuthServiceServer interface {
+	// Protected Gateway delegated-user issue and Space-only atomic consume.
+	IssueOwnershipTransferProof(context.Context, *IssueOwnershipTransferProofRequest) (*IssueOwnershipTransferProofResponse, error)
+	ConsumeOwnershipTransferProof(context.Context, *ConsumeOwnershipTransferProofRequest) (*ConsumeOwnershipTransferProofResponse, error)
 	Register(context.Context, *RegisterRequest) (*RegisterResponse, error)
 	Login(context.Context, *LoginRequest) (*LoginResponse, error)
 	Logout(context.Context, *LogoutRequest) (*LogoutResponse, error)
@@ -357,6 +385,12 @@ type AuthServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedAuthServiceServer struct{}
 
+func (UnimplementedAuthServiceServer) IssueOwnershipTransferProof(context.Context, *IssueOwnershipTransferProofRequest) (*IssueOwnershipTransferProofResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method IssueOwnershipTransferProof not implemented")
+}
+func (UnimplementedAuthServiceServer) ConsumeOwnershipTransferProof(context.Context, *ConsumeOwnershipTransferProofRequest) (*ConsumeOwnershipTransferProofResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ConsumeOwnershipTransferProof not implemented")
+}
 func (UnimplementedAuthServiceServer) Register(context.Context, *RegisterRequest) (*RegisterResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Register not implemented")
 }
@@ -442,6 +476,42 @@ func RegisterAuthServiceServer(s grpc.ServiceRegistrar, srv AuthServiceServer) {
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&AuthService_ServiceDesc, srv)
+}
+
+func _AuthService_IssueOwnershipTransferProof_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(IssueOwnershipTransferProofRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).IssueOwnershipTransferProof(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_IssueOwnershipTransferProof_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).IssueOwnershipTransferProof(ctx, req.(*IssueOwnershipTransferProofRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_ConsumeOwnershipTransferProof_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConsumeOwnershipTransferProofRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).ConsumeOwnershipTransferProof(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_ConsumeOwnershipTransferProof_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).ConsumeOwnershipTransferProof(ctx, req.(*ConsumeOwnershipTransferProofRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _AuthService_Register_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -847,6 +917,14 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "voice.auth.v1.AuthService",
 	HandlerType: (*AuthServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "IssueOwnershipTransferProof",
+			Handler:    _AuthService_IssueOwnershipTransferProof_Handler,
+		},
+		{
+			MethodName: "ConsumeOwnershipTransferProof",
+			Handler:    _AuthService_ConsumeOwnershipTransferProof_Handler,
+		},
 		{
 			MethodName: "Register",
 			Handler:    _AuthService_Register_Handler,
