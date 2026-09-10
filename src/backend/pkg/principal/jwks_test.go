@@ -104,14 +104,34 @@ func TestJWKSResolver_CoolsDownRepeatedUnknownKidRefreshes(t *testing.T) {
 	if _, err := resolver.Resolve(context.Background(), "gateway", "current"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := resolver.Resolve(context.Background(), "gateway", "missing"); err == nil {
+	if _, err := resolver.Resolve(context.Background(), "gateway", "missing-one"); err == nil {
 		t.Fatal("unknown kid accepted")
 	}
-	if _, err := resolver.Resolve(context.Background(), "gateway", "missing"); err == nil {
-		t.Fatal("unknown kid accepted during cooldown")
+	if _, err := resolver.Resolve(context.Background(), "gateway", "missing-two"); err == nil {
+		t.Fatal("distinct unknown kid bypassed issuer cooldown")
 	}
 	if got := calls.Load(); got != 2 {
 		t.Fatalf("unknown kid fetch calls = %d, want 2", got)
+	}
+}
+
+func TestJWKSResolver_CoolsDownColdCacheUnknownKidRefreshes(t *testing.T) {
+	var calls atomic.Int32
+	resolver, err := NewJWKSResolverWithConfig(JWKSResolverConfig{
+		Fetch:              func(context.Context, string) ([]byte, error) { calls.Add(1); return []byte(`{"keys":[]}`), nil },
+		UnknownKIDCooldown: time.Minute,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resolver.Resolve(context.Background(), "gateway", "missing-one"); err == nil {
+		t.Fatal("cold unknown kid accepted")
+	}
+	if _, err := resolver.Resolve(context.Background(), "gateway", "missing-two"); err == nil {
+		t.Fatal("cold distinct unknown kid bypassed cooldown")
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("cold unknown kid fetch calls = %d, want 1", got)
 	}
 }
 

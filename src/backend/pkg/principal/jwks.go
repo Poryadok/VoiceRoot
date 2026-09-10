@@ -89,6 +89,7 @@ const (
 
 // JWKSResolverConfig sets bounded cache behavior. HardExpiry must be at least
 // RefreshAfter so failed refreshes can temporarily use a last-good current+next set.
+// UnknownKIDCooldown is issuer-wide to bound attacker-controlled key-id cardinality.
 type JWKSResolverConfig struct {
 	Fetch              JWKSFetcher
 	Clock              func() time.Time
@@ -114,7 +115,7 @@ type JWKSResolver struct {
 	mu                 sync.RWMutex
 	refresh            sync.Mutex
 	sets               map[string]jwksCacheEntry
-	unknownKIDRefresh  map[string]map[string]time.Time
+	unknownKIDRefresh  map[string]time.Time
 }
 
 func NewJWKSResolver(fetch JWKSFetcher) *JWKSResolver {
@@ -145,7 +146,7 @@ func NewJWKSResolverWithConfig(config JWKSResolverConfig) (*JWKSResolver, error)
 	if config.RefreshAfter <= 0 || config.HardExpiry < config.RefreshAfter || config.UnknownKIDCooldown <= 0 {
 		return nil, errors.New("jwks cache ttl configuration is invalid")
 	}
-	return &JWKSResolver{fetch: config.Fetch, clock: config.Clock, refreshAfter: config.RefreshAfter, hardExpiry: config.HardExpiry, unknownKIDCooldown: config.UnknownKIDCooldown, sets: make(map[string]jwksCacheEntry), unknownKIDRefresh: make(map[string]map[string]time.Time)}, nil
+	return &JWKSResolver{fetch: config.Fetch, clock: config.Clock, refreshAfter: config.RefreshAfter, hardExpiry: config.HardExpiry, unknownKIDCooldown: config.UnknownKIDCooldown, sets: make(map[string]jwksCacheEntry), unknownKIDRefresh: make(map[string]time.Time)}, nil
 }
 
 func (r *JWKSResolver) Resolve(ctx context.Context, issuer, keyID string) (*rsa.PublicKey, error) {
@@ -161,20 +162,20 @@ func (r *JWKSResolver) Resolve(ctx context.Context, issuer, keyID string) (*rsa.
 	if key, fresh, _ := r.cached(issuer, keyID); key != nil && fresh {
 		return key, nil
 	}
-	if key, _, usable := r.cached(issuer, keyID); key == nil && usable && r.unknownKIDCoolingDown(issuer, keyID) {
+	if r.unknownKIDCoolingDown(issuer) {
 		return nil, errors.New("jwks kid refresh is cooling down")
 	}
 	if err := r.refreshLocked(ctx, issuer); err != nil {
 		if key, _, usable := r.cached(issuer, keyID); key != nil && usable {
 			return key, nil
 		}
-		r.markUnknownKIDRefresh(issuer, keyID)
+		r.markUnknownKIDRefresh(issuer)
 		return nil, err
 	}
 	if key, _, _ := r.cached(issuer, keyID); key != nil {
 		return key, nil
 	}
-	r.markUnknownKIDRefresh(issuer, keyID)
+	r.markUnknownKIDRefresh(issuer)
 	return nil, errors.New("jwks kid is unknown")
 }
 
@@ -218,18 +219,15 @@ func (r *JWKSResolver) cached(issuer, keyID string) (*rsa.PublicKey, bool, bool)
 	return entry.keys[keyID], age < r.refreshAfter, true
 }
 
-func (r *JWKSResolver) unknownKIDCoolingDown(issuer, keyID string) bool {
+func (r *JWKSResolver) unknownKIDCoolingDown(issuer string) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	last := r.unknownKIDRefresh[issuer][keyID]
+	last := r.unknownKIDRefresh[issuer]
 	return !last.IsZero() && r.clock().UTC().Sub(last) < r.unknownKIDCooldown
 }
 
-func (r *JWKSResolver) markUnknownKIDRefresh(issuer, keyID string) {
+func (r *JWKSResolver) markUnknownKIDRefresh(issuer string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.unknownKIDRefresh[issuer] == nil {
-		r.unknownKIDRefresh[issuer] = make(map[string]time.Time)
-	}
-	r.unknownKIDRefresh[issuer][keyID] = r.clock().UTC()
+	r.unknownKIDRefresh[issuer] = r.clock().UTC()
 }

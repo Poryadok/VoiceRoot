@@ -29,6 +29,8 @@ func TestIncomingMetadata_RejectsAmbiguousOrRawIdentityHeaders(t *testing.T) {
 		{name: "missing authorization", pairs: []string{"x-request-id", "request-1"}},
 		{name: "duplicate authorization", pairs: []string{"authorization", "Bearer one", "authorization", "Bearer two", "x-request-id", "request-1"}},
 		{name: "non bearer", pairs: []string{"authorization", "Basic value", "x-request-id", "request-1"}},
+		{name: "bearer whitespace", pairs: []string{"authorization", "Bearer token ", "x-request-id", "request-1"}},
+		{name: "request id whitespace", pairs: []string{"authorization", "Bearer token", "x-request-id", " request-1"}},
 		{name: "duplicate request id", pairs: []string{"authorization", "Bearer token", "x-request-id", "request-1", "x-request-id", "request-2"}},
 		{name: "raw profile", pairs: []string{"authorization", "Bearer token", "x-request-id", "request-1", "x-voice-profile-id", "attacker"}},
 		{name: "raw caller", pairs: []string{"authorization", "Bearer token", "x-request-id", "request-1", "x-voice-internal-caller", "attacker"}},

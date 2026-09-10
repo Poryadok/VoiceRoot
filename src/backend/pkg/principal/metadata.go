@@ -37,9 +37,9 @@ func IncomingMetadata(ctx context.Context) (TransportMetadata, error) {
 	if !strings.HasPrefix(authorization[0], prefix) {
 		return TransportMetadata{}, ErrInvalidPrincipalMetadata
 	}
-	token := strings.TrimSpace(strings.TrimPrefix(authorization[0], prefix))
-	requestID := strings.TrimSpace(requestIDs[0])
-	if token == "" || requestID == "" || strings.ContainsAny(token, " \t\r\n") {
+	token := strings.TrimPrefix(authorization[0], prefix)
+	requestID := requestIDs[0]
+	if token == "" || requestID == "" || token != strings.TrimSpace(token) || requestID != strings.TrimSpace(requestID) || strings.ContainsAny(token, " \t\r\n") {
 		return TransportMetadata{}, ErrInvalidPrincipalMetadata
 	}
 	return TransportMetadata{BearerToken: token, RequestID: requestID}, nil
