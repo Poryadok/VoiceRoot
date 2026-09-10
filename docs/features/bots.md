@@ -159,10 +159,30 @@ commands:
 | `SPACE_VIEW_MEMBER_LIST`    | Видеть список участников спейса                                               |
 | `MEMBER_ASSIGN_ROLES`       | Выдавать/забирать роли ниже бота по иерархии                                  |
 | `TEXT_CHAT_CREATE_IN_SPACE` | Создавать/архивировать текстовые чаты в спейсе (`group` \| `channel`)         |
-| `SPACE_MANAGE_ROLES` ⚠️     | Создавать и управлять ролями ниже бота по иерархии (привилегированный scope)  |
+| `SPACE_MANAGE_ROLES` ⚠️     | Создавать кастомные роли ниже бота по иерархии (привилегированный scope)      |
 | `TEXT_CHAT_READ_HISTORY` ⚠️ | Читать историю сообщений в разрешённых чатах (привилегированный scope)        |
 
-Scopes `SPACE_MANAGE_ROLES` и `TEXT_CHAT_READ_HISTORY` для бота — привилегированные: при установке пользователь видит явное предупреждение. `TEXT_CHAT_READ_HISTORY` предназначен для модерационных ботов; `SPACE_MANAGE_ROLES` — для ботов, которым нужно создавать определения ролей (назначение участникам — `MEMBER_ASSIGN_ROLES`). Имена совпадают с правами участника; политика проверки — в Bot Service / Gateway.
+Scopes `SPACE_MANAGE_ROLES` и `TEXT_CHAT_READ_HISTORY` для бота — привилегированные: при установке пользователь видит явное предупреждение. `TEXT_CHAT_READ_HISTORY` предназначен для модерационных ботов; `SPACE_MANAGE_ROLES` — для ботов, которым нужно создавать определения ролей; этот Phase-0 scope не даёт обновлять, удалять или reorder-ить роли (назначение участникам — `MEMBER_ASSIGN_ROLES`). Имена совпадают с правами участника; политика проверки — в Bot Service / Gateway.
+
+### Phase-0: подписанная capability для role mutations (target; не реализовано)
+
+Для `CreateBotRole`, `AssignBotRole` и `RevokeBotRole` Bot Service передаёт в
+Role отдельную подписанную `bot_actor` capability, а не клиентский identity или
+metadata. В ней фиксированы `principal_type=bot_actor`, `iss=bot`,
+`sub=bot:<bot_id>`, `aud=role`, точный `rpc`, `request_id`, `request_hash`,
+`actor_profile_id`, `bot_id`, `space_id`, `installation_id`, `bot_scope`,
+`iat`, `nbf`, `exp` (не более 30 s), `jti` и `kid`. `request_hash` связывает все
+поля целевого RPC: для `CreateRole` — `space_id`, `name`, `permissions_mask`,
+`position`; для `AssignRole`/`RevokeRole` — `space_id`, `profile_id`, `role_id`.
+Role сопоставляет `space_id` запроса с capability и получает actor только из
+claim.
+
+`SPACE_MANAGE_ROLES` даёт только `CreateRole`; `MEMBER_ASSIGN_ROLES` даёт только
+`AssignRole`/`RevokeRole`. Обычная иерархия и permission checks остаются
+обязательными. Capability никогда не даёт назначить, снять или передать `Owner`,
+а также изменить любую system role. После cutover каждого из этих RPC legacy
+headers/metadata не принимаются; подробная Role matrix и error model находятся
+в [role-service.md](../microservices/role-service.md#phase-0-principal-и-caller-matrix-target-не-реализовано).
 
 ---
 
@@ -173,5 +193,4 @@ Scopes `SPACE_MANAGE_ROLES` и `TEXT_CHAT_READ_HISTORY` для бота — пр
 - **Incoming Webhooks** — простой URL для отправки сообщений без OAuth; для CI/CD, мониторинга, внешних сервисов
 - **Bot DM по инициативе** — scope для уведомлений (opt-in от пользователя); сейчас бот может писать только в ответ
 - **Каталог ботов** — публичный App Directory со страницами ботов, отзывами, категориями
-
 
