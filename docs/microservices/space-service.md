@@ -72,7 +72,7 @@ service SpaceService {
   rpc ListBans(ListBansRequest) returns (BanList);
   rpc TimeoutMember(TimeoutMemberRequest) returns (Empty);           // ✓ shipped
   rpc RemoveMemberTimeout(RemoveMemberTimeoutRequest) returns (Empty); // ✓ shipped
-  rpc TransferOwnership(TransferRequest) returns (Empty);            // ✓ backend gRPC (Role Owner reassign fail-closed + compensated)
+  rpc TransferOwnership(TransferRequest) returns (Empty);            // disabled in production pending durable v2 + Auth proof
   rpc AddBotMember(AddBotMemberRequest) returns (SpaceMembership);   // ✓ shipped
   rpc RemoveBotMember(RemoveBotMemberRequest) returns (Empty);       // ✓ shipped
 
@@ -110,7 +110,7 @@ service SpaceService {
 | JoinSpace, LeaveSpace | ✓ | ✓ | Composable AND entry policy and invite-safe verifier pipeline remain backlog — [todo/backend.md](../todo/backend.md) |
 | KickMember, BanMember, UnbanMember, ListMembers, ListBans | ✓ | ✓ | |
 | TimeoutMember, RemoveMemberTimeout | ✓ | ✓ | |
-| TransferOwnership | ✓ | ✓ | Existing backend owner→member path is compensated; it **does not yet implement** the approved Auth proof, `operation_id` idempotency or trusted Owner-role path. Those must land before exposing it through Gateway/Flutter; see § Ownership-transfer contract. |
+| TransferOwnership | ✓ | Disabled | Production denies before dependencies. The signed, compensated v1 foundation is test-only; durable v2 journal/freeze/finalization, Auth proof and public operation idempotency must land before activation through Gateway/Flutter. See § Ownership lifecycle principal transport. |
 | AddBotMember, RemoveBotMember | ✓ | ✓ | |
 | ListTemplates, CreateFromTemplate | ✓ | ✗ | |
 | GetAuditLog | ✓ | ✓ | `created_at DESC, id DESC`; opaque timestamp+UUID keyset cursor; default 50/max 100; exact `SPACE_VIEW_AUDIT_LOG` check, owner-only fallback only when Role Service is unwired. Filters and REST/Flutter surfaces remain backlog |
@@ -316,3 +316,125 @@ message UnpinTreeNodeRequest {
 - **Subscription Service** — лимиты узлов дерева (текст + голос) и участников (free vs Pro)
 - **User Service** — профили участников
 - **Social Service** — проверка блокировок при join
+
+### Ownership lifecycle principal transport
+
+**Staged foundation:** production Space TransferOwnership is disabled before any
+lock, database or Role access, including when all signing/TLS settings exist or
+Role is absent. There is no environment setting to activate the v1 saga; only
+same-package test fixtures opt into its private test switch. Generic Role Owner
+assignment/revocation remains forbidden; bootstrap and non-Owner member behavior
+is unchanged. V2 durable convergence and Auth proof consumption must be enabled
+atomically before production transfer is exposed.
+
+
+Space calls dedicated Role `ApplyOwnershipTransfer` and
+`CompensateOwnershipTransfer` through a separate TLS client. It issues a fresh
+short-lived `service:space` credential for each call, binding the exact method,
+request hash and request ID. Forwarded user credentials and raw actor metadata
+are not sent on this transport. One internal operation UUID identifies both
+legs of the current saga; compensation retains the original old/new owner
+ordering, detaches cancellation and uses a bounded cleanup context. A receipt
+whose owner does not match the expected result fails closed.
+
+When Role integration is configured, missing signer or dedicated client prevents
+ownership mutation. There is no generic Owner assignment fallback. A public
+current+next JWKS is served at `GET /.well-known/jwks.json`; deployment exposes
+that route through HTTPS to Role. This slice does not yet implement client
+operation idempotency, Auth proof consumption or the public confirmation flow.
+Configuration and activation are specified in
+[DEPLOYMENT.md](../DEPLOYMENT.md#ownership-lifecycle-principal-transport).
+
+#### Target durable ownership journal and recovery (not implemented)
+
+A follow-on slice persists the exact operation tuple, canonical non-secret
+request binding, consumed Auth receipt and decision in `space_db` before owner
+mutation. Under the space mutation lease it advances a journal through prepared,
+commit-decided or abort-decided, then completed or aborted. Commit and abort are
+mutually exclusive durable decisions; clients retry the same operation body to
+observe its outcome, while a changed body returns `ALREADY_EXISTS`.
+
+The target order is: reserve journal and validate/consume proof; invoke v2 Prepare for Role's
+frozen ownership operation; atomically persist the new Space owner, audit/outbox
+and commit decision; finalize Role; mark the Space operation completed and allow
+its audit/event visibility. Any failure before commit decision selects durable
+abort and retries v2 Role Abort; failure after commit decision retries
+Finalize and never switches to abort. Do not report a terminal result until both
+local state and the authoritative Role receipt confirm it.
+
+A pending journal blocks conflicting Space mutations and ownership-sensitive
+reads, including owner/role/member/audit and tree access, with `UNAVAILABLE`.
+Pending audit/outbox entries remain invisible until completion. Role's matching
+prepared state denies new space-scoped ACL decisions rather than transiently
+granting Owner to either profile. Reads that cannot determine pending state fail
+closed. A process health check does not assert operation convergence.
+
+A recovery worker resumes exact operations after restart, including crashes after
+journal reservation, Auth consume, ambiguous v2 Role Prepare, local commit decision,
+Role Finalize, local completion or outbox delivery. No timeout silently deletes a
+pending operation or clears its freeze. Audit/event delivery is idempotent; an
+abort publishes neither successful transfer audit nor event. Sustained dependency
+failure leaves a visible pending/unavailable outcome and operational alert, not
+fabricated rollback success. Space remains the owner authority and uses Role API
+receipts, never cross-service database access.
+
+Acceptance requires injected response loss/unavailability at every boundary,
+restart recovery from each durable state, concurrent same-operation replay and
+conflicting bodies, Finalize/Abort races obeying one durable decision,
+invisible pending audit/read surfaces, and proof that no permission decision
+observes two effective Owners. The current compensated saga and terminal Role
+abort barrier do not yet satisfy this complete convergence contract.
+
+
+##### Journal exclusivity, freeze inventory and ambiguous consume
+
+Space durably enforces one active ownership journal per space with a database
+unique constraint, not only an in-process/advisory lease. The immutable global
+operation record binds actor/account/original session epoch, space, old/new
+owner, protocol version and canonical non-secret body/proof digest. A different
+operation while one is active is `FAILED_PRECONDITION`; the same operation with
+a changed body is `ALREADY_EXISTS`. Reservation precedes Auth consume. The only
+allowed decisions are unset -> commit or unset -> abort, through serialized
+compare-and-set; neither terminal decision can switch sides. A worker re-reads
+the committed decision before sending its action, so stale workers cannot issue
+contradictory Finalize and Abort. Abort completion requires an authoritative Role
+aborted receipt even when Prepare was not observed, fencing delayed attempts.
+
+Space freeze applies to GetSpace/owner enrichment, ListMySpaces/search/templates
+that include the space, members/bans/audit/tree/category/node reads, invite reads
+and redemption, join/leave/bot/subscription/member lifecycle and every space,
+chat-node or voice-room mutation. A request or batch involving a pending space
+fails atomically with `UNAVAILABLE`; no partial authority-bearing result is
+returned. Indirect owner lookups and all owner/admin fallback paths consult the
+journal under the same store serialization boundary as the protected action.
+Permission/owner caches cannot turn unavailable state into an allow. Ordinary
+absence of an active journal permits normal behavior; lookup errors deny. The
+operation status/identical-request outcome may remain readable only to its
+verified initiating actor without disclosing pending member or audit data.
+
+Auth's current identical Consume replay requires the original opaque proof
+(matched by its digest) and exact original binding, including original session epoch, and returns its durable
+receipt even after proof expiry or later account security/epoch changes; it does
+not create a second grant. Recovery without retaining plaintext proof therefore
+requires a separate target trusted Space-only
+`GetOwnershipTransferReceipt` lookup with exact `account_id`, `profile_id`
+(the old-owner actor), `space_id`, `new_owner_profile_id`, `operation_id` and
+original `session_epoch`, plus required `proof_digest` (the SHA-256 hex digest
+of the original opaque proof). This safely persisted digest must match Auth
+storage, preserving exact-proof replay without retaining plaintext proof.
+It returns only a previously committed matching receipt; missing, unconsumed or
+mismatched results all return coarse `PERMISSION_DENIED` and never authorize
+consumption or ownership. Consumed receipts outlive ordinary proof TTL cleanup.
+This additive Auth contract is a dependency of v2, not a change to the current
+Consume implementation.
+
+After ambiguous consume, recover that exact receipt and persist it before
+Prepare or a commit decision. Never consume a different proof to resolve the
+same operation and never infer success from timeout. If no receipt can be
+confirmed, recovery may choose durable abort (ownership stays unchanged); an
+already abort-decided operation cannot revive when a late consume succeeds.
+A later new ownership intent requires a new operation and proof. The journal
+stores proof digest and receipt only, never opaque plaintext proof. Terminal
+journal tombstones follow Role's durable lifetime/retired-space retention rule.
+A missing journal after a previously issued operation is an operational failure,
+not permission to create a second transfer.

@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"voice/backend/pkg/principal"
 	"voice/backend/space/internal/spaceevents"
 	"voice/backend/space/internal/store"
 
@@ -21,6 +22,8 @@ type SpaceGRPC struct {
 	voiceRoomAccessResolver voiceRoomAccessResolver // test seam; production uses Store
 	SpaceEvents             spaceevents.Publisher   // optional; CreateSpace publishes space.created
 	Roles                   rolev1.RoleServiceClient
+	OwnershipRoles          rolev1.RoleServiceClient // dedicated authenticated Role lifecycle transport
+	PrincipalIssuer         *principal.Issuer
 	ProfileAccounts         ProfileAccountLookup // optional; resolves profile_id → account_id for bans
 	Chats                   ChatLookup           // optional; enriches text_chat nodes in ListSpaceTree
 	Privacy                 InvitePrivacyChecker
@@ -28,6 +31,10 @@ type SpaceGRPC struct {
 	SpaceCoMembership       InviteSpaceCoMembershipChecker
 	Blocks                  JoinAccountBlockChecker
 	MutationLocker          SpaceMutationLocker
+
+	// V1 is a test-only foundation until the durable v2 journal/freeze protocol
+	// lands. This private false-default switch has no production setter or env.
+	allowLegacyOwnershipTransferForTest bool
 
 	// skipJoinBlockDefaults disables permissive join-block stubs in integration tests.
 	skipJoinBlockDefaults bool
