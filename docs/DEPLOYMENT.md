@@ -360,3 +360,45 @@ go test -run TestStagingBotsWebhook_live -count=1 .
 - [PLAN.md](PLAN.md) — дорожная карта продукта и инфраструктуры
 
 
+
+
+### Ownership lifecycle principal transport
+
+This is a disabled foundation: production Space TransferOwnership always denies
+before lock/database access until the durable v2 protocol lands. No signing, TLS
+or environment setting activates the v1 saga. Fixture-only opt-in preserves
+legacy regression coverage; public ownership activation remains a later gate.
+
+Role keeps ordinary callers on `ROLE_GRPC_LISTEN` (default `:9090`) and rejects
+both ownership lifecycle RPCs there. The additional listener is TLS-only and
+allows only `ApplyOwnershipTransfer` and `CompensateOwnershipTransfer`.
+
+| Service | Setting | Purpose |
+|---|---|---|
+| Space | `SPACE_PRINCIPAL_SIGNING_KEYS_DIR` | Secret mount with exactly two distinct RSA PKCS#8 `<kid>.pem` private keys (at least 2048 bits) |
+| Space | `SPACE_PRINCIPAL_ACTIVE_KID` | Active key ID; the peer key remains published for rotation |
+| Space | `ROLE_PRINCIPAL_GRPC_ADDR` | Dedicated Role TLS endpoint, normally `voice-role:9091` |
+| Space | `ROLE_PRINCIPAL_TLS_CA_FILE` | Optional additional trusted CA PEM; system roots remain available |
+| Space | `ROLE_PRINCIPAL_TLS_SERVER_NAME` | Optional expected Role certificate DNS name override; otherwise use endpoint authority |
+| Role | `ROLE_PRINCIPAL_GRPC_LISTEN` | Dedicated listener address; default `:9091` when enabled |
+| Role | `ROLE_PRINCIPAL_TLS_CERT_FILE`, `ROLE_PRINCIPAL_TLS_KEY_FILE` | Server TLS certificate chain and matching private key secret mounts |
+| Role | `S2S_JWKS_URLS_JSON` | Trusted issuer-to-HTTPS endpoint map, including `space` |
+| Role | `S2S_JWKS_CA_FILE` | Optional private CA for the HTTPS issuer endpoint |
+| Role | `ROLE_PRINCIPAL_REPLAY_REDIS_ADDR` | Shared Redis for atomic credential replay rejection |
+
+Space publishes only the public keys at `GET /.well-known/jwks.json` on its HTTP
+listener. A trusted HTTPS reverse proxy must expose that endpoint to Role; no
+HTTP fallback is accepted by the verifier. Provision service-specific keys,
+certificates, issuer HTTPS routing and shared replay Redis before activating the
+Space dedicated client. Never share Gateway and Space private keys or commit
+fixture private keys. Preserve the current+next rotation overlap from
+[ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md).
+
+Role validates runtime/TLS configuration at startup. Initial JWKS fetch is lazy
+at the first protected request to avoid a Role-to-Space startup cycle; health
+alone does not prove ownership transport readiness. Missing/unavailable JWKS,
+invalid credentials, or unavailable replay storage deny the call. With the
+principal runtime absent, ordinary health/service calls can remain available,
+but ownership transfer stays unavailable. A configured Space Role integration
+with an absent signer or dedicated client denies transfer before its database
+mutation. Public Auth proof confirmation remains a separate activation gate.

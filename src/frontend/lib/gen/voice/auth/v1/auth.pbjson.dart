@@ -998,3 +998,71 @@ final $typed_data.Uint8List consumeOwnershipTransferProofResponseDescriptor = $c
     'aWQYBiABKAlSC29wZXJhdGlvbklkEiMKDXNlc3Npb25fZXBvY2gYByABKANSDHNlc3Npb25FcG'
     '9jaBI7Cgtjb25zdW1lZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBSCmNv'
     'bnN1bWVkQXQSKQoQdmVyaWZpZWRfZmFjdG9ycxgJIAMoCVIPdmVyaWZpZWRGYWN0b3Jz');
+
+@$core.Deprecated('Use getOwnershipTransferReceiptRequestDescriptor instead')
+const GetOwnershipTransferReceiptRequest$json = {
+  '1': 'GetOwnershipTransferReceiptRequest',
+  '2': [
+    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+    {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
+    {'1': 'space_id', '3': 3, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'new_owner_profile_id',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '10': 'newOwnerProfileId'
+    },
+    {'1': 'operation_id', '3': 5, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'session_epoch', '3': 6, '4': 1, '5': 3, '10': 'sessionEpoch'},
+    {'1': 'proof_digest', '3': 7, '4': 1, '5': 9, '10': 'proofDigest'},
+  ],
+};
+
+/// Descriptor for `GetOwnershipTransferReceiptRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getOwnershipTransferReceiptRequestDescriptor = $convert.base64Decode(
+    'CiJHZXRPd25lcnNoaXBUcmFuc2ZlclJlY2VpcHRSZXF1ZXN0Eh0KCmFjY291bnRfaWQYASABKA'
+    'lSCWFjY291bnRJZBIdCgpwcm9maWxlX2lkGAIgASgJUglwcm9maWxlSWQSGQoIc3BhY2VfaWQY'
+    'AyABKAlSB3NwYWNlSWQSLwoUbmV3X293bmVyX3Byb2ZpbGVfaWQYBCABKAlSEW5ld093bmVyUH'
+    'JvZmlsZUlkEiEKDG9wZXJhdGlvbl9pZBgFIAEoCVILb3BlcmF0aW9uSWQSIwoNc2Vzc2lvbl9l'
+    'cG9jaBgGIAEoA1IMc2Vzc2lvbkVwb2NoEiEKDHByb29mX2RpZ2VzdBgHIAEoCVILcHJvb2ZEaW'
+    'dlc3Q=');
+
+@$core.Deprecated('Use getOwnershipTransferReceiptResponseDescriptor instead')
+const GetOwnershipTransferReceiptResponse$json = {
+  '1': 'GetOwnershipTransferReceiptResponse',
+  '2': [
+    {'1': 'receipt_id', '3': 1, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'account_id', '3': 2, '4': 1, '5': 9, '10': 'accountId'},
+    {'1': 'profile_id', '3': 3, '4': 1, '5': 9, '10': 'profileId'},
+    {'1': 'space_id', '3': 4, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'new_owner_profile_id',
+      '3': 5,
+      '4': 1,
+      '5': 9,
+      '10': 'newOwnerProfileId'
+    },
+    {'1': 'operation_id', '3': 6, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'session_epoch', '3': 7, '4': 1, '5': 3, '10': 'sessionEpoch'},
+    {
+      '1': 'consumed_at',
+      '3': 8,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'consumedAt'
+    },
+    {'1': 'verified_factors', '3': 9, '4': 3, '5': 9, '10': 'verifiedFactors'},
+  ],
+};
+
+/// Descriptor for `GetOwnershipTransferReceiptResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getOwnershipTransferReceiptResponseDescriptor = $convert.base64Decode(
+    'CiNHZXRPd25lcnNoaXBUcmFuc2ZlclJlY2VpcHRSZXNwb25zZRIdCgpyZWNlaXB0X2lkGAEgAS'
+    'gJUglyZWNlaXB0SWQSHQoKYWNjb3VudF9pZBgCIAEoCVIJYWNjb3VudElkEh0KCnByb2ZpbGVf'
+    'aWQYAyABKAlSCXByb2ZpbGVJZBIZCghzcGFjZV9pZBgEIAEoCVIHc3BhY2VJZBIvChRuZXdfb3'
+    'duZXJfcHJvZmlsZV9pZBgFIAEoCVIRbmV3T3duZXJQcm9maWxlSWQSIQoMb3BlcmF0aW9uX2lk'
+    'GAYgASgJUgtvcGVyYXRpb25JZBIjCg1zZXNzaW9uX2Vwb2NoGAcgASgDUgxzZXNzaW9uRXBvY2'
+    'gSOwoLY29uc3VtZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wUgpjb25z'
+    'dW1lZEF0EikKEHZlcmlmaWVkX2ZhY3RvcnMYCSADKAlSD3ZlcmlmaWVkRmFjdG9ycw==');

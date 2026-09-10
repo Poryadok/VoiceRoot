@@ -378,7 +378,7 @@ func TestGetAuditLog_CrossInstance_WaitsForSpaceMutationSaga(t *testing.T) {
 	tracedPool := tracedSpacePool(t, pool, tracer)
 	lockPoolA := independentSpacePool(t, pool, 1)
 	lockPoolB := independentSpacePool(t, pool, 1)
-	svcA := &SpaceGRPC{
+	svcA := &SpaceGRPC{allowLegacyOwnershipTransferForTest: true,
 		Store:          &store.SpaceStore{Pool: tracedPool},
 		MutationLocker: store.NewSpaceMutationLocker(lockPoolA),
 	}

@@ -52,6 +52,16 @@ class AuthServiceClient extends $grpc.Client {
         options: options);
   }
 
+  /// Private Space-only read of an already committed receipt; never grants or consumes.
+  $grpc.ResponseFuture<$0.GetOwnershipTransferReceiptResponse>
+      getOwnershipTransferReceipt(
+    $0.GetOwnershipTransferReceiptRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getOwnershipTransferReceipt, request,
+        options: options);
+  }
+
   $grpc.ResponseFuture<$0.RegisterResponse> register(
     $0.RegisterRequest request, {
     $grpc.CallOptions? options,
@@ -233,6 +243,12 @@ class AuthServiceClient extends $grpc.Client {
       '/voice.auth.v1.AuthService/ConsumeOwnershipTransferProof',
       ($0.ConsumeOwnershipTransferProofRequest value) => value.writeToBuffer(),
       $0.ConsumeOwnershipTransferProofResponse.fromBuffer);
+  static final _$getOwnershipTransferReceipt = $grpc.ClientMethod<
+          $0.GetOwnershipTransferReceiptRequest,
+          $0.GetOwnershipTransferReceiptResponse>(
+      '/voice.auth.v1.AuthService/GetOwnershipTransferReceipt',
+      ($0.GetOwnershipTransferReceiptRequest value) => value.writeToBuffer(),
+      $0.GetOwnershipTransferReceiptResponse.fromBuffer);
   static final _$register =
       $grpc.ClientMethod<$0.RegisterRequest, $0.RegisterResponse>(
           '/voice.auth.v1.AuthService/Register',
@@ -369,6 +385,16 @@ abstract class AuthServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.ConsumeOwnershipTransferProofRequest.fromBuffer(value),
         ($0.ConsumeOwnershipTransferProofResponse value) =>
+            value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GetOwnershipTransferReceiptRequest,
+            $0.GetOwnershipTransferReceiptResponse>(
+        'GetOwnershipTransferReceipt',
+        getOwnershipTransferReceipt_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetOwnershipTransferReceiptRequest.fromBuffer(value),
+        ($0.GetOwnershipTransferReceiptResponse value) =>
             value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.RegisterRequest, $0.RegisterResponse>(
         'Register',
@@ -577,6 +603,16 @@ abstract class AuthServiceBase extends $grpc.Service {
   $async.Future<$0.ConsumeOwnershipTransferProofResponse>
       consumeOwnershipTransferProof($grpc.ServiceCall call,
           $0.ConsumeOwnershipTransferProofRequest request);
+
+  $async.Future<$0.GetOwnershipTransferReceiptResponse>
+      getOwnershipTransferReceipt_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.GetOwnershipTransferReceiptRequest> $request) async {
+    return getOwnershipTransferReceipt($call, await $request);
+  }
+
+  $async.Future<$0.GetOwnershipTransferReceiptResponse>
+      getOwnershipTransferReceipt($grpc.ServiceCall call,
+          $0.GetOwnershipTransferReceiptRequest request);
 
   $async.Future<$0.RegisterResponse> register_Pre($grpc.ServiceCall $call,
       $async.Future<$0.RegisterRequest> $request) async {

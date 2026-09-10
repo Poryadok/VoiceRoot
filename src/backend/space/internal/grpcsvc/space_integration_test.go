@@ -213,7 +213,8 @@ func startSpaceGRPCTestServer(t *testing.T, pool *pgxpool.Pool, opts ...spaceSer
 	const bufSize = 1 << 20
 	lis := bufconn.Listen(bufSize)
 	srv := grpc.NewServer()
-	svc := &SpaceGRPC{Store: &store.SpaceStore{Pool: pool}}
+	// Legacy saga coverage opts in only inside this package; production cannot enable it.
+	svc := &SpaceGRPC{allowLegacyOwnershipTransferForTest: true, Store: &store.SpaceStore{Pool: pool}}
 	for _, o := range opts {
 		o(svc)
 	}

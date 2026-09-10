@@ -11,14 +11,14 @@
 | Сервис               | PostgreSQL        | Redis                     | Прочее                           |
 |----------------------|-------------------|---------------------------|----------------------------------|
 | API Gateway          | —                 | rate limit, JWT blacklist; session-epoch floor | —                  |
-| Auth Service         | `auth_db`         | blacklist, session-epoch floor, limits, OTP | —            |
+| Auth Service         | `auth_db`         | blacklist, session-epoch floor, principal replay, limits, OTP | —            |
 | User Service         | `user_db`         | presence cache            | —                                |
 | Social Service       | `social_db`       | —                         | —                                |
 | Chat Service         | `chat_db`         | —                         | —                                |
 | Messaging Service    | `messaging_db`    | —                         | NATS JetStream (publish)         |
 | Realtime Service     | —                 | Pub/Sub, WS registry; session-epoch floor read/check | NATS (не БД)          |
 | Space Service        | `space_db`        | —                         | —                                |
-| Role Service         | `role_db`         | —                         | —                                |
+| Role Service         | `role_db`         | Shared principal replay Redis | —                                |
 | Voice Service        | —                 | активные сессии звонков   | LiveKit                          |
 | File Service         | `file_db`         | —                         | R2, воркеры конвертации          |
 | Notification Service | `notification_db` | grouping push, limits     | FCM, APNs, email                 |
@@ -58,6 +58,13 @@
 ### `auth_db` (Auth Service)
 
 Инвентарь таблиц — [auth-service.md](microservices/auth-service.md); миграции Flyway в `src/backend/auth/src/main/resources/db/migration/`.
+
+Auth principal replay admission uses the existing Auth Redis connection:
+`auth:principal:replay:<issuer>:<SHA-256-of-jti>`, written atomically with SET NX
+and the credential's remaining lifetime as TTL. Missing/unavailable replay
+admission fails closed; this ephemeral key does not replace durable ownership
+proof receipts. Runtime configuration is documented in
+[Auth README](../src/backend/auth/README.md#ownership-proof-principal-listener).
 
 | Таблица | Примечание |
 |---------|------------|
@@ -121,3 +128,16 @@ authority остаётся за JWT/floor validation.
 1. Скоуп v1 и трассировка фич → сервисы: [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md).
 2. Таблицы и связи для волны v1: [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md) и секции «Модель данных» в [microservices/](microservices/) (общие правила — [DATA_MODEL.md](DATA_MODEL.md)).
 3. Миграции: один сервис — один набор миграций на свою БД; инструменты и порядок — [OPERATIONS.md](OPERATIONS.md#миграции-бд-database-per-service).
+
+
+### Role ownership principal replay
+
+The dedicated ownership transport uses shared Redis configured by
+`ROLE_PRINCIPAL_REPLAY_REDIS_ADDR`. Keys are
+`role:principal:replay:<sha256(issuer + NUL + jti)>`; atomic create-if-absent rejects
+replay across Role instances. Entries use the remaining lifetime to the verifier's credential `exp`, rounded
+up to the next millisecond, as an atomic relative TTL; Redis wall-clock skew
+cannot expire replay protection early.
+Unavailable storage fails closed; it is not replaced by a process-local cache.
+Role ownership operation receipts remain durable in `role_db` and implement
+business idempotency independently of per-attempt JWT replay rejection.
