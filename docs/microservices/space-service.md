@@ -117,6 +117,20 @@ service SpaceService {
 | AreCoMembers | ✓ | ✓ | S2S co-membership check |
 | SyncSpaceProSubscription | ✓ | ✓ | Subscription sync |
 
+### Phase-0 S2S decision callers (target)
+
+`AreCoMembers`, subscription sync и новые internal decision RPC не получают actor
+из metadata. Для `RoleService.CheckPermission` Space предъявляет только signed
+`service:space` principal в единственном Bearer header: exact RPC, `space_id`,
+decision `profile_id`, permission и отсутствие необязательных node fields входят
+в deterministic protobuf request hash. `profile_id` остаётся decision data,
+подтверждённым самим Space, но не становится identity authority. Разрешённый
+permission subset и Owner lifecycle paths определены в
+[role-service.md](role-service.md#space-checkpermission-decision-contract): generic
+`AssignRole`/`RevokeRole` не меняют Owner; это могут сделать только
+`ApplyOwnershipTransfer`/`CompensateOwnershipTransfer` с проверенным
+`operation_id`.
+
 `GetAuditLog` читает только строки запрошенного `space_id` и возвращает все поля `AuditLogEntry`. Ошибка Role Service закрывает доступ (`UNAVAILABLE`), явный deny даёт `PERMISSION_DENIED`, malformed cursor — `INVALID_ARGUMENT`. Наличие RPC не означает полноту аудита: writers для части действий, фильтры по actor/action и клиентские REST/Flutter поверхности остаются в [backend backlog](../todo/backend.md).
 
 **Invite permissions (code vs spec):** shipped handlers gate `RevokeInvite` / `ListInvites` on **space owner** only. Product spec allows admins with invite-management permission — align handlers when Role Service integration lands; until then document owner-only as **partial shipment**.
