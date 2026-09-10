@@ -372,6 +372,10 @@ message CallStarted {
   string callee_profile_id = 5;
   string media_kind = 6; // audio | video
   string livekit_room_name = 7;
+  // Complete persisted locator pair for voice_room sessions; not a permission grant.
+  optional string voice_room_id = 8;
+  optional string space_id = 9;
+  optional string room_type = 10; // call | group_voice | voice_room; absent in legacy events
 }
 
 message CallEnded {

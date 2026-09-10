@@ -107,6 +107,8 @@ message CallSession {
   CallStatus status = 11;
   google.protobuf.Timestamp expires_at = 12;
   google.protobuf.Timestamp ended_at = 13;
+  // Persisted room locator, not a current authorization grant. Absent for legacy/incomplete bindings.
+  optional string space_id = 14;
 }
 
 message JoinVoiceRoomRequest {
@@ -128,6 +130,8 @@ message VoiceSession {
   string room_id = 1;
   string livekit_room_name = 2;
   string voice_room_id = 3;
+  // Server-resolved Space persisted when joining this voice room.
+  optional string space_id = 4;
 }
 
 message GetJoinTokenRequest {

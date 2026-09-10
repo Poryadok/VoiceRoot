@@ -443,6 +443,7 @@ class CallSession extends $pb.GeneratedMessage {
     CallStatus? status,
     $3.Timestamp? expiresAt,
     $3.Timestamp? endedAt,
+    $core.String? spaceId,
   }) {
     final result = create();
     if (roomId != null) result.roomId = roomId;
@@ -459,6 +460,7 @@ class CallSession extends $pb.GeneratedMessage {
     if (status != null) result.status = status;
     if (expiresAt != null) result.expiresAt = expiresAt;
     if (endedAt != null) result.endedAt = endedAt;
+    if (spaceId != null) result.spaceId = spaceId;
     return result;
   }
 
@@ -495,6 +497,7 @@ class CallSession extends $pb.GeneratedMessage {
         subBuilder: $3.Timestamp.create)
     ..aOM<$3.Timestamp>(13, _omitFieldNames ? '' : 'endedAt',
         subBuilder: $3.Timestamp.create)
+    ..aOS(14, _omitFieldNames ? '' : 'spaceId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -640,6 +643,16 @@ class CallSession extends $pb.GeneratedMessage {
   void clearEndedAt() => $_clearField(13);
   @$pb.TagNumber(13)
   $3.Timestamp ensureEndedAt() => $_ensure(12);
+
+  /// Persisted room locator, not a current authorization grant. Absent for legacy/incomplete bindings.
+  @$pb.TagNumber(14)
+  $core.String get spaceId => $_getSZ(13);
+  @$pb.TagNumber(14)
+  set spaceId($core.String value) => $_setString(13, value);
+  @$pb.TagNumber(14)
+  $core.bool hasSpaceId() => $_has(13);
+  @$pb.TagNumber(14)
+  void clearSpaceId() => $_clearField(14);
 }
 
 class JoinVoiceRoomRequest extends $pb.GeneratedMessage {
@@ -853,11 +866,13 @@ class VoiceSession extends $pb.GeneratedMessage {
     $core.String? roomId,
     $core.String? livekitRoomName,
     $core.String? voiceRoomId,
+    $core.String? spaceId,
   }) {
     final result = create();
     if (roomId != null) result.roomId = roomId;
     if (livekitRoomName != null) result.livekitRoomName = livekitRoomName;
     if (voiceRoomId != null) result.voiceRoomId = voiceRoomId;
+    if (spaceId != null) result.spaceId = spaceId;
     return result;
   }
 
@@ -877,6 +892,7 @@ class VoiceSession extends $pb.GeneratedMessage {
     ..aOS(1, _omitFieldNames ? '' : 'roomId')
     ..aOS(2, _omitFieldNames ? '' : 'livekitRoomName')
     ..aOS(3, _omitFieldNames ? '' : 'voiceRoomId')
+    ..aOS(4, _omitFieldNames ? '' : 'spaceId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -924,6 +940,16 @@ class VoiceSession extends $pb.GeneratedMessage {
   $core.bool hasVoiceRoomId() => $_has(2);
   @$pb.TagNumber(3)
   void clearVoiceRoomId() => $_clearField(3);
+
+  /// Server-resolved Space persisted when joining this voice room.
+  @$pb.TagNumber(4)
+  $core.String get spaceId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set spaceId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasSpaceId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearSpaceId() => $_clearField(4);
 }
 
 class GetJoinTokenRequest extends $pb.GeneratedMessage {

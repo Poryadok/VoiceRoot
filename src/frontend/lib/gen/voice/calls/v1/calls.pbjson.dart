@@ -297,11 +297,21 @@ const CallSession$json = {
       '6': '.google.protobuf.Timestamp',
       '10': 'endedAt'
     },
+    {
+      '1': 'space_id',
+      '3': 14,
+      '4': 1,
+      '5': 9,
+      '9': 3,
+      '10': 'spaceId',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_linked_chat'},
     {'1': '_voice_room_id'},
     {'1': '_room_type_enum'},
+    {'1': '_space_id'},
   ],
 };
 
@@ -319,8 +329,8 @@ final $typed_data.Uint8List callSessionDescriptor = $convert.base64Decode(
     'RpYUtpbmQSMgoGc3RhdHVzGAsgASgOMhoudm9pY2UuY2FsbHMudjEuQ2FsbFN0YXR1c1IGc3Rh'
     'dHVzEjkKCmV4cGlyZXNfYXQYDCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wUglleH'
     'BpcmVzQXQSNQoIZW5kZWRfYXQYDSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wUgdl'
-    'bmRlZEF0Qg4KDF9saW5rZWRfY2hhdEIQCg5fdm9pY2Vfcm9vbV9pZEIRCg9fcm9vbV90eXBlX2'
-    'VudW0=');
+    'bmRlZEF0Eh4KCHNwYWNlX2lkGA4gASgJSANSB3NwYWNlSWSIAQFCDgoMX2xpbmtlZF9jaGF0Qh'
+    'AKDl92b2ljZV9yb29tX2lkQhEKD19yb29tX3R5cGVfZW51bUILCglfc3BhY2VfaWQ=');
 
 @$core.Deprecated('Use joinVoiceRoomRequestDescriptor instead')
 const JoinVoiceRoomRequest$json = {
@@ -392,6 +402,18 @@ const VoiceSession$json = {
     {'1': 'room_id', '3': 1, '4': 1, '5': 9, '10': 'roomId'},
     {'1': 'livekit_room_name', '3': 2, '4': 1, '5': 9, '10': 'livekitRoomName'},
     {'1': 'voice_room_id', '3': 3, '4': 1, '5': 9, '10': 'voiceRoomId'},
+    {
+      '1': 'space_id',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'spaceId',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_space_id'},
   ],
 };
 
@@ -399,7 +421,7 @@ const VoiceSession$json = {
 final $typed_data.Uint8List voiceSessionDescriptor = $convert.base64Decode(
     'CgxWb2ljZVNlc3Npb24SFwoHcm9vbV9pZBgBIAEoCVIGcm9vbUlkEioKEWxpdmVraXRfcm9vbV'
     '9uYW1lGAIgASgJUg9saXZla2l0Um9vbU5hbWUSIgoNdm9pY2Vfcm9vbV9pZBgDIAEoCVILdm9p'
-    'Y2VSb29tSWQ=');
+    'Y2VSb29tSWQSHgoIc3BhY2VfaWQYBCABKAlIAFIHc3BhY2VJZIgBAUILCglfc3BhY2VfaWQ=');
 
 @$core.Deprecated('Use getJoinTokenRequestDescriptor instead')
 const GetJoinTokenRequest$json = {

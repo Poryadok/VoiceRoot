@@ -73,6 +73,24 @@ voice:room:{room_id}:participants → Set[profile_id]
 voice:room:{room_id}:screen_shares → Set[{profile_id, stream_id}]
 ```
 
+### Привязка комнаты в ответах и событиях
+
+`CallSession.space_id` (active session) и `VoiceSession.space_id` (join response)
+передают сохранённый при проверенном join серверный Space ID. Новое поле присутствует
+только у `voice_room` с полной парой валидных UUID `voice_room_id` / `space_id`.
+Старые записи без полной пары остаются читаемыми; Space не выводится из session ID,
+LiveKit name или данных клиента. Существующие поля ответа сохраняют совместимость.
+
+`CallStarted` / WS `call_started` дополнительно передают `room_type`
+(`call`, `group_voice`, `voice_room`), а для полной room-привязки — оба ID.
+Realtime сохраняет прежних получателей `profile_ids`; legacy события без новых
+полей допустимы. `voice_member_joined` уже передаёт эту пару, его аудитория не меняется.
+
+Это persisted locator, **не разрешение** и не доказательство текущего membership.
+`GetActiveCall` не добавляет обращения к Space; выдача/повторная выдача media grant
+по-прежнему требует свежей проверки через существующий token flow. Проекция не
+включает canonical join/leave routes или клиентский cleanup lifecycle.
+
 ## Интеграция с LiveKit
 
 ```
@@ -162,5 +180,4 @@ requires a new snapshot.
 ## Масштабирование
 
 Voice Service stateless — масштабируется горизонтально. LiveKit масштабируется независимо (SFU per region для low-latency).
-
 
