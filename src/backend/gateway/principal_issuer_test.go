@@ -118,6 +118,38 @@ func TestGatewayPrincipalIssuerConfig_RejectsLegacyAndNonRotationDirectories(t *
 	}
 }
 
+func TestGatewayPrincipalIssuerConfig_RejectsUnsafeKeyMaterial(t *testing.T) {
+	t.Run("duplicate public key", func(t *testing.T) {
+		dir := t.TempDir()
+		key, err := rsa.GenerateKey(rand.Reader, 2048)
+		require.NoError(t, err)
+		writeGatewayPrincipalKeyValue(t, dir, "current", key)
+		writeGatewayPrincipalKeyValue(t, dir, "peer", key)
+		assertGatewayPrincipalConfigRejected(t, dir)
+	})
+	t.Run("rsa below 2048 bits", func(t *testing.T) {
+		dir := t.TempDir()
+		key, err := rsa.GenerateKey(rand.Reader, 1024)
+		require.NoError(t, err)
+		writeGatewayPrincipalKeyValue(t, dir, "current", key)
+		writeGatewayPrincipalKey(t, dir, "peer")
+		assertGatewayPrincipalConfigRejected(t, dir)
+	})
+	t.Run("encrypted pem", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "current.pem"), pem.EncodeToMemory(&pem.Block{Type: "ENCRYPTED PRIVATE KEY", Bytes: []byte("encrypted")}), 0o600))
+		writeGatewayPrincipalKey(t, dir, "peer")
+		assertGatewayPrincipalConfigRejected(t, dir)
+	})
+	t.Run("extra entry", func(t *testing.T) {
+		dir := t.TempDir()
+		writeGatewayPrincipalKey(t, dir, "current")
+		writeGatewayPrincipalKey(t, dir, "peer")
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("not a key"), 0o600))
+		assertGatewayPrincipalConfigRejected(t, dir)
+	})
+}
+
 func TestGatewayPrincipalJWKSWellKnown(t *testing.T) {
 	dir := t.TempDir()
 	writeGatewayPrincipalKey(t, dir, "current")
@@ -150,7 +182,20 @@ func writeGatewayPrincipalKey(t *testing.T, dir, kid string) {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
+	writeGatewayPrincipalKeyValue(t, dir, kid, key)
+}
+
+func writeGatewayPrincipalKeyValue(t *testing.T, dir, kid string, key *rsa.PrivateKey) {
+	t.Helper()
 	encoded, err := x509.MarshalPKCS8PrivateKey(key)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, kid+".pem"), pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: encoded}), 0o600))
+}
+
+func assertGatewayPrincipalConfigRejected(t *testing.T, dir string) {
+	t.Helper()
+	t.Setenv("GATEWAY_PRINCIPAL_SIGNING_KEYS_DIR", dir)
+	t.Setenv("GATEWAY_PRINCIPAL_ACTIVE_KID", "current")
+	_, err := loadGatewayConfigFromEnvChecked()
+	require.Error(t, err)
 }
