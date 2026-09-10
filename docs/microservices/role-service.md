@@ -199,7 +199,7 @@ interceptor ([ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md));
 |---|---|---|
 | `gateway` delegated user | `CreateRole`, `UpdateRole`, `DeleteRole`, `ListRoles`, `ReorderRoles`, `AssignRole`, `RevokeRole`, `GetMemberRoles`, `SetChatOverride`, `RemoveChatOverride`, `GetChatOverrides`, `SetVoiceRoomOverride`, `RemoveVoiceRoomOverride`, `GetVoiceRoomOverrides`, `SetDefaultJoinRole`, `GetDefaultJoinRole`, `GetEffectivePermissions` | actor is only derived `sub`/`profile_id`; request `profile_id` is a target subject where that RPC has one and is ACL-checked by Role |
 | `space` service | `BootstrapSpaceRoles`, `GetDefaultJoinRole`, `ListRoles`, `GetMemberRoles`, `EnsureDefaultMemberRole` (**target dedicated lifecycle RPC**), `RemoveMemberRoles` (**target dedicated lifecycle RPC**), `CheckPermission` | `owner_profile_id` only for bootstrap; dedicated lifecycle RPCs bind the joining/leaving `profile_id`, `space_id` and Role-resolved default/member roles. Generic `AssignRole`/`RevokeRole` are not accepted from Space. `CheckPermission` is limited to the global permission names enumerated below. |
-| `space` trusted transfer | `ApplyOwnershipTransfer` and `CompensateOwnershipTransfer` (**target dedicated lifecycle RPCs**) | exact `space_id`, `old_owner_profile_id`, `new_owner_profile_id`, `operation_id` and request binding; same operation is idempotent; no generic Role RPC may mutate `Owner` |
+| `space` trusted transfer | `GetOwnershipTransferCapabilities`, `PrepareOwnershipTransfer`, `FinalizeOwnershipTransfer`, `AbortOwnershipTransfer` | protocol 2 and exact `space_id`, `old_owner_profile_id`, `new_owner_profile_id`, `operation_id` and request binding; same action is idempotent; no generic Role RPC may mutate `Owner` |
 | `voice`, `chat`, `messaging` service | `CheckPermission` | explicit `profile_id` only as the decision subject, plus requested `space_id`/node scope; no actor mutation authority |
 | `bot` service | `CheckPermission`, `GetMemberRoles`, `RevokeRole`, `DeleteRolesCreatedByProfile` | only signed `service:bot` lifecycle/decision calls below; no actor-mutation authority; cleanup cannot touch `Owner` or system roles |
 | `bot` signed `bot_actor` capability | `CreateRole`, `AssignRole`, `RevokeRole` | only the exact scope and claim-bound space below; no generic Gateway principal or metadata fallback; `Owner` and every system-role mutation are rejected |
@@ -227,13 +227,13 @@ only non-system non-Owner memberships, and cannot invoke a generic role mutation
 Both use the standard signed `service:space` claims and request hash. The concrete
 RPC additions are target-only until their proto and handler migration lands.
 
-For ownership transfer, the same verified Space principal calls only
-`ApplyOwnershipTransfer` or `CompensateOwnershipTransfer`. Each call binds
-`space_id`, `old_owner_profile_id`, `new_owner_profile_id`, `operation_id` and
-the exact request in its signed request binding. Role records the operation so an
-identical replay returns the same result; it never applies or compensates a
-different body under the same `operation_id`. These are the only constrained
-paths for Owner-role mutation, including the compensating leg of the Space saga.
+For ownership transfer, the same verified Space principal calls only the v2
+capability, Prepare, Finalize and Abort RPCs on the protected listener. Each
+transition binds protocol 2, `space_id`, `old_owner_profile_id`,
+`new_owner_profile_id`, `operation_id` and the exact request in its signed
+request binding. Role records the operation so an identical action replay returns
+the same result; it rejects a different body under the same `operation_id`.
+These are the only routed paths for Owner-role mutation.
 
 ### Bot service lifecycle and decision contract
 
@@ -317,24 +317,27 @@ idempotent по `operation_id`. Unknown caller/RPC, caller с неправиль
 
 **Staged foundation:** production Space TransferOwnership is disabled before any
 lock, database or Role access, including when all signing/TLS settings exist or
-Role is absent. There is no environment setting to activate the v1 saga; only
-same-package test fixtures opt into its private test switch. Generic Role Owner
-assignment/revocation remains forbidden; bootstrap and non-Owner member behavior
-is unchanged. V2 durable convergence and Auth proof consumption must be enabled
-atomically before production transfer is exposed.
+Role is absent. There is no environment setting to activate the v1 saga. Generic
+Role Owner assignment/revocation remains forbidden; bootstrap and non-Owner
+member behavior is unchanged. Role's v2 ledger and protected transport are
+present, but capability advertisement remains fail-closed until the legacy drain,
+complete v2 method set and retired-space fence are explicitly proven. The Space
+coordinator and public transfer remain disabled.
 
 
-The dedicated `ApplyOwnershipTransfer` and `CompensateOwnershipTransfer` paths
-verify `service:space` and the complete deterministic protobuf request hash,
-including unknown wire fields. The apply and compensating leg retain the same
-`operation_id` and original old/new owner ordering. Generic `AssignRole` and
-`RevokeRole` reject `Owner` mutations.
+The legacy `ApplyOwnershipTransfer` and `CompensateOwnershipTransfer` handlers
+retain their immutable v1 receipts for historical recovery, but neither Role
+listener routes new calls to them. Generic `AssignRole` and `RevokeRole` reject
+`Owner` mutations.
 
-The ordinary Role listener (`ROLE_GRPC_LISTEN`, default `:9090`) rejects both
-ownership RPCs even if a signed credential is supplied. A separate TLS listener
-(`ROLE_PRINCIPAL_GRPC_LISTEN`, default `:9091` when enabled) accepts only these two
-RPCs; unrelated methods are denied there. Other callers remain on their existing
-per-method migration path. See the exact runtime settings and activation order in
+The ordinary Role listener (`ROLE_GRPC_LISTEN`, default `:9090`) rejects the
+capability RPC and all v1/v2 ownership RPCs before handler or verifier access. A
+separate TLS listener (`ROLE_PRINCIPAL_GRPC_LISTEN`, default `:9091` when enabled)
+routes only authenticated `GetOwnershipTransferCapabilities`,
+`PrepareOwnershipTransfer`, `FinalizeOwnershipTransfer` and
+`AbortOwnershipTransfer`; it rejects legacy and unrelated methods. Capability
+returns `UNAVAILABLE` until the explicit activation gate passes. See the runtime
+settings and activation order in
 [DEPLOYMENT.md](../DEPLOYMENT.md#ownership-lifecycle-principal-transport).
 
 This is the Role transport/receipt cutover, not completion of the Auth proof or
@@ -352,13 +355,13 @@ recorded old-owner result; changed tuple or request binding conflicts. This
 prevents a timed-out Apply from changing Role ownership after Space has restored
 its database owner and released its mutation lease.
 
-#### Target durable ownership commit protocol (not implemented)
+#### Role-side durable ownership commit protocol
 
-The next ownership slice adds a disjoint v2 `PrepareOwnershipTransfer`,
+Role implements the disjoint v2 `PrepareOwnershipTransfer`,
 `FinalizeOwnershipTransfer` and `AbortOwnershipTransfer` surface with the same
-Space principal and exact operation/space/old/new binding. It must land atomically
-with the Space durable journal and caller, generated contracts, Role ACL freeze
-and recovery worker; the current two-method listener does not enable it.
+Space principal and exact operation/space/old/new binding. The Space caller and
+recovery coordinator remain a separate activation dependency; Role capability
+does not advertise until the legacy drain and retired-space hold are resolved.
 
 Role records one serialized operation state per tuple: `prepared`, `finalized`
 or `aborted`. In v2, Prepare records `prepared` and freezes
@@ -432,10 +435,12 @@ requests and their bounded RPC contexts/transactions, and prove current Space an
 Role owners converge through service-owned inspection. All old Space replicas
 must stop issuing generic/v1 mutations before v2 activation. Then enable v2 only
 after capability checks pass for the serving fleet and update exact caller and
-listener allow-lists atomically. Old v1 receipts keep their original semantics;
-only exact recovery/abort of preexisting v1 operations remains during drain, and
-new v1 Apply is rejected after cutover. A fleet unable to prove drain/convergence
-remains in maintenance rather than mixing ownership protocols.
+listener allow-lists atomically. Preexisting v1 operations must reach a durable
+terminal and owner-converged state while the old fleet still serves its bounded
+recovery path, before listener cutover. After cutover the retained v1 receipts
+and handlers are historical/internal evidence only; neither Role listener routes
+Apply or Compensate. A fleet unable to prove drain/convergence remains in
+maintenance rather than mixing ownership protocols.
 
 ##### Ordinary-operation transaction boundary and scoped integrity
 

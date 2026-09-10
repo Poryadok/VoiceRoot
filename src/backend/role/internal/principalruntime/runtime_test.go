@@ -92,8 +92,8 @@ func TestRuntimeVerifiesBothRotationKeysAndRejectsReplay(t *testing.T) {
 		kid, method string
 		key         *rsa.PrivateKey
 	}{
-		{"current", rolev1.RoleService_ApplyOwnershipTransfer_FullMethodName, f.key},
-		{"next", rolev1.RoleService_CompensateOwnershipTransfer_FullMethodName, f.next},
+		{"current", rolev1.RoleService_PrepareOwnershipTransfer_FullMethodName, f.key},
+		{"next", rolev1.RoleService_AbortOwnershipTransfer_FullMethodName, f.next},
 	} {
 		t.Run(tc.kid, func(t *testing.T) {
 			token := issueRuntimeToken(t, tc.key, "space", tc.kid, "role", tc.method, "request-"+tc.kid, runtimeHash)
@@ -112,16 +112,58 @@ func TestRuntimeVerifiesBothRotationKeysAndRejectsReplay(t *testing.T) {
 	}
 }
 
+func TestRuntimeOwnershipV2ActivationRequiresCompleteDrainAndRetiredSpaceFence(t *testing.T) {
+	f := newRuntimeFixture(t, 2)
+	runtime, err := New(context.Background(), f.config)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, runtime.Close()) })
+	complete := OwnershipV2Activation{
+		V1Drained: true, RetiredSpaceFence: true,
+		SupportedMethods: []string{
+			rolev1.RoleService_PrepareOwnershipTransfer_FullMethodName,
+			rolev1.RoleService_FinalizeOwnershipTransfer_FullMethodName,
+			rolev1.RoleService_AbortOwnershipTransfer_FullMethodName,
+		},
+	}
+	for _, tc := range []struct {
+		name   string
+		mutate func(*OwnershipV2Activation)
+	}{
+		{"v1_not_drained", func(g *OwnershipV2Activation) { g.V1Drained = false }},
+		{"retired_space_fence_missing", func(g *OwnershipV2Activation) { g.RetiredSpaceFence = false }},
+		{"method_missing", func(g *OwnershipV2Activation) { g.SupportedMethods = g.SupportedMethods[:2] }},
+		{"legacy_method_present", func(g *OwnershipV2Activation) {
+			g.SupportedMethods = append(g.SupportedMethods, rolev1.RoleService_ApplyOwnershipTransfer_FullMethodName)
+		}},
+		{"unrelated_method_present", func(g *OwnershipV2Activation) {
+			g.SupportedMethods = append(g.SupportedMethods, rolev1.RoleService_ListRoles_FullMethodName)
+		}},
+		{"duplicate_method", func(g *OwnershipV2Activation) {
+			g.SupportedMethods = append(g.SupportedMethods, rolev1.RoleService_PrepareOwnershipTransfer_FullMethodName)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			gate := complete
+			gate.SupportedMethods = append([]string(nil), complete.SupportedMethods...)
+			tc.mutate(&gate)
+			require.Error(t, runtime.ActivateOwnershipV2Capabilities(gate))
+			require.False(t, runtime.ownershipV2CapabilitiesActive.Load())
+		})
+	}
+	require.NoError(t, runtime.ActivateOwnershipV2Capabilities(complete))
+	require.True(t, runtime.ownershipV2CapabilitiesActive.Load())
+}
+
 func TestRuntimeRejectsWrongIdentityBindingAndUnknownKey(t *testing.T) {
 	f := newRuntimeFixture(t, 2)
 	runtime, err := New(context.Background(), f.config)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, runtime.Close()) })
-	method := rolev1.RoleService_ApplyOwnershipTransfer_FullMethodName
+	method := rolev1.RoleService_PrepareOwnershipTransfer_FullMethodName
 	for _, tc := range []struct{ name, issuer, kid, audience, rpc, requestID, hash string }{
 		{"issuer", "gateway", "current", "role", method, "request", runtimeHash},
 		{"audience", "space", "current", "chat", method, "request", runtimeHash},
-		{"rpc", "space", "current", "role", rolev1.RoleService_CompensateOwnershipTransfer_FullMethodName, "request", runtimeHash},
+		{"rpc", "space", "current", "role", rolev1.RoleService_AbortOwnershipTransfer_FullMethodName, "request", runtimeHash},
 		{"request_id", "space", "current", "role", method, "different", runtimeHash},
 		{"hash", "space", "current", "role", method, "request", "sha256:" + strings.Repeat("b", 64)},
 		{"unknown_kid", "space", "unpublished", "role", method, "request", runtimeHash},
@@ -140,7 +182,7 @@ func TestRuntimeFailsClosedWhenReplayRedisStops(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, runtime.Close()) })
 	f.redis.Close()
-	method := rolev1.RoleService_ApplyOwnershipTransfer_FullMethodName
+	method := rolev1.RoleService_PrepareOwnershipTransfer_FullMethodName
 	token := issueRuntimeToken(t, f.key, "space", "current", "role", method, "request", runtimeHash)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -188,7 +230,7 @@ func TestRuntimeRejectsUnsafeConfigAndFailsClosedUntilJWKSIsTrusted(t *testing.T
 				return
 			}
 			require.NoError(t, err, "remote JWKS readiness must not block Role startup")
-			method := rolev1.RoleService_ApplyOwnershipTransfer_FullMethodName
+			method := rolev1.RoleService_PrepareOwnershipTransfer_FullMethodName
 			token := issueRuntimeToken(t, f.key, "space", "current", "role", method, "untrusted", runtimeHash)
 			got, err := runtime.Verify(ctx, token, method, "untrusted", runtimeHash)
 			require.Error(t, err)
@@ -258,7 +300,7 @@ func TestRuntimeStartsBeforeIssuerAndAcceptsOnlyAfterTrustedJWKSRecovery(t *test
 	runtime, err := New(context.Background(), f.config)
 	require.NoError(t, err, "Space issuer startup must not form a cycle with Role health")
 	t.Cleanup(func() { require.NoError(t, runtime.Close()) })
-	method := rolev1.RoleService_ApplyOwnershipTransfer_FullMethodName
+	method := rolev1.RoleService_PrepareOwnershipTransfer_FullMethodName
 	token := issueRuntimeToken(t, f.key, "space", "current", "role", method, "issuer-not-ready", runtimeHash)
 	got, err := runtime.Verify(context.Background(), token, method, "issuer-not-ready", runtimeHash)
 	require.Error(t, err)

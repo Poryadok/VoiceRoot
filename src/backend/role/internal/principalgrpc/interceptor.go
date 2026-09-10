@@ -14,6 +14,19 @@ type Verifier interface {
 	Verify(context.Context, string, string, string, string) (principal.Principal, error)
 }
 
+type ownershipV2CapabilitiesContextKey struct{}
+
+// WithOwnershipV2CapabilitiesActive records a server-owned activation decision.
+// Incoming metadata cannot construct this context value.
+func WithOwnershipV2CapabilitiesActive(ctx context.Context) context.Context {
+	return context.WithValue(ctx, ownershipV2CapabilitiesContextKey{}, true)
+}
+
+func OwnershipV2CapabilitiesActive(ctx context.Context) bool {
+	active, _ := ctx.Value(ownershipV2CapabilitiesContextKey{}).(bool)
+	return active
+}
+
 // StrictUnaryInterceptor authenticates a protected RPC before its handler.
 func StrictUnaryInterceptor(verifier Verifier) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
@@ -58,14 +71,18 @@ func verificationStatus(err error) error {
 	return status.Error(codes.Unauthenticated, "invalid principal")
 }
 
-// OwnershipUnaryInterceptor migrates exactly the dedicated ownership methods.
-// A missing runtime verifier fails closed without changing unmigrated methods.
-func OwnershipUnaryInterceptor(verifier Verifier) grpc.UnaryServerInterceptor {
-	strict := StrictUnaryInterceptor(verifier)
+// OwnershipUnaryInterceptor drains every ownership protocol from the ordinary
+// listener without consuming protected verifier dependencies.
+func OwnershipUnaryInterceptor(_ Verifier) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		switch info.FullMethod {
-		case "/voice.role.v1.RoleService/ApplyOwnershipTransfer", "/voice.role.v1.RoleService/CompensateOwnershipTransfer":
-			return strict(ctx, request, info, handler)
+		case "/voice.role.v1.RoleService/GetOwnershipTransferCapabilities",
+			"/voice.role.v1.RoleService/PrepareOwnershipTransfer",
+			"/voice.role.v1.RoleService/FinalizeOwnershipTransfer",
+			"/voice.role.v1.RoleService/AbortOwnershipTransfer",
+			"/voice.role.v1.RoleService/ApplyOwnershipTransfer",
+			"/voice.role.v1.RoleService/CompensateOwnershipTransfer":
+			return nil, status.Error(codes.Unavailable, "ownership method unavailable on ordinary listener")
 		default:
 			return handler(ctx, request)
 		}
