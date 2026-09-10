@@ -168,11 +168,14 @@ Scopes `SPACE_MANAGE_ROLES` и `TEXT_CHAT_READ_HISTORY` для бота — пр
 
 Для `CreateBotRole`, `AssignBotRole` и `RevokeBotRole` Bot Service передаёт в
 Role отдельную подписанную `bot_actor` capability, а не клиентский identity или
-metadata. В ней фиксированы `iss=bot`, `sub=bot:<bot_id>`, `aud=role`, точный
-RPC и binding запроса, `actor_profile_id`, `bot_id`, `space_id`,
-`installation_id`, `bot_scope`, `iat`, `nbf`, `exp` (не более 30 s), `jti` и
-`kid`. Role сопоставляет `space_id` запроса с capability и получает actor только
-из claim.
+metadata. В ней фиксированы `principal_type=bot_actor`, `iss=bot`,
+`sub=bot:<bot_id>`, `aud=role`, точный `rpc`, `request_id`, `request_hash`,
+`actor_profile_id`, `bot_id`, `space_id`, `installation_id`, `bot_scope`,
+`iat`, `nbf`, `exp` (не более 30 s), `jti` и `kid`. `request_hash` связывает все
+поля целевого RPC: для `CreateRole` — `space_id`, `name`, `permissions_mask`,
+`position`; для `AssignRole`/`RevokeRole` — `space_id`, `profile_id`, `role_id`.
+Role сопоставляет `space_id` запроса с capability и получает actor только из
+claim.
 
 `SPACE_MANAGE_ROLES` даёт только `CreateRole`; `MEMBER_ASSIGN_ROLES` даёт только
 `AssignRole`/`RevokeRole`. Обычная иерархия и permission checks остаются
@@ -190,5 +193,4 @@ headers/metadata не принимаются; подробная Role matrix и 
 - **Incoming Webhooks** — простой URL для отправки сообщений без OAuth; для CI/CD, мониторинга, внешних сервисов
 - **Bot DM по инициативе** — scope для уведомлений (opt-in от пользователя); сейчас бот может писать только в ответ
 - **Каталог ботов** — публичный App Directory со страницами ботов, отзывами, категориями
-
 

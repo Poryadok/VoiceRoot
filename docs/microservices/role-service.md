@@ -199,7 +199,7 @@ interceptor ([ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md));
 |---|---|---|
 | `gateway` delegated user | `CreateRole`, `UpdateRole`, `DeleteRole`, `ListRoles`, `ReorderRoles`, `AssignRole`, `RevokeRole`, `GetMemberRoles`, `SetChatOverride`, `RemoveChatOverride`, `GetChatOverrides`, `SetVoiceRoomOverride`, `RemoveVoiceRoomOverride`, `GetVoiceRoomOverrides`, `SetDefaultJoinRole`, `GetDefaultJoinRole`, `GetEffectivePermissions` | actor is only derived `sub`/`profile_id`; request `profile_id` is a target subject where that RPC has one and is ACL-checked by Role |
 | `space` service | `BootstrapSpaceRoles`, `GetDefaultJoinRole`, `ListRoles`, `GetMemberRoles`, `EnsureDefaultMemberRole` (**target dedicated lifecycle RPC**), `RemoveMemberRoles` (**target dedicated lifecycle RPC**), `CheckPermission` | `owner_profile_id` only for bootstrap; dedicated lifecycle RPCs bind the joining/leaving `profile_id`, `space_id` and Role-resolved default/member roles. Generic `AssignRole`/`RevokeRole` are not accepted from Space. `CheckPermission` is limited to the global permission names enumerated below. |
-| `space` trusted transfer | `TransferOwnerRole` (**new dedicated RPC**) | exact `space_id`, `old_owner_profile_id`, `new_owner_profile_id`, `operation_id`; no generic Role RPC may mutate `Owner` |
+| `space` trusted transfer | `ApplyOwnershipTransfer` and `CompensateOwnershipTransfer` (**target dedicated lifecycle RPCs**) | exact `space_id`, `old_owner_profile_id`, `new_owner_profile_id`, `operation_id` and request binding; same operation is idempotent; no generic Role RPC may mutate `Owner` |
 | `voice`, `chat`, `messaging` service | `CheckPermission` | explicit `profile_id` only as the decision subject, plus requested `space_id`/node scope; no actor mutation authority |
 | `bot` service | `CheckPermission`, `GetMemberRoles`, `RevokeRole`, `DeleteRolesCreatedByProfile` | only signed `service:bot` lifecycle/decision calls below; no actor-mutation authority; cleanup cannot touch `Owner` or system roles |
 | `bot` signed `bot_actor` capability | `CreateRole`, `AssignRole`, `RevokeRole` | only the exact scope and claim-bound space below; no generic Gateway principal or metadata fallback; `Owner` and every system-role mutation are rejected |
@@ -226,6 +226,14 @@ For Space member lifecycle, `EnsureDefaultMemberRole` binds exactly
 only non-system non-Owner memberships, and cannot invoke a generic role mutation.
 Both use the standard signed `service:space` claims and request hash. The concrete
 RPC additions are target-only until their proto and handler migration lands.
+
+For ownership transfer, the same verified Space principal calls only
+`ApplyOwnershipTransfer` or `CompensateOwnershipTransfer`. Each call binds
+`space_id`, `old_owner_profile_id`, `new_owner_profile_id`, `operation_id` and
+the exact request in its signed request binding. Role records the operation so an
+identical replay returns the same result; it never applies or compensates a
+different body under the same `operation_id`. These are the only constrained
+paths for Owner-role mutation, including the compensating leg of the Space saga.
 
 ### Bot service lifecycle and decision contract
 
@@ -303,5 +311,4 @@ idempotent по `operation_id`. Unknown caller/RPC, caller с неправиль
 - **Space Service** — валидация `space_id`, `voice_room_id`
 - **Chat Service** — валидация `chat_id` для текстового чата (`group` \| `channel`) при оверрайдах
 - **Federation Service** — синхронизация ролей при S2S (SyncSnapshot)
-
 
