@@ -181,6 +181,10 @@ func (s *SpaceGRPC) DeleteSpace(ctx context.Context, req *spacev1.DeleteSpaceReq
 }
 
 func (s *SpaceGRPC) TransferOwnership(ctx context.Context, req *spacev1.TransferOwnershipRequest) (*spacev1.TransferOwnershipResponse, error) {
+	if s != nil && !s.allowLegacyOwnershipTransferForTest {
+		return nil, status.Error(codes.Unavailable, "ownership transfer awaits durable protocol activation")
+	}
+
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "space persistence not configured")
 	}
@@ -204,6 +208,10 @@ func (s *SpaceGRPC) TransferOwnership(ctx context.Context, req *spacev1.Transfer
 	if err := s.requireSpaceOwner(ctx, spaceID); err != nil {
 		return nil, err
 	}
+	if err := s.ownershipRoleRuntimeReady(); err != nil {
+		return nil, err
+	}
+	operationID := uuid.New()
 	if err := s.Store.TransferOwnership(ctx, spaceID, caller, newOwnerID); err != nil {
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
@@ -218,7 +226,10 @@ func (s *SpaceGRPC) TransferOwnership(ctx context.Context, req *spacev1.Transfer
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 	}
-	if err := s.reassignOwnerRole(ctx, spaceID, caller, newOwnerID); err != nil {
+	if err := s.applyOwnerRole(ctx, spaceID, caller, newOwnerID, operationID); err != nil {
+		if compensateErr := s.compensateOwnerRole(ctx, spaceID, caller, newOwnerID, operationID); compensateErr != nil {
+			err = status.Errorf(status.Code(err), "ownership apply failed (%v); ownership compensation failed: %v", err, compensateErr)
+		}
 		if rbErr := s.rollbackOwnershipTransfer(ctx, spaceID, newOwnerID, caller); rbErr != nil {
 			return nil, status.Errorf(codes.Internal, "owner role reassignment failed (%v); ownership rollback failed: %v", err, rbErr)
 		}
@@ -233,7 +244,7 @@ func (s *SpaceGRPC) TransferOwnership(ctx context.Context, req *spacev1.Transfer
 	}
 	auditID := uuid.New()
 	if err := s.Store.RecordOwnershipTransferred(ctx, auditID, spaceID, caller, newOwnerID); err != nil {
-		roleRollbackErr, auditRollbackErr, dbRollbackErr := s.rollbackOwnershipAfterAuditFailure(ctx, auditID, spaceID, caller, newOwnerID)
+		roleRollbackErr, auditRollbackErr, dbRollbackErr := s.rollbackOwnershipAfterAuditFailure(ctx, auditID, spaceID, caller, newOwnerID, operationID)
 		switch {
 		case roleRollbackErr != nil && auditRollbackErr != nil && dbRollbackErr != nil:
 			return nil, status.Errorf(codes.Internal, "record ownership transfer audit failed (%v); owner role rollback failed (%v); audit rollback failed (%v); ownership rollback failed: %v", err, roleRollbackErr, auditRollbackErr, dbRollbackErr)
@@ -274,9 +285,9 @@ func (s *SpaceGRPC) rollbackOwnershipTransfer(ctx context.Context, spaceID, curr
 // transition, deletes a known ambiguous audit entry, and restores the database
 // owner. Each operation gets a fresh bounded detached context so a timeout in
 // one compensation cannot suppress later compensations.
-func (s *SpaceGRPC) rollbackOwnershipAfterAuditFailure(ctx context.Context, auditID, spaceID, previousOwner, newOwner uuid.UUID) (error, error, error) {
+func (s *SpaceGRPC) rollbackOwnershipAfterAuditFailure(ctx context.Context, auditID, spaceID, previousOwner, newOwner, operationID uuid.UUID) (error, error, error) {
 	roleCtx, roleCancel := ownershipTransferCleanupContext(ctx)
-	roleErr := s.reassignOwnerRole(roleCtx, spaceID, newOwner, previousOwner)
+	roleErr := s.compensateOwnerRole(roleCtx, spaceID, previousOwner, newOwner, operationID)
 	roleCancel()
 
 	auditCtx, auditCancel := ownershipTransferCleanupContext(ctx)

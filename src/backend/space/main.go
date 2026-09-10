@@ -15,6 +15,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
 	"voice/backend/pkg/grpcclient"
@@ -41,6 +42,10 @@ const (
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	principalIssuer, publicJWKS, err := loadSpacePrincipalIssuerFromEnv()
+	if err != nil {
+		log.Fatalf("space principal issuer: %v", err)
+	}
 	metricsReg := prometheus.NewRegistry()
 	runCtx, runCancel := context.WithCancel(context.Background())
 	defer runCancel()
@@ -108,6 +113,25 @@ func main() {
 			roleClient = rolev1.NewRoleServiceClient(rconn)
 		}
 
+		var ownershipRoleClient rolev1.RoleServiceClient
+		if addr := strings.TrimSpace(os.Getenv("ROLE_PRINCIPAL_GRPC_ADDR")); addr != "" {
+			if principalIssuer == nil {
+				log.Fatal("Space principal issuer is required for Role ownership transport")
+			}
+			tlsConfig, err := ownershipRoleTLSFromEnv()
+			if err != nil {
+				log.Fatalf("role ownership TLS: %v", err)
+			}
+			conn, err := grpc.NewClient(grpcclient.DialTarget(addr), grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
+			if err != nil {
+				log.Fatalf("role ownership grpc: %v", err)
+			}
+			defer func() { _ = conn.Close() }()
+			ownershipRoleClient = rolev1.NewRoleServiceClient(conn)
+		} else if strings.TrimSpace(os.Getenv("ROLE_PRINCIPAL_TLS_CA_FILE")) != "" || strings.TrimSpace(os.Getenv("ROLE_PRINCIPAL_TLS_SERVER_NAME")) != "" {
+			log.Fatal("ROLE_PRINCIPAL_GRPC_ADDR is required with Role ownership TLS settings")
+		}
+
 		grpcOptions := grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))
 		grpcOptions = append(grpcOptions, grpc.ChainUnaryInterceptor(
 			authctx.VerifiedServiceIdentityUnaryInterceptor(os.Getenv("SPACE_VOICE_S2S_TOKEN")),
@@ -117,6 +141,8 @@ func main() {
 			Store:             spaceStore,
 			SpaceEvents:       spaceEvents,
 			Roles:             roleClient,
+			OwnershipRoles:    ownershipRoleClient,
+			PrincipalIssuer:   principalIssuer,
 			MutationLocker:    store.NewSpaceMutationLocker(mutationLockPool),
 			SpaceCoMembership: &grpcsvc.StoreCoMembership{Store: spaceStore},
 			Logger:            logger,
@@ -189,7 +215,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:    httpAddr,
-		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(healthHandler(serviceName), metricsReg), logger),
+		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(spaceHTTPHandler(serviceName, publicJWKS), metricsReg), logger),
 	}
 	httpserver.ApplyHTTPServerTimeouts(server)
 	errCh := make(chan error, 1)

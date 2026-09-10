@@ -147,6 +147,16 @@ func (s *RoleGRPC) AssignRole(ctx context.Context, req *rolev1.AssignRoleRequest
 	if err != nil {
 		return nil, err
 	}
+	role, err := s.Store.GetRoleByID(ctx, roleID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if role == nil || role.SpaceID != spaceID {
+		return nil, status.Error(codes.NotFound, "role not found")
+	}
+	if role.Name == permissions.RoleOwner {
+		return nil, status.Error(codes.PermissionDenied, "Owner role requires the ownership transfer lifecycle")
+	}
 	can, err := s.Store.CanManageRole(ctx, spaceID, actor, roleID)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -182,6 +192,16 @@ func (s *RoleGRPC) RevokeRole(ctx context.Context, req *rolev1.RevokeRoleRequest
 	roleID, err := parseUUIDField("role_id", req.GetRoleId())
 	if err != nil {
 		return nil, err
+	}
+	role, err := s.Store.GetRoleByID(ctx, roleID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if role == nil || role.SpaceID != spaceID {
+		return nil, status.Error(codes.NotFound, "role not found")
+	}
+	if role.Name == permissions.RoleOwner {
+		return nil, status.Error(codes.PermissionDenied, "Owner role requires the ownership transfer lifecycle")
 	}
 	can, err := s.Store.CanManageRole(ctx, spaceID, actor, roleID)
 	if err != nil {
