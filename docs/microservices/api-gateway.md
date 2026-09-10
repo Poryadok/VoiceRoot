@@ -285,10 +285,13 @@ A path ID is authoritative: a supplied matching body ID is accepted for existing
 protobuf clients, but a different body ID is `400 invalid_argument`; a referenced
 node/category/invite/room from another Space is never operated on.
 
-JSON uses protobuf `snake_case` field names, UUID strings, RFC3339 UTC timestamps
-and existing response wrappers. Required fields are listed below; `?` means
-optional. Unknown fields, invalid UUID/timestamp, duplicate query keys or invalid
-integer ranges are `400 invalid_argument`. Empty optional strings are not IDs.
+JSON responses use protobuf `snake_case` field names, UUID strings, RFC3339 UTC
+timestamps and existing response wrappers. Requests on established routes continue
+to accept both protobuf `snake_case` and standard lowerCamel aliases (for example,
+`max_uses` and `maxUses`); supplying both aliases for one field is
+`400 invalid_argument`. Required fields are listed below; `?` means optional.
+Unknown fields, invalid UUID/timestamp, duplicate query keys or invalid integer
+ranges are `400 invalid_argument`. Empty optional strings are not IDs.
 Responses serialize the named protobuf type using the existing Gateway rules;
 `204` has no body. `Space`, `Invite`, `Category`, `VoiceRoom`, `SpaceTreeNode`,
 `SpaceMembership` and `AuditLogEntry` are defined by
