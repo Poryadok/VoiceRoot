@@ -65,3 +65,60 @@ profile-related paths используют `ResolvePrimaryProfileIDs`, `SwitchPr
   `docker run … mvn` without mounting `/var/run/docker.sock`).
 
 Canonical product spec: [docs/microservices/auth-service.md](../../../docs/microservices/auth-service.md).
+
+## Ownership-proof principal listener
+
+The legacy gRPC listener on `auth.grpc.port` (9090) always rejects
+`IssueOwnershipTransferProof` and `ConsumeOwnershipTransferProof`. Existing Auth
+RPCs keep their current listener. The dedicated principal listener exposes only
+these two proof methods, and only when `S2S_JWKS_URLS_JSON` is configured:
+
+| Setting | Contract |
+|---|---|
+| `AUTH_PRINCIPAL_GRPC_PORT` | Dedicated listener, default 9091; must differ from the legacy port. Port 0 is allowed only in explicit local/test profiles. |
+| `AUTH_GRPC_TLS_CERT_FILE`, `AUTH_GRPC_TLS_KEY_FILE` | Paired PEM certificate chain and private-key files for the dedicated listener. Mount from an Auth-owned secret, for example `/run/secrets/auth-grpc/tls.crt` and `tls.key`. |
+| `S2S_JWKS_URLS_JSON` | Nonempty issuer-to-HTTPS-URL object containing `gateway` and `space`. |
+| `S2S_JWKS_REFRESH_AFTER`, `S2S_JWKS_HARD_EXPIRY`, `S2S_UNKNOWN_KID_COOLDOWN` | Defaults `30s`, `2m`, `5s`; positive duration values, hard expiry at least refresh interval. Explicit blank/invalid values fail startup. |
+
+Missing JWKS configuration leaves the private listener disabled and proof methods
+denied on the legacy listener. Partial/invalid configuration is a startup error.
+Principal TLS is mandatory unless every active Spring profile is explicitly
+`local` or `test`; mixed production/test profiles cannot enable plaintext.
+There is no plaintext retry following a TLS error. Private startup also fails if
+either proof RPC is absent, so verifier installation alone cannot activate an
+incomplete proof service.
+
+Gateway calls issue with its derived `delegated_user` principal; Space calls
+consume with `service:space`. Both use one Bearer credential and one
+`x-request-id`, an exact full RPC name and deterministic protobuf SHA-256
+request binding. Raw identity metadata is rejected. Validation checks RS256,
+issuer, audience `auth`, current key ID, all time claims (30-second maximum
+lifetime, five-second iat/nbf skew, no expiry grace), caller permissions and
+replay before the handler.
+
+Auth reads the existing Redis minimum session-epoch floor for delegated users
+through `SessionEpochFloorStore`; missing, corrupt, stale or unavailable floors
+deny admission. Shared replay uses the existing `spring.data.redis.*` connection
+and one atomic SET-NX-with-expiry operation on
+`auth:principal:replay:<issuer>:<SHA-256-of-jti>`. Both Redis operations are bounded
+by two seconds. In-memory replay is available only with `auth.persistence=memory`
+and explicit local/test profiles.
+
+JWKS fetches are lazy (no Gateway/Auth startup dependency cycle), HTTPS only,
+without redirects, bounded by two seconds and 64 KiB. Java's default certificate
+and hostname verification applies. A private CA must be installed in the JVM
+trust store (standard `javax.net.ssl.trustStore` configuration). Gateway and Space
+each publish a complete current+next RS256 signing set before switching active
+keys; retain old keys for at least 30 seconds after their last issuance. Incomplete
+refresh never replaces or extends the last-good set, and hard expiry fails closed.
+Auth consumes these service keys; its existing client-JWT signing configuration
+does not sign principal credentials. Legacy `S2S_SIGNING_KEY_PEM` and
+`S2S_SIGNING_KID` aliases are rejected.
+
+Deployment must route only these proof calls to port 9091, install the Auth
+certificate chain and CA trust for Gateway/Space clients, and verify the
+certificate's Auth service DNS name. Existing callers remain on 9090. Do not
+publish port 9091 externally. Test fixture keys under `src/test/resources` are
+public test data and must never be deployed. Verification denials use the
+existing gRPC request logging with coarse status descriptions; credentials and
+proof bodies are not logged.
