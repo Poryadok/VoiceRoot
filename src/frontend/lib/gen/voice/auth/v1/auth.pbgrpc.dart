@@ -33,6 +33,25 @@ class AuthServiceClient extends $grpc.Client {
 
   AuthServiceClient(super.channel, {super.options, super.interceptors});
 
+  /// Protected Gateway delegated-user issue and Space-only atomic consume.
+  $grpc.ResponseFuture<$0.IssueOwnershipTransferProofResponse>
+      issueOwnershipTransferProof(
+    $0.IssueOwnershipTransferProofRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$issueOwnershipTransferProof, request,
+        options: options);
+  }
+
+  $grpc.ResponseFuture<$0.ConsumeOwnershipTransferProofResponse>
+      consumeOwnershipTransferProof(
+    $0.ConsumeOwnershipTransferProofRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$consumeOwnershipTransferProof, request,
+        options: options);
+  }
+
   $grpc.ResponseFuture<$0.RegisterResponse> register(
     $0.RegisterRequest request, {
     $grpc.CallOptions? options,
@@ -202,6 +221,18 @@ class AuthServiceClient extends $grpc.Client {
 
   // method descriptors
 
+  static final _$issueOwnershipTransferProof = $grpc.ClientMethod<
+          $0.IssueOwnershipTransferProofRequest,
+          $0.IssueOwnershipTransferProofResponse>(
+      '/voice.auth.v1.AuthService/IssueOwnershipTransferProof',
+      ($0.IssueOwnershipTransferProofRequest value) => value.writeToBuffer(),
+      $0.IssueOwnershipTransferProofResponse.fromBuffer);
+  static final _$consumeOwnershipTransferProof = $grpc.ClientMethod<
+          $0.ConsumeOwnershipTransferProofRequest,
+          $0.ConsumeOwnershipTransferProofResponse>(
+      '/voice.auth.v1.AuthService/ConsumeOwnershipTransferProof',
+      ($0.ConsumeOwnershipTransferProofRequest value) => value.writeToBuffer(),
+      $0.ConsumeOwnershipTransferProofResponse.fromBuffer);
   static final _$register =
       $grpc.ClientMethod<$0.RegisterRequest, $0.RegisterResponse>(
           '/voice.auth.v1.AuthService/Register',
@@ -319,6 +350,26 @@ abstract class AuthServiceBase extends $grpc.Service {
   $core.String get $name => 'voice.auth.v1.AuthService';
 
   AuthServiceBase() {
+    $addMethod($grpc.ServiceMethod<$0.IssueOwnershipTransferProofRequest,
+            $0.IssueOwnershipTransferProofResponse>(
+        'IssueOwnershipTransferProof',
+        issueOwnershipTransferProof_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.IssueOwnershipTransferProofRequest.fromBuffer(value),
+        ($0.IssueOwnershipTransferProofResponse value) =>
+            value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ConsumeOwnershipTransferProofRequest,
+            $0.ConsumeOwnershipTransferProofResponse>(
+        'ConsumeOwnershipTransferProof',
+        consumeOwnershipTransferProof_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ConsumeOwnershipTransferProofRequest.fromBuffer(value),
+        ($0.ConsumeOwnershipTransferProofResponse value) =>
+            value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.RegisterRequest, $0.RegisterResponse>(
         'Register',
         register_Pre,
@@ -504,6 +555,28 @@ abstract class AuthServiceBase extends $grpc.Service {
                 $0.RevokeSessionRequest.fromBuffer(value),
             ($0.RevokeSessionResponse value) => value.writeToBuffer()));
   }
+
+  $async.Future<$0.IssueOwnershipTransferProofResponse>
+      issueOwnershipTransferProof_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.IssueOwnershipTransferProofRequest> $request) async {
+    return issueOwnershipTransferProof($call, await $request);
+  }
+
+  $async.Future<$0.IssueOwnershipTransferProofResponse>
+      issueOwnershipTransferProof($grpc.ServiceCall call,
+          $0.IssueOwnershipTransferProofRequest request);
+
+  $async.Future<$0.ConsumeOwnershipTransferProofResponse>
+      consumeOwnershipTransferProof_Pre(
+          $grpc.ServiceCall $call,
+          $async.Future<$0.ConsumeOwnershipTransferProofRequest>
+              $request) async {
+    return consumeOwnershipTransferProof($call, await $request);
+  }
+
+  $async.Future<$0.ConsumeOwnershipTransferProofResponse>
+      consumeOwnershipTransferProof($grpc.ServiceCall call,
+          $0.ConsumeOwnershipTransferProofRequest request);
 
   $async.Future<$0.RegisterResponse> register_Pre($grpc.ServiceCall $call,
       $async.Future<$0.RegisterRequest> $request) async {

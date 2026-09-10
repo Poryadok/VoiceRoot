@@ -53,12 +53,13 @@ service AuthService {
 }
 ```
 
-### Ownership-transfer step-up proof (target contract; not implemented)
+### Ownership-transfer step-up proof
 
-The currently generated Auth proto contains no issue/consume RPC for this flow.
-The following is the normative contract for the future authenticated client issue
-surface and trusted Space-only consume surface; it must land together with
-proto, S2S principal enforcement, durable storage and contract tests.
+Auth implements `IssueOwnershipTransferProof` and `ConsumeOwnershipTransferProof`.
+The issue surface requires a verified Gateway delegated-user principal; consume
+requires a verified Space service principal. Gateway routing and Space transfer
+integration remain separate rollout requirements. Unverified/legacy metadata never
+creates proof authority.
 
 - Auth checks password on every request. If the account has 2FA enabled, it also
   requires a valid TOTP or one unused backup code. It issues an opaque
@@ -85,6 +86,41 @@ proto, S2S principal enforcement, durable storage and contract tests.
 See [spaces.md](../features/spaces.md#контракт-подтверждения-передачи-владения)
 for the end-to-end request, Space idempotency and error contract.
 
+
+#### Durable proof implementation
+
+`auth.persistence=jdbc` provides the proof service; memory mode has no proof store
+and the adapter fails closed. Principal listener/configuration is documented in
+[Auth README](../../src/backend/auth/README.md). The public issue route is
+`POST /api/v1/auth/ownership-transfer-proof` through Gateway; the internal consume
+RPC is never a public route.
+
+Flyway `V12__ownership_transfer_proofs.sql` (golang-migrate mirror
+`000013_ownership_transfer_proofs.up.sql`) adds `ownership_transfer_proofs` with
+unique `operation_id`, SHA-256 proof hash, exact account/profile/Space/target/epoch
+bindings, verified factors, five-minute expiry and durable receipt ID/time. A proof
+contains 32 random bytes encoded as unpadded base64url. Re-issuing an existing
+operation cannot replace its proof or return its plaintext again. An identical
+consume retry returns the already committed receipt, including after later expiry
+or revocation; it never creates a new grant. Changed proof/bindings fail closed.
+Times are normalized to PostgreSQL microsecond precision before persistence and
+response so retried receipts remain identical.
+
+`accounts.security_revision` is monotonic. Database triggers advance it on changes
+to password, TOTP secret/enabled state, session epoch, account status/deletion/type,
+email/phone and pending-verification state, and on backup-code replacement/use.
+Reverting credentials does not revive an older proof. Issue and consume hold the
+account row lock for their complete transaction. Existing JDBC backup-code consume
+and replacement use the same account-before-backup lock order; replacement and
+factor consumption are atomic. An issue that consumes a backup factor reloads its
+new revision before saving the proof, and a later write failure rolls both back.
+Only the existing receipt replay bypasses new-grant expiry/security checks.
+
+Focused verification: `OwnershipTransferProofServiceTest`,
+`OwnershipTransferProofJdbcIntegrationTest`, and `AuthOwnershipProofAdapterTest`
+cover factors, all bindings, expiry, revocation, rollback, concurrent consumers and
+security writers, coarse status disclosure and hash-only persistence. Proofs and
+factor material are never included in adapter errors or logs.
 ### ConvertGuest (guest → regular)
 
 REST: `POST /api/v1/auth/convert-guest` (Gateway transcoding). Спека UX: [auth-and-contacts.md](../features/auth-and-contacts.md) § «Регистрация гостевого аккаунта».

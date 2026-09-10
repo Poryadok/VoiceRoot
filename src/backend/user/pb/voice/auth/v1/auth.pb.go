@@ -2408,6 +2408,345 @@ func (*RevokeSessionResponse) Descriptor() ([]byte, []int) {
 	return file_voice_auth_v1_auth_proto_rawDescGZIP(), []int{47}
 }
 
+// Actor account/profile/epoch are derived exclusively from the verified Gateway principal.
+type IssueOwnershipTransferProofRequest struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	SpaceId           string                 `protobuf:"bytes,1,opt,name=space_id,json=spaceId,proto3" json:"space_id,omitempty"`
+	NewOwnerProfileId string                 `protobuf:"bytes,2,opt,name=new_owner_profile_id,json=newOwnerProfileId,proto3" json:"new_owner_profile_id,omitempty"`
+	OperationId       string                 `protobuf:"bytes,3,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
+	Password          string                 `protobuf:"bytes,4,opt,name=password,proto3" json:"password,omitempty"`
+	TotpCode          string                 `protobuf:"bytes,5,opt,name=totp_code,json=totpCode,proto3" json:"totp_code,omitempty"`
+	BackupCode        string                 `protobuf:"bytes,6,opt,name=backup_code,json=backupCode,proto3" json:"backup_code,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *IssueOwnershipTransferProofRequest) Reset() {
+	*x = IssueOwnershipTransferProofRequest{}
+	mi := &file_voice_auth_v1_auth_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IssueOwnershipTransferProofRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IssueOwnershipTransferProofRequest) ProtoMessage() {}
+
+func (x *IssueOwnershipTransferProofRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_auth_v1_auth_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IssueOwnershipTransferProofRequest.ProtoReflect.Descriptor instead.
+func (*IssueOwnershipTransferProofRequest) Descriptor() ([]byte, []int) {
+	return file_voice_auth_v1_auth_proto_rawDescGZIP(), []int{48}
+}
+
+func (x *IssueOwnershipTransferProofRequest) GetSpaceId() string {
+	if x != nil {
+		return x.SpaceId
+	}
+	return ""
+}
+
+func (x *IssueOwnershipTransferProofRequest) GetNewOwnerProfileId() string {
+	if x != nil {
+		return x.NewOwnerProfileId
+	}
+	return ""
+}
+
+func (x *IssueOwnershipTransferProofRequest) GetOperationId() string {
+	if x != nil {
+		return x.OperationId
+	}
+	return ""
+}
+
+func (x *IssueOwnershipTransferProofRequest) GetPassword() string {
+	if x != nil {
+		return x.Password
+	}
+	return ""
+}
+
+func (x *IssueOwnershipTransferProofRequest) GetTotpCode() string {
+	if x != nil {
+		return x.TotpCode
+	}
+	return ""
+}
+
+func (x *IssueOwnershipTransferProofRequest) GetBackupCode() string {
+	if x != nil {
+		return x.BackupCode
+	}
+	return ""
+}
+
+type IssueOwnershipTransferProofResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Opaque secret, returned once. Never persist or log outside Auth's hash-only store.
+	Proof         string                 `protobuf:"bytes,1,opt,name=proof,proto3" json:"proof,omitempty"`
+	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IssueOwnershipTransferProofResponse) Reset() {
+	*x = IssueOwnershipTransferProofResponse{}
+	mi := &file_voice_auth_v1_auth_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IssueOwnershipTransferProofResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IssueOwnershipTransferProofResponse) ProtoMessage() {}
+
+func (x *IssueOwnershipTransferProofResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_auth_v1_auth_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IssueOwnershipTransferProofResponse.ProtoReflect.Descriptor instead.
+func (*IssueOwnershipTransferProofResponse) Descriptor() ([]byte, []int) {
+	return file_voice_auth_v1_auth_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *IssueOwnershipTransferProofResponse) GetProof() string {
+	if x != nil {
+		return x.Proof
+	}
+	return ""
+}
+
+func (x *IssueOwnershipTransferProofResponse) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+// Internal Space service principal only; actor identifiers are signed request data.
+type ConsumeOwnershipTransferProofRequest struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	AccountId         string                 `protobuf:"bytes,1,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
+	ProfileId         string                 `protobuf:"bytes,2,opt,name=profile_id,json=profileId,proto3" json:"profile_id,omitempty"`
+	SpaceId           string                 `protobuf:"bytes,3,opt,name=space_id,json=spaceId,proto3" json:"space_id,omitempty"`
+	NewOwnerProfileId string                 `protobuf:"bytes,4,opt,name=new_owner_profile_id,json=newOwnerProfileId,proto3" json:"new_owner_profile_id,omitempty"`
+	OperationId       string                 `protobuf:"bytes,5,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
+	SessionEpoch      int64                  `protobuf:"varint,6,opt,name=session_epoch,json=sessionEpoch,proto3" json:"session_epoch,omitempty"`
+	Proof             string                 `protobuf:"bytes,7,opt,name=proof,proto3" json:"proof,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *ConsumeOwnershipTransferProofRequest) Reset() {
+	*x = ConsumeOwnershipTransferProofRequest{}
+	mi := &file_voice_auth_v1_auth_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConsumeOwnershipTransferProofRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConsumeOwnershipTransferProofRequest) ProtoMessage() {}
+
+func (x *ConsumeOwnershipTransferProofRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_auth_v1_auth_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConsumeOwnershipTransferProofRequest.ProtoReflect.Descriptor instead.
+func (*ConsumeOwnershipTransferProofRequest) Descriptor() ([]byte, []int) {
+	return file_voice_auth_v1_auth_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *ConsumeOwnershipTransferProofRequest) GetAccountId() string {
+	if x != nil {
+		return x.AccountId
+	}
+	return ""
+}
+
+func (x *ConsumeOwnershipTransferProofRequest) GetProfileId() string {
+	if x != nil {
+		return x.ProfileId
+	}
+	return ""
+}
+
+func (x *ConsumeOwnershipTransferProofRequest) GetSpaceId() string {
+	if x != nil {
+		return x.SpaceId
+	}
+	return ""
+}
+
+func (x *ConsumeOwnershipTransferProofRequest) GetNewOwnerProfileId() string {
+	if x != nil {
+		return x.NewOwnerProfileId
+	}
+	return ""
+}
+
+func (x *ConsumeOwnershipTransferProofRequest) GetOperationId() string {
+	if x != nil {
+		return x.OperationId
+	}
+	return ""
+}
+
+func (x *ConsumeOwnershipTransferProofRequest) GetSessionEpoch() int64 {
+	if x != nil {
+		return x.SessionEpoch
+	}
+	return 0
+}
+
+func (x *ConsumeOwnershipTransferProofRequest) GetProof() string {
+	if x != nil {
+		return x.Proof
+	}
+	return ""
+}
+
+type ConsumeOwnershipTransferProofResponse struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	ReceiptId         string                 `protobuf:"bytes,1,opt,name=receipt_id,json=receiptId,proto3" json:"receipt_id,omitempty"`
+	AccountId         string                 `protobuf:"bytes,2,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
+	ProfileId         string                 `protobuf:"bytes,3,opt,name=profile_id,json=profileId,proto3" json:"profile_id,omitempty"`
+	SpaceId           string                 `protobuf:"bytes,4,opt,name=space_id,json=spaceId,proto3" json:"space_id,omitempty"`
+	NewOwnerProfileId string                 `protobuf:"bytes,5,opt,name=new_owner_profile_id,json=newOwnerProfileId,proto3" json:"new_owner_profile_id,omitempty"`
+	OperationId       string                 `protobuf:"bytes,6,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
+	SessionEpoch      int64                  `protobuf:"varint,7,opt,name=session_epoch,json=sessionEpoch,proto3" json:"session_epoch,omitempty"`
+	ConsumedAt        *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=consumed_at,json=consumedAt,proto3" json:"consumed_at,omitempty"`
+	VerifiedFactors   []string               `protobuf:"bytes,9,rep,name=verified_factors,json=verifiedFactors,proto3" json:"verified_factors,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *ConsumeOwnershipTransferProofResponse) Reset() {
+	*x = ConsumeOwnershipTransferProofResponse{}
+	mi := &file_voice_auth_v1_auth_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConsumeOwnershipTransferProofResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConsumeOwnershipTransferProofResponse) ProtoMessage() {}
+
+func (x *ConsumeOwnershipTransferProofResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_auth_v1_auth_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConsumeOwnershipTransferProofResponse.ProtoReflect.Descriptor instead.
+func (*ConsumeOwnershipTransferProofResponse) Descriptor() ([]byte, []int) {
+	return file_voice_auth_v1_auth_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *ConsumeOwnershipTransferProofResponse) GetReceiptId() string {
+	if x != nil {
+		return x.ReceiptId
+	}
+	return ""
+}
+
+func (x *ConsumeOwnershipTransferProofResponse) GetAccountId() string {
+	if x != nil {
+		return x.AccountId
+	}
+	return ""
+}
+
+func (x *ConsumeOwnershipTransferProofResponse) GetProfileId() string {
+	if x != nil {
+		return x.ProfileId
+	}
+	return ""
+}
+
+func (x *ConsumeOwnershipTransferProofResponse) GetSpaceId() string {
+	if x != nil {
+		return x.SpaceId
+	}
+	return ""
+}
+
+func (x *ConsumeOwnershipTransferProofResponse) GetNewOwnerProfileId() string {
+	if x != nil {
+		return x.NewOwnerProfileId
+	}
+	return ""
+}
+
+func (x *ConsumeOwnershipTransferProofResponse) GetOperationId() string {
+	if x != nil {
+		return x.OperationId
+	}
+	return ""
+}
+
+func (x *ConsumeOwnershipTransferProofResponse) GetSessionEpoch() int64 {
+	if x != nil {
+		return x.SessionEpoch
+	}
+	return 0
+}
+
+func (x *ConsumeOwnershipTransferProofResponse) GetConsumedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ConsumedAt
+	}
+	return nil
+}
+
+func (x *ConsumeOwnershipTransferProofResponse) GetVerifiedFactors() []string {
+	if x != nil {
+		return x.VerifiedFactors
+	}
+	return nil
+}
+
 var File_voice_auth_v1_auth_proto protoreflect.FileDescriptor
 
 var file_voice_auth_v1_auth_proto_rawDesc = string([]byte{
@@ -2675,14 +3014,95 @@ var file_voice_auth_v1_auth_proto_rawDesc = string([]byte{
 	0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1d, 0x0a, 0x0a, 0x73, 0x65, 0x73, 0x73, 0x69, 0x6f, 0x6e,
 	0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x73, 0x65, 0x73, 0x73, 0x69,
 	0x6f, 0x6e, 0x49, 0x64, 0x22, 0x17, 0x0a, 0x15, 0x52, 0x65, 0x76, 0x6f, 0x6b, 0x65, 0x53, 0x65,
-	0x73, 0x73, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x2a, 0x5b, 0x0a,
-	0x07, 0x4f, 0x74, 0x70, 0x54, 0x79, 0x70, 0x65, 0x12, 0x18, 0x0a, 0x14, 0x4f, 0x54, 0x50, 0x5f,
-	0x54, 0x59, 0x50, 0x45, 0x5f, 0x55, 0x4e, 0x53, 0x50, 0x45, 0x43, 0x49, 0x46, 0x49, 0x45, 0x44,
-	0x10, 0x00, 0x12, 0x19, 0x0a, 0x15, 0x4f, 0x54, 0x50, 0x5f, 0x54, 0x59, 0x50, 0x45, 0x5f, 0x45,
-	0x4d, 0x41, 0x49, 0x4c, 0x5f, 0x56, 0x45, 0x52, 0x49, 0x46, 0x59, 0x10, 0x01, 0x12, 0x1b, 0x0a,
-	0x17, 0x4f, 0x54, 0x50, 0x5f, 0x54, 0x59, 0x50, 0x45, 0x5f, 0x50, 0x41, 0x53, 0x53, 0x57, 0x4f,
-	0x52, 0x44, 0x5f, 0x52, 0x45, 0x53, 0x45, 0x54, 0x10, 0x02, 0x32, 0xf5, 0x0f, 0x0a, 0x0b, 0x41,
-	0x75, 0x74, 0x68, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x12, 0x4b, 0x0a, 0x08, 0x52, 0x65,
+	0x73, 0x73, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0xed, 0x01,
+	0x0a, 0x22, 0x49, 0x73, 0x73, 0x75, 0x65, 0x4f, 0x77, 0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70,
+	0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65, 0x72, 0x50, 0x72, 0x6f, 0x6f, 0x66, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x12, 0x19, 0x0a, 0x08, 0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x69, 0x64,
+	0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x73, 0x70, 0x61, 0x63, 0x65, 0x49, 0x64, 0x12,
+	0x2f, 0x0a, 0x14, 0x6e, 0x65, 0x77, 0x5f, 0x6f, 0x77, 0x6e, 0x65, 0x72, 0x5f, 0x70, 0x72, 0x6f,
+	0x66, 0x69, 0x6c, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x11, 0x6e,
+	0x65, 0x77, 0x4f, 0x77, 0x6e, 0x65, 0x72, 0x50, 0x72, 0x6f, 0x66, 0x69, 0x6c, 0x65, 0x49, 0x64,
+	0x12, 0x21, 0x0a, 0x0c, 0x6f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x69, 0x64,
+	0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x6f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f,
+	0x6e, 0x49, 0x64, 0x12, 0x1a, 0x0a, 0x08, 0x70, 0x61, 0x73, 0x73, 0x77, 0x6f, 0x72, 0x64, 0x18,
+	0x04, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x70, 0x61, 0x73, 0x73, 0x77, 0x6f, 0x72, 0x64, 0x12,
+	0x1b, 0x0a, 0x09, 0x74, 0x6f, 0x74, 0x70, 0x5f, 0x63, 0x6f, 0x64, 0x65, 0x18, 0x05, 0x20, 0x01,
+	0x28, 0x09, 0x52, 0x08, 0x74, 0x6f, 0x74, 0x70, 0x43, 0x6f, 0x64, 0x65, 0x12, 0x1f, 0x0a, 0x0b,
+	0x62, 0x61, 0x63, 0x6b, 0x75, 0x70, 0x5f, 0x63, 0x6f, 0x64, 0x65, 0x18, 0x06, 0x20, 0x01, 0x28,
+	0x09, 0x52, 0x0a, 0x62, 0x61, 0x63, 0x6b, 0x75, 0x70, 0x43, 0x6f, 0x64, 0x65, 0x22, 0x76, 0x0a,
+	0x23, 0x49, 0x73, 0x73, 0x75, 0x65, 0x4f, 0x77, 0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54,
+	0x72, 0x61, 0x6e, 0x73, 0x66, 0x65, 0x72, 0x50, 0x72, 0x6f, 0x6f, 0x66, 0x52, 0x65, 0x73, 0x70,
+	0x6f, 0x6e, 0x73, 0x65, 0x12, 0x14, 0x0a, 0x05, 0x70, 0x72, 0x6f, 0x6f, 0x66, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x05, 0x70, 0x72, 0x6f, 0x6f, 0x66, 0x12, 0x39, 0x0a, 0x0a, 0x65, 0x78,
+	0x70, 0x69, 0x72, 0x65, 0x73, 0x5f, 0x61, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a,
+	0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66,
+	0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x09, 0x65, 0x78, 0x70, 0x69,
+	0x72, 0x65, 0x73, 0x41, 0x74, 0x22, 0x8e, 0x02, 0x0a, 0x24, 0x43, 0x6f, 0x6e, 0x73, 0x75, 0x6d,
+	0x65, 0x4f, 0x77, 0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x66,
+	0x65, 0x72, 0x50, 0x72, 0x6f, 0x6f, 0x66, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1d,
+	0x0a, 0x0a, 0x61, 0x63, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x09, 0x52, 0x09, 0x61, 0x63, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x49, 0x64, 0x12, 0x1d, 0x0a,
+	0x0a, 0x70, 0x72, 0x6f, 0x66, 0x69, 0x6c, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28,
+	0x09, 0x52, 0x09, 0x70, 0x72, 0x6f, 0x66, 0x69, 0x6c, 0x65, 0x49, 0x64, 0x12, 0x19, 0x0a, 0x08,
+	0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07,
+	0x73, 0x70, 0x61, 0x63, 0x65, 0x49, 0x64, 0x12, 0x2f, 0x0a, 0x14, 0x6e, 0x65, 0x77, 0x5f, 0x6f,
+	0x77, 0x6e, 0x65, 0x72, 0x5f, 0x70, 0x72, 0x6f, 0x66, 0x69, 0x6c, 0x65, 0x5f, 0x69, 0x64, 0x18,
+	0x04, 0x20, 0x01, 0x28, 0x09, 0x52, 0x11, 0x6e, 0x65, 0x77, 0x4f, 0x77, 0x6e, 0x65, 0x72, 0x50,
+	0x72, 0x6f, 0x66, 0x69, 0x6c, 0x65, 0x49, 0x64, 0x12, 0x21, 0x0a, 0x0c, 0x6f, 0x70, 0x65, 0x72,
+	0x61, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x69, 0x64, 0x18, 0x05, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b,
+	0x6f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x49, 0x64, 0x12, 0x23, 0x0a, 0x0d, 0x73,
+	0x65, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x5f, 0x65, 0x70, 0x6f, 0x63, 0x68, 0x18, 0x06, 0x20, 0x01,
+	0x28, 0x03, 0x52, 0x0c, 0x73, 0x65, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x45, 0x70, 0x6f, 0x63, 0x68,
+	0x12, 0x14, 0x0a, 0x05, 0x70, 0x72, 0x6f, 0x6f, 0x66, 0x18, 0x07, 0x20, 0x01, 0x28, 0x09, 0x52,
+	0x05, 0x70, 0x72, 0x6f, 0x6f, 0x66, 0x22, 0x80, 0x03, 0x0a, 0x25, 0x43, 0x6f, 0x6e, 0x73, 0x75,
+	0x6d, 0x65, 0x4f, 0x77, 0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72, 0x61, 0x6e, 0x73,
+	0x66, 0x65, 0x72, 0x50, 0x72, 0x6f, 0x6f, 0x66, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x12, 0x1d, 0x0a, 0x0a, 0x72, 0x65, 0x63, 0x65, 0x69, 0x70, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x01,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x72, 0x65, 0x63, 0x65, 0x69, 0x70, 0x74, 0x49, 0x64, 0x12,
+	0x1d, 0x0a, 0x0a, 0x61, 0x63, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x09, 0x61, 0x63, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x49, 0x64, 0x12, 0x1d,
+	0x0a, 0x0a, 0x70, 0x72, 0x6f, 0x66, 0x69, 0x6c, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x03, 0x20, 0x01,
+	0x28, 0x09, 0x52, 0x09, 0x70, 0x72, 0x6f, 0x66, 0x69, 0x6c, 0x65, 0x49, 0x64, 0x12, 0x19, 0x0a,
+	0x08, 0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x52,
+	0x07, 0x73, 0x70, 0x61, 0x63, 0x65, 0x49, 0x64, 0x12, 0x2f, 0x0a, 0x14, 0x6e, 0x65, 0x77, 0x5f,
+	0x6f, 0x77, 0x6e, 0x65, 0x72, 0x5f, 0x70, 0x72, 0x6f, 0x66, 0x69, 0x6c, 0x65, 0x5f, 0x69, 0x64,
+	0x18, 0x05, 0x20, 0x01, 0x28, 0x09, 0x52, 0x11, 0x6e, 0x65, 0x77, 0x4f, 0x77, 0x6e, 0x65, 0x72,
+	0x50, 0x72, 0x6f, 0x66, 0x69, 0x6c, 0x65, 0x49, 0x64, 0x12, 0x21, 0x0a, 0x0c, 0x6f, 0x70, 0x65,
+	0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x69, 0x64, 0x18, 0x06, 0x20, 0x01, 0x28, 0x09, 0x52,
+	0x0b, 0x6f, 0x70, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x49, 0x64, 0x12, 0x23, 0x0a, 0x0d,
+	0x73, 0x65, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x5f, 0x65, 0x70, 0x6f, 0x63, 0x68, 0x18, 0x07, 0x20,
+	0x01, 0x28, 0x03, 0x52, 0x0c, 0x73, 0x65, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x45, 0x70, 0x6f, 0x63,
+	0x68, 0x12, 0x3b, 0x0a, 0x0b, 0x63, 0x6f, 0x6e, 0x73, 0x75, 0x6d, 0x65, 0x64, 0x5f, 0x61, 0x74,
+	0x18, 0x08, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e,
+	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61,
+	0x6d, 0x70, 0x52, 0x0a, 0x63, 0x6f, 0x6e, 0x73, 0x75, 0x6d, 0x65, 0x64, 0x41, 0x74, 0x12, 0x29,
+	0x0a, 0x10, 0x76, 0x65, 0x72, 0x69, 0x66, 0x69, 0x65, 0x64, 0x5f, 0x66, 0x61, 0x63, 0x74, 0x6f,
+	0x72, 0x73, 0x18, 0x09, 0x20, 0x03, 0x28, 0x09, 0x52, 0x0f, 0x76, 0x65, 0x72, 0x69, 0x66, 0x69,
+	0x65, 0x64, 0x46, 0x61, 0x63, 0x74, 0x6f, 0x72, 0x73, 0x2a, 0x5b, 0x0a, 0x07, 0x4f, 0x74, 0x70,
+	0x54, 0x79, 0x70, 0x65, 0x12, 0x18, 0x0a, 0x14, 0x4f, 0x54, 0x50, 0x5f, 0x54, 0x59, 0x50, 0x45,
+	0x5f, 0x55, 0x4e, 0x53, 0x50, 0x45, 0x43, 0x49, 0x46, 0x49, 0x45, 0x44, 0x10, 0x00, 0x12, 0x19,
+	0x0a, 0x15, 0x4f, 0x54, 0x50, 0x5f, 0x54, 0x59, 0x50, 0x45, 0x5f, 0x45, 0x4d, 0x41, 0x49, 0x4c,
+	0x5f, 0x56, 0x45, 0x52, 0x49, 0x46, 0x59, 0x10, 0x01, 0x12, 0x1b, 0x0a, 0x17, 0x4f, 0x54, 0x50,
+	0x5f, 0x54, 0x59, 0x50, 0x45, 0x5f, 0x50, 0x41, 0x53, 0x53, 0x57, 0x4f, 0x52, 0x44, 0x5f, 0x52,
+	0x45, 0x53, 0x45, 0x54, 0x10, 0x02, 0x32, 0x89, 0x12, 0x0a, 0x0b, 0x41, 0x75, 0x74, 0x68, 0x53,
+	0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x12, 0x84, 0x01, 0x0a, 0x1b, 0x49, 0x73, 0x73, 0x75, 0x65,
+	0x4f, 0x77, 0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65,
+	0x72, 0x50, 0x72, 0x6f, 0x6f, 0x66, 0x12, 0x31, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x61,
+	0x75, 0x74, 0x68, 0x2e, 0x76, 0x31, 0x2e, 0x49, 0x73, 0x73, 0x75, 0x65, 0x4f, 0x77, 0x6e, 0x65,
+	0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65, 0x72, 0x50, 0x72, 0x6f,
+	0x6f, 0x66, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x32, 0x2e, 0x76, 0x6f, 0x69, 0x63,
+	0x65, 0x2e, 0x61, 0x75, 0x74, 0x68, 0x2e, 0x76, 0x31, 0x2e, 0x49, 0x73, 0x73, 0x75, 0x65, 0x4f,
+	0x77, 0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65, 0x72,
+	0x50, 0x72, 0x6f, 0x6f, 0x66, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x8a, 0x01,
+	0x0a, 0x1d, 0x43, 0x6f, 0x6e, 0x73, 0x75, 0x6d, 0x65, 0x4f, 0x77, 0x6e, 0x65, 0x72, 0x73, 0x68,
+	0x69, 0x70, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65, 0x72, 0x50, 0x72, 0x6f, 0x6f, 0x66, 0x12,
+	0x33, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x61, 0x75, 0x74, 0x68, 0x2e, 0x76, 0x31, 0x2e,
+	0x43, 0x6f, 0x6e, 0x73, 0x75, 0x6d, 0x65, 0x4f, 0x77, 0x6e, 0x65, 0x72, 0x73, 0x68, 0x69, 0x70,
+	0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65, 0x72, 0x50, 0x72, 0x6f, 0x6f, 0x66, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x1a, 0x34, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x61, 0x75, 0x74,
+	0x68, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x6f, 0x6e, 0x73, 0x75, 0x6d, 0x65, 0x4f, 0x77, 0x6e, 0x65,
+	0x72, 0x73, 0x68, 0x69, 0x70, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x66, 0x65, 0x72, 0x50, 0x72, 0x6f,
+	0x6f, 0x66, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x4b, 0x0a, 0x08, 0x52, 0x65,
 	0x67, 0x69, 0x73, 0x74, 0x65, 0x72, 0x12, 0x1e, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x61,
 	0x75, 0x74, 0x68, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x67, 0x69, 0x73, 0x74, 0x65, 0x72, 0x52,
 	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1f, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x61,
@@ -2829,58 +3249,62 @@ func file_voice_auth_v1_auth_proto_rawDescGZIP() []byte {
 }
 
 var file_voice_auth_v1_auth_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_voice_auth_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 48)
+var file_voice_auth_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 52)
 var file_voice_auth_v1_auth_proto_goTypes = []any{
-	(OtpType)(0),                            // 0: voice.auth.v1.OtpType
-	(*RegisterRequest)(nil),                 // 1: voice.auth.v1.RegisterRequest
-	(*LoginRequest)(nil),                    // 2: voice.auth.v1.LoginRequest
-	(*LogoutRequest)(nil),                   // 3: voice.auth.v1.LogoutRequest
-	(*RefreshTokenRequest)(nil),             // 4: voice.auth.v1.RefreshTokenRequest
-	(*Enable2FARequest)(nil),                // 5: voice.auth.v1.Enable2FARequest
-	(*Enable2FAResponse)(nil),               // 6: voice.auth.v1.Enable2FAResponse
-	(*Verify2FARequest)(nil),                // 7: voice.auth.v1.Verify2FARequest
-	(*VerifyOTPRequest)(nil),                // 8: voice.auth.v1.VerifyOTPRequest
-	(*ConvertGuestRequest)(nil),             // 9: voice.auth.v1.ConvertGuestRequest
-	(*DeleteAccountRequest)(nil),            // 10: voice.auth.v1.DeleteAccountRequest
-	(*RestoreAccountRequest)(nil),           // 11: voice.auth.v1.RestoreAccountRequest
-	(*ValidateTokenRequest)(nil),            // 12: voice.auth.v1.ValidateTokenRequest
-	(*AuthSession)(nil),                     // 13: voice.auth.v1.AuthSession
-	(*RegisterResponse)(nil),                // 14: voice.auth.v1.RegisterResponse
-	(*LoginResponse)(nil),                   // 15: voice.auth.v1.LoginResponse
-	(*LogoutResponse)(nil),                  // 16: voice.auth.v1.LogoutResponse
-	(*RefreshTokenResponse)(nil),            // 17: voice.auth.v1.RefreshTokenResponse
-	(*Verify2FAResponse)(nil),               // 18: voice.auth.v1.Verify2FAResponse
-	(*VerifyOTPResponse)(nil),               // 19: voice.auth.v1.VerifyOTPResponse
-	(*ConvertGuestResponse)(nil),            // 20: voice.auth.v1.ConvertGuestResponse
-	(*DeleteAccountResponse)(nil),           // 21: voice.auth.v1.DeleteAccountResponse
-	(*RestoreAccountResponse)(nil),          // 22: voice.auth.v1.RestoreAccountResponse
-	(*ValidateTokenResponse)(nil),           // 23: voice.auth.v1.ValidateTokenResponse
-	(*GetJWKSRequest)(nil),                  // 24: voice.auth.v1.GetJWKSRequest
-	(*GetJWKSResponse)(nil),                 // 25: voice.auth.v1.GetJWKSResponse
-	(*TokenClaims)(nil),                     // 26: voice.auth.v1.TokenClaims
-	(*SwitchActiveProfileRequest)(nil),      // 27: voice.auth.v1.SwitchActiveProfileRequest
-	(*SwitchActiveProfileResponse)(nil),     // 28: voice.auth.v1.SwitchActiveProfileResponse
-	(*SetAccountStatusRequest)(nil),         // 29: voice.auth.v1.SetAccountStatusRequest
-	(*SetAccountStatusResponse)(nil),        // 30: voice.auth.v1.SetAccountStatusResponse
-	(*PutE2EKeyBackupRequest)(nil),          // 31: voice.auth.v1.PutE2EKeyBackupRequest
-	(*PutE2EKeyBackupResponse)(nil),         // 32: voice.auth.v1.PutE2EKeyBackupResponse
-	(*GetE2EKeyBackupRequest)(nil),          // 33: voice.auth.v1.GetE2EKeyBackupRequest
-	(*GetE2EKeyBackupResponse)(nil),         // 34: voice.auth.v1.GetE2EKeyBackupResponse
-	(*ResolvePhoneHashesRequest)(nil),       // 35: voice.auth.v1.ResolvePhoneHashesRequest
-	(*PhoneHashProfileMatch)(nil),           // 36: voice.auth.v1.PhoneHashProfileMatch
-	(*ResolvePhoneHashesResponse)(nil),      // 37: voice.auth.v1.ResolvePhoneHashesResponse
-	(*FilterDeletedAccountIDsRequest)(nil),  // 38: voice.auth.v1.FilterDeletedAccountIDsRequest
-	(*FilterDeletedAccountIDsResponse)(nil), // 39: voice.auth.v1.FilterDeletedAccountIDsResponse
-	(*GetGuestReminderRequest)(nil),         // 40: voice.auth.v1.GetGuestReminderRequest
-	(*GetGuestReminderResponse)(nil),        // 41: voice.auth.v1.GetGuestReminderResponse
-	(*MarkGuestReminderShownRequest)(nil),   // 42: voice.auth.v1.MarkGuestReminderShownRequest
-	(*MarkGuestReminderShownResponse)(nil),  // 43: voice.auth.v1.MarkGuestReminderShownResponse
-	(*ListSessionsRequest)(nil),             // 44: voice.auth.v1.ListSessionsRequest
-	(*SessionInfo)(nil),                     // 45: voice.auth.v1.SessionInfo
-	(*ListSessionsResponse)(nil),            // 46: voice.auth.v1.ListSessionsResponse
-	(*RevokeSessionRequest)(nil),            // 47: voice.auth.v1.RevokeSessionRequest
-	(*RevokeSessionResponse)(nil),           // 48: voice.auth.v1.RevokeSessionResponse
-	(*timestamppb.Timestamp)(nil),           // 49: google.protobuf.Timestamp
+	(OtpType)(0),                                  // 0: voice.auth.v1.OtpType
+	(*RegisterRequest)(nil),                       // 1: voice.auth.v1.RegisterRequest
+	(*LoginRequest)(nil),                          // 2: voice.auth.v1.LoginRequest
+	(*LogoutRequest)(nil),                         // 3: voice.auth.v1.LogoutRequest
+	(*RefreshTokenRequest)(nil),                   // 4: voice.auth.v1.RefreshTokenRequest
+	(*Enable2FARequest)(nil),                      // 5: voice.auth.v1.Enable2FARequest
+	(*Enable2FAResponse)(nil),                     // 6: voice.auth.v1.Enable2FAResponse
+	(*Verify2FARequest)(nil),                      // 7: voice.auth.v1.Verify2FARequest
+	(*VerifyOTPRequest)(nil),                      // 8: voice.auth.v1.VerifyOTPRequest
+	(*ConvertGuestRequest)(nil),                   // 9: voice.auth.v1.ConvertGuestRequest
+	(*DeleteAccountRequest)(nil),                  // 10: voice.auth.v1.DeleteAccountRequest
+	(*RestoreAccountRequest)(nil),                 // 11: voice.auth.v1.RestoreAccountRequest
+	(*ValidateTokenRequest)(nil),                  // 12: voice.auth.v1.ValidateTokenRequest
+	(*AuthSession)(nil),                           // 13: voice.auth.v1.AuthSession
+	(*RegisterResponse)(nil),                      // 14: voice.auth.v1.RegisterResponse
+	(*LoginResponse)(nil),                         // 15: voice.auth.v1.LoginResponse
+	(*LogoutResponse)(nil),                        // 16: voice.auth.v1.LogoutResponse
+	(*RefreshTokenResponse)(nil),                  // 17: voice.auth.v1.RefreshTokenResponse
+	(*Verify2FAResponse)(nil),                     // 18: voice.auth.v1.Verify2FAResponse
+	(*VerifyOTPResponse)(nil),                     // 19: voice.auth.v1.VerifyOTPResponse
+	(*ConvertGuestResponse)(nil),                  // 20: voice.auth.v1.ConvertGuestResponse
+	(*DeleteAccountResponse)(nil),                 // 21: voice.auth.v1.DeleteAccountResponse
+	(*RestoreAccountResponse)(nil),                // 22: voice.auth.v1.RestoreAccountResponse
+	(*ValidateTokenResponse)(nil),                 // 23: voice.auth.v1.ValidateTokenResponse
+	(*GetJWKSRequest)(nil),                        // 24: voice.auth.v1.GetJWKSRequest
+	(*GetJWKSResponse)(nil),                       // 25: voice.auth.v1.GetJWKSResponse
+	(*TokenClaims)(nil),                           // 26: voice.auth.v1.TokenClaims
+	(*SwitchActiveProfileRequest)(nil),            // 27: voice.auth.v1.SwitchActiveProfileRequest
+	(*SwitchActiveProfileResponse)(nil),           // 28: voice.auth.v1.SwitchActiveProfileResponse
+	(*SetAccountStatusRequest)(nil),               // 29: voice.auth.v1.SetAccountStatusRequest
+	(*SetAccountStatusResponse)(nil),              // 30: voice.auth.v1.SetAccountStatusResponse
+	(*PutE2EKeyBackupRequest)(nil),                // 31: voice.auth.v1.PutE2EKeyBackupRequest
+	(*PutE2EKeyBackupResponse)(nil),               // 32: voice.auth.v1.PutE2EKeyBackupResponse
+	(*GetE2EKeyBackupRequest)(nil),                // 33: voice.auth.v1.GetE2EKeyBackupRequest
+	(*GetE2EKeyBackupResponse)(nil),               // 34: voice.auth.v1.GetE2EKeyBackupResponse
+	(*ResolvePhoneHashesRequest)(nil),             // 35: voice.auth.v1.ResolvePhoneHashesRequest
+	(*PhoneHashProfileMatch)(nil),                 // 36: voice.auth.v1.PhoneHashProfileMatch
+	(*ResolvePhoneHashesResponse)(nil),            // 37: voice.auth.v1.ResolvePhoneHashesResponse
+	(*FilterDeletedAccountIDsRequest)(nil),        // 38: voice.auth.v1.FilterDeletedAccountIDsRequest
+	(*FilterDeletedAccountIDsResponse)(nil),       // 39: voice.auth.v1.FilterDeletedAccountIDsResponse
+	(*GetGuestReminderRequest)(nil),               // 40: voice.auth.v1.GetGuestReminderRequest
+	(*GetGuestReminderResponse)(nil),              // 41: voice.auth.v1.GetGuestReminderResponse
+	(*MarkGuestReminderShownRequest)(nil),         // 42: voice.auth.v1.MarkGuestReminderShownRequest
+	(*MarkGuestReminderShownResponse)(nil),        // 43: voice.auth.v1.MarkGuestReminderShownResponse
+	(*ListSessionsRequest)(nil),                   // 44: voice.auth.v1.ListSessionsRequest
+	(*SessionInfo)(nil),                           // 45: voice.auth.v1.SessionInfo
+	(*ListSessionsResponse)(nil),                  // 46: voice.auth.v1.ListSessionsResponse
+	(*RevokeSessionRequest)(nil),                  // 47: voice.auth.v1.RevokeSessionRequest
+	(*RevokeSessionResponse)(nil),                 // 48: voice.auth.v1.RevokeSessionResponse
+	(*IssueOwnershipTransferProofRequest)(nil),    // 49: voice.auth.v1.IssueOwnershipTransferProofRequest
+	(*IssueOwnershipTransferProofResponse)(nil),   // 50: voice.auth.v1.IssueOwnershipTransferProofResponse
+	(*ConsumeOwnershipTransferProofRequest)(nil),  // 51: voice.auth.v1.ConsumeOwnershipTransferProofRequest
+	(*ConsumeOwnershipTransferProofResponse)(nil), // 52: voice.auth.v1.ConsumeOwnershipTransferProofResponse
+	(*timestamppb.Timestamp)(nil),                 // 53: google.protobuf.Timestamp
 }
 var file_voice_auth_v1_auth_proto_depIdxs = []int32{
 	0,  // 0: voice.auth.v1.VerifyOTPRequest.otp_type_enum:type_name -> voice.auth.v1.OtpType
@@ -2892,63 +3316,69 @@ var file_voice_auth_v1_auth_proto_depIdxs = []int32{
 	13, // 6: voice.auth.v1.ConvertGuestResponse.session:type_name -> voice.auth.v1.AuthSession
 	13, // 7: voice.auth.v1.RestoreAccountResponse.session:type_name -> voice.auth.v1.AuthSession
 	26, // 8: voice.auth.v1.ValidateTokenResponse.claims:type_name -> voice.auth.v1.TokenClaims
-	49, // 9: voice.auth.v1.TokenClaims.expires_at:type_name -> google.protobuf.Timestamp
+	53, // 9: voice.auth.v1.TokenClaims.expires_at:type_name -> google.protobuf.Timestamp
 	13, // 10: voice.auth.v1.SwitchActiveProfileResponse.session:type_name -> voice.auth.v1.AuthSession
 	36, // 11: voice.auth.v1.ResolvePhoneHashesResponse.matches:type_name -> voice.auth.v1.PhoneHashProfileMatch
-	49, // 12: voice.auth.v1.GetGuestReminderResponse.last_shown_at:type_name -> google.protobuf.Timestamp
-	49, // 13: voice.auth.v1.MarkGuestReminderShownResponse.last_shown_at:type_name -> google.protobuf.Timestamp
-	49, // 14: voice.auth.v1.SessionInfo.created_at:type_name -> google.protobuf.Timestamp
-	49, // 15: voice.auth.v1.SessionInfo.expires_at:type_name -> google.protobuf.Timestamp
+	53, // 12: voice.auth.v1.GetGuestReminderResponse.last_shown_at:type_name -> google.protobuf.Timestamp
+	53, // 13: voice.auth.v1.MarkGuestReminderShownResponse.last_shown_at:type_name -> google.protobuf.Timestamp
+	53, // 14: voice.auth.v1.SessionInfo.created_at:type_name -> google.protobuf.Timestamp
+	53, // 15: voice.auth.v1.SessionInfo.expires_at:type_name -> google.protobuf.Timestamp
 	45, // 16: voice.auth.v1.ListSessionsResponse.sessions:type_name -> voice.auth.v1.SessionInfo
-	1,  // 17: voice.auth.v1.AuthService.Register:input_type -> voice.auth.v1.RegisterRequest
-	2,  // 18: voice.auth.v1.AuthService.Login:input_type -> voice.auth.v1.LoginRequest
-	3,  // 19: voice.auth.v1.AuthService.Logout:input_type -> voice.auth.v1.LogoutRequest
-	4,  // 20: voice.auth.v1.AuthService.RefreshToken:input_type -> voice.auth.v1.RefreshTokenRequest
-	5,  // 21: voice.auth.v1.AuthService.Enable2FA:input_type -> voice.auth.v1.Enable2FARequest
-	7,  // 22: voice.auth.v1.AuthService.Verify2FA:input_type -> voice.auth.v1.Verify2FARequest
-	8,  // 23: voice.auth.v1.AuthService.VerifyOTP:input_type -> voice.auth.v1.VerifyOTPRequest
-	9,  // 24: voice.auth.v1.AuthService.ConvertGuest:input_type -> voice.auth.v1.ConvertGuestRequest
-	10, // 25: voice.auth.v1.AuthService.DeleteAccount:input_type -> voice.auth.v1.DeleteAccountRequest
-	11, // 26: voice.auth.v1.AuthService.RestoreAccount:input_type -> voice.auth.v1.RestoreAccountRequest
-	12, // 27: voice.auth.v1.AuthService.ValidateToken:input_type -> voice.auth.v1.ValidateTokenRequest
-	24, // 28: voice.auth.v1.AuthService.GetJWKS:input_type -> voice.auth.v1.GetJWKSRequest
-	27, // 29: voice.auth.v1.AuthService.SwitchActiveProfile:input_type -> voice.auth.v1.SwitchActiveProfileRequest
-	29, // 30: voice.auth.v1.AuthService.SetAccountStatus:input_type -> voice.auth.v1.SetAccountStatusRequest
-	31, // 31: voice.auth.v1.AuthService.PutE2EKeyBackup:input_type -> voice.auth.v1.PutE2EKeyBackupRequest
-	33, // 32: voice.auth.v1.AuthService.GetE2EKeyBackup:input_type -> voice.auth.v1.GetE2EKeyBackupRequest
-	35, // 33: voice.auth.v1.AuthService.ResolvePhoneHashes:input_type -> voice.auth.v1.ResolvePhoneHashesRequest
-	38, // 34: voice.auth.v1.AuthService.FilterDeletedAccountIDs:input_type -> voice.auth.v1.FilterDeletedAccountIDsRequest
-	40, // 35: voice.auth.v1.AuthService.GetGuestReminder:input_type -> voice.auth.v1.GetGuestReminderRequest
-	42, // 36: voice.auth.v1.AuthService.MarkGuestReminderShown:input_type -> voice.auth.v1.MarkGuestReminderShownRequest
-	44, // 37: voice.auth.v1.AuthService.ListSessions:input_type -> voice.auth.v1.ListSessionsRequest
-	47, // 38: voice.auth.v1.AuthService.RevokeSession:input_type -> voice.auth.v1.RevokeSessionRequest
-	14, // 39: voice.auth.v1.AuthService.Register:output_type -> voice.auth.v1.RegisterResponse
-	15, // 40: voice.auth.v1.AuthService.Login:output_type -> voice.auth.v1.LoginResponse
-	16, // 41: voice.auth.v1.AuthService.Logout:output_type -> voice.auth.v1.LogoutResponse
-	17, // 42: voice.auth.v1.AuthService.RefreshToken:output_type -> voice.auth.v1.RefreshTokenResponse
-	6,  // 43: voice.auth.v1.AuthService.Enable2FA:output_type -> voice.auth.v1.Enable2FAResponse
-	18, // 44: voice.auth.v1.AuthService.Verify2FA:output_type -> voice.auth.v1.Verify2FAResponse
-	19, // 45: voice.auth.v1.AuthService.VerifyOTP:output_type -> voice.auth.v1.VerifyOTPResponse
-	20, // 46: voice.auth.v1.AuthService.ConvertGuest:output_type -> voice.auth.v1.ConvertGuestResponse
-	21, // 47: voice.auth.v1.AuthService.DeleteAccount:output_type -> voice.auth.v1.DeleteAccountResponse
-	22, // 48: voice.auth.v1.AuthService.RestoreAccount:output_type -> voice.auth.v1.RestoreAccountResponse
-	23, // 49: voice.auth.v1.AuthService.ValidateToken:output_type -> voice.auth.v1.ValidateTokenResponse
-	25, // 50: voice.auth.v1.AuthService.GetJWKS:output_type -> voice.auth.v1.GetJWKSResponse
-	28, // 51: voice.auth.v1.AuthService.SwitchActiveProfile:output_type -> voice.auth.v1.SwitchActiveProfileResponse
-	30, // 52: voice.auth.v1.AuthService.SetAccountStatus:output_type -> voice.auth.v1.SetAccountStatusResponse
-	32, // 53: voice.auth.v1.AuthService.PutE2EKeyBackup:output_type -> voice.auth.v1.PutE2EKeyBackupResponse
-	34, // 54: voice.auth.v1.AuthService.GetE2EKeyBackup:output_type -> voice.auth.v1.GetE2EKeyBackupResponse
-	37, // 55: voice.auth.v1.AuthService.ResolvePhoneHashes:output_type -> voice.auth.v1.ResolvePhoneHashesResponse
-	39, // 56: voice.auth.v1.AuthService.FilterDeletedAccountIDs:output_type -> voice.auth.v1.FilterDeletedAccountIDsResponse
-	41, // 57: voice.auth.v1.AuthService.GetGuestReminder:output_type -> voice.auth.v1.GetGuestReminderResponse
-	43, // 58: voice.auth.v1.AuthService.MarkGuestReminderShown:output_type -> voice.auth.v1.MarkGuestReminderShownResponse
-	46, // 59: voice.auth.v1.AuthService.ListSessions:output_type -> voice.auth.v1.ListSessionsResponse
-	48, // 60: voice.auth.v1.AuthService.RevokeSession:output_type -> voice.auth.v1.RevokeSessionResponse
-	39, // [39:61] is the sub-list for method output_type
-	17, // [17:39] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	53, // 17: voice.auth.v1.IssueOwnershipTransferProofResponse.expires_at:type_name -> google.protobuf.Timestamp
+	53, // 18: voice.auth.v1.ConsumeOwnershipTransferProofResponse.consumed_at:type_name -> google.protobuf.Timestamp
+	49, // 19: voice.auth.v1.AuthService.IssueOwnershipTransferProof:input_type -> voice.auth.v1.IssueOwnershipTransferProofRequest
+	51, // 20: voice.auth.v1.AuthService.ConsumeOwnershipTransferProof:input_type -> voice.auth.v1.ConsumeOwnershipTransferProofRequest
+	1,  // 21: voice.auth.v1.AuthService.Register:input_type -> voice.auth.v1.RegisterRequest
+	2,  // 22: voice.auth.v1.AuthService.Login:input_type -> voice.auth.v1.LoginRequest
+	3,  // 23: voice.auth.v1.AuthService.Logout:input_type -> voice.auth.v1.LogoutRequest
+	4,  // 24: voice.auth.v1.AuthService.RefreshToken:input_type -> voice.auth.v1.RefreshTokenRequest
+	5,  // 25: voice.auth.v1.AuthService.Enable2FA:input_type -> voice.auth.v1.Enable2FARequest
+	7,  // 26: voice.auth.v1.AuthService.Verify2FA:input_type -> voice.auth.v1.Verify2FARequest
+	8,  // 27: voice.auth.v1.AuthService.VerifyOTP:input_type -> voice.auth.v1.VerifyOTPRequest
+	9,  // 28: voice.auth.v1.AuthService.ConvertGuest:input_type -> voice.auth.v1.ConvertGuestRequest
+	10, // 29: voice.auth.v1.AuthService.DeleteAccount:input_type -> voice.auth.v1.DeleteAccountRequest
+	11, // 30: voice.auth.v1.AuthService.RestoreAccount:input_type -> voice.auth.v1.RestoreAccountRequest
+	12, // 31: voice.auth.v1.AuthService.ValidateToken:input_type -> voice.auth.v1.ValidateTokenRequest
+	24, // 32: voice.auth.v1.AuthService.GetJWKS:input_type -> voice.auth.v1.GetJWKSRequest
+	27, // 33: voice.auth.v1.AuthService.SwitchActiveProfile:input_type -> voice.auth.v1.SwitchActiveProfileRequest
+	29, // 34: voice.auth.v1.AuthService.SetAccountStatus:input_type -> voice.auth.v1.SetAccountStatusRequest
+	31, // 35: voice.auth.v1.AuthService.PutE2EKeyBackup:input_type -> voice.auth.v1.PutE2EKeyBackupRequest
+	33, // 36: voice.auth.v1.AuthService.GetE2EKeyBackup:input_type -> voice.auth.v1.GetE2EKeyBackupRequest
+	35, // 37: voice.auth.v1.AuthService.ResolvePhoneHashes:input_type -> voice.auth.v1.ResolvePhoneHashesRequest
+	38, // 38: voice.auth.v1.AuthService.FilterDeletedAccountIDs:input_type -> voice.auth.v1.FilterDeletedAccountIDsRequest
+	40, // 39: voice.auth.v1.AuthService.GetGuestReminder:input_type -> voice.auth.v1.GetGuestReminderRequest
+	42, // 40: voice.auth.v1.AuthService.MarkGuestReminderShown:input_type -> voice.auth.v1.MarkGuestReminderShownRequest
+	44, // 41: voice.auth.v1.AuthService.ListSessions:input_type -> voice.auth.v1.ListSessionsRequest
+	47, // 42: voice.auth.v1.AuthService.RevokeSession:input_type -> voice.auth.v1.RevokeSessionRequest
+	50, // 43: voice.auth.v1.AuthService.IssueOwnershipTransferProof:output_type -> voice.auth.v1.IssueOwnershipTransferProofResponse
+	52, // 44: voice.auth.v1.AuthService.ConsumeOwnershipTransferProof:output_type -> voice.auth.v1.ConsumeOwnershipTransferProofResponse
+	14, // 45: voice.auth.v1.AuthService.Register:output_type -> voice.auth.v1.RegisterResponse
+	15, // 46: voice.auth.v1.AuthService.Login:output_type -> voice.auth.v1.LoginResponse
+	16, // 47: voice.auth.v1.AuthService.Logout:output_type -> voice.auth.v1.LogoutResponse
+	17, // 48: voice.auth.v1.AuthService.RefreshToken:output_type -> voice.auth.v1.RefreshTokenResponse
+	6,  // 49: voice.auth.v1.AuthService.Enable2FA:output_type -> voice.auth.v1.Enable2FAResponse
+	18, // 50: voice.auth.v1.AuthService.Verify2FA:output_type -> voice.auth.v1.Verify2FAResponse
+	19, // 51: voice.auth.v1.AuthService.VerifyOTP:output_type -> voice.auth.v1.VerifyOTPResponse
+	20, // 52: voice.auth.v1.AuthService.ConvertGuest:output_type -> voice.auth.v1.ConvertGuestResponse
+	21, // 53: voice.auth.v1.AuthService.DeleteAccount:output_type -> voice.auth.v1.DeleteAccountResponse
+	22, // 54: voice.auth.v1.AuthService.RestoreAccount:output_type -> voice.auth.v1.RestoreAccountResponse
+	23, // 55: voice.auth.v1.AuthService.ValidateToken:output_type -> voice.auth.v1.ValidateTokenResponse
+	25, // 56: voice.auth.v1.AuthService.GetJWKS:output_type -> voice.auth.v1.GetJWKSResponse
+	28, // 57: voice.auth.v1.AuthService.SwitchActiveProfile:output_type -> voice.auth.v1.SwitchActiveProfileResponse
+	30, // 58: voice.auth.v1.AuthService.SetAccountStatus:output_type -> voice.auth.v1.SetAccountStatusResponse
+	32, // 59: voice.auth.v1.AuthService.PutE2EKeyBackup:output_type -> voice.auth.v1.PutE2EKeyBackupResponse
+	34, // 60: voice.auth.v1.AuthService.GetE2EKeyBackup:output_type -> voice.auth.v1.GetE2EKeyBackupResponse
+	37, // 61: voice.auth.v1.AuthService.ResolvePhoneHashes:output_type -> voice.auth.v1.ResolvePhoneHashesResponse
+	39, // 62: voice.auth.v1.AuthService.FilterDeletedAccountIDs:output_type -> voice.auth.v1.FilterDeletedAccountIDsResponse
+	41, // 63: voice.auth.v1.AuthService.GetGuestReminder:output_type -> voice.auth.v1.GetGuestReminderResponse
+	43, // 64: voice.auth.v1.AuthService.MarkGuestReminderShown:output_type -> voice.auth.v1.MarkGuestReminderShownResponse
+	46, // 65: voice.auth.v1.AuthService.ListSessions:output_type -> voice.auth.v1.ListSessionsResponse
+	48, // 66: voice.auth.v1.AuthService.RevokeSession:output_type -> voice.auth.v1.RevokeSessionResponse
+	43, // [43:67] is the sub-list for method output_type
+	19, // [19:43] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_voice_auth_v1_auth_proto_init() }
@@ -2970,7 +3400,7 @@ func file_voice_auth_v1_auth_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_voice_auth_v1_auth_proto_rawDesc), len(file_voice_auth_v1_auth_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   48,
+			NumMessages:   52,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
