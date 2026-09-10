@@ -47,6 +47,26 @@ func TestGatewayPrincipalIssuerConfig_LoadsCurrentAndNextKeys(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestGatewayPrincipalIssuerConfig_LoadsKubernetesProjectedSecretLayout(t *testing.T) {
+	dir := t.TempDir()
+	dataDir := filepath.Join(dir, "..data-123")
+	require.NoError(t, os.Mkdir(dataDir, 0o700))
+	writeGatewayPrincipalKey(t, dataDir, "current")
+	writeGatewayPrincipalKey(t, dataDir, "next")
+	for _, kid := range []string{"current", "next"} {
+		require.NoError(t, os.Symlink(filepath.Join("..data-123", kid+".pem"), filepath.Join(dir, kid+".pem")))
+	}
+	// Kubernetes itself exposes `..data` as a service symlink beside the key links.
+	require.NoError(t, os.Symlink("..data-123", filepath.Join(dir, "..data")))
+	t.Setenv("GATEWAY_PRINCIPAL_SIGNING_KEYS_DIR", dir)
+	t.Setenv("GATEWAY_PRINCIPAL_ACTIVE_KID", "current")
+
+	config, err := loadGatewayConfigFromEnvChecked()
+	require.NoError(t, err)
+	require.NotNil(t, config.principalIssuer)
+	require.Len(t, config.principalJWKS.Keys, 2)
+}
+
 func TestGatewayPrincipalIssuerConfig_FailsClosedForInvalidConfiguration(t *testing.T) {
 	cases := []struct {
 		name string

@@ -73,6 +73,9 @@ func loadGatewayPrincipalIssuerFromEnv() (*principal.Issuer, principalJWKS, erro
 		if entry.IsDir() {
 			continue
 		}
+		if strings.HasPrefix(entry.Name(), "..") {
+			continue
+		}
 		if !strings.EqualFold(filepath.Ext(entry.Name()), ".pem") {
 			return nil, principalJWKS{}, fmt.Errorf("principal signing key file %q must end in .pem", entry.Name())
 		}
