@@ -16,6 +16,8 @@ type KeyResolver func(ctx context.Context, issuer, keyID string) (*rsa.PublicKey
 type ReplayGuard func(ctx context.Context, issuer, jwtID string, expiresAt time.Time) error
 type SessionEpochChecker func(ctx context.Context, accountID string, sessionEpoch int64) error
 
+const temporalSkew = 5 * time.Second
+
 type VerifyConfig struct {
 	ExpectedIssuer      string
 	ExpectedAudience    string
@@ -126,7 +128,7 @@ func verify(ctx context.Context, token string, config VerifyConfig, expectedType
 	if err := rsa.VerifyPKCS1v15(key, crypto.SHA256, digest[:], signature); err != nil {
 		return rawClaims{}, err
 	}
-	if claims.Type != expectedType || claims.Audience != config.ExpectedAudience || claims.RPC != config.ExpectedRPC || claims.RequestID != config.ExpectedRequestID || claims.RequestHash != config.ExpectedRequestHash {
+	if !isCanonicalRequestHash(claims.RequestHash) || !isCanonicalRequestHash(config.ExpectedRequestHash) || claims.Type != expectedType || claims.Audience != config.ExpectedAudience || claims.RPC != config.ExpectedRPC || claims.RequestID != config.ExpectedRequestID || claims.RequestHash != config.ExpectedRequestHash {
 		return rawClaims{}, fmt.Errorf("credential binding mismatch")
 	}
 	if err := validateTemporal(claims, config.Clock().UTC()); err != nil {
@@ -145,7 +147,7 @@ func validateTemporal(claims rawClaims, now time.Time) error {
 		return fmt.Errorf("required temporal claims missing")
 	}
 	issuedAt, notBefore, expiresAt := time.Unix(claims.IssuedAt, 0), time.Unix(claims.NotBefore, 0), time.Unix(claims.ExpiresAt, 0)
-	if notBefore.Before(issuedAt) || notBefore.After(now) || issuedAt.After(now) || !expiresAt.After(now) || expiresAt.Before(notBefore) || expiresAt.Sub(issuedAt) > maxCredentialTTL {
+	if notBefore.Before(issuedAt) || notBefore.After(now.Add(temporalSkew)) || issuedAt.After(now.Add(temporalSkew)) || !expiresAt.After(now) || !expiresAt.After(notBefore) || expiresAt.Sub(issuedAt) > maxCredentialTTL {
 		return fmt.Errorf("credential temporal claims invalid")
 	}
 	return nil
