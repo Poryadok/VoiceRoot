@@ -40,6 +40,12 @@ service RoleService {
   rpc DeleteRolesCreatedByProfile(DeleteRolesCreatedByProfileRequest) returns (DeleteRolesCreatedByProfileResponse);
 
   // Trusted Space-only lifecycle operations. These are the sole Owner mutation path.
+  // Staged v2 contract: runtime activation requires the durable journal/freeze cutover.
+  // Trusted Space-only methods; never reinterpret the legacy Apply/Compensate pair.
+  rpc GetOwnershipTransferCapabilities(GetOwnershipTransferCapabilitiesRequest) returns (GetOwnershipTransferCapabilitiesResponse);
+  rpc PrepareOwnershipTransfer(PrepareOwnershipTransferRequest) returns (PrepareOwnershipTransferResponse);
+  rpc FinalizeOwnershipTransfer(FinalizeOwnershipTransferRequest) returns (FinalizeOwnershipTransferResponse);
+  rpc AbortOwnershipTransfer(AbortOwnershipTransferRequest) returns (AbortOwnershipTransferResponse);
   rpc ApplyOwnershipTransfer(ApplyOwnershipTransferRequest) returns (ApplyOwnershipTransferResponse);
   rpc CompensateOwnershipTransfer(CompensateOwnershipTransferRequest) returns (CompensateOwnershipTransferResponse);
 }
@@ -78,6 +84,81 @@ message ApplyOwnershipTransferResponse {
 
 message CompensateOwnershipTransferResponse {
   string current_owner_profile_id = 1;
+}
+
+// Immutable cross-action identity. Missing intent and protocol_version other than 2
+// are rejected before mutation. UUIDs retain the original old/new ordering.
+// The ledger hashes and retains the deterministic encoding, INCLUDING unknown
+// intent fields; receipts echo that exact intent rather than reconstructing IDs.
+// Space separately binds account/session/proof data in its durable journal.
+message OwnershipTransferIntent {
+  uint32 protocol_version = 1;
+  string space_id = 2;
+  string old_owner_profile_id = 3;
+  string new_owner_profile_id = 4;
+  string operation_id = 5;
+}
+
+// Successful receipts never use UNSPECIFIED. Prepared freezes scoped authority.
+enum OwnershipTransferState {
+  OWNERSHIP_TRANSFER_STATE_UNSPECIFIED = 0;
+  OWNERSHIP_TRANSFER_STATE_PREPARED = 1;
+  OWNERSHIP_TRANSFER_STATE_FINALIZED = 2;
+  OWNERSHIP_TRANSFER_STATE_ABORTED = 3;
+}
+
+message OwnershipTransferReceipt {
+  OwnershipTransferIntent intent = 1;
+  OwnershipTransferState state = 2;
+  // Empty while prepared; new owner when finalized; old owner when aborted.
+  string current_owner_profile_id = 3;
+}
+
+message GetOwnershipTransferCapabilitiesRequest {}
+
+// An authenticated protocol 2 and all three exact full transition RPC paths are
+// required before journal reservation. Missing/incompatible capability denies;
+// no network-error or old-server fallback to v1 is permitted. Schema availability
+// alone does not advertise support or activate the production ownership flow.
+message GetOwnershipTransferCapabilitiesResponse {
+  uint32 protocol_version = 1;
+  repeated string supported_methods = 2;
+}
+
+// Each action retains its first accepted full deterministic request hash,
+// INCLUDING unknown wrapper fields, separately from the shared intent hash.
+// JWT request_hash binds the full request; its rpc claim binds the exact action.
+// Changed intent or same-action request conflicts with ALREADY_EXISTS.
+message PrepareOwnershipTransferRequest {
+  OwnershipTransferIntent intent = 1;
+}
+
+message PrepareOwnershipTransferResponse {
+  // Only PREPARED; terminal operations cannot be prepared again.
+  OwnershipTransferReceipt receipt = 1;
+}
+
+// Same immutable intent and per-action full request binding rules as Prepare.
+// Only a durable Space commit decision may issue Finalize; absent/aborted denies.
+message FinalizeOwnershipTransferRequest {
+  OwnershipTransferIntent intent = 1;
+}
+
+message FinalizeOwnershipTransferResponse {
+  // Only FINALIZED, including identical terminal retries.
+  OwnershipTransferReceipt receipt = 1;
+}
+
+// Same immutable intent and per-action full request binding rules as Prepare.
+// Only a durable Space abort decision may issue Abort; absent Abort fences delayed
+// Prepare after sole-old-owner validation. A finalized operation cannot abort.
+message AbortOwnershipTransferRequest {
+  OwnershipTransferIntent intent = 1;
+}
+
+message AbortOwnershipTransferResponse {
+  // Only ABORTED, including identical terminal retries.
+  OwnershipTransferReceipt receipt = 1;
 }
 
 message Role {
