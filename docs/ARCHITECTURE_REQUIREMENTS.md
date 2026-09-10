@@ -138,21 +138,49 @@ fan-out.
 - **Уточнение причин** для отладки, корреляции или i18n — опционально через **`google.rpc.Status`** и вложения (`ErrorInfo`, `LocalizedMessage`, …): см. пакет [`google.rpc`](https://github.com/googleapis/googleapis/tree/master/google/rpc). Отдельный общий `.proto` в монорепо для ошибок не обязателен, пока коды достаточны для клиента и наблюдаемости.
 - **REST через API Gateway**: маппинг gRPC→HTTP статусов и тела ошибки — ответственность Gateway; источник истины для маршрутов и префиксов — [microservices/api-gateway.md](microservices/api-gateway.md).
 
-## Phase-0: межсервисные и edge principals (target; не реализовано)
+## Phase-0: межсервисные и edge principals (target; внедряется по сервисам)
 
 Это обязательный контракт для новых и мигрируемых внутренних вызовов. Он не делает
 существующие forwarded metadata доверенными до внедрения verifier/interceptor.
 
-- Каждый service-to-service RPC идёт только по TLS и несёт короткоживущий (TTL **30 s**)
-  service JWT. JWT подписан ключом issuer-сервиса, имеет `iss`, точный `aud` целевого
-  сервиса, `sub` = service principal, `rpc` = точное полное имя RPC, `iat`, `exp`,
-  `jti` и `kid`. Получатель проверяет signature/JWKS, issuer, audience, expiry,
-  `rpc`, replay policy и caller→method allow-list до handler.
-- Issuer публикует JWKS с `kid`; rotation перекрывает старый и новый public key не
-  меньше максимального TTL, private key не покидает issuer. Неизвестный `kid`,
-  expired/malformed JWT, TLS/verifier failure, недопустимый caller или RPC дают
-  `UNAUTHENTICATED`/`PERMISSION_DENIED` и fail closed. Static bearer и произвольные
-  `x-voice-internal-caller` не являются целевым credential.
+Каждый защищённый межсервисный RPC принимает ровно два transport metadata:
+`authorization: Bearer <signed-principal>` и один непустой `x-request-id`.
+Повторный `authorization` или `x-request-id`, иной auth scheme и любые raw identity
+metadata (`x-voice-*`, `x-profile-id`, `x-account-id`, `x-user-id`, `x-actor-id`,
+`x-internal-caller`) отвергаются до handler. Нельзя добавить второй bearer как
+совместимый путь.
+
+- Service JWT имеет TTL не более **30 s**, `iss`, `sub=service:<issuer>`, точный
+  `aud` целевого сервиса, точный full RPC name в `rpc`, `request_id`,
+  `request_hash`, `iat`, `nbf`, `exp`, `jti` и `kid`. `request_hash` имеет форму
+  `sha256:<hex>` и считается как SHA-256 от deterministic protobuf serialization
+  точного request (`proto.MarshalOptions{Deterministic: true}`). Получатель
+  сопоставляет его с принятым request,
+  а также проверяет signature/JWKS, issuer, audience, RPC, replay policy и
+  caller→method allow-list до handler.
+- Временная проверка допускает только фиксированный clock skew **5 s** для
+  `iat`/`nbf`; `exp` не получает grace period. Credential с lifetime свыше 30 s,
+  с будущими `iat`/`nbf` дальше пяти секунд или с истёкшим `exp` недействителен.
+- Issuer публикует JWKS с `kid`; private signing key остаётся в secret store
+  issuer-а. В set одновременно присутствуют `current` и `next` ключи. Consumer
+  обновляет полный валидный JWKS через 30 s, может использовать last-good полный
+  set только до hard expiry 2 min, а refresh для неизвестного `kid` ограничивает
+  одним на issuer за 5 s. Неполный/невалидный refresh не заменяет last-good set;
+  после hard expiry verifier fail-closed. Для rotation новый public key появляется
+  до выдачи им credential, старый остаётся не меньше 30 s после прекращения
+  подписи.
+- `S2S_SIGNING_KEY_PEM` и `S2S_SIGNING_KID` являются secret/config issuer-а;
+  consumer получает issuer→HTTPS JWKS endpoint через `S2S_JWKS_URLS_JSON`.
+  `S2S_JWKS_REFRESH_AFTER`, `S2S_JWKS_HARD_EXPIRY` и
+  `S2S_UNKNOWN_KID_COOLDOWN` используют соответственно defaults `30s`, `2m`,
+  `5s`; пустое или некорректное значение — startup error. Эти имена — общий
+  Phase-0 config contract, а не разрешение хранить ключ в ConfigMap.
+- Staging и production используют TLS для каждого такого gRPC connection и
+  проверяют цепочку peer certificate. Plaintext допускается только для явно
+  обозначенных local development/test profiles; он не является fallback при
+  TLS/JWKS/verifier ошибке. Unknown `kid`, malformed/expired JWT, TLS/verifier
+  failure или replay дают `UNAUTHENTICATED`; verified caller с запрещёнными
+  caller/RPC/scope даёт `PERMISSION_DENIED`. Во всех случаях решение fail-closed.
 - Gateway после проверки client JWT создаёт **подписанный** derived delegated-user
   JWT для downstream user-surface. Это отдельный credential с TTL не более **30 s**
   и не длиннее остатка проверенной client session. Он обязан иметь `iss=gateway`,
@@ -161,7 +189,8 @@ fan-out.
   (`request_id` и canonical idempotency/request context). Gateway подписывает его
   rotation-capable key, публикует JWKS; consumer проверяет signature/`kid`, все
   temporal claims, issuer/audience/RPC/request binding и актуальность
-  `session_epoch` по Auth policy до handler. Он не копирует клиентские identity
+  `session_epoch` по Auth policy до handler. Failure/timeout epoch lookup означает
+  deny, а не compatibility fallback. Он не копирует клиентские identity
   headers и downstream не принимает их как authority. S2S callers, которым нужен
   subject для decision/read, передают его как data только после проверки собственной
   service principal.
@@ -171,9 +200,10 @@ fan-out.
   verified principal; сами по себе они никогда не создают actor/service identity.
 
 Перед включением каждого сервиса нужны: issuer/consumer key-rotation runbook,
-TLS ownership, exact caller/RPC matrix, отрицательные tests и observability для
-verify deny. Этот target распространяется и на нынешний narrow Space↔Voice bearer;
-его нельзя расширять или использовать как общий precedent.
+TLS ownership, exact caller/RPC matrix, negative tests (duplicate metadata, raw
+identity, wrong `rpc`/hash/audience, stale `session_epoch`, expired hard cache) и
+observability для verify deny. Этот target распространяется и на нынешний narrow
+Space↔Voice bearer; его нельзя расширять или использовать как общий precedent.
 
 
 - **Провайдер**: Resend (до 3000 писем/мес бесплатно; $20/мес за 50k)

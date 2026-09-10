@@ -176,6 +176,18 @@ Send after pick — **Messaging** `POST /api/v1/messages/...` (not File attach).
 6. Сохраняет проверенные claims и upstream JWT в существующем auth context при проксировании `/ws` в Realtime; отдельный downstream header для `session_epoch` этим контрактом не вводится
 7. Публичные endpoints (login, register, OTP, version, health, metrics) — без JWT
 
+### Phase-0 delegated transport (target)
+
+Для защищённого downstream gRPC Gateway выдаёт отдельный delegated-user bearer,
+а не пересылает client JWT или `X-Voice-*` identity headers. В metadata остаются
+только один `authorization: Bearer <delegated principal>` и один `x-request-id`.
+Credential содержит verified account/profile, положительный `session_epoch`, exact
+`aud`/full `rpc`, deterministic protobuf `request_hash`, `request_id`, `iat`,
+`nbf`, `exp`, `jti`, `kid`; его TTL не более 30 s и не длиннее остатка client
+session. Consumer проверяет JWKS, request binding и Auth epoch fail-closed до
+handler. Общие transport, temporal и rotation правила —
+[ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md#phase-0-межсервисные-и-edge-principals-target-внедряется-по-сервисам).
+
 ### T056-P1: session epoch
 
 Auth DB хранит `accounts.session_epoch` как durable source of truth и выдаёт его
@@ -224,6 +236,8 @@ blacklist-механизмом и не заменяется epoch.
 | `GATEWAY_REDIS_ADDR`, `GATEWAY_REDIS_PASSWORD` | Redis для rate limit и JWT blacklist |
 | `GATEWAY_SESSION_EPOCH_STRICT` | Только точное `true` включает strict; unset/точное `false` — compatibility; прочее не даёт Gateway стартовать |
 | `GATEWAY_JWT_BLACKLIST_PREFIX` | Prefix blacklist ключей; default `jwt:blacklist:` |
+| `S2S_SIGNING_KEY_PEM`, `S2S_SIGNING_KID` | Phase-0 Gateway delegated-principal signer; key только в secret store |
+| `S2S_JWKS_URLS_JSON`, `S2S_JWKS_REFRESH_AFTER`, `S2S_JWKS_HARD_EXPIRY`, `S2S_UNKNOWN_KID_COOLDOWN` | Phase-0 issuer JWKS endpoints и bounded verifier cache; общий contract с downstream services |
 | `GATEWAY_TRUSTED_PROXY_CIDRS` | CIDR/IP список proxy, от которых принимается `X-Forwarded-For` |
 | `GATEWAY_CORS_ALLOWED_ORIGINS` | CSV allowlist browser origins; default deny |
 | `GATEWAY_REST_UPSTREAMS_JSON` / `GATEWAY_<NAMESPACE>_UPSTREAM_URL` | REST upstream routes |

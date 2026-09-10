@@ -319,7 +319,12 @@ Re-run only when new migration files ship; use a new Job name or delete the comp
 
 See also [ADR 002: gRPC mTLS scope](adr/002-grpc-mtls-scope.md).
 
-**v1 (current):** `BOT_GRPC_GATEWAY_ONLY=true` — Bot rejects gRPC without Gateway metadata (`x-voice-internal`) or bot-token context. Staging and compose use plaintext gRPC on port **9090** inside the cluster.
+**Current Bot baseline:** `BOT_GRPC_GATEWAY_ONLY=true` remains a narrow legacy
+boundary until its Phase-0 principal cutover. It is not a general S2S credential
+and cannot justify `x-voice-internal` metadata elsewhere. Compose may use
+plaintext gRPC on port **9090** only in an explicitly selected development/test
+profile. Phase-0 protected S2S calls require TLS in staging and production; see
+[ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md#phase-0-межсервисные-и-edge-principals-target-внедряется-по-сервисам).
 
 **Prod hardening (incremental):**
 
