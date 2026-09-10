@@ -43,6 +43,14 @@ func (s *recordingRoleServer) ListRoles(context.Context, *rolev1.ListRolesReques
 func startRuntimeListener(t *testing.T, f runtimeFixture) (string, *recordingRoleServer, *x509.CertPool) {
 	t.Helper()
 	runtime := startFixtureRuntime(t, f)
+	require.NoError(t, runtime.ActivateOwnershipV2Capabilities(OwnershipV2Activation{
+		V1Drained: true, RetiredSpaceFence: true,
+		SupportedMethods: []string{
+			rolev1.RoleService_PrepareOwnershipTransfer_FullMethodName,
+			rolev1.RoleService_FinalizeOwnershipTransfer_FullMethodName,
+			rolev1.RoleService_AbortOwnershipTransfer_FullMethodName,
+		},
+	}))
 	return startRuntimeListenerWithRuntime(t, f, runtime)
 }
 
@@ -71,19 +79,19 @@ func runtimeListenerClient(t *testing.T, address string, transport credentials.T
 	return rolev1.NewRoleServiceClient(conn)
 }
 
-func TestRuntimeListenerAuthenticatesBoundOwnershipAndRejectsBeforeHandler(t *testing.T) {
+func TestRuntimeListenerAuthenticatesBoundV2OwnershipAndRejectsBeforeHandler(t *testing.T) {
 	f := newRuntimeFixture(t, 2)
 	address, recorder, roots := startRuntimeListener(t, f)
 	client := runtimeListenerClient(t, address, credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}))
-	request := &rolev1.ApplyOwnershipTransferRequest{SpaceId: "space-1", OldOwnerProfileId: "owner-1", NewOwnerProfileId: "owner-2", OperationId: "operation-1"}
+	request := &rolev1.PrepareOwnershipTransferRequest{Intent: &rolev1.OwnershipTransferIntent{ProtocolVersion: 2, SpaceId: "space-1", OldOwnerProfileId: "owner-1", NewOwnerProfileId: "owner-2", OperationId: "operation-1"}}
 	hash, err := principal.RequestHash(request)
 	require.NoError(t, err)
-	method := rolev1.RoleService_ApplyOwnershipTransfer_FullMethodName
+	method := rolev1.RoleService_PrepareOwnershipTransfer_FullMethodName
 	token := issueRuntimeToken(t, f.key, "space", "current", "role", method, "listener-valid", hash)
 	md := metadata.Pairs("authorization", "Bearer "+token, "x-request-id", "listener-valid")
 	ctx, cancel := context.WithTimeout(metadata.NewOutgoingContext(context.Background(), md), 2*time.Second)
 	defer cancel()
-	_, err = client.ApplyOwnershipTransfer(ctx, request)
+	_, err = client.PrepareOwnershipTransfer(ctx, request)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), recorder.calls.Load())
 	verified := <-recorder.principals
@@ -93,26 +101,42 @@ func TestRuntimeListenerAuthenticatesBoundOwnershipAndRejectsBeforeHandler(t *te
 	require.Empty(t, verified.AccountID)
 	require.Empty(t, verified.ProfileID)
 	require.Zero(t, verified.SessionEpoch)
-	_, err = client.ApplyOwnershipTransfer(ctx, request)
+	_, err = client.PrepareOwnershipTransfer(ctx, request)
 	require.Equal(t, codes.Unauthenticated, status.Code(err), "replay must stop before handler")
 	require.Equal(t, int64(1), recorder.calls.Load())
-	for _, name := range []string{"duplicate_authorization", "raw_identity", "wrong_hash"} {
+	for _, name := range []string{"duplicate_authorization", "duplicate_request_id", "raw_identity", "wrong_issuer", "wrong_audience", "wrong_rpc", "wrong_hash", "unknown_kid", "session_epoch"} {
 		t.Run(name, func(t *testing.T) {
+			issuer, kid, audience, signedRPC := "space", "current", "role", method
 			signedHash := hash
-			if name == "wrong_hash" {
+			switch name {
+			case "wrong_issuer":
+				issuer = "gateway"
+			case "wrong_audience":
+				audience = "space"
+			case "wrong_rpc":
+				signedRPC = rolev1.RoleService_AbortOwnershipTransfer_FullMethodName
+			case "wrong_hash":
 				signedHash = runtimeHash
+			case "unknown_kid":
+				kid = "unpublished"
 			}
-			token := issueRuntimeToken(t, f.key, "space", "current", "role", method, name, signedHash)
+			token := issueRuntimeToken(t, f.key, issuer, kid, audience, signedRPC, name, signedHash)
+			if name == "session_epoch" {
+				token = withSignedRuntimeClaim(t, token, f.key, "session_epoch")
+			}
 			md := metadata.Pairs("authorization", "Bearer "+token, "x-request-id", name)
 			if name == "duplicate_authorization" {
 				md.Append("authorization", "Bearer "+token)
+			}
+			if name == "duplicate_request_id" {
+				md.Append("x-request-id", "other")
 			}
 			if name == "raw_identity" {
 				md.Set("x-voice-profile-id", "forged")
 			}
 			ctx, cancel := context.WithTimeout(metadata.NewOutgoingContext(context.Background(), md), 2*time.Second)
 			defer cancel()
-			_, err := client.ApplyOwnershipTransfer(ctx, request)
+			_, err := client.PrepareOwnershipTransfer(ctx, request)
 			require.Equal(t, codes.Unauthenticated, status.Code(err))
 			require.Equal(t, int64(1), recorder.calls.Load(), "invalid credentials reached handler")
 		})
@@ -142,13 +166,13 @@ func TestRuntimeListenerRequiresTLSAndVerifiedServerIdentity(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			client := runtimeListenerClient(t, address, tc.transport)
-			request := &rolev1.ApplyOwnershipTransferRequest{SpaceId: "space-1", OperationId: "transport-check"}
+			request := &rolev1.PrepareOwnershipTransferRequest{Intent: &rolev1.OwnershipTransferIntent{ProtocolVersion: 2, SpaceId: "space-1", OperationId: "transport-check"}}
 			hash, err := principal.RequestHash(request)
 			require.NoError(t, err)
-			token := issueRuntimeToken(t, f.key, "space", "current", "role", rolev1.RoleService_ApplyOwnershipTransfer_FullMethodName, tc.name, hash)
+			token := issueRuntimeToken(t, f.key, "space", "current", "role", rolev1.RoleService_PrepareOwnershipTransfer_FullMethodName, tc.name, hash)
 			ctx, cancel := context.WithTimeout(metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token, "x-request-id", tc.name)), time.Second)
 			defer cancel()
-			_, err = client.ApplyOwnershipTransfer(ctx, request)
+			_, err = client.PrepareOwnershipTransfer(ctx, request)
 			require.Error(t, err)
 			require.Contains(t, []codes.Code{codes.Unavailable, codes.DeadlineExceeded}, status.Code(err), "failure must occur in transport, before auth or handler")
 			require.Zero(t, recorder.calls.Load())
@@ -163,18 +187,18 @@ func (s *recordingRoleServer) CompensateOwnershipTransfer(ctx context.Context, _
 	return &rolev1.CompensateOwnershipTransferResponse{}, nil
 }
 
-func TestRuntimeListenerAuthenticatesBoundCompensation(t *testing.T) {
+func TestRuntimeListenerAuthenticatesBoundV2Abort(t *testing.T) {
 	f := newRuntimeFixture(t, 2)
 	address, recorder, roots := startRuntimeListener(t, f)
 	client := runtimeListenerClient(t, address, credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}))
-	request := &rolev1.CompensateOwnershipTransferRequest{}
+	request := &rolev1.AbortOwnershipTransferRequest{Intent: &rolev1.OwnershipTransferIntent{ProtocolVersion: 2}}
 	hash, err := principal.RequestHash(request)
 	require.NoError(t, err)
-	method := rolev1.RoleService_CompensateOwnershipTransfer_FullMethodName
+	method := rolev1.RoleService_AbortOwnershipTransfer_FullMethodName
 	token := issueRuntimeToken(t, f.next, "space", "next", "role", method, "compensation", hash)
 	ctx, cancel := context.WithTimeout(metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token, "x-request-id", "compensation")), 2*time.Second)
 	defer cancel()
-	_, err = client.CompensateOwnershipTransfer(ctx, request)
+	_, err = client.AbortOwnershipTransfer(ctx, request)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), recorder.calls.Load())
 	verified := <-recorder.principals
@@ -217,18 +241,18 @@ func TestRuntimeListenerDistinguishesUnavailableJWKSFromUntrustedCredentials(t *
 			// no complete trusted last-good set can authenticate the credential.
 			address, recorder, roots := startRuntimeListenerWithRuntime(t, f, runtime)
 			client := runtimeListenerClient(t, address, credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}))
-			request := &rolev1.ApplyOwnershipTransferRequest{SpaceId: "space-1"}
+			request := &rolev1.PrepareOwnershipTransferRequest{Intent: &rolev1.OwnershipTransferIntent{ProtocolVersion: 2, SpaceId: "space-1"}}
 			hash, err := principal.RequestHash(request)
 			require.NoError(t, err)
-			token := issueRuntimeToken(t, f.key, "space", "current", "role", rolev1.RoleService_ApplyOwnershipTransfer_FullMethodName, tc.name, hash)
+			token := issueRuntimeToken(t, f.key, "space", "current", "role", rolev1.RoleService_PrepareOwnershipTransfer_FullMethodName, tc.name, hash)
 			ctx, cancel := context.WithTimeout(metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token, "x-request-id", tc.name)), 2*time.Second)
 			defer cancel()
-			_, err = client.ApplyOwnershipTransfer(ctx, request)
+			_, err = client.PrepareOwnershipTransfer(ctx, request)
 			require.Equal(t, tc.want, status.Code(err))
 			if tc.name == "unavailable" {
 				// A failed verification does not consume replay, and issuer
 				// cooldown must preserve the dependency's Unavailable category.
-				_, err = client.ApplyOwnershipTransfer(ctx, request)
+				_, err = client.PrepareOwnershipTransfer(ctx, request)
 				require.Equal(t, codes.Unavailable, status.Code(err))
 			}
 			require.Zero(t, recorder.calls.Load())

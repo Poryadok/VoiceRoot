@@ -26,7 +26,7 @@ func startFixtureRuntime(t *testing.T, f runtimeFixture) *Runtime {
 	t.Cleanup(func() { require.NoError(t, runtime.Close()) })
 	// Warm through the public verifier, not New: issuer availability is not a
 	// startup precondition because Space itself waits for Role health.
-	method := rolev1.RoleService_ApplyOwnershipTransfer_FullMethodName
+	method := rolev1.RoleService_PrepareOwnershipTransfer_FullMethodName
 	token := issueRuntimeToken(t, f.key, "space", "current", "role", method, "fixture-prime", runtimeHash)
 	_, err = runtime.Verify(context.Background(), token, method, "fixture-prime", runtimeHash)
 	require.NoError(t, err)
@@ -37,7 +37,7 @@ func TestRuntimeReplaySharedAcrossInstancesExpiresAtSignedExpiry(t *testing.T) {
 	f := newRuntimeFixture(t, 2)
 	first := startFixtureRuntime(t, f)
 	second := startFixtureRuntime(t, f)
-	method := rolev1.RoleService_ApplyOwnershipTransfer_FullMethodName
+	method := rolev1.RoleService_PrepareOwnershipTransfer_FullMethodName
 	token := issueRuntimeToken(t, f.key, "space", "current", "role", method, "shared-request", runtimeHash)
 	priorKeys := make(map[string]bool)
 	for _, key := range f.redis.Keys() {
@@ -78,7 +78,7 @@ func TestRuntimeRefreshesCompleteJWKSWithoutIncomingTraffic(t *testing.T) {
 		"JWKS must refresh on schedule without a Verify call")
 	// A failing endpoint now forces verification to use the refreshed last-good set.
 	f.jwks.set(http.StatusServiceUnavailable, nil)
-	method := rolev1.RoleService_ApplyOwnershipTransfer_FullMethodName
+	method := rolev1.RoleService_PrepareOwnershipTransfer_FullMethodName
 	token := issueRuntimeToken(t, f.next, "space", "current", "role", method, "rotated-request", runtimeHash)
 	_, err := runtime.Verify(context.Background(), token, method, "rotated-request", runtimeHash)
 	require.NoError(t, err, "complete background refresh must replace cached key material")
@@ -100,7 +100,7 @@ func TestRuntimeInvalidRefreshRetainsLastGoodOnlyUntilHardExpiry(t *testing.T) {
 			case "unavailable":
 				f.jwks.set(http.StatusServiceUnavailable, nil)
 			}
-			method := rolev1.RoleService_ApplyOwnershipTransfer_FullMethodName
+			method := rolev1.RoleService_PrepareOwnershipTransfer_FullMethodName
 			// Wait past soft expiry, leaving a wide interval before the hard deadline.
 			timer := time.NewTimer(200 * time.Millisecond)
 			<-timer.C
@@ -123,7 +123,7 @@ func TestRuntimeInvalidRefreshRetainsLastGoodOnlyUntilHardExpiry(t *testing.T) {
 func TestRuntimeUnknownKIDStormHasIssuerWideCooldown(t *testing.T) {
 	f := newRuntimeFixture(t, 2)
 	runtime := startFixtureRuntime(t, f)
-	method := rolev1.RoleService_ApplyOwnershipTransfer_FullMethodName
+	method := rolev1.RoleService_PrepareOwnershipTransfer_FullMethodName
 	baseline := f.jwks.calls.Load()
 	for i := 0; i < 20; i++ {
 		requestID := fmt.Sprintf("storm-%d", i)
@@ -137,7 +137,7 @@ func TestRuntimeUnknownKIDStormHasIssuerWideCooldown(t *testing.T) {
 func TestRuntimeRejectsInvalidSignatureAndServiceUserAuthority(t *testing.T) {
 	f := newRuntimeFixture(t, 2)
 	runtime := startFixtureRuntime(t, f)
-	method := rolev1.RoleService_ApplyOwnershipTransfer_FullMethodName
+	method := rolev1.RoleService_PrepareOwnershipTransfer_FullMethodName
 	for _, name := range []string{"wrong_signature", "account_id", "profile_id", "session_epoch"} {
 		t.Run(name, func(t *testing.T) {
 			token := issueRuntimeToken(t, f.key, "space", "current", "role", method, name, runtimeHash)
@@ -207,7 +207,7 @@ func TestRuntimeReplaySurvivesRedisClockAheadOfVerifier(t *testing.T) {
 	f.redis.SetTime(time.Now().Add(10 * time.Second))
 	first := startFixtureRuntime(t, f)
 	second := startFixtureRuntime(t, f)
-	method := rolev1.RoleService_ApplyOwnershipTransfer_FullMethodName
+	method := rolev1.RoleService_PrepareOwnershipTransfer_FullMethodName
 	token := issueRuntimeToken(t, f.key, "space", "current", "role", method, "redis-clock-ahead", runtimeHash)
 	verified, err := first.Verify(context.Background(), token, method, "redis-clock-ahead", runtimeHash)
 	require.NoError(t, err)
@@ -248,7 +248,7 @@ func TestRuntimeAllowsCanonicalLifetimeWithFutureIssuedAtSkew(t *testing.T) {
 		Clock: func() time.Time { return time.Now().Add(5 * time.Second) },
 	})
 	require.NoError(t, err)
-	method := rolev1.RoleService_ApplyOwnershipTransfer_FullMethodName
+	method := rolev1.RoleService_PrepareOwnershipTransfer_FullMethodName
 	token, err := signer.IssueService(principal.ServiceInput{Audience: "role", RPC: method, RequestID: "future-skew", RequestHash: runtimeHash})
 	require.NoError(t, err)
 	before := make(map[string]bool)

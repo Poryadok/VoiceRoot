@@ -12,6 +12,7 @@ import (
 
 	rolev1 "voice.app/voice/role/v1"
 	"voice/backend/pkg/principal"
+	"voice/backend/role/internal/principalgrpc"
 )
 
 type v2HandlerCase struct {
@@ -117,3 +118,62 @@ func TestOwnershipTransferV2_HandlersRejectMalformedIntentBeforeDependency(t *te
 		}
 	}
 }
+
+func TestOwnershipTransferV2_CapabilityAdvertisesOnlyCompleteActiveProtocol(t *testing.T) {
+	req := &rolev1.GetOwnershipTransferCapabilitiesRequest{}
+	hash, err := principal.RequestHash(req)
+	require.NoError(t, err)
+	rpc := rolev1.RoleService_GetOwnershipTransferCapabilities_FullMethodName
+	verified := principal.Principal{
+		Kind: "service", Issuer: "space", Subject: "service:space", Audience: "role",
+		RPC: rpc, RequestID: "capability-request", RequestHash: hash,
+	}
+	svc := &RoleGRPC{}
+
+	_, err = svc.GetOwnershipTransferCapabilities(context.Background(), req)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	_, err = svc.GetOwnershipTransferCapabilities(principal.WithVerified(context.Background(), verified), req)
+	require.Equal(t, codes.Unavailable, status.Code(err), "verified transport alone must not bypass the activation hold")
+
+	active := principalgrpc.WithOwnershipV2CapabilitiesActive(context.Background())
+	for _, name := range []string{"kind", "issuer", "subject", "audience", "rpc", "request_id", "hash"} {
+		t.Run(name, func(t *testing.T) {
+			p := verified
+			switch name {
+			case "kind":
+				p.Kind = "delegated_user"
+			case "issuer":
+				p.Issuer = "gateway"
+			case "subject":
+				p.Subject = "service:gateway"
+			case "audience":
+				p.Audience = "space"
+			case "rpc":
+				p.RPC = rolev1.RoleService_PrepareOwnershipTransfer_FullMethodName
+			case "request_id":
+				p.RequestID = ""
+			case "hash":
+				p.RequestHash = runtimeHashForCapabilityTest
+			}
+			_, err := svc.GetOwnershipTransferCapabilities(principal.WithVerified(active, p), req)
+			require.Equal(t, codes.PermissionDenied, status.Code(err))
+		})
+	}
+	changed := proto.Clone(req).(*rolev1.GetOwnershipTransferCapabilitiesRequest)
+	changed.ProtoReflect().SetUnknown([]byte{0xa0, 0x06, 0x01})
+	_, err = svc.GetOwnershipTransferCapabilities(principal.WithVerified(active, verified), changed)
+	require.Equal(t, codes.PermissionDenied, status.Code(err), "capability request must retain exact unknown-field binding")
+
+	response, err := svc.GetOwnershipTransferCapabilities(principal.WithVerified(active, verified), req)
+	require.NoError(t, err)
+	require.Equal(t, uint32(2), response.ProtocolVersion)
+	require.Equal(t, []string{
+		rolev1.RoleService_PrepareOwnershipTransfer_FullMethodName,
+		rolev1.RoleService_FinalizeOwnershipTransfer_FullMethodName,
+		rolev1.RoleService_AbortOwnershipTransfer_FullMethodName,
+	}, response.SupportedMethods)
+	require.NotContains(t, response.SupportedMethods, rolev1.RoleService_ApplyOwnershipTransfer_FullMethodName)
+	require.NotContains(t, response.SupportedMethods, rolev1.RoleService_CompensateOwnershipTransfer_FullMethodName)
+}
+
+const runtimeHashForCapabilityTest = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

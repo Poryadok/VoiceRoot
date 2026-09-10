@@ -364,14 +364,19 @@ go test -run TestStagingBotsWebhook_live -count=1 .
 
 ### Ownership lifecycle principal transport
 
-This is a disabled foundation: production Space TransferOwnership always denies
-before lock/database access until the durable v2 protocol lands. No signing, TLS
-or environment setting activates the v1 saga. Fixture-only opt-in preserves
-legacy regression coverage; public ownership activation remains a later gate.
+This remains a disabled public foundation: production Space TransferOwnership
+denies before lock/database access until its durable v2 coordinator lands. No
+signing, TLS or environment setting activates the v1 saga. Public ownership
+activation remains a later gate.
 
 Role keeps ordinary callers on `ROLE_GRPC_LISTEN` (default `:9090`) and rejects
-both ownership lifecycle RPCs there. The additional listener is TLS-only and
-allows only `ApplyOwnershipTransfer` and `CompensateOwnershipTransfer`.
+the capability RPC plus every v1/v2 ownership lifecycle RPC there. The additional
+listener is TLS-only and routes only `GetOwnershipTransferCapabilities`,
+`PrepareOwnershipTransfer`, `FinalizeOwnershipTransfer` and
+`AbortOwnershipTransfer`; legacy Apply/Compensate and unrelated RPCs are denied.
+Capability advertisement is disabled by default and returns `UNAVAILABLE` until
+the process explicitly proves the v1 drain, the exact complete v2 method set and
+the retired-space fence. Current deployment settings do not bypass that hold.
 
 | Service | Setting | Purpose |
 |---|---|---|

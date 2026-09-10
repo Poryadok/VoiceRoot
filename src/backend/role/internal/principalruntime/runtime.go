@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -26,14 +27,21 @@ const dependencyTimeout = 2 * time.Second
 
 // Runtime is the fail-closed verifier for the dedicated Space ownership listener.
 type Runtime struct {
-	resolver    *principal.JWKSResolver
-	replay      *redis.Client
-	transport   *http.Transport
-	credentials credentials.TransportCredentials
-	cancel      context.CancelFunc
-	done        chan struct{}
-	closeOnce   sync.Once
-	closeErr    error
+	resolver                      *principal.JWKSResolver
+	replay                        *redis.Client
+	transport                     *http.Transport
+	credentials                   credentials.TransportCredentials
+	cancel                        context.CancelFunc
+	done                          chan struct{}
+	closeOnce                     sync.Once
+	closeErr                      error
+	ownershipV2CapabilitiesActive atomic.Bool
+}
+
+type OwnershipV2Activation struct {
+	V1Drained         bool
+	RetiredSpaceFence bool
+	SupportedMethods  []string
 }
 
 func New(ctx context.Context, config Config) (*Runtime, error) {
@@ -138,8 +146,37 @@ func jwksTransportError(err error) error {
 	return err
 }
 
+var ownershipV2Methods = []string{
+	rolev1.RoleService_PrepareOwnershipTransfer_FullMethodName,
+	rolev1.RoleService_FinalizeOwnershipTransfer_FullMethodName,
+	rolev1.RoleService_AbortOwnershipTransfer_FullMethodName,
+}
+
 func isOwnershipMethod(method string) bool {
-	return method == rolev1.RoleService_ApplyOwnershipTransfer_FullMethodName || method == rolev1.RoleService_CompensateOwnershipTransfer_FullMethodName
+	if method == rolev1.RoleService_GetOwnershipTransferCapabilities_FullMethodName {
+		return true
+	}
+	for _, allowed := range ownershipV2Methods {
+		if method == allowed {
+			return true
+		}
+	}
+	return false
+}
+
+// ActivateOwnershipV2Capabilities removes the advertisement hold only after the
+// caller proves the legacy drain, retired-space fence, and exact serving set.
+func (r *Runtime) ActivateOwnershipV2Capabilities(gate OwnershipV2Activation) error {
+	if r == nil || !gate.V1Drained || !gate.RetiredSpaceFence || len(gate.SupportedMethods) != len(ownershipV2Methods) {
+		return errors.New("ownership v2 activation gate is incomplete")
+	}
+	for index, method := range ownershipV2Methods {
+		if gate.SupportedMethods[index] != method {
+			return errors.New("ownership v2 activation method set is incomplete")
+		}
+	}
+	r.ownershipV2CapabilitiesActive.Store(true)
+	return nil
 }
 
 func (r *Runtime) Verify(ctx context.Context, token, method, requestID, hash string) (principal.Principal, error) {

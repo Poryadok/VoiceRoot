@@ -11,8 +11,37 @@ import (
 	"google.golang.org/protobuf/proto"
 	rolev1 "voice.app/voice/role/v1"
 	"voice/backend/pkg/principal"
+	"voice/backend/role/internal/principalgrpc"
 	"voice/backend/role/internal/store"
 )
+
+var ownershipV2SupportedMethods = []string{
+	rolev1.RoleService_PrepareOwnershipTransfer_FullMethodName,
+	rolev1.RoleService_FinalizeOwnershipTransfer_FullMethodName,
+	rolev1.RoleService_AbortOwnershipTransfer_FullMethodName,
+}
+
+func (s *RoleGRPC) GetOwnershipTransferCapabilities(ctx context.Context, req *rolev1.GetOwnershipTransferCapabilitiesRequest) (*rolev1.GetOwnershipTransferCapabilitiesResponse, error) {
+	rpc := rolev1.RoleService_GetOwnershipTransferCapabilities_FullMethodName
+	verified, ok := principal.FromContext(ctx)
+	if !ok || verified.Kind != "service" || verified.Issuer != "space" || verified.Subject != "service:space" || verified.Audience != "role" || verified.RPC != rpc || verified.RequestID == "" {
+		return nil, status.Error(codes.PermissionDenied, "verified space principal required")
+	}
+	hash, err := principal.RequestHash(req)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid capability request")
+	}
+	if verified.RequestHash != hash {
+		return nil, status.Error(codes.PermissionDenied, "verified request binding required")
+	}
+	if !principalgrpc.OwnershipV2CapabilitiesActive(ctx) {
+		return nil, status.Error(codes.Unavailable, "ownership v2 activation hold")
+	}
+	return &rolev1.GetOwnershipTransferCapabilitiesResponse{
+		ProtocolVersion:  2,
+		SupportedMethods: append([]string(nil), ownershipV2SupportedMethods...),
+	}, nil
+}
 
 type ownershipV2Request interface {
 	proto.Message
