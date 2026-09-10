@@ -272,7 +272,7 @@ verify-required-jobs-test:
 image-catalog-drift-check:
 	$(BASH) "$(ROOT)/scripts/ci/check-image-catalog-drift.sh"
 
-ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test buf-generate-ci-local-template-check image-catalog-drift-check e2e-manifest-helper-test rollout-app-tier-order-test staging-kubectl-configmap-test staging-app-secrets-test phase0-fixture-test
+ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test buf-generate-ci-local-template-check image-catalog-drift-check e2e-manifest-helper-test rollout-app-tier-order-test staging-kubectl-configmap-test staging-app-secrets-test phase0-fixture-test staging-observability-test
 	$(BASH) "$(ROOT)/scripts/ci/ci-script-tests-reachability_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/e2e-manifest_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/compose-e2e-smoke_test.sh"
@@ -298,6 +298,11 @@ staging-app-secrets-test:
 .PHONY: phase0-fixture-test
 phase0-fixture-test:
 	python3 "$(ROOT)/scripts/ci/phase0-fixture_test.py"
+
+.PHONY: staging-observability-test
+staging-observability-test:
+	$(BASH) "$(ROOT)/scripts/staging/apply-observability_test.sh"
+	$(BASH) "$(ROOT)/scripts/staging/lib/kubectl-secret_test.sh"
 
 generate-staging-services:
 	$(BASH) "$(ROOT)/scripts/ci/generate-staging-go-services.sh"
