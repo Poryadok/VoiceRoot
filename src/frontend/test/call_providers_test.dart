@@ -250,6 +250,70 @@ Future<void> drainMicrotasks({int rounds = 30}) async {
 }
 
 void main() {
+  test(
+    'legacy room entry retains room and Space binding in active state',
+    () async {
+      const spaceId = '11111111-1111-4111-8111-111111111111';
+      const voiceRoomId = '22222222-2222-4222-8222-222222222222';
+      const roomId = '33333333-3333-4333-8333-333333333333';
+      var joinRequests = 0;
+      var tokenRequests = 0;
+      final client = MockClient((request) async {
+        if (request.method == 'POST' &&
+            request.url.path == '/api/v1/voice/rooms/$voiceRoomId/join') {
+          joinRequests++;
+          expect(jsonDecode(request.body), {
+            'space': {'id': spaceId},
+          });
+          return utf8JsonResponse(
+            jsonEncode({
+              'voice_session': {
+                'room_id': roomId,
+                'livekit_room_name': 'voice-room-$roomId',
+                'voice_room_id': voiceRoomId,
+              },
+            }),
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/api/v1/voice/calls/$roomId/token') {
+          tokenRequests++;
+          return utf8JsonResponse(
+            jsonEncode({
+              'jwt': 'livekit-jwt',
+              'livekit_url': 'ws://127.0.0.1:7880',
+            }),
+          );
+        }
+        fail('Unexpected request: ${request.method} ${request.url.path}');
+      });
+      final realtime = StreamController<RealtimeFrame>.broadcast();
+      final fakeRoom = _FakeLiveKitRoom();
+      final container = _callTestContainer(
+        client: client,
+        realtime: realtime,
+        fakeRoom: fakeRoom,
+        activeProfileId: 'prof-test',
+      );
+      addTearDown(container.dispose);
+      addTearDown(realtime.close);
+
+      await container
+          .read(callControllerProvider.notifier)
+          .joinVoiceRoom(voiceRoomId: voiceRoomId, spaceId: spaceId);
+
+      final state = container.read(callControllerProvider);
+      expect(state.phase, CallPhase.active);
+      expect(state.session?.sessionKind, VoiceSessionKind.voiceRoom);
+      expect(state.session?.roomId, roomId);
+      expect(state.session?.voiceRoomId, voiceRoomId);
+      expect(state.session?.spaceId, spaceId);
+      expect(joinRequests, 1);
+      expect(tokenRequests, 1);
+      expect(fakeRoom.connectCalls, 1);
+    },
+  );
+
   test('resolveLivekitConnectUrl prefers client fallback for docker host', () {
     expect(
       resolveLivekitConnectUrl(
