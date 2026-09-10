@@ -11,6 +11,7 @@ import (
 	"voice/backend/pkg/correlation"
 	voicelog "voice/backend/pkg/logging"
 	voicemw "voice/backend/pkg/middleware"
+	"voice/backend/pkg/principal"
 )
 
 type gatewayConfig struct {
@@ -36,6 +37,8 @@ type gatewayConfig struct {
 	metrics            *gatewayMetrics
 	analyticsTelemetry gatewayAnalyticsTelemetry
 	analyticsAudit     analyticsAuditStore
+	principalIssuer    *principal.Issuer
+	principalJWKS      principalJWKS
 	slogLogger         *slog.Logger
 }
 
