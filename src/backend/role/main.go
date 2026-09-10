@@ -15,15 +15,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
 
-	grpcsvc "voice/backend/role/internal/grpcsvc"
-	"voice/backend/role/internal/roleevents"
-	"voice/backend/role/internal/store"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
-	"voice/backend/pkg/runtimeconfig"
 	voiceprom "voice/backend/pkg/promhttp"
-
-	rolev1 "voice.app/voice/role/v1"
+	"voice/backend/pkg/runtimeconfig"
+	grpcsvc "voice/backend/role/internal/grpcsvc"
+	"voice/backend/role/internal/principalruntime"
+	"voice/backend/role/internal/roleevents"
+	"voice/backend/role/internal/store"
 )
 
 const serviceName = "role"
@@ -41,7 +40,14 @@ func main() {
 	}
 
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
-	var grpcSrv *grpc.Server
+	principalConfig, principalEnabled, err := principalruntime.LoadFromEnv()
+	if err != nil {
+		log.Fatalf("principal config: %v", err)
+	}
+	if principalEnabled && dbURL == "" {
+		log.Fatal("principal listener requires DATABASE_URL")
+	}
+	var grpcSrv, principalSrv *grpc.Server
 	if dbURL != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
 		pool, err := pgxpool.New(ctx, dbURL)
@@ -67,11 +73,28 @@ func main() {
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
 		}
-		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))...)
-		rolev1.RegisterRoleServiceServer(grpcSrv, &grpcsvc.RoleGRPC{
-			Store:  roleStore,
-			Events: events,
-		})
+		var principal *principalruntime.Runtime
+		if principalEnabled {
+			principal, err = principalruntime.New(context.Background(), principalConfig)
+			if err != nil {
+				log.Fatalf("principal runtime: %v", err)
+			}
+			defer func() { _ = principal.Close() }()
+		}
+		// Construct shared metrics once; both listeners use the same collectors.
+		grpcSrv, principalSrv = newRoleGRPCServers(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg)), &grpcsvc.RoleGRPC{Store: roleStore, Events: events}, principal)
+		if principalSrv != nil {
+			protectedListener, err := net.Listen("tcp", principalConfig.ListenAddr)
+			if err != nil {
+				log.Fatalf("principal grpc listen: %v", err)
+			}
+			go func() {
+				logger.Info("ownership gRPC TLS listening", slog.String("addr", principalConfig.ListenAddr))
+				if err := principalSrv.Serve(protectedListener); err != nil {
+					log.Fatalf("principal grpc serve: %v", err)
+				}
+			}()
+		}
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcListen))
 			if err := grpcSrv.Serve(lis); err != nil {
@@ -99,11 +122,9 @@ func main() {
 			log.Fatal(err)
 		}
 	case <-stop:
-		if grpcSrv != nil {
-			grpcSrv.GracefulStop()
-		}
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.ShutdownTimeoutFromEnv())
 		defer cancel()
+		shutdownRoleServers(ctx, grpcSrv, principalSrv)
 		if err := server.Shutdown(ctx); err != nil {
 			log.Fatal(err)
 		}
