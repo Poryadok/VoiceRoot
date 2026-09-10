@@ -16,6 +16,8 @@ type KeyResolver func(ctx context.Context, issuer, keyID string) (*rsa.PublicKey
 type ReplayGuard func(ctx context.Context, issuer, jwtID string, expiresAt time.Time) error
 type SessionEpochChecker func(ctx context.Context, accountID string, sessionEpoch int64) error
 
+const temporalSkew = 5 * time.Second
+
 type VerifyConfig struct {
 	ExpectedIssuer      string
 	ExpectedAudience    string
@@ -145,7 +147,7 @@ func validateTemporal(claims rawClaims, now time.Time) error {
 		return fmt.Errorf("required temporal claims missing")
 	}
 	issuedAt, notBefore, expiresAt := time.Unix(claims.IssuedAt, 0), time.Unix(claims.NotBefore, 0), time.Unix(claims.ExpiresAt, 0)
-	if notBefore.Before(issuedAt) || notBefore.After(now) || issuedAt.After(now) || !expiresAt.After(now) || expiresAt.Before(notBefore) || expiresAt.Sub(issuedAt) > maxCredentialTTL {
+	if notBefore.Before(issuedAt) || notBefore.After(now.Add(temporalSkew)) || issuedAt.After(now.Add(temporalSkew)) || !expiresAt.After(now.Add(-temporalSkew)) || expiresAt.Before(notBefore) || expiresAt.Sub(issuedAt) > maxCredentialTTL {
 		return fmt.Errorf("credential temporal claims invalid")
 	}
 	return nil

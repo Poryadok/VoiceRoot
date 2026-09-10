@@ -68,7 +68,7 @@ func TestVerifier_FailsClosedForInvalidOrMismatchedCredentials(t *testing.T) {
 		{"wrong rpc", service, altered(serviceConfig(key, now), func(c *VerifyConfig) { c.ExpectedRPC = "/other" }), false},
 		{"wrong request", service, altered(serviceConfig(key, now), func(c *VerifyConfig) { c.ExpectedRequestHash = "sha256:other" }), false},
 		{"wrong issuer", service, altered(serviceConfig(key, now), func(c *VerifyConfig) { c.ExpectedIssuer = "space" }), false},
-		{"expired", service, serviceConfig(key, now.Add(31*time.Second)), false},
+		{"expired", service, serviceConfig(key, now.Add(36*time.Second)), false},
 		{"service as delegated", service, delegatedConfig(key, now), true},
 		{"delegated as service", delegated, serviceConfig(key, now), false},
 		{"missing session epoch checker", delegated, altered(delegatedConfig(key, now), func(c *VerifyConfig) { c.SessionEpochChecker = nil }), true},
@@ -144,6 +144,32 @@ func TestIssuer_RejectsIncompleteInputs(t *testing.T) {
 	}
 	if _, err := issuer.IssueDelegatedUser(DelegatedUserInput{Audience: "role", RPC: "rpc", RequestID: "request", RequestHash: "hash", AccountID: "account", ProfileID: "profile", ClientExpiresAt: now.Add(time.Minute)}); err == nil {
 		t.Fatal("zero session epoch accepted")
+	}
+}
+
+func TestVerifier_AllowsOnlyFixedFiveSecondTemporalSkew(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0).UTC()
+	_, key := testIssuer(t, now)
+	claims := rawClaims{Type: serviceType, Issuer: "gateway", Subject: "service:gateway", Audience: "role", RPC: "/voice.role.v1.RoleService/CheckPermission", RequestID: "req-1", RequestHash: "sha256:request", JWTID: "id"}
+	claims.IssuedAt = now.Add(5 * time.Second).Unix()
+	claims.NotBefore = now.Add(5 * time.Second).Unix()
+	claims.ExpiresAt = now.Add(30 * time.Second).Unix()
+	token, err := signClaims(key, "current", claims)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifyService(context.Background(), token, serviceConfig(key, now)); err != nil {
+		t.Fatalf("five-second future skew rejected: %v", err)
+	}
+	claims.IssuedAt = now.Add(6 * time.Second).Unix()
+	claims.NotBefore = now.Add(6 * time.Second).Unix()
+	claims.ExpiresAt = now.Add(30 * time.Second).Unix()
+	token, err = signClaims(key, "current", claims)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifyService(context.Background(), token, serviceConfig(key, now)); err == nil {
+		t.Fatal("future credential beyond fixed skew accepted")
 	}
 }
 
