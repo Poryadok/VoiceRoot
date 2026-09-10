@@ -71,7 +71,7 @@ func verificationStatus(err error) error {
 	return status.Error(codes.Unauthenticated, "invalid principal")
 }
 
-// OwnershipUnaryInterceptor drains every ownership protocol from the ordinary
+// OwnershipUnaryInterceptor drains every protected protocol from the ordinary
 // listener without consuming protected verifier dependencies.
 func OwnershipUnaryInterceptor(_ Verifier) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
@@ -81,8 +81,9 @@ func OwnershipUnaryInterceptor(_ Verifier) grpc.UnaryServerInterceptor {
 			"/voice.role.v1.RoleService/FinalizeOwnershipTransfer",
 			"/voice.role.v1.RoleService/AbortOwnershipTransfer",
 			"/voice.role.v1.RoleService/ApplyOwnershipTransfer",
-			"/voice.role.v1.RoleService/CompensateOwnershipTransfer":
-			return nil, status.Error(codes.Unavailable, "ownership method unavailable on ordinary listener")
+			"/voice.role.v1.RoleService/CompensateOwnershipTransfer",
+			"/voice.role.v1.RoleService/ResolveVoiceRoomGrants":
+			return nil, status.Error(codes.Unavailable, "protected method unavailable on ordinary listener")
 		default:
 			return handler(ctx, request)
 		}

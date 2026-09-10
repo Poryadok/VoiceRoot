@@ -49,6 +49,13 @@ func (s *recordingRoleServer) AbortOwnershipTransfer(ctx context.Context, _ *rol
 	return &rolev1.AbortOwnershipTransferResponse{}, nil
 }
 
+func (s *recordingRoleServer) ResolveVoiceRoomGrants(ctx context.Context, _ *rolev1.ResolveVoiceRoomGrantsRequest) (*rolev1.ResolveVoiceRoomGrantsResponse, error) {
+	s.calls.Add(1)
+	p, _ := principal.FromContext(ctx)
+	s.principals <- p
+	return &rolev1.ResolveVoiceRoomGrantsResponse{}, nil
+}
+
 func TestRuntimeListener_AllowsOnlyAuthenticatedV2OwnershipSurface(t *testing.T) {
 	f := newRuntimeFixture(t, 2)
 	address, recorder, roots := startRuntimeListener(t, f)
@@ -116,6 +123,8 @@ func TestRuntimeListener_DeniesLegacyAndUnrelatedMethodsBeforeHandler(t *testing
 	_, err := client.ApplyOwnershipTransfer(ctx, &rolev1.ApplyOwnershipTransferRequest{})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 	_, err = client.CompensateOwnershipTransfer(ctx, &rolev1.CompensateOwnershipTransferRequest{})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	_, err = client.ResolveVoiceRoomGrants(ctx, &rolev1.ResolveVoiceRoomGrantsRequest{})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 	_, err = client.ListRoles(ctx, &rolev1.ListRolesRequest{})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
