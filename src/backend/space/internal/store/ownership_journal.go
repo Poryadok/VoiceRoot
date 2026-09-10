@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -43,6 +44,7 @@ type OwnershipJournal struct {
 	State        string
 	AuditID      uuid.UUID
 	EventID      uuid.UUID
+	AuthReceipt  *OwnershipAuthReceipt
 }
 
 // EncodeOwnershipBinding derives codec-v1 bytes and their digest exclusively
@@ -161,15 +163,23 @@ func (s *SpaceStore) LoadOwnership(ctx context.Context, operationID uuid.UUID) (
 }
 
 const ownershipJournalColumns = `operation_id,protocol_version,space_id,account_id,actor_profile_id,
-	new_owner_profile_id,session_epoch,proof_digest,binding_bytes,binding_hash,state,audit_id,event_id`
+	new_owner_profile_id,session_epoch,proof_digest,binding_bytes,binding_hash,state,audit_id,event_id,
+	auth_receipt_id,auth_account_id,auth_profile_id,auth_space_id,auth_new_owner_profile_id,
+	auth_operation_id,auth_session_epoch,auth_consumed_at,auth_verified_factors`
 
 func scanOwnershipJournal(row pgx.Row) (*OwnershipJournal, error) {
 	out := new(OwnershipJournal)
 	b := &out.Binding
 	var storedHash []byte
+	var receiptID, accountID, profileID, spaceID, newOwnerID, operationID *uuid.UUID
+	var sessionEpoch *int64
+	var consumedAt *time.Time
+	var verifiedFactors []string
 	err := row.Scan(&b.OperationID, &b.ProtocolVersion, &b.SpaceID, &b.AccountID,
 		&b.ActorProfileID, &b.NewOwnerProfileID, &b.SessionEpoch, &b.ProofDigest,
-		&out.BindingBytes, &storedHash, &out.State, &out.AuditID, &out.EventID)
+		&out.BindingBytes, &storedHash, &out.State, &out.AuditID, &out.EventID,
+		&receiptID, &accountID, &profileID, &spaceID, &newOwnerID, &operationID,
+		&sessionEpoch, &consumedAt, &verifiedFactors)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrOwnershipMissing
 	}
@@ -181,5 +191,31 @@ func scanOwnershipJournal(row pgx.Row) (*OwnershipJournal, error) {
 		return nil, errors.New("ownership journal binding evidence is inconsistent")
 	}
 	out.BindingHash = hash
+	if receiptID == nil {
+		if accountID != nil || profileID != nil || spaceID != nil || newOwnerID != nil ||
+			operationID != nil || sessionEpoch != nil || consumedAt != nil || verifiedFactors != nil {
+			return nil, errors.New("ownership journal auth receipt evidence is incomplete")
+		}
+		return out, nil
+	}
+	if accountID == nil || profileID == nil || spaceID == nil || newOwnerID == nil ||
+		operationID == nil || sessionEpoch == nil || consumedAt == nil || verifiedFactors == nil {
+		return nil, errors.New("ownership journal auth receipt evidence is incomplete")
+	}
+	receipt := OwnershipAuthReceipt{
+		ReceiptID:         *receiptID,
+		AccountID:         *accountID,
+		ProfileID:         *profileID,
+		SpaceID:           *spaceID,
+		NewOwnerProfileID: *newOwnerID,
+		OperationID:       *operationID,
+		SessionEpoch:      *sessionEpoch,
+		ConsumedAt:        consumedAt.UTC(),
+		VerifiedFactors:   append([]string(nil), verifiedFactors...),
+	}
+	if err := validateOwnershipAuthReceiptShape(receipt); err != nil || !ownershipAuthReceiptMatchesBinding(receipt, *b) {
+		return nil, errors.New("ownership journal auth receipt evidence is inconsistent")
+	}
+	out.AuthReceipt = &receipt
 	return out, nil
 }

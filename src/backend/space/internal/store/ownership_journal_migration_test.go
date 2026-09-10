@@ -19,6 +19,14 @@ func ownershipJournalMigrationSQL(t *testing.T, direction string) string {
 	require.NoError(t, err)
 	return string(raw)
 }
+
+func ownershipJournalDecisionMigrationSQL(t *testing.T, direction string) string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", "000009_ownership_journal_decision."+direction+".sql"))
+	require.NoError(t, err)
+	return string(raw)
+}
+
 func requireJournalSchema(t *testing.T, pool *pgxpool.Pool, present bool) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -27,6 +35,18 @@ func requireJournalSchema(t *testing.T, pool *pgxpool.Pool, present bool) {
 	require.NoError(t, pool.QueryRow(ctx, `SELECT to_regclass('ownership_journal') IS NOT NULL,to_regclass('ownership_journal_one_active_space') IS NOT NULL`).Scan(&table, &index))
 	require.Equal(t, present, table)
 	require.Equal(t, present, index)
+}
+
+func requireJournalDecisionSchema(t *testing.T, pool *pgxpool.Pool, present bool) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	var receiptID, factors bool
+	require.NoError(t, pool.QueryRow(ctx, `SELECT
+		EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='ownership_journal' AND column_name='auth_receipt_id'),
+		EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='ownership_journal' AND column_name='auth_verified_factors')`).Scan(&receiptID, &factors))
+	require.Equal(t, present, receiptID)
+	require.Equal(t, present, factors)
 }
 
 func TestOwnershipJournalMigration_EmptyDownUpPreservesExistingSpace(t *testing.T) {
@@ -41,6 +61,10 @@ func TestOwnershipJournalMigration_EmptyDownUpPreservesExistingSpace(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, binding.ActorProfileID, row.OwnerProfileID)
 	_, err = st.Pool.Exec(ctx, ownershipJournalMigrationSQL(t, "up"))
+	require.NoError(t, err)
+	decisionMigration, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", "000009_ownership_journal_decision.up.sql"))
+	require.NoError(t, err)
+	_, err = st.Pool.Exec(ctx, string(decisionMigration))
 	require.NoError(t, err)
 	requireJournalSchema(t, st.Pool, true)
 	reservation, err := st.ReserveOwnership(ctx, binding)
@@ -179,4 +203,62 @@ func TestOwnershipJournalMigration_ConcurrentCommittedInsertCannotBeErasedByDown
 	var count int
 	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT count(*) FROM ownership_journal`).Scan(&count))
 	require.Equal(t, 1, count)
+}
+
+func TestOwnershipJournalDecisionMigration_EmptyDownUpPreservesReservationSchema(t *testing.T) {
+	st := ownershipJournalStoreFixture(t)
+	binding := seedOwnershipJournalBinding(t, st)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err := st.Pool.Exec(ctx, ownershipJournalDecisionMigrationSQL(t, "down"))
+	require.NoError(t, err)
+	requireJournalSchema(t, st.Pool, true)
+	requireJournalDecisionSchema(t, st.Pool, false)
+	row, err := st.GetSpace(ctx, binding.SpaceID)
+	require.NoError(t, err)
+	require.Equal(t, binding.ActorProfileID, row.OwnerProfileID)
+
+	_, err = st.Pool.Exec(ctx, ownershipJournalDecisionMigrationSQL(t, "up"))
+	require.NoError(t, err)
+	requireJournalDecisionSchema(t, st.Pool, true)
+	_, err = st.ReserveOwnership(ctx, binding)
+	require.NoError(t, err)
+	confirmed, err := st.ConfirmOwnershipProof(ctx, binding, ownershipAuthReceiptFixture(binding))
+	require.NoError(t, err)
+	require.Equal(t, "proof_confirmed", confirmed.State)
+}
+
+func TestOwnershipJournalDecisionMigration_DownRefusesDecisionEvidenceWithoutLoss(t *testing.T) {
+	for _, state := range []string{"proof_confirmed", "abort_decided"} {
+		t.Run(state, func(t *testing.T) {
+			st := ownershipJournalStoreFixture(t)
+			binding := seedOwnershipJournalBinding(t, st)
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			_, err := st.ReserveOwnership(ctx, binding)
+			require.NoError(t, err)
+			if state == "proof_confirmed" {
+				_, err = st.ConfirmOwnershipProof(ctx, binding, ownershipAuthReceiptFixture(binding))
+			} else {
+				_, err = st.DecideOwnershipAbort(ctx, binding)
+			}
+			require.NoError(t, err)
+			before, err := st.LoadOwnership(ctx, binding.OperationID)
+			require.NoError(t, err)
+
+			_, err = st.Pool.Exec(ctx, ownershipJournalDecisionMigrationSQL(t, "down"))
+			require.Error(t, err)
+			var refusal *pgconn.PgError
+			require.ErrorAs(t, err, &refusal)
+			require.Equal(t, "P0001", refusal.Code)
+			require.Contains(t, refusal.Message, "decision evidence")
+			requireJournalSchema(t, st.Pool, true)
+			requireJournalDecisionSchema(t, st.Pool, true)
+			after, loadErr := st.LoadOwnership(ctx, binding.OperationID)
+			require.NoError(t, loadErr)
+			require.Equal(t, before, after)
+			assertOwnershipJournalHasNoSuccessEffects(t, st, binding)
+		})
+	}
 }

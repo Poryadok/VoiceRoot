@@ -99,6 +99,10 @@ func ownershipJournalStoreFixture(t *testing.T) *SpaceStore {
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, string(migration))
 	require.NoError(t, err)
+	decisionMigration, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", "000009_ownership_journal_decision.up.sql"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(decisionMigration))
+	require.NoError(t, err)
 	return &SpaceStore{Pool: pool}
 }
 func seedOwnershipJournalBinding(t *testing.T, st *SpaceStore) OwnershipBinding {
