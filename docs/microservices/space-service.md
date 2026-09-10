@@ -159,7 +159,9 @@ identity.
 
 Space receives authenticated owner actor plus exact request bindings. It stores a
 durable idempotency record keyed by `(actor_profile_id, operation_id)` and the
-exact request body before performing the existing compensated transfer. Identical
+canonical non-secret request bindings plus a cryptographic proof digest before
+performing the existing compensated transfer; it never stores the proof-bearing
+request body. Identical
 replay returns the saved outcome; changed body returns `ALREADY_EXISTS`. Before
 any owner, Role, audit or event mutation, Space calls the trusted Auth consume
 operation with actor/account/profile, `space_id`, new owner and `operation_id`.
@@ -438,3 +440,60 @@ stores proof digest and receipt only, never opaque plaintext proof. Terminal
 journal tombstones follow Role's durable lifetime/retired-space retention rule.
 A missing journal after a previously issued operation is an operational failure,
 not permission to create a second transfer.
+## A2 public lifecycle and retry contract (target)
+
+The canonical HTTP table, JSON projections, disclosure and pagination are in
+[API Gateway](api-gateway.md#a2-space-rest-contract-target). It preserves existing
+Space/invite/tree paths and freezes target transfer/delete/restore/audit additions.
+No target status in that table means the current service implements it.
+
+Space owns the durable mutation record `(actor_profile_id,operation_id)`, a
+canonical digest binding method/resource/body, and resumable outcome for 30 days.
+The Auth proof contributes only a digest; Space never persists its plaintext.
+Completed replay authenticates the original actor and compares the saved binding
+before applying current-owner/member preconditions: a successful transfer/leave
+can therefore be retried after the actor has ceased to be owner/member. A new
+operation still checks current ownership/membership before any effect. Unfinished
+operations retain the same IDs through Auth consume, Role apply/compensation and
+audit outbox; dependency failure cannot be converted into a success receipt.
+
+### Deletion confirmation proof
+
+This is an autonomous A2 contract decision, **target only**: implement after the
+ownership transfer proof, as a distinct purpose. Password and second-factor checks
+remain owned by Auth; Space must never receive a password or TOTP/backup code.
+The separate names prevent a transfer proof from authorizing deletion.
+
+- `POST /api/v1/auth/space-deletion-proof` (JWT) maps to future Auth
+  `IssueSpaceDeletionProof`. JSON is `{space_id,confirmation_name,operation_id,
+  password,totp_code?,backup_code?}`; success is `200 {proof,expires_at}`. At most
+  one second-factor field is present; password is always checked and enabled 2FA
+  requires TOTP or one unused backup code. Auth does not claim the name is current:
+  Space makes that authoritative comparison when consuming the intent.
+- Proof purpose is exactly `space_delete`, bound to verified `account_id`, active
+  `profile_id`, positive `session_epoch`, `space_id`, UUID `operation_id`, exact
+  UTF-8 `confirmation_name` and verified-factor set. It is opaque/high entropy,
+  returned once, hash-only in Auth storage, expires in five minutes and revokes
+  on epoch/password/2FA/security changes exactly as the transfer proof does.
+- Only signed `service:space` may invoke future `ConsumeSpaceDeletionProof` with
+  `{account_id,profile_id,session_epoch,space_id,confirmation_name,operation_id,proof}`.
+  Auth atomically consumes once and stores an immutable receipt with `receipt_id`,
+  exact bound fields, `verified_factors` and `consumed_at`; identical retry returns
+  it and any changed binding/purpose/operation fails closed. No public consume route.
+- Before consume, Space checks current owner, exact current name (case-sensitive,
+  no trimming or Unicode normalization) and its operation record. It verifies every
+  receipt binding before scheduling deletion. Wrong name/factor/unusable proof is
+  `PERMISSION_DENIED`, invalid field format is `INVALID_ARGUMENT`; Auth outage or
+  mismatched receipt leaves Space unchanged. Neither logs nor audit details contain
+  name confirmation, password, factor or proof plaintext.
+- Schedule commits `deletion_scheduled_at`, `purge_after = scheduled_at + 7 days`
+  and audit/outbox atomically; freezes normal reads/writes/join/invite/MM and revokes
+  active media access. Owner `RestoreSpace` before that deadline restores previous
+  resources; it needs an authenticated current owner and operation ID, not a new
+  factor proof. Restore and expiry/purge share serialization. Purge at/after the
+  deadline remains retryable cross-service cleanup with attachment reference-aware
+  GC and minimal audit tombstone; no delete HTTP response asserts completed purge.
+
+Auth deletion issue/consume proto, Java storage/factors and trusted-principal
+support are a separate later A2 implementation dependency. This decision does
+not expand the ownership-proof implementation or reuse its tokens/receipts.

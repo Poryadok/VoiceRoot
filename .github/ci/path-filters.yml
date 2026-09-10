@@ -7,6 +7,8 @@ global:
   - .github/workflows/**
   - .github/ci/**
   - scripts/ci/**
+  - scripts/dev/generate-phase0-fixture.py
+  - docker/phase0/**
   - src/backend/scripts/docker-go-mod-download.sh
   - scripts/staging/**
   - scripts/prod/**

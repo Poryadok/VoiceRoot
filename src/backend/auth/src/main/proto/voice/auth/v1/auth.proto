@@ -10,6 +10,9 @@ option java_package = "app.voice.auth.v1";
 
 // Auth Service — registration, sessions, JWT, 2FA (Java). HTTP prefix: /api/v1/auth/** → Gateway.
 service AuthService {
+  // Protected Gateway delegated-user issue and Space-only atomic consume.
+  rpc IssueOwnershipTransferProof(IssueOwnershipTransferProofRequest) returns (IssueOwnershipTransferProofResponse);
+  rpc ConsumeOwnershipTransferProof(ConsumeOwnershipTransferProofRequest) returns (ConsumeOwnershipTransferProofResponse);
   rpc Register(RegisterRequest) returns (RegisterResponse);
   rpc Login(LoginRequest) returns (LoginResponse);
   rpc Logout(LogoutRequest) returns (LogoutResponse);
@@ -266,3 +269,40 @@ message RevokeSessionRequest {
 }
 
 message RevokeSessionResponse {}
+
+// Actor account/profile/epoch are derived exclusively from the verified Gateway principal.
+message IssueOwnershipTransferProofRequest {
+  string space_id = 1;
+  string new_owner_profile_id = 2;
+  string operation_id = 3;
+  string password = 4;
+  string totp_code = 5;
+  string backup_code = 6;
+}
+message IssueOwnershipTransferProofResponse {
+  // Opaque secret, returned once. Never persist or log outside Auth's hash-only store.
+  string proof = 1;
+  google.protobuf.Timestamp expires_at = 2;
+}
+
+// Internal Space service principal only; actor identifiers are signed request data.
+message ConsumeOwnershipTransferProofRequest {
+  string account_id = 1;
+  string profile_id = 2;
+  string space_id = 3;
+  string new_owner_profile_id = 4;
+  string operation_id = 5;
+  int64 session_epoch = 6;
+  string proof = 7;
+}
+message ConsumeOwnershipTransferProofResponse {
+  string receipt_id = 1;
+  string account_id = 2;
+  string profile_id = 3;
+  string space_id = 4;
+  string new_owner_profile_id = 5;
+  string operation_id = 6;
+  int64 session_epoch = 7;
+  google.protobuf.Timestamp consumed_at = 8;
+  repeated string verified_factors = 9;
+}
