@@ -177,6 +177,16 @@ spec:
             summary: JetStream pending messages high on {{ $labels.stream }}
             description: Stream {{ $labels.stream }} has >1000 pending messages for 10m.
 
+        - alert: SpaceOwnershipOutboxDeliveryFailures
+          expr: space_ownership_outbox_delivery_alerting_events > 0
+          for: 0m
+          labels:
+            severity: warning
+            cluster: voice-staging
+          annotations:
+            summary: Space ownership outbox delivery failures persist
+            description: One or more Space ownership outbox events have failed delivery at least 10 consecutive times and remain retryable.
+
         - alert: DiskSpaceLow
           expr: |
             (
