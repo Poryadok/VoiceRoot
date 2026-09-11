@@ -497,6 +497,7 @@ allowed = {
     "src/backend/gateway/rest_transcoding_integration_test.go",
     "src/backend/matchmaking/Dockerfile",
     "src/backend/matchmaking/go.mod",
+    "src/backend/role/internal/grpcsvc/ordinary_scope_test.go",
     "src/backend/search/Dockerfile",
     "src/backend/search/go.mod",
     "src/backend/social/Dockerfile",
@@ -578,6 +579,12 @@ r23_contract_path_authorized_in_delta \
   printf '%s\n' 'F13 oracle bug: exact R23 CI-closure path was rejected' >&2
   exit 2
 }
+r23_contract_path_authorized_in_delta \
+  'src/backend/role/internal/grpcsvc/ordinary_scope_test.go' \
+  "${TMP_DIR}/r23-fixed-delta" || {
+  printf '%s\n' 'F13 oracle bug: exact R23 Role contract-test path was rejected' >&2
+  exit 2
+}
 if r23_contract_path_authorized_in_delta \
   'protos/voice/auth/v1/auth.proto.near-match' \
   "${TMP_DIR}/r23-fixed-delta"; then
@@ -594,6 +601,12 @@ if r23_contract_path_authorized_in_delta \
   'src/backend/space/Dockerfile.near-match' \
   "${TMP_DIR}/r23-fixed-delta"; then
   printf '%s\n' 'F13 oracle bug: near-match CI-closure path was accepted' >&2
+  exit 2
+fi
+if r23_contract_path_authorized_in_delta \
+  'src/backend/role/internal/grpcsvc/ordinary_scope_test.go.near-match' \
+  "${TMP_DIR}/r23-fixed-delta"; then
+  printf '%s\n' 'F13 oracle bug: near-match Role contract-test path was accepted' >&2
   exit 2
 fi
 if r23_contract_path_authorized_in_delta \
