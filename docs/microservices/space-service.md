@@ -72,7 +72,7 @@ service SpaceService {
   rpc ListBans(ListBansRequest) returns (BanList);
   rpc TimeoutMember(TimeoutMemberRequest) returns (Empty);           // ✓ shipped
   rpc RemoveMemberTimeout(RemoveMemberTimeoutRequest) returns (Empty); // ✓ shipped
-  rpc TransferOwnership(TransferRequest) returns (Empty);            // disabled in production pending durable v2 + Auth proof
+  rpc TransferOwnership(TransferRequest) returns (Empty);            // disabled pending production coordinator/recovery, capability activation and public vertical
   rpc AddBotMember(AddBotMemberRequest) returns (SpaceMembership);   // ✓ shipped
   rpc RemoveBotMember(RemoveBotMemberRequest) returns (Empty);       // ✓ shipped
 
@@ -110,7 +110,7 @@ service SpaceService {
 | JoinSpace, LeaveSpace | ✓ | ✓ | Composable AND entry policy and invite-safe verifier pipeline remain backlog — [todo/backend.md](../todo/backend.md) |
 | KickMember, BanMember, UnbanMember, ListMembers, ListBans | ✓ | ✓ | |
 | TimeoutMember, RemoveMemberTimeout | ✓ | ✓ | |
-| TransferOwnership | ✓ | Disabled | Production denies before dependencies. The signed, compensated v1 foundation is test-only; durable v2 journal/freeze/finalization, Auth proof and public operation idempotency must land before activation through Gateway/Flutter. See § Ownership lifecycle principal transport. |
+| TransferOwnership | ✓ | Disabled | Production still denies before dependencies. Auth proof consume/receipt lookup, Role v2, and the Space protocol-2 journal through terminal evidence, ordinary freeze and the ready-row scan are shipped foundations. Network recovery/orchestration, capability activation, public operation idempotency and the Gateway/Flutter vertical remain open. See § Ownership lifecycle principal transport. |
 | AddBotMember, RemoveBotMember | ✓ | ✓ | |
 | ListTemplates, CreateFromTemplate | ✓ | ✗ | |
 | GetAuditLog | ✓ | ✓ | `created_at DESC, id DESC`; opaque timestamp+UUID keyset cursor; default 50/max 100; exact `SPACE_VIEW_AUDIT_LOG` check, owner-only fallback only when Role Service is unwired. Filters and REST/Flutter surfaces remain backlog |
@@ -164,29 +164,31 @@ identity.
 
 Space receives authenticated owner actor plus exact request bindings. It stores a
 durable idempotency record keyed by `(actor_profile_id, operation_id)` and the
-canonical non-secret request bindings plus a cryptographic proof digest before
-performing the existing compensated transfer; it never stores the proof-bearing
-request body. Identical
+canonical non-secret request bindings plus a cryptographic proof digest in the
+protocol-2 journal; it never stores the proof-bearing request body. Identical
 replay returns the saved outcome; changed body returns `ALREADY_EXISTS`. Before
-any owner, Role, audit or event mutation, Space calls the trusted Auth consume
-operation with actor/account/profile, `space_id`, new owner and `operation_id`.
-The Auth receipt must exactly match those bindings. Any consume error, receipt
-mismatch, timeout or unavailable dependency fails closed and leaves no transfer
-mutation.
+any owner, Role, audit or event mutation, Space confirms the trusted Auth consume
+receipt for actor/account/profile, `space_id`, new owner and `operation_id`, then
+invokes Role Prepare. The Auth receipt must exactly match those bindings. Any
+consume error, receipt mismatch, timeout or unavailable dependency fails closed
+and leaves no transfer mutation.
 
-The only valid Owner-role mutation is the dedicated trusted transfer path. It
-retains Space-owned compensation, serialization and post-success audit/event
-behavior; Role must reject direct/public `Owner` assign, revoke or reassignment.
-The future authenticated Space→Role transfer operation must be bound to the same
-space, previous owner, new owner and operation ID; it is not a bypass for generic
-member-role RPCs.
+The only valid Owner-role mutation is the dedicated trusted protocol-2 path. Space
+persists one irreversible commit or abort decision: commit follows only a matching
+Role Prepare and sends Finalize, while abort sends Role Abort, including as a
+durable barrier before an observed Prepare. Successful audit and the ready outbox
+event become visible only after the authoritative terminal Role receipt and local
+completion. Every Role call remains bound to the same space, previous owner, new
+owner and operation ID; it is not a bypass for generic member-role RPCs. Role must
+reject direct/public `Owner` assign, revoke or reassignment. Private v1
+Apply/Compensate remains test-only and is never a production fallback.
 
 For client-visible errors, use the feature contract: proof/factor/binding failure
 is `PERMISSION_DENIED` without an oracle; malformed fields are
 `INVALID_ARGUMENT`; current owner/member preconditions are
 `FAILED_PRECONDITION`; same idempotency key with different body is
 `ALREADY_EXISTS`. Existing dependency failures remain fail-closed. The exact
-Auth semantics are in [auth-service.md](auth-service.md#ownership-transfer-step-up-proof-target-contract-not-implemented)
+Auth semantics are in [auth-service.md](auth-service.md#ownership-transfer-step-up-proof)
 and product contract in [spaces.md](../features/spaces.md#контракт-подтверждения-передачи-владения).
 
 ## Ownership-transfer contract (target; not implemented)
@@ -328,46 +330,53 @@ message UnpinTreeNodeRequest {
 
 **Staged foundation:** production Space TransferOwnership is disabled before any
 lock, database or Role access, including when all signing/TLS settings exist or
-Role is absent. There is no environment setting to activate the v1 saga; only
-same-package test fixtures opt into its private test switch. Generic Role Owner
-assignment/revocation remains forbidden; bootstrap and non-Owner member behavior
-is unchanged. V2 durable convergence and Auth proof consumption must be enabled
-atomically before production transfer is exposed.
+Role is absent. Auth proof issuance/consume/receipt recovery, Role's protected v2
+ledger, and Space's protocol-2 reservation, proof confirmation, PREPARED evidence,
+irreversible decision, terminal evidence, ordinary freeze and ready-row scan are
+present. Network orchestration and restart recovery, outbox publish/claim/ack,
+capability activation, the public Space transfer contract and its Gateway/Flutter
+vertical remain open. There is no environment setting to activate the private v1
+saga; only same-package tests opt into it. Generic Role Owner assignment/revocation
+remains forbidden; bootstrap and non-Owner member behavior are unchanged.
 
 
-Space calls dedicated Role `ApplyOwnershipTransfer` and
+The private test-only v1 saga calls dedicated Role `ApplyOwnershipTransfer` and
 `CompensateOwnershipTransfer` through a separate TLS client. It issues a fresh
 short-lived `service:space` credential for each call, binding the exact method,
 request hash and request ID. Forwarded user credentials and raw actor metadata
 are not sent on this transport. One internal operation UUID identifies both
-legs of the current saga; compensation retains the original old/new owner
-ordering, detaches cancellation and uses a bounded cleanup context. A receipt
-whose owner does not match the expected result fails closed.
+legs; compensation retains the original old/new owner ordering, detaches
+cancellation and uses a bounded cleanup context. A receipt whose owner does not
+match the expected result fails closed.
 
 When Role integration is configured, missing signer or dedicated client prevents
 ownership mutation. There is no generic Owner assignment fallback. A public
 current+next JWKS is served at `GET /.well-known/jwks.json`; deployment exposes
-that route through HTTPS to Role. This slice does not yet implement client
-operation idempotency, Auth proof consumption or the public confirmation flow.
+that route through HTTPS to Role. The protected Role v2 surface and Space store
+transitions are not yet connected by a production coordinator, and the public
+confirmation flow remains unavailable.
 Configuration and activation are specified in
 [DEPLOYMENT.md](../DEPLOYMENT.md#ownership-lifecycle-principal-transport).
 
-#### Target durable ownership journal and recovery (not implemented)
+#### Durable ownership journal and completion (store layer shipped; coordinator open)
 
-A follow-on slice persists the exact operation tuple, canonical non-secret
+The merged Space store persists the exact operation tuple, canonical non-secret
 request binding, consumed Auth receipt and decision in `space_db` before owner
-mutation. Under the space mutation lease it advances a journal through prepared,
-commit-decided or abort-decided, then completed or aborted. Commit and abort are
-mutually exclusive durable decisions; clients retry the same operation body to
-observe its outcome, while a changed body returns `ALREADY_EXISTS`.
+mutation. Its protocol-2 journal implements `reserved`, `proof_confirmed`,
+`prepared`, `commit_decided` or `abort_decided`, then `completed` or `aborted`.
+Commit and abort are mutually exclusive durable decisions. Exact PREPARED and
+terminal evidence, atomic terminal audit/outbox visibility, the ordinary Space
+freeze and the bounded deterministic `ready=true` outbox scan are shipped. These
+store APIs are not a network recovery worker or an activated public transfer.
 
-The target order is: reserve journal and validate/consume proof; invoke v2 Prepare for Role's
-frozen ownership operation; atomically persist the new Space owner, audit/outbox
-and commit decision; finalize Role; mark the Space operation completed and allow
-its audit/event visibility. Any failure before commit decision selects durable
-abort and retries v2 Role Abort; failure after commit decision retries
-Finalize and never switches to abort. Do not report a terminal result until both
-local state and the authoritative Role receipt confirm it.
+The still-open coordinator order is: reserve journal and validate/consume proof;
+invoke v2 Prepare for Role's frozen ownership operation; atomically persist the
+new Space owner, audit/outbox and commit decision; finalize Role; mark the Space
+operation completed and allow its audit/event visibility. Any failure before
+commit decision selects durable abort and retries v2 Role Abort; failure after
+commit decision retries Finalize and never switches to abort. Do not report a
+terminal result until both local state and the authoritative Role receipt confirm
+it.
 
 Terminal receipt validation canonicalizes the embedded intent and the receipt
 wrapper separately. After Prepare, every terminal receipt must retain the exact
@@ -399,22 +408,23 @@ are not dispatchable through this seam. The delivery, claim and acknowledgement
 protocol remains a later coordinator/dispatcher contract and is not an R20
 activation claim.
 
-A recovery worker resumes exact operations after restart, including crashes after
-journal reservation, Auth consume, ambiguous v2 Role Prepare, local commit decision,
-Role Finalize or local completion. Once the later delivery protocol exists, its
-worker also resumes outbox delivery. No timeout silently deletes a pending operation
-or clears its freeze. Audit/event delivery is idempotent; an abort publishes neither
-successful transfer audit nor event. Sustained dependency failure leaves a visible
-pending/unavailable outcome and operational alert, not fabricated rollback success.
-Space remains the owner authority and uses Role API receipts, never cross-service
-database access.
+The missing network recovery worker must resume exact operations after restart,
+including crashes after journal reservation, Auth consume, ambiguous v2 Role
+Prepare, local commit decision, Role Finalize or local completion. Once the later
+delivery protocol exists, its worker also resumes outbox delivery. No timeout may
+silently delete a pending operation or clear its freeze. Audit/event delivery is
+idempotent; an abort publishes neither successful transfer audit nor event.
+Sustained dependency failure leaves a visible pending/unavailable outcome and
+operational alert, not fabricated rollback success. Space remains the owner
+authority and uses Role API receipts, never cross-service database access.
 
 Acceptance requires injected response loss/unavailability at every boundary,
 restart recovery from each durable state, concurrent same-operation replay and
 conflicting bodies, Finalize/Abort races obeying one durable decision,
 invisible pending audit/read surfaces, and proof that no permission decision
-observes two effective Owners. The current compensated saga and terminal Role
-abort barrier do not yet satisfy this complete convergence contract.
+observes two effective Owners. The shipped durable store layer and Role terminal
+barrier do not yet satisfy this complete convergence contract without the network
+coordinator, recovery worker and public vertical.
 
 
 ##### Journal exclusivity, freeze inventory and ambiguous consume
@@ -426,10 +436,11 @@ owner, protocol version and canonical non-secret body/proof digest. A different
 operation while one is active is `FAILED_PRECONDITION`; the same operation with
 a changed body is `ALREADY_EXISTS`. Reservation precedes Auth consume. The only
 allowed decisions are unset -> commit or unset -> abort, through serialized
-compare-and-set; neither terminal decision can switch sides. A worker re-reads
-the committed decision before sending its action, so stale workers cannot issue
-contradictory Finalize and Abort. Abort completion requires an authoritative Role
-aborted receipt even when Prepare was not observed, fencing delayed attempts.
+compare-and-set; neither terminal decision can switch sides. The future network
+worker must re-read the committed decision before sending its action, so stale
+workers cannot issue contradictory Finalize and Abort. Abort completion requires
+an authoritative Role aborted receipt even when Prepare was not observed, fencing
+delayed attempts.
 
 Space freeze applies to GetSpace/owner enrichment, ListMySpaces/search/templates
 that include the space, members/bans/audit/tree/category/node reads, invite reads
@@ -443,11 +454,11 @@ absence of an active journal permits normal behavior; lookup errors deny. The
 operation status/identical-request outcome may remain readable only to its
 verified initiating actor without disclosing pending member or audit data.
 
-Auth's current identical Consume replay requires the original opaque proof
+Auth's identical Consume replay requires the original opaque proof
 (matched by its digest) and exact original binding, including original session epoch, and returns its durable
 receipt even after proof expiry or later account security/epoch changes; it does
 not create a second grant. Recovery without retaining plaintext proof therefore
-requires a separate target trusted Space-only
+uses the shipped trusted Space-only
 `GetOwnershipTransferReceipt` lookup with exact `account_id`, `profile_id`
 (the old-owner actor), `space_id`, `new_owner_profile_id`, `operation_id` and
 original `session_epoch`, plus required `proof_digest` (the SHA-256 hex digest
@@ -456,8 +467,7 @@ storage, preserving exact-proof replay without retaining plaintext proof.
 It returns only a previously committed matching receipt; missing, unconsumed or
 mismatched results all return coarse `PERMISSION_DENIED` and never authorize
 consumption or ownership. Consumed receipts outlive ordinary proof TTL cleanup.
-This additive Auth contract is a dependency of v2, not a change to the current
-Consume implementation.
+The production Space recovery worker that calls this lookup remains open.
 
 After ambiguous consume, recover that exact receipt and persist it before
 Prepare or a commit decision. Never consume a different proof to resolve the
@@ -483,8 +493,9 @@ Completed replay authenticates the original actor and compares the saved binding
 before applying current-owner/member preconditions: a successful transfer/leave
 can therefore be retried after the actor has ceased to be owner/member. A new
 operation still checks current ownership/membership before any effect. Unfinished
-operations retain the same IDs through Auth consume, Role apply/compensation and
-audit outbox; dependency failure cannot be converted into a success receipt.
+operations retain the same IDs through Auth consume, Role Prepare, the durable
+commit/abort decision, matching Finalize/Abort and terminal audit/outbox
+visibility; dependency failure cannot be converted into a success receipt.
 
 ### Deletion confirmation proof
 

@@ -74,9 +74,13 @@ manual approval. Invite не обходит требования. Если вк�
 
 Это утверждённый target-контракт публичной передачи. Auth уже содержит
 `IssueOwnershipTransferProof`, Space-only `ConsumeOwnershipTransferProof` и lookup
-durable receipt; публичный Space request, durable operation journal и Gateway /
-Flutter vertical ещё не реализованы. Клиент получает proof только у Auth через
-authenticated user surface, а не создаёт и не проверяет его в Gateway или Space.
+durable receipt; Role содержит защищённый protocol-2 ledger, а Space — durable
+journal от reservation/proof/PREPARED через необратимое решение до terminal
+evidence, ordinary freeze и read-only scan готовых outbox rows. Network recovery
+worker, publish/claim/ack, capability activation, публичный Space request и
+Gateway/Flutter vertical ещё не реализованы. Клиент получает proof только у Auth
+через authenticated user surface, а не создаёт и не проверяет его в Gateway или
+Space.
 
 1. После проверки password и, для account с включённой 2FA, TOTP либо backup code,
    Auth выпускает непрозрачный high-entropy proof. Его plaintext возвращается ровно
@@ -94,17 +98,21 @@ authenticated user surface, а не создаёт и не проверяет е
    saved outcome исходному actor без повторной проверки current owner и без новых
    данных или side effects. Для новой операции Space проверяет текущего owner. Первый запрос сохраняет canonical non-secret bindings и криптографический digest proof, без plaintext proof.
    Тот же body возвращает ранее сохранённый outcome; иной body с тем же ключом
-   завершается `ALREADY_EXISTS`. До существующей компенсируемой передачи Space
-   атомарно вызывает trusted Auth consume с этими exact bindings.
+   завершается `ALREADY_EXISTS`. Space сначала резервирует protocol-2 journal и
+   атомарно подтверждает trusted Auth consume с этими exact bindings, затем
+   вызывает Role Prepare.
 5. Auth consume допускается только trusted Space principal, атомарно помечает proof
    использованным и возвращает durable receipt, привязанный к `operation_id`.
    Повтор того же consume после сетевого сбоя возвращает этот receipt, не выдаёт
    второе разрешение и не расходует другой proof. Любая ошибка Auth/receipt или
    несовпадение binding закрывает передачу до mutation.
-6. Только этот verified transfer path вправе менять системную роль `Owner`: Space
-   выполняет существующую компенсируемую transition owner/profile + Role, а
+6. Только этот verified protocol-2 path вправе менять системную роль `Owner`:
+   Space сохраняет необратимое commit/abort решение; commit следует только после
+   Role Prepare и вызывает Finalize, а abort вызывает Role Abort, включая durable
+   barrier до наблюдаемого Prepare. Успешные audit/ready outbox event становятся
+   видимыми только после matching terminal Role receipt и локального completion;
    обычные member-role операции не могут выдать, снять или переназначить `Owner`.
-   Audit/event публикуются только после успешного завершения этой transition.
+   Private v1 compensation не является production fallback.
 
 Клиентские ошибки не раскрывают, существует ли proof и почему именно он не годен:
 отсутствующий/невалидный session → `UNAUTHENTICATED`; неверный password или
@@ -119,7 +127,8 @@ unavailability остаётся `UNAVAILABLE`; остальные failure path f
 state; all bindings and five-minute expiry; every revocation trigger; single consume
 and durable same-operation receipt; Space same-body replay and changed-body
 `ALREADY_EXISTS`; no mutation/audit/event on consume denial; and that direct Role
-member RPCs reject `Owner` mutation while the trusted compensated path succeeds.
+member RPCs reject `Owner` mutation while the trusted protocol-2
+Prepare/decision/Finalize-or-Abort path reaches one matching terminal outcome.
 - **Бан участника**: забаненный не может зайти в спейс; его сообщения остаются (не удаляются); публичный контент спейса — не видит (как Discord)
 - **Slow mode для текстовых чатов** (`group` \| `channel`): настраиваемый интервал 5 сек – 6 ч (настраивается из rate limiting)
 - **Шаблоны при создании**: выбор темы — "Игровое" / "Рабочее" / "Общение"; влияет на дефолтные каналы и структуру, не на функциональность
