@@ -5,6 +5,7 @@ package voice.file.v1;
 import "google/protobuf/timestamp.proto";
 import "voice/chat/v1/chat.proto";
 import "voice/common/v1/common.proto";
+import "voice/common/v1/space_lifecycle.proto";
 import "voice/story/v1/story.proto";
 
 option go_package = "voice.app/voice/file/v1;filev1";
@@ -44,15 +45,44 @@ enum FileScanOutcome {
 service FileService {
   rpc RequestUpload(RequestUploadRequest) returns (RequestUploadResponse);
   rpc ConfirmUpload(ConfirmUploadRequest) returns (ConfirmUploadResponse);
-
+  // @voice.security=public_gateway;callers=service:gateway
   rpc GetFileURL(GetFileURLRequest) returns (GetFileURLResponse);
+  // @voice.security=public_gateway;callers=service:gateway
   rpc GetFileMetadata(GetFileMetadataRequest) returns (GetFileMetadataResponse);
+  // @voice.security=public_gateway;callers=service:gateway
   rpc GetBulkMetadata(GetBulkMetadataRequest) returns (GetBulkMetadataResponse);
 
   rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
   rpc ListFiles(ListFilesRequest) returns (ListFilesResponse);
 
   rpc CheckQuota(CheckQuotaRequest) returns (CheckQuotaResponse);
+
+  // @voice.security=protected;callers=service:messaging,service:chat,service:story,service:user
+  rpc IssueFileAccessCapability(voice.file.v1.IssueFileAccessCapabilityRequest) returns (voice.file.v1.IssueFileAccessCapabilityResponse);
+
+  // @voice.security=protected;callers=service:space
+  rpc PrepareSpaceDeletionReferenceManifest(voice.file.v1.PrepareSpaceDeletionReferenceManifestRequest) returns (voice.file.v1.PrepareSpaceDeletionReferenceManifestResponse);
+
+  // @voice.security=protected;callers=service:space,service:chat,service:messaging
+  rpc RegisterSpaceDeletionReferenceChunk(voice.file.v1.RegisterSpaceDeletionReferenceChunkRequest) returns (voice.file.v1.RegisterSpaceDeletionReferenceChunkResponse);
+
+  // @voice.security=protected;callers=service:space,service:chat,service:messaging
+  rpc ReleaseSpaceDeletionProducerReferences(voice.file.v1.ReleaseSpaceDeletionProducerReferencesRequest) returns (voice.file.v1.ReleaseSpaceDeletionProducerReferencesResponse);
+
+  // @voice.security=protected;callers=service:space
+  rpc ApplySpaceLifecycleFence(voice.file.v1.ApplySpaceLifecycleFenceRequest) returns (voice.file.v1.ApplySpaceLifecycleFenceResponse);
+
+  // @voice.security=protected;callers=service:space
+  rpc PurgeSpace(voice.file.v1.PurgeSpaceRequest) returns (voice.file.v1.PurgeSpaceResponse);
+
+  // @voice.security=protected;callers=service:space,service:chat,service:messaging
+  rpc AcquireFileReferences(voice.file.v1.AcquireFileReferencesRequest) returns (voice.file.v1.AcquireFileReferencesResponse);
+
+  // @voice.security=protected;callers=service:space,service:chat,service:messaging
+  rpc ReleaseFileReferences(voice.file.v1.ReleaseFileReferencesRequest) returns (voice.file.v1.ReleaseFileReferencesResponse);
+
+  // @voice.security=protected;callers=service:space
+  rpc GetSpacePurgeReceipt(voice.file.v1.GetSpacePurgeReceiptRequest) returns (voice.file.v1.GetSpacePurgeReceiptResponse);
 }
 
 message RequestUploadRequest {
@@ -104,16 +134,22 @@ message FileMetadata {
   optional FileScanOutcome scan_result_enum = 23;
 }
 
+// @voice.unknown_fields=reject
 message GetFileURLRequest {
   string file_id = 1;
+  voice.file.v1.FileAccessSelector access = 2;
 }
 
+// @voice.unknown_fields=reject
 message GetFileMetadataRequest {
   string file_id = 1;
+  voice.file.v1.FileAccessSelector access = 2;
 }
 
+// @voice.unknown_fields=reject
 message GetBulkMetadataRequest {
-  repeated string file_ids = 1;
+  repeated string file_ids = 1 [deprecated = true];
+  repeated voice.file.v1.FileAccessItem items = 2;
 }
 
 message BulkFileMetadata {
@@ -166,4 +202,292 @@ message ListFilesResponse {
 }
 message CheckQuotaResponse {
   QuotaResponse quota_response = 1;
+}
+
+enum FileReferenceOwnerType {
+  FILE_REFERENCE_OWNER_TYPE_UNSPECIFIED = 0;
+  FILE_REFERENCE_OWNER_TYPE_MESSAGE = 1;
+  FILE_REFERENCE_OWNER_TYPE_STORY = 2;
+  FILE_REFERENCE_OWNER_TYPE_PROFILE_AVATAR = 3;
+  FILE_REFERENCE_OWNER_TYPE_CHAT_AVATAR = 4;
+  FILE_REFERENCE_OWNER_TYPE_SPACE_AVATAR = 5;
+  FILE_REFERENCE_OWNER_TYPE_STICKER = 6;
+  FILE_REFERENCE_OWNER_TYPE_GIF_ASSET = 7;
+  FILE_REFERENCE_OWNER_TYPE_UPLOAD_SESSION = 8;
+}
+
+enum FileReadSurface {
+  FILE_READ_SURFACE_UNSPECIFIED = 0;
+  FILE_READ_SURFACE_URL = 1;
+  FILE_READ_SURFACE_METADATA = 2;
+}
+
+enum FileReferenceProducerId {
+  FILE_REFERENCE_PRODUCER_ID_UNSPECIFIED = 0;
+  FILE_REFERENCE_PRODUCER_ID_SPACE = 1;
+  FILE_REFERENCE_PRODUCER_ID_CHAT = 2;
+  FILE_REFERENCE_PRODUCER_ID_MESSAGING = 3;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message FileReferenceProducerDeclaration {
+  voice.file.v1.FileReferenceProducerId producer_id = 1;
+  uint64 expected_total_count = 2;
+  bytes expected_references_sha256 = 3;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message FileReferenceKey {
+  string file_id = 1;
+  voice.file.v1.FileReferenceOwnerType owner_type = 2;
+  string owner_id = 3;
+  optional string subresource_id = 4;
+  optional string scope_space_id = 5;
+}
+
+// @voice.unknown_fields=reject
+message FileAccessSelector {
+  oneof selector {
+    voice.file.v1.FileReferenceKey reference = 1;
+    string capability_id = 2;
+  }
+}
+
+// @voice.unknown_fields=reject
+message FileAccessItem {
+  string file_id = 1;
+  voice.file.v1.FileAccessSelector access = 2;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message IssueFileAccessCapabilityRequest {
+  uint32 protocol_version = 1;
+  string operation_id = 2;
+  voice.file.v1.FileReferenceKey reference = 3;
+  string subject_profile_id = 4;
+  repeated voice.file.v1.FileReadSurface allowed_surfaces = 5;
+  google.protobuf.Timestamp expires_at = 6;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message IssueFileAccessCapabilityResponse {
+  voice.file.v1.IssueFileAccessCapabilityReceipt receipt = 1;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message IssueFileAccessCapabilityReceipt {
+  uint32 protocol_version = 1;
+  string receipt_id = 2;
+  string operation_id = 3;
+  string capability_id = 4;
+  voice.file.v1.FileReferenceKey reference = 5;
+  string subject_profile_id = 6;
+  repeated voice.file.v1.FileReadSurface allowed_surfaces = 7;
+  google.protobuf.Timestamp expires_at = 8;
+  bytes request_sha256 = 9;
+  google.protobuf.Timestamp completed_at = 10;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message PrepareSpaceDeletionReferenceManifestRequest {
+  uint32 protocol_version = 1;
+  string space_id = 2;
+  string deletion_operation_id = 3;
+  uint64 schedule_generation = 4;
+  voice.common.v1.ManifestBinding chat_manifest = 5;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message PrepareSpaceDeletionReferenceManifestReceipt {
+  uint32 protocol_version = 1;
+  string receipt_id = 2;
+  string space_id = 3;
+  string deletion_operation_id = 4;
+  uint64 schedule_generation = 5;
+  voice.common.v1.LifecycleFenceState applied_state = 6;
+  bytes request_sha256 = 7;
+  google.protobuf.Timestamp applied_at = 8;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message PrepareSpaceDeletionReferenceManifestResponse {
+  voice.file.v1.PrepareSpaceDeletionReferenceManifestReceipt receipt = 1;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message RegisterSpaceDeletionReferenceChunkRequest {
+  uint32 protocol_version = 1;
+  voice.file.v1.FileReferenceProducerId producer_id = 2;
+  string operation_id = 3;
+  string deletion_operation_id = 4;
+  string space_id = 5;
+  uint64 schedule_generation = 6;
+  uint64 chunk_index = 7;
+  repeated voice.file.v1.FileReferenceKey references = 8;
+  uint64 expected_total_count = 9;
+  bytes expected_references_sha256 = 10;
+  bool seals_producer = 11;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message RegisterSpaceDeletionReferenceChunkReceipt {
+  uint32 protocol_version = 1;
+  string receipt_id = 2;
+  string operation_id = 3;
+  string deletion_operation_id = 4;
+  string space_id = 5;
+  uint64 schedule_generation = 6;
+  uint64 chunk_index = 7;
+  uint64 accepted_count = 8;
+  voice.file.v1.FileReferenceProducerId producer_id = 9;
+  uint64 expected_total_count = 10;
+  bytes expected_references_sha256 = 11;
+  bool producer_sealed = 12;
+  bytes request_sha256 = 13;
+  google.protobuf.Timestamp completed_at = 14;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message RegisterSpaceDeletionReferenceChunkResponse {
+  voice.file.v1.RegisterSpaceDeletionReferenceChunkReceipt receipt = 1;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message ReleaseSpaceDeletionProducerReferencesRequest {
+  uint32 protocol_version = 1;
+  string deletion_operation_id = 2;
+  string space_id = 3;
+  uint64 purge_generation = 4;
+  uint64 source_schedule_generation = 5;
+  voice.file.v1.FileReferenceProducerId producer_id = 6;
+  bytes expected_references_sha256 = 7;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message ReleaseSpaceDeletionProducerReferencesReceipt {
+  uint32 protocol_version = 1;
+  string receipt_id = 2;
+  string deletion_operation_id = 3;
+  string space_id = 4;
+  uint64 purge_generation = 5;
+  uint64 source_schedule_generation = 6;
+  voice.file.v1.FileReferenceProducerId producer_id = 7;
+  uint64 released_count = 8;
+  bytes expected_references_sha256 = 9;
+  bytes request_sha256 = 10;
+  google.protobuf.Timestamp completed_at = 11;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message ReleaseSpaceDeletionProducerReferencesResponse {
+  voice.file.v1.ReleaseSpaceDeletionProducerReferencesReceipt receipt = 1;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message ApplySpaceLifecycleFenceRequest {
+  voice.common.v1.SpaceLifecycleFenceRequest fence = 1;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message ApplySpaceLifecycleFenceResponse {
+  voice.common.v1.SpaceLifecycleFenceReceipt receipt = 1;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message PurgeSpaceRequest {
+  voice.common.v1.SpacePurgeRequest purge = 1;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message PurgeSpaceResponse {
+  voice.common.v1.SpacePurgeReceipt receipt = 1;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message AcquireFileReferencesRequest {
+  uint32 protocol_version = 1;
+  string operation_id = 2;
+  voice.file.v1.FileReferenceProducerId producer_id = 3;
+  repeated voice.file.v1.FileReferenceKey references = 4;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message AcquireFileReferencesReceipt {
+  uint32 protocol_version = 1;
+  string receipt_id = 2;
+  string operation_id = 3;
+  voice.file.v1.FileReferenceProducerId producer_id = 4;
+  uint64 reference_count = 5;
+  bytes request_sha256 = 6;
+  google.protobuf.Timestamp completed_at = 7;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message AcquireFileReferencesResponse {
+  voice.file.v1.AcquireFileReferencesReceipt receipt = 1;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message ReleaseFileReferencesRequest {
+  uint32 protocol_version = 1;
+  string operation_id = 2;
+  voice.file.v1.FileReferenceProducerId producer_id = 3;
+  repeated voice.file.v1.FileReferenceKey references = 4;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message ReleaseFileReferencesReceipt {
+  uint32 protocol_version = 1;
+  string receipt_id = 2;
+  string operation_id = 3;
+  voice.file.v1.FileReferenceProducerId producer_id = 4;
+  uint64 released_count = 5;
+  bytes request_sha256 = 6;
+  google.protobuf.Timestamp completed_at = 7;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message ReleaseFileReferencesResponse {
+  voice.file.v1.ReleaseFileReferencesReceipt receipt = 1;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message GetSpacePurgeReceiptRequest {
+  uint32 protocol_version = 1;
+  string space_id = 2;
+  string deletion_operation_id = 3;
+  uint64 generation = 4;
+  bytes purge_request_sha256 = 5;
+  bytes manifest_sha256 = 6;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message GetSpacePurgeReceiptResponse {
+  voice.common.v1.SpacePurgeReceipt receipt = 1;
 }

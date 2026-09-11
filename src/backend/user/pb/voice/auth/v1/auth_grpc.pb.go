@@ -19,31 +19,35 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AuthService_IssueOwnershipTransferProof_FullMethodName   = "/voice.auth.v1.AuthService/IssueOwnershipTransferProof"
-	AuthService_ConsumeOwnershipTransferProof_FullMethodName = "/voice.auth.v1.AuthService/ConsumeOwnershipTransferProof"
-	AuthService_GetOwnershipTransferReceipt_FullMethodName   = "/voice.auth.v1.AuthService/GetOwnershipTransferReceipt"
-	AuthService_Register_FullMethodName                      = "/voice.auth.v1.AuthService/Register"
-	AuthService_Login_FullMethodName                         = "/voice.auth.v1.AuthService/Login"
-	AuthService_Logout_FullMethodName                        = "/voice.auth.v1.AuthService/Logout"
-	AuthService_RefreshToken_FullMethodName                  = "/voice.auth.v1.AuthService/RefreshToken"
-	AuthService_Enable2FA_FullMethodName                     = "/voice.auth.v1.AuthService/Enable2FA"
-	AuthService_Verify2FA_FullMethodName                     = "/voice.auth.v1.AuthService/Verify2FA"
-	AuthService_VerifyOTP_FullMethodName                     = "/voice.auth.v1.AuthService/VerifyOTP"
-	AuthService_ConvertGuest_FullMethodName                  = "/voice.auth.v1.AuthService/ConvertGuest"
-	AuthService_DeleteAccount_FullMethodName                 = "/voice.auth.v1.AuthService/DeleteAccount"
-	AuthService_RestoreAccount_FullMethodName                = "/voice.auth.v1.AuthService/RestoreAccount"
-	AuthService_ValidateToken_FullMethodName                 = "/voice.auth.v1.AuthService/ValidateToken"
-	AuthService_GetJWKS_FullMethodName                       = "/voice.auth.v1.AuthService/GetJWKS"
-	AuthService_SwitchActiveProfile_FullMethodName           = "/voice.auth.v1.AuthService/SwitchActiveProfile"
-	AuthService_SetAccountStatus_FullMethodName              = "/voice.auth.v1.AuthService/SetAccountStatus"
-	AuthService_PutE2EKeyBackup_FullMethodName               = "/voice.auth.v1.AuthService/PutE2EKeyBackup"
-	AuthService_GetE2EKeyBackup_FullMethodName               = "/voice.auth.v1.AuthService/GetE2EKeyBackup"
-	AuthService_ResolvePhoneHashes_FullMethodName            = "/voice.auth.v1.AuthService/ResolvePhoneHashes"
-	AuthService_FilterDeletedAccountIDs_FullMethodName       = "/voice.auth.v1.AuthService/FilterDeletedAccountIDs"
-	AuthService_GetGuestReminder_FullMethodName              = "/voice.auth.v1.AuthService/GetGuestReminder"
-	AuthService_MarkGuestReminderShown_FullMethodName        = "/voice.auth.v1.AuthService/MarkGuestReminderShown"
-	AuthService_ListSessions_FullMethodName                  = "/voice.auth.v1.AuthService/ListSessions"
-	AuthService_RevokeSession_FullMethodName                 = "/voice.auth.v1.AuthService/RevokeSession"
+	AuthService_IssueOwnershipTransferProof_FullMethodName          = "/voice.auth.v1.AuthService/IssueOwnershipTransferProof"
+	AuthService_ConsumeOwnershipTransferProof_FullMethodName        = "/voice.auth.v1.AuthService/ConsumeOwnershipTransferProof"
+	AuthService_GetOwnershipTransferReceipt_FullMethodName          = "/voice.auth.v1.AuthService/GetOwnershipTransferReceipt"
+	AuthService_Register_FullMethodName                             = "/voice.auth.v1.AuthService/Register"
+	AuthService_Login_FullMethodName                                = "/voice.auth.v1.AuthService/Login"
+	AuthService_Logout_FullMethodName                               = "/voice.auth.v1.AuthService/Logout"
+	AuthService_RefreshToken_FullMethodName                         = "/voice.auth.v1.AuthService/RefreshToken"
+	AuthService_Enable2FA_FullMethodName                            = "/voice.auth.v1.AuthService/Enable2FA"
+	AuthService_Verify2FA_FullMethodName                            = "/voice.auth.v1.AuthService/Verify2FA"
+	AuthService_VerifyOTP_FullMethodName                            = "/voice.auth.v1.AuthService/VerifyOTP"
+	AuthService_ConvertGuest_FullMethodName                         = "/voice.auth.v1.AuthService/ConvertGuest"
+	AuthService_DeleteAccount_FullMethodName                        = "/voice.auth.v1.AuthService/DeleteAccount"
+	AuthService_RestoreAccount_FullMethodName                       = "/voice.auth.v1.AuthService/RestoreAccount"
+	AuthService_ValidateToken_FullMethodName                        = "/voice.auth.v1.AuthService/ValidateToken"
+	AuthService_GetJWKS_FullMethodName                              = "/voice.auth.v1.AuthService/GetJWKS"
+	AuthService_SwitchActiveProfile_FullMethodName                  = "/voice.auth.v1.AuthService/SwitchActiveProfile"
+	AuthService_SetAccountStatus_FullMethodName                     = "/voice.auth.v1.AuthService/SetAccountStatus"
+	AuthService_PutE2EKeyBackup_FullMethodName                      = "/voice.auth.v1.AuthService/PutE2EKeyBackup"
+	AuthService_GetE2EKeyBackup_FullMethodName                      = "/voice.auth.v1.AuthService/GetE2EKeyBackup"
+	AuthService_ResolvePhoneHashes_FullMethodName                   = "/voice.auth.v1.AuthService/ResolvePhoneHashes"
+	AuthService_FilterDeletedAccountIDs_FullMethodName              = "/voice.auth.v1.AuthService/FilterDeletedAccountIDs"
+	AuthService_GetGuestReminder_FullMethodName                     = "/voice.auth.v1.AuthService/GetGuestReminder"
+	AuthService_MarkGuestReminderShown_FullMethodName               = "/voice.auth.v1.AuthService/MarkGuestReminderShown"
+	AuthService_ListSessions_FullMethodName                         = "/voice.auth.v1.AuthService/ListSessions"
+	AuthService_RevokeSession_FullMethodName                        = "/voice.auth.v1.AuthService/RevokeSession"
+	AuthService_IssueSpaceDeletionProof_FullMethodName              = "/voice.auth.v1.AuthService/IssueSpaceDeletionProof"
+	AuthService_ConsumeSpaceDeletionProof_FullMethodName            = "/voice.auth.v1.AuthService/ConsumeSpaceDeletionProof"
+	AuthService_GetSpaceDeletionProofReceipt_FullMethodName         = "/voice.auth.v1.AuthService/GetSpaceDeletionProofReceipt"
+	AuthService_AcknowledgeSpaceDeletionProofReceipt_FullMethodName = "/voice.auth.v1.AuthService/AcknowledgeSpaceDeletionProofReceipt"
 )
 
 // AuthServiceClient is the client API for AuthService service.
@@ -88,6 +92,14 @@ type AuthServiceClient interface {
 	// Active devices / sessions (docs/features/auth-and-contacts.md).
 	ListSessions(ctx context.Context, in *ListSessionsRequest, opts ...grpc.CallOption) (*ListSessionsResponse, error)
 	RevokeSession(ctx context.Context, in *RevokeSessionRequest, opts ...grpc.CallOption) (*RevokeSessionResponse, error)
+	// @voice.security=public_gateway;callers=service:gateway
+	IssueSpaceDeletionProof(ctx context.Context, in *IssueSpaceDeletionProofRequest, opts ...grpc.CallOption) (*IssueSpaceDeletionProofResponse, error)
+	// @voice.security=protected;callers=service:space
+	ConsumeSpaceDeletionProof(ctx context.Context, in *ConsumeSpaceDeletionProofRequest, opts ...grpc.CallOption) (*ConsumeSpaceDeletionProofResponse, error)
+	// @voice.security=protected;callers=service:space
+	GetSpaceDeletionProofReceipt(ctx context.Context, in *GetSpaceDeletionProofReceiptRequest, opts ...grpc.CallOption) (*GetSpaceDeletionProofReceiptResponse, error)
+	// @voice.security=protected;callers=service:space
+	AcknowledgeSpaceDeletionProofReceipt(ctx context.Context, in *AcknowledgeSpaceDeletionProofReceiptRequest, opts ...grpc.CallOption) (*AcknowledgeSpaceDeletionProofReceiptResponse, error)
 }
 
 type authServiceClient struct {
@@ -348,6 +360,46 @@ func (c *authServiceClient) RevokeSession(ctx context.Context, in *RevokeSession
 	return out, nil
 }
 
+func (c *authServiceClient) IssueSpaceDeletionProof(ctx context.Context, in *IssueSpaceDeletionProofRequest, opts ...grpc.CallOption) (*IssueSpaceDeletionProofResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(IssueSpaceDeletionProofResponse)
+	err := c.cc.Invoke(ctx, AuthService_IssueSpaceDeletionProof_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) ConsumeSpaceDeletionProof(ctx context.Context, in *ConsumeSpaceDeletionProofRequest, opts ...grpc.CallOption) (*ConsumeSpaceDeletionProofResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ConsumeSpaceDeletionProofResponse)
+	err := c.cc.Invoke(ctx, AuthService_ConsumeSpaceDeletionProof_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) GetSpaceDeletionProofReceipt(ctx context.Context, in *GetSpaceDeletionProofReceiptRequest, opts ...grpc.CallOption) (*GetSpaceDeletionProofReceiptResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSpaceDeletionProofReceiptResponse)
+	err := c.cc.Invoke(ctx, AuthService_GetSpaceDeletionProofReceipt_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) AcknowledgeSpaceDeletionProofReceipt(ctx context.Context, in *AcknowledgeSpaceDeletionProofReceiptRequest, opts ...grpc.CallOption) (*AcknowledgeSpaceDeletionProofReceiptResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AcknowledgeSpaceDeletionProofReceiptResponse)
+	err := c.cc.Invoke(ctx, AuthService_AcknowledgeSpaceDeletionProofReceipt_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AuthServiceServer is the server API for AuthService service.
 // All implementations must embed UnimplementedAuthServiceServer
 // for forward compatibility.
@@ -390,6 +442,14 @@ type AuthServiceServer interface {
 	// Active devices / sessions (docs/features/auth-and-contacts.md).
 	ListSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error)
 	RevokeSession(context.Context, *RevokeSessionRequest) (*RevokeSessionResponse, error)
+	// @voice.security=public_gateway;callers=service:gateway
+	IssueSpaceDeletionProof(context.Context, *IssueSpaceDeletionProofRequest) (*IssueSpaceDeletionProofResponse, error)
+	// @voice.security=protected;callers=service:space
+	ConsumeSpaceDeletionProof(context.Context, *ConsumeSpaceDeletionProofRequest) (*ConsumeSpaceDeletionProofResponse, error)
+	// @voice.security=protected;callers=service:space
+	GetSpaceDeletionProofReceipt(context.Context, *GetSpaceDeletionProofReceiptRequest) (*GetSpaceDeletionProofReceiptResponse, error)
+	// @voice.security=protected;callers=service:space
+	AcknowledgeSpaceDeletionProofReceipt(context.Context, *AcknowledgeSpaceDeletionProofReceiptRequest) (*AcknowledgeSpaceDeletionProofReceiptResponse, error)
 	mustEmbedUnimplementedAuthServiceServer()
 }
 
@@ -474,6 +534,18 @@ func (UnimplementedAuthServiceServer) ListSessions(context.Context, *ListSession
 }
 func (UnimplementedAuthServiceServer) RevokeSession(context.Context, *RevokeSessionRequest) (*RevokeSessionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RevokeSession not implemented")
+}
+func (UnimplementedAuthServiceServer) IssueSpaceDeletionProof(context.Context, *IssueSpaceDeletionProofRequest) (*IssueSpaceDeletionProofResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method IssueSpaceDeletionProof not implemented")
+}
+func (UnimplementedAuthServiceServer) ConsumeSpaceDeletionProof(context.Context, *ConsumeSpaceDeletionProofRequest) (*ConsumeSpaceDeletionProofResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ConsumeSpaceDeletionProof not implemented")
+}
+func (UnimplementedAuthServiceServer) GetSpaceDeletionProofReceipt(context.Context, *GetSpaceDeletionProofReceiptRequest) (*GetSpaceDeletionProofReceiptResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSpaceDeletionProofReceipt not implemented")
+}
+func (UnimplementedAuthServiceServer) AcknowledgeSpaceDeletionProofReceipt(context.Context, *AcknowledgeSpaceDeletionProofReceiptRequest) (*AcknowledgeSpaceDeletionProofReceiptResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AcknowledgeSpaceDeletionProofReceipt not implemented")
 }
 func (UnimplementedAuthServiceServer) mustEmbedUnimplementedAuthServiceServer() {}
 func (UnimplementedAuthServiceServer) testEmbeddedByValue()                     {}
@@ -946,6 +1018,78 @@ func _AuthService_RevokeSession_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthService_IssueSpaceDeletionProof_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(IssueSpaceDeletionProofRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).IssueSpaceDeletionProof(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_IssueSpaceDeletionProof_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).IssueSpaceDeletionProof(ctx, req.(*IssueSpaceDeletionProofRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_ConsumeSpaceDeletionProof_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConsumeSpaceDeletionProofRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).ConsumeSpaceDeletionProof(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_ConsumeSpaceDeletionProof_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).ConsumeSpaceDeletionProof(ctx, req.(*ConsumeSpaceDeletionProofRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_GetSpaceDeletionProofReceipt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSpaceDeletionProofReceiptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).GetSpaceDeletionProofReceipt(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_GetSpaceDeletionProofReceipt_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).GetSpaceDeletionProofReceipt(ctx, req.(*GetSpaceDeletionProofReceiptRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_AcknowledgeSpaceDeletionProofReceipt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AcknowledgeSpaceDeletionProofReceiptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).AcknowledgeSpaceDeletionProofReceipt(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_AcknowledgeSpaceDeletionProofReceipt_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).AcknowledgeSpaceDeletionProofReceipt(ctx, req.(*AcknowledgeSpaceDeletionProofReceiptRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AuthService_ServiceDesc is the grpc.ServiceDesc for AuthService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1052,6 +1196,22 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RevokeSession",
 			Handler:    _AuthService_RevokeSession_Handler,
+		},
+		{
+			MethodName: "IssueSpaceDeletionProof",
+			Handler:    _AuthService_IssueSpaceDeletionProof_Handler,
+		},
+		{
+			MethodName: "ConsumeSpaceDeletionProof",
+			Handler:    _AuthService_ConsumeSpaceDeletionProof_Handler,
+		},
+		{
+			MethodName: "GetSpaceDeletionProofReceipt",
+			Handler:    _AuthService_GetSpaceDeletionProofReceipt_Handler,
+		},
+		{
+			MethodName: "AcknowledgeSpaceDeletionProofReceipt",
+			Handler:    _AuthService_AcknowledgeSpaceDeletionProofReceipt_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

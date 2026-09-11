@@ -124,6 +124,24 @@ class SubscriptionServiceClient extends $grpc.Client {
         options: options);
   }
 
+  /// @voice.security=protected;callers=service:space
+  $grpc.ResponseFuture<$0.ApplySpaceLifecycleFenceResponse>
+      applySpaceLifecycleFence(
+    $0.ApplySpaceLifecycleFenceRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$applySpaceLifecycleFence, request,
+        options: options);
+  }
+
+  /// @voice.security=protected;callers=service:space
+  $grpc.ResponseFuture<$0.PurgeSpaceResponse> purgeSpace(
+    $0.PurgeSpaceRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$purgeSpace, request, options: options);
+  }
+
   // method descriptors
 
   static final _$getSubscription =
@@ -188,6 +206,17 @@ class SubscriptionServiceClient extends $grpc.Client {
       '/voice.subscription.v1.SubscriptionService/ApplyDowngradeProfiles',
       ($0.ApplyDowngradeProfilesRequest value) => value.writeToBuffer(),
       $0.ApplyDowngradeProfilesResponse.fromBuffer);
+  static final _$applySpaceLifecycleFence = $grpc.ClientMethod<
+          $0.ApplySpaceLifecycleFenceRequest,
+          $0.ApplySpaceLifecycleFenceResponse>(
+      '/voice.subscription.v1.SubscriptionService/ApplySpaceLifecycleFence',
+      ($0.ApplySpaceLifecycleFenceRequest value) => value.writeToBuffer(),
+      $0.ApplySpaceLifecycleFenceResponse.fromBuffer);
+  static final _$purgeSpace =
+      $grpc.ClientMethod<$0.PurgeSpaceRequest, $0.PurgeSpaceResponse>(
+          '/voice.subscription.v1.SubscriptionService/PurgeSpace',
+          ($0.PurgeSpaceRequest value) => value.writeToBuffer(),
+          $0.PurgeSpaceResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.subscription.v1.SubscriptionService')
@@ -301,6 +330,22 @@ abstract class SubscriptionServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.ApplyDowngradeProfilesRequest.fromBuffer(value),
         ($0.ApplyDowngradeProfilesResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ApplySpaceLifecycleFenceRequest,
+            $0.ApplySpaceLifecycleFenceResponse>(
+        'ApplySpaceLifecycleFence',
+        applySpaceLifecycleFence_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ApplySpaceLifecycleFenceRequest.fromBuffer(value),
+        ($0.ApplySpaceLifecycleFenceResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.PurgeSpaceRequest, $0.PurgeSpaceResponse>(
+        'PurgeSpace',
+        purgeSpace_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) => $0.PurgeSpaceRequest.fromBuffer(value),
+        ($0.PurgeSpaceResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.GetSubscriptionResponse> getSubscription_Pre(
@@ -410,4 +455,21 @@ abstract class SubscriptionServiceBase extends $grpc.Service {
 
   $async.Future<$0.ApplyDowngradeProfilesResponse> applyDowngradeProfiles(
       $grpc.ServiceCall call, $0.ApplyDowngradeProfilesRequest request);
+
+  $async.Future<$0.ApplySpaceLifecycleFenceResponse>
+      applySpaceLifecycleFence_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.ApplySpaceLifecycleFenceRequest> $request) async {
+    return applySpaceLifecycleFence($call, await $request);
+  }
+
+  $async.Future<$0.ApplySpaceLifecycleFenceResponse> applySpaceLifecycleFence(
+      $grpc.ServiceCall call, $0.ApplySpaceLifecycleFenceRequest request);
+
+  $async.Future<$0.PurgeSpaceResponse> purgeSpace_Pre($grpc.ServiceCall $call,
+      $async.Future<$0.PurgeSpaceRequest> $request) async {
+    return purgeSpace($call, await $request);
+  }
+
+  $async.Future<$0.PurgeSpaceResponse> purgeSpace(
+      $grpc.ServiceCall call, $0.PurgeSpaceRequest request);
 }

@@ -58,6 +58,8 @@ const (
 	BotService_GetChatMessagesForBot_FullMethodName    = "/voice.bot.v1.BotService/GetChatMessagesForBot"
 	BotService_CreateBotRole_FullMethodName            = "/voice.bot.v1.BotService/CreateBotRole"
 	BotService_CompleteAutocomplete_FullMethodName     = "/voice.bot.v1.BotService/CompleteAutocomplete"
+	BotService_ApplySpaceLifecycleFence_FullMethodName = "/voice.bot.v1.BotService/ApplySpaceLifecycleFence"
+	BotService_PurgeSpace_FullMethodName               = "/voice.bot.v1.BotService/PurgeSpace"
 )
 
 // BotServiceClient is the client API for BotService service.
@@ -109,6 +111,10 @@ type BotServiceClient interface {
 	GetChatMessagesForBot(ctx context.Context, in *GetChatMessagesForBotRequest, opts ...grpc.CallOption) (*GetChatMessagesForBotResponse, error)
 	CreateBotRole(ctx context.Context, in *CreateBotRoleRequest, opts ...grpc.CallOption) (*CreateBotRoleResponse, error)
 	CompleteAutocomplete(ctx context.Context, in *CompleteAutocompleteRequest, opts ...grpc.CallOption) (*CompleteAutocompleteResponse, error)
+	// @voice.security=protected;callers=service:space
+	ApplySpaceLifecycleFence(ctx context.Context, in *ApplySpaceLifecycleFenceRequest, opts ...grpc.CallOption) (*ApplySpaceLifecycleFenceResponse, error)
+	// @voice.security=protected;callers=service:space
+	PurgeSpace(ctx context.Context, in *PurgeSpaceRequest, opts ...grpc.CallOption) (*PurgeSpaceResponse, error)
 }
 
 type botServiceClient struct {
@@ -518,6 +524,26 @@ func (c *botServiceClient) CompleteAutocomplete(ctx context.Context, in *Complet
 	return out, nil
 }
 
+func (c *botServiceClient) ApplySpaceLifecycleFence(ctx context.Context, in *ApplySpaceLifecycleFenceRequest, opts ...grpc.CallOption) (*ApplySpaceLifecycleFenceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplySpaceLifecycleFenceResponse)
+	err := c.cc.Invoke(ctx, BotService_ApplySpaceLifecycleFence_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *botServiceClient) PurgeSpace(ctx context.Context, in *PurgeSpaceRequest, opts ...grpc.CallOption) (*PurgeSpaceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PurgeSpaceResponse)
+	err := c.cc.Invoke(ctx, BotService_PurgeSpace_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BotServiceServer is the server API for BotService service.
 // All implementations must embed UnimplementedBotServiceServer
 // for forward compatibility.
@@ -567,6 +593,10 @@ type BotServiceServer interface {
 	GetChatMessagesForBot(context.Context, *GetChatMessagesForBotRequest) (*GetChatMessagesForBotResponse, error)
 	CreateBotRole(context.Context, *CreateBotRoleRequest) (*CreateBotRoleResponse, error)
 	CompleteAutocomplete(context.Context, *CompleteAutocompleteRequest) (*CompleteAutocompleteResponse, error)
+	// @voice.security=protected;callers=service:space
+	ApplySpaceLifecycleFence(context.Context, *ApplySpaceLifecycleFenceRequest) (*ApplySpaceLifecycleFenceResponse, error)
+	// @voice.security=protected;callers=service:space
+	PurgeSpace(context.Context, *PurgeSpaceRequest) (*PurgeSpaceResponse, error)
 	mustEmbedUnimplementedBotServiceServer()
 }
 
@@ -693,6 +723,12 @@ func (UnimplementedBotServiceServer) CreateBotRole(context.Context, *CreateBotRo
 }
 func (UnimplementedBotServiceServer) CompleteAutocomplete(context.Context, *CompleteAutocompleteRequest) (*CompleteAutocompleteResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CompleteAutocomplete not implemented")
+}
+func (UnimplementedBotServiceServer) ApplySpaceLifecycleFence(context.Context, *ApplySpaceLifecycleFenceRequest) (*ApplySpaceLifecycleFenceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApplySpaceLifecycleFence not implemented")
+}
+func (UnimplementedBotServiceServer) PurgeSpace(context.Context, *PurgeSpaceRequest) (*PurgeSpaceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PurgeSpace not implemented")
 }
 func (UnimplementedBotServiceServer) mustEmbedUnimplementedBotServiceServer() {}
 func (UnimplementedBotServiceServer) testEmbeddedByValue()                    {}
@@ -1410,6 +1446,42 @@ func _BotService_CompleteAutocomplete_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BotService_ApplySpaceLifecycleFence_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplySpaceLifecycleFenceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BotServiceServer).ApplySpaceLifecycleFence(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BotService_ApplySpaceLifecycleFence_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BotServiceServer).ApplySpaceLifecycleFence(ctx, req.(*ApplySpaceLifecycleFenceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BotService_PurgeSpace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PurgeSpaceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BotServiceServer).PurgeSpace(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BotService_PurgeSpace_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BotServiceServer).PurgeSpace(ctx, req.(*PurgeSpaceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // BotService_ServiceDesc is the grpc.ServiceDesc for BotService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1568,6 +1640,14 @@ var BotService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CompleteAutocomplete",
 			Handler:    _BotService_CompleteAutocomplete_Handler,
+		},
+		{
+			MethodName: "ApplySpaceLifecycleFence",
+			Handler:    _BotService_ApplySpaceLifecycleFence_Handler,
+		},
+		{
+			MethodName: "PurgeSpace",
+			Handler:    _BotService_PurgeSpace_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

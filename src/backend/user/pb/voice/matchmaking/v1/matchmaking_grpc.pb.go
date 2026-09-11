@@ -19,35 +19,37 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	MatchmakingService_ListGames_FullMethodName             = "/voice.matchmaking.v1.MatchmakingService/ListGames"
-	MatchmakingService_GetGame_FullMethodName               = "/voice.matchmaking.v1.MatchmakingService/GetGame"
-	MatchmakingService_CreateGame_FullMethodName            = "/voice.matchmaking.v1.MatchmakingService/CreateGame"
-	MatchmakingService_UpdateGame_FullMethodName            = "/voice.matchmaking.v1.MatchmakingService/UpdateGame"
-	MatchmakingService_SearchGames_FullMethodName           = "/voice.matchmaking.v1.MatchmakingService/SearchGames"
-	MatchmakingService_SubmitGameRequest_FullMethodName     = "/voice.matchmaking.v1.MatchmakingService/SubmitGameRequest"
-	MatchmakingService_ListGameRequests_FullMethodName      = "/voice.matchmaking.v1.MatchmakingService/ListGameRequests"
-	MatchmakingService_ApproveGameRequest_FullMethodName    = "/voice.matchmaking.v1.MatchmakingService/ApproveGameRequest"
-	MatchmakingService_RejectGameRequest_FullMethodName     = "/voice.matchmaking.v1.MatchmakingService/RejectGameRequest"
-	MatchmakingService_StartSearch_FullMethodName           = "/voice.matchmaking.v1.MatchmakingService/StartSearch"
-	MatchmakingService_StartSpaceQueue_FullMethodName       = "/voice.matchmaking.v1.MatchmakingService/StartSpaceQueue"
-	MatchmakingService_CancelSearch_FullMethodName          = "/voice.matchmaking.v1.MatchmakingService/CancelSearch"
-	MatchmakingService_GetSearchStatus_FullMethodName       = "/voice.matchmaking.v1.MatchmakingService/GetSearchStatus"
-	MatchmakingService_GetMatch_FullMethodName              = "/voice.matchmaking.v1.MatchmakingService/GetMatch"
-	MatchmakingService_RespondToMatch_FullMethodName        = "/voice.matchmaking.v1.MatchmakingService/RespondToMatch"
-	MatchmakingService_CompleteMatch_FullMethodName         = "/voice.matchmaking.v1.MatchmakingService/CompleteMatch"
-	MatchmakingService_GetMatchHistory_FullMethodName       = "/voice.matchmaking.v1.MatchmakingService/GetMatchHistory"
-	MatchmakingService_RateMatch_FullMethodName             = "/voice.matchmaking.v1.MatchmakingService/RateMatch"
-	MatchmakingService_GetPlayerRating_FullMethodName       = "/voice.matchmaking.v1.MatchmakingService/GetPlayerRating"
-	MatchmakingService_BanFromMM_FullMethodName             = "/voice.matchmaking.v1.MatchmakingService/BanFromMM"
-	MatchmakingService_UnbanFromMM_FullMethodName           = "/voice.matchmaking.v1.MatchmakingService/UnbanFromMM"
-	MatchmakingService_GetMMBanStatus_FullMethodName        = "/voice.matchmaking.v1.MatchmakingService/GetMMBanStatus"
-	MatchmakingService_ApplyPlatformMMBan_FullMethodName    = "/voice.matchmaking.v1.MatchmakingService/ApplyPlatformMMBan"
-	MatchmakingService_RevokePlatformMMBan_FullMethodName   = "/voice.matchmaking.v1.MatchmakingService/RevokePlatformMMBan"
-	MatchmakingService_GetMyPlayerProfile_FullMethodName    = "/voice.matchmaking.v1.MatchmakingService/GetMyPlayerProfile"
-	MatchmakingService_GetPlayerProfile_FullMethodName      = "/voice.matchmaking.v1.MatchmakingService/GetPlayerProfile"
-	MatchmakingService_UpsertPlayerGameEntry_FullMethodName = "/voice.matchmaking.v1.MatchmakingService/UpsertPlayerGameEntry"
-	MatchmakingService_DeletePlayerGameEntry_FullMethodName = "/voice.matchmaking.v1.MatchmakingService/DeletePlayerGameEntry"
-	MatchmakingService_DecideLfpRequest_FullMethodName      = "/voice.matchmaking.v1.MatchmakingService/DecideLfpRequest"
+	MatchmakingService_ListGames_FullMethodName                = "/voice.matchmaking.v1.MatchmakingService/ListGames"
+	MatchmakingService_GetGame_FullMethodName                  = "/voice.matchmaking.v1.MatchmakingService/GetGame"
+	MatchmakingService_CreateGame_FullMethodName               = "/voice.matchmaking.v1.MatchmakingService/CreateGame"
+	MatchmakingService_UpdateGame_FullMethodName               = "/voice.matchmaking.v1.MatchmakingService/UpdateGame"
+	MatchmakingService_SearchGames_FullMethodName              = "/voice.matchmaking.v1.MatchmakingService/SearchGames"
+	MatchmakingService_SubmitGameRequest_FullMethodName        = "/voice.matchmaking.v1.MatchmakingService/SubmitGameRequest"
+	MatchmakingService_ListGameRequests_FullMethodName         = "/voice.matchmaking.v1.MatchmakingService/ListGameRequests"
+	MatchmakingService_ApproveGameRequest_FullMethodName       = "/voice.matchmaking.v1.MatchmakingService/ApproveGameRequest"
+	MatchmakingService_RejectGameRequest_FullMethodName        = "/voice.matchmaking.v1.MatchmakingService/RejectGameRequest"
+	MatchmakingService_StartSearch_FullMethodName              = "/voice.matchmaking.v1.MatchmakingService/StartSearch"
+	MatchmakingService_StartSpaceQueue_FullMethodName          = "/voice.matchmaking.v1.MatchmakingService/StartSpaceQueue"
+	MatchmakingService_CancelSearch_FullMethodName             = "/voice.matchmaking.v1.MatchmakingService/CancelSearch"
+	MatchmakingService_GetSearchStatus_FullMethodName          = "/voice.matchmaking.v1.MatchmakingService/GetSearchStatus"
+	MatchmakingService_GetMatch_FullMethodName                 = "/voice.matchmaking.v1.MatchmakingService/GetMatch"
+	MatchmakingService_RespondToMatch_FullMethodName           = "/voice.matchmaking.v1.MatchmakingService/RespondToMatch"
+	MatchmakingService_CompleteMatch_FullMethodName            = "/voice.matchmaking.v1.MatchmakingService/CompleteMatch"
+	MatchmakingService_GetMatchHistory_FullMethodName          = "/voice.matchmaking.v1.MatchmakingService/GetMatchHistory"
+	MatchmakingService_RateMatch_FullMethodName                = "/voice.matchmaking.v1.MatchmakingService/RateMatch"
+	MatchmakingService_GetPlayerRating_FullMethodName          = "/voice.matchmaking.v1.MatchmakingService/GetPlayerRating"
+	MatchmakingService_BanFromMM_FullMethodName                = "/voice.matchmaking.v1.MatchmakingService/BanFromMM"
+	MatchmakingService_UnbanFromMM_FullMethodName              = "/voice.matchmaking.v1.MatchmakingService/UnbanFromMM"
+	MatchmakingService_GetMMBanStatus_FullMethodName           = "/voice.matchmaking.v1.MatchmakingService/GetMMBanStatus"
+	MatchmakingService_ApplyPlatformMMBan_FullMethodName       = "/voice.matchmaking.v1.MatchmakingService/ApplyPlatformMMBan"
+	MatchmakingService_RevokePlatformMMBan_FullMethodName      = "/voice.matchmaking.v1.MatchmakingService/RevokePlatformMMBan"
+	MatchmakingService_GetMyPlayerProfile_FullMethodName       = "/voice.matchmaking.v1.MatchmakingService/GetMyPlayerProfile"
+	MatchmakingService_GetPlayerProfile_FullMethodName         = "/voice.matchmaking.v1.MatchmakingService/GetPlayerProfile"
+	MatchmakingService_UpsertPlayerGameEntry_FullMethodName    = "/voice.matchmaking.v1.MatchmakingService/UpsertPlayerGameEntry"
+	MatchmakingService_DeletePlayerGameEntry_FullMethodName    = "/voice.matchmaking.v1.MatchmakingService/DeletePlayerGameEntry"
+	MatchmakingService_DecideLfpRequest_FullMethodName         = "/voice.matchmaking.v1.MatchmakingService/DecideLfpRequest"
+	MatchmakingService_ApplySpaceLifecycleFence_FullMethodName = "/voice.matchmaking.v1.MatchmakingService/ApplySpaceLifecycleFence"
+	MatchmakingService_PurgeSpace_FullMethodName               = "/voice.matchmaking.v1.MatchmakingService/PurgeSpace"
 )
 
 // MatchmakingServiceClient is the client API for MatchmakingService service.
@@ -91,6 +93,10 @@ type MatchmakingServiceClient interface {
 	// LFP Social Discovery decision (docs/features/matchmaking.md; roadmap П.3).
 	// Author Accept/Decline on JOIN|INVITE from story.lfp_response.
 	DecideLfpRequest(ctx context.Context, in *DecideLfpRequestRequest, opts ...grpc.CallOption) (*DecideLfpRequestResponse, error)
+	// @voice.security=protected;callers=service:space
+	ApplySpaceLifecycleFence(ctx context.Context, in *ApplySpaceLifecycleFenceRequest, opts ...grpc.CallOption) (*ApplySpaceLifecycleFenceResponse, error)
+	// @voice.security=protected;callers=service:space
+	PurgeSpace(ctx context.Context, in *PurgeSpaceRequest, opts ...grpc.CallOption) (*PurgeSpaceResponse, error)
 }
 
 type matchmakingServiceClient struct {
@@ -391,6 +397,26 @@ func (c *matchmakingServiceClient) DecideLfpRequest(ctx context.Context, in *Dec
 	return out, nil
 }
 
+func (c *matchmakingServiceClient) ApplySpaceLifecycleFence(ctx context.Context, in *ApplySpaceLifecycleFenceRequest, opts ...grpc.CallOption) (*ApplySpaceLifecycleFenceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplySpaceLifecycleFenceResponse)
+	err := c.cc.Invoke(ctx, MatchmakingService_ApplySpaceLifecycleFence_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchmakingServiceClient) PurgeSpace(ctx context.Context, in *PurgeSpaceRequest, opts ...grpc.CallOption) (*PurgeSpaceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PurgeSpaceResponse)
+	err := c.cc.Invoke(ctx, MatchmakingService_PurgeSpace_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MatchmakingServiceServer is the server API for MatchmakingService service.
 // All implementations must embed UnimplementedMatchmakingServiceServer
 // for forward compatibility.
@@ -432,6 +458,10 @@ type MatchmakingServiceServer interface {
 	// LFP Social Discovery decision (docs/features/matchmaking.md; roadmap П.3).
 	// Author Accept/Decline on JOIN|INVITE from story.lfp_response.
 	DecideLfpRequest(context.Context, *DecideLfpRequestRequest) (*DecideLfpRequestResponse, error)
+	// @voice.security=protected;callers=service:space
+	ApplySpaceLifecycleFence(context.Context, *ApplySpaceLifecycleFenceRequest) (*ApplySpaceLifecycleFenceResponse, error)
+	// @voice.security=protected;callers=service:space
+	PurgeSpace(context.Context, *PurgeSpaceRequest) (*PurgeSpaceResponse, error)
 	mustEmbedUnimplementedMatchmakingServiceServer()
 }
 
@@ -528,6 +558,12 @@ func (UnimplementedMatchmakingServiceServer) DeletePlayerGameEntry(context.Conte
 }
 func (UnimplementedMatchmakingServiceServer) DecideLfpRequest(context.Context, *DecideLfpRequestRequest) (*DecideLfpRequestResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DecideLfpRequest not implemented")
+}
+func (UnimplementedMatchmakingServiceServer) ApplySpaceLifecycleFence(context.Context, *ApplySpaceLifecycleFenceRequest) (*ApplySpaceLifecycleFenceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApplySpaceLifecycleFence not implemented")
+}
+func (UnimplementedMatchmakingServiceServer) PurgeSpace(context.Context, *PurgeSpaceRequest) (*PurgeSpaceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PurgeSpace not implemented")
 }
 func (UnimplementedMatchmakingServiceServer) mustEmbedUnimplementedMatchmakingServiceServer() {}
 func (UnimplementedMatchmakingServiceServer) testEmbeddedByValue()                            {}
@@ -1072,6 +1108,42 @@ func _MatchmakingService_DecideLfpRequest_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MatchmakingService_ApplySpaceLifecycleFence_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplySpaceLifecycleFenceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchmakingServiceServer).ApplySpaceLifecycleFence(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchmakingService_ApplySpaceLifecycleFence_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchmakingServiceServer).ApplySpaceLifecycleFence(ctx, req.(*ApplySpaceLifecycleFenceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchmakingService_PurgeSpace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PurgeSpaceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchmakingServiceServer).PurgeSpace(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchmakingService_PurgeSpace_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchmakingServiceServer).PurgeSpace(ctx, req.(*PurgeSpaceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MatchmakingService_ServiceDesc is the grpc.ServiceDesc for MatchmakingService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1194,6 +1266,14 @@ var MatchmakingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DecideLfpRequest",
 			Handler:    _MatchmakingService_DecideLfpRequest_Handler,
+		},
+		{
+			MethodName: "ApplySpaceLifecycleFence",
+			Handler:    _MatchmakingService_ApplySpaceLifecycleFence_Handler,
+		},
+		{
+			MethodName: "PurgeSpace",
+			Handler:    _MatchmakingService_PurgeSpace_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

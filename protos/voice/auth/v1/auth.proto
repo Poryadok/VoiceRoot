@@ -46,6 +46,18 @@ service AuthService {
   // Active devices / sessions (docs/features/auth-and-contacts.md).
   rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
   rpc RevokeSession(RevokeSessionRequest) returns (RevokeSessionResponse);
+
+  // @voice.security=public_gateway;callers=service:gateway
+  rpc IssueSpaceDeletionProof(voice.auth.v1.IssueSpaceDeletionProofRequest) returns (voice.auth.v1.IssueSpaceDeletionProofResponse);
+
+  // @voice.security=protected;callers=service:space
+  rpc ConsumeSpaceDeletionProof(voice.auth.v1.ConsumeSpaceDeletionProofRequest) returns (voice.auth.v1.ConsumeSpaceDeletionProofResponse);
+
+  // @voice.security=protected;callers=service:space
+  rpc GetSpaceDeletionProofReceipt(voice.auth.v1.GetSpaceDeletionProofReceiptRequest) returns (voice.auth.v1.GetSpaceDeletionProofReceiptResponse);
+
+  // @voice.security=protected;callers=service:space
+  rpc AcknowledgeSpaceDeletionProofReceipt(voice.auth.v1.AcknowledgeSpaceDeletionProofReceiptRequest) returns (voice.auth.v1.AcknowledgeSpaceDeletionProofReceiptResponse);
 }
 
 message RegisterRequest {
@@ -330,4 +342,113 @@ message GetOwnershipTransferReceiptResponse {
   int64 session_epoch = 7;
   google.protobuf.Timestamp consumed_at = 8;
   repeated string verified_factors = 9;
+}
+
+enum VerifiedFactor {
+  VERIFIED_FACTOR_UNSPECIFIED = 0;
+  VERIFIED_FACTOR_PASSWORD = 1;
+  VERIFIED_FACTOR_TOTP = 2;
+  VERIFIED_FACTOR_BACKUP_CODE = 3;
+}
+
+enum ProofPurpose {
+  PROOF_PURPOSE_UNSPECIFIED = 0;
+  PROOF_PURPOSE_SPACE_DELETE = 1;
+}
+
+// @voice.unknown_fields=reject
+message IssueSpaceDeletionProofRequest {
+  string space_id = 1;
+  string confirmation_name = 2;
+  string operation_id = 3;
+  string password = 4;
+  string totp_code = 5;
+  string backup_code = 6;
+}
+
+// @voice.unknown_fields=accept_preserve
+message IssueSpaceDeletionProofResponse {
+  string proof = 1;
+  google.protobuf.Timestamp expires_at = 2;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message ConsumeSpaceDeletionProofRequest {
+  uint32 protocol_version = 1;
+  string account_id = 2;
+  string profile_id = 3;
+  int64 session_epoch = 4;
+  string space_id = 5;
+  string operation_id = 6;
+  string confirmation_name = 7;
+  string proof = 8;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message ConsumeSpaceDeletionProofResponse {
+  voice.auth.v1.SpaceDeletionProofReceipt receipt = 1;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message SpaceDeletionProofBinding {
+  uint32 protocol_version = 1;
+  string account_id = 2;
+  string profile_id = 3;
+  int64 session_epoch = 4;
+  string space_id = 5;
+  string operation_id = 6;
+  bytes confirmation_name_sha256 = 7;
+  bytes proof_digest_sha256 = 8;
+  repeated voice.auth.v1.VerifiedFactor verified_factors = 9;
+  voice.auth.v1.ProofPurpose purpose = 10;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message SpaceDeletionProofReceipt {
+  uint32 protocol_version = 1;
+  string receipt_id = 2;
+  string operation_id = 3;
+  bytes binding_sha256 = 4;
+  bytes confirmation_name_sha256 = 5;
+  google.protobuf.Timestamp consumed_at = 6;
+  repeated voice.auth.v1.VerifiedFactor verified_factors = 7;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message GetSpaceDeletionProofReceiptRequest {
+  uint32 protocol_version = 1;
+  string account_id = 2;
+  string profile_id = 3;
+  int64 session_epoch = 4;
+  string space_id = 5;
+  string operation_id = 6;
+  bytes confirmation_name_sha256 = 7;
+  bytes proof_digest_sha256 = 8;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message GetSpaceDeletionProofReceiptResponse {
+  voice.auth.v1.SpaceDeletionProofReceipt receipt = 1;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message AcknowledgeSpaceDeletionProofReceiptRequest {
+  uint32 protocol_version = 1;
+  string receipt_id = 2;
+  string space_id = 3;
+  string operation_id = 4;
+  bytes receipt_sha256 = 5;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message AcknowledgeSpaceDeletionProofReceiptResponse {
+  google.protobuf.Timestamp acknowledged_at = 1;
 }

@@ -19,14 +19,23 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	FileService_RequestUpload_FullMethodName   = "/voice.file.v1.FileService/RequestUpload"
-	FileService_ConfirmUpload_FullMethodName   = "/voice.file.v1.FileService/ConfirmUpload"
-	FileService_GetFileURL_FullMethodName      = "/voice.file.v1.FileService/GetFileURL"
-	FileService_GetFileMetadata_FullMethodName = "/voice.file.v1.FileService/GetFileMetadata"
-	FileService_GetBulkMetadata_FullMethodName = "/voice.file.v1.FileService/GetBulkMetadata"
-	FileService_DeleteFile_FullMethodName      = "/voice.file.v1.FileService/DeleteFile"
-	FileService_ListFiles_FullMethodName       = "/voice.file.v1.FileService/ListFiles"
-	FileService_CheckQuota_FullMethodName      = "/voice.file.v1.FileService/CheckQuota"
+	FileService_RequestUpload_FullMethodName                          = "/voice.file.v1.FileService/RequestUpload"
+	FileService_ConfirmUpload_FullMethodName                          = "/voice.file.v1.FileService/ConfirmUpload"
+	FileService_GetFileURL_FullMethodName                             = "/voice.file.v1.FileService/GetFileURL"
+	FileService_GetFileMetadata_FullMethodName                        = "/voice.file.v1.FileService/GetFileMetadata"
+	FileService_GetBulkMetadata_FullMethodName                        = "/voice.file.v1.FileService/GetBulkMetadata"
+	FileService_DeleteFile_FullMethodName                             = "/voice.file.v1.FileService/DeleteFile"
+	FileService_ListFiles_FullMethodName                              = "/voice.file.v1.FileService/ListFiles"
+	FileService_CheckQuota_FullMethodName                             = "/voice.file.v1.FileService/CheckQuota"
+	FileService_IssueFileAccessCapability_FullMethodName              = "/voice.file.v1.FileService/IssueFileAccessCapability"
+	FileService_PrepareSpaceDeletionReferenceManifest_FullMethodName  = "/voice.file.v1.FileService/PrepareSpaceDeletionReferenceManifest"
+	FileService_RegisterSpaceDeletionReferenceChunk_FullMethodName    = "/voice.file.v1.FileService/RegisterSpaceDeletionReferenceChunk"
+	FileService_ReleaseSpaceDeletionProducerReferences_FullMethodName = "/voice.file.v1.FileService/ReleaseSpaceDeletionProducerReferences"
+	FileService_ApplySpaceLifecycleFence_FullMethodName               = "/voice.file.v1.FileService/ApplySpaceLifecycleFence"
+	FileService_PurgeSpace_FullMethodName                             = "/voice.file.v1.FileService/PurgeSpace"
+	FileService_AcquireFileReferences_FullMethodName                  = "/voice.file.v1.FileService/AcquireFileReferences"
+	FileService_ReleaseFileReferences_FullMethodName                  = "/voice.file.v1.FileService/ReleaseFileReferences"
+	FileService_GetSpacePurgeReceipt_FullMethodName                   = "/voice.file.v1.FileService/GetSpacePurgeReceipt"
 )
 
 // FileServiceClient is the client API for FileService service.
@@ -37,12 +46,33 @@ const (
 type FileServiceClient interface {
 	RequestUpload(ctx context.Context, in *RequestUploadRequest, opts ...grpc.CallOption) (*RequestUploadResponse, error)
 	ConfirmUpload(ctx context.Context, in *ConfirmUploadRequest, opts ...grpc.CallOption) (*ConfirmUploadResponse, error)
+	// @voice.security=public_gateway;callers=service:gateway
 	GetFileURL(ctx context.Context, in *GetFileURLRequest, opts ...grpc.CallOption) (*GetFileURLResponse, error)
+	// @voice.security=public_gateway;callers=service:gateway
 	GetFileMetadata(ctx context.Context, in *GetFileMetadataRequest, opts ...grpc.CallOption) (*GetFileMetadataResponse, error)
+	// @voice.security=public_gateway;callers=service:gateway
 	GetBulkMetadata(ctx context.Context, in *GetBulkMetadataRequest, opts ...grpc.CallOption) (*GetBulkMetadataResponse, error)
 	DeleteFile(ctx context.Context, in *DeleteFileRequest, opts ...grpc.CallOption) (*DeleteFileResponse, error)
 	ListFiles(ctx context.Context, in *ListFilesRequest, opts ...grpc.CallOption) (*ListFilesResponse, error)
 	CheckQuota(ctx context.Context, in *CheckQuotaRequest, opts ...grpc.CallOption) (*CheckQuotaResponse, error)
+	// @voice.security=protected;callers=service:messaging,service:chat,service:story,service:user
+	IssueFileAccessCapability(ctx context.Context, in *IssueFileAccessCapabilityRequest, opts ...grpc.CallOption) (*IssueFileAccessCapabilityResponse, error)
+	// @voice.security=protected;callers=service:space
+	PrepareSpaceDeletionReferenceManifest(ctx context.Context, in *PrepareSpaceDeletionReferenceManifestRequest, opts ...grpc.CallOption) (*PrepareSpaceDeletionReferenceManifestResponse, error)
+	// @voice.security=protected;callers=service:space,service:chat,service:messaging
+	RegisterSpaceDeletionReferenceChunk(ctx context.Context, in *RegisterSpaceDeletionReferenceChunkRequest, opts ...grpc.CallOption) (*RegisterSpaceDeletionReferenceChunkResponse, error)
+	// @voice.security=protected;callers=service:space,service:chat,service:messaging
+	ReleaseSpaceDeletionProducerReferences(ctx context.Context, in *ReleaseSpaceDeletionProducerReferencesRequest, opts ...grpc.CallOption) (*ReleaseSpaceDeletionProducerReferencesResponse, error)
+	// @voice.security=protected;callers=service:space
+	ApplySpaceLifecycleFence(ctx context.Context, in *ApplySpaceLifecycleFenceRequest, opts ...grpc.CallOption) (*ApplySpaceLifecycleFenceResponse, error)
+	// @voice.security=protected;callers=service:space
+	PurgeSpace(ctx context.Context, in *PurgeSpaceRequest, opts ...grpc.CallOption) (*PurgeSpaceResponse, error)
+	// @voice.security=protected;callers=service:space,service:chat,service:messaging
+	AcquireFileReferences(ctx context.Context, in *AcquireFileReferencesRequest, opts ...grpc.CallOption) (*AcquireFileReferencesResponse, error)
+	// @voice.security=protected;callers=service:space,service:chat,service:messaging
+	ReleaseFileReferences(ctx context.Context, in *ReleaseFileReferencesRequest, opts ...grpc.CallOption) (*ReleaseFileReferencesResponse, error)
+	// @voice.security=protected;callers=service:space
+	GetSpacePurgeReceipt(ctx context.Context, in *GetSpacePurgeReceiptRequest, opts ...grpc.CallOption) (*GetSpacePurgeReceiptResponse, error)
 }
 
 type fileServiceClient struct {
@@ -133,6 +163,96 @@ func (c *fileServiceClient) CheckQuota(ctx context.Context, in *CheckQuotaReques
 	return out, nil
 }
 
+func (c *fileServiceClient) IssueFileAccessCapability(ctx context.Context, in *IssueFileAccessCapabilityRequest, opts ...grpc.CallOption) (*IssueFileAccessCapabilityResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(IssueFileAccessCapabilityResponse)
+	err := c.cc.Invoke(ctx, FileService_IssueFileAccessCapability_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fileServiceClient) PrepareSpaceDeletionReferenceManifest(ctx context.Context, in *PrepareSpaceDeletionReferenceManifestRequest, opts ...grpc.CallOption) (*PrepareSpaceDeletionReferenceManifestResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PrepareSpaceDeletionReferenceManifestResponse)
+	err := c.cc.Invoke(ctx, FileService_PrepareSpaceDeletionReferenceManifest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fileServiceClient) RegisterSpaceDeletionReferenceChunk(ctx context.Context, in *RegisterSpaceDeletionReferenceChunkRequest, opts ...grpc.CallOption) (*RegisterSpaceDeletionReferenceChunkResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RegisterSpaceDeletionReferenceChunkResponse)
+	err := c.cc.Invoke(ctx, FileService_RegisterSpaceDeletionReferenceChunk_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fileServiceClient) ReleaseSpaceDeletionProducerReferences(ctx context.Context, in *ReleaseSpaceDeletionProducerReferencesRequest, opts ...grpc.CallOption) (*ReleaseSpaceDeletionProducerReferencesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReleaseSpaceDeletionProducerReferencesResponse)
+	err := c.cc.Invoke(ctx, FileService_ReleaseSpaceDeletionProducerReferences_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fileServiceClient) ApplySpaceLifecycleFence(ctx context.Context, in *ApplySpaceLifecycleFenceRequest, opts ...grpc.CallOption) (*ApplySpaceLifecycleFenceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplySpaceLifecycleFenceResponse)
+	err := c.cc.Invoke(ctx, FileService_ApplySpaceLifecycleFence_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fileServiceClient) PurgeSpace(ctx context.Context, in *PurgeSpaceRequest, opts ...grpc.CallOption) (*PurgeSpaceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PurgeSpaceResponse)
+	err := c.cc.Invoke(ctx, FileService_PurgeSpace_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fileServiceClient) AcquireFileReferences(ctx context.Context, in *AcquireFileReferencesRequest, opts ...grpc.CallOption) (*AcquireFileReferencesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AcquireFileReferencesResponse)
+	err := c.cc.Invoke(ctx, FileService_AcquireFileReferences_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fileServiceClient) ReleaseFileReferences(ctx context.Context, in *ReleaseFileReferencesRequest, opts ...grpc.CallOption) (*ReleaseFileReferencesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReleaseFileReferencesResponse)
+	err := c.cc.Invoke(ctx, FileService_ReleaseFileReferences_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fileServiceClient) GetSpacePurgeReceipt(ctx context.Context, in *GetSpacePurgeReceiptRequest, opts ...grpc.CallOption) (*GetSpacePurgeReceiptResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSpacePurgeReceiptResponse)
+	err := c.cc.Invoke(ctx, FileService_GetSpacePurgeReceipt_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // FileServiceServer is the server API for FileService service.
 // All implementations must embed UnimplementedFileServiceServer
 // for forward compatibility.
@@ -141,12 +261,33 @@ func (c *fileServiceClient) CheckQuota(ctx context.Context, in *CheckQuotaReques
 type FileServiceServer interface {
 	RequestUpload(context.Context, *RequestUploadRequest) (*RequestUploadResponse, error)
 	ConfirmUpload(context.Context, *ConfirmUploadRequest) (*ConfirmUploadResponse, error)
+	// @voice.security=public_gateway;callers=service:gateway
 	GetFileURL(context.Context, *GetFileURLRequest) (*GetFileURLResponse, error)
+	// @voice.security=public_gateway;callers=service:gateway
 	GetFileMetadata(context.Context, *GetFileMetadataRequest) (*GetFileMetadataResponse, error)
+	// @voice.security=public_gateway;callers=service:gateway
 	GetBulkMetadata(context.Context, *GetBulkMetadataRequest) (*GetBulkMetadataResponse, error)
 	DeleteFile(context.Context, *DeleteFileRequest) (*DeleteFileResponse, error)
 	ListFiles(context.Context, *ListFilesRequest) (*ListFilesResponse, error)
 	CheckQuota(context.Context, *CheckQuotaRequest) (*CheckQuotaResponse, error)
+	// @voice.security=protected;callers=service:messaging,service:chat,service:story,service:user
+	IssueFileAccessCapability(context.Context, *IssueFileAccessCapabilityRequest) (*IssueFileAccessCapabilityResponse, error)
+	// @voice.security=protected;callers=service:space
+	PrepareSpaceDeletionReferenceManifest(context.Context, *PrepareSpaceDeletionReferenceManifestRequest) (*PrepareSpaceDeletionReferenceManifestResponse, error)
+	// @voice.security=protected;callers=service:space,service:chat,service:messaging
+	RegisterSpaceDeletionReferenceChunk(context.Context, *RegisterSpaceDeletionReferenceChunkRequest) (*RegisterSpaceDeletionReferenceChunkResponse, error)
+	// @voice.security=protected;callers=service:space,service:chat,service:messaging
+	ReleaseSpaceDeletionProducerReferences(context.Context, *ReleaseSpaceDeletionProducerReferencesRequest) (*ReleaseSpaceDeletionProducerReferencesResponse, error)
+	// @voice.security=protected;callers=service:space
+	ApplySpaceLifecycleFence(context.Context, *ApplySpaceLifecycleFenceRequest) (*ApplySpaceLifecycleFenceResponse, error)
+	// @voice.security=protected;callers=service:space
+	PurgeSpace(context.Context, *PurgeSpaceRequest) (*PurgeSpaceResponse, error)
+	// @voice.security=protected;callers=service:space,service:chat,service:messaging
+	AcquireFileReferences(context.Context, *AcquireFileReferencesRequest) (*AcquireFileReferencesResponse, error)
+	// @voice.security=protected;callers=service:space,service:chat,service:messaging
+	ReleaseFileReferences(context.Context, *ReleaseFileReferencesRequest) (*ReleaseFileReferencesResponse, error)
+	// @voice.security=protected;callers=service:space
+	GetSpacePurgeReceipt(context.Context, *GetSpacePurgeReceiptRequest) (*GetSpacePurgeReceiptResponse, error)
 	mustEmbedUnimplementedFileServiceServer()
 }
 
@@ -180,6 +321,33 @@ func (UnimplementedFileServiceServer) ListFiles(context.Context, *ListFilesReque
 }
 func (UnimplementedFileServiceServer) CheckQuota(context.Context, *CheckQuotaRequest) (*CheckQuotaResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CheckQuota not implemented")
+}
+func (UnimplementedFileServiceServer) IssueFileAccessCapability(context.Context, *IssueFileAccessCapabilityRequest) (*IssueFileAccessCapabilityResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method IssueFileAccessCapability not implemented")
+}
+func (UnimplementedFileServiceServer) PrepareSpaceDeletionReferenceManifest(context.Context, *PrepareSpaceDeletionReferenceManifestRequest) (*PrepareSpaceDeletionReferenceManifestResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PrepareSpaceDeletionReferenceManifest not implemented")
+}
+func (UnimplementedFileServiceServer) RegisterSpaceDeletionReferenceChunk(context.Context, *RegisterSpaceDeletionReferenceChunkRequest) (*RegisterSpaceDeletionReferenceChunkResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RegisterSpaceDeletionReferenceChunk not implemented")
+}
+func (UnimplementedFileServiceServer) ReleaseSpaceDeletionProducerReferences(context.Context, *ReleaseSpaceDeletionProducerReferencesRequest) (*ReleaseSpaceDeletionProducerReferencesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReleaseSpaceDeletionProducerReferences not implemented")
+}
+func (UnimplementedFileServiceServer) ApplySpaceLifecycleFence(context.Context, *ApplySpaceLifecycleFenceRequest) (*ApplySpaceLifecycleFenceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApplySpaceLifecycleFence not implemented")
+}
+func (UnimplementedFileServiceServer) PurgeSpace(context.Context, *PurgeSpaceRequest) (*PurgeSpaceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PurgeSpace not implemented")
+}
+func (UnimplementedFileServiceServer) AcquireFileReferences(context.Context, *AcquireFileReferencesRequest) (*AcquireFileReferencesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AcquireFileReferences not implemented")
+}
+func (UnimplementedFileServiceServer) ReleaseFileReferences(context.Context, *ReleaseFileReferencesRequest) (*ReleaseFileReferencesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReleaseFileReferences not implemented")
+}
+func (UnimplementedFileServiceServer) GetSpacePurgeReceipt(context.Context, *GetSpacePurgeReceiptRequest) (*GetSpacePurgeReceiptResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSpacePurgeReceipt not implemented")
 }
 func (UnimplementedFileServiceServer) mustEmbedUnimplementedFileServiceServer() {}
 func (UnimplementedFileServiceServer) testEmbeddedByValue()                     {}
@@ -346,6 +514,168 @@ func _FileService_CheckQuota_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _FileService_IssueFileAccessCapability_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(IssueFileAccessCapabilityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FileServiceServer).IssueFileAccessCapability(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FileService_IssueFileAccessCapability_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FileServiceServer).IssueFileAccessCapability(ctx, req.(*IssueFileAccessCapabilityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FileService_PrepareSpaceDeletionReferenceManifest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PrepareSpaceDeletionReferenceManifestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FileServiceServer).PrepareSpaceDeletionReferenceManifest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FileService_PrepareSpaceDeletionReferenceManifest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FileServiceServer).PrepareSpaceDeletionReferenceManifest(ctx, req.(*PrepareSpaceDeletionReferenceManifestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FileService_RegisterSpaceDeletionReferenceChunk_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterSpaceDeletionReferenceChunkRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FileServiceServer).RegisterSpaceDeletionReferenceChunk(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FileService_RegisterSpaceDeletionReferenceChunk_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FileServiceServer).RegisterSpaceDeletionReferenceChunk(ctx, req.(*RegisterSpaceDeletionReferenceChunkRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FileService_ReleaseSpaceDeletionProducerReferences_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReleaseSpaceDeletionProducerReferencesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FileServiceServer).ReleaseSpaceDeletionProducerReferences(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FileService_ReleaseSpaceDeletionProducerReferences_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FileServiceServer).ReleaseSpaceDeletionProducerReferences(ctx, req.(*ReleaseSpaceDeletionProducerReferencesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FileService_ApplySpaceLifecycleFence_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplySpaceLifecycleFenceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FileServiceServer).ApplySpaceLifecycleFence(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FileService_ApplySpaceLifecycleFence_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FileServiceServer).ApplySpaceLifecycleFence(ctx, req.(*ApplySpaceLifecycleFenceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FileService_PurgeSpace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PurgeSpaceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FileServiceServer).PurgeSpace(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FileService_PurgeSpace_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FileServiceServer).PurgeSpace(ctx, req.(*PurgeSpaceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FileService_AcquireFileReferences_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AcquireFileReferencesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FileServiceServer).AcquireFileReferences(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FileService_AcquireFileReferences_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FileServiceServer).AcquireFileReferences(ctx, req.(*AcquireFileReferencesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FileService_ReleaseFileReferences_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReleaseFileReferencesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FileServiceServer).ReleaseFileReferences(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FileService_ReleaseFileReferences_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FileServiceServer).ReleaseFileReferences(ctx, req.(*ReleaseFileReferencesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FileService_GetSpacePurgeReceipt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSpacePurgeReceiptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FileServiceServer).GetSpacePurgeReceipt(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FileService_GetSpacePurgeReceipt_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FileServiceServer).GetSpacePurgeReceipt(ctx, req.(*GetSpacePurgeReceiptRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // FileService_ServiceDesc is the grpc.ServiceDesc for FileService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -384,6 +714,42 @@ var FileService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CheckQuota",
 			Handler:    _FileService_CheckQuota_Handler,
+		},
+		{
+			MethodName: "IssueFileAccessCapability",
+			Handler:    _FileService_IssueFileAccessCapability_Handler,
+		},
+		{
+			MethodName: "PrepareSpaceDeletionReferenceManifest",
+			Handler:    _FileService_PrepareSpaceDeletionReferenceManifest_Handler,
+		},
+		{
+			MethodName: "RegisterSpaceDeletionReferenceChunk",
+			Handler:    _FileService_RegisterSpaceDeletionReferenceChunk_Handler,
+		},
+		{
+			MethodName: "ReleaseSpaceDeletionProducerReferences",
+			Handler:    _FileService_ReleaseSpaceDeletionProducerReferences_Handler,
+		},
+		{
+			MethodName: "ApplySpaceLifecycleFence",
+			Handler:    _FileService_ApplySpaceLifecycleFence_Handler,
+		},
+		{
+			MethodName: "PurgeSpace",
+			Handler:    _FileService_PurgeSpace_Handler,
+		},
+		{
+			MethodName: "AcquireFileReferences",
+			Handler:    _FileService_AcquireFileReferences_Handler,
+		},
+		{
+			MethodName: "ReleaseFileReferences",
+			Handler:    _FileService_ReleaseFileReferences_Handler,
+		},
+		{
+			MethodName: "GetSpacePurgeReceipt",
+			Handler:    _FileService_GetSpacePurgeReceipt_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

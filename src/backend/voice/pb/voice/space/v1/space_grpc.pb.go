@@ -19,48 +19,50 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	SpaceService_CreateSpace_FullMethodName              = "/voice.space.v1.SpaceService/CreateSpace"
-	SpaceService_UpdateSpace_FullMethodName              = "/voice.space.v1.SpaceService/UpdateSpace"
-	SpaceService_UpdateSpaceMmConfig_FullMethodName      = "/voice.space.v1.SpaceService/UpdateSpaceMmConfig"
-	SpaceService_DeleteSpace_FullMethodName              = "/voice.space.v1.SpaceService/DeleteSpace"
-	SpaceService_GetSpace_FullMethodName                 = "/voice.space.v1.SpaceService/GetSpace"
-	SpaceService_ListMySpaces_FullMethodName             = "/voice.space.v1.SpaceService/ListMySpaces"
-	SpaceService_SearchPublicSpaces_FullMethodName       = "/voice.space.v1.SpaceService/SearchPublicSpaces"
-	SpaceService_CreateVoiceRoom_FullMethodName          = "/voice.space.v1.SpaceService/CreateVoiceRoom"
-	SpaceService_UpdateVoiceRoom_FullMethodName          = "/voice.space.v1.SpaceService/UpdateVoiceRoom"
-	SpaceService_DeleteVoiceRoom_FullMethodName          = "/voice.space.v1.SpaceService/DeleteVoiceRoom"
-	SpaceService_UpsertTreeNode_FullMethodName           = "/voice.space.v1.SpaceService/UpsertTreeNode"
-	SpaceService_RemoveTreeNode_FullMethodName           = "/voice.space.v1.SpaceService/RemoveTreeNode"
-	SpaceService_CreateCategory_FullMethodName           = "/voice.space.v1.SpaceService/CreateCategory"
-	SpaceService_UpdateCategory_FullMethodName           = "/voice.space.v1.SpaceService/UpdateCategory"
-	SpaceService_DeleteCategory_FullMethodName           = "/voice.space.v1.SpaceService/DeleteCategory"
-	SpaceService_ReorderSpaceTree_FullMethodName         = "/voice.space.v1.SpaceService/ReorderSpaceTree"
-	SpaceService_PinTreeNode_FullMethodName              = "/voice.space.v1.SpaceService/PinTreeNode"
-	SpaceService_UnpinTreeNode_FullMethodName            = "/voice.space.v1.SpaceService/UnpinTreeNode"
-	SpaceService_ListSpaceTree_FullMethodName            = "/voice.space.v1.SpaceService/ListSpaceTree"
-	SpaceService_CreateInvite_FullMethodName             = "/voice.space.v1.SpaceService/CreateInvite"
-	SpaceService_RevokeInvite_FullMethodName             = "/voice.space.v1.SpaceService/RevokeInvite"
-	SpaceService_GetInvite_FullMethodName                = "/voice.space.v1.SpaceService/GetInvite"
-	SpaceService_ListInvites_FullMethodName              = "/voice.space.v1.SpaceService/ListInvites"
-	SpaceService_JoinByInvite_FullMethodName             = "/voice.space.v1.SpaceService/JoinByInvite"
-	SpaceService_JoinSpace_FullMethodName                = "/voice.space.v1.SpaceService/JoinSpace"
-	SpaceService_LeaveSpace_FullMethodName               = "/voice.space.v1.SpaceService/LeaveSpace"
-	SpaceService_KickMember_FullMethodName               = "/voice.space.v1.SpaceService/KickMember"
-	SpaceService_BanMember_FullMethodName                = "/voice.space.v1.SpaceService/BanMember"
-	SpaceService_UnbanMember_FullMethodName              = "/voice.space.v1.SpaceService/UnbanMember"
-	SpaceService_ListMembers_FullMethodName              = "/voice.space.v1.SpaceService/ListMembers"
-	SpaceService_ListBans_FullMethodName                 = "/voice.space.v1.SpaceService/ListBans"
-	SpaceService_TimeoutMember_FullMethodName            = "/voice.space.v1.SpaceService/TimeoutMember"
-	SpaceService_RemoveMemberTimeout_FullMethodName      = "/voice.space.v1.SpaceService/RemoveMemberTimeout"
-	SpaceService_TransferOwnership_FullMethodName        = "/voice.space.v1.SpaceService/TransferOwnership"
-	SpaceService_AddBotMember_FullMethodName             = "/voice.space.v1.SpaceService/AddBotMember"
-	SpaceService_RemoveBotMember_FullMethodName          = "/voice.space.v1.SpaceService/RemoveBotMember"
-	SpaceService_ListTemplates_FullMethodName            = "/voice.space.v1.SpaceService/ListTemplates"
-	SpaceService_CreateFromTemplate_FullMethodName       = "/voice.space.v1.SpaceService/CreateFromTemplate"
-	SpaceService_GetAuditLog_FullMethodName              = "/voice.space.v1.SpaceService/GetAuditLog"
-	SpaceService_AreCoMembers_FullMethodName             = "/voice.space.v1.SpaceService/AreCoMembers"
-	SpaceService_ResolveVoiceRoomAccess_FullMethodName   = "/voice.space.v1.SpaceService/ResolveVoiceRoomAccess"
-	SpaceService_SyncSpaceProSubscription_FullMethodName = "/voice.space.v1.SpaceService/SyncSpaceProSubscription"
+	SpaceService_CreateSpace_FullMethodName                       = "/voice.space.v1.SpaceService/CreateSpace"
+	SpaceService_UpdateSpace_FullMethodName                       = "/voice.space.v1.SpaceService/UpdateSpace"
+	SpaceService_UpdateSpaceMmConfig_FullMethodName               = "/voice.space.v1.SpaceService/UpdateSpaceMmConfig"
+	SpaceService_DeleteSpace_FullMethodName                       = "/voice.space.v1.SpaceService/DeleteSpace"
+	SpaceService_GetSpace_FullMethodName                          = "/voice.space.v1.SpaceService/GetSpace"
+	SpaceService_ListMySpaces_FullMethodName                      = "/voice.space.v1.SpaceService/ListMySpaces"
+	SpaceService_SearchPublicSpaces_FullMethodName                = "/voice.space.v1.SpaceService/SearchPublicSpaces"
+	SpaceService_CreateVoiceRoom_FullMethodName                   = "/voice.space.v1.SpaceService/CreateVoiceRoom"
+	SpaceService_UpdateVoiceRoom_FullMethodName                   = "/voice.space.v1.SpaceService/UpdateVoiceRoom"
+	SpaceService_DeleteVoiceRoom_FullMethodName                   = "/voice.space.v1.SpaceService/DeleteVoiceRoom"
+	SpaceService_UpsertTreeNode_FullMethodName                    = "/voice.space.v1.SpaceService/UpsertTreeNode"
+	SpaceService_RemoveTreeNode_FullMethodName                    = "/voice.space.v1.SpaceService/RemoveTreeNode"
+	SpaceService_CreateCategory_FullMethodName                    = "/voice.space.v1.SpaceService/CreateCategory"
+	SpaceService_UpdateCategory_FullMethodName                    = "/voice.space.v1.SpaceService/UpdateCategory"
+	SpaceService_DeleteCategory_FullMethodName                    = "/voice.space.v1.SpaceService/DeleteCategory"
+	SpaceService_ReorderSpaceTree_FullMethodName                  = "/voice.space.v1.SpaceService/ReorderSpaceTree"
+	SpaceService_PinTreeNode_FullMethodName                       = "/voice.space.v1.SpaceService/PinTreeNode"
+	SpaceService_UnpinTreeNode_FullMethodName                     = "/voice.space.v1.SpaceService/UnpinTreeNode"
+	SpaceService_ListSpaceTree_FullMethodName                     = "/voice.space.v1.SpaceService/ListSpaceTree"
+	SpaceService_CreateInvite_FullMethodName                      = "/voice.space.v1.SpaceService/CreateInvite"
+	SpaceService_RevokeInvite_FullMethodName                      = "/voice.space.v1.SpaceService/RevokeInvite"
+	SpaceService_GetInvite_FullMethodName                         = "/voice.space.v1.SpaceService/GetInvite"
+	SpaceService_ListInvites_FullMethodName                       = "/voice.space.v1.SpaceService/ListInvites"
+	SpaceService_JoinByInvite_FullMethodName                      = "/voice.space.v1.SpaceService/JoinByInvite"
+	SpaceService_JoinSpace_FullMethodName                         = "/voice.space.v1.SpaceService/JoinSpace"
+	SpaceService_LeaveSpace_FullMethodName                        = "/voice.space.v1.SpaceService/LeaveSpace"
+	SpaceService_KickMember_FullMethodName                        = "/voice.space.v1.SpaceService/KickMember"
+	SpaceService_BanMember_FullMethodName                         = "/voice.space.v1.SpaceService/BanMember"
+	SpaceService_UnbanMember_FullMethodName                       = "/voice.space.v1.SpaceService/UnbanMember"
+	SpaceService_ListMembers_FullMethodName                       = "/voice.space.v1.SpaceService/ListMembers"
+	SpaceService_ListBans_FullMethodName                          = "/voice.space.v1.SpaceService/ListBans"
+	SpaceService_TimeoutMember_FullMethodName                     = "/voice.space.v1.SpaceService/TimeoutMember"
+	SpaceService_RemoveMemberTimeout_FullMethodName               = "/voice.space.v1.SpaceService/RemoveMemberTimeout"
+	SpaceService_TransferOwnership_FullMethodName                 = "/voice.space.v1.SpaceService/TransferOwnership"
+	SpaceService_AddBotMember_FullMethodName                      = "/voice.space.v1.SpaceService/AddBotMember"
+	SpaceService_RemoveBotMember_FullMethodName                   = "/voice.space.v1.SpaceService/RemoveBotMember"
+	SpaceService_ListTemplates_FullMethodName                     = "/voice.space.v1.SpaceService/ListTemplates"
+	SpaceService_CreateFromTemplate_FullMethodName                = "/voice.space.v1.SpaceService/CreateFromTemplate"
+	SpaceService_GetAuditLog_FullMethodName                       = "/voice.space.v1.SpaceService/GetAuditLog"
+	SpaceService_AreCoMembers_FullMethodName                      = "/voice.space.v1.SpaceService/AreCoMembers"
+	SpaceService_ResolveVoiceRoomAccess_FullMethodName            = "/voice.space.v1.SpaceService/ResolveVoiceRoomAccess"
+	SpaceService_SyncSpaceProSubscription_FullMethodName          = "/voice.space.v1.SpaceService/SyncSpaceProSubscription"
+	SpaceService_RestoreSpace_FullMethodName                      = "/voice.space.v1.SpaceService/RestoreSpace"
+	SpaceService_GetSpaceDeletionCoordinatorStatus_FullMethodName = "/voice.space.v1.SpaceService/GetSpaceDeletionCoordinatorStatus"
 )
 
 // SpaceServiceClient is the client API for SpaceService service.
@@ -73,6 +75,7 @@ type SpaceServiceClient interface {
 	UpdateSpace(ctx context.Context, in *UpdateSpaceRequest, opts ...grpc.CallOption) (*UpdateSpaceResponse, error)
 	// Space-level matchmaking settings (mm_config jsonb; roadmap П.1).
 	UpdateSpaceMmConfig(ctx context.Context, in *UpdateSpaceMmConfigRequest, opts ...grpc.CallOption) (*UpdateSpaceMmConfigResponse, error)
+	// @voice.security=public_gateway;callers=service:gateway
 	DeleteSpace(ctx context.Context, in *DeleteSpaceRequest, opts ...grpc.CallOption) (*DeleteSpaceResponse, error)
 	GetSpace(ctx context.Context, in *GetSpaceRequest, opts ...grpc.CallOption) (*GetSpaceResponse, error)
 	ListMySpaces(ctx context.Context, in *ListMySpacesRequest, opts ...grpc.CallOption) (*ListMySpacesResponse, error)
@@ -117,6 +120,12 @@ type SpaceServiceClient interface {
 	ResolveVoiceRoomAccess(ctx context.Context, in *ResolveVoiceRoomAccessRequest, opts ...grpc.CallOption) (*ResolveVoiceRoomAccessResponse, error)
 	// S2S: Subscription Service syncs Space Pro entitlement cache after webhook.
 	SyncSpaceProSubscription(ctx context.Context, in *SyncSpaceProSubscriptionRequest, opts ...grpc.CallOption) (*SyncSpaceProSubscriptionResponse, error)
+	// @voice.security=public_gateway;callers=service:gateway
+	RestoreSpace(ctx context.Context, in *RestoreSpaceRequest, opts ...grpc.CallOption) (*RestoreSpaceResponse, error)
+	// @voice.security=public_gateway;callers=service:gateway
+	// @voice.activation=held
+	// @voice.authorization=current_owner
+	GetSpaceDeletionCoordinatorStatus(ctx context.Context, in *GetSpaceDeletionCoordinatorStatusRequest, opts ...grpc.CallOption) (*GetSpaceDeletionCoordinatorStatusResponse, error)
 }
 
 type spaceServiceClient struct {
@@ -547,6 +556,26 @@ func (c *spaceServiceClient) SyncSpaceProSubscription(ctx context.Context, in *S
 	return out, nil
 }
 
+func (c *spaceServiceClient) RestoreSpace(ctx context.Context, in *RestoreSpaceRequest, opts ...grpc.CallOption) (*RestoreSpaceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RestoreSpaceResponse)
+	err := c.cc.Invoke(ctx, SpaceService_RestoreSpace_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *spaceServiceClient) GetSpaceDeletionCoordinatorStatus(ctx context.Context, in *GetSpaceDeletionCoordinatorStatusRequest, opts ...grpc.CallOption) (*GetSpaceDeletionCoordinatorStatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSpaceDeletionCoordinatorStatusResponse)
+	err := c.cc.Invoke(ctx, SpaceService_GetSpaceDeletionCoordinatorStatus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SpaceServiceServer is the server API for SpaceService service.
 // All implementations must embed UnimplementedSpaceServiceServer
 // for forward compatibility.
@@ -557,6 +586,7 @@ type SpaceServiceServer interface {
 	UpdateSpace(context.Context, *UpdateSpaceRequest) (*UpdateSpaceResponse, error)
 	// Space-level matchmaking settings (mm_config jsonb; roadmap П.1).
 	UpdateSpaceMmConfig(context.Context, *UpdateSpaceMmConfigRequest) (*UpdateSpaceMmConfigResponse, error)
+	// @voice.security=public_gateway;callers=service:gateway
 	DeleteSpace(context.Context, *DeleteSpaceRequest) (*DeleteSpaceResponse, error)
 	GetSpace(context.Context, *GetSpaceRequest) (*GetSpaceResponse, error)
 	ListMySpaces(context.Context, *ListMySpacesRequest) (*ListMySpacesResponse, error)
@@ -601,6 +631,12 @@ type SpaceServiceServer interface {
 	ResolveVoiceRoomAccess(context.Context, *ResolveVoiceRoomAccessRequest) (*ResolveVoiceRoomAccessResponse, error)
 	// S2S: Subscription Service syncs Space Pro entitlement cache after webhook.
 	SyncSpaceProSubscription(context.Context, *SyncSpaceProSubscriptionRequest) (*SyncSpaceProSubscriptionResponse, error)
+	// @voice.security=public_gateway;callers=service:gateway
+	RestoreSpace(context.Context, *RestoreSpaceRequest) (*RestoreSpaceResponse, error)
+	// @voice.security=public_gateway;callers=service:gateway
+	// @voice.activation=held
+	// @voice.authorization=current_owner
+	GetSpaceDeletionCoordinatorStatus(context.Context, *GetSpaceDeletionCoordinatorStatusRequest) (*GetSpaceDeletionCoordinatorStatusResponse, error)
 	mustEmbedUnimplementedSpaceServiceServer()
 }
 
@@ -736,6 +772,12 @@ func (UnimplementedSpaceServiceServer) ResolveVoiceRoomAccess(context.Context, *
 }
 func (UnimplementedSpaceServiceServer) SyncSpaceProSubscription(context.Context, *SyncSpaceProSubscriptionRequest) (*SyncSpaceProSubscriptionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SyncSpaceProSubscription not implemented")
+}
+func (UnimplementedSpaceServiceServer) RestoreSpace(context.Context, *RestoreSpaceRequest) (*RestoreSpaceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RestoreSpace not implemented")
+}
+func (UnimplementedSpaceServiceServer) GetSpaceDeletionCoordinatorStatus(context.Context, *GetSpaceDeletionCoordinatorStatusRequest) (*GetSpaceDeletionCoordinatorStatusResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSpaceDeletionCoordinatorStatus not implemented")
 }
 func (UnimplementedSpaceServiceServer) mustEmbedUnimplementedSpaceServiceServer() {}
 func (UnimplementedSpaceServiceServer) testEmbeddedByValue()                      {}
@@ -1514,6 +1556,42 @@ func _SpaceService_SyncSpaceProSubscription_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SpaceService_RestoreSpace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RestoreSpaceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).RestoreSpace(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_RestoreSpace_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).RestoreSpace(ctx, req.(*RestoreSpaceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SpaceService_GetSpaceDeletionCoordinatorStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSpaceDeletionCoordinatorStatusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).GetSpaceDeletionCoordinatorStatus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_GetSpaceDeletionCoordinatorStatus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).GetSpaceDeletionCoordinatorStatus(ctx, req.(*GetSpaceDeletionCoordinatorStatusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SpaceService_ServiceDesc is the grpc.ServiceDesc for SpaceService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1688,6 +1766,14 @@ var SpaceService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SyncSpaceProSubscription",
 			Handler:    _SpaceService_SyncSpaceProSubscription_Handler,
+		},
+		{
+			MethodName: "RestoreSpace",
+			Handler:    _SpaceService_RestoreSpace_Handler,
+		},
+		{
+			MethodName: "GetSpaceDeletionCoordinatorStatus",
+			Handler:    _SpaceService_GetSpaceDeletionCoordinatorStatus_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

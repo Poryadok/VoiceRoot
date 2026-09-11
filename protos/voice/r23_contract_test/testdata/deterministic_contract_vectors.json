@@ -1,0 +1,351 @@
+{
+  "version": 3,
+  "hash_rule": "sha256(utf8_fully_qualified_message_name || 0x00 || deterministic_protobuf_bytes)",
+  "schemas": {
+    "voice.common.v1.ManifestBinding": {
+      "unknown_policy": "reject",
+      "fields": [
+        {
+          "number": 1,
+          "name": "manifest_id",
+          "wire_type": 2,
+          "repeated": false
+        },
+        {
+          "number": 2,
+          "name": "manifest_sha256",
+          "wire_type": 2,
+          "repeated": false
+        },
+        {
+          "number": 3,
+          "name": "item_count",
+          "wire_type": 0,
+          "repeated": false
+        }
+      ]
+    },
+    "voice.common.v1.SpaceLifecycleFenceRequest": {
+      "unknown_policy": "reject",
+      "fields": [
+        {
+          "number": 1,
+          "name": "protocol_version",
+          "wire_type": 0,
+          "repeated": false
+        },
+        {
+          "number": 2,
+          "name": "space_id",
+          "wire_type": 2,
+          "repeated": false
+        },
+        {
+          "number": 3,
+          "name": "deletion_operation_id",
+          "wire_type": 2,
+          "repeated": false
+        },
+        {
+          "number": 4,
+          "name": "generation",
+          "wire_type": 0,
+          "repeated": false
+        },
+        {
+          "number": 5,
+          "name": "desired_state",
+          "wire_type": 0,
+          "repeated": false,
+          "type_name": ".voice.common.v1.LifecycleFenceState"
+        },
+        {
+          "number": 6,
+          "name": "manifest",
+          "wire_type": 2,
+          "repeated": false,
+          "type_name": ".voice.common.v1.ManifestBinding"
+        }
+      ]
+    },
+    "voice.chat.v1.ApplySpaceLifecycleFenceRequest": {
+      "unknown_policy": "reject",
+      "fields": [
+        {
+          "number": 1,
+          "name": "fence",
+          "wire_type": 2,
+          "repeated": false,
+          "type_name": ".voice.common.v1.SpaceLifecycleFenceRequest"
+        }
+      ]
+    },
+    "voice.file.v1.ApplySpaceLifecycleFenceRequest": {
+      "unknown_policy": "reject",
+      "fields": [
+        {
+          "number": 1,
+          "name": "fence",
+          "wire_type": 2,
+          "repeated": false,
+          "type_name": ".voice.common.v1.SpaceLifecycleFenceRequest"
+        }
+      ]
+    },
+    "voice.chat.v1.SpacePurgeManifestPage": {
+      "unknown_policy": "accept_preserve",
+      "fields": [
+        {
+          "number": 1,
+          "name": "protocol_version",
+          "wire_type": 0,
+          "repeated": false
+        },
+        {
+          "number": 2,
+          "name": "manifest",
+          "wire_type": 2,
+          "repeated": false,
+          "type_name": ".voice.common.v1.ManifestBinding"
+        },
+        {
+          "number": 3,
+          "name": "page_index",
+          "wire_type": 0,
+          "repeated": false
+        },
+        {
+          "number": 4,
+          "name": "item_ids",
+          "wire_type": 2,
+          "repeated": true
+        },
+        {
+          "number": 5,
+          "name": "page_sha256",
+          "wire_type": 2,
+          "repeated": false
+        },
+        {
+          "number": 6,
+          "name": "next_page_token",
+          "wire_type": 2,
+          "repeated": false
+        }
+      ]
+    },
+    "voice.auth.v1.SpaceDeletionProofBinding": {
+      "unknown_policy": "reject",
+      "fields": [
+        {
+          "number": 1,
+          "name": "protocol_version",
+          "wire_type": 0,
+          "repeated": false
+        },
+        {
+          "number": 2,
+          "name": "account_id",
+          "wire_type": 2,
+          "repeated": false
+        },
+        {
+          "number": 3,
+          "name": "profile_id",
+          "wire_type": 2,
+          "repeated": false
+        },
+        {
+          "number": 4,
+          "name": "session_epoch",
+          "wire_type": 0,
+          "repeated": false
+        },
+        {
+          "number": 5,
+          "name": "space_id",
+          "wire_type": 2,
+          "repeated": false
+        },
+        {
+          "number": 6,
+          "name": "operation_id",
+          "wire_type": 2,
+          "repeated": false
+        },
+        {
+          "number": 7,
+          "name": "confirmation_name_sha256",
+          "wire_type": 2,
+          "repeated": false
+        },
+        {
+          "number": 8,
+          "name": "proof_digest_sha256",
+          "wire_type": 2,
+          "repeated": false
+        },
+        {
+          "number": 9,
+          "name": "verified_factors",
+          "wire_type": 0,
+          "repeated": true,
+          "type_name": ".voice.auth.v1.VerifiedFactor"
+        },
+        {
+          "number": 10,
+          "name": "purpose",
+          "wire_type": 0,
+          "repeated": false,
+          "type_name": ".voice.auth.v1.ProofPurpose"
+        }
+      ]
+    },
+    "voice.auth.v1.ConsumeSpaceDeletionProofResponse": {
+      "unknown_policy": "accept_preserve",
+      "fields": [
+        {
+          "number": 1,
+          "name": "receipt",
+          "wire_type": 2,
+          "repeated": false,
+          "type_name": ".voice.auth.v1.SpaceDeletionProofReceipt"
+        }
+      ]
+    }
+  },
+  "vectors": [
+    {
+      "id": "manifest_base",
+      "message": "voice.common.v1.ManifestBinding",
+      "input_wire_hex": "0a016d120200ff1803",
+      "canonical_wire_hex": "0a016d120200ff1803",
+      "domain_sha256": "dc081b02d2826e9f502e4c3b812e75268d7291242867f89fa7422f925d7ee3c7"
+    },
+    {
+      "id": "manifest_changed_known_field",
+      "message": "voice.common.v1.ManifestBinding",
+      "input_wire_hex": "0a016d120200ff1804",
+      "canonical_wire_hex": "0a016d120200ff1804",
+      "domain_sha256": "f9c692c1c8da0f12b9158681596698e85f33283045c72b89065ffd81776e0e23"
+    },
+    {
+      "id": "fence_request",
+      "message": "voice.common.v1.SpaceLifecycleFenceRequest",
+      "input_wire_hex": "08011201731a016f2002280132090a016d120200ff1803",
+      "canonical_wire_hex": "08011201731a016f2002280132090a016d120200ff1803",
+      "domain_sha256": "bf86d2132778497f0c028abe99dff6889a875881d54fd9f260e2094e6d9352d7"
+    },
+    {
+      "id": "chat_wrapper",
+      "message": "voice.chat.v1.ApplySpaceLifecycleFenceRequest",
+      "input_wire_hex": "0a1708011201731a016f2002280132090a016d120200ff1803",
+      "canonical_wire_hex": "0a1708011201731a016f2002280132090a016d120200ff1803",
+      "domain_sha256": "b3f2e6b6f0c02d28efd0360df097fe6002184182ae5f617f4a3e2aaac47422de"
+    },
+    {
+      "id": "file_wrapper_same_wire",
+      "message": "voice.file.v1.ApplySpaceLifecycleFenceRequest",
+      "input_wire_hex": "0a1708011201731a016f2002280132090a016d120200ff1803",
+      "canonical_wire_hex": "0a1708011201731a016f2002280132090a016d120200ff1803",
+      "domain_sha256": "34b9a5ea92ea7b60234adc2dc93c4f5bf2fbcf3a8db08d701309fa0593a65fad"
+    },
+    {
+      "id": "page_repeated_ab",
+      "message": "voice.chat.v1.SpacePurgeManifestPage",
+      "input_wire_hex": "080112090a016d120200ff180318012201612201622a01ff320178",
+      "canonical_wire_hex": "080112090a016d120200ff180318012201612201622a01ff320178",
+      "domain_sha256": "3f39f2aa09d64c9f79cf4c854c99493f712da295e08fc158b407521079365f9c"
+    },
+    {
+      "id": "page_repeated_ba",
+      "message": "voice.chat.v1.SpacePurgeManifestPage",
+      "input_wire_hex": "080112090a016d120200ff180318012201622201612a01ff320178",
+      "canonical_wire_hex": "080112090a016d120200ff180318012201622201612a01ff320178",
+      "domain_sha256": "e1e002e64f2d06d342e4aecccd1ea1a36c27a92c940d7c788d92a75357016c96"
+    },
+    {
+      "id": "page_unknown_value_order_a",
+      "message": "voice.chat.v1.SpacePurgeManifestPage",
+      "input_wire_hex": "980601080112090a016d120200ff180318012201612201622a01ff320178a2060175",
+      "canonical_wire_hex": "080112090a016d120200ff180318012201612201622a01ff320178980601a2060175",
+      "domain_sha256": "5282ea26ce3f06e892025a6431157eccfb53742c113bf8f6eaf5af0130dc7e6b"
+    },
+    {
+      "id": "page_unknown_value_order_b",
+      "message": "voice.chat.v1.SpacePurgeManifestPage",
+      "input_wire_hex": "a2060175080112090a016d120200ff180318012201612201622a01ff320178980602",
+      "canonical_wire_hex": "080112090a016d120200ff180318012201612201622a01ff320178a2060175980602",
+      "domain_sha256": "26e75508c49e196435c47a324f1e14ac65eabfe79179f51f1ee647e15a0ff7a7"
+    },
+    {
+      "id": "auth_binding_factors_12",
+      "message": "voice.auth.v1.SpaceDeletionProofBinding",
+      "input_wire_hex": "08011201611a017020072a017332016f3a01014201024a0201025001",
+      "canonical_wire_hex": "08011201611a017020072a017332016f3a01014201024a0201025001",
+      "domain_sha256": "bba5b129093d623c004741e8d40d34a34a90f912ef73870c255ef46b9e03ad47"
+    },
+    {
+      "id": "auth_binding_factors_21",
+      "message": "voice.auth.v1.SpaceDeletionProofBinding",
+      "input_wire_hex": "08011201611a017020072a017332016f3a01014201024a0202015001",
+      "canonical_wire_hex": "08011201611a017020072a017332016f3a01014201024a0202015001",
+      "domain_sha256": "84b05bb5b7326af6559280ac758b1619e45ce991a800a2033ad49018a11c9948"
+    },
+    {
+      "id": "auth_receipt_wrapper",
+      "message": "voice.auth.v1.ConsumeSpaceDeletionProofResponse",
+      "input_wire_hex": "0a1608011201721a016f2201032a0104320208053a020102",
+      "canonical_wire_hex": "0a1608011201721a016f2201032a0104320208053a020102",
+      "domain_sha256": "e634730a681cbd2253fdaf7798dfdba34cf8291e06a259c7410f97831ed431ac"
+    }
+  ],
+  "relations": {
+    "changed_known_field_hash_differs": [
+      "manifest_base",
+      "manifest_changed_known_field"
+    ],
+    "unknown_value_order_hash_differs": [
+      "page_unknown_value_order_a",
+      "page_unknown_value_order_b"
+    ],
+    "repeated_order_hash_differs": [
+      "page_repeated_ab",
+      "page_repeated_ba"
+    ],
+    "auth_repeated_order_hash_differs": [
+      "auth_binding_factors_12",
+      "auth_binding_factors_21"
+    ],
+    "fqn_prefix_hash_differs": [
+      "chat_wrapper",
+      "file_wrapper_same_wire"
+    ],
+    "wrapper_vectors": [
+      "chat_wrapper",
+      "file_wrapper_same_wire",
+      "auth_receipt_wrapper"
+    ]
+  },
+  "runtime_consumers": {
+    "go": [
+      "manifest_base",
+      "fence_request",
+      "chat_wrapper",
+      "file_wrapper_same_wire",
+      "page_repeated_ab",
+      "page_repeated_ba"
+    ],
+    "java": [
+      "auth_binding_factors_12",
+      "auth_binding_factors_21",
+      "auth_receipt_wrapper"
+    ]
+  },
+  "proof_digest_vectors": [
+    {
+      "exact_utf8": "proof",
+      "sha256": "c1cda26362828b69266512052b97cb3729e3b052e4ade47c0a1e3383defe73c7"
+    }
+  ]
+}

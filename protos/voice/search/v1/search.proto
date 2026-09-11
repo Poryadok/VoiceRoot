@@ -4,6 +4,7 @@ package voice.search.v1;
 
 import "voice/chat/v1/chat.proto";
 import "voice/common/v1/common.proto";
+import "voice/common/v1/space_lifecycle.proto";
 
 option go_package = "voice.app/voice/search/v1;searchv1";
 
@@ -14,6 +15,12 @@ service SearchService {
   rpc SearchUsers(SearchUsersRequest) returns (SearchUsersResponse);
   rpc SearchSpaces(SearchSpacesRequest) returns (SearchSpacesResponse);
   rpc ReindexChat(ReindexChatRequest) returns (ReindexChatResponse);
+
+  // @voice.security=protected;callers=service:space
+  rpc ApplySpaceLifecycleFence(voice.search.v1.ApplySpaceLifecycleFenceRequest) returns (voice.search.v1.ApplySpaceLifecycleFenceResponse);
+
+  // @voice.security=protected;callers=service:space
+  rpc PurgeSpace(voice.search.v1.PurgeSpaceRequest) returns (voice.search.v1.PurgeSpaceResponse);
 }
 
 message SearchInChatRequest {
@@ -83,3 +90,27 @@ message SearchSpacesResponse {
   SpaceSearchResults space_search_results = 1;
 }
 message ReindexChatResponse {}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message ApplySpaceLifecycleFenceRequest {
+  voice.common.v1.SpaceLifecycleFenceRequest fence = 1;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message ApplySpaceLifecycleFenceResponse {
+  voice.common.v1.SpaceLifecycleFenceReceipt receipt = 1;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message PurgeSpaceRequest {
+  voice.common.v1.SpacePurgeRequest purge = 1;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message PurgeSpaceResponse {
+  voice.common.v1.SpacePurgeReceipt receipt = 1;
+}

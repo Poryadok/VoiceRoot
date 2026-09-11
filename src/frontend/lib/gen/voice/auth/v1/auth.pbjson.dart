@@ -30,6 +30,37 @@ final $typed_data.Uint8List otpTypeDescriptor = $convert.base64Decode(
     'CgdPdHBUeXBlEhgKFE9UUF9UWVBFX1VOU1BFQ0lGSUVEEAASGQoVT1RQX1RZUEVfRU1BSUxfVk'
     'VSSUZZEAESGwoXT1RQX1RZUEVfUEFTU1dPUkRfUkVTRVQQAg==');
 
+@$core.Deprecated('Use verifiedFactorDescriptor instead')
+const VerifiedFactor$json = {
+  '1': 'VerifiedFactor',
+  '2': [
+    {'1': 'VERIFIED_FACTOR_UNSPECIFIED', '2': 0},
+    {'1': 'VERIFIED_FACTOR_PASSWORD', '2': 1},
+    {'1': 'VERIFIED_FACTOR_TOTP', '2': 2},
+    {'1': 'VERIFIED_FACTOR_BACKUP_CODE', '2': 3},
+  ],
+};
+
+/// Descriptor for `VerifiedFactor`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List verifiedFactorDescriptor = $convert.base64Decode(
+    'Cg5WZXJpZmllZEZhY3RvchIfChtWRVJJRklFRF9GQUNUT1JfVU5TUEVDSUZJRUQQABIcChhWRV'
+    'JJRklFRF9GQUNUT1JfUEFTU1dPUkQQARIYChRWRVJJRklFRF9GQUNUT1JfVE9UUBACEh8KG1ZF'
+    'UklGSUVEX0ZBQ1RPUl9CQUNLVVBfQ09ERRAD');
+
+@$core.Deprecated('Use proofPurposeDescriptor instead')
+const ProofPurpose$json = {
+  '1': 'ProofPurpose',
+  '2': [
+    {'1': 'PROOF_PURPOSE_UNSPECIFIED', '2': 0},
+    {'1': 'PROOF_PURPOSE_SPACE_DELETE', '2': 1},
+  ],
+};
+
+/// Descriptor for `ProofPurpose`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List proofPurposeDescriptor = $convert.base64Decode(
+    'CgxQcm9vZlB1cnBvc2USHQoZUFJPT0ZfUFVSUE9TRV9VTlNQRUNJRklFRBAAEh4KGlBST09GX1'
+    'BVUlBPU0VfU1BBQ0VfREVMRVRFEAE=');
+
 @$core.Deprecated('Use registerRequestDescriptor instead')
 const RegisterRequest$json = {
   '1': 'RegisterRequest',
@@ -1066,3 +1097,307 @@ final $typed_data.Uint8List getOwnershipTransferReceiptResponseDescriptor = $con
     'GAYgASgJUgtvcGVyYXRpb25JZBIjCg1zZXNzaW9uX2Vwb2NoGAcgASgDUgxzZXNzaW9uRXBvY2'
     'gSOwoLY29uc3VtZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wUgpjb25z'
     'dW1lZEF0EikKEHZlcmlmaWVkX2ZhY3RvcnMYCSADKAlSD3ZlcmlmaWVkRmFjdG9ycw==');
+
+@$core.Deprecated('Use issueSpaceDeletionProofRequestDescriptor instead')
+const IssueSpaceDeletionProofRequest$json = {
+  '1': 'IssueSpaceDeletionProofRequest',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'confirmation_name',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '10': 'confirmationName'
+    },
+    {'1': 'operation_id', '3': 3, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'password', '3': 4, '4': 1, '5': 9, '10': 'password'},
+    {'1': 'totp_code', '3': 5, '4': 1, '5': 9, '10': 'totpCode'},
+    {'1': 'backup_code', '3': 6, '4': 1, '5': 9, '10': 'backupCode'},
+  ],
+};
+
+/// Descriptor for `IssueSpaceDeletionProofRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List issueSpaceDeletionProofRequestDescriptor = $convert.base64Decode(
+    'Ch5Jc3N1ZVNwYWNlRGVsZXRpb25Qcm9vZlJlcXVlc3QSGQoIc3BhY2VfaWQYASABKAlSB3NwYW'
+    'NlSWQSKwoRY29uZmlybWF0aW9uX25hbWUYAiABKAlSEGNvbmZpcm1hdGlvbk5hbWUSIQoMb3Bl'
+    'cmF0aW9uX2lkGAMgASgJUgtvcGVyYXRpb25JZBIaCghwYXNzd29yZBgEIAEoCVIIcGFzc3dvcm'
+    'QSGwoJdG90cF9jb2RlGAUgASgJUgh0b3RwQ29kZRIfCgtiYWNrdXBfY29kZRgGIAEoCVIKYmFj'
+    'a3VwQ29kZQ==');
+
+@$core.Deprecated('Use issueSpaceDeletionProofResponseDescriptor instead')
+const IssueSpaceDeletionProofResponse$json = {
+  '1': 'IssueSpaceDeletionProofResponse',
+  '2': [
+    {'1': 'proof', '3': 1, '4': 1, '5': 9, '10': 'proof'},
+    {
+      '1': 'expires_at',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'expiresAt'
+    },
+  ],
+};
+
+/// Descriptor for `IssueSpaceDeletionProofResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List issueSpaceDeletionProofResponseDescriptor =
+    $convert.base64Decode(
+        'Ch9Jc3N1ZVNwYWNlRGVsZXRpb25Qcm9vZlJlc3BvbnNlEhQKBXByb29mGAEgASgJUgVwcm9vZh'
+        'I5CgpleHBpcmVzX2F0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcFIJZXhwaXJl'
+        'c0F0');
+
+@$core.Deprecated('Use consumeSpaceDeletionProofRequestDescriptor instead')
+const ConsumeSpaceDeletionProofRequest$json = {
+  '1': 'ConsumeSpaceDeletionProofRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'account_id', '3': 2, '4': 1, '5': 9, '10': 'accountId'},
+    {'1': 'profile_id', '3': 3, '4': 1, '5': 9, '10': 'profileId'},
+    {'1': 'session_epoch', '3': 4, '4': 1, '5': 3, '10': 'sessionEpoch'},
+    {'1': 'space_id', '3': 5, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'operation_id', '3': 6, '4': 1, '5': 9, '10': 'operationId'},
+    {
+      '1': 'confirmation_name',
+      '3': 7,
+      '4': 1,
+      '5': 9,
+      '10': 'confirmationName'
+    },
+    {'1': 'proof', '3': 8, '4': 1, '5': 9, '10': 'proof'},
+  ],
+};
+
+/// Descriptor for `ConsumeSpaceDeletionProofRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List consumeSpaceDeletionProofRequestDescriptor = $convert.base64Decode(
+    'CiBDb25zdW1lU3BhY2VEZWxldGlvblByb29mUmVxdWVzdBIpChBwcm90b2NvbF92ZXJzaW9uGA'
+    'EgASgNUg9wcm90b2NvbFZlcnNpb24SHQoKYWNjb3VudF9pZBgCIAEoCVIJYWNjb3VudElkEh0K'
+    'CnByb2ZpbGVfaWQYAyABKAlSCXByb2ZpbGVJZBIjCg1zZXNzaW9uX2Vwb2NoGAQgASgDUgxzZX'
+    'NzaW9uRXBvY2gSGQoIc3BhY2VfaWQYBSABKAlSB3NwYWNlSWQSIQoMb3BlcmF0aW9uX2lkGAYg'
+    'ASgJUgtvcGVyYXRpb25JZBIrChFjb25maXJtYXRpb25fbmFtZRgHIAEoCVIQY29uZmlybWF0aW'
+    '9uTmFtZRIUCgVwcm9vZhgIIAEoCVIFcHJvb2Y=');
+
+@$core.Deprecated('Use consumeSpaceDeletionProofResponseDescriptor instead')
+const ConsumeSpaceDeletionProofResponse$json = {
+  '1': 'ConsumeSpaceDeletionProofResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.auth.v1.SpaceDeletionProofReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `ConsumeSpaceDeletionProofResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List consumeSpaceDeletionProofResponseDescriptor =
+    $convert.base64Decode(
+        'CiFDb25zdW1lU3BhY2VEZWxldGlvblByb29mUmVzcG9uc2USQgoHcmVjZWlwdBgBIAEoCzIoLn'
+        'ZvaWNlLmF1dGgudjEuU3BhY2VEZWxldGlvblByb29mUmVjZWlwdFIHcmVjZWlwdA==');
+
+@$core.Deprecated('Use spaceDeletionProofBindingDescriptor instead')
+const SpaceDeletionProofBinding$json = {
+  '1': 'SpaceDeletionProofBinding',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'account_id', '3': 2, '4': 1, '5': 9, '10': 'accountId'},
+    {'1': 'profile_id', '3': 3, '4': 1, '5': 9, '10': 'profileId'},
+    {'1': 'session_epoch', '3': 4, '4': 1, '5': 3, '10': 'sessionEpoch'},
+    {'1': 'space_id', '3': 5, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'operation_id', '3': 6, '4': 1, '5': 9, '10': 'operationId'},
+    {
+      '1': 'confirmation_name_sha256',
+      '3': 7,
+      '4': 1,
+      '5': 12,
+      '10': 'confirmationNameSha256'
+    },
+    {
+      '1': 'proof_digest_sha256',
+      '3': 8,
+      '4': 1,
+      '5': 12,
+      '10': 'proofDigestSha256'
+    },
+    {
+      '1': 'verified_factors',
+      '3': 9,
+      '4': 3,
+      '5': 14,
+      '6': '.voice.auth.v1.VerifiedFactor',
+      '10': 'verifiedFactors'
+    },
+    {
+      '1': 'purpose',
+      '3': 10,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.auth.v1.ProofPurpose',
+      '10': 'purpose'
+    },
+  ],
+};
+
+/// Descriptor for `SpaceDeletionProofBinding`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List spaceDeletionProofBindingDescriptor = $convert.base64Decode(
+    'ChlTcGFjZURlbGV0aW9uUHJvb2ZCaW5kaW5nEikKEHByb3RvY29sX3ZlcnNpb24YASABKA1SD3'
+    'Byb3RvY29sVmVyc2lvbhIdCgphY2NvdW50X2lkGAIgASgJUglhY2NvdW50SWQSHQoKcHJvZmls'
+    'ZV9pZBgDIAEoCVIJcHJvZmlsZUlkEiMKDXNlc3Npb25fZXBvY2gYBCABKANSDHNlc3Npb25FcG'
+    '9jaBIZCghzcGFjZV9pZBgFIAEoCVIHc3BhY2VJZBIhCgxvcGVyYXRpb25faWQYBiABKAlSC29w'
+    'ZXJhdGlvbklkEjgKGGNvbmZpcm1hdGlvbl9uYW1lX3NoYTI1NhgHIAEoDFIWY29uZmlybWF0aW'
+    '9uTmFtZVNoYTI1NhIuChNwcm9vZl9kaWdlc3Rfc2hhMjU2GAggASgMUhFwcm9vZkRpZ2VzdFNo'
+    'YTI1NhJIChB2ZXJpZmllZF9mYWN0b3JzGAkgAygOMh0udm9pY2UuYXV0aC52MS5WZXJpZmllZE'
+    'ZhY3RvclIPdmVyaWZpZWRGYWN0b3JzEjUKB3B1cnBvc2UYCiABKA4yGy52b2ljZS5hdXRoLnYx'
+    'LlByb29mUHVycG9zZVIHcHVycG9zZQ==');
+
+@$core.Deprecated('Use spaceDeletionProofReceiptDescriptor instead')
+const SpaceDeletionProofReceipt$json = {
+  '1': 'SpaceDeletionProofReceipt',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'receipt_id', '3': 2, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'operation_id', '3': 3, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'binding_sha256', '3': 4, '4': 1, '5': 12, '10': 'bindingSha256'},
+    {
+      '1': 'confirmation_name_sha256',
+      '3': 5,
+      '4': 1,
+      '5': 12,
+      '10': 'confirmationNameSha256'
+    },
+    {
+      '1': 'consumed_at',
+      '3': 6,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'consumedAt'
+    },
+    {
+      '1': 'verified_factors',
+      '3': 7,
+      '4': 3,
+      '5': 14,
+      '6': '.voice.auth.v1.VerifiedFactor',
+      '10': 'verifiedFactors'
+    },
+  ],
+};
+
+/// Descriptor for `SpaceDeletionProofReceipt`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List spaceDeletionProofReceiptDescriptor = $convert.base64Decode(
+    'ChlTcGFjZURlbGV0aW9uUHJvb2ZSZWNlaXB0EikKEHByb3RvY29sX3ZlcnNpb24YASABKA1SD3'
+    'Byb3RvY29sVmVyc2lvbhIdCgpyZWNlaXB0X2lkGAIgASgJUglyZWNlaXB0SWQSIQoMb3BlcmF0'
+    'aW9uX2lkGAMgASgJUgtvcGVyYXRpb25JZBIlCg5iaW5kaW5nX3NoYTI1NhgEIAEoDFINYmluZG'
+    'luZ1NoYTI1NhI4Chhjb25maXJtYXRpb25fbmFtZV9zaGEyNTYYBSABKAxSFmNvbmZpcm1hdGlv'
+    'bk5hbWVTaGEyNTYSOwoLY29uc3VtZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZX'
+    'N0YW1wUgpjb25zdW1lZEF0EkgKEHZlcmlmaWVkX2ZhY3RvcnMYByADKA4yHS52b2ljZS5hdXRo'
+    'LnYxLlZlcmlmaWVkRmFjdG9yUg92ZXJpZmllZEZhY3RvcnM=');
+
+@$core.Deprecated('Use getSpaceDeletionProofReceiptRequestDescriptor instead')
+const GetSpaceDeletionProofReceiptRequest$json = {
+  '1': 'GetSpaceDeletionProofReceiptRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'account_id', '3': 2, '4': 1, '5': 9, '10': 'accountId'},
+    {'1': 'profile_id', '3': 3, '4': 1, '5': 9, '10': 'profileId'},
+    {'1': 'session_epoch', '3': 4, '4': 1, '5': 3, '10': 'sessionEpoch'},
+    {'1': 'space_id', '3': 5, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'operation_id', '3': 6, '4': 1, '5': 9, '10': 'operationId'},
+    {
+      '1': 'confirmation_name_sha256',
+      '3': 7,
+      '4': 1,
+      '5': 12,
+      '10': 'confirmationNameSha256'
+    },
+    {
+      '1': 'proof_digest_sha256',
+      '3': 8,
+      '4': 1,
+      '5': 12,
+      '10': 'proofDigestSha256'
+    },
+  ],
+};
+
+/// Descriptor for `GetSpaceDeletionProofReceiptRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getSpaceDeletionProofReceiptRequestDescriptor = $convert.base64Decode(
+    'CiNHZXRTcGFjZURlbGV0aW9uUHJvb2ZSZWNlaXB0UmVxdWVzdBIpChBwcm90b2NvbF92ZXJzaW'
+    '9uGAEgASgNUg9wcm90b2NvbFZlcnNpb24SHQoKYWNjb3VudF9pZBgCIAEoCVIJYWNjb3VudElk'
+    'Eh0KCnByb2ZpbGVfaWQYAyABKAlSCXByb2ZpbGVJZBIjCg1zZXNzaW9uX2Vwb2NoGAQgASgDUg'
+    'xzZXNzaW9uRXBvY2gSGQoIc3BhY2VfaWQYBSABKAlSB3NwYWNlSWQSIQoMb3BlcmF0aW9uX2lk'
+    'GAYgASgJUgtvcGVyYXRpb25JZBI4Chhjb25maXJtYXRpb25fbmFtZV9zaGEyNTYYByABKAxSFm'
+    'NvbmZpcm1hdGlvbk5hbWVTaGEyNTYSLgoTcHJvb2ZfZGlnZXN0X3NoYTI1NhgIIAEoDFIRcHJv'
+    'b2ZEaWdlc3RTaGEyNTY=');
+
+@$core.Deprecated('Use getSpaceDeletionProofReceiptResponseDescriptor instead')
+const GetSpaceDeletionProofReceiptResponse$json = {
+  '1': 'GetSpaceDeletionProofReceiptResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.auth.v1.SpaceDeletionProofReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `GetSpaceDeletionProofReceiptResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getSpaceDeletionProofReceiptResponseDescriptor =
+    $convert.base64Decode(
+        'CiRHZXRTcGFjZURlbGV0aW9uUHJvb2ZSZWNlaXB0UmVzcG9uc2USQgoHcmVjZWlwdBgBIAEoCz'
+        'IoLnZvaWNlLmF1dGgudjEuU3BhY2VEZWxldGlvblByb29mUmVjZWlwdFIHcmVjZWlwdA==');
+
+@$core.Deprecated(
+    'Use acknowledgeSpaceDeletionProofReceiptRequestDescriptor instead')
+const AcknowledgeSpaceDeletionProofReceiptRequest$json = {
+  '1': 'AcknowledgeSpaceDeletionProofReceiptRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'receipt_id', '3': 2, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'space_id', '3': 3, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'operation_id', '3': 4, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'receipt_sha256', '3': 5, '4': 1, '5': 12, '10': 'receiptSha256'},
+  ],
+};
+
+/// Descriptor for `AcknowledgeSpaceDeletionProofReceiptRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List
+    acknowledgeSpaceDeletionProofReceiptRequestDescriptor =
+    $convert.base64Decode(
+        'CitBY2tub3dsZWRnZVNwYWNlRGVsZXRpb25Qcm9vZlJlY2VpcHRSZXF1ZXN0EikKEHByb3RvY2'
+        '9sX3ZlcnNpb24YASABKA1SD3Byb3RvY29sVmVyc2lvbhIdCgpyZWNlaXB0X2lkGAIgASgJUgly'
+        'ZWNlaXB0SWQSGQoIc3BhY2VfaWQYAyABKAlSB3NwYWNlSWQSIQoMb3BlcmF0aW9uX2lkGAQgAS'
+        'gJUgtvcGVyYXRpb25JZBIlCg5yZWNlaXB0X3NoYTI1NhgFIAEoDFINcmVjZWlwdFNoYTI1Ng==');
+
+@$core.Deprecated(
+    'Use acknowledgeSpaceDeletionProofReceiptResponseDescriptor instead')
+const AcknowledgeSpaceDeletionProofReceiptResponse$json = {
+  '1': 'AcknowledgeSpaceDeletionProofReceiptResponse',
+  '2': [
+    {
+      '1': 'acknowledged_at',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'acknowledgedAt'
+    },
+  ],
+};
+
+/// Descriptor for `AcknowledgeSpaceDeletionProofReceiptResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List
+    acknowledgeSpaceDeletionProofReceiptResponseDescriptor =
+    $convert.base64Decode(
+        'CixBY2tub3dsZWRnZVNwYWNlRGVsZXRpb25Qcm9vZlJlY2VpcHRSZXNwb25zZRJDCg9hY2tub3'
+        'dsZWRnZWRfYXQYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wUg5hY2tub3dsZWRn'
+        'ZWRBdA==');

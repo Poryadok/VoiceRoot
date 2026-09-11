@@ -3349,9 +3349,14 @@ enum ChatStreamEvent_Payload {
   spaceDeleted,
   dmPeerDeleted,
   voiceRoomAccessInvalidated,
+  spaceDeletionScheduled,
+  spaceRestored,
   notSet
 }
 
+/// --- chat.events (Chat, Space) ---
+/// @voice.unknown_fields=accept_preserve
+/// @voice.hash=domain_separated_sha256
 class ChatStreamEvent extends $pb.GeneratedMessage {
   factory ChatStreamEvent({
     $core.String? eventId,
@@ -3367,6 +3372,8 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
     SpaceDeleted? spaceDeleted,
     DmPeerDeleted? dmPeerDeleted,
     VoiceRoomAccessInvalidated? voiceRoomAccessInvalidated,
+    SpaceDeletionScheduled? spaceDeletionScheduled,
+    SpaceRestored? spaceRestored,
   }) {
     final result = create();
     if (eventId != null) result.eventId = eventId;
@@ -3384,6 +3391,9 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
     if (dmPeerDeleted != null) result.dmPeerDeleted = dmPeerDeleted;
     if (voiceRoomAccessInvalidated != null)
       result.voiceRoomAccessInvalidated = voiceRoomAccessInvalidated;
+    if (spaceDeletionScheduled != null)
+      result.spaceDeletionScheduled = spaceDeletionScheduled;
+    if (spaceRestored != null) result.spaceRestored = spaceRestored;
     return result;
   }
 
@@ -3409,6 +3419,8 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
     18: ChatStreamEvent_Payload.spaceDeleted,
     19: ChatStreamEvent_Payload.dmPeerDeleted,
     20: ChatStreamEvent_Payload.voiceRoomAccessInvalidated,
+    21: ChatStreamEvent_Payload.spaceDeletionScheduled,
+    22: ChatStreamEvent_Payload.spaceRestored,
     0: ChatStreamEvent_Payload.notSet
   };
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
@@ -3416,7 +3428,7 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
       package:
           const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
       createEmptyInstance: create)
-    ..oo(0, [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20])
+    ..oo(0, [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22])
     ..aOS(1, _omitFieldNames ? '' : 'eventId')
     ..aOM<$0.Timestamp>(2, _omitFieldNames ? '' : 'occurredAt',
         subBuilder: $0.Timestamp.create)
@@ -3443,6 +3455,11 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
     ..aOM<VoiceRoomAccessInvalidated>(
         20, _omitFieldNames ? '' : 'voiceRoomAccessInvalidated',
         subBuilder: VoiceRoomAccessInvalidated.create)
+    ..aOM<SpaceDeletionScheduled>(
+        21, _omitFieldNames ? '' : 'spaceDeletionScheduled',
+        subBuilder: SpaceDeletionScheduled.create)
+    ..aOM<SpaceRestored>(22, _omitFieldNames ? '' : 'spaceRestored',
+        subBuilder: SpaceRestored.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3475,6 +3492,8 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(18)
   @$pb.TagNumber(19)
   @$pb.TagNumber(20)
+  @$pb.TagNumber(21)
+  @$pb.TagNumber(22)
   ChatStreamEvent_Payload whichPayload() =>
       _ChatStreamEvent_PayloadByTag[$_whichOneof(0)]!;
   @$pb.TagNumber(10)
@@ -3488,6 +3507,8 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(18)
   @$pb.TagNumber(19)
   @$pb.TagNumber(20)
+  @$pb.TagNumber(21)
+  @$pb.TagNumber(22)
   void clearPayload() => $_clearField($_whichOneof(0));
 
   @$pb.TagNumber(1)
@@ -3631,6 +3652,29 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
   void clearVoiceRoomAccessInvalidated() => $_clearField(20);
   @$pb.TagNumber(20)
   VoiceRoomAccessInvalidated ensureVoiceRoomAccessInvalidated() => $_ensure(12);
+
+  @$pb.TagNumber(21)
+  SpaceDeletionScheduled get spaceDeletionScheduled => $_getN(13);
+  @$pb.TagNumber(21)
+  set spaceDeletionScheduled(SpaceDeletionScheduled value) =>
+      $_setField(21, value);
+  @$pb.TagNumber(21)
+  $core.bool hasSpaceDeletionScheduled() => $_has(13);
+  @$pb.TagNumber(21)
+  void clearSpaceDeletionScheduled() => $_clearField(21);
+  @$pb.TagNumber(21)
+  SpaceDeletionScheduled ensureSpaceDeletionScheduled() => $_ensure(13);
+
+  @$pb.TagNumber(22)
+  SpaceRestored get spaceRestored => $_getN(14);
+  @$pb.TagNumber(22)
+  set spaceRestored(SpaceRestored value) => $_setField(22, value);
+  @$pb.TagNumber(22)
+  $core.bool hasSpaceRestored() => $_has(14);
+  @$pb.TagNumber(22)
+  void clearSpaceRestored() => $_clearField(22);
+  @$pb.TagNumber(22)
+  SpaceRestored ensureSpaceRestored() => $_ensure(14);
 }
 
 class ChatCreated extends $pb.GeneratedMessage {
@@ -4241,12 +4285,25 @@ class SpaceUpdated extends $pb.GeneratedMessage {
   void clearSpaceId() => $_clearField(1);
 }
 
+/// @voice.unknown_fields=accept_preserve
+/// @voice.hash=domain_separated_sha256
 class SpaceDeleted extends $pb.GeneratedMessage {
   factory SpaceDeleted({
     $core.String? spaceId,
+    $core.int? protocolVersion,
+    $core.String? deletionOperationId,
+    $fixnum.Int64? generation,
+    $0.Timestamp? purgeDecidedAt,
+    $0.Timestamp? purgedAt,
   }) {
     final result = create();
     if (spaceId != null) result.spaceId = spaceId;
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (deletionOperationId != null)
+      result.deletionOperationId = deletionOperationId;
+    if (generation != null) result.generation = generation;
+    if (purgeDecidedAt != null) result.purgeDecidedAt = purgeDecidedAt;
+    if (purgedAt != null) result.purgedAt = purgedAt;
     return result;
   }
 
@@ -4265,6 +4322,16 @@ class SpaceDeleted extends $pb.GeneratedMessage {
           const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aI(2, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(3, _omitFieldNames ? '' : 'deletionOperationId')
+    ..a<$fixnum.Int64>(
+        4, _omitFieldNames ? '' : 'generation', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOM<$0.Timestamp>(5, _omitFieldNames ? '' : 'purgeDecidedAt',
+        subBuilder: $0.Timestamp.create)
+    ..aOM<$0.Timestamp>(6, _omitFieldNames ? '' : 'purgedAt',
+        subBuilder: $0.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -4294,6 +4361,55 @@ class SpaceDeleted extends $pb.GeneratedMessage {
   $core.bool hasSpaceId() => $_has(0);
   @$pb.TagNumber(1)
   void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.int get protocolVersion => $_getIZ(1);
+  @$pb.TagNumber(2)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProtocolVersion() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProtocolVersion() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get deletionOperationId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set deletionOperationId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasDeletionOperationId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearDeletionOperationId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $fixnum.Int64 get generation => $_getI64(3);
+  @$pb.TagNumber(4)
+  set generation($fixnum.Int64 value) => $_setInt64(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasGeneration() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearGeneration() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $0.Timestamp get purgeDecidedAt => $_getN(4);
+  @$pb.TagNumber(5)
+  set purgeDecidedAt($0.Timestamp value) => $_setField(5, value);
+  @$pb.TagNumber(5)
+  $core.bool hasPurgeDecidedAt() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearPurgeDecidedAt() => $_clearField(5);
+  @$pb.TagNumber(5)
+  $0.Timestamp ensurePurgeDecidedAt() => $_ensure(4);
+
+  @$pb.TagNumber(6)
+  $0.Timestamp get purgedAt => $_getN(5);
+  @$pb.TagNumber(6)
+  set purgedAt($0.Timestamp value) => $_setField(6, value);
+  @$pb.TagNumber(6)
+  $core.bool hasPurgedAt() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearPurgedAt() => $_clearField(6);
+  @$pb.TagNumber(6)
+  $0.Timestamp ensurePurgedAt() => $_ensure(5);
 }
 
 /// Targeted acceleration for a surviving participant of a DM. The deleted
@@ -10276,6 +10392,246 @@ class WebhookFailed extends $pb.GeneratedMessage {
   $core.bool hasError() => $_has(2);
   @$pb.TagNumber(3)
   void clearError() => $_clearField(3);
+}
+
+/// @voice.unknown_fields=accept_preserve
+/// @voice.hash=domain_separated_sha256
+class SpaceDeletionScheduled extends $pb.GeneratedMessage {
+  factory SpaceDeletionScheduled({
+    $core.int? protocolVersion,
+    $core.String? spaceId,
+    $core.String? deletionOperationId,
+    $fixnum.Int64? generation,
+    $0.Timestamp? scheduledAt,
+    $0.Timestamp? purgeAfter,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (deletionOperationId != null)
+      result.deletionOperationId = deletionOperationId;
+    if (generation != null) result.generation = generation;
+    if (scheduledAt != null) result.scheduledAt = scheduledAt;
+    if (purgeAfter != null) result.purgeAfter = purgeAfter;
+    return result;
+  }
+
+  SpaceDeletionScheduled._();
+
+  factory SpaceDeletionScheduled.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SpaceDeletionScheduled.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SpaceDeletionScheduled',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(3, _omitFieldNames ? '' : 'deletionOperationId')
+    ..a<$fixnum.Int64>(
+        4, _omitFieldNames ? '' : 'generation', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOM<$0.Timestamp>(5, _omitFieldNames ? '' : 'scheduledAt',
+        subBuilder: $0.Timestamp.create)
+    ..aOM<$0.Timestamp>(6, _omitFieldNames ? '' : 'purgeAfter',
+        subBuilder: $0.Timestamp.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceDeletionScheduled clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceDeletionScheduled copyWith(
+          void Function(SpaceDeletionScheduled) updates) =>
+      super.copyWith((message) => updates(message as SpaceDeletionScheduled))
+          as SpaceDeletionScheduled;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SpaceDeletionScheduled create() => SpaceDeletionScheduled._();
+  @$core.override
+  SpaceDeletionScheduled createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SpaceDeletionScheduled getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SpaceDeletionScheduled>(create);
+  static SpaceDeletionScheduled? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get spaceId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set spaceId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasSpaceId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSpaceId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get deletionOperationId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set deletionOperationId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasDeletionOperationId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearDeletionOperationId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $fixnum.Int64 get generation => $_getI64(3);
+  @$pb.TagNumber(4)
+  set generation($fixnum.Int64 value) => $_setInt64(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasGeneration() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearGeneration() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $0.Timestamp get scheduledAt => $_getN(4);
+  @$pb.TagNumber(5)
+  set scheduledAt($0.Timestamp value) => $_setField(5, value);
+  @$pb.TagNumber(5)
+  $core.bool hasScheduledAt() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearScheduledAt() => $_clearField(5);
+  @$pb.TagNumber(5)
+  $0.Timestamp ensureScheduledAt() => $_ensure(4);
+
+  @$pb.TagNumber(6)
+  $0.Timestamp get purgeAfter => $_getN(5);
+  @$pb.TagNumber(6)
+  set purgeAfter($0.Timestamp value) => $_setField(6, value);
+  @$pb.TagNumber(6)
+  $core.bool hasPurgeAfter() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearPurgeAfter() => $_clearField(6);
+  @$pb.TagNumber(6)
+  $0.Timestamp ensurePurgeAfter() => $_ensure(5);
+}
+
+/// @voice.unknown_fields=accept_preserve
+/// @voice.hash=domain_separated_sha256
+class SpaceRestored extends $pb.GeneratedMessage {
+  factory SpaceRestored({
+    $core.int? protocolVersion,
+    $core.String? spaceId,
+    $core.String? deletionOperationId,
+    $fixnum.Int64? generation,
+    $0.Timestamp? restoredAt,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (deletionOperationId != null)
+      result.deletionOperationId = deletionOperationId;
+    if (generation != null) result.generation = generation;
+    if (restoredAt != null) result.restoredAt = restoredAt;
+    return result;
+  }
+
+  SpaceRestored._();
+
+  factory SpaceRestored.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SpaceRestored.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SpaceRestored',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(3, _omitFieldNames ? '' : 'deletionOperationId')
+    ..a<$fixnum.Int64>(
+        4, _omitFieldNames ? '' : 'generation', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOM<$0.Timestamp>(5, _omitFieldNames ? '' : 'restoredAt',
+        subBuilder: $0.Timestamp.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceRestored clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceRestored copyWith(void Function(SpaceRestored) updates) =>
+      super.copyWith((message) => updates(message as SpaceRestored))
+          as SpaceRestored;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SpaceRestored create() => SpaceRestored._();
+  @$core.override
+  SpaceRestored createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SpaceRestored getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SpaceRestored>(create);
+  static SpaceRestored? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get spaceId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set spaceId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasSpaceId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSpaceId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get deletionOperationId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set deletionOperationId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasDeletionOperationId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearDeletionOperationId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $fixnum.Int64 get generation => $_getI64(3);
+  @$pb.TagNumber(4)
+  set generation($fixnum.Int64 value) => $_setInt64(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasGeneration() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearGeneration() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $0.Timestamp get restoredAt => $_getN(4);
+  @$pb.TagNumber(5)
+  set restoredAt($0.Timestamp value) => $_setField(5, value);
+  @$pb.TagNumber(5)
+  $core.bool hasRestoredAt() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearRestoredAt() => $_clearField(5);
+  @$pb.TagNumber(5)
+  $0.Timestamp ensureRestoredAt() => $_ensure(4);
 }
 
 const $core.bool _omitFieldNames =

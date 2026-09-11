@@ -5,6 +5,7 @@ package voice.messaging.v1;
 import "google/protobuf/timestamp.proto";
 import "voice/chat/v1/chat.proto";
 import "voice/common/v1/common.proto";
+import "voice/common/v1/space_lifecycle.proto";
 
 option go_package = "voice.app/voice/messaging/v1;messagingv1";
 
@@ -57,6 +58,15 @@ service MessagingService {
   // Signal pre-key directory for DM E2E — docs/features/encryption.md.
   rpc UploadPreKeyBundle(UploadPreKeyBundleRequest) returns (UploadPreKeyBundleResponse);
   rpc GetPreKeyBundle(GetPreKeyBundleRequest) returns (GetPreKeyBundleResponse);
+
+  // @voice.security=protected;callers=service:space
+  rpc ApplySpaceLifecycleFence(voice.messaging.v1.ApplySpaceLifecycleFenceRequest) returns (voice.messaging.v1.ApplySpaceLifecycleFenceResponse);
+
+  // @voice.security=protected;callers=service:space
+  rpc PurgeSpace(voice.messaging.v1.PurgeSpaceRequest) returns (voice.messaging.v1.PurgeSpaceResponse);
+
+  // @voice.security=protected;callers=service:space
+  rpc ImportSpacePurgeManifestPage(voice.messaging.v1.ImportSpacePurgeManifestPageRequest) returns (voice.messaging.v1.ImportSpacePurgeManifestPageResponse);
 }
 
 // Shared media tabs in chat info (docs/features/text-chat.md, docs/features/search.md).
@@ -352,4 +362,62 @@ message GetPreKeyBundleRequest {
 
 message GetPreKeyBundleResponse {
   string bundle = 1;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message ApplySpaceLifecycleFenceRequest {
+  voice.common.v1.SpaceLifecycleFenceRequest fence = 1;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message ApplySpaceLifecycleFenceResponse {
+  voice.common.v1.SpaceLifecycleFenceReceipt receipt = 1;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message PurgeSpaceRequest {
+  voice.common.v1.SpacePurgeRequest purge = 1;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message PurgeSpaceResponse {
+  voice.common.v1.SpacePurgeReceipt receipt = 1;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message ImportSpacePurgeManifestPageRequest {
+  uint32 protocol_version = 1;
+  string space_id = 2;
+  string deletion_operation_id = 3;
+  uint64 schedule_generation = 4;
+  voice.chat.v1.SpacePurgeManifestPage page = 5;
+  bool seals_manifest = 6;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message ImportSpacePurgeManifestPageReceipt {
+  uint32 protocol_version = 1;
+  string receipt_id = 2;
+  string space_id = 3;
+  string deletion_operation_id = 4;
+  uint64 generation = 5;
+  voice.common.v1.ManifestBinding manifest = 6;
+  uint64 page_index = 7;
+  uint64 accepted_count = 8;
+  bytes page_sha256 = 9;
+  bool manifest_sealed = 10;
+  bytes request_sha256 = 11;
+  google.protobuf.Timestamp completed_at = 12;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message ImportSpacePurgeManifestPageResponse {
+  voice.messaging.v1.ImportSpacePurgeManifestPageReceipt receipt = 1;
 }

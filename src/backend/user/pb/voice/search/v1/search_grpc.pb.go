@@ -19,11 +19,13 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	SearchService_SearchInChat_FullMethodName = "/voice.search.v1.SearchService/SearchInChat"
-	SearchService_SearchGlobal_FullMethodName = "/voice.search.v1.SearchService/SearchGlobal"
-	SearchService_SearchUsers_FullMethodName  = "/voice.search.v1.SearchService/SearchUsers"
-	SearchService_SearchSpaces_FullMethodName = "/voice.search.v1.SearchService/SearchSpaces"
-	SearchService_ReindexChat_FullMethodName  = "/voice.search.v1.SearchService/ReindexChat"
+	SearchService_SearchInChat_FullMethodName             = "/voice.search.v1.SearchService/SearchInChat"
+	SearchService_SearchGlobal_FullMethodName             = "/voice.search.v1.SearchService/SearchGlobal"
+	SearchService_SearchUsers_FullMethodName              = "/voice.search.v1.SearchService/SearchUsers"
+	SearchService_SearchSpaces_FullMethodName             = "/voice.search.v1.SearchService/SearchSpaces"
+	SearchService_ReindexChat_FullMethodName              = "/voice.search.v1.SearchService/ReindexChat"
+	SearchService_ApplySpaceLifecycleFence_FullMethodName = "/voice.search.v1.SearchService/ApplySpaceLifecycleFence"
+	SearchService_PurgeSpace_FullMethodName               = "/voice.search.v1.SearchService/PurgeSpace"
 )
 
 // SearchServiceClient is the client API for SearchService service.
@@ -37,6 +39,10 @@ type SearchServiceClient interface {
 	SearchUsers(ctx context.Context, in *SearchUsersRequest, opts ...grpc.CallOption) (*SearchUsersResponse, error)
 	SearchSpaces(ctx context.Context, in *SearchSpacesRequest, opts ...grpc.CallOption) (*SearchSpacesResponse, error)
 	ReindexChat(ctx context.Context, in *ReindexChatRequest, opts ...grpc.CallOption) (*ReindexChatResponse, error)
+	// @voice.security=protected;callers=service:space
+	ApplySpaceLifecycleFence(ctx context.Context, in *ApplySpaceLifecycleFenceRequest, opts ...grpc.CallOption) (*ApplySpaceLifecycleFenceResponse, error)
+	// @voice.security=protected;callers=service:space
+	PurgeSpace(ctx context.Context, in *PurgeSpaceRequest, opts ...grpc.CallOption) (*PurgeSpaceResponse, error)
 }
 
 type searchServiceClient struct {
@@ -97,6 +103,26 @@ func (c *searchServiceClient) ReindexChat(ctx context.Context, in *ReindexChatRe
 	return out, nil
 }
 
+func (c *searchServiceClient) ApplySpaceLifecycleFence(ctx context.Context, in *ApplySpaceLifecycleFenceRequest, opts ...grpc.CallOption) (*ApplySpaceLifecycleFenceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplySpaceLifecycleFenceResponse)
+	err := c.cc.Invoke(ctx, SearchService_ApplySpaceLifecycleFence_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *searchServiceClient) PurgeSpace(ctx context.Context, in *PurgeSpaceRequest, opts ...grpc.CallOption) (*PurgeSpaceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PurgeSpaceResponse)
+	err := c.cc.Invoke(ctx, SearchService_PurgeSpace_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SearchServiceServer is the server API for SearchService service.
 // All implementations must embed UnimplementedSearchServiceServer
 // for forward compatibility.
@@ -108,6 +134,10 @@ type SearchServiceServer interface {
 	SearchUsers(context.Context, *SearchUsersRequest) (*SearchUsersResponse, error)
 	SearchSpaces(context.Context, *SearchSpacesRequest) (*SearchSpacesResponse, error)
 	ReindexChat(context.Context, *ReindexChatRequest) (*ReindexChatResponse, error)
+	// @voice.security=protected;callers=service:space
+	ApplySpaceLifecycleFence(context.Context, *ApplySpaceLifecycleFenceRequest) (*ApplySpaceLifecycleFenceResponse, error)
+	// @voice.security=protected;callers=service:space
+	PurgeSpace(context.Context, *PurgeSpaceRequest) (*PurgeSpaceResponse, error)
 	mustEmbedUnimplementedSearchServiceServer()
 }
 
@@ -132,6 +162,12 @@ func (UnimplementedSearchServiceServer) SearchSpaces(context.Context, *SearchSpa
 }
 func (UnimplementedSearchServiceServer) ReindexChat(context.Context, *ReindexChatRequest) (*ReindexChatResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReindexChat not implemented")
+}
+func (UnimplementedSearchServiceServer) ApplySpaceLifecycleFence(context.Context, *ApplySpaceLifecycleFenceRequest) (*ApplySpaceLifecycleFenceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApplySpaceLifecycleFence not implemented")
+}
+func (UnimplementedSearchServiceServer) PurgeSpace(context.Context, *PurgeSpaceRequest) (*PurgeSpaceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PurgeSpace not implemented")
 }
 func (UnimplementedSearchServiceServer) mustEmbedUnimplementedSearchServiceServer() {}
 func (UnimplementedSearchServiceServer) testEmbeddedByValue()                       {}
@@ -244,6 +280,42 @@ func _SearchService_ReindexChat_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SearchService_ApplySpaceLifecycleFence_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplySpaceLifecycleFenceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SearchServiceServer).ApplySpaceLifecycleFence(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SearchService_ApplySpaceLifecycleFence_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SearchServiceServer).ApplySpaceLifecycleFence(ctx, req.(*ApplySpaceLifecycleFenceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SearchService_PurgeSpace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PurgeSpaceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SearchServiceServer).PurgeSpace(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SearchService_PurgeSpace_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SearchServiceServer).PurgeSpace(ctx, req.(*PurgeSpaceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SearchService_ServiceDesc is the grpc.ServiceDesc for SearchService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -270,6 +342,14 @@ var SearchService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReindexChat",
 			Handler:    _SearchService_ReindexChat_Handler,
+		},
+		{
+			MethodName: "ApplySpaceLifecycleFence",
+			Handler:    _SearchService_ApplySpaceLifecycleFence_Handler,
+		},
+		{
+			MethodName: "PurgeSpace",
+			Handler:    _SearchService_PurgeSpace_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -188,6 +188,34 @@ class MessagingServiceClient extends $grpc.Client {
     return $createUnaryCall(_$getPreKeyBundle, request, options: options);
   }
 
+  /// @voice.security=protected;callers=service:space
+  $grpc.ResponseFuture<$0.ApplySpaceLifecycleFenceResponse>
+      applySpaceLifecycleFence(
+    $0.ApplySpaceLifecycleFenceRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$applySpaceLifecycleFence, request,
+        options: options);
+  }
+
+  /// @voice.security=protected;callers=service:space
+  $grpc.ResponseFuture<$0.PurgeSpaceResponse> purgeSpace(
+    $0.PurgeSpaceRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$purgeSpace, request, options: options);
+  }
+
+  /// @voice.security=protected;callers=service:space
+  $grpc.ResponseFuture<$0.ImportSpacePurgeManifestPageResponse>
+      importSpacePurgeManifestPage(
+    $0.ImportSpacePurgeManifestPageRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$importSpacePurgeManifestPage, request,
+        options: options);
+  }
+
   // method descriptors
 
   static final _$sendMessage =
@@ -296,6 +324,23 @@ class MessagingServiceClient extends $grpc.Client {
           '/voice.messaging.v1.MessagingService/GetPreKeyBundle',
           ($0.GetPreKeyBundleRequest value) => value.writeToBuffer(),
           $0.GetPreKeyBundleResponse.fromBuffer);
+  static final _$applySpaceLifecycleFence = $grpc.ClientMethod<
+          $0.ApplySpaceLifecycleFenceRequest,
+          $0.ApplySpaceLifecycleFenceResponse>(
+      '/voice.messaging.v1.MessagingService/ApplySpaceLifecycleFence',
+      ($0.ApplySpaceLifecycleFenceRequest value) => value.writeToBuffer(),
+      $0.ApplySpaceLifecycleFenceResponse.fromBuffer);
+  static final _$purgeSpace =
+      $grpc.ClientMethod<$0.PurgeSpaceRequest, $0.PurgeSpaceResponse>(
+          '/voice.messaging.v1.MessagingService/PurgeSpace',
+          ($0.PurgeSpaceRequest value) => value.writeToBuffer(),
+          $0.PurgeSpaceResponse.fromBuffer);
+  static final _$importSpacePurgeManifestPage = $grpc.ClientMethod<
+          $0.ImportSpacePurgeManifestPageRequest,
+          $0.ImportSpacePurgeManifestPageResponse>(
+      '/voice.messaging.v1.MessagingService/ImportSpacePurgeManifestPage',
+      ($0.ImportSpacePurgeManifestPageRequest value) => value.writeToBuffer(),
+      $0.ImportSpacePurgeManifestPageResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.messaging.v1.MessagingService')
@@ -487,6 +532,32 @@ abstract class MessagingServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.GetPreKeyBundleRequest.fromBuffer(value),
         ($0.GetPreKeyBundleResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ApplySpaceLifecycleFenceRequest,
+            $0.ApplySpaceLifecycleFenceResponse>(
+        'ApplySpaceLifecycleFence',
+        applySpaceLifecycleFence_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ApplySpaceLifecycleFenceRequest.fromBuffer(value),
+        ($0.ApplySpaceLifecycleFenceResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.PurgeSpaceRequest, $0.PurgeSpaceResponse>(
+        'PurgeSpace',
+        purgeSpace_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) => $0.PurgeSpaceRequest.fromBuffer(value),
+        ($0.PurgeSpaceResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ImportSpacePurgeManifestPageRequest,
+            $0.ImportSpacePurgeManifestPageResponse>(
+        'ImportSpacePurgeManifestPage',
+        importSpacePurgeManifestPage_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ImportSpacePurgeManifestPageRequest.fromBuffer(value),
+        ($0.ImportSpacePurgeManifestPageResponse value) =>
+            value.writeToBuffer()));
   }
 
   $async.Future<$0.SendMessageResponse> sendMessage_Pre($grpc.ServiceCall $call,
@@ -672,4 +743,33 @@ abstract class MessagingServiceBase extends $grpc.Service {
 
   $async.Future<$0.GetPreKeyBundleResponse> getPreKeyBundle(
       $grpc.ServiceCall call, $0.GetPreKeyBundleRequest request);
+
+  $async.Future<$0.ApplySpaceLifecycleFenceResponse>
+      applySpaceLifecycleFence_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.ApplySpaceLifecycleFenceRequest> $request) async {
+    return applySpaceLifecycleFence($call, await $request);
+  }
+
+  $async.Future<$0.ApplySpaceLifecycleFenceResponse> applySpaceLifecycleFence(
+      $grpc.ServiceCall call, $0.ApplySpaceLifecycleFenceRequest request);
+
+  $async.Future<$0.PurgeSpaceResponse> purgeSpace_Pre($grpc.ServiceCall $call,
+      $async.Future<$0.PurgeSpaceRequest> $request) async {
+    return purgeSpace($call, await $request);
+  }
+
+  $async.Future<$0.PurgeSpaceResponse> purgeSpace(
+      $grpc.ServiceCall call, $0.PurgeSpaceRequest request);
+
+  $async.Future<$0.ImportSpacePurgeManifestPageResponse>
+      importSpacePurgeManifestPage_Pre(
+          $grpc.ServiceCall $call,
+          $async.Future<$0.ImportSpacePurgeManifestPageRequest>
+              $request) async {
+    return importSpacePurgeManifestPage($call, await $request);
+  }
+
+  $async.Future<$0.ImportSpacePurgeManifestPageResponse>
+      importSpacePurgeManifestPage($grpc.ServiceCall call,
+          $0.ImportSpacePurgeManifestPageRequest request);
 }

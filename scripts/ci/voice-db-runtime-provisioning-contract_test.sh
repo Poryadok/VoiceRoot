@@ -414,12 +414,311 @@ expect_regex 'deploy/staging/README.md' 'VOICE_DATABASE_URL.*voice-app-secrets|v
 
 printf '%s\n' '== F13/G7: source-disabled scope boundary =='
 base_sha="${VOICE_R22_BASE_SHA:-$(git -C "${ROOT}" merge-base HEAD origin/master)}"
+accepted_r23_base='edc52d46406d97283f81dfbdfc916660f50dcc69'
+r23_contract_base_allowed() {
+  local candidate="$1"
+  git -C "${ROOT}" rev-parse --verify "${candidate}^{commit}" >/dev/null 2>&1 &&
+    git -C "${ROOT}" merge-base --is-ancestor "${accepted_r23_base}" "${candidate}" &&
+    ! git -C "${ROOT}" cat-file -e "${candidate}:protos/voice/r23_contract_manifest.json" 2>/dev/null
+}
+
+r23_allowlist_enabled=false
+if r23_contract_base_allowed "${base_sha}"; then
+  r23_allowlist_enabled=true
+fi
+
+{
+  git -C "${ROOT}" diff --name-only "${accepted_r23_base}" --
+  git -C "${ROOT}" ls-files --others --exclude-standard
+} | sed '/^[[:space:]]*$/d' | LC_ALL=C sort -u >"${TMP_DIR}/r23-fixed-delta"
+
+cat >"${TMP_DIR}/r23-allowlist.py" <<'PY'
+import json
+import sys
+
+manifest_path, targets_path, accepted_base = sys.argv[1:]
+with open(manifest_path, encoding="utf-8") as stream:
+    manifest = json.load(stream)
+with open(targets_path, encoding="utf-8") as stream:
+    targets = json.load(stream)
+
+if manifest.get("metadata", {}).get("base_sha") != accepted_base:
+    raise SystemExit("R23 manifest base_sha does not match the accepted base")
+if not isinstance(manifest.get("files"), list) or not isinstance(targets.get("targets"), list):
+    raise SystemExit("R23 contract manifests have invalid collection fields")
+
+proto_paths = []
+for item in manifest["files"]:
+    if not isinstance(item, dict) or not isinstance(item.get("path"), str):
+        raise SystemExit("R23 manifest contains an invalid proto path")
+    proto_paths.append("protos/" + item["path"])
+
+committed_targets = []
+for item in targets["targets"]:
+    if (
+        not isinstance(item, dict)
+        or not isinstance(item.get("path"), str)
+        or type(item.get("committed")) is not bool
+    ):
+        raise SystemExit("R23 generated-target manifest contains an invalid target")
+    if item["committed"]:
+        committed_targets.append(item["path"])
+
+generated_module_roots = {
+    "src/backend/file/pb/voice/file",
+    "src/backend/role/pb/voice/role",
+    "src/backend/voice/pb/voice/bot",
+    "src/backend/voice/pb/voice/calls",
+    "src/backend/voice/pb/voice/notification",
+    "src/backend/voice/pb/voice/space",
+    "src/backend/voice/pb/voice/subscription",
+}
+generated_module_mods = {
+    root + "/go.mod"
+    for root in generated_module_roots
+    if any(path.startswith(root + "/") for path in committed_targets)
+}
+if len(generated_module_mods) != len(generated_module_roots):
+    raise SystemExit("R23 generated-module go.mod derivation is incomplete")
+
+allowed = {
+    ".github/workflows/ci.yml",
+    "Makefile",
+    "protos/voice/r23_contract_manifest.json",
+    "protos/voice/r23_contract_test/RED_EVIDENCE.md",
+    "protos/voice/r23_contract_test/generated_targets.json",
+    "protos/voice/r23_contract_test/go.mod",
+    "protos/voice/r23_contract_test/r23_contract_test.go",
+    "protos/voice/r23_contract_test/testdata/deterministic_contract_vectors.json",
+    "scripts/ci/voice-db-runtime-provisioning-contract_test.sh",
+    "src/backend/bot/Dockerfile",
+    "src/backend/bot/go.mod",
+    "src/backend/chat/Dockerfile",
+    "src/backend/gateway/rest_transcoding_integration_test.go",
+    "src/backend/matchmaking/Dockerfile",
+    "src/backend/matchmaking/go.mod",
+    "src/backend/role/internal/grpcsvc/ordinary_scope_test.go",
+    "src/backend/search/Dockerfile",
+    "src/backend/search/go.mod",
+    "src/backend/social/Dockerfile",
+    "src/backend/social/go.mod",
+    "src/backend/space/Dockerfile",
+    "src/backend/space/go.mod",
+    "src/backend/subscription/Dockerfile",
+    "src/backend/subscription/go.mod",
+    "src/backend/user/Dockerfile",
+    "src/backend/voice/go.mod",
+}
+allowed.update(proto_paths)
+allowed.update(committed_targets)
+allowed.update(generated_module_mods)
+print("\n".join(sorted(allowed)))
+PY
+
+python3 "${TMP_DIR}/r23-allowlist.py" \
+  "${ROOT}/protos/voice/r23_contract_manifest.json" \
+  "${ROOT}/protos/voice/r23_contract_test/generated_targets.json" \
+  "${accepted_r23_base}" \
+  >"${TMP_DIR}/r23-allowed-paths"
+
+r23_contract_path_authorized_in_delta() {
+  local path="$1"
+  local delta="$2"
+  grep -Fxq -- "${path}" "${TMP_DIR}/r23-allowed-paths" &&
+    grep -Fxq -- "${path}" "${delta}"
+}
+
+r23_contract_path_allowed_for_window() {
+  local enabled="$1"
+  local path="$2"
+  local delta="$3"
+  [[ "${enabled}" == 'true' ]] &&
+    r23_contract_path_authorized_in_delta "${path}" "${delta}"
+}
+
+r23_contract_path_allowed() {
+  r23_contract_path_allowed_for_window \
+    "${r23_allowlist_enabled}" \
+    "$1" \
+    "${TMP_DIR}/r23-fixed-delta"
+}
+
+r23_contract_path_authorized_in_delta \
+  'protos/voice/auth/v1/auth.proto' \
+  "${TMP_DIR}/r23-fixed-delta" || {
+  printf '%s\n' 'F13 oracle bug: canonical R23 proto was rejected' >&2
+  exit 2
+}
+r23_contract_path_authorized_in_delta \
+  'src/backend/auth/src/main/proto/voice/auth/v1/auth.proto' \
+  "${TMP_DIR}/r23-fixed-delta" || {
+  printf '%s\n' 'F13 oracle bug: committed R23 Auth mirror was rejected' >&2
+  exit 2
+}
+r23_contract_path_authorized_in_delta \
+  'src/backend/voice/pb/voice/space/v1/space.pb.go' \
+  "${TMP_DIR}/r23-fixed-delta" || {
+  printf '%s\n' 'F13 oracle bug: committed R23 Go target was rejected' >&2
+  exit 2
+}
+r23_contract_path_authorized_in_delta \
+  'src/frontend/lib/gen/voice/space/v1/space.pb.dart' \
+  "${TMP_DIR}/r23-fixed-delta" || {
+  printf '%s\n' 'F13 oracle bug: committed R23 Dart target was rejected' >&2
+  exit 2
+}
+r23_contract_path_authorized_in_delta \
+  'src/backend/voice/pb/voice/space/go.mod' \
+  "${TMP_DIR}/r23-fixed-delta" || {
+  printf '%s\n' 'F13 oracle bug: derived generated-module go.mod was rejected' >&2
+  exit 2
+}
+r23_contract_path_authorized_in_delta \
+  'src/backend/space/Dockerfile' \
+  "${TMP_DIR}/r23-fixed-delta" || {
+  printf '%s\n' 'F13 oracle bug: exact R23 CI-closure path was rejected' >&2
+  exit 2
+}
+r23_contract_path_authorized_in_delta \
+  'src/backend/role/internal/grpcsvc/ordinary_scope_test.go' \
+  "${TMP_DIR}/r23-fixed-delta" || {
+  printf '%s\n' 'F13 oracle bug: exact R23 Role contract-test path was rejected' >&2
+  exit 2
+}
+if r23_contract_path_authorized_in_delta \
+  'protos/voice/auth/v1/auth.proto.near-match' \
+  "${TMP_DIR}/r23-fixed-delta"; then
+  printf '%s\n' 'F13 oracle bug: near-match R23 path was accepted' >&2
+  exit 2
+fi
+if r23_contract_path_authorized_in_delta \
+  'src/backend/auth/target/generated-sources/protobuf/java/app/voice/auth/v1/Auth.java' \
+  "${TMP_DIR}/r23-fixed-delta"; then
+  printf '%s\n' 'F13 oracle bug: uncommitted Java target was accepted' >&2
+  exit 2
+fi
+if r23_contract_path_authorized_in_delta \
+  'src/backend/space/Dockerfile.near-match' \
+  "${TMP_DIR}/r23-fixed-delta"; then
+  printf '%s\n' 'F13 oracle bug: near-match CI-closure path was accepted' >&2
+  exit 2
+fi
+if r23_contract_path_authorized_in_delta \
+  'src/backend/role/internal/grpcsvc/ordinary_scope_test.go.near-match' \
+  "${TMP_DIR}/r23-fixed-delta"; then
+  printf '%s\n' 'F13 oracle bug: near-match Role contract-test path was accepted' >&2
+  exit 2
+fi
+if r23_contract_path_authorized_in_delta \
+  'src/backend/space/internal/grpcsvc/r23_rogue.go' \
+  "${TMP_DIR}/r23-fixed-delta"; then
+  printf '%s\n' 'F13 oracle bug: unlisted R23 path was accepted' >&2
+  exit 2
+fi
+grep -Fxv -- 'protos/voice/auth/v1/auth.proto' \
+  "${TMP_DIR}/r23-fixed-delta" >"${TMP_DIR}/r23-fixed-delta-without-auth"
+if r23_contract_path_authorized_in_delta \
+  'protos/voice/auth/v1/auth.proto' \
+  "${TMP_DIR}/r23-fixed-delta-without-auth"; then
+  printf '%s\n' 'F13 oracle bug: authorized path absent from fixed_delta was accepted' >&2
+  exit 2
+fi
+if r23_contract_path_allowed_for_window \
+  false \
+  'protos/voice/auth/v1/auth.proto' \
+  "${TMP_DIR}/r23-fixed-delta"; then
+  printf '%s\n' 'F13 oracle bug: manifest-present window still exempted an R23 path' >&2
+  exit 2
+fi
+ordinary_disabled_window_path='docs/PLAN.md'
+if r23_contract_path_allowed_for_window \
+  false \
+  "${ordinary_disabled_window_path}" \
+  "${TMP_DIR}/r23-fixed-delta"; then
+  printf '%s\n' 'F13 oracle bug: disabled window unexpectedly exempted an ordinary path' >&2
+  exit 2
+fi
+
+fixed_tree="$(git -C "${ROOT}" rev-parse "${accepted_r23_base}^{tree}")"
+r23_fixture_commit() {
+  local message="$1"
+  shift
+  printf '%s\n' "${message}" | \
+    GIT_AUTHOR_NAME='Voice CI' \
+    GIT_AUTHOR_EMAIL='voice-ci@example.invalid' \
+    GIT_COMMITTER_NAME='Voice CI' \
+    GIT_COMMITTER_EMAIL='voice-ci@example.invalid' \
+    git -C "${ROOT}" -c commit.gpgSign=false commit-tree "$@"
+}
+prerequisite_commit="$(r23_fixture_commit 'F13 prerequisite fixture' "${fixed_tree}" -p "${accepted_r23_base}")"
+merge_side_commit="$(r23_fixture_commit 'F13 merge-side fixture' "${fixed_tree}" -p "${accepted_r23_base}")"
+merge_commit="$(r23_fixture_commit 'F13 prerequisite merge fixture' "${fixed_tree}" -p "${prerequisite_commit}" -p "${merge_side_commit}")"
+post_merge_commit="$(r23_fixture_commit 'F13 post-merge push fixture' "${fixed_tree}" -p "${merge_commit}")"
+non_descendant_commit="$(git -C "${ROOT}" rev-list --max-parents=0 "${accepted_r23_base}" | sed -n '1p')"
+r23_contract_base_allowed "${accepted_r23_base}" || {
+  printf '%s\n' 'F13 oracle bug: accepted R23 base was rejected' >&2
+  exit 2
+}
+r23_contract_base_allowed "${prerequisite_commit}" || {
+  printf '%s\n' 'F13 oracle bug: descendant prerequisite base was rejected' >&2
+  exit 2
+}
+r23_contract_base_allowed "${merge_commit}" || {
+  printf '%s\n' 'F13 oracle bug: prerequisite merge base was rejected' >&2
+  exit 2
+}
+r23_contract_base_allowed "${post_merge_commit}" || {
+  printf '%s\n' 'F13 oracle bug: post-merge push base was rejected' >&2
+  exit 2
+}
+if r23_contract_base_allowed "${non_descendant_commit}"; then
+  printf '%s\n' 'F13 oracle bug: non-descendant base was accepted' >&2
+  exit 2
+fi
+if r23_contract_base_allowed HEAD; then
+  printf '%s\n' 'F13 oracle bug: descendant base containing the R23 manifest was accepted' >&2
+  exit 2
+fi
+
+printf '%s\n' '{' >"${TMP_DIR}/malformed-r23-manifest.json"
+if python3 "${TMP_DIR}/r23-allowlist.py" \
+  "${TMP_DIR}/malformed-r23-manifest.json" \
+  "${ROOT}/protos/voice/r23_contract_test/generated_targets.json" \
+  "${accepted_r23_base}" \
+  >/dev/null 2>&1; then
+  printf '%s\n' 'F13 oracle bug: malformed manifest enabled the R23 allowlist' >&2
+  exit 2
+fi
+python3 - \
+  "${ROOT}/protos/voice/r23_contract_manifest.json" \
+  "${TMP_DIR}/mismatched-r23-manifest.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as stream:
+    manifest = json.load(stream)
+manifest["metadata"]["base_sha"] = "0000000000000000000000000000000000000000"
+with open(sys.argv[2], "w", encoding="utf-8") as stream:
+    json.dump(manifest, stream)
+PY
+if python3 "${TMP_DIR}/r23-allowlist.py" \
+  "${TMP_DIR}/mismatched-r23-manifest.json" \
+  "${ROOT}/protos/voice/r23_contract_test/generated_targets.json" \
+  "${accepted_r23_base}" \
+  >/dev/null 2>&1; then
+  printf '%s\n' 'F13 oracle bug: mismatched manifest base_sha enabled the R23 allowlist' >&2
+  exit 2
+fi
+
 {
   git -C "${ROOT}" diff --name-only "${base_sha}" --
   git -C "${ROOT}" ls-files --others --exclude-standard
 } | sed '/^[[:space:]]*$/d' | LC_ALL=C sort -u >"${TMP_DIR}/changed-files"
 
 while IFS= read -r file; do
+  if r23_contract_path_allowed "${file}"; then
+    continue
+  fi
   case "${file}" in
     protos/*|*/pb/*|*.pb.go)
       fail "F13: proto/generated change is outside R22.2: ${file}"

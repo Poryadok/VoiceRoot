@@ -303,7 +303,8 @@ type fileMetadataMap map[string]*filev1.FileMetadata
 
 func (m fileMetadataMap) GetBulkMetadata(_ context.Context, req *filev1.GetBulkMetadataRequest, _ ...grpc.CallOption) (*filev1.GetBulkMetadataResponse, error) {
 	out := map[string]*filev1.FileMetadata{}
-	for _, id := range req.GetFileIds() {
+	legacyFileIDs := req.GetFileIds() //nolint:staticcheck // R23 compatibility: keep legacy metadata fixtures until callers migrate to access-scoped items.
+	for _, id := range legacyFileIDs {
 		if meta := m[id]; meta != nil {
 			out[id] = meta
 		}

@@ -1489,3 +1489,275 @@ const DisableChatE2EResponse$json = {
 /// Descriptor for `DisableChatE2EResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List disableChatE2EResponseDescriptor =
     $convert.base64Decode('ChZEaXNhYmxlQ2hhdEUyRVJlc3BvbnNl');
+
+@$core.Deprecated('Use applySpaceLifecycleFenceRequestDescriptor instead')
+const ApplySpaceLifecycleFenceRequest$json = {
+  '1': 'ApplySpaceLifecycleFenceRequest',
+  '2': [
+    {
+      '1': 'fence',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.SpaceLifecycleFenceRequest',
+      '10': 'fence'
+    },
+  ],
+};
+
+/// Descriptor for `ApplySpaceLifecycleFenceRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List applySpaceLifecycleFenceRequestDescriptor =
+    $convert.base64Decode(
+        'Ch9BcHBseVNwYWNlTGlmZWN5Y2xlRmVuY2VSZXF1ZXN0EkEKBWZlbmNlGAEgASgLMisudm9pY2'
+        'UuY29tbW9uLnYxLlNwYWNlTGlmZWN5Y2xlRmVuY2VSZXF1ZXN0UgVmZW5jZQ==');
+
+@$core.Deprecated('Use applySpaceLifecycleFenceResponseDescriptor instead')
+const ApplySpaceLifecycleFenceResponse$json = {
+  '1': 'ApplySpaceLifecycleFenceResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.SpaceLifecycleFenceReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `ApplySpaceLifecycleFenceResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List applySpaceLifecycleFenceResponseDescriptor =
+    $convert.base64Decode(
+        'CiBBcHBseVNwYWNlTGlmZWN5Y2xlRmVuY2VSZXNwb25zZRJFCgdyZWNlaXB0GAEgASgLMisudm'
+        '9pY2UuY29tbW9uLnYxLlNwYWNlTGlmZWN5Y2xlRmVuY2VSZWNlaXB0UgdyZWNlaXB0');
+
+@$core.Deprecated('Use purgeSpaceRequestDescriptor instead')
+const PurgeSpaceRequest$json = {
+  '1': 'PurgeSpaceRequest',
+  '2': [
+    {
+      '1': 'purge',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.SpacePurgeRequest',
+      '10': 'purge'
+    },
+  ],
+};
+
+/// Descriptor for `PurgeSpaceRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List purgeSpaceRequestDescriptor = $convert.base64Decode(
+    'ChFQdXJnZVNwYWNlUmVxdWVzdBI4CgVwdXJnZRgBIAEoCzIiLnZvaWNlLmNvbW1vbi52MS5TcG'
+    'FjZVB1cmdlUmVxdWVzdFIFcHVyZ2U=');
+
+@$core.Deprecated('Use purgeSpaceResponseDescriptor instead')
+const PurgeSpaceResponse$json = {
+  '1': 'PurgeSpaceResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.SpacePurgeReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `PurgeSpaceResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List purgeSpaceResponseDescriptor = $convert.base64Decode(
+    'ChJQdXJnZVNwYWNlUmVzcG9uc2USPAoHcmVjZWlwdBgBIAEoCzIiLnZvaWNlLmNvbW1vbi52MS'
+    '5TcGFjZVB1cmdlUmVjZWlwdFIHcmVjZWlwdA==');
+
+@$core.Deprecated('Use getSpacePurgeManifestPageRequestDescriptor instead')
+const GetSpacePurgeManifestPageRequest$json = {
+  '1': 'GetSpacePurgeManifestPageRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'space_id', '3': 2, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'deletion_operation_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '10': 'deletionOperationId'
+    },
+    {'1': 'generation', '3': 4, '4': 1, '5': 4, '10': 'generation'},
+    {'1': 'manifest_id', '3': 5, '4': 1, '5': 9, '10': 'manifestId'},
+    {'1': 'page_token', '3': 6, '4': 1, '5': 9, '10': 'pageToken'},
+  ],
+};
+
+/// Descriptor for `GetSpacePurgeManifestPageRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getSpacePurgeManifestPageRequestDescriptor = $convert.base64Decode(
+    'CiBHZXRTcGFjZVB1cmdlTWFuaWZlc3RQYWdlUmVxdWVzdBIpChBwcm90b2NvbF92ZXJzaW9uGA'
+    'EgASgNUg9wcm90b2NvbFZlcnNpb24SGQoIc3BhY2VfaWQYAiABKAlSB3NwYWNlSWQSMgoVZGVs'
+    'ZXRpb25fb3BlcmF0aW9uX2lkGAMgASgJUhNkZWxldGlvbk9wZXJhdGlvbklkEh4KCmdlbmVyYX'
+    'Rpb24YBCABKARSCmdlbmVyYXRpb24SHwoLbWFuaWZlc3RfaWQYBSABKAlSCm1hbmlmZXN0SWQS'
+    'HQoKcGFnZV90b2tlbhgGIAEoCVIJcGFnZVRva2Vu');
+
+@$core.Deprecated('Use spacePurgeManifestPageDescriptor instead')
+const SpacePurgeManifestPage$json = {
+  '1': 'SpacePurgeManifestPage',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {
+      '1': 'manifest',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.ManifestBinding',
+      '10': 'manifest'
+    },
+    {'1': 'page_index', '3': 3, '4': 1, '5': 4, '10': 'pageIndex'},
+    {'1': 'item_ids', '3': 4, '4': 3, '5': 9, '10': 'itemIds'},
+    {'1': 'page_sha256', '3': 5, '4': 1, '5': 12, '10': 'pageSha256'},
+    {'1': 'next_page_token', '3': 6, '4': 1, '5': 9, '10': 'nextPageToken'},
+  ],
+};
+
+/// Descriptor for `SpacePurgeManifestPage`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List spacePurgeManifestPageDescriptor = $convert.base64Decode(
+    'ChZTcGFjZVB1cmdlTWFuaWZlc3RQYWdlEikKEHByb3RvY29sX3ZlcnNpb24YASABKA1SD3Byb3'
+    'RvY29sVmVyc2lvbhI8CghtYW5pZmVzdBgCIAEoCzIgLnZvaWNlLmNvbW1vbi52MS5NYW5pZmVz'
+    'dEJpbmRpbmdSCG1hbmlmZXN0Eh0KCnBhZ2VfaW5kZXgYAyABKARSCXBhZ2VJbmRleBIZCghpdG'
+    'VtX2lkcxgEIAMoCVIHaXRlbUlkcxIfCgtwYWdlX3NoYTI1NhgFIAEoDFIKcGFnZVNoYTI1NhIm'
+    'Cg9uZXh0X3BhZ2VfdG9rZW4YBiABKAlSDW5leHRQYWdlVG9rZW4=');
+
+@$core.Deprecated('Use prepareSpaceDeletionManifestRequestDescriptor instead')
+const PrepareSpaceDeletionManifestRequest$json = {
+  '1': 'PrepareSpaceDeletionManifestRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'space_id', '3': 2, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'deletion_operation_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '10': 'deletionOperationId'
+    },
+    {
+      '1': 'schedule_generation',
+      '3': 4,
+      '4': 1,
+      '5': 4,
+      '10': 'scheduleGeneration'
+    },
+  ],
+};
+
+/// Descriptor for `PrepareSpaceDeletionManifestRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List prepareSpaceDeletionManifestRequestDescriptor =
+    $convert.base64Decode(
+        'CiNQcmVwYXJlU3BhY2VEZWxldGlvbk1hbmlmZXN0UmVxdWVzdBIpChBwcm90b2NvbF92ZXJzaW'
+        '9uGAEgASgNUg9wcm90b2NvbFZlcnNpb24SGQoIc3BhY2VfaWQYAiABKAlSB3NwYWNlSWQSMgoV'
+        'ZGVsZXRpb25fb3BlcmF0aW9uX2lkGAMgASgJUhNkZWxldGlvbk9wZXJhdGlvbklkEi8KE3NjaG'
+        'VkdWxlX2dlbmVyYXRpb24YBCABKARSEnNjaGVkdWxlR2VuZXJhdGlvbg==');
+
+@$core.Deprecated('Use prepareSpaceDeletionManifestReceiptDescriptor instead')
+const PrepareSpaceDeletionManifestReceipt$json = {
+  '1': 'PrepareSpaceDeletionManifestReceipt',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'receipt_id', '3': 2, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'space_id', '3': 3, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'deletion_operation_id',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '10': 'deletionOperationId'
+    },
+    {
+      '1': 'schedule_generation',
+      '3': 5,
+      '4': 1,
+      '5': 4,
+      '10': 'scheduleGeneration'
+    },
+    {
+      '1': 'applied_state',
+      '3': 6,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.common.v1.LifecycleFenceState',
+      '10': 'appliedState'
+    },
+    {
+      '1': 'chat_manifest',
+      '3': 7,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.ManifestBinding',
+      '10': 'chatManifest'
+    },
+    {'1': 'request_sha256', '3': 8, '4': 1, '5': 12, '10': 'requestSha256'},
+    {
+      '1': 'applied_at',
+      '3': 9,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'appliedAt'
+    },
+  ],
+};
+
+/// Descriptor for `PrepareSpaceDeletionManifestReceipt`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List prepareSpaceDeletionManifestReceiptDescriptor = $convert.base64Decode(
+    'CiNQcmVwYXJlU3BhY2VEZWxldGlvbk1hbmlmZXN0UmVjZWlwdBIpChBwcm90b2NvbF92ZXJzaW'
+    '9uGAEgASgNUg9wcm90b2NvbFZlcnNpb24SHQoKcmVjZWlwdF9pZBgCIAEoCVIJcmVjZWlwdElk'
+    'EhkKCHNwYWNlX2lkGAMgASgJUgdzcGFjZUlkEjIKFWRlbGV0aW9uX29wZXJhdGlvbl9pZBgEIA'
+    'EoCVITZGVsZXRpb25PcGVyYXRpb25JZBIvChNzY2hlZHVsZV9nZW5lcmF0aW9uGAUgASgEUhJz'
+    'Y2hlZHVsZUdlbmVyYXRpb24SSQoNYXBwbGllZF9zdGF0ZRgGIAEoDjIkLnZvaWNlLmNvbW1vbi'
+    '52MS5MaWZlY3ljbGVGZW5jZVN0YXRlUgxhcHBsaWVkU3RhdGUSRQoNY2hhdF9tYW5pZmVzdBgH'
+    'IAEoCzIgLnZvaWNlLmNvbW1vbi52MS5NYW5pZmVzdEJpbmRpbmdSDGNoYXRNYW5pZmVzdBIlCg'
+    '5yZXF1ZXN0X3NoYTI1NhgIIAEoDFINcmVxdWVzdFNoYTI1NhI5CgphcHBsaWVkX2F0GAkgASgL'
+    'MhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcFIJYXBwbGllZEF0');
+
+@$core.Deprecated('Use prepareSpaceDeletionManifestResponseDescriptor instead')
+const PrepareSpaceDeletionManifestResponse$json = {
+  '1': 'PrepareSpaceDeletionManifestResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.chat.v1.PrepareSpaceDeletionManifestReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `PrepareSpaceDeletionManifestResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List prepareSpaceDeletionManifestResponseDescriptor =
+    $convert.base64Decode(
+        'CiRQcmVwYXJlU3BhY2VEZWxldGlvbk1hbmlmZXN0UmVzcG9uc2USTAoHcmVjZWlwdBgBIAEoCz'
+        'IyLnZvaWNlLmNoYXQudjEuUHJlcGFyZVNwYWNlRGVsZXRpb25NYW5pZmVzdFJlY2VpcHRSB3Jl'
+        'Y2VpcHQ=');
+
+@$core.Deprecated('Use getSpacePurgeManifestPageResponseDescriptor instead')
+const GetSpacePurgeManifestPageResponse$json = {
+  '1': 'GetSpacePurgeManifestPageResponse',
+  '2': [
+    {
+      '1': 'page',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.chat.v1.SpacePurgeManifestPage',
+      '10': 'page'
+    },
+  ],
+};
+
+/// Descriptor for `GetSpacePurgeManifestPageResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getSpacePurgeManifestPageResponseDescriptor =
+    $convert.base64Decode(
+        'CiFHZXRTcGFjZVB1cmdlTWFuaWZlc3RQYWdlUmVzcG9uc2USOQoEcGFnZRgBIAEoCzIlLnZvaW'
+        'NlLmNoYXQudjEuU3BhY2VQdXJnZU1hbmlmZXN0UGFnZVIEcGFnZQ==');

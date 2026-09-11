@@ -4,6 +4,7 @@ package voice.chat.v1;
 
 import "google/protobuf/timestamp.proto";
 import "voice/common/v1/common.proto";
+import "voice/common/v1/space_lifecycle.proto";
 
 option go_package = "voice.app/voice/chat/v1;chatv1";
 
@@ -55,6 +56,18 @@ service ChatService {
   // visibility after a profile disables show_read_receipts. It has no Gateway
   // route and requires the trusted Messaging service identity.
   rpc ListDMReceiptVisibilityTargets(ListDMReceiptVisibilityTargetsRequest) returns (ListDMReceiptVisibilityTargetsResponse);
+
+  // @voice.security=protected;callers=service:space
+  rpc ApplySpaceLifecycleFence(voice.chat.v1.ApplySpaceLifecycleFenceRequest) returns (voice.chat.v1.ApplySpaceLifecycleFenceResponse);
+
+  // @voice.security=protected;callers=service:space
+  rpc PurgeSpace(voice.chat.v1.PurgeSpaceRequest) returns (voice.chat.v1.PurgeSpaceResponse);
+
+  // @voice.security=protected;callers=service:space
+  rpc PrepareSpaceDeletionManifest(voice.chat.v1.PrepareSpaceDeletionManifestRequest) returns (voice.chat.v1.PrepareSpaceDeletionManifestResponse);
+
+  // @voice.security=protected;callers=service:space,service:messaging,service:search,service:bot,service:notification
+  rpc GetSpacePurgeManifestPage(voice.chat.v1.GetSpacePurgeManifestPageRequest) returns (voice.chat.v1.GetSpacePurgeManifestPageResponse);
 }
 
 enum ChatType {
@@ -368,3 +381,84 @@ message MuteChatResponse {}
 message ArchiveChatResponse {}
 message EnableChatE2EResponse {}
 message DisableChatE2EResponse {}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message ApplySpaceLifecycleFenceRequest {
+  voice.common.v1.SpaceLifecycleFenceRequest fence = 1;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message ApplySpaceLifecycleFenceResponse {
+  voice.common.v1.SpaceLifecycleFenceReceipt receipt = 1;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message PurgeSpaceRequest {
+  voice.common.v1.SpacePurgeRequest purge = 1;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message PurgeSpaceResponse {
+  voice.common.v1.SpacePurgeReceipt receipt = 1;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message GetSpacePurgeManifestPageRequest {
+  uint32 protocol_version = 1;
+  string space_id = 2;
+  string deletion_operation_id = 3;
+  uint64 generation = 4;
+  string manifest_id = 5;
+  string page_token = 6;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message SpacePurgeManifestPage {
+  uint32 protocol_version = 1;
+  voice.common.v1.ManifestBinding manifest = 2;
+  uint64 page_index = 3;
+  repeated string item_ids = 4;
+  bytes page_sha256 = 5;
+  string next_page_token = 6;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message PrepareSpaceDeletionManifestRequest {
+  uint32 protocol_version = 1;
+  string space_id = 2;
+  string deletion_operation_id = 3;
+  uint64 schedule_generation = 4;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message PrepareSpaceDeletionManifestReceipt {
+  uint32 protocol_version = 1;
+  string receipt_id = 2;
+  string space_id = 3;
+  string deletion_operation_id = 4;
+  uint64 schedule_generation = 5;
+  voice.common.v1.LifecycleFenceState applied_state = 6;
+  voice.common.v1.ManifestBinding chat_manifest = 7;
+  bytes request_sha256 = 8;
+  google.protobuf.Timestamp applied_at = 9;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message PrepareSpaceDeletionManifestResponse {
+  voice.chat.v1.PrepareSpaceDeletionManifestReceipt receipt = 1;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message GetSpacePurgeManifestPageResponse {
+  voice.chat.v1.SpacePurgeManifestPage page = 1;
+}

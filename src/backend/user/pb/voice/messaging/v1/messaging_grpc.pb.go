@@ -40,6 +40,9 @@ const (
 	MessagingService_ListSharedMedia_FullMethodName              = "/voice.messaging.v1.MessagingService/ListSharedMedia"
 	MessagingService_UploadPreKeyBundle_FullMethodName           = "/voice.messaging.v1.MessagingService/UploadPreKeyBundle"
 	MessagingService_GetPreKeyBundle_FullMethodName              = "/voice.messaging.v1.MessagingService/GetPreKeyBundle"
+	MessagingService_ApplySpaceLifecycleFence_FullMethodName     = "/voice.messaging.v1.MessagingService/ApplySpaceLifecycleFence"
+	MessagingService_PurgeSpace_FullMethodName                   = "/voice.messaging.v1.MessagingService/PurgeSpace"
+	MessagingService_ImportSpacePurgeManifestPage_FullMethodName = "/voice.messaging.v1.MessagingService/ImportSpacePurgeManifestPage"
 )
 
 // MessagingServiceClient is the client API for MessagingService service.
@@ -75,6 +78,12 @@ type MessagingServiceClient interface {
 	// Signal pre-key directory for DM E2E — docs/features/encryption.md.
 	UploadPreKeyBundle(ctx context.Context, in *UploadPreKeyBundleRequest, opts ...grpc.CallOption) (*UploadPreKeyBundleResponse, error)
 	GetPreKeyBundle(ctx context.Context, in *GetPreKeyBundleRequest, opts ...grpc.CallOption) (*GetPreKeyBundleResponse, error)
+	// @voice.security=protected;callers=service:space
+	ApplySpaceLifecycleFence(ctx context.Context, in *ApplySpaceLifecycleFenceRequest, opts ...grpc.CallOption) (*ApplySpaceLifecycleFenceResponse, error)
+	// @voice.security=protected;callers=service:space
+	PurgeSpace(ctx context.Context, in *PurgeSpaceRequest, opts ...grpc.CallOption) (*PurgeSpaceResponse, error)
+	// @voice.security=protected;callers=service:space
+	ImportSpacePurgeManifestPage(ctx context.Context, in *ImportSpacePurgeManifestPageRequest, opts ...grpc.CallOption) (*ImportSpacePurgeManifestPageResponse, error)
 }
 
 type messagingServiceClient struct {
@@ -295,6 +304,36 @@ func (c *messagingServiceClient) GetPreKeyBundle(ctx context.Context, in *GetPre
 	return out, nil
 }
 
+func (c *messagingServiceClient) ApplySpaceLifecycleFence(ctx context.Context, in *ApplySpaceLifecycleFenceRequest, opts ...grpc.CallOption) (*ApplySpaceLifecycleFenceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplySpaceLifecycleFenceResponse)
+	err := c.cc.Invoke(ctx, MessagingService_ApplySpaceLifecycleFence_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *messagingServiceClient) PurgeSpace(ctx context.Context, in *PurgeSpaceRequest, opts ...grpc.CallOption) (*PurgeSpaceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PurgeSpaceResponse)
+	err := c.cc.Invoke(ctx, MessagingService_PurgeSpace_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *messagingServiceClient) ImportSpacePurgeManifestPage(ctx context.Context, in *ImportSpacePurgeManifestPageRequest, opts ...grpc.CallOption) (*ImportSpacePurgeManifestPageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ImportSpacePurgeManifestPageResponse)
+	err := c.cc.Invoke(ctx, MessagingService_ImportSpacePurgeManifestPage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MessagingServiceServer is the server API for MessagingService service.
 // All implementations must embed UnimplementedMessagingServiceServer
 // for forward compatibility.
@@ -328,6 +367,12 @@ type MessagingServiceServer interface {
 	// Signal pre-key directory for DM E2E — docs/features/encryption.md.
 	UploadPreKeyBundle(context.Context, *UploadPreKeyBundleRequest) (*UploadPreKeyBundleResponse, error)
 	GetPreKeyBundle(context.Context, *GetPreKeyBundleRequest) (*GetPreKeyBundleResponse, error)
+	// @voice.security=protected;callers=service:space
+	ApplySpaceLifecycleFence(context.Context, *ApplySpaceLifecycleFenceRequest) (*ApplySpaceLifecycleFenceResponse, error)
+	// @voice.security=protected;callers=service:space
+	PurgeSpace(context.Context, *PurgeSpaceRequest) (*PurgeSpaceResponse, error)
+	// @voice.security=protected;callers=service:space
+	ImportSpacePurgeManifestPage(context.Context, *ImportSpacePurgeManifestPageRequest) (*ImportSpacePurgeManifestPageResponse, error)
 	mustEmbedUnimplementedMessagingServiceServer()
 }
 
@@ -400,6 +445,15 @@ func (UnimplementedMessagingServiceServer) UploadPreKeyBundle(context.Context, *
 }
 func (UnimplementedMessagingServiceServer) GetPreKeyBundle(context.Context, *GetPreKeyBundleRequest) (*GetPreKeyBundleResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetPreKeyBundle not implemented")
+}
+func (UnimplementedMessagingServiceServer) ApplySpaceLifecycleFence(context.Context, *ApplySpaceLifecycleFenceRequest) (*ApplySpaceLifecycleFenceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApplySpaceLifecycleFence not implemented")
+}
+func (UnimplementedMessagingServiceServer) PurgeSpace(context.Context, *PurgeSpaceRequest) (*PurgeSpaceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PurgeSpace not implemented")
+}
+func (UnimplementedMessagingServiceServer) ImportSpacePurgeManifestPage(context.Context, *ImportSpacePurgeManifestPageRequest) (*ImportSpacePurgeManifestPageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ImportSpacePurgeManifestPage not implemented")
 }
 func (UnimplementedMessagingServiceServer) mustEmbedUnimplementedMessagingServiceServer() {}
 func (UnimplementedMessagingServiceServer) testEmbeddedByValue()                          {}
@@ -800,6 +854,60 @@ func _MessagingService_GetPreKeyBundle_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MessagingService_ApplySpaceLifecycleFence_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplySpaceLifecycleFenceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServiceServer).ApplySpaceLifecycleFence(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessagingService_ApplySpaceLifecycleFence_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServiceServer).ApplySpaceLifecycleFence(ctx, req.(*ApplySpaceLifecycleFenceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MessagingService_PurgeSpace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PurgeSpaceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServiceServer).PurgeSpace(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessagingService_PurgeSpace_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServiceServer).PurgeSpace(ctx, req.(*PurgeSpaceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MessagingService_ImportSpacePurgeManifestPage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ImportSpacePurgeManifestPageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServiceServer).ImportSpacePurgeManifestPage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessagingService_ImportSpacePurgeManifestPage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServiceServer).ImportSpacePurgeManifestPage(ctx, req.(*ImportSpacePurgeManifestPageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MessagingService_ServiceDesc is the grpc.ServiceDesc for MessagingService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -890,6 +998,18 @@ var MessagingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetPreKeyBundle",
 			Handler:    _MessagingService_GetPreKeyBundle_Handler,
+		},
+		{
+			MethodName: "ApplySpaceLifecycleFence",
+			Handler:    _MessagingService_ApplySpaceLifecycleFence_Handler,
+		},
+		{
+			MethodName: "PurgeSpace",
+			Handler:    _MessagingService_PurgeSpace_Handler,
+		},
+		{
+			MethodName: "ImportSpacePurgeManifestPage",
+			Handler:    _MessagingService_ImportSpacePurgeManifestPage_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

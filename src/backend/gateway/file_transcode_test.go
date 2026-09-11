@@ -86,7 +86,8 @@ func (s *recordingFileGRPC) GetBulkMetadata(ctx context.Context, req *filev1.Get
 	s.lastMD = md
 	s.bulkMeta = req
 	out := map[string]*filev1.FileMetadata{}
-	for _, id := range req.GetFileIds() {
+	legacyFileIDs := req.GetFileIds() //nolint:staticcheck // R23 compatibility: keep covering deprecated file_ids during caller migration.
+	for _, id := range legacyFileIDs {
 		out[id] = &filev1.FileMetadata{Id: id, Status: "ready"}
 	}
 	return &filev1.GetBulkMetadataResponse{BulkFileMetadata: &filev1.BulkFileMetadata{ByFileId: out}}, nil
@@ -238,7 +239,8 @@ func TestTranscodeFilesConfirmMetadataAndDelete(t *testing.T) {
 	})
 	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
 	require.NotNil(t, grpcRec.bulkMeta)
-	require.Equal(t, []string{fileID}, grpcRec.bulkMeta.GetFileIds())
+	legacyFileIDs := grpcRec.bulkMeta.GetFileIds() //nolint:staticcheck // R23 compatibility: assert the deprecated JSON field still transcodes.
+	require.Equal(t, []string{fileID}, legacyFileIDs)
 
 	resp = performRequest(h, http.MethodDelete, "/api/v1/files/"+fileID, "", map[string]string{
 		"Authorization": "Bearer valid-user-token",

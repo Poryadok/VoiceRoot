@@ -1,0 +1,1888 @@
+{
+  "version": 1,
+  "authority": "scripts/dev/sync-pb-from-gen.sh + scripts/ci/buf-generate-dart.sh + src/backend/auth/pom.xml",
+  "gate": "make r23-p2-generated-parity",
+  "targets": [
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/auth/v1/auth.pb.dart",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": true,
+      "required_symbols": [
+        "IssueSpaceDeletionProofRequest",
+        "IssueSpaceDeletionProofResponse",
+        "ConsumeSpaceDeletionProofRequest",
+        "ConsumeSpaceDeletionProofResponse",
+        "SpaceDeletionProofBinding",
+        "SpaceDeletionProofReceipt",
+        "GetSpaceDeletionProofReceiptRequest",
+        "GetSpaceDeletionProofReceiptResponse",
+        "AcknowledgeSpaceDeletionProofReceiptRequest",
+        "AcknowledgeSpaceDeletionProofReceiptResponse",
+        "VerifiedFactor",
+        "ProofPurpose"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/auth/v1/auth.pbenum.dart",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": true,
+      "required_symbols": [
+        "VerifiedFactor",
+        "ProofPurpose"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/auth/v1/auth.pbgrpc.dart",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": true,
+      "required_symbols": [
+        "IssueSpaceDeletionProof",
+        "ConsumeSpaceDeletionProof",
+        "GetSpaceDeletionProofReceipt",
+        "AcknowledgeSpaceDeletionProofReceipt"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/auth/v1/auth.pbjson.dart",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": true,
+      "required_symbols": [
+        "IssueSpaceDeletionProofRequest",
+        "IssueSpaceDeletionProofResponse",
+        "ConsumeSpaceDeletionProofRequest",
+        "ConsumeSpaceDeletionProofResponse",
+        "SpaceDeletionProofBinding",
+        "SpaceDeletionProofReceipt",
+        "GetSpaceDeletionProofReceiptRequest",
+        "GetSpaceDeletionProofReceiptResponse",
+        "AcknowledgeSpaceDeletionProofReceiptRequest",
+        "AcknowledgeSpaceDeletionProofReceiptResponse",
+        "VerifiedFactor",
+        "ProofPurpose"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/bot/v1/bot.pb.dart",
+      "source_proto": "voice/bot/v1/bot.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/bot/v1/bot.pbenum.dart",
+      "source_proto": "voice/bot/v1/bot.proto",
+      "committed": true,
+      "required_symbols": []
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/bot/v1/bot.pbgrpc.dart",
+      "source_proto": "voice/bot/v1/bot.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/bot/v1/bot.pbjson.dart",
+      "source_proto": "voice/bot/v1/bot.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/calls/v1/calls.pb.dart",
+      "source_proto": "voice/calls/v1/calls.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/calls/v1/calls.pbenum.dart",
+      "source_proto": "voice/calls/v1/calls.proto",
+      "committed": true,
+      "required_symbols": []
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/calls/v1/calls.pbgrpc.dart",
+      "source_proto": "voice/calls/v1/calls.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/calls/v1/calls.pbjson.dart",
+      "source_proto": "voice/calls/v1/calls.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/chat/v1/chat.pb.dart",
+      "source_proto": "voice/chat/v1/chat.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse",
+        "GetSpacePurgeManifestPageRequest",
+        "SpacePurgeManifestPage",
+        "PrepareSpaceDeletionManifestRequest",
+        "PrepareSpaceDeletionManifestReceipt",
+        "PrepareSpaceDeletionManifestResponse",
+        "GetSpacePurgeManifestPageResponse"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/chat/v1/chat.pbenum.dart",
+      "source_proto": "voice/chat/v1/chat.proto",
+      "committed": true,
+      "required_symbols": []
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/chat/v1/chat.pbgrpc.dart",
+      "source_proto": "voice/chat/v1/chat.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace",
+        "PrepareSpaceDeletionManifest",
+        "GetSpacePurgeManifestPage"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/chat/v1/chat.pbjson.dart",
+      "source_proto": "voice/chat/v1/chat.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse",
+        "GetSpacePurgeManifestPageRequest",
+        "SpacePurgeManifestPage",
+        "PrepareSpaceDeletionManifestRequest",
+        "PrepareSpaceDeletionManifestReceipt",
+        "PrepareSpaceDeletionManifestResponse",
+        "GetSpacePurgeManifestPageResponse"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/common/v1/space_lifecycle.pb.dart",
+      "source_proto": "voice/common/v1/space_lifecycle.proto",
+      "committed": true,
+      "required_symbols": [
+        "ManifestBinding",
+        "SpaceLifecycleFenceRequest",
+        "SpaceLifecycleFenceReceipt",
+        "SpacePurgeRequest",
+        "SpacePurgeReceipt",
+        "ParticipantId",
+        "LifecycleFenceState",
+        "PurgeReceiptState"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/common/v1/space_lifecycle.pbenum.dart",
+      "source_proto": "voice/common/v1/space_lifecycle.proto",
+      "committed": true,
+      "required_symbols": [
+        "ParticipantId",
+        "LifecycleFenceState",
+        "PurgeReceiptState"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/common/v1/space_lifecycle.pbjson.dart",
+      "source_proto": "voice/common/v1/space_lifecycle.proto",
+      "committed": true,
+      "required_symbols": [
+        "ManifestBinding",
+        "SpaceLifecycleFenceRequest",
+        "SpaceLifecycleFenceReceipt",
+        "SpacePurgeRequest",
+        "SpacePurgeReceipt",
+        "ParticipantId",
+        "LifecycleFenceState",
+        "PurgeReceiptState"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/events/v1/jetstream_events.pb.dart",
+      "source_proto": "voice/events/v1/jetstream_events.proto",
+      "committed": true,
+      "required_symbols": [
+        "ChatStreamEvent",
+        "SpaceDeletionScheduled",
+        "SpaceRestored",
+        "SpaceDeleted"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/events/v1/jetstream_events.pbenum.dart",
+      "source_proto": "voice/events/v1/jetstream_events.proto",
+      "committed": true,
+      "required_symbols": []
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/events/v1/jetstream_events.pbjson.dart",
+      "source_proto": "voice/events/v1/jetstream_events.proto",
+      "committed": true,
+      "required_symbols": [
+        "ChatStreamEvent",
+        "SpaceDeletionScheduled",
+        "SpaceRestored",
+        "SpaceDeleted"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/file/v1/file.pb.dart",
+      "source_proto": "voice/file/v1/file.proto",
+      "committed": true,
+      "required_symbols": [
+        "FileReferenceProducerDeclaration",
+        "FileReferenceKey",
+        "FileAccessSelector",
+        "FileAccessItem",
+        "IssueFileAccessCapabilityRequest",
+        "IssueFileAccessCapabilityResponse",
+        "IssueFileAccessCapabilityReceipt",
+        "PrepareSpaceDeletionReferenceManifestRequest",
+        "PrepareSpaceDeletionReferenceManifestReceipt",
+        "PrepareSpaceDeletionReferenceManifestResponse",
+        "RegisterSpaceDeletionReferenceChunkRequest",
+        "RegisterSpaceDeletionReferenceChunkReceipt",
+        "RegisterSpaceDeletionReferenceChunkResponse",
+        "ReleaseSpaceDeletionProducerReferencesRequest",
+        "ReleaseSpaceDeletionProducerReferencesReceipt",
+        "ReleaseSpaceDeletionProducerReferencesResponse",
+        "GetFileURLRequest",
+        "GetFileMetadataRequest",
+        "GetBulkMetadataRequest",
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse",
+        "AcquireFileReferencesRequest",
+        "AcquireFileReferencesReceipt",
+        "AcquireFileReferencesResponse",
+        "ReleaseFileReferencesRequest",
+        "ReleaseFileReferencesReceipt",
+        "ReleaseFileReferencesResponse",
+        "GetSpacePurgeReceiptRequest",
+        "GetSpacePurgeReceiptResponse",
+        "FileReferenceOwnerType",
+        "FileReadSurface",
+        "FileReferenceProducerId"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/file/v1/file.pbenum.dart",
+      "source_proto": "voice/file/v1/file.proto",
+      "committed": true,
+      "required_symbols": [
+        "FileReferenceOwnerType",
+        "FileReadSurface",
+        "FileReferenceProducerId"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/file/v1/file.pbgrpc.dart",
+      "source_proto": "voice/file/v1/file.proto",
+      "committed": true,
+      "required_symbols": [
+        "GetFileURL",
+        "GetFileMetadata",
+        "GetBulkMetadata",
+        "IssueFileAccessCapability",
+        "PrepareSpaceDeletionReferenceManifest",
+        "RegisterSpaceDeletionReferenceChunk",
+        "ReleaseSpaceDeletionProducerReferences",
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace",
+        "AcquireFileReferences",
+        "ReleaseFileReferences",
+        "GetSpacePurgeReceipt"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/file/v1/file.pbjson.dart",
+      "source_proto": "voice/file/v1/file.proto",
+      "committed": true,
+      "required_symbols": [
+        "FileReferenceProducerDeclaration",
+        "FileReferenceKey",
+        "FileAccessSelector",
+        "FileAccessItem",
+        "IssueFileAccessCapabilityRequest",
+        "IssueFileAccessCapabilityResponse",
+        "IssueFileAccessCapabilityReceipt",
+        "PrepareSpaceDeletionReferenceManifestRequest",
+        "PrepareSpaceDeletionReferenceManifestReceipt",
+        "PrepareSpaceDeletionReferenceManifestResponse",
+        "RegisterSpaceDeletionReferenceChunkRequest",
+        "RegisterSpaceDeletionReferenceChunkReceipt",
+        "RegisterSpaceDeletionReferenceChunkResponse",
+        "ReleaseSpaceDeletionProducerReferencesRequest",
+        "ReleaseSpaceDeletionProducerReferencesReceipt",
+        "ReleaseSpaceDeletionProducerReferencesResponse",
+        "GetFileURLRequest",
+        "GetFileMetadataRequest",
+        "GetBulkMetadataRequest",
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse",
+        "AcquireFileReferencesRequest",
+        "AcquireFileReferencesReceipt",
+        "AcquireFileReferencesResponse",
+        "ReleaseFileReferencesRequest",
+        "ReleaseFileReferencesReceipt",
+        "ReleaseFileReferencesResponse",
+        "GetSpacePurgeReceiptRequest",
+        "GetSpacePurgeReceiptResponse",
+        "FileReferenceOwnerType",
+        "FileReadSurface",
+        "FileReferenceProducerId"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/matchmaking/v1/matchmaking.pb.dart",
+      "source_proto": "voice/matchmaking/v1/matchmaking.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/matchmaking/v1/matchmaking.pbenum.dart",
+      "source_proto": "voice/matchmaking/v1/matchmaking.proto",
+      "committed": true,
+      "required_symbols": []
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/matchmaking/v1/matchmaking.pbgrpc.dart",
+      "source_proto": "voice/matchmaking/v1/matchmaking.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/matchmaking/v1/matchmaking.pbjson.dart",
+      "source_proto": "voice/matchmaking/v1/matchmaking.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/messaging/v1/messaging.pb.dart",
+      "source_proto": "voice/messaging/v1/messaging.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse",
+        "ImportSpacePurgeManifestPageRequest",
+        "ImportSpacePurgeManifestPageReceipt",
+        "ImportSpacePurgeManifestPageResponse"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/messaging/v1/messaging.pbenum.dart",
+      "source_proto": "voice/messaging/v1/messaging.proto",
+      "committed": true,
+      "required_symbols": []
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/messaging/v1/messaging.pbgrpc.dart",
+      "source_proto": "voice/messaging/v1/messaging.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace",
+        "ImportSpacePurgeManifestPage"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/messaging/v1/messaging.pbjson.dart",
+      "source_proto": "voice/messaging/v1/messaging.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse",
+        "ImportSpacePurgeManifestPageRequest",
+        "ImportSpacePurgeManifestPageReceipt",
+        "ImportSpacePurgeManifestPageResponse"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/notification/v1/notification.pb.dart",
+      "source_proto": "voice/notification/v1/notification.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/notification/v1/notification.pbenum.dart",
+      "source_proto": "voice/notification/v1/notification.proto",
+      "committed": true,
+      "required_symbols": []
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/notification/v1/notification.pbgrpc.dart",
+      "source_proto": "voice/notification/v1/notification.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/notification/v1/notification.pbjson.dart",
+      "source_proto": "voice/notification/v1/notification.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/role/v1/role.pb.dart",
+      "source_proto": "voice/role/v1/role.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "RetireSpaceRequest",
+        "RetireSpaceReceipt",
+        "RetireSpaceResponse",
+        "RoleRetirementState"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/role/v1/role.pbenum.dart",
+      "source_proto": "voice/role/v1/role.proto",
+      "committed": true,
+      "required_symbols": [
+        "RoleRetirementState"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/role/v1/role.pbgrpc.dart",
+      "source_proto": "voice/role/v1/role.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "RetireSpace"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/role/v1/role.pbjson.dart",
+      "source_proto": "voice/role/v1/role.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "RetireSpaceRequest",
+        "RetireSpaceReceipt",
+        "RetireSpaceResponse",
+        "RoleRetirementState"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/search/v1/search.pb.dart",
+      "source_proto": "voice/search/v1/search.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/search/v1/search.pbenum.dart",
+      "source_proto": "voice/search/v1/search.proto",
+      "committed": true,
+      "required_symbols": []
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/search/v1/search.pbgrpc.dart",
+      "source_proto": "voice/search/v1/search.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/search/v1/search.pbjson.dart",
+      "source_proto": "voice/search/v1/search.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/space/v1/space.pb.dart",
+      "source_proto": "voice/space/v1/space.proto",
+      "committed": true,
+      "required_symbols": [
+        "Space",
+        "DeleteSpaceRequest",
+        "DeleteSpaceResponse",
+        "RestoreSpaceRequest",
+        "RestoreSpaceResponse",
+        "SpaceDeletionManifestSet",
+        "ParticipantCoordinatorStatus",
+        "SpaceDeletionCoordinatorStatus",
+        "GetSpaceDeletionCoordinatorStatusRequest",
+        "GetSpaceDeletionCoordinatorStatusResponse",
+        "SpaceDeletionPhase",
+        "ParticipantOperationState"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/space/v1/space.pbenum.dart",
+      "source_proto": "voice/space/v1/space.proto",
+      "committed": true,
+      "required_symbols": [
+        "SpaceDeletionPhase",
+        "ParticipantOperationState"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/space/v1/space.pbgrpc.dart",
+      "source_proto": "voice/space/v1/space.proto",
+      "committed": true,
+      "required_symbols": [
+        "DeleteSpace",
+        "RestoreSpace",
+        "GetSpaceDeletionCoordinatorStatus"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/space/v1/space.pbjson.dart",
+      "source_proto": "voice/space/v1/space.proto",
+      "committed": true,
+      "required_symbols": [
+        "Space",
+        "DeleteSpaceRequest",
+        "DeleteSpaceResponse",
+        "RestoreSpaceRequest",
+        "RestoreSpaceResponse",
+        "SpaceDeletionManifestSet",
+        "ParticipantCoordinatorStatus",
+        "SpaceDeletionCoordinatorStatus",
+        "GetSpaceDeletionCoordinatorStatusRequest",
+        "GetSpaceDeletionCoordinatorStatusResponse",
+        "SpaceDeletionPhase",
+        "ParticipantOperationState"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/subscription/v1/subscription.pb.dart",
+      "source_proto": "voice/subscription/v1/subscription.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/subscription/v1/subscription.pbenum.dart",
+      "source_proto": "voice/subscription/v1/subscription.proto",
+      "committed": true,
+      "required_symbols": []
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/subscription/v1/subscription.pbgrpc.dart",
+      "source_proto": "voice/subscription/v1/subscription.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace"
+      ]
+    },
+    {
+      "language": "dart",
+      "path": "src/frontend/lib/gen/voice/subscription/v1/subscription.pbjson.dart",
+      "source_proto": "voice/subscription/v1/subscription.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/chat/pb/voice/chat/v1/chat.pb.go",
+      "source_proto": "voice/chat/v1/chat.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse",
+        "GetSpacePurgeManifestPageRequest",
+        "SpacePurgeManifestPage",
+        "PrepareSpaceDeletionManifestRequest",
+        "PrepareSpaceDeletionManifestReceipt",
+        "PrepareSpaceDeletionManifestResponse",
+        "GetSpacePurgeManifestPageResponse"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/chat/pb/voice/chat/v1/chat_grpc.pb.go",
+      "source_proto": "voice/chat/v1/chat.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace",
+        "PrepareSpaceDeletionManifest",
+        "GetSpacePurgeManifestPage"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/file/pb/voice/file/v1/file.pb.go",
+      "source_proto": "voice/file/v1/file.proto",
+      "committed": true,
+      "required_symbols": [
+        "FileReferenceProducerDeclaration",
+        "FileReferenceKey",
+        "FileAccessSelector",
+        "FileAccessItem",
+        "IssueFileAccessCapabilityRequest",
+        "IssueFileAccessCapabilityResponse",
+        "IssueFileAccessCapabilityReceipt",
+        "PrepareSpaceDeletionReferenceManifestRequest",
+        "PrepareSpaceDeletionReferenceManifestReceipt",
+        "PrepareSpaceDeletionReferenceManifestResponse",
+        "RegisterSpaceDeletionReferenceChunkRequest",
+        "RegisterSpaceDeletionReferenceChunkReceipt",
+        "RegisterSpaceDeletionReferenceChunkResponse",
+        "ReleaseSpaceDeletionProducerReferencesRequest",
+        "ReleaseSpaceDeletionProducerReferencesReceipt",
+        "ReleaseSpaceDeletionProducerReferencesResponse",
+        "GetFileURLRequest",
+        "GetFileMetadataRequest",
+        "GetBulkMetadataRequest",
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse",
+        "AcquireFileReferencesRequest",
+        "AcquireFileReferencesReceipt",
+        "AcquireFileReferencesResponse",
+        "ReleaseFileReferencesRequest",
+        "ReleaseFileReferencesReceipt",
+        "ReleaseFileReferencesResponse",
+        "GetSpacePurgeReceiptRequest",
+        "GetSpacePurgeReceiptResponse",
+        "FileReferenceOwnerType",
+        "FileReadSurface",
+        "FileReferenceProducerId"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/file/pb/voice/file/v1/file_grpc.pb.go",
+      "source_proto": "voice/file/v1/file.proto",
+      "committed": true,
+      "required_symbols": [
+        "GetFileURL",
+        "GetFileMetadata",
+        "GetBulkMetadata",
+        "IssueFileAccessCapability",
+        "PrepareSpaceDeletionReferenceManifest",
+        "RegisterSpaceDeletionReferenceChunk",
+        "ReleaseSpaceDeletionProducerReferences",
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace",
+        "AcquireFileReferences",
+        "ReleaseFileReferences",
+        "GetSpacePurgeReceipt"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/messaging/pb/voice/chat/v1/chat.pb.go",
+      "source_proto": "voice/chat/v1/chat.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse",
+        "GetSpacePurgeManifestPageRequest",
+        "SpacePurgeManifestPage",
+        "PrepareSpaceDeletionManifestRequest",
+        "PrepareSpaceDeletionManifestReceipt",
+        "PrepareSpaceDeletionManifestResponse",
+        "GetSpacePurgeManifestPageResponse"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/messaging/pb/voice/chat/v1/chat_grpc.pb.go",
+      "source_proto": "voice/chat/v1/chat.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace",
+        "PrepareSpaceDeletionManifest",
+        "GetSpacePurgeManifestPage"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/messaging/pb/voice/common/v1/space_lifecycle.pb.go",
+      "source_proto": "voice/common/v1/space_lifecycle.proto",
+      "committed": true,
+      "required_symbols": [
+        "ManifestBinding",
+        "SpaceLifecycleFenceRequest",
+        "SpaceLifecycleFenceReceipt",
+        "SpacePurgeRequest",
+        "SpacePurgeReceipt",
+        "ParticipantId",
+        "LifecycleFenceState",
+        "PurgeReceiptState"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/messaging/pb/voice/events/v1/jetstream_events.pb.go",
+      "source_proto": "voice/events/v1/jetstream_events.proto",
+      "committed": true,
+      "required_symbols": [
+        "ChatStreamEvent",
+        "SpaceDeletionScheduled",
+        "SpaceRestored",
+        "SpaceDeleted"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/messaging/pb/voice/messaging/v1/messaging.pb.go",
+      "source_proto": "voice/messaging/v1/messaging.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse",
+        "ImportSpacePurgeManifestPageRequest",
+        "ImportSpacePurgeManifestPageReceipt",
+        "ImportSpacePurgeManifestPageResponse"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/messaging/pb/voice/messaging/v1/messaging_grpc.pb.go",
+      "source_proto": "voice/messaging/v1/messaging.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace",
+        "ImportSpacePurgeManifestPage"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/role/pb/voice/role/v1/role.pb.go",
+      "source_proto": "voice/role/v1/role.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "RetireSpaceRequest",
+        "RetireSpaceReceipt",
+        "RetireSpaceResponse",
+        "RoleRetirementState"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/role/pb/voice/role/v1/role_grpc.pb.go",
+      "source_proto": "voice/role/v1/role.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "RetireSpace"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/user/pb/voice/auth/v1/auth.pb.go",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": true,
+      "required_symbols": [
+        "IssueSpaceDeletionProofRequest",
+        "IssueSpaceDeletionProofResponse",
+        "ConsumeSpaceDeletionProofRequest",
+        "ConsumeSpaceDeletionProofResponse",
+        "SpaceDeletionProofBinding",
+        "SpaceDeletionProofReceipt",
+        "GetSpaceDeletionProofReceiptRequest",
+        "GetSpaceDeletionProofReceiptResponse",
+        "AcknowledgeSpaceDeletionProofReceiptRequest",
+        "AcknowledgeSpaceDeletionProofReceiptResponse",
+        "VerifiedFactor",
+        "ProofPurpose"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/user/pb/voice/auth/v1/auth_grpc.pb.go",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": true,
+      "required_symbols": [
+        "IssueSpaceDeletionProof",
+        "ConsumeSpaceDeletionProof",
+        "GetSpaceDeletionProofReceipt",
+        "AcknowledgeSpaceDeletionProofReceipt"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/user/pb/voice/bot/v1/bot.pb.go",
+      "source_proto": "voice/bot/v1/bot.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/user/pb/voice/bot/v1/bot_grpc.pb.go",
+      "source_proto": "voice/bot/v1/bot.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/user/pb/voice/calls/v1/calls.pb.go",
+      "source_proto": "voice/calls/v1/calls.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/user/pb/voice/calls/v1/calls_grpc.pb.go",
+      "source_proto": "voice/calls/v1/calls.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/user/pb/voice/chat/v1/chat.pb.go",
+      "source_proto": "voice/chat/v1/chat.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse",
+        "GetSpacePurgeManifestPageRequest",
+        "SpacePurgeManifestPage",
+        "PrepareSpaceDeletionManifestRequest",
+        "PrepareSpaceDeletionManifestReceipt",
+        "PrepareSpaceDeletionManifestResponse",
+        "GetSpacePurgeManifestPageResponse"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/user/pb/voice/chat/v1/chat_grpc.pb.go",
+      "source_proto": "voice/chat/v1/chat.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace",
+        "PrepareSpaceDeletionManifest",
+        "GetSpacePurgeManifestPage"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/user/pb/voice/common/v1/space_lifecycle.pb.go",
+      "source_proto": "voice/common/v1/space_lifecycle.proto",
+      "committed": true,
+      "required_symbols": [
+        "ManifestBinding",
+        "SpaceLifecycleFenceRequest",
+        "SpaceLifecycleFenceReceipt",
+        "SpacePurgeRequest",
+        "SpacePurgeReceipt",
+        "ParticipantId",
+        "LifecycleFenceState",
+        "PurgeReceiptState"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/user/pb/voice/events/v1/jetstream_events.pb.go",
+      "source_proto": "voice/events/v1/jetstream_events.proto",
+      "committed": true,
+      "required_symbols": [
+        "ChatStreamEvent",
+        "SpaceDeletionScheduled",
+        "SpaceRestored",
+        "SpaceDeleted"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/user/pb/voice/file/v1/file.pb.go",
+      "source_proto": "voice/file/v1/file.proto",
+      "committed": true,
+      "required_symbols": [
+        "FileReferenceProducerDeclaration",
+        "FileReferenceKey",
+        "FileAccessSelector",
+        "FileAccessItem",
+        "IssueFileAccessCapabilityRequest",
+        "IssueFileAccessCapabilityResponse",
+        "IssueFileAccessCapabilityReceipt",
+        "PrepareSpaceDeletionReferenceManifestRequest",
+        "PrepareSpaceDeletionReferenceManifestReceipt",
+        "PrepareSpaceDeletionReferenceManifestResponse",
+        "RegisterSpaceDeletionReferenceChunkRequest",
+        "RegisterSpaceDeletionReferenceChunkReceipt",
+        "RegisterSpaceDeletionReferenceChunkResponse",
+        "ReleaseSpaceDeletionProducerReferencesRequest",
+        "ReleaseSpaceDeletionProducerReferencesReceipt",
+        "ReleaseSpaceDeletionProducerReferencesResponse",
+        "GetFileURLRequest",
+        "GetFileMetadataRequest",
+        "GetBulkMetadataRequest",
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse",
+        "AcquireFileReferencesRequest",
+        "AcquireFileReferencesReceipt",
+        "AcquireFileReferencesResponse",
+        "ReleaseFileReferencesRequest",
+        "ReleaseFileReferencesReceipt",
+        "ReleaseFileReferencesResponse",
+        "GetSpacePurgeReceiptRequest",
+        "GetSpacePurgeReceiptResponse",
+        "FileReferenceOwnerType",
+        "FileReadSurface",
+        "FileReferenceProducerId"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/user/pb/voice/file/v1/file_grpc.pb.go",
+      "source_proto": "voice/file/v1/file.proto",
+      "committed": true,
+      "required_symbols": [
+        "GetFileURL",
+        "GetFileMetadata",
+        "GetBulkMetadata",
+        "IssueFileAccessCapability",
+        "PrepareSpaceDeletionReferenceManifest",
+        "RegisterSpaceDeletionReferenceChunk",
+        "ReleaseSpaceDeletionProducerReferences",
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace",
+        "AcquireFileReferences",
+        "ReleaseFileReferences",
+        "GetSpacePurgeReceipt"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/user/pb/voice/matchmaking/v1/matchmaking.pb.go",
+      "source_proto": "voice/matchmaking/v1/matchmaking.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/user/pb/voice/matchmaking/v1/matchmaking_grpc.pb.go",
+      "source_proto": "voice/matchmaking/v1/matchmaking.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/user/pb/voice/messaging/v1/messaging.pb.go",
+      "source_proto": "voice/messaging/v1/messaging.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse",
+        "ImportSpacePurgeManifestPageRequest",
+        "ImportSpacePurgeManifestPageReceipt",
+        "ImportSpacePurgeManifestPageResponse"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/user/pb/voice/messaging/v1/messaging_grpc.pb.go",
+      "source_proto": "voice/messaging/v1/messaging.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace",
+        "ImportSpacePurgeManifestPage"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/user/pb/voice/notification/v1/notification.pb.go",
+      "source_proto": "voice/notification/v1/notification.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/user/pb/voice/notification/v1/notification_grpc.pb.go",
+      "source_proto": "voice/notification/v1/notification.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/user/pb/voice/role/v1/role.pb.go",
+      "source_proto": "voice/role/v1/role.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "RetireSpaceRequest",
+        "RetireSpaceReceipt",
+        "RetireSpaceResponse",
+        "RoleRetirementState"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/user/pb/voice/role/v1/role_grpc.pb.go",
+      "source_proto": "voice/role/v1/role.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "RetireSpace"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/user/pb/voice/search/v1/search.pb.go",
+      "source_proto": "voice/search/v1/search.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/user/pb/voice/search/v1/search_grpc.pb.go",
+      "source_proto": "voice/search/v1/search.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/user/pb/voice/space/v1/space.pb.go",
+      "source_proto": "voice/space/v1/space.proto",
+      "committed": true,
+      "required_symbols": [
+        "Space",
+        "DeleteSpaceRequest",
+        "DeleteSpaceResponse",
+        "RestoreSpaceRequest",
+        "RestoreSpaceResponse",
+        "SpaceDeletionManifestSet",
+        "ParticipantCoordinatorStatus",
+        "SpaceDeletionCoordinatorStatus",
+        "GetSpaceDeletionCoordinatorStatusRequest",
+        "GetSpaceDeletionCoordinatorStatusResponse",
+        "SpaceDeletionPhase",
+        "ParticipantOperationState"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/user/pb/voice/space/v1/space_grpc.pb.go",
+      "source_proto": "voice/space/v1/space.proto",
+      "committed": true,
+      "required_symbols": [
+        "DeleteSpace",
+        "RestoreSpace",
+        "GetSpaceDeletionCoordinatorStatus"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/user/pb/voice/subscription/v1/subscription.pb.go",
+      "source_proto": "voice/subscription/v1/subscription.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/user/pb/voice/subscription/v1/subscription_grpc.pb.go",
+      "source_proto": "voice/subscription/v1/subscription.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/voice/pb/voice/auth/v1/auth.pb.go",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": true,
+      "required_symbols": [
+        "IssueSpaceDeletionProofRequest",
+        "IssueSpaceDeletionProofResponse",
+        "ConsumeSpaceDeletionProofRequest",
+        "ConsumeSpaceDeletionProofResponse",
+        "SpaceDeletionProofBinding",
+        "SpaceDeletionProofReceipt",
+        "GetSpaceDeletionProofReceiptRequest",
+        "GetSpaceDeletionProofReceiptResponse",
+        "AcknowledgeSpaceDeletionProofReceiptRequest",
+        "AcknowledgeSpaceDeletionProofReceiptResponse",
+        "VerifiedFactor",
+        "ProofPurpose"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/voice/pb/voice/auth/v1/auth_grpc.pb.go",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": true,
+      "required_symbols": [
+        "IssueSpaceDeletionProof",
+        "ConsumeSpaceDeletionProof",
+        "GetSpaceDeletionProofReceipt",
+        "AcknowledgeSpaceDeletionProofReceipt"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/voice/pb/voice/bot/v1/bot.pb.go",
+      "source_proto": "voice/bot/v1/bot.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/voice/pb/voice/bot/v1/bot_grpc.pb.go",
+      "source_proto": "voice/bot/v1/bot.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/voice/pb/voice/calls/v1/calls.pb.go",
+      "source_proto": "voice/calls/v1/calls.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/voice/pb/voice/calls/v1/calls_grpc.pb.go",
+      "source_proto": "voice/calls/v1/calls.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/voice/pb/voice/chat/v1/chat.pb.go",
+      "source_proto": "voice/chat/v1/chat.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse",
+        "GetSpacePurgeManifestPageRequest",
+        "SpacePurgeManifestPage",
+        "PrepareSpaceDeletionManifestRequest",
+        "PrepareSpaceDeletionManifestReceipt",
+        "PrepareSpaceDeletionManifestResponse",
+        "GetSpacePurgeManifestPageResponse"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/voice/pb/voice/chat/v1/chat_grpc.pb.go",
+      "source_proto": "voice/chat/v1/chat.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace",
+        "PrepareSpaceDeletionManifest",
+        "GetSpacePurgeManifestPage"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/voice/pb/voice/common/v1/space_lifecycle.pb.go",
+      "source_proto": "voice/common/v1/space_lifecycle.proto",
+      "committed": true,
+      "required_symbols": [
+        "ManifestBinding",
+        "SpaceLifecycleFenceRequest",
+        "SpaceLifecycleFenceReceipt",
+        "SpacePurgeRequest",
+        "SpacePurgeReceipt",
+        "ParticipantId",
+        "LifecycleFenceState",
+        "PurgeReceiptState"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/voice/pb/voice/events/v1/jetstream_events.pb.go",
+      "source_proto": "voice/events/v1/jetstream_events.proto",
+      "committed": true,
+      "required_symbols": [
+        "ChatStreamEvent",
+        "SpaceDeletionScheduled",
+        "SpaceRestored",
+        "SpaceDeleted"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/voice/pb/voice/file/v1/file.pb.go",
+      "source_proto": "voice/file/v1/file.proto",
+      "committed": true,
+      "required_symbols": [
+        "FileReferenceProducerDeclaration",
+        "FileReferenceKey",
+        "FileAccessSelector",
+        "FileAccessItem",
+        "IssueFileAccessCapabilityRequest",
+        "IssueFileAccessCapabilityResponse",
+        "IssueFileAccessCapabilityReceipt",
+        "PrepareSpaceDeletionReferenceManifestRequest",
+        "PrepareSpaceDeletionReferenceManifestReceipt",
+        "PrepareSpaceDeletionReferenceManifestResponse",
+        "RegisterSpaceDeletionReferenceChunkRequest",
+        "RegisterSpaceDeletionReferenceChunkReceipt",
+        "RegisterSpaceDeletionReferenceChunkResponse",
+        "ReleaseSpaceDeletionProducerReferencesRequest",
+        "ReleaseSpaceDeletionProducerReferencesReceipt",
+        "ReleaseSpaceDeletionProducerReferencesResponse",
+        "GetFileURLRequest",
+        "GetFileMetadataRequest",
+        "GetBulkMetadataRequest",
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse",
+        "AcquireFileReferencesRequest",
+        "AcquireFileReferencesReceipt",
+        "AcquireFileReferencesResponse",
+        "ReleaseFileReferencesRequest",
+        "ReleaseFileReferencesReceipt",
+        "ReleaseFileReferencesResponse",
+        "GetSpacePurgeReceiptRequest",
+        "GetSpacePurgeReceiptResponse",
+        "FileReferenceOwnerType",
+        "FileReadSurface",
+        "FileReferenceProducerId"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/voice/pb/voice/file/v1/file_grpc.pb.go",
+      "source_proto": "voice/file/v1/file.proto",
+      "committed": true,
+      "required_symbols": [
+        "GetFileURL",
+        "GetFileMetadata",
+        "GetBulkMetadata",
+        "IssueFileAccessCapability",
+        "PrepareSpaceDeletionReferenceManifest",
+        "RegisterSpaceDeletionReferenceChunk",
+        "ReleaseSpaceDeletionProducerReferences",
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace",
+        "AcquireFileReferences",
+        "ReleaseFileReferences",
+        "GetSpacePurgeReceipt"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/voice/pb/voice/matchmaking/v1/matchmaking.pb.go",
+      "source_proto": "voice/matchmaking/v1/matchmaking.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/voice/pb/voice/matchmaking/v1/matchmaking_grpc.pb.go",
+      "source_proto": "voice/matchmaking/v1/matchmaking.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/voice/pb/voice/messaging/v1/messaging.pb.go",
+      "source_proto": "voice/messaging/v1/messaging.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse",
+        "ImportSpacePurgeManifestPageRequest",
+        "ImportSpacePurgeManifestPageReceipt",
+        "ImportSpacePurgeManifestPageResponse"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/voice/pb/voice/messaging/v1/messaging_grpc.pb.go",
+      "source_proto": "voice/messaging/v1/messaging.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace",
+        "ImportSpacePurgeManifestPage"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/voice/pb/voice/notification/v1/notification.pb.go",
+      "source_proto": "voice/notification/v1/notification.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/voice/pb/voice/notification/v1/notification_grpc.pb.go",
+      "source_proto": "voice/notification/v1/notification.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/voice/pb/voice/role/v1/role.pb.go",
+      "source_proto": "voice/role/v1/role.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "RetireSpaceRequest",
+        "RetireSpaceReceipt",
+        "RetireSpaceResponse",
+        "RoleRetirementState"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/voice/pb/voice/role/v1/role_grpc.pb.go",
+      "source_proto": "voice/role/v1/role.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "RetireSpace"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/voice/pb/voice/search/v1/search.pb.go",
+      "source_proto": "voice/search/v1/search.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/voice/pb/voice/search/v1/search_grpc.pb.go",
+      "source_proto": "voice/search/v1/search.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/voice/pb/voice/space/v1/space.pb.go",
+      "source_proto": "voice/space/v1/space.proto",
+      "committed": true,
+      "required_symbols": [
+        "Space",
+        "DeleteSpaceRequest",
+        "DeleteSpaceResponse",
+        "RestoreSpaceRequest",
+        "RestoreSpaceResponse",
+        "SpaceDeletionManifestSet",
+        "ParticipantCoordinatorStatus",
+        "SpaceDeletionCoordinatorStatus",
+        "GetSpaceDeletionCoordinatorStatusRequest",
+        "GetSpaceDeletionCoordinatorStatusResponse",
+        "SpaceDeletionPhase",
+        "ParticipantOperationState"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/voice/pb/voice/space/v1/space_grpc.pb.go",
+      "source_proto": "voice/space/v1/space.proto",
+      "committed": true,
+      "required_symbols": [
+        "DeleteSpace",
+        "RestoreSpace",
+        "GetSpaceDeletionCoordinatorStatus"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/voice/pb/voice/subscription/v1/subscription.pb.go",
+      "source_proto": "voice/subscription/v1/subscription.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFenceRequest",
+        "ApplySpaceLifecycleFenceResponse",
+        "PurgeSpaceRequest",
+        "PurgeSpaceResponse"
+      ]
+    },
+    {
+      "language": "go",
+      "path": "src/backend/voice/pb/voice/subscription/v1/subscription_grpc.pb.go",
+      "source_proto": "voice/subscription/v1/subscription.proto",
+      "committed": true,
+      "required_symbols": [
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace"
+      ]
+    },
+    {
+      "language": "java",
+      "path": "src/backend/auth/target/generated-sources/protobuf/grpc-java/app/voice/auth/v1/AuthServiceGrpc.java",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": false,
+      "required_symbols": [
+        "IssueSpaceDeletionProof",
+        "ConsumeSpaceDeletionProof",
+        "GetSpaceDeletionProofReceipt",
+        "AcknowledgeSpaceDeletionProofReceipt"
+      ]
+    },
+    {
+      "language": "java",
+      "path": "src/backend/auth/target/generated-sources/protobuf/java/app/voice/auth/v1/AcknowledgeSpaceDeletionProofReceiptRequest.java",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": false,
+      "required_symbols": [
+        "AcknowledgeSpaceDeletionProofReceiptRequest"
+      ]
+    },
+    {
+      "language": "java",
+      "path": "src/backend/auth/target/generated-sources/protobuf/java/app/voice/auth/v1/AcknowledgeSpaceDeletionProofReceiptRequestOrBuilder.java",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": false,
+      "required_symbols": [
+        "AcknowledgeSpaceDeletionProofReceiptRequestOrBuilder"
+      ]
+    },
+    {
+      "language": "java",
+      "path": "src/backend/auth/target/generated-sources/protobuf/java/app/voice/auth/v1/AcknowledgeSpaceDeletionProofReceiptResponse.java",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": false,
+      "required_symbols": [
+        "AcknowledgeSpaceDeletionProofReceiptResponse"
+      ]
+    },
+    {
+      "language": "java",
+      "path": "src/backend/auth/target/generated-sources/protobuf/java/app/voice/auth/v1/AcknowledgeSpaceDeletionProofReceiptResponseOrBuilder.java",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": false,
+      "required_symbols": [
+        "AcknowledgeSpaceDeletionProofReceiptResponseOrBuilder"
+      ]
+    },
+    {
+      "language": "java",
+      "path": "src/backend/auth/target/generated-sources/protobuf/java/app/voice/auth/v1/Auth.java",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": false,
+      "required_symbols": [
+        "Auth"
+      ]
+    },
+    {
+      "language": "java",
+      "path": "src/backend/auth/target/generated-sources/protobuf/java/app/voice/auth/v1/ConsumeSpaceDeletionProofRequest.java",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": false,
+      "required_symbols": [
+        "ConsumeSpaceDeletionProofRequest"
+      ]
+    },
+    {
+      "language": "java",
+      "path": "src/backend/auth/target/generated-sources/protobuf/java/app/voice/auth/v1/ConsumeSpaceDeletionProofRequestOrBuilder.java",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": false,
+      "required_symbols": [
+        "ConsumeSpaceDeletionProofRequestOrBuilder"
+      ]
+    },
+    {
+      "language": "java",
+      "path": "src/backend/auth/target/generated-sources/protobuf/java/app/voice/auth/v1/ConsumeSpaceDeletionProofResponse.java",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": false,
+      "required_symbols": [
+        "ConsumeSpaceDeletionProofResponse"
+      ]
+    },
+    {
+      "language": "java",
+      "path": "src/backend/auth/target/generated-sources/protobuf/java/app/voice/auth/v1/ConsumeSpaceDeletionProofResponseOrBuilder.java",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": false,
+      "required_symbols": [
+        "ConsumeSpaceDeletionProofResponseOrBuilder"
+      ]
+    },
+    {
+      "language": "java",
+      "path": "src/backend/auth/target/generated-sources/protobuf/java/app/voice/auth/v1/GetSpaceDeletionProofReceiptRequest.java",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": false,
+      "required_symbols": [
+        "GetSpaceDeletionProofReceiptRequest"
+      ]
+    },
+    {
+      "language": "java",
+      "path": "src/backend/auth/target/generated-sources/protobuf/java/app/voice/auth/v1/GetSpaceDeletionProofReceiptRequestOrBuilder.java",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": false,
+      "required_symbols": [
+        "GetSpaceDeletionProofReceiptRequestOrBuilder"
+      ]
+    },
+    {
+      "language": "java",
+      "path": "src/backend/auth/target/generated-sources/protobuf/java/app/voice/auth/v1/GetSpaceDeletionProofReceiptResponse.java",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": false,
+      "required_symbols": [
+        "GetSpaceDeletionProofReceiptResponse"
+      ]
+    },
+    {
+      "language": "java",
+      "path": "src/backend/auth/target/generated-sources/protobuf/java/app/voice/auth/v1/GetSpaceDeletionProofReceiptResponseOrBuilder.java",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": false,
+      "required_symbols": [
+        "GetSpaceDeletionProofReceiptResponseOrBuilder"
+      ]
+    },
+    {
+      "language": "java",
+      "path": "src/backend/auth/target/generated-sources/protobuf/java/app/voice/auth/v1/IssueSpaceDeletionProofRequest.java",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": false,
+      "required_symbols": [
+        "IssueSpaceDeletionProofRequest"
+      ]
+    },
+    {
+      "language": "java",
+      "path": "src/backend/auth/target/generated-sources/protobuf/java/app/voice/auth/v1/IssueSpaceDeletionProofRequestOrBuilder.java",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": false,
+      "required_symbols": [
+        "IssueSpaceDeletionProofRequestOrBuilder"
+      ]
+    },
+    {
+      "language": "java",
+      "path": "src/backend/auth/target/generated-sources/protobuf/java/app/voice/auth/v1/IssueSpaceDeletionProofResponse.java",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": false,
+      "required_symbols": [
+        "IssueSpaceDeletionProofResponse"
+      ]
+    },
+    {
+      "language": "java",
+      "path": "src/backend/auth/target/generated-sources/protobuf/java/app/voice/auth/v1/IssueSpaceDeletionProofResponseOrBuilder.java",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": false,
+      "required_symbols": [
+        "IssueSpaceDeletionProofResponseOrBuilder"
+      ]
+    },
+    {
+      "language": "java",
+      "path": "src/backend/auth/target/generated-sources/protobuf/java/app/voice/auth/v1/ProofPurpose.java",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": false,
+      "required_symbols": [
+        "ProofPurpose"
+      ]
+    },
+    {
+      "language": "java",
+      "path": "src/backend/auth/target/generated-sources/protobuf/java/app/voice/auth/v1/SpaceDeletionProofBinding.java",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": false,
+      "required_symbols": [
+        "SpaceDeletionProofBinding"
+      ]
+    },
+    {
+      "language": "java",
+      "path": "src/backend/auth/target/generated-sources/protobuf/java/app/voice/auth/v1/SpaceDeletionProofBindingOrBuilder.java",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": false,
+      "required_symbols": [
+        "SpaceDeletionProofBindingOrBuilder"
+      ]
+    },
+    {
+      "language": "java",
+      "path": "src/backend/auth/target/generated-sources/protobuf/java/app/voice/auth/v1/SpaceDeletionProofReceipt.java",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": false,
+      "required_symbols": [
+        "SpaceDeletionProofReceipt"
+      ]
+    },
+    {
+      "language": "java",
+      "path": "src/backend/auth/target/generated-sources/protobuf/java/app/voice/auth/v1/SpaceDeletionProofReceiptOrBuilder.java",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": false,
+      "required_symbols": [
+        "SpaceDeletionProofReceiptOrBuilder"
+      ]
+    },
+    {
+      "language": "java",
+      "path": "src/backend/auth/target/generated-sources/protobuf/java/app/voice/auth/v1/VerifiedFactor.java",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": false,
+      "required_symbols": [
+        "VerifiedFactor"
+      ]
+    },
+    {
+      "language": "proto_mirror",
+      "path": "src/backend/auth/src/main/proto/voice/auth/v1/auth.proto",
+      "source_proto": "voice/auth/v1/auth.proto",
+      "committed": true,
+      "required_symbols": [
+        "IssueSpaceDeletionProofRequest",
+        "IssueSpaceDeletionProofResponse",
+        "ConsumeSpaceDeletionProofRequest",
+        "ConsumeSpaceDeletionProofResponse",
+        "SpaceDeletionProofBinding",
+        "SpaceDeletionProofReceipt",
+        "GetSpaceDeletionProofReceiptRequest",
+        "GetSpaceDeletionProofReceiptResponse",
+        "AcknowledgeSpaceDeletionProofReceiptRequest",
+        "AcknowledgeSpaceDeletionProofReceiptResponse",
+        "VerifiedFactor",
+        "ProofPurpose",
+        "IssueSpaceDeletionProof",
+        "ConsumeSpaceDeletionProof",
+        "GetSpaceDeletionProofReceipt",
+        "AcknowledgeSpaceDeletionProofReceipt"
+      ]
+    }
+  ]
+}

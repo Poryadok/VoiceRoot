@@ -33,6 +33,20 @@ final $typed_data.Uint8List ownershipTransferStateDescriptor = $convert.base64De
     'TkVSU0hJUF9UUkFOU0ZFUl9TVEFURV9GSU5BTElaRUQQAhIkCiBPV05FUlNISVBfVFJBTlNGRV'
     'JfU1RBVEVfQUJPUlRFRBAD');
 
+@$core.Deprecated('Use roleRetirementStateDescriptor instead')
+const RoleRetirementState$json = {
+  '1': 'RoleRetirementState',
+  '2': [
+    {'1': 'ROLE_RETIREMENT_STATE_UNSPECIFIED', '2': 0},
+    {'1': 'ROLE_RETIREMENT_STATE_RETIRED', '2': 1},
+  ],
+};
+
+/// Descriptor for `RoleRetirementState`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List roleRetirementStateDescriptor = $convert.base64Decode(
+    'ChNSb2xlUmV0aXJlbWVudFN0YXRlEiUKIVJPTEVfUkVUSVJFTUVOVF9TVEFURV9VTlNQRUNJRk'
+    'lFRBAAEiEKHVJPTEVfUkVUSVJFTUVOVF9TVEFURV9SRVRJUkVEEAE=');
+
 @$core.Deprecated('Use bootstrapSpaceRolesRequestDescriptor instead')
 const BootstrapSpaceRolesRequest$json = {
   '1': 'BootstrapSpaceRolesRequest',
@@ -1274,3 +1288,154 @@ final $typed_data.Uint8List getDefaultJoinRoleResponseDescriptor =
     $convert.base64Decode(
         'ChpHZXREZWZhdWx0Sm9pblJvbGVSZXNwb25zZRInCgRyb2xlGAEgASgLMhMudm9pY2Uucm9sZS'
         '52MS5Sb2xlUgRyb2xl');
+
+@$core.Deprecated('Use applySpaceLifecycleFenceRequestDescriptor instead')
+const ApplySpaceLifecycleFenceRequest$json = {
+  '1': 'ApplySpaceLifecycleFenceRequest',
+  '2': [
+    {
+      '1': 'fence',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.SpaceLifecycleFenceRequest',
+      '10': 'fence'
+    },
+  ],
+};
+
+/// Descriptor for `ApplySpaceLifecycleFenceRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List applySpaceLifecycleFenceRequestDescriptor =
+    $convert.base64Decode(
+        'Ch9BcHBseVNwYWNlTGlmZWN5Y2xlRmVuY2VSZXF1ZXN0EkEKBWZlbmNlGAEgASgLMisudm9pY2'
+        'UuY29tbW9uLnYxLlNwYWNlTGlmZWN5Y2xlRmVuY2VSZXF1ZXN0UgVmZW5jZQ==');
+
+@$core.Deprecated('Use applySpaceLifecycleFenceResponseDescriptor instead')
+const ApplySpaceLifecycleFenceResponse$json = {
+  '1': 'ApplySpaceLifecycleFenceResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.SpaceLifecycleFenceReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `ApplySpaceLifecycleFenceResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List applySpaceLifecycleFenceResponseDescriptor =
+    $convert.base64Decode(
+        'CiBBcHBseVNwYWNlTGlmZWN5Y2xlRmVuY2VSZXNwb25zZRJFCgdyZWNlaXB0GAEgASgLMisudm'
+        '9pY2UuY29tbW9uLnYxLlNwYWNlTGlmZWN5Y2xlRmVuY2VSZWNlaXB0UgdyZWNlaXB0');
+
+@$core.Deprecated('Use retireSpaceRequestDescriptor instead')
+const RetireSpaceRequest$json = {
+  '1': 'RetireSpaceRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'space_id', '3': 2, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'deletion_operation_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '10': 'deletionOperationId'
+    },
+    {'1': 'generation', '3': 4, '4': 1, '5': 4, '10': 'generation'},
+    {
+      '1': 'purge_decided_at',
+      '3': 5,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'purgeDecidedAt'
+    },
+    {
+      '1': 'manifest',
+      '3': 6,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.ManifestBinding',
+      '10': 'manifest'
+    },
+  ],
+};
+
+/// Descriptor for `RetireSpaceRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List retireSpaceRequestDescriptor = $convert.base64Decode(
+    'ChJSZXRpcmVTcGFjZVJlcXVlc3QSKQoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoDVIPcHJvdG9jb2'
+    'xWZXJzaW9uEhkKCHNwYWNlX2lkGAIgASgJUgdzcGFjZUlkEjIKFWRlbGV0aW9uX29wZXJhdGlv'
+    'bl9pZBgDIAEoCVITZGVsZXRpb25PcGVyYXRpb25JZBIeCgpnZW5lcmF0aW9uGAQgASgEUgpnZW'
+    '5lcmF0aW9uEkQKEHB1cmdlX2RlY2lkZWRfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGlt'
+    'ZXN0YW1wUg5wdXJnZURlY2lkZWRBdBI8CghtYW5pZmVzdBgGIAEoCzIgLnZvaWNlLmNvbW1vbi'
+    '52MS5NYW5pZmVzdEJpbmRpbmdSCG1hbmlmZXN0');
+
+@$core.Deprecated('Use retireSpaceReceiptDescriptor instead')
+const RetireSpaceReceipt$json = {
+  '1': 'RetireSpaceReceipt',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'receipt_id', '3': 2, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'space_id', '3': 3, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'deletion_operation_id',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '10': 'deletionOperationId'
+    },
+    {'1': 'generation', '3': 5, '4': 1, '5': 4, '10': 'generation'},
+    {
+      '1': 'state',
+      '3': 6,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.role.v1.RoleRetirementState',
+      '10': 'state'
+    },
+    {'1': 'request_sha256', '3': 7, '4': 1, '5': 12, '10': 'requestSha256'},
+    {'1': 'manifest_sha256', '3': 8, '4': 1, '5': 12, '10': 'manifestSha256'},
+    {
+      '1': 'retired_at',
+      '3': 9,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'retiredAt'
+    },
+  ],
+};
+
+/// Descriptor for `RetireSpaceReceipt`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List retireSpaceReceiptDescriptor = $convert.base64Decode(
+    'ChJSZXRpcmVTcGFjZVJlY2VpcHQSKQoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoDVIPcHJvdG9jb2'
+    'xWZXJzaW9uEh0KCnJlY2VpcHRfaWQYAiABKAlSCXJlY2VpcHRJZBIZCghzcGFjZV9pZBgDIAEo'
+    'CVIHc3BhY2VJZBIyChVkZWxldGlvbl9vcGVyYXRpb25faWQYBCABKAlSE2RlbGV0aW9uT3Blcm'
+    'F0aW9uSWQSHgoKZ2VuZXJhdGlvbhgFIAEoBFIKZ2VuZXJhdGlvbhI4CgVzdGF0ZRgGIAEoDjIi'
+    'LnZvaWNlLnJvbGUudjEuUm9sZVJldGlyZW1lbnRTdGF0ZVIFc3RhdGUSJQoOcmVxdWVzdF9zaG'
+    'EyNTYYByABKAxSDXJlcXVlc3RTaGEyNTYSJwoPbWFuaWZlc3Rfc2hhMjU2GAggASgMUg5tYW5p'
+    'ZmVzdFNoYTI1NhI5CgpyZXRpcmVkX2F0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdG'
+    'FtcFIJcmV0aXJlZEF0');
+
+@$core.Deprecated('Use retireSpaceResponseDescriptor instead')
+const RetireSpaceResponse$json = {
+  '1': 'RetireSpaceResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.role.v1.RetireSpaceReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `RetireSpaceResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List retireSpaceResponseDescriptor = $convert.base64Decode(
+    'ChNSZXRpcmVTcGFjZVJlc3BvbnNlEjsKB3JlY2VpcHQYASABKAsyIS52b2ljZS5yb2xlLnYxLl'
+    'JldGlyZVNwYWNlUmVjZWlwdFIHcmVjZWlwdA==');

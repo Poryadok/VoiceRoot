@@ -9,6 +9,8 @@ COPY search/go.mod search/go.sum ./search/
 COPY analytics/pb/voice/analytics/go.mod ./analytics/pb/voice/analytics/
 COPY voice/pb/voice/search/go.mod ./voice/pb/voice/search/
 COPY voice/pb/voice/space/go.mod ./voice/pb/voice/space/
+COPY file/pb/voice/file/go.mod ./file/pb/voice/file/
+COPY voice/pb/voice/story/go.mod ./voice/pb/voice/story/
 COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
 COPY messaging/pb/voice/messaging/go.mod ./messaging/pb/voice/messaging/
 COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
@@ -20,6 +22,7 @@ RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked sh /usr/
 COPY pkg ./pkg
 COPY analytics/pb/voice/analytics ./analytics/pb/voice/analytics
 COPY voice/pb ./voice/pb
+COPY file/pb/voice/file ./file/pb/voice/file
 COPY chat/pb/voice/chat ./chat/pb/voice/chat
 COPY messaging/pb/voice/messaging ./messaging/pb/voice/messaging
 COPY messaging/pb/voice/events ./messaging/pb/voice/events

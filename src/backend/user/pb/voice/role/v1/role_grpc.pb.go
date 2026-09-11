@@ -46,6 +46,8 @@ const (
 	RoleService_AbortOwnershipTransfer_FullMethodName           = "/voice.role.v1.RoleService/AbortOwnershipTransfer"
 	RoleService_ApplyOwnershipTransfer_FullMethodName           = "/voice.role.v1.RoleService/ApplyOwnershipTransfer"
 	RoleService_CompensateOwnershipTransfer_FullMethodName      = "/voice.role.v1.RoleService/CompensateOwnershipTransfer"
+	RoleService_ApplySpaceLifecycleFence_FullMethodName         = "/voice.role.v1.RoleService/ApplySpaceLifecycleFence"
+	RoleService_RetireSpace_FullMethodName                      = "/voice.role.v1.RoleService/RetireSpace"
 )
 
 // RoleServiceClient is the client API for RoleService service.
@@ -88,6 +90,10 @@ type RoleServiceClient interface {
 	AbortOwnershipTransfer(ctx context.Context, in *AbortOwnershipTransferRequest, opts ...grpc.CallOption) (*AbortOwnershipTransferResponse, error)
 	ApplyOwnershipTransfer(ctx context.Context, in *ApplyOwnershipTransferRequest, opts ...grpc.CallOption) (*ApplyOwnershipTransferResponse, error)
 	CompensateOwnershipTransfer(ctx context.Context, in *CompensateOwnershipTransferRequest, opts ...grpc.CallOption) (*CompensateOwnershipTransferResponse, error)
+	// @voice.security=protected;callers=service:space
+	ApplySpaceLifecycleFence(ctx context.Context, in *ApplySpaceLifecycleFenceRequest, opts ...grpc.CallOption) (*ApplySpaceLifecycleFenceResponse, error)
+	// @voice.security=protected;callers=service:space
+	RetireSpace(ctx context.Context, in *RetireSpaceRequest, opts ...grpc.CallOption) (*RetireSpaceResponse, error)
 }
 
 type roleServiceClient struct {
@@ -368,6 +374,26 @@ func (c *roleServiceClient) CompensateOwnershipTransfer(ctx context.Context, in 
 	return out, nil
 }
 
+func (c *roleServiceClient) ApplySpaceLifecycleFence(ctx context.Context, in *ApplySpaceLifecycleFenceRequest, opts ...grpc.CallOption) (*ApplySpaceLifecycleFenceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplySpaceLifecycleFenceResponse)
+	err := c.cc.Invoke(ctx, RoleService_ApplySpaceLifecycleFence_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *roleServiceClient) RetireSpace(ctx context.Context, in *RetireSpaceRequest, opts ...grpc.CallOption) (*RetireSpaceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RetireSpaceResponse)
+	err := c.cc.Invoke(ctx, RoleService_RetireSpace_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // RoleServiceServer is the server API for RoleService service.
 // All implementations must embed UnimplementedRoleServiceServer
 // for forward compatibility.
@@ -408,6 +434,10 @@ type RoleServiceServer interface {
 	AbortOwnershipTransfer(context.Context, *AbortOwnershipTransferRequest) (*AbortOwnershipTransferResponse, error)
 	ApplyOwnershipTransfer(context.Context, *ApplyOwnershipTransferRequest) (*ApplyOwnershipTransferResponse, error)
 	CompensateOwnershipTransfer(context.Context, *CompensateOwnershipTransferRequest) (*CompensateOwnershipTransferResponse, error)
+	// @voice.security=protected;callers=service:space
+	ApplySpaceLifecycleFence(context.Context, *ApplySpaceLifecycleFenceRequest) (*ApplySpaceLifecycleFenceResponse, error)
+	// @voice.security=protected;callers=service:space
+	RetireSpace(context.Context, *RetireSpaceRequest) (*RetireSpaceResponse, error)
 	mustEmbedUnimplementedRoleServiceServer()
 }
 
@@ -498,6 +528,12 @@ func (UnimplementedRoleServiceServer) ApplyOwnershipTransfer(context.Context, *A
 }
 func (UnimplementedRoleServiceServer) CompensateOwnershipTransfer(context.Context, *CompensateOwnershipTransferRequest) (*CompensateOwnershipTransferResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CompensateOwnershipTransfer not implemented")
+}
+func (UnimplementedRoleServiceServer) ApplySpaceLifecycleFence(context.Context, *ApplySpaceLifecycleFenceRequest) (*ApplySpaceLifecycleFenceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApplySpaceLifecycleFence not implemented")
+}
+func (UnimplementedRoleServiceServer) RetireSpace(context.Context, *RetireSpaceRequest) (*RetireSpaceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RetireSpace not implemented")
 }
 func (UnimplementedRoleServiceServer) mustEmbedUnimplementedRoleServiceServer() {}
 func (UnimplementedRoleServiceServer) testEmbeddedByValue()                     {}
@@ -1006,6 +1042,42 @@ func _RoleService_CompensateOwnershipTransfer_Handler(srv interface{}, ctx conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RoleService_ApplySpaceLifecycleFence_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplySpaceLifecycleFenceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RoleServiceServer).ApplySpaceLifecycleFence(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RoleService_ApplySpaceLifecycleFence_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RoleServiceServer).ApplySpaceLifecycleFence(ctx, req.(*ApplySpaceLifecycleFenceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RoleService_RetireSpace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RetireSpaceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RoleServiceServer).RetireSpace(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RoleService_RetireSpace_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RoleServiceServer).RetireSpace(ctx, req.(*RetireSpaceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // RoleService_ServiceDesc is the grpc.ServiceDesc for RoleService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1120,6 +1192,14 @@ var RoleService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CompensateOwnershipTransfer",
 			Handler:    _RoleService_CompensateOwnershipTransfer_Handler,
+		},
+		{
+			MethodName: "ApplySpaceLifecycleFence",
+			Handler:    _RoleService_ApplySpaceLifecycleFence_Handler,
+		},
+		{
+			MethodName: "RetireSpace",
+			Handler:    _RoleService_RetireSpace_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -55,6 +55,7 @@ class SpaceServiceClient extends $grpc.Client {
     return $createUnaryCall(_$updateSpaceMmConfig, request, options: options);
   }
 
+  /// @voice.security=public_gateway;callers=service:gateway
   $grpc.ResponseFuture<$0.DeleteSpaceResponse> deleteSpace(
     $0.DeleteSpaceRequest request, {
     $grpc.CallOptions? options,
@@ -337,6 +338,26 @@ class SpaceServiceClient extends $grpc.Client {
         options: options);
   }
 
+  /// @voice.security=public_gateway;callers=service:gateway
+  $grpc.ResponseFuture<$0.RestoreSpaceResponse> restoreSpace(
+    $0.RestoreSpaceRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$restoreSpace, request, options: options);
+  }
+
+  /// @voice.security=public_gateway;callers=service:gateway
+  /// @voice.activation=held
+  /// @voice.authorization=current_owner
+  $grpc.ResponseFuture<$0.GetSpaceDeletionCoordinatorStatusResponse>
+      getSpaceDeletionCoordinatorStatus(
+    $0.GetSpaceDeletionCoordinatorStatusRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getSpaceDeletionCoordinatorStatus, request,
+        options: options);
+  }
+
   // method descriptors
 
   static final _$createSpace =
@@ -550,6 +571,18 @@ class SpaceServiceClient extends $grpc.Client {
       '/voice.space.v1.SpaceService/SyncSpaceProSubscription',
       ($0.SyncSpaceProSubscriptionRequest value) => value.writeToBuffer(),
       $0.SyncSpaceProSubscriptionResponse.fromBuffer);
+  static final _$restoreSpace =
+      $grpc.ClientMethod<$0.RestoreSpaceRequest, $0.RestoreSpaceResponse>(
+          '/voice.space.v1.SpaceService/RestoreSpace',
+          ($0.RestoreSpaceRequest value) => value.writeToBuffer(),
+          $0.RestoreSpaceResponse.fromBuffer);
+  static final _$getSpaceDeletionCoordinatorStatus = $grpc.ClientMethod<
+          $0.GetSpaceDeletionCoordinatorStatusRequest,
+          $0.GetSpaceDeletionCoordinatorStatusResponse>(
+      '/voice.space.v1.SpaceService/GetSpaceDeletionCoordinatorStatus',
+      ($0.GetSpaceDeletionCoordinatorStatusRequest value) =>
+          value.writeToBuffer(),
+      $0.GetSpaceDeletionCoordinatorStatusResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.space.v1.SpaceService')
@@ -921,6 +954,25 @@ abstract class SpaceServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.SyncSpaceProSubscriptionRequest.fromBuffer(value),
         ($0.SyncSpaceProSubscriptionResponse value) => value.writeToBuffer()));
+    $addMethod(
+        $grpc.ServiceMethod<$0.RestoreSpaceRequest, $0.RestoreSpaceResponse>(
+            'RestoreSpace',
+            restoreSpace_Pre,
+            false,
+            false,
+            ($core.List<$core.int> value) =>
+                $0.RestoreSpaceRequest.fromBuffer(value),
+            ($0.RestoreSpaceResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GetSpaceDeletionCoordinatorStatusRequest,
+            $0.GetSpaceDeletionCoordinatorStatusResponse>(
+        'GetSpaceDeletionCoordinatorStatus',
+        getSpaceDeletionCoordinatorStatus_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetSpaceDeletionCoordinatorStatusRequest.fromBuffer(value),
+        ($0.GetSpaceDeletionCoordinatorStatusResponse value) =>
+            value.writeToBuffer()));
   }
 
   $async.Future<$0.CreateSpaceResponse> createSpace_Pre($grpc.ServiceCall $call,
@@ -1285,4 +1337,25 @@ abstract class SpaceServiceBase extends $grpc.Service {
 
   $async.Future<$0.SyncSpaceProSubscriptionResponse> syncSpaceProSubscription(
       $grpc.ServiceCall call, $0.SyncSpaceProSubscriptionRequest request);
+
+  $async.Future<$0.RestoreSpaceResponse> restoreSpace_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.RestoreSpaceRequest> $request) async {
+    return restoreSpace($call, await $request);
+  }
+
+  $async.Future<$0.RestoreSpaceResponse> restoreSpace(
+      $grpc.ServiceCall call, $0.RestoreSpaceRequest request);
+
+  $async.Future<$0.GetSpaceDeletionCoordinatorStatusResponse>
+      getSpaceDeletionCoordinatorStatus_Pre(
+          $grpc.ServiceCall $call,
+          $async.Future<$0.GetSpaceDeletionCoordinatorStatusRequest>
+              $request) async {
+    return getSpaceDeletionCoordinatorStatus($call, await $request);
+  }
+
+  $async.Future<$0.GetSpaceDeletionCoordinatorStatusResponse>
+      getSpaceDeletionCoordinatorStatus($grpc.ServiceCall call,
+          $0.GetSpaceDeletionCoordinatorStatusRequest request);
 }

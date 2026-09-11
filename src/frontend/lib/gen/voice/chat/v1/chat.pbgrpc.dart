@@ -273,6 +273,44 @@ class ChatServiceClient extends $grpc.Client {
         options: options);
   }
 
+  /// @voice.security=protected;callers=service:space
+  $grpc.ResponseFuture<$0.ApplySpaceLifecycleFenceResponse>
+      applySpaceLifecycleFence(
+    $0.ApplySpaceLifecycleFenceRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$applySpaceLifecycleFence, request,
+        options: options);
+  }
+
+  /// @voice.security=protected;callers=service:space
+  $grpc.ResponseFuture<$0.PurgeSpaceResponse> purgeSpace(
+    $0.PurgeSpaceRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$purgeSpace, request, options: options);
+  }
+
+  /// @voice.security=protected;callers=service:space
+  $grpc.ResponseFuture<$0.PrepareSpaceDeletionManifestResponse>
+      prepareSpaceDeletionManifest(
+    $0.PrepareSpaceDeletionManifestRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$prepareSpaceDeletionManifest, request,
+        options: options);
+  }
+
+  /// @voice.security=protected;callers=service:space,service:messaging,service:search,service:bot,service:notification
+  $grpc.ResponseFuture<$0.GetSpacePurgeManifestPageResponse>
+      getSpacePurgeManifestPage(
+    $0.GetSpacePurgeManifestPageRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getSpacePurgeManifestPage, request,
+        options: options);
+  }
+
   // method descriptors
 
   static final _$createDM =
@@ -440,6 +478,29 @@ class ChatServiceClient extends $grpc.Client {
       '/voice.chat.v1.ChatService/ListDMReceiptVisibilityTargets',
       ($0.ListDMReceiptVisibilityTargetsRequest value) => value.writeToBuffer(),
       $0.ListDMReceiptVisibilityTargetsResponse.fromBuffer);
+  static final _$applySpaceLifecycleFence = $grpc.ClientMethod<
+          $0.ApplySpaceLifecycleFenceRequest,
+          $0.ApplySpaceLifecycleFenceResponse>(
+      '/voice.chat.v1.ChatService/ApplySpaceLifecycleFence',
+      ($0.ApplySpaceLifecycleFenceRequest value) => value.writeToBuffer(),
+      $0.ApplySpaceLifecycleFenceResponse.fromBuffer);
+  static final _$purgeSpace =
+      $grpc.ClientMethod<$0.PurgeSpaceRequest, $0.PurgeSpaceResponse>(
+          '/voice.chat.v1.ChatService/PurgeSpace',
+          ($0.PurgeSpaceRequest value) => value.writeToBuffer(),
+          $0.PurgeSpaceResponse.fromBuffer);
+  static final _$prepareSpaceDeletionManifest = $grpc.ClientMethod<
+          $0.PrepareSpaceDeletionManifestRequest,
+          $0.PrepareSpaceDeletionManifestResponse>(
+      '/voice.chat.v1.ChatService/PrepareSpaceDeletionManifest',
+      ($0.PrepareSpaceDeletionManifestRequest value) => value.writeToBuffer(),
+      $0.PrepareSpaceDeletionManifestResponse.fromBuffer);
+  static final _$getSpacePurgeManifestPage = $grpc.ClientMethod<
+          $0.GetSpacePurgeManifestPageRequest,
+          $0.GetSpacePurgeManifestPageResponse>(
+      '/voice.chat.v1.ChatService/GetSpacePurgeManifestPage',
+      ($0.GetSpacePurgeManifestPageRequest value) => value.writeToBuffer(),
+      $0.GetSpacePurgeManifestPageResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.chat.v1.ChatService')
@@ -725,6 +786,41 @@ abstract class ChatServiceBase extends $grpc.Service {
             $0.ListDMReceiptVisibilityTargetsRequest.fromBuffer(value),
         ($0.ListDMReceiptVisibilityTargetsResponse value) =>
             value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ApplySpaceLifecycleFenceRequest,
+            $0.ApplySpaceLifecycleFenceResponse>(
+        'ApplySpaceLifecycleFence',
+        applySpaceLifecycleFence_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ApplySpaceLifecycleFenceRequest.fromBuffer(value),
+        ($0.ApplySpaceLifecycleFenceResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.PurgeSpaceRequest, $0.PurgeSpaceResponse>(
+        'PurgeSpace',
+        purgeSpace_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) => $0.PurgeSpaceRequest.fromBuffer(value),
+        ($0.PurgeSpaceResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.PrepareSpaceDeletionManifestRequest,
+            $0.PrepareSpaceDeletionManifestResponse>(
+        'PrepareSpaceDeletionManifest',
+        prepareSpaceDeletionManifest_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.PrepareSpaceDeletionManifestRequest.fromBuffer(value),
+        ($0.PrepareSpaceDeletionManifestResponse value) =>
+            value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GetSpacePurgeManifestPageRequest,
+            $0.GetSpacePurgeManifestPageResponse>(
+        'GetSpacePurgeManifestPage',
+        getSpacePurgeManifestPage_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetSpacePurgeManifestPageRequest.fromBuffer(value),
+        ($0.GetSpacePurgeManifestPageResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.CreateDMResponse> createDM_Pre($grpc.ServiceCall $call,
@@ -1013,4 +1109,42 @@ abstract class ChatServiceBase extends $grpc.Service {
   $async.Future<$0.ListDMReceiptVisibilityTargetsResponse>
       listDMReceiptVisibilityTargets($grpc.ServiceCall call,
           $0.ListDMReceiptVisibilityTargetsRequest request);
+
+  $async.Future<$0.ApplySpaceLifecycleFenceResponse>
+      applySpaceLifecycleFence_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.ApplySpaceLifecycleFenceRequest> $request) async {
+    return applySpaceLifecycleFence($call, await $request);
+  }
+
+  $async.Future<$0.ApplySpaceLifecycleFenceResponse> applySpaceLifecycleFence(
+      $grpc.ServiceCall call, $0.ApplySpaceLifecycleFenceRequest request);
+
+  $async.Future<$0.PurgeSpaceResponse> purgeSpace_Pre($grpc.ServiceCall $call,
+      $async.Future<$0.PurgeSpaceRequest> $request) async {
+    return purgeSpace($call, await $request);
+  }
+
+  $async.Future<$0.PurgeSpaceResponse> purgeSpace(
+      $grpc.ServiceCall call, $0.PurgeSpaceRequest request);
+
+  $async.Future<$0.PrepareSpaceDeletionManifestResponse>
+      prepareSpaceDeletionManifest_Pre(
+          $grpc.ServiceCall $call,
+          $async.Future<$0.PrepareSpaceDeletionManifestRequest>
+              $request) async {
+    return prepareSpaceDeletionManifest($call, await $request);
+  }
+
+  $async.Future<$0.PrepareSpaceDeletionManifestResponse>
+      prepareSpaceDeletionManifest($grpc.ServiceCall call,
+          $0.PrepareSpaceDeletionManifestRequest request);
+
+  $async.Future<$0.GetSpacePurgeManifestPageResponse>
+      getSpacePurgeManifestPage_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.GetSpacePurgeManifestPageRequest> $request) async {
+    return getSpacePurgeManifestPage($call, await $request);
+  }
+
+  $async.Future<$0.GetSpacePurgeManifestPageResponse> getSpacePurgeManifestPage(
+      $grpc.ServiceCall call, $0.GetSpacePurgeManifestPageRequest request);
 }
