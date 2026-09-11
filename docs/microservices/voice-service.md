@@ -5,12 +5,14 @@
 Оркестрация голосовых/видео-звонков и screen share через LiveKit SFU. Сам сервис не обрабатывает медиа-потоки.
 
 **Язык**: Go
-**Хранилище**: PostgreSQL (`voice_db`) — durable source of truth для room lifecycle; Redis — rebuildable projection активных сессий; LiveKit — SFU
+**Хранилище**: PostgreSQL (`voice_db`) — durable source of truth для room lifecycle; Redis — active-call compatibility projection и rebuildable admission/receipt mirror; LiveKit — SFU
 
-В срезе R22.2 lifecycle остаётся **source-disabled**: Voice открывает и проверяет
-`voice_db`, но coordinator, lifecycle handlers, Redis bridge и external-effects
+В срезе R22.3 lifecycle остаётся **source-disabled**: Voice открывает и проверяет
+`voice_db`, включая durable Redis-divergence evidence, но coordinator, lifecycle handlers, Redis bridge и external-effects
 workers ещё не зарегистрированы. Отсутствующий `VOICE_DATABASE_URL` сохраняет
-этот режим; заданный DSN обязан успешно подключиться, а `/ready` проверяет схему.
+этот режим; заданный DSN обязан успешно подключиться, а `/ready` проверяет
+базовую схему R22.2 (`000001`). D1 paths явно проверяют наличие `000002`, не
+делая source-disabled readiness зависимой от новой таблицы.
 
 ## Ответственность
 
@@ -57,7 +59,16 @@ service VoiceService {
 }
 ```
 
-## Модель данных (Redis projection)
+## Модель данных (`voice_db` + Redis)
+
+`voice_db` содержит семь lifecycle tables: room instances, memberships,
+operations, effects, media-epoch denials, outbox и orthogonal
+`voice_lifecycle_redis_divergences`. Open divergence evidence проверяется до
+Redis access и до admission нового operation ID. Для `decided` mismatch Voice
+атомарно увеличивает fence, снимает lease и применяет существующий business
+transition в `quarantined`; `completed` receipt остаётся неизменным; orphan не
+получает выдуманный subject. Исправление/исчезновение Redis не закрывает
+incident. Resolution остаётся отдельным будущим protected operator flow.
 
 ```
 voice:session:{profile_id} → {
@@ -79,7 +90,9 @@ voice:room:{room_id}:screen_shares → Set[{profile_id, stream_id}]
 ```
 
 Эти Redis-ключи — projection, которую можно перестроить из durable lifecycle
-данных в `voice_db`; Redis не является источником истины room lifecycle.
+данных в `voice_db`, если operation не заблокирована open divergence evidence;
+Redis не является источником истины room lifecycle. Process instances остаются
+горизонтально масштабируемыми, потому что durable state вынесен наружу.
 
 ## Интеграция с LiveKit
 
@@ -96,6 +109,11 @@ Client ──LiveKit Client SDK──► LiveKit SFU (media streams)
 - LiveKit Simulcast для screen share (адаптивное качество)
 
 ## Phase-0 Space-room media, roster и lifecycle (target; не реализовано)
+
+R22.3 предоставляет только source-disabled PostgreSQL evidence/classification
+foundation. Coordinator, handlers, LiveKit/NATS adapters, registration, grant
+issuance и public readiness остаются не реализованы; Redis v2 encoding и replay
+deadline bridge semantics (D2/D3) также остаются отдельными gates.
 
 **Public surface.** Gateway exposes Space room actions under
 `/api/v1/spaces/{space_id}/voice-rooms/{voice_room_id}`: `POST /join`,
@@ -166,10 +184,12 @@ requires a new snapshot.
 - **Role Service** — проверка прав (`VOICE_JOIN`, `VOICE_SPEAK`, `VOICE_VIDEO`, …)
 - **Notification Service** — (через NATS) входящий звонок → push
 - **Redis** — хранение активных сессий
+- **PostgreSQL `voice_db`** — durable lifecycle и divergence evidence; Redis
+  outage/divergence fail closed и не выбирает memory или legacy Redis-only authority
 
 ## Масштабирование
 
-Voice Service stateless — масштабируется горизонтально. LiveKit масштабируется независимо (SFU per region для low-latency).
+Voice process instances stateless — масштабируются горизонтально. Durable lifecycle и divergence evidence находятся в `voice_db`; Redis rebuildable. LiveKit масштабируется независимо (SFU per region для low-latency).
 
 ## P3 Space lifecycle participant (target)
 

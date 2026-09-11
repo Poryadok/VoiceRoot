@@ -32,6 +32,11 @@ func (store *PostgresLifecycleStore) DecideOperation(ctx context.Context, decisi
 	if err = advisoryLock(ctx, tx, LifecycleOperationAdvisoryKey(decision.ActorProfileID, decision.OperationID)); err != nil {
 		return LifecycleOperation{}, mapWriteError(err)
 	}
+	if _, blocked, loadErr := loadRedisDivergenceForAdmission(ctx, tx, decision.ActorProfileID, decision.OperationID); loadErr != nil {
+		return LifecycleOperation{}, loadErr
+	} else if blocked {
+		return LifecycleOperation{}, ErrRedisMirrorQuarantined
+	}
 	existing, found, err := loadOperation(ctx, tx, decision.ActorProfileID, decision.OperationID, "FOR UPDATE")
 	if err != nil {
 		return LifecycleOperation{}, err
@@ -106,6 +111,11 @@ func (store *PostgresLifecycleStore) CompleteNoOp(ctx context.Context, noOp Life
 	decision := noOp.Decision
 	if err = advisoryLock(ctx, tx, LifecycleOperationAdvisoryKey(decision.ActorProfileID, decision.OperationID)); err != nil {
 		return LifecycleOperation{}, mapWriteError(err)
+	}
+	if _, blocked, loadErr := loadRedisDivergenceForAdmission(ctx, tx, decision.ActorProfileID, decision.OperationID); loadErr != nil {
+		return LifecycleOperation{}, loadErr
+	} else if blocked {
+		return LifecycleOperation{}, ErrRedisMirrorQuarantined
 	}
 	existing, found, err := loadOperation(ctx, tx, decision.ActorProfileID, decision.OperationID, "FOR UPDATE")
 	if err != nil {

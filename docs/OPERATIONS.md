@@ -54,6 +54,21 @@
 | **Realtime**: Pub/Sub между инстансами | События live **не доходят** между узлами (фрагментированный fan-out) | Клиенты в одном инстансе видят обновления, в другом — нет. **Degraded UX**: баннер «обновите чат / переподключение»; после reconnect — догрузка истории через Messaging ([ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md)). |
 | **User Service**: presence (если в Redis) | Неточный или пустой presence | Некритично для доставки сообщений; показывать «статус неизвестен» или скрыть presence. |
 | **User Service**: `privacy_settings` отсутствует / Social или Space S2S недоступен | Неверная видимость онлайн или DM / friend-request gate | **Fail-closed**: без строки `privacy_settings` онлайн скрыт (кроме self-view); при недоступности Social/Space S2S проверки friends/FoF/space_members **отклоняют** доступ (не открывают всем). Алерт при длительном отказе S2S. |
+| **Voice lifecycle mirror** | Admission/receipt mirror недоступен | Возвращать unavailable. Только unblocked decided/replayable-completed state позже может быть rebuilt из `voice_db`; open divergence запрещает Redis access/rebuild/replay. Memory fallback и automatic key deletion запрещены. |
+
+### Voice lifecycle Redis divergence (source-disabled)
+
+R22.3 сохраняет durable incidents `orphan`, `decided`, `completed` и
+`quarantined` с закрытым Redis class и redacted digest. Open evidence проверяется
+в PostgreSQL до Redis/admission; Redis correction, equality, TTL или flush не
+являются resolution. Метрики используют только closed low-cardinality labels.
+Backup/restore включает incidents как часть `voice_db`; PG restore без Redis не
+снимает fences, а Redis без PG никогда не становится authority.
+
+Будущий protected operator tool может закрыть incident только как
+`orphan_removed`, `mirror_restored_exact`, `mirror_reset_for_rebuild` или
+`expired_operation_retired`. R22.3 не предоставляет этот tool. Business
+quarantine после закрытия incident требует отдельного reviewed repair.
 
 ### NATS JetStream (брокер недоступен, переполнение, долгий NAK)
 
@@ -88,6 +103,9 @@
 - **Несколько сервисов в одной фиче**: инициатор фичи задаёт **порядок деплоя** и совместимость gRPC/NATS контрактов (consumer не ломается раньше producer).
 - **Удаление спейса и проекции**: публикуется доменное событие (например `space.deleted`); Role, Search и другие сервисы удаляют связанные строки **идемпотентно** (см. [microservices/role-service.md](microservices/role-service.md#модель-данных)). Порядок относительно Messaging и TTL сообщений канала — явно в дизайне фичи (сага / transactional outbox).
 - **API Gateway**: обновление маршрутов и контракта REST — **после** готовности целевых бэкендов или за **feature flag** на маршруте.
+- **Voice**: применять `000001_room_lifecycle`, затем
+  `000002_redis_divergence` до rollout. DOWN `000002` берёт `ACCESS EXCLUSIVE`
+  и отказывается при любой incident row, включая resolved history.
 
 ---
 

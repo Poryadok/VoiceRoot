@@ -61,6 +61,12 @@
 - **`-short` vs полный прогон:** в PR/push CI job **`backend-go`** запускает `go test -short ./...` — тесты с `testing.Short()` (testcontainers, долгие HTTP/webhook) пропускаются. Полный `go test ./...` по матрице сервисов — nightly job **`backend-go-integration`** (cron + `workflow_dispatch`) и локально при необходимости: `make backend-test-ci` или `cd src/backend/<service> && go test ./...`. Паритет с PR CI на хосте: **`make backend-test-ci-short`**.
 - HTTP: `httptest` для хендлеров Gateway без поднятия сети.
 - gRPC: in-process server или клиент в тесте — как в уже существующем сервисе с тестами.
+- Voice R22.3: `go test ./internal/roomlifecycle -run '^Test(VoiceDBRedisDivergenceMigration|PostgresLifecycleStore)_D1[^0-9].*$' -count=1`,
+  затем `go test ./internal/roomlifecycle -count=1`, `go test -race
+  ./internal/roomlifecycle -count=1`, `go test ./... -count=1`, `go vet ./...`
+  и repository-pinned `golangci-lint run ./...`. Migration/classifier gate
+  требует real PostgreSQL 16 с zero skips; Redis 7 понадобится для deferred
+  D2/D3 bridge tests, не для D1-only classifier transaction.
 
 ### API Gateway
 
@@ -193,6 +199,7 @@ Promtail ставит label **`namespace`** из pod metadata; **`request_id`** 
 | Репозиторий целиком (sign-off / tier 3) | **`make build-all`** + **`make flutter-ci`** — как nightly **`local-ci-parity`**; на каждый коммит не обязательно |
 | Flutter (как в CI, на хосте с SDK) | из корня: **`make flutter-ci`** — tokens/contrast/a11y-web-axe, `flutter pub get`, `flutter analyze`, `flutter test` в `src/frontend/` (в т.ч. якорный `test/e2e_readiness_test.dart`). Device-driver host matrix: `flutter test integration_test/device_driver_smoke_test.dart -d flutter-tester` (CI job **`flutter-device-driver`**). Android emulator (skips without device): `flutter test integration_test/android_emulator_deeplink_test.dart -d emulator-5554`. См. [`integration_test/README.md`](../src/frontend/integration_test/README.md) и скилл `flutter-web-client-testing` |
 | Go-сервис   | `cd src/backend/<service> && CGO_ENABLED=0 go test ./...`; общий прогон — **`make golangci-ci`** из корня или `golangci-lint run ./...` в каталоге модуля; для Gateway дополнительно `CGO_ENABLED=1 go test -race ./...` (цель **`gateway-test-race-ci`**, входит в `build-all`) |
+| Voice R22.3 D1 | Из `src/backend/voice`: `go test ./internal/roomlifecycle -run '^Test(VoiceDBRedisDivergenceMigration|PostgresLifecycleStore)_D1[^0-9].*$' -count=1`; Testcontainers владеет изолированной PostgreSQL DB и cleanup, shared Compose data не используется. |
 | Auth (Java) | `cd src/backend/auth && mvn -B test` (как **`make auth-test-ci`** / CI); образ и smoke — Docker, см. CI ниже |
 | Developer Portal | `cd src/developer-portal && npm ci && npm test && npm run build` (как job **`developer-portal`** в CI) |
 
@@ -275,6 +282,8 @@ Self-hosted runner на staging: версия runner **≥ 2.327.1** для node
 - **A1 isolated Flutter proof:** `make compose-a1-flutter-profile-handoff` runs ordered T-055 profile handoff, T-106 soft-delete, and T-107 folders/Quick Access persistence against its own Compose project and ports.
 - Манифест фич: [`.github/ci/e2e-features.yml`](../.github/ci/e2e-features.yml).
 - Flutter live helper `registerUser` завершает публичный email verification flow через compose-only Resend fixture: `otp/send` → `GET /emails/latest?to=<unique-email>` → `otp/verify`. Compose публикует fixture только на loopback; изолированный runner передаёт его URL через `VOICE_AUTH_MAIL_STUB_URL`. Staging/production сохраняют стандартный endpoint `https://api.resend.com/emails`.
+- R22.3 D1 tests являются source-disabled storage tests, не public Voice/media
+  E2E и не активируют handlers, coordinator или Redis bridge.
 
 ### E2E по фичам
 
