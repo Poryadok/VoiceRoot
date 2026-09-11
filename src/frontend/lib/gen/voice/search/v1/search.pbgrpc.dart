@@ -68,6 +68,24 @@ class SearchServiceClient extends $grpc.Client {
     return $createUnaryCall(_$reindexChat, request, options: options);
   }
 
+  /// @voice.security=protected;callers=service:space
+  $grpc.ResponseFuture<$0.ApplySpaceLifecycleFenceResponse>
+      applySpaceLifecycleFence(
+    $0.ApplySpaceLifecycleFenceRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$applySpaceLifecycleFence, request,
+        options: options);
+  }
+
+  /// @voice.security=protected;callers=service:space
+  $grpc.ResponseFuture<$0.PurgeSpaceResponse> purgeSpace(
+    $0.PurgeSpaceRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$purgeSpace, request, options: options);
+  }
+
   // method descriptors
 
   static final _$searchInChat =
@@ -95,6 +113,17 @@ class SearchServiceClient extends $grpc.Client {
           '/voice.search.v1.SearchService/ReindexChat',
           ($0.ReindexChatRequest value) => value.writeToBuffer(),
           $0.ReindexChatResponse.fromBuffer);
+  static final _$applySpaceLifecycleFence = $grpc.ClientMethod<
+          $0.ApplySpaceLifecycleFenceRequest,
+          $0.ApplySpaceLifecycleFenceResponse>(
+      '/voice.search.v1.SearchService/ApplySpaceLifecycleFence',
+      ($0.ApplySpaceLifecycleFenceRequest value) => value.writeToBuffer(),
+      $0.ApplySpaceLifecycleFenceResponse.fromBuffer);
+  static final _$purgeSpace =
+      $grpc.ClientMethod<$0.PurgeSpaceRequest, $0.PurgeSpaceResponse>(
+          '/voice.search.v1.SearchService/PurgeSpace',
+          ($0.PurgeSpaceRequest value) => value.writeToBuffer(),
+          $0.PurgeSpaceResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.search.v1.SearchService')
@@ -147,6 +176,22 @@ abstract class SearchServiceBase extends $grpc.Service {
             ($core.List<$core.int> value) =>
                 $0.ReindexChatRequest.fromBuffer(value),
             ($0.ReindexChatResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ApplySpaceLifecycleFenceRequest,
+            $0.ApplySpaceLifecycleFenceResponse>(
+        'ApplySpaceLifecycleFence',
+        applySpaceLifecycleFence_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ApplySpaceLifecycleFenceRequest.fromBuffer(value),
+        ($0.ApplySpaceLifecycleFenceResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.PurgeSpaceRequest, $0.PurgeSpaceResponse>(
+        'PurgeSpace',
+        purgeSpace_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) => $0.PurgeSpaceRequest.fromBuffer(value),
+        ($0.PurgeSpaceResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.SearchInChatResponse> searchInChat_Pre(
@@ -191,4 +236,21 @@ abstract class SearchServiceBase extends $grpc.Service {
 
   $async.Future<$0.ReindexChatResponse> reindexChat(
       $grpc.ServiceCall call, $0.ReindexChatRequest request);
+
+  $async.Future<$0.ApplySpaceLifecycleFenceResponse>
+      applySpaceLifecycleFence_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.ApplySpaceLifecycleFenceRequest> $request) async {
+    return applySpaceLifecycleFence($call, await $request);
+  }
+
+  $async.Future<$0.ApplySpaceLifecycleFenceResponse> applySpaceLifecycleFence(
+      $grpc.ServiceCall call, $0.ApplySpaceLifecycleFenceRequest request);
+
+  $async.Future<$0.PurgeSpaceResponse> purgeSpace_Pre($grpc.ServiceCall $call,
+      $async.Future<$0.PurgeSpaceRequest> $request) async {
+    return purgeSpace($call, await $request);
+  }
+
+  $async.Future<$0.PurgeSpaceResponse> purgeSpace(
+      $grpc.ServiceCall call, $0.PurgeSpaceRequest request);
 }

@@ -3,6 +3,7 @@ syntax = "proto3";
 package voice.notification.v1;
 
 import "google/protobuf/timestamp.proto";
+import "voice/common/v1/space_lifecycle.proto";
 
 option go_package = "voice.app/voice/notification/v1;notificationv1";
 
@@ -21,6 +22,12 @@ service NotificationService {
   rpc SendBulkNotification(SendBulkNotificationRequest) returns (SendBulkNotificationResponse);
 
   rpc RelayNotification(RelayNotificationRequest) returns (RelayNotificationResponse);
+
+  // @voice.security=protected;callers=service:space
+  rpc ApplySpaceLifecycleFence(voice.notification.v1.ApplySpaceLifecycleFenceRequest) returns (voice.notification.v1.ApplySpaceLifecycleFenceResponse);
+
+  // @voice.security=protected;callers=service:space
+  rpc PurgeSpace(voice.notification.v1.PurgeSpaceRequest) returns (voice.notification.v1.PurgeSpaceResponse);
 }
 
 // Canonical values for RegisterDeviceRequest.platform (string).
@@ -156,3 +163,27 @@ message SetQuietHoursResponse {}
 message SendNotificationResponse {}
 message SendBulkNotificationResponse {}
 message RelayNotificationResponse {}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message ApplySpaceLifecycleFenceRequest {
+  voice.common.v1.SpaceLifecycleFenceRequest fence = 1;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message ApplySpaceLifecycleFenceResponse {
+  voice.common.v1.SpaceLifecycleFenceReceipt receipt = 1;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message PurgeSpaceRequest {
+  voice.common.v1.SpacePurgeRequest purge = 1;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message PurgeSpaceResponse {
+  voice.common.v1.SpacePurgeReceipt receipt = 1;
+}

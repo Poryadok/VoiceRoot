@@ -272,7 +272,8 @@ message MessageForwarded {
 }
 
 // --- chat.events (Chat, Space) ---
-
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
 message ChatStreamEvent {
   string event_id = 1;
   google.protobuf.Timestamp occurred_at = 2;
@@ -288,6 +289,8 @@ message ChatStreamEvent {
     SpaceDeleted space_deleted = 18;
     DmPeerDeleted dm_peer_deleted = 19;
     VoiceRoomAccessInvalidated voice_room_access_invalidated = 20;
+    voice.events.v1.SpaceDeletionScheduled space_deletion_scheduled = 21;
+    voice.events.v1.SpaceRestored space_restored = 22;
   }
 }
 
@@ -337,8 +340,15 @@ message SpaceUpdated {
   string space_id = 1;
 }
 
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
 message SpaceDeleted {
   string space_id = 1;
+  uint32 protocol_version = 2;
+  string deletion_operation_id = 3;
+  uint64 generation = 4;
+  google.protobuf.Timestamp purge_decided_at = 5;
+  google.protobuf.Timestamp purged_at = 6;
 }
 
 // Targeted acceleration for a surviving participant of a DM. The deleted
@@ -803,4 +813,25 @@ message WebhookFailed {
   string bot_id = 1;
   string event_type = 2;
   string error = 3;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message SpaceDeletionScheduled {
+  uint32 protocol_version = 1;
+  string space_id = 2;
+  string deletion_operation_id = 3;
+  uint64 generation = 4;
+  google.protobuf.Timestamp scheduled_at = 5;
+  google.protobuf.Timestamp purge_after = 6;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message SpaceRestored {
+  uint32 protocol_version = 1;
+  string space_id = 2;
+  string deletion_operation_id = 3;
+  uint64 generation = 4;
+  google.protobuf.Timestamp restored_at = 5;
 }

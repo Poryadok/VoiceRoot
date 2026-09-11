@@ -190,6 +190,24 @@ class VoiceServiceClient extends $grpc.Client {
     return $createUnaryCall(_$revokeFloor, request, options: options);
   }
 
+  /// @voice.security=protected;callers=service:space
+  $grpc.ResponseFuture<$0.ApplySpaceLifecycleFenceResponse>
+      applySpaceLifecycleFence(
+    $0.ApplySpaceLifecycleFenceRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$applySpaceLifecycleFence, request,
+        options: options);
+  }
+
+  /// @voice.security=protected;callers=service:space
+  $grpc.ResponseFuture<$0.PurgeSpaceResponse> purgeSpace(
+    $0.PurgeSpaceRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$purgeSpace, request, options: options);
+  }
+
   // method descriptors
 
   static final _$startCall =
@@ -303,6 +321,17 @@ class VoiceServiceClient extends $grpc.Client {
           '/voice.calls.v1.VoiceService/RevokeFloor',
           ($0.RevokeFloorRequest value) => value.writeToBuffer(),
           $0.RevokeFloorResponse.fromBuffer);
+  static final _$applySpaceLifecycleFence = $grpc.ClientMethod<
+          $0.ApplySpaceLifecycleFenceRequest,
+          $0.ApplySpaceLifecycleFenceResponse>(
+      '/voice.calls.v1.VoiceService/ApplySpaceLifecycleFence',
+      ($0.ApplySpaceLifecycleFenceRequest value) => value.writeToBuffer(),
+      $0.ApplySpaceLifecycleFenceResponse.fromBuffer);
+  static final _$purgeSpace =
+      $grpc.ClientMethod<$0.PurgeSpaceRequest, $0.PurgeSpaceResponse>(
+          '/voice.calls.v1.VoiceService/PurgeSpace',
+          ($0.PurgeSpaceRequest value) => value.writeToBuffer(),
+          $0.PurgeSpaceResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.calls.v1.VoiceService')
@@ -492,6 +521,22 @@ abstract class VoiceServiceBase extends $grpc.Service {
             ($core.List<$core.int> value) =>
                 $0.RevokeFloorRequest.fromBuffer(value),
             ($0.RevokeFloorResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ApplySpaceLifecycleFenceRequest,
+            $0.ApplySpaceLifecycleFenceResponse>(
+        'ApplySpaceLifecycleFence',
+        applySpaceLifecycleFence_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ApplySpaceLifecycleFenceRequest.fromBuffer(value),
+        ($0.ApplySpaceLifecycleFenceResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.PurgeSpaceRequest, $0.PurgeSpaceResponse>(
+        'PurgeSpace',
+        purgeSpace_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) => $0.PurgeSpaceRequest.fromBuffer(value),
+        ($0.PurgeSpaceResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.StartCallResponse> startCall_Pre($grpc.ServiceCall $call,
@@ -681,4 +726,21 @@ abstract class VoiceServiceBase extends $grpc.Service {
 
   $async.Future<$0.RevokeFloorResponse> revokeFloor(
       $grpc.ServiceCall call, $0.RevokeFloorRequest request);
+
+  $async.Future<$0.ApplySpaceLifecycleFenceResponse>
+      applySpaceLifecycleFence_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.ApplySpaceLifecycleFenceRequest> $request) async {
+    return applySpaceLifecycleFence($call, await $request);
+  }
+
+  $async.Future<$0.ApplySpaceLifecycleFenceResponse> applySpaceLifecycleFence(
+      $grpc.ServiceCall call, $0.ApplySpaceLifecycleFenceRequest request);
+
+  $async.Future<$0.PurgeSpaceResponse> purgeSpace_Pre($grpc.ServiceCall $call,
+      $async.Future<$0.PurgeSpaceRequest> $request) async {
+    return purgeSpace($call, await $request);
+  }
+
+  $async.Future<$0.PurgeSpaceResponse> purgeSpace(
+      $grpc.ServiceCall call, $0.PurgeSpaceRequest request);
 }

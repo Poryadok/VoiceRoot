@@ -37,5 +37,49 @@ class OtpType extends $pb.ProtobufEnum {
   const OtpType._(super.value, super.name);
 }
 
+class VerifiedFactor extends $pb.ProtobufEnum {
+  static const VerifiedFactor VERIFIED_FACTOR_UNSPECIFIED =
+      VerifiedFactor._(0, _omitEnumNames ? '' : 'VERIFIED_FACTOR_UNSPECIFIED');
+  static const VerifiedFactor VERIFIED_FACTOR_PASSWORD =
+      VerifiedFactor._(1, _omitEnumNames ? '' : 'VERIFIED_FACTOR_PASSWORD');
+  static const VerifiedFactor VERIFIED_FACTOR_TOTP =
+      VerifiedFactor._(2, _omitEnumNames ? '' : 'VERIFIED_FACTOR_TOTP');
+  static const VerifiedFactor VERIFIED_FACTOR_BACKUP_CODE =
+      VerifiedFactor._(3, _omitEnumNames ? '' : 'VERIFIED_FACTOR_BACKUP_CODE');
+
+  static const $core.List<VerifiedFactor> values = <VerifiedFactor>[
+    VERIFIED_FACTOR_UNSPECIFIED,
+    VERIFIED_FACTOR_PASSWORD,
+    VERIFIED_FACTOR_TOTP,
+    VERIFIED_FACTOR_BACKUP_CODE,
+  ];
+
+  static final $core.List<VerifiedFactor?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 3);
+  static VerifiedFactor? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const VerifiedFactor._(super.value, super.name);
+}
+
+class ProofPurpose extends $pb.ProtobufEnum {
+  static const ProofPurpose PROOF_PURPOSE_UNSPECIFIED =
+      ProofPurpose._(0, _omitEnumNames ? '' : 'PROOF_PURPOSE_UNSPECIFIED');
+  static const ProofPurpose PROOF_PURPOSE_SPACE_DELETE =
+      ProofPurpose._(1, _omitEnumNames ? '' : 'PROOF_PURPOSE_SPACE_DELETE');
+
+  static const $core.List<ProofPurpose> values = <ProofPurpose>[
+    PROOF_PURPOSE_UNSPECIFIED,
+    PROOF_PURPOSE_SPACE_DELETE,
+  ];
+
+  static final $core.List<ProofPurpose?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 1);
+  static ProofPurpose? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const ProofPurpose._(super.value, super.name);
+}
+
 const $core.bool _omitEnumNames =
     $core.bool.fromEnvironment('protobuf.omit_enum_names');

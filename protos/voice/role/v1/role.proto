@@ -4,6 +4,7 @@ package voice.role.v1;
 
 import "google/protobuf/timestamp.proto";
 import "voice/chat/v1/chat.proto";
+import "voice/common/v1/space_lifecycle.proto";
 
 option go_package = "voice.app/voice/role/v1;rolev1";
 
@@ -50,6 +51,12 @@ service RoleService {
   rpc AbortOwnershipTransfer(AbortOwnershipTransferRequest) returns (AbortOwnershipTransferResponse);
   rpc ApplyOwnershipTransfer(ApplyOwnershipTransferRequest) returns (ApplyOwnershipTransferResponse);
   rpc CompensateOwnershipTransfer(CompensateOwnershipTransferRequest) returns (CompensateOwnershipTransferResponse);
+
+  // @voice.security=protected;callers=service:space
+  rpc ApplySpaceLifecycleFence(voice.role.v1.ApplySpaceLifecycleFenceRequest) returns (voice.role.v1.ApplySpaceLifecycleFenceResponse);
+
+  // @voice.security=protected;callers=service:space
+  rpc RetireSpace(voice.role.v1.RetireSpaceRequest) returns (voice.role.v1.RetireSpaceResponse);
 }
 
 message BootstrapSpaceRolesRequest {
@@ -363,4 +370,52 @@ message GetEffectivePermissionsResponse {
 message SetDefaultJoinRoleResponse {}
 message GetDefaultJoinRoleResponse {
   Role role = 1;
+}
+
+enum RoleRetirementState {
+  ROLE_RETIREMENT_STATE_UNSPECIFIED = 0;
+  ROLE_RETIREMENT_STATE_RETIRED = 1;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message ApplySpaceLifecycleFenceRequest {
+  voice.common.v1.SpaceLifecycleFenceRequest fence = 1;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message ApplySpaceLifecycleFenceResponse {
+  voice.common.v1.SpaceLifecycleFenceReceipt receipt = 1;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message RetireSpaceRequest {
+  uint32 protocol_version = 1;
+  string space_id = 2;
+  string deletion_operation_id = 3;
+  uint64 generation = 4;
+  google.protobuf.Timestamp purge_decided_at = 5;
+  voice.common.v1.ManifestBinding manifest = 6;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message RetireSpaceReceipt {
+  uint32 protocol_version = 1;
+  string receipt_id = 2;
+  string space_id = 3;
+  string deletion_operation_id = 4;
+  uint64 generation = 5;
+  voice.role.v1.RoleRetirementState state = 6;
+  bytes request_sha256 = 7;
+  bytes manifest_sha256 = 8;
+  google.protobuf.Timestamp retired_at = 9;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message RetireSpaceResponse {
+  voice.role.v1.RetireSpaceReceipt receipt = 1;
 }

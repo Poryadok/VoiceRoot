@@ -15,6 +15,54 @@ import 'dart:convert' as $convert;
 import 'dart:core' as $core;
 import 'dart:typed_data' as $typed_data;
 
+@$core.Deprecated('Use spaceDeletionPhaseDescriptor instead')
+const SpaceDeletionPhase$json = {
+  '1': 'SpaceDeletionPhase',
+  '2': [
+    {'1': 'SPACE_DELETION_PHASE_UNSPECIFIED', '2': 0},
+    {'1': 'SPACE_DELETION_PHASE_LIVE', '2': 1},
+    {'1': 'SPACE_DELETION_PHASE_SCHEDULE_PENDING', '2': 2},
+    {'1': 'SPACE_DELETION_PHASE_FREEZE_PENDING', '2': 3},
+    {'1': 'SPACE_DELETION_PHASE_SCHEDULED', '2': 4},
+    {'1': 'SPACE_DELETION_PHASE_RESTORE_DECIDED', '2': 5},
+    {'1': 'SPACE_DELETION_PHASE_PURGE_DECIDED', '2': 6},
+    {'1': 'SPACE_DELETION_PHASE_PURGING', '2': 7},
+    {'1': 'SPACE_DELETION_PHASE_PURGED', '2': 8},
+  ],
+};
+
+/// Descriptor for `SpaceDeletionPhase`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List spaceDeletionPhaseDescriptor = $convert.base64Decode(
+    'ChJTcGFjZURlbGV0aW9uUGhhc2USJAogU1BBQ0VfREVMRVRJT05fUEhBU0VfVU5TUEVDSUZJRU'
+    'QQABIdChlTUEFDRV9ERUxFVElPTl9QSEFTRV9MSVZFEAESKQolU1BBQ0VfREVMRVRJT05fUEhB'
+    'U0VfU0NIRURVTEVfUEVORElORxACEicKI1NQQUNFX0RFTEVUSU9OX1BIQVNFX0ZSRUVaRV9QRU'
+    '5ESU5HEAMSIgoeU1BBQ0VfREVMRVRJT05fUEhBU0VfU0NIRURVTEVEEAQSKAokU1BBQ0VfREVM'
+    'RVRJT05fUEhBU0VfUkVTVE9SRV9ERUNJREVEEAUSJgoiU1BBQ0VfREVMRVRJT05fUEhBU0VfUF'
+    'VSR0VfREVDSURFRBAGEiAKHFNQQUNFX0RFTEVUSU9OX1BIQVNFX1BVUkdJTkcQBxIfChtTUEFD'
+    'RV9ERUxFVElPTl9QSEFTRV9QVVJHRUQQCA==');
+
+@$core.Deprecated('Use participantOperationStateDescriptor instead')
+const ParticipantOperationState$json = {
+  '1': 'ParticipantOperationState',
+  '2': [
+    {'1': 'PARTICIPANT_OPERATION_STATE_UNSPECIFIED', '2': 0},
+    {'1': 'PARTICIPANT_OPERATION_STATE_NOT_STARTED', '2': 1},
+    {'1': 'PARTICIPANT_OPERATION_STATE_IN_FLIGHT', '2': 2},
+    {'1': 'PARTICIPANT_OPERATION_STATE_COMPLETE', '2': 3},
+    {'1': 'PARTICIPANT_OPERATION_STATE_RETRYABLE_FAILURE', '2': 4},
+    {'1': 'PARTICIPANT_OPERATION_STATE_CONTRACT_MISMATCH', '2': 5},
+  ],
+};
+
+/// Descriptor for `ParticipantOperationState`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List participantOperationStateDescriptor = $convert.base64Decode(
+    'ChlQYXJ0aWNpcGFudE9wZXJhdGlvblN0YXRlEisKJ1BBUlRJQ0lQQU5UX09QRVJBVElPTl9TVE'
+    'FURV9VTlNQRUNJRklFRBAAEisKJ1BBUlRJQ0lQQU5UX09QRVJBVElPTl9TVEFURV9OT1RfU1RB'
+    'UlRFRBABEikKJVBBUlRJQ0lQQU5UX09QRVJBVElPTl9TVEFURV9JTl9GTElHSFQQAhIoCiRQQV'
+    'JUSUNJUEFOVF9PUEVSQVRJT05fU1RBVEVfQ09NUExFVEUQAxIxCi1QQVJUSUNJUEFOVF9PUEVS'
+    'QVRJT05fU1RBVEVfUkVUUllBQkxFX0ZBSUxVUkUQBBIxCi1QQVJUSUNJUEFOVF9PUEVSQVRJT0'
+    '5fU1RBVEVfQ09OVFJBQ1RfTUlTTUFUQ0gQBQ==');
+
 @$core.Deprecated('Use spaceDescriptor instead')
 const Space$json = {
   '1': 'Space',
@@ -82,10 +130,32 @@ const Space$json = {
       '6': '.google.protobuf.Timestamp',
       '10': 'updatedAt'
     },
+    {
+      '1': 'deletion_scheduled_at',
+      '3': 16,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '9': 2,
+      '10': 'deletionScheduledAt',
+      '17': true
+    },
+    {
+      '1': 'purge_after',
+      '3': 17,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '9': 3,
+      '10': 'purgeAfter',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_icon_url'},
     {'1': '_banner_url'},
+    {'1': '_deletion_scheduled_at'},
+    {'1': '_purge_after'},
   ],
 };
 
@@ -101,8 +171,11 @@ final $typed_data.Uint8List spaceDescriptor = $convert.base64Decode(
     'Vlc3Rpb25zX2pzb24YDCABKAlSEmVudHJ5UXVlc3Rpb25zSnNvbhIkCg5tbV9jb25maWdfanNv'
     'bhgNIAEoCVIMbW1Db25maWdKc29uEjkKCmNyZWF0ZWRfYXQYDiABKAsyGi5nb29nbGUucHJvdG'
     '9idWYuVGltZXN0YW1wUgljcmVhdGVkQXQSOQoKdXBkYXRlZF9hdBgPIAEoCzIaLmdvb2dsZS5w'
-    'cm90b2J1Zi5UaW1lc3RhbXBSCXVwZGF0ZWRBdEILCglfaWNvbl91cmxCDQoLX2Jhbm5lcl91cm'
-    'w=');
+    'cm90b2J1Zi5UaW1lc3RhbXBSCXVwZGF0ZWRBdBJTChVkZWxldGlvbl9zY2hlZHVsZWRfYXQYEC'
+    'ABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wSAJSE2RlbGV0aW9uU2NoZWR1bGVkQXSI'
+    'AQESQAoLcHVyZ2VfYWZ0ZXIYESABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wSANSCn'
+    'B1cmdlQWZ0ZXKIAQFCCwoJX2ljb25fdXJsQg0KC19iYW5uZXJfdXJsQhgKFl9kZWxldGlvbl9z'
+    'Y2hlZHVsZWRfYXRCDgoMX3B1cmdlX2FmdGVy');
 
 @$core.Deprecated('Use createSpaceRequestDescriptor instead')
 const CreateSpaceRequest$json = {
@@ -254,13 +327,23 @@ const DeleteSpaceRequest$json = {
   '1': 'DeleteSpaceRequest',
   '2': [
     {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'confirmation_name',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '10': 'confirmationName'
+    },
+    {'1': 'proof', '3': 3, '4': 1, '5': 9, '10': 'proof'},
+    {'1': 'operation_id', '3': 4, '4': 1, '5': 9, '10': 'operationId'},
   ],
 };
 
 /// Descriptor for `DeleteSpaceRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List deleteSpaceRequestDescriptor =
-    $convert.base64Decode(
-        'ChJEZWxldGVTcGFjZVJlcXVlc3QSGQoIc3BhY2VfaWQYASABKAlSB3NwYWNlSWQ=');
+final $typed_data.Uint8List deleteSpaceRequestDescriptor = $convert.base64Decode(
+    'ChJEZWxldGVTcGFjZVJlcXVlc3QSGQoIc3BhY2VfaWQYASABKAlSB3NwYWNlSWQSKwoRY29uZm'
+    'lybWF0aW9uX25hbWUYAiABKAlSEGNvbmZpcm1hdGlvbk5hbWUSFAoFcHJvb2YYAyABKAlSBXBy'
+    'b29mEiEKDG9wZXJhdGlvbl9pZBgEIAEoCVILb3BlcmF0aW9uSWQ=');
 
 @$core.Deprecated('Use getSpaceRequestDescriptor instead')
 const GetSpaceRequest$json = {
@@ -2070,3 +2153,277 @@ const SyncSpaceProSubscriptionResponse$json = {
 /// Descriptor for `SyncSpaceProSubscriptionResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List syncSpaceProSubscriptionResponseDescriptor =
     $convert.base64Decode('CiBTeW5jU3BhY2VQcm9TdWJzY3JpcHRpb25SZXNwb25zZQ==');
+
+@$core.Deprecated('Use restoreSpaceRequestDescriptor instead')
+const RestoreSpaceRequest$json = {
+  '1': 'RestoreSpaceRequest',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'operation_id', '3': 2, '4': 1, '5': 9, '10': 'operationId'},
+  ],
+};
+
+/// Descriptor for `RestoreSpaceRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List restoreSpaceRequestDescriptor = $convert.base64Decode(
+    'ChNSZXN0b3JlU3BhY2VSZXF1ZXN0EhkKCHNwYWNlX2lkGAEgASgJUgdzcGFjZUlkEiEKDG9wZX'
+    'JhdGlvbl9pZBgCIAEoCVILb3BlcmF0aW9uSWQ=');
+
+@$core.Deprecated('Use restoreSpaceResponseDescriptor instead')
+const RestoreSpaceResponse$json = {
+  '1': 'RestoreSpaceResponse',
+  '2': [
+    {
+      '1': 'space',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.space.v1.Space',
+      '10': 'space'
+    },
+  ],
+};
+
+/// Descriptor for `RestoreSpaceResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List restoreSpaceResponseDescriptor = $convert.base64Decode(
+    'ChRSZXN0b3JlU3BhY2VSZXNwb25zZRIrCgVzcGFjZRgBIAEoCzIVLnZvaWNlLnNwYWNlLnYxLl'
+    'NwYWNlUgVzcGFjZQ==');
+
+@$core.Deprecated('Use spaceDeletionManifestSetDescriptor instead')
+const SpaceDeletionManifestSet$json = {
+  '1': 'SpaceDeletionManifestSet',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'space_id', '3': 2, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'deletion_operation_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '10': 'deletionOperationId'
+    },
+    {
+      '1': 'schedule_generation',
+      '3': 4,
+      '4': 1,
+      '5': 4,
+      '10': 'scheduleGeneration'
+    },
+    {
+      '1': 'chat_manifest',
+      '3': 5,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.ManifestBinding',
+      '10': 'chatManifest'
+    },
+    {
+      '1': 'file_producers',
+      '3': 6,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.file.v1.FileReferenceProducerDeclaration',
+      '10': 'fileProducers'
+    },
+    {'1': 'root_sha256', '3': 7, '4': 1, '5': 12, '10': 'rootSha256'},
+  ],
+};
+
+/// Descriptor for `SpaceDeletionManifestSet`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List spaceDeletionManifestSetDescriptor = $convert.base64Decode(
+    'ChhTcGFjZURlbGV0aW9uTWFuaWZlc3RTZXQSKQoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoDVIPcH'
+    'JvdG9jb2xWZXJzaW9uEhkKCHNwYWNlX2lkGAIgASgJUgdzcGFjZUlkEjIKFWRlbGV0aW9uX29w'
+    'ZXJhdGlvbl9pZBgDIAEoCVITZGVsZXRpb25PcGVyYXRpb25JZBIvChNzY2hlZHVsZV9nZW5lcm'
+    'F0aW9uGAQgASgEUhJzY2hlZHVsZUdlbmVyYXRpb24SRQoNY2hhdF9tYW5pZmVzdBgFIAEoCzIg'
+    'LnZvaWNlLmNvbW1vbi52MS5NYW5pZmVzdEJpbmRpbmdSDGNoYXRNYW5pZmVzdBJWCg5maWxlX3'
+    'Byb2R1Y2VycxgGIAMoCzIvLnZvaWNlLmZpbGUudjEuRmlsZVJlZmVyZW5jZVByb2R1Y2VyRGVj'
+    'bGFyYXRpb25SDWZpbGVQcm9kdWNlcnMSHwoLcm9vdF9zaGEyNTYYByABKAxSCnJvb3RTaGEyNT'
+    'Y=');
+
+@$core.Deprecated('Use participantCoordinatorStatusDescriptor instead')
+const ParticipantCoordinatorStatus$json = {
+  '1': 'ParticipantCoordinatorStatus',
+  '2': [
+    {
+      '1': 'participant_id',
+      '3': 1,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.common.v1.ParticipantId',
+      '10': 'participantId'
+    },
+    {
+      '1': 'state',
+      '3': 2,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.space.v1.ParticipantOperationState',
+      '10': 'state'
+    },
+    {'1': 'request_sha256', '3': 3, '4': 1, '5': 12, '10': 'requestSha256'},
+    {'1': 'receipt_sha256', '3': 4, '4': 1, '5': 12, '10': 'receiptSha256'},
+    {
+      '1': 'updated_at',
+      '3': 5,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'updatedAt'
+    },
+  ],
+};
+
+/// Descriptor for `ParticipantCoordinatorStatus`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List participantCoordinatorStatusDescriptor = $convert.base64Decode(
+    'ChxQYXJ0aWNpcGFudENvb3JkaW5hdG9yU3RhdHVzEkUKDnBhcnRpY2lwYW50X2lkGAEgASgOMh'
+    '4udm9pY2UuY29tbW9uLnYxLlBhcnRpY2lwYW50SWRSDXBhcnRpY2lwYW50SWQSPwoFc3RhdGUY'
+    'AiABKA4yKS52b2ljZS5zcGFjZS52MS5QYXJ0aWNpcGFudE9wZXJhdGlvblN0YXRlUgVzdGF0ZR'
+    'IlCg5yZXF1ZXN0X3NoYTI1NhgDIAEoDFINcmVxdWVzdFNoYTI1NhIlCg5yZWNlaXB0X3NoYTI1'
+    'NhgEIAEoDFINcmVjZWlwdFNoYTI1NhI5Cgp1cGRhdGVkX2F0GAUgASgLMhouZ29vZ2xlLnByb3'
+    'RvYnVmLlRpbWVzdGFtcFIJdXBkYXRlZEF0');
+
+@$core.Deprecated('Use spaceDeletionCoordinatorStatusDescriptor instead')
+const SpaceDeletionCoordinatorStatus$json = {
+  '1': 'SpaceDeletionCoordinatorStatus',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'space_id', '3': 2, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'deletion_operation_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '10': 'deletionOperationId'
+    },
+    {
+      '1': 'generation',
+      '3': 4,
+      '4': 1,
+      '5': 4,
+      '9': 0,
+      '10': 'generation',
+      '17': true
+    },
+    {
+      '1': 'phase',
+      '3': 5,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.space.v1.SpaceDeletionPhase',
+      '10': 'phase'
+    },
+    {
+      '1': 'manifest',
+      '3': 6,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.ManifestBinding',
+      '10': 'manifest'
+    },
+    {
+      '1': 'participants',
+      '3': 7,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.space.v1.ParticipantCoordinatorStatus',
+      '10': 'participants'
+    },
+    {
+      '1': 'scheduled_at',
+      '3': 8,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '9': 1,
+      '10': 'scheduledAt',
+      '17': true
+    },
+    {
+      '1': 'purge_after',
+      '3': 9,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '9': 2,
+      '10': 'purgeAfter',
+      '17': true
+    },
+    {
+      '1': 'purged_at',
+      '3': 10,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '9': 3,
+      '10': 'purgedAt',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_generation'},
+    {'1': '_scheduled_at'},
+    {'1': '_purge_after'},
+    {'1': '_purged_at'},
+  ],
+};
+
+/// Descriptor for `SpaceDeletionCoordinatorStatus`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List spaceDeletionCoordinatorStatusDescriptor = $convert.base64Decode(
+    'Ch5TcGFjZURlbGV0aW9uQ29vcmRpbmF0b3JTdGF0dXMSKQoQcHJvdG9jb2xfdmVyc2lvbhgBIA'
+    'EoDVIPcHJvdG9jb2xWZXJzaW9uEhkKCHNwYWNlX2lkGAIgASgJUgdzcGFjZUlkEjIKFWRlbGV0'
+    'aW9uX29wZXJhdGlvbl9pZBgDIAEoCVITZGVsZXRpb25PcGVyYXRpb25JZBIjCgpnZW5lcmF0aW'
+    '9uGAQgASgESABSCmdlbmVyYXRpb26IAQESOAoFcGhhc2UYBSABKA4yIi52b2ljZS5zcGFjZS52'
+    'MS5TcGFjZURlbGV0aW9uUGhhc2VSBXBoYXNlEjwKCG1hbmlmZXN0GAYgASgLMiAudm9pY2UuY2'
+    '9tbW9uLnYxLk1hbmlmZXN0QmluZGluZ1IIbWFuaWZlc3QSUAoMcGFydGljaXBhbnRzGAcgAygL'
+    'Miwudm9pY2Uuc3BhY2UudjEuUGFydGljaXBhbnRDb29yZGluYXRvclN0YXR1c1IMcGFydGljaX'
+    'BhbnRzEkIKDHNjaGVkdWxlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBI'
+    'AVILc2NoZWR1bGVkQXSIAQESQAoLcHVyZ2VfYWZ0ZXIYCSABKAsyGi5nb29nbGUucHJvdG9idW'
+    'YuVGltZXN0YW1wSAJSCnB1cmdlQWZ0ZXKIAQESPAoJcHVyZ2VkX2F0GAogASgLMhouZ29vZ2xl'
+    'LnByb3RvYnVmLlRpbWVzdGFtcEgDUghwdXJnZWRBdIgBAUINCgtfZ2VuZXJhdGlvbkIPCg1fc2'
+    'NoZWR1bGVkX2F0Qg4KDF9wdXJnZV9hZnRlckIMCgpfcHVyZ2VkX2F0');
+
+@$core.Deprecated(
+    'Use getSpaceDeletionCoordinatorStatusRequestDescriptor instead')
+const GetSpaceDeletionCoordinatorStatusRequest$json = {
+  '1': 'GetSpaceDeletionCoordinatorStatusRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'space_id', '3': 2, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'deletion_operation_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '10': 'deletionOperationId'
+    },
+  ],
+};
+
+/// Descriptor for `GetSpaceDeletionCoordinatorStatusRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getSpaceDeletionCoordinatorStatusRequestDescriptor =
+    $convert.base64Decode(
+        'CihHZXRTcGFjZURlbGV0aW9uQ29vcmRpbmF0b3JTdGF0dXNSZXF1ZXN0EikKEHByb3RvY29sX3'
+        'ZlcnNpb24YASABKA1SD3Byb3RvY29sVmVyc2lvbhIZCghzcGFjZV9pZBgCIAEoCVIHc3BhY2VJ'
+        'ZBIyChVkZWxldGlvbl9vcGVyYXRpb25faWQYAyABKAlSE2RlbGV0aW9uT3BlcmF0aW9uSWQ=');
+
+@$core.Deprecated(
+    'Use getSpaceDeletionCoordinatorStatusResponseDescriptor instead')
+const GetSpaceDeletionCoordinatorStatusResponse$json = {
+  '1': 'GetSpaceDeletionCoordinatorStatusResponse',
+  '2': [
+    {
+      '1': 'status',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.space.v1.SpaceDeletionCoordinatorStatus',
+      '10': 'status'
+    },
+  ],
+};
+
+/// Descriptor for `GetSpaceDeletionCoordinatorStatusResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List
+    getSpaceDeletionCoordinatorStatusResponseDescriptor = $convert.base64Decode(
+        'CilHZXRTcGFjZURlbGV0aW9uQ29vcmRpbmF0b3JTdGF0dXNSZXNwb25zZRJGCgZzdGF0dXMYAS'
+        'ABKAsyLi52b2ljZS5zcGFjZS52MS5TcGFjZURlbGV0aW9uQ29vcmRpbmF0b3JTdGF0dXNSBnN0'
+        'YXR1cw==');

@@ -150,6 +150,8 @@ jobs:
         run: buf lint
       - name: Buf format (check)
         run: buf format -d --exit-code
+      - name: R23 protobuf contract gate
+        run: make r23-contract-ci
       - name: Buf breaking (PR vs base)
         if: github.event_name == 'pull_request'
         run: buf breaking protos --against ".git#branch=${{ github.base_ref }},subdir=protos"

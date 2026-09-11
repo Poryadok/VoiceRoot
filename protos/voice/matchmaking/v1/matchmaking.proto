@@ -4,6 +4,7 @@ package voice.matchmaking.v1;
 
 import "google/protobuf/timestamp.proto";
 import "voice/common/v1/common.proto";
+import "voice/common/v1/space_lifecycle.proto";
 
 option go_package = "voice.app/voice/matchmaking/v1;matchmakingv1";
 
@@ -52,6 +53,12 @@ service MatchmakingService {
   // LFP Social Discovery decision (docs/features/matchmaking.md; roadmap П.3).
   // Author Accept/Decline on JOIN|INVITE from story.lfp_response.
   rpc DecideLfpRequest(DecideLfpRequestRequest) returns (DecideLfpRequestResponse);
+
+  // @voice.security=protected;callers=service:space
+  rpc ApplySpaceLifecycleFence(voice.matchmaking.v1.ApplySpaceLifecycleFenceRequest) returns (voice.matchmaking.v1.ApplySpaceLifecycleFenceResponse);
+
+  // @voice.security=protected;callers=service:space
+  rpc PurgeSpace(voice.matchmaking.v1.PurgeSpaceRequest) returns (voice.matchmaking.v1.PurgeSpaceResponse);
 }
 
 message Game {
@@ -356,4 +363,28 @@ message DecideLfpRequestResponse {
   string status = 1; // accepted | declined
   optional string party_id = 2;
   repeated SearchSession search_sessions = 3;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message ApplySpaceLifecycleFenceRequest {
+  voice.common.v1.SpaceLifecycleFenceRequest fence = 1;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message ApplySpaceLifecycleFenceResponse {
+  voice.common.v1.SpaceLifecycleFenceReceipt receipt = 1;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message PurgeSpaceRequest {
+  voice.common.v1.SpacePurgeRequest purge = 1;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message PurgeSpaceResponse {
+  voice.common.v1.SpacePurgeReceipt receipt = 1;
 }

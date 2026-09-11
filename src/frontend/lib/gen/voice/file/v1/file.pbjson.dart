@@ -78,6 +78,66 @@ final $typed_data.Uint8List fileScanOutcomeDescriptor = $convert.base64Decode(
     'AhIeChpGSUxFX1NDQU5fT1VUQ09NRV9JTkZFQ1RFRBADEhsKF0ZJTEVfU0NBTl9PVVRDT01FX0'
     'VSUk9SEAQSHQoZRklMRV9TQ0FOX09VVENPTUVfU0tJUFBFRBAF');
 
+@$core.Deprecated('Use fileReferenceOwnerTypeDescriptor instead')
+const FileReferenceOwnerType$json = {
+  '1': 'FileReferenceOwnerType',
+  '2': [
+    {'1': 'FILE_REFERENCE_OWNER_TYPE_UNSPECIFIED', '2': 0},
+    {'1': 'FILE_REFERENCE_OWNER_TYPE_MESSAGE', '2': 1},
+    {'1': 'FILE_REFERENCE_OWNER_TYPE_STORY', '2': 2},
+    {'1': 'FILE_REFERENCE_OWNER_TYPE_PROFILE_AVATAR', '2': 3},
+    {'1': 'FILE_REFERENCE_OWNER_TYPE_CHAT_AVATAR', '2': 4},
+    {'1': 'FILE_REFERENCE_OWNER_TYPE_SPACE_AVATAR', '2': 5},
+    {'1': 'FILE_REFERENCE_OWNER_TYPE_STICKER', '2': 6},
+    {'1': 'FILE_REFERENCE_OWNER_TYPE_GIF_ASSET', '2': 7},
+    {'1': 'FILE_REFERENCE_OWNER_TYPE_UPLOAD_SESSION', '2': 8},
+  ],
+};
+
+/// Descriptor for `FileReferenceOwnerType`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List fileReferenceOwnerTypeDescriptor = $convert.base64Decode(
+    'ChZGaWxlUmVmZXJlbmNlT3duZXJUeXBlEikKJUZJTEVfUkVGRVJFTkNFX09XTkVSX1RZUEVfVU'
+    '5TUEVDSUZJRUQQABIlCiFGSUxFX1JFRkVSRU5DRV9PV05FUl9UWVBFX01FU1NBR0UQARIjCh9G'
+    'SUxFX1JFRkVSRU5DRV9PV05FUl9UWVBFX1NUT1JZEAISLAooRklMRV9SRUZFUkVOQ0VfT1dORV'
+    'JfVFlQRV9QUk9GSUxFX0FWQVRBUhADEikKJUZJTEVfUkVGRVJFTkNFX09XTkVSX1RZUEVfQ0hB'
+    'VF9BVkFUQVIQBBIqCiZGSUxFX1JFRkVSRU5DRV9PV05FUl9UWVBFX1NQQUNFX0FWQVRBUhAFEi'
+    'UKIUZJTEVfUkVGRVJFTkNFX09XTkVSX1RZUEVfU1RJQ0tFUhAGEicKI0ZJTEVfUkVGRVJFTkNF'
+    'X09XTkVSX1RZUEVfR0lGX0FTU0VUEAcSLAooRklMRV9SRUZFUkVOQ0VfT1dORVJfVFlQRV9VUE'
+    'xPQURfU0VTU0lPThAI');
+
+@$core.Deprecated('Use fileReadSurfaceDescriptor instead')
+const FileReadSurface$json = {
+  '1': 'FileReadSurface',
+  '2': [
+    {'1': 'FILE_READ_SURFACE_UNSPECIFIED', '2': 0},
+    {'1': 'FILE_READ_SURFACE_URL', '2': 1},
+    {'1': 'FILE_READ_SURFACE_METADATA', '2': 2},
+  ],
+};
+
+/// Descriptor for `FileReadSurface`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List fileReadSurfaceDescriptor = $convert.base64Decode(
+    'Cg9GaWxlUmVhZFN1cmZhY2USIQodRklMRV9SRUFEX1NVUkZBQ0VfVU5TUEVDSUZJRUQQABIZCh'
+    'VGSUxFX1JFQURfU1VSRkFDRV9VUkwQARIeChpGSUxFX1JFQURfU1VSRkFDRV9NRVRBREFUQRAC');
+
+@$core.Deprecated('Use fileReferenceProducerIdDescriptor instead')
+const FileReferenceProducerId$json = {
+  '1': 'FileReferenceProducerId',
+  '2': [
+    {'1': 'FILE_REFERENCE_PRODUCER_ID_UNSPECIFIED', '2': 0},
+    {'1': 'FILE_REFERENCE_PRODUCER_ID_SPACE', '2': 1},
+    {'1': 'FILE_REFERENCE_PRODUCER_ID_CHAT', '2': 2},
+    {'1': 'FILE_REFERENCE_PRODUCER_ID_MESSAGING', '2': 3},
+  ],
+};
+
+/// Descriptor for `FileReferenceProducerId`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List fileReferenceProducerIdDescriptor = $convert.base64Decode(
+    'ChdGaWxlUmVmZXJlbmNlUHJvZHVjZXJJZBIqCiZGSUxFX1JFRkVSRU5DRV9QUk9EVUNFUl9JRF'
+    '9VTlNQRUNJRklFRBAAEiQKIEZJTEVfUkVGRVJFTkNFX1BST0RVQ0VSX0lEX1NQQUNFEAESIwof'
+    'RklMRV9SRUZFUkVOQ0VfUFJPRFVDRVJfSURfQ0hBVBACEigKJEZJTEVfUkVGRVJFTkNFX1BST0'
+    'RVQ0VSX0lEX01FU1NBR0lORxAD');
+
 @$core.Deprecated('Use requestUploadRequestDescriptor instead')
 const RequestUploadRequest$json = {
   '1': 'RequestUploadRequest',
@@ -321,38 +381,70 @@ const GetFileURLRequest$json = {
   '1': 'GetFileURLRequest',
   '2': [
     {'1': 'file_id', '3': 1, '4': 1, '5': 9, '10': 'fileId'},
+    {
+      '1': 'access',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.file.v1.FileAccessSelector',
+      '10': 'access'
+    },
   ],
 };
 
 /// Descriptor for `GetFileURLRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List getFileURLRequestDescriptor = $convert.base64Decode(
-    'ChFHZXRGaWxlVVJMUmVxdWVzdBIXCgdmaWxlX2lkGAEgASgJUgZmaWxlSWQ=');
+    'ChFHZXRGaWxlVVJMUmVxdWVzdBIXCgdmaWxlX2lkGAEgASgJUgZmaWxlSWQSOQoGYWNjZXNzGA'
+    'IgASgLMiEudm9pY2UuZmlsZS52MS5GaWxlQWNjZXNzU2VsZWN0b3JSBmFjY2Vzcw==');
 
 @$core.Deprecated('Use getFileMetadataRequestDescriptor instead')
 const GetFileMetadataRequest$json = {
   '1': 'GetFileMetadataRequest',
   '2': [
     {'1': 'file_id', '3': 1, '4': 1, '5': 9, '10': 'fileId'},
+    {
+      '1': 'access',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.file.v1.FileAccessSelector',
+      '10': 'access'
+    },
   ],
 };
 
 /// Descriptor for `GetFileMetadataRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List getFileMetadataRequestDescriptor =
-    $convert.base64Decode(
-        'ChZHZXRGaWxlTWV0YWRhdGFSZXF1ZXN0EhcKB2ZpbGVfaWQYASABKAlSBmZpbGVJZA==');
+final $typed_data.Uint8List getFileMetadataRequestDescriptor = $convert.base64Decode(
+    'ChZHZXRGaWxlTWV0YWRhdGFSZXF1ZXN0EhcKB2ZpbGVfaWQYASABKAlSBmZpbGVJZBI5CgZhY2'
+    'Nlc3MYAiABKAsyIS52b2ljZS5maWxlLnYxLkZpbGVBY2Nlc3NTZWxlY3RvclIGYWNjZXNz');
 
 @$core.Deprecated('Use getBulkMetadataRequestDescriptor instead')
 const GetBulkMetadataRequest$json = {
   '1': 'GetBulkMetadataRequest',
   '2': [
-    {'1': 'file_ids', '3': 1, '4': 3, '5': 9, '10': 'fileIds'},
+    {
+      '1': 'file_ids',
+      '3': 1,
+      '4': 3,
+      '5': 9,
+      '8': {'3': true},
+      '10': 'fileIds',
+    },
+    {
+      '1': 'items',
+      '3': 2,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.file.v1.FileAccessItem',
+      '10': 'items'
+    },
   ],
 };
 
 /// Descriptor for `GetBulkMetadataRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List getBulkMetadataRequestDescriptor =
-    $convert.base64Decode(
-        'ChZHZXRCdWxrTWV0YWRhdGFSZXF1ZXN0EhkKCGZpbGVfaWRzGAEgAygJUgdmaWxlSWRz');
+final $typed_data.Uint8List getBulkMetadataRequestDescriptor = $convert.base64Decode(
+    'ChZHZXRCdWxrTWV0YWRhdGFSZXF1ZXN0Eh0KCGZpbGVfaWRzGAEgAygJQgIYAVIHZmlsZUlkcx'
+    'IzCgVpdGVtcxgCIAMoCzIdLnZvaWNlLmZpbGUudjEuRmlsZUFjY2Vzc0l0ZW1SBWl0ZW1z');
 
 @$core.Deprecated('Use bulkFileMetadataDescriptor instead')
 const BulkFileMetadata$json = {
@@ -653,3 +745,1027 @@ const CheckQuotaResponse$json = {
 final $typed_data.Uint8List checkQuotaResponseDescriptor = $convert.base64Decode(
     'ChJDaGVja1F1b3RhUmVzcG9uc2USQwoOcXVvdGFfcmVzcG9uc2UYASABKAsyHC52b2ljZS5maW'
     'xlLnYxLlF1b3RhUmVzcG9uc2VSDXF1b3RhUmVzcG9uc2U=');
+
+@$core.Deprecated('Use fileReferenceProducerDeclarationDescriptor instead')
+const FileReferenceProducerDeclaration$json = {
+  '1': 'FileReferenceProducerDeclaration',
+  '2': [
+    {
+      '1': 'producer_id',
+      '3': 1,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.file.v1.FileReferenceProducerId',
+      '10': 'producerId'
+    },
+    {
+      '1': 'expected_total_count',
+      '3': 2,
+      '4': 1,
+      '5': 4,
+      '10': 'expectedTotalCount'
+    },
+    {
+      '1': 'expected_references_sha256',
+      '3': 3,
+      '4': 1,
+      '5': 12,
+      '10': 'expectedReferencesSha256'
+    },
+  ],
+};
+
+/// Descriptor for `FileReferenceProducerDeclaration`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List fileReferenceProducerDeclarationDescriptor =
+    $convert.base64Decode(
+        'CiBGaWxlUmVmZXJlbmNlUHJvZHVjZXJEZWNsYXJhdGlvbhJHCgtwcm9kdWNlcl9pZBgBIAEoDj'
+        'ImLnZvaWNlLmZpbGUudjEuRmlsZVJlZmVyZW5jZVByb2R1Y2VySWRSCnByb2R1Y2VySWQSMAoU'
+        'ZXhwZWN0ZWRfdG90YWxfY291bnQYAiABKARSEmV4cGVjdGVkVG90YWxDb3VudBI8ChpleHBlY3'
+        'RlZF9yZWZlcmVuY2VzX3NoYTI1NhgDIAEoDFIYZXhwZWN0ZWRSZWZlcmVuY2VzU2hhMjU2');
+
+@$core.Deprecated('Use fileReferenceKeyDescriptor instead')
+const FileReferenceKey$json = {
+  '1': 'FileReferenceKey',
+  '2': [
+    {'1': 'file_id', '3': 1, '4': 1, '5': 9, '10': 'fileId'},
+    {
+      '1': 'owner_type',
+      '3': 2,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.file.v1.FileReferenceOwnerType',
+      '10': 'ownerType'
+    },
+    {'1': 'owner_id', '3': 3, '4': 1, '5': 9, '10': 'ownerId'},
+    {
+      '1': 'subresource_id',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'subresourceId',
+      '17': true
+    },
+    {
+      '1': 'scope_space_id',
+      '3': 5,
+      '4': 1,
+      '5': 9,
+      '9': 1,
+      '10': 'scopeSpaceId',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_subresource_id'},
+    {'1': '_scope_space_id'},
+  ],
+};
+
+/// Descriptor for `FileReferenceKey`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List fileReferenceKeyDescriptor = $convert.base64Decode(
+    'ChBGaWxlUmVmZXJlbmNlS2V5EhcKB2ZpbGVfaWQYASABKAlSBmZpbGVJZBJECgpvd25lcl90eX'
+    'BlGAIgASgOMiUudm9pY2UuZmlsZS52MS5GaWxlUmVmZXJlbmNlT3duZXJUeXBlUglvd25lclR5'
+    'cGUSGQoIb3duZXJfaWQYAyABKAlSB293bmVySWQSKgoOc3VicmVzb3VyY2VfaWQYBCABKAlIAF'
+    'INc3VicmVzb3VyY2VJZIgBARIpCg5zY29wZV9zcGFjZV9pZBgFIAEoCUgBUgxzY29wZVNwYWNl'
+    'SWSIAQFCEQoPX3N1YnJlc291cmNlX2lkQhEKD19zY29wZV9zcGFjZV9pZA==');
+
+@$core.Deprecated('Use fileAccessSelectorDescriptor instead')
+const FileAccessSelector$json = {
+  '1': 'FileAccessSelector',
+  '2': [
+    {
+      '1': 'reference',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.file.v1.FileReferenceKey',
+      '9': 0,
+      '10': 'reference'
+    },
+    {
+      '1': 'capability_id',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'capabilityId'
+    },
+  ],
+  '8': [
+    {'1': 'selector'},
+  ],
+};
+
+/// Descriptor for `FileAccessSelector`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List fileAccessSelectorDescriptor = $convert.base64Decode(
+    'ChJGaWxlQWNjZXNzU2VsZWN0b3ISPwoJcmVmZXJlbmNlGAEgASgLMh8udm9pY2UuZmlsZS52MS'
+    '5GaWxlUmVmZXJlbmNlS2V5SABSCXJlZmVyZW5jZRIlCg1jYXBhYmlsaXR5X2lkGAIgASgJSABS'
+    'DGNhcGFiaWxpdHlJZEIKCghzZWxlY3Rvcg==');
+
+@$core.Deprecated('Use fileAccessItemDescriptor instead')
+const FileAccessItem$json = {
+  '1': 'FileAccessItem',
+  '2': [
+    {'1': 'file_id', '3': 1, '4': 1, '5': 9, '10': 'fileId'},
+    {
+      '1': 'access',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.file.v1.FileAccessSelector',
+      '10': 'access'
+    },
+  ],
+};
+
+/// Descriptor for `FileAccessItem`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List fileAccessItemDescriptor = $convert.base64Decode(
+    'Cg5GaWxlQWNjZXNzSXRlbRIXCgdmaWxlX2lkGAEgASgJUgZmaWxlSWQSOQoGYWNjZXNzGAIgAS'
+    'gLMiEudm9pY2UuZmlsZS52MS5GaWxlQWNjZXNzU2VsZWN0b3JSBmFjY2Vzcw==');
+
+@$core.Deprecated('Use issueFileAccessCapabilityRequestDescriptor instead')
+const IssueFileAccessCapabilityRequest$json = {
+  '1': 'IssueFileAccessCapabilityRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'operation_id', '3': 2, '4': 1, '5': 9, '10': 'operationId'},
+    {
+      '1': 'reference',
+      '3': 3,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.file.v1.FileReferenceKey',
+      '10': 'reference'
+    },
+    {
+      '1': 'subject_profile_id',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '10': 'subjectProfileId'
+    },
+    {
+      '1': 'allowed_surfaces',
+      '3': 5,
+      '4': 3,
+      '5': 14,
+      '6': '.voice.file.v1.FileReadSurface',
+      '10': 'allowedSurfaces'
+    },
+    {
+      '1': 'expires_at',
+      '3': 6,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'expiresAt'
+    },
+  ],
+};
+
+/// Descriptor for `IssueFileAccessCapabilityRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List issueFileAccessCapabilityRequestDescriptor = $convert.base64Decode(
+    'CiBJc3N1ZUZpbGVBY2Nlc3NDYXBhYmlsaXR5UmVxdWVzdBIpChBwcm90b2NvbF92ZXJzaW9uGA'
+    'EgASgNUg9wcm90b2NvbFZlcnNpb24SIQoMb3BlcmF0aW9uX2lkGAIgASgJUgtvcGVyYXRpb25J'
+    'ZBI9CglyZWZlcmVuY2UYAyABKAsyHy52b2ljZS5maWxlLnYxLkZpbGVSZWZlcmVuY2VLZXlSCX'
+    'JlZmVyZW5jZRIsChJzdWJqZWN0X3Byb2ZpbGVfaWQYBCABKAlSEHN1YmplY3RQcm9maWxlSWQS'
+    'SQoQYWxsb3dlZF9zdXJmYWNlcxgFIAMoDjIeLnZvaWNlLmZpbGUudjEuRmlsZVJlYWRTdXJmYW'
+    'NlUg9hbGxvd2VkU3VyZmFjZXMSOQoKZXhwaXJlc19hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1'
+    'Zi5UaW1lc3RhbXBSCWV4cGlyZXNBdA==');
+
+@$core.Deprecated('Use issueFileAccessCapabilityResponseDescriptor instead')
+const IssueFileAccessCapabilityResponse$json = {
+  '1': 'IssueFileAccessCapabilityResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.file.v1.IssueFileAccessCapabilityReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `IssueFileAccessCapabilityResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List issueFileAccessCapabilityResponseDescriptor =
+    $convert.base64Decode(
+        'CiFJc3N1ZUZpbGVBY2Nlc3NDYXBhYmlsaXR5UmVzcG9uc2USSQoHcmVjZWlwdBgBIAEoCzIvLn'
+        'ZvaWNlLmZpbGUudjEuSXNzdWVGaWxlQWNjZXNzQ2FwYWJpbGl0eVJlY2VpcHRSB3JlY2VpcHQ=');
+
+@$core.Deprecated('Use issueFileAccessCapabilityReceiptDescriptor instead')
+const IssueFileAccessCapabilityReceipt$json = {
+  '1': 'IssueFileAccessCapabilityReceipt',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'receipt_id', '3': 2, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'operation_id', '3': 3, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'capability_id', '3': 4, '4': 1, '5': 9, '10': 'capabilityId'},
+    {
+      '1': 'reference',
+      '3': 5,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.file.v1.FileReferenceKey',
+      '10': 'reference'
+    },
+    {
+      '1': 'subject_profile_id',
+      '3': 6,
+      '4': 1,
+      '5': 9,
+      '10': 'subjectProfileId'
+    },
+    {
+      '1': 'allowed_surfaces',
+      '3': 7,
+      '4': 3,
+      '5': 14,
+      '6': '.voice.file.v1.FileReadSurface',
+      '10': 'allowedSurfaces'
+    },
+    {
+      '1': 'expires_at',
+      '3': 8,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'expiresAt'
+    },
+    {'1': 'request_sha256', '3': 9, '4': 1, '5': 12, '10': 'requestSha256'},
+    {
+      '1': 'completed_at',
+      '3': 10,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'completedAt'
+    },
+  ],
+};
+
+/// Descriptor for `IssueFileAccessCapabilityReceipt`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List issueFileAccessCapabilityReceiptDescriptor = $convert.base64Decode(
+    'CiBJc3N1ZUZpbGVBY2Nlc3NDYXBhYmlsaXR5UmVjZWlwdBIpChBwcm90b2NvbF92ZXJzaW9uGA'
+    'EgASgNUg9wcm90b2NvbFZlcnNpb24SHQoKcmVjZWlwdF9pZBgCIAEoCVIJcmVjZWlwdElkEiEK'
+    'DG9wZXJhdGlvbl9pZBgDIAEoCVILb3BlcmF0aW9uSWQSIwoNY2FwYWJpbGl0eV9pZBgEIAEoCV'
+    'IMY2FwYWJpbGl0eUlkEj0KCXJlZmVyZW5jZRgFIAEoCzIfLnZvaWNlLmZpbGUudjEuRmlsZVJl'
+    'ZmVyZW5jZUtleVIJcmVmZXJlbmNlEiwKEnN1YmplY3RfcHJvZmlsZV9pZBgGIAEoCVIQc3Viam'
+    'VjdFByb2ZpbGVJZBJJChBhbGxvd2VkX3N1cmZhY2VzGAcgAygOMh4udm9pY2UuZmlsZS52MS5G'
+    'aWxlUmVhZFN1cmZhY2VSD2FsbG93ZWRTdXJmYWNlcxI5CgpleHBpcmVzX2F0GAggASgLMhouZ2'
+    '9vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcFIJZXhwaXJlc0F0EiUKDnJlcXVlc3Rfc2hhMjU2GAkg'
+    'ASgMUg1yZXF1ZXN0U2hhMjU2Ej0KDGNvbXBsZXRlZF9hdBgKIAEoCzIaLmdvb2dsZS5wcm90b2'
+    'J1Zi5UaW1lc3RhbXBSC2NvbXBsZXRlZEF0');
+
+@$core.Deprecated(
+    'Use prepareSpaceDeletionReferenceManifestRequestDescriptor instead')
+const PrepareSpaceDeletionReferenceManifestRequest$json = {
+  '1': 'PrepareSpaceDeletionReferenceManifestRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'space_id', '3': 2, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'deletion_operation_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '10': 'deletionOperationId'
+    },
+    {
+      '1': 'schedule_generation',
+      '3': 4,
+      '4': 1,
+      '5': 4,
+      '10': 'scheduleGeneration'
+    },
+    {
+      '1': 'chat_manifest',
+      '3': 5,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.ManifestBinding',
+      '10': 'chatManifest'
+    },
+  ],
+};
+
+/// Descriptor for `PrepareSpaceDeletionReferenceManifestRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List
+    prepareSpaceDeletionReferenceManifestRequestDescriptor =
+    $convert.base64Decode(
+        'CixQcmVwYXJlU3BhY2VEZWxldGlvblJlZmVyZW5jZU1hbmlmZXN0UmVxdWVzdBIpChBwcm90b2'
+        'NvbF92ZXJzaW9uGAEgASgNUg9wcm90b2NvbFZlcnNpb24SGQoIc3BhY2VfaWQYAiABKAlSB3Nw'
+        'YWNlSWQSMgoVZGVsZXRpb25fb3BlcmF0aW9uX2lkGAMgASgJUhNkZWxldGlvbk9wZXJhdGlvbk'
+        'lkEi8KE3NjaGVkdWxlX2dlbmVyYXRpb24YBCABKARSEnNjaGVkdWxlR2VuZXJhdGlvbhJFCg1j'
+        'aGF0X21hbmlmZXN0GAUgASgLMiAudm9pY2UuY29tbW9uLnYxLk1hbmlmZXN0QmluZGluZ1IMY2'
+        'hhdE1hbmlmZXN0');
+
+@$core.Deprecated(
+    'Use prepareSpaceDeletionReferenceManifestReceiptDescriptor instead')
+const PrepareSpaceDeletionReferenceManifestReceipt$json = {
+  '1': 'PrepareSpaceDeletionReferenceManifestReceipt',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'receipt_id', '3': 2, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'space_id', '3': 3, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'deletion_operation_id',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '10': 'deletionOperationId'
+    },
+    {
+      '1': 'schedule_generation',
+      '3': 5,
+      '4': 1,
+      '5': 4,
+      '10': 'scheduleGeneration'
+    },
+    {
+      '1': 'applied_state',
+      '3': 6,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.common.v1.LifecycleFenceState',
+      '10': 'appliedState'
+    },
+    {'1': 'request_sha256', '3': 7, '4': 1, '5': 12, '10': 'requestSha256'},
+    {
+      '1': 'applied_at',
+      '3': 8,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'appliedAt'
+    },
+  ],
+};
+
+/// Descriptor for `PrepareSpaceDeletionReferenceManifestReceipt`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List prepareSpaceDeletionReferenceManifestReceiptDescriptor = $convert.base64Decode(
+    'CixQcmVwYXJlU3BhY2VEZWxldGlvblJlZmVyZW5jZU1hbmlmZXN0UmVjZWlwdBIpChBwcm90b2'
+    'NvbF92ZXJzaW9uGAEgASgNUg9wcm90b2NvbFZlcnNpb24SHQoKcmVjZWlwdF9pZBgCIAEoCVIJ'
+    'cmVjZWlwdElkEhkKCHNwYWNlX2lkGAMgASgJUgdzcGFjZUlkEjIKFWRlbGV0aW9uX29wZXJhdG'
+    'lvbl9pZBgEIAEoCVITZGVsZXRpb25PcGVyYXRpb25JZBIvChNzY2hlZHVsZV9nZW5lcmF0aW9u'
+    'GAUgASgEUhJzY2hlZHVsZUdlbmVyYXRpb24SSQoNYXBwbGllZF9zdGF0ZRgGIAEoDjIkLnZvaW'
+    'NlLmNvbW1vbi52MS5MaWZlY3ljbGVGZW5jZVN0YXRlUgxhcHBsaWVkU3RhdGUSJQoOcmVxdWVz'
+    'dF9zaGEyNTYYByABKAxSDXJlcXVlc3RTaGEyNTYSOQoKYXBwbGllZF9hdBgIIAEoCzIaLmdvb2'
+    'dsZS5wcm90b2J1Zi5UaW1lc3RhbXBSCWFwcGxpZWRBdA==');
+
+@$core.Deprecated(
+    'Use prepareSpaceDeletionReferenceManifestResponseDescriptor instead')
+const PrepareSpaceDeletionReferenceManifestResponse$json = {
+  '1': 'PrepareSpaceDeletionReferenceManifestResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.file.v1.PrepareSpaceDeletionReferenceManifestReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `PrepareSpaceDeletionReferenceManifestResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List
+    prepareSpaceDeletionReferenceManifestResponseDescriptor =
+    $convert.base64Decode(
+        'Ci1QcmVwYXJlU3BhY2VEZWxldGlvblJlZmVyZW5jZU1hbmlmZXN0UmVzcG9uc2USVQoHcmVjZW'
+        'lwdBgBIAEoCzI7LnZvaWNlLmZpbGUudjEuUHJlcGFyZVNwYWNlRGVsZXRpb25SZWZlcmVuY2VN'
+        'YW5pZmVzdFJlY2VpcHRSB3JlY2VpcHQ=');
+
+@$core.Deprecated(
+    'Use registerSpaceDeletionReferenceChunkRequestDescriptor instead')
+const RegisterSpaceDeletionReferenceChunkRequest$json = {
+  '1': 'RegisterSpaceDeletionReferenceChunkRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {
+      '1': 'producer_id',
+      '3': 2,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.file.v1.FileReferenceProducerId',
+      '10': 'producerId'
+    },
+    {'1': 'operation_id', '3': 3, '4': 1, '5': 9, '10': 'operationId'},
+    {
+      '1': 'deletion_operation_id',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '10': 'deletionOperationId'
+    },
+    {'1': 'space_id', '3': 5, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'schedule_generation',
+      '3': 6,
+      '4': 1,
+      '5': 4,
+      '10': 'scheduleGeneration'
+    },
+    {'1': 'chunk_index', '3': 7, '4': 1, '5': 4, '10': 'chunkIndex'},
+    {
+      '1': 'references',
+      '3': 8,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.file.v1.FileReferenceKey',
+      '10': 'references'
+    },
+    {
+      '1': 'expected_total_count',
+      '3': 9,
+      '4': 1,
+      '5': 4,
+      '10': 'expectedTotalCount'
+    },
+    {
+      '1': 'expected_references_sha256',
+      '3': 10,
+      '4': 1,
+      '5': 12,
+      '10': 'expectedReferencesSha256'
+    },
+    {'1': 'seals_producer', '3': 11, '4': 1, '5': 8, '10': 'sealsProducer'},
+  ],
+};
+
+/// Descriptor for `RegisterSpaceDeletionReferenceChunkRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List registerSpaceDeletionReferenceChunkRequestDescriptor = $convert.base64Decode(
+    'CipSZWdpc3RlclNwYWNlRGVsZXRpb25SZWZlcmVuY2VDaHVua1JlcXVlc3QSKQoQcHJvdG9jb2'
+    'xfdmVyc2lvbhgBIAEoDVIPcHJvdG9jb2xWZXJzaW9uEkcKC3Byb2R1Y2VyX2lkGAIgASgOMiYu'
+    'dm9pY2UuZmlsZS52MS5GaWxlUmVmZXJlbmNlUHJvZHVjZXJJZFIKcHJvZHVjZXJJZBIhCgxvcG'
+    'VyYXRpb25faWQYAyABKAlSC29wZXJhdGlvbklkEjIKFWRlbGV0aW9uX29wZXJhdGlvbl9pZBgE'
+    'IAEoCVITZGVsZXRpb25PcGVyYXRpb25JZBIZCghzcGFjZV9pZBgFIAEoCVIHc3BhY2VJZBIvCh'
+    'NzY2hlZHVsZV9nZW5lcmF0aW9uGAYgASgEUhJzY2hlZHVsZUdlbmVyYXRpb24SHwoLY2h1bmtf'
+    'aW5kZXgYByABKARSCmNodW5rSW5kZXgSPwoKcmVmZXJlbmNlcxgIIAMoCzIfLnZvaWNlLmZpbG'
+    'UudjEuRmlsZVJlZmVyZW5jZUtleVIKcmVmZXJlbmNlcxIwChRleHBlY3RlZF90b3RhbF9jb3Vu'
+    'dBgJIAEoBFISZXhwZWN0ZWRUb3RhbENvdW50EjwKGmV4cGVjdGVkX3JlZmVyZW5jZXNfc2hhMj'
+    'U2GAogASgMUhhleHBlY3RlZFJlZmVyZW5jZXNTaGEyNTYSJQoOc2VhbHNfcHJvZHVjZXIYCyAB'
+    'KAhSDXNlYWxzUHJvZHVjZXI=');
+
+@$core.Deprecated(
+    'Use registerSpaceDeletionReferenceChunkReceiptDescriptor instead')
+const RegisterSpaceDeletionReferenceChunkReceipt$json = {
+  '1': 'RegisterSpaceDeletionReferenceChunkReceipt',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'receipt_id', '3': 2, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'operation_id', '3': 3, '4': 1, '5': 9, '10': 'operationId'},
+    {
+      '1': 'deletion_operation_id',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '10': 'deletionOperationId'
+    },
+    {'1': 'space_id', '3': 5, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'schedule_generation',
+      '3': 6,
+      '4': 1,
+      '5': 4,
+      '10': 'scheduleGeneration'
+    },
+    {'1': 'chunk_index', '3': 7, '4': 1, '5': 4, '10': 'chunkIndex'},
+    {'1': 'accepted_count', '3': 8, '4': 1, '5': 4, '10': 'acceptedCount'},
+    {
+      '1': 'producer_id',
+      '3': 9,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.file.v1.FileReferenceProducerId',
+      '10': 'producerId'
+    },
+    {
+      '1': 'expected_total_count',
+      '3': 10,
+      '4': 1,
+      '5': 4,
+      '10': 'expectedTotalCount'
+    },
+    {
+      '1': 'expected_references_sha256',
+      '3': 11,
+      '4': 1,
+      '5': 12,
+      '10': 'expectedReferencesSha256'
+    },
+    {'1': 'producer_sealed', '3': 12, '4': 1, '5': 8, '10': 'producerSealed'},
+    {'1': 'request_sha256', '3': 13, '4': 1, '5': 12, '10': 'requestSha256'},
+    {
+      '1': 'completed_at',
+      '3': 14,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'completedAt'
+    },
+  ],
+};
+
+/// Descriptor for `RegisterSpaceDeletionReferenceChunkReceipt`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List registerSpaceDeletionReferenceChunkReceiptDescriptor = $convert.base64Decode(
+    'CipSZWdpc3RlclNwYWNlRGVsZXRpb25SZWZlcmVuY2VDaHVua1JlY2VpcHQSKQoQcHJvdG9jb2'
+    'xfdmVyc2lvbhgBIAEoDVIPcHJvdG9jb2xWZXJzaW9uEh0KCnJlY2VpcHRfaWQYAiABKAlSCXJl'
+    'Y2VpcHRJZBIhCgxvcGVyYXRpb25faWQYAyABKAlSC29wZXJhdGlvbklkEjIKFWRlbGV0aW9uX2'
+    '9wZXJhdGlvbl9pZBgEIAEoCVITZGVsZXRpb25PcGVyYXRpb25JZBIZCghzcGFjZV9pZBgFIAEo'
+    'CVIHc3BhY2VJZBIvChNzY2hlZHVsZV9nZW5lcmF0aW9uGAYgASgEUhJzY2hlZHVsZUdlbmVyYX'
+    'Rpb24SHwoLY2h1bmtfaW5kZXgYByABKARSCmNodW5rSW5kZXgSJQoOYWNjZXB0ZWRfY291bnQY'
+    'CCABKARSDWFjY2VwdGVkQ291bnQSRwoLcHJvZHVjZXJfaWQYCSABKA4yJi52b2ljZS5maWxlLn'
+    'YxLkZpbGVSZWZlcmVuY2VQcm9kdWNlcklkUgpwcm9kdWNlcklkEjAKFGV4cGVjdGVkX3RvdGFs'
+    'X2NvdW50GAogASgEUhJleHBlY3RlZFRvdGFsQ291bnQSPAoaZXhwZWN0ZWRfcmVmZXJlbmNlc1'
+    '9zaGEyNTYYCyABKAxSGGV4cGVjdGVkUmVmZXJlbmNlc1NoYTI1NhInCg9wcm9kdWNlcl9zZWFs'
+    'ZWQYDCABKAhSDnByb2R1Y2VyU2VhbGVkEiUKDnJlcXVlc3Rfc2hhMjU2GA0gASgMUg1yZXF1ZX'
+    'N0U2hhMjU2Ej0KDGNvbXBsZXRlZF9hdBgOIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3Rh'
+    'bXBSC2NvbXBsZXRlZEF0');
+
+@$core.Deprecated(
+    'Use registerSpaceDeletionReferenceChunkResponseDescriptor instead')
+const RegisterSpaceDeletionReferenceChunkResponse$json = {
+  '1': 'RegisterSpaceDeletionReferenceChunkResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.file.v1.RegisterSpaceDeletionReferenceChunkReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `RegisterSpaceDeletionReferenceChunkResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List
+    registerSpaceDeletionReferenceChunkResponseDescriptor =
+    $convert.base64Decode(
+        'CitSZWdpc3RlclNwYWNlRGVsZXRpb25SZWZlcmVuY2VDaHVua1Jlc3BvbnNlElMKB3JlY2VpcH'
+        'QYASABKAsyOS52b2ljZS5maWxlLnYxLlJlZ2lzdGVyU3BhY2VEZWxldGlvblJlZmVyZW5jZUNo'
+        'dW5rUmVjZWlwdFIHcmVjZWlwdA==');
+
+@$core.Deprecated(
+    'Use releaseSpaceDeletionProducerReferencesRequestDescriptor instead')
+const ReleaseSpaceDeletionProducerReferencesRequest$json = {
+  '1': 'ReleaseSpaceDeletionProducerReferencesRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {
+      '1': 'deletion_operation_id',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '10': 'deletionOperationId'
+    },
+    {'1': 'space_id', '3': 3, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'purge_generation', '3': 4, '4': 1, '5': 4, '10': 'purgeGeneration'},
+    {
+      '1': 'source_schedule_generation',
+      '3': 5,
+      '4': 1,
+      '5': 4,
+      '10': 'sourceScheduleGeneration'
+    },
+    {
+      '1': 'producer_id',
+      '3': 6,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.file.v1.FileReferenceProducerId',
+      '10': 'producerId'
+    },
+    {
+      '1': 'expected_references_sha256',
+      '3': 7,
+      '4': 1,
+      '5': 12,
+      '10': 'expectedReferencesSha256'
+    },
+  ],
+};
+
+/// Descriptor for `ReleaseSpaceDeletionProducerReferencesRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List releaseSpaceDeletionProducerReferencesRequestDescriptor = $convert.base64Decode(
+    'Ci1SZWxlYXNlU3BhY2VEZWxldGlvblByb2R1Y2VyUmVmZXJlbmNlc1JlcXVlc3QSKQoQcHJvdG'
+    '9jb2xfdmVyc2lvbhgBIAEoDVIPcHJvdG9jb2xWZXJzaW9uEjIKFWRlbGV0aW9uX29wZXJhdGlv'
+    'bl9pZBgCIAEoCVITZGVsZXRpb25PcGVyYXRpb25JZBIZCghzcGFjZV9pZBgDIAEoCVIHc3BhY2'
+    'VJZBIpChBwdXJnZV9nZW5lcmF0aW9uGAQgASgEUg9wdXJnZUdlbmVyYXRpb24SPAoac291cmNl'
+    'X3NjaGVkdWxlX2dlbmVyYXRpb24YBSABKARSGHNvdXJjZVNjaGVkdWxlR2VuZXJhdGlvbhJHCg'
+    'twcm9kdWNlcl9pZBgGIAEoDjImLnZvaWNlLmZpbGUudjEuRmlsZVJlZmVyZW5jZVByb2R1Y2Vy'
+    'SWRSCnByb2R1Y2VySWQSPAoaZXhwZWN0ZWRfcmVmZXJlbmNlc19zaGEyNTYYByABKAxSGGV4cG'
+    'VjdGVkUmVmZXJlbmNlc1NoYTI1Ng==');
+
+@$core.Deprecated(
+    'Use releaseSpaceDeletionProducerReferencesReceiptDescriptor instead')
+const ReleaseSpaceDeletionProducerReferencesReceipt$json = {
+  '1': 'ReleaseSpaceDeletionProducerReferencesReceipt',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'receipt_id', '3': 2, '4': 1, '5': 9, '10': 'receiptId'},
+    {
+      '1': 'deletion_operation_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '10': 'deletionOperationId'
+    },
+    {'1': 'space_id', '3': 4, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'purge_generation', '3': 5, '4': 1, '5': 4, '10': 'purgeGeneration'},
+    {
+      '1': 'source_schedule_generation',
+      '3': 6,
+      '4': 1,
+      '5': 4,
+      '10': 'sourceScheduleGeneration'
+    },
+    {
+      '1': 'producer_id',
+      '3': 7,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.file.v1.FileReferenceProducerId',
+      '10': 'producerId'
+    },
+    {'1': 'released_count', '3': 8, '4': 1, '5': 4, '10': 'releasedCount'},
+    {
+      '1': 'expected_references_sha256',
+      '3': 9,
+      '4': 1,
+      '5': 12,
+      '10': 'expectedReferencesSha256'
+    },
+    {'1': 'request_sha256', '3': 10, '4': 1, '5': 12, '10': 'requestSha256'},
+    {
+      '1': 'completed_at',
+      '3': 11,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'completedAt'
+    },
+  ],
+};
+
+/// Descriptor for `ReleaseSpaceDeletionProducerReferencesReceipt`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List releaseSpaceDeletionProducerReferencesReceiptDescriptor = $convert.base64Decode(
+    'Ci1SZWxlYXNlU3BhY2VEZWxldGlvblByb2R1Y2VyUmVmZXJlbmNlc1JlY2VpcHQSKQoQcHJvdG'
+    '9jb2xfdmVyc2lvbhgBIAEoDVIPcHJvdG9jb2xWZXJzaW9uEh0KCnJlY2VpcHRfaWQYAiABKAlS'
+    'CXJlY2VpcHRJZBIyChVkZWxldGlvbl9vcGVyYXRpb25faWQYAyABKAlSE2RlbGV0aW9uT3Blcm'
+    'F0aW9uSWQSGQoIc3BhY2VfaWQYBCABKAlSB3NwYWNlSWQSKQoQcHVyZ2VfZ2VuZXJhdGlvbhgF'
+    'IAEoBFIPcHVyZ2VHZW5lcmF0aW9uEjwKGnNvdXJjZV9zY2hlZHVsZV9nZW5lcmF0aW9uGAYgAS'
+    'gEUhhzb3VyY2VTY2hlZHVsZUdlbmVyYXRpb24SRwoLcHJvZHVjZXJfaWQYByABKA4yJi52b2lj'
+    'ZS5maWxlLnYxLkZpbGVSZWZlcmVuY2VQcm9kdWNlcklkUgpwcm9kdWNlcklkEiUKDnJlbGVhc2'
+    'VkX2NvdW50GAggASgEUg1yZWxlYXNlZENvdW50EjwKGmV4cGVjdGVkX3JlZmVyZW5jZXNfc2hh'
+    'MjU2GAkgASgMUhhleHBlY3RlZFJlZmVyZW5jZXNTaGEyNTYSJQoOcmVxdWVzdF9zaGEyNTYYCi'
+    'ABKAxSDXJlcXVlc3RTaGEyNTYSPQoMY29tcGxldGVkX2F0GAsgASgLMhouZ29vZ2xlLnByb3Rv'
+    'YnVmLlRpbWVzdGFtcFILY29tcGxldGVkQXQ=');
+
+@$core.Deprecated(
+    'Use releaseSpaceDeletionProducerReferencesResponseDescriptor instead')
+const ReleaseSpaceDeletionProducerReferencesResponse$json = {
+  '1': 'ReleaseSpaceDeletionProducerReferencesResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.file.v1.ReleaseSpaceDeletionProducerReferencesReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `ReleaseSpaceDeletionProducerReferencesResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List
+    releaseSpaceDeletionProducerReferencesResponseDescriptor =
+    $convert.base64Decode(
+        'Ci5SZWxlYXNlU3BhY2VEZWxldGlvblByb2R1Y2VyUmVmZXJlbmNlc1Jlc3BvbnNlElYKB3JlY2'
+        'VpcHQYASABKAsyPC52b2ljZS5maWxlLnYxLlJlbGVhc2VTcGFjZURlbGV0aW9uUHJvZHVjZXJS'
+        'ZWZlcmVuY2VzUmVjZWlwdFIHcmVjZWlwdA==');
+
+@$core.Deprecated('Use applySpaceLifecycleFenceRequestDescriptor instead')
+const ApplySpaceLifecycleFenceRequest$json = {
+  '1': 'ApplySpaceLifecycleFenceRequest',
+  '2': [
+    {
+      '1': 'fence',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.SpaceLifecycleFenceRequest',
+      '10': 'fence'
+    },
+  ],
+};
+
+/// Descriptor for `ApplySpaceLifecycleFenceRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List applySpaceLifecycleFenceRequestDescriptor =
+    $convert.base64Decode(
+        'Ch9BcHBseVNwYWNlTGlmZWN5Y2xlRmVuY2VSZXF1ZXN0EkEKBWZlbmNlGAEgASgLMisudm9pY2'
+        'UuY29tbW9uLnYxLlNwYWNlTGlmZWN5Y2xlRmVuY2VSZXF1ZXN0UgVmZW5jZQ==');
+
+@$core.Deprecated('Use applySpaceLifecycleFenceResponseDescriptor instead')
+const ApplySpaceLifecycleFenceResponse$json = {
+  '1': 'ApplySpaceLifecycleFenceResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.SpaceLifecycleFenceReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `ApplySpaceLifecycleFenceResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List applySpaceLifecycleFenceResponseDescriptor =
+    $convert.base64Decode(
+        'CiBBcHBseVNwYWNlTGlmZWN5Y2xlRmVuY2VSZXNwb25zZRJFCgdyZWNlaXB0GAEgASgLMisudm'
+        '9pY2UuY29tbW9uLnYxLlNwYWNlTGlmZWN5Y2xlRmVuY2VSZWNlaXB0UgdyZWNlaXB0');
+
+@$core.Deprecated('Use purgeSpaceRequestDescriptor instead')
+const PurgeSpaceRequest$json = {
+  '1': 'PurgeSpaceRequest',
+  '2': [
+    {
+      '1': 'purge',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.SpacePurgeRequest',
+      '10': 'purge'
+    },
+  ],
+};
+
+/// Descriptor for `PurgeSpaceRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List purgeSpaceRequestDescriptor = $convert.base64Decode(
+    'ChFQdXJnZVNwYWNlUmVxdWVzdBI4CgVwdXJnZRgBIAEoCzIiLnZvaWNlLmNvbW1vbi52MS5TcG'
+    'FjZVB1cmdlUmVxdWVzdFIFcHVyZ2U=');
+
+@$core.Deprecated('Use purgeSpaceResponseDescriptor instead')
+const PurgeSpaceResponse$json = {
+  '1': 'PurgeSpaceResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.SpacePurgeReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `PurgeSpaceResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List purgeSpaceResponseDescriptor = $convert.base64Decode(
+    'ChJQdXJnZVNwYWNlUmVzcG9uc2USPAoHcmVjZWlwdBgBIAEoCzIiLnZvaWNlLmNvbW1vbi52MS'
+    '5TcGFjZVB1cmdlUmVjZWlwdFIHcmVjZWlwdA==');
+
+@$core.Deprecated('Use acquireFileReferencesRequestDescriptor instead')
+const AcquireFileReferencesRequest$json = {
+  '1': 'AcquireFileReferencesRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'operation_id', '3': 2, '4': 1, '5': 9, '10': 'operationId'},
+    {
+      '1': 'producer_id',
+      '3': 3,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.file.v1.FileReferenceProducerId',
+      '10': 'producerId'
+    },
+    {
+      '1': 'references',
+      '3': 4,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.file.v1.FileReferenceKey',
+      '10': 'references'
+    },
+  ],
+};
+
+/// Descriptor for `AcquireFileReferencesRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List acquireFileReferencesRequestDescriptor = $convert.base64Decode(
+    'ChxBY3F1aXJlRmlsZVJlZmVyZW5jZXNSZXF1ZXN0EikKEHByb3RvY29sX3ZlcnNpb24YASABKA'
+    '1SD3Byb3RvY29sVmVyc2lvbhIhCgxvcGVyYXRpb25faWQYAiABKAlSC29wZXJhdGlvbklkEkcK'
+    'C3Byb2R1Y2VyX2lkGAMgASgOMiYudm9pY2UuZmlsZS52MS5GaWxlUmVmZXJlbmNlUHJvZHVjZX'
+    'JJZFIKcHJvZHVjZXJJZBI/CgpyZWZlcmVuY2VzGAQgAygLMh8udm9pY2UuZmlsZS52MS5GaWxl'
+    'UmVmZXJlbmNlS2V5UgpyZWZlcmVuY2Vz');
+
+@$core.Deprecated('Use acquireFileReferencesReceiptDescriptor instead')
+const AcquireFileReferencesReceipt$json = {
+  '1': 'AcquireFileReferencesReceipt',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'receipt_id', '3': 2, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'operation_id', '3': 3, '4': 1, '5': 9, '10': 'operationId'},
+    {
+      '1': 'producer_id',
+      '3': 4,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.file.v1.FileReferenceProducerId',
+      '10': 'producerId'
+    },
+    {'1': 'reference_count', '3': 5, '4': 1, '5': 4, '10': 'referenceCount'},
+    {'1': 'request_sha256', '3': 6, '4': 1, '5': 12, '10': 'requestSha256'},
+    {
+      '1': 'completed_at',
+      '3': 7,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'completedAt'
+    },
+  ],
+};
+
+/// Descriptor for `AcquireFileReferencesReceipt`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List acquireFileReferencesReceiptDescriptor = $convert.base64Decode(
+    'ChxBY3F1aXJlRmlsZVJlZmVyZW5jZXNSZWNlaXB0EikKEHByb3RvY29sX3ZlcnNpb24YASABKA'
+    '1SD3Byb3RvY29sVmVyc2lvbhIdCgpyZWNlaXB0X2lkGAIgASgJUglyZWNlaXB0SWQSIQoMb3Bl'
+    'cmF0aW9uX2lkGAMgASgJUgtvcGVyYXRpb25JZBJHCgtwcm9kdWNlcl9pZBgEIAEoDjImLnZvaW'
+    'NlLmZpbGUudjEuRmlsZVJlZmVyZW5jZVByb2R1Y2VySWRSCnByb2R1Y2VySWQSJwoPcmVmZXJl'
+    'bmNlX2NvdW50GAUgASgEUg5yZWZlcmVuY2VDb3VudBIlCg5yZXF1ZXN0X3NoYTI1NhgGIAEoDF'
+    'INcmVxdWVzdFNoYTI1NhI9Cgxjb21wbGV0ZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYu'
+    'VGltZXN0YW1wUgtjb21wbGV0ZWRBdA==');
+
+@$core.Deprecated('Use acquireFileReferencesResponseDescriptor instead')
+const AcquireFileReferencesResponse$json = {
+  '1': 'AcquireFileReferencesResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.file.v1.AcquireFileReferencesReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `AcquireFileReferencesResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List acquireFileReferencesResponseDescriptor =
+    $convert.base64Decode(
+        'Ch1BY3F1aXJlRmlsZVJlZmVyZW5jZXNSZXNwb25zZRJFCgdyZWNlaXB0GAEgASgLMisudm9pY2'
+        'UuZmlsZS52MS5BY3F1aXJlRmlsZVJlZmVyZW5jZXNSZWNlaXB0UgdyZWNlaXB0');
+
+@$core.Deprecated('Use releaseFileReferencesRequestDescriptor instead')
+const ReleaseFileReferencesRequest$json = {
+  '1': 'ReleaseFileReferencesRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'operation_id', '3': 2, '4': 1, '5': 9, '10': 'operationId'},
+    {
+      '1': 'producer_id',
+      '3': 3,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.file.v1.FileReferenceProducerId',
+      '10': 'producerId'
+    },
+    {
+      '1': 'references',
+      '3': 4,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.file.v1.FileReferenceKey',
+      '10': 'references'
+    },
+  ],
+};
+
+/// Descriptor for `ReleaseFileReferencesRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List releaseFileReferencesRequestDescriptor = $convert.base64Decode(
+    'ChxSZWxlYXNlRmlsZVJlZmVyZW5jZXNSZXF1ZXN0EikKEHByb3RvY29sX3ZlcnNpb24YASABKA'
+    '1SD3Byb3RvY29sVmVyc2lvbhIhCgxvcGVyYXRpb25faWQYAiABKAlSC29wZXJhdGlvbklkEkcK'
+    'C3Byb2R1Y2VyX2lkGAMgASgOMiYudm9pY2UuZmlsZS52MS5GaWxlUmVmZXJlbmNlUHJvZHVjZX'
+    'JJZFIKcHJvZHVjZXJJZBI/CgpyZWZlcmVuY2VzGAQgAygLMh8udm9pY2UuZmlsZS52MS5GaWxl'
+    'UmVmZXJlbmNlS2V5UgpyZWZlcmVuY2Vz');
+
+@$core.Deprecated('Use releaseFileReferencesReceiptDescriptor instead')
+const ReleaseFileReferencesReceipt$json = {
+  '1': 'ReleaseFileReferencesReceipt',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'receipt_id', '3': 2, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'operation_id', '3': 3, '4': 1, '5': 9, '10': 'operationId'},
+    {
+      '1': 'producer_id',
+      '3': 4,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.file.v1.FileReferenceProducerId',
+      '10': 'producerId'
+    },
+    {'1': 'released_count', '3': 5, '4': 1, '5': 4, '10': 'releasedCount'},
+    {'1': 'request_sha256', '3': 6, '4': 1, '5': 12, '10': 'requestSha256'},
+    {
+      '1': 'completed_at',
+      '3': 7,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'completedAt'
+    },
+  ],
+};
+
+/// Descriptor for `ReleaseFileReferencesReceipt`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List releaseFileReferencesReceiptDescriptor = $convert.base64Decode(
+    'ChxSZWxlYXNlRmlsZVJlZmVyZW5jZXNSZWNlaXB0EikKEHByb3RvY29sX3ZlcnNpb24YASABKA'
+    '1SD3Byb3RvY29sVmVyc2lvbhIdCgpyZWNlaXB0X2lkGAIgASgJUglyZWNlaXB0SWQSIQoMb3Bl'
+    'cmF0aW9uX2lkGAMgASgJUgtvcGVyYXRpb25JZBJHCgtwcm9kdWNlcl9pZBgEIAEoDjImLnZvaW'
+    'NlLmZpbGUudjEuRmlsZVJlZmVyZW5jZVByb2R1Y2VySWRSCnByb2R1Y2VySWQSJQoOcmVsZWFz'
+    'ZWRfY291bnQYBSABKARSDXJlbGVhc2VkQ291bnQSJQoOcmVxdWVzdF9zaGEyNTYYBiABKAxSDX'
+    'JlcXVlc3RTaGEyNTYSPQoMY29tcGxldGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRp'
+    'bWVzdGFtcFILY29tcGxldGVkQXQ=');
+
+@$core.Deprecated('Use releaseFileReferencesResponseDescriptor instead')
+const ReleaseFileReferencesResponse$json = {
+  '1': 'ReleaseFileReferencesResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.file.v1.ReleaseFileReferencesReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `ReleaseFileReferencesResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List releaseFileReferencesResponseDescriptor =
+    $convert.base64Decode(
+        'Ch1SZWxlYXNlRmlsZVJlZmVyZW5jZXNSZXNwb25zZRJFCgdyZWNlaXB0GAEgASgLMisudm9pY2'
+        'UuZmlsZS52MS5SZWxlYXNlRmlsZVJlZmVyZW5jZXNSZWNlaXB0UgdyZWNlaXB0');
+
+@$core.Deprecated('Use getSpacePurgeReceiptRequestDescriptor instead')
+const GetSpacePurgeReceiptRequest$json = {
+  '1': 'GetSpacePurgeReceiptRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'space_id', '3': 2, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'deletion_operation_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '10': 'deletionOperationId'
+    },
+    {'1': 'generation', '3': 4, '4': 1, '5': 4, '10': 'generation'},
+    {
+      '1': 'purge_request_sha256',
+      '3': 5,
+      '4': 1,
+      '5': 12,
+      '10': 'purgeRequestSha256'
+    },
+    {'1': 'manifest_sha256', '3': 6, '4': 1, '5': 12, '10': 'manifestSha256'},
+  ],
+};
+
+/// Descriptor for `GetSpacePurgeReceiptRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getSpacePurgeReceiptRequestDescriptor = $convert.base64Decode(
+    'ChtHZXRTcGFjZVB1cmdlUmVjZWlwdFJlcXVlc3QSKQoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoDV'
+    'IPcHJvdG9jb2xWZXJzaW9uEhkKCHNwYWNlX2lkGAIgASgJUgdzcGFjZUlkEjIKFWRlbGV0aW9u'
+    'X29wZXJhdGlvbl9pZBgDIAEoCVITZGVsZXRpb25PcGVyYXRpb25JZBIeCgpnZW5lcmF0aW9uGA'
+    'QgASgEUgpnZW5lcmF0aW9uEjAKFHB1cmdlX3JlcXVlc3Rfc2hhMjU2GAUgASgMUhJwdXJnZVJl'
+    'cXVlc3RTaGEyNTYSJwoPbWFuaWZlc3Rfc2hhMjU2GAYgASgMUg5tYW5pZmVzdFNoYTI1Ng==');
+
+@$core.Deprecated('Use getSpacePurgeReceiptResponseDescriptor instead')
+const GetSpacePurgeReceiptResponse$json = {
+  '1': 'GetSpacePurgeReceiptResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.SpacePurgeReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `GetSpacePurgeReceiptResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getSpacePurgeReceiptResponseDescriptor =
+    $convert.base64Decode(
+        'ChxHZXRTcGFjZVB1cmdlUmVjZWlwdFJlc3BvbnNlEjwKB3JlY2VpcHQYASABKAsyIi52b2ljZS'
+        '5jb21tb24udjEuU3BhY2VQdXJnZVJlY2VpcHRSB3JlY2VpcHQ=');

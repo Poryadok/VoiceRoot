@@ -562,3 +562,85 @@ const RelayNotificationResponse$json = {
 /// Descriptor for `RelayNotificationResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List relayNotificationResponseDescriptor =
     $convert.base64Decode('ChlSZWxheU5vdGlmaWNhdGlvblJlc3BvbnNl');
+
+@$core.Deprecated('Use applySpaceLifecycleFenceRequestDescriptor instead')
+const ApplySpaceLifecycleFenceRequest$json = {
+  '1': 'ApplySpaceLifecycleFenceRequest',
+  '2': [
+    {
+      '1': 'fence',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.SpaceLifecycleFenceRequest',
+      '10': 'fence'
+    },
+  ],
+};
+
+/// Descriptor for `ApplySpaceLifecycleFenceRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List applySpaceLifecycleFenceRequestDescriptor =
+    $convert.base64Decode(
+        'Ch9BcHBseVNwYWNlTGlmZWN5Y2xlRmVuY2VSZXF1ZXN0EkEKBWZlbmNlGAEgASgLMisudm9pY2'
+        'UuY29tbW9uLnYxLlNwYWNlTGlmZWN5Y2xlRmVuY2VSZXF1ZXN0UgVmZW5jZQ==');
+
+@$core.Deprecated('Use applySpaceLifecycleFenceResponseDescriptor instead')
+const ApplySpaceLifecycleFenceResponse$json = {
+  '1': 'ApplySpaceLifecycleFenceResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.SpaceLifecycleFenceReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `ApplySpaceLifecycleFenceResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List applySpaceLifecycleFenceResponseDescriptor =
+    $convert.base64Decode(
+        'CiBBcHBseVNwYWNlTGlmZWN5Y2xlRmVuY2VSZXNwb25zZRJFCgdyZWNlaXB0GAEgASgLMisudm'
+        '9pY2UuY29tbW9uLnYxLlNwYWNlTGlmZWN5Y2xlRmVuY2VSZWNlaXB0UgdyZWNlaXB0');
+
+@$core.Deprecated('Use purgeSpaceRequestDescriptor instead')
+const PurgeSpaceRequest$json = {
+  '1': 'PurgeSpaceRequest',
+  '2': [
+    {
+      '1': 'purge',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.SpacePurgeRequest',
+      '10': 'purge'
+    },
+  ],
+};
+
+/// Descriptor for `PurgeSpaceRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List purgeSpaceRequestDescriptor = $convert.base64Decode(
+    'ChFQdXJnZVNwYWNlUmVxdWVzdBI4CgVwdXJnZRgBIAEoCzIiLnZvaWNlLmNvbW1vbi52MS5TcG'
+    'FjZVB1cmdlUmVxdWVzdFIFcHVyZ2U=');
+
+@$core.Deprecated('Use purgeSpaceResponseDescriptor instead')
+const PurgeSpaceResponse$json = {
+  '1': 'PurgeSpaceResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.SpacePurgeReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `PurgeSpaceResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List purgeSpaceResponseDescriptor = $convert.base64Decode(
+    'ChJQdXJnZVNwYWNlUmVzcG9uc2USPAoHcmVjZWlwdBgBIAEoCzIiLnZvaWNlLmNvbW1vbi52MS'
+    '5TcGFjZVB1cmdlUmVjZWlwdFIHcmVjZWlwdA==');

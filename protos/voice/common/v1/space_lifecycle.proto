@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package voice.common.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "voice.app/voice/common/v1;commonv1";
+option java_multiple_files = true;
+option java_package = "app.voice.common.v1";
+
+enum ParticipantId {
+  PARTICIPANT_ID_UNSPECIFIED = 0;
+  PARTICIPANT_ID_ROLE = 1;
+  PARTICIPANT_ID_CHAT = 2;
+  PARTICIPANT_ID_MESSAGING = 3;
+  PARTICIPANT_ID_FILE = 4;
+  PARTICIPANT_ID_VOICE = 5;
+  PARTICIPANT_ID_MATCHMAKING = 6;
+  PARTICIPANT_ID_SEARCH = 7;
+  PARTICIPANT_ID_SUBSCRIPTION = 8;
+  PARTICIPANT_ID_BOT = 9;
+  PARTICIPANT_ID_NOTIFICATION = 10;
+}
+
+enum LifecycleFenceState {
+  LIFECYCLE_FENCE_STATE_UNSPECIFIED = 0;
+  LIFECYCLE_FENCE_STATE_FROZEN = 1;
+  LIFECYCLE_FENCE_STATE_LIVE = 2;
+  LIFECYCLE_FENCE_STATE_PURGE_DECIDED = 3;
+}
+
+enum PurgeReceiptState {
+  PURGE_RECEIPT_STATE_UNSPECIFIED = 0;
+  PURGE_RECEIPT_STATE_COMPLETED = 1;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message ManifestBinding {
+  string manifest_id = 1;
+  bytes manifest_sha256 = 2;
+  uint64 item_count = 3;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message SpaceLifecycleFenceRequest {
+  uint32 protocol_version = 1;
+  string space_id = 2;
+  string deletion_operation_id = 3;
+  uint64 generation = 4;
+  voice.common.v1.LifecycleFenceState desired_state = 5;
+  voice.common.v1.ManifestBinding manifest = 6;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message SpaceLifecycleFenceReceipt {
+  uint32 protocol_version = 1;
+  string receipt_id = 2;
+  string space_id = 3;
+  string deletion_operation_id = 4;
+  uint64 generation = 5;
+  voice.common.v1.ParticipantId participant_id = 6;
+  voice.common.v1.LifecycleFenceState applied_state = 7;
+  bytes request_sha256 = 8;
+  bytes manifest_sha256 = 9;
+  google.protobuf.Timestamp applied_at = 10;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message SpacePurgeRequest {
+  uint32 protocol_version = 1;
+  string space_id = 2;
+  string deletion_operation_id = 3;
+  uint64 generation = 4;
+  google.protobuf.Timestamp purge_decided_at = 5;
+  voice.common.v1.ParticipantId participant_id = 6;
+  voice.common.v1.ManifestBinding manifest = 7;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message SpacePurgeReceipt {
+  uint32 protocol_version = 1;
+  string receipt_id = 2;
+  string space_id = 3;
+  string deletion_operation_id = 4;
+  uint64 generation = 5;
+  voice.common.v1.ParticipantId participant_id = 6;
+  voice.common.v1.PurgeReceiptState state = 7;
+  bytes request_sha256 = 8;
+  google.protobuf.Timestamp completed_at = 9;
+}

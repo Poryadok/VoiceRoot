@@ -1109,6 +1109,24 @@ const ChatStreamEvent$json = {
       '9': 0,
       '10': 'voiceRoomAccessInvalidated'
     },
+    {
+      '1': 'space_deletion_scheduled',
+      '3': 21,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.SpaceDeletionScheduled',
+      '9': 0,
+      '10': 'spaceDeletionScheduled'
+    },
+    {
+      '1': 'space_restored',
+      '3': 22,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.SpaceRestored',
+      '9': 0,
+      '10': 'spaceRestored'
+    },
   ],
   '8': [
     {'1': 'payload'},
@@ -1134,8 +1152,11 @@ final $typed_data.Uint8List chatStreamEventDescriptor = $convert.base64Decode(
     'LlNwYWNlRGVsZXRlZEgAUgxzcGFjZURlbGV0ZWQSSAoPZG1fcGVlcl9kZWxldGVkGBMgASgLMh'
     '4udm9pY2UuZXZlbnRzLnYxLkRtUGVlckRlbGV0ZWRIAFINZG1QZWVyRGVsZXRlZBJwCh12b2lj'
     'ZV9yb29tX2FjY2Vzc19pbnZhbGlkYXRlZBgUIAEoCzIrLnZvaWNlLmV2ZW50cy52MS5Wb2ljZV'
-    'Jvb21BY2Nlc3NJbnZhbGlkYXRlZEgAUhp2b2ljZVJvb21BY2Nlc3NJbnZhbGlkYXRlZEIJCgdw'
-    'YXlsb2Fk');
+    'Jvb21BY2Nlc3NJbnZhbGlkYXRlZEgAUhp2b2ljZVJvb21BY2Nlc3NJbnZhbGlkYXRlZBJjChhz'
+    'cGFjZV9kZWxldGlvbl9zY2hlZHVsZWQYFSABKAsyJy52b2ljZS5ldmVudHMudjEuU3BhY2VEZW'
+    'xldGlvblNjaGVkdWxlZEgAUhZzcGFjZURlbGV0aW9uU2NoZWR1bGVkEkcKDnNwYWNlX3Jlc3Rv'
+    'cmVkGBYgASgLMh4udm9pY2UuZXZlbnRzLnYxLlNwYWNlUmVzdG9yZWRIAFINc3BhY2VSZXN0b3'
+    'JlZEIJCgdwYXlsb2Fk');
 
 @$core.Deprecated('Use chatCreatedDescriptor instead')
 const ChatCreated$json = {
@@ -1292,12 +1313,42 @@ const SpaceDeleted$json = {
   '1': 'SpaceDeleted',
   '2': [
     {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'protocol_version', '3': 2, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {
+      '1': 'deletion_operation_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '10': 'deletionOperationId'
+    },
+    {'1': 'generation', '3': 4, '4': 1, '5': 4, '10': 'generation'},
+    {
+      '1': 'purge_decided_at',
+      '3': 5,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'purgeDecidedAt'
+    },
+    {
+      '1': 'purged_at',
+      '3': 6,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'purgedAt'
+    },
   ],
 };
 
 /// Descriptor for `SpaceDeleted`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List spaceDeletedDescriptor = $convert
-    .base64Decode('CgxTcGFjZURlbGV0ZWQSGQoIc3BhY2VfaWQYASABKAlSB3NwYWNlSWQ=');
+final $typed_data.Uint8List spaceDeletedDescriptor = $convert.base64Decode(
+    'CgxTcGFjZURlbGV0ZWQSGQoIc3BhY2VfaWQYASABKAlSB3NwYWNlSWQSKQoQcHJvdG9jb2xfdm'
+    'Vyc2lvbhgCIAEoDVIPcHJvdG9jb2xWZXJzaW9uEjIKFWRlbGV0aW9uX29wZXJhdGlvbl9pZBgD'
+    'IAEoCVITZGVsZXRpb25PcGVyYXRpb25JZBIeCgpnZW5lcmF0aW9uGAQgASgEUgpnZW5lcmF0aW'
+    '9uEkQKEHB1cmdlX2RlY2lkZWRfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1w'
+    'Ug5wdXJnZURlY2lkZWRBdBI3CglwdXJnZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVG'
+    'ltZXN0YW1wUghwdXJnZWRBdA==');
 
 @$core.Deprecated('Use dmPeerDeletedDescriptor instead')
 const DmPeerDeleted$json = {
@@ -3154,3 +3205,78 @@ const WebhookFailed$json = {
 final $typed_data.Uint8List webhookFailedDescriptor = $convert.base64Decode(
     'Cg1XZWJob29rRmFpbGVkEhUKBmJvdF9pZBgBIAEoCVIFYm90SWQSHQoKZXZlbnRfdHlwZRgCIA'
     'EoCVIJZXZlbnRUeXBlEhQKBWVycm9yGAMgASgJUgVlcnJvcg==');
+
+@$core.Deprecated('Use spaceDeletionScheduledDescriptor instead')
+const SpaceDeletionScheduled$json = {
+  '1': 'SpaceDeletionScheduled',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'space_id', '3': 2, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'deletion_operation_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '10': 'deletionOperationId'
+    },
+    {'1': 'generation', '3': 4, '4': 1, '5': 4, '10': 'generation'},
+    {
+      '1': 'scheduled_at',
+      '3': 5,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'scheduledAt'
+    },
+    {
+      '1': 'purge_after',
+      '3': 6,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'purgeAfter'
+    },
+  ],
+};
+
+/// Descriptor for `SpaceDeletionScheduled`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List spaceDeletionScheduledDescriptor = $convert.base64Decode(
+    'ChZTcGFjZURlbGV0aW9uU2NoZWR1bGVkEikKEHByb3RvY29sX3ZlcnNpb24YASABKA1SD3Byb3'
+    'RvY29sVmVyc2lvbhIZCghzcGFjZV9pZBgCIAEoCVIHc3BhY2VJZBIyChVkZWxldGlvbl9vcGVy'
+    'YXRpb25faWQYAyABKAlSE2RlbGV0aW9uT3BlcmF0aW9uSWQSHgoKZ2VuZXJhdGlvbhgEIAEoBF'
+    'IKZ2VuZXJhdGlvbhI9CgxzY2hlZHVsZWRfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGlt'
+    'ZXN0YW1wUgtzY2hlZHVsZWRBdBI7CgtwdXJnZV9hZnRlchgGIAEoCzIaLmdvb2dsZS5wcm90b2'
+    'J1Zi5UaW1lc3RhbXBSCnB1cmdlQWZ0ZXI=');
+
+@$core.Deprecated('Use spaceRestoredDescriptor instead')
+const SpaceRestored$json = {
+  '1': 'SpaceRestored',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'space_id', '3': 2, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'deletion_operation_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '10': 'deletionOperationId'
+    },
+    {'1': 'generation', '3': 4, '4': 1, '5': 4, '10': 'generation'},
+    {
+      '1': 'restored_at',
+      '3': 5,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'restoredAt'
+    },
+  ],
+};
+
+/// Descriptor for `SpaceRestored`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List spaceRestoredDescriptor = $convert.base64Decode(
+    'Cg1TcGFjZVJlc3RvcmVkEikKEHByb3RvY29sX3ZlcnNpb24YASABKA1SD3Byb3RvY29sVmVyc2'
+    'lvbhIZCghzcGFjZV9pZBgCIAEoCVIHc3BhY2VJZBIyChVkZWxldGlvbl9vcGVyYXRpb25faWQY'
+    'AyABKAlSE2RlbGV0aW9uT3BlcmF0aW9uSWQSHgoKZ2VuZXJhdGlvbhgEIAEoBFIKZ2VuZXJhdG'
+    'lvbhI7CgtyZXN0b3JlZF9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBSCnJl'
+    'c3RvcmVkQXQ=');

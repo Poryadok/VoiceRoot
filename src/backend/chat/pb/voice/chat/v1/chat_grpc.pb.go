@@ -52,6 +52,10 @@ const (
 	ChatService_EnableChatE2E_FullMethodName                  = "/voice.chat.v1.ChatService/EnableChatE2E"
 	ChatService_DisableChatE2E_FullMethodName                 = "/voice.chat.v1.ChatService/DisableChatE2E"
 	ChatService_ListDMReceiptVisibilityTargets_FullMethodName = "/voice.chat.v1.ChatService/ListDMReceiptVisibilityTargets"
+	ChatService_ApplySpaceLifecycleFence_FullMethodName       = "/voice.chat.v1.ChatService/ApplySpaceLifecycleFence"
+	ChatService_PurgeSpace_FullMethodName                     = "/voice.chat.v1.ChatService/PurgeSpace"
+	ChatService_PrepareSpaceDeletionManifest_FullMethodName   = "/voice.chat.v1.ChatService/PrepareSpaceDeletionManifest"
+	ChatService_GetSpacePurgeManifestPage_FullMethodName      = "/voice.chat.v1.ChatService/GetSpacePurgeManifestPage"
 )
 
 // ChatServiceClient is the client API for ChatService service.
@@ -98,6 +102,14 @@ type ChatServiceClient interface {
 	// visibility after a profile disables show_read_receipts. It has no Gateway
 	// route and requires the trusted Messaging service identity.
 	ListDMReceiptVisibilityTargets(ctx context.Context, in *ListDMReceiptVisibilityTargetsRequest, opts ...grpc.CallOption) (*ListDMReceiptVisibilityTargetsResponse, error)
+	// @voice.security=protected;callers=service:space
+	ApplySpaceLifecycleFence(ctx context.Context, in *ApplySpaceLifecycleFenceRequest, opts ...grpc.CallOption) (*ApplySpaceLifecycleFenceResponse, error)
+	// @voice.security=protected;callers=service:space
+	PurgeSpace(ctx context.Context, in *PurgeSpaceRequest, opts ...grpc.CallOption) (*PurgeSpaceResponse, error)
+	// @voice.security=protected;callers=service:space
+	PrepareSpaceDeletionManifest(ctx context.Context, in *PrepareSpaceDeletionManifestRequest, opts ...grpc.CallOption) (*PrepareSpaceDeletionManifestResponse, error)
+	// @voice.security=protected;callers=service:space,service:messaging,service:search,service:bot,service:notification
+	GetSpacePurgeManifestPage(ctx context.Context, in *GetSpacePurgeManifestPageRequest, opts ...grpc.CallOption) (*GetSpacePurgeManifestPageResponse, error)
 }
 
 type chatServiceClient struct {
@@ -438,6 +450,46 @@ func (c *chatServiceClient) ListDMReceiptVisibilityTargets(ctx context.Context, 
 	return out, nil
 }
 
+func (c *chatServiceClient) ApplySpaceLifecycleFence(ctx context.Context, in *ApplySpaceLifecycleFenceRequest, opts ...grpc.CallOption) (*ApplySpaceLifecycleFenceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplySpaceLifecycleFenceResponse)
+	err := c.cc.Invoke(ctx, ChatService_ApplySpaceLifecycleFence_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) PurgeSpace(ctx context.Context, in *PurgeSpaceRequest, opts ...grpc.CallOption) (*PurgeSpaceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PurgeSpaceResponse)
+	err := c.cc.Invoke(ctx, ChatService_PurgeSpace_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) PrepareSpaceDeletionManifest(ctx context.Context, in *PrepareSpaceDeletionManifestRequest, opts ...grpc.CallOption) (*PrepareSpaceDeletionManifestResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PrepareSpaceDeletionManifestResponse)
+	err := c.cc.Invoke(ctx, ChatService_PrepareSpaceDeletionManifest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) GetSpacePurgeManifestPage(ctx context.Context, in *GetSpacePurgeManifestPageRequest, opts ...grpc.CallOption) (*GetSpacePurgeManifestPageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSpacePurgeManifestPageResponse)
+	err := c.cc.Invoke(ctx, ChatService_GetSpacePurgeManifestPage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ChatServiceServer is the server API for ChatService service.
 // All implementations must embed UnimplementedChatServiceServer
 // for forward compatibility.
@@ -482,6 +534,14 @@ type ChatServiceServer interface {
 	// visibility after a profile disables show_read_receipts. It has no Gateway
 	// route and requires the trusted Messaging service identity.
 	ListDMReceiptVisibilityTargets(context.Context, *ListDMReceiptVisibilityTargetsRequest) (*ListDMReceiptVisibilityTargetsResponse, error)
+	// @voice.security=protected;callers=service:space
+	ApplySpaceLifecycleFence(context.Context, *ApplySpaceLifecycleFenceRequest) (*ApplySpaceLifecycleFenceResponse, error)
+	// @voice.security=protected;callers=service:space
+	PurgeSpace(context.Context, *PurgeSpaceRequest) (*PurgeSpaceResponse, error)
+	// @voice.security=protected;callers=service:space
+	PrepareSpaceDeletionManifest(context.Context, *PrepareSpaceDeletionManifestRequest) (*PrepareSpaceDeletionManifestResponse, error)
+	// @voice.security=protected;callers=service:space,service:messaging,service:search,service:bot,service:notification
+	GetSpacePurgeManifestPage(context.Context, *GetSpacePurgeManifestPageRequest) (*GetSpacePurgeManifestPageResponse, error)
 	mustEmbedUnimplementedChatServiceServer()
 }
 
@@ -590,6 +650,18 @@ func (UnimplementedChatServiceServer) DisableChatE2E(context.Context, *DisableCh
 }
 func (UnimplementedChatServiceServer) ListDMReceiptVisibilityTargets(context.Context, *ListDMReceiptVisibilityTargetsRequest) (*ListDMReceiptVisibilityTargetsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListDMReceiptVisibilityTargets not implemented")
+}
+func (UnimplementedChatServiceServer) ApplySpaceLifecycleFence(context.Context, *ApplySpaceLifecycleFenceRequest) (*ApplySpaceLifecycleFenceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApplySpaceLifecycleFence not implemented")
+}
+func (UnimplementedChatServiceServer) PurgeSpace(context.Context, *PurgeSpaceRequest) (*PurgeSpaceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PurgeSpace not implemented")
+}
+func (UnimplementedChatServiceServer) PrepareSpaceDeletionManifest(context.Context, *PrepareSpaceDeletionManifestRequest) (*PrepareSpaceDeletionManifestResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PrepareSpaceDeletionManifest not implemented")
+}
+func (UnimplementedChatServiceServer) GetSpacePurgeManifestPage(context.Context, *GetSpacePurgeManifestPageRequest) (*GetSpacePurgeManifestPageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSpacePurgeManifestPage not implemented")
 }
 func (UnimplementedChatServiceServer) mustEmbedUnimplementedChatServiceServer() {}
 func (UnimplementedChatServiceServer) testEmbeddedByValue()                     {}
@@ -1206,6 +1278,78 @@ func _ChatService_ListDMReceiptVisibilityTargets_Handler(srv interface{}, ctx co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChatService_ApplySpaceLifecycleFence_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplySpaceLifecycleFenceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).ApplySpaceLifecycleFence(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_ApplySpaceLifecycleFence_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).ApplySpaceLifecycleFence(ctx, req.(*ApplySpaceLifecycleFenceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_PurgeSpace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PurgeSpaceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).PurgeSpace(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_PurgeSpace_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).PurgeSpace(ctx, req.(*PurgeSpaceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_PrepareSpaceDeletionManifest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PrepareSpaceDeletionManifestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).PrepareSpaceDeletionManifest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_PrepareSpaceDeletionManifest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).PrepareSpaceDeletionManifest(ctx, req.(*PrepareSpaceDeletionManifestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_GetSpacePurgeManifestPage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSpacePurgeManifestPageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).GetSpacePurgeManifestPage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_GetSpacePurgeManifestPage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).GetSpacePurgeManifestPage(ctx, req.(*GetSpacePurgeManifestPageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ChatService_ServiceDesc is the grpc.ServiceDesc for ChatService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1344,6 +1488,22 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListDMReceiptVisibilityTargets",
 			Handler:    _ChatService_ListDMReceiptVisibilityTargets_Handler,
+		},
+		{
+			MethodName: "ApplySpaceLifecycleFence",
+			Handler:    _ChatService_ApplySpaceLifecycleFence_Handler,
+		},
+		{
+			MethodName: "PurgeSpace",
+			Handler:    _ChatService_PurgeSpace_Handler,
+		},
+		{
+			MethodName: "PrepareSpaceDeletionManifest",
+			Handler:    _ChatService_PrepareSpaceDeletionManifest_Handler,
+		},
+		{
+			MethodName: "GetSpacePurgeManifestPage",
+			Handler:    _ChatService_GetSpacePurgeManifestPage_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

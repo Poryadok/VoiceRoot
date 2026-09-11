@@ -5,6 +5,8 @@ package voice.space.v1;
 import "google/protobuf/timestamp.proto";
 import "voice/chat/v1/chat.proto";
 import "voice/common/v1/common.proto";
+import "voice/common/v1/space_lifecycle.proto";
+import "voice/file/v1/file.proto";
 
 option go_package = "voice.app/voice/space/v1;spacev1";
 
@@ -14,6 +16,7 @@ service SpaceService {
   rpc UpdateSpace(UpdateSpaceRequest) returns (UpdateSpaceResponse);
   // Space-level matchmaking settings (mm_config jsonb; roadmap П.1).
   rpc UpdateSpaceMmConfig(UpdateSpaceMmConfigRequest) returns (UpdateSpaceMmConfigResponse);
+  // @voice.security=public_gateway;callers=service:gateway
   rpc DeleteSpace(DeleteSpaceRequest) returns (DeleteSpaceResponse);
   rpc GetSpace(GetSpaceRequest) returns (GetSpaceResponse);
   rpc ListMySpaces(ListMySpacesRequest) returns (ListMySpacesResponse);
@@ -67,6 +70,14 @@ service SpaceService {
 
   // S2S: Subscription Service syncs Space Pro entitlement cache after webhook.
   rpc SyncSpaceProSubscription(SyncSpaceProSubscriptionRequest) returns (SyncSpaceProSubscriptionResponse);
+
+  // @voice.security=public_gateway;callers=service:gateway
+  rpc RestoreSpace(voice.space.v1.RestoreSpaceRequest) returns (voice.space.v1.RestoreSpaceResponse);
+
+  // @voice.security=public_gateway;callers=service:gateway
+  // @voice.activation=held
+  // @voice.authorization=current_owner
+  rpc GetSpaceDeletionCoordinatorStatus(voice.space.v1.GetSpaceDeletionCoordinatorStatusRequest) returns (voice.space.v1.GetSpaceDeletionCoordinatorStatusResponse);
 }
 
 message Space {
@@ -85,6 +96,8 @@ message Space {
   string mm_config_json = 13;
   google.protobuf.Timestamp created_at = 14;
   google.protobuf.Timestamp updated_at = 15;
+  optional google.protobuf.Timestamp deletion_scheduled_at = 16;
+  optional google.protobuf.Timestamp purge_after = 17;
 }
 
 message CreateSpaceRequest {
@@ -114,8 +127,12 @@ message UpdateSpaceMmConfigResponse {
   Space space = 1;
 }
 
+// @voice.unknown_fields=reject
 message DeleteSpaceRequest {
   string space_id = 1;
+  string confirmation_name = 2;
+  string proof = 3;
+  string operation_id = 4;
 }
 
 message GetSpaceRequest {
@@ -402,6 +419,8 @@ message CreateSpaceResponse {
 message UpdateSpaceResponse {
   Space space = 1;
 }
+
+// @voice.unknown_fields=accept_preserve
 message DeleteSpaceResponse {}
 message GetSpaceResponse {
   Space space = 1;
@@ -521,3 +540,82 @@ message SyncSpaceProSubscriptionRequest {
 }
 
 message SyncSpaceProSubscriptionResponse {}
+
+enum SpaceDeletionPhase {
+  SPACE_DELETION_PHASE_UNSPECIFIED = 0;
+  SPACE_DELETION_PHASE_LIVE = 1;
+  SPACE_DELETION_PHASE_SCHEDULE_PENDING = 2;
+  SPACE_DELETION_PHASE_FREEZE_PENDING = 3;
+  SPACE_DELETION_PHASE_SCHEDULED = 4;
+  SPACE_DELETION_PHASE_RESTORE_DECIDED = 5;
+  SPACE_DELETION_PHASE_PURGE_DECIDED = 6;
+  SPACE_DELETION_PHASE_PURGING = 7;
+  SPACE_DELETION_PHASE_PURGED = 8;
+}
+
+enum ParticipantOperationState {
+  PARTICIPANT_OPERATION_STATE_UNSPECIFIED = 0;
+  PARTICIPANT_OPERATION_STATE_NOT_STARTED = 1;
+  PARTICIPANT_OPERATION_STATE_IN_FLIGHT = 2;
+  PARTICIPANT_OPERATION_STATE_COMPLETE = 3;
+  PARTICIPANT_OPERATION_STATE_RETRYABLE_FAILURE = 4;
+  PARTICIPANT_OPERATION_STATE_CONTRACT_MISMATCH = 5;
+}
+
+// @voice.unknown_fields=reject
+message RestoreSpaceRequest {
+  string space_id = 1;
+  string operation_id = 2;
+}
+
+// @voice.unknown_fields=accept_preserve
+message RestoreSpaceResponse {
+  voice.space.v1.Space space = 1;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message SpaceDeletionManifestSet {
+  uint32 protocol_version = 1;
+  string space_id = 2;
+  string deletion_operation_id = 3;
+  uint64 schedule_generation = 4;
+  voice.common.v1.ManifestBinding chat_manifest = 5;
+  repeated voice.file.v1.FileReferenceProducerDeclaration file_producers = 6;
+  bytes root_sha256 = 7;
+}
+
+// @voice.unknown_fields=accept_preserve
+message ParticipantCoordinatorStatus {
+  voice.common.v1.ParticipantId participant_id = 1;
+  voice.space.v1.ParticipantOperationState state = 2;
+  bytes request_sha256 = 3;
+  bytes receipt_sha256 = 4;
+  google.protobuf.Timestamp updated_at = 5;
+}
+
+// @voice.unknown_fields=accept_preserve
+message SpaceDeletionCoordinatorStatus {
+  uint32 protocol_version = 1;
+  string space_id = 2;
+  string deletion_operation_id = 3;
+  optional uint64 generation = 4;
+  voice.space.v1.SpaceDeletionPhase phase = 5;
+  voice.common.v1.ManifestBinding manifest = 6;
+  repeated voice.space.v1.ParticipantCoordinatorStatus participants = 7;
+  optional google.protobuf.Timestamp scheduled_at = 8;
+  optional google.protobuf.Timestamp purge_after = 9;
+  optional google.protobuf.Timestamp purged_at = 10;
+}
+
+// @voice.unknown_fields=reject
+message GetSpaceDeletionCoordinatorStatusRequest {
+  uint32 protocol_version = 1;
+  string space_id = 2;
+  string deletion_operation_id = 3;
+}
+
+// @voice.unknown_fields=accept_preserve
+message GetSpaceDeletionCoordinatorStatusResponse {
+  voice.space.v1.SpaceDeletionCoordinatorStatus status = 1;
+}

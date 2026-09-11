@@ -249,6 +249,24 @@ class RoleServiceClient extends $grpc.Client {
         options: options);
   }
 
+  /// @voice.security=protected;callers=service:space
+  $grpc.ResponseFuture<$0.ApplySpaceLifecycleFenceResponse>
+      applySpaceLifecycleFence(
+    $0.ApplySpaceLifecycleFenceRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$applySpaceLifecycleFence, request,
+        options: options);
+  }
+
+  /// @voice.security=protected;callers=service:space
+  $grpc.ResponseFuture<$0.RetireSpaceResponse> retireSpace(
+    $0.RetireSpaceRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$retireSpace, request, options: options);
+  }
+
   // method descriptors
 
   static final _$createRole =
@@ -394,6 +412,17 @@ class RoleServiceClient extends $grpc.Client {
       '/voice.role.v1.RoleService/CompensateOwnershipTransfer',
       ($0.CompensateOwnershipTransferRequest value) => value.writeToBuffer(),
       $0.CompensateOwnershipTransferResponse.fromBuffer);
+  static final _$applySpaceLifecycleFence = $grpc.ClientMethod<
+          $0.ApplySpaceLifecycleFenceRequest,
+          $0.ApplySpaceLifecycleFenceResponse>(
+      '/voice.role.v1.RoleService/ApplySpaceLifecycleFence',
+      ($0.ApplySpaceLifecycleFenceRequest value) => value.writeToBuffer(),
+      $0.ApplySpaceLifecycleFenceResponse.fromBuffer);
+  static final _$retireSpace =
+      $grpc.ClientMethod<$0.RetireSpaceRequest, $0.RetireSpaceResponse>(
+          '/voice.role.v1.RoleService/RetireSpace',
+          ($0.RetireSpaceRequest value) => value.writeToBuffer(),
+          $0.RetireSpaceResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.role.v1.RoleService')
@@ -635,6 +664,24 @@ abstract class RoleServiceBase extends $grpc.Service {
             $0.CompensateOwnershipTransferRequest.fromBuffer(value),
         ($0.CompensateOwnershipTransferResponse value) =>
             value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ApplySpaceLifecycleFenceRequest,
+            $0.ApplySpaceLifecycleFenceResponse>(
+        'ApplySpaceLifecycleFence',
+        applySpaceLifecycleFence_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ApplySpaceLifecycleFenceRequest.fromBuffer(value),
+        ($0.ApplySpaceLifecycleFenceResponse value) => value.writeToBuffer()));
+    $addMethod(
+        $grpc.ServiceMethod<$0.RetireSpaceRequest, $0.RetireSpaceResponse>(
+            'RetireSpace',
+            retireSpace_Pre,
+            false,
+            false,
+            ($core.List<$core.int> value) =>
+                $0.RetireSpaceRequest.fromBuffer(value),
+            ($0.RetireSpaceResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.CreateRoleResponse> createRole_Pre($grpc.ServiceCall $call,
@@ -878,4 +925,21 @@ abstract class RoleServiceBase extends $grpc.Service {
   $async.Future<$0.CompensateOwnershipTransferResponse>
       compensateOwnershipTransfer($grpc.ServiceCall call,
           $0.CompensateOwnershipTransferRequest request);
+
+  $async.Future<$0.ApplySpaceLifecycleFenceResponse>
+      applySpaceLifecycleFence_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.ApplySpaceLifecycleFenceRequest> $request) async {
+    return applySpaceLifecycleFence($call, await $request);
+  }
+
+  $async.Future<$0.ApplySpaceLifecycleFenceResponse> applySpaceLifecycleFence(
+      $grpc.ServiceCall call, $0.ApplySpaceLifecycleFenceRequest request);
+
+  $async.Future<$0.RetireSpaceResponse> retireSpace_Pre($grpc.ServiceCall $call,
+      $async.Future<$0.RetireSpaceRequest> $request) async {
+    return retireSpace($call, await $request);
+  }
+
+  $async.Future<$0.RetireSpaceResponse> retireSpace(
+      $grpc.ServiceCall call, $0.RetireSpaceRequest request);
 }

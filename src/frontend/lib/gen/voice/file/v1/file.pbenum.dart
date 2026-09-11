@@ -123,5 +123,108 @@ class FileScanOutcome extends $pb.ProtobufEnum {
   const FileScanOutcome._(super.value, super.name);
 }
 
+class FileReferenceOwnerType extends $pb.ProtobufEnum {
+  static const FileReferenceOwnerType FILE_REFERENCE_OWNER_TYPE_UNSPECIFIED =
+      FileReferenceOwnerType._(
+          0, _omitEnumNames ? '' : 'FILE_REFERENCE_OWNER_TYPE_UNSPECIFIED');
+  static const FileReferenceOwnerType FILE_REFERENCE_OWNER_TYPE_MESSAGE =
+      FileReferenceOwnerType._(
+          1, _omitEnumNames ? '' : 'FILE_REFERENCE_OWNER_TYPE_MESSAGE');
+  static const FileReferenceOwnerType FILE_REFERENCE_OWNER_TYPE_STORY =
+      FileReferenceOwnerType._(
+          2, _omitEnumNames ? '' : 'FILE_REFERENCE_OWNER_TYPE_STORY');
+  static const FileReferenceOwnerType FILE_REFERENCE_OWNER_TYPE_PROFILE_AVATAR =
+      FileReferenceOwnerType._(
+          3, _omitEnumNames ? '' : 'FILE_REFERENCE_OWNER_TYPE_PROFILE_AVATAR');
+  static const FileReferenceOwnerType FILE_REFERENCE_OWNER_TYPE_CHAT_AVATAR =
+      FileReferenceOwnerType._(
+          4, _omitEnumNames ? '' : 'FILE_REFERENCE_OWNER_TYPE_CHAT_AVATAR');
+  static const FileReferenceOwnerType FILE_REFERENCE_OWNER_TYPE_SPACE_AVATAR =
+      FileReferenceOwnerType._(
+          5, _omitEnumNames ? '' : 'FILE_REFERENCE_OWNER_TYPE_SPACE_AVATAR');
+  static const FileReferenceOwnerType FILE_REFERENCE_OWNER_TYPE_STICKER =
+      FileReferenceOwnerType._(
+          6, _omitEnumNames ? '' : 'FILE_REFERENCE_OWNER_TYPE_STICKER');
+  static const FileReferenceOwnerType FILE_REFERENCE_OWNER_TYPE_GIF_ASSET =
+      FileReferenceOwnerType._(
+          7, _omitEnumNames ? '' : 'FILE_REFERENCE_OWNER_TYPE_GIF_ASSET');
+  static const FileReferenceOwnerType FILE_REFERENCE_OWNER_TYPE_UPLOAD_SESSION =
+      FileReferenceOwnerType._(
+          8, _omitEnumNames ? '' : 'FILE_REFERENCE_OWNER_TYPE_UPLOAD_SESSION');
+
+  static const $core.List<FileReferenceOwnerType> values =
+      <FileReferenceOwnerType>[
+    FILE_REFERENCE_OWNER_TYPE_UNSPECIFIED,
+    FILE_REFERENCE_OWNER_TYPE_MESSAGE,
+    FILE_REFERENCE_OWNER_TYPE_STORY,
+    FILE_REFERENCE_OWNER_TYPE_PROFILE_AVATAR,
+    FILE_REFERENCE_OWNER_TYPE_CHAT_AVATAR,
+    FILE_REFERENCE_OWNER_TYPE_SPACE_AVATAR,
+    FILE_REFERENCE_OWNER_TYPE_STICKER,
+    FILE_REFERENCE_OWNER_TYPE_GIF_ASSET,
+    FILE_REFERENCE_OWNER_TYPE_UPLOAD_SESSION,
+  ];
+
+  static final $core.List<FileReferenceOwnerType?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 8);
+  static FileReferenceOwnerType? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const FileReferenceOwnerType._(super.value, super.name);
+}
+
+class FileReadSurface extends $pb.ProtobufEnum {
+  static const FileReadSurface FILE_READ_SURFACE_UNSPECIFIED =
+      FileReadSurface._(
+          0, _omitEnumNames ? '' : 'FILE_READ_SURFACE_UNSPECIFIED');
+  static const FileReadSurface FILE_READ_SURFACE_URL =
+      FileReadSurface._(1, _omitEnumNames ? '' : 'FILE_READ_SURFACE_URL');
+  static const FileReadSurface FILE_READ_SURFACE_METADATA =
+      FileReadSurface._(2, _omitEnumNames ? '' : 'FILE_READ_SURFACE_METADATA');
+
+  static const $core.List<FileReadSurface> values = <FileReadSurface>[
+    FILE_READ_SURFACE_UNSPECIFIED,
+    FILE_READ_SURFACE_URL,
+    FILE_READ_SURFACE_METADATA,
+  ];
+
+  static final $core.List<FileReadSurface?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 2);
+  static FileReadSurface? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const FileReadSurface._(super.value, super.name);
+}
+
+class FileReferenceProducerId extends $pb.ProtobufEnum {
+  static const FileReferenceProducerId FILE_REFERENCE_PRODUCER_ID_UNSPECIFIED =
+      FileReferenceProducerId._(
+          0, _omitEnumNames ? '' : 'FILE_REFERENCE_PRODUCER_ID_UNSPECIFIED');
+  static const FileReferenceProducerId FILE_REFERENCE_PRODUCER_ID_SPACE =
+      FileReferenceProducerId._(
+          1, _omitEnumNames ? '' : 'FILE_REFERENCE_PRODUCER_ID_SPACE');
+  static const FileReferenceProducerId FILE_REFERENCE_PRODUCER_ID_CHAT =
+      FileReferenceProducerId._(
+          2, _omitEnumNames ? '' : 'FILE_REFERENCE_PRODUCER_ID_CHAT');
+  static const FileReferenceProducerId FILE_REFERENCE_PRODUCER_ID_MESSAGING =
+      FileReferenceProducerId._(
+          3, _omitEnumNames ? '' : 'FILE_REFERENCE_PRODUCER_ID_MESSAGING');
+
+  static const $core.List<FileReferenceProducerId> values =
+      <FileReferenceProducerId>[
+    FILE_REFERENCE_PRODUCER_ID_UNSPECIFIED,
+    FILE_REFERENCE_PRODUCER_ID_SPACE,
+    FILE_REFERENCE_PRODUCER_ID_CHAT,
+    FILE_REFERENCE_PRODUCER_ID_MESSAGING,
+  ];
+
+  static final $core.List<FileReferenceProducerId?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 3);
+  static FileReferenceProducerId? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const FileReferenceProducerId._(super.value, super.name);
+}
+
 const $core.bool _omitEnumNames =
     $core.bool.fromEnvironment('protobuf.omit_enum_names');

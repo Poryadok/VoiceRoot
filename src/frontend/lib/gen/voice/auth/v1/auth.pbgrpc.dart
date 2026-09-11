@@ -229,6 +229,46 @@ class AuthServiceClient extends $grpc.Client {
     return $createUnaryCall(_$revokeSession, request, options: options);
   }
 
+  /// @voice.security=public_gateway;callers=service:gateway
+  $grpc.ResponseFuture<$0.IssueSpaceDeletionProofResponse>
+      issueSpaceDeletionProof(
+    $0.IssueSpaceDeletionProofRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$issueSpaceDeletionProof, request,
+        options: options);
+  }
+
+  /// @voice.security=protected;callers=service:space
+  $grpc.ResponseFuture<$0.ConsumeSpaceDeletionProofResponse>
+      consumeSpaceDeletionProof(
+    $0.ConsumeSpaceDeletionProofRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$consumeSpaceDeletionProof, request,
+        options: options);
+  }
+
+  /// @voice.security=protected;callers=service:space
+  $grpc.ResponseFuture<$0.GetSpaceDeletionProofReceiptResponse>
+      getSpaceDeletionProofReceipt(
+    $0.GetSpaceDeletionProofReceiptRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getSpaceDeletionProofReceipt, request,
+        options: options);
+  }
+
+  /// @voice.security=protected;callers=service:space
+  $grpc.ResponseFuture<$0.AcknowledgeSpaceDeletionProofReceiptResponse>
+      acknowledgeSpaceDeletionProofReceipt(
+    $0.AcknowledgeSpaceDeletionProofReceiptRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$acknowledgeSpaceDeletionProofReceipt, request,
+        options: options);
+  }
+
   // method descriptors
 
   static final _$issueOwnershipTransferProof = $grpc.ClientMethod<
@@ -359,6 +399,31 @@ class AuthServiceClient extends $grpc.Client {
           '/voice.auth.v1.AuthService/RevokeSession',
           ($0.RevokeSessionRequest value) => value.writeToBuffer(),
           $0.RevokeSessionResponse.fromBuffer);
+  static final _$issueSpaceDeletionProof = $grpc.ClientMethod<
+          $0.IssueSpaceDeletionProofRequest,
+          $0.IssueSpaceDeletionProofResponse>(
+      '/voice.auth.v1.AuthService/IssueSpaceDeletionProof',
+      ($0.IssueSpaceDeletionProofRequest value) => value.writeToBuffer(),
+      $0.IssueSpaceDeletionProofResponse.fromBuffer);
+  static final _$consumeSpaceDeletionProof = $grpc.ClientMethod<
+          $0.ConsumeSpaceDeletionProofRequest,
+          $0.ConsumeSpaceDeletionProofResponse>(
+      '/voice.auth.v1.AuthService/ConsumeSpaceDeletionProof',
+      ($0.ConsumeSpaceDeletionProofRequest value) => value.writeToBuffer(),
+      $0.ConsumeSpaceDeletionProofResponse.fromBuffer);
+  static final _$getSpaceDeletionProofReceipt = $grpc.ClientMethod<
+          $0.GetSpaceDeletionProofReceiptRequest,
+          $0.GetSpaceDeletionProofReceiptResponse>(
+      '/voice.auth.v1.AuthService/GetSpaceDeletionProofReceipt',
+      ($0.GetSpaceDeletionProofReceiptRequest value) => value.writeToBuffer(),
+      $0.GetSpaceDeletionProofReceiptResponse.fromBuffer);
+  static final _$acknowledgeSpaceDeletionProofReceipt = $grpc.ClientMethod<
+          $0.AcknowledgeSpaceDeletionProofReceiptRequest,
+          $0.AcknowledgeSpaceDeletionProofReceiptResponse>(
+      '/voice.auth.v1.AuthService/AcknowledgeSpaceDeletionProofReceipt',
+      ($0.AcknowledgeSpaceDeletionProofReceiptRequest value) =>
+          value.writeToBuffer(),
+      $0.AcknowledgeSpaceDeletionProofReceiptResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.auth.v1.AuthService')
@@ -580,6 +645,45 @@ abstract class AuthServiceBase extends $grpc.Service {
             ($core.List<$core.int> value) =>
                 $0.RevokeSessionRequest.fromBuffer(value),
             ($0.RevokeSessionResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.IssueSpaceDeletionProofRequest,
+            $0.IssueSpaceDeletionProofResponse>(
+        'IssueSpaceDeletionProof',
+        issueSpaceDeletionProof_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.IssueSpaceDeletionProofRequest.fromBuffer(value),
+        ($0.IssueSpaceDeletionProofResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ConsumeSpaceDeletionProofRequest,
+            $0.ConsumeSpaceDeletionProofResponse>(
+        'ConsumeSpaceDeletionProof',
+        consumeSpaceDeletionProof_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ConsumeSpaceDeletionProofRequest.fromBuffer(value),
+        ($0.ConsumeSpaceDeletionProofResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GetSpaceDeletionProofReceiptRequest,
+            $0.GetSpaceDeletionProofReceiptResponse>(
+        'GetSpaceDeletionProofReceipt',
+        getSpaceDeletionProofReceipt_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetSpaceDeletionProofReceiptRequest.fromBuffer(value),
+        ($0.GetSpaceDeletionProofReceiptResponse value) =>
+            value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<
+            $0.AcknowledgeSpaceDeletionProofReceiptRequest,
+            $0.AcknowledgeSpaceDeletionProofReceiptResponse>(
+        'AcknowledgeSpaceDeletionProofReceipt',
+        acknowledgeSpaceDeletionProofReceipt_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.AcknowledgeSpaceDeletionProofReceiptRequest.fromBuffer(value),
+        ($0.AcknowledgeSpaceDeletionProofReceiptResponse value) =>
+            value.writeToBuffer()));
   }
 
   $async.Future<$0.IssueOwnershipTransferProofResponse>
@@ -804,4 +908,46 @@ abstract class AuthServiceBase extends $grpc.Service {
 
   $async.Future<$0.RevokeSessionResponse> revokeSession(
       $grpc.ServiceCall call, $0.RevokeSessionRequest request);
+
+  $async.Future<$0.IssueSpaceDeletionProofResponse> issueSpaceDeletionProof_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.IssueSpaceDeletionProofRequest> $request) async {
+    return issueSpaceDeletionProof($call, await $request);
+  }
+
+  $async.Future<$0.IssueSpaceDeletionProofResponse> issueSpaceDeletionProof(
+      $grpc.ServiceCall call, $0.IssueSpaceDeletionProofRequest request);
+
+  $async.Future<$0.ConsumeSpaceDeletionProofResponse>
+      consumeSpaceDeletionProof_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.ConsumeSpaceDeletionProofRequest> $request) async {
+    return consumeSpaceDeletionProof($call, await $request);
+  }
+
+  $async.Future<$0.ConsumeSpaceDeletionProofResponse> consumeSpaceDeletionProof(
+      $grpc.ServiceCall call, $0.ConsumeSpaceDeletionProofRequest request);
+
+  $async.Future<$0.GetSpaceDeletionProofReceiptResponse>
+      getSpaceDeletionProofReceipt_Pre(
+          $grpc.ServiceCall $call,
+          $async.Future<$0.GetSpaceDeletionProofReceiptRequest>
+              $request) async {
+    return getSpaceDeletionProofReceipt($call, await $request);
+  }
+
+  $async.Future<$0.GetSpaceDeletionProofReceiptResponse>
+      getSpaceDeletionProofReceipt($grpc.ServiceCall call,
+          $0.GetSpaceDeletionProofReceiptRequest request);
+
+  $async.Future<$0.AcknowledgeSpaceDeletionProofReceiptResponse>
+      acknowledgeSpaceDeletionProofReceipt_Pre(
+          $grpc.ServiceCall $call,
+          $async.Future<$0.AcknowledgeSpaceDeletionProofReceiptRequest>
+              $request) async {
+    return acknowledgeSpaceDeletionProofReceipt($call, await $request);
+  }
+
+  $async.Future<$0.AcknowledgeSpaceDeletionProofReceiptResponse>
+      acknowledgeSpaceDeletionProofReceipt($grpc.ServiceCall call,
+          $0.AcknowledgeSpaceDeletionProofReceiptRequest request);
 }

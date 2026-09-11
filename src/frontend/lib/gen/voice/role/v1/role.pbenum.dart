@@ -45,5 +45,26 @@ class OwnershipTransferState extends $pb.ProtobufEnum {
   const OwnershipTransferState._(super.value, super.name);
 }
 
+class RoleRetirementState extends $pb.ProtobufEnum {
+  static const RoleRetirementState ROLE_RETIREMENT_STATE_UNSPECIFIED =
+      RoleRetirementState._(
+          0, _omitEnumNames ? '' : 'ROLE_RETIREMENT_STATE_UNSPECIFIED');
+  static const RoleRetirementState ROLE_RETIREMENT_STATE_RETIRED =
+      RoleRetirementState._(
+          1, _omitEnumNames ? '' : 'ROLE_RETIREMENT_STATE_RETIRED');
+
+  static const $core.List<RoleRetirementState> values = <RoleRetirementState>[
+    ROLE_RETIREMENT_STATE_UNSPECIFIED,
+    ROLE_RETIREMENT_STATE_RETIRED,
+  ];
+
+  static final $core.List<RoleRetirementState?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 1);
+  static RoleRetirementState? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const RoleRetirementState._(super.value, super.name);
+}
+
 const $core.bool _omitEnumNames =
     $core.bool.fromEnvironment('protobuf.omit_enum_names');

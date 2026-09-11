@@ -31,6 +31,8 @@ const (
 	SubscriptionService_HandleCloudPaymentsWebhook_FullMethodName = "/voice.subscription.v1.SubscriptionService/HandleCloudPaymentsWebhook"
 	SubscriptionService_GetBillingHistory_FullMethodName          = "/voice.subscription.v1.SubscriptionService/GetBillingHistory"
 	SubscriptionService_ApplyDowngradeProfiles_FullMethodName     = "/voice.subscription.v1.SubscriptionService/ApplyDowngradeProfiles"
+	SubscriptionService_ApplySpaceLifecycleFence_FullMethodName   = "/voice.subscription.v1.SubscriptionService/ApplySpaceLifecycleFence"
+	SubscriptionService_PurgeSpace_FullMethodName                 = "/voice.subscription.v1.SubscriptionService/PurgeSpace"
 )
 
 // SubscriptionServiceClient is the client API for SubscriptionService service.
@@ -52,6 +54,10 @@ type SubscriptionServiceClient interface {
 	GetBillingHistory(ctx context.Context, in *GetBillingHistoryRequest, opts ...grpc.CallOption) (*GetBillingHistoryResponse, error)
 	// See docs/features/multi-profile.md — keep selected profiles when downgrading from premium.
 	ApplyDowngradeProfiles(ctx context.Context, in *ApplyDowngradeProfilesRequest, opts ...grpc.CallOption) (*ApplyDowngradeProfilesResponse, error)
+	// @voice.security=protected;callers=service:space
+	ApplySpaceLifecycleFence(ctx context.Context, in *ApplySpaceLifecycleFenceRequest, opts ...grpc.CallOption) (*ApplySpaceLifecycleFenceResponse, error)
+	// @voice.security=protected;callers=service:space
+	PurgeSpace(ctx context.Context, in *PurgeSpaceRequest, opts ...grpc.CallOption) (*PurgeSpaceResponse, error)
 }
 
 type subscriptionServiceClient struct {
@@ -182,6 +188,26 @@ func (c *subscriptionServiceClient) ApplyDowngradeProfiles(ctx context.Context, 
 	return out, nil
 }
 
+func (c *subscriptionServiceClient) ApplySpaceLifecycleFence(ctx context.Context, in *ApplySpaceLifecycleFenceRequest, opts ...grpc.CallOption) (*ApplySpaceLifecycleFenceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplySpaceLifecycleFenceResponse)
+	err := c.cc.Invoke(ctx, SubscriptionService_ApplySpaceLifecycleFence_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *subscriptionServiceClient) PurgeSpace(ctx context.Context, in *PurgeSpaceRequest, opts ...grpc.CallOption) (*PurgeSpaceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PurgeSpaceResponse)
+	err := c.cc.Invoke(ctx, SubscriptionService_PurgeSpace_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SubscriptionServiceServer is the server API for SubscriptionService service.
 // All implementations must embed UnimplementedSubscriptionServiceServer
 // for forward compatibility.
@@ -201,6 +227,10 @@ type SubscriptionServiceServer interface {
 	GetBillingHistory(context.Context, *GetBillingHistoryRequest) (*GetBillingHistoryResponse, error)
 	// See docs/features/multi-profile.md — keep selected profiles when downgrading from premium.
 	ApplyDowngradeProfiles(context.Context, *ApplyDowngradeProfilesRequest) (*ApplyDowngradeProfilesResponse, error)
+	// @voice.security=protected;callers=service:space
+	ApplySpaceLifecycleFence(context.Context, *ApplySpaceLifecycleFenceRequest) (*ApplySpaceLifecycleFenceResponse, error)
+	// @voice.security=protected;callers=service:space
+	PurgeSpace(context.Context, *PurgeSpaceRequest) (*PurgeSpaceResponse, error)
 	mustEmbedUnimplementedSubscriptionServiceServer()
 }
 
@@ -246,6 +276,12 @@ func (UnimplementedSubscriptionServiceServer) GetBillingHistory(context.Context,
 }
 func (UnimplementedSubscriptionServiceServer) ApplyDowngradeProfiles(context.Context, *ApplyDowngradeProfilesRequest) (*ApplyDowngradeProfilesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ApplyDowngradeProfiles not implemented")
+}
+func (UnimplementedSubscriptionServiceServer) ApplySpaceLifecycleFence(context.Context, *ApplySpaceLifecycleFenceRequest) (*ApplySpaceLifecycleFenceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApplySpaceLifecycleFence not implemented")
+}
+func (UnimplementedSubscriptionServiceServer) PurgeSpace(context.Context, *PurgeSpaceRequest) (*PurgeSpaceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PurgeSpace not implemented")
 }
 func (UnimplementedSubscriptionServiceServer) mustEmbedUnimplementedSubscriptionServiceServer() {}
 func (UnimplementedSubscriptionServiceServer) testEmbeddedByValue()                             {}
@@ -484,6 +520,42 @@ func _SubscriptionService_ApplyDowngradeProfiles_Handler(srv interface{}, ctx co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SubscriptionService_ApplySpaceLifecycleFence_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplySpaceLifecycleFenceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SubscriptionServiceServer).ApplySpaceLifecycleFence(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SubscriptionService_ApplySpaceLifecycleFence_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SubscriptionServiceServer).ApplySpaceLifecycleFence(ctx, req.(*ApplySpaceLifecycleFenceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SubscriptionService_PurgeSpace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PurgeSpaceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SubscriptionServiceServer).PurgeSpace(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SubscriptionService_PurgeSpace_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SubscriptionServiceServer).PurgeSpace(ctx, req.(*PurgeSpaceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SubscriptionService_ServiceDesc is the grpc.ServiceDesc for SubscriptionService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -538,6 +610,14 @@ var SubscriptionService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ApplyDowngradeProfiles",
 			Handler:    _SubscriptionService_ApplyDowngradeProfiles_Handler,
+		},
+		{
+			MethodName: "ApplySpaceLifecycleFence",
+			Handler:    _SubscriptionService_ApplySpaceLifecycleFence_Handler,
+		},
+		{
+			MethodName: "PurgeSpace",
+			Handler:    _SubscriptionService_PurgeSpace_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

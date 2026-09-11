@@ -18,6 +18,7 @@ import 'package:protobuf/well_known_types/google/protobuf/timestamp.pb.dart'
     as $1;
 
 import '../../chat/v1/chat.pb.dart' as $2;
+import '../../common/v1/space_lifecycle.pb.dart' as $5;
 import '../../messaging/v1/messaging.pb.dart' as $3;
 import '../../role/v1/role.pb.dart' as $4;
 import 'bot.pbenum.dart';
@@ -5886,6 +5887,251 @@ class CompleteAutocompleteResponse extends $pb.GeneratedMessage {
   static CompleteAutocompleteResponse getDefault() => _defaultInstance ??=
       $pb.GeneratedMessage.$_defaultFor<CompleteAutocompleteResponse>(create);
   static CompleteAutocompleteResponse? _defaultInstance;
+}
+
+/// @voice.unknown_fields=reject
+/// @voice.hash=domain_separated_sha256
+class ApplySpaceLifecycleFenceRequest extends $pb.GeneratedMessage {
+  factory ApplySpaceLifecycleFenceRequest({
+    $5.SpaceLifecycleFenceRequest? fence,
+  }) {
+    final result = create();
+    if (fence != null) result.fence = fence;
+    return result;
+  }
+
+  ApplySpaceLifecycleFenceRequest._();
+
+  factory ApplySpaceLifecycleFenceRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ApplySpaceLifecycleFenceRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ApplySpaceLifecycleFenceRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.bot.v1'),
+      createEmptyInstance: create)
+    ..aOM<$5.SpaceLifecycleFenceRequest>(1, _omitFieldNames ? '' : 'fence',
+        subBuilder: $5.SpaceLifecycleFenceRequest.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplySpaceLifecycleFenceRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplySpaceLifecycleFenceRequest copyWith(
+          void Function(ApplySpaceLifecycleFenceRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as ApplySpaceLifecycleFenceRequest))
+          as ApplySpaceLifecycleFenceRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ApplySpaceLifecycleFenceRequest create() =>
+      ApplySpaceLifecycleFenceRequest._();
+  @$core.override
+  ApplySpaceLifecycleFenceRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ApplySpaceLifecycleFenceRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ApplySpaceLifecycleFenceRequest>(
+          create);
+  static ApplySpaceLifecycleFenceRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $5.SpaceLifecycleFenceRequest get fence => $_getN(0);
+  @$pb.TagNumber(1)
+  set fence($5.SpaceLifecycleFenceRequest value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasFence() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearFence() => $_clearField(1);
+  @$pb.TagNumber(1)
+  $5.SpaceLifecycleFenceRequest ensureFence() => $_ensure(0);
+}
+
+/// @voice.unknown_fields=accept_preserve
+/// @voice.hash=domain_separated_sha256
+class ApplySpaceLifecycleFenceResponse extends $pb.GeneratedMessage {
+  factory ApplySpaceLifecycleFenceResponse({
+    $5.SpaceLifecycleFenceReceipt? receipt,
+  }) {
+    final result = create();
+    if (receipt != null) result.receipt = receipt;
+    return result;
+  }
+
+  ApplySpaceLifecycleFenceResponse._();
+
+  factory ApplySpaceLifecycleFenceResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ApplySpaceLifecycleFenceResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ApplySpaceLifecycleFenceResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.bot.v1'),
+      createEmptyInstance: create)
+    ..aOM<$5.SpaceLifecycleFenceReceipt>(1, _omitFieldNames ? '' : 'receipt',
+        subBuilder: $5.SpaceLifecycleFenceReceipt.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplySpaceLifecycleFenceResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplySpaceLifecycleFenceResponse copyWith(
+          void Function(ApplySpaceLifecycleFenceResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as ApplySpaceLifecycleFenceResponse))
+          as ApplySpaceLifecycleFenceResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ApplySpaceLifecycleFenceResponse create() =>
+      ApplySpaceLifecycleFenceResponse._();
+  @$core.override
+  ApplySpaceLifecycleFenceResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ApplySpaceLifecycleFenceResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ApplySpaceLifecycleFenceResponse>(
+          create);
+  static ApplySpaceLifecycleFenceResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $5.SpaceLifecycleFenceReceipt get receipt => $_getN(0);
+  @$pb.TagNumber(1)
+  set receipt($5.SpaceLifecycleFenceReceipt value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasReceipt() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearReceipt() => $_clearField(1);
+  @$pb.TagNumber(1)
+  $5.SpaceLifecycleFenceReceipt ensureReceipt() => $_ensure(0);
+}
+
+/// @voice.unknown_fields=reject
+/// @voice.hash=domain_separated_sha256
+class PurgeSpaceRequest extends $pb.GeneratedMessage {
+  factory PurgeSpaceRequest({
+    $5.SpacePurgeRequest? purge,
+  }) {
+    final result = create();
+    if (purge != null) result.purge = purge;
+    return result;
+  }
+
+  PurgeSpaceRequest._();
+
+  factory PurgeSpaceRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory PurgeSpaceRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'PurgeSpaceRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.bot.v1'),
+      createEmptyInstance: create)
+    ..aOM<$5.SpacePurgeRequest>(1, _omitFieldNames ? '' : 'purge',
+        subBuilder: $5.SpacePurgeRequest.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PurgeSpaceRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PurgeSpaceRequest copyWith(void Function(PurgeSpaceRequest) updates) =>
+      super.copyWith((message) => updates(message as PurgeSpaceRequest))
+          as PurgeSpaceRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static PurgeSpaceRequest create() => PurgeSpaceRequest._();
+  @$core.override
+  PurgeSpaceRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static PurgeSpaceRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<PurgeSpaceRequest>(create);
+  static PurgeSpaceRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $5.SpacePurgeRequest get purge => $_getN(0);
+  @$pb.TagNumber(1)
+  set purge($5.SpacePurgeRequest value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasPurge() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearPurge() => $_clearField(1);
+  @$pb.TagNumber(1)
+  $5.SpacePurgeRequest ensurePurge() => $_ensure(0);
+}
+
+/// @voice.unknown_fields=accept_preserve
+/// @voice.hash=domain_separated_sha256
+class PurgeSpaceResponse extends $pb.GeneratedMessage {
+  factory PurgeSpaceResponse({
+    $5.SpacePurgeReceipt? receipt,
+  }) {
+    final result = create();
+    if (receipt != null) result.receipt = receipt;
+    return result;
+  }
+
+  PurgeSpaceResponse._();
+
+  factory PurgeSpaceResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory PurgeSpaceResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'PurgeSpaceResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.bot.v1'),
+      createEmptyInstance: create)
+    ..aOM<$5.SpacePurgeReceipt>(1, _omitFieldNames ? '' : 'receipt',
+        subBuilder: $5.SpacePurgeReceipt.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PurgeSpaceResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PurgeSpaceResponse copyWith(void Function(PurgeSpaceResponse) updates) =>
+      super.copyWith((message) => updates(message as PurgeSpaceResponse))
+          as PurgeSpaceResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static PurgeSpaceResponse create() => PurgeSpaceResponse._();
+  @$core.override
+  PurgeSpaceResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static PurgeSpaceResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<PurgeSpaceResponse>(create);
+  static PurgeSpaceResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $5.SpacePurgeReceipt get receipt => $_getN(0);
+  @$pb.TagNumber(1)
+  set receipt($5.SpacePurgeReceipt value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasReceipt() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearReceipt() => $_clearField(1);
+  @$pb.TagNumber(1)
+  $5.SpacePurgeReceipt ensureReceipt() => $_ensure(0);
 }
 
 const $core.bool _omitFieldNames =

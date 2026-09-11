@@ -1,0 +1,4539 @@
+{
+  "version": 2,
+  "metadata": {
+    "base_sha": "edc52d46406d97283f81dfbdfc916660f50dcc69",
+    "docs_merge_sha": "2bf7e0844bda087258886b08cb77f25606ff1387",
+    "proposal_sha256": "3877EBCDB9CA4E7308DF8CD3122112DC2A7FC4A7D3D8BD020ACD8AB12EEFE4F4",
+    "ballot_sha256": "563A79303638060B289EC438B029518E807EEBFDB63DF6E631033EE4B2B3BEB7",
+    "plan_sha256": "B6E5A242AF8420C3958B4C68764A2C3FCD98936B6161F5C194C87EDE446D1F9A",
+    "dispatch_sha256": "1855B1DC665CA9EACDE5BA4732DC12661BA8736F0D41EE712A3075723BCC60F6",
+    "hash_rule": "sha256(utf8_fully_qualified_message_name || 0x00 || deterministic_protobuf_bytes)",
+    "proof_digest_rule": "sha256(exact_utf8_proof_bytes)",
+    "compatibility_rule": "additive; preserve existing numbers; removed names and numbers are reserved",
+    "p2_generated_parity_gate": "make r23-p2-generated-parity",
+    "generated_targets_sha256": "0e250cdf2d5a9d5a2d0b48ff32dd95affabb95e9a31e683506449c0752d62da4",
+    "deterministic_vectors_sha256": "af12194346ecd704ac79ca67ac04c993fa9bca292608f01a6dbd759f18ee6656"
+  },
+  "files": [
+    {
+      "path": "voice/common/v1/space_lifecycle.proto",
+      "package": "voice.common.v1",
+      "enums": [
+        {
+          "name": "ParticipantId",
+          "exact": true,
+          "values": {
+            "PARTICIPANT_ID_UNSPECIFIED": 0,
+            "PARTICIPANT_ID_ROLE": 1,
+            "PARTICIPANT_ID_CHAT": 2,
+            "PARTICIPANT_ID_MESSAGING": 3,
+            "PARTICIPANT_ID_FILE": 4,
+            "PARTICIPANT_ID_VOICE": 5,
+            "PARTICIPANT_ID_MATCHMAKING": 6,
+            "PARTICIPANT_ID_SEARCH": 7,
+            "PARTICIPANT_ID_SUBSCRIPTION": 8,
+            "PARTICIPANT_ID_BOT": 9,
+            "PARTICIPANT_ID_NOTIFICATION": 10
+          },
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "LifecycleFenceState",
+          "exact": true,
+          "values": {
+            "LIFECYCLE_FENCE_STATE_UNSPECIFIED": 0,
+            "LIFECYCLE_FENCE_STATE_FROZEN": 1,
+            "LIFECYCLE_FENCE_STATE_LIVE": 2,
+            "LIFECYCLE_FENCE_STATE_PURGE_DECIDED": 3
+          },
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "PurgeReceiptState",
+          "exact": true,
+          "values": {
+            "PURGE_RECEIPT_STATE_UNSPECIFIED": 0,
+            "PURGE_RECEIPT_STATE_COMPLETED": 1
+          },
+          "reserved_names": [],
+          "reserved_ranges": []
+        }
+      ],
+      "messages": [
+        {
+          "name": "ManifestBinding",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "manifest_id",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "manifest_sha256",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            },
+            {
+              "name": "item_count",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "SpaceLifecycleFenceRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "space_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "deletion_operation_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "generation",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "desired_state",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_ENUM",
+              "type_name": ".voice.common.v1.LifecycleFenceState"
+            },
+            {
+              "name": "manifest",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.ManifestBinding"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "SpaceLifecycleFenceReceipt",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "forbidden_fields": [
+            "password",
+            "totp",
+            "backup_code",
+            "proof",
+            "confirmation_name"
+          ],
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "receipt_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "space_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "deletion_operation_id",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "generation",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "participant_id",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_ENUM",
+              "type_name": ".voice.common.v1.ParticipantId"
+            },
+            {
+              "name": "applied_state",
+              "number": 7,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_ENUM",
+              "type_name": ".voice.common.v1.LifecycleFenceState"
+            },
+            {
+              "name": "request_sha256",
+              "number": 8,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            },
+            {
+              "name": "manifest_sha256",
+              "number": 9,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            },
+            {
+              "name": "applied_at",
+              "number": 10,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "SpacePurgeRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "space_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "deletion_operation_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "generation",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "purge_decided_at",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp"
+            },
+            {
+              "name": "participant_id",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_ENUM",
+              "type_name": ".voice.common.v1.ParticipantId"
+            },
+            {
+              "name": "manifest",
+              "number": 7,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.ManifestBinding"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "SpacePurgeReceipt",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "forbidden_fields": [
+            "password",
+            "totp",
+            "backup_code",
+            "proof",
+            "confirmation_name"
+          ],
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "receipt_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "space_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "deletion_operation_id",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "generation",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "participant_id",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_ENUM",
+              "type_name": ".voice.common.v1.ParticipantId"
+            },
+            {
+              "name": "state",
+              "number": 7,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_ENUM",
+              "type_name": ".voice.common.v1.PurgeReceiptState"
+            },
+            {
+              "name": "request_sha256",
+              "number": 8,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            },
+            {
+              "name": "completed_at",
+              "number": 9,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        }
+      ],
+      "contract_projection_sha256": "4211ab4ff354b541e67b25c8d1a1bba545004718d32d9c5cb4f5de0194faa636",
+      "syntax": "proto3",
+      "dependencies": [
+        "google/protobuf/timestamp.proto"
+      ],
+      "options": {
+        "go_package": "voice.app/voice/common/v1;commonv1",
+        "java_package": "app.voice.common.v1",
+        "java_multiple_files": true
+      }
+    },
+    {
+      "path": "voice/auth/v1/auth.proto",
+      "package": "voice.auth.v1",
+      "enums": [
+        {
+          "name": "VerifiedFactor",
+          "exact": true,
+          "values": {
+            "VERIFIED_FACTOR_UNSPECIFIED": 0,
+            "VERIFIED_FACTOR_PASSWORD": 1,
+            "VERIFIED_FACTOR_TOTP": 2,
+            "VERIFIED_FACTOR_BACKUP_CODE": 3
+          },
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "ProofPurpose",
+          "exact": true,
+          "values": {
+            "PROOF_PURPOSE_UNSPECIFIED": 0,
+            "PROOF_PURPOSE_SPACE_DELETE": 1
+          },
+          "reserved_names": [],
+          "reserved_ranges": []
+        }
+      ],
+      "messages": [
+        {
+          "name": "IssueSpaceDeletionProofRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "fields": [
+            {
+              "name": "space_id",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "confirmation_name",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "operation_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "password",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "totp_code",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "backup_code",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "IssueSpaceDeletionProofResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "fields": [
+            {
+              "name": "proof",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "expires_at",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "ConsumeSpaceDeletionProofRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "account_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "profile_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "session_epoch",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_INT64"
+            },
+            {
+              "name": "space_id",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "operation_id",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "confirmation_name",
+              "number": 7,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "proof",
+              "number": 8,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "ConsumeSpaceDeletionProofResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.auth.v1.SpaceDeletionProofReceipt"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "SpaceDeletionProofBinding",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "account_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "profile_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "session_epoch",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_INT64"
+            },
+            {
+              "name": "space_id",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "operation_id",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "confirmation_name_sha256",
+              "number": 7,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            },
+            {
+              "name": "proof_digest_sha256",
+              "number": 8,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            },
+            {
+              "name": "verified_factors",
+              "number": 9,
+              "label": "LABEL_REPEATED",
+              "type": "TYPE_ENUM",
+              "type_name": ".voice.auth.v1.VerifiedFactor"
+            },
+            {
+              "name": "purpose",
+              "number": 10,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_ENUM",
+              "type_name": ".voice.auth.v1.ProofPurpose"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "SpaceDeletionProofReceipt",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "forbidden_fields": [
+            "password",
+            "totp_code",
+            "backup_code",
+            "proof_digest",
+            "proof"
+          ],
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "receipt_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "operation_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "binding_sha256",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            },
+            {
+              "name": "confirmation_name_sha256",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            },
+            {
+              "name": "consumed_at",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp"
+            },
+            {
+              "name": "verified_factors",
+              "number": 7,
+              "label": "LABEL_REPEATED",
+              "type": "TYPE_ENUM",
+              "type_name": ".voice.auth.v1.VerifiedFactor"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "GetSpaceDeletionProofReceiptRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "account_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "profile_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "session_epoch",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_INT64"
+            },
+            {
+              "name": "space_id",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "operation_id",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "confirmation_name_sha256",
+              "number": 7,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            },
+            {
+              "name": "proof_digest_sha256",
+              "number": 8,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "GetSpaceDeletionProofReceiptResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.auth.v1.SpaceDeletionProofReceipt"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "AcknowledgeSpaceDeletionProofReceiptRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "receipt_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "space_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "operation_id",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "receipt_sha256",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "AcknowledgeSpaceDeletionProofReceiptResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "acknowledged_at",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        }
+      ],
+      "services": [
+        {
+          "name": "AuthService",
+          "methods": [
+            {
+              "name": "IssueSpaceDeletionProof",
+              "input": ".voice.auth.v1.IssueSpaceDeletionProofRequest",
+              "output": ".voice.auth.v1.IssueSpaceDeletionProofResponse",
+              "exposure": "public_gateway",
+              "callers": [
+                "service:gateway"
+              ],
+              "no_streaming": true
+            },
+            {
+              "name": "ConsumeSpaceDeletionProof",
+              "input": ".voice.auth.v1.ConsumeSpaceDeletionProofRequest",
+              "output": ".voice.auth.v1.ConsumeSpaceDeletionProofResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space"
+              ],
+              "no_streaming": true
+            },
+            {
+              "name": "GetSpaceDeletionProofReceipt",
+              "input": ".voice.auth.v1.GetSpaceDeletionProofReceiptRequest",
+              "output": ".voice.auth.v1.GetSpaceDeletionProofReceiptResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space"
+              ],
+              "no_streaming": true
+            },
+            {
+              "name": "AcknowledgeSpaceDeletionProofReceipt",
+              "input": ".voice.auth.v1.AcknowledgeSpaceDeletionProofReceiptRequest",
+              "output": ".voice.auth.v1.AcknowledgeSpaceDeletionProofReceiptResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space"
+              ],
+              "no_streaming": true
+            }
+          ]
+        }
+      ],
+      "contract_projection_sha256": "42d32268601aaa9edf89ded0063ca6b37d386896aa1021aab6a7ea920d96a1b9",
+      "syntax": "proto3",
+      "dependencies": [
+        "google/protobuf/timestamp.proto"
+      ],
+      "options": {
+        "go_package": "voice.app/voice/auth/v1;authv1",
+        "java_package": "app.voice.auth.v1",
+        "java_multiple_files": true
+      }
+    },
+    {
+      "path": "voice/space/v1/space.proto",
+      "package": "voice.space.v1",
+      "messages": [
+        {
+          "name": "Space",
+          "exact": false,
+          "fields": [
+            {
+              "name": "deletion_scheduled_at",
+              "number": 16,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp",
+              "oneof": "_deletion_scheduled_at",
+              "proto3_optional": true
+            },
+            {
+              "name": "purge_after",
+              "number": 17,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp",
+              "oneof": "_purge_after",
+              "proto3_optional": true
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "forbidden_fields": [
+            "password",
+            "totp",
+            "backup_code",
+            "proof",
+            "confirmation_name",
+            "factor"
+          ]
+        },
+        {
+          "name": "DeleteSpaceRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "forbidden_fields": [
+            "password",
+            "totp_code",
+            "backup_code"
+          ],
+          "fields": [
+            {
+              "name": "space_id",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "confirmation_name",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "proof",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "operation_id",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "DeleteSpaceResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "forbidden_fields": [
+            "password",
+            "totp",
+            "backup_code",
+            "proof",
+            "confirmation_name"
+          ],
+          "fields": [],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "RestoreSpaceRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "fields": [
+            {
+              "name": "space_id",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "operation_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "RestoreSpaceResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "fields": [
+            {
+              "name": "space",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.space.v1.Space"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "SpaceDeletionManifestSet",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "forbidden_fields": [
+            "password",
+            "totp",
+            "backup_code",
+            "proof",
+            "confirmation_name"
+          ],
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "space_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "deletion_operation_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "schedule_generation",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "chat_manifest",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.ManifestBinding"
+            },
+            {
+              "name": "file_producers",
+              "number": 6,
+              "label": "LABEL_REPEATED",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.file.v1.FileReferenceProducerDeclaration"
+            },
+            {
+              "name": "root_sha256",
+              "number": 7,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            }
+          ]
+        },
+        {
+          "name": "ParticipantCoordinatorStatus",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "fields": [
+            {
+              "name": "participant_id",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_ENUM",
+              "type_name": ".voice.common.v1.ParticipantId"
+            },
+            {
+              "name": "state",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_ENUM",
+              "type_name": ".voice.space.v1.ParticipantOperationState"
+            },
+            {
+              "name": "request_sha256",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            },
+            {
+              "name": "receipt_sha256",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            },
+            {
+              "name": "updated_at",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp"
+            }
+          ],
+          "forbidden_fields": [
+            "owner_id",
+            "account_id",
+            "profile_id",
+            "name",
+            "proof",
+            "factor",
+            "reason",
+            "text"
+          ]
+        },
+        {
+          "name": "SpaceDeletionCoordinatorStatus",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "space_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "deletion_operation_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "generation",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64",
+              "oneof": "_generation",
+              "proto3_optional": true
+            },
+            {
+              "name": "phase",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_ENUM",
+              "type_name": ".voice.space.v1.SpaceDeletionPhase"
+            },
+            {
+              "name": "manifest",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.ManifestBinding"
+            },
+            {
+              "name": "participants",
+              "number": 7,
+              "label": "LABEL_REPEATED",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.space.v1.ParticipantCoordinatorStatus"
+            },
+            {
+              "name": "scheduled_at",
+              "number": 8,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp",
+              "oneof": "_scheduled_at",
+              "proto3_optional": true
+            },
+            {
+              "name": "purge_after",
+              "number": 9,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp",
+              "oneof": "_purge_after",
+              "proto3_optional": true
+            },
+            {
+              "name": "purged_at",
+              "number": 10,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp",
+              "oneof": "_purged_at",
+              "proto3_optional": true
+            }
+          ],
+          "forbidden_fields": [
+            "owner_id",
+            "account_id",
+            "profile_id",
+            "name",
+            "proof",
+            "factor",
+            "reason",
+            "text"
+          ]
+        },
+        {
+          "name": "GetSpaceDeletionCoordinatorStatusRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "space_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "deletion_operation_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            }
+          ],
+          "forbidden_fields": [
+            "owner_id",
+            "account_id",
+            "profile_id",
+            "name",
+            "proof",
+            "factor",
+            "reason",
+            "text"
+          ]
+        },
+        {
+          "name": "GetSpaceDeletionCoordinatorStatusResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "fields": [
+            {
+              "name": "status",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.space.v1.SpaceDeletionCoordinatorStatus"
+            }
+          ],
+          "forbidden_fields": [
+            "owner_id",
+            "account_id",
+            "profile_id",
+            "name",
+            "proof",
+            "factor",
+            "reason",
+            "text"
+          ]
+        }
+      ],
+      "services": [
+        {
+          "name": "SpaceService",
+          "methods": [
+            {
+              "name": "DeleteSpace",
+              "input": ".voice.space.v1.DeleteSpaceRequest",
+              "output": ".voice.space.v1.DeleteSpaceResponse",
+              "exposure": "public_gateway",
+              "callers": [
+                "service:gateway"
+              ],
+              "no_streaming": true
+            },
+            {
+              "name": "RestoreSpace",
+              "input": ".voice.space.v1.RestoreSpaceRequest",
+              "output": ".voice.space.v1.RestoreSpaceResponse",
+              "exposure": "public_gateway",
+              "callers": [
+                "service:gateway"
+              ],
+              "no_streaming": true
+            },
+            {
+              "name": "GetSpaceDeletionCoordinatorStatus",
+              "input": ".voice.space.v1.GetSpaceDeletionCoordinatorStatusRequest",
+              "output": ".voice.space.v1.GetSpaceDeletionCoordinatorStatusResponse",
+              "exposure": "public_gateway",
+              "callers": [
+                "service:gateway"
+              ],
+              "no_streaming": true,
+              "annotations": [
+                "@voice.activation=held",
+                "@voice.authorization=current_owner"
+              ]
+            }
+          ]
+        }
+      ],
+      "contract_projection_sha256": "c9ace599b4e409e8120a6c1009accfb6067e1ab34fff4b44da79d4c956d0a45c",
+      "syntax": "proto3",
+      "dependencies": [
+        "google/protobuf/timestamp.proto",
+        "voice/chat/v1/chat.proto",
+        "voice/common/v1/common.proto",
+        "voice/common/v1/space_lifecycle.proto",
+        "voice/file/v1/file.proto"
+      ],
+      "options": {
+        "go_package": "voice.app/voice/space/v1;spacev1"
+      },
+      "enums": [
+        {
+          "name": "SpaceDeletionPhase",
+          "exact": true,
+          "values": {
+            "SPACE_DELETION_PHASE_UNSPECIFIED": 0,
+            "SPACE_DELETION_PHASE_LIVE": 1,
+            "SPACE_DELETION_PHASE_SCHEDULE_PENDING": 2,
+            "SPACE_DELETION_PHASE_FREEZE_PENDING": 3,
+            "SPACE_DELETION_PHASE_SCHEDULED": 4,
+            "SPACE_DELETION_PHASE_RESTORE_DECIDED": 5,
+            "SPACE_DELETION_PHASE_PURGE_DECIDED": 6,
+            "SPACE_DELETION_PHASE_PURGING": 7,
+            "SPACE_DELETION_PHASE_PURGED": 8
+          },
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "ParticipantOperationState",
+          "exact": true,
+          "values": {
+            "PARTICIPANT_OPERATION_STATE_UNSPECIFIED": 0,
+            "PARTICIPANT_OPERATION_STATE_NOT_STARTED": 1,
+            "PARTICIPANT_OPERATION_STATE_IN_FLIGHT": 2,
+            "PARTICIPANT_OPERATION_STATE_COMPLETE": 3,
+            "PARTICIPANT_OPERATION_STATE_RETRYABLE_FAILURE": 4,
+            "PARTICIPANT_OPERATION_STATE_CONTRACT_MISMATCH": 5
+          },
+          "reserved_names": [],
+          "reserved_ranges": []
+        }
+      ]
+    },
+    {
+      "path": "voice/role/v1/role.proto",
+      "package": "voice.role.v1",
+      "enums": [
+        {
+          "name": "RoleRetirementState",
+          "exact": true,
+          "values": {
+            "ROLE_RETIREMENT_STATE_UNSPECIFIED": 0,
+            "ROLE_RETIREMENT_STATE_RETIRED": 1
+          },
+          "reserved_names": [],
+          "reserved_ranges": []
+        }
+      ],
+      "messages": [
+        {
+          "name": "ApplySpaceLifecycleFenceRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "fence",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpaceLifecycleFenceRequest"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "ApplySpaceLifecycleFenceResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpaceLifecycleFenceReceipt"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "RetireSpaceRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "space_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "deletion_operation_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "generation",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "purge_decided_at",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp"
+            },
+            {
+              "name": "manifest",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.ManifestBinding"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "RetireSpaceReceipt",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "forbidden_fields": [
+            "password",
+            "totp",
+            "backup_code",
+            "proof",
+            "confirmation_name"
+          ],
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "receipt_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "space_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "deletion_operation_id",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "generation",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "state",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_ENUM",
+              "type_name": ".voice.role.v1.RoleRetirementState"
+            },
+            {
+              "name": "request_sha256",
+              "number": 7,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            },
+            {
+              "name": "manifest_sha256",
+              "number": 8,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            },
+            {
+              "name": "retired_at",
+              "number": 9,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "RetireSpaceResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.role.v1.RetireSpaceReceipt"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        }
+      ],
+      "services": [
+        {
+          "name": "RoleService",
+          "methods": [
+            {
+              "name": "ApplySpaceLifecycleFence",
+              "input": ".voice.role.v1.ApplySpaceLifecycleFenceRequest",
+              "output": ".voice.role.v1.ApplySpaceLifecycleFenceResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space"
+              ],
+              "no_streaming": true
+            },
+            {
+              "name": "RetireSpace",
+              "input": ".voice.role.v1.RetireSpaceRequest",
+              "output": ".voice.role.v1.RetireSpaceResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space"
+              ],
+              "no_streaming": true
+            }
+          ]
+        }
+      ],
+      "contract_projection_sha256": "736dacfa8b1d6f37d9016137b24f580129c43de50fa876035c3a0565cc716b40",
+      "syntax": "proto3",
+      "dependencies": [
+        "google/protobuf/timestamp.proto",
+        "voice/chat/v1/chat.proto",
+        "voice/common/v1/space_lifecycle.proto"
+      ],
+      "options": {
+        "go_package": "voice.app/voice/role/v1;rolev1"
+      }
+    },
+    {
+      "path": "voice/events/v1/jetstream_events.proto",
+      "package": "voice.events.v1",
+      "messages": [
+        {
+          "name": "ChatStreamEvent",
+          "exact": false,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "event_id",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "occurred_at",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp"
+            },
+            {
+              "name": "space_deleted",
+              "number": 18,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.events.v1.SpaceDeleted",
+              "oneof": "payload"
+            },
+            {
+              "name": "space_deletion_scheduled",
+              "number": 21,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.events.v1.SpaceDeletionScheduled",
+              "oneof": "payload"
+            },
+            {
+              "name": "space_restored",
+              "number": 22,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.events.v1.SpaceRestored",
+              "oneof": "payload"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "forbidden_fields": [
+            "password",
+            "totp",
+            "backup_code",
+            "proof",
+            "confirmation_name",
+            "factor"
+          ]
+        },
+        {
+          "name": "SpaceDeletionScheduled",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "forbidden_fields": [
+            "owner",
+            "account",
+            "profile",
+            "name",
+            "proof",
+            "participant",
+            "reason"
+          ],
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "space_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "deletion_operation_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "generation",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "scheduled_at",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp"
+            },
+            {
+              "name": "purge_after",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "SpaceRestored",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "forbidden_fields": [
+            "owner",
+            "account",
+            "profile",
+            "name",
+            "proof",
+            "participant",
+            "reason"
+          ],
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "space_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "deletion_operation_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "generation",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "restored_at",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "SpaceDeleted",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "forbidden_fields": [
+            "owner",
+            "account",
+            "profile",
+            "name",
+            "proof",
+            "participant",
+            "reason"
+          ],
+          "fields": [
+            {
+              "name": "space_id",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "protocol_version",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "deletion_operation_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "generation",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "purge_decided_at",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp"
+            },
+            {
+              "name": "purged_at",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        }
+      ],
+      "contract_projection_sha256": "4f9649c1299701433b5d67e0b5f7e610692d6f41929437b72ff7346cabee6792",
+      "syntax": "proto3",
+      "dependencies": [
+        "google/protobuf/timestamp.proto"
+      ],
+      "options": {
+        "go_package": "voice.app/voice/events/v1;eventsv1"
+      }
+    },
+    {
+      "path": "voice/file/v1/file.proto",
+      "package": "voice.file.v1",
+      "enums": [
+        {
+          "name": "FileReferenceOwnerType",
+          "exact": true,
+          "values": {
+            "FILE_REFERENCE_OWNER_TYPE_UNSPECIFIED": 0,
+            "FILE_REFERENCE_OWNER_TYPE_MESSAGE": 1,
+            "FILE_REFERENCE_OWNER_TYPE_STORY": 2,
+            "FILE_REFERENCE_OWNER_TYPE_PROFILE_AVATAR": 3,
+            "FILE_REFERENCE_OWNER_TYPE_CHAT_AVATAR": 4,
+            "FILE_REFERENCE_OWNER_TYPE_SPACE_AVATAR": 5,
+            "FILE_REFERENCE_OWNER_TYPE_STICKER": 6,
+            "FILE_REFERENCE_OWNER_TYPE_GIF_ASSET": 7,
+            "FILE_REFERENCE_OWNER_TYPE_UPLOAD_SESSION": 8
+          },
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "FileReadSurface",
+          "exact": true,
+          "values": {
+            "FILE_READ_SURFACE_UNSPECIFIED": 0,
+            "FILE_READ_SURFACE_URL": 1,
+            "FILE_READ_SURFACE_METADATA": 2
+          },
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "FileReferenceProducerId",
+          "exact": true,
+          "values": {
+            "FILE_REFERENCE_PRODUCER_ID_UNSPECIFIED": 0,
+            "FILE_REFERENCE_PRODUCER_ID_SPACE": 1,
+            "FILE_REFERENCE_PRODUCER_ID_CHAT": 2,
+            "FILE_REFERENCE_PRODUCER_ID_MESSAGING": 3
+          },
+          "reserved_names": [],
+          "reserved_ranges": []
+        }
+      ],
+      "messages": [
+        {
+          "name": "FileReferenceProducerDeclaration",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "producer_id",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_ENUM",
+              "type_name": ".voice.file.v1.FileReferenceProducerId"
+            },
+            {
+              "name": "expected_total_count",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "expected_references_sha256",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "FileReferenceKey",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "file_id",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "owner_type",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_ENUM",
+              "type_name": ".voice.file.v1.FileReferenceOwnerType"
+            },
+            {
+              "name": "owner_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "subresource_id",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING",
+              "oneof": "_subresource_id",
+              "proto3_optional": true
+            },
+            {
+              "name": "scope_space_id",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING",
+              "oneof": "_scope_space_id",
+              "proto3_optional": true
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "FileAccessSelector",
+          "exact": true,
+          "unknown_fields": "reject",
+          "fields": [
+            {
+              "name": "reference",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.file.v1.FileReferenceKey",
+              "oneof": "selector"
+            },
+            {
+              "name": "capability_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING",
+              "oneof": "selector"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "FileAccessItem",
+          "exact": true,
+          "unknown_fields": "reject",
+          "fields": [
+            {
+              "name": "file_id",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "access",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.file.v1.FileAccessSelector"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "IssueFileAccessCapabilityRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "operation_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "reference",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.file.v1.FileReferenceKey"
+            },
+            {
+              "name": "subject_profile_id",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "allowed_surfaces",
+              "number": 5,
+              "label": "LABEL_REPEATED",
+              "type": "TYPE_ENUM",
+              "type_name": ".voice.file.v1.FileReadSurface"
+            },
+            {
+              "name": "expires_at",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "IssueFileAccessCapabilityResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.file.v1.IssueFileAccessCapabilityReceipt"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "IssueFileAccessCapabilityReceipt",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "receipt_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "operation_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "capability_id",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "reference",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.file.v1.FileReferenceKey"
+            },
+            {
+              "name": "subject_profile_id",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "allowed_surfaces",
+              "number": 7,
+              "label": "LABEL_REPEATED",
+              "type": "TYPE_ENUM",
+              "type_name": ".voice.file.v1.FileReadSurface"
+            },
+            {
+              "name": "expires_at",
+              "number": 8,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp"
+            },
+            {
+              "name": "request_sha256",
+              "number": 9,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            },
+            {
+              "name": "completed_at",
+              "number": 10,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "PrepareSpaceDeletionReferenceManifestRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "space_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "deletion_operation_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "schedule_generation",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "chat_manifest",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.ManifestBinding"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "PrepareSpaceDeletionReferenceManifestReceipt",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "receipt_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "space_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "deletion_operation_id",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "schedule_generation",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "applied_state",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_ENUM",
+              "type_name": ".voice.common.v1.LifecycleFenceState"
+            },
+            {
+              "name": "request_sha256",
+              "number": 7,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            },
+            {
+              "name": "applied_at",
+              "number": 8,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "PrepareSpaceDeletionReferenceManifestResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.file.v1.PrepareSpaceDeletionReferenceManifestReceipt"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "RegisterSpaceDeletionReferenceChunkRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "producer_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_ENUM",
+              "type_name": ".voice.file.v1.FileReferenceProducerId"
+            },
+            {
+              "name": "operation_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "deletion_operation_id",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "space_id",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "schedule_generation",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "chunk_index",
+              "number": 7,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "references",
+              "number": 8,
+              "label": "LABEL_REPEATED",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.file.v1.FileReferenceKey"
+            },
+            {
+              "name": "expected_total_count",
+              "number": 9,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "expected_references_sha256",
+              "number": 10,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            },
+            {
+              "name": "seals_producer",
+              "number": 11,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BOOL"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "RegisterSpaceDeletionReferenceChunkReceipt",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "receipt_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "operation_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "deletion_operation_id",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "space_id",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "schedule_generation",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "chunk_index",
+              "number": 7,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "accepted_count",
+              "number": 8,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "producer_id",
+              "number": 9,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_ENUM",
+              "type_name": ".voice.file.v1.FileReferenceProducerId"
+            },
+            {
+              "name": "expected_total_count",
+              "number": 10,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "expected_references_sha256",
+              "number": 11,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            },
+            {
+              "name": "producer_sealed",
+              "number": 12,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BOOL"
+            },
+            {
+              "name": "request_sha256",
+              "number": 13,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            },
+            {
+              "name": "completed_at",
+              "number": 14,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "RegisterSpaceDeletionReferenceChunkResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.file.v1.RegisterSpaceDeletionReferenceChunkReceipt"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "ReleaseSpaceDeletionProducerReferencesRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "deletion_operation_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "space_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "purge_generation",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "source_schedule_generation",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "producer_id",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_ENUM",
+              "type_name": ".voice.file.v1.FileReferenceProducerId"
+            },
+            {
+              "name": "expected_references_sha256",
+              "number": 7,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "ReleaseSpaceDeletionProducerReferencesReceipt",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "receipt_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "deletion_operation_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "space_id",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "purge_generation",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "source_schedule_generation",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "producer_id",
+              "number": 7,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_ENUM",
+              "type_name": ".voice.file.v1.FileReferenceProducerId"
+            },
+            {
+              "name": "released_count",
+              "number": 8,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "expected_references_sha256",
+              "number": 9,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            },
+            {
+              "name": "request_sha256",
+              "number": 10,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            },
+            {
+              "name": "completed_at",
+              "number": 11,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "ReleaseSpaceDeletionProducerReferencesResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.file.v1.ReleaseSpaceDeletionProducerReferencesReceipt"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "GetFileURLRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "fields": [
+            {
+              "name": "file_id",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "access",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.file.v1.FileAccessSelector"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "GetFileMetadataRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "fields": [
+            {
+              "name": "file_id",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "access",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.file.v1.FileAccessSelector"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "GetBulkMetadataRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "fields": [
+            {
+              "name": "file_ids",
+              "number": 1,
+              "label": "LABEL_REPEATED",
+              "type": "TYPE_STRING",
+              "deprecated": true
+            },
+            {
+              "name": "items",
+              "number": 2,
+              "label": "LABEL_REPEATED",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.file.v1.FileAccessItem"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "ApplySpaceLifecycleFenceRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "fence",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpaceLifecycleFenceRequest"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "ApplySpaceLifecycleFenceResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpaceLifecycleFenceReceipt"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "PurgeSpaceRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "purge",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpacePurgeRequest"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "PurgeSpaceResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpacePurgeReceipt"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "AcquireFileReferencesRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "operation_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "producer_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_ENUM",
+              "type_name": ".voice.file.v1.FileReferenceProducerId"
+            },
+            {
+              "name": "references",
+              "number": 4,
+              "label": "LABEL_REPEATED",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.file.v1.FileReferenceKey"
+            }
+          ]
+        },
+        {
+          "name": "AcquireFileReferencesReceipt",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "receipt_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "operation_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "producer_id",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_ENUM",
+              "type_name": ".voice.file.v1.FileReferenceProducerId"
+            },
+            {
+              "name": "reference_count",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "request_sha256",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            },
+            {
+              "name": "completed_at",
+              "number": 7,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp"
+            }
+          ],
+          "forbidden_fields": [
+            "password",
+            "totp",
+            "backup_code",
+            "proof",
+            "confirmation_name"
+          ]
+        },
+        {
+          "name": "AcquireFileReferencesResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.file.v1.AcquireFileReferencesReceipt"
+            }
+          ],
+          "forbidden_fields": [
+            "password",
+            "totp",
+            "backup_code",
+            "proof",
+            "confirmation_name"
+          ]
+        },
+        {
+          "name": "ReleaseFileReferencesRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "operation_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "producer_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_ENUM",
+              "type_name": ".voice.file.v1.FileReferenceProducerId"
+            },
+            {
+              "name": "references",
+              "number": 4,
+              "label": "LABEL_REPEATED",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.file.v1.FileReferenceKey"
+            }
+          ]
+        },
+        {
+          "name": "ReleaseFileReferencesReceipt",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "receipt_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "operation_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "producer_id",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_ENUM",
+              "type_name": ".voice.file.v1.FileReferenceProducerId"
+            },
+            {
+              "name": "released_count",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "request_sha256",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            },
+            {
+              "name": "completed_at",
+              "number": 7,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp"
+            }
+          ],
+          "forbidden_fields": [
+            "password",
+            "totp",
+            "backup_code",
+            "proof",
+            "confirmation_name"
+          ]
+        },
+        {
+          "name": "ReleaseFileReferencesResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.file.v1.ReleaseFileReferencesReceipt"
+            }
+          ],
+          "forbidden_fields": [
+            "password",
+            "totp",
+            "backup_code",
+            "proof",
+            "confirmation_name"
+          ]
+        },
+        {
+          "name": "GetSpacePurgeReceiptRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "space_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "deletion_operation_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "generation",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "purge_request_sha256",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            },
+            {
+              "name": "manifest_sha256",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            }
+          ]
+        },
+        {
+          "name": "GetSpacePurgeReceiptResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpacePurgeReceipt"
+            }
+          ],
+          "forbidden_fields": [
+            "password",
+            "totp",
+            "backup_code",
+            "proof",
+            "confirmation_name"
+          ]
+        }
+      ],
+      "services": [
+        {
+          "name": "FileService",
+          "methods": [
+            {
+              "name": "GetFileURL",
+              "input": ".voice.file.v1.GetFileURLRequest",
+              "output": ".voice.file.v1.GetFileURLResponse",
+              "exposure": "public_gateway",
+              "callers": [
+                "service:gateway"
+              ],
+              "no_streaming": true
+            },
+            {
+              "name": "GetFileMetadata",
+              "input": ".voice.file.v1.GetFileMetadataRequest",
+              "output": ".voice.file.v1.GetFileMetadataResponse",
+              "exposure": "public_gateway",
+              "callers": [
+                "service:gateway"
+              ],
+              "no_streaming": true
+            },
+            {
+              "name": "GetBulkMetadata",
+              "input": ".voice.file.v1.GetBulkMetadataRequest",
+              "output": ".voice.file.v1.GetBulkMetadataResponse",
+              "exposure": "public_gateway",
+              "callers": [
+                "service:gateway"
+              ],
+              "no_streaming": true
+            },
+            {
+              "name": "IssueFileAccessCapability",
+              "input": ".voice.file.v1.IssueFileAccessCapabilityRequest",
+              "output": ".voice.file.v1.IssueFileAccessCapabilityResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:messaging",
+                "service:chat",
+                "service:story",
+                "service:user"
+              ],
+              "no_streaming": true
+            },
+            {
+              "name": "PrepareSpaceDeletionReferenceManifest",
+              "input": ".voice.file.v1.PrepareSpaceDeletionReferenceManifestRequest",
+              "output": ".voice.file.v1.PrepareSpaceDeletionReferenceManifestResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space"
+              ],
+              "no_streaming": true
+            },
+            {
+              "name": "RegisterSpaceDeletionReferenceChunk",
+              "input": ".voice.file.v1.RegisterSpaceDeletionReferenceChunkRequest",
+              "output": ".voice.file.v1.RegisterSpaceDeletionReferenceChunkResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space",
+                "service:chat",
+                "service:messaging"
+              ],
+              "no_streaming": true
+            },
+            {
+              "name": "ReleaseSpaceDeletionProducerReferences",
+              "input": ".voice.file.v1.ReleaseSpaceDeletionProducerReferencesRequest",
+              "output": ".voice.file.v1.ReleaseSpaceDeletionProducerReferencesResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space",
+                "service:chat",
+                "service:messaging"
+              ],
+              "no_streaming": true
+            },
+            {
+              "name": "ApplySpaceLifecycleFence",
+              "input": ".voice.file.v1.ApplySpaceLifecycleFenceRequest",
+              "output": ".voice.file.v1.ApplySpaceLifecycleFenceResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space"
+              ],
+              "no_streaming": true
+            },
+            {
+              "name": "PurgeSpace",
+              "input": ".voice.file.v1.PurgeSpaceRequest",
+              "output": ".voice.file.v1.PurgeSpaceResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space"
+              ],
+              "no_streaming": true
+            },
+            {
+              "name": "AcquireFileReferences",
+              "input": ".voice.file.v1.AcquireFileReferencesRequest",
+              "output": ".voice.file.v1.AcquireFileReferencesResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space",
+                "service:chat",
+                "service:messaging"
+              ],
+              "no_streaming": true
+            },
+            {
+              "name": "ReleaseFileReferences",
+              "input": ".voice.file.v1.ReleaseFileReferencesRequest",
+              "output": ".voice.file.v1.ReleaseFileReferencesResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space",
+                "service:chat",
+                "service:messaging"
+              ],
+              "no_streaming": true
+            },
+            {
+              "name": "GetSpacePurgeReceipt",
+              "input": ".voice.file.v1.GetSpacePurgeReceiptRequest",
+              "output": ".voice.file.v1.GetSpacePurgeReceiptResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space"
+              ],
+              "no_streaming": true
+            }
+          ]
+        }
+      ],
+      "contract_projection_sha256": "3dbb4e5017c0e78e2375b7107d65b777ffe43d45259e241d8491b71fe8540437",
+      "syntax": "proto3",
+      "dependencies": [
+        "google/protobuf/timestamp.proto",
+        "voice/chat/v1/chat.proto",
+        "voice/common/v1/common.proto",
+        "voice/common/v1/space_lifecycle.proto",
+        "voice/story/v1/story.proto"
+      ],
+      "options": {
+        "go_package": "voice.app/voice/file/v1;filev1"
+      }
+    },
+    {
+      "path": "voice/chat/v1/chat.proto",
+      "package": "voice.chat.v1",
+      "messages": [
+        {
+          "name": "ApplySpaceLifecycleFenceRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "fence",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpaceLifecycleFenceRequest"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "ApplySpaceLifecycleFenceResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpaceLifecycleFenceReceipt"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "PurgeSpaceRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "purge",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpacePurgeRequest"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "PurgeSpaceResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpacePurgeReceipt"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "GetSpacePurgeManifestPageRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "space_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "deletion_operation_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "generation",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "manifest_id",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "page_token",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            }
+          ]
+        },
+        {
+          "name": "SpacePurgeManifestPage",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "forbidden_fields": [
+            "password",
+            "totp",
+            "backup_code",
+            "proof",
+            "confirmation_name"
+          ],
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "manifest",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.ManifestBinding"
+            },
+            {
+              "name": "page_index",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "item_ids",
+              "number": 4,
+              "label": "LABEL_REPEATED",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "page_sha256",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            },
+            {
+              "name": "next_page_token",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            }
+          ]
+        },
+        {
+          "name": "PrepareSpaceDeletionManifestRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "space_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "deletion_operation_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "schedule_generation",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            }
+          ]
+        },
+        {
+          "name": "PrepareSpaceDeletionManifestReceipt",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "receipt_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "space_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "deletion_operation_id",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "schedule_generation",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "applied_state",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_ENUM",
+              "type_name": ".voice.common.v1.LifecycleFenceState"
+            },
+            {
+              "name": "chat_manifest",
+              "number": 7,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.ManifestBinding"
+            },
+            {
+              "name": "request_sha256",
+              "number": 8,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            },
+            {
+              "name": "applied_at",
+              "number": 9,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp"
+            }
+          ],
+          "forbidden_fields": [
+            "password",
+            "totp",
+            "backup_code",
+            "proof",
+            "confirmation_name"
+          ]
+        },
+        {
+          "name": "PrepareSpaceDeletionManifestResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.chat.v1.PrepareSpaceDeletionManifestReceipt"
+            }
+          ],
+          "forbidden_fields": [
+            "password",
+            "totp",
+            "backup_code",
+            "proof",
+            "confirmation_name"
+          ]
+        },
+        {
+          "name": "GetSpacePurgeManifestPageResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "fields": [
+            {
+              "name": "page",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.chat.v1.SpacePurgeManifestPage"
+            }
+          ],
+          "forbidden_fields": [
+            "password",
+            "totp",
+            "backup_code",
+            "proof",
+            "confirmation_name"
+          ]
+        }
+      ],
+      "services": [
+        {
+          "name": "ChatService",
+          "methods": [
+            {
+              "name": "ApplySpaceLifecycleFence",
+              "input": ".voice.chat.v1.ApplySpaceLifecycleFenceRequest",
+              "output": ".voice.chat.v1.ApplySpaceLifecycleFenceResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space"
+              ],
+              "no_streaming": true
+            },
+            {
+              "name": "PurgeSpace",
+              "input": ".voice.chat.v1.PurgeSpaceRequest",
+              "output": ".voice.chat.v1.PurgeSpaceResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space"
+              ],
+              "no_streaming": true
+            },
+            {
+              "name": "PrepareSpaceDeletionManifest",
+              "input": ".voice.chat.v1.PrepareSpaceDeletionManifestRequest",
+              "output": ".voice.chat.v1.PrepareSpaceDeletionManifestResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space"
+              ],
+              "no_streaming": true
+            },
+            {
+              "name": "GetSpacePurgeManifestPage",
+              "input": ".voice.chat.v1.GetSpacePurgeManifestPageRequest",
+              "output": ".voice.chat.v1.GetSpacePurgeManifestPageResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space",
+                "service:messaging",
+                "service:search",
+                "service:bot",
+                "service:notification"
+              ],
+              "no_streaming": true
+            }
+          ]
+        }
+      ],
+      "contract_projection_sha256": "f965d3ac3197e9780892a45c06809c95d4e233fe9fefb394a043d2fdd78efe70",
+      "syntax": "proto3",
+      "dependencies": [
+        "google/protobuf/timestamp.proto",
+        "voice/common/v1/common.proto",
+        "voice/common/v1/space_lifecycle.proto"
+      ],
+      "options": {
+        "go_package": "voice.app/voice/chat/v1;chatv1"
+      }
+    },
+    {
+      "path": "voice/messaging/v1/messaging.proto",
+      "package": "voice.messaging.v1",
+      "messages": [
+        {
+          "name": "ApplySpaceLifecycleFenceRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "fence",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpaceLifecycleFenceRequest"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "ApplySpaceLifecycleFenceResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpaceLifecycleFenceReceipt"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "PurgeSpaceRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "purge",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpacePurgeRequest"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "PurgeSpaceResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpacePurgeReceipt"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "ImportSpacePurgeManifestPageRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "space_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "deletion_operation_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "schedule_generation",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "page",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.chat.v1.SpacePurgeManifestPage"
+            },
+            {
+              "name": "seals_manifest",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BOOL"
+            }
+          ]
+        },
+        {
+          "name": "ImportSpacePurgeManifestPageReceipt",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "receipt_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "space_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "deletion_operation_id",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "generation",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "manifest",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.ManifestBinding"
+            },
+            {
+              "name": "page_index",
+              "number": 7,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "accepted_count",
+              "number": 8,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "page_sha256",
+              "number": 9,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            },
+            {
+              "name": "manifest_sealed",
+              "number": 10,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BOOL"
+            },
+            {
+              "name": "request_sha256",
+              "number": 11,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            },
+            {
+              "name": "completed_at",
+              "number": 12,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp"
+            }
+          ],
+          "forbidden_fields": [
+            "password",
+            "totp",
+            "backup_code",
+            "proof",
+            "confirmation_name"
+          ]
+        },
+        {
+          "name": "ImportSpacePurgeManifestPageResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.messaging.v1.ImportSpacePurgeManifestPageReceipt"
+            }
+          ],
+          "forbidden_fields": [
+            "password",
+            "totp",
+            "backup_code",
+            "proof",
+            "confirmation_name"
+          ]
+        }
+      ],
+      "services": [
+        {
+          "name": "MessagingService",
+          "methods": [
+            {
+              "name": "ApplySpaceLifecycleFence",
+              "input": ".voice.messaging.v1.ApplySpaceLifecycleFenceRequest",
+              "output": ".voice.messaging.v1.ApplySpaceLifecycleFenceResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space"
+              ],
+              "no_streaming": true
+            },
+            {
+              "name": "PurgeSpace",
+              "input": ".voice.messaging.v1.PurgeSpaceRequest",
+              "output": ".voice.messaging.v1.PurgeSpaceResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space"
+              ],
+              "no_streaming": true
+            },
+            {
+              "name": "ImportSpacePurgeManifestPage",
+              "input": ".voice.messaging.v1.ImportSpacePurgeManifestPageRequest",
+              "output": ".voice.messaging.v1.ImportSpacePurgeManifestPageResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space"
+              ],
+              "no_streaming": true
+            }
+          ]
+        }
+      ],
+      "contract_projection_sha256": "1d0e75a42e20b681fe7943f255867aee3cbdecac281dbc8d02f2ddba031a53ef",
+      "syntax": "proto3",
+      "dependencies": [
+        "google/protobuf/timestamp.proto",
+        "voice/chat/v1/chat.proto",
+        "voice/common/v1/common.proto",
+        "voice/common/v1/space_lifecycle.proto"
+      ],
+      "options": {
+        "go_package": "voice.app/voice/messaging/v1;messagingv1"
+      }
+    },
+    {
+      "path": "voice/calls/v1/calls.proto",
+      "package": "voice.calls.v1",
+      "messages": [
+        {
+          "name": "ApplySpaceLifecycleFenceRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "fence",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpaceLifecycleFenceRequest"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "ApplySpaceLifecycleFenceResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpaceLifecycleFenceReceipt"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "PurgeSpaceRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "purge",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpacePurgeRequest"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "PurgeSpaceResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpacePurgeReceipt"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        }
+      ],
+      "services": [
+        {
+          "name": "VoiceService",
+          "methods": [
+            {
+              "name": "ApplySpaceLifecycleFence",
+              "input": ".voice.calls.v1.ApplySpaceLifecycleFenceRequest",
+              "output": ".voice.calls.v1.ApplySpaceLifecycleFenceResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space"
+              ],
+              "no_streaming": true
+            },
+            {
+              "name": "PurgeSpace",
+              "input": ".voice.calls.v1.PurgeSpaceRequest",
+              "output": ".voice.calls.v1.PurgeSpaceResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space"
+              ],
+              "no_streaming": true
+            }
+          ]
+        }
+      ],
+      "contract_projection_sha256": "afb2d39568791d4bf8c1f48a0eaaf4462a6f790fc24258c62dda64cf688514eb",
+      "syntax": "proto3",
+      "dependencies": [
+        "google/protobuf/timestamp.proto",
+        "voice/chat/v1/chat.proto",
+        "voice/common/v1/space_lifecycle.proto",
+        "voice/space/v1/space.proto"
+      ],
+      "options": {
+        "go_package": "voice.app/voice/calls/v1;callsv1"
+      }
+    },
+    {
+      "path": "voice/matchmaking/v1/matchmaking.proto",
+      "package": "voice.matchmaking.v1",
+      "messages": [
+        {
+          "name": "ApplySpaceLifecycleFenceRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "fence",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpaceLifecycleFenceRequest"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "ApplySpaceLifecycleFenceResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpaceLifecycleFenceReceipt"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "PurgeSpaceRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "purge",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpacePurgeRequest"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "PurgeSpaceResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpacePurgeReceipt"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        }
+      ],
+      "services": [
+        {
+          "name": "MatchmakingService",
+          "methods": [
+            {
+              "name": "ApplySpaceLifecycleFence",
+              "input": ".voice.matchmaking.v1.ApplySpaceLifecycleFenceRequest",
+              "output": ".voice.matchmaking.v1.ApplySpaceLifecycleFenceResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space"
+              ],
+              "no_streaming": true
+            },
+            {
+              "name": "PurgeSpace",
+              "input": ".voice.matchmaking.v1.PurgeSpaceRequest",
+              "output": ".voice.matchmaking.v1.PurgeSpaceResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space"
+              ],
+              "no_streaming": true
+            }
+          ]
+        }
+      ],
+      "contract_projection_sha256": "9873a97768b0740f30f059b8a6d4abceb38b1867080e36ef9799c4ae9c788011",
+      "syntax": "proto3",
+      "dependencies": [
+        "google/protobuf/timestamp.proto",
+        "voice/common/v1/common.proto",
+        "voice/common/v1/space_lifecycle.proto"
+      ],
+      "options": {
+        "go_package": "voice.app/voice/matchmaking/v1;matchmakingv1"
+      }
+    },
+    {
+      "path": "voice/search/v1/search.proto",
+      "package": "voice.search.v1",
+      "messages": [
+        {
+          "name": "ApplySpaceLifecycleFenceRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "fence",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpaceLifecycleFenceRequest"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "ApplySpaceLifecycleFenceResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpaceLifecycleFenceReceipt"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "PurgeSpaceRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "purge",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpacePurgeRequest"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "PurgeSpaceResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpacePurgeReceipt"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        }
+      ],
+      "services": [
+        {
+          "name": "SearchService",
+          "methods": [
+            {
+              "name": "ApplySpaceLifecycleFence",
+              "input": ".voice.search.v1.ApplySpaceLifecycleFenceRequest",
+              "output": ".voice.search.v1.ApplySpaceLifecycleFenceResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space"
+              ],
+              "no_streaming": true
+            },
+            {
+              "name": "PurgeSpace",
+              "input": ".voice.search.v1.PurgeSpaceRequest",
+              "output": ".voice.search.v1.PurgeSpaceResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space"
+              ],
+              "no_streaming": true
+            }
+          ]
+        }
+      ],
+      "contract_projection_sha256": "7c53b0849b7d44340c917eceac1802a510ad5d4eb61a5c9b244797a03890bb14",
+      "syntax": "proto3",
+      "dependencies": [
+        "voice/chat/v1/chat.proto",
+        "voice/common/v1/common.proto",
+        "voice/common/v1/space_lifecycle.proto"
+      ],
+      "options": {
+        "go_package": "voice.app/voice/search/v1;searchv1"
+      }
+    },
+    {
+      "path": "voice/subscription/v1/subscription.proto",
+      "package": "voice.subscription.v1",
+      "messages": [
+        {
+          "name": "ApplySpaceLifecycleFenceRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "fence",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpaceLifecycleFenceRequest"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "ApplySpaceLifecycleFenceResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpaceLifecycleFenceReceipt"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "PurgeSpaceRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "purge",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpacePurgeRequest"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "PurgeSpaceResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpacePurgeReceipt"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        }
+      ],
+      "services": [
+        {
+          "name": "SubscriptionService",
+          "methods": [
+            {
+              "name": "ApplySpaceLifecycleFence",
+              "input": ".voice.subscription.v1.ApplySpaceLifecycleFenceRequest",
+              "output": ".voice.subscription.v1.ApplySpaceLifecycleFenceResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space"
+              ],
+              "no_streaming": true
+            },
+            {
+              "name": "PurgeSpace",
+              "input": ".voice.subscription.v1.PurgeSpaceRequest",
+              "output": ".voice.subscription.v1.PurgeSpaceResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space"
+              ],
+              "no_streaming": true
+            }
+          ]
+        }
+      ],
+      "contract_projection_sha256": "21b0cc45c8c3cdf51d21943fef6d4dd72f7d95a254d2925a608d82b7fa108820",
+      "syntax": "proto3",
+      "dependencies": [
+        "google/protobuf/timestamp.proto",
+        "voice/common/v1/common.proto",
+        "voice/common/v1/space_lifecycle.proto",
+        "voice/space/v1/space.proto"
+      ],
+      "options": {
+        "go_package": "voice.app/voice/subscription/v1;subscriptionv1"
+      }
+    },
+    {
+      "path": "voice/bot/v1/bot.proto",
+      "package": "voice.bot.v1",
+      "messages": [
+        {
+          "name": "ApplySpaceLifecycleFenceRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "fence",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpaceLifecycleFenceRequest"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "ApplySpaceLifecycleFenceResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpaceLifecycleFenceReceipt"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "PurgeSpaceRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "purge",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpacePurgeRequest"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "PurgeSpaceResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpacePurgeReceipt"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        }
+      ],
+      "services": [
+        {
+          "name": "BotService",
+          "methods": [
+            {
+              "name": "ApplySpaceLifecycleFence",
+              "input": ".voice.bot.v1.ApplySpaceLifecycleFenceRequest",
+              "output": ".voice.bot.v1.ApplySpaceLifecycleFenceResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space"
+              ],
+              "no_streaming": true
+            },
+            {
+              "name": "PurgeSpace",
+              "input": ".voice.bot.v1.PurgeSpaceRequest",
+              "output": ".voice.bot.v1.PurgeSpaceResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space"
+              ],
+              "no_streaming": true
+            }
+          ]
+        }
+      ],
+      "contract_projection_sha256": "35bab9d185abc41e4cbc733968f9512807ee063525a5a5a705025e9c70e634f5",
+      "syntax": "proto3",
+      "dependencies": [
+        "google/protobuf/timestamp.proto",
+        "voice/chat/v1/chat.proto",
+        "voice/common/v1/space_lifecycle.proto",
+        "voice/messaging/v1/messaging.proto",
+        "voice/role/v1/role.proto"
+      ],
+      "options": {
+        "go_package": "voice.app/voice/bot/v1;botv1"
+      }
+    },
+    {
+      "path": "voice/notification/v1/notification.proto",
+      "package": "voice.notification.v1",
+      "messages": [
+        {
+          "name": "ApplySpaceLifecycleFenceRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "fence",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpaceLifecycleFenceRequest"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "ApplySpaceLifecycleFenceResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpaceLifecycleFenceReceipt"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "PurgeSpaceRequest",
+          "exact": true,
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "purge",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpacePurgeRequest"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
+          "name": "PurgeSpaceResponse",
+          "exact": true,
+          "unknown_fields": "accept_preserve",
+          "hashing": "domain_separated_sha256",
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpacePurgeReceipt"
+            }
+          ],
+          "reserved_names": [],
+          "reserved_ranges": []
+        }
+      ],
+      "services": [
+        {
+          "name": "NotificationService",
+          "methods": [
+            {
+              "name": "ApplySpaceLifecycleFence",
+              "input": ".voice.notification.v1.ApplySpaceLifecycleFenceRequest",
+              "output": ".voice.notification.v1.ApplySpaceLifecycleFenceResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space"
+              ],
+              "no_streaming": true
+            },
+            {
+              "name": "PurgeSpace",
+              "input": ".voice.notification.v1.PurgeSpaceRequest",
+              "output": ".voice.notification.v1.PurgeSpaceResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space"
+              ],
+              "no_streaming": true
+            }
+          ]
+        }
+      ],
+      "contract_projection_sha256": "e79d2648df081af3e394dd5817584b5712821520d78110c0f71379dc2057785c",
+      "syntax": "proto3",
+      "dependencies": [
+        "google/protobuf/timestamp.proto",
+        "voice/common/v1/space_lifecycle.proto"
+      ],
+      "options": {
+        "go_package": "voice.app/voice/notification/v1;notificationv1"
+      }
+    }
+  ],
+  "forbidden_rpc_exposure": [
+    {
+      "package": "voice.realtime.v1",
+      "allowed_r23_methods": []
+    },
+    {
+      "package": "voice.analytics.v1",
+      "allowed_r23_methods": []
+    },
+    {
+      "package": "voice.moderation.v1",
+      "allowed_r23_methods": []
+    },
+    {
+      "package": "voice.user.v1",
+      "allowed_r23_methods": []
+    },
+    {
+      "package": "voice.auth.v1",
+      "allowed_r23_methods": [
+        "IssueSpaceDeletionProof",
+        "ConsumeSpaceDeletionProof",
+        "GetSpaceDeletionProofReceipt",
+        "AcknowledgeSpaceDeletionProofReceipt"
+      ]
+    },
+    {
+      "package": "voice.story.v1",
+      "allowed_r23_methods": []
+    }
+  ]
+}

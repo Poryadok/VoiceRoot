@@ -3710,6 +3710,1106 @@ class GetOwnershipTransferReceiptResponse extends $pb.GeneratedMessage {
   $pb.PbList<$core.String> get verifiedFactors => $_getList(8);
 }
 
+/// @voice.unknown_fields=reject
+class IssueSpaceDeletionProofRequest extends $pb.GeneratedMessage {
+  factory IssueSpaceDeletionProofRequest({
+    $core.String? spaceId,
+    $core.String? confirmationName,
+    $core.String? operationId,
+    $core.String? password,
+    $core.String? totpCode,
+    $core.String? backupCode,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (confirmationName != null) result.confirmationName = confirmationName;
+    if (operationId != null) result.operationId = operationId;
+    if (password != null) result.password = password;
+    if (totpCode != null) result.totpCode = totpCode;
+    if (backupCode != null) result.backupCode = backupCode;
+    return result;
+  }
+
+  IssueSpaceDeletionProofRequest._();
+
+  factory IssueSpaceDeletionProofRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory IssueSpaceDeletionProofRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'IssueSpaceDeletionProofRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'confirmationName')
+    ..aOS(3, _omitFieldNames ? '' : 'operationId')
+    ..aOS(4, _omitFieldNames ? '' : 'password')
+    ..aOS(5, _omitFieldNames ? '' : 'totpCode')
+    ..aOS(6, _omitFieldNames ? '' : 'backupCode')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  IssueSpaceDeletionProofRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  IssueSpaceDeletionProofRequest copyWith(
+          void Function(IssueSpaceDeletionProofRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as IssueSpaceDeletionProofRequest))
+          as IssueSpaceDeletionProofRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static IssueSpaceDeletionProofRequest create() =>
+      IssueSpaceDeletionProofRequest._();
+  @$core.override
+  IssueSpaceDeletionProofRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static IssueSpaceDeletionProofRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<IssueSpaceDeletionProofRequest>(create);
+  static IssueSpaceDeletionProofRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get confirmationName => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set confirmationName($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasConfirmationName() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearConfirmationName() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get operationId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set operationId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasOperationId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearOperationId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get password => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set password($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasPassword() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearPassword() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get totpCode => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set totpCode($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasTotpCode() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearTotpCode() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get backupCode => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set backupCode($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasBackupCode() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearBackupCode() => $_clearField(6);
+}
+
+/// @voice.unknown_fields=accept_preserve
+class IssueSpaceDeletionProofResponse extends $pb.GeneratedMessage {
+  factory IssueSpaceDeletionProofResponse({
+    $core.String? proof,
+    $1.Timestamp? expiresAt,
+  }) {
+    final result = create();
+    if (proof != null) result.proof = proof;
+    if (expiresAt != null) result.expiresAt = expiresAt;
+    return result;
+  }
+
+  IssueSpaceDeletionProofResponse._();
+
+  factory IssueSpaceDeletionProofResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory IssueSpaceDeletionProofResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'IssueSpaceDeletionProofResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'proof')
+    ..aOM<$1.Timestamp>(2, _omitFieldNames ? '' : 'expiresAt',
+        subBuilder: $1.Timestamp.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  IssueSpaceDeletionProofResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  IssueSpaceDeletionProofResponse copyWith(
+          void Function(IssueSpaceDeletionProofResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as IssueSpaceDeletionProofResponse))
+          as IssueSpaceDeletionProofResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static IssueSpaceDeletionProofResponse create() =>
+      IssueSpaceDeletionProofResponse._();
+  @$core.override
+  IssueSpaceDeletionProofResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static IssueSpaceDeletionProofResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<IssueSpaceDeletionProofResponse>(
+          create);
+  static IssueSpaceDeletionProofResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get proof => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set proof($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProof() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProof() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $1.Timestamp get expiresAt => $_getN(1);
+  @$pb.TagNumber(2)
+  set expiresAt($1.Timestamp value) => $_setField(2, value);
+  @$pb.TagNumber(2)
+  $core.bool hasExpiresAt() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearExpiresAt() => $_clearField(2);
+  @$pb.TagNumber(2)
+  $1.Timestamp ensureExpiresAt() => $_ensure(1);
+}
+
+/// @voice.unknown_fields=reject
+/// @voice.hash=domain_separated_sha256
+class ConsumeSpaceDeletionProofRequest extends $pb.GeneratedMessage {
+  factory ConsumeSpaceDeletionProofRequest({
+    $core.int? protocolVersion,
+    $core.String? accountId,
+    $core.String? profileId,
+    $fixnum.Int64? sessionEpoch,
+    $core.String? spaceId,
+    $core.String? operationId,
+    $core.String? confirmationName,
+    $core.String? proof,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (accountId != null) result.accountId = accountId;
+    if (profileId != null) result.profileId = profileId;
+    if (sessionEpoch != null) result.sessionEpoch = sessionEpoch;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (operationId != null) result.operationId = operationId;
+    if (confirmationName != null) result.confirmationName = confirmationName;
+    if (proof != null) result.proof = proof;
+    return result;
+  }
+
+  ConsumeSpaceDeletionProofRequest._();
+
+  factory ConsumeSpaceDeletionProofRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ConsumeSpaceDeletionProofRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ConsumeSpaceDeletionProofRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'accountId')
+    ..aOS(3, _omitFieldNames ? '' : 'profileId')
+    ..aInt64(4, _omitFieldNames ? '' : 'sessionEpoch')
+    ..aOS(5, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(6, _omitFieldNames ? '' : 'operationId')
+    ..aOS(7, _omitFieldNames ? '' : 'confirmationName')
+    ..aOS(8, _omitFieldNames ? '' : 'proof')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ConsumeSpaceDeletionProofRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ConsumeSpaceDeletionProofRequest copyWith(
+          void Function(ConsumeSpaceDeletionProofRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as ConsumeSpaceDeletionProofRequest))
+          as ConsumeSpaceDeletionProofRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ConsumeSpaceDeletionProofRequest create() =>
+      ConsumeSpaceDeletionProofRequest._();
+  @$core.override
+  ConsumeSpaceDeletionProofRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ConsumeSpaceDeletionProofRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ConsumeSpaceDeletionProofRequest>(
+          create);
+  static ConsumeSpaceDeletionProofRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get accountId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set accountId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasAccountId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearAccountId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get profileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set profileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $fixnum.Int64 get sessionEpoch => $_getI64(3);
+  @$pb.TagNumber(4)
+  set sessionEpoch($fixnum.Int64 value) => $_setInt64(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasSessionEpoch() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearSessionEpoch() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get spaceId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set spaceId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasSpaceId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearSpaceId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get operationId => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set operationId($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasOperationId() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearOperationId() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.String get confirmationName => $_getSZ(6);
+  @$pb.TagNumber(7)
+  set confirmationName($core.String value) => $_setString(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasConfirmationName() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearConfirmationName() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $core.String get proof => $_getSZ(7);
+  @$pb.TagNumber(8)
+  set proof($core.String value) => $_setString(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasProof() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearProof() => $_clearField(8);
+}
+
+/// @voice.unknown_fields=accept_preserve
+/// @voice.hash=domain_separated_sha256
+class ConsumeSpaceDeletionProofResponse extends $pb.GeneratedMessage {
+  factory ConsumeSpaceDeletionProofResponse({
+    SpaceDeletionProofReceipt? receipt,
+  }) {
+    final result = create();
+    if (receipt != null) result.receipt = receipt;
+    return result;
+  }
+
+  ConsumeSpaceDeletionProofResponse._();
+
+  factory ConsumeSpaceDeletionProofResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ConsumeSpaceDeletionProofResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ConsumeSpaceDeletionProofResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aOM<SpaceDeletionProofReceipt>(1, _omitFieldNames ? '' : 'receipt',
+        subBuilder: SpaceDeletionProofReceipt.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ConsumeSpaceDeletionProofResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ConsumeSpaceDeletionProofResponse copyWith(
+          void Function(ConsumeSpaceDeletionProofResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as ConsumeSpaceDeletionProofResponse))
+          as ConsumeSpaceDeletionProofResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ConsumeSpaceDeletionProofResponse create() =>
+      ConsumeSpaceDeletionProofResponse._();
+  @$core.override
+  ConsumeSpaceDeletionProofResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ConsumeSpaceDeletionProofResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ConsumeSpaceDeletionProofResponse>(
+          create);
+  static ConsumeSpaceDeletionProofResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  SpaceDeletionProofReceipt get receipt => $_getN(0);
+  @$pb.TagNumber(1)
+  set receipt(SpaceDeletionProofReceipt value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasReceipt() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearReceipt() => $_clearField(1);
+  @$pb.TagNumber(1)
+  SpaceDeletionProofReceipt ensureReceipt() => $_ensure(0);
+}
+
+/// @voice.unknown_fields=reject
+/// @voice.hash=domain_separated_sha256
+class SpaceDeletionProofBinding extends $pb.GeneratedMessage {
+  factory SpaceDeletionProofBinding({
+    $core.int? protocolVersion,
+    $core.String? accountId,
+    $core.String? profileId,
+    $fixnum.Int64? sessionEpoch,
+    $core.String? spaceId,
+    $core.String? operationId,
+    $core.List<$core.int>? confirmationNameSha256,
+    $core.List<$core.int>? proofDigestSha256,
+    $core.Iterable<VerifiedFactor>? verifiedFactors,
+    ProofPurpose? purpose,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (accountId != null) result.accountId = accountId;
+    if (profileId != null) result.profileId = profileId;
+    if (sessionEpoch != null) result.sessionEpoch = sessionEpoch;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (operationId != null) result.operationId = operationId;
+    if (confirmationNameSha256 != null)
+      result.confirmationNameSha256 = confirmationNameSha256;
+    if (proofDigestSha256 != null) result.proofDigestSha256 = proofDigestSha256;
+    if (verifiedFactors != null) result.verifiedFactors.addAll(verifiedFactors);
+    if (purpose != null) result.purpose = purpose;
+    return result;
+  }
+
+  SpaceDeletionProofBinding._();
+
+  factory SpaceDeletionProofBinding.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SpaceDeletionProofBinding.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SpaceDeletionProofBinding',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'accountId')
+    ..aOS(3, _omitFieldNames ? '' : 'profileId')
+    ..aInt64(4, _omitFieldNames ? '' : 'sessionEpoch')
+    ..aOS(5, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(6, _omitFieldNames ? '' : 'operationId')
+    ..a<$core.List<$core.int>>(
+        7, _omitFieldNames ? '' : 'confirmationNameSha256', $pb.PbFieldType.OY)
+    ..a<$core.List<$core.int>>(
+        8, _omitFieldNames ? '' : 'proofDigestSha256', $pb.PbFieldType.OY)
+    ..pc<VerifiedFactor>(
+        9, _omitFieldNames ? '' : 'verifiedFactors', $pb.PbFieldType.KE,
+        valueOf: VerifiedFactor.valueOf,
+        enumValues: VerifiedFactor.values,
+        defaultEnumValue: VerifiedFactor.VERIFIED_FACTOR_UNSPECIFIED)
+    ..aE<ProofPurpose>(10, _omitFieldNames ? '' : 'purpose',
+        enumValues: ProofPurpose.values)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceDeletionProofBinding clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceDeletionProofBinding copyWith(
+          void Function(SpaceDeletionProofBinding) updates) =>
+      super.copyWith((message) => updates(message as SpaceDeletionProofBinding))
+          as SpaceDeletionProofBinding;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SpaceDeletionProofBinding create() => SpaceDeletionProofBinding._();
+  @$core.override
+  SpaceDeletionProofBinding createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SpaceDeletionProofBinding getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SpaceDeletionProofBinding>(create);
+  static SpaceDeletionProofBinding? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get accountId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set accountId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasAccountId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearAccountId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get profileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set profileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $fixnum.Int64 get sessionEpoch => $_getI64(3);
+  @$pb.TagNumber(4)
+  set sessionEpoch($fixnum.Int64 value) => $_setInt64(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasSessionEpoch() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearSessionEpoch() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get spaceId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set spaceId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasSpaceId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearSpaceId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get operationId => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set operationId($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasOperationId() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearOperationId() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.List<$core.int> get confirmationNameSha256 => $_getN(6);
+  @$pb.TagNumber(7)
+  set confirmationNameSha256($core.List<$core.int> value) =>
+      $_setBytes(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasConfirmationNameSha256() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearConfirmationNameSha256() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $core.List<$core.int> get proofDigestSha256 => $_getN(7);
+  @$pb.TagNumber(8)
+  set proofDigestSha256($core.List<$core.int> value) => $_setBytes(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasProofDigestSha256() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearProofDigestSha256() => $_clearField(8);
+
+  @$pb.TagNumber(9)
+  $pb.PbList<VerifiedFactor> get verifiedFactors => $_getList(8);
+
+  @$pb.TagNumber(10)
+  ProofPurpose get purpose => $_getN(9);
+  @$pb.TagNumber(10)
+  set purpose(ProofPurpose value) => $_setField(10, value);
+  @$pb.TagNumber(10)
+  $core.bool hasPurpose() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearPurpose() => $_clearField(10);
+}
+
+/// @voice.unknown_fields=accept_preserve
+/// @voice.hash=domain_separated_sha256
+class SpaceDeletionProofReceipt extends $pb.GeneratedMessage {
+  factory SpaceDeletionProofReceipt({
+    $core.int? protocolVersion,
+    $core.String? receiptId,
+    $core.String? operationId,
+    $core.List<$core.int>? bindingSha256,
+    $core.List<$core.int>? confirmationNameSha256,
+    $1.Timestamp? consumedAt,
+    $core.Iterable<VerifiedFactor>? verifiedFactors,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (receiptId != null) result.receiptId = receiptId;
+    if (operationId != null) result.operationId = operationId;
+    if (bindingSha256 != null) result.bindingSha256 = bindingSha256;
+    if (confirmationNameSha256 != null)
+      result.confirmationNameSha256 = confirmationNameSha256;
+    if (consumedAt != null) result.consumedAt = consumedAt;
+    if (verifiedFactors != null) result.verifiedFactors.addAll(verifiedFactors);
+    return result;
+  }
+
+  SpaceDeletionProofReceipt._();
+
+  factory SpaceDeletionProofReceipt.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SpaceDeletionProofReceipt.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SpaceDeletionProofReceipt',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'receiptId')
+    ..aOS(3, _omitFieldNames ? '' : 'operationId')
+    ..a<$core.List<$core.int>>(
+        4, _omitFieldNames ? '' : 'bindingSha256', $pb.PbFieldType.OY)
+    ..a<$core.List<$core.int>>(
+        5, _omitFieldNames ? '' : 'confirmationNameSha256', $pb.PbFieldType.OY)
+    ..aOM<$1.Timestamp>(6, _omitFieldNames ? '' : 'consumedAt',
+        subBuilder: $1.Timestamp.create)
+    ..pc<VerifiedFactor>(
+        7, _omitFieldNames ? '' : 'verifiedFactors', $pb.PbFieldType.KE,
+        valueOf: VerifiedFactor.valueOf,
+        enumValues: VerifiedFactor.values,
+        defaultEnumValue: VerifiedFactor.VERIFIED_FACTOR_UNSPECIFIED)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceDeletionProofReceipt clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceDeletionProofReceipt copyWith(
+          void Function(SpaceDeletionProofReceipt) updates) =>
+      super.copyWith((message) => updates(message as SpaceDeletionProofReceipt))
+          as SpaceDeletionProofReceipt;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SpaceDeletionProofReceipt create() => SpaceDeletionProofReceipt._();
+  @$core.override
+  SpaceDeletionProofReceipt createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SpaceDeletionProofReceipt getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SpaceDeletionProofReceipt>(create);
+  static SpaceDeletionProofReceipt? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get receiptId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set receiptId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasReceiptId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearReceiptId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get operationId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set operationId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasOperationId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearOperationId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.List<$core.int> get bindingSha256 => $_getN(3);
+  @$pb.TagNumber(4)
+  set bindingSha256($core.List<$core.int> value) => $_setBytes(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasBindingSha256() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearBindingSha256() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.List<$core.int> get confirmationNameSha256 => $_getN(4);
+  @$pb.TagNumber(5)
+  set confirmationNameSha256($core.List<$core.int> value) =>
+      $_setBytes(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasConfirmationNameSha256() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearConfirmationNameSha256() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $1.Timestamp get consumedAt => $_getN(5);
+  @$pb.TagNumber(6)
+  set consumedAt($1.Timestamp value) => $_setField(6, value);
+  @$pb.TagNumber(6)
+  $core.bool hasConsumedAt() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearConsumedAt() => $_clearField(6);
+  @$pb.TagNumber(6)
+  $1.Timestamp ensureConsumedAt() => $_ensure(5);
+
+  @$pb.TagNumber(7)
+  $pb.PbList<VerifiedFactor> get verifiedFactors => $_getList(6);
+}
+
+/// @voice.unknown_fields=reject
+/// @voice.hash=domain_separated_sha256
+class GetSpaceDeletionProofReceiptRequest extends $pb.GeneratedMessage {
+  factory GetSpaceDeletionProofReceiptRequest({
+    $core.int? protocolVersion,
+    $core.String? accountId,
+    $core.String? profileId,
+    $fixnum.Int64? sessionEpoch,
+    $core.String? spaceId,
+    $core.String? operationId,
+    $core.List<$core.int>? confirmationNameSha256,
+    $core.List<$core.int>? proofDigestSha256,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (accountId != null) result.accountId = accountId;
+    if (profileId != null) result.profileId = profileId;
+    if (sessionEpoch != null) result.sessionEpoch = sessionEpoch;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (operationId != null) result.operationId = operationId;
+    if (confirmationNameSha256 != null)
+      result.confirmationNameSha256 = confirmationNameSha256;
+    if (proofDigestSha256 != null) result.proofDigestSha256 = proofDigestSha256;
+    return result;
+  }
+
+  GetSpaceDeletionProofReceiptRequest._();
+
+  factory GetSpaceDeletionProofReceiptRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetSpaceDeletionProofReceiptRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetSpaceDeletionProofReceiptRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'accountId')
+    ..aOS(3, _omitFieldNames ? '' : 'profileId')
+    ..aInt64(4, _omitFieldNames ? '' : 'sessionEpoch')
+    ..aOS(5, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(6, _omitFieldNames ? '' : 'operationId')
+    ..a<$core.List<$core.int>>(
+        7, _omitFieldNames ? '' : 'confirmationNameSha256', $pb.PbFieldType.OY)
+    ..a<$core.List<$core.int>>(
+        8, _omitFieldNames ? '' : 'proofDigestSha256', $pb.PbFieldType.OY)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSpaceDeletionProofReceiptRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSpaceDeletionProofReceiptRequest copyWith(
+          void Function(GetSpaceDeletionProofReceiptRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as GetSpaceDeletionProofReceiptRequest))
+          as GetSpaceDeletionProofReceiptRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetSpaceDeletionProofReceiptRequest create() =>
+      GetSpaceDeletionProofReceiptRequest._();
+  @$core.override
+  GetSpaceDeletionProofReceiptRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetSpaceDeletionProofReceiptRequest getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          GetSpaceDeletionProofReceiptRequest>(create);
+  static GetSpaceDeletionProofReceiptRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get accountId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set accountId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasAccountId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearAccountId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get profileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set profileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $fixnum.Int64 get sessionEpoch => $_getI64(3);
+  @$pb.TagNumber(4)
+  set sessionEpoch($fixnum.Int64 value) => $_setInt64(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasSessionEpoch() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearSessionEpoch() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get spaceId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set spaceId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasSpaceId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearSpaceId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get operationId => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set operationId($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasOperationId() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearOperationId() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.List<$core.int> get confirmationNameSha256 => $_getN(6);
+  @$pb.TagNumber(7)
+  set confirmationNameSha256($core.List<$core.int> value) =>
+      $_setBytes(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasConfirmationNameSha256() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearConfirmationNameSha256() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $core.List<$core.int> get proofDigestSha256 => $_getN(7);
+  @$pb.TagNumber(8)
+  set proofDigestSha256($core.List<$core.int> value) => $_setBytes(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasProofDigestSha256() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearProofDigestSha256() => $_clearField(8);
+}
+
+/// @voice.unknown_fields=accept_preserve
+/// @voice.hash=domain_separated_sha256
+class GetSpaceDeletionProofReceiptResponse extends $pb.GeneratedMessage {
+  factory GetSpaceDeletionProofReceiptResponse({
+    SpaceDeletionProofReceipt? receipt,
+  }) {
+    final result = create();
+    if (receipt != null) result.receipt = receipt;
+    return result;
+  }
+
+  GetSpaceDeletionProofReceiptResponse._();
+
+  factory GetSpaceDeletionProofReceiptResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetSpaceDeletionProofReceiptResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetSpaceDeletionProofReceiptResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aOM<SpaceDeletionProofReceipt>(1, _omitFieldNames ? '' : 'receipt',
+        subBuilder: SpaceDeletionProofReceipt.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSpaceDeletionProofReceiptResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSpaceDeletionProofReceiptResponse copyWith(
+          void Function(GetSpaceDeletionProofReceiptResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as GetSpaceDeletionProofReceiptResponse))
+          as GetSpaceDeletionProofReceiptResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetSpaceDeletionProofReceiptResponse create() =>
+      GetSpaceDeletionProofReceiptResponse._();
+  @$core.override
+  GetSpaceDeletionProofReceiptResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetSpaceDeletionProofReceiptResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          GetSpaceDeletionProofReceiptResponse>(create);
+  static GetSpaceDeletionProofReceiptResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  SpaceDeletionProofReceipt get receipt => $_getN(0);
+  @$pb.TagNumber(1)
+  set receipt(SpaceDeletionProofReceipt value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasReceipt() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearReceipt() => $_clearField(1);
+  @$pb.TagNumber(1)
+  SpaceDeletionProofReceipt ensureReceipt() => $_ensure(0);
+}
+
+/// @voice.unknown_fields=reject
+/// @voice.hash=domain_separated_sha256
+class AcknowledgeSpaceDeletionProofReceiptRequest extends $pb.GeneratedMessage {
+  factory AcknowledgeSpaceDeletionProofReceiptRequest({
+    $core.int? protocolVersion,
+    $core.String? receiptId,
+    $core.String? spaceId,
+    $core.String? operationId,
+    $core.List<$core.int>? receiptSha256,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (receiptId != null) result.receiptId = receiptId;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (operationId != null) result.operationId = operationId;
+    if (receiptSha256 != null) result.receiptSha256 = receiptSha256;
+    return result;
+  }
+
+  AcknowledgeSpaceDeletionProofReceiptRequest._();
+
+  factory AcknowledgeSpaceDeletionProofReceiptRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory AcknowledgeSpaceDeletionProofReceiptRequest.fromJson(
+          $core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'AcknowledgeSpaceDeletionProofReceiptRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'receiptId')
+    ..aOS(3, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(4, _omitFieldNames ? '' : 'operationId')
+    ..a<$core.List<$core.int>>(
+        5, _omitFieldNames ? '' : 'receiptSha256', $pb.PbFieldType.OY)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AcknowledgeSpaceDeletionProofReceiptRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AcknowledgeSpaceDeletionProofReceiptRequest copyWith(
+          void Function(AcknowledgeSpaceDeletionProofReceiptRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as AcknowledgeSpaceDeletionProofReceiptRequest))
+          as AcknowledgeSpaceDeletionProofReceiptRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static AcknowledgeSpaceDeletionProofReceiptRequest create() =>
+      AcknowledgeSpaceDeletionProofReceiptRequest._();
+  @$core.override
+  AcknowledgeSpaceDeletionProofReceiptRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static AcknowledgeSpaceDeletionProofReceiptRequest getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          AcknowledgeSpaceDeletionProofReceiptRequest>(create);
+  static AcknowledgeSpaceDeletionProofReceiptRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get receiptId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set receiptId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasReceiptId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearReceiptId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get spaceId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set spaceId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasSpaceId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearSpaceId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get operationId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set operationId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasOperationId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearOperationId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.List<$core.int> get receiptSha256 => $_getN(4);
+  @$pb.TagNumber(5)
+  set receiptSha256($core.List<$core.int> value) => $_setBytes(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasReceiptSha256() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearReceiptSha256() => $_clearField(5);
+}
+
+/// @voice.unknown_fields=accept_preserve
+/// @voice.hash=domain_separated_sha256
+class AcknowledgeSpaceDeletionProofReceiptResponse
+    extends $pb.GeneratedMessage {
+  factory AcknowledgeSpaceDeletionProofReceiptResponse({
+    $1.Timestamp? acknowledgedAt,
+  }) {
+    final result = create();
+    if (acknowledgedAt != null) result.acknowledgedAt = acknowledgedAt;
+    return result;
+  }
+
+  AcknowledgeSpaceDeletionProofReceiptResponse._();
+
+  factory AcknowledgeSpaceDeletionProofReceiptResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory AcknowledgeSpaceDeletionProofReceiptResponse.fromJson(
+          $core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'AcknowledgeSpaceDeletionProofReceiptResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aOM<$1.Timestamp>(1, _omitFieldNames ? '' : 'acknowledgedAt',
+        subBuilder: $1.Timestamp.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AcknowledgeSpaceDeletionProofReceiptResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AcknowledgeSpaceDeletionProofReceiptResponse copyWith(
+          void Function(AcknowledgeSpaceDeletionProofReceiptResponse)
+              updates) =>
+      super.copyWith((message) =>
+              updates(message as AcknowledgeSpaceDeletionProofReceiptResponse))
+          as AcknowledgeSpaceDeletionProofReceiptResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static AcknowledgeSpaceDeletionProofReceiptResponse create() =>
+      AcknowledgeSpaceDeletionProofReceiptResponse._();
+  @$core.override
+  AcknowledgeSpaceDeletionProofReceiptResponse createEmptyInstance() =>
+      create();
+  @$core.pragma('dart2js:noInline')
+  static AcknowledgeSpaceDeletionProofReceiptResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          AcknowledgeSpaceDeletionProofReceiptResponse>(create);
+  static AcknowledgeSpaceDeletionProofReceiptResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $1.Timestamp get acknowledgedAt => $_getN(0);
+  @$pb.TagNumber(1)
+  set acknowledgedAt($1.Timestamp value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAcknowledgedAt() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAcknowledgedAt() => $_clearField(1);
+  @$pb.TagNumber(1)
+  $1.Timestamp ensureAcknowledgedAt() => $_ensure(0);
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =

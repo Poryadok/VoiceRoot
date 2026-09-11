@@ -28,6 +28,8 @@ const (
 	NotificationService_SendNotification_FullMethodName           = "/voice.notification.v1.NotificationService/SendNotification"
 	NotificationService_SendBulkNotification_FullMethodName       = "/voice.notification.v1.NotificationService/SendBulkNotification"
 	NotificationService_RelayNotification_FullMethodName          = "/voice.notification.v1.NotificationService/RelayNotification"
+	NotificationService_ApplySpaceLifecycleFence_FullMethodName   = "/voice.notification.v1.NotificationService/ApplySpaceLifecycleFence"
+	NotificationService_PurgeSpace_FullMethodName                 = "/voice.notification.v1.NotificationService/PurgeSpace"
 )
 
 // NotificationServiceClient is the client API for NotificationService service.
@@ -45,6 +47,10 @@ type NotificationServiceClient interface {
 	SendNotification(ctx context.Context, in *SendNotificationRequest, opts ...grpc.CallOption) (*SendNotificationResponse, error)
 	SendBulkNotification(ctx context.Context, in *SendBulkNotificationRequest, opts ...grpc.CallOption) (*SendBulkNotificationResponse, error)
 	RelayNotification(ctx context.Context, in *RelayNotificationRequest, opts ...grpc.CallOption) (*RelayNotificationResponse, error)
+	// @voice.security=protected;callers=service:space
+	ApplySpaceLifecycleFence(ctx context.Context, in *ApplySpaceLifecycleFenceRequest, opts ...grpc.CallOption) (*ApplySpaceLifecycleFenceResponse, error)
+	// @voice.security=protected;callers=service:space
+	PurgeSpace(ctx context.Context, in *PurgeSpaceRequest, opts ...grpc.CallOption) (*PurgeSpaceResponse, error)
 }
 
 type notificationServiceClient struct {
@@ -145,6 +151,26 @@ func (c *notificationServiceClient) RelayNotification(ctx context.Context, in *R
 	return out, nil
 }
 
+func (c *notificationServiceClient) ApplySpaceLifecycleFence(ctx context.Context, in *ApplySpaceLifecycleFenceRequest, opts ...grpc.CallOption) (*ApplySpaceLifecycleFenceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplySpaceLifecycleFenceResponse)
+	err := c.cc.Invoke(ctx, NotificationService_ApplySpaceLifecycleFence_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *notificationServiceClient) PurgeSpace(ctx context.Context, in *PurgeSpaceRequest, opts ...grpc.CallOption) (*PurgeSpaceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PurgeSpaceResponse)
+	err := c.cc.Invoke(ctx, NotificationService_PurgeSpace_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // NotificationServiceServer is the server API for NotificationService service.
 // All implementations must embed UnimplementedNotificationServiceServer
 // for forward compatibility.
@@ -160,6 +186,10 @@ type NotificationServiceServer interface {
 	SendNotification(context.Context, *SendNotificationRequest) (*SendNotificationResponse, error)
 	SendBulkNotification(context.Context, *SendBulkNotificationRequest) (*SendBulkNotificationResponse, error)
 	RelayNotification(context.Context, *RelayNotificationRequest) (*RelayNotificationResponse, error)
+	// @voice.security=protected;callers=service:space
+	ApplySpaceLifecycleFence(context.Context, *ApplySpaceLifecycleFenceRequest) (*ApplySpaceLifecycleFenceResponse, error)
+	// @voice.security=protected;callers=service:space
+	PurgeSpace(context.Context, *PurgeSpaceRequest) (*PurgeSpaceResponse, error)
 	mustEmbedUnimplementedNotificationServiceServer()
 }
 
@@ -196,6 +226,12 @@ func (UnimplementedNotificationServiceServer) SendBulkNotification(context.Conte
 }
 func (UnimplementedNotificationServiceServer) RelayNotification(context.Context, *RelayNotificationRequest) (*RelayNotificationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RelayNotification not implemented")
+}
+func (UnimplementedNotificationServiceServer) ApplySpaceLifecycleFence(context.Context, *ApplySpaceLifecycleFenceRequest) (*ApplySpaceLifecycleFenceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApplySpaceLifecycleFence not implemented")
+}
+func (UnimplementedNotificationServiceServer) PurgeSpace(context.Context, *PurgeSpaceRequest) (*PurgeSpaceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PurgeSpace not implemented")
 }
 func (UnimplementedNotificationServiceServer) mustEmbedUnimplementedNotificationServiceServer() {}
 func (UnimplementedNotificationServiceServer) testEmbeddedByValue()                             {}
@@ -380,6 +416,42 @@ func _NotificationService_RelayNotification_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NotificationService_ApplySpaceLifecycleFence_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplySpaceLifecycleFenceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NotificationServiceServer).ApplySpaceLifecycleFence(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NotificationService_ApplySpaceLifecycleFence_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NotificationServiceServer).ApplySpaceLifecycleFence(ctx, req.(*ApplySpaceLifecycleFenceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NotificationService_PurgeSpace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PurgeSpaceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NotificationServiceServer).PurgeSpace(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NotificationService_PurgeSpace_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NotificationServiceServer).PurgeSpace(ctx, req.(*PurgeSpaceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // NotificationService_ServiceDesc is the grpc.ServiceDesc for NotificationService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -422,6 +494,14 @@ var NotificationService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RelayNotification",
 			Handler:    _NotificationService_RelayNotification_Handler,
+		},
+		{
+			MethodName: "ApplySpaceLifecycleFence",
+			Handler:    _NotificationService_ApplySpaceLifecycleFence_Handler,
+		},
+		{
+			MethodName: "PurgeSpace",
+			Handler:    _NotificationService_PurgeSpace_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

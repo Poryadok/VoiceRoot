@@ -41,6 +41,8 @@ const (
 	VoiceService_LowerHand_FullMethodName                = "/voice.calls.v1.VoiceService/LowerHand"
 	VoiceService_GrantFloor_FullMethodName               = "/voice.calls.v1.VoiceService/GrantFloor"
 	VoiceService_RevokeFloor_FullMethodName              = "/voice.calls.v1.VoiceService/RevokeFloor"
+	VoiceService_ApplySpaceLifecycleFence_FullMethodName = "/voice.calls.v1.VoiceService/ApplySpaceLifecycleFence"
+	VoiceService_PurgeSpace_FullMethodName               = "/voice.calls.v1.VoiceService/PurgeSpace"
 )
 
 // VoiceServiceClient is the client API for VoiceService service.
@@ -72,6 +74,10 @@ type VoiceServiceClient interface {
 	LowerHand(ctx context.Context, in *LowerHandRequest, opts ...grpc.CallOption) (*LowerHandResponse, error)
 	GrantFloor(ctx context.Context, in *GrantFloorRequest, opts ...grpc.CallOption) (*GrantFloorResponse, error)
 	RevokeFloor(ctx context.Context, in *RevokeFloorRequest, opts ...grpc.CallOption) (*RevokeFloorResponse, error)
+	// @voice.security=protected;callers=service:space
+	ApplySpaceLifecycleFence(ctx context.Context, in *ApplySpaceLifecycleFenceRequest, opts ...grpc.CallOption) (*ApplySpaceLifecycleFenceResponse, error)
+	// @voice.security=protected;callers=service:space
+	PurgeSpace(ctx context.Context, in *PurgeSpaceRequest, opts ...grpc.CallOption) (*PurgeSpaceResponse, error)
 }
 
 type voiceServiceClient struct {
@@ -302,6 +308,26 @@ func (c *voiceServiceClient) RevokeFloor(ctx context.Context, in *RevokeFloorReq
 	return out, nil
 }
 
+func (c *voiceServiceClient) ApplySpaceLifecycleFence(ctx context.Context, in *ApplySpaceLifecycleFenceRequest, opts ...grpc.CallOption) (*ApplySpaceLifecycleFenceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplySpaceLifecycleFenceResponse)
+	err := c.cc.Invoke(ctx, VoiceService_ApplySpaceLifecycleFence_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *voiceServiceClient) PurgeSpace(ctx context.Context, in *PurgeSpaceRequest, opts ...grpc.CallOption) (*PurgeSpaceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PurgeSpaceResponse)
+	err := c.cc.Invoke(ctx, VoiceService_PurgeSpace_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // VoiceServiceServer is the server API for VoiceService service.
 // All implementations must embed UnimplementedVoiceServiceServer
 // for forward compatibility.
@@ -331,6 +357,10 @@ type VoiceServiceServer interface {
 	LowerHand(context.Context, *LowerHandRequest) (*LowerHandResponse, error)
 	GrantFloor(context.Context, *GrantFloorRequest) (*GrantFloorResponse, error)
 	RevokeFloor(context.Context, *RevokeFloorRequest) (*RevokeFloorResponse, error)
+	// @voice.security=protected;callers=service:space
+	ApplySpaceLifecycleFence(context.Context, *ApplySpaceLifecycleFenceRequest) (*ApplySpaceLifecycleFenceResponse, error)
+	// @voice.security=protected;callers=service:space
+	PurgeSpace(context.Context, *PurgeSpaceRequest) (*PurgeSpaceResponse, error)
 	mustEmbedUnimplementedVoiceServiceServer()
 }
 
@@ -406,6 +436,12 @@ func (UnimplementedVoiceServiceServer) GrantFloor(context.Context, *GrantFloorRe
 }
 func (UnimplementedVoiceServiceServer) RevokeFloor(context.Context, *RevokeFloorRequest) (*RevokeFloorResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RevokeFloor not implemented")
+}
+func (UnimplementedVoiceServiceServer) ApplySpaceLifecycleFence(context.Context, *ApplySpaceLifecycleFenceRequest) (*ApplySpaceLifecycleFenceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApplySpaceLifecycleFence not implemented")
+}
+func (UnimplementedVoiceServiceServer) PurgeSpace(context.Context, *PurgeSpaceRequest) (*PurgeSpaceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PurgeSpace not implemented")
 }
 func (UnimplementedVoiceServiceServer) mustEmbedUnimplementedVoiceServiceServer() {}
 func (UnimplementedVoiceServiceServer) testEmbeddedByValue()                      {}
@@ -824,6 +860,42 @@ func _VoiceService_RevokeFloor_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _VoiceService_ApplySpaceLifecycleFence_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplySpaceLifecycleFenceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VoiceServiceServer).ApplySpaceLifecycleFence(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VoiceService_ApplySpaceLifecycleFence_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VoiceServiceServer).ApplySpaceLifecycleFence(ctx, req.(*ApplySpaceLifecycleFenceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VoiceService_PurgeSpace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PurgeSpaceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VoiceServiceServer).PurgeSpace(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VoiceService_PurgeSpace_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VoiceServiceServer).PurgeSpace(ctx, req.(*PurgeSpaceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // VoiceService_ServiceDesc is the grpc.ServiceDesc for VoiceService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -918,6 +990,14 @@ var VoiceService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RevokeFloor",
 			Handler:    _VoiceService_RevokeFloor_Handler,
+		},
+		{
+			MethodName: "ApplySpaceLifecycleFence",
+			Handler:    _VoiceService_ApplySpaceLifecycleFence_Handler,
+		},
+		{
+			MethodName: "PurgeSpace",
+			Handler:    _VoiceService_PurgeSpace_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

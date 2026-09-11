@@ -32,7 +32,7 @@ GO_TEST_TARGETS := $(GO_SERVICES:%=go-test-%)
 GO_TEST_SHORT_TARGETS := $(GO_SERVICES:%=go-test-short-%)
 GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 
-.PHONY: buf-lint buf-format buf-breaking buf-generate buf-generate-dart buf-dart-check buf-go-pb-check check-auth-proto-sync sync-pb-from-gen buf-generate-all compose-up compose-app-up compose-down compose-logs-collect compose-observability-up \
+.PHONY: buf-lint buf-format buf-breaking buf-generate buf-generate-dart buf-dart-check buf-go-pb-check check-auth-proto-sync r23-contract-ci r23-p2-generated-parity sync-pb-from-gen buf-generate-all compose-up compose-app-up compose-down compose-logs-collect compose-observability-up \
 	compose-migrate-all compose-migrate-e2e compose-migrate-bot compose-migrate-story compose-migrate-voice compose-e2e-smoke compose-e2e-live compose-e2e-full compose-e2e-voice-live compose-file-attachment-restart-proof compose-a1-multi-account-proof compose-a1-flutter-profile-handoff \
 	build-all build-all-breaking check-toolchain compose-config-ci buf-ci backend-test-ci backend-test-ci-short backend-image-ci \
 	gateway-test-ci gateway-image-ci go-test-pkg go-mod-tidy-all auth-test-ci auth-image-ci buf-breaking-ci \
@@ -79,6 +79,18 @@ buf-go-pb-check:
 # CI: Auth Maven proto copy must stay wire-equivalent to protos/voice/auth/v1/auth.proto.
 check-auth-proto-sync:
 	$(BASH) "$(ROOT)/scripts/ci/check-auth-proto-sync.sh"
+
+# R23/P1 descriptor, deterministic-vector, negative-exposure, and generated-target contract oracle.
+r23-contract-ci:
+	cd "$(ROOT)/protos/voice/r23_contract_test" && go test -count=1 -v ./...
+
+# R23/P2 atomic generated-output acceptance. Existing generators remain the source of truth.
+r23-p2-generated-parity: r23-contract-ci buf-go-pb-check check-auth-proto-sync buf-dart-check $(FLUTTER_SQLITE_PREFETCH)
+	cd "$(ROOT)/src/backend/auth" && mvn -B -DskipTests compile
+	$(BASH) -c 'cd "$(ROOT)/protos/voice/r23_contract_test" && R23_CHECK_UNCOMMITTED_JAVA=1 go test -run "^(TestR23GeneratedTargets|TestR23GeneratedRuntimeConsumers)$$" -count=1 -v'
+	$(BASH) -c 'set -e; for module in chat file messaging role user voice; do (cd "$(ROOT)/src/backend/$$module" && go test -run "^$$" ./...); done'
+	cd "$(ROOT)/src/frontend" && flutter analyze lib/gen
+	cd "$(ROOT)/src/frontend" && flutter test test/spaces_client_tree_test.dart test/shared_media_client_test.dart test/realtime_protocol_test.dart
 
 compose-up:
 	docker compose up -d
