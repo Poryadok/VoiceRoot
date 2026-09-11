@@ -1,0 +1,26 @@
+# Production LiveKit signaling. RTC media uses the dedicated NodePorts in infra.yaml.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: voice-livekit-https
+  namespace: voice-prod
+  labels:
+    app.kubernetes.io/name: voice-livekit
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [__LIVEKIT_INGRESS_HOST__]
+      secretName: voice-origin-tls
+  rules:
+    - host: __LIVEKIT_INGRESS_HOST__
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: voice-livekit
+                port:
+                  number: 7880

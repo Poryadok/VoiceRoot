@@ -1,0 +1,20 @@
+# k3s HelmChartConfig: stable router-facing NodePorts for the production node.
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    service:
+      type: NodePort
+      spec:
+        type: NodePort
+    ports:
+      web:
+        nodePort: 30080
+      websecure:
+        nodePort: 30443
+        forwardedHeaders:
+          trustedIPs:
+            - 5.252.225.0/32

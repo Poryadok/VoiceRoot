@@ -11,6 +11,7 @@ source "${ROOT}/scripts/prod/map-prod-env.sh"
 REGISTRY="${VOICE_IMAGE_REGISTRY:-ghcr.io/voiceroot/voiceroot}"
 TAG="${VOICE_IMAGE_TAG:?VOICE_IMAGE_TAG required for production}"
 NS="${VOICE_K8S_NAMESPACE:-voice-prod}"
+LIVEKIT_NODE_IP="${VOICE_LIVEKIT_NODE_IP:?VOICE_LIVEKIT_NODE_IP required for production}"
 
 render() {
   sed -e "s|__IMAGE_REGISTRY__|${REGISTRY}|g" \
@@ -26,10 +27,14 @@ sed -e "s|__GATEWAY_INGRESS_HOST__|${VOICE_GATEWAY_INGRESS_HOST}|g" \
     -e "s|__LIVEKIT_INGRESS_HOST__|${VOICE_LIVEKIT_INGRESS_HOST}|g" \
   "${MANIFEST_DIR}/configmap-app.yaml" | kubectl apply -f -
 
-if [ -n "${PROD_APP_SECRETS_YAML_B64:-}" ] || [ ! -f "${MANIFEST_DIR}/secret.yaml" ]; then
+if kubectl get secret voice-app-secrets -n "${NS}" >/dev/null 2>&1; then
+  echo "Secret voice-app-secrets already exists in ${NS}; preserving it."
+elif [ -n "${PROD_APP_SECRETS_YAML_B64:-}" ] || [ -n "${PROD_APP_SECRETS_YAML:-}" ]; then
   bash "${ROOT}/scripts/staging/ensure-app-secrets.sh"
 elif [ -f "${MANIFEST_DIR}/secret.yaml" ]; then
   kubectl apply -f "${MANIFEST_DIR}/secret.yaml"
+else
+  bash "${ROOT}/scripts/prod/bootstrap-app-secrets.sh"
 fi
 
 if ! kubectl get secret voice-app-secrets -n "${NS}" >/dev/null 2>&1; then
@@ -49,12 +54,30 @@ if [ -z "${LIVEKIT_API_KEY}" ] || [ -z "${LIVEKIT_API_SECRET}" ]; then
   exit 1
 fi
 
-render "${MANIFEST_DIR}/infra.yaml" | \
-  sed -e "s|__LIVEKIT_API_KEY__|${LIVEKIT_API_KEY}|g" \
-      -e "s|__LIVEKIT_API_SECRET__|${LIVEKIT_API_SECRET}|g" | \
-  kubectl apply -f -
+livekit_config="$(mktemp)"
+trap 'rm -f "${livekit_config}"' EXIT
+sed -e "s|__LIVEKIT_NODE_IP__|${LIVEKIT_NODE_IP}|g" \
+    -e "s|__LIVEKIT_API_KEY__|${LIVEKIT_API_KEY}|g" \
+    -e "s|__LIVEKIT_API_SECRET__|${LIVEKIT_API_SECRET}|g" \
+  "${MANIFEST_DIR}/livekit-config.template.yaml" >"${livekit_config}"
+kubectl create secret generic voice-livekit-config -n "${NS}" \
+  --from-file=livekit.yaml="${livekit_config}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+render "${MANIFEST_DIR}/infra.yaml" | kubectl apply -f -
 
 kubectl wait --for=condition=ready pod/voice-postgres-0 -n "${NS}" --timeout=120s
+for attempt in $(seq 1 30); do
+  if kubectl exec -n "${NS}" voice-postgres-0 -- \
+    psql -U voice -d voice -v ON_ERROR_STOP=1 -Atqc 'SELECT 1' 2>/dev/null | grep -qx 1; then
+    break
+  fi
+  if [ "${attempt}" -eq 30 ]; then
+    echo "ERROR: Postgres did not become transaction-ready after initial bootstrap" >&2
+    exit 1
+  fi
+  sleep 2
+done
 bash "${ROOT}/scripts/staging/init-postgres-databases.sh"
 bash "${ROOT}/scripts/staging/sync-postgres-password.sh"
 bash "${ROOT}/scripts/staging/ensure-gateway-schema.sh"

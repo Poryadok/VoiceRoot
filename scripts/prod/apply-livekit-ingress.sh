@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Apply deploy/livekit/ingress.yaml for production LiveKit signaling (wss via Cloudflare).
+# Apply the TLS-only production LiveKit signaling ingress.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -15,6 +15,6 @@ if [ -z "${INGRESS_HOST}" ]; then
 fi
 
 echo "Applying LiveKit Ingress: host=${INGRESS_HOST} namespace=${NS}"
-sed -e "s|__K_NAMESPACE__|${NS}|g" \
-    -e "s|__INGRESS_HOST__|${INGRESS_HOST}|g" \
-  "${ROOT}/deploy/livekit/ingress.yaml" | kubectl apply -f -
+sed -e "s|namespace: voice-prod|namespace: ${NS}|g" \
+    -e "s|__LIVEKIT_INGRESS_HOST__|${INGRESS_HOST}|g" \
+  "${ROOT}/deploy/prod/livekit-ingress.yaml" | kubectl apply -f -

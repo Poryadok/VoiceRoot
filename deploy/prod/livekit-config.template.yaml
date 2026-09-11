@@ -1,0 +1,10 @@
+port: 7880
+rtc:
+  tcp_port: 7881
+  udp_port: 7882
+  use_external_ip: false
+  node_ip: __LIVEKIT_NODE_IP__
+prometheus:
+  port: 6789
+keys:
+  __LIVEKIT_API_KEY__: __LIVEKIT_API_SECRET__
