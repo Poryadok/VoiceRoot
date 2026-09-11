@@ -228,4 +228,6 @@ profile ID, proof/factor data, member/participant detail or free text; there is
 no P3 legal-hold field. Database-time equality expires the tombstone. The Space
 HMAC key is available only to the Space workload identity, has no staff or
 break-glass reader, rotates every `P90D`, fails closed, and follows the shared
-`P30D` maximum restorable-backup window and destruction rules.
+`P30D` maximum restorable-backup window and destruction rules. The accepted
+U5-A owner decision explicitly treats this purpose-specific pseudonymous Space
+tombstone value as compatible with account erasure.

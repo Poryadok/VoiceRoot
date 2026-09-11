@@ -160,7 +160,10 @@ business idempotency independently of per-attempt JWT replay rejection.
 
 Unconsumed Auth proof expires at five minutes; unacknowledged consumed receipt
 does not time out; acknowledged receipt keeps through
-`max(consumed + 30 days, acknowledged + 24 hours)`. Completed Space operation,
-participant full evidence, delivered outbox and processed inbox evidence keep
-30 days at their specified terminal timestamps. Role retirement and participant
-PURGED fences are permanent. The Space tombstone keeps 365 days from purge.
+`max(consumed + 30 days, acknowledged + 24 hours)`. A completed Space operation
+keeps 30 days from `completed_at`; coordinator-held participant bytes keep 30
+days after aggregate `PURGED`; each participant's own full request/receipt bytes
+keep 30 days from that participant's completion. Delivered outbox rows keep 30
+days from `delivered_at`, and processed inbox rows keep 30 days from
+`processed_at`. Role retirement and participant PURGED fences are permanent.
+The Space tombstone keeps 365 days from `purged_at`.

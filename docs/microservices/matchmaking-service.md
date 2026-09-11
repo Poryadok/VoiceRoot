@@ -189,5 +189,5 @@ denies create/join/match/result mutations before cached membership shortcuts.
 `LIVE` requires the next generation. `PURGE_DECIDED` permanently suppresses
 delayed work and removes Space queues, sessions, candidates, projections and
 Redis state. The receipt binds the root manifest but owns no Chat page set. Full
-evidence retains 30 days; compact `PURGED` fence is permanent.
-
+request/receipt bytes retain 30 days from this participant's completion;
+compact `PURGED` fence is permanent.

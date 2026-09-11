@@ -244,6 +244,6 @@ pages and immutable receipts. `FROZEN` suppresses Space/channel setting changes
 and delivery before queue routing; cached membership cannot override it. Restore
 accepts only the next `LIVE` generation. Purge deletes Space/channel settings,
 preferences scoped to those resources and pending deliveries before they can
-route, then writes a permanent compact `PURGED` fence. Full evidence retains 30
-days and delayed lower-generation deliveries remain suppressed.
-
+route, then writes a permanent compact `PURGED` fence. Full request/receipt
+bytes retain 30 days from this participant's completion, and delayed
+lower-generation deliveries remain suppressed.

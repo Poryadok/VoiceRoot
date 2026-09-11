@@ -161,7 +161,8 @@ provider-event dedup fences. `FROZEN` denies entitlement use/mutation for the
 Space; restore accepts only the next `LIVE` generation. Purge cancels renewal,
 removes the active Space entitlement/projection and its billing detail, then
 returns an immutable completion receipt bound to the root manifest. Full
-lifecycle evidence retains 30 days and compact `PURGED` state is permanent.
+request/receipt bytes retain 30 days from this participant's completion and
+compact `PURGED` state is permanent.
 
 Billing-detail removal never removes webhook idempotency authority. The compact
 fence retains only provider, purpose-specific HMAC-SHA-256 of the exact provider
@@ -179,4 +180,3 @@ destruction. The maximum restorable-backup window is `P30D`. Because fences are
 permanent, old key versions also remain permanent until a separately reviewed
 migration re-HMACs every fence. This HMAC evidence is accepted as compatible
 with account erasure.
-

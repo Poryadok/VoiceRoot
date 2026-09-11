@@ -167,8 +167,10 @@ After purge, ordinary Space rows and audit rows are removed. A separate no-FK
 owner/actor account values, key version, `OWNER_REQUESTED`, lifecycle times and
 `retain_until = purged_at + 365 days`; no P3 legal hold exists. Role and every
 participant keep permanent identity-reuse fences containing no account/profile
-identity. Moderation, Analytics and Subscription follow their explicit service
-classifications rather than becoming coordinator completion participants.
+identity. Moderation and Analytics follow their explicit service classifications
+without becoming coordinator completion participants. Subscription remains
+required participant 8; its separate billing classification never removes its
+purge-receipt requirement.
 
 File owns cross-service reference liveness. A live reference is identified by
 `(file_id, owner_type, owner_id, subresource_id?, scope_space_id?)`; the

@@ -87,5 +87,5 @@ Space/chat/message projection reads and writes for that generation. Restore
 accepts only the higher `LIVE` generation. Purge deletes every Space, chat and
 message document from every active index and persists a permanent compact
 `PURGED` fence before completion. A generation gap reconciles through Space;
-uncertain fence state fails closed. Full evidence retains 30 days.
-
+uncertain fence state fails closed. Full request/receipt bytes retain 30 days
+from this participant's completion.

@@ -501,4 +501,5 @@ Chat's final fence receipt binds the complete root manifest. Restore applies the
 higher `LIVE` generation without recapture. Purge exposes only the saved pages,
 waits for Messaging completion and File acceptance of Chat-owned reference
 releases, then removes chats/navigation and returns an immutable completion
-receipt. Full evidence retains 30 days; compact terminal fence is permanent.
+receipt. Full request/receipt bytes retain 30 days from this participant's
+completion; compact terminal fence is permanent.

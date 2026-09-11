@@ -589,9 +589,10 @@ Role returns the stricter retirement receipt. Exact replay returns stored bytes;
 changed bytes for the same operation/generation conflict, timeouts never
 manufacture a receipt, and `CONTRACT_MISMATCH` is never auto-skipped.
 
-Completed schedule/restore replay lasts 30 days; nonterminal operations last
-until terminal. Full participant evidence lasts 30 days after `PURGED`, compact
-completion tuples through tombstone expiry. The no-FK tombstone contains only
+Completed schedule/restore replay lasts 30 days from operation `completed_at`;
+nonterminal operations last until terminal. Coordinator-held full participant
+request/receipt bytes last 30 days after the aggregate reaches `PURGED`; compact
+completion tuples last through tombstone expiry. The no-FK tombstone contains only
 Space ID, purpose-specific account HMACs, key version, `OWNER_REQUESTED`,
 lifecycle timestamps and `retain_until = purged_at + 365 days`. Ordinary audit
 is purged; no legal-hold field exists in P3 and public audit never exposes it.
@@ -601,4 +602,5 @@ Space tombstone HMAC input is ASCII `voice-space-tombstone-v1`, NUL, then raw
 have no access. Its distinct KMS/HSM family rotates every `P90D`, fails closed,
 is audited, and uses the shared `P30D` maximum restorable-backup window. Old
 versions are destroyed only after no retained row or restorable backup needs
-them.
+them. The owner-approved U5-A decision explicitly accepts this purpose-specific
+pseudonymous Space tombstone HMAC as compatible with account erasure.

@@ -624,4 +624,5 @@ waits for `AcquireFileReferences`. Purge deletes messages, reactions, read and
 delivery state, pins, hides, threads and scheduled rows in bounded FK order,
 then asks File to release the saved producer manifest. Completion requires
 File's exact release receipt. Restore reuses the saved manifest and releases
-nothing. Full evidence retains 30 days and compact `PURGED` fence is permanent.
+nothing. Full request/receipt bytes retain 30 days from this participant's
+completion and the compact `PURGED` fence is permanent.

@@ -219,4 +219,5 @@ commands and deferred Space/chat work before bot/admin shortcuts. Restore
 accepts only the next `LIVE` generation. Purge removes installations, Space and
 chat whitelists, bot memberships/projections and deferred deliveries, then
 persists a permanent compact `PURGED` fence. Full request/receipt bytes retain
-30 days; delayed lower-generation work is a no-op.
+30 days from this participant's completion; delayed lower-generation work is a
+no-op.
