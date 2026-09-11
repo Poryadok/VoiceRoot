@@ -12,8 +12,13 @@ func (s *SpaceStore) AddBotMember(ctx context.Context, spaceID, profileID uuid.U
 	if s == nil || s.Pool == nil {
 		return pgx.ErrNoRows
 	}
+	if s.tx == nil {
+		return s.withOwnershipScope(ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) error {
+			return scoped.AddBotMember(ctx, spaceID, profileID)
+		})
+	}
 	var exists int
-	err := s.Pool.QueryRow(ctx, `
+	err := s.db().QueryRow(ctx, `
 SELECT COUNT(*)::int FROM space_members WHERE space_id = $1 AND profile_id = $2`, spaceID, profileID).Scan(&exists)
 	if err != nil {
 		return err
@@ -21,7 +26,7 @@ SELECT COUNT(*)::int FROM space_members WHERE space_id = $1 AND profile_id = $2`
 	if exists > 0 {
 		return nil
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.db().Begin(ctx)
 	if err != nil {
 		return err
 	}

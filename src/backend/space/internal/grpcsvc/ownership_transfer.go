@@ -50,10 +50,20 @@ func (l *ownershipTransferLocker) releaseReference(spaceID string, entry *owners
 	}
 }
 
-// lockSpaceMutation holds the per-space mutation gate. It keeps every write
-// out of the temporary owner window between TransferOwnership's database leg
-// and its Role/audit legs. Waiting remains bounded by the request context.
+// lockSpaceMutation retains only the in-process ownership-transfer gate.
+// Ordinary Space serialization is owned by the store's transaction scope;
+// acquiring the legacy session advisory lease here would self-deadlock it.
 func (s *SpaceGRPC) lockSpaceMutation(ctx context.Context, spaceID uuid.UUID) (func(), error) {
+	release, err := s.ownershipTransfers.acquire(ctx, spaceID.String())
+	if err != nil {
+		return nil, status.FromContextError(err).Err()
+	}
+	return release, nil
+}
+
+// lockLegacyOwnershipMutation preserves the private v1 saga's cross-instance
+// lease. It must never wrap an ordinary tx-scoped store action.
+func (s *SpaceGRPC) lockLegacyOwnershipMutation(ctx context.Context, spaceID uuid.UUID) (func(), error) {
 	releaseLocal, err := s.ownershipTransfers.acquire(ctx, spaceID.String())
 	if err != nil {
 		return nil, status.FromContextError(err).Err()
@@ -61,7 +71,6 @@ func (s *SpaceGRPC) lockSpaceMutation(ctx context.Context, spaceID uuid.UUID) (f
 	if s.MutationLocker == nil {
 		return releaseLocal, nil
 	}
-
 	releaseDistributed, err := s.MutationLocker.Acquire(ctx, spaceID)
 	if err != nil {
 		releaseLocal()
@@ -70,7 +79,6 @@ func (s *SpaceGRPC) lockSpaceMutation(ctx context.Context, spaceID uuid.UUID) (f
 		}
 		return nil, status.Error(codes.Unavailable, "space mutation lock unavailable: "+err.Error())
 	}
-
 	var once sync.Once
 	return func() {
 		once.Do(func() {

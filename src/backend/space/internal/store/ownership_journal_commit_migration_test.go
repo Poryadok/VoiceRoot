@@ -119,15 +119,15 @@ func TestOwnershipJournalCommitMigration_DownRefusesPreparedDecisionAndTerminalE
 			after, loadErr := st.LoadOwnership(ctx, binding.OperationID)
 			require.NoError(t, loadErr)
 			require.Equal(t, before, after)
-			space, getErr := st.GetSpace(ctx, binding.SpaceID)
-			require.NoError(t, getErr)
-			require.Equal(t, expectedOwner, space.OwnerProfileID)
+			var owner uuid.UUID
+			require.NoError(t, st.Pool.QueryRow(ctx, `SELECT owner_profile_id FROM spaces WHERE id=$1`, binding.SpaceID).Scan(&owner))
+			require.Equal(t, expectedOwner, owner)
 			var outboxCount int
 			require.NoError(t, st.Pool.QueryRow(ctx, `SELECT count(*) FROM ownership_outbox WHERE operation_id=$1`, binding.OperationID).Scan(&outboxCount))
 			require.Equal(t, wantOutbox, outboxCount)
-			page, pageErr := st.ListAuditLogPage(ctx, binding.SpaceID, "", 10)
-			require.NoError(t, pageErr)
-			require.Empty(t, page.Rows)
+			var auditCount int
+			require.NoError(t, st.Pool.QueryRow(ctx, `SELECT count(*) FROM audit_log WHERE space_id=$1`, binding.SpaceID).Scan(&auditCount))
+			require.Zero(t, auditCount)
 		})
 	}
 }

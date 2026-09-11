@@ -94,7 +94,7 @@ func ownershipJournalStoreFixture(t *testing.T) *SpaceStore {
 	}
 	ctx := context.Background()
 	pool := startSpacePostgresForStoreTest(t, ctx)
-	applySpaceMigrationForStoreTest(t, ctx, pool)
+	applySpaceMigrationsThrough7ForStoreTest(t, ctx, pool)
 	migration, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", "000008_ownership_journal.up.sql"))
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, string(migration))
@@ -134,9 +134,9 @@ func assertOwnershipReservation(t *testing.T, row *OwnershipJournal, binding Own
 }
 func assertReservationHasNoPublicEffects(t *testing.T, st *SpaceStore, b OwnershipBinding) {
 	t.Helper()
-	row, err := st.GetSpace(context.Background(), b.SpaceID)
-	require.NoError(t, err)
-	require.Equal(t, b.ActorProfileID, row.OwnerProfileID)
+	var owner uuid.UUID
+	require.NoError(t, st.Pool.QueryRow(context.Background(), `SELECT owner_profile_id FROM spaces WHERE id=$1`, b.SpaceID).Scan(&owner))
+	require.Equal(t, b.ActorProfileID, owner)
 	var audits int
 	require.NoError(t, st.Pool.QueryRow(context.Background(), `SELECT count(*) FROM audit_log WHERE space_id=$1`, b.SpaceID).Scan(&audits))
 	require.Zero(t, audits)

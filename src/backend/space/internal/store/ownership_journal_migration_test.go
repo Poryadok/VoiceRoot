@@ -57,9 +57,9 @@ func TestOwnershipJournalMigration_EmptyDownUpPreservesExistingSpace(t *testing.
 	_, err := st.Pool.Exec(ctx, ownershipJournalMigrationSQL(t, "down"))
 	require.NoError(t, err)
 	requireJournalSchema(t, st.Pool, false)
-	row, err := st.GetSpace(ctx, binding.SpaceID)
-	require.NoError(t, err)
-	require.Equal(t, binding.ActorProfileID, row.OwnerProfileID)
+	var owner uuid.UUID
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT owner_profile_id FROM spaces WHERE id=$1`, binding.SpaceID).Scan(&owner))
+	require.Equal(t, binding.ActorProfileID, owner)
 	_, err = st.Pool.Exec(ctx, ownershipJournalMigrationSQL(t, "up"))
 	require.NoError(t, err)
 	decisionMigration, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", "000009_ownership_journal_decision.up.sql"))
@@ -215,9 +215,9 @@ func TestOwnershipJournalDecisionMigration_EmptyDownUpPreservesReservationSchema
 	require.NoError(t, err)
 	requireJournalSchema(t, st.Pool, true)
 	requireJournalDecisionSchema(t, st.Pool, false)
-	row, err := st.GetSpace(ctx, binding.SpaceID)
-	require.NoError(t, err)
-	require.Equal(t, binding.ActorProfileID, row.OwnerProfileID)
+	var owner uuid.UUID
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT owner_profile_id FROM spaces WHERE id=$1`, binding.SpaceID).Scan(&owner))
+	require.Equal(t, binding.ActorProfileID, owner)
 
 	_, err = st.Pool.Exec(ctx, ownershipJournalDecisionMigrationSQL(t, "up"))
 	require.NoError(t, err)

@@ -39,7 +39,7 @@ func (s *SpaceGRPC) ListMembers(ctx context.Context, req *spacev1.ListMembersReq
 		if err == store.ErrInvalidListCursor {
 			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	members := make([]*spacev1.SpaceMembership, 0, len(rows))
 	for _, row := range rows {
@@ -99,7 +99,7 @@ func (s *SpaceGRPC) KickMember(ctx context.Context, req *spacev1.KickMemberReque
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, status.Error(codes.NotFound, "member not found")
 		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	s.revokeAllMemberRoles(ctx, spaceID, profileID)
 	_ = s.Store.RecordMemberKicked(ctx, spaceID, profileID, caller)

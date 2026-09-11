@@ -15,6 +15,17 @@ func (s *SpaceStore) ListSpaceMembersPage(ctx context.Context, spaceID uuid.UUID
 	if s == nil || s.Pool == nil {
 		return nil, "", errors.New("space store: pool not configured")
 	}
+	if s.tx == nil {
+		type result struct {
+			rows   []*MembershipRow
+			cursor string
+		}
+		value, err := withOwnershipScopeValue(s, ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) (result, error) {
+			rows, next, callErr := scoped.ListSpaceMembersPage(ctx, spaceID, pageSize, cursor)
+			return result{rows: rows, cursor: next}, callErr
+		})
+		return value.rows, value.cursor, err
+	}
 	if pageSize <= 0 {
 		pageSize = 50
 	}
@@ -25,7 +36,7 @@ func (s *SpaceStore) ListSpaceMembersPage(ctx context.Context, spaceID uuid.UUID
 	var rows pgx.Rows
 	var err error
 	if cursor == "" {
-		rows, err = s.Pool.Query(ctx, `
+		rows, err = s.db().Query(ctx, `
 SELECT space_id, profile_id, joined_at, nickname
 FROM space_members
 WHERE space_id = $1
@@ -37,7 +48,7 @@ LIMIT $2
 		if parseErr != nil {
 			return nil, "", ErrInvalidListCursor
 		}
-		rows, err = s.Pool.Query(ctx, `
+		rows, err = s.db().Query(ctx, `
 SELECT space_id, profile_id, joined_at, nickname
 FROM space_members
 WHERE space_id = $1 AND profile_id > $2
@@ -74,7 +85,12 @@ func (s *SpaceStore) RemoveMember(ctx context.Context, spaceID, profileID uuid.U
 	if s == nil || s.Pool == nil {
 		return errors.New("space store: pool not configured")
 	}
-	tag, err := s.Pool.Exec(ctx, `
+	if s.tx == nil {
+		return s.withOwnershipScope(ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) error {
+			return scoped.RemoveMember(ctx, spaceID, profileID)
+		})
+	}
+	tag, err := s.db().Exec(ctx, `
 DELETE FROM space_members WHERE space_id = $1 AND profile_id = $2
 `, spaceID, profileID)
 	if err != nil {
@@ -83,14 +99,14 @@ DELETE FROM space_members WHERE space_id = $1 AND profile_id = $2
 	if tag.RowsAffected() == 0 {
 		return pgx.ErrNoRows
 	}
-	_, err = s.Pool.Exec(ctx, `
+	_, err = s.db().Exec(ctx, `
 UPDATE spaces SET member_count = GREATEST(member_count - 1, 0), updated_at = now()
 WHERE id = $1
 `, spaceID)
 	if err != nil {
 		return err
 	}
-	_, _ = s.Pool.Exec(ctx, `
+	_, _ = s.db().Exec(ctx, `
 DELETE FROM space_member_timeouts WHERE space_id = $1 AND profile_id = $2
 `, spaceID, profileID)
 	return nil
@@ -101,7 +117,12 @@ func (s *SpaceStore) RecordMemberKicked(ctx context.Context, spaceID, profileID,
 	if s == nil || s.Pool == nil {
 		return errors.New("space store: pool not configured")
 	}
-	_, err := s.Pool.Exec(ctx, `
+	if s.tx == nil {
+		return s.withOwnershipScope(ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) error {
+			return scoped.RecordMemberKicked(ctx, spaceID, profileID, actor)
+		})
+	}
+	_, err := s.db().Exec(ctx, `
 INSERT INTO audit_log (space_id, actor_profile_id, action, target_type, target_id, details)
 VALUES ($1, $2, 'member_kicked', 'profile', $3, '{}')
 `, spaceID, actor, profileID)

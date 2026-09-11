@@ -73,7 +73,7 @@ func (s *SpaceGRPC) BanMember(ctx context.Context, req *spacev1.BanMemberRequest
 	} else if s.ProfileAccounts != nil {
 		members, _, err := s.Store.ListSpaceMembersPage(ctx, spaceID, 100, "")
 		if err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
+			return nil, mapSpaceStoreError(err)
 		}
 		for _, m := range members {
 			acct, err := s.ProfileAccounts.AccountIDByProfileID(ctx, m.ProfileID)
@@ -94,7 +94,7 @@ func (s *SpaceGRPC) BanMember(ctx context.Context, req *spacev1.BanMemberRequest
 		if errors.Is(err, store.ErrCannotBanOwner) {
 			return nil, status.Error(codes.FailedPrecondition, err.Error())
 		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	if evictProfile != nil {
 		s.revokeAllMemberRoles(ctx, spaceID, *evictProfile)
@@ -130,7 +130,7 @@ func (s *SpaceGRPC) UnbanMember(ctx context.Context, req *spacev1.UnbanMemberReq
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, status.Error(codes.NotFound, "ban not found")
 		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	return &spacev1.UnbanMemberResponse{}, nil
 }
@@ -153,7 +153,7 @@ func (s *SpaceGRPC) ListBans(ctx context.Context, req *spacev1.ListBansRequest) 
 	}
 	rows, err := s.Store.ListBans(ctx, spaceID)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	out := make([]*spacev1.SpaceBan, 0, len(rows))
 	for _, r := range rows {
@@ -211,7 +211,7 @@ func (s *SpaceGRPC) TimeoutMember(ctx context.Context, req *spacev1.TimeoutMembe
 		if errors.Is(err, store.ErrInvalidTimeoutDuration) {
 			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	return &spacev1.TimeoutMemberResponse{}, nil
 }
@@ -244,7 +244,7 @@ func (s *SpaceGRPC) RemoveMemberTimeout(ctx context.Context, req *spacev1.Remove
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, status.Error(codes.NotFound, "timeout not found")
 		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	return &spacev1.RemoveMemberTimeoutResponse{}, nil
 }
