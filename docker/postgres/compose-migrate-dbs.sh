@@ -18,6 +18,13 @@ psql_db() {
   psql -v ON_ERROR_STOP=1 --dbname "$1" -tAc "$2"
 }
 
+is_voice_database() {
+  case "$1" in
+    voice_*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 latest_version() {
   db="$1"
   v="$(ls -1 "${MIGRATIONS_DIR}/${db}"/*.up.sql 2>/dev/null | sed 's/.*\///;s/_.*//' | sort -n | tail -1)"
@@ -27,6 +34,13 @@ latest_version() {
 baseline_version() {
   db="$1"
   case "$db" in
+    chat_db)
+      if [ "$(psql_db chat_db "SELECT to_regclass('public.chat_members') IS NOT NULL")" = "t" ]; then
+        echo 1
+      else
+        echo 0
+      fi
+      ;;
     space_db)
       if [ "$(psql_db space_db "SELECT to_regclass('public.space_subscriptions') IS NOT NULL")" = "t" ]; then
         echo 5
@@ -123,6 +137,10 @@ migrate_db() {
     dirty="$(psql_db "$db" "SELECT dirty FROM schema_migrations LIMIT 1")"
     if [ "$dirty" = "t" ]; then
       current_ver="$(psql_db "$db" "SELECT version FROM schema_migrations LIMIT 1")"
+      if is_voice_database "$db"; then
+        echo "ERROR: dirty ${db} at v${current_ver}; refusing migrate force" >&2
+        return 1
+      fi
       echo "==> fix dirty ${db} at v${current_ver}"
       migrate -path "$dir" -database "$(dsn "$db")" force "$current_ver"
     fi
@@ -136,6 +154,11 @@ migrate_db() {
     echo "==> migrate up (fresh): ${db}"
     migrate -path "$dir" -database "$(dsn "$db")" up
     return 0
+  fi
+
+  if is_voice_database "$db"; then
+    echo "ERROR: ${db} has tables without schema_migrations; refusing migrate force" >&2
+    return 1
   fi
 
   ver="$(baseline_version "$db")"
@@ -166,6 +189,7 @@ GO_OWNED_DBS="
   chat_db messaging_db bot_db story_db
   user_db social_db file_db space_db role_db notification_db
   matchmaking_db search_db moderation_db gateway_db subscription_db
+  voice_db
 "
 
 for db in $GO_OWNED_DBS; do

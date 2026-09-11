@@ -68,6 +68,8 @@ auth_target="$(sed -n '/^auth-test-ci:/,/^auth-image-ci:/p' "${MAKEFILE}")"
 [[ "${auth_target}" == *"mvn -B test"* ]] || fail "auth-test-ci must run Maven tests"
 [[ "${auth_target}" == *"check-auth-testcontainers-reports.sh"* ]] || fail "auth-test-ci must check Surefire reports"
 [[ "${auth_target#*mvn -B test}" == *"check-auth-testcontainers-reports.sh"* ]] || fail "auth-test-ci must check reports after Maven"
+[[ "${auth_target#*check-auth-testcontainers-reports.sh}" == *"check-auth-testcontainers-reports_test.sh"* ]] \
+  || fail "auth-test-ci must run the inventory regression after checking reports"
 grep -A 35 '^  backend-auth:' "${WORKFLOW}" | grep -F 'run: make auth-test-ci' >/dev/null || fail "backend-auth must use canonical auth-test-ci"
 grep -A 12 '^auth:' "${PATH_FILTERS}" | grep -Fx '  - src/backend/migrations/auth_db/**' >/dev/null || fail "Auth path filter must include auth_db migrations"
 ci_script_target="$(sed -n '/^ci-script-tests:/,/^generate-staging-services:/p' "${MAKEFILE}")"

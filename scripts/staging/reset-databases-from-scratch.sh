@@ -14,13 +14,13 @@ MIGRATE_TAG="${VOICE_MIGRATE_IMAGE_TAG:-v4.18.1}"
 databases=(
   auth_db user_db social_db chat_db messaging_db file_db space_db role_db
   notification_db matchmaking_db gateway_db search_db subscription_db
-  moderation_db bot_db story_db
+  moderation_db bot_db story_db voice_db
 )
 
 go_owned_dbs=(
   chat_db messaging_db bot_db story_db
   user_db social_db file_db space_db role_db notification_db
-  matchmaking_db search_db moderation_db gateway_db subscription_db
+  matchmaking_db search_db moderation_db gateway_db subscription_db voice_db
 )
 
 echo "==> Waiting for Postgres pod ${NS}/${PG_POD}"

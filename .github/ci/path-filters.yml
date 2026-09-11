@@ -144,6 +144,7 @@ svc_user:
 
 svc_voice:
   - src/backend/voice/**
+  - src/backend/migrations/voice_db/**
 
 # Application code changes (excludes docs-only and repo meta: docs/**, README*, .cursor/**, *.md).
 code:

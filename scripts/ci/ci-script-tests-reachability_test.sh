@@ -7,6 +7,7 @@ WORKFLOW="${ROOT}/.github/workflows/ci.yml"
 PATH_FILTERS="${ROOT}/.github/ci/path-filters.yml"
 REQUIRED_JOBS="${ROOT}/.github/ci/verify-required-jobs.sh"
 GO_DOWNLOAD_HELPER="src/backend/scripts/docker-go-mod-download.sh"
+VOICE_R22_BASE_RESOLVER="${ROOT}/scripts/ci/resolve-voice-r22-base.sh"
 
 fail() {
   echo "FAIL: $*" >&2
@@ -28,6 +29,35 @@ echo "${job_block}" | grep -Eq '^      - name: CI script regression tests$' \
   || fail "ci-script-tests must name its regression-test step"
 echo "${job_block}" | grep -Eq '^        run: make ci-script-tests$' \
   || fail "ci-script-tests must invoke make ci-script-tests"
+echo "${job_block}" | grep -Eq '^          fetch-depth: 0$' \
+  || fail "ci-script-tests must fetch master history for scope checks"
+echo "${job_block}" | grep -Fq 'VOICE_CI_EVENT_NAME: ${{ github.event_name }}' \
+  || fail "ci-script-tests must pass the event name to the Voice scope-base resolver"
+echo "${job_block}" | grep -Fq 'bash scripts/ci/resolve-voice-r22-base.sh' \
+  || fail "ci-script-tests must use the Voice scope-base resolver"
+echo "${job_block}" | grep -Fq 'VOICE_R22_BASE_SHA=${base_sha}' \
+  || fail "ci-script-tests must export the resolved Voice scope base"
+
+pr_base='1111111111111111111111111111111111111111'
+push_before='2222222222222222222222222222222222222222'
+zero_sha='0000000000000000000000000000000000000000'
+resolve_voice_base() {
+  VOICE_CI_EVENT_NAME="$1" \
+    VOICE_CI_PR_BASE_SHA="$2" \
+    VOICE_CI_PUSH_BEFORE_SHA="$3" \
+    bash "${VOICE_R22_BASE_RESOLVER}"
+}
+[[ "$(resolve_voice_base pull_request "${pr_base}" "${push_before}")" == "${pr_base}" ]] \
+  || fail "Voice scope base must use the pull request base SHA"
+[[ "$(resolve_voice_base push "${pr_base}" "${push_before}")" == "${push_before}" ]] \
+  || fail "Voice scope base must use a nonzero push before SHA"
+[[ -z "$(resolve_voice_base workflow_dispatch "${pr_base}" "${push_before}")" ]] \
+  || fail "Voice scope base must fall back for workflow dispatch"
+[[ -z "$(resolve_voice_base push "${pr_base}" "${zero_sha}")" ]] \
+  || fail "Voice scope base must fall back for a zero push before SHA"
+if resolve_voice_base pull_request "${zero_sha}" "${push_before}" >/dev/null 2>&1; then
+  fail "Voice scope base must reject an invalid pull request base SHA"
+fi
 
 gate_block="$(sed -n '/^  ci-gate:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
 echo "${gate_block}" | grep -Eq '^      - ci-script-tests$' \

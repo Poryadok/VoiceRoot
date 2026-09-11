@@ -844,6 +844,7 @@ services:
       dockerfile: voice/Dockerfile
     environment:
       LOG_LEVEL: debug
+      VOICE_DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/voice_db?sslmode=disable
       VOICE_GRPC_LISTEN: :9090
       VOICE_REDIS_ADDR: redis:6379
       CHAT_GRPC_ADDR: chat:9090
@@ -857,6 +858,10 @@ services:
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-secret}
     depends_on:
+      postgres:
+        condition: service_healthy
+      compose-db-init:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       nats:
@@ -874,7 +879,7 @@ services:
       role:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/ready"]
       interval: 5s
       timeout: 3s
       retries: 10

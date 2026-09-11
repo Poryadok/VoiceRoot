@@ -54,6 +54,16 @@ func main() {
 	runCtx, runCancel := context.WithCancel(context.Background())
 	defer runCancel()
 
+	lifecycleStore, closeLifecycleDatabase, lifecycleEnabled, err := openLifecycleDatabase(runCtx)
+	if err != nil {
+		log.Fatalf("voice lifecycle database: %v", err)
+	}
+	defer closeLifecycleDatabase()
+	var lifecycleReadiness func(context.Context) error
+	if lifecycleEnabled {
+		lifecycleReadiness = lifecycleStore.CheckSchema
+	}
+
 	var callStore voicestore.CallStore
 	if redisAddr := strings.TrimSpace(os.Getenv("VOICE_REDIS_ADDR")); redisAddr != "" {
 		rdb := redis.NewClient(&redis.Options{
@@ -179,7 +189,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:    addr,
-		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(healthHandler(serviceName), metricsReg), logger),
+		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(healthHandler(serviceName, lifecycleReadiness), metricsReg), logger),
 	}
 	httpserver.ApplyHTTPServerTimeouts(server)
 	errCh := make(chan error, 1)

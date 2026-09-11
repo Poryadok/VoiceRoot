@@ -86,8 +86,29 @@ PG_PASS="$(secret_data_key POSTGRES_PASSWORD | base64 -d 2>/dev/null || true)"
 if [ -z "${PG_PASS}" ]; then
   echo "WARN: ${SECRET_NAME} has no POSTGRES_PASSWORD; skip Postgres database URL patch" >&2
 else
+  rfc3986_encode_component() {
+    local value="$1"
+    local encoded=""
+    local byte
+    for byte in $(printf '%s' "${value}" | LC_ALL=C od -An -v -tx1); do
+      case "${byte}" in
+        2d|2e|3[0-9]|4[1-9a-f]|5[0-9a]|5f|6[1-9a-f]|7[0-9a]|7e)
+          encoded="${encoded}$(printf "\\$(printf '%03o' "$((0x${byte}))")")"
+          ;;
+        *)
+          encoded="${encoded}%$(printf '%s' "${byte}" | tr '[:lower:]' '[:upper:]')"
+          ;;
+      esac
+    done
+    printf '%s' "${encoded}"
+  }
+
+  PG_USER_ENCODED="$(rfc3986_encode_component voice)"
+  PG_PASS_ENCODED="$(rfc3986_encode_component "${PG_PASS}")"
+
   pg_url() {
-    printf 'postgres://voice:%s@voice-postgres:5432/%s?sslmode=disable' "$PG_PASS" "$1"
+    printf 'postgres://%s:%s@voice-postgres:5432/%s?sslmode=disable' \
+      "${PG_USER_ENCODED}" "${PG_PASS_ENCODED}" "$1"
   }
 
   sync_pg_url_if_needed() {
@@ -121,6 +142,7 @@ else
     MODERATION_DATABASE_URL:moderation_db
     SUBSCRIPTION_DATABASE_URL:subscription_db
     GATEWAY_DATABASE_URL:gateway_db
+    VOICE_DATABASE_URL:voice_db
   )
   for entry in "${pg_url_keys[@]}"; do
     sync_pg_url_if_needed "${entry%%:*}" "${entry#*:}"

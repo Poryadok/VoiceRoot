@@ -107,6 +107,17 @@ Shared timeouts for Go HTTP services and Postgres bootstrap. Values are Go `time
 
 Staging overrides — `deploy/staging/configmap-app.yaml` (`GRPC_DIAL_TIMEOUT` is set; HTTP/Postgres keys are commented for optional tuning).
 
+### Voice lifecycle database
+
+`voice_db` is the durable source of truth for Voice room lifecycle state. Redis
+contains a rebuildable projection; after Redis loss, rebuild the Redis projection
+from PostgreSQL rather than treating the cache as authoritative.
+
+Run the lifecycle migration before the Voice application rollout and require
+`/ready` to pass its bounded schema check. For recovery, restore `voice_db` into an isolated database and validate the migration version, table set, invariants,
+and evidence before cutover. The restore workflow must never write to the live source database. The guarded lifecycle migration DOWN refuses to remove schema
+while evidence rows remain.
+
 ## Phase-0 S2S key rotation and verifier incidents (target)
 
 Каждый issuer получает secret-mounted каталог

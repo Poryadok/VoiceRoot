@@ -41,8 +41,29 @@ if [ ! -f "$JWT_FILE" ]; then
   exit 1
 fi
 
+rfc3986_encode_component() {
+  local value="$1"
+  local encoded=""
+  local byte
+  for byte in $(printf '%s' "${value}" | LC_ALL=C od -An -v -tx1); do
+    case "${byte}" in
+      2d|2e|3[0-9]|4[1-9a-f]|5[0-9a]|5f|6[1-9a-f]|7[0-9a]|7e)
+        encoded="${encoded}$(printf "\\$(printf '%03o' "$((0x${byte}))")")"
+        ;;
+      *)
+        encoded="${encoded}%$(printf '%s' "${byte}" | tr '[:lower:]' '[:upper:]')"
+        ;;
+    esac
+  done
+  printf '%s' "${encoded}"
+}
+
+PG_USER_ENCODED="$(rfc3986_encode_component voice)"
+PG_PASS_ENCODED="$(rfc3986_encode_component "${PG_PASS}")"
+
 pg_url() {
-  printf 'postgres://voice:%s@voice-postgres:5432/%s?sslmode=disable' "$PG_PASS" "$1"
+  printf 'postgres://%s:%s@voice-postgres:5432/%s?sslmode=disable' \
+    "${PG_USER_ENCODED}" "${PG_PASS_ENCODED}" "$1"
 }
 
 # Auth runs with JDBC persistence in staging, so both of these secrets must be
@@ -120,6 +141,7 @@ kubectl_apply_bootstrap_secret "$SECRET_NAME" \
   --from-literal=MODERATION_DATABASE_URL="$(pg_url moderation_db)" \
   --from-literal=SUBSCRIPTION_DATABASE_URL="$(pg_url subscription_db)" \
   --from-literal=GATEWAY_DATABASE_URL="$(pg_url gateway_db)" \
+  --from-literal=VOICE_DATABASE_URL="$(pg_url voice_db)" \
   --from-literal=CLICKHOUSE_PASSWORD="$CH_PASS" \
   --from-literal=CLICKHOUSE_DSN="clickhouse://default:${CH_PASS}@voice-clickhouse:9000/voice" \
   --from-literal=ANALYTICS_ID_HASH_KEY="change-me-staging-analytics-hash" \

@@ -197,6 +197,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Resolve Voice R22 scope base
+        env:
+          VOICE_CI_EVENT_NAME: ${{ github.event_name }}
+          VOICE_CI_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          VOICE_CI_PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          base_sha="$(bash scripts/ci/resolve-voice-r22-base.sh)"
+          echo "VOICE_R22_BASE_SHA=${base_sha}" >> "${GITHUB_ENV}"
       - name: CI script regression tests
         run: make ci-script-tests
 

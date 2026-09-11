@@ -17,7 +17,7 @@ Voice — распределённая система из 20 микросерв
 | 7  | Realtime Service     | Go   | WebSocket-шлюз, fan-out событий, typing indicators | [подробнее](microservices/realtime-service.md)     |
 | 8  | Space Service        | Go   | Пространства, дерево (текст → Chat, голос), инвайты | [подробнее](microservices/space-service.md)        |
 | 9  | Role Service         | Go   | Роли, права, иерархия, оверрайды по чатам и голосу (`chat_overrides`, `voice_room_overrides`) | [подробнее](microservices/role-service.md)         |
-| 10 | Voice Service        | Go   | Голос, видео, screen share, LiveKit                | [подробнее](microservices/voice-service.md)        |
+| 10 | Voice Service        | Go   | Голос, видео, screen share; PostgreSQL `voice_db`, Redis projection, LiveKit | [подробнее](microservices/voice-service.md) |
 | 11 | File Service         | Go   | Загрузка, хранение, конвертация, антивирус         | [подробнее](microservices/file-service.md)         |
 | 12 | Notification Service | Go   | FCM, APNs, email, push-роутинг                     | [подробнее](microservices/notification-service.md) |
 | 13 | Search Service       | Go   | Полнотекстовый поиск, глобальный поиск             | [подробнее](microservices/search-service.md)       |
@@ -28,6 +28,8 @@ Voice — распределённая система из 20 микросерв
 | 18 | Federation Service   | Go   | S2S gRPC, синхронизация, федеративные ноды         | [подробнее](microservices/federation-service.md)   |
 | 19 | Story Service        | Go   | Сторис, хайлайты, архив, "ищу пати"                | [подробнее](microservices/story-service.md)        |
 | 20 | Analytics Service    | Go   | Сбор событий, метрики, дашборды                    | [подробнее](microservices/analytics-service.md)    |
+
+В срезе R22.2 lifecycle остаётся source-disabled: coordinator и lifecycle handlers ещё не зарегистрированы.
 
 ## Архитектурная диаграмма
 
@@ -219,7 +221,7 @@ Federation ──gRPC bidirectional stream──► External Node
 | Realtime Service     | Redis (Pub/Sub, WS registry); PostgreSQL нет                                      |
 | Space Service        | PostgreSQL `space_db`                                                               |
 | Role Service         | PostgreSQL `role_db`                                                                |
-| Voice Service        | Redis (active sessions), LiveKit                                                    |
+| Voice Service        | PostgreSQL `voice_db` (durable source of truth), Redis (rebuildable projection), LiveKit |
 | File Service         | PostgreSQL `file_db`, Cloudflare R2                                                 |
 | Notification Service | PostgreSQL `notification_db`, Redis                                                 |
 | Search Service       | PostgreSQL `search_db` (v1), Meilisearch (v2), Elasticsearch (v3 при необходимости) |
@@ -276,5 +278,4 @@ Federation ──gRPC bidirectional stream──► External Node
 | Desktop App | Flutter 3.41+     | Windows, macOS, Linux |
 | Web App     | Flutter Web 3.41+ | Браузер               |
 | Admin Panel | React 19, Vite 7  | Модерация, аналитика  |
-
 
