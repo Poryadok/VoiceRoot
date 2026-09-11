@@ -399,8 +399,9 @@ func (s *FileGRPC) GetBulkMetadata(ctx context.Context, req *filev1.GetBulkMetad
 	if err != nil {
 		return nil, err
 	}
-	ids := make([]uuid.UUID, 0, len(req.GetFileIds()))
-	for _, raw := range req.GetFileIds() {
+	legacyFileIDs := req.GetFileIds() //nolint:staticcheck // R23 compatibility: accept deprecated file_ids until callers migrate to access-scoped items.
+	ids := make([]uuid.UUID, 0, len(legacyFileIDs))
+	for _, raw := range legacyFileIDs {
 		id, err := parseUUID("file_ids", raw)
 		if err != nil {
 			return nil, err

@@ -88,7 +88,7 @@ r23-contract-ci:
 r23-p2-generated-parity: r23-contract-ci buf-go-pb-check check-auth-proto-sync buf-dart-check $(FLUTTER_SQLITE_PREFETCH)
 	cd "$(ROOT)/src/backend/auth" && mvn -B -DskipTests compile
 	$(BASH) -c 'cd "$(ROOT)/protos/voice/r23_contract_test" && R23_CHECK_UNCOMMITTED_JAVA=1 go test -run "^(TestR23GeneratedTargets|TestR23GeneratedRuntimeConsumers)$$" -count=1 -v'
-	$(BASH) -c 'set -e; for module in chat file messaging role user voice; do (cd "$(ROOT)/src/backend/$$module" && go test -run "^$$" ./...); done'
+	$(BASH) -c 'set -e; for module in $(GO_SERVICES); do (cd "$(ROOT)/src/backend/$$module" && go test -run "^$$" ./...); done'
 	cd "$(ROOT)/src/frontend" && flutter analyze lib/gen
 	cd "$(ROOT)/src/frontend" && flutter test test/spaces_client_tree_test.dart test/shared_media_client_test.dart test/realtime_protocol_test.dart
 

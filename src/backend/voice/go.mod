@@ -19,7 +19,7 @@ require (
 	voice.app/voice/role v0.0.0
 	voice.app/voice/social v0.0.0-00010101000000-000000000000
 	voice.app/voice/space v0.0.0
-	voice.app/voice/story v0.0.0-00010101000000-000000000000
+	voice.app/voice/story v0.0.0
 	voice.app/voice/subscription v0.0.0
 	voice.app/voice/user v0.0.0
 	voice/backend/pkg v0.0.0-00010101000000-000000000000

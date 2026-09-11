@@ -9,6 +9,8 @@ COPY space/go.mod ./space/
 COPY role/go.mod ./role/
 COPY role/pb/voice/role/go.mod ./role/pb/voice/role/
 COPY voice/pb/voice/space/go.mod ./voice/pb/voice/space/
+COPY file/pb/voice/file/go.mod ./file/pb/voice/file/
+COPY voice/pb/voice/story/go.mod ./voice/pb/voice/story/
 COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
 COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
 COPY user/pb/voice/social/go.mod ./user/pb/voice/social/
@@ -22,6 +24,8 @@ COPY messaging/pb/voice/events ./messaging/pb/voice/events
 COPY role/pb ./role/pb
 COPY role/permissions ./role/permissions
 COPY voice/pb/voice/space ./voice/pb/voice/space
+COPY file/pb/voice/file ./file/pb/voice/file
+COPY voice/pb/voice/story ./voice/pb/voice/story
 COPY space ./space
 WORKDIR /src/space
 RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked --mount=type=cache,target=/root/.cache/go-build,id=voice-gobuild,sharing=locked CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/service .

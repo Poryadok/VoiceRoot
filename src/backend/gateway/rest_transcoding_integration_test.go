@@ -26,10 +26,30 @@ import (
 type dmSmokeBackend struct {
 	userv1.UnimplementedUserServiceServer
 	socialv1.UnimplementedSocialServiceServer
-	chatv1.UnimplementedChatServiceServer
-	messagingv1.UnimplementedMessagingServiceServer
 
 	sendCalls atomic.Int32
+}
+
+type dmSmokeChatBackend struct {
+	chatv1.UnimplementedChatServiceServer
+	backend *dmSmokeBackend
+}
+
+func (s *dmSmokeChatBackend) ListChats(ctx context.Context, req *chatv1.ListChatsRequest) (*chatv1.ListChatsResponse, error) {
+	return s.backend.ListChats(ctx, req)
+}
+
+type dmSmokeMessagingBackend struct {
+	messagingv1.UnimplementedMessagingServiceServer
+	backend *dmSmokeBackend
+}
+
+func (s *dmSmokeMessagingBackend) GetMessages(ctx context.Context, req *messagingv1.GetMessagesRequest) (*messagingv1.GetMessagesResponse, error) {
+	return s.backend.GetMessages(ctx, req)
+}
+
+func (s *dmSmokeMessagingBackend) SendMessage(ctx context.Context, req *messagingv1.SendMessageRequest) (*messagingv1.SendMessageResponse, error) {
+	return s.backend.SendMessage(ctx, req)
 }
 
 func (s *dmSmokeBackend) SearchProfiles(_ context.Context, req *userv1.SearchProfilesRequest) (*userv1.SearchProfilesResponse, error) {
@@ -85,8 +105,8 @@ func startBufconnDMStack(t *testing.T, backend *dmSmokeBackend) (grpc.ClientConn
 	srv := grpc.NewServer()
 	userv1.RegisterUserServiceServer(srv, backend)
 	socialv1.RegisterSocialServiceServer(srv, backend)
-	chatv1.RegisterChatServiceServer(srv, backend)
-	messagingv1.RegisterMessagingServiceServer(srv, backend)
+	chatv1.RegisterChatServiceServer(srv, &dmSmokeChatBackend{backend: backend})
+	messagingv1.RegisterMessagingServiceServer(srv, &dmSmokeMessagingBackend{backend: backend})
 	go func() { _ = srv.Serve(lis) }()
 	conn, err := grpc.NewClient("passthrough:///bufnet",
 		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return lis.Dial() }),
