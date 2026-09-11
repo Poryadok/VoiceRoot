@@ -37,13 +37,13 @@ func (s *SpaceGRPC) CreateSpace(ctx context.Context, req *spacev1.CreateSpaceReq
 
 	row, err := s.Store.CreateSpace(ctx, caller, name, req.GetDescription(), req.GetVisibility())
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	if accountID, ok := authctx.AccountID(ctx); ok && s.SeedSpaceProActive {
 		_ = s.Store.UpsertSpaceSubscription(ctx, row.ID, accountID, "active")
 	}
 	if err := s.bootstrapSpaceRoles(ctx, row.ID, caller); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	if s.SpaceEvents != nil {
 		if err := s.SpaceEvents.PublishSpaceCreated(ctx, row.ID.String(), row.OwnerProfileID.String()); err != nil {
@@ -105,7 +105,7 @@ func (s *SpaceGRPC) UpdateSpace(ctx context.Context, req *spacev1.UpdateSpaceReq
 	}
 	updated, err := s.Store.UpdateSpace(ctx, spaceID, in)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	if updated == nil {
 		return nil, status.Error(codes.NotFound, "space not found")
@@ -137,7 +137,7 @@ func (s *SpaceGRPC) UpdateSpaceMmConfig(ctx context.Context, req *spacev1.Update
 	cfg := req.GetMmConfigJson()
 	updated, err := s.Store.UpdateSpace(ctx, spaceID, store.UpdateSpaceInput{MMConfigJSON: &cfg})
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	if updated == nil {
 		return nil, status.Error(codes.NotFound, "space not found")
@@ -170,7 +170,7 @@ func (s *SpaceGRPC) DeleteSpace(ctx context.Context, req *spacev1.DeleteSpaceReq
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, status.Error(codes.NotFound, "space not found")
 		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	if s.SpaceEvents != nil {
 		if pubErr := s.SpaceEvents.PublishSpaceDeleted(ctx, spaceID.String()); pubErr != nil {
@@ -196,11 +196,21 @@ func (s *SpaceGRPC) TransferOwnership(ctx context.Context, req *spacev1.Transfer
 	if err != nil {
 		return nil, err
 	}
-	release, err := s.lockSpaceMutation(ctx, spaceID)
+	release, err := s.lockLegacyOwnershipMutation(ctx, spaceID)
 	if err != nil {
 		return nil, err
 	}
 	defer release()
+	legacyService := &SpaceGRPC{
+		Store:                               s.Store.LegacyOwnershipLeaseStoreForTest(),
+		SpaceEvents:                         s.SpaceEvents,
+		Roles:                               s.Roles,
+		OwnershipRoles:                      s.OwnershipRoles,
+		PrincipalIssuer:                     s.PrincipalIssuer,
+		Logger:                              s.Logger,
+		allowLegacyOwnershipTransferForTest: true,
+	}
+	s = legacyService
 	caller, ok := authctx.ProfileID(ctx)
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
@@ -223,7 +233,7 @@ func (s *SpaceGRPC) TransferOwnership(ctx context.Context, req *spacev1.Transfer
 		case errors.Is(err, store.ErrNotSpaceOwner):
 			return nil, status.Error(codes.PermissionDenied, "space owner required")
 		default:
-			return nil, status.Error(codes.Internal, err.Error())
+			return nil, mapSpaceStoreError(err)
 		}
 	}
 	if err := s.applyOwnerRole(ctx, spaceID, caller, newOwnerID, operationID); err != nil {
@@ -314,14 +324,14 @@ func (s *SpaceGRPC) GetSpace(ctx context.Context, req *spacev1.GetSpaceRequest) 
 	}
 	member, err := s.Store.IsSpaceMember(ctx, spaceID, caller)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	if !member {
 		return nil, status.Error(codes.PermissionDenied, "not a space member")
 	}
 	row, err := s.Store.GetSpace(ctx, spaceID)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	if row == nil {
 		return nil, status.Error(codes.NotFound, "space not found")
@@ -357,7 +367,7 @@ func (s *SpaceGRPC) ListMySpaces(ctx context.Context, req *spacev1.ListMySpacesR
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	spaces := make([]*spacev1.Space, 0, len(page.Rows))
 	for _, row := range page.Rows {

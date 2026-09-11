@@ -32,7 +32,7 @@ func (s *SpaceGRPC) AddBotMember(ctx context.Context, req *spacev1.AddBotMemberR
 		return nil, err
 	}
 	if err := s.Store.AddBotMember(ctx, spaceID, profileID); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	return &spacev1.AddBotMemberResponse{}, nil
 }
@@ -58,7 +58,7 @@ func (s *SpaceGRPC) RemoveBotMember(ctx context.Context, req *spacev1.RemoveBotM
 		return nil, err
 	}
 	if err := s.Store.RemoveBotMember(ctx, spaceID, profileID); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	return &spacev1.RemoveBotMemberResponse{}, nil
 }

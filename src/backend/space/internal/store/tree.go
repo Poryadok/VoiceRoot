@@ -67,12 +67,12 @@ type TreeNodeRow struct {
 
 // SpaceTreeData aggregates categories, nodes, and voice rooms for a space.
 type SpaceTreeData struct {
-	Categories  []*CategoryRow
-	Nodes       []*TreeNodeRow
-	VoiceRooms  []*VoiceRoomRow
+	Categories []*CategoryRow
+	Nodes      []*TreeNodeRow
+	VoiceRooms []*VoiceRoomRow
 }
 
-	func (s *SpaceStore) treeNodeCapTx(ctx context.Context, tx pgx.Tx, spaceID uuid.UUID) (int, error) {
+func (s *SpaceStore) treeNodeCapTx(ctx context.Context, tx pgx.Tx, spaceID uuid.UUID) (int, error) {
 	var exists bool
 	err := tx.QueryRow(ctx, `
 SELECT EXISTS (
@@ -149,11 +149,16 @@ func (s *SpaceStore) CreateCategory(ctx context.Context, spaceID uuid.UUID, name
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("space store: pool not configured")
 	}
+	if s.tx == nil {
+		return withOwnershipScopeValue(s, ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) (*CategoryRow, error) {
+			return scoped.CreateCategory(ctx, spaceID, name, sortOrder)
+		})
+	}
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, errors.New("category name is required")
 	}
-	return scanCategoryRow(s.Pool.QueryRow(ctx, `
+	return scanCategoryRow(s.db().QueryRow(ctx, `
 INSERT INTO categories (space_id, name, sort_order)
 VALUES ($1, $2, $3)
 RETURNING id, space_id, name, sort_order, created_at
@@ -165,7 +170,12 @@ func (s *SpaceStore) ListCategories(ctx context.Context, spaceID uuid.UUID) ([]*
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("space store: pool not configured")
 	}
-	rows, err := s.Pool.Query(ctx, `
+	if s.tx == nil {
+		return withOwnershipScopeValue(s, ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) ([]*CategoryRow, error) {
+			return scoped.ListCategories(ctx, spaceID)
+		})
+	}
+	rows, err := s.db().Query(ctx, `
 SELECT id, space_id, name, sort_order, created_at
 FROM categories
 WHERE space_id = $1
@@ -191,8 +201,23 @@ func (s *SpaceStore) UpdateCategory(ctx context.Context, categoryID uuid.UUID, n
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("space store: pool not configured")
 	}
+	if s.tx == nil {
+		resolve := func(db spaceStoreDB) (uuid.UUID, error) {
+			var spaceID uuid.UUID
+			err := db.QueryRow(ctx, `SELECT space_id FROM categories WHERE id=$1`, categoryID).Scan(&spaceID)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return uuid.Nil, nil
+			}
+			return spaceID, err
+		}
+		return withResolvedOwnershipScopeValue(s, ctx, resolve, func(scoped *SpaceStore) (*CategoryRow, error) {
+			return scoped.UpdateCategory(ctx, categoryID, name, sortOrder)
+		}, func() (*CategoryRow, error) {
+			return nil, ErrCategoryNotFound
+		})
+	}
 	if name == nil && sortOrder == nil {
-		return scanCategoryRow(s.Pool.QueryRow(ctx, `
+		return scanCategoryRow(s.db().QueryRow(ctx, `
 SELECT id, space_id, name, sort_order, created_at FROM categories WHERE id = $1
 `, categoryID))
 	}
@@ -214,7 +239,7 @@ SELECT id, space_id, name, sort_order, created_at FROM categories WHERE id = $1
 UPDATE categories SET %s WHERE id = $%d
 RETURNING id, space_id, name, sort_order, created_at
 `, strings.Join(sets, ", "), argN)
-	row, err := scanCategoryRow(s.Pool.QueryRow(ctx, q, args...))
+	row, err := scanCategoryRow(s.db().QueryRow(ctx, q, args...))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrCategoryNotFound
 	}
@@ -226,7 +251,22 @@ func (s *SpaceStore) DeleteCategory(ctx context.Context, categoryID uuid.UUID) e
 	if s == nil || s.Pool == nil {
 		return errors.New("space store: pool not configured")
 	}
-	tag, err := s.Pool.Exec(ctx, `DELETE FROM categories WHERE id = $1`, categoryID)
+	if s.tx == nil {
+		resolve := func(db spaceStoreDB) (uuid.UUID, error) {
+			var spaceID uuid.UUID
+			err := db.QueryRow(ctx, `SELECT space_id FROM categories WHERE id=$1`, categoryID).Scan(&spaceID)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return uuid.Nil, nil
+			}
+			return spaceID, err
+		}
+		return s.withResolvedOwnershipScope(ctx, resolve, func(scoped *SpaceStore) error {
+			return scoped.DeleteCategory(ctx, categoryID)
+		}, func() error {
+			return ErrCategoryNotFound
+		})
+	}
+	tag, err := s.db().Exec(ctx, `DELETE FROM categories WHERE id = $1`, categoryID)
 	if err != nil {
 		return err
 	}
@@ -241,12 +281,23 @@ func (s *SpaceStore) CreateVoiceRoom(ctx context.Context, spaceID uuid.UUID, nam
 	if s == nil || s.Pool == nil {
 		return nil, nil, errors.New("space store: pool not configured")
 	}
+	if s.tx == nil {
+		type result struct {
+			room *VoiceRoomRow
+			node *TreeNodeRow
+		}
+		value, err := withOwnershipScopeValue(s, ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) (result, error) {
+			room, node, callErr := scoped.CreateVoiceRoom(ctx, spaceID, name, categoryID)
+			return result{room: room, node: node}, callErr
+		})
+		return value.room, value.node, err
+	}
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, nil, errors.New("voice room name is required")
 	}
 
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.db().Begin(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -298,11 +349,26 @@ func (s *SpaceStore) UpdateVoiceRoom(ctx context.Context, voiceRoomID uuid.UUID,
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("space store: pool not configured")
 	}
+	if s.tx == nil {
+		resolve := func(db spaceStoreDB) (uuid.UUID, error) {
+			var spaceID uuid.UUID
+			err := db.QueryRow(ctx, `SELECT space_id FROM voice_rooms WHERE id=$1`, voiceRoomID).Scan(&spaceID)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return uuid.Nil, nil
+			}
+			return spaceID, err
+		}
+		return withResolvedOwnershipScopeValue(s, ctx, resolve, func(scoped *SpaceStore) (*VoiceRoomRow, error) {
+			return scoped.UpdateVoiceRoom(ctx, voiceRoomID, name)
+		}, func() (*VoiceRoomRow, error) {
+			return nil, ErrVoiceRoomNotFound
+		})
+	}
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, errors.New("voice room name is required")
 	}
-	row, err := scanVoiceRoomRow(s.Pool.QueryRow(ctx, `
+	row, err := scanVoiceRoomRow(s.db().QueryRow(ctx, `
 UPDATE voice_rooms SET name = $1, updated_at = now() WHERE id = $2
 RETURNING id, space_id, name, created_at, updated_at
 `, name, voiceRoomID))
@@ -317,7 +383,22 @@ func (s *SpaceStore) DeleteVoiceRoom(ctx context.Context, voiceRoomID uuid.UUID)
 	if s == nil || s.Pool == nil {
 		return errors.New("space store: pool not configured")
 	}
-	tag, err := s.Pool.Exec(ctx, `DELETE FROM voice_rooms WHERE id = $1`, voiceRoomID)
+	if s.tx == nil {
+		resolve := func(db spaceStoreDB) (uuid.UUID, error) {
+			var spaceID uuid.UUID
+			err := db.QueryRow(ctx, `SELECT space_id FROM voice_rooms WHERE id=$1`, voiceRoomID).Scan(&spaceID)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return uuid.Nil, nil
+			}
+			return spaceID, err
+		}
+		return s.withResolvedOwnershipScope(ctx, resolve, func(scoped *SpaceStore) error {
+			return scoped.DeleteVoiceRoom(ctx, voiceRoomID)
+		}, func() error {
+			return ErrVoiceRoomNotFound
+		})
+	}
+	tag, err := s.db().Exec(ctx, `DELETE FROM voice_rooms WHERE id = $1`, voiceRoomID)
 	if err != nil {
 		return err
 	}
@@ -344,6 +425,11 @@ func (s *SpaceStore) UpsertTreeNode(ctx context.Context, in UpsertTreeNodeInput)
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("space store: pool not configured")
 	}
+	if s.tx == nil {
+		return withOwnershipScopeValue(s, ctx, []uuid.UUID{in.SpaceID}, func(scoped *SpaceStore) (*TreeNodeRow, error) {
+			return scoped.UpsertTreeNode(ctx, in)
+		})
+	}
 	kind := strings.TrimSpace(in.Kind)
 	if kind != TreeKindTextChat && kind != TreeKindVoiceRoom {
 		return nil, ErrInvalidTreeKind
@@ -362,7 +448,7 @@ func (s *SpaceStore) UpsertTreeNode(ctx context.Context, in UpsertTreeNodeInput)
 }
 
 func (s *SpaceStore) insertTreeNode(ctx context.Context, in UpsertTreeNodeInput) (*TreeNodeRow, error) {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.db().Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -444,7 +530,7 @@ UPDATE space_tree_nodes SET %s WHERE id = $%d AND space_id = $%d
 RETURNING `+treeNodeSelectColumns+`
 `, strings.Join(sets, ", "), argN, argN+1)
 
-	row, err := scanTreeNodeRow(s.Pool.QueryRow(ctx, q, args...))
+	row, err := scanTreeNodeRow(s.db().QueryRow(ctx, q, args...))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrTreeNodeNotFound
 	}
@@ -456,7 +542,12 @@ func (s *SpaceStore) RemoveTreeNode(ctx context.Context, spaceID, nodeID uuid.UU
 	if s == nil || s.Pool == nil {
 		return errors.New("space store: pool not configured")
 	}
-	tag, err := s.Pool.Exec(ctx, `
+	if s.tx == nil {
+		return s.withOwnershipScope(ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) error {
+			return scoped.RemoveTreeNode(ctx, spaceID, nodeID)
+		})
+	}
+	tag, err := s.db().Exec(ctx, `
 DELETE FROM space_tree_nodes WHERE id = $1 AND space_id = $2
 `, nodeID, spaceID)
 	if err != nil {
@@ -473,7 +564,12 @@ func (s *SpaceStore) ListTreeNodes(ctx context.Context, spaceID uuid.UUID) ([]*T
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("space store: pool not configured")
 	}
-	rows, err := s.Pool.Query(ctx, `
+	if s.tx == nil {
+		return withOwnershipScopeValue(s, ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) ([]*TreeNodeRow, error) {
+			return scoped.ListTreeNodes(ctx, spaceID)
+		})
+	}
+	rows, err := s.db().Query(ctx, `
 SELECT `+treeNodeSelectColumns+`
 FROM space_tree_nodes
 WHERE space_id = $1
@@ -499,7 +595,12 @@ func (s *SpaceStore) ListVoiceRooms(ctx context.Context, spaceID uuid.UUID) ([]*
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("space store: pool not configured")
 	}
-	rows, err := s.Pool.Query(ctx, `
+	if s.tx == nil {
+		return withOwnershipScopeValue(s, ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) ([]*VoiceRoomRow, error) {
+			return scoped.ListVoiceRooms(ctx, spaceID)
+		})
+	}
+	rows, err := s.db().Query(ctx, `
 SELECT id, space_id, name, created_at, updated_at
 FROM voice_rooms
 WHERE space_id = $1
@@ -522,6 +623,14 @@ ORDER BY created_at ASC
 
 // ListSpaceTree loads categories, nodes, and voice rooms for a space.
 func (s *SpaceStore) ListSpaceTree(ctx context.Context, spaceID uuid.UUID) (*SpaceTreeData, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("space store: pool not configured")
+	}
+	if s.tx == nil {
+		return withOwnershipScopeValue(s, ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) (*SpaceTreeData, error) {
+			return scoped.ListSpaceTree(ctx, spaceID)
+		})
+	}
 	categories, err := s.ListCategories(ctx, spaceID)
 	if err != nil {
 		return nil, err
@@ -546,8 +655,13 @@ func (s *SpaceStore) PinTreeNode(ctx context.Context, spaceID, nodeID uuid.UUID)
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("space store: pool not configured")
 	}
+	if s.tx == nil {
+		return withOwnershipScopeValue(s, ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) (*TreeNodeRow, error) {
+			return scoped.PinTreeNode(ctx, spaceID, nodeID)
+		})
+	}
 
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.db().Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -593,8 +707,13 @@ func (s *SpaceStore) UnpinTreeNode(ctx context.Context, spaceID, nodeID uuid.UUI
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("space store: pool not configured")
 	}
+	if s.tx == nil {
+		return withOwnershipScopeValue(s, ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) (*TreeNodeRow, error) {
+			return scoped.UnpinTreeNode(ctx, spaceID, nodeID)
+		})
+	}
 
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.db().Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -640,11 +759,16 @@ func (s *SpaceStore) ReorderSpaceTree(ctx context.Context, spaceID uuid.UUID, or
 	if s == nil || s.Pool == nil {
 		return errors.New("space store: pool not configured")
 	}
+	if s.tx == nil {
+		return s.withOwnershipScope(ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) error {
+			return scoped.ReorderSpaceTree(ctx, spaceID, orderedNodeIDs)
+		})
+	}
 	if len(orderedNodeIDs) == 0 {
 		return nil
 	}
 
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.db().Begin(ctx)
 	if err != nil {
 		return err
 	}

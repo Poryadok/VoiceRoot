@@ -13,6 +13,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"google.golang.org/protobuf/proto"
+	rolev1 "voice.app/voice/role/v1"
 )
 
 var (
@@ -47,6 +49,19 @@ type OwnershipJournal struct {
 	AuthReceipt  *OwnershipAuthReceipt
 	RoleReceipt  *OwnershipRolePreparedReceipt
 	PendingAudit *OwnershipPendingAudit
+
+	terminalReceiptBytes []byte
+	terminalReceiptHash  [32]byte
+	hasTerminalReceipt   bool
+}
+
+// OwnershipTerminalReceiptEvidence returns defensive copies of immutable
+// authoritative terminal evidence when the journal has reached a terminal state.
+func (j *OwnershipJournal) OwnershipTerminalReceiptEvidence() ([]byte, [32]byte, bool) {
+	if j == nil || !j.hasTerminalReceipt {
+		return nil, [32]byte{}, false
+	}
+	return append([]byte(nil), j.terminalReceiptBytes...), j.terminalReceiptHash, true
 }
 
 // EncodeOwnershipBinding derives codec-v1 bytes and their digest exclusively
@@ -176,12 +191,19 @@ type ownershipJournalQuerier interface {
 }
 
 func loadOwnershipJournal(ctx context.Context, querier ownershipJournalQuerier, operationID uuid.UUID) (*OwnershipJournal, error) {
-	var hasCommitSchema bool
+	var hasCommitSchema, hasTerminalSchema bool
 	if err := querier.QueryRow(ctx, `SELECT EXISTS(
 		SELECT 1 FROM information_schema.columns
 		WHERE table_schema=current_schema() AND table_name='ownership_journal' AND column_name='role_receipt_bytes'
-	)`).Scan(&hasCommitSchema); err != nil {
+	), EXISTS(
+		SELECT 1 FROM information_schema.columns
+		WHERE table_schema=current_schema() AND table_name='ownership_journal' AND column_name='role_terminal_receipt_bytes'
+	)`).Scan(&hasCommitSchema, &hasTerminalSchema); err != nil {
 		return nil, err
+	}
+	if hasTerminalSchema {
+		return scanOwnershipJournalTerminal(querier.QueryRow(ctx,
+			`SELECT `+ownershipJournalTerminalColumns+` FROM ownership_journal WHERE operation_id=$1`, operationID))
 	}
 	if hasCommitSchema {
 		return scanOwnershipJournalCommit(querier.QueryRow(ctx,
@@ -192,14 +214,21 @@ func loadOwnershipJournal(ctx context.Context, querier ownershipJournalQuerier, 
 }
 
 func scanOwnershipJournal(row pgx.Row) (*OwnershipJournal, error) {
-	return scanOwnershipJournalEvidence(row, false)
+	return scanOwnershipJournalEvidence(row, false, false)
 }
 
 func scanOwnershipJournalCommit(row pgx.Row) (*OwnershipJournal, error) {
-	return scanOwnershipJournalEvidence(row, true)
+	return scanOwnershipJournalEvidence(row, true, false)
 }
 
-func scanOwnershipJournalEvidence(row pgx.Row, includeCommit bool) (*OwnershipJournal, error) {
+const ownershipJournalTerminalColumns = ownershipJournalCommitColumns + `,
+	role_terminal_receipt_bytes,role_terminal_receipt_hash`
+
+func scanOwnershipJournalTerminal(row pgx.Row) (*OwnershipJournal, error) {
+	return scanOwnershipJournalEvidence(row, true, true)
+}
+
+func scanOwnershipJournalEvidence(row pgx.Row, includeCommit, includeTerminal bool) (*OwnershipJournal, error) {
 	out := new(OwnershipJournal)
 	b := &out.Binding
 	var storedHash []byte
@@ -210,6 +239,7 @@ func scanOwnershipJournalEvidence(row pgx.Row, includeCommit bool) (*OwnershipJo
 	var roleReceiptBytes, roleReceiptHash, roleIntentBytes, roleIntentHash []byte
 	var pendingAction, pendingTargetType, pendingDetails *string
 	var pendingTargetID *uuid.UUID
+	var terminalReceiptBytes, terminalReceiptHash []byte
 	destinations := []any{&b.OperationID, &b.ProtocolVersion, &b.SpaceID, &b.AccountID,
 		&b.ActorProfileID, &b.NewOwnerProfileID, &b.SessionEpoch, &b.ProofDigest,
 		&out.BindingBytes, &storedHash, &out.State, &out.AuditID, &out.EventID,
@@ -218,6 +248,9 @@ func scanOwnershipJournalEvidence(row pgx.Row, includeCommit bool) (*OwnershipJo
 	if includeCommit {
 		destinations = append(destinations, &roleReceiptBytes, &roleReceiptHash, &roleIntentBytes, &roleIntentHash,
 			&pendingAction, &pendingTargetType, &pendingTargetID, &pendingDetails)
+	}
+	if includeTerminal {
+		destinations = append(destinations, &terminalReceiptBytes, &terminalReceiptHash)
 	}
 	err := row.Scan(destinations...)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -236,8 +269,8 @@ func scanOwnershipJournalEvidence(row pgx.Row, includeCommit bool) (*OwnershipJo
 			operationID != nil || sessionEpoch != nil || consumedAt != nil || verifiedFactors != nil {
 			return nil, errors.New("ownership journal auth receipt evidence is incomplete")
 		}
-		return finishOwnershipCommitEvidence(out, includeCommit, roleReceiptBytes, roleReceiptHash, roleIntentBytes, roleIntentHash,
-			pendingAction, pendingTargetType, pendingTargetID, pendingDetails)
+		return finishOwnershipTerminalEvidence(out, includeCommit, includeTerminal, roleReceiptBytes, roleReceiptHash, roleIntentBytes, roleIntentHash,
+			pendingAction, pendingTargetType, pendingTargetID, pendingDetails, terminalReceiptBytes, terminalReceiptHash)
 	}
 	if accountID == nil || profileID == nil || spaceID == nil || newOwnerID == nil ||
 		operationID == nil || sessionEpoch == nil || consumedAt == nil || verifiedFactors == nil {
@@ -258,8 +291,58 @@ func scanOwnershipJournalEvidence(row pgx.Row, includeCommit bool) (*OwnershipJo
 		return nil, errors.New("ownership journal auth receipt evidence is inconsistent")
 	}
 	out.AuthReceipt = &receipt
-	return finishOwnershipCommitEvidence(out, includeCommit, roleReceiptBytes, roleReceiptHash, roleIntentBytes, roleIntentHash,
+	return finishOwnershipTerminalEvidence(out, includeCommit, includeTerminal, roleReceiptBytes, roleReceiptHash, roleIntentBytes, roleIntentHash,
+		pendingAction, pendingTargetType, pendingTargetID, pendingDetails, terminalReceiptBytes, terminalReceiptHash)
+}
+
+func finishOwnershipTerminalEvidence(out *OwnershipJournal, includeCommit, includeTerminal bool,
+	receiptBytes, receiptHash, intentBytes, intentHash []byte,
+	pendingAction, pendingTargetType *string, pendingTargetID *uuid.UUID, pendingDetails *string,
+	terminalReceiptBytes, terminalReceiptHash []byte,
+) (*OwnershipJournal, error) {
+	out, err := finishOwnershipCommitEvidence(out, includeCommit, receiptBytes, receiptHash, intentBytes, intentHash,
 		pendingAction, pendingTargetType, pendingTargetID, pendingDetails)
+	if err != nil || !includeTerminal {
+		return out, err
+	}
+	if terminalReceiptBytes == nil {
+		if terminalReceiptHash != nil || out.State == "completed" || out.State == "aborted" {
+			return nil, errors.New("ownership journal terminal receipt evidence is incomplete")
+		}
+		return out, nil
+	}
+	digest := sha256.Sum256(terminalReceiptBytes)
+	if len(terminalReceiptHash) != sha256.Size || !bytes.Equal(terminalReceiptHash, digest[:]) || (out.State != "completed" && out.State != "aborted") {
+		return nil, errors.New("ownership journal terminal receipt evidence is inconsistent")
+	}
+	var decoded rolev1.OwnershipTransferReceipt
+	if err := proto.Unmarshal(terminalReceiptBytes, &decoded); err != nil {
+		return nil, errors.New("ownership journal terminal receipt evidence is inconsistent")
+	}
+	wantState := rolev1.OwnershipTransferState_OWNERSHIP_TRANSFER_STATE_ABORTED
+	wantOwner := out.Binding.ActorProfileID
+	if out.State == "completed" {
+		wantState = rolev1.OwnershipTransferState_OWNERSHIP_TRANSFER_STATE_FINALIZED
+		wantOwner = out.Binding.NewOwnerProfileID
+	}
+	evidence, err := validateOwnershipTerminalReceipt(out.Binding, &decoded, wantState, wantOwner)
+	if err != nil || !bytes.Equal(evidence.bytes, terminalReceiptBytes) {
+		return nil, errors.New("ownership journal terminal receipt evidence is inconsistent")
+	}
+	if out.RoleReceipt != nil {
+		if !bytes.Equal(out.RoleReceipt.IntentBytes, evidence.intentBytes) {
+			return nil, errors.New("ownership journal terminal receipt evidence is inconsistent")
+		}
+	} else {
+		canonicalIntent, canonicalErr := canonicalOwnershipIntentBytes(out.Binding)
+		if canonicalErr != nil || !bytes.Equal(canonicalIntent, evidence.intentBytes) {
+			return nil, errors.New("ownership journal terminal receipt evidence is inconsistent")
+		}
+	}
+	copy(out.terminalReceiptHash[:], terminalReceiptHash)
+	out.terminalReceiptBytes = append([]byte(nil), terminalReceiptBytes...)
+	out.hasTerminalReceipt = true
+	return out, nil
 }
 
 func finishOwnershipCommitEvidence(out *OwnershipJournal, includeCommit bool, receiptBytes, receiptHash, intentBytes, intentHash []byte,

@@ -30,6 +30,22 @@ func startSpacePostgresForStoreTest(t *testing.T, ctx context.Context) *pgxpool.
 
 func applySpaceMigrationForStoreTest(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
+	applySpaceMigrationsThrough7ForStoreTest(t, ctx, pool)
+	for _, name := range []string{
+		"000008_ownership_journal.up.sql", "000009_ownership_journal_decision.up.sql",
+		"000010_ownership_journal_commit.up.sql", "000011_voice_access_epoch.up.sql",
+		"000012_ownership_journal_completion.up.sql",
+	} {
+		migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", name)
+		sqlBytes, err := os.ReadFile(migrationPath)
+		require.NoError(t, err)
+		_, err = pool.Exec(ctx, string(sqlBytes))
+		require.NoError(t, err)
+	}
+}
+
+func applySpaceMigrationsThrough7ForStoreTest(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
 	for _, name := range []string{
 		"000001_init.up.sql", "000002_tree.up.sql", "000003_invites.up.sql",
 		"000004_moderation.up.sql", "000005_space_subscriptions.up.sql",

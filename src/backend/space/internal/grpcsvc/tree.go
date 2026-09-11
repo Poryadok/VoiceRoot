@@ -28,7 +28,7 @@ func (s *SpaceGRPC) requireSpaceMember(ctx context.Context, spaceID uuid.UUID) e
 	}
 	member, err := s.Store.IsSpaceMember(ctx, spaceID, caller)
 	if err != nil {
-		return status.Error(codes.Internal, err.Error())
+		return mapSpaceStoreError(err)
 	}
 	if !member {
 		return status.Error(codes.PermissionDenied, "not a space member")
@@ -53,7 +53,7 @@ func (s *SpaceGRPC) ListSpaceTree(ctx context.Context, req *spacev1.ListSpaceTre
 	}
 	data, err := s.Store.ListSpaceTree(ctx, spaceID)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	return s.spaceTreeDataToProto(ctx, data), nil
 }
@@ -106,7 +106,7 @@ func (s *SpaceGRPC) UpdateCategory(ctx context.Context, req *spacev1.UpdateCateg
 		return nil, status.Error(codes.NotFound, err.Error())
 	}
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	return &spacev1.UpdateCategoryResponse{Category: categoryRowToProto(row)}, nil
 }
@@ -136,7 +136,7 @@ func (s *SpaceGRPC) DeleteCategory(ctx context.Context, req *spacev1.DeleteCateg
 		if errors.Is(err, store.ErrCategoryNotFound) {
 			return nil, status.Error(codes.NotFound, err.Error())
 		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	return &spacev1.DeleteCategoryResponse{}, nil
 }
@@ -213,7 +213,7 @@ func (s *SpaceGRPC) UpdateVoiceRoom(ctx context.Context, req *spacev1.UpdateVoic
 		return nil, status.Error(codes.NotFound, err.Error())
 	}
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	return &spacev1.UpdateVoiceRoomResponse{VoiceRoom: voiceRoomRowToProto(room)}, nil
 }
@@ -237,7 +237,7 @@ WHERE vr.id = $1
 		return nil, status.Error(codes.NotFound, "voice room not found")
 	}
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	release, err := s.lockSpaceMutation(ctx, spaceID)
 	if err != nil {
@@ -251,7 +251,7 @@ WHERE vr.id = $1
 		if errors.Is(err, store.ErrVoiceRoomNotFound) {
 			return nil, status.Error(codes.NotFound, err.Error())
 		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	if nodeID.Valid {
 		if nid, parseErr := uuid.Parse(nodeID.String); parseErr == nil {
@@ -330,7 +330,7 @@ func (s *SpaceGRPC) UpsertTreeNode(ctx context.Context, req *spacev1.UpsertTreeN
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	s.publishTreeUpserted(ctx, spaceID, node)
 	return &spacev1.UpsertTreeNodeResponse{SpaceTreeNode: treeNodeRowToProto(node, nil)}, nil
@@ -360,7 +360,7 @@ func (s *SpaceGRPC) RemoveTreeNode(ctx context.Context, req *spacev1.RemoveTreeN
 		if errors.Is(err, store.ErrTreeNodeNotFound) {
 			return nil, status.Error(codes.NotFound, err.Error())
 		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	s.publishTreeRemoved(ctx, spaceID, nodeID)
 	return &spacev1.RemoveTreeNodeResponse{}, nil
@@ -394,7 +394,7 @@ func (s *SpaceGRPC) ReorderSpaceTree(ctx context.Context, req *spacev1.ReorderSp
 		if errors.Is(err, store.ErrInvalidReorder) {
 			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	return &spacev1.ReorderSpaceTreeResponse{}, nil
 }
@@ -424,7 +424,7 @@ func (s *SpaceGRPC) PinTreeNode(ctx context.Context, req *spacev1.PinTreeNodeReq
 		return nil, status.Error(codes.NotFound, err.Error())
 	}
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	s.publishTreeUpserted(ctx, spaceID, node)
 	return &spacev1.PinTreeNodeResponse{SpaceTreeNode: treeNodeRowToProto(node, nil)}, nil
@@ -455,7 +455,7 @@ func (s *SpaceGRPC) UnpinTreeNode(ctx context.Context, req *spacev1.UnpinTreeNod
 		return nil, status.Error(codes.NotFound, err.Error())
 	}
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	s.publishTreeUpserted(ctx, spaceID, node)
 	return &spacev1.UnpinTreeNodeResponse{SpaceTreeNode: treeNodeRowToProto(node, nil)}, nil

@@ -70,6 +70,11 @@ func (s *SpaceStore) CreateInvite(ctx context.Context, in CreateInviteInput) (*I
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("space store: pool not configured")
 	}
+	if s.tx == nil {
+		return withOwnershipScopeValue(s, ctx, []uuid.UUID{in.SpaceID}, func(scoped *SpaceStore) (*InviteRow, error) {
+			return scoped.CreateInvite(ctx, in)
+		})
+	}
 	if in.MaxUses != nil && *in.MaxUses < 1 {
 		return nil, errors.New("max_uses must be at least 1")
 	}
@@ -78,7 +83,7 @@ func (s *SpaceStore) CreateInvite(ctx context.Context, in CreateInviteInput) (*I
 		if err != nil {
 			return nil, err
 		}
-		row, err := scanInviteRow(s.Pool.QueryRow(ctx, `
+		row, err := scanInviteRow(s.db().QueryRow(ctx, `
 INSERT INTO invites (space_id, code, creator_profile_id, max_uses, expires_at)
 VALUES ($1, $2, $3, $4, $5)
 RETURNING id, space_id, code, creator_profile_id, max_uses, use_count, expires_at, created_at, revoked_at
@@ -103,7 +108,12 @@ func (s *SpaceStore) ListInvites(ctx context.Context, spaceID uuid.UUID) ([]*Inv
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("space store: pool not configured")
 	}
-	rows, err := s.Pool.Query(ctx, `
+	if s.tx == nil {
+		return withOwnershipScopeValue(s, ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) ([]*InviteRow, error) {
+			return scoped.ListInvites(ctx, spaceID)
+		})
+	}
+	rows, err := s.db().Query(ctx, `
 SELECT id, space_id, code, creator_profile_id, max_uses, use_count, expires_at, created_at, revoked_at
 FROM invites
 WHERE space_id = $1 AND revoked_at IS NULL
@@ -132,7 +142,22 @@ func (s *SpaceStore) GetInviteByCode(ctx context.Context, code string) (*InviteR
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("space store: pool not configured")
 	}
-	return scanInviteRow(s.Pool.QueryRow(ctx, `
+	if s.tx == nil {
+		resolve := func(db spaceStoreDB) (uuid.UUID, error) {
+			var spaceID uuid.UUID
+			err := db.QueryRow(ctx, `SELECT space_id FROM invites WHERE code=$1`, code).Scan(&spaceID)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return uuid.Nil, nil
+			}
+			return spaceID, err
+		}
+		return withResolvedOwnershipScopeValue(s, ctx, resolve, func(scoped *SpaceStore) (*InviteRow, error) {
+			return scoped.GetInviteByCode(ctx, code)
+		}, func() (*InviteRow, error) {
+			return nil, nil
+		})
+	}
+	return scanInviteRow(s.db().QueryRow(ctx, `
 SELECT id, space_id, code, creator_profile_id, max_uses, use_count, expires_at, created_at, revoked_at
 FROM invites
 WHERE code = $1
@@ -144,7 +169,22 @@ func (s *SpaceStore) GetInviteByID(ctx context.Context, inviteID uuid.UUID) (*In
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("space store: pool not configured")
 	}
-	return scanInviteRow(s.Pool.QueryRow(ctx, `
+	if s.tx == nil {
+		resolve := func(db spaceStoreDB) (uuid.UUID, error) {
+			var spaceID uuid.UUID
+			err := db.QueryRow(ctx, `SELECT space_id FROM invites WHERE id=$1`, inviteID).Scan(&spaceID)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return uuid.Nil, nil
+			}
+			return spaceID, err
+		}
+		return withResolvedOwnershipScopeValue(s, ctx, resolve, func(scoped *SpaceStore) (*InviteRow, error) {
+			return scoped.GetInviteByID(ctx, inviteID)
+		}, func() (*InviteRow, error) {
+			return nil, nil
+		})
+	}
+	return scanInviteRow(s.db().QueryRow(ctx, `
 SELECT id, space_id, code, creator_profile_id, max_uses, use_count, expires_at, created_at, revoked_at
 FROM invites
 WHERE id = $1
@@ -156,7 +196,22 @@ func (s *SpaceStore) RevokeInvite(ctx context.Context, inviteID, actorProfileID 
 	if s == nil || s.Pool == nil {
 		return errors.New("space store: pool not configured")
 	}
-	tx, err := s.Pool.Begin(ctx)
+	if s.tx == nil {
+		resolve := func(db spaceStoreDB) (uuid.UUID, error) {
+			var spaceID uuid.UUID
+			err := db.QueryRow(ctx, `SELECT space_id FROM invites WHERE id=$1`, inviteID).Scan(&spaceID)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return uuid.Nil, nil
+			}
+			return spaceID, err
+		}
+		return s.withResolvedOwnershipScope(ctx, resolve, func(scoped *SpaceStore) error {
+			return scoped.RevokeInvite(ctx, inviteID, actorProfileID)
+		}, func() error {
+			return ErrInviteNotFound
+		})
+	}
+	tx, err := s.db().Begin(ctx)
 	if err != nil {
 		return err
 	}
@@ -219,7 +274,12 @@ func (s *SpaceStore) GetMembership(ctx context.Context, spaceID, profileID uuid.
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("space store: pool not configured")
 	}
-	return scanMembershipRow(s.Pool.QueryRow(ctx, `
+	if s.tx == nil {
+		return withOwnershipScopeValue(s, ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) (*MembershipRow, error) {
+			return scoped.GetMembership(ctx, spaceID, profileID)
+		})
+	}
+	return scanMembershipRow(s.db().QueryRow(ctx, `
 SELECT space_id, profile_id, joined_at, nickname
 FROM space_members
 WHERE space_id = $1 AND profile_id = $2
@@ -248,9 +308,24 @@ func (s *SpaceStore) JoinByInvite(ctx context.Context, code string, profileID, a
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("space store: pool not configured")
 	}
+	if s.tx == nil {
+		resolve := func(db spaceStoreDB) (uuid.UUID, error) {
+			var spaceID uuid.UUID
+			err := db.QueryRow(ctx, `SELECT space_id FROM invites WHERE code=$1`, code).Scan(&spaceID)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return uuid.Nil, nil
+			}
+			return spaceID, err
+		}
+		return withResolvedOwnershipScopeValue(s, ctx, resolve, func(scoped *SpaceStore) (*MembershipRow, error) {
+			return scoped.JoinByInvite(ctx, code, profileID, accountID)
+		}, func() (*MembershipRow, error) {
+			return nil, ErrInviteNotFound
+		})
+	}
 	now := time.Now().UTC()
 
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.db().Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -341,7 +416,12 @@ func (s *SpaceStore) JoinSpace(ctx context.Context, spaceID, profileID, accountI
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("space store: pool not configured")
 	}
-	tx, err := s.Pool.Begin(ctx)
+	if s.tx == nil {
+		return withOwnershipScopeValue(s, ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) (*MembershipRow, error) {
+			return scoped.JoinSpace(ctx, spaceID, profileID, accountID)
+		})
+	}
+	tx, err := s.db().Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -430,8 +510,23 @@ func (s *SpaceStore) AllowGuestsForInvite(ctx context.Context, code string) (boo
 	if s == nil || s.Pool == nil {
 		return false, errors.New("space store: pool not configured")
 	}
+	if s.tx == nil {
+		resolve := func(db spaceStoreDB) (uuid.UUID, error) {
+			var spaceID uuid.UUID
+			err := db.QueryRow(ctx, `SELECT space_id FROM invites WHERE code=$1`, code).Scan(&spaceID)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return uuid.Nil, nil
+			}
+			return spaceID, err
+		}
+		return withResolvedOwnershipScopeValue(s, ctx, resolve, func(scoped *SpaceStore) (bool, error) {
+			return scoped.AllowGuestsForInvite(ctx, code)
+		}, func() (bool, error) {
+			return false, ErrInviteNotFound
+		})
+	}
 	var allow bool
-	err := s.Pool.QueryRow(ctx, `
+	err := s.db().QueryRow(ctx, `
 SELECT COALESCE(sp.allow_guests, true)
 FROM invites i
 JOIN spaces sp ON sp.id = i.space_id

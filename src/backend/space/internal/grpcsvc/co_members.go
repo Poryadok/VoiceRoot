@@ -32,7 +32,7 @@ func (s *SpaceGRPC) AreCoMembers(ctx context.Context, req *spacev1.AreCoMembersR
 	}
 	ok, err := s.Store.AreCoMembers(ctx, profileA, profileB, spaceIDs)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	return &spacev1.AreCoMembersResponse{CoMembers: ok}, nil
 }

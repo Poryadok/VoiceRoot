@@ -49,7 +49,7 @@ func (s *SpaceGRPC) JoinSpace(ctx context.Context, req *spacev1.JoinSpaceRequest
 
 	row, err := s.Store.GetSpace(ctx, spaceID)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	if row == nil {
 		return nil, status.Error(codes.NotFound, "space not found")
@@ -67,7 +67,7 @@ func (s *SpaceGRPC) JoinSpace(ctx context.Context, req *spacev1.JoinSpaceRequest
 
 	wasMember, err := s.Store.IsSpaceMember(ctx, spaceID, profileID)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 
 	member, err := s.Store.JoinSpace(ctx, spaceID, profileID, accountID)
@@ -100,7 +100,7 @@ func (s *SpaceGRPC) LeaveSpace(ctx context.Context, req *spacev1.LeaveSpaceReque
 	}
 	row, err := s.Store.GetSpace(ctx, spaceID)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	if row == nil {
 		return nil, status.Error(codes.NotFound, "space not found")
@@ -112,7 +112,7 @@ func (s *SpaceGRPC) LeaveSpace(ctx context.Context, req *spacev1.LeaveSpaceReque
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, status.Error(codes.NotFound, "member not found")
 		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	s.revokeAllMemberRoles(ctx, spaceID, profileID)
 	if s.SpaceEvents != nil {
@@ -141,7 +141,7 @@ func (s *SpaceGRPC) SyncSpaceProSubscription(ctx context.Context, req *spacev1.S
 		return nil, err
 	}
 	if err := s.Store.SyncSpaceProSubscription(ctx, spaceID, purchaserID, req.GetStatus()); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	return &spacev1.SyncSpaceProSubscriptionResponse{}, nil
 }
@@ -149,7 +149,7 @@ func (s *SpaceGRPC) SyncSpaceProSubscription(ctx context.Context, req *spacev1.S
 func (s *SpaceGRPC) finalizeMembership(ctx context.Context, member *store.MembershipRow, isNew bool) (*spacev1.SpaceMembership, error) {
 	if isNew {
 		if err := s.assignDefaultMemberRole(ctx, member.SpaceID, member.ProfileID); err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
+			return nil, mapSpaceStoreError(err)
 		}
 		if s.SpaceEvents != nil {
 			if pubErr := s.SpaceEvents.PublishMemberJoined(ctx, member.SpaceID.String(), member.ProfileID.String()); pubErr != nil {
@@ -168,11 +168,11 @@ func (s *SpaceGRPC) ensureJoinNotBlocked(ctx context.Context, joinerAccountID, o
 	}
 	ownerAccountID, err := s.ProfileAccounts.AccountIDByProfileID(ctx, ownerProfileID)
 	if err != nil {
-		return status.Error(codes.Internal, err.Error())
+		return mapSpaceStoreError(err)
 	}
 	blocked, err := s.Blocks.AccountPairBlocked(ctx, joinerAccountID, ownerAccountID)
 	if err != nil {
-		return status.Error(codes.Internal, err.Error())
+		return mapSpaceStoreError(err)
 	}
 	if blocked {
 		return status.Error(codes.PermissionDenied, "cannot join space due to block")

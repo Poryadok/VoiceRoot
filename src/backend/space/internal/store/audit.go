@@ -75,6 +75,11 @@ func (s *SpaceStore) ListAuditLogPage(ctx context.Context, spaceID uuid.UUID, cu
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("space store: pool not configured")
 	}
+	if s.tx == nil {
+		return withOwnershipScopeValue(s, ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) (*AuditLogPage, error) {
+			return scoped.ListAuditLogPage(ctx, spaceID, cursor, limit)
+		})
+	}
 	if limit < 1 {
 		limit = 1
 	}
@@ -85,7 +90,7 @@ func (s *SpaceStore) ListAuditLogPage(ctx context.Context, spaceID uuid.UUID, cu
 
 	var rows pgx.Rows
 	if createdAt.IsZero() {
-		rows, err = s.Pool.Query(ctx, `
+		rows, err = s.db().Query(ctx, `
 SELECT id, space_id, actor_profile_id, action, target_type, target_id, details::text, created_at
 FROM audit_log
 WHERE space_id = $1
@@ -93,7 +98,7 @@ ORDER BY created_at DESC, id DESC
 LIMIT $2
 `, spaceID, limit+1)
 	} else {
-		rows, err = s.Pool.Query(ctx, `
+		rows, err = s.db().Query(ctx, `
 SELECT id, space_id, actor_profile_id, action, target_type, target_id, details::text, created_at
 FROM audit_log
 WHERE space_id = $1 AND (created_at, id) < ($2, $3)

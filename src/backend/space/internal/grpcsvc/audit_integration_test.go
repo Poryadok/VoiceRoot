@@ -336,10 +336,19 @@ func TestGetAuditLog_RoleDependencyFailure_Unavailable(t *testing.T) {
 }
 
 func TestRequireSpacePermission_RoleDependencyFailure_Unavailable(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
 	owner, _, ownerCtx := profileFixture(t)
+	ctx := context.Background()
+	pool := startSpacePostgresForTest(t, ctx)
+	applySpaceMigration(t, ctx, pool)
+	st := &store.SpaceStore{Pool: pool}
+	created, err := st.CreateSpace(ctx, owner, "Role dependency", "", "private")
+	require.NoError(t, err)
 	roles := &auditPermissionRoleStub{allowed: true}
-	svc := &SpaceGRPC{Roles: roles}
-	spaceID := uuid.New()
+	svc := &SpaceGRPC{Store: st, Roles: roles}
+	spaceID := created.ID
 
 	for _, dependencyCode := range []codes.Code{
 		codes.Unavailable,
@@ -422,7 +431,7 @@ func TestGetAuditLog_CrossInstance_WaitsForSpaceMutationSaga(t *testing.T) {
 	resp, err := svcB.GetAuditLog(memberCtx, &spacev1.GetAuditLogRequest{SpaceId: spaceID.String()})
 	require.NoError(t, err, "authorized member must read audit after the ownership saga releases the lease")
 	require.NotNil(t, resp.GetAuditLogList())
-	require.Equal(t, codes.DeadlineExceeded, status.Code(readErr), "audit reads must not observe the transfer's temporary owner window")
+	require.Equal(t, codes.Unavailable, status.Code(readErr), "audit reads must not observe the transfer's temporary owner window")
 	require.Empty(t, permissionBeforeRelease, "permission evaluation must happen only after the mutation lease is acquired")
 	require.Equal(t, permissions.SpaceViewAuditLog, roles.lastPermission)
 

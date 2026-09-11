@@ -91,12 +91,12 @@ func assertOwnershipPreparedReceipt(t *testing.T, journal *OwnershipJournal, rec
 
 func assertNoOwnershipCommitEffects(t *testing.T, st *SpaceStore, binding OwnershipBinding, expectedOwner uuid.UUID) {
 	t.Helper()
-	space, err := st.GetSpace(context.Background(), binding.SpaceID)
-	require.NoError(t, err)
-	require.Equal(t, expectedOwner, space.OwnerProfileID)
-	page, err := st.ListAuditLogPage(context.Background(), binding.SpaceID, "", 10)
-	require.NoError(t, err)
-	require.Empty(t, page.Rows)
+	var owner uuid.UUID
+	require.NoError(t, st.Pool.QueryRow(context.Background(), `SELECT owner_profile_id FROM spaces WHERE id=$1`, binding.SpaceID).Scan(&owner))
+	require.Equal(t, expectedOwner, owner)
+	var auditCount int
+	require.NoError(t, st.Pool.QueryRow(context.Background(), `SELECT count(*) FROM audit_log WHERE space_id=$1`, binding.SpaceID).Scan(&auditCount))
+	require.Zero(t, auditCount)
 	var outboxCount int
 	require.NoError(t, st.Pool.QueryRow(context.Background(), `SELECT count(*) FROM ownership_outbox WHERE operation_id=$1`, binding.OperationID).Scan(&outboxCount))
 	require.Zero(t, outboxCount)
@@ -342,12 +342,12 @@ func TestOwnershipJournalCommit_AtomicCommitPersistsPendingArtifactsButKeepsThem
 	require.Equal(t, binding.NewOwnerProfileID, committed.PendingAudit.TargetID)
 	require.JSONEq(t, `{}`, committed.PendingAudit.DetailsJSON)
 
-	space, err := st.GetSpace(context.Background(), binding.SpaceID)
-	require.NoError(t, err)
-	require.Equal(t, binding.NewOwnerProfileID, space.OwnerProfileID)
-	page, err := st.ListAuditLogPage(context.Background(), binding.SpaceID, "", 10)
-	require.NoError(t, err)
-	require.Empty(t, page.Rows)
+	var owner uuid.UUID
+	require.NoError(t, st.Pool.QueryRow(context.Background(), `SELECT owner_profile_id FROM spaces WHERE id=$1`, binding.SpaceID).Scan(&owner))
+	require.Equal(t, binding.NewOwnerProfileID, owner)
+	var auditCount int
+	require.NoError(t, st.Pool.QueryRow(context.Background(), `SELECT count(*) FROM audit_log WHERE space_id=$1`, binding.SpaceID).Scan(&auditCount))
+	require.Zero(t, auditCount)
 	var eventID, operationID, spaceID, oldOwner, newOwner uuid.UUID
 	var eventType string
 	var ready bool
@@ -376,15 +376,13 @@ func TestOwnershipJournalCommit_AtomicCommitPersistsPendingArtifactsButKeepsThem
 	replay, err = st.DecideOwnershipCommit(context.Background(), binding)
 	require.NoError(t, err)
 	require.Equal(t, committed, replay)
-	space, err = st.GetSpace(context.Background(), binding.SpaceID)
-	require.NoError(t, err)
-	require.Equal(t, laterOwner, space.OwnerProfileID, "commit replay cannot rewrite a later live owner")
+	require.NoError(t, st.Pool.QueryRow(context.Background(), `SELECT owner_profile_id FROM spaces WHERE id=$1`, binding.SpaceID).Scan(&owner))
+	require.Equal(t, laterOwner, owner, "commit replay cannot rewrite a later live owner")
 	aborted, err := st.DecideOwnershipAbort(context.Background(), binding)
 	require.ErrorIs(t, err, ErrOwnershipStateTransition)
 	require.Nil(t, aborted)
-	space, err = st.GetSpace(context.Background(), binding.SpaceID)
-	require.NoError(t, err)
-	require.Equal(t, laterOwner, space.OwnerProfileID)
+	require.NoError(t, st.Pool.QueryRow(context.Background(), `SELECT owner_profile_id FROM spaces WHERE id=$1`, binding.SpaceID).Scan(&owner))
+	require.Equal(t, laterOwner, owner)
 }
 
 func TestOwnershipJournalCommit_OutboxFailureRollsBackOwnerDecisionAndPendingAudit(t *testing.T) {
@@ -447,14 +445,14 @@ func TestOwnershipJournalCommit_ConcurrentCommitAndAbortHaveOneDurableWinner(t *
 	defer readerPool.Close()
 	loaded, err := (&SpaceStore{Pool: readerPool}).LoadOwnership(context.Background(), binding.OperationID)
 	require.NoError(t, err)
-	space, err := st.GetSpace(context.Background(), binding.SpaceID)
-	require.NoError(t, err)
+	var owner uuid.UUID
+	require.NoError(t, st.Pool.QueryRow(context.Background(), `SELECT owner_profile_id FROM spaces WHERE id=$1`, binding.SpaceID).Scan(&owner))
 	if loaded.State == "commit_decided" {
-		require.Equal(t, binding.NewOwnerProfileID, space.OwnerProfileID)
+		require.Equal(t, binding.NewOwnerProfileID, owner)
 		require.NotNil(t, loaded.PendingAudit)
 	} else {
 		require.Equal(t, "abort_decided", loaded.State)
-		require.Equal(t, binding.ActorProfileID, space.OwnerProfileID)
+		require.Equal(t, binding.ActorProfileID, owner)
 		assertNoOwnershipCommitEffects(t, st, binding, binding.ActorProfileID)
 	}
 }
@@ -718,9 +716,9 @@ func TestOwnershipJournalCommit_AmbiguousCommitErrorRecoversDurableDecisionByRel
 	require.NoError(t, err)
 	require.Equal(t, "commit_decided", recovered.State)
 	require.NotNil(t, recovered.PendingAudit)
-	space, err := (&SpaceStore{Pool: readerPool}).GetSpace(context.Background(), binding.SpaceID)
-	require.NoError(t, err)
-	require.Equal(t, binding.NewOwnerProfileID, space.OwnerProfileID)
+	var owner uuid.UUID
+	require.NoError(t, readerPool.QueryRow(context.Background(), `SELECT owner_profile_id FROM spaces WHERE id=$1`, binding.SpaceID).Scan(&owner))
+	require.Equal(t, binding.NewOwnerProfileID, owner)
 }
 
 func TestOwnershipJournalCommit_InvalidPreparedReceiptRejectedBeforeDatabaseAccess(t *testing.T) {

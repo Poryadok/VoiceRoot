@@ -99,7 +99,7 @@ func TestResolveVoiceRoomAccess_TrustedVoiceGetsCanonicalRoomAndExactMembership(
 	}
 	_, _, ownerCtx := profileFixture(t)
 	pool := startSpacePostgresForTest(t, context.Background())
-	applySpaceMigration(t, context.Background(), pool)
+	applySpaceMigrationsThrough7(t, context.Background(), pool)
 	applyVoiceAccessEpochMigration(t, context.Background(), pool)
 	c, cleanup := startVoiceResolverGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
@@ -126,7 +126,7 @@ func TestResolveVoiceRoomAccess_FailClosedBoundaryAndInputErrors(t *testing.T) {
 	}
 	ownerProfile, _, ownerCtx := profileFixture(t)
 	pool := startSpacePostgresForTest(t, context.Background())
-	applySpaceMigration(t, context.Background(), pool)
+	applySpaceMigrationsThrough7(t, context.Background(), pool)
 	applyVoiceAccessEpochMigration(t, context.Background(), pool)
 	c, cleanup := startVoiceResolverGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
