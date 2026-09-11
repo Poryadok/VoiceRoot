@@ -144,6 +144,10 @@ kubectl create secret tls voice-gateway-tls -n voice-staging --cert=tls.crt --ke
 4. Включить **CI** из [TESTING.md](TESTING.md): сборка и пуш образов, деплой на staging.
 5. **Production**: кластер, бэкапы БД, мониторинг (Prometheus/Grafana из [MICROSERVICES.md](MICROSERVICES.md)), затем первый релиз по политике [OPERATIONS.md](OPERATIONS.md) (canary, rollback).
 
+Для будущей активации Voice lifecycle сначала восстановить/мигрировать
+`voice_db`, затем проверить PostgreSQL и Redis readiness. Protected coordinator
+можно включать только после R22.4–R22.6; R22.3 сам по себе не является activation evidence.
+
 Миграции БД при выкате — строго по разделу «Миграции БД» в [OPERATIONS.md](OPERATIONS.md).
 
 ---
@@ -161,6 +165,7 @@ kubectl create secret tls voice-gateway-tls -n voice-staging --cert=tls.crt --ke
 ### Product analytics (ClickHouse + Analytics service)
 
 Спека фичи: [features/analytics.md](features/analytics.md).
+
 | Переменная | Где | Назначение |
 |------------|-----|------------|
 | `CLICKHOUSE_DSN` | `voice-analytics` | Native DSN (`clickhouse://user:pass@host:9000/voice`) |
@@ -180,6 +185,14 @@ kubectl create secret tls voice-gateway-tls -n voice-staging --cert=tls.crt --ke
 6. **Backfill** (опционально): replay JetStream с `DeliverAll` за N дней — только по runbook, с лимитом объёма; иначе старт с нуля.
 
 **Admin UI:** `src/admin` — `/analytics/product`, `/analytics/funnels`, `/analytics/export` (staff JWT).
+
+### Voice lifecycle storage (source-disabled)
+
+Voice использует `VOICE_DATABASE_URL` для `voice_db` и существующие
+`VOICE_REDIS_ADDR`/`VOICE_REDIS_PASSWORD`; новых secrets R22.3 не добавляет.
+Миграции `000001_room_lifecycle` и `000002_redis_divergence` выполняются до
+Voice rollout. Эти settings не регистрируют bridge/coordinator/handlers и не
+открывают public или admin repair route.
 
 ### APNs / VoIP (iOS)
 
@@ -318,7 +331,8 @@ Re-run only when new migration files ship; use a new Job name or delete the comp
 ### `voice_db` lifecycle migration and readiness
 
 `voice_db` is owned by Voice Service. Apply
-`src/backend/migrations/voice_db/000001_room_lifecycle.up.sql` before rolling or
+`src/backend/migrations/voice_db/000001_room_lifecycle.up.sql`, then
+`000002_redis_divergence.up.sql`, before rolling or
 starting the `voice-voice` Deployment. Local Compose does this through
 `compose-db-init`; an operator can also run `make compose-migrate-voice`.
 
@@ -331,7 +345,7 @@ schema. Migration completion therefore precedes application readiness.
 
 Before a lifecycle schema release, backup `voice_db` together with the other service-owned PostgreSQL databases.
 For recovery, restore `voice_db` into an isolated database,
-validate migration version `000001_room_lifecycle` and the six lifecycle tables,
+validate migrations through `000002_redis_divergence`, all seven lifecycle tables,
 then perform a separately approved cutover; do not restore over the live source.
 
 ### gRPC mTLS and NetworkPolicy (prod hardening)

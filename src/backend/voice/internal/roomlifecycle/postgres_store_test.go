@@ -20,7 +20,7 @@ import (
 
 // This file freezes RED-C from R22.2-VOICE-DB-PLAN.md lines 798-827.
 
-var r22StoreTime = time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC)
+var r22StoreTime = time.Date(2100, 1, 1, 12, 0, 0, 0, time.UTC)
 
 type r22StoreFixture struct {
 	ctx                    context.Context

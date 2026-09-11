@@ -11,6 +11,7 @@ Per-database folders for the first migration wave ([docs/DATA_SCOPE_V1.md](../..
 | `messaging_db/` | `messaging_db` | Messaging Service |
 | `file_db/` | `file_db` | File Service |
 | `bot_db/` | `bot_db` | Bot Service |
+| `voice_db/` | `voice_db` | Voice Service — `000001_room_lifecycle`, затем `000002_redis_divergence` |
 
 Apply against the matching database only; do not run one folder against another DB ([docs/OPERATIONS.md](../../../docs/OPERATIONS.md)).
 
@@ -47,6 +48,11 @@ The `compose-db-init` service runs on every Compose app startup: it creates any
 missing Go-owned databases and applies their migrations before dependent apps
 start, including existing Postgres volumes. The lifecycle migration DOWN refuses destructive teardown while evidence rows exist; archive or remove evidence through an
 explicit operator workflow before attempting destructive teardown.
+
+Voice migration `000002_redis_divergence.down.sql` refuses to run when any
+incident exists, including resolved history. Evidence must be exported and
+handled by an explicitly reviewed retention/resolution procedure before any
+later destructive operation; R22.3 adds no generic cleanup path.
 
 **E2E encryption (compose Path A):** `e2e_key_backups` via Auth Flyway `V4__e2e_key_backups.sql` on boot. `chat_db` / `messaging_db` DDL (`e2e_enabled`, `is_e2e`, `e2e_prekey_bundles`) via idempotent `docker/postgres/incremental_*.sql.snippet`, or `make compose-migrate-e2e` for golang-migrate on Go-owned DBs.
 

@@ -19,7 +19,7 @@
 | Realtime Service     | —                 | Pub/Sub, WS registry; session-epoch floor read/check | NATS (не БД)          |
 | Space Service        | `space_db`        | —                         | —                                |
 | Role Service         | `role_db`         | Shared principal replay Redis | —                                |
-| Voice Service        | `voice_db`        | активные сессии звонков (projection) | LiveKit                 |
+| Voice Service        | `voice_db`        | active-call compatibility projection + lifecycle admission/receipt mirror | LiveKit |
 | File Service         | `file_db`         | —                         | R2, воркеры конвертации          |
 | Notification Service | `notification_db` | grouping push, limits     | FCM, APNs, email                 |
 | Search Service       | `search_db` (target) | —                      | Meilisearch v2, Elasticsearch v3 |
@@ -91,6 +91,17 @@ Sticker/GIF bytes live in **`file_db`** (`files`); send payloads in **`messaging
 
 ---
 
+### `voice_db` (Voice Service)
+
+Voice owns `voice_room_instances`, `voice_room_memberships`,
+`voice_lifecycle_operations`, `voice_lifecycle_effects`,
+`voice_media_epoch_denials`, `voice_event_outbox`, and
+`voice_lifecycle_redis_divergences`. PostgreSQL is the sole durable lifecycle
+source. Divergence incidents are orthogonal evidence: completed receipts do not
+regress, and Redis orphans remain representable without an operation row.
+Redis is a rebuildable, non-authoritative mirror; Voice stores no cross-service
+foreign keys to profile/account owners.
+
 ## Клиенты и админка
 
 | Компонент           | Хранилище                                                  |
@@ -109,6 +120,10 @@ Sticker/GIF bytes live in **`file_db`** (`files`); send payloads in **`messaging
 ## Redis: один кластер или несколько
 
 В документации зоны использования разные (Gateway, Auth, User presence, Realtime, Voice, Notification, Matchmaking, Analytics buffer). На старте обычно **один Redis** с разделением по ключам/префиксам; при росте — вынести Realtime / Matchmaking в отдельные инстансы по нагрузке.
+
+For the Voice namespace, Redis loss is repairable from PostgreSQL only when no
+open divergence incident blocks the operation. TTL expiry, flush, equality, or
+manual Redis correction never resolves durable evidence automatically.
 
 ### Минимальный epoch сессии (T056-P1)
 
