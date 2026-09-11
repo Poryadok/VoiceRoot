@@ -36,8 +36,13 @@ func (s *SpaceStore) ResolveVoiceRoomAccess(ctx context.Context, expectedSpaceID
 	if s.Pool == nil {
 		return nil, errors.New("space store: pool not configured")
 	}
+	if s.tx == nil {
+		return withOwnershipScopeValue(s, ctx, []uuid.UUID{expectedSpaceID}, func(scoped *SpaceStore) (*VoiceRoomAccessRow, error) {
+			return scoped.ResolveVoiceRoomAccess(ctx, expectedSpaceID, voiceRoomID, profileID)
+		})
+	}
 
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.db().Begin(ctx)
 	if err != nil {
 		return nil, err
 	}

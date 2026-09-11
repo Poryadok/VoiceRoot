@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -136,7 +137,12 @@ func (s *SpaceStore) GetSpace(ctx context.Context, spaceID uuid.UUID) (*SpaceRow
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("space store: pool not configured")
 	}
-	return scanSpaceRow(s.Pool.QueryRow(ctx, `
+	if s.tx == nil && !s.legacyOwnershipLease {
+		return withOwnershipScopeValue(s, ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) (*SpaceRow, error) {
+			return scoped.GetSpace(ctx, spaceID)
+		})
+	}
+	return scanSpaceRow(s.db().QueryRow(ctx, `
 SELECT `+spaceSelectColumns+`
 FROM spaces
 WHERE id = $1
@@ -148,8 +154,13 @@ func (s *SpaceStore) IsSpaceMember(ctx context.Context, spaceID, profileID uuid.
 	if s == nil || s.Pool == nil {
 		return false, errors.New("space store: pool not configured")
 	}
+	if s.tx == nil {
+		return withOwnershipScopeValue(s, ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) (bool, error) {
+			return scoped.IsSpaceMember(ctx, spaceID, profileID)
+		})
+	}
 	var n int
-	err := s.Pool.QueryRow(ctx, `
+	err := s.db().QueryRow(ctx, `
 SELECT COUNT(*)::int FROM space_members WHERE space_id = $1 AND profile_id = $2
 `, spaceID, profileID).Scan(&n)
 	return n > 0, err
@@ -160,7 +171,12 @@ func (s *SpaceStore) DeleteSpace(ctx context.Context, spaceID uuid.UUID) error {
 	if s == nil || s.Pool == nil {
 		return errors.New("space store: pool not configured")
 	}
-	tag, err := s.Pool.Exec(ctx, `DELETE FROM spaces WHERE id = $1`, spaceID)
+	if s.tx == nil {
+		return s.withOwnershipScope(ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) error {
+			return scoped.DeleteSpace(ctx, spaceID)
+		})
+	}
+	tag, err := s.db().Exec(ctx, `DELETE FROM spaces WHERE id = $1`, spaceID)
 	if err != nil {
 		return err
 	}
@@ -175,11 +191,16 @@ func (s *SpaceStore) TransferOwnership(ctx context.Context, spaceID, currentOwne
 	if s == nil || s.Pool == nil {
 		return errors.New("space store: pool not configured")
 	}
+	if s.tx == nil && !s.legacyOwnershipLease {
+		return s.withOwnershipScope(ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) error {
+			return scoped.TransferOwnership(ctx, spaceID, currentOwner, newOwner)
+		})
+	}
 	if currentOwner == newOwner {
 		return ErrTransferToSelf
 	}
 
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.db().Begin(ctx)
 	if err != nil {
 		return err
 	}
@@ -235,7 +256,7 @@ UPDATE spaces SET owner_profile_id = $2, updated_at = now() WHERE id = $1
 	outcomeCtx, outcomeCancel := BoundedCleanupContext(ctx)
 	defer outcomeCancel()
 	var actualOwner uuid.UUID
-	readErr := s.Pool.QueryRow(outcomeCtx, `
+	readErr := s.db().QueryRow(outcomeCtx, `
 SELECT owner_profile_id FROM spaces WHERE id = $1 FOR UPDATE
 `, spaceID).Scan(&actualOwner)
 	if readErr != nil {
@@ -263,7 +284,12 @@ func (s *SpaceStore) RecordOwnershipTransferred(ctx context.Context, auditID, sp
 	if s == nil || s.Pool == nil {
 		return errors.New("space store: pool not configured")
 	}
-	_, err := s.Pool.Exec(ctx, `
+	if s.tx == nil && !s.legacyOwnershipLease {
+		return s.withOwnershipScope(ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) error {
+			return scoped.RecordOwnershipTransferred(ctx, auditID, spaceID, previousOwner, newOwner)
+		})
+	}
+	_, err := s.db().Exec(ctx, `
 INSERT INTO audit_log (id, space_id, actor_profile_id, action, target_type, target_id, details)
 VALUES ($1, $2, $3, 'ownership_transferred', 'profile', $4, '{}')
 `, auditID, spaceID, previousOwner, newOwner)
@@ -281,7 +307,22 @@ func (s *SpaceStore) DeleteAuditLogEntry(ctx context.Context, auditID uuid.UUID)
 	if s == nil || s.Pool == nil {
 		return errors.New("space store: pool not configured")
 	}
-	_, err := s.Pool.Exec(ctx, `DELETE FROM audit_log WHERE id = $1`, auditID)
+	if s.tx == nil && !s.legacyOwnershipLease {
+		resolve := func(db spaceStoreDB) (uuid.UUID, error) {
+			var spaceID uuid.UUID
+			err := db.QueryRow(ctx, `SELECT space_id FROM audit_log WHERE id=$1`, auditID).Scan(&spaceID)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return uuid.Nil, nil
+			}
+			return spaceID, err
+		}
+		return s.withResolvedOwnershipScope(ctx, resolve, func(scoped *SpaceStore) error {
+			return scoped.DeleteAuditLogEntry(ctx, auditID)
+		}, func() error {
+			return nil
+		})
+	}
+	_, err := s.db().Exec(ctx, `DELETE FROM audit_log WHERE id = $1`, auditID)
 	return err
 }
 
@@ -289,6 +330,11 @@ func (s *SpaceStore) DeleteAuditLogEntry(ctx context.Context, auditID uuid.UUID)
 func (s *SpaceStore) UpdateSpace(ctx context.Context, spaceID uuid.UUID, in UpdateSpaceInput) (*SpaceRow, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("space store: pool not configured")
+	}
+	if s.tx == nil {
+		return withOwnershipScopeValue(s, ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) (*SpaceRow, error) {
+			return scoped.UpdateSpace(ctx, spaceID, in)
+		})
 	}
 	if in.Name == nil && in.Description == nil && in.IconURL == nil && in.BannerURL == nil &&
 		in.Visibility == nil && in.EntryRequirement == nil && in.EntryQuestionsJSON == nil && in.MMConfigJSON == nil {
@@ -345,7 +391,7 @@ SET %s
 WHERE id = $%d
 RETURNING `+spaceSelectColumns+`
 `, strings.Join(sets, ", "), argN)
-	return scanSpaceRow(s.Pool.QueryRow(ctx, q, args...))
+	return scanSpaceRow(s.db().QueryRow(ctx, q, args...))
 }
 
 // UpdateSpaceInput holds optional mutable space fields.
@@ -365,6 +411,9 @@ func (s *SpaceStore) ListMySpacesPage(ctx context.Context, profileID uuid.UUID, 
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("space store: pool not configured")
 	}
+	if s.tx == nil {
+		return s.listMySpacesPageWithOwnershipScope(ctx, profileID, cursor, limit)
+	}
 	if limit < 1 {
 		limit = 1
 	}
@@ -377,7 +426,7 @@ func (s *SpaceStore) ListMySpacesPage(ctx context.Context, profileID uuid.UUID, 
 
 	var rows pgx.Rows
 	if joinedAt.IsZero() {
-		rows, err = s.Pool.Query(ctx, `
+		rows, err = s.db().Query(ctx, `
 SELECT `+spaceListSelectColumns+`, m.joined_at
 FROM space_members m
 JOIN spaces s ON s.id = m.space_id
@@ -386,7 +435,7 @@ ORDER BY m.joined_at DESC, s.id DESC
 LIMIT $2
 `, profileID, fetch)
 	} else {
-		rows, err = s.Pool.Query(ctx, `
+		rows, err = s.db().Query(ctx, `
 SELECT `+spaceListSelectColumns+`, m.joined_at
 FROM space_members m
 JOIN spaces s ON s.id = m.space_id
@@ -420,6 +469,79 @@ LIMIT $4
 		return nil, err
 	}
 	return &ListMySpacesPage{Rows: out}, nil
+}
+
+func (s *SpaceStore) listMySpacesPageWithOwnershipScope(ctx context.Context, profileID uuid.UUID, cursor string, limit int) (*ListMySpacesPage, error) {
+	for attempt := 0; attempt < 3; attempt++ {
+		tx, err := s.Pool.Begin(ctx)
+		if err != nil {
+			return nil, err
+		}
+		rollback := func() {
+			cleanupCtx, cancel := BoundedCleanupContext(ctx)
+			defer cancel()
+			_ = tx.Rollback(cleanupCtx)
+		}
+		rows, err := tx.Query(ctx, `SELECT space_id FROM space_members WHERE profile_id=$1 ORDER BY space_id`, profileID)
+		if err != nil {
+			rollback()
+			return nil, fmt.Errorf("%w: %v", ErrOwnershipScopeUnavailable, err)
+		}
+		var candidates []uuid.UUID
+		for rows.Next() {
+			var id uuid.UUID
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				rollback()
+				return nil, err
+			}
+			candidates = append(candidates, id)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			rollback()
+			return nil, err
+		}
+		candidates = normalizedOwnershipSpaceIDs(candidates)
+		for _, id := range candidates {
+			if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1::bigint)`, spaceMutationAdvisoryKey(id)); err != nil {
+				rollback()
+				return nil, err
+			}
+		}
+		var verified []uuid.UUID
+		var frozen bool
+		err = tx.QueryRow(ctx, `WITH candidate AS (
+			SELECT space_id FROM space_members WHERE profile_id=$1
+		) SELECT COALESCE(array_agg(space_id ORDER BY space_id),'{}'::uuid[]),
+			EXISTS(SELECT 1 FROM ownership_journal j JOIN candidate c ON c.space_id=j.space_id WHERE j.state NOT IN ('completed','aborted'))
+			FROM candidate`, profileID).Scan(&verified, &frozen)
+		if err != nil {
+			rollback()
+			return nil, fmt.Errorf("%w: %v", ErrOwnershipScopeUnavailable, err)
+		}
+		verified = normalizedOwnershipSpaceIDs(verified)
+		if !slices.Equal(candidates, verified) {
+			rollback()
+			continue
+		}
+		if frozen {
+			rollback()
+			return nil, ErrOwnershipFrozen
+		}
+		scoped := *s
+		scoped.tx = tx
+		page, err := scoped.ListMySpacesPage(ctx, profileID, cursor, limit)
+		if err != nil {
+			rollback()
+			return nil, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return nil, err
+		}
+		return page, nil
+	}
+	return nil, ErrOwnershipFrozen
 }
 
 func scanSpaceRow(row pgx.Row) (*SpaceRow, error) {

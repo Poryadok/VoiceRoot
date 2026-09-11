@@ -60,14 +60,14 @@ func (s *SpaceGRPC) ensureJoinInvitePrivacy(ctx context.Context, joiner, inviter
 	}
 	audience, err := s.Privacy.AllowChatSpaceInvitesAudience(ctx, joiner)
 	if err != nil {
-		return status.Error(codes.Internal, err.Error())
+		return mapSpaceStoreError(err)
 	}
 	matcher := privacy.Matcher{Social: s.Friends, Space: s.SpaceCoMembership}
 	if err := privacy.CheckAllowed(matcher, ctx, joiner, inviter, audience, guestguard.IsGuest(ctx)); err != nil {
 		if errors.Is(err, privacy.ErrDenied) {
 			return status.Error(codes.PermissionDenied, "invite blocked by recipient privacy settings")
 		}
-		return status.Error(codes.Internal, err.Error())
+		return mapSpaceStoreError(err)
 	}
 	return nil
 }

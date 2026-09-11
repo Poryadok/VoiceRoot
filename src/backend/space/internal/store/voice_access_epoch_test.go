@@ -39,6 +39,18 @@ func r22SpaceMigrationSQL(t *testing.T, name string) string {
 
 func applyR22SpaceEpochMigration(t *testing.T, ctx context.Context, st *SpaceStore) {
 	t.Helper()
+	var journalPresent bool
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT to_regclass('ownership_journal') IS NOT NULL`).Scan(&journalPresent))
+	if !journalPresent {
+		for _, name := range []string{
+			"000008_ownership_journal.up.sql",
+			"000009_ownership_journal_decision.up.sql",
+			"000010_ownership_journal_commit.up.sql",
+		} {
+			_, err := st.Pool.Exec(ctx, r22SpaceMigrationSQL(t, name))
+			require.NoError(t, err)
+		}
+	}
 	_, err := st.Pool.Exec(ctx, r22SpaceMigrationSQL(t, r22SpaceEpochMigration))
 	require.NoError(t, err)
 }
@@ -157,7 +169,7 @@ SELECT EXISTS (
 func TestSpaceVoiceAccessEpochMigration_BackfillsAndConstrainsPositiveEpoch(t *testing.T) {
 	ctx := context.Background()
 	pool := startSpacePostgresForStoreTest(t, ctx)
-	applySpaceMigrationForStoreTest(t, ctx, pool)
+	applySpaceMigrationsThrough7ForStoreTest(t, ctx, pool)
 	st := &SpaceStore{Pool: pool}
 	existing, err := st.CreateSpace(ctx, uuid.New(), "pre-epoch", "", "private")
 	require.NoError(t, err)
@@ -180,7 +192,7 @@ VALUES($1,$2,0,$3,'{}')
 func TestSpaceVoiceAccessEpochMigration_EmptyDownCanReapply(t *testing.T) {
 	ctx := context.Background()
 	pool := startSpacePostgresForStoreTest(t, ctx)
-	applySpaceMigrationForStoreTest(t, ctx, pool)
+	applySpaceMigrationsThrough7ForStoreTest(t, ctx, pool)
 	st := &SpaceStore{Pool: pool}
 
 	applyR22SpaceEpochMigration(t, ctx, st)
@@ -202,7 +214,7 @@ func TestSpaceVoiceAccessEpochMigration_EmptyDownCanReapply(t *testing.T) {
 func TestSpaceVoiceAccessEpochMigration_DownWaitsForConcurrentEvidenceThenRefuses(t *testing.T) {
 	ctx := context.Background()
 	pool := startSpacePostgresForStoreTest(t, ctx)
-	applySpaceMigrationForStoreTest(t, ctx, pool)
+	applySpaceMigrationsThrough7ForStoreTest(t, ctx, pool)
 	st := &SpaceStore{Pool: pool}
 	applyR22SpaceEpochMigration(t, ctx, st)
 
@@ -285,7 +297,7 @@ VALUES($1,$2,1,$3,$4)
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
 			pool := startSpacePostgresForStoreTest(t, ctx)
-			applySpaceMigrationForStoreTest(t, ctx, pool)
+			applySpaceMigrationsThrough7ForStoreTest(t, ctx, pool)
 			st := &SpaceStore{Pool: pool}
 			applyR22SpaceEpochMigration(t, ctx, st)
 			spaceID := tc.seed(t, ctx, st)
@@ -310,7 +322,7 @@ SELECT
 func TestSpaceVoiceAccessEpochMigration_NonEmptyDownRefusesAndPreservesEvidence(t *testing.T) {
 	ctx := context.Background()
 	pool := startSpacePostgresForStoreTest(t, ctx)
-	applySpaceMigrationForStoreTest(t, ctx, pool)
+	applySpaceMigrationsThrough7ForStoreTest(t, ctx, pool)
 	st := &SpaceStore{Pool: pool}
 	space, err := st.CreateSpace(ctx, uuid.New(), "preserve", "", "private")
 	require.NoError(t, err)
@@ -336,7 +348,7 @@ func TestSpaceVoiceAccessEpochMigration_NonEmptyDownRefusesAndPreservesEvidence(
 func TestSpaceVoiceAccessEpoch_DecisionSanitizesUndiscoverableTuples(t *testing.T) {
 	ctx := context.Background()
 	pool := startSpacePostgresForStoreTest(t, ctx)
-	applySpaceMigrationForStoreTest(t, ctx, pool)
+	applySpaceMigrationsThrough7ForStoreTest(t, ctx, pool)
 	st := &SpaceStore{Pool: pool}
 	applyR22SpaceEpochMigration(t, ctx, st)
 
@@ -387,7 +399,7 @@ func TestSpaceVoiceAccessEpoch_DecisionSanitizesUndiscoverableTuples(t *testing.
 func TestSpaceVoiceAccessEpoch_MembershipAndRoomChangesEnqueueExactInvalidation(t *testing.T) {
 	ctx := context.Background()
 	pool := startSpacePostgresForStoreTest(t, ctx)
-	applySpaceMigrationForStoreTest(t, ctx, pool)
+	applySpaceMigrationsThrough7ForStoreTest(t, ctx, pool)
 	st := &SpaceStore{Pool: pool}
 	space, err := st.CreateSpace(ctx, uuid.New(), "mutations", "", "public")
 	require.NoError(t, err)
@@ -433,7 +445,7 @@ func TestSpaceVoiceAccessEpoch_MembershipAndRoomChangesEnqueueExactInvalidation(
 func TestSpaceVoiceAccessEpoch_OutboxIsUniqueImmutableSnapshot(t *testing.T) {
 	ctx := context.Background()
 	pool := startSpacePostgresForStoreTest(t, ctx)
-	applySpaceMigrationForStoreTest(t, ctx, pool)
+	applySpaceMigrationsThrough7ForStoreTest(t, ctx, pool)
 	st := &SpaceStore{Pool: pool}
 	space, err := st.CreateSpace(ctx, uuid.New(), "outbox", "", "private")
 	require.NoError(t, err)
@@ -494,7 +506,7 @@ VALUES($1,$2,$3,$4,$5,$6,$7)
 func TestSpaceVoiceAccessEpoch_OutboxFailureRollsBackWithoutOrphan(t *testing.T) {
 	ctx := context.Background()
 	pool := startSpacePostgresForStoreTest(t, ctx)
-	applySpaceMigrationForStoreTest(t, ctx, pool)
+	applySpaceMigrationsThrough7ForStoreTest(t, ctx, pool)
 	st := &SpaceStore{Pool: pool}
 	space, err := st.CreateSpace(ctx, uuid.New(), "rollback", "", "public")
 	require.NoError(t, err)
@@ -533,7 +545,7 @@ FOR EACH ROW EXECUTE FUNCTION r22_reject_space_voice_invalidation();`)
 func TestSpaceVoiceAccessEpoch_DecisionLinearizesWithMutationAcrossPools(t *testing.T) {
 	ctx := context.Background()
 	pool := startSpacePostgresForStoreTest(t, ctx)
-	applySpaceMigrationForStoreTest(t, ctx, pool)
+	applySpaceMigrationsThrough7ForStoreTest(t, ctx, pool)
 	st := &SpaceStore{Pool: pool}
 	space, err := st.CreateSpace(ctx, uuid.New(), "linearized", "", "private")
 	require.NoError(t, err)
@@ -575,7 +587,7 @@ func TestSpaceVoiceAccessEpoch_DecisionLinearizesWithMutationAcrossPools(t *test
 func TestSpaceVoiceAccessEpoch_ConcurrentMembershipChangesAreStrictlyMonotonic(t *testing.T) {
 	ctx := context.Background()
 	pool := startSpacePostgresForStoreTest(t, ctx)
-	applySpaceMigrationForStoreTest(t, ctx, pool)
+	applySpaceMigrationsThrough7ForStoreTest(t, ctx, pool)
 	st := &SpaceStore{Pool: pool}
 	space, err := st.CreateSpace(ctx, uuid.New(), "concurrent", "", "public")
 	require.NoError(t, err)
@@ -619,7 +631,7 @@ func TestSpaceVoiceAccessEpoch_ConcurrentMembershipChangesAreStrictlyMonotonic(t
 func TestSpaceVoiceAccessEpoch_SpaceDeletionRetainsWildcardInvalidation(t *testing.T) {
 	ctx := context.Background()
 	pool := startSpacePostgresForStoreTest(t, ctx)
-	applySpaceMigrationForStoreTest(t, ctx, pool)
+	applySpaceMigrationsThrough7ForStoreTest(t, ctx, pool)
 	st := &SpaceStore{Pool: pool}
 	space, err := st.CreateSpace(ctx, uuid.New(), "delete", "", "private")
 	require.NoError(t, err)

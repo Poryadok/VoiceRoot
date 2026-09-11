@@ -37,7 +37,7 @@ func (s *SpaceGRPC) GetAuditLog(ctx context.Context, req *spacev1.GetAuditLogReq
 
 	member, err := s.Store.IsSpaceMember(ctx, spaceID, caller)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	if !member {
 		return nil, status.Error(codes.PermissionDenied, "not a space member")
@@ -62,7 +62,7 @@ func (s *SpaceGRPC) GetAuditLog(ctx context.Context, req *spacev1.GetAuditLogReq
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 
 	entries := make([]*spacev1.AuditLogEntry, 0, len(page.Rows))

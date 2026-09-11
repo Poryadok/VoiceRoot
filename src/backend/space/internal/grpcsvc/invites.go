@@ -72,7 +72,7 @@ func mapInviteStoreErr(err error) error {
 	case errors.Is(err, store.ErrAccountBanned):
 		return status.Error(codes.PermissionDenied, "account is banned from this space")
 	default:
-		return status.Error(codes.Internal, err.Error())
+		return mapSpaceStoreError(err)
 	}
 }
 
@@ -115,7 +115,7 @@ func (s *SpaceGRPC) CreateInvite(ctx context.Context, req *spacev1.CreateInviteR
 		if strings.Contains(err.Error(), "max_uses") {
 			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	if s.SpaceEvents != nil {
 		if pubErr := s.SpaceEvents.PublishInviteCreated(ctx, row.SpaceID.String(), row.Code); pubErr != nil {
@@ -136,7 +136,7 @@ func (s *SpaceGRPC) RevokeInvite(ctx context.Context, req *spacev1.RevokeInviteR
 	}
 	inv, err := s.Store.GetInviteByID(ctx, inviteID)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	if inv == nil {
 		return nil, status.Error(codes.NotFound, "invite not found")
@@ -172,7 +172,7 @@ func (s *SpaceGRPC) GetInvite(ctx context.Context, req *spacev1.GetInviteRequest
 	}
 	row, err := s.Store.GetInviteByCode(ctx, code)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	if row == nil || row.RevokedAt != nil {
 		return nil, status.Error(codes.NotFound, "invite not found")
@@ -204,7 +204,7 @@ func (s *SpaceGRPC) ListInvites(ctx context.Context, req *spacev1.ListInvitesReq
 	}
 	rows, err := s.Store.ListInvites(ctx, spaceID)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	out := make([]*spacev1.Invite, 0, len(rows))
 	for _, row := range rows {
@@ -242,7 +242,7 @@ func (s *SpaceGRPC) JoinByInvite(ctx context.Context, req *spacev1.JoinByInviteR
 	}
 	inv, err := s.Store.GetInviteByCode(ctx, code)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	if inv == nil || inv.RevokedAt != nil {
 		return nil, status.Error(codes.NotFound, "invite not found")
@@ -266,7 +266,7 @@ func (s *SpaceGRPC) JoinByInvite(ctx context.Context, req *spacev1.JoinByInviteR
 	}
 	wasMember, err := s.Store.IsSpaceMember(ctx, inv.SpaceID, profileID)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, mapSpaceStoreError(err)
 	}
 	member, err := s.Store.JoinByInvite(ctx, code, profileID, accountID)
 	if err != nil {
