@@ -27,6 +27,8 @@ required_suites=(
   "voice.backend.auth.sessionepoch.RedisSessionEpochFloorStoreIntegrationTest"
   "voice.backend.auth.sessionepoch.SessionEpochFloorStartupLifecycleJdbcIntegrationTest"
   "voice.backend.auth.oauth.RedisOAuthAuthorizationCodeStoreIntegrationTest"
+  "voice.backend.auth.ownershipproof.OwnershipTransferProofJdbcIntegrationTest"
+  "voice.backend.auth.ownershipproof.OwnershipTransferReceiptLookupJdbcIntegrationTest"
 )
 
 attribute_value() {
