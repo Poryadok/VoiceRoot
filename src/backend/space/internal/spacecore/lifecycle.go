@@ -294,10 +294,10 @@ func (a *LifecycleAggregate) RecordPurgeReceipt(receipt *commonv1.SpacePurgeRece
 		return fmt.Errorf("participant %d is not canonical", participantID)
 	}
 	if participantID == commonv1.ParticipantId_PARTICIPANT_ID_ROLE {
-		return errors.New("Role purge completion requires a typed retirement receipt")
+		return errors.New("role purge completion requires a typed retirement receipt")
 	}
 	if a.roleReceipt == nil {
-		return errors.New("Role retirement must complete before participant purge")
+		return errors.New("role retirement must complete before participant purge")
 	}
 	if err := a.validatePurgeReceipt(receipt); err != nil {
 		return err
@@ -314,10 +314,10 @@ func (a *LifecycleAggregate) RecordPurgeReceipt(receipt *commonv1.SpacePurgeRece
 
 func (a *LifecycleAggregate) RecordRoleRetirementReceipt(receipt *rolev1.RetireSpaceReceipt) error {
 	if a.phase != spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_PURGING {
-		return fmt.Errorf("Role retirement receipt is not accepted in phase %s", a.phase)
+		return fmt.Errorf("role retirement receipt is not accepted in phase %s", a.phase)
 	}
 	if receipt == nil {
-		return errors.New("Role retirement receipt is required")
+		return errors.New("role retirement receipt is required")
 	}
 	if err := a.validateRoleRetirementReceipt(receipt); err != nil {
 		return err
@@ -337,7 +337,7 @@ func (a *LifecycleAggregate) RecordLocalPurgeCompleted() error {
 		return fmt.Errorf("local purge completion is not accepted in phase %s", a.phase)
 	}
 	if a.roleReceipt == nil {
-		return errors.New("Role retirement receipt is missing")
+		return errors.New("role retirement receipt is missing")
 	}
 	for _, participantID := range canonicalParticipants[1:] {
 		if a.purgeReceipts[participantID] == nil {
@@ -362,7 +362,7 @@ func (a *LifecycleAggregate) CompletePurge(purgedAt time.Time) (LifecycleOutboxR
 		return LifecycleOutboxRecord{}, errors.New("local purge is incomplete")
 	}
 	if a.roleReceipt == nil {
-		return LifecycleOutboxRecord{}, errors.New("Role retirement receipt is missing")
+		return LifecycleOutboxRecord{}, errors.New("role retirement receipt is missing")
 	}
 	for _, participantID := range canonicalParticipants[1:] {
 		if a.purgeReceipts[participantID] == nil {
@@ -433,20 +433,20 @@ func (a *LifecycleAggregate) validatePurgeReceipt(receipt *commonv1.SpacePurgeRe
 
 func (a *LifecycleAggregate) validateRoleRetirementReceipt(receipt *rolev1.RetireSpaceReceipt) error {
 	if receipt.GetProtocolVersion() != 1 || receipt.GetReceiptId() == "" {
-		return errors.New("Role retirement receipt protocol version and receipt ID are required")
+		return errors.New("role retirement receipt protocol version and receipt ID are required")
 	}
 	if receipt.GetSpaceId() != a.spaceID || receipt.GetDeletionOperationId() != a.deletionOperationID {
-		return errors.New("Role retirement receipt operation binding does not match")
+		return errors.New("role retirement receipt operation binding does not match")
 	}
 	if receipt.GetGeneration() != a.generation || receipt.GetState() != rolev1.RoleRetirementState_ROLE_RETIREMENT_STATE_RETIRED {
-		return errors.New("Role retirement receipt generation or state does not match")
+		return errors.New("role retirement receipt generation or state does not match")
 	}
 	if !bytes.Equal(receipt.GetRequestSha256(), a.expectedRoleHash) ||
 		!bytes.Equal(receipt.GetManifestSha256(), a.manifest.GetManifestSha256()) {
-		return errors.New("Role retirement receipt hash binding does not match")
+		return errors.New("role retirement receipt hash binding does not match")
 	}
 	if receipt.GetRetiredAt() == nil || receipt.GetRetiredAt().CheckValid() != nil {
-		return errors.New("Role retirement time is invalid")
+		return errors.New("role retirement time is invalid")
 	}
 	return nil
 }
