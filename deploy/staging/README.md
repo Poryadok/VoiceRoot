@@ -7,7 +7,7 @@ Kubernetes manifests for `voice-staging` namespace. Gateway-only deploy is legac
 1. k3s cluster with kubectl access ([DEPLOYMENT.md](../../docs/DEPLOYMENT.md))
 2. GHCR images built by CI on `master` for changed services; unchanged images promoted from previous SHA (tag `:<git_sha>` only — no `:latest` in CI)
 3. Secrets from [secret.example.yaml](secret.example.yaml) → `secret.yaml` (do not commit)
-4. Postgres init + golang-migrate Jobs (`scripts/staging/apply-migrate-jobs.sh` for `bot_db`, `story_db`, `moderation_db`, `subscription_db`)
+4. Postgres init + golang-migrate Jobs (`scripts/staging/apply-migrate-jobs.sh` for `bot_db`, `story_db`, `moderation_db`, `subscription_db`, `voice_db`)
 
 ## Image tag and GHCR pull
 
@@ -31,6 +31,15 @@ export STAGING_KUBECONFIG=~/.kube/config   # or use CI secret
 
 scripts/staging/render-and-apply.sh
 ```
+
+The deployment order for Voice is database first: create `voice_db` and apply `voice_db/000001_room_lifecycle` through ConfigMap
+`voice-voice-db-migrations` and Job `voice-migrate-voice-db`. Run this migration before Deployment `voice-voice`.
+Voice reads `VOICE_DATABASE_URL` from `voice-app-secrets`; the migration Job reads `POSTGRES_PASSWORD` from the same
+Secret and constructs its DSN inside the container without printing it.
+
+Voice uses `/health` for liveness and `/ready` for database/schema readiness.
+The R22.2 lifecycle path remains source-disabled: coordinator and lifecycle
+handlers are not registered yet.
 
 Optional smoke after deploy:
 

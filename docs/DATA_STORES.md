@@ -19,7 +19,7 @@
 | Realtime Service     | —                 | Pub/Sub, WS registry; session-epoch floor read/check | NATS (не БД)          |
 | Space Service        | `space_db`        | —                         | —                                |
 | Role Service         | `role_db`         | Shared principal replay Redis | —                                |
-| Voice Service        | —                 | активные сессии звонков   | LiveKit                          |
+| Voice Service        | `voice_db`        | активные сессии звонков (projection) | LiveKit                 |
 | File Service         | `file_db`         | —                         | R2, воркеры конвертации          |
 | Notification Service | `notification_db` | grouping push, limits     | FCM, APNs, email                 |
 | Search Service       | `search_db` (target) | —                      | Meilisearch v2, Elasticsearch v3 |
@@ -102,7 +102,7 @@ Sticker/GIF bytes live in **`file_db`** (`files`); send payloads in **`messaging
 
 ## Подсчёт логических PostgreSQL БД
 
-**16** planned PostgreSQL databases (see table above). **`federation_db`** is documented for the deferred Federation Service but is **not** created in `docker/postgres/initdb.d/`, `deploy/templates/`, or migrate jobs until federation implementation starts ([PLAN.md](PLAN.md)).
+**17** planned PostgreSQL databases (see table above). **16** are provisioned by current deployment tooling, including the Voice Service `voice_db`. **`federation_db`** is documented for the deferred Federation Service but is **not** created in `docker/postgres/initdb.d/`, `deploy/templates/`, or migrate jobs until federation implementation starts ([PLAN.md](PLAN.md)).
 
 ---
 

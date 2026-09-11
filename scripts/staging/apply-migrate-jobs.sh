@@ -29,14 +29,16 @@ substitute() {
 
 dump_migrate_job_logs() {
   local job_name="$1"
+  local job_status_jsonpath pod_status_jsonpath
+  job_status_jsonpath='jsonpath=job active={.status.active} failed={.status.failed} succeeded={.status.succeeded}{"\n"}{range .status.conditions[*]}job.condition type={.type} reason={.reason}{"\n"}{end}'
+  pod_status_jsonpath='jsonpath=pod phase={.status.phase}{"\n"}{range .status.containerStatuses[*]}container name={.name} terminated.reason={.state.terminated.reason} waiting.reason={.state.waiting.reason} exitCode={.state.terminated.exitCode}{"\n"}{end}'
+
   echo "migrate job ${job_name} status:" >&2
-  kubectl get job "${job_name}" -n "${NS}" -o wide >&2 || true
-  kubectl describe job "${job_name}" -n "${NS}" >&2 || true
+  kubectl get job "${job_name}" -n "${NS}" -o "${job_status_jsonpath}" >&2 || true
   local pod
   pod="$(kubectl get pods -n "${NS}" -l "job-name=${job_name}" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
   if [ -n "${pod}" ]; then
-    kubectl describe pod "${pod}" -n "${NS}" >&2 || true
-    kubectl logs "${pod}" -n "${NS}" --all-containers=true --tail=120 >&2 || true
+    kubectl get pod "${pod}" -n "${NS}" -o "${pod_status_jsonpath}" >&2 || true
   fi
 }
 
@@ -60,18 +62,13 @@ apply_migrate() {
     return 0
   fi
 
-  echo "Applying migrations ConfigMap ${cm_name} from ${migrations_dir}"
-  local content_hash
+  local content_hash stored_hash succeeded
   content_hash="$(migration_content_hash "${migrations_dir}")"
-  kubectl_apply_configmap "${cm_name}" "${NS}" \
-    --from-file="${migrations_dir}"
-  kubectl annotate configmap "${cm_name}" -n "${NS}" \
-    "voice.io/migration-content-hash=${content_hash}" --overwrite
+  stored_hash="$(kubectl get configmap "${cm_name}" -n "${NS}" -o jsonpath='{.metadata.annotations.voice\.io/migration-content-hash}' 2>/dev/null || true)"
+  succeeded=0
 
   if kubectl get job "${job_name}" -n "${NS}" >/dev/null 2>&1; then
-    local succeeded stored_hash
     succeeded="$(kubectl get job "${job_name}" -n "${NS}" -o jsonpath='{.status.succeeded}' 2>/dev/null || echo 0)"
-    stored_hash="$(kubectl get configmap "${cm_name}" -n "${NS}" -o jsonpath='{.metadata.annotations.voice\.io/migration-content-hash}' 2>/dev/null || true)"
     if [ "${succeeded:-0}" = "1" ] && [ "${stored_hash}" = "${content_hash}" ]; then
       echo "migrate job ${job_name} already succeeded for current migrations; skipping"
       return 0
@@ -83,11 +80,20 @@ apply_migrate() {
     kubectl delete job "${job_name}" -n "${NS}" --ignore-not-found
   fi
 
-  local dsn
-  dsn="$(postgres_migrate_dsn "${db_key}")"
+  echo "Applying migrations ConfigMap ${cm_name} from ${migrations_dir}"
+  kubectl_apply_configmap "${cm_name}" "${NS}" \
+    --from-file="${migrations_dir}"
+  kubectl annotate configmap "${cm_name}" -n "${NS}" \
+    "voice.io/migration-content-hash=${content_hash}" --overwrite
 
   echo "Applying migrate job ${job_name}"
-  substitute "${dsn}" < "${template}" | kubectl apply -f -
+  if grep -Fq '__DATABASE_URL__' "${template}"; then
+    local dsn
+    dsn="$(postgres_migrate_dsn "${db_key}")"
+    substitute "${dsn}" < "${template}" | kubectl apply -f -
+  else
+    substitute '' < "${template}" | kubectl apply -f -
+  fi
   if ! kubectl wait --for=condition=complete "job/${job_name}" -n "${NS}" --timeout=300s; then
     dump_migrate_job_logs "${job_name}"
     exit 1
@@ -130,5 +136,11 @@ apply_migrate subscription_db \
   "${ROOT}/deploy/templates/migrate-subscription-db-job.yaml" \
   voice-migrate-subscription-db \
   voice-subscription-db-migrations
+
+apply_migrate voice_db \
+  "${ROOT}/src/backend/migrations/voice_db" \
+  "${ROOT}/deploy/templates/migrate-voice-db-job.yaml" \
+  voice-migrate-voice-db \
+  voice-voice-db-migrations
 
 echo "Staging DB migrate jobs complete."

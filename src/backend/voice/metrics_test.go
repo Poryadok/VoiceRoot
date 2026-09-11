@@ -18,7 +18,7 @@ func TestHealthHandler_MetricsExposesGRPCServer(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	grpcmw.PrimeMetricsRegistry(reg)
 
-	h := voiceprom.MountMetricsOnHealth(healthHandler(serviceName), reg)
+	h := voiceprom.MountMetricsOnHealth(healthHandler(serviceName, nil), reg)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
 	require.Equal(t, http.StatusOK, rec.Code)

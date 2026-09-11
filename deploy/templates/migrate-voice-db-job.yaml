@@ -1,0 +1,66 @@
+# One-shot golang-migrate Job for voice_db.
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: voice-migrate-voice-db
+  namespace: __K_NAMESPACE__
+  labels:
+    app.kubernetes.io/name: voice-migrate-voice-db
+    app.kubernetes.io/component: migration
+spec:
+  ttlSecondsAfterFinished: 86400
+  backoffLimit: 2
+  activeDeadlineSeconds: 180
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: voice-migrate-voice-db
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: migrate/migrate:__MIGRATE_IMAGE_TAG__
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              rfc3986_encode_component() (
+                value=$1
+                encoded=
+                for byte in $(printf '%s' "${value}" | LC_ALL=C od -An -v -tx1); do
+                  case "${byte}" in
+                    2d|2e|3[0-9]|4[1-9a-f]|5[0-9a]|5f|6[1-9a-f]|7[0-9a]|7e)
+                      encoded="${encoded}$(printf "\\$(printf '%03o' "$((0x${byte}))")")"
+                      ;;
+                    *)
+                      encoded="${encoded}%$(printf '%s' "${byte}" | tr '[:lower:]' '[:upper:]')"
+                      ;;
+                  esac
+                done
+                printf '%s' "${encoded}"
+              )
+              encoded_user="$(rfc3986_encode_component "${POSTGRES_USER}")"
+              encoded_password="$(rfc3986_encode_component "${POSTGRES_PASSWORD}")"
+              database_url="postgres://${encoded_user}:${encoded_password}@${POSTGRES_HOST}:5432/${POSTGRES_DATABASE}?sslmode=disable"
+              exec migrate -path=/migrations -database="${database_url}" up
+          env:
+            - name: POSTGRES_USER
+              value: voice
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: voice-app-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_HOST
+              value: voice-postgres
+            - name: POSTGRES_DATABASE
+              value: voice_db
+          volumeMounts:
+            - name: migrations
+              mountPath: /migrations
+              readOnly: true
+      volumes:
+        - name: migrations
+          configMap:
+            name: voice-voice-db-migrations
+            optional: false

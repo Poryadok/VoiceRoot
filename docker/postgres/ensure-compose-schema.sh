@@ -19,11 +19,16 @@ ensure_database() {
 apply_if_exists() {
   db="$1"
   file="$2"
+  anchor_table="$3"
   if [ ! -f "${SCHEMA_DIR}/${file}" ]; then
     return 0
   fi
   has_sm="$(psql -v ON_ERROR_STOP=1 -tAc "SELECT to_regclass('public.schema_migrations') IS NOT NULL" --dbname "$db")"
   if [ "$has_sm" = "t" ]; then
+    return 0
+  fi
+  has_anchor="$(psql -v ON_ERROR_STOP=1 -tAc "SELECT to_regclass('public.${anchor_table}') IS NOT NULL" --dbname "$db")"
+  if [ "$has_anchor" != "t" ]; then
     return 0
   fi
   tables="$(psql -v ON_ERROR_STOP=1 -tAc "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'" --dbname "$db")"
@@ -35,23 +40,23 @@ apply_if_exists() {
 }
 
 for db in auth_db user_db social_db chat_db messaging_db file_db space_db role_db \
-  notification_db matchmaking_db gateway_db search_db subscription_db moderation_db bot_db story_db; do
+  notification_db matchmaking_db gateway_db search_db subscription_db moderation_db bot_db story_db voice_db; do
   ensure_database "$db"
 done
 
 # Idempotent deltas for volumes created before golang-migrate tracking.
-apply_if_exists chat_db incremental_chat_db.sql.snippet
-apply_if_exists messaging_db incremental_messaging_db.sql.snippet
-apply_if_exists user_db incremental_user_db.sql.snippet
-apply_if_exists role_db incremental_role_db.sql.snippet
-apply_if_exists matchmaking_db incremental_matchmaking_db.sql.snippet
-apply_if_exists space_db incremental_space_db.sql.snippet
-apply_if_exists story_db incremental_story_db.sql.snippet
-apply_if_exists file_db incremental_file_db.sql.snippet
-apply_if_exists file_db file_db_premium_upload.sql.snippet
-apply_if_exists bot_db incremental_bot_db.sql.snippet
-apply_if_exists moderation_db incremental_moderation_db.sql.snippet
-apply_if_exists search_db search_db_verification.sql.snippet
+apply_if_exists chat_db incremental_chat_db.sql.snippet chat_members
+apply_if_exists messaging_db incremental_messaging_db.sql.snippet messages
+apply_if_exists user_db incremental_user_db.sql.snippet profiles
+apply_if_exists role_db incremental_role_db.sql.snippet roles
+apply_if_exists matchmaking_db incremental_matchmaking_db.sql.snippet search_sessions
+apply_if_exists space_db incremental_space_db.sql.snippet spaces
+apply_if_exists story_db incremental_story_db.sql.snippet stories
+apply_if_exists file_db incremental_file_db.sql.snippet files
+apply_if_exists file_db file_db_premium_upload.sql.snippet files
+apply_if_exists bot_db incremental_bot_db.sql.snippet bots
+apply_if_exists moderation_db incremental_moderation_db.sql.snippet reports
+apply_if_exists search_db search_db_verification.sql.snippet profile_search_documents
 
 export MIGRATIONS_DIR
 sh /usr/local/bin/compose-migrate-dbs.sh

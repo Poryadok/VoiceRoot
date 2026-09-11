@@ -5,7 +5,12 @@
 Оркестрация голосовых/видео-звонков и screen share через LiveKit SFU. Сам сервис не обрабатывает медиа-потоки.
 
 **Язык**: Go
-**Хранилище**: Redis (активные сессии), LiveKit (SFU)
+**Хранилище**: PostgreSQL (`voice_db`) — durable source of truth для room lifecycle; Redis — rebuildable projection активных сессий; LiveKit — SFU
+
+В срезе R22.2 lifecycle остаётся **source-disabled**: Voice открывает и проверяет
+`voice_db`, но coordinator, lifecycle handlers, Redis bridge и external-effects
+workers ещё не зарегистрированы. Отсутствующий `VOICE_DATABASE_URL` сохраняет
+этот режим; заданный DSN обязан успешно подключиться, а `/ready` проверяет схему.
 
 ## Ответственность
 
@@ -52,7 +57,7 @@ service VoiceService {
 }
 ```
 
-## Модель данных (Redis)
+## Модель данных (Redis projection)
 
 ```
 voice:session:{profile_id} → {
@@ -72,6 +77,9 @@ voice:room:{room_id} → {
 voice:room:{room_id}:participants → Set[profile_id]
 voice:room:{room_id}:screen_shares → Set[{profile_id, stream_id}]
 ```
+
+Эти Redis-ключи — projection, которую можно перестроить из durable lifecycle
+данных в `voice_db`; Redis не является источником истины room lifecycle.
 
 ## Интеграция с LiveKit
 
@@ -162,5 +170,4 @@ requires a new snapshot.
 ## Масштабирование
 
 Voice Service stateless — масштабируется горизонтально. LiveKit масштабируется независимо (SFU per region для low-latency).
-
 

@@ -315,6 +315,25 @@ kubectl wait --for=condition=complete job/voice-migrate-bot-db -n "$NS" --timeou
 
 Re-run only when new migration files ship; use a new Job name or delete the completed Job before re-apply.
 
+### `voice_db` lifecycle migration and readiness
+
+`voice_db` is owned by Voice Service. Apply
+`src/backend/migrations/voice_db/000001_room_lifecycle.up.sql` before rolling or
+starting the `voice-voice` Deployment. Local Compose does this through
+`compose-db-init`; an operator can also run `make compose-migrate-voice`.
+
+For staging and production, `scripts/staging/apply-migrate-jobs.sh` publishes
+ConfigMap `voice-voice-db-migrations`, runs Job `voice-migrate-voice-db`, and
+waits for completion. `scripts/prod/apply-infra.sh` reuses that script with the
+default `voice-prod` namespace. The application reads `VOICE_DATABASE_URL` from
+`voice-app-secrets`; its readiness probe uses `/ready` and checks the lifecycle
+schema. Migration completion therefore precedes application readiness.
+
+Before a lifecycle schema release, backup `voice_db` together with the other service-owned PostgreSQL databases.
+For recovery, restore `voice_db` into an isolated database,
+validate migration version `000001_room_lifecycle` and the six lifecycle tables,
+then perform a separately approved cutover; do not restore over the live source.
+
 ### gRPC mTLS and NetworkPolicy (prod hardening)
 
 See also [ADR 002: gRPC mTLS scope](adr/002-grpc-mtls-scope.md).

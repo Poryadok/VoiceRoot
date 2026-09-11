@@ -33,7 +33,7 @@ GO_TEST_SHORT_TARGETS := $(GO_SERVICES:%=go-test-short-%)
 GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 
 .PHONY: buf-lint buf-format buf-breaking buf-generate buf-generate-dart buf-dart-check buf-go-pb-check check-auth-proto-sync sync-pb-from-gen buf-generate-all compose-up compose-app-up compose-down compose-logs-collect compose-observability-up \
-	compose-migrate-all compose-migrate-e2e compose-migrate-bot compose-migrate-story compose-e2e-smoke compose-e2e-live compose-e2e-full compose-e2e-voice-live compose-file-attachment-restart-proof compose-a1-multi-account-proof compose-a1-flutter-profile-handoff \
+	compose-migrate-all compose-migrate-e2e compose-migrate-bot compose-migrate-story compose-migrate-voice compose-e2e-smoke compose-e2e-live compose-e2e-full compose-e2e-voice-live compose-file-attachment-restart-proof compose-a1-multi-account-proof compose-a1-flutter-profile-handoff \
 	build-all build-all-breaking check-toolchain compose-config-ci buf-ci backend-test-ci backend-test-ci-short backend-image-ci \
 	gateway-test-ci gateway-image-ci go-test-pkg go-mod-tidy-all auth-test-ci auth-image-ci buf-breaking-ci \
 	golangci-ci gateway-test-race-ci design-tokens-check penpot-tokens-export penpot-tokens-export-check flutter-ui-color-gate flutter-ci flutter-windows-prefetch-sqlite3 flutter-linux-prefetch-sqlite3 prekey-golden-check coverage-report testcontainers-prune buf-generate-ci-local-template-check \
@@ -98,6 +98,9 @@ compose-migrate-bot:
 
 compose-migrate-story:
 	$(BASH) "$(ROOT)/scripts/dev/compose-migrate-all.sh" story
+
+compose-migrate-voice:
+	$(BASH) "$(ROOT)/scripts/dev/compose-migrate-all.sh" voice
 
 compose-down:
 	docker compose down
@@ -272,7 +275,7 @@ verify-required-jobs-test:
 image-catalog-drift-check:
 	$(BASH) "$(ROOT)/scripts/ci/check-image-catalog-drift.sh"
 
-ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test buf-generate-ci-local-template-check image-catalog-drift-check e2e-manifest-helper-test rollout-app-tier-order-test staging-kubectl-configmap-test staging-app-secrets-test phase0-fixture-test staging-observability-test
+ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test buf-generate-ci-local-template-check image-catalog-drift-check e2e-manifest-helper-test rollout-app-tier-order-test staging-kubectl-configmap-test staging-app-secrets-test voice-db-runtime-provisioning-contract-test phase0-fixture-test staging-observability-test
 	$(BASH) "$(ROOT)/scripts/ci/ci-script-tests-reachability_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/e2e-manifest_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/compose-e2e-smoke_test.sh"
@@ -294,6 +297,11 @@ staging-kubectl-configmap-test:
 staging-app-secrets-test:
 	$(BASH) "$(ROOT)/scripts/staging/ensure-app-secrets_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/ensure-app-secrets-dry-run_test.sh"
+
+.PHONY: voice-db-runtime-provisioning-contract-test
+voice-db-runtime-provisioning-contract-test:
+	$(BASH) "$(ROOT)/scripts/ci/voice-db-runtime-provisioning-contract_test.sh"
+	$(BASH) "$(ROOT)/scripts/staging/apply-migrate-jobs_test.sh"
 
 .PHONY: phase0-fixture-test
 phase0-fixture-test:
