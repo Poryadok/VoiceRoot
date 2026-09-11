@@ -297,7 +297,7 @@ func TestManifestSelfConsistency(t *testing.T) {
 		HashRule:               "sha256(utf8_fully_qualified_message_name || 0x00 || deterministic_protobuf_bytes)",
 		ProofDigestRule:        "sha256(exact_utf8_proof_bytes)",
 		P2ParityGate:           "make r23-p2-generated-parity",
-		GeneratedTargetsSHA256: "0e250cdf2d5a9d5a2d0b48ff32dd95affabb95e9a31e683506449c0752d62da4",
+		GeneratedTargetsSHA256: "78d2bf974330286d3178636a5cb83239f687b5b51903a3db11bcef369decaeb4",
 		VectorsSHA256:          "af12194346ecd704ac79ca67ac04c993fa9bca292608f01a6dbd759f18ee6656",
 		CompatibilityDoc:       "additive; preserve existing numbers; removed names and numbers are reserved",
 	}
