@@ -131,6 +131,37 @@ func (s *SpaceStore) MarkOwnershipOutboxDelivered(ctx context.Context, eventID, 
 	return command.RowsAffected() == 1, nil
 }
 
+// CleanupDeliveredOwnershipOutbox removes a bounded batch of terminal delivery
+// evidence after the documented retention period. transaction_timestamp is
+// intentionally stable for callers that provide an existing transaction.
+func (s *SpaceStore) CleanupDeliveredOwnershipOutbox(ctx context.Context, limit int) (int64, error) {
+	if limit < 1 || limit > 100 {
+		return 0, errors.New("invalid ownership outbox cleanup limit")
+	}
+	if s == nil || (s.Pool == nil && s.tx == nil) {
+		return 0, errors.New("space store: database not configured")
+	}
+	command, err := s.db().Exec(ctx, `WITH candidates AS (
+		SELECT event_id
+		FROM ownership_outbox
+		WHERE NOT ready
+		  AND delivered_at IS NOT NULL
+		  AND lease_token IS NULL
+		  AND lease_expires_at IS NULL
+		  AND delivered_at <= transaction_timestamp()-interval '30 days'
+		ORDER BY delivered_at,event_id
+		FOR UPDATE SKIP LOCKED
+		LIMIT $1
+	)
+	DELETE FROM ownership_outbox AS outbox
+	USING candidates
+	WHERE outbox.event_id=candidates.event_id`, limit)
+	if err != nil {
+		return 0, fmt.Errorf("cleanup delivered ownership outbox: %w", err)
+	}
+	return command.RowsAffected(), nil
+}
+
 // ReadReadyOwnershipOutbox visits immutable ready events in stable delivery order.
 // Claiming, acknowledgement, deletion and publishing belong to the dispatcher slice.
 func (s *SpaceStore) ReadReadyOwnershipOutbox(ctx context.Context, limit int, visit func(eventID, operationID, spaceID, previousOwnerProfileID, newOwnerProfileID uuid.UUID, eventType string, createdAt time.Time) error) error {
