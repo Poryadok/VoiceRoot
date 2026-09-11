@@ -113,6 +113,24 @@ func (s *SpaceStore) MarkOwnershipOutboxFailed(ctx context.Context, eventID, lea
 	return command.RowsAffected() == 1, nil
 }
 
+// CountAlertingOwnershipOutbox reports durable retryable events that have
+// reached the documented consecutive delivery failure threshold. An active
+// lease does not suppress an alert for a row whose failure count is persisted.
+func (s *SpaceStore) CountAlertingOwnershipOutbox(ctx context.Context) (int64, error) {
+	if s == nil || (s.Pool == nil && s.tx == nil) {
+		return 0, errors.New("space store: database not configured")
+	}
+	var count int64
+	if err := s.db().QueryRow(ctx, `SELECT count(*)
+		FROM ownership_outbox
+		WHERE ready
+		  AND delivered_at IS NULL
+		  AND attempt_count >= 10`).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count alerting ownership outbox: %w", err)
+	}
+	return count, nil
+}
+
 // MarkOwnershipOutboxDelivered records delivery without deleting the row. Both
 // the stable event ID and current lease token are required for the CAS update.
 func (s *SpaceStore) MarkOwnershipOutboxDelivered(ctx context.Context, eventID, leaseToken uuid.UUID) (bool, error) {
