@@ -153,4 +153,13 @@ Analytics Service — чистый consumer, не публикует событ�
 - **Prometheus** — экспорт operational метрик (`/metrics`)
 - **Grafana** — визуализация (ClickHouse + Prometheus dashboards)
 
+## P3 Space deletion classification (accepted target)
+
+Analytics is not a purge-completion RPC participant. Raw deletion events retain
+under the existing 90-day policy and HMAC `space_id` as well as account/profile
+identifiers with the Analytics key family. They contain no Space name, content,
+tombstone fields, proof/factor data or participant detail. Aggregates may remain
+indefinitely only as de-identified counts and cannot keep a row keyed by a raw
+deleted Space UUID. Analytics keys are never reused for Space, Auth or
+Subscription HMAC purposes.
 

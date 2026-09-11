@@ -237,4 +237,13 @@ Durable read cursor — **Messaging** `MarkRead` REST/gRPC only. WS `mark_read` 
 - **NATS** — получение событий для отправки уведомлений
 - **Realtime Service** — (через NATS) in-app delivery
 
+## P3 Space lifecycle participant (target)
+
+Notification stores a durable lifecycle fence, exact imported Chat manifest
+pages and immutable receipts. `FROZEN` suppresses Space/channel setting changes
+and delivery before queue routing; cached membership cannot override it. Restore
+accepts only the next `LIVE` generation. Purge deletes Space/channel settings,
+preferences scoped to those resources and pending deliveries before they can
+route, then writes a permanent compact `PURGED` fence. Full evidence retains 30
+days and delayed lower-generation deliveries remain suppressed.
 

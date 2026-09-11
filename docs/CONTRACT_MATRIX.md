@@ -110,3 +110,38 @@ All rows below are target contract coverage, not shipment claims.
 No public route permits direct Owner-role reassignment or either Auth consume RPC.
 NATS ownership remains unchanged: Space audit/lifecycle effects use Space's
 transactional outbox in the existing domain stream; this table adds no new stream.
+
+## P3 Space lifecycle protected contracts (accepted target)
+
+All rows below use authenticated workload identities, deterministic protocol
+version 1 evidence and no public Gateway route unless stated.
+
+| Caller | Callee / contract | Result |
+|---|---|---|
+| Gateway/user | Auth `IssueSpaceDeletionProof` | public issue only; password and enabled 2FA; opaque five-minute proof |
+| Space | Auth `ConsumeSpaceDeletionProof`, `GetSpaceDeletionProofReceipt`, `AcknowledgeSpaceDeletionProofReceipt` | exact consume recovery and persistence acknowledgement; no other caller |
+| Space | Role `RetireSpace` | permanent retirement receipt after `PURGE_DECIDED` |
+| Space | Chat `ApplySpaceLifecycleFence`, manifest prepare/page, `PurgeSpace` | first freeze linearization, exact chat pages, terminal cleanup |
+| Space | Messaging `ApplySpaceLifecycleFence`, manifest import/page acknowledgement, `PurgeSpace` | bounded message purge and File release handoff |
+| Space | File `ApplySpaceLifecycleFence`, prepare/register/seal producer manifests, `PurgeSpace` | exact reference denial/release and durable GC handoff |
+| Space | Voice, Matchmaking, Search, Subscription, Bot, Notification `ApplySpaceLifecycleFence`, `PurgeSpace` | service-owned deny/cleanup receipt for every fixed participant |
+| Space/Chat/Messaging | File reference acquire/release and producer registration | caller identity fixes allowed producer/owner type |
+| Messaging/Chat/Story/User (reference owner) | File `IssueFileAccessCapability` | exact live reference, authenticated subject, sorted URL/metadata surfaces, at most one hour |
+| Gateway/public File routes | File URL/metadata/bulk reads | subject-bound capability required after activation; no file_id-only authority |
+
+Participant IDs are fixed: Role=1, Chat=2, Messaging=3, File=4, Voice=5,
+Matchmaking=6, Search=7, Subscription=8, Bot=9, Notification=10. Every fence,
+purge request and receipt binds canonical Space/deletion IDs, positive
+generation and exact root manifest; Role uses its stricter retirement wire.
+
+| Subject / payload | Producer | Consumers / rule |
+|---|---|---|
+| `space.deletion_scheduled` / `SpaceDeletionScheduled` v1 | Space after full FROZEN barrier | generation-aware projections; notification only |
+| `space.restored` / `SpaceRestored` v1 | Space after full LIVE barrier | generation-aware projections; notification only |
+| `space.deleted` / additive `SpaceDeleted` v2 | Space after ten purge receipts plus tombstone/local purge | Realtime and projections; legacy field 1 remains `space_id` |
+
+The events stay in `chat.events`; direct participant receipts prove convergence.
+`ChatStreamEvent` retains `event_id=1`, `occurred_at=2`. NATS delivery is
+at-least-once with `Nats-Msg-Id=event_id`; consumer inbox and generation state
+provide logical dedup. Unknown payload/protocol and same-generation changed bytes
+are contract mismatch and are not ACKed as success.

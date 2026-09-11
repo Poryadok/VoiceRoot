@@ -147,8 +147,10 @@ invite lifecycle, membership/moderation, role and owner transfer, tree/room chan
 and settings. The mutation transaction writes an outbox row with the same
 `audit_event_id`; the publisher delivers exactly once to the logical audit effect
 (idempotent consumers dedupe by that ID). A failed mutation produces no audit row.
-Records retain 365 days; `details` is canonical, redacted and capped at 4 KiB.
-Deletion/purge never cascades audit rows: it leaves the required minimal tombstone.
+While a Space is live, records retain 365 days; `details` is canonical, redacted
+and capped at 4 KiB. Accepted P3 purge is the exception: ordinary audit rows are
+deleted after mandatory lifecycle facts are reduced to the sole minimal
+tombstone, which retains until `purged_at + 365 days`.
 
 `GetAuditLog` adds action/actor/time filters and uses an HMAC-signed cursor bound to
 `space_id` and the full filter set. A changed filter/cursor, invalid signature or
@@ -537,3 +539,66 @@ The separate names prevent a transfer proof from authorizing deletion.
 Auth deletion issue/consume proto, Java storage/factors and trusted-principal
 support are a separate later A2 implementation dependency. This decision does
 not expand the ownership-proof implementation or reuse its tokens/receipts.
+
+## P3 Space lifecycle coordinator (accepted target; not implemented)
+
+Space owns the aggregate and durable participant ledger. States are `LIVE`,
+`SCHEDULE_PENDING`, `FREEZE_PENDING`, `SCHEDULED`, `RESTORE_DECIDED`,
+`PURGE_DECIDED`, `PURGING`, `PURGED`; generations are positive and monotonic.
+The release manifest fixes ten participants: Role, Chat, Messaging, File, Voice,
+Matchmaking, Search, Subscription, Bot and Notification. Service absence never
+removes a participant: an empty result still has an immutable receipt.
+
+Before Auth consume Space commits the immutable operation binding and
+`SCHEDULE_PENDING`. After an exact receipt it enters `FREEZE_PENDING`, where
+Chat first fences and captures the immutable sorted chat manifest; Messaging
+imports it; File preliminarily fences and seals exact `SPACE`, `CHAT` and
+`MESSAGING` reference declarations/pages; then all ten participants acknowledge
+the same root manifest. Only after the complete barrier does fresh PostgreSQL
+time under the Space lock set `SCHEDULED`, `scheduled_at` and
+`purge_after = scheduled_at + interval '7 days'`. Subphases and exact manifest
+bytes survive restart; no work set is recreated for the same generation.
+
+Restore samples database time after acquiring the same lock. Strictly before
+`purge_after`, it commits `RESTORE_DECIDED` at the next generation and returns
+to `LIVE` only after all participant `LIVE` receipts. At equality or later it
+commits irreversible `PURGE_DECIDED`, sends that fence to all participants,
+then retries destructive work. Role retirement is first. Messaging deletes the
+saved Chat domain and obtains File release acceptance; Chat deletes its rows
+only afterward. Other participants may converge in parallel. Local `PURGED`,
+the tombstone and ready `space.deleted` outbox row commit only after all ten
+validated completion receipts. File receipt proves durable reference/GC
+handoff, not physical R2 absence.
+
+Each attempt uses exact stored bytes, a fresh 10-second RPC deadline and
+unbounded exponential retry from one second to a five-minute cap with bounded
+jitter. Fifteen minutes without progress alerts but never skips a participant.
+The ledger uses `NOT_STARTED`, `IN_FLIGHT`, `COMPLETE`, `RETRYABLE_FAILURE`,
+`CONTRACT_MISMATCH`; only an accepted receipt may set `COMPLETE`.
+
+The common protected wire uses `protocol_version=1`. A lifecycle-fence request
+contains canonical `space_id`, `deletion_operation_id`, positive `generation`,
+desired `FROZEN`/`LIVE`/`PURGE_DECIDED` and `ManifestBinding(manifest_id,
+manifest_sha256,item_count)`. Its receipt adds stable `receipt_id`, fixed
+`participant_id`, applied state, request/manifest hashes and database
+`applied_at`. A purge request replaces desired state with `purge_decided_at`;
+its receipt accepts only `COMPLETED` and records `completed_at`. Participant IDs
+are Role=1, Chat=2, Messaging=3, File=4, Voice=5, Matchmaking=6, Search=7,
+Subscription=8, Bot=9, Notification=10; zero/unknown IDs or states are invalid.
+Role returns the stricter retirement receipt. Exact replay returns stored bytes;
+changed bytes for the same operation/generation conflict, timeouts never
+manufacture a receipt, and `CONTRACT_MISMATCH` is never auto-skipped.
+
+Completed schedule/restore replay lasts 30 days; nonterminal operations last
+until terminal. Full participant evidence lasts 30 days after `PURGED`, compact
+completion tuples through tombstone expiry. The no-FK tombstone contains only
+Space ID, purpose-specific account HMACs, key version, `OWNER_REQUESTED`,
+lifecycle timestamps and `retain_until = purged_at + 365 days`. Ordinary audit
+is purged; no legal-hold field exists in P3 and public audit never exposes it.
+
+Space tombstone HMAC input is ASCII `voice-space-tombstone-v1`, NUL, then raw
+16-byte UUID. Only Space workload identity may compute it; staff and break-glass
+have no access. Its distinct KMS/HSM family rotates every `P90D`, fails closed,
+is audited, and uses the shared `P30D` maximum restorable-backup window. Old
+versions are destroyed only after no retained row or restorable backup needs
+them.

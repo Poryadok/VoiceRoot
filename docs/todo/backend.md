@@ -759,3 +759,7 @@
 - [ ] **Compose expiry full chain live test** — worker → archive → purge → `DeleteFile` с `STORY_TTL_DEV` в compose.
 
 **Промпт-якорь:** `Backend audit from docs/todo/backend.md` + сервис и приоритет.
+
+## R23 accepted docs / open source
+
+- [ ] **[Cross-cutting] Implement the accepted P3 Space deletion and Role retirement contract** — canonical docs fix U1-A/U2-A/U3-B/U4-B/U5-A, `K=P90D` and `B=P30D`; source still needs proto/generated ownership, Auth/Space/Role/participant migrations and workers, File reference/capability authority, RED fixtures, activation gates and end-to-end convergence evidence. This open item must not be read as shipped status.

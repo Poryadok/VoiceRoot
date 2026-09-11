@@ -79,4 +79,13 @@ NATS message.sent/edited/deleted ──► Search Service ──► Update index
 - **Space Service** — валидация доступа
 - **Federation Service** — маршрутизация поиска к нодам
 
+## P3 Space lifecycle participant (target)
+
+Search stores a durable lifecycle fence, imported exact Chat manifest pages,
+operation evidence and receipts. `FROZEN` imports the saved pages and denies
+Space/chat/message projection reads and writes for that generation. Restore
+accepts only the higher `LIVE` generation. Purge deletes every Space, chat and
+message document from every active index and persists a permanent compact
+`PURGED` fence before completion. A generation gap reconciles through Space;
+uncertain fence state fails closed. Full evidence retains 30 days.
 

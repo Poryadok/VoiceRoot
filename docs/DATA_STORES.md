@@ -141,3 +141,26 @@ cannot expire replay protection early.
 Unavailable storage fails closed; it is not replaced by a process-local cache.
 Role ownership operation receipts remain durable in `role_db` and implement
 business idempotency independently of per-attempt JWT replay rejection.
+
+## P3 Space lifecycle storage inventory (accepted target)
+
+| Store owner | Additive durable data |
+|---|---|
+| `auth_db` | separate Space-deletion proofs, immutable consume receipts, persistence acknowledgement and purpose-specific post-erasure HMAC lookup index |
+| `space_db` | lifecycle operation/state, immutable root/chat/File bindings, ten-participant ledger and receipts, leased outbox/inbox evidence, no-FK minimal deletion tombstone |
+| `role_db` | permanent Space retirement fence, compact retirement receipt and bounded full request/receipt evidence |
+| `chat_db` | lifecycle fence, immutable Space-chat manifest header/pages, operation/receipt evidence and permanent compact PURGED fence |
+| `messaging_db` | lifecycle fence, imported Chat pages, Messaging File-reference producer pages, purge/release operation evidence and compact PURGED fence |
+| `file_db` | `file_blobs`, exact `file_references`, subject-bound access capabilities, Space lifecycle fences, reference operations, producer declarations/chunks/seals and GC operations |
+| `voice_db` | lifecycle fence/operation receipts and compact terminal fence; Redis remains a projection, never the durable deletion authority |
+| Matchmaking/Search/Bot/Notification DBs | service-owned lifecycle fence, exact imported Chat pages where required, cleanup operation/receipt evidence and compact terminal fence |
+| `subscription_db` | lifecycle fence/receipts, purged Space billing detail and permanent provider-event HMAC dedup fences |
+| Moderation DB | atomic `TARGET_DELETED` resolution, sanction snapshot/detached report relation and deletion of Space report evidence |
+| Analytics ClickHouse | existing 90-day raw HMAC events and de-identified aggregates; no raw deleted Space key |
+
+Unconsumed Auth proof expires at five minutes; unacknowledged consumed receipt
+does not time out; acknowledged receipt keeps through
+`max(consumed + 30 days, acknowledged + 24 hours)`. Completed Space operation,
+participant full evidence, delivered outbox and processed inbox evidence keep
+30 days at their specified terminal timestamps. Role retirement and participant
+PURGED fences are permanent. The Space tombstone keeps 365 days from purge.

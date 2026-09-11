@@ -181,4 +181,13 @@ Matcher Worker (горизонтально масштабируемый):
 - **Story Service** — (через NATS) "ищу пати" → автоматическая заявка
 - **Moderation Service** — проверка ММ-банов
 
+## P3 Space lifecycle participant (target)
+
+Matchmaking stores a durable per-Space generation fence plus immutable operation
+and receipt evidence. `FROZEN` cancels active searches tied to the Space and
+denies create/join/match/result mutations before cached membership shortcuts.
+`LIVE` requires the next generation. `PURGE_DECIDED` permanently suppresses
+delayed work and removes Space queues, sessions, candidates, projections and
+Redis state. The receipt binds the root manifest but owns no Chat page set. Full
+evidence retains 30 days; compact `PURGED` fence is permanent.
 

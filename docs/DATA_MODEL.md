@@ -151,3 +151,30 @@ strict proof не завершает rollout во всех окружениях;
 
 - Детальные таблицы по сервисам: секции «Модель данных» в [microservices/](microservices/); объём первой волны миграций — [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md); инвентарь БД — [DATA_STORES.md](DATA_STORES.md).
 - После стабилизации черновика — короткая отсылка из этого файла в [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md) (по желанию), чтобы не дублировать длинные абзацы.
+
+## P3 Space deletion ownership and File references (accepted target)
+
+Space owns lifecycle state, generation, deadline, immutable root manifest and
+participant receipts; each participant owns its fence, cleanup rows and receipt
+in its own database. No coordinator reads another service database. The fixed
+participant set is Role, Chat, Messaging, File, Voice, Matchmaking, Search,
+Subscription, Bot and Notification. Lower generations are stale no-ops; same
+generation with changed state/bytes conflicts; `PURGE_DECIDED`/`PURGED` can
+never return to `LIVE`.
+
+After purge, ordinary Space rows and audit rows are removed. A separate no-FK
+`space_deletion_tombstones` row keeps only Space ID, purpose-specific HMAC
+owner/actor account values, key version, `OWNER_REQUESTED`, lifecycle times and
+`retain_until = purged_at + 365 days`; no P3 legal hold exists. Role and every
+participant keep permanent identity-reuse fences containing no account/profile
+identity. Moderation, Analytics and Subscription follow their explicit service
+classifications rather than becoming coordinator completion participants.
+
+File owns cross-service reference liveness. A live reference is identified by
+`(file_id, owner_type, owner_id, subresource_id?, scope_space_id?)`; the
+authenticated owner supplies `scope_space_id`, File does not infer it. Every
+Space-derived reference requires that scope. A URL/metadata/bulk read requires
+one exact live reference or a subject-bound capability and checks the File-owned
+Space fence before any uploader/owner shortcut. Owner rows become externally
+visible only after durable reference acquisition, and release names the exact
+same tuple. Blob GC begins only when File proves zero live references globally.

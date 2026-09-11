@@ -412,3 +412,14 @@ Normative inbox classification для DM (`chat_members.inbox_bucket` per `profi
 ## Pin чатов
 
 См. [navigation.md](navigation.md) и [GLOSSARY.md](../GLOSSARY.md). Кратко: pin в папке / спейсе ≠ Quick Access в rail.
+
+## Attachment reference lifecycle (P3 target)
+
+Space-scoped attachments become visible only after Messaging has acquired the
+exact durable `FileReferenceKey` with `scope_space_id`. URL/metadata refresh
+uses either that reference or a subject-bound capability issued by File after
+Messaging authorization; `file_id` or uploader identity alone is insufficient.
+During Space freeze Chat persists the immutable sorted Space-chat manifest,
+Messaging imports those exact pages and seals its message-reference producer
+manifest. Purge deletes the bounded message domain and releases exactly that
+saved producer manifest before Chat may remove the authoritative chat rows.

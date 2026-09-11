@@ -171,3 +171,13 @@ requires a new snapshot.
 
 Voice Service stateless — масштабируется горизонтально. LiveKit масштабируется независимо (SFU per region для low-latency).
 
+## P3 Space lifecycle participant (target)
+
+Voice adds a durable PostgreSQL lifecycle fence/operation receipt even though
+its media projection is primarily Redis. `FROZEN` atomically fences admission,
+actively ejects every Space session and revokes outstanding grants; ordinary
+join/token/command paths fail closed on uncertain fence state. `LIVE` accepts
+only the next valid generation. `PURGE_DECIDED` is irreversible and removes or
+terminally fences Space room/session/grant rows and Redis keys. It binds the
+root manifest without inventing chat-owned work. Full evidence retains 30 days;
+the compact max-generation `PURGED` fence is permanent.

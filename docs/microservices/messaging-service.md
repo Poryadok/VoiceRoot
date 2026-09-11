@@ -608,3 +608,20 @@ REST через Gateway: `POST/GET /api/v1/messages/prekeys` (см. [api-gateway
 Key backup хранится в **Auth Service** (`PutE2EKeyBackup` / `GetE2EKeyBackup`), не в Messaging.
 
 Включение E2E в DM — **Chat Service** (`E2EPreKeyGate`: оба участника должны иметь pre-key bundle).
+
+## P3 Space lifecycle participant (target)
+
+Messaging stores its generation fence, imported immutable Chat manifest pages,
+message-reference producer pages and request/receipt evidence. `FROZEN` imports
+and seals the exact Chat binding, blocks message/reaction/thread/schedule/read/
+delivery mutations for that Space work set, and enumerates exact Space-scoped
+`FileReferenceKey` values as the fixed `MESSAGING` producer. A final receipt is
+valid only after the root manifest matches local saved evidence.
+
+Reads and attachment refresh authorize the message domain first, then request a
+subject-bound File capability for its exact live reference. Attachment visibility
+waits for `AcquireFileReferences`. Purge deletes messages, reactions, read and
+delivery state, pins, hides, threads and scheduled rows in bounded FK order,
+then asks File to release the saved producer manifest. Completion requires
+File's exact release receipt. Restore reuses the saved manifest and releases
+nothing. Full evidence retains 30 days and compact `PURGED` fence is permanent.

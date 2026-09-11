@@ -265,4 +265,42 @@ When conversion finishes (`status=ready` or `failed`), File publishes **`file.pr
 
 Upload/download — через presigned URLs (R2 обслуживает напрямую). Конвертация — отдельный пул воркеров, масштабируется по очереди задач.
 
+## P3 reference authority, lifecycle fence and GC (accepted target)
+
+File is sole reference and binary-GC authority. Add service-owned blob,
+reference, access-capability, lifecycle-fence, immutable operation and deletion-
+manifest storage. The unique live key is `(file_id, owner_type, owner_id,
+subresource_id?, scope_space_id?)`; owner types are closed and Space-derived
+references require `scope_space_id`. `files.chat_id` is upload context only.
+
+Every URL/metadata/bulk/variant read selects an exact reference or opaque,
+subject-bound capability with sorted surfaces and expiry no later than one hour.
+In one transaction File checks capability subject/surface/database-time expiry,
+then locks/requires a `LIVE` Space fence, exact unreleased reference and file
+state before any uploader/owner shortcut. Fence and reference locks use that
+order everywhere. A capability is rechecked after freeze. Bulk locks UUIDs in
+raw-byte order and fails as a whole. Before cutover legacy `file_id` resolves
+only when the same single live key remains after locking; zero, multiple or
+mixed frozen/live references fail closed. After cutover selector is required.
+
+`AcquireFileReferences` completes before owner data becomes visible; release is
+bound to the same tuple and never decrements a caller-owned counter. For each
+schedule generation File first durably installs preliminary `FROZEN` against
+the Chat binding, then accepts exactly `SPACE`, `CHAT`, `MESSAGING` producer
+declarations (including zero counts), contiguous chunks of at most 1000 sorted
+keys, exact counts and aggregate hashes. Early, missing, duplicate or changed
+chunks cannot seal. Final fence receipt binds the complete root manifest.
+Restore reuses it and releases nothing; purge releases only saved manifests.
+
+Zero-reference blobs enter durable `GC_PENDING`; File receipt means exact
+releases were accepted and each newly unreferenced blob is pending or complete.
+Physical original/converted/thumbnail R2 deletion is independently retried;
+NotFound succeeds and ambiguous deletion is reconciled until all keys are
+absent. A surviving reference in Story/profile/another live Space keeps shared
+bytes and remains readable through its own selector.
+
+Activation requires sealed deterministic backfills from every owner, dual-write
+catch-up, a `LIVE` fence for every Space-scoped reference and zero remaining
+file_id-only callers. Full lifecycle/operation receipts retain 30 days after
+completion; permanent compact PURGED fence state survives identifier reuse.
 

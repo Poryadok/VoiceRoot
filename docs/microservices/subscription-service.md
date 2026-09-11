@@ -154,4 +154,29 @@ Flutter не потребляют downgrade для выбора и заморо�
 - **Space Service** — (через NATS) снижение лимитов пространства при expiry
 - **File Service** — (через NATS) изменение retention при downgrade
 
+## P3 Space deletion and provider dedup (accepted target)
+
+Subscription stores a durable lifecycle fence, operation receipts and compact
+provider-event dedup fences. `FROZEN` denies entitlement use/mutation for the
+Space; restore accepts only the next `LIVE` generation. Purge cancels renewal,
+removes the active Space entitlement/projection and its billing detail, then
+returns an immutable completion receipt bound to the root manifest. Full
+lifecycle evidence retains 30 days and compact `PURGED` state is permanent.
+
+Billing-detail removal never removes webhook idempotency authority. The compact
+fence retains only provider, purpose-specific HMAC-SHA-256 of the exact provider
+event ID, `first_seen_at`, stable terminal outcome class, `key_version` and
+`retain_until`. HMAC input is UTF-8
+`voice-subscription-provider-dedup-v1`, NUL, canonical lowercase provider, NUL,
+then exact provider-event bytes. A transient or rolled-back attempt writes no
+fence. Both Paddle and CloudPayments fences are permanent because no bounded
+maximum replay/reconciliation/dispute-redelivery window is canonical.
+
+Only Subscription workload identity may compute or transactionally read the
+fence; there is no public/admin/staff/break-glass read surface. Its distinct
+KMS/HSM family rotates every `P90D`, fails closed and has audited rotation and
+destruction. The maximum restorable-backup window is `P30D`. Because fences are
+permanent, old key versions also remain permanent until a separately reviewed
+migration re-HMACs every fence. This HMAC evidence is accepted as compatible
+with account erasure.
 

@@ -362,3 +362,43 @@ Space↔Voice bearer; его нельзя расширять или исполь
 - error model (status code + `error_code`)
 - pagination/курсоры (если применимо)
 - idempotency/повтор запроса (если применимо)
+
+## P3 durable lifecycle wire and fail-closed propagation (accepted target)
+
+All immutable P3 requests, receipts, manifest pages and lifecycle events use
+`protocol_version=1` except additive `SpaceDeleted` version 2. Parse while
+retaining unknown fields, validate every known field and invariant, serialize in
+protobuf deterministic mode, then hash UTF-8 fully-qualified message name, one
+NUL byte and exact deterministic bytes with SHA-256. Store exact first-accepted
+bytes and the 32 raw hash bytes. Equality requires semantic fields and byte/hash
+equality; hash alone is insufficient. Set-like fields are canonicalized as
+specified. The existing opaque proof digest remains SHA-256 of exact proof bytes
+without this domain prefix.
+
+Authority-bearing requests reject unknown fields before mutation. Receipt
+wrappers accept unknown fields only after known validation and preserve exact
+bytes. Known lifecycle-event payloads preserve validated unknown fields; unknown
+payload arms/protocols are contract mismatch and are not ACKed as success.
+
+Space lifecycle fences are positive, monotonic generations replicated by direct
+trusted RPC and checked in the same participant transaction as every governed
+read/mutation. Lower generation is stale, same generation with different bytes
+is mismatch, gaps reconcile through Space, and `PURGE_DECIDED` is irreversible.
+Lookup/cache uncertainty is unavailable and cannot become allow. File requires
+a backfilled fence row for every Space-scoped reference; every URL, metadata,
+bulk and variant access selects an exact reference or subject-bound capability,
+then checks the current File fence before uploader/owner/admin/bot shortcuts.
+
+Lifecycle events are at-least-once notifications, never purge authority. Space
+uses transactional outbox leases, JetStream PubAck and `Nats-Msg-Id=event_id`;
+consumers atomically insert `(consumer_name,event_id)`, apply generation-aware
+state, commit, then ACK. An offline authority projection beyond stream MaxAge
+must reconcile a complete owner snapshot before serving.
+
+Space, Auth and Subscription HMAC purposes use three distinct KMS/HSM families,
+never Analytics keys. Only the corresponding workload identity may compute each;
+general staff and break-glass access are absent. Each rotates every `P90D`, uses
+maximum restorable-backup age `P30D`, fails closed and audits rotation/
+destruction. A version is destroyed only after no retained row and no restorable
+backup needs it; permanent Subscription fences keep old versions until reviewed
+re-HMAC migration. Raw UUID is never a fallback.

@@ -326,3 +326,13 @@ Milestone — законченный пользовательский резул
 | Release | exact-SHA deploy/render, migrations, canary observation, authenticated smoke, backup→restore, observability и rollback-trigger evidence |
 
 Live provider/device проверки добавляются только в соответствующий gate. Их отсутствие не превращает успешно проверенный fake/sandbox milestone в «заблокированную работу», но запрещает объявлять live gate пройденным.
+
+## Accepted R23 deletion/retirement contract
+
+The canonical docs decision for R23 is accepted: U1-A, U2-A, U3-B, U4-B and
+U5-A, with HMAC rotation `K=P90D` and maximum restorable-backup age `B=P30D`.
+It fixes the convergent Space lifecycle, permanent Role retirement, File
+reference authority, service-owned cleanup receipts and explicit post-purge
+data classifications. This closes the owner/docs-decision gate only. R23
+implementation, migrations, protos, RED tests, activation evidence and source
+review remain open, so no feature status in this plan changes.

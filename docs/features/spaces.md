@@ -191,3 +191,41 @@ Prepare/decision/Finalize-or-Abort path reaches one matching terminal outcome.
 удаления непригоден. Factors, TTL и consume описаны в
 [Space Service](../microservices/space-service.md#a2-public-lifecycle-and-retry-contract-target).
 Это фиксация входов для следующей реализации, а не изменение статуса готовности.
+
+### P3 convergent lifecycle contract (accepted target)
+
+Scheduling moves `LIVE -> SCHEDULE_PENDING -> FREEZE_PENDING -> SCHEDULED`.
+`scheduled_at` and `purge_after = scheduled_at + 7 days` are committed only
+after Role, Chat, Messaging, File, Voice, Matchmaking, Search, Subscription, Bot
+and Notification durably acknowledge `FROZEN` for the same positive generation
+and immutable root manifest. Chat captures the complete immutable Space-chat
+manifest first; Messaging imports it and all three File reference producers
+(`SPACE`, `CHAT`, `MESSAGING`, including zero-count producers) seal their exact
+pages before final acknowledgements. A `204` means the full seven-day
+hidden/frozen window has begun, not merely that work was queued.
+
+Restore is eligible only when fresh PostgreSQL time sampled after the shared
+Space lock is strictly less than `purge_after`. It commits `RESTORE_DECIDED`,
+uses the next generation and the saved manifest, and returns `200` only after
+all ten participants acknowledge `LIVE`. At equality or later Space commits
+irreversible `PURGE_DECIDED`; all participants fence that generation before
+destructive cleanup. Role retires the Space permanently, Messaging deletes the
+exact frozen Chat work set and hands its exact File releases to File, and Chat
+deletes its rows only after Messaging completes. `space.deleted` becomes ready
+only after all ten receipts, the local purge and tombstone transaction.
+
+File completion means every exact reference release is durable and each newly
+unreferenced blob is in durable GC state. Physical R2 deletion remains an
+observable, retryable File-owned operation. A shared blob survives and remains
+readable through an exact live Story/profile/other-Space reference while the
+frozen Space reference is denied.
+
+After purge, the sole Space audit record is a minimal tombstone containing
+`space_id`, purpose-specific HMAC-SHA-256 owner/actor account tombstones,
+`key_version`, `OWNER_REQUESTED`, lifecycle timestamps and
+`retain_until = purged_at + 365 days`. It contains no Space name, raw account or
+profile ID, proof/factor data, member/participant detail or free text; there is
+no P3 legal-hold field. Database-time equality expires the tombstone. The Space
+HMAC key is available only to the Space workload identity, has no staff or
+break-glass reader, rotates every `P90D`, fails closed, and follows the shared
+`P30D` maximum restorable-backup window and destruction rules.

@@ -152,3 +152,11 @@ Post-MVP gaps (ops-секреты, расширенные дашборды) — 
 - [DATA_STORES.md](../DATA_STORES.md) — ClickHouse, env vars
 - [DEPLOYMENT.md](../DEPLOYMENT.md) — compose и staging rollout
 - [observability.md](observability.md) — operational monitoring (отдельная фича)
+
+## Space deletion data contract (P3 target)
+
+Deletion lifecycle telemetry HMACs `space_id` as well as account/profile IDs
+before raw storage. Properties must not contain raw Space UUID/name, message
+content, tombstone fields, proof/factor data or participant receipts. Raw events
+retain the existing 90-day TTL. Aggregates may remain indefinitely only as
+de-identified counts and must not keep a row keyed by the deleted raw Space ID.
