@@ -239,7 +239,7 @@ jobs:
           cache: true
       - name: Install protoc_plugin
         run: |
-          dart pub global activate protoc_plugin
+          dart pub global activate protoc_plugin 25.0.0
           echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
       - name: Check Dart protobuf codegen
         run: make buf-dart-check
@@ -1399,7 +1399,7 @@ jobs:
         run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Install protoc_plugin
         run: |
-          dart pub global activate protoc_plugin
+          dart pub global activate protoc_plugin 25.0.0
           echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
       - name: Go mod tidy (all Go modules)
         run: |
