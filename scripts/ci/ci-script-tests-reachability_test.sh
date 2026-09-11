@@ -28,6 +28,10 @@ echo "${job_block}" | grep -Eq '^      - name: CI script regression tests$' \
   || fail "ci-script-tests must name its regression-test step"
 echo "${job_block}" | grep -Eq '^        run: make ci-script-tests$' \
   || fail "ci-script-tests must invoke make ci-script-tests"
+echo "${job_block}" | grep -Eq '^          fetch-depth: 0$' \
+  || fail "ci-script-tests must fetch master history for scope checks"
+echo "${job_block}" | grep -Fq 'VOICE_R22_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}' \
+  || fail "ci-script-tests must pass the event base SHA to scope checks"
 
 gate_block="$(sed -n '/^  ci-gate:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
 echo "${gate_block}" | grep -Eq '^      - ci-script-tests$' \

@@ -195,8 +195,12 @@ jobs:
         (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')
       )
     runs-on: ubuntu-latest
+    env:
+      VOICE_R22_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - name: CI script regression tests
         run: make ci-script-tests
 
