@@ -34,6 +34,41 @@ expect_regex() {
   grep -Eq -- "${pattern}" "${ROOT}/${file}" 2>/dev/null || fail "${label}: ${file} does not match ${pattern}"
 }
 
+paragraph_matches_regex() {
+  local file="$1"
+  local pattern="$2"
+  awk -v pattern="${pattern}" '
+    function flush_paragraph() {
+      if (paragraph != "") {
+        gsub(/[[:space:]]+/, " ", paragraph)
+        if (paragraph ~ pattern) {
+          found=1
+        }
+      }
+      paragraph=""
+    }
+    /^[[:space:]]*$/ { flush_paragraph(); next }
+    /^[[:space:]]*#{1,6}[[:space:]]/ { flush_paragraph(); next }
+    {
+      line=$0
+      sub(/\r$/, "", line)
+      paragraph=paragraph (paragraph == "" ? "" : " ") line
+    }
+    END {
+      flush_paragraph()
+      exit found ? 0 : 1
+    }
+  ' "${file}"
+}
+
+expect_paragraph_regex() {
+  local file="$1"
+  local pattern="$2"
+  local label="$3"
+  paragraph_matches_regex "${ROOT}/${file}" "${pattern}" || \
+    fail "${label}: ${file} has no matching Markdown paragraph for ${pattern}"
+}
+
 expect_word_count() {
   local file="$1"
   local word="$2"
@@ -115,6 +150,50 @@ forbidden_activation_content() {
   fi
   grep -Eiz '\.(Handle|HandleFunc)[[:space:]]*\([^)]*(lifecycle|room)' "${file}" >/dev/null
 }
+
+cat >"${TMP_DIR}/f12-adjacent-lines" <<'EOF'
+Apply lifecycle migrations before rolling or
+starting the voice-voice Deployment.
+EOF
+cat >"${TMP_DIR}/f12-adjacent-paragraph" <<'EOF'
+Apply 000001_room_lifecycle.up.sql to voice_db.
+Verify the completed Job and schema state.
+Only then, before rolling the voice-voice Deployment, continue the release.
+EOF
+cat >"${TMP_DIR}/f12-distant-paragraphs" <<'EOF'
+Apply lifecycle migrations during the maintenance window.
+
+Unrelated operational guidance belongs here.
+
+Before rolling the voice-voice Deployment, notify the on-call engineer.
+EOF
+cat >"${TMP_DIR}/f12-distant-sections" <<'EOF'
+## Database migrations
+Apply lifecycle migrations during the maintenance window.
+## Application rollout
+Before rolling the voice-voice Deployment, notify the on-call engineer.
+EOF
+if ! declare -F paragraph_matches_regex >/dev/null; then
+  printf '%s\n' 'F12 oracle bug: paragraph-scoped regex matcher is missing' >&2
+  exit 2
+fi
+f12_lifecycle_pattern='(migrat|миграц).*(before|до).*(voice-voice|Voice)|(voice_db|000001_room_lifecycle).*(before|до).*(roll|запуск|депло)'
+paragraph_matches_regex "${TMP_DIR}/f12-adjacent-lines" "${f12_lifecycle_pattern}" || {
+  printf '%s\n' 'F12 oracle bug: adjacent-line lifecycle requirement was rejected' >&2
+  exit 2
+}
+paragraph_matches_regex "${TMP_DIR}/f12-adjacent-paragraph" "${f12_lifecycle_pattern}" || {
+  printf '%s\n' 'F12 oracle bug: split lifecycle paragraph was rejected' >&2
+  exit 2
+}
+if paragraph_matches_regex "${TMP_DIR}/f12-distant-paragraphs" "${f12_lifecycle_pattern}"; then
+  printf '%s\n' 'F12 oracle bug: distant paragraphs formed a false lifecycle requirement' >&2
+  exit 2
+fi
+if paragraph_matches_regex "${TMP_DIR}/f12-distant-sections" "${f12_lifecycle_pattern}"; then
+  printf '%s\n' 'F12 oracle bug: distant sections formed a false lifecycle requirement' >&2
+  exit 2
+fi
 
 assert_forbidden_activation_fixture() {
   local label="$1"
@@ -312,7 +391,7 @@ expect_fixed 'docs/DEPLOYMENT.md' '000001_room_lifecycle' F12
 expect_fixed 'docs/DEPLOYMENT.md' 'voice-migrate-voice-db' F12
 expect_fixed 'docs/DEPLOYMENT.md' 'voice-voice-db-migrations' F12
 expect_fixed 'docs/DEPLOYMENT.md' '/ready' F12
-expect_regex 'docs/DEPLOYMENT.md' '(migrat|миграц).*(before|до).*(voice-voice|Voice)|(voice_db|000001_room_lifecycle).*(before|до).*(roll|запуск|депло)' F12
+expect_paragraph_regex 'docs/DEPLOYMENT.md' "${f12_lifecycle_pattern}" F12
 expect_regex 'docs/DEPLOYMENT.md' '(backup|резерв).*(voice_db)|voice_db.*(backup|резерв)' F12
 expect_regex 'docs/DEPLOYMENT.md' '(restore|восстанов).*(voice_db)|voice_db.*(restore|восстанов)' F12
 expect_fixed 'docs/OPERATIONS.md' 'voice_db' F12
