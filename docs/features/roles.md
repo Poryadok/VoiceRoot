@@ -45,3 +45,18 @@
 
 Кто может писать пользователю в DM — настраивается **самим пользователем** в настройках приватности (не на уровне спейса).
 
+## Permanent Space retirement (P3 target)
+
+После `PURGE_DECIDED` только Space workload identity вызывает защищённый
+`RetireSpace` с `protocol_version=1`, Space/deletion IDs, generation,
+`purge_decided_at` и immutable manifest binding. Role отказывает, пока любая
+ownership-v2 операция `PREPARED`; затем одной транзакцией записывает permanent
+retirement fence и compact receipt, удаляет ordinary Role rows и публикует
+последнюю policy invalidation. Точный replay возвращает сохранённый receipt,
+изменённый запрос для того же Space не может заменить fence.
+
+После commit все delayed ownership v1/v2, ordinary permission, bootstrap и
+identifier-reuse paths сначала проверяют retirement fence. Старые ownership
+receipts могут быть удалены только после retirement и отсутствия `PREPARED`;
+fence и compact receipt не имеют time-based expiry. Restore происходит только
+до `PURGE_DECIDED`, поэтому permanent retirement с ним не пересекается.

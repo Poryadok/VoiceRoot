@@ -486,3 +486,20 @@ Gateway REST (sketch): `GET /api/v1/sticker-packs`, `POST /api/v1/sticker-packs/
   - также единственный trusted S2S caller `ListDMReceiptVisibilityTargets`: paginated `chat_id` + peer profile для symmetric read-receipt revoke. RPC не маршрутизируется через Gateway; включает `main`, `requests` и `archive` DM, исключая group/channel и некорректные DMs не с двумя участниками.
 - **Subscription Service** — лимиты на количество участников группы
 - **Space Service** — при создании текстового чата (`group` \| `channel`) в спейсе: узел **`space_tree_nodes`** (`kind=text_chat`) после создания строки `chats`
+
+## P3 Space lifecycle participant (target)
+
+Chat owns a durable per-Space generation fence, immutable manifest header/pages,
+request/receipt evidence and compact permanent `PURGED` fence. On `FROZEN`, its
+transaction blocks Space-chat/navigation mutation and captures every
+`chats.space_id` UUID sorted by raw 16-byte value in pages of at most 1000. This
+is the first downstream freeze linearization point. Exact pages/count/hash are
+replayed; the same page index with changed bytes conflicts.
+
+Messaging, Search, Bot and Notification import/acknowledge those exact pages.
+Chat's final fence receipt binds the complete root manifest. Restore applies the
+higher `LIVE` generation without recapture. Purge exposes only the saved pages,
+waits for Messaging completion and File acceptance of Chat-owned reference
+releases, then removes chats/navigation and returns an immutable completion
+receipt. Full request/receipt bytes retain 30 days from this participant's
+completion; compact terminal fence is permanent.

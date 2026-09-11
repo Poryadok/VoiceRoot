@@ -464,3 +464,19 @@ Gateway schemas/error mapping and client contract tests. Legacy and target route
 must not form an alternative authorization bypass: enable each vertical only
 after caller cutover and UI/REST/gRPC negative tests on the same SHA. This document
 freezes implementation inputs; it does not make the current endpoints production ready.
+
+### P3 lifecycle and File activation semantics
+
+Deletion `204` is emitted only after the all-participant `FROZEN` barrier and
+the database-time scheduling commit; restore `200` is emitted only after the
+next-generation all-participant `LIVE` barrier. Pending/unavailable dependency
+maps to `503`; malformed evidence to `400`, proof/factor/binding denial to `403`,
+and conflicting immutable operation to `409`. Gateway exposes only the limited
+Space lifecycle projection and never participant receipts, tombstones or proof
+data.
+
+After File activation every URL, metadata and bulk route carries a subject-bound
+capability obtained by the owning service after domain authorization. Gateway
+does not synthesize access from `file_id`, uploader or cached membership. A
+missing selector is invalid and an ambiguous legacy selector fails closed; one
+invalid or denied bulk item prevents a partial metadata response.

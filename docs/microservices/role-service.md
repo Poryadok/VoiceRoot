@@ -465,3 +465,31 @@ only the dedicated trusted ownership protocol can change that membership.
 Retired spaces cannot be recreated by bootstrap. These scoped-integrity rules
 also apply while transfer entrypoints remain disabled; implementing them does
 not activate the v2 ownership feature.
+
+## P3 permanent Space retirement (accepted target; not implemented)
+
+`RetireSpace` is protected-listener only and accepts `protocol_version=1`,
+canonical Space/deletion IDs, positive generation, `purge_decided_at` and exact
+root manifest binding from authenticated Space workload identity. Unknown
+request fields are rejected. Role refuses retirement while any ownership-v2
+operation is `PREPARED`. One transaction writes the permanent retirement fence
+and immutable receipt, removes ordinary Role rows and emits final policy
+invalidation. Exact replay returns stored bytes; changed operation, generation,
+manifest or request for the retired Space is `FAILED_PRECONDITION`.
+
+Every delayed ownership v1/v2, ordinary role/permission and bootstrap call
+checks retirement before old receipt replay or mutation, so identifier reuse
+cannot recreate authority. Ownership receipts may compact only after retirement
+and no `PREPARED` operation; the compact retirement receipt and fence are
+permanent. Full request/receipt bytes retain 30 days after completion. The
+receipt binds request and manifest SHA-256 and is Role's participant completion
+evidence; restore cannot reach this path because it is decided only before
+`PURGE_DECIDED`.
+
+The immutable request fields are `protocol_version`, `space_id`,
+`deletion_operation_id`, positive `generation`, `purge_decided_at` and
+`ManifestBinding`. The receipt fields are `protocol_version`, stable
+`receipt_id`, the same Space/operation/generation, state exactly `RETIRED`,
+`request_sha256`, `manifest_sha256` and database `retired_at`. Receipt-wrapper
+unknown fields are preserved after known-field validation; request and nested
+unknown fields are rejected before mutation.

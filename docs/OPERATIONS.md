@@ -163,3 +163,39 @@ cannot be promoted to staging or production.
 - [DEPLOYMENT.md](DEPLOYMENT.md) — стенды, поток артефактов, первый выкат
 - [TESTING.md](TESTING.md) — тесты в CI перед выкатом
 - [CONTRIBUTING.md](CONTRIBUTING.md) — merge в `master`, review
+
+## P3 Space lifecycle operations and activation (accepted target)
+
+Space retries every incomplete participant with exact durable request bytes, a
+fresh 10-second deadline and exponential one-second-to-five-minute backoff with
+bounded jitter and no attempt cap. Fifteen minutes without progress raises a
+stuck-participant alert; contract mismatch pages immediately. Operators monitor
+state/subphase age, participant/retry/receipt validation, Auth unacknowledged
+receipts, manifest imports/seals, File zero-reference GC and physical R2 retry.
+
+Lifecycle outbox rows start `BLOCKED` in the domain transaction and become
+`READY` only after the corresponding all-participant barrier/local terminal
+commit. Dispatchers claim at most 100 ordered rows with `FOR UPDATE SKIP LOCKED`,
+store a random 30-second lease token, publish deterministic bytes outside the
+transaction with `Nats-Msg-Id=event_id`, and mark `DELIVERED` only on the correct
+JetStream PubAck and matching lease token. Failure retries from one second to
+five minutes. Consumers use durable pull, explicit ACK, 30-second AckWait,
+unlimited MaxDeliver within the seven-day stream MaxAge and transactional inbox
+dedup; ten consecutive failures alert without discard.
+
+Cleanup workers use PostgreSQL time, bounded batches and both age and terminal/
+ack predicates. They expire Space tombstones at equality after 365 days, full
+lifecycle/outbox/inbox evidence at its 30-day boundary and acknowledged Auth
+receipts at the later required boundary. Permanent Role/participant/provider
+fences never enter ordinary TTL cleanup. HMAC families rotate each `P90D` and
+old versions wait for dependent rows plus the `P30D` restorable-backup window;
+rotation/destruction is audited and missing keys fail closed.
+
+P3 activation requires protected RPC capability on every replica, deterministic
+owner backfills and dual-write catch-up, sealed File manifests from every owner,
+a `LIVE` File fence for every Space-scoped reference, zero URL/metadata/bulk
+file_id-only callers, generation-aware authority consumers, and drain/advance
+past legacy lifecycle events. A missing method, row, participant or receipt is
+never empty success. Physical R2 completion is monitored independently after
+durable File GC handoff. Rollback migrations refuse while permanent/unexpired
+evidence exists.

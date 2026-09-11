@@ -383,3 +383,34 @@ outbound fan-out.
 Compose strict proof не завершает rollout для всех окружений: требуется отдельная
 operational acceptance. Immediate account-targeted close через Redis Pub/Sub пока
 не реализован; authority остаются strict JWT/floor проверки.
+
+## Space deletion proof and recovery (P3 target; not implemented)
+
+This is a distinct `space_delete` family and never reuses ownership-transfer
+tokens, rows or receipts. Public `IssueSpaceDeletionProof` binds account, active
+profile, positive session epoch, canonical Space/operation IDs and the exact
+UTF-8 confirmation name. Password is always verified; enabled 2FA requires
+exactly one TOTP or unused backup code. The opaque proof is returned once; Auth
+stores only its SHA-256, exact-name SHA-256, remaining bindings and security
+revision. TTL is exactly five minutes and equality is expired; password/session/
+2FA security changes revoke it.
+
+Only signed Space workload identity may consume, look up or acknowledge a
+deletion receipt. Consume is atomic and immutable; exact replay returns the same
+receipt, while changed purpose or binding fails closed. Lookup requires account,
+profile, epoch, Space, operation plus both name and proof digests, creates no
+grant and reveals only an already committed receipt. Missing, unconsumed,
+expired-before-consume, revoked and mismatched states all return coarse
+`PERMISSION_DENIED`. Space stores exact receipt bytes/hash before acknowledgement;
+missing lookup cannot abort an in-flight consume.
+
+Unconsumed proof rows retain through `expires_at`. A consumed receipt awaiting
+Space acknowledgement has no time-based deletion. An acknowledged receipt
+retains until `max(consumed_at + 30 days, acknowledged_at + 24 hours)`. If
+account erasure precedes acknowledgement, raw bindings become an Auth-keyed
+HMAC-SHA-256 lookup index over `voice-auth-space-delete-receipt-v1`, NUL and
+deterministic binding bytes while the immutable receipt remains recoverable.
+Only Auth workload identity has that distinct key; staff and break-glass have no
+access. Rotation is `P90D`, maximum restorable-backup age is `P30D`, missing key
+fails closed, and destruction waits for every dependent receipt and backup.
+This pseudonymous evidence is accepted as compatible with account erasure.

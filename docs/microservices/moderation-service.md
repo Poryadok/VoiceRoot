@@ -141,4 +141,20 @@ report.created event ──► Check thresholds:
 - **Notification Service** — (через NATS) уведомление о санкции
 - **Federation Service** — (через NATS) дефедерация при нарушениях
 
+## P3 Space deletion classification (accepted target)
+
+Moderation is not a purge-completion participant. At Space purge, `pending` and
+`reviewing` Space-target reports atomically become `dismissed` with
+`resolution_code=TARGET_DELETED`, then descriptions, screenshots and message
+evidence are deleted. Resolved or already dismissed Space-target reports and
+their Space evidence are deleted.
+
+An issued account/profile sanction remains effective until its own expiry or
+revocation; Space deletion never lifts it. Before report removal
+`sanction.report_id` becomes null and only a minimal non-Space reason code
+remains. A pending appeal continues against the sanction snapshot and may
+approve, deny or revoke without retaining report or Space content. The accepted
+product/Moderation decision declares that snapshot sufficient for every active
+appeal; no hidden `RETAIN_UNTIL_POLICY` exception or staff evidence archive is
+created in P3.
 

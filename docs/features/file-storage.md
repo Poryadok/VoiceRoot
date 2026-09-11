@@ -85,4 +85,31 @@ SHA-256 от содержимого файла считается при заг�
 - **P2P передача файлов в DM** — отложено, возможно не понадобится
 - **Хранение оригиналов** — только обработанные версии
 
+## Reference authority and Space deletion (P3 target)
+
+File Service — единственный authority для durable references и binary GC;
+`files.chat_id` остаётся legacy upload context и не доказывает liveness. Live
+reference key равен `(file_id, owner_type, owner_id, subresource_id?,
+scope_space_id?)`; Space-derived Message/Chat/media references обязаны иметь
+`scope_space_id`, а Story/profile reference вне Space его не получает.
+
+Каждый URL, metadata, bulk и thumbnail/original/converted refresh выбирает либо
+один exact live reference, либо subject-bound File capability (TTL не более
+одного часа). File в одной транзакции проверяет subject/surface/expiry, затем
+Space fence, exact unreleased reference и только после этого file state и любые
+owner/uploader conveniences. Freeze после выдачи capability всё равно запрещает
+доступ. Один denied bulk item запрещает весь bulk result. До activation legacy
+`file_id` допустим лишь при ровно одном live reference; zero/multiple и mixed
+frozen/live references дают fail-closed. После activation selector обязателен.
+
+Domain owner acquires the durable reference before an attachment becomes
+visible and releases only the same owner tuple. For Space deletion File first
+installs a generation-bound preliminary `FROZEN` fence, then seals fixed
+`SPACE`, `CHAT`, `MESSAGING` producer declarations and their exact sorted chunks,
+counts and hashes, including zero-count declarations. Restore changes the saved
+fence to `LIVE` without releases. Purge replays the sealed producer manifests;
+it never discovers a replacement set. A blob enters `GC_PENDING` only at zero
+live references across all owner types. Logical deletion completes at durable
+access denial/GC handoff; physical R2 removal retries until every object key is
+confirmed absent.
 

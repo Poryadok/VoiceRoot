@@ -210,3 +210,14 @@ Event (NATS: message in whitelisted chat) ──► Bot Service
 - **Chat Service** — `chat_id` в whitelist = `chats.id` (`type` = `group` \| `channel`)
 - **Space Service** — `AddBotMember` / `RemoveBotMember` для `actor_profile_id`
 - **NATS** — получение событий для доставки ботам
+
+## P3 Space lifecycle participant (target)
+
+Bot stores a durable lifecycle fence, imported exact Chat manifest pages and
+immutable receipts. `FROZEN` blocks installations, whitelist changes, bot
+commands and deferred Space/chat work before bot/admin shortcuts. Restore
+accepts only the next `LIVE` generation. Purge removes installations, Space and
+chat whitelists, bot memberships/projections and deferred deliveries, then
+persists a permanent compact `PURGED` fence. Full request/receipt bytes retain
+30 days from this participant's completion; delayed lower-generation work is a
+no-op.
