@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -27,7 +29,15 @@ func (s *MessageSearchStore) Upsert(ctx context.Context, doc MessageDocument) er
 	if s == nil || s.Pool == nil {
 		return fmt.Errorf("message search store unavailable")
 	}
-	_, err := s.Pool.Exec(ctx, `
+	tx, err := beginGovernedTx(ctx, s.Pool)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	if err := lifecycleGateChat(ctx, tx, doc.ChatID); err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `
 		INSERT INTO message_search_documents (message_id, chat_id, sender_profile_id, body, created_at)
 		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (message_id) DO UPDATE SET
@@ -37,15 +47,36 @@ func (s *MessageSearchStore) Upsert(ctx context.Context, doc MessageDocument) er
 			created_at = EXCLUDED.created_at`,
 		doc.MessageID, doc.ChatID, doc.SenderProfileID, doc.Body, doc.CreatedAt,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (s *MessageSearchStore) Delete(ctx context.Context, messageID uuid.UUID) error {
 	if s == nil || s.Pool == nil {
 		return fmt.Errorf("message search store unavailable")
 	}
-	_, err := s.Pool.Exec(ctx, `DELETE FROM message_search_documents WHERE message_id = $1`, messageID)
-	return err
+	tx, err := beginGovernedTx(ctx, s.Pool)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	var chatID uuid.UUID
+	err = tx.QueryRow(ctx, `SELECT chat_id FROM message_search_documents WHERE message_id=$1`, messageID).Scan(&chatID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+	if err == nil {
+		if err := lifecycleGateChat(ctx, tx, chatID); err != nil {
+			return err
+		}
+	}
+	_, err = tx.Exec(ctx, `DELETE FROM message_search_documents WHERE message_id = $1`, messageID)
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 type messageCursor struct {
@@ -103,6 +134,23 @@ func (s *MessageSearchStore) searchMessages(ctx context.Context, chatID uuid.UUI
 	if q == "" {
 		return nil, "", fmt.Errorf("query required")
 	}
+	tx, err := beginGovernedTx(ctx, s.Pool)
+	if err != nil {
+		return nil, "", err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	if chatID != uuid.Nil {
+		if err := lifecycleGateChat(ctx, tx, chatID); err != nil {
+			return nil, "", err
+		}
+	}
+	if len(chatFilter) > 0 {
+		for _, id := range chatFilter {
+			if err := lifecycleGateChat(ctx, tx, id); err != nil {
+				return nil, "", err
+			}
+		}
+	}
 
 	var after *messageCursor
 	if cursorRaw != nil && strings.TrimSpace(*cursorRaw) != "" {
@@ -140,7 +188,7 @@ func (s *MessageSearchStore) searchMessages(ctx context.Context, chatID uuid.UUI
 		ORDER BY created_at DESC, message_id DESC
 		LIMIT $%d`, where, limitArg)
 
-	rows, err := s.Pool.Query(ctx, sql, args...)
+	rows, err := tx.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, "", err
 	}
@@ -170,6 +218,9 @@ func (s *MessageSearchStore) searchMessages(ctx context.Context, chatID uuid.UUI
 		}
 		next = c
 		hits = hits[:limit]
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, "", err
 	}
 	return hits, next, nil
 }

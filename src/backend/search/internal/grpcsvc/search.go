@@ -18,6 +18,13 @@ import (
 	chatv1 "voice.app/voice/chat/v1"
 )
 
+func searchStoreError(err error) error {
+	if err != nil && (strings.Contains(err.Error(), "projection frozen") || strings.Contains(err.Error(), "lifecycle schema unavailable")) {
+		return status.Error(codes.Unavailable, "space lifecycle frozen")
+	}
+	return status.Error(codes.Internal, err.Error())
+}
+
 const (
 	defaultPageSize = 20
 	maxPageSize     = 50
@@ -94,6 +101,7 @@ type SearchGRPC struct {
 	Social          privacy.SocialGraph
 	SpaceMembers    privacy.SpaceCoMembership
 	Reindex         ChatReindexer
+	ChatManifest    chatv1.ChatServiceClient
 	Analytics       interface {
 		Publish(ctx context.Context, subject, sourceService, eventType string, props map[string]any) error
 	}
@@ -257,7 +265,7 @@ func (s *SearchGRPC) SearchInChat(ctx context.Context, req *searchv1.SearchInCha
 	limit := pageSize(req.GetPage())
 	hits, next, err := s.Messages.SearchInChat(ctx, chatID, q, cursorPtr(req.GetPage()), limit)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, searchStoreError(err)
 	}
 	return &searchv1.SearchInChatResponse{
 		SearchResults: &searchv1.SearchResults{
@@ -302,7 +310,7 @@ func (s *SearchGRPC) SearchGlobal(ctx context.Context, req *searchv1.SearchGloba
 	if s.Spaces != nil {
 		ids, _, err := s.Spaces.SearchSpaces(ctx, q, cursorPtr(req.GetPage()), limit)
 		if err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
+			return nil, searchStoreError(err)
 		}
 		spaceIDs = make([]string, 0, len(ids))
 		for _, id := range ids {
@@ -329,7 +337,7 @@ func (s *SearchGRPC) SearchGlobal(ctx context.Context, req *searchv1.SearchGloba
 	if s.Messages != nil && len(accessible) > 0 {
 		hits, cursor, err := s.Messages.SearchGlobalMessages(ctx, viewer, q, cursorPtr(req.GetPage()), limit, accessible)
 		if err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
+			return nil, searchStoreError(err)
 		}
 		msgHits = toProtoHits(hits)
 		next = cursor
@@ -402,7 +410,7 @@ func (s *SearchGRPC) SearchSpaces(ctx context.Context, req *searchv1.SearchSpace
 	limit := pageSize(req.GetPage())
 	ids, next, err := s.Spaces.SearchSpaces(ctx, q, cursorPtr(req.GetPage()), limit)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, searchStoreError(err)
 	}
 	out := make([]string, 0, len(ids))
 	for _, id := range ids {
