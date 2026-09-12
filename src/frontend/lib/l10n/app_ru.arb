@@ -833,6 +833,14 @@
   "verificationLinkedAccountsTitle": "Связанные аккаунты",
   "verificationLinkedAccountsEmpty": "Связанных аккаунтов пока нет.",
   "verificationLinkTwitch": "Привязать Twitch",
+  "verificationLinkYoutube": "Привязать YouTube",
+  "verificationUnlink": "Отвязать",
+  "verificationSelectedProfile": "Выбранный профиль: {profileId}",
+  "@verificationSelectedProfile": {
+    "placeholders": {
+      "profileId": {"type": "String"}
+    }
+  },
   "verifiedBadgePersonal": "Верифицирован",
   "verifiedBadgeOrganization": "Верифицированная организация",
   "security2faEnableTitle": "Двухфакторная аутентификация",

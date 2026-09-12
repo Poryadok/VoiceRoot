@@ -10,6 +10,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class InMemoryLinkedIdentityRepository implements LinkedIdentityRepository {
   private final Map<String, LinkedIdentity> byAccountPlatform = new ConcurrentHashMap<>();
+  private final Map<String, VerificationSourceSyncTarget> syncTargets = new ConcurrentHashMap<>();
+  private final Map<String, Long> syncedRevisions = new ConcurrentHashMap<>();
   private final AtomicLong versions = new AtomicLong();
 
   private static String key(UUID accountId, String platform) {
@@ -17,7 +19,7 @@ public class InMemoryLinkedIdentityRepository implements LinkedIdentityRepositor
   }
 
   @Override
-  public synchronized void upsertActive(
+  public synchronized LinkedIdentity linkActive(
       UUID accountId,
       UUID profileId,
       String platform,
@@ -25,12 +27,18 @@ public class InMemoryLinkedIdentityRepository implements LinkedIdentityRepositor
       String externalLogin,
       byte[] accessTokenEncrypted,
       byte[] refreshTokenEncrypted) {
+    LinkedIdentity current = byAccountPlatform.get(key(accountId, platform));
+    if (current != null
+        && "active".equals(current.status())
+        && !profileId.equals(current.profileId())) {
+      throw new LinkedIdentityProfileConflictException();
+    }
     UUID id =
-        Optional.ofNullable(byAccountPlatform.get(key(accountId, platform)))
+        Optional.ofNullable(current)
             .map(LinkedIdentity::id)
             .orElseGet(UUID::randomUUID);
-    byAccountPlatform.put(
-        key(accountId, platform),
+    long revision = versions.incrementAndGet();
+    LinkedIdentity linked =
         new LinkedIdentity(
             id,
             accountId,
@@ -41,7 +49,14 @@ public class InMemoryLinkedIdentityRepository implements LinkedIdentityRepositor
             accessTokenEncrypted,
             refreshTokenEncrypted,
             "active",
-            versions.incrementAndGet()));
+            revision);
+    byAccountPlatform.put(
+        key(accountId, platform),
+        linked);
+    syncTargets.put(
+        targetKey(accountId, profileId, platform),
+        new VerificationSourceSyncTarget(accountId, profileId, platform, revision, true, platform));
+    return linked;
   }
 
   @Override
@@ -68,17 +83,6 @@ public class InMemoryLinkedIdentityRepository implements LinkedIdentityRepositor
   }
 
   @Override
-  public List<LinkedIdentity> listAllPersonalVerificationProfiles() {
-    List<LinkedIdentity> out = new ArrayList<>();
-    for (LinkedIdentity row : byAccountPlatform.values()) {
-      if ("twitch".equals(row.platform()) || "youtube".equals(row.platform())) {
-        out.add(row);
-      }
-    }
-    return out;
-  }
-
-  @Override
   public Optional<LinkedIdentity> findActive(UUID accountId, String platform) {
     LinkedIdentity row = byAccountPlatform.get(key(accountId, platform));
     if (row == null || !"active".equals(row.status())) {
@@ -93,6 +97,7 @@ public class InMemoryLinkedIdentityRepository implements LinkedIdentityRepositor
     if (row == null || !"active".equals(row.status()) || row.version() != expected.version()) {
       return Optional.empty();
     }
+    long revision = versions.incrementAndGet();
     byAccountPlatform.put(
         key(expected.accountId(), expected.platform()),
         new LinkedIdentity(
@@ -105,7 +110,36 @@ public class InMemoryLinkedIdentityRepository implements LinkedIdentityRepositor
             null,
             null,
             "revoked",
-            versions.incrementAndGet()));
+            revision));
+    syncTargets.put(
+        targetKey(row.accountId(), row.profileId(), row.platform()),
+        new VerificationSourceSyncTarget(
+            row.accountId(), row.profileId(), row.platform(), revision, false, row.platform()));
     return Optional.of(row);
+  }
+
+  @Override
+  public List<VerificationSourceSyncTarget> listPendingVerificationSyncTargets() {
+    List<VerificationSourceSyncTarget> out = new ArrayList<>();
+    for (var entry : syncTargets.entrySet()) {
+      if (entry.getValue().revision() > syncedRevisions.getOrDefault(entry.getKey(), 0L)) {
+        out.add(entry.getValue());
+      }
+    }
+    out.sort((a, b) -> Long.compare(a.revision(), b.revision()));
+    return out;
+  }
+
+  @Override
+  public synchronized void markVerificationSyncTargetSynced(VerificationSourceSyncTarget target) {
+    String key = targetKey(target.accountId(), target.profileId(), target.platform());
+    VerificationSourceSyncTarget current = syncTargets.get(key);
+    if (current != null && current.revision() == target.revision()) {
+      syncedRevisions.put(key, target.revision());
+    }
+  }
+
+  private static String targetKey(UUID accountId, UUID profileId, String platform) {
+    return accountId + "|" + profileId + "|" + platform;
   }
 }

@@ -4,12 +4,145 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
+
+const verificationSourceResolutionSQL = `
+	SELECT verification_type, badge
+	FROM profile_verification_sources
+	WHERE profile_id = $1 AND verified = true
+	ORDER BY CASE verification_type WHEN 'organization' THEN 0 ELSE 1 END,
+	         CASE source WHEN 'twitch' THEN 0 WHEN 'youtube' THEN 1 ELSE 2 END,
+	         revision DESC
+	LIMIT 1`
+
+// ApplyVerificationSourceState atomically applies a per-source monotonic revision and
+// refreshes the compatibility summary on profiles. Older or conflicting equal revisions
+// are ignored, while an exact retry is idempotent.
+func (s *ProfileStore) ApplyVerificationSourceState(
+	ctx context.Context,
+	profileID uuid.UUID,
+	source string,
+	revision int64,
+	verified bool,
+	verificationType string,
+	badge string,
+) (*ProfileRow, bool, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	row, applied, err := applyVerificationSourceStateTx(
+		ctx, tx, profileID, source, revision, verified, verificationType, badge,
+	)
+	if err != nil {
+		return nil, false, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, false, err
+	}
+	return row, applied, nil
+}
+
+func applyVerificationSourceStateTx(
+	ctx context.Context,
+	tx pgx.Tx,
+	profileID uuid.UUID,
+	source string,
+	revision int64,
+	verified bool,
+	verificationType string,
+	badge string,
+) (*ProfileRow, bool, error) {
+	var lockedProfileID uuid.UUID
+	err := tx.QueryRow(ctx, `
+		SELECT id FROM profiles
+		WHERE id = $1 AND deleted_at IS NULL
+		FOR UPDATE`, profileID).Scan(&lockedProfileID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+
+	var currentRevision int64
+	var currentVerified bool
+	var currentType, currentBadge string
+	err = tx.QueryRow(ctx, `
+		SELECT revision, verified, verification_type, badge
+		FROM profile_verification_sources
+		WHERE profile_id = $1 AND source = $2
+		FOR UPDATE`, profileID, source).Scan(&currentRevision, &currentVerified, &currentType, &currentBadge)
+	applied := false
+	resolveSummary := false
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		_, err = tx.Exec(ctx, `
+			INSERT INTO profile_verification_sources
+				(profile_id, source, verification_type, badge, verified, revision)
+			VALUES ($1, $2, $3, $4, $5, $6)`,
+			profileID, source, verificationType, badge, verified, revision)
+		applied = err == nil
+		resolveSummary = err == nil
+	case err != nil:
+		return nil, false, err
+	case revision > currentRevision:
+		_, err = tx.Exec(ctx, `
+			UPDATE profile_verification_sources
+			SET verification_type = $3, badge = $4, verified = $5, revision = $6, updated_at = now()
+			WHERE profile_id = $1 AND source = $2`,
+			profileID, source, verificationType, badge, verified, revision)
+		applied = err == nil
+		resolveSummary = err == nil
+	case revision == currentRevision && currentVerified == verified && currentType == verificationType && currentBadge == badge:
+		// Exact retry; the effective summary is still repaired below.
+		resolveSummary = true
+	default:
+		// Stale or conflicting equal revision must not mutate even compatibility timestamps.
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	if !resolveSummary {
+		profile, err := scanProfile(tx.QueryRow(ctx, `
+			SELECT `+profileSelectCols+`
+			FROM profiles
+			WHERE id = $1 AND deleted_at IS NULL`, profileID))
+		return profile, false, err
+	}
+
+	effectiveType := "none"
+	var effectiveBadge *string
+	var resolvedType, resolvedBadge string
+	err = tx.QueryRow(ctx, verificationSourceResolutionSQL, profileID).Scan(&resolvedType, &resolvedBadge)
+	if err == nil {
+		effectiveType = resolvedType
+		effectiveBadge = &resolvedBadge
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, false, err
+	}
+	row := tx.QueryRow(ctx, `
+		UPDATE profiles
+		SET verification_type = $2, verification_badge = $3, updated_at = now()
+		WHERE id = $1 AND deleted_at IS NULL
+		RETURNING `+profileSelectCols, profileID, effectiveType, effectiveBadge)
+	profile, err := scanProfile(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	return profile, applied, nil
+}
 
 // SetProfileVerification updates verification_type and badge on a profile.
 func (s *ProfileStore) SetProfileVerification(ctx context.Context, profileID uuid.UUID, verificationType, badge string) (*ProfileRow, error) {
@@ -143,13 +276,34 @@ func (s *ProfileStore) LatestOrgVerification(ctx context.Context, profileID uuid
 
 // MarkOrgVerificationVerified marks request verified and updates profile.
 func (s *ProfileStore) MarkOrgVerificationVerified(ctx context.Context, profileID uuid.UUID) (*ProfileRow, error) {
-	_, err := s.pool.Exec(ctx, `
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	tag, err := tx.Exec(ctx, `
 		UPDATE organization_verification_requests SET status = 'verified', verified_at = now()
 		WHERE profile_id = $1 AND status = 'pending'`, profileID)
 	if err != nil {
 		return nil, err
 	}
-	return s.SetProfileVerification(ctx, profileID, "organization", "dns")
+	if tag.RowsAffected() == 0 {
+		return nil, pgx.ErrNoRows
+	}
+	var revision int64
+	if err := tx.QueryRow(ctx, `SELECT nextval('profile_verification_revision_seq')`).Scan(&revision); err != nil {
+		return nil, err
+	}
+	row, _, err := applyVerificationSourceStateTx(
+		ctx, tx, profileID, "organization_dns", revision, true, "organization", "dns",
+	)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return row, nil
 }
 
 func randomHexToken(n int) (string, error) {

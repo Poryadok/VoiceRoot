@@ -38,10 +38,27 @@ UI-semantics; см. [matchmaking.md](matchmaking.md#verified-rank-post-v1-тол
 
 ### Логика
 
-1. Пользователь идёт в Настройки → Связанные аккаунты → подключает Twitch
-2. OAuth → Voice получает токен → проверяет `broadcaster_type == "partner"`
+1. Пользователь выбирает активный профиль и в Настройки → Связанные аккаунты подключает Twitch или YouTube.
+2. OAuth → Voice получает токен → проверяет Partner/YPP criterion.
 3. Если да — значок выставляется и привязывается к платформе
-4. Если пользователь отвязывает аккаунт или теряет Partner-статус → значок снимается автоматически (проверка по крону)
+4. Если пользователь отвязывает аккаунт или теряет Partner/YPP-статус → source снимается автоматически (проверка по крону)
+
+### Source-scoped lifecycle
+
+- Один provider source (`twitch` или `youtube`) account может быть привязан только к одному
+  профилю. Callback для другого профиля получает conflict; V1-перенос выполняется явно:
+  unlink старого профиля, затем link нового.
+- Личная верификация профиля — OR по активным Twitch и YouTube sources. Потеря или unlink
+  одного source не снимает personal badge, пока второй source остаётся verified.
+- Итоговый публичный статус вычисляет User Service: `organization > personal > none`.
+  При отзыве organization source снова становится виден подходящий personal source.
+- Список связанных provider accounts доступен только владельцу account и содержит
+  `profile_id`. Публичные profile/read API возвращают только итоговый verification status;
+  provider source state наружу не раскрывается.
+- Auth сохраняет для каждого profile/provider durable sync target с монотонной revision.
+  User применяет только более новую revision; одинаковый replay идемпотентен, stale и
+  out-of-order delivery не меняют состояние. Недоступность provider не считается потерей
+  статуса, а недоступность User оставляет target pending для следующего refresh/callback.
 
 ---
 
@@ -103,7 +120,8 @@ DNS-верификация доказывает владение доменом 
 ## Enforcement path
 
 1. Пользователь инициирует привязку платформы/домена через API.
-2. `Auth Service` выполняет OAuth identity checks и подтверждает внешнюю идентичность.
-3. `User Service` фиксирует verification state и управляет отображением badge.
+2. `Auth Service` выполняет OAuth identity checks, хранит profile-bound provider source и
+   его durable revision/sync target.
+3. `User Service` применяет source state через internal RPC и атомарно пересчитывает
+   итоговый status/badge.
 4. Плановый re-check статуса (cron) снимает badge при потере условий верификации.
-

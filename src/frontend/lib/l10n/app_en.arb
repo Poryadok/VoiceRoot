@@ -901,6 +901,14 @@
   "verificationLinkedAccountsTitle": "Linked accounts",
   "verificationLinkedAccountsEmpty": "No linked accounts yet.",
   "verificationLinkTwitch": "Link Twitch",
+  "verificationLinkYoutube": "Link YouTube",
+  "verificationUnlink": "Unlink",
+  "verificationSelectedProfile": "Selected profile: {profileId}",
+  "@verificationSelectedProfile": {
+    "placeholders": {
+      "profileId": {"type": "String"}
+    }
+  },
   "verifiedBadgePersonal": "Verified",
   "verifiedBadgeOrganization": "Verified organization",
   "security2faEnableTitle": "Two-factor authentication",

@@ -5,7 +5,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface LinkedIdentityRepository {
-  void upsertActive(
+  LinkedIdentity linkActive(
       UUID accountId,
       UUID profileId,
       String platform,
@@ -18,11 +18,12 @@ public interface LinkedIdentityRepository {
 
   List<LinkedIdentity> listAllActive();
 
-  /** Durable reconciliation targets, including revoked links whose User badge still needs clearing. */
-  List<LinkedIdentity> listAllPersonalVerificationProfiles();
-
   Optional<LinkedIdentity> findActive(UUID accountId, String platform);
 
   /** Revokes only the exact active snapshot and returns the row actually revoked. */
   Optional<LinkedIdentity> revokeIfUnchanged(LinkedIdentity expected);
+
+  List<VerificationSourceSyncTarget> listPendingVerificationSyncTargets();
+
+  void markVerificationSyncTargetSynced(VerificationSourceSyncTarget target);
 }

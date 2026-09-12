@@ -16,7 +16,9 @@ import java.util.Map;
 import java.util.UUID;
 import voice.backend.auth.config.AuthProperties;
 import voice.backend.auth.repository.LinkedIdentity;
+import voice.backend.auth.repository.LinkedIdentityProfileConflictException;
 import voice.backend.auth.repository.LinkedIdentityRepository;
+import voice.backend.auth.repository.VerificationSourceSyncTarget;
 import voice.backend.auth.userdb.UserVerificationSync;
 
 /**
@@ -119,6 +121,7 @@ public class LinkedAccountsService {
       item.put("external_id", row.externalId());
       item.put("external_login", row.externalLogin() == null ? "" : row.externalLogin());
       item.put("status", row.status());
+      item.put("profile_id", row.profileId().toString());
       out.add(item);
     }
     return out;
@@ -142,7 +145,7 @@ public class LinkedAccountsService {
         user.login(),
         tokens.accessToken(),
         tokens.refreshToken());
-    syncProfileSafely(accountId, profileId);
+    syncPendingTargetsSafely();
     return new VerificationResult("personal", PLATFORM_TWITCH);
   }
 
@@ -164,7 +167,7 @@ public class LinkedAccountsService {
         channel.title(),
         tokens.accessToken(),
         tokens.refreshToken());
-    syncProfileSafely(accountId, profileId);
+    syncPendingTargetsSafely();
     return new VerificationResult("personal", PLATFORM_YOUTUBE);
   }
 
@@ -182,7 +185,7 @@ public class LinkedAccountsService {
     linkedIdentities
         .findActive(accountId, platform)
         .flatMap(linkedIdentities::revokeIfUnchanged)
-        .ifPresent(revoked -> syncProfileSafely(revoked.accountId(), revoked.profileId()));
+        .ifPresent(revoked -> syncPendingTargetsSafely());
   }
 
   /** Re-check partner status for all active links; clear badge when lost. */
@@ -217,39 +220,24 @@ public class LinkedAccountsService {
         }
       }
     }
-    // Links are Auth-owned durable truth. Reconcile both active and revoked history so a
-    // transient User gRPC failure after either a link or revoke eventually converges.
-    for (LinkedIdentity row : linkedIdentities.listAllPersonalVerificationProfiles()) {
-      syncProfileSafely(row.accountId(), row.profileId());
-    }
+    syncPendingTargetsSafely();
     return cleared;
   }
 
-  private void syncProfileSafely(UUID accountId, UUID profileId) {
-    try {
-      reconcileProfileVerification(accountId, profileId);
-    } catch (AuthException ignored) {
-      // The linked-identity commit remains durable; the scheduled reconciliation retries.
-    }
-  }
-
-  /**
-   * Reconciles exactly one profile after an unlink or an authoritative provider loss.
-   * Linked identities are account-scoped, but their badge belongs to the profile recorded on the
-   * link. A different active profile must never keep or lose this profile's badge.
-   */
-  private void reconcileProfileVerification(UUID accountId, UUID profileId) {
-    for (LinkedIdentity row : linkedIdentities.listActiveByAccount(accountId)) {
-      if (profileId.equals(row.profileId()) && isPersonalVerificationPlatform(row.platform())) {
-        verificationSync.setPersonalVerification(profileId, row.platform());
-        return;
+  private void syncPendingTargetsSafely() {
+    for (VerificationSourceSyncTarget target : linkedIdentities.listPendingVerificationSyncTargets()) {
+      try {
+        verificationSync.applySourceState(
+            target.profileId(),
+            target.platform(),
+            target.revision(),
+            target.verified(),
+            target.badge());
+        linkedIdentities.markVerificationSyncTargetSynced(target);
+      } catch (AuthException ignored) {
+        // Auth retains the exact source revision and retries on the next scheduled pass.
       }
     }
-    verificationSync.clearVerification(profileId);
-  }
-
-  private static boolean isPersonalVerificationPlatform(String platform) {
-    return PLATFORM_TWITCH.equals(platform) || PLATFORM_YOUTUBE.equals(platform);
   }
 
   private void persistLink(
@@ -260,14 +248,18 @@ public class LinkedAccountsService {
       String login,
       String accessToken,
       String refreshToken) {
-    linkedIdentities.upsertActive(
-        accountId,
-        profileId,
-        platform,
-        externalId,
-        login,
-        accessToken == null ? null : accessToken.getBytes(StandardCharsets.UTF_8),
-        refreshToken == null ? null : refreshToken.getBytes(StandardCharsets.UTF_8));
+    try {
+      linkedIdentities.linkActive(
+          accountId,
+          profileId,
+          platform,
+          externalId,
+          login,
+          accessToken == null ? null : accessToken.getBytes(StandardCharsets.UTF_8),
+          refreshToken == null ? null : refreshToken.getBytes(StandardCharsets.UTF_8));
+    } catch (LinkedIdentityProfileConflictException ex) {
+      throw new AuthException("linked_account_profile_conflict");
+    }
   }
 
   private TokenPair exchangeTwitchCode(String code, String redirectUri) {

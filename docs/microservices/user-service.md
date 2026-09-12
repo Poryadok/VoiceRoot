@@ -68,6 +68,7 @@ service UserService {
 
   // Verification
   rpc GetVerificationStatus(GetVerificationRequest) returns (VerificationStatus);
+  rpc ApplyVerificationSourceState(ApplyVerificationSourceStateRequest) returns (ApplyVerificationSourceStateResponse); // internal Auth; monotonic per-source CAS
 }
 ```
 
@@ -78,6 +79,11 @@ service UserService {
 `EnsurePrimaryProfile`, `ResolvePrimaryProfileIDs` и `MarkAccountRegular` доступны только internal callers; они не являются Gateway REST API. `ResolvePrimaryProfileIDs` — read-only batch lookup: возвращает только существующие non-deleted primary profiles, пропускает unknown/no-primary/deleted записи и не создаёт профиль. Frozen primary остаётся каноническим и возвращается. После successful guest→regular conversion в Auth `MarkAccountRegular` снимает `is_guest_account` у всех профилей account, включая soft-deleted; повторный вызов или неизвестный account успешен без изменений.
 
 `ResolveAccountIDForProfile` — отдельный read-only internal lookup только для exact caller `messaging` или `chat`: возвращает только `account_id` владельца указанного `profile_id`, включая soft-deleted profile. Messaging использует его для lifecycle account check до DM write; Chat — для fresh `ListChats` snapshot, чтобы убрать DM с deleted peer. Он не возвращает `Profile`, не применяет public visibility/block filters и не имеет Gateway REST route. Missing, wrong, padded или multiple internal caller metadata отвергается; invalid UUID — `INVALID_ARGUMENT`, unknown profile — `NOT_FOUND`, ошибка store — `INTERNAL`.
+
+`ApplyVerificationSourceState` — internal-only Auth seam. Он принимает `twitch` или
+`youtube`, положительную монотонную revision и применяет только более новое состояние
+source. Public `GetVerificationStatus` возвращает итоговый status/badge и не раскрывает
+provider source rows.
 
 **`PrivacySettings` sketch (spec — not yet in proto/DDL):**
 
@@ -170,7 +176,8 @@ Redis-only interim **недостаточен** для long-tail «был 2 не
 
 ### Current code vs full spec
 
-**Deployed migrations** используют только `profiles` и `onboarding_state`.
+**Deployed migrations** используют `profiles`, `onboarding_state` и
+`profile_verification_sources`.
 `privacy_settings` и расширенные Premium-поля — **not yet in proto/code**.
 
 ```
@@ -197,7 +204,21 @@ onboarding_state
 ├── completed_at TIMESTAMPTZ NULL
 ├── created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 └── updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+
+profile_verification_sources
+├── profile_id UUID REFERENCES profiles(id)
+├── source VARCHAR(32) -- twitch | youtube | organization_dns | legacy_personal
+├── verification_type VARCHAR(32) -- personal | organization
+├── badge VARCHAR(32) NOT NULL
+├── verified BOOLEAN NOT NULL
+├── revision BIGINT NOT NULL -- monotonic CAS per source
+└── PRIMARY KEY (profile_id, source)
 ```
+
+Resolver атомарно обновляет совместимые поля `profiles.verification_type` /
+`verification_badge` с приоритетом `organization > personal > none`; Twitch и YouTube
+образуют OR. Migration переносит существующий итоговый badge в source row и выравнивает
+sequence, поэтому первый новый provider update не проигрывает backfill revision.
 
 Индексы:
 - `UNIQUE (username, discriminator)`

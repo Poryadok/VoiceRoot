@@ -1563,6 +1563,52 @@ final $typed_data.Uint8List clearVerificationResponseDescriptor = $convert.base6
     'ChlDbGVhclZlcmlmaWNhdGlvblJlc3BvbnNlElIKE3ZlcmlmaWNhdGlvbl9zdGF0dXMYASABKA'
     'syIS52b2ljZS51c2VyLnYxLlZlcmlmaWNhdGlvblN0YXR1c1ISdmVyaWZpY2F0aW9uU3RhdHVz');
 
+@$core.Deprecated('Use applyVerificationSourceStateRequestDescriptor instead')
+const ApplyVerificationSourceStateRequest$json = {
+  '1': 'ApplyVerificationSourceStateRequest',
+  '2': [
+    {'1': 'profile_id', '3': 1, '4': 1, '5': 9, '10': 'profileId'},
+    {'1': 'source', '3': 2, '4': 1, '5': 9, '10': 'source'},
+    {'1': 'revision', '3': 3, '4': 1, '5': 3, '10': 'revision'},
+    {'1': 'verified', '3': 4, '4': 1, '5': 8, '10': 'verified'},
+    {'1': 'badge', '3': 5, '4': 1, '5': 9, '9': 0, '10': 'badge', '17': true},
+  ],
+  '8': [
+    {'1': '_badge'},
+  ],
+};
+
+/// Descriptor for `ApplyVerificationSourceStateRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List applyVerificationSourceStateRequestDescriptor =
+    $convert.base64Decode(
+        'CiNBcHBseVZlcmlmaWNhdGlvblNvdXJjZVN0YXRlUmVxdWVzdBIdCgpwcm9maWxlX2lkGAEgAS'
+        'gJUglwcm9maWxlSWQSFgoGc291cmNlGAIgASgJUgZzb3VyY2USGgoIcmV2aXNpb24YAyABKANS'
+        'CHJldmlzaW9uEhoKCHZlcmlmaWVkGAQgASgIUgh2ZXJpZmllZBIZCgViYWRnZRgFIAEoCUgAUg'
+        'ViYWRnZYgBAUIICgZfYmFkZ2U=');
+
+@$core.Deprecated('Use applyVerificationSourceStateResponseDescriptor instead')
+const ApplyVerificationSourceStateResponse$json = {
+  '1': 'ApplyVerificationSourceStateResponse',
+  '2': [
+    {
+      '1': 'verification_status',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.user.v1.VerificationStatus',
+      '10': 'verificationStatus'
+    },
+    {'1': 'applied', '3': 2, '4': 1, '5': 8, '10': 'applied'},
+  ],
+};
+
+/// Descriptor for `ApplyVerificationSourceStateResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List applyVerificationSourceStateResponseDescriptor =
+    $convert.base64Decode(
+        'CiRBcHBseVZlcmlmaWNhdGlvblNvdXJjZVN0YXRlUmVzcG9uc2USUgoTdmVyaWZpY2F0aW9uX3'
+        'N0YXR1cxgBIAEoCzIhLnZvaWNlLnVzZXIudjEuVmVyaWZpY2F0aW9uU3RhdHVzUhJ2ZXJpZmlj'
+        'YXRpb25TdGF0dXMSGAoHYXBwbGllZBgCIAEoCFIHYXBwbGllZA==');
+
 @$core.Deprecated('Use startOrganizationVerificationRequestDescriptor instead')
 const StartOrganizationVerificationRequest$json = {
   '1': 'StartOrganizationVerificationRequest',

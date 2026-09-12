@@ -1833,6 +1833,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get verificationLinkTwitch => 'Link Twitch';
 
   @override
+  String get verificationLinkYoutube => 'Link YouTube';
+
+  @override
+  String get verificationUnlink => 'Unlink';
+
+  @override
+  String verificationSelectedProfile(String profileId) {
+    return 'Selected profile: $profileId';
+  }
+
+  @override
   String get verifiedBadgePersonal => 'Verified';
 
   @override

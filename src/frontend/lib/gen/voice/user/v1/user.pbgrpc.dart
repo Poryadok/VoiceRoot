@@ -228,6 +228,17 @@ class UserServiceClient extends $grpc.Client {
     return $createUnaryCall(_$clearVerification, request, options: options);
   }
 
+  /// S2S from Auth. Applies one monotonic Twitch/YouTube source state and resolves
+  /// the profile's effective visible verification without exposing source rows publicly.
+  $grpc.ResponseFuture<$0.ApplyVerificationSourceStateResponse>
+      applyVerificationSourceState(
+    $0.ApplyVerificationSourceStateRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$applyVerificationSourceState, request,
+        options: options);
+  }
+
   $grpc.ResponseFuture<$0.StartOrganizationVerificationResponse>
       startOrganizationVerification(
     $0.StartOrganizationVerificationRequest request, {
@@ -395,6 +406,12 @@ class UserServiceClient extends $grpc.Client {
       '/voice.user.v1.UserService/ClearVerification',
       ($0.ClearVerificationRequest value) => value.writeToBuffer(),
       $0.ClearVerificationResponse.fromBuffer);
+  static final _$applyVerificationSourceState = $grpc.ClientMethod<
+          $0.ApplyVerificationSourceStateRequest,
+          $0.ApplyVerificationSourceStateResponse>(
+      '/voice.user.v1.UserService/ApplyVerificationSourceState',
+      ($0.ApplyVerificationSourceStateRequest value) => value.writeToBuffer(),
+      $0.ApplyVerificationSourceStateResponse.fromBuffer);
   static final _$startOrganizationVerification = $grpc.ClientMethod<
           $0.StartOrganizationVerificationRequest,
           $0.StartOrganizationVerificationResponse>(
@@ -649,6 +666,16 @@ abstract class UserServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.ClearVerificationRequest.fromBuffer(value),
         ($0.ClearVerificationResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ApplyVerificationSourceStateRequest,
+            $0.ApplyVerificationSourceStateResponse>(
+        'ApplyVerificationSourceState',
+        applyVerificationSourceState_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ApplyVerificationSourceStateRequest.fromBuffer(value),
+        ($0.ApplyVerificationSourceStateResponse value) =>
+            value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.StartOrganizationVerificationRequest,
             $0.StartOrganizationVerificationResponse>(
         'StartOrganizationVerification',
@@ -911,6 +938,18 @@ abstract class UserServiceBase extends $grpc.Service {
 
   $async.Future<$0.ClearVerificationResponse> clearVerification(
       $grpc.ServiceCall call, $0.ClearVerificationRequest request);
+
+  $async.Future<$0.ApplyVerificationSourceStateResponse>
+      applyVerificationSourceState_Pre(
+          $grpc.ServiceCall $call,
+          $async.Future<$0.ApplyVerificationSourceStateRequest>
+              $request) async {
+    return applyVerificationSourceState($call, await $request);
+  }
+
+  $async.Future<$0.ApplyVerificationSourceStateResponse>
+      applyVerificationSourceState($grpc.ServiceCall call,
+          $0.ApplyVerificationSourceStateRequest request);
 
   $async.Future<$0.StartOrganizationVerificationResponse>
       startOrganizationVerification_Pre(

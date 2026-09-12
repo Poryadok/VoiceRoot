@@ -273,6 +273,95 @@ func TestClearVerification_S2S_RemovesBadge(t *testing.T) {
 	require.Equal(t, "none", resp.GetVerificationStatus().GetVerificationType())
 }
 
+// TestApplyVerificationSourceState_ResolvesPrecedenceAndRejectsStaleUpdates documents
+// the source-scoped PR-003 contract: provider sources are independent, Twitch/YouTube
+// are an OR, organization wins visibly, and revisions are monotonic per source.
+func TestApplyVerificationSourceState_ResolvesPrecedenceAndRejectsStaleUpdates(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startUserPostgresForSubscriptionTests(t, ctx)
+	profiles := store.NewProfileStore(pool)
+	cli, _ := startUserGRPCForPhase13(t, profiles, nil)
+
+	accountID := uuid.New()
+	pid := uuid.New()
+	_, err := pool.Exec(ctx, `
+		INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+		VALUES ($1, $2, 'sources', '0001', 'Sources', true)`, pid, accountID)
+	require.NoError(t, err)
+	s2s := metadata.AppendToOutgoingContext(ctx, authctx.HeaderInternalCaller, "auth")
+
+	apply := func(source string, revision int64, verified bool, badge string) *userv1.ApplyVerificationSourceStateResponse {
+		t.Helper()
+		resp, applyErr := cli.ApplyVerificationSourceState(s2s, &userv1.ApplyVerificationSourceStateRequest{
+			ProfileId: pid.String(), Source: source, Revision: revision, Verified: verified,
+			Badge: proto.String(badge),
+		})
+		require.NoError(t, applyErr)
+		return resp
+	}
+
+	twitch := apply("twitch", 10, true, "twitch")
+	require.True(t, twitch.GetApplied())
+	require.Equal(t, "personal", twitch.GetVerificationStatus().GetVerificationType())
+	require.Equal(t, "twitch", twitch.GetVerificationStatus().GetBadge())
+
+	youtube := apply("youtube", 20, true, "youtube")
+	require.True(t, youtube.GetApplied())
+	require.Equal(t, "personal", youtube.GetVerificationStatus().GetVerificationType())
+
+	revokedTwitch := apply("twitch", 11, false, "twitch")
+	require.True(t, revokedTwitch.GetApplied())
+	require.Equal(t, "personal", revokedTwitch.GetVerificationStatus().GetVerificationType())
+	require.Equal(t, "youtube", revokedTwitch.GetVerificationStatus().GetBadge())
+
+	orgRow, orgApplied, err := profiles.ApplyVerificationSourceState(ctx, pid, "organization_dns", 1, true, "organization", "dns")
+	require.NoError(t, err)
+	require.True(t, orgApplied)
+	require.Equal(t, "organization", orgRow.VerificationType)
+	require.Equal(t, "dns", *orgRow.VerificationBadge)
+
+	stale := apply("twitch", 10, true, "twitch")
+	require.False(t, stale.GetApplied())
+	require.Equal(t, "organization", stale.GetVerificationStatus().GetVerificationType())
+
+	_, orgApplied, err = profiles.ApplyVerificationSourceState(ctx, pid, "organization_dns", 2, false, "organization", "dns")
+	require.NoError(t, err)
+	require.True(t, orgApplied)
+	statusResp, err := cli.GetVerificationStatus(withAccountTier(ctx, accountID, "free"), &userv1.GetVerificationStatusRequest{ProfileId: pid.String()})
+	require.NoError(t, err)
+	require.Equal(t, "personal", statusResp.GetVerificationStatus().GetVerificationType())
+	require.Equal(t, "youtube", statusResp.GetVerificationStatus().GetBadge())
+}
+
+func TestApplyVerificationSourceState_RejectsPublicCallerAndInvalidSource(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startUserPostgresForSubscriptionTests(t, ctx)
+	profiles := store.NewProfileStore(pool)
+	cli, _ := startUserGRPCForPhase13(t, profiles, nil)
+	pid := uuid.New()
+	_, err := pool.Exec(ctx, `
+		INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+		VALUES ($1, $2, 'private', '0001', 'Private', true)`, pid, uuid.New())
+	require.NoError(t, err)
+
+	_, err = cli.ApplyVerificationSourceState(ctx, &userv1.ApplyVerificationSourceStateRequest{
+		ProfileId: pid.String(), Source: "twitch", Revision: 1, Verified: true,
+	})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	s2s := metadata.AppendToOutgoingContext(ctx, authctx.HeaderInternalCaller, "auth")
+	_, err = cli.ApplyVerificationSourceState(s2s, &userv1.ApplyVerificationSourceStateRequest{
+		ProfileId: pid.String(), Source: "steam", Revision: 1, Verified: true,
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
 // TestOrganizationVerification_DNSTxtGrantsBadge documents org DNS TXT flow (verification.md VR-03).
 func TestOrganizationVerification_DNSTxtGrantsBadge(t *testing.T) {
 	if testing.Short() {

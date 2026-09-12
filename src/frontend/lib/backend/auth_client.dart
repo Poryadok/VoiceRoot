@@ -114,12 +114,14 @@ final class AuthApiFailure extends AuthApiResult<Never> {
 class LinkedAccount {
   const LinkedAccount({
     required this.platform,
+    required this.profileId,
     this.externalId,
     this.displayName,
     this.linkedAt,
   });
 
   final String platform;
+  final String profileId;
   final String? externalId;
   final String? displayName;
   final DateTime? linkedAt;
@@ -133,8 +135,11 @@ List<LinkedAccount> linkedAccountsFromJson(Map<String, dynamic> json) {
       .map(
         (item) => LinkedAccount(
           platform: item['platform'] as String? ?? '',
+          profileId: item['profile_id'] as String? ?? '',
           externalId: item['external_id'] as String?,
-          displayName: item['display_name'] as String?,
+          displayName:
+              item['external_login'] as String? ??
+              item['display_name'] as String?,
         ),
       )
       .where((a) => a.platform.isNotEmpty)
@@ -359,6 +364,24 @@ class VoiceAuthClient {
       GatewayHttpOk(:final data) => AuthApiOk(
         data['authorization_url'] as String? ?? '',
       ),
+      GatewayHttpFailure(:final error) => AuthApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+
+  Future<AuthApiResult<void>> unlinkLinkedAccount({
+    required AuthSession session,
+    required String platform,
+  }) async {
+    final result = await _gateway.postEmpty(
+      uri: _gateway.resolve('/api/v1/auth/linked-accounts/$platform/unlink'),
+      authorization: session.authorizationHeader,
+    );
+    return switch (result) {
+      GatewayHttpOk<void>() => const AuthApiOk(null),
       GatewayHttpFailure(:final error) => AuthApiFailure(
         message: GatewayApiResultMapper.failureMessage(error),
         errorCode: GatewayApiResultMapper.failureCode(error),

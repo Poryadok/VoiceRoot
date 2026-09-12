@@ -71,6 +71,9 @@ service UserService {
   // S2S from Auth after OAuth identity checks (verification.md).
   rpc SetVerification(SetVerificationRequest) returns (SetVerificationResponse);
   rpc ClearVerification(ClearVerificationRequest) returns (ClearVerificationResponse);
+  // S2S from Auth. Applies one monotonic Twitch/YouTube source state and resolves
+  // the profile's effective visible verification without exposing source rows publicly.
+  rpc ApplyVerificationSourceState(ApplyVerificationSourceStateRequest) returns (ApplyVerificationSourceStateResponse);
   rpc StartOrganizationVerification(StartOrganizationVerificationRequest) returns (StartOrganizationVerificationResponse);
   rpc CheckOrganizationVerification(CheckOrganizationVerificationRequest) returns (CheckOrganizationVerificationResponse);
   rpc ApplyDowngradeProfiles(ApplyDowngradeProfilesRequest) returns (ApplyDowngradeProfilesResponse);
@@ -375,6 +378,19 @@ message ClearVerificationRequest {
 
 message ClearVerificationResponse {
   VerificationStatus verification_status = 1;
+}
+
+message ApplyVerificationSourceStateRequest {
+  string profile_id = 1;
+  string source = 2; // twitch | youtube
+  int64 revision = 3; // positive and monotonic for this profile/source
+  bool verified = 4;
+  optional string badge = 5;
+}
+
+message ApplyVerificationSourceStateResponse {
+  VerificationStatus verification_status = 1;
+  bool applied = 2; // false for an idempotent or stale revision
 }
 
 message StartOrganizationVerificationRequest {

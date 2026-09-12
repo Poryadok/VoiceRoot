@@ -75,7 +75,7 @@ Scope разделён явно:
 | [Шара экрана](features/screen-share.md) | partial | API/signaling core есть; actual-media E2E, source picker, system audio и staging RTC acceptance не закрыты. |
 | [Сторис](features/stories.md) | partial | Create/feed/LFP ядро есть; нужны audience/privacy, editor и media lifecycle. |
 | [Регистрация и контакты](features/auth-and-contacts.md) | partial | Email, guest, sessions и reset UI работают; delete пока soft/deactivation path, а phone/OTP, erasure/tombstone и часть hardening не закрыты. |
-| [Верификация](features/verification.md) | partial | Backend sync и базовые provider paths в основном есть; UI, remaining provider/cron paths и live-provider acceptance неполны. |
+| [Верификация](features/verification.md) | partial | Source-scoped Twitch+YouTube lifecycle, durable Auth→User sync/CAS и Settings выбранного профиля реализованы; production OAuth callback/resume и live-provider acceptance остаются. |
 | [Профиль пользователя](features/user-profile.md) | core-live | Avatar, bio, status, switch и banner field работают; нужны animated media, premium gating и полная persistence. |
 | [Множественные профили](features/multi-profile.md) | core-live | Create/switch/delete/frozen/downgrade picker работают; нужны entitlement lifecycle, primary-profile flow и regression coverage. |
 | [Друзья и контакты](features/friends.md) | core-live | Requests, block, DM gate, contacts/favorites и QR paste работают; нужен phone-book hash pipeline и остаточный fail-closed hardening. |
