@@ -12,6 +12,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	voicejwt "voice/backend/pkg/jwt"
 )
@@ -201,7 +203,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 		slog.String("request_id", requestID),
 	)
 	var writeMu sync.Mutex
-	reg := hub.attachConn(instanceID, connID, claims.ProfileID, 32)
+	reg := hub.attachAccountConn(instanceID, connID, claims.UserID, claims.ProfileID, 32)
 	guard := policy.newConnectionGuard(c, claims, &writeMu)
 	reg.setWriteGuard(func() bool { return guard.authorizeWrite("fanout") })
 	lastTypingStart := make(map[string]time.Time)
@@ -263,16 +265,24 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 	if lister != nil {
 		lctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		ids, err := lister.ListChatIDs(lctx, claims.UserID, claims.ProfileID)
-		cancel()
 		degraded := err != nil
 		if err != nil {
 			svcLogger.Warn("ws chat bootstrap list failed", slog.String("error", err.Error()), slog.String("conn_id", connID))
 			ids = nil
 		}
+		authorizedIDs := make([]string, 0, len(ids))
 		for _, id := range ids {
-			hub.addChat(reg, id)
+			if authErr := hub.authorizeAndAddChat(lctx, reg, claims.UserID, claims.ProfileID, id); authErr != nil {
+				if status.Code(authErr) != codes.PermissionDenied {
+					degraded = true
+					svcLogger.Warn("ws chat bootstrap authorization failed", slog.String("error", authErr.Error()), slog.String("conn_id", connID))
+				}
+				continue
+			}
+			authorizedIDs = append(authorizedIDs, canonicalChatID(id))
 		}
-		idsCopy := append([]string(nil), ids...)
+		cancel()
+		idsCopy := append([]string(nil), authorizedIDs...)
 		slices.Sort(idsCopy)
 		syncD, _ := json.Marshal(map[string]any{
 			"scope":    "all",
@@ -337,8 +347,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 					continue
 				}
 				cid := strings.TrimSpace(p.ChatID)
-				checker := hub.subscriptionChecker
-				if checker == nil || checker.AuthorizeChat(context.Background(), claims.UserID, claims.ProfileID, cid) != nil {
+				if hub.authorizeAndAddChat(context.Background(), reg, claims.UserID, claims.ProfileID, cid) != nil {
 					errD, _ := json.Marshal(map[string]any{
 						"code":    "permission_denied",
 						"message": "chat subscription denied",
@@ -349,7 +358,6 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 					}
 					continue
 				}
-				hub.addChat(reg, cid)
 				svcLogger.Debug("ws subscribe",
 					slog.String("event", "ws_subscribe"),
 					slog.String("conn_id", connID),
@@ -406,7 +414,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 				// Otherwise case-equivalent RFC4122 values can bypass the throttle
 				// and create independent idle timers.
 				typingKey := canonicalChatID(cid)
-				if !hub.hasChat(reg, cid) {
+				if !guard.authorizeSideEffect() || !hub.authorizeClientSideEffect(context.Background(), reg, cid) {
 					errD, _ := json.Marshal(map[string]any{
 						"code":    "invalid_typing",
 						"message": "not subscribed to chat",
@@ -416,10 +424,10 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 					}
 					continue
 				}
-				broadcastTyping := func(k string) {
+				broadcastTyping := func(k string, recheck bool) {
 					// A delayed typing-stop can outlive the inbound frame that scheduled
 					// it. Re-authorize immediately before it can fan out or publish.
-					if !guard.authorizeSideEffect() || !hub.hasChat(reg, cid) {
+					if recheck && (!guard.authorizeSideEffect() || !hub.authorizeClientSideEffect(context.Background(), reg, cid)) {
 						return
 					}
 					d, _ := json.Marshal(map[string]any{
@@ -447,7 +455,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 					mu.Lock()
 					delete(lastTypingStart, typingKey)
 					mu.Unlock()
-					broadcastTyping("stop")
+					broadcastTyping("stop", false)
 					continue
 				}
 				now := time.Now()
@@ -462,11 +470,11 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 					delete(lastTypingStart, typingKey)
 					delete(typingTimers, typingKey)
 					mu.Unlock()
-					broadcastTyping("stop")
+					broadcastTyping("stop", true)
 				})
 				mu.Unlock()
 				if shouldBroadcast {
-					broadcastTyping("start")
+					broadcastTyping("start", false)
 				}
 			case "mark_read":
 				var p markReadPayload
@@ -482,7 +490,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 				}
 				cid := strings.TrimSpace(p.ChatID)
 				mid := strings.TrimSpace(p.MessageID)
-				if !hub.hasChat(reg, cid) {
+				if !guard.authorizeSideEffect() || !hub.authorizeClientSideEffect(context.Background(), reg, cid) {
 					errD, _ := json.Marshal(map[string]any{
 						"code":    "invalid_mark_read",
 						"message": "not subscribed to chat",
@@ -523,7 +531,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 				cid := strings.TrimSpace(p.ChatID)
 				mid := strings.TrimSpace(p.MessageID)
 				senderID := strings.TrimSpace(p.SenderProfileID)
-				if !hub.hasChat(reg, cid) {
+				if !guard.authorizeSideEffect() || !hub.authorizeClientSideEffect(context.Background(), reg, cid) {
 					errD, _ := json.Marshal(map[string]any{
 						"code":    "invalid_delivery_ack",
 						"message": "not subscribed to chat",
