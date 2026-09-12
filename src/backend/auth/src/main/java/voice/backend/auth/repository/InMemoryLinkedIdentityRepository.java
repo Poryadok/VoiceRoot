@@ -68,6 +68,17 @@ public class InMemoryLinkedIdentityRepository implements LinkedIdentityRepositor
   }
 
   @Override
+  public List<LinkedIdentity> listAllPersonalVerificationProfiles() {
+    List<LinkedIdentity> out = new ArrayList<>();
+    for (LinkedIdentity row : byAccountPlatform.values()) {
+      if ("twitch".equals(row.platform()) || "youtube".equals(row.platform())) {
+        out.add(row);
+      }
+    }
+    return out;
+  }
+
+  @Override
   public Optional<LinkedIdentity> findActive(UUID accountId, String platform) {
     LinkedIdentity row = byAccountPlatform.get(key(accountId, platform));
     if (row == null || !"active".equals(row.status())) {

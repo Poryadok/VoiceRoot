@@ -549,6 +549,70 @@ class ProfilesVerificationIntegrationTest {
   }
 
   @Test
+  void linkSyncFailureIsRetriedFromDurableLinkedIdentity() throws Exception {
+    HttpServer mockTwitch = partnerTwitchServer("tw-link-retry");
+    mockTwitch.start();
+    linkedAccountsService.setTwitchEndpointsForTests(
+        "http://127.0.0.1:" + mockTwitch.getAddress().getPort(),
+        "http://127.0.0.1:" + mockTwitch.getAddress().getPort() + "/oauth2/token");
+    try {
+      JsonNode registered = registerSession("link-sync-retry@example.com");
+      UUID accountId = UUID.fromString(registered.get("account_id").asText());
+      UUID profileId = UUID.fromString(registered.get("profile_id").asText());
+      userGrpc.failNextSetVerification();
+
+      linkedAccountsService.completeTwitchCallback(
+          accountId, profileId, "mock-code", "http://127.0.0.1/cb");
+
+      assertThat(userGrpc.verificationType(profileId.toString())).isNull();
+      verificationStatusRefresh.refresh();
+      assertThat(userGrpc.verificationType(profileId.toString())).isEqualTo("personal");
+    } finally {
+      mockTwitch.stop(0);
+    }
+  }
+
+  @Test
+  void revokeSyncFailureIsRetriedFromDurableRevokedIdentity() throws Exception {
+    JsonNode registered = registerSession("revoke-sync-retry@example.com");
+    UUID accountId = UUID.fromString(registered.get("account_id").asText());
+    UUID profileId = UUID.fromString(registered.get("profile_id").asText());
+    userGrpc.seedVerification(profileId.toString(), "personal", "twitch");
+    jdbc.update(
+        """
+        INSERT INTO linked_identities (account_id, profile_id, platform, external_id, status)
+        VALUES (:accountId, :profileId, 'twitch', 'tw-revoke-retry', 'active')
+        """,
+        Map.of("accountId", accountId, "profileId", profileId));
+    userGrpc.failNextClearVerification();
+
+    linkedAccountsService.unlinkTwitch(accountId, profileId);
+
+    assertThat(userGrpc.verificationType(profileId.toString())).isEqualTo("personal");
+    verificationStatusRefresh.refresh();
+    assertThat(userGrpc.verificationType(profileId.toString())).isEqualTo("none");
+  }
+
+  private static HttpServer partnerTwitchServer(String externalId) throws Exception {
+    HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+    server.createContext(
+        "/helix/users",
+        exchange -> {
+          byte[] body =
+              ("{\"data\":[{\"id\":\""
+                      + externalId
+                      + "\",\"login\":\"partner\",\"broadcaster_type\":\"partner\"}]}")
+                  .getBytes(StandardCharsets.UTF_8);
+          exchange.getResponseHeaders().add("Content-Type", "application/json");
+          exchange.sendResponseHeaders(200, body.length);
+          try (OutputStream os = exchange.getResponseBody()) {
+            os.write(body);
+          }
+        });
+    return server;
+  }
+
+  @Test
   void unlinkClearsVerificationViaUserService() throws Exception {
     JsonNode registered = registerSession("unlink@example.com");
     String profileId = registered.get("profile_id").asText();
@@ -617,6 +681,16 @@ class ProfilesVerificationIntegrationTest {
         java.util.Collections.synchronizedList(new ArrayList<>());
     private final List<ClearVerificationRequest> clearVerificationRequests =
         java.util.Collections.synchronizedList(new ArrayList<>());
+    private final AtomicInteger failNextSetVerification = new AtomicInteger();
+    private final AtomicInteger failNextClearVerification = new AtomicInteger();
+
+    void failNextSetVerification() {
+      failNextSetVerification.incrementAndGet();
+    }
+
+    void failNextClearVerification() {
+      failNextClearVerification.incrementAndGet();
+    }
 
     void addSwitchableProfile(UUID profileId, UUID accountId) {
       switchableProfiles.put(
@@ -693,6 +767,10 @@ class ProfilesVerificationIntegrationTest {
     public void setVerification(
         SetVerificationRequest request, StreamObserver<SetVerificationResponse> observer) {
       setVerificationRequests.add(request);
+      if (failNextSetVerification.getAndUpdate(value -> Math.max(0, value - 1)) > 0) {
+        observer.onError(Status.UNAVAILABLE.asRuntimeException());
+        return;
+      }
       VerificationStatus status =
           VerificationStatus.newBuilder()
               .setProfileId(request.getProfileId())
@@ -708,6 +786,10 @@ class ProfilesVerificationIntegrationTest {
     public void clearVerification(
         ClearVerificationRequest request, StreamObserver<ClearVerificationResponse> observer) {
       clearVerificationRequests.add(request);
+      if (failNextClearVerification.getAndUpdate(value -> Math.max(0, value - 1)) > 0) {
+        observer.onError(Status.UNAVAILABLE.asRuntimeException());
+        return;
+      }
       VerificationStatus status =
           VerificationStatus.newBuilder()
               .setProfileId(request.getProfileId())

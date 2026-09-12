@@ -142,7 +142,7 @@ public class LinkedAccountsService {
         user.login(),
         tokens.accessToken(),
         tokens.refreshToken());
-    verificationSync.setPersonalVerification(profileId, PLATFORM_TWITCH);
+    syncProfileSafely(accountId, profileId);
     return new VerificationResult("personal", PLATFORM_TWITCH);
   }
 
@@ -164,7 +164,7 @@ public class LinkedAccountsService {
         channel.title(),
         tokens.accessToken(),
         tokens.refreshToken());
-    verificationSync.setPersonalVerification(profileId, PLATFORM_YOUTUBE);
+    syncProfileSafely(accountId, profileId);
     return new VerificationResult("personal", PLATFORM_YOUTUBE);
   }
 
@@ -182,7 +182,7 @@ public class LinkedAccountsService {
     linkedIdentities
         .findActive(accountId, platform)
         .flatMap(linkedIdentities::revokeIfUnchanged)
-        .ifPresent(revoked -> reconcileProfileVerification(revoked.accountId(), revoked.profileId()));
+        .ifPresent(revoked -> syncProfileSafely(revoked.accountId(), revoked.profileId()));
   }
 
   /** Re-check partner status for all active links; clear badge when lost. */
@@ -213,12 +213,24 @@ public class LinkedAccountsService {
       }
       if (!stillEligible) {
         if (linkedIdentities.revokeIfUnchanged(row).isPresent()) {
-          reconcileProfileVerification(row.accountId(), row.profileId());
           cleared++;
         }
       }
     }
+    // Links are Auth-owned durable truth. Reconcile both active and revoked history so a
+    // transient User gRPC failure after either a link or revoke eventually converges.
+    for (LinkedIdentity row : linkedIdentities.listAllPersonalVerificationProfiles()) {
+      syncProfileSafely(row.accountId(), row.profileId());
+    }
     return cleared;
+  }
+
+  private void syncProfileSafely(UUID accountId, UUID profileId) {
+    try {
+      reconcileProfileVerification(accountId, profileId);
+    } catch (AuthException ignored) {
+      // The linked-identity commit remains durable; the scheduled reconciliation retries.
+    }
   }
 
   /**

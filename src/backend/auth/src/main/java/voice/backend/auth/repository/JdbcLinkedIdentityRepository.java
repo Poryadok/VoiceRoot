@@ -95,6 +95,22 @@ public class JdbcLinkedIdentityRepository implements LinkedIdentityRepository {
   }
 
   @Override
+  public List<LinkedIdentity> listAllPersonalVerificationProfiles() {
+    return jdbc.query(
+        """
+        SELECT DISTINCT ON (account_id, profile_id)
+               id, account_id, profile_id, platform, external_id, external_login,
+               access_token_encrypted, refresh_token_encrypted, status,
+               xmin::text::bigint AS row_version
+        FROM linked_identities
+        WHERE platform IN ('twitch', 'youtube') AND profile_id IS NOT NULL
+        ORDER BY account_id, profile_id, updated_at DESC, id DESC
+        """,
+        new MapSqlParameterSource(),
+        ROW_MAPPER);
+  }
+
+  @Override
   public Optional<LinkedIdentity> findActive(UUID accountId, String platform) {
     return jdbc
         .query(
