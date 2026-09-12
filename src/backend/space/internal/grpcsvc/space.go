@@ -2,6 +2,8 @@ package grpcsvc
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"log/slog"
 	"strings"
@@ -222,6 +224,10 @@ func (s *SpaceGRPC) TransferOwnership(ctx context.Context, req *spacev1.Transfer
 		return nil, err
 	}
 	operationID := uuid.New()
+	auditCompensationToken, err := newAuditCompensationToken()
+	if err != nil {
+		return nil, status.Error(codes.Internal, "audit compensation capability unavailable")
+	}
 	if err := s.Store.TransferOwnership(ctx, spaceID, caller, newOwnerID); err != nil {
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
@@ -253,8 +259,8 @@ func (s *SpaceGRPC) TransferOwnership(ctx context.Context, req *spacev1.Transfer
 		}
 	}
 	auditID := uuid.New()
-	if err := s.Store.RecordOwnershipTransferred(ctx, auditID, spaceID, caller, newOwnerID); err != nil {
-		roleRollbackErr, auditRollbackErr, dbRollbackErr := s.rollbackOwnershipAfterAuditFailure(ctx, auditID, spaceID, caller, newOwnerID, operationID)
+	if err := s.Store.RecordOwnershipTransferred(ctx, auditID, spaceID, caller, newOwnerID, auditCompensationToken); err != nil {
+		roleRollbackErr, auditRollbackErr, dbRollbackErr := s.rollbackOwnershipAfterAuditFailure(ctx, auditID, spaceID, caller, newOwnerID, operationID, auditCompensationToken)
 		switch {
 		case roleRollbackErr != nil && auditRollbackErr != nil && dbRollbackErr != nil:
 			return nil, status.Errorf(codes.Internal, "record ownership transfer audit failed (%v); owner role rollback failed (%v); audit rollback failed (%v); ownership rollback failed: %v", err, roleRollbackErr, auditRollbackErr, dbRollbackErr)
@@ -295,19 +301,27 @@ func (s *SpaceGRPC) rollbackOwnershipTransfer(ctx context.Context, spaceID, curr
 // transition, deletes a known ambiguous audit entry, and restores the database
 // owner. Each operation gets a fresh bounded detached context so a timeout in
 // one compensation cannot suppress later compensations.
-func (s *SpaceGRPC) rollbackOwnershipAfterAuditFailure(ctx context.Context, auditID, spaceID, previousOwner, newOwner, operationID uuid.UUID) (error, error, error) {
+func (s *SpaceGRPC) rollbackOwnershipAfterAuditFailure(ctx context.Context, auditID, spaceID, previousOwner, newOwner, operationID uuid.UUID, auditCompensationToken ...string) (error, error, error) {
 	roleCtx, roleCancel := ownershipTransferCleanupContext(ctx)
 	roleErr := s.compensateOwnerRole(roleCtx, spaceID, previousOwner, newOwner, operationID)
 	roleCancel()
 
 	auditCtx, auditCancel := ownershipTransferCleanupContext(ctx)
-	auditErr := s.Store.DeleteAuditLogEntry(auditCtx, auditID)
+	auditErr := s.Store.DeleteAuditLogEntry(auditCtx, auditID, auditCompensationToken...)
 	auditCancel()
 
 	dbCtx, dbCancel := ownershipTransferCleanupContext(ctx)
 	dbErr := s.Store.TransferOwnership(dbCtx, spaceID, newOwner, previousOwner)
 	dbCancel()
 	return roleErr, auditErr, dbErr
+}
+
+func newAuditCompensationToken() (string, error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(raw), nil
 }
 
 func (s *SpaceGRPC) GetSpace(ctx context.Context, req *spacev1.GetSpaceRequest) (*spacev1.GetSpaceResponse, error) {

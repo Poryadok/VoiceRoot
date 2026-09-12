@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -278,21 +279,45 @@ SELECT owner_profile_id FROM spaces WHERE id = $1 FOR UPDATE
 }
 
 // RecordOwnershipTransferred records a completed ownership and Owner-role transfer.
-// auditID is supplied by the caller so an ambiguous request cancellation can
-// remove precisely this row during compensation.
-func (s *SpaceStore) RecordOwnershipTransferred(ctx context.Context, auditID, spaceID, previousOwner, newOwner uuid.UUID) error {
+// auditID and compensationToken are supplied by the disabled legacy saga so an
+// ambiguous request cancellation can remove only this row during compensation.
+func (s *SpaceStore) RecordOwnershipTransferred(ctx context.Context, auditID, spaceID, previousOwner, newOwner uuid.UUID, compensationToken ...string) error {
 	if s == nil || s.Pool == nil {
 		return errors.New("space store: pool not configured")
 	}
 	if s.tx == nil && !s.legacyOwnershipLease {
 		return s.withOwnershipScope(ctx, []uuid.UUID{spaceID}, func(scoped *SpaceStore) error {
-			return scoped.RecordOwnershipTransferred(ctx, auditID, spaceID, previousOwner, newOwner)
+			return scoped.RecordOwnershipTransferred(ctx, auditID, spaceID, previousOwner, newOwner, compensationToken...)
 		})
 	}
-	_, err := s.db().Exec(ctx, `
+	var authorizationTable bool
+	if err := s.db().QueryRow(ctx, `SELECT to_regclass('audit_compensation_authorizations') IS NOT NULL`).Scan(&authorizationTable); err != nil {
+		return err
+	}
+	if !authorizationTable {
+		_, err := s.db().Exec(ctx, `
 INSERT INTO audit_log (id, space_id, actor_profile_id, action, target_type, target_id, details)
 VALUES ($1, $2, $3, 'ownership_transferred', 'profile', $4, '{}')
 `, auditID, spaceID, previousOwner, newOwner)
+		if err != nil {
+			return err
+		}
+		return ctx.Err()
+	}
+	token, err := exactAuditCompensationToken(compensationToken)
+	if err != nil {
+		return err
+	}
+	_, err = s.db().Exec(ctx, `
+WITH inserted AS (
+	INSERT INTO audit_log (id, space_id, actor_profile_id, action, target_type, target_id, details)
+	VALUES ($1, $2, $3, 'ownership_transferred', 'profile', $4, '{}')
+	RETURNING id
+)
+INSERT INTO audit_compensation_authorizations(
+	audit_event_id,space_id,previous_owner_profile_id,new_owner_profile_id,capability_sha256)
+SELECT id,$2,$3,$4,digest(decode($5,'hex'),'sha256') FROM inserted
+`, auditID, spaceID, previousOwner, newOwner, token)
 	if err != nil {
 		return err
 	}
@@ -303,7 +328,7 @@ VALUES ($1, $2, $3, 'ownership_transferred', 'profile', $4, '{}')
 
 // DeleteAuditLogEntry removes a known audit row after its write outcome was
 // ambiguous. A missing row is already the desired state.
-func (s *SpaceStore) DeleteAuditLogEntry(ctx context.Context, auditID uuid.UUID) error {
+func (s *SpaceStore) DeleteAuditLogEntry(ctx context.Context, auditID uuid.UUID, compensationToken ...string) error {
 	if s == nil || s.Pool == nil {
 		return errors.New("space store: pool not configured")
 	}
@@ -317,13 +342,69 @@ func (s *SpaceStore) DeleteAuditLogEntry(ctx context.Context, auditID uuid.UUID)
 			return spaceID, err
 		}
 		return s.withResolvedOwnershipScope(ctx, resolve, func(scoped *SpaceStore) error {
-			return scoped.DeleteAuditLogEntry(ctx, auditID)
+			return scoped.DeleteAuditLogEntry(ctx, auditID, compensationToken...)
 		}, func() error {
 			return nil
 		})
 	}
-	_, err := s.db().Exec(ctx, `DELETE FROM audit_log WHERE id = $1`, auditID)
+	if s.tx == nil {
+		var authorizationTable bool
+		if err := s.Pool.QueryRow(ctx, `SELECT to_regclass('audit_compensation_authorizations') IS NOT NULL`).Scan(&authorizationTable); err != nil {
+			return err
+		}
+		if !authorizationTable {
+			_, err := s.Pool.Exec(ctx, `DELETE FROM audit_log WHERE id = $1`, auditID)
+			return err
+		}
+		tx, err := s.Pool.Begin(ctx)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			cleanupCtx, cleanupCancel := BoundedCleanupContext(ctx)
+			defer cleanupCancel()
+			_ = tx.Rollback(cleanupCtx)
+		}()
+		token, err := exactAuditCompensationToken(compensationToken)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `SELECT set_config('voice.audit_delete_mode','compensation',true),set_config('voice.audit_compensation_token',$1,true)`, token); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM audit_log WHERE id = $1`, auditID); err != nil {
+			return err
+		}
+		return tx.Commit(ctx)
+	}
+	var authorizationTable bool
+	if err := s.db().QueryRow(ctx, `SELECT to_regclass('audit_compensation_authorizations') IS NOT NULL`).Scan(&authorizationTable); err != nil {
+		return err
+	}
+	if !authorizationTable {
+		_, err := s.db().Exec(ctx, `DELETE FROM audit_log WHERE id = $1`, auditID)
+		return err
+	}
+	token, err := exactAuditCompensationToken(compensationToken)
+	if err != nil {
+		return err
+	}
+	if _, err := s.db().Exec(ctx, `SELECT set_config('voice.audit_delete_mode','compensation',true),set_config('voice.audit_compensation_token',$1,true)`, token); err != nil {
+		return err
+	}
+	_, err = s.db().Exec(ctx, `DELETE FROM audit_log WHERE id = $1`, auditID)
 	return err
+}
+
+func exactAuditCompensationToken(tokens []string) (string, error) {
+	if len(tokens) != 1 {
+		return "", errors.New("exact audit compensation capability required")
+	}
+	decoded, err := hex.DecodeString(tokens[0])
+	if err != nil || len(decoded) != 32 {
+		return "", errors.New("invalid audit compensation capability")
+	}
+	return tokens[0], nil
 }
 
 // UpdateSpace updates mutable space fields.

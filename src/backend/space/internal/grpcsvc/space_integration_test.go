@@ -1,6 +1,7 @@
 package grpcsvc
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"net"
@@ -230,7 +231,11 @@ func startSpaceGRPCTestServer(t *testing.T, pool *pgxpool.Pool, opts ...spaceSer
 	lis := bufconn.Listen(bufSize)
 	srv := grpc.NewServer()
 	// Legacy saga coverage opts in only inside this package; production cannot enable it.
-	svc := &SpaceGRPC{allowLegacyOwnershipTransferForTest: true, Store: &store.SpaceStore{Pool: pool}}
+	svc := &SpaceGRPC{
+		allowLegacyOwnershipTransferForTest: true,
+		Store:                               &store.SpaceStore{Pool: pool},
+		AuditCursorKey:                      bytes.Repeat([]byte{0xa7}, 32),
+	}
 	for _, o := range opts {
 		o(svc)
 	}
@@ -893,14 +898,19 @@ func TestJoinByInvite_GuestBlockedWhenAllowGuestsFalse(t *testing.T) {
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
-// TestDeleteSpace_OwnerDeletesAndEmitsEvent documents DeleteSpace owner-only hard delete + space.deleted.
-func TestDeleteSpace_OwnerDeletesAndEmitsEvent(t *testing.T) {
+// TestDeleteSpace_LegacyRPCPreservesAggregateUntilP3 documents that the obsolete
+// hard-delete RPC cannot bypass the accepted scheduled-delete coordinator.
+func TestDeleteSpace_LegacyRPCPreservesAggregateUntilP3(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
 	owner, _, ctx := profileFixture(t)
 	pool := startSpacePostgresForTest(t, context.Background())
 	applySpaceMigration(t, context.Background(), pool)
+	auditMigration, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", "000015_audit_ledger.up.sql"))
+	require.NoError(t, err)
+	_, err = pool.Exec(context.Background(), string(auditMigration))
+	require.NoError(t, err)
 	spy := &spySpaceEvents{}
 	client, cleanup := startSpaceGRPCTestServer(t, pool, withSpaceEventsPublisher(spy))
 	t.Cleanup(cleanup)
@@ -910,15 +920,23 @@ func TestDeleteSpace_OwnerDeletesAndEmitsEvent(t *testing.T) {
 	spaceID := created.GetSpace().GetId()
 	parsedID, err := uuid.Parse(spaceID)
 	require.NoError(t, err)
+	auditID := uuid.New()
+	_, err = pool.Exec(context.Background(), `INSERT INTO audit_log(id,space_id,actor_profile_id,action,target_type,target_id,details) VALUES($1,$2,$3,'member_kicked','profile',$4,'{}')`, auditID, parsedID, owner, uuid.New())
+	require.NoError(t, err)
 
 	_, err = client.DeleteSpace(ctx, &spacev1.DeleteSpaceRequest{SpaceId: spaceID})
-	require.NoError(t, err)
+	require.Error(t, err)
 
 	row, err := (&store.SpaceStore{Pool: pool}).GetSpace(context.Background(), parsedID)
 	require.NoError(t, err)
-	require.Nil(t, row)
-	require.Equal(t, 0, countSpaceMembers(t, context.Background(), pool, parsedID, owner))
-	require.Equal(t, []string{spaceID}, spy.snapshotDeleted())
+	require.NotNil(t, row)
+	require.Equal(t, 1, countSpaceMembers(t, context.Background(), pool, parsedID, owner))
+	var audits, outbox int
+	require.NoError(t, pool.QueryRow(context.Background(), `SELECT count(*) FROM audit_log WHERE id=$1`, auditID).Scan(&audits))
+	require.NoError(t, pool.QueryRow(context.Background(), `SELECT count(*) FROM audit_outbox WHERE audit_event_id=$1`, auditID).Scan(&outbox))
+	require.Equal(t, 1, audits)
+	require.Equal(t, 1, outbox)
+	require.Empty(t, spy.snapshotDeleted())
 }
 
 // TestDeleteSpace_NonOwner_PermissionDenied documents only owner may DeleteSpace.
