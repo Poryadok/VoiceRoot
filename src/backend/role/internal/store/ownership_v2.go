@@ -73,6 +73,13 @@ func (s *RoleStore) transitionOwnershipV2(ctx context.Context, action string, in
 	var result OwnershipTransferV2Receipt
 	err := s.withLockedTransaction(ctx, in.OperationID, []uuid.UUID{in.SpaceID}, func(scoped *RoleStore) error {
 		db := scoped.db()
+		var retired bool
+		if err := db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM role_space_lifecycle WHERE space_id=$1 AND retired_at IS NOT NULL)`, in.SpaceID).Scan(&retired); err != nil {
+			return err
+		}
+		if retired {
+			return ErrSpaceRetired
+		}
 		var legacy bool
 		if err := db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM ownership_transfer_role_receipts WHERE operation_id=$1)`, in.OperationID).Scan(&legacy); err != nil {
 			return err
@@ -103,13 +110,7 @@ func (s *RoleStore) transitionOwnershipV2(ctx context.Context, action string, in
 				return ErrOwnershipTransferConflict
 			}
 		}
-		var retired, active bool
-		if err := db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM role_space_lifecycle WHERE space_id=$1 AND retired_at IS NOT NULL)`, in.SpaceID).Scan(&retired); err != nil {
-			return err
-		}
-		if retired {
-			return ErrSpaceRetired
-		}
+		var active bool
 		if err := db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM ownership_transfer_v2 WHERE space_id=$1 AND state='prepared' AND operation_id<>$2)`, in.SpaceID, in.OperationID).Scan(&active); err != nil {
 			return err
 		}

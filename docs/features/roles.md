@@ -45,7 +45,7 @@
 
 Кто может писать пользователю в DM — настраивается **самим пользователем** в настройках приватности (не на уровне спейса).
 
-## Permanent Space retirement (P3 target)
+## Permanent Space retirement (P3)
 
 После `PURGE_DECIDED` только Space workload identity вызывает защищённый
 `RetireSpace` с `protocol_version=1`, Space/deletion IDs, generation,
@@ -60,3 +60,8 @@ identifier-reuse paths сначала проверяют retirement fence. Ст�
 receipts могут быть удалены только после retirement и отсутствия `PREPARED`;
 fence и compact receipt не имеют time-based expiry. Restore происходит только
 до `PURGE_DECIDED`, поэтому permanent retirement с ним не пересекается.
+
+Role хранит compact evidence в `role_space_retirement_receipts`, а full
+request/receipt bytes — минимум 30 дней от database `retired_at`. Вызывать
+`RetireSpace` можно только через authenticated TLS listener; ordinary listener
+возвращает `UNAVAILABLE` до входа в handler.
