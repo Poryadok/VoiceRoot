@@ -123,6 +123,29 @@ func streamHasSubject(info *nats.StreamInfo, subject string) bool {
 	return false
 }
 
+// Publish sends a coordinator-prepared message without changing its subject,
+// payload or headers and returns the JetStream acknowledgement for validation
+// by the outbox delivery coordinator.
+func (p *JetStreamPublisher) Publish(ctx context.Context, msg *nats.Msg) (*nats.PubAck, error) {
+	if p == nil || p.js == nil {
+		return nil, fmt.Errorf("jetstream publisher not initialized")
+	}
+	if ctx == nil {
+		return nil, fmt.Errorf("jetstream publish context is nil")
+	}
+	if msg == nil {
+		return nil, fmt.Errorf("jetstream prepared message is nil")
+	}
+	if err := p.ensureStream(); err != nil {
+		return nil, err
+	}
+	ack, err := p.js.PublishMsg(msg, nats.Context(ctx))
+	if err != nil {
+		return nil, fmt.Errorf("jetstream publish prepared %s: %w", msg.Subject, err)
+	}
+	return ack, nil
+}
+
 func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, env *eventsv1.ChatStreamEvent) error {
 	if err := p.ensureStream(); err != nil {
 		return err
