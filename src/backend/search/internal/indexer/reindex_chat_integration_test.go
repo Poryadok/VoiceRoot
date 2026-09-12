@@ -32,6 +32,7 @@ func TestReindexChat_SkipsE2EBodies_postgres(t *testing.T) {
 	ctx := context.Background()
 	migrationPath := filepath.Join(searchModuleRepoRoot(t), "src", "backend", "migrations", "search_db", "000001_init.up.sql")
 	pool := integrationtest.StartPostgres(t, ctx, "searchdb", migrationPath)
+	integrationtest.ApplySQLFile(t, ctx, pool, searchModuleRepoRoot(t), filepath.Join("src", "backend", "migrations", "search_db", "000003_space_lifecycle.up.sql"))
 
 	chatID := uuid.New()
 	plainID := uuid.New()
