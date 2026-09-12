@@ -69,7 +69,7 @@ func TestJetStreamPublisher_PublishPreparedPassesExactMessageAndContext(t *testi
 	require.Len(t, capture.options, 1)
 	contextOption, ok := capture.options[0].(nats.ContextOpt)
 	require.True(t, ok, "PublishMsg must receive nats.Context")
-	require.Equal(t, "r21", contextOption.Context.Value(contextKey("delivery")))
+	require.Equal(t, "r21", contextOption.Value(contextKey("delivery")))
 }
 
 func TestJetStreamPublisher_PublishPreparedReturnsChatEventsServerAck(t *testing.T) {
@@ -114,5 +114,5 @@ func TestJetStreamPublisher_PublishPreparedPreservesFailureAndCancellation(t *te
 	require.Len(t, capture.options, 1)
 	contextOption, ok := capture.options[0].(nats.ContextOpt)
 	require.True(t, ok)
-	require.ErrorIs(t, contextOption.Context.Err(), context.Canceled)
+	require.ErrorIs(t, contextOption.Err(), context.Canceled)
 }
