@@ -82,7 +82,8 @@ func OwnershipUnaryInterceptor(_ Verifier) grpc.UnaryServerInterceptor {
 			"/voice.role.v1.RoleService/AbortOwnershipTransfer",
 			"/voice.role.v1.RoleService/ApplyOwnershipTransfer",
 			"/voice.role.v1.RoleService/CompensateOwnershipTransfer",
-			"/voice.role.v1.RoleService/ResolveVoiceRoomGrants":
+			"/voice.role.v1.RoleService/ResolveVoiceRoomGrants",
+			"/voice.role.v1.RoleService/RetireSpace":
 			return nil, status.Error(codes.Unavailable, "protected method unavailable on ordinary listener")
 		default:
 			return handler(ctx, request)
