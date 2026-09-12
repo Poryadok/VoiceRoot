@@ -16,6 +16,7 @@ required_suites=(
   "voice.backend.auth.E2EKeyBackupJdbcIntegrationTest"
   "voice.backend.auth.RegistrationSessionEpochJdbcIntegrationTest"
   "voice.backend.auth.GuestAccountSweeperJdbcIntegrationTest"
+  "voice.backend.auth.spacedeletionproof.SpaceDeletionProofJdbcIntegrationTest"
   "voice.backend.auth.GuestConversionDurabilityJdbcIntegrationTest"
   "voice.backend.auth.GuestConversionLocalPromotionJdbcIntegrationTest"
   "voice.backend.auth.GuestConversionOperationRepositoryJdbcIntegrationTest"
