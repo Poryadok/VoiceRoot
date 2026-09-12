@@ -174,6 +174,10 @@ public class JwtService {
       if (accountType == null || accountType.isBlank()) {
         accountType = "regular";
       }
+      Long sessionEpoch = claims.getLongClaim("session_epoch");
+      if (sessionEpoch == null || sessionEpoch <= 0) {
+        throw new AuthException("invalid_token");
+      }
       return new TokenClaims(
           userId,
           profileId,
@@ -181,7 +185,8 @@ public class JwtService {
           claims.getStringClaim("subscription_tier"),
           expiresAt,
           claims.getJWTID(),
-          accountType);
+          accountType,
+          sessionEpoch);
     } catch (AuthException ex) {
       throw ex;
     } catch (ParseException | JOSEException ex) {
