@@ -92,15 +92,33 @@ RETURNING id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_
 }
 
 func (s *FilesStore) GetFileByID(ctx context.Context, id uuid.UUID) (FileRow, error) {
+	return getFileByID(ctx, s.Pool, id, "")
+}
+
+// GetFileByIDTx keeps the file-state read in the caller's authorization
+// transaction. lockClause is restricted to the two clauses used by File.
+func (s *FilesStore) GetFileByIDTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, forUpdate bool) (FileRow, error) {
+	lockClause := " FOR SHARE"
+	if forUpdate {
+		lockClause = " FOR UPDATE"
+	}
+	return getFileByID(ctx, tx, id, lockClause)
+}
+
+type fileRowQueryer interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
+func getFileByID(ctx context.Context, q fileRowQueryer, id uuid.UUID, lockClause string) (FileRow, error) {
 	var row FileRow
-	err := s.Pool.QueryRow(ctx, `
+	err := q.QueryRow(ctx, `
 SELECT id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_hash,
        r2_key, status, file_type, width, height, duration_seconds,
        thumbnail_r2_key, converted_r2_key, chat_id, chat_type, is_e2e, expires_at,
        scan_result, created_at, updated_at
 FROM files
 WHERE id = $1
-`, id).Scan(
+`+lockClause, id).Scan(
 		&row.ID,
 		&row.UploaderProfileID,
 		&row.OriginalName,
