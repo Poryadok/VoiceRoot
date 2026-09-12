@@ -85,7 +85,7 @@ service UserService {
 source. Public `GetVerificationStatus` возвращает итоговый status/badge и не раскрывает
 provider source rows.
 
-**`PrivacySettings` sketch (spec — not yet in proto/DDL):**
+**`PrivacySettings` V1 contract (implemented in proto, DDL and User store):**
 
 ```protobuf
 message PrivacySettings {
@@ -183,9 +183,9 @@ Redis-only interim **недостаточен** для long-tail «был 2 не
 
 ### Current code vs full spec
 
-**Deployed migrations** используют `profiles`, `onboarding_state` и
-`profile_verification_sources`.
-`privacy_settings` и расширенные Premium-поля — **not yet in proto/code**.
+**Deployed migrations** используют `profiles`, `onboarding_state`,
+`privacy_settings` и `profile_verification_sources`. V1 privacy settings are
+implemented in proto/code; extended Premium fields remain a separate gap.
 
 ```
 profiles
