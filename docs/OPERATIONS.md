@@ -179,6 +179,7 @@ cannot be promoted to staging or production.
 - [CONTRACT_MATRIX.md](CONTRACT_MATRIX.md) — маршруты Gateway → сервисы и таблица JetStream
 - [MICROSERVICES.md](MICROSERVICES.md) — отказоустойчивость, масштабирование, перечень сервисов
 - [DEPLOYMENT.md](DEPLOYMENT.md) — стенды, поток артефактов, первый выкат
+- [PRODUCTION_HOME_SERVER.md](PRODUCTION_HOME_SERVER.md) — фактическая схема домашнего production, edge, backup и recovery
 - [TESTING.md](TESTING.md) — тесты в CI перед выкатом
 - [CONTRIBUTING.md](CONTRIBUTING.md) — merge в `master`, review
 
