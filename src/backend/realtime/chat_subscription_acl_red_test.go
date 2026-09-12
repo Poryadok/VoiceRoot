@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // T-057 intentionally exercises the current public WS handler, not a test-only
@@ -21,6 +24,20 @@ func newACLTestRealtimeHandler(tv tokenValidator) (*wsHub, http.Handler) {
 
 func newACLTestRealtimeHandlerWithLister(tv tokenValidator, lister chatBootstrapLister) (*wsHub, http.Handler) {
 	hub := newWSHub()
+	if lister != nil {
+		hub.subscriptionChecker = subscriptionCheckerFunc(func(ctx context.Context, accountID, profileID, chatID string) error {
+			ids, err := lister.ListChatIDs(ctx, accountID, profileID)
+			if err != nil {
+				return err
+			}
+			for _, id := range ids {
+				if canonicalChatID(id) == canonicalChatID(chatID) {
+					return nil
+				}
+			}
+			return status.Error(codes.PermissionDenied, "not a chat member")
+		})
+	}
 	return hub, newServiceHandler(serviceName, tv, lister, hub, nil, "acl-test-instance", readinessDeps{})
 }
 
@@ -162,4 +179,58 @@ func TestWSSubscribeACLSeparatesProfilesOfSameAccount(t *testing.T) {
 		}
 	}
 	hub.mu.RUnlock()
+}
+
+func TestWSBootstrapAppliesSubscriptionPolicyFailClosed(t *testing.T) {
+	accountID, profileID := uuid.NewString(), uuid.NewString()
+	blockedChatID, unavailableChatID, allowedChatID := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	checker := subscriptionCheckerFunc(func(_ context.Context, account, profile, chat string) error {
+		if account != accountID || profile != profileID {
+			return errors.New("unexpected caller")
+		}
+		switch canonicalChatID(chat) {
+		case blockedChatID:
+			return status.Error(codes.PermissionDenied, "account pair blocked")
+		case unavailableChatID:
+			return status.Error(codes.Unavailable, "social unavailable")
+		case allowedChatID:
+			return nil
+		default:
+			return errors.New("unexpected chat")
+		}
+	})
+	hub := newWSHub()
+	hub.subscriptionChecker = checker
+	h := newServiceHandler(serviceName, staticTokenValidator{
+		"member": {UserID: accountID, ProfileID: profileID},
+	}, perProfileBootstrapLister{profileID: {blockedChatID, unavailableChatID, allowedChatID}}, hub, nil, "bootstrap-policy-test", readinessDeps{})
+	srv := httptest.NewServer(h)
+	t.Cleanup(srv.Close)
+	c := dialACLTestConn(t, srv, "member", profileID)
+
+	sync := readACLEnvelope(t, c)
+	if sync.Op != "subscription_sync" || sync.S != 2 {
+		t.Fatalf("bootstrap response = %+v", sync)
+	}
+	var body struct {
+		ChatIDs  []string `json:"chat_ids"`
+		Degraded bool     `json:"degraded"`
+	}
+	if err := json.Unmarshal(sync.D, &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.ChatIDs) != 1 || body.ChatIDs[0] != allowedChatID {
+		t.Fatalf("bootstrap chat_ids = %v, want only allowed chat %s", body.ChatIDs, allowedChatID)
+	}
+	if !body.Degraded {
+		t.Fatal("dependency failure must mark bootstrap degraded while still omitting the chat")
+	}
+	hub.mu.RLock()
+	_, blockedRegistered := hub.byChat[blockedChatID]
+	_, unavailableRegistered := hub.byChat[unavailableChatID]
+	_, allowedRegistered := hub.byChat[allowedChatID]
+	hub.mu.RUnlock()
+	if blockedRegistered || unavailableRegistered || !allowedRegistered {
+		t.Fatalf("hub registrations blocked=%v unavailable=%v allowed=%v", blockedRegistered, unavailableRegistered, allowedRegistered)
+	}
 }

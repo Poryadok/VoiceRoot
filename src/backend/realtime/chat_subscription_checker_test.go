@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -20,7 +21,176 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 
 	chatv1 "voice.app/voice/chat/v1"
+	socialv1 "voice.app/voice/social/v1"
+	userv1 "voice.app/voice/user/v1"
 )
+
+type policyChatClient struct {
+	chat       *chatv1.Chat
+	members    []*chatv1.ChatMember
+	getErr     error
+	membersErr error
+}
+
+func (c *policyChatClient) GetChat(context.Context, *chatv1.GetChatRequest, ...grpc.CallOption) (*chatv1.GetChatResponse, error) {
+	return &chatv1.GetChatResponse{Chat: c.chat}, c.getErr
+}
+
+func (c *policyChatClient) ListMembers(context.Context, *chatv1.ListMembersRequest, ...grpc.CallOption) (*chatv1.ListMembersResponse, error) {
+	return &chatv1.ListMembersResponse{MemberList: &chatv1.MemberList{Members: c.members}}, c.membersErr
+}
+
+type policyUserClient struct {
+	accounts map[string]string
+	err      error
+	calls    int
+}
+
+func (c *policyUserClient) GetProfile(_ context.Context, req *userv1.GetProfileRequest, _ ...grpc.CallOption) (*userv1.GetProfileResponse, error) {
+	c.calls++
+	if c.err != nil {
+		return nil, c.err
+	}
+	profileID := req.GetProfileId()
+	return &userv1.GetProfileResponse{Profile: &userv1.Profile{Id: profileID, AccountId: c.accounts[profileID]}}, nil
+}
+
+type policySocialClient struct {
+	blocked map[string]bool
+	err     error
+	pairs   [][2]string
+}
+
+type blockingPolicySocialClient struct {
+	started chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (c *blockingPolicySocialClient) IsBlocked(_ context.Context, _ *socialv1.IsBlockedRequest, _ ...grpc.CallOption) (*socialv1.IsBlockedResponse, error) {
+	c.once.Do(func() {
+		close(c.started)
+		<-c.release
+	})
+	return &socialv1.IsBlockedResponse{}, nil
+}
+
+func (c *policySocialClient) IsBlocked(_ context.Context, req *socialv1.IsBlockedRequest, _ ...grpc.CallOption) (*socialv1.IsBlockedResponse, error) {
+	c.pairs = append(c.pairs, [2]string{req.GetAccountIdA(), req.GetAccountIdB()})
+	if c.err != nil {
+		return nil, c.err
+	}
+	return &socialv1.IsBlockedResponse{Blocked: c.blocked[req.GetAccountIdA()+"/"+req.GetAccountIdB()]}, nil
+}
+
+func TestChatSubscriptionPolicyChecksSocialForDMOnlyAndRemembersPair(t *testing.T) {
+	accountA, accountB := uuid.NewString(), uuid.NewString()
+	profileA, profileB, dmChatID, groupChatID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
+	hub := newWSHub()
+	user := &policyUserClient{accounts: map[string]string{profileB: accountB}}
+	social := &policySocialClient{blocked: map[string]bool{}}
+	dm := newChatSubscriptionPolicy(
+		&policyChatClient{chat: &chatv1.Chat{Id: dmChatID, Type: chatv1.ChatType_CHAT_TYPE_DM}, members: []*chatv1.ChatMember{{ProfileId: profileA}, {ProfileId: profileB}}},
+		user, social, hub,
+	)
+	reg := hub.attachAccountConn("instance", "conn", accountA, profileA, 1)
+	registrar, ok := dm.(chatSubscriptionRegistrar)
+	if !ok {
+		t.Fatal("DM policy does not support atomic subscription registration")
+	}
+	if err := registrar.AuthorizeAndAddChat(context.Background(), accountA, profileA, dmChatID, reg); err != nil {
+		t.Fatalf("allowed DM rejected: %v", err)
+	}
+	if user.calls != 1 {
+		t.Fatalf("user calls=%d, want 1", user.calls)
+	}
+	wantPairs := [][2]string{{accountA, accountB}, {accountB, accountA}}
+	if !slices.Equal(social.pairs, wantPairs) {
+		t.Fatalf("social pairs=%v, want %v", social.pairs, wantPairs)
+	}
+	hub.revokeAccountPairDMChats(accountA, accountB)
+	if hub.hasChat(reg, dmChatID) {
+		t.Fatal("allowed DM pair was not remembered for later block revocation")
+	}
+
+	user.calls = 0
+	social.pairs = nil
+	group := newChatSubscriptionPolicy(
+		&policyChatClient{chat: &chatv1.Chat{Id: groupChatID, Type: chatv1.ChatType_CHAT_TYPE_GROUP}},
+		user, social, hub,
+	)
+	if err := group.AuthorizeChat(context.Background(), accountA, profileA, groupChatID); err != nil {
+		t.Fatalf("group subscription rejected: %v", err)
+	}
+	if user.calls != 0 || len(social.pairs) != 0 {
+		t.Fatalf("non-DM invoked DM policy: user=%d social=%v", user.calls, social.pairs)
+	}
+}
+
+func TestDMSubscriptionCheckEventAddRaceFailsClosed(t *testing.T) {
+	accountA, accountB := uuid.NewString(), uuid.NewString()
+	profileA, profileB, chatID := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	hub := newWSHub()
+	social := &blockingPolicySocialClient{started: make(chan struct{}), release: make(chan struct{})}
+	checker := newChatSubscriptionPolicy(
+		&policyChatClient{
+			chat:    &chatv1.Chat{Id: chatID, Type: chatv1.ChatType_CHAT_TYPE_DM},
+			members: []*chatv1.ChatMember{{ProfileId: profileA}, {ProfileId: profileB}},
+		},
+		&policyUserClient{accounts: map[string]string{profileB: accountB}},
+		social,
+		hub,
+	)
+	reg := hub.attachAccountConn("instance", "conn", accountA, profileA, 1)
+	result := make(chan error, 1)
+	go func() {
+		result <- checker.(chatSubscriptionRegistrar).AuthorizeAndAddChat(context.Background(), accountA, profileA, chatID, reg)
+	}()
+	<-social.started
+	hub.revokeAccountPairDMChats(accountA, accountB)
+	close(social.release)
+
+	if err := <-result; err == nil {
+		t.Fatal("an event racing the authoritative check authorized add")
+	}
+	if hub.hasChat(reg, chatID) {
+		t.Fatal("racing subscription was added")
+	}
+	hub.mu.RLock()
+	defer hub.mu.RUnlock()
+	if len(hub.dmPairByChat) != 0 || len(hub.dmChatsByPair) != 0 {
+		t.Fatalf("race left pair index state: by_chat=%d by_pair=%d", len(hub.dmPairByChat), len(hub.dmChatsByPair))
+	}
+}
+
+func TestChatSubscriptionPolicyDeniesBlocksAndDependencyFailures(t *testing.T) {
+	accountA, accountB := uuid.NewString(), uuid.NewString()
+	profileA, profileB, chatID := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	newPolicy := func(userErr, socialErr error, blocked map[string]bool) chatSubscriptionChecker {
+		return newChatSubscriptionPolicy(
+			&policyChatClient{chat: &chatv1.Chat{Id: chatID, Type: chatv1.ChatType_CHAT_TYPE_DM}, members: []*chatv1.ChatMember{{ProfileId: profileA}, {ProfileId: profileB}}},
+			&policyUserClient{accounts: map[string]string{profileB: accountB}, err: userErr},
+			&policySocialClient{blocked: blocked, err: socialErr},
+			newWSHub(),
+		)
+	}
+	for name, policy := range map[string]chatSubscriptionChecker{
+		"blocked-forward":    newPolicy(nil, nil, map[string]bool{accountA + "/" + accountB: true}),
+		"blocked-reverse":    newPolicy(nil, nil, map[string]bool{accountB + "/" + accountA: true}),
+		"user-unavailable":   newPolicy(status.Error(codes.Unavailable, "user down"), nil, nil),
+		"social-unavailable": newPolicy(nil, status.Error(codes.Unavailable, "social down"), nil),
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := policy.AuthorizeChat(context.Background(), accountA, profileA, chatID)
+			if err == nil {
+				t.Fatal("DM policy failure authorized subscription")
+			}
+			if strings.HasPrefix(name, "blocked-") && status.Code(err) != codes.PermissionDenied {
+				t.Fatalf("blocked error code=%s, want PermissionDenied", status.Code(err))
+			}
+		})
+	}
+}
 
 type recordingGetChatServer struct {
 	chatv1.UnimplementedChatServiceServer
