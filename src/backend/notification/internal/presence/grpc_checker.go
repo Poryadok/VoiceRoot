@@ -46,8 +46,26 @@ func (c *GRPCChecker) IsOnline(ctx context.Context, profileID uuid.UUID) (bool, 
 	if !ok || st == nil {
 		return false, nil
 	}
-	if st.GetStatusEnum() == userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_ONLINE {
-		return true, nil
+	return isActiveSessionPresence(st), nil
+}
+
+func isActiveSessionPresence(st *userv1.PresenceStatus) bool {
+	if st == nil {
+		return false
 	}
-	return strings.EqualFold(st.GetStatus(), "online"), nil
+	switch st.GetStatusEnum() {
+	case userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_INVISIBLE:
+		return false
+	case userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_ONLINE,
+		userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_IDLE,
+		userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_DND:
+		return true
+	}
+	status := strings.TrimSpace(st.GetStatus())
+	if strings.EqualFold(status, "invisible") || strings.EqualFold(status, "offline") {
+		return false
+	}
+	return strings.EqualFold(status, "online") ||
+		strings.EqualFold(status, "idle") ||
+		strings.EqualFold(status, "dnd")
 }

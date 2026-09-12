@@ -109,7 +109,8 @@ quiet_hours
 | **Grouping** | By sender `profile_id` until accept |
 | **After accept** | Subsequent messages → `new_message` |
 
-**Code gaps:** `message_request` absent from `delivery/types.go`; Realtime `in_app_notification_fanout.go` hardcodes `type=new_message` for all DM — [todo/backend.md](../todo/backend.md).
+`message_request` реализован как отдельный delivery type; Notification группирует
+его по sender profile, а Realtime сохраняет это wire-имя в in-app fan-out.
 
 ### Stickers and GIF (`new_message` variant)
 
@@ -160,9 +161,13 @@ Event (NATS) ──► Notification Service
 
 | Recipient `GetPresence` | In-app | Push |
 |-------------------------|--------|------|
-| **Online session** (`online`, `idle`, `in_call` on active WS / heartbeat) | ✓ | **✗** |
+| **Active session** (`online`, `idle`, `dnd`; `in_call` = active session + non-empty `call_info_json`) | ✓ | **✗** |
 | **Offline** (`offline`, no session) | ✓ | ✓ (if settings allow) |
 | **Invisible** | ✓ | ✓ (treat as offline for push) |
+
+`call_info_json` — ортогональные metadata звонка: без live status они не делают
+сессию активной. Явные `offline` / `invisible` всегда имеют приоритет над
+устаревшими call metadata.
 
 **Exceptions — skip presence check** (always evaluate push policy):
 
@@ -176,10 +181,10 @@ The moderation row does **not** make every `system` notification presence-blind;
 other system producers continue to use the base rule unless their own contract says
 otherwise.
 
-**Code gaps:** `GRPCChecker.IsOnline` checks only
-`PRESENCE_ONLINE_STATUS_ONLINE`; idle/in-call are not treated as online, so push may
-fire incorrectly. MM/voice paths still apply presence contrary to their skip rule.
-For moderation sanctions, T-023 remains open: no Notification→Realtime transport or
+`GRPCChecker.IsOnline` классифицирует `online`, `idle` и `dnd` как active-session,
+а `offline` / `invisible` как push-eligible. `match_found` и
+`voice_member_joined` не вызывают presence checker, но всё равно проходят
+settings и quiet-hours policy. For moderation sanctions, T-023 remains open: no Notification→Realtime transport or
 payload, no transport-level dedupe, no settled account→profiles delivery semantics,
 and no Flutter presentation for `system` sanctions —
 [todo/backend.md](../todo/backend.md).

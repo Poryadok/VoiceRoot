@@ -126,6 +126,45 @@ func TestMessagePusher_MessageRequestGroupsBySenderAcrossChats(t *testing.T) {
 	require.Equal(t, 2, rec.sent[1].Counter)
 }
 
+func TestMessagePusher_MessageTypesShareOneChatGroupingSequence(t *testing.T) {
+	rec := &recordingFCM{}
+	recipientID := uuid.New()
+	senderID := uuid.New()
+	pusher := &dispatch.MessagePusher{
+		Tokens: &fakeTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
+			recipientID: {{Token: "tok-fcm", PushService: "fcm"}},
+		}},
+		Pusher:   &dispatch.PushDispatcher{FCM: rec},
+		Grouping: grouping.NewMemoryStore(),
+	}
+	decision := map[string]delivery.DeliveryDecision{
+		recipientID.String(): {Push: true},
+	}
+	chatID := uuid.NewString()
+	types := []delivery.NotificationType{
+		delivery.TypeNewMessage,
+		delivery.TypeMention,
+		delivery.TypeReply,
+	}
+
+	for i, typ := range types {
+		body := string(typ)
+		require.NoError(t, pusher.SendPush(context.Background(), decision, delivery.DeliveryInput{
+			SenderProfileID: senderID,
+			ChatID:          chatID,
+			Type:            typ,
+		}, push.Payload{
+			Body: body,
+			Data: map[string]string{"type": body},
+		}, body))
+		require.Len(t, rec.sent, i+1)
+		require.Equal(t, i+1, rec.sent[i].Counter)
+		if i > 0 {
+			require.Equal(t, rec.sent[0].CollapseTag, rec.sent[i].CollapseTag)
+		}
+	}
+}
+
 func TestMessagePusher_SkipsVoIPToken(t *testing.T) {
 	rec := &recordingFCM{}
 	profileID := uuid.New()

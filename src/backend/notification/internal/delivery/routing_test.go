@@ -122,3 +122,48 @@ func TestDecideRouting_SenderExcluded(t *testing.T) {
 	require.False(t, decision.InApp)
 	require.False(t, decision.Push, "sender must not receive own notification")
 }
+
+func TestFinalizeDecision_PushSuppressionPreservesInAppAcrossRoutes(t *testing.T) {
+	recipient := uuid.New()
+	sender := uuid.New()
+	quietAt := time.Date(2026, 9, 12, 23, 30, 0, 0, time.UTC)
+	quiet := delivery.QuietHoursSnapshot{
+		Enabled:   true,
+		StartTime: "23:00",
+		EndTime:   "08:00",
+		Timezone:  "UTC",
+		At:        quietAt,
+	}
+	tests := []struct {
+		name   string
+		typ    delivery.NotificationType
+		online bool
+		quiet  delivery.QuietHoursSnapshot
+	}{
+		{name: "online message", typ: delivery.TypeNewMessage, online: true},
+		{name: "online incoming call", typ: delivery.TypeIncomingCall, online: true},
+		{name: "quiet hours match found", typ: delivery.TypeMatchFound, quiet: quiet},
+		{name: "quiet hours voice member joined", typ: delivery.TypeVoiceMemberJoined, quiet: quiet},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			in := delivery.DeliveryInput{
+				RecipientProfileID: recipient,
+				SenderProfileID:    sender,
+				ChatID:             uuid.NewString(),
+				Type:               tt.typ,
+				IsOnline:           tt.online,
+				At:                 quietAt,
+			}
+			decision := delivery.FinalizeDecision(
+				delivery.DecideRouting(in),
+				in,
+				delivery.SettingsSnapshot{},
+				tt.quiet,
+			)
+			require.True(t, decision.InApp, "%s must retain the in-app route", tt.typ)
+			require.False(t, decision.Push, "%s push must be suppressed", tt.typ)
+		})
+	}
+}

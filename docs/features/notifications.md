@@ -28,7 +28,7 @@
 | **After accept** | Subsequent messages → ordinary `new_message` |
 | **Suppress** | Blocked sender / `allow_dm=nobody` — no push and no in-app for that DM |
 
-См. [text-chat.md](text-chat.md) § «Запросы сообщений», [friends.md](friends.md). **Code gap:** Realtime may still emit `new_message` for request inbox — [todo/backend.md](../todo/backend.md).
+См. [text-chat.md](text-chat.md) § «Запросы сообщений», [friends.md](friends.md).
 
 ### Архивированные чаты
 
@@ -47,7 +47,7 @@ notification center не создаются.
 
 - Email — **только для авторизации** (вход, подтверждение), не для событий
 - Собственный push-сервер не нужен
-- **Группировка**: 1 push на чат с превью последнего сообщения и счётчиком ("Вася и ещё 4 сообщения"); обновлять существующий push, не плодить новые
+- **Группировка**: `new_message`, `mention` и `reply` используют один collapse id на чат с превью последнего сообщения и счётчиком ("Вася и ещё 4 сообщения"); `message_request` до accept группируется по sender profile; обновлять существующий push, не плодить новые
 - **Синхронизация прочитанного**: событие `mark_read(chat_id, message_id)` через WebSocket рассылается на все подключённые устройства пользователя
 
 ## Presence routing (online → in-app only)
@@ -56,8 +56,12 @@ notification center не создаются.
 
 | Recipient presence | In-app (WebSocket) | Push (FCM/APNs) |
 |--------------------|--------------------|-----------------|
-| **Online** (`GetPresence` = online/idle/in-call on active session) | ✓ | **✗** |
+| **Active session** (`GetPresence` = online / idle / DND; in-call = live session + `call_info_json`) | ✓ | **✗** |
 | **Offline** | ✓ | ✓ |
+
+`call_info_json` сам по себе не доказывает активную сессию. Явные `offline` и
+`invisible` имеют приоритет над устаревшими call metadata и остаются
+push-eligible.
 
 - Sender **никогда** не получает push/in-app на собственное сообщение
 - **Matchmaking / voice join** — presence check **пропускается** (always evaluate push policy); см. [todo/backend.md](../todo/backend.md)
