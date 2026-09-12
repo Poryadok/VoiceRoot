@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -590,7 +591,17 @@ func TestRetireSpace_OperationLockPrecedesSpaceAndWinsAllAuthorityRaces(t *testi
 	defer cancel()
 	blocker, err := f.store.Pool.Begin(ctx)
 	require.NoError(t, err)
-	defer func() { _ = blocker.Rollback(context.Background()) }()
+	var racerPools []*pgxpool.Pool
+	defer func() {
+		// Release the advisory lock before closing any blocked racer pool. This
+		// also keeps every early return from stranding a pool close behind it.
+		_ = blocker.Rollback(context.Background())
+		for _, racerPool := range racerPools {
+			if racerPool != nil {
+				racerPool.Close()
+			}
+		}
+	}()
 	var blockerPID int32
 	require.NoError(t, blocker.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&blockerPID))
 	_, err = blocker.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, f.spaceID.String())
@@ -633,36 +644,50 @@ func TestRetireSpace_OperationLockPrecedesSpaceAndWinsAllAuthorityRaces(t *testi
 	results := make(chan raceResult, 5)
 	calls := []struct {
 		ownership bool
-		call      func() error
+		call      func(*RoleGRPC) error
 	}{
-		{true, func() error { _, e := f.svc.PrepareOwnershipTransfer(prepareCtx, prepare); return e }},
-		{true, func() error { _, e := f.svc.FinalizeOwnershipTransfer(finalizeCtx, finalize); return e }},
-		{true, func() error { _, e := f.svc.AbortOwnershipTransfer(abortCtx, abort); return e }},
-		{false, func() error {
-			_, e := f.svc.CreateRole(context.Background(), &rolev1.CreateRoleRequest{SpaceId: f.spaceID.String(), Name: "must not survive retirement", Position: 1})
+		{true, func(svc *RoleGRPC) error { _, e := svc.PrepareOwnershipTransfer(prepareCtx, prepare); return e }},
+		{true, func(svc *RoleGRPC) error { _, e := svc.FinalizeOwnershipTransfer(finalizeCtx, finalize); return e }},
+		{true, func(svc *RoleGRPC) error { _, e := svc.AbortOwnershipTransfer(abortCtx, abort); return e }},
+		{false, func(svc *RoleGRPC) error {
+			_, e := svc.CreateRole(context.Background(), &rolev1.CreateRoleRequest{SpaceId: f.spaceID.String(), Name: "must not survive retirement", Position: 1})
 			return e
 		}},
-		{false, func() error {
-			_, e := f.svc.BootstrapSpaceRoles(context.Background(), &rolev1.BootstrapSpaceRolesRequest{SpaceId: f.spaceID.String(), OwnerProfileId: uuid.NewString()})
+		{false, func(svc *RoleGRPC) error {
+			_, e := svc.BootstrapSpaceRoles(context.Background(), &rolev1.BootstrapSpaceRolesRequest{SpaceId: f.spaceID.String(), OwnerProfileId: uuid.NewString()})
 			return e
 		}},
 	}
-	for _, tc := range calls {
-		go func(tc struct {
+	// The cleanup defer above intentionally releases blocker before these pools.
+	racerPools = make([]*pgxpool.Pool, len(calls))
+	racerPIDs := make([]int32, len(calls))
+	for i := range calls {
+		config := f.store.Pool.Config().Copy()
+		config.MaxConns = 1
+		config.MinConns = 0
+		racerPools[i], err = pgxpool.NewWithConfig(ctx, config)
+		require.NoError(t, err)
+		require.NoError(t, racerPools[i].QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&racerPIDs[i]))
+	}
+	for i, tc := range calls {
+		go func(i int, tc struct {
 			ownership bool
-			call      func() error
+			call      func(*RoleGRPC) error
 		}) {
-			results <- raceResult{ownership: tc.ownership, err: tc.call()}
-		}(tc)
+			svc := &RoleGRPC{Store: &store.RoleStore{Pool: racerPools[i]}, Events: events}
+			results <- raceResult{ownership: tc.ownership, err: tc.call(svc)}
+		}(i, tc)
 	}
+	// Each racer owns one connection, so this is a readiness barrier for these
+	// exact backend PIDs rather than an advisory count sampled from a shared pool.
 	require.Eventually(t, func() bool {
 		var waiters int
-		err := f.store.Pool.QueryRow(ctx, `SELECT count(*) FROM pg_locks w JOIN pg_locks b
+		err := f.store.Pool.QueryRow(ctx, `SELECT count(DISTINCT w.pid) FROM pg_locks w JOIN pg_locks b
  ON b.locktype=w.locktype AND b.database IS NOT DISTINCT FROM w.database
  AND b.classid=w.classid AND b.objid=w.objid AND b.objsubid=w.objsubid
- WHERE b.pid=$1 AND b.locktype='advisory' AND b.granted AND NOT w.granted`, blockerPID).Scan(&waiters)
-		return err == nil && waiters >= 6
-	}, 5*time.Second, 20*time.Millisecond)
+	WHERE b.pid=$1 AND b.locktype='advisory' AND b.granted AND NOT w.granted AND w.pid=ANY($2)`, blockerPID, racerPIDs).Scan(&waiters)
+		return err == nil && waiters == len(calls)
+	}, 5*time.Second, 20*time.Millisecond, "every authority race must wait on the blocker-held Space advisory lock")
 	require.NoError(t, blocker.Commit(ctx))
 	require.NoError(t, <-retirementDone)
 	for range calls {
