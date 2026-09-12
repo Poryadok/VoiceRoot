@@ -92,7 +92,7 @@ Two producers may emit WS `notification` for the same message; clients **dedupe*
 
 | Path | When | Owner |
 |------|------|-------|
-| **Fast path** | `message.sent` on NATS | Realtime emits `notification` parallel to `message_create` (type `new_message` today; `message_request` spec — code gap) |
+| **Fast path** | `message.sent` on NATS | Realtime emits `notification` parallel to `message_create`: `message_request` for a recipient in the requests inbox, otherwise `new_message` |
 | **Policy path** | After Notification `DecideRouting` | Notification → NATS → Realtime fan-out (presence, mute, quiet hours, `send_silent`; push vs in-app split) |
 
 **Normative rule:** Notification Service owns **routing policy** (which channel, sound, grouping). Realtime fast path is **latency optimization** for subscribed in-app sessions — must not bypass mute/type suppress. When both paths fire, client keeps one row per dedupe key. Payload schema — § **`notification` op payload** below. Push — always Notification Service (FCM/APNs), never Realtime direct.
@@ -186,7 +186,7 @@ Canonical identity fields use **`profile_id`** (not `user_id`). Legacy code may 
 | `d.type` | Notes |
 |----------|-------|
 | `new_message` | Ordinary DM after accept |
-| `message_request` | Stranger / requests inbox — title «Незнакомец» / «Message request» (**code gap:** fast path emits `new_message` today) |
+| `message_request` | Stranger / requests inbox — title «Незнакомец» / «Message request» |
 | `mention` | Group/channel @mention |
 | `reply` | Thread reply — **not yet in code** (interim: `new_message`) |
 
@@ -196,7 +196,7 @@ Routing rules (presence, quiet hours, `send_silent`, mute) — [notification-ser
 
 | Gap | Location | Spec |
 |-----|----------|------|
-| All DM in-app fan-out uses `type=new_message` | `in_app_notification_fanout.go` | Stranger / requests inbox must emit **`message_request`** — [notification-service.md](notification-service.md) § `message_request` |
+| Thread replies use `type=new_message` | `in_app_notification_fanout.go` | Emit canonical **`reply`** after the reply producer contract is implemented — [notification-service.md](notification-service.md) § Types |
 | Legacy `user_id` in mention payloads | mention fan-out paths | Producers **must** use `profile_id` (see payload note above) |
 
 ### Reconnect checklist (client)
