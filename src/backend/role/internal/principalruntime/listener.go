@@ -9,8 +9,8 @@ import (
 	"voice/backend/role/internal/principalgrpc"
 )
 
-// ServerOptions secures the dedicated TLS listener and exposes only the v2
-// ownership RPCs. The generic Role listener has a separate deny-only interceptor.
+// ServerOptions secures the dedicated TLS listener and exposes ownership and
+// permanent-retirement RPCs. The generic Role listener has a separate deny-only interceptor.
 func (r *Runtime) ServerOptions() []grpc.ServerOption {
 	return []grpc.ServerOption{
 		grpc.Creds(r.credentials),
