@@ -248,8 +248,8 @@ func r20OrdinaryScopeCases() []r20ScopeCase {
 		{"FinalizeSpacePro", func(s *SpaceStore, f r20ScopeFixture) error {
 			return s.FinalizeSpacePro(context.Background(), f.binding.SpaceID)
 		}},
-		{"ListAuditLogPage", func(s *SpaceStore, f r20ScopeFixture) error {
-			_, err := s.ListAuditLogPage(context.Background(), f.binding.SpaceID, "", 10)
+		{"ListAuditLogSignedPage", func(s *SpaceStore, f r20ScopeFixture) error {
+			_, err := s.ListAuditLogSignedPage(context.Background(), f.binding.SpaceID, "", 10, "r20-test", bytes.Repeat([]byte{0xa7}, 32))
 			return err
 		}},
 		{"CreateCategory", func(s *SpaceStore, f r20ScopeFixture) error {
@@ -1037,7 +1037,7 @@ func TestOwnershipScope_InventoryNamesRemainExact(t *testing.T) {
 		require.False(t, seen[tc.name])
 		seen[tc.name] = true
 	}
-	for _, requiredName := range []string{"GetSpace", "ListMySpacesPage", "AreCoMembers", "JoinByInvite", "AddBotMember", "MemberCap", "ListAuditLogPage", "ListSpaceTree", "ResolveVoiceRoomAccess"} {
+	for _, requiredName := range []string{"GetSpace", "ListMySpacesPage", "AreCoMembers", "JoinByInvite", "AddBotMember", "MemberCap", "ListAuditLogSignedPage", "ListSpaceTree", "ResolveVoiceRoomAccess"} {
 		require.True(t, seen[requiredName], fmt.Sprintf("canonical ordinary inventory lost %s", requiredName))
 	}
 }

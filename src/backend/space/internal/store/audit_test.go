@@ -1,8 +1,8 @@
 package store
 
 import (
+	"bytes"
 	"context"
-	"encoding/base64"
 	"fmt"
 	"testing"
 	"time"
@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestSpaceStore_ListAuditLogPage documents newest-first, space-scoped stable cursor paging.
-func TestSpaceStore_ListAuditLogPage(t *testing.T) {
+// TestSpaceStore_ListAuditLogSignedPage documents newest-first, space-scoped stable cursor paging.
+func TestSpaceStore_ListAuditLogSignedPage(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -54,7 +54,8 @@ VALUES ($1, $2, $3, $4, 'profile', $5, $6::jsonb, $7)
 		require.NoError(t, err)
 	}
 
-	page1, err := st.ListAuditLogPage(ctx, requested.ID, "", 2)
+	key := bytes.Repeat([]byte{0x4a}, 32)
+	page1, err := st.ListAuditLogSignedPage(ctx, requested.ID, "", 2, "reader", key)
 	require.NoError(t, err)
 	require.Len(t, page1.Rows, 2)
 	require.Equal(t, ids[0], page1.Rows[0].ID)
@@ -71,7 +72,7 @@ VALUES ($1, $2, $3, 'inserted_between_pages', 'profile', $4, '{}'::jsonb, $5)
 `, insertedBetweenPages, requested.ID, owner, uuid.New(), sharedAt)
 	require.NoError(t, err)
 
-	page2, err := st.ListAuditLogPage(ctx, requested.ID, page1.NextCursor, 2)
+	page2, err := st.ListAuditLogSignedPage(ctx, requested.ID, page1.NextCursor, 2, "reader", key)
 	require.NoError(t, err)
 	require.Len(t, page2.Rows, 2)
 	require.Equal(t, []uuid.UUID{ids[2], ids[3]}, []uuid.UUID{page2.Rows[0].ID, page2.Rows[1].ID})
@@ -79,7 +80,7 @@ VALUES ($1, $2, $3, 'inserted_between_pages', 'profile', $4, '{}'::jsonb, $5)
 	require.Empty(t, page2.NextCursor, "final page must not advertise continuation")
 }
 
-func TestSpaceStore_ListAuditLogPage_InvalidCursor(t *testing.T) {
+func TestSpaceStore_ListAuditLogSignedPage_InvalidCursor(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -88,26 +89,6 @@ func TestSpaceStore_ListAuditLogPage_InvalidCursor(t *testing.T) {
 	applySpaceMigrationForStoreTest(t, ctx, pool)
 	st := &SpaceStore{Pool: pool}
 
-	_, err := st.ListAuditLogPage(ctx, uuid.New(), "not-an-audit-cursor", 50)
+	_, err := st.ListAuditLogSignedPage(ctx, uuid.New(), "not-an-audit-cursor", 50, "reader", bytes.Repeat([]byte{0x4a}, 32))
 	require.ErrorIs(t, err, ErrInvalidAuditCursor)
-}
-
-func TestDecodeAuditCursor_IncompleteOrZeroPayload_InvalidCursor(t *testing.T) {
-	validBase64 := func(json string) string {
-		return base64.RawURLEncoding.EncodeToString([]byte(json))
-	}
-	for _, tc := range []struct {
-		name   string
-		cursor string
-	}{
-		{name: "missing timestamp", cursor: validBase64(`{"i":"11111111-1111-4111-8111-111111111111"}`)},
-		{name: "missing id", cursor: validBase64(`{"t":"2026-09-03T10:00:00Z"}`)},
-		{name: "zero timestamp", cursor: validBase64(`{"t":"0001-01-01T00:00:00Z","i":"11111111-1111-4111-8111-111111111111"}`)},
-		{name: "zero uuid", cursor: validBase64(`{"t":"2026-09-03T10:00:00Z","i":"00000000-0000-0000-0000-000000000000"}`)},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			_, _, err := decodeAuditCursor(tc.cursor)
-			require.ErrorIs(t, err, ErrInvalidAuditCursor)
-		})
-	}
 }

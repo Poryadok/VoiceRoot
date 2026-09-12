@@ -57,7 +57,8 @@ func (s *SpaceGRPC) GetAuditLog(ctx context.Context, req *spacev1.GetAuditLogReq
 	if limit > 100 {
 		limit = 100
 	}
-	page, err := s.Store.ListAuditLogPage(ctx, spaceID, cursor, limit)
+	accessScope := caller.String() + "|" + permissions.SpaceViewAuditLog
+	page, err := s.Store.ListAuditLogSignedPage(ctx, spaceID, cursor, limit, accessScope, s.AuditCursorKey)
 	if errors.Is(err, store.ErrInvalidAuditCursor) {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}

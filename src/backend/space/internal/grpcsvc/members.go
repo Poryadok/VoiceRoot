@@ -95,14 +95,13 @@ func (s *SpaceGRPC) KickMember(ctx context.Context, req *spacev1.KickMemberReque
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
 	}
-	if err := s.Store.RemoveMember(ctx, spaceID, profileID); err != nil {
+	if err := s.Store.KickMember(ctx, spaceID, profileID, caller); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, status.Error(codes.NotFound, "member not found")
 		}
 		return nil, mapSpaceStoreError(err)
 	}
 	s.revokeAllMemberRoles(ctx, spaceID, profileID)
-	_ = s.Store.RecordMemberKicked(ctx, spaceID, profileID, caller)
 	if s.SpaceEvents != nil {
 		if pubErr := s.SpaceEvents.PublishMemberLeft(ctx, spaceID.String(), profileID.String()); pubErr != nil {
 			logInviteEventFailure(pubErr)
