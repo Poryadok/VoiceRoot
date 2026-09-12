@@ -20,6 +20,7 @@ WebSocket-шлюз для доставки событий в реальном в
 - **Не хранит inbox или историю чатов**; после reconnect клиент делает глобальную REST-сверку inbox через Chat `ListChats`, а сообщения догружает через Messaging API (Gateway → REST/gRPC) только per selected `chat_id`, см. [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) (Reconnect)
 - Heartbeat / ping-pong для детекции разрыва
 - На client **`delivery_ack`**: ephemeral `message_delivered` fan-out **и** publish JetStream **`message.delivery_ack`** на `message.events` (Messaging consumer → durable cursor) — см. § `delivery_ack` op
+- Social block closure для DM: bootstrap, lazy `subscribe` и каждая client side effect (`typing`, `mark_read`, `delivery_ack`) проверяют account pair fail-closed; `social.user_blocked` ускоряет отзыв уже открытых DM-подписок
 
 ## Протокол WebSocket
 
@@ -215,10 +216,10 @@ Routing rules (presence, quiet hours, `send_silent`, mute) — [notification-ser
 ## Конфигурация (NATS / JetStream)
 
 - **`NATS_URL`** — URL NATS Server с JetStream (порт **4222**). В Compose: `nats://nats:4222`; с хоста: `nats://127.0.0.1:${NATS_PORT:-4222}` (см. [`docker-compose.yml`](../../docker-compose.yml)).
-- Подписки на доменные потоки для fan-out в WebSocket — в первую очередь **`message.events`** (consume: `message.sent`, …; **publish:** client `delivery_ack` → `message.delivery_ack`), **`chat.events`** и с Фазы 2 **`voice.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)); детали subject/consumer — в реализации сервиса.
+- Подписки на доменные потоки для fan-out и отзыва доступа — в первую очередь **`message.events`** (consume: `message.sent`, …; **publish:** client `delivery_ack` → `message.delivery_ack`), **`chat.events`**, **`social.user_blocked`** из `social.events` и с Фазы 2 **`voice.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)); детали subject/consumer — в реализации сервиса.
 - **`REALTIME_CHAT_GRPC_ADDR`** (опционально) — gRPC адрес **Chat Service** для bootstrap списка DM при открытии WebSocket и проверки lazy `subscribe` через `GetChat` (например `chat:50051` в compose). Если не задан, сервер **не** вызывает Chat и **не** шлёт `subscription_sync`; valid lazy `subscribe` fail-closed с generic `permission_denied`, а не создаёт неподтверждённую подписку. TLS/insecure — как принято в окружении (локально часто plaintext внутри mesh).
-- **`REALTIME_USER_GRPC_ADDR`** (опционально) — User Service для записи presence при WS `presence_update`.
-- **`REALTIME_SOCIAL_GRPC_ADDR`** (опционально) — Social Service `ListFriends` для fan-out `user.presence_changed` друзьям по WebSocket (без общей chat-подписки).
+- **`REALTIME_USER_GRPC_ADDR`** (опционально) — User Service для записи presence при WS `presence_update` и разрешения `dm_peer_profile_id → account_id` перед DM block decision.
+- **`REALTIME_SOCIAL_GRPC_ADDR`** (опционально) — Social Service `ListFriends` для fan-out `user.presence_changed` и `IsBlocked` в обе стороны для DM subscription policy. Если User/Social policy dependency отсутствует или ошибается, DM bootstrap/lazy subscribe fail-closed.
 
 ## Архитектура fan-out
 
@@ -254,17 +255,20 @@ Redis и проверка JWT остаются correctness path.
 
 | Подход | Описание |
 |--------|----------|
-| **Bootstrap из Chat (основной)** | После `hello`, если задан `REALTIME_CHAT_GRPC_ADDR`, Realtime вызывает Chat Service **`ListChats`** (постранично), собирает чаты с типом **`CHAT_TYPE_DM`** и регистрирует их в локальном наборе подписок соединения. Клиент получает **`subscription_sync`** с отсортированным `chat_ids`. Источник истины по членству в чатах — **Chat**; так не пропускаются события по DM, в которые пользователь вступил, но UI ещё не открывал. |
-| **Lazy `subscribe`** | Клиент шлёт `subscribe` с `chat_id` (например гонка сразу после `CreateDM`, пока список не обновился, или вспомогательный чат вне первой страницы `ListChats` до доработки пагинации на стороне bootstrap). Перед `subscribe_ack` Realtime вызывает Chat `GetChat` c обычными user/profile metadata (не internal caller); unknown, nonmember, deleted-for-self, dependency failure или timeout возвращают только generic `permission_denied`. Подписки суммируются с bootstrap. |
+| **Bootstrap из Chat (основной)** | После `hello`, если задан `REALTIME_CHAT_GRPC_ADDR`, Realtime вызывает Chat Service **`ListChats`** (постранично), затем повторно авторизует каждый chat через `GetChat`. Для **DM** он получает peer через `ListMembers`, разрешает peer account через User `GetProfile` и вызывает Social `IsBlocked` в обе стороны. Block даёт чистый deny; ошибка Chat/User/Social исключает chat и выставляет `degraded=true`. Клиент получает **`subscription_sync`** только с разрешёнными отсортированными `chat_ids`. |
+| **Lazy `subscribe`** | Клиент шлёт `subscribe` с `chat_id`. Перед `subscribe_ack` Realtime применяет тот же Chat membership и DM Social account-pair policy. Block, unknown, nonmember, deleted-for-self, dependency failure или timeout возвращают только generic `permission_denied`; внутренние причины не раскрываются. Non-DM сохраняет Chat membership semantics и не применяет DM block pair как взаимный запрет общего канала. |
 | **Chat не сконфигурирован** | Bootstrap не выполняется; lazy `subscribe` **не** служит fallback для ACL и fail-closed с generic `permission_denied`. Для продакшена DM MVP ожидается заданный адрес Chat. |
 | **Ошибка Chat при bootstrap** | Всё равно отправляется `subscription_sync` с `degraded: true` и пустым `chat_ids`; клиенту следует опереться на REST список чатов и при необходимости прислать `subscribe` по известным `chat_id`. |
 
-Группы/каналы и прочие scope — вне этого чанка; по мере готовности Chat/Realtime их bootstrap расширяется по той же схеме (источник списка в Chat, не выдумывать членство в Realtime). `chat.member_changed` c `removed` или `left` отзывает все локальные подписки profile/chat; `joined` не создаёт подписку автоматически.
+`chat.member_changed` c `removed` или `left` отзывает все локальные подписки profile/chat; `joined` не создаёт подписку автоматически. Для DM Realtime держит bounded локальный индекс `account pair → local chat IDs` только пока существует подписка или выполняется authorization check; последняя `unsubscribe`/disconnect/revoke удаляет chat и пустую pair. Каждый instance имеет собственный durable consumer `social.user_blocked`: событие по этому индексу удаляет DM из локальных tabs обоих accounts, не сканируя глобальную историю пар. In-flight generation barrier не позволяет гонке `check → event → add` восстановить подписку.
+
+Событие остаётся revoke-оптимизацией, а не correctness path: перед `typing`, `mark_read` и `delivery_ack` для уже открытого DM Realtime синхронно вызывает Social `IsBlocked` в обе стороны по сохранённой pair. Block или ошибка Social дают существующий generic deny до fan-out/Redis/JetStream side effects. Поэтому успешный `BlockAccount` закрывает старый socket даже если `PublishUserBlocked` завершился ошибкой или event не был доставлен; non-DM сохраняет local-subscription semantics без Social round-trip.
 
 ## Зависимости
 
 - **Redis** — Pub/Sub, registry подключений `{profile_id → [instance_id, ws_conn_id]}` и minimum-epoch floor для fail-closed проверок аккаунта
 - **NATS** — получение событий от всех сервисов
+- **Chat / User / Social gRPC** — membership/type, DM peer account resolution и двунаправленный account-level block decision
 
 Ни глобальная сверка inbox, ни догрузка пропущенных **сообщений** не проходят через Realtime: клиент обращается через API Gateway к Chat `ListChats`, затем при необходимости к Messaging Service `GetMessages` (без обязательного gRPC Realtime → Messaging для catch-up).
 

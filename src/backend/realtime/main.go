@@ -50,11 +50,11 @@ func main() {
 
 	chatLister := dialChatBootstrapLister()
 	memberInboxLister := dialChatMemberInboxLister()
-	subscriptionChecker := dialChatSubscriptionChecker()
 	presenceUpdater := dialPresenceUpdater()
 	friendLister := dialFriendLister()
 
 	hub := newWSHub()
+	subscriptionChecker := dialChatSubscriptionChecker(hub)
 	hub.memberInboxLister = memberInboxLister
 	hub.subscriptionChecker = subscriptionChecker
 	instanceID := strings.TrimSpace(os.Getenv("REALTIME_INSTANCE_ID"))
@@ -124,6 +124,12 @@ func main() {
 			err := runChatEventsConsumer(ctx, hub, natsURL, instanceID, logger)
 			if err != nil && err != context.Canceled {
 				logger.Error("chat.events consumer exited", slog.String("error", err.Error()))
+			}
+		}()
+		go func() {
+			err := runSocialEventsConsumer(ctx, hub, natsURL, instanceID, logger)
+			if err != nil && err != context.Canceled {
+				logger.Error("social.events consumer exited", slog.String("error", err.Error()))
 			}
 		}()
 		go func() {
@@ -236,17 +242,27 @@ func dialChatMemberInboxLister() chatMemberInboxLister {
 	return newGRPCChatMemberInboxLister(conn)
 }
 
-func dialChatSubscriptionChecker() chatSubscriptionChecker {
-	addr := strings.TrimSpace(os.Getenv("REALTIME_CHAT_GRPC_ADDR"))
+func dialChatSubscriptionChecker(hub *wsHub) chatSubscriptionChecker {
+	chatConn := dialRealtimeGRPCDependency("chat subscription", "REALTIME_CHAT_GRPC_ADDR")
+	if chatConn == nil {
+		return nil
+	}
+	userConn := dialRealtimeGRPCDependency("user subscription policy", "REALTIME_USER_GRPC_ADDR")
+	socialConn := dialRealtimeGRPCDependency("social subscription policy", "REALTIME_SOCIAL_GRPC_ADDR")
+	return newGRPCChatSubscriptionPolicy(chatConn, userConn, socialConn, hub)
+}
+
+func dialRealtimeGRPCDependency(name, envKey string) *grpc.ClientConn {
+	addr := strings.TrimSpace(os.Getenv(envKey))
 	if addr == "" {
 		return nil
 	}
 	conn, err := grpc.NewClient(grpcclient.DialTarget(addr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		svcLogger.Warn("chat subscription grpc client unavailable", slog.String("addr", addr), slog.String("error", err.Error()))
+		svcLogger.Warn(name+" grpc client unavailable", slog.String("addr", addr), slog.String("error", err.Error()))
 		return nil
 	}
-	return newGRPCChatSubscriptionChecker(conn)
+	return conn
 }
 
 func dialChatBootstrapLister() chatBootstrapLister {
