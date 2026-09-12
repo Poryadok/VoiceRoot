@@ -92,9 +92,9 @@ message PrivacySettings {
   string profile_id = 1;
   PrivacyPreset preset = 2;
   PrivacyAudience show_online = 3;
-  PrivacyAudience show_last_seen = 4;   // «был(а) N назад» — independent from show_online
-  bool show_read_receipts = 5;          // DM ✓✓ opt-out; default true — [privacy.md](../features/privacy.md) § Read receipts
-  PrivacyAudience show_game_status = 6;
+  // Additive field 21 in the canonical proto; independent from show_online.
+  PrivacyAudience show_last_seen = 21;
+  optional bool show_read_receipts = 20; // DM ✓✓ opt-out; default true — [privacy.md](../features/privacy.md) § Read receipts
   // … allow_dm, allow_friend_requests, allow_forward, allow_guest_dm, …
 }
 ```
@@ -172,7 +172,7 @@ Redis-only interim **недостаточен** для long-tail «был 2 не
 | 3 | If status enum changed → publish `user.presence_changed` with `old_status`, `new_status`; for the first live observation `old_status` is empty and `new_status` is the canonical current status. Same-enum heartbeats still complete steps 1–2 but publish nothing. |
 | 4 | Realtime fan-out `presence_update` to friends/subscribers **after** privacy filter (spec) |
 
-**`show_last_seen` enforcement:** when `show_last_seen = nobody` (or viewer not in allowed audience for `friends`), `GetPresence` / `GetBulkPresence` **omit** `last_seen_at` / `last_seen` timestamp (live online may still respect `show_online`). Invisible: live status shown as offline to others; **must not** leak `last_seen` when hidden. Header «был(а)…» in DM — [presence.md](../features/presence.md). **Code gap:** field not in proto/DDL; no read-time filter — [todo/backend.md](../todo/backend.md).
+**`show_last_seen` enforcement:** when `show_last_seen = nobody` (or viewer is outside its allowed audience), `GetPresence` / `GetBulkPresence` **omit** `last_seen` timestamp (live online independently respects `show_online`). Self may read it; viewerless calls, missing privacy rows and audience dependency errors fail closed. Invisible is shown as offline to others and never leaks a hidden timestamp. Header «был(а)…» in DM — [presence.md](../features/presence.md). Durable PostgreSQL `last_seen_at` remains separate — [todo/backend.md](../todo/backend.md).
 
 ### Current code vs full spec
 

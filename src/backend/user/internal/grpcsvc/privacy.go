@@ -108,6 +108,14 @@ func (s *UserGRPC) UpdatePrivacySettings(ctx context.Context, req *userv1.Update
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	showLastSeen := privacy.FromProto(in.GetShowLastSeen())
+	if in.ShowLastSeen == nil {
+		if existing != nil {
+			showLastSeen = existing.ShowLastSeen
+		} else {
+			showLastSeen = privacy.SettingsForPreset(strings.TrimSpace(in.GetPreset())).ShowLastSeen
+		}
+	}
 	allowForward := true
 	if in.AllowForward != nil {
 		allowForward = in.GetAllowForward()
@@ -124,7 +132,7 @@ func (s *UserGRPC) UpdatePrivacySettings(ctx context.Context, req *userv1.Update
 		ProfileID:             profileID,
 		Preset:                strings.TrimSpace(in.GetPreset()),
 		ShowOnline:            privacy.FromProto(in.GetShowOnline()),
-		ShowLastSeen:          privacy.FromProto(in.GetShowLastSeen()),
+		ShowLastSeen:          showLastSeen,
 		ShowGameStatus:        privacy.FromProto(in.GetShowGameStatus()),
 		ShowMmRating:          privacy.FromProto(in.GetShowMmRating()),
 		ShowPhone:             privacy.FromProto(in.GetShowPhone()),

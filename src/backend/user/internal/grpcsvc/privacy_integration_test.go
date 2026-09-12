@@ -266,6 +266,8 @@ VALUES ($1, $2, 'nofwd', '5555', 'NoFwd', true)`,
 	require.NoError(t, err)
 	require.False(t, after.GetPrivacySettings().GetAllowForward())
 	require.False(t, after.GetPrivacySettings().GetShowReadReceipts())
+	require.True(t, after.GetPrivacySettings().GetShowLastSeen().GetIncludeGuests(),
+		"an older client omitting show_last_seen must preserve the stored gaming default")
 	require.Equal(t, profileID.String(), events.profileID)
 	require.Equal(t, `[{"key":"show_read_receipts","value":false}]`, events.changedKeysJSON)
 
