@@ -47,6 +47,7 @@ func main() {
 		log.Fatalf("space principal issuer: %v", err)
 	}
 	metricsReg := prometheus.NewRegistry()
+	ownershipOutboxAlertGauge := newOwnershipOutboxDeliveryAlertGauge(metricsReg)
 	runCtx, runCancel := context.WithCancel(context.Background())
 	defer runCancel()
 	httpAddr := ":8080"
@@ -60,6 +61,7 @@ func main() {
 
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	var grpcSrv *grpc.Server
+	var outboxRuntime *ownershipOutboxRuntime
 	if dbURL != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
 		pool, err := pgxpool.New(ctx, dbURL)
@@ -89,8 +91,9 @@ func main() {
 		spaceStore := &store.SpaceStore{Pool: pool}
 		natsURL := strings.TrimSpace(os.Getenv("NATS_URL"))
 		var spaceEvents spaceevents.Publisher
+		var jsPub *spaceevents.JetStreamPublisher
 		if natsURL != "" {
-			jsPub, err := spaceevents.NewJetStreamPublisher(natsURL)
+			jsPub, err = spaceevents.NewJetStreamPublisher(natsURL)
 			if err != nil {
 				log.Fatalf("nats jetstream publisher: %v", err)
 			}
@@ -202,6 +205,12 @@ func main() {
 			}()
 			logger.Info("space subscription entitlement consumer enabled")
 		}
+		outboxRuntime = startOwnershipOutboxRuntime(runCtx, ownershipOutboxRuntimeConfigFromEnv(), ownershipOutboxRuntimeDependencies{
+			store: spaceStore, transport: jsPub, alertGauge: ownershipOutboxAlertGauge, logger: logger,
+		})
+		if outboxRuntime != nil {
+			defer outboxRuntime.Stop()
+		}
 		spacev1.RegisterSpaceServiceServer(grpcSrv, spaceSvc)
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcListen))
@@ -229,11 +238,13 @@ func main() {
 	select {
 	case err := <-errCh:
 		runCancel()
+		outboxRuntime.Stop()
 		if err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
 		}
 	case <-stop:
 		runCancel()
+		outboxRuntime.Stop()
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.ShutdownTimeoutFromEnv())
 		defer cancel()
 		if grpcSrv != nil {
