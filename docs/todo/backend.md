@@ -452,7 +452,7 @@
 
 
 - [ ] **[User] `UpdateProfile.custom_status` ignored** — comment "not persisted in current DDL" (`src/backend/user/internal/grpcsvc/user.go`); only Redis presence path works.
-- [ ] **[User] Org DNS verification lifecycle thin** — unlimited pending rows, no expiry/TTL (`src/backend/user/internal/store/verification.go`).
+- [ ] **BE-131 [User] Org DNS verification lifecycle** — pending DNS request needs TTL: exactly one active request; a new Start atomically expires the prior request; Check accepts only the current unexpired request; an old TXT never grants a badge; verifier unavailability does not consume the request. Source: `src/backend/user/internal/store/verification.go`.
 - [x] **[User] `README.md` status** — describes the implemented RPC surface and keeps residual gaps explicit (`src/backend/user/README.md`).
 
 ### Analytics

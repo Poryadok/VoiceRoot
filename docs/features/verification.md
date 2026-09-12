@@ -24,10 +24,17 @@
 
 ### Поддерживаемые платформы (будущее)
 
-- FACEIT (верификация ранга для CS2 и других)
+- FACEIT — кандидат для будущей rank attestation только в Space MM; не personal badge
 - ESL / FACEIT Pro League — про-статус
 - Riot Games (API для верифицированных про-игроков)
 - Twitter/X — если статус верификации стабилизируется
+
+Rank attestation для будущего Space MM отделена от личной и организационной
+верификации: она не выдаёт и не заменяет profile badge. Steam не одобрен как
+verifier. До реализации должны быть документированы provider/игры, identity и rank
+criterion, версионированное external→per-game `integer` или `enum` mapping,
+freshness/re-check/revoke, Space config, fail-closed verifier и отдельная доступная
+UI-semantics; см. [matchmaking.md](matchmaking.md#verified-rank-post-v1-только-space-mm).
 
 ### Логика
 
@@ -99,5 +106,4 @@ DNS-верификация доказывает владение доменом 
 2. `Auth Service` выполняет OAuth identity checks и подтверждает внешнюю идентичность.
 3. `User Service` фиксирует verification state и управляет отображением badge.
 4. Плановый re-check статуса (cron) снимает badge при потере условий верификации.
-
 
