@@ -96,6 +96,46 @@ func (s *UserGRPC) ClearVerification(ctx context.Context, req *userv1.ClearVerif
 	return &userv1.ClearVerificationResponse{VerificationStatus: verificationStatusFromRow(row)}, nil
 }
 
+// ApplyVerificationSourceState applies one Auth-owned provider source using a
+// per-profile/source monotonic revision. Source rows remain internal; public reads expose
+// only the resolved verification status.
+func (s *UserGRPC) ApplyVerificationSourceState(ctx context.Context, req *userv1.ApplyVerificationSourceStateRequest) (*userv1.ApplyVerificationSourceStateResponse, error) {
+	if !authctx.IsExactInternalCaller(ctx, "auth") {
+		return nil, status.Error(codes.PermissionDenied, "auth caller only")
+	}
+	profileID, err := uuid.Parse(strings.TrimSpace(req.GetProfileId()))
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid profile_id")
+	}
+	source := strings.ToLower(strings.TrimSpace(req.GetSource()))
+	if source != "twitch" && source != "youtube" {
+		return nil, status.Error(codes.InvalidArgument, "invalid verification source")
+	}
+	if req.GetRevision() <= 0 {
+		return nil, status.Error(codes.InvalidArgument, "revision must be positive")
+	}
+	badge := source
+	if req.Badge != nil && strings.TrimSpace(req.GetBadge()) != "" {
+		badge = strings.TrimSpace(req.GetBadge())
+	}
+	row, applied, err := s.Profiles.ApplyVerificationSourceState(
+		ctx, profileID, source, req.GetRevision(), req.GetVerified(), "personal", badge,
+	)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if row == nil {
+		return nil, status.Error(codes.NotFound, "profile not found")
+	}
+	if applied && s.Events != nil {
+		_ = s.Events.PublishVerified(ctx, row.ID.String(), row.AccountID.String(), row.VerificationType)
+	}
+	return &userv1.ApplyVerificationSourceStateResponse{
+		VerificationStatus: verificationStatusFromRow(row),
+		Applied:            applied,
+	}, nil
+}
+
 // StartOrganizationVerification begins DNS TXT org verification.
 func (s *UserGRPC) StartOrganizationVerification(ctx context.Context, req *userv1.StartOrganizationVerificationRequest) (*userv1.StartOrganizationVerificationResponse, error) {
 	accountID, ok := authctx.AccountID(ctx)

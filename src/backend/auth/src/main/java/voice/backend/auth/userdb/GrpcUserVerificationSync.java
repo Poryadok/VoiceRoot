@@ -1,5 +1,6 @@
 package voice.backend.auth.userdb;
 
+import app.voice.user.v1.ApplyVerificationSourceStateRequest;
 import app.voice.user.v1.ClearVerificationRequest;
 import app.voice.user.v1.SetVerificationRequest;
 import app.voice.user.v1.UserServiceGrpc;
@@ -44,6 +45,28 @@ public class GrpcUserVerificationSync implements UserVerificationSync {
       var status = stub.setVerification(req).getVerificationStatus();
       if (!profileId.toString().equals(status.getProfileId())
           || !"personal".equals(status.getVerificationType())) {
+        throw new AuthException("verification_sync_failed");
+      }
+    } catch (StatusRuntimeException ex) {
+      throw new AuthException("verification_sync_failed");
+    }
+  }
+
+  @Override
+  public void applySourceState(
+      UUID profileId, String source, long revision, boolean verified, String badge) {
+    try {
+      var response =
+          stub.applyVerificationSourceState(
+              ApplyVerificationSourceStateRequest.newBuilder()
+                  .setProfileId(profileId.toString())
+                  .setSource(source)
+                  .setRevision(revision)
+                  .setVerified(verified)
+                  .setBadge(badge == null || badge.isBlank() ? source : badge)
+                  .build());
+      var status = response.getVerificationStatus();
+      if (!profileId.toString().equals(status.getProfileId())) {
         throw new AuthException("verification_sync_failed");
       }
     } catch (StatusRuntimeException ex) {

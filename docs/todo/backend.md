@@ -47,8 +47,8 @@
 ### User
 
 
-- [x] **[User] OAuth verification goes through User Service** — Auth uses User gRPC
-  `SetVerification` / `ClearVerification`; direct `user_db` verification writes were removed.
+- [x] **[User] OAuth verification goes through User Service** — Auth uses source-scoped
+  `ApplyVerificationSourceState` with durable revisions/retry; direct `user_db` writes were removed.
 
 ### Analytics
 
@@ -165,7 +165,6 @@
 
 - [ ] **[User] Premium animated GIF avatar is a dead path** — premium gate in `user_avatar.go` but `image/gif` rejected by `r2avatar/validate.go` (`TestValidateUploadParams_rejectsGifInPhase1`); conflicts with `docs/features/user-profile.md`. `GetSettings`/`UpdateSettings` **есть** (`user_settings.go`). `GetPrivacySettings` ownership check **есть** (non-S2S → `GetOwnedProfile`).
 - [ ] **[User] `SetPrimaryProfile` отсутствует** — `is_primary` только bootstrap; phone search всегда primary.
-- [ ] **[User] Verification V1 incomplete (Auth + User boundary)** — Twitch only in `LinkedAccountsService` (`src/backend/auth/src/main/java/voice/backend/auth/service/LinkedAccountsService.java`); YouTube in DB schema only (`src/backend/auth/src/main/resources/db/migration/V3__linked_identities.sql`); no partner-status recheck cron (`docs/features/verification.md`).
 - [ ] **[User] NATS contract gaps** — missing `user.game_detected`, `user.settings_changed` ([user-service.md](../microservices/user-service.md)); `PublishProfileUpdated` / `PublishVerified` emit stub `ProfileCreated` without `changed_fields` / `verification_type`; `PublishProfileSwitched` drops `old_profile_id` (`src/backend/user/internal/userevents/jetstream.go`).
 - [ ] **[User] Durable `last_seen_at` (PostgreSQL)** — spec requires PG persistence for header; code Redis-only TTL 5 min — [presence.md](../features/presence.md), [user-service.md](../microservices/user-service.md). Sub-bullet: privacy filter at read time when `show_last_seen` lands.
 - [ ] **[User] `show_last_seen` privacy enforcement** — add `show_last_seen` to `privacy_settings` proto/DDL; filter `last_seen_at` in `GetPresence`/`GetBulkPresence` per viewer — [user-service.md](../microservices/user-service.md) — **P0**
@@ -349,7 +348,6 @@
 - [ ] **[Auth] OTP Redis throttling not implemented in Auth** — `docs/ARCHITECTURE_REQUIREMENTS.md` assigns OTP attempt throttling to Auth Redis; only JWT blacklist is wired. Password-reset REST **есть** (`POST /api/v1/auth/password/reset`, `OtpService.resetPassword`); Flutter UI нет — [client.md](client.md).
 - [ ] **[Auth] Resend на staging/prod** — `ResendMailSender` есть; без `RESEND_API_KEY` → `NoopMailSender`. [ci.md](ci.md).
 - [x] **[Auth] NATS `user.guest_converted` not wired in compose/staging** — **done (compose):** `AUTH_NATS_URL` + `depends_on: nats` in `docker-compose.yml`; convert publishes + `TestComposeConvertGuestNATS_live`. Staging env still worth verifying separately.
-- [ ] **[Auth] Linked-accounts list is a stub** — `GET /api/v1/auth/linked-accounts` returns `[]` in both Auth REST and Gateway transcoding; `linked_identities` table unused by Java. Twitch OAuth mock-only (`mock-code`).
 - [ ] **[Auth] Password change (logged-in) + revoke-all-refresh not implemented** — reset-via-OTP есть; нет change-password для сессии. UI reset — [client.md](client.md).
 
 ### Realtime
@@ -587,7 +585,6 @@
 
 - [ ] **[Auth] NATS event matrix mostly unimplemented** — `docs/microservices/auth-service.md` lists `user.registered`, `user.logged_in`, `user.logged_out`, `user.2fa_enabled`, `user.account_deleted`, `user.account_restored`; `AuthEventPublisher` only defines `user.guest_converted`. Files: `src/backend/auth/src/main/java/voice/backend/auth/events/AuthEventPublisher.java`, `src/backend/auth/src/main/java/voice/backend/auth/events/NatsAuthEventPublisher.java`.
 - [ ] **[Auth] Disable 2FA not implemented** — No RPC/REST to turn off TOTP or invalidate backup codes after enrollment. Sessions list/revoke **есть** (`GET /api/v1/auth/sessions`, `TestComposeAuthSessions_live`); Flutter UI — [client.md](client.md).
-- [ ] **[Auth] YouTube linked identity not implemented** — DDL allows `youtube` in `linked_identities`; only partial Twitch path exists. File: `src/backend/migrations/auth_db/000004_linked_identities.up.sql`.
 - [ ] **[Auth] Guest TTL sweeper lacks real JDBC tests** — `GuestAccountLifecycleIntegrationTest` only checks bean exists and invokes `sweep()` without DB assertions; comment admits gap. File: `src/backend/auth/src/test/java/voice/backend/auth/GuestAccountLifecycleIntegrationTest.java`.
 - [ ] **[Auth] Guest sweeper deletes guests with `last_online_at IS NULL`** — First sweep can soft-delete never-touched guests (e.g. legacy rows). File: `src/backend/auth/src/main/java/voice/backend/auth/repository/JdbcAccountRepository.java` (`deactivateExpiredGuests`).
 - [ ] **[Auth] gRPC token context via `lastAccessToken` atomic** — `enable2FA`, `verify2FA`, `putE2EKeyBackup`, `getE2EKeyBackup`, `convertGuest` rely on in-process `lastAccessToken` when metadata missing; unsafe for concurrent direct gRPC. File: `src/backend/auth/src/main/java/voice/backend/auth/grpc/AuthGrpcService.java`.

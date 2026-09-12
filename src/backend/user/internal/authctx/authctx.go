@@ -76,3 +76,18 @@ func IsInternalService(ctx context.Context) bool {
 	vals := md.Get(HeaderInternalCaller)
 	return len(vals) > 0 && strings.TrimSpace(vals[0]) != ""
 }
+
+// IsExactInternalCaller requires one canonical caller value. It rejects missing,
+// duplicated, case-variant, and whitespace-padded metadata so ownership-specific
+// service seams fail closed.
+func IsExactInternalCaller(ctx context.Context, caller string) bool {
+	if caller == "" {
+		return false
+	}
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return false
+	}
+	vals := md.Get(HeaderInternalCaller)
+	return len(vals) == 1 && vals[0] == caller
+}

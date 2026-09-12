@@ -330,11 +330,23 @@ acceptance are tracked in [todo/client.md](../todo/client.md) and
 
 ## Зависимости
 
+### Linked provider verification
+
+`linked_identities` хранит единственную account/provider identity вместе с owning
+`profile_id` и монотонной `source_revision`. Активную identity нельзя молча перенести на
+другой профиль: V1 требует unlink → link. `verification_source_sync_targets` — durable
+outbox-like state по account/profile/provider; target считается synced только после успешного
+`UserService.ApplyVerificationSourceState`. Callback, unlink и scheduled refresh повторяют
+pending targets. Provider outage сохраняет последнее verified state; подтверждённая потеря
+критерия создаёт новую revoked revision. Owner-only list возвращает `profile_id`, чтобы клиент
+показывал sources выбранного профиля.
+
 - **User Service gRPC** (`USER_GRPC_ADDR`) — provisioning/resolve/switch профилей,
   синхронизация verification и завершения guest conversion. User единолично владеет `user_db`;
   недоступность, `DEADLINE_EXCEEDED` или непригодный ответ User блокирует выдачу новой сессии.
   Каждый blocking RPC (`EnsurePrimaryProfile`, `ResolvePrimaryProfileIDs`, `SwitchProfile`,
-  `SetVerification`, `ClearVerification`, `MarkAccountRegular`) получает новый per-call deadline:
+  `ApplyVerificationSourceState`, legacy `SetVerification` / `ClearVerification`,
+  `MarkAccountRegular`) получает новый per-call deadline:
   `auth.user-grpc.deadline` / `AUTH_USER_GRPC_DEADLINE` — положительная ISO-8601 `Duration`.
   Если переменная **отсутствует**, используется `PT15S`; явные пустое, malformed, zero или negative
   значения являются ошибкой конфигурации и останавливают startup. Deadline создаётся при создании

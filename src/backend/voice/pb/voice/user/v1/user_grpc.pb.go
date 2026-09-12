@@ -44,6 +44,7 @@ const (
 	UserService_GetVerificationStatus_FullMethodName         = "/voice.user.v1.UserService/GetVerificationStatus"
 	UserService_SetVerification_FullMethodName               = "/voice.user.v1.UserService/SetVerification"
 	UserService_ClearVerification_FullMethodName             = "/voice.user.v1.UserService/ClearVerification"
+	UserService_ApplyVerificationSourceState_FullMethodName  = "/voice.user.v1.UserService/ApplyVerificationSourceState"
 	UserService_StartOrganizationVerification_FullMethodName = "/voice.user.v1.UserService/StartOrganizationVerification"
 	UserService_CheckOrganizationVerification_FullMethodName = "/voice.user.v1.UserService/CheckOrganizationVerification"
 	UserService_ApplyDowngradeProfiles_FullMethodName        = "/voice.user.v1.UserService/ApplyDowngradeProfiles"
@@ -93,6 +94,9 @@ type UserServiceClient interface {
 	// S2S from Auth after OAuth identity checks (verification.md).
 	SetVerification(ctx context.Context, in *SetVerificationRequest, opts ...grpc.CallOption) (*SetVerificationResponse, error)
 	ClearVerification(ctx context.Context, in *ClearVerificationRequest, opts ...grpc.CallOption) (*ClearVerificationResponse, error)
+	// S2S from Auth. Applies one monotonic Twitch/YouTube source state and resolves
+	// the profile's effective visible verification without exposing source rows publicly.
+	ApplyVerificationSourceState(ctx context.Context, in *ApplyVerificationSourceStateRequest, opts ...grpc.CallOption) (*ApplyVerificationSourceStateResponse, error)
 	StartOrganizationVerification(ctx context.Context, in *StartOrganizationVerificationRequest, opts ...grpc.CallOption) (*StartOrganizationVerificationResponse, error)
 	CheckOrganizationVerification(ctx context.Context, in *CheckOrganizationVerificationRequest, opts ...grpc.CallOption) (*CheckOrganizationVerificationResponse, error)
 	ApplyDowngradeProfiles(ctx context.Context, in *ApplyDowngradeProfilesRequest, opts ...grpc.CallOption) (*ApplyDowngradeProfilesResponse, error)
@@ -358,6 +362,16 @@ func (c *userServiceClient) ClearVerification(ctx context.Context, in *ClearVeri
 	return out, nil
 }
 
+func (c *userServiceClient) ApplyVerificationSourceState(ctx context.Context, in *ApplyVerificationSourceStateRequest, opts ...grpc.CallOption) (*ApplyVerificationSourceStateResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplyVerificationSourceStateResponse)
+	err := c.cc.Invoke(ctx, UserService_ApplyVerificationSourceState_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *userServiceClient) StartOrganizationVerification(ctx context.Context, in *StartOrganizationVerificationRequest, opts ...grpc.CallOption) (*StartOrganizationVerificationResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(StartOrganizationVerificationResponse)
@@ -441,6 +455,9 @@ type UserServiceServer interface {
 	// S2S from Auth after OAuth identity checks (verification.md).
 	SetVerification(context.Context, *SetVerificationRequest) (*SetVerificationResponse, error)
 	ClearVerification(context.Context, *ClearVerificationRequest) (*ClearVerificationResponse, error)
+	// S2S from Auth. Applies one monotonic Twitch/YouTube source state and resolves
+	// the profile's effective visible verification without exposing source rows publicly.
+	ApplyVerificationSourceState(context.Context, *ApplyVerificationSourceStateRequest) (*ApplyVerificationSourceStateResponse, error)
 	StartOrganizationVerification(context.Context, *StartOrganizationVerificationRequest) (*StartOrganizationVerificationResponse, error)
 	CheckOrganizationVerification(context.Context, *CheckOrganizationVerificationRequest) (*CheckOrganizationVerificationResponse, error)
 	ApplyDowngradeProfiles(context.Context, *ApplyDowngradeProfilesRequest) (*ApplyDowngradeProfilesResponse, error)
@@ -530,6 +547,9 @@ func (UnimplementedUserServiceServer) SetVerification(context.Context, *SetVerif
 }
 func (UnimplementedUserServiceServer) ClearVerification(context.Context, *ClearVerificationRequest) (*ClearVerificationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ClearVerification not implemented")
+}
+func (UnimplementedUserServiceServer) ApplyVerificationSourceState(context.Context, *ApplyVerificationSourceStateRequest) (*ApplyVerificationSourceStateResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApplyVerificationSourceState not implemented")
 }
 func (UnimplementedUserServiceServer) StartOrganizationVerification(context.Context, *StartOrganizationVerificationRequest) (*StartOrganizationVerificationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method StartOrganizationVerification not implemented")
@@ -1014,6 +1034,24 @@ func _UserService_ClearVerification_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _UserService_ApplyVerificationSourceState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyVerificationSourceStateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).ApplyVerificationSourceState(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_ApplyVerificationSourceState_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).ApplyVerificationSourceState(ctx, req.(*ApplyVerificationSourceStateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _UserService_StartOrganizationVerification_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(StartOrganizationVerificationRequest)
 	if err := dec(in); err != nil {
@@ -1192,6 +1230,10 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ClearVerification",
 			Handler:    _UserService_ClearVerification_Handler,
+		},
+		{
+			MethodName: "ApplyVerificationSourceState",
+			Handler:    _UserService_ApplyVerificationSourceState_Handler,
 		},
 		{
 			MethodName: "StartOrganizationVerification",

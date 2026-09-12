@@ -7,13 +7,15 @@ import '../../state/auth_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../core/voice_primary_button.dart';
 
-/// Stub: linked accounts and verification entry points (multi-profile/verification (docs/features/multi-profile.md)).
+/// Profile-scoped linked accounts and verification entry points.
 class VerificationSettingsSheet extends ConsumerStatefulWidget {
   const VerificationSettingsSheet({super.key});
 
   static const Key sheetKey = Key('verification_settings_sheet');
   static const Key linkedAccountsKey = Key('verification_linked_accounts');
+  static const Key selectedProfileKey = Key('verification_selected_profile');
   static const Key twitchLinkKey = Key('verification_twitch_link');
+  static const Key youtubeLinkKey = Key('verification_youtube_link');
 
   @override
   ConsumerState<VerificationSettingsSheet> createState() =>
@@ -25,7 +27,8 @@ class _VerificationSettingsSheetState
   List<LinkedAccount>? _accounts;
   var _loading = true;
   String? _error;
-  var _linkingTwitch = false;
+  String? _selectedProfileId;
+  String? _busyPlatform;
 
   @override
   void initState() {
@@ -42,6 +45,7 @@ class _VerificationSettingsSheetState
       });
       return;
     }
+    final selectedProfileId = session.activeProfileId;
     final result = await ref
         .read(voiceAuthClientProvider)
         .listLinkedAccounts(session: session);
@@ -50,7 +54,10 @@ class _VerificationSettingsSheetState
       _loading = false;
       switch (result) {
         case AuthApiOk(:final data):
-          _accounts = data;
+          _selectedProfileId = selectedProfileId;
+          _accounts = data
+              .where((account) => account.profileId == selectedProfileId)
+              .toList(growable: false);
           _error = null;
         case AuthApiFailure(:final message):
           _accounts = const [];
@@ -59,29 +66,46 @@ class _VerificationSettingsSheetState
     });
   }
 
-  Future<void> _linkTwitch() async {
+  Future<void> _linkProvider(String platform) async {
     final session = ref.read(authControllerProvider).session;
     if (session == null) return;
-    setState(() => _linkingTwitch = true);
+    setState(() => _busyPlatform = platform);
     final result = await ref
         .read(voiceAuthClientProvider)
         .startLinkedAccountLink(
           session: session,
-          platform: 'twitch',
-          redirectUri: 'https://app.voice.test/oauth/twitch',
+          platform: platform,
+          redirectUri: 'https://app.voice.test/oauth/$platform',
         );
     if (!mounted) return;
-    setState(() => _linkingTwitch = false);
+    setState(() => _busyPlatform = null);
     switch (result) {
       case AuthApiOk(:final data):
         if (data.isNotEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('OAuth: $data')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('OAuth: $data')));
         }
       case AuthApiFailure(:final message):
         setState(() => _error = message);
     }
+  }
+
+  Future<void> _unlinkProvider(String platform) async {
+    final session = ref.read(authControllerProvider).session;
+    if (session == null) return;
+    setState(() => _busyPlatform = platform);
+    final result = await ref
+        .read(voiceAuthClientProvider)
+        .unlinkLinkedAccount(session: session, platform: platform);
+    if (!mounted) return;
+    switch (result) {
+      case AuthApiOk<void>():
+        await _loadLinkedAccounts();
+      case AuthApiFailure(:final message):
+        setState(() => _error = message);
+    }
+    if (mounted) setState(() => _busyPlatform = null);
   }
 
   @override
@@ -106,6 +130,14 @@ class _VerificationSettingsSheetState
                 l10n.verificationSettingsHint,
                 style: TextStyle(color: voice.textSecondary),
               ),
+              if (_selectedProfileId != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  l10n.verificationSelectedProfile(_selectedProfileId!),
+                  key: VerificationSettingsSheet.selectedProfileKey,
+                  style: TextStyle(color: voice.textSecondary),
+                ),
+              ],
               const SizedBox(height: 16),
               Text(
                 l10n.verificationLinkedAccountsTitle,
@@ -133,17 +165,44 @@ class _VerificationSettingsSheetState
                                 subtitle: account.displayName != null
                                     ? Text(account.displayName!)
                                     : null,
+                                trailing: TextButton(
+                                  key: ValueKey(
+                                    'verification_${account.platform}_unlink',
+                                  ),
+                                  onPressed: _busyPlatform == null
+                                      ? () => _unlinkProvider(account.platform)
+                                      : null,
+                                  child: Text(l10n.verificationUnlink),
+                                ),
                               ),
                           ],
                         ),
                 ),
               const SizedBox(height: 16),
-              VoicePrimaryButton(
-                key: VerificationSettingsSheet.twitchLinkKey,
-                onPressed: _linkingTwitch ? null : _linkTwitch,
-                isLoading: _linkingTwitch,
-                child: Text(l10n.verificationLinkTwitch),
-              ),
+              if (!(_accounts ?? const <LinkedAccount>[]).any(
+                (account) => account.platform == 'twitch',
+              ))
+                VoicePrimaryButton(
+                  key: VerificationSettingsSheet.twitchLinkKey,
+                  onPressed: _busyPlatform == null
+                      ? () => _linkProvider('twitch')
+                      : null,
+                  isLoading: _busyPlatform == 'twitch',
+                  child: Text(l10n.verificationLinkTwitch),
+                ),
+              if (!(_accounts ?? const <LinkedAccount>[]).any(
+                (account) => account.platform == 'youtube',
+              )) ...[
+                const SizedBox(height: 8),
+                VoicePrimaryButton(
+                  key: VerificationSettingsSheet.youtubeLinkKey,
+                  onPressed: _busyPlatform == null
+                      ? () => _linkProvider('youtube')
+                      : null,
+                  isLoading: _busyPlatform == 'youtube',
+                  child: Text(l10n.verificationLinkYoutube),
+                ),
+              ],
             ],
           ),
         ),

@@ -4228,6 +4228,188 @@ class ClearVerificationResponse extends $pb.GeneratedMessage {
   VerificationStatus ensureVerificationStatus() => $_ensure(0);
 }
 
+class ApplyVerificationSourceStateRequest extends $pb.GeneratedMessage {
+  factory ApplyVerificationSourceStateRequest({
+    $core.String? profileId,
+    $core.String? source,
+    $fixnum.Int64? revision,
+    $core.bool? verified,
+    $core.String? badge,
+  }) {
+    final result = create();
+    if (profileId != null) result.profileId = profileId;
+    if (source != null) result.source = source;
+    if (revision != null) result.revision = revision;
+    if (verified != null) result.verified = verified;
+    if (badge != null) result.badge = badge;
+    return result;
+  }
+
+  ApplyVerificationSourceStateRequest._();
+
+  factory ApplyVerificationSourceStateRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ApplyVerificationSourceStateRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ApplyVerificationSourceStateRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'profileId')
+    ..aOS(2, _omitFieldNames ? '' : 'source')
+    ..aInt64(3, _omitFieldNames ? '' : 'revision')
+    ..aOB(4, _omitFieldNames ? '' : 'verified')
+    ..aOS(5, _omitFieldNames ? '' : 'badge')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyVerificationSourceStateRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyVerificationSourceStateRequest copyWith(
+          void Function(ApplyVerificationSourceStateRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as ApplyVerificationSourceStateRequest))
+          as ApplyVerificationSourceStateRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ApplyVerificationSourceStateRequest create() =>
+      ApplyVerificationSourceStateRequest._();
+  @$core.override
+  ApplyVerificationSourceStateRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ApplyVerificationSourceStateRequest getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          ApplyVerificationSourceStateRequest>(create);
+  static ApplyVerificationSourceStateRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get profileId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set profileId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProfileId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProfileId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get source => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set source($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasSource() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSource() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $fixnum.Int64 get revision => $_getI64(2);
+  @$pb.TagNumber(3)
+  set revision($fixnum.Int64 value) => $_setInt64(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasRevision() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearRevision() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.bool get verified => $_getBF(3);
+  @$pb.TagNumber(4)
+  set verified($core.bool value) => $_setBool(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasVerified() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearVerified() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get badge => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set badge($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasBadge() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearBadge() => $_clearField(5);
+}
+
+class ApplyVerificationSourceStateResponse extends $pb.GeneratedMessage {
+  factory ApplyVerificationSourceStateResponse({
+    VerificationStatus? verificationStatus,
+    $core.bool? applied,
+  }) {
+    final result = create();
+    if (verificationStatus != null)
+      result.verificationStatus = verificationStatus;
+    if (applied != null) result.applied = applied;
+    return result;
+  }
+
+  ApplyVerificationSourceStateResponse._();
+
+  factory ApplyVerificationSourceStateResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ApplyVerificationSourceStateResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ApplyVerificationSourceStateResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..aOM<VerificationStatus>(1, _omitFieldNames ? '' : 'verificationStatus',
+        subBuilder: VerificationStatus.create)
+    ..aOB(2, _omitFieldNames ? '' : 'applied')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyVerificationSourceStateResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyVerificationSourceStateResponse copyWith(
+          void Function(ApplyVerificationSourceStateResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as ApplyVerificationSourceStateResponse))
+          as ApplyVerificationSourceStateResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ApplyVerificationSourceStateResponse create() =>
+      ApplyVerificationSourceStateResponse._();
+  @$core.override
+  ApplyVerificationSourceStateResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ApplyVerificationSourceStateResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          ApplyVerificationSourceStateResponse>(create);
+  static ApplyVerificationSourceStateResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  VerificationStatus get verificationStatus => $_getN(0);
+  @$pb.TagNumber(1)
+  set verificationStatus(VerificationStatus value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasVerificationStatus() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearVerificationStatus() => $_clearField(1);
+  @$pb.TagNumber(1)
+  VerificationStatus ensureVerificationStatus() => $_ensure(0);
+
+  @$pb.TagNumber(2)
+  $core.bool get applied => $_getBF(1);
+  @$pb.TagNumber(2)
+  set applied($core.bool value) => $_setBool(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasApplied() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearApplied() => $_clearField(2);
+}
+
 class StartOrganizationVerificationRequest extends $pb.GeneratedMessage {
   factory StartOrganizationVerificationRequest({
     $core.String? profileId,

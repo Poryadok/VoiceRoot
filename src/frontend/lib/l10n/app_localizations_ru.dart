@@ -1840,6 +1840,17 @@ class AppLocalizationsRu extends AppLocalizations {
   String get verificationLinkTwitch => 'Привязать Twitch';
 
   @override
+  String get verificationLinkYoutube => 'Привязать YouTube';
+
+  @override
+  String get verificationUnlink => 'Отвязать';
+
+  @override
+  String verificationSelectedProfile(String profileId) {
+    return 'Выбранный профиль: $profileId';
+  }
+
+  @override
   String get verifiedBadgePersonal => 'Верифицирован';
 
   @override

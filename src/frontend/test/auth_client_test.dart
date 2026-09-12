@@ -133,6 +133,57 @@ void main() {
     });
   });
 
+  group('VoiceAuthClient.linkedAccounts', () {
+    test('parses profile ownership and unlinks the requested source', () async {
+      var unlinkCalled = false;
+      final mock = MockClient((req) async {
+        expect(req.headers['authorization'], 'Bearer access-abc');
+        if (req.method == 'GET') {
+          expect(req.url.path, '/api/v1/auth/linked-accounts');
+          return http.Response(
+            jsonEncode({
+              'linked_accounts': [
+                {
+                  'platform': 'youtube',
+                  'profile_id': 'prof-2',
+                  'external_id': 'channel-1',
+                  'external_login': 'Creator Channel',
+                },
+              ],
+            }),
+            200,
+          );
+        }
+        expect(req.method, 'POST');
+        expect(req.url.path, '/api/v1/auth/linked-accounts/youtube/unlink');
+        unlinkCalled = true;
+        return http.Response('', 204);
+      });
+      final client = VoiceAuthClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
+      const session = AuthSession(
+        accessToken: 'access-abc',
+        refreshToken: 'refresh-xyz',
+        accountId: 'acc-1',
+        activeProfileId: 'prof-1',
+        expiresInSeconds: 900,
+      );
+
+      final listed = await client.listLinkedAccounts(session: session);
+      final account = (listed as AuthApiOk<List<LinkedAccount>>).data.single;
+      expect(account.profileId, 'prof-2');
+      expect(account.displayName, 'Creator Channel');
+
+      final unlinked = await client.unlinkLinkedAccount(
+        session: session,
+        platform: 'youtube',
+      );
+      expect(unlinked, isA<AuthApiOk<void>>());
+      expect(unlinkCalled, isTrue);
+    });
+  });
+
   group('VoiceAuthClient.guestReminder', () {
     test('reads protojson camelCase shouldShow from gateway', () async {
       final mock = MockClient((req) async {
@@ -382,36 +433,39 @@ void main() {
       },
     );
 
-    test('returns the immediate SessionEnvelope from a newer endpoint', () async {
-      final mock = MockClient((req) async {
-        expect(req.headers['authorization'], 'Bearer guest-access');
-        expect(req.url.path, '/api/v1/auth/otp/verify');
-        expect(jsonDecode(req.body)['otp_type'], 'email_verify');
-        return http.Response(jsonEncode(sessionJson()), 200);
-      });
-      final client = VoiceAuthClient(
-        gateway: gatewayHttpForTest(mock, config: config),
-      );
-      const guest = AuthSession(
-        accessToken: 'guest-access',
-        refreshToken: 'guest-refresh',
-        accountId: 'acc-1',
-        activeProfileId: 'prof-1',
-        expiresInSeconds: 900,
-        accountType: 'guest',
-      );
+    test(
+      'returns the immediate SessionEnvelope from a newer endpoint',
+      () async {
+        final mock = MockClient((req) async {
+          expect(req.headers['authorization'], 'Bearer guest-access');
+          expect(req.url.path, '/api/v1/auth/otp/verify');
+          expect(jsonDecode(req.body)['otp_type'], 'email_verify');
+          return http.Response(jsonEncode(sessionJson()), 200);
+        });
+        final client = VoiceAuthClient(
+          gateway: gatewayHttpForTest(mock, config: config),
+        );
+        const guest = AuthSession(
+          accessToken: 'guest-access',
+          refreshToken: 'guest-refresh',
+          accountId: 'acc-1',
+          activeProfileId: 'prof-1',
+          expiresInSeconds: 900,
+          accountType: 'guest',
+        );
 
-      final result = await client.verifyGuestConversionEmailOtp(
-        session: guest,
-        email: 'guest@example.com',
-        code: '123456',
-      );
-      expect(result, isA<GuestConversionOtpSession>());
-      expect(
-        (result as GuestConversionOtpSession).session.accessToken,
-        'access-abc',
-      );
-    });
+        final result = await client.verifyGuestConversionEmailOtp(
+          session: guest,
+          email: 'guest@example.com',
+          code: '123456',
+        );
+        expect(result, isA<GuestConversionOtpSession>());
+        expect(
+          (result as GuestConversionOtpSession).session.accessToken,
+          'access-abc',
+        );
+      },
+    );
   });
 
   group('VoiceAuthClient.revokeSession', () {

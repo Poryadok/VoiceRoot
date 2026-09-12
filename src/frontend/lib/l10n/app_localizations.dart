@@ -3350,6 +3350,24 @@ abstract class AppLocalizations {
   /// **'Link Twitch'**
   String get verificationLinkTwitch;
 
+  /// No description provided for @verificationLinkYoutube.
+  ///
+  /// In en, this message translates to:
+  /// **'Link YouTube'**
+  String get verificationLinkYoutube;
+
+  /// No description provided for @verificationUnlink.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlink'**
+  String get verificationUnlink;
+
+  /// No description provided for @verificationSelectedProfile.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected profile: {profileId}'**
+  String verificationSelectedProfile(String profileId);
+
   /// No description provided for @verifiedBadgePersonal.
   ///
   /// In en, this message translates to:
