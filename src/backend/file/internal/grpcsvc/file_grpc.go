@@ -1,6 +1,7 @@
 package grpcsvc
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -8,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -17,6 +19,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"voice/backend/file/internal/authctx"
@@ -82,28 +85,30 @@ func (realClock) Now() time.Time {
 }
 
 type Deps struct {
-	Files     *store.FilesStore
-	Presigner r2file.Presigner
-	Deleter   r2file.ObjectDeleter
-	Clock     Clock
-	ChatGuard ChatGuard
-	Processor ImageProcessor
-	Reader    ObjectReader
-	Scanner   Scanner
-	Events    fileevents.Publisher
+	Files                    *store.FilesStore
+	Presigner                r2file.Presigner
+	Deleter                  r2file.ObjectDeleter
+	Clock                    Clock
+	ChatGuard                ChatGuard
+	Processor                ImageProcessor
+	Reader                   ObjectReader
+	Scanner                  Scanner
+	Events                   fileevents.Publisher
+	ReferenceAuthorityActive bool
 }
 
 type FileGRPC struct {
 	filev1.UnimplementedFileServiceServer
-	files     *store.FilesStore
-	presigner r2file.Presigner
-	deleter   r2file.ObjectDeleter
-	clock     Clock
-	chatGuard ChatGuard
-	processor ImageProcessor
-	reader    ObjectReader
-	scanner   Scanner
-	events    fileevents.Publisher
+	files                    *store.FilesStore
+	presigner                r2file.Presigner
+	deleter                  r2file.ObjectDeleter
+	clock                    Clock
+	chatGuard                ChatGuard
+	processor                ImageProcessor
+	reader                   ObjectReader
+	scanner                  Scanner
+	events                   fileevents.Publisher
+	referenceAuthorityActive bool
 }
 
 func New(deps Deps) *FileGRPC {
@@ -120,15 +125,16 @@ func New(deps Deps) *FileGRPC {
 		events = fileevents.NoopPublisher{}
 	}
 	return &FileGRPC{
-		files:     deps.Files,
-		presigner: deps.Presigner,
-		deleter:   deps.Deleter,
-		clock:     clock,
-		chatGuard: deps.ChatGuard,
-		processor: processor,
-		reader:    deps.Reader,
-		scanner:   deps.Scanner,
-		events:    events,
+		files:                    deps.Files,
+		presigner:                deps.Presigner,
+		deleter:                  deps.Deleter,
+		clock:                    clock,
+		chatGuard:                deps.ChatGuard,
+		processor:                processor,
+		reader:                   deps.Reader,
+		scanner:                  deps.Scanner,
+		events:                   events,
+		referenceAuthorityActive: deps.ReferenceAuthorityActive,
 	}
 }
 
@@ -235,14 +241,13 @@ func (s *FileGRPC) GetFileURL(ctx context.Context, req *filev1.GetFileURLRequest
 	if err != nil {
 		return nil, err
 	}
-	row, err := s.files.GetFileByID(ctx, fileID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, status.Error(codes.NotFound, "file not found")
-		}
-		return nil, status.Error(codes.Internal, err.Error())
+	var row store.FileRow
+	if req.GetAccess() != nil {
+		row, err = s.fileAccessibleBySelector(ctx, fileID, profileID, req.GetAccess(), filev1.FileReadSurface_FILE_READ_SURFACE_URL)
+	} else {
+		row, err = s.fileAccessibleByProfile(ctx, fileID, profileID)
 	}
-	if err := s.ensureFileAccess(ctx, row, profileID); err != nil {
+	if err != nil {
 		return nil, err
 	}
 	if row.Status != "ready" {
@@ -387,7 +392,12 @@ func (s *FileGRPC) GetFileMetadata(ctx context.Context, req *filev1.GetFileMetad
 	if err != nil {
 		return nil, err
 	}
-	row, err := s.fileAccessibleByProfile(ctx, fileID, profileID)
+	var row store.FileRow
+	if req.GetAccess() != nil {
+		row, err = s.fileAccessibleBySelector(ctx, fileID, profileID, req.GetAccess(), filev1.FileReadSurface_FILE_READ_SURFACE_METADATA)
+	} else {
+		row, err = s.fileAccessibleByProfile(ctx, fileID, profileID)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -399,6 +409,29 @@ func (s *FileGRPC) GetBulkMetadata(ctx context.Context, req *filev1.GetBulkMetad
 	if err != nil {
 		return nil, err
 	}
+	if len(req.GetItems()) > 0 {
+		items, prepareErr := prepareBulkMetadataItems(req.GetItems())
+		if prepareErr != nil {
+			return nil, prepareErr
+		}
+		tx, beginErr := s.files.Pool.Begin(ctx)
+		if beginErr != nil {
+			return nil, status.Error(codes.Internal, beginErr.Error())
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+		out := make(map[string]*filev1.FileMetadata, len(items))
+		for _, item := range items {
+			row, accessErr := s.fileAccessibleBySelectorTx(ctx, tx, item.fileID, profileID, item.selector, filev1.FileReadSurface_FILE_READ_SURFACE_METADATA)
+			if accessErr != nil {
+				return nil, accessErr
+			}
+			out[item.fileID.String()] = fileRowToProto(row)
+		}
+		if commitErr := tx.Commit(ctx); commitErr != nil {
+			return nil, status.Error(codes.Internal, commitErr.Error())
+		}
+		return &filev1.GetBulkMetadataResponse{BulkFileMetadata: &filev1.BulkFileMetadata{ByFileId: out}}, nil
+	}
 	legacyFileIDs := req.GetFileIds() //nolint:staticcheck // R23 compatibility: accept deprecated file_ids until callers migrate to access-scoped items.
 	ids := make([]uuid.UUID, 0, len(legacyFileIDs))
 	for _, raw := range legacyFileIDs {
@@ -407,6 +440,27 @@ func (s *FileGRPC) GetBulkMetadata(ctx context.Context, req *filev1.GetBulkMetad
 			return nil, err
 		}
 		ids = append(ids, id)
+	}
+	if s.referenceAuthorityActive {
+		lockedIDs := append([]uuid.UUID(nil), ids...)
+		sort.Slice(lockedIDs, func(i, j int) bool { return lockedIDs[i].String() < lockedIDs[j].String() })
+		tx, beginErr := s.files.Pool.Begin(ctx)
+		if beginErr != nil {
+			return nil, status.Error(codes.Internal, beginErr.Error())
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+		out := make(map[string]*filev1.FileMetadata, len(lockedIDs))
+		for _, id := range lockedIDs {
+			row, accessErr := s.fileAccessibleByLegacyTx(ctx, tx, id, profileID)
+			if accessErr != nil {
+				return nil, accessErr
+			}
+			out[id.String()] = fileRowToProto(row)
+		}
+		if commitErr := tx.Commit(ctx); commitErr != nil {
+			return nil, status.Error(codes.Internal, commitErr.Error())
+		}
+		return &filev1.GetBulkMetadataResponse{BulkFileMetadata: &filev1.BulkFileMetadata{ByFileId: out}}, nil
 	}
 	rows, err := s.files.GetFilesByIDs(ctx, ids)
 	if err != nil {
@@ -423,6 +477,55 @@ func (s *FileGRPC) GetBulkMetadata(ctx context.Context, req *filev1.GetBulkMetad
 	return &filev1.GetBulkMetadataResponse{
 		BulkFileMetadata: &filev1.BulkFileMetadata{ByFileId: out},
 	}, nil
+}
+
+type preparedBulkMetadataItem struct {
+	fileID        uuid.UUID
+	selector      *filev1.FileAccessSelector
+	selectorKey   []byte
+	originalIndex int
+}
+
+func prepareBulkMetadataItems(items []*filev1.FileAccessItem) ([]preparedBulkMetadataItem, error) {
+	prepared := make([]preparedBulkMetadataItem, 0, len(items))
+	for index, item := range items {
+		fileID, err := parseUUID("items.file_id", item.GetFileId())
+		if err != nil {
+			return nil, err
+		}
+		selector := item.GetAccess()
+		if selector == nil {
+			return nil, status.Error(codes.PermissionDenied, "exact access selector required")
+		}
+		switch selected := selector.GetSelector().(type) {
+		case *filev1.FileAccessSelector_Reference:
+			ids, parseErr := parseReference(selected.Reference)
+			if parseErr != nil || ids.file != fileID {
+				return nil, status.Error(codes.PermissionDenied, "reference does not match file")
+			}
+		case *filev1.FileAccessSelector_CapabilityId:
+			if _, parseErr := parseUUID("capability_id", selected.CapabilityId); parseErr != nil {
+				return nil, status.Error(codes.PermissionDenied, "invalid capability")
+			}
+		default:
+			return nil, status.Error(codes.PermissionDenied, "exact access selector required")
+		}
+		selectorKey, marshalErr := proto.MarshalOptions{Deterministic: true}.Marshal(selector)
+		if marshalErr != nil {
+			return nil, status.Error(codes.InvalidArgument, "invalid access selector")
+		}
+		prepared = append(prepared, preparedBulkMetadataItem{fileID: fileID, selector: selector, selectorKey: selectorKey, originalIndex: index})
+	}
+	sort.Slice(prepared, func(i, j int) bool {
+		if comparison := bytes.Compare(prepared[i].fileID[:], prepared[j].fileID[:]); comparison != 0 {
+			return comparison < 0
+		}
+		if comparison := bytes.Compare(prepared[i].selectorKey, prepared[j].selectorKey); comparison != 0 {
+			return comparison < 0
+		}
+		return prepared[i].originalIndex < prepared[j].originalIndex
+	})
+	return prepared, nil
 }
 
 func (s *FileGRPC) DeleteFile(ctx context.Context, req *filev1.DeleteFileRequest) (*filev1.DeleteFileResponse, error) {
@@ -610,6 +713,21 @@ func (s *FileGRPC) fileOwnedByUploader(ctx context.Context, fileID, profileID uu
 }
 
 func (s *FileGRPC) fileAccessibleByProfile(ctx context.Context, fileID, profileID uuid.UUID) (store.FileRow, error) {
+	if s.referenceAuthorityActive {
+		tx, err := s.files.Pool.Begin(ctx)
+		if err != nil {
+			return store.FileRow{}, status.Error(codes.Internal, err.Error())
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+		row, err := s.fileAccessibleByLegacyTx(ctx, tx, fileID, profileID)
+		if err != nil {
+			return store.FileRow{}, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return store.FileRow{}, status.Error(codes.Internal, err.Error())
+		}
+		return row, nil
+	}
 	row, err := s.files.GetFileByID(ctx, fileID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -619,6 +737,52 @@ func (s *FileGRPC) fileAccessibleByProfile(ctx context.Context, fileID, profileI
 	}
 	if err := s.ensureFileAccess(ctx, row, profileID); err != nil {
 		return store.FileRow{}, err
+	}
+	return row, nil
+}
+
+func (s *FileGRPC) fileAccessibleByLegacyTx(ctx context.Context, tx pgx.Tx, fileID, profileID uuid.UUID) (store.FileRow, error) {
+	rows, err := tx.Query(ctx, `SELECT owner_type,owner_id,subresource_id,scope_space_id FROM file_references WHERE file_id=$1 AND released_at IS NULL ORDER BY owner_type,owner_id,subresource_id NULLS FIRST,scope_space_id NULLS FIRST LIMIT 2`, fileID)
+	if err != nil {
+		return store.FileRow{}, status.Error(codes.Internal, err.Error())
+	}
+	var refs []*filev1.FileReferenceKey
+	for rows.Next() {
+		var ownerType int32
+		var owner uuid.UUID
+		var subresource, scope *uuid.UUID
+		if err := rows.Scan(&ownerType, &owner, &subresource, &scope); err != nil {
+			rows.Close()
+			return store.FileRow{}, status.Error(codes.Internal, err.Error())
+		}
+		ref := &filev1.FileReferenceKey{FileId: fileID.String(), OwnerType: filev1.FileReferenceOwnerType(ownerType), OwnerId: owner.String()}
+		if subresource != nil {
+			value := subresource.String()
+			ref.SubresourceId = &value
+		}
+		if scope != nil {
+			value := scope.String()
+			ref.ScopeSpaceId = &value
+		}
+		refs = append(refs, ref)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return store.FileRow{}, status.Error(codes.Internal, err.Error())
+	}
+	if len(refs) != 1 {
+		return store.FileRow{}, status.Error(codes.PermissionDenied, "legacy access requires exactly one live reference")
+	}
+	row, err := s.authorizeExactReferenceTx(ctx, tx, fileID, profileID, refs[0], false)
+	if err != nil {
+		return store.FileRow{}, err
+	}
+	var lockedCardinality int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM file_references WHERE file_id=$1 AND released_at IS NULL`, fileID).Scan(&lockedCardinality); err != nil {
+		return store.FileRow{}, status.Error(codes.Internal, err.Error())
+	}
+	if lockedCardinality != 1 {
+		return store.FileRow{}, status.Error(codes.PermissionDenied, "legacy access requires exactly one live reference after locking")
 	}
 	return row, nil
 }
