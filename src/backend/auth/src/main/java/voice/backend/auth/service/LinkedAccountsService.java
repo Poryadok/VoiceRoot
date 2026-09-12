@@ -178,16 +178,7 @@ public class LinkedAccountsService {
 
   private void unlinkPlatform(UUID accountId, UUID profileId, String platform) {
     linkedIdentities.revoke(accountId, platform);
-    // Clear badge only when no other active verifying platform remains.
-    boolean stillVerified =
-        linkedIdentities.listActiveByAccount(accountId).stream()
-            .anyMatch(
-                row ->
-                    PLATFORM_TWITCH.equals(row.platform())
-                        || PLATFORM_YOUTUBE.equals(row.platform()));
-    if (!stillVerified) {
-      verificationSync.clearVerification(profileId);
-    }
+    reconcileProfileVerification(accountId, profileId);
   }
 
   /** Re-check partner status for all active links; clear badge when lost. */
@@ -209,15 +200,36 @@ public class LinkedAccountsService {
           continue;
         }
       } catch (AuthException ex) {
-        stillEligible = false;
+        // A provider outage is not proof that a creator lost Partner/YPP.
+        // Keep the last verified state and retry on the next scheduled pass.
+        continue;
       }
       if (!stillEligible) {
         linkedIdentities.revoke(row.accountId(), row.platform());
-        verificationSync.clearVerification(row.profileId());
+        reconcileProfileVerification(row.accountId(), row.profileId());
         cleared++;
       }
     }
     return cleared;
+  }
+
+  /**
+   * Reconciles exactly one profile after an unlink or an authoritative provider loss.
+   * Linked identities are account-scoped, but their badge belongs to the profile recorded on the
+   * link. A different active profile must never keep or lose this profile's badge.
+   */
+  private void reconcileProfileVerification(UUID accountId, UUID profileId) {
+    for (LinkedIdentity row : linkedIdentities.listActiveByAccount(accountId)) {
+      if (profileId.equals(row.profileId()) && isPersonalVerificationPlatform(row.platform())) {
+        verificationSync.setPersonalVerification(profileId, row.platform());
+        return;
+      }
+    }
+    verificationSync.clearVerification(profileId);
+  }
+
+  private static boolean isPersonalVerificationPlatform(String platform) {
+    return PLATFORM_TWITCH.equals(platform) || PLATFORM_YOUTUBE.equals(platform);
   }
 
   private void persistLink(

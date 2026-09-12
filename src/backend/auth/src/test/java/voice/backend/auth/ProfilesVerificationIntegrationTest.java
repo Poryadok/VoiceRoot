@@ -352,6 +352,92 @@ class ProfilesVerificationIntegrationTest {
   }
 
   @Test
+  void verificationStatusRefreshKeepsBadgeWhenProviderIsUnavailable() throws Exception {
+    AtomicInteger helixCalls = new AtomicInteger();
+    HttpServer mockTwitch = HttpServer.create(new InetSocketAddress(0), 0);
+    mockTwitch.createContext(
+        "/helix/users",
+        exchange -> {
+          int call = helixCalls.incrementAndGet();
+          if (call > 1) {
+            exchange.sendResponseHeaders(503, -1);
+            exchange.close();
+            return;
+          }
+          byte[] body =
+              "{\"data\":[{\"id\":\"tw-unavailable\",\"login\":\"partner\",\"broadcaster_type\":\"partner\"}]}"
+                  .getBytes(StandardCharsets.UTF_8);
+          exchange.getResponseHeaders().add("Content-Type", "application/json");
+          exchange.sendResponseHeaders(200, body.length);
+          try (OutputStream os = exchange.getResponseBody()) {
+            os.write(body);
+          }
+        });
+    mockTwitch.start();
+    linkedAccountsService.setTwitchEndpointsForTests(
+        "http://127.0.0.1:" + mockTwitch.getAddress().getPort(),
+        "http://127.0.0.1:" + mockTwitch.getAddress().getPort() + "/oauth2/token");
+    try {
+      JsonNode registered = registerSession("twitch-unavailable@example.com");
+      String accountId = registered.get("account_id").asText();
+      String profileId = registered.get("profile_id").asText();
+      String access = registered.get("access_token").asText();
+      mockMvc
+          .perform(
+              post("/api/v1/auth/linked-accounts/twitch/callback")
+                  .header("Authorization", "Bearer " + access)
+                  .contentType("application/json")
+                  .content("{\"code\":\"mock-code\",\"redirect_uri\":\"http://127.0.0.1/cb\"}"))
+          .andExpect(status().isOk());
+
+      verificationStatusRefresh.refresh();
+
+      assertThat(userGrpc.verificationType(profileId)).isEqualTo("personal");
+      Integer active =
+          jdbc.queryForObject(
+              """
+              SELECT COUNT(*) FROM linked_identities
+              WHERE account_id = :accountId::uuid AND platform = 'twitch' AND status = 'active'
+              """,
+              Map.of("accountId", accountId),
+              Integer.class);
+      assertThat(active).isEqualTo(1);
+    } finally {
+      mockTwitch.stop(0);
+    }
+  }
+
+  @Test
+  void unlinkRetainsAnotherVerifyingProviderOnTheSameProfile() throws Exception {
+    JsonNode registered = registerSession("unlink-two-providers@example.com");
+    String profileId = registered.get("profile_id").asText();
+    String accountId = registered.get("account_id").asText();
+    String access = registered.get("access_token").asText();
+    userGrpc.seedVerification(profileId, "personal", "twitch");
+    jdbc.update(
+        """
+        INSERT INTO linked_identities (account_id, profile_id, platform, external_id, status)
+        VALUES (:accountId::uuid, :profileId::uuid, 'twitch', 'tw-keep', 'active'),
+               (:accountId::uuid, :profileId::uuid, 'youtube', 'yt-keep', 'active')
+        """,
+        Map.of("accountId", accountId, "profileId", profileId));
+
+    mockMvc
+        .perform(
+            post("/api/v1/auth/linked-accounts/twitch/unlink")
+                .header("Authorization", "Bearer " + access))
+        .andExpect(status().isNoContent());
+
+    assertThat(userGrpc.verificationType(profileId)).isEqualTo("personal");
+    assertThat(userGrpc.setVerificationRequests())
+        .anySatisfy(
+            request -> {
+              assertThat(request.getProfileId()).isEqualTo(profileId);
+              assertThat(request.getBadge()).isEqualTo("youtube");
+            });
+  }
+
+  @Test
   void unlinkClearsVerificationViaUserService() throws Exception {
     JsonNode registered = registerSession("unlink@example.com");
     String profileId = registered.get("profile_id").asText();
