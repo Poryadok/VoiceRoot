@@ -70,8 +70,14 @@ class AuthPrincipalServerLifecycleTest {
           "lifecycle-request", AuthPrincipalServerInterceptor.requestHash(REQUEST));
       assertStatus(privateChannel, LOGIN, Status.Code.UNIMPLEMENTED);
       assertEquals(1, loginCalls.get());
+      int legacyPort = server.legacyPort();
+      int principalPort = server.principalPort();
       server.stop();
       assertFalse(server.isRunning());
+      // shutdownNow cancels calls on an established transport. Verify listener shutdown through
+      // new connection attempts, whose contract is UNAVAILABLE rather than transport cancellation.
+      close(legacy); close(privateChannel);
+      legacy = channel(legacyPort); privateChannel = channel(principalPort);
       assertStatus(legacy, LOGIN, Status.Code.UNAVAILABLE);
       assertStatus(privateChannel, ISSUE, Status.Code.UNAVAILABLE);
       assertStatus(privateChannel, LOOKUP, Status.Code.UNAVAILABLE);
