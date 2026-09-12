@@ -89,7 +89,7 @@ quiet_hours
 | **`new_message`** | push + in-app | by `chat_id` — accepted DM after requests bucket cleared |
 | **`message_request`** | push + in-app | by **sender `profile_id`** (not `chat_id` until accept); stranger label — § ниже |
 | `mention` | push + in-app | by `chat_id`; may bypass mute / quiet hours |
-| `reply` | push + in-app | by `chat_id` |
+| `reply` | push groups by `chat_id` | Realtime in-app fan-out still maps thread replies to `new_message` |
 | `reaction` | in-app only | — |
 | `friend_request` | push + in-app | — |
 | `match_found` | push + in-app | presence check **skipped** (spec) |

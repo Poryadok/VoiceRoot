@@ -47,7 +47,7 @@ notification center не создаются.
 
 - Email — **только для авторизации** (вход, подтверждение), не для событий
 - Собственный push-сервер не нужен
-- **Группировка**: `new_message`, `mention` и `reply` используют один collapse id на чат с превью последнего сообщения и счётчиком ("Вася и ещё 4 сообщения"); `message_request` до accept группируется по sender profile; обновлять существующий push, не плодить новые
+- **Группировка**: `new_message`, `mention` и `reply` используют один collapse id на чат с превью последнего сообщения и счётчиком ("Вася и ещё 4 сообщения"); `message_request` до accept группируется по sender profile; обновлять существующий push, не плодить новые. Push grouping для `reply` есть; Realtime in-app fan-out thread reply пока передаёт как `new_message`.
 - **Синхронизация прочитанного**: событие `mark_read(chat_id, message_id)` через WebSocket рассылается на все подключённые устройства пользователя
 
 ## Presence routing (online → in-app only)
