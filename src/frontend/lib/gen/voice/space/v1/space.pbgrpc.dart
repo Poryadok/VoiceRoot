@@ -309,6 +309,14 @@ class SpaceServiceClient extends $grpc.Client {
     return $createUnaryCall(_$getAuditLog, request, options: options);
   }
 
+  /// @voice.security=protected;callers=service:role,service:chat
+  $grpc.ResponseFuture<$0.AppendAuditEventResponse> appendAuditEvent(
+    $0.AppendAuditEventRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$appendAuditEvent, request, options: options);
+  }
+
   /// S2S: privacy audience "space members" — shared membership between two profiles.
   $grpc.ResponseFuture<$0.AreCoMembersResponse> areCoMembers(
     $0.AreCoMembersRequest request, {
@@ -555,6 +563,11 @@ class SpaceServiceClient extends $grpc.Client {
           '/voice.space.v1.SpaceService/GetAuditLog',
           ($0.GetAuditLogRequest value) => value.writeToBuffer(),
           $0.GetAuditLogResponse.fromBuffer);
+  static final _$appendAuditEvent = $grpc.ClientMethod<
+          $0.AppendAuditEventRequest, $0.AppendAuditEventResponse>(
+      '/voice.space.v1.SpaceService/AppendAuditEvent',
+      ($0.AppendAuditEventRequest value) => value.writeToBuffer(),
+      $0.AppendAuditEventResponse.fromBuffer);
   static final _$areCoMembers =
       $grpc.ClientMethod<$0.AreCoMembersRequest, $0.AreCoMembersResponse>(
           '/voice.space.v1.SpaceService/AreCoMembers',
@@ -927,6 +940,15 @@ abstract class SpaceServiceBase extends $grpc.Service {
             ($core.List<$core.int> value) =>
                 $0.GetAuditLogRequest.fromBuffer(value),
             ($0.GetAuditLogResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.AppendAuditEventRequest,
+            $0.AppendAuditEventResponse>(
+        'AppendAuditEvent',
+        appendAuditEvent_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.AppendAuditEventRequest.fromBuffer(value),
+        ($0.AppendAuditEventResponse value) => value.writeToBuffer()));
     $addMethod(
         $grpc.ServiceMethod<$0.AreCoMembersRequest, $0.AreCoMembersResponse>(
             'AreCoMembers',
@@ -1310,6 +1332,15 @@ abstract class SpaceServiceBase extends $grpc.Service {
 
   $async.Future<$0.GetAuditLogResponse> getAuditLog(
       $grpc.ServiceCall call, $0.GetAuditLogRequest request);
+
+  $async.Future<$0.AppendAuditEventResponse> appendAuditEvent_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.AppendAuditEventRequest> $request) async {
+    return appendAuditEvent($call, await $request);
+  }
+
+  $async.Future<$0.AppendAuditEventResponse> appendAuditEvent(
+      $grpc.ServiceCall call, $0.AppendAuditEventRequest request);
 
   $async.Future<$0.AreCoMembersResponse> areCoMembers_Pre(
       $grpc.ServiceCall $call,

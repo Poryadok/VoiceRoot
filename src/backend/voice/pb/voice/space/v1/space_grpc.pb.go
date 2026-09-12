@@ -58,6 +58,7 @@ const (
 	SpaceService_ListTemplates_FullMethodName                     = "/voice.space.v1.SpaceService/ListTemplates"
 	SpaceService_CreateFromTemplate_FullMethodName                = "/voice.space.v1.SpaceService/CreateFromTemplate"
 	SpaceService_GetAuditLog_FullMethodName                       = "/voice.space.v1.SpaceService/GetAuditLog"
+	SpaceService_AppendAuditEvent_FullMethodName                  = "/voice.space.v1.SpaceService/AppendAuditEvent"
 	SpaceService_AreCoMembers_FullMethodName                      = "/voice.space.v1.SpaceService/AreCoMembers"
 	SpaceService_ResolveVoiceRoomAccess_FullMethodName            = "/voice.space.v1.SpaceService/ResolveVoiceRoomAccess"
 	SpaceService_SyncSpaceProSubscription_FullMethodName          = "/voice.space.v1.SpaceService/SyncSpaceProSubscription"
@@ -113,6 +114,8 @@ type SpaceServiceClient interface {
 	ListTemplates(ctx context.Context, in *ListTemplatesRequest, opts ...grpc.CallOption) (*ListTemplatesResponse, error)
 	CreateFromTemplate(ctx context.Context, in *CreateFromTemplateRequest, opts ...grpc.CallOption) (*CreateFromTemplateResponse, error)
 	GetAuditLog(ctx context.Context, in *GetAuditLogRequest, opts ...grpc.CallOption) (*GetAuditLogResponse, error)
+	// @voice.security=protected;callers=service:role,service:chat
+	AppendAuditEvent(ctx context.Context, in *AppendAuditEventRequest, opts ...grpc.CallOption) (*AppendAuditEventResponse, error)
 	// S2S: privacy audience "space members" — shared membership between two profiles.
 	AreCoMembers(ctx context.Context, in *AreCoMembersRequest, opts ...grpc.CallOption) (*AreCoMembersResponse, error)
 	// S2S: canonical owner and exact membership evidence for Voice authorization.
@@ -526,6 +529,16 @@ func (c *spaceServiceClient) GetAuditLog(ctx context.Context, in *GetAuditLogReq
 	return out, nil
 }
 
+func (c *spaceServiceClient) AppendAuditEvent(ctx context.Context, in *AppendAuditEventRequest, opts ...grpc.CallOption) (*AppendAuditEventResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AppendAuditEventResponse)
+	err := c.cc.Invoke(ctx, SpaceService_AppendAuditEvent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *spaceServiceClient) AreCoMembers(ctx context.Context, in *AreCoMembersRequest, opts ...grpc.CallOption) (*AreCoMembersResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AreCoMembersResponse)
@@ -624,6 +637,8 @@ type SpaceServiceServer interface {
 	ListTemplates(context.Context, *ListTemplatesRequest) (*ListTemplatesResponse, error)
 	CreateFromTemplate(context.Context, *CreateFromTemplateRequest) (*CreateFromTemplateResponse, error)
 	GetAuditLog(context.Context, *GetAuditLogRequest) (*GetAuditLogResponse, error)
+	// @voice.security=protected;callers=service:role,service:chat
+	AppendAuditEvent(context.Context, *AppendAuditEventRequest) (*AppendAuditEventResponse, error)
 	// S2S: privacy audience "space members" — shared membership between two profiles.
 	AreCoMembers(context.Context, *AreCoMembersRequest) (*AreCoMembersResponse, error)
 	// S2S: canonical owner and exact membership evidence for Voice authorization.
@@ -763,6 +778,9 @@ func (UnimplementedSpaceServiceServer) CreateFromTemplate(context.Context, *Crea
 }
 func (UnimplementedSpaceServiceServer) GetAuditLog(context.Context, *GetAuditLogRequest) (*GetAuditLogResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetAuditLog not implemented")
+}
+func (UnimplementedSpaceServiceServer) AppendAuditEvent(context.Context, *AppendAuditEventRequest) (*AppendAuditEventResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AppendAuditEvent not implemented")
 }
 func (UnimplementedSpaceServiceServer) AreCoMembers(context.Context, *AreCoMembersRequest) (*AreCoMembersResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AreCoMembers not implemented")
@@ -1502,6 +1520,24 @@ func _SpaceService_GetAuditLog_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SpaceService_AppendAuditEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AppendAuditEventRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).AppendAuditEvent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_AppendAuditEvent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).AppendAuditEvent(ctx, req.(*AppendAuditEventRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _SpaceService_AreCoMembers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AreCoMembersRequest)
 	if err := dec(in); err != nil {
@@ -1754,6 +1790,10 @@ var SpaceService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetAuditLog",
 			Handler:    _SpaceService_GetAuditLog_Handler,
+		},
+		{
+			MethodName: "AppendAuditEvent",
+			Handler:    _SpaceService_AppendAuditEvent_Handler,
 		},
 		{
 			MethodName: "AreCoMembers",
