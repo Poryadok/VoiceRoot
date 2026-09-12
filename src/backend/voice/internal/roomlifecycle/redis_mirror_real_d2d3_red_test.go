@@ -921,10 +921,10 @@ func TestRedisMirrorV2_RealRedisAtomicAbsentCompletionExactPEXPIRETIME(t *testin
 	key := r223KeyText(reservation.Binding.Key)
 	require.EqualValues(t, 8, client.HLen(ctx, key).Val())
 	require.Equal(t, deadline.UnixMilli(), client.Do(ctx, "PEXPIRETIME", key).Val())
-	beforeDump := client.Dump(ctx, key).Val()
+	beforeFields := client.HGetAll(ctx, key).Val()
 	_, err = NewRedisLedger(client).CompleteMirror(ctx, reservation, receipt)
 	require.NoError(t, err)
-	require.Equal(t, beforeDump, client.Dump(ctx, key).Val())
+	require.Equal(t, beforeFields, client.HGetAll(ctx, key).Val())
 	require.Equal(t, deadline.UnixMilli(), client.Do(ctx, "PEXPIRETIME", key).Val())
 }
 

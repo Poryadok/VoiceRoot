@@ -209,8 +209,6 @@ if count == 0 then
   if now >= tonumber(ARGV[6]) then return {'redis_expired'} end
   redis.call('HSET', KEYS[1], 'schema_version', '2', 'state', 'completed', 'method', ARGV[1], 'fingerprint', ARGV[2], 'owner_token', ARGV[3], 'receipt_bytes', ARGV[4], 'receipt_hash', ARGV[5], 'replay_until', ARGV[6])
   redis.call('PEXPIREAT', KEYS[1], ARGV[6])
-  -- Finish any hash-table rehash before returning so a read-only replay leaves DUMP byte-identical.
-  redis.call('HGETALL', KEYS[1])
   return {'completed', ARGV[1], ARGV[2], ARGV[3], ARGV[4], ARGV[5], ARGV[6]}
 end
 local values = redis.call('HMGET', KEYS[1], 'schema_version', 'state', 'method', 'fingerprint', 'owner_token', 'receipt_bytes', 'receipt_hash', 'replay_until')
