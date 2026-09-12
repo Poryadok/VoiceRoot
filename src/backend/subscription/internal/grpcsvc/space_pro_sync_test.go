@@ -51,6 +51,7 @@ func TestSpaceProWebhook_SyncsActiveEntitlementToSpace(t *testing.T) {
 	st := &store.SubscriptionStore{Pool: pool}
 	sync := &captureSpaceSync{}
 	svc := NewSubscriptionGRPC(st)
+	svc.ProviderEventKeys = testProviderEventKeys{}
 	svc.SpaceEntitlements = sync
 
 	spaceID := uuid.New()
@@ -78,6 +79,7 @@ func TestSpaceProWebhook_CancelSyncsCancelledWhenPeriodEnded(t *testing.T) {
 	st := &store.SubscriptionStore{Pool: pool}
 	sync := &captureSpaceSync{}
 	svc := NewSubscriptionGRPC(st)
+	svc.ProviderEventKeys = testProviderEventKeys{}
 	svc.SpaceEntitlements = sync
 
 	spaceID := uuid.New()

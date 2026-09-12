@@ -182,7 +182,7 @@ func TestGetBillingHistory_emptyList(t *testing.T) {
 	require.NotNil(t, resp.GetBillingHistoryList())
 }
 
-func TestHandleCloudPaymentsWebhook_unimplemented(t *testing.T) {
+func TestHandleCloudPaymentsWebhook_requiresVerifier(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -193,7 +193,7 @@ func TestHandleCloudPaymentsWebhook_unimplemented(t *testing.T) {
 
 	_, err := client.HandleCloudPaymentsWebhook(ctx, &subscriptionv1.HandleCloudPaymentsWebhookRequest{})
 	require.Error(t, err)
-	require.Equal(t, codes.Unimplemented, status.Code(err))
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
 }
 
 func TestHandlePaddleWebhook_paymentFailedNotFound(t *testing.T) {

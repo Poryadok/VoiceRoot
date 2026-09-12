@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"net"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"testing"
 	"time"
@@ -81,7 +83,20 @@ func startSubscriptionPostgres(t *testing.T, ctx context.Context) *pgxpool.Pool 
 	pool := integrationtest.StartPostgres(t, ctx, "subscriptiondb", "")
 	_, err := pool.Exec(ctx, subscriptionSchemaSQL)
 	require.NoError(t, err)
+	_, current, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	migrationPath := filepath.Clean(filepath.Join(filepath.Dir(current), "..", "..", "..", "migrations", "subscription_db", "000003_space_lifecycle_provider_dedup.up.sql"))
+	migration, err := os.ReadFile(migrationPath)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(migration))
+	require.NoError(t, err)
 	return pool
+}
+
+type testProviderEventKeys struct{}
+
+func (testProviderEventKeys) CurrentProviderEventHMACKey(context.Context, string) (string, []byte, error) {
+	return "test-v1", []byte("subscription-test-provider-event-key"), nil
 }
 
 func startSubscriptionGRPCTestServer(t *testing.T, pool *pgxpool.Pool) (subscriptionv1.SubscriptionServiceClient, func()) {
@@ -90,7 +105,9 @@ func startSubscriptionGRPCTestServer(t *testing.T, pool *pgxpool.Pool) (subscrip
 	lis := bufconn.Listen(bufSize)
 	srv := grpc.NewServer()
 	st := &store.SubscriptionStore{Pool: pool}
-	subscriptionv1.RegisterSubscriptionServiceServer(srv, NewSubscriptionGRPC(st))
+	svc := NewSubscriptionGRPC(st)
+	svc.ProviderEventKeys = testProviderEventKeys{}
+	subscriptionv1.RegisterSubscriptionServiceServer(srv, svc)
 	go func() {
 		if err := srv.Serve(lis); err != nil {
 			t.Logf("grpc serve: %v", err)

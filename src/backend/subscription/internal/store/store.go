@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -184,6 +185,9 @@ func (s *SubscriptionStore) ActivateSpacePro(ctx context.Context, spaceID, purch
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := lockMutableSpaceLifecycleTx(ctx, tx, spaceID); err != nil {
+		return nil, err
+	}
 
 	if inserted, err := insertBillingEventTx(ctx, tx, nil, nil, "subscription.activated", "paddle", providerEventID, details); err != nil {
 		return nil, err
@@ -226,24 +230,92 @@ WHERE provider = 'paddle' AND provider_event_id = $2`, subID, providerEventID)
 }
 
 func (s *SubscriptionStore) GetSpaceSubscriptionBySpaceID(ctx context.Context, spaceID uuid.UUID) (*SpaceSubscriptionRow, error) {
-	row := s.Pool.QueryRow(ctx, `
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	allowed, err := lockReadableSpaceLifecycleTx(ctx, tx, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	if !allowed {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	}
+	result, err := scanSpaceSubscription(tx.QueryRow(ctx, `
 SELECT id, space_id, purchaser_account_id, plan, billing_period, status, provider, provider_subscription_id,
 	current_period_start, current_period_end, grace_period_end, created_at, updated_at
 FROM space_subscriptions
 WHERE space_id = $1
 ORDER BY created_at DESC
-LIMIT 1`, spaceID)
-	return scanSpaceSubscription(row)
+LIMIT 1`, spaceID))
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func (s *SubscriptionStore) HasActiveSpaceProForPurchaser(ctx context.Context, accountID uuid.UUID) (bool, error) {
-	var exists bool
-	err := s.Pool.QueryRow(ctx, `
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	rows, err := tx.Query(ctx, `
+SELECT DISTINCT space_id
+FROM space_subscriptions
+WHERE purchaser_account_id = $1 AND status IN ('active', 'grace_period')`, accountID)
+	if err != nil {
+		return false, err
+	}
+	var spaceIDs []uuid.UUID
+	for rows.Next() {
+		var spaceID uuid.UUID
+		if err := rows.Scan(&spaceID); err != nil {
+			rows.Close()
+			return false, err
+		}
+		spaceIDs = append(spaceIDs, spaceID)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return false, err
+	}
+	rows.Close()
+	sort.Slice(spaceIDs, func(i, j int) bool { return spaceIDs[i].String() < spaceIDs[j].String() })
+	for _, spaceID := range spaceIDs {
+		allowed, err := lockReadableSpaceLifecycleTx(ctx, tx, spaceID)
+		if err != nil {
+			return false, err
+		}
+		if !allowed {
+			continue
+		}
+		var exists bool
+		if err := tx.QueryRow(ctx, `
 SELECT EXISTS (
 	SELECT 1 FROM space_subscriptions
-	WHERE purchaser_account_id = $1 AND status IN ('active', 'grace_period')
-)`, accountID).Scan(&exists)
-	return exists, err
+	WHERE purchaser_account_id = $1 AND space_id = $2 AND status IN ('active', 'grace_period')
+)`, accountID, spaceID).Scan(&exists); err != nil {
+			return false, err
+		}
+		if exists {
+			if err := tx.Commit(ctx); err != nil {
+				return false, err
+			}
+			return true, nil
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return false, err
+	}
+	return false, nil
 }
 
 func (s *SubscriptionStore) EffectiveAccountTier(ctx context.Context, accountID uuid.UUID) (string, error) {
