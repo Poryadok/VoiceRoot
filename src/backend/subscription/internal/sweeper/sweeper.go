@@ -65,7 +65,7 @@ func (r *Runner) RunOnce(ctx context.Context) error {
 		return err
 	}
 	for _, item := range spaceEnded {
-		if _, err := r.Store.FinalizeSpaceProCancellation(ctx, item.ID); err != nil {
+		if _, err := r.Store.FinalizeSpaceProCancellation(ctx, item.SpaceID, item.ID); err != nil {
 			return err
 		}
 		if r.DomainEvents != nil {

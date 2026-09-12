@@ -16,18 +16,18 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	grpcsvc "voice/backend/subscription/internal/grpcsvc"
-	"voice/backend/subscription/internal/billing"
-	"voice/backend/subscription/internal/store"
-	"voice/backend/subscription/internal/subscriptionevents"
-	"voice/backend/subscription/internal/sweeper"
 	"voice/backend/pkg/analyticsevents"
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
 	"voice/backend/pkg/runtimeconfig"
+	"voice/backend/subscription/internal/billing"
+	grpcsvc "voice/backend/subscription/internal/grpcsvc"
+	"voice/backend/subscription/internal/principalruntime"
+	"voice/backend/subscription/internal/store"
+	"voice/backend/subscription/internal/subscriptionevents"
+	"voice/backend/subscription/internal/sweeper"
 
-	subscriptionv1 "voice.app/voice/subscription/v1"
 	spacev1 "voice.app/voice/space/v1"
 	userv1 "voice.app/voice/user/v1"
 )
@@ -45,10 +45,17 @@ func main() {
 		grpcAddr = v
 	}
 
-	var grpcSrv *grpc.Server
+	principalConfig, principalEnabled, err := principalruntime.LoadFromEnv()
+	if err != nil {
+		log.Fatalf("principal config: %v", err)
+	}
+	var grpcSrv, principalSrv *grpc.Server
 	runCtx, runCancel := context.WithCancel(context.Background())
 	defer runCancel()
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
+	if principalEnabled && dbURL == "" {
+		log.Fatal("principal listener requires DATABASE_URL")
+	}
 	if dbURL != "" {
 		if err := billing.ValidateWebhookSecretConfig(); err != nil {
 			log.Fatalf("billing webhook secret: %v", err)
@@ -104,8 +111,27 @@ func main() {
 			svc.SpaceEntitlements = spacev1.NewSpaceServiceClient(conn)
 			logger.Info("space entitlement sync client enabled", slog.String("addr", spaceAddr))
 		}
-		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger)...)
-		subscriptionv1.RegisterSubscriptionServiceServer(grpcSrv, svc)
+		var principalRuntime *principalruntime.Runtime
+		if principalEnabled {
+			principalRuntime, err = principalruntime.New(context.Background(), principalConfig)
+			if err != nil {
+				log.Fatalf("principal runtime: %v", err)
+			}
+			defer func() { _ = principalRuntime.Close() }()
+		}
+		grpcSrv, principalSrv = newSubscriptionGRPCServers(grpcmw.ServerOptions(logger), svc, principalRuntime)
+		if principalSrv != nil {
+			protectedListener, err := net.Listen("tcp", principalConfig.ListenAddr)
+			if err != nil {
+				log.Fatalf("principal grpc listen: %v", err)
+			}
+			go func() {
+				logger.Info("lifecycle gRPC TLS listening", slog.String("addr", principalConfig.ListenAddr))
+				if err := principalSrv.Serve(protectedListener); err != nil {
+					log.Fatalf("principal grpc serve: %v", err)
+				}
+			}()
+		}
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcAddr))
 			if err := grpcSrv.Serve(lis); err != nil {
@@ -140,7 +166,7 @@ func main() {
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.ShutdownTimeoutFromEnv())
 		defer cancel()
 		if grpcSrv != nil {
-			grpcSrv.GracefulStop()
+			shutdownSubscriptionServers(ctx, grpcSrv, principalSrv)
 		}
 		if err := server.Shutdown(ctx); err != nil {
 			log.Fatal(err)

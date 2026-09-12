@@ -3,6 +3,9 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/google/uuid"
@@ -65,6 +68,13 @@ func startStorePostgres(t *testing.T, ctx context.Context) *SubscriptionStore {
 	t.Helper()
 	pool := integrationtest.StartPostgres(t, ctx, "subscriptiondb", "")
 	_, err := pool.Exec(ctx, storeSchemaSQL)
+	require.NoError(t, err)
+	_, current, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	migrationPath := filepath.Clean(filepath.Join(filepath.Dir(current), "..", "..", "..", "migrations", "subscription_db", "000003_space_lifecycle_provider_dedup.up.sql"))
+	migration, err := os.ReadFile(migrationPath)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(migration))
 	require.NoError(t, err)
 	return &SubscriptionStore{Pool: pool}
 }

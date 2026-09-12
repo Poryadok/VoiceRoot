@@ -28,13 +28,34 @@ WHERE id = $1`, id)
 
 // HasActiveSpaceProForSpace reports whether the given space has active or grace_period Space Pro.
 func (s *SubscriptionStore) HasActiveSpaceProForSpace(ctx context.Context, spaceID uuid.UUID) (bool, error) {
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	allowed, err := lockReadableSpaceLifecycleTx(ctx, tx, spaceID)
+	if err != nil {
+		return false, err
+	}
+	if !allowed {
+		if err := tx.Commit(ctx); err != nil {
+			return false, err
+		}
+		return false, nil
+	}
 	var exists bool
-	err := s.Pool.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 SELECT EXISTS (
 	SELECT 1 FROM space_subscriptions
 	WHERE space_id = $1 AND status IN ('active', 'grace_period')
 )`, spaceID).Scan(&exists)
-	return exists, err
+	if err != nil {
+		return false, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return false, err
+	}
+	return exists, nil
 }
 
 // CancelSubscriptionByID marks a subscription for cancellation at period end.
@@ -268,6 +289,9 @@ func (s *SubscriptionStore) MarkSpaceProCancelled(ctx context.Context, spaceID u
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := lockMutableSpaceLifecycleTx(ctx, tx, spaceID); err != nil {
+		return nil, err
+	}
 
 	row, err := scanSpaceSubscription(tx.QueryRow(ctx, `
 SELECT id, space_id, purchaser_account_id, plan, billing_period, status, provider, provider_subscription_id,
@@ -306,22 +330,47 @@ WHERE id = $1`, row.ID, newStatus)
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
-	return s.GetSpaceSubscriptionBySpaceID(ctx, spaceID)
+	row.Status = newStatus
+	row.UpdatedAt = now
+	return row, nil
 }
 
 // FinalizeSpaceProCancellation sets status cancelled for a space subscription.
-func (s *SubscriptionStore) FinalizeSpaceProCancellation(ctx context.Context, spaceSubID uuid.UUID) (*SpaceSubscriptionRow, error) {
-	_, err := s.Pool.Exec(ctx, `
-UPDATE space_subscriptions
-SET status = 'cancelled', grace_period_end = NULL, updated_at = now()
-WHERE id = $1`, spaceSubID)
+func (s *SubscriptionStore) FinalizeSpaceProCancellation(ctx context.Context, spaceID, spaceSubID uuid.UUID) (*SpaceSubscriptionRow, error) {
+	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	row := s.Pool.QueryRow(ctx, `
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	if err := lockMutableSpaceLifecycleTx(ctx, tx, spaceID); err != nil {
+		return nil, err
+	}
+	row, err := scanSpaceSubscription(tx.QueryRow(ctx, `
 SELECT id, space_id, purchaser_account_id, plan, billing_period, status, provider, provider_subscription_id,
 	current_period_start, current_period_end, grace_period_end, created_at, updated_at
 FROM space_subscriptions
-WHERE id = $1`, spaceSubID)
-	return scanSpaceSubscription(row)
+WHERE id = $1 AND space_id = $2
+FOR UPDATE`, spaceSubID, spaceID))
+	if err != nil {
+		return nil, err
+	}
+	if row == nil {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	}
+	_, err = tx.Exec(ctx, `
+UPDATE space_subscriptions
+SET status = 'cancelled', grace_period_end = NULL, updated_at = now()
+WHERE id = $1 AND space_id = $2`, spaceSubID, spaceID)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	row.Status = "cancelled"
+	row.GracePeriodEnd = nil
+	return row, nil
 }
