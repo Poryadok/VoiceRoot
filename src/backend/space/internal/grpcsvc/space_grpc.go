@@ -31,6 +31,7 @@ type SpaceGRPC struct {
 	SpaceCoMembership       InviteSpaceCoMembershipChecker
 	Blocks                  JoinAccountBlockChecker
 	MutationLocker          SpaceMutationLocker
+	AuditCursorKey          []byte // test override; production reads the database-owned key
 
 	// V1 is a test-only foundation until the durable v2 journal/freeze protocol
 	// lands. This private false-default switch has no production setter or env.

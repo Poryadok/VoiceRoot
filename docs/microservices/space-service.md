@@ -35,7 +35,7 @@ service SpaceService {
   rpc CreateSpace(CreateSpaceRequest) returns (Space);
   rpc UpdateSpace(UpdateSpaceRequest) returns (Space);
   rpc UpdateSpaceMmConfig(UpdateSpaceMmConfigRequest) returns (Space); // ✓ shipped
-  rpc DeleteSpace(DeleteSpaceRequest) returns (Empty);               // current hard-delete handler; must become schedule-delete
+  rpc DeleteSpace(DeleteSpaceRequest) returns (Empty);               // obsolete hard-delete handler is DB-blocked; BE-245 must replace it
   rpc RestoreSpace(RestoreSpaceRequest) returns (Space);             // target: owner restore within 7 days
   rpc GetSpace(GetSpaceRequest) returns (Space);
   rpc ListMySpaces(ListMySpacesRequest) returns (SpaceList);
@@ -97,7 +97,7 @@ service SpaceService {
 |-----|-------|---------|-------|
 | CreateSpace, UpdateSpace, GetSpace, ListMySpaces | ✓ | ✓ | |
 | UpdateSpaceMmConfig | ✓ | ✓ | MM config on space |
-| DeleteSpace | ✓ | ✓ | Current owner-only hard delete is obsolete; target schedules 7-day hidden/frozen recovery window |
+| DeleteSpace | ✓ | Disabled | Obsolete owner-only hard delete is blocked at the DB boundary; BE-245 must schedule the 7-day hidden/frozen recovery window and freeze the public status mapping |
 | RestoreSpace | ✗ | ✗ | Target owner-only restore during recovery window |
 | SearchPublicSpaces | ✓ | ✗ | Catalog search backlog |
 | Create/Update/Delete VoiceRoom | ✓ | ✓ | |
@@ -113,7 +113,7 @@ service SpaceService {
 | TransferOwnership | ✓ | Disabled | Production still denies before dependencies. Auth proof consume/receipt lookup, Role v2, and the Space protocol-2 journal through terminal evidence, ordinary freeze and the ready-row scan are shipped foundations. Network recovery/orchestration, capability activation, public operation idempotency and the Gateway/Flutter vertical remain open. See § Ownership lifecycle principal transport. |
 | AddBotMember, RemoveBotMember | ✓ | ✓ | |
 | ListTemplates, CreateFromTemplate | ✓ | ✗ | |
-| GetAuditLog | ✓ | ✓ | `created_at DESC, id DESC`; opaque timestamp+UUID keyset cursor; default 50/max 100; exact `SPACE_VIEW_AUDIT_LOG` check, owner-only fallback only when Role Service is unwired. Filters and REST/Flutter surfaces remain backlog |
+| GetAuditLog | ✓ | ✓ | `created_at DESC, id DESC`; 15-minute HMAC-signed snapshot cursor; default 50/max 100; exact `SPACE_VIEW_AUDIT_LOG` check, owner-only fallback only when Role Service is unwired. Filters and REST/Flutter surfaces remain backlog |
 | AreCoMembers | ✓ | ✓ | S2S co-membership check |
 | SyncSpaceProSubscription | ✓ | ✓ | Subscription sync |
 
@@ -140,7 +140,9 @@ Role Service fails closed. While Role is intentionally unwired, the shared
 the A2 target does not retain this fallback after signed Role integration is
 required.
 
-## Phase-0 Space audit ledger (target; not implemented)
+<a id="phase-0-space-audit-ledger-target-not-implemented"></a>
+
+## Phase-0 Space audit ledger (target; bounded core implemented)
 
 Space owns an immutable audit registry for every administrative mutation, including
 invite lifecycle, membership/moderation, role and owner transfer, tree/room changes
@@ -155,7 +157,57 @@ tombstone, which retains until `purged_at + 365 days`.
 `GetAuditLog` adds action/actor/time filters and uses an HMAC-signed cursor bound to
 `space_id` and the full filter set. A changed filter/cursor, invalid signature or
 expired cursor is `INVALID_ARGUMENT`; no cursor may be replayed against another
-Space or disclosure scope. Existing current RPC/storage do not yet meet this target.
+Space or disclosure scope. The full external target remains incomplete as
+described below.
+
+BE-116 ships the bounded Space-owned ledger core in migration
+`000015_audit_ledger`: `audit_log` is append-only outside the exact capability-bound
+legacy ownership compensation or delivered-row 365-day retention predicates;
+canonical JSONB `details` is capped at
+4096 bytes; every inserted row creates an `audit_outbox` row with the identical
+`audit_event_id` in the same transaction. Outbox claim/retry/lease/ack retains
+that ID as the consumer dedupe key. Compensation serializes on that exact outbox
+row and, after any claim wait, rechecks the capability, current Space owner and
+pristine outbox state under row locks before its delete can proceed. Cleanup uses
+database time, removes only delivered effects older than 365 days, and is exposed
+through the bounded `internal/auditretention` worker.
+
+BE-116 deliberately has no aggregate audit purge authority. Migration
+`000015_audit_ledger` blocks direct `spaces` deletion before its foreign-key
+cascades can erase audit/outbox evidence, so the obsolete legacy `DeleteSpace`
+RPC now fails closed. BE-245 must supply the documented terminal same-transaction
+P3 purge coordinator before that guard can be replaced. The public gRPC status
+mapping for this temporarily disabled legacy RPC is still a contract gap; BE-116
+does not invent one.
+
+The closed lower-snake-case registry currently contains only Space-local writers
+whose action contract already existed:
+
+| `action` | `target_type` | allowed `details` keys |
+|---|---|---|
+| `invite_revoked` | `invite` | none |
+| `member_kicked` | `profile` | none |
+| `member_banned` | `account` | optional `reason` |
+| `member_unbanned` | `account` | none |
+| `member_timed_out` | `profile` | required `duration_seconds`, optional `reason` |
+| `member_timeout_removed` | `profile` | none |
+| `ownership_transferred` | `profile` | none |
+
+The current unfiltered gRPC read now uses a 15-minute HMAC cursor bound to
+`space_id`, reader/access scope and page size, with a first-page tuple ceiling;
+all replicas use the database-owned signing key and recheck ACL on every page.
+The store has the actor/action/time filter-bound query needed by the target, but
+the current protobuf request still exposes only `space_id` and `page`. Adding
+those request fields and the Gateway/Flutter transport is a separate contract
+change. Role-owned and Chat-owned mutations need their own trusted ingestion and
+outbox contracts before their producers can join this registry. In that future
+path, Space must validate the actor UUID and the producer's caller/action
+ownership, then persist `actor_profile_id` from the mutation/outbox body bound by
+the producer's request hash. The service principal identifies the producer; it
+does not replace or authorize ignoring the hash-bound actor body. Tree/settings,
+invite creation and other ordinary writers likewise remain outside the closed
+registry until their exact action/target/details contracts are recorded; they
+must not emit invented audit shapes.
 
 
 The current `TransferOwnershipRequest` only carries `space_id` and
