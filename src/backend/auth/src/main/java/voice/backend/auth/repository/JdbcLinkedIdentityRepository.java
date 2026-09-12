@@ -19,7 +19,8 @@ public class JdbcLinkedIdentityRepository implements LinkedIdentityRepository {
               rs.getString("external_login"),
               rs.getBytes("access_token_encrypted"),
               rs.getBytes("refresh_token_encrypted"),
-              rs.getString("status"));
+              rs.getString("status"),
+              rs.getLong("row_version"));
 
   private final NamedParameterJdbcTemplate jdbc;
 
@@ -68,7 +69,8 @@ public class JdbcLinkedIdentityRepository implements LinkedIdentityRepository {
     return jdbc.query(
         """
         SELECT id, account_id, profile_id, platform, external_id, external_login,
-               access_token_encrypted, refresh_token_encrypted, status
+               access_token_encrypted, refresh_token_encrypted, status,
+               xmin::text::bigint AS row_version
         FROM linked_identities
         WHERE account_id = :accountId AND status = 'active'
         ORDER BY platform
@@ -82,7 +84,8 @@ public class JdbcLinkedIdentityRepository implements LinkedIdentityRepository {
     return jdbc.query(
         """
         SELECT id, account_id, profile_id, platform, external_id, external_login,
-               access_token_encrypted, refresh_token_encrypted, status
+               access_token_encrypted, refresh_token_encrypted, status,
+               xmin::text::bigint AS row_version
         FROM linked_identities
         WHERE status = 'active'
         ORDER BY created_at
@@ -97,7 +100,8 @@ public class JdbcLinkedIdentityRepository implements LinkedIdentityRepository {
         .query(
             """
             SELECT id, account_id, profile_id, platform, external_id, external_login,
-                   access_token_encrypted, refresh_token_encrypted, status
+               access_token_encrypted, refresh_token_encrypted, status,
+               xmin::text::bigint AS row_version
             FROM linked_identities
             WHERE account_id = :accountId AND platform = :platform AND status = 'active'
             LIMIT 1
@@ -111,16 +115,26 @@ public class JdbcLinkedIdentityRepository implements LinkedIdentityRepository {
   }
 
   @Override
-  public void revoke(UUID accountId, String platform) {
-    jdbc.update(
+  public Optional<LinkedIdentity> revokeIfUnchanged(LinkedIdentity expected) {
+    return jdbc
+        .query(
         """
         UPDATE linked_identities
         SET status = 'revoked', updated_at = now(),
             access_token_encrypted = NULL, refresh_token_encrypted = NULL
-        WHERE account_id = :accountId AND platform = :platform
+        WHERE id = :id AND account_id = :accountId AND platform = :platform
+          AND status = 'active' AND xmin::text::bigint = :version
+        RETURNING id, account_id, profile_id, platform, external_id, external_login,
+                  access_token_encrypted, refresh_token_encrypted, status,
+                  xmin::text::bigint AS row_version
         """,
         new MapSqlParameterSource()
-            .addValue("accountId", accountId)
-            .addValue("platform", platform));
+            .addValue("id", expected.id())
+            .addValue("accountId", expected.accountId())
+            .addValue("platform", expected.platform())
+            .addValue("version", expected.version()),
+        ROW_MAPPER)
+        .stream()
+        .findFirst();
   }
 }

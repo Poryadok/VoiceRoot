@@ -177,8 +177,12 @@ public class LinkedAccountsService {
   }
 
   private void unlinkPlatform(UUID accountId, UUID profileId, String platform) {
-    linkedIdentities.revoke(accountId, platform);
-    reconcileProfileVerification(accountId, profileId);
+    // The JWT profile can have changed since the account linked this provider.
+    // Reconcile the profile stored on the row actually revoked, never the caller's current profile.
+    linkedIdentities
+        .findActive(accountId, platform)
+        .flatMap(linkedIdentities::revokeIfUnchanged)
+        .ifPresent(revoked -> reconcileProfileVerification(revoked.accountId(), revoked.profileId()));
   }
 
   /** Re-check partner status for all active links; clear badge when lost. */
@@ -200,14 +204,18 @@ public class LinkedAccountsService {
           continue;
         }
       } catch (AuthException ex) {
-        // A provider outage is not proof that a creator lost Partner/YPP.
-        // Keep the last verified state and retry on the next scheduled pass.
-        continue;
+        if (!"verification_denied".equals(ex.getMessage())) {
+          // A transport/provider outage is not proof that a creator lost Partner/YPP.
+          // Keep the last verified state and retry on the next scheduled pass.
+          continue;
+        }
+        stillEligible = false;
       }
       if (!stillEligible) {
-        linkedIdentities.revoke(row.accountId(), row.platform());
-        reconcileProfileVerification(row.accountId(), row.profileId());
-        cleared++;
+        if (linkedIdentities.revokeIfUnchanged(row).isPresent()) {
+          reconcileProfileVerification(row.accountId(), row.profileId());
+          cleared++;
+        }
       }
     }
     return cleared;

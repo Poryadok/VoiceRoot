@@ -12,4 +12,5 @@ public record LinkedIdentity(
     String externalLogin,
     byte[] accessTokenEncrypted,
     byte[] refreshTokenEncrypted,
-    String status) {}
+    String status,
+    long version) {}

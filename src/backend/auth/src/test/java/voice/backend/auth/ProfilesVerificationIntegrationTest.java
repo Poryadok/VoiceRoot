@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterAll;
@@ -359,7 +360,7 @@ class ProfilesVerificationIntegrationTest {
         "/helix/users",
         exchange -> {
           int call = helixCalls.incrementAndGet();
-          if (call > 1) {
+          if (call == 2) {
             exchange.sendResponseHeaders(503, -1);
             exchange.close();
             return;
@@ -391,8 +392,10 @@ class ProfilesVerificationIntegrationTest {
           .andExpect(status().isOk());
 
       verificationStatusRefresh.refresh();
+      verificationStatusRefresh.refresh();
 
       assertThat(userGrpc.verificationType(profileId)).isEqualTo("personal");
+      assertThat(helixCalls.get()).isGreaterThanOrEqualTo(3);
       Integer active =
           jdbc.queryForObject(
               """
@@ -402,6 +405,76 @@ class ProfilesVerificationIntegrationTest {
               Map.of("accountId", accountId),
               Integer.class);
       assertThat(active).isEqualTo(1);
+    } finally {
+      mockTwitch.stop(0);
+    }
+  }
+
+  @Test
+  void staleNegativeRefreshCannotRevokeARelinkedIdentity() throws Exception {
+    AtomicInteger helixCalls = new AtomicInteger();
+    AtomicReference<UUID> accountId = new AtomicReference<>();
+    AtomicReference<UUID> profileId = new AtomicReference<>();
+    HttpServer mockTwitch = HttpServer.create(new InetSocketAddress(0), 0);
+    mockTwitch.setExecutor(Executors.newCachedThreadPool());
+    mockTwitch.createContext(
+        "/helix/users",
+        exchange -> {
+          int call = helixCalls.incrementAndGet();
+          if (call == 2) {
+            // The refresh has already read its snapshot. Re-link before returning
+            // an authoritative denial for that stale snapshot.
+            linkedAccountsService.completeTwitchCallback(
+                accountId.get(), profileId.get(), "mock-code", "http://127.0.0.1/cb");
+            byte[] denied = "{\"data\":[]}".getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, denied.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+              os.write(denied);
+            }
+            return;
+          }
+          byte[] partner =
+              ("{\"data\":[{\"id\":\"tw-relinked-"
+                      + call
+                      + "\",\"login\":\"partner\",\"broadcaster_type\":\"partner\"}]}")
+                  .getBytes(StandardCharsets.UTF_8);
+          exchange.getResponseHeaders().add("Content-Type", "application/json");
+          exchange.sendResponseHeaders(200, partner.length);
+          try (OutputStream os = exchange.getResponseBody()) {
+            os.write(partner);
+          }
+        });
+    mockTwitch.start();
+    linkedAccountsService.setTwitchEndpointsForTests(
+        "http://127.0.0.1:" + mockTwitch.getAddress().getPort(),
+        "http://127.0.0.1:" + mockTwitch.getAddress().getPort() + "/oauth2/token");
+    try {
+      JsonNode registered = registerSession("twitch-stale-refresh@example.com");
+      accountId.set(UUID.fromString(registered.get("account_id").asText()));
+      profileId.set(UUID.fromString(registered.get("profile_id").asText()));
+      String access = registered.get("access_token").asText();
+      mockMvc
+          .perform(
+              post("/api/v1/auth/linked-accounts/twitch/callback")
+                  .header("Authorization", "Bearer " + access)
+                  .contentType("application/json")
+                  .content("{\"code\":\"mock-code\",\"redirect_uri\":\"http://127.0.0.1/cb\"}"))
+          .andExpect(status().isOk());
+
+      assertThat(linkedAccountsService.refreshVerificationStatuses()).isZero();
+
+      Integer active =
+          jdbc.queryForObject(
+              """
+              SELECT COUNT(*) FROM linked_identities
+              WHERE account_id = :accountId::uuid AND platform = 'twitch' AND status = 'active'
+              """,
+              Map.of("accountId", accountId.get().toString()),
+              Integer.class);
+      assertThat(active).isEqualTo(1);
+      assertThat(userGrpc.verificationType(profileId.get().toString())).isEqualTo("personal");
+      assertThat(helixCalls.get()).isGreaterThanOrEqualTo(3);
     } finally {
       mockTwitch.stop(0);
     }
@@ -435,6 +508,44 @@ class ProfilesVerificationIntegrationTest {
               assertThat(request.getProfileId()).isEqualTo(profileId);
               assertThat(request.getBadge()).isEqualTo("youtube");
             });
+  }
+
+  @Test
+  void unlinkAfterProfileSwitchReconcilesTheProfileThatOwnedTheRevokedLink() throws Exception {
+    JsonNode registered = registerSession("unlink-profile-switch@example.com");
+    String linkedProfileId = registered.get("profile_id").asText();
+    String accountId = registered.get("account_id").asText();
+    String originalAccess = registered.get("access_token").asText();
+    UUID currentProfileId = UUID.randomUUID();
+    userGrpc.addSwitchableProfile(currentProfileId, UUID.fromString(accountId));
+    MvcResult switched =
+        mockMvc
+            .perform(
+                post("/api/v1/auth/switch-profile")
+                    .header("Authorization", "Bearer " + originalAccess)
+                    .contentType("application/json")
+                    .content("{\"profile_id\":\"" + currentProfileId + "\"}"))
+            .andExpect(status().isOk())
+            .andReturn();
+    String currentAccess =
+        objectMapper.readTree(switched.getResponse().getContentAsString()).get("access_token").asText();
+    userGrpc.seedVerification(linkedProfileId, "personal", "twitch");
+    userGrpc.seedVerification(currentProfileId.toString(), "personal", "youtube");
+    jdbc.update(
+        """
+        INSERT INTO linked_identities (account_id, profile_id, platform, external_id, status)
+        VALUES (:accountId::uuid, :linkedProfileId::uuid, 'twitch', 'tw-profile-a', 'active')
+        """,
+        Map.of("accountId", accountId, "linkedProfileId", linkedProfileId));
+
+    mockMvc
+        .perform(
+            post("/api/v1/auth/linked-accounts/twitch/unlink")
+                .header("Authorization", "Bearer " + currentAccess))
+        .andExpect(status().isNoContent());
+
+    assertThat(userGrpc.verificationType(linkedProfileId)).isEqualTo("none");
+    assertThat(userGrpc.verificationType(currentProfileId.toString())).isEqualTo("personal");
   }
 
   @Test

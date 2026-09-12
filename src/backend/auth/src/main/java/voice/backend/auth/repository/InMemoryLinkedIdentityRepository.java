@@ -5,10 +5,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class InMemoryLinkedIdentityRepository implements LinkedIdentityRepository {
   private final Map<String, LinkedIdentity> byAccountPlatform = new ConcurrentHashMap<>();
+  private final AtomicLong versions = new AtomicLong();
 
   private static String key(UUID accountId, String platform) {
     return accountId + "|" + platform;
@@ -38,7 +40,8 @@ public class InMemoryLinkedIdentityRepository implements LinkedIdentityRepositor
             externalLogin,
             accessTokenEncrypted,
             refreshTokenEncrypted,
-            "active"));
+            "active",
+            versions.incrementAndGet()));
   }
 
   @Override
@@ -74,13 +77,13 @@ public class InMemoryLinkedIdentityRepository implements LinkedIdentityRepositor
   }
 
   @Override
-  public synchronized void revoke(UUID accountId, String platform) {
-    LinkedIdentity row = byAccountPlatform.get(key(accountId, platform));
-    if (row == null) {
-      return;
+  public synchronized Optional<LinkedIdentity> revokeIfUnchanged(LinkedIdentity expected) {
+    LinkedIdentity row = byAccountPlatform.get(key(expected.accountId(), expected.platform()));
+    if (row == null || !"active".equals(row.status()) || row.version() != expected.version()) {
+      return Optional.empty();
     }
     byAccountPlatform.put(
-        key(accountId, platform),
+        key(expected.accountId(), expected.platform()),
         new LinkedIdentity(
             row.id(),
             row.accountId(),
@@ -90,6 +93,8 @@ public class InMemoryLinkedIdentityRepository implements LinkedIdentityRepositor
             row.externalLogin(),
             null,
             null,
-            "revoked"));
+            "revoked",
+            versions.incrementAndGet()));
+    return Optional.of(row);
   }
 }
