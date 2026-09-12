@@ -78,6 +78,23 @@ service ChatService {
 }
 ```
 
+### BE-116 Space audit producer dependency (accepted target; not implemented)
+
+For successful create/update/delete of a Space-attached text chat, Chat writes
+one canonical `chat_created`, `chat_updated` or `chat_deleted` fact into a durable
+`chat_db` producer outbox in the same transaction as the domain mutation. A failed
+or no-op mutation creates no new fact. A worker signs the exact deterministic
+`voice.space.v1.SpaceService/AppendAuditEvent` request as `service:chat`; after
+the empty acknowledgement it marks the item delivered. Retry keeps the same
+`audit_event_id` and exact payload. Standalone DM/group/channel mutations do not
+enter the Space ledger. Chat never writes `space_db` and cannot emit Space- or
+Role-owned actions.
+
+Composite `POST /api/v1/spaces/{space_id}/chats` exposes one `chat_created` only
+after the complete Chat+tree outcome. The internal Space tree upsert in that flow
+must not create a second user-visible audit effect. The proto/registry exists;
+the Chat outbox, publisher and activation remain a BE-116 implementation dependency.
+
 ### `ListChatsRequest` / `ChatListItem`
 
 ```protobuf

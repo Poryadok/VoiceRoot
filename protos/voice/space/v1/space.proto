@@ -61,6 +61,9 @@ service SpaceService {
 
   rpc GetAuditLog(GetAuditLogRequest) returns (GetAuditLogResponse);
 
+  // @voice.security=protected;callers=service:role,service:chat
+  rpc AppendAuditEvent(AppendAuditEventRequest) returns (AppendAuditEventResponse);
+
   // S2S: privacy audience "space members" — shared membership between two profiles.
   rpc AreCoMembers(AreCoMembersRequest) returns (AreCoMembersResponse);
 
@@ -390,6 +393,10 @@ message CreateFromTemplateRequest {
 message GetAuditLogRequest {
   string space_id = 1;
   voice.common.v1.CursorPageRequest page = 2;
+  optional string actor_profile_id = 3;
+  optional string action = 4;
+  google.protobuf.Timestamp from = 5;
+  google.protobuf.Timestamp to = 6;
 }
 
 message AuditLogList {
@@ -407,6 +414,21 @@ message AuditLogEntry {
   string details_json = 7;
   google.protobuf.Timestamp created_at = 8;
 }
+
+// @voice.unknown_fields=reject
+message AppendAuditEventRequest {
+  string audit_event_id = 1;
+  string space_id = 2;
+  string actor_profile_id = 3;
+  string action = 4;
+  string target_type = 5;
+  string target_id = 6;
+  string details_json = 7;
+  google.protobuf.Timestamp occurred_at = 8;
+}
+
+// @voice.unknown_fields=accept_preserve
+message AppendAuditEventResponse {}
 
 // Logical reference to space_db.spaces for other services (cf. ChatRef).
 message SpaceRef {

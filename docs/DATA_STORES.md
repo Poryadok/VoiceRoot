@@ -55,6 +55,19 @@
 
 Для `API Gateway` канонично **нет service-owned PostgreSQL**. Политика версий клиента (`/api/v1/version`) может храниться либо в managed config store, либо в отдельной control-plane БД/таблице (`client_versions`) под владением Gateway как edge-политики; это не означает появление отдельной доменной БД Gateway в inventory.
 
+### BE-116 Space audit durable ownership (accepted target; not implemented)
+
+| Store owner | Durable responsibility |
+|---|---|
+| `space_db` | immutable audit registry, local mutation/audit/outbox atomicity, idempotent Role/Chat ingestion and Space-owned 365-day retention |
+| `role_db` | role mutation and audit producer outbox in one transaction; stable event ID/payload until protected Space acknowledgement |
+| `chat_db` | Space-attached chat mutation and audit producer outbox in one transaction; stable event ID/payload until protected Space acknowledgement |
+
+No service writes another service database. Role and Chat deliver their outboxes
+through signed `SpaceService.AppendAuditEvent`; Gateway is neither a producer nor
+a persistence owner. These rows describe the accepted runtime dependency. The
+proto is shipped, while the stores/workers remain unimplemented.
+
 ### `auth_db` (Auth Service)
 
 Инвентарь таблиц — [auth-service.md](microservices/auth-service.md); миграции Flyway в `src/backend/auth/src/main/resources/db/migration/`.

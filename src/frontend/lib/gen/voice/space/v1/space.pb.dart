@@ -4051,10 +4051,18 @@ class GetAuditLogRequest extends $pb.GeneratedMessage {
   factory GetAuditLogRequest({
     $core.String? spaceId,
     $2.CursorPageRequest? page,
+    $core.String? actorProfileId,
+    $core.String? action,
+    $1.Timestamp? from,
+    $1.Timestamp? to,
   }) {
     final result = create();
     if (spaceId != null) result.spaceId = spaceId;
     if (page != null) result.page = page;
+    if (actorProfileId != null) result.actorProfileId = actorProfileId;
+    if (action != null) result.action = action;
+    if (from != null) result.from = from;
+    if (to != null) result.to = to;
     return result;
   }
 
@@ -4074,6 +4082,12 @@ class GetAuditLogRequest extends $pb.GeneratedMessage {
     ..aOS(1, _omitFieldNames ? '' : 'spaceId')
     ..aOM<$2.CursorPageRequest>(2, _omitFieldNames ? '' : 'page',
         subBuilder: $2.CursorPageRequest.create)
+    ..aOS(3, _omitFieldNames ? '' : 'actorProfileId')
+    ..aOS(4, _omitFieldNames ? '' : 'action')
+    ..aOM<$1.Timestamp>(5, _omitFieldNames ? '' : 'from',
+        subBuilder: $1.Timestamp.create)
+    ..aOM<$1.Timestamp>(6, _omitFieldNames ? '' : 'to',
+        subBuilder: $1.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -4114,6 +4128,46 @@ class GetAuditLogRequest extends $pb.GeneratedMessage {
   void clearPage() => $_clearField(2);
   @$pb.TagNumber(2)
   $2.CursorPageRequest ensurePage() => $_ensure(1);
+
+  @$pb.TagNumber(3)
+  $core.String get actorProfileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set actorProfileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasActorProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearActorProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get action => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set action($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasAction() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearAction() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $1.Timestamp get from => $_getN(4);
+  @$pb.TagNumber(5)
+  set from($1.Timestamp value) => $_setField(5, value);
+  @$pb.TagNumber(5)
+  $core.bool hasFrom() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearFrom() => $_clearField(5);
+  @$pb.TagNumber(5)
+  $1.Timestamp ensureFrom() => $_ensure(4);
+
+  @$pb.TagNumber(6)
+  $1.Timestamp get to => $_getN(5);
+  @$pb.TagNumber(6)
+  set to($1.Timestamp value) => $_setField(6, value);
+  @$pb.TagNumber(6)
+  $core.bool hasTo() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearTo() => $_clearField(6);
+  @$pb.TagNumber(6)
+  $1.Timestamp ensureTo() => $_ensure(5);
 }
 
 class AuditLogList extends $pb.GeneratedMessage {
@@ -4316,6 +4370,189 @@ class AuditLogEntry extends $pb.GeneratedMessage {
   void clearCreatedAt() => $_clearField(8);
   @$pb.TagNumber(8)
   $1.Timestamp ensureCreatedAt() => $_ensure(7);
+}
+
+/// @voice.unknown_fields=reject
+class AppendAuditEventRequest extends $pb.GeneratedMessage {
+  factory AppendAuditEventRequest({
+    $core.String? auditEventId,
+    $core.String? spaceId,
+    $core.String? actorProfileId,
+    $core.String? action,
+    $core.String? targetType,
+    $core.String? targetId,
+    $core.String? detailsJson,
+    $1.Timestamp? occurredAt,
+  }) {
+    final result = create();
+    if (auditEventId != null) result.auditEventId = auditEventId;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (actorProfileId != null) result.actorProfileId = actorProfileId;
+    if (action != null) result.action = action;
+    if (targetType != null) result.targetType = targetType;
+    if (targetId != null) result.targetId = targetId;
+    if (detailsJson != null) result.detailsJson = detailsJson;
+    if (occurredAt != null) result.occurredAt = occurredAt;
+    return result;
+  }
+
+  AppendAuditEventRequest._();
+
+  factory AppendAuditEventRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory AppendAuditEventRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'AppendAuditEventRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'auditEventId')
+    ..aOS(2, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(3, _omitFieldNames ? '' : 'actorProfileId')
+    ..aOS(4, _omitFieldNames ? '' : 'action')
+    ..aOS(5, _omitFieldNames ? '' : 'targetType')
+    ..aOS(6, _omitFieldNames ? '' : 'targetId')
+    ..aOS(7, _omitFieldNames ? '' : 'detailsJson')
+    ..aOM<$1.Timestamp>(8, _omitFieldNames ? '' : 'occurredAt',
+        subBuilder: $1.Timestamp.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AppendAuditEventRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AppendAuditEventRequest copyWith(
+          void Function(AppendAuditEventRequest) updates) =>
+      super.copyWith((message) => updates(message as AppendAuditEventRequest))
+          as AppendAuditEventRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static AppendAuditEventRequest create() => AppendAuditEventRequest._();
+  @$core.override
+  AppendAuditEventRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static AppendAuditEventRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<AppendAuditEventRequest>(create);
+  static AppendAuditEventRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get auditEventId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set auditEventId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAuditEventId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAuditEventId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get spaceId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set spaceId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasSpaceId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSpaceId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get actorProfileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set actorProfileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasActorProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearActorProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get action => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set action($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasAction() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearAction() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get targetType => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set targetType($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasTargetType() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearTargetType() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get targetId => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set targetId($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasTargetId() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearTargetId() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.String get detailsJson => $_getSZ(6);
+  @$pb.TagNumber(7)
+  set detailsJson($core.String value) => $_setString(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasDetailsJson() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearDetailsJson() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $1.Timestamp get occurredAt => $_getN(7);
+  @$pb.TagNumber(8)
+  set occurredAt($1.Timestamp value) => $_setField(8, value);
+  @$pb.TagNumber(8)
+  $core.bool hasOccurredAt() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearOccurredAt() => $_clearField(8);
+  @$pb.TagNumber(8)
+  $1.Timestamp ensureOccurredAt() => $_ensure(7);
+}
+
+/// @voice.unknown_fields=accept_preserve
+class AppendAuditEventResponse extends $pb.GeneratedMessage {
+  factory AppendAuditEventResponse() => create();
+
+  AppendAuditEventResponse._();
+
+  factory AppendAuditEventResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory AppendAuditEventResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'AppendAuditEventResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AppendAuditEventResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AppendAuditEventResponse copyWith(
+          void Function(AppendAuditEventResponse) updates) =>
+      super.copyWith((message) => updates(message as AppendAuditEventResponse))
+          as AppendAuditEventResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static AppendAuditEventResponse create() => AppendAuditEventResponse._();
+  @$core.override
+  AppendAuditEventResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static AppendAuditEventResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<AppendAuditEventResponse>(create);
+  static AppendAuditEventResponse? _defaultInstance;
 }
 
 /// Logical reference to space_db.spaces for other services (cf. ChatRef).
