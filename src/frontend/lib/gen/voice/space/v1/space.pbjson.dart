@@ -1358,13 +1358,47 @@ const GetAuditLogRequest$json = {
       '6': '.voice.common.v1.CursorPageRequest',
       '10': 'page'
     },
+    {
+      '1': 'actor_profile_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'actorProfileId',
+      '17': true
+    },
+    {'1': 'action', '3': 4, '4': 1, '5': 9, '9': 1, '10': 'action', '17': true},
+    {
+      '1': 'from',
+      '3': 5,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'from'
+    },
+    {
+      '1': 'to',
+      '3': 6,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'to'
+    },
+  ],
+  '8': [
+    {'1': '_actor_profile_id'},
+    {'1': '_action'},
   ],
 };
 
 /// Descriptor for `GetAuditLogRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List getAuditLogRequestDescriptor = $convert.base64Decode(
     'ChJHZXRBdWRpdExvZ1JlcXVlc3QSGQoIc3BhY2VfaWQYASABKAlSB3NwYWNlSWQSNgoEcGFnZR'
-    'gCIAEoCzIiLnZvaWNlLmNvbW1vbi52MS5DdXJzb3JQYWdlUmVxdWVzdFIEcGFnZQ==');
+    'gCIAEoCzIiLnZvaWNlLmNvbW1vbi52MS5DdXJzb3JQYWdlUmVxdWVzdFIEcGFnZRItChBhY3Rv'
+    'cl9wcm9maWxlX2lkGAMgASgJSABSDmFjdG9yUHJvZmlsZUlkiAEBEhsKBmFjdGlvbhgEIAEoCU'
+    'gBUgZhY3Rpb26IAQESLgoEZnJvbRgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBS'
+    'BGZyb20SKgoCdG8YBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wUgJ0b0ITChFfYW'
+    'N0b3JfcHJvZmlsZV9pZEIJCgdfYWN0aW9u');
 
 @$core.Deprecated('Use auditLogListDescriptor instead')
 const AuditLogList$json = {
@@ -1417,6 +1451,46 @@ final $typed_data.Uint8List auditLogEntryDescriptor = $convert.base64Decode(
     'RfaWQYBiABKAlSCHRhcmdldElkEiEKDGRldGFpbHNfanNvbhgHIAEoCVILZGV0YWlsc0pzb24S'
     'OQoKY3JlYXRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBSCWNyZWF0ZW'
     'RBdA==');
+
+@$core.Deprecated('Use appendAuditEventRequestDescriptor instead')
+const AppendAuditEventRequest$json = {
+  '1': 'AppendAuditEventRequest',
+  '2': [
+    {'1': 'audit_event_id', '3': 1, '4': 1, '5': 9, '10': 'auditEventId'},
+    {'1': 'space_id', '3': 2, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'actor_profile_id', '3': 3, '4': 1, '5': 9, '10': 'actorProfileId'},
+    {'1': 'action', '3': 4, '4': 1, '5': 9, '10': 'action'},
+    {'1': 'target_type', '3': 5, '4': 1, '5': 9, '10': 'targetType'},
+    {'1': 'target_id', '3': 6, '4': 1, '5': 9, '10': 'targetId'},
+    {'1': 'details_json', '3': 7, '4': 1, '5': 9, '10': 'detailsJson'},
+    {
+      '1': 'occurred_at',
+      '3': 8,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'occurredAt'
+    },
+  ],
+};
+
+/// Descriptor for `AppendAuditEventRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List appendAuditEventRequestDescriptor = $convert.base64Decode(
+    'ChdBcHBlbmRBdWRpdEV2ZW50UmVxdWVzdBIkCg5hdWRpdF9ldmVudF9pZBgBIAEoCVIMYXVkaX'
+    'RFdmVudElkEhkKCHNwYWNlX2lkGAIgASgJUgdzcGFjZUlkEigKEGFjdG9yX3Byb2ZpbGVfaWQY'
+    'AyABKAlSDmFjdG9yUHJvZmlsZUlkEhYKBmFjdGlvbhgEIAEoCVIGYWN0aW9uEh8KC3RhcmdldF'
+    '90eXBlGAUgASgJUgp0YXJnZXRUeXBlEhsKCXRhcmdldF9pZBgGIAEoCVIIdGFyZ2V0SWQSIQoM'
+    'ZGV0YWlsc19qc29uGAcgASgJUgtkZXRhaWxzSnNvbhI7CgtvY2N1cnJlZF9hdBgIIAEoCzIaLm'
+    'dvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBSCm9jY3VycmVkQXQ=');
+
+@$core.Deprecated('Use appendAuditEventResponseDescriptor instead')
+const AppendAuditEventResponse$json = {
+  '1': 'AppendAuditEventResponse',
+};
+
+/// Descriptor for `AppendAuditEventResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List appendAuditEventResponseDescriptor =
+    $convert.base64Decode('ChhBcHBlbmRBdWRpdEV2ZW50UmVzcG9uc2U=');
 
 @$core.Deprecated('Use spaceRefDescriptor instead')
 const SpaceRef$json = {

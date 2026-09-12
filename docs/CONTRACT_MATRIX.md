@@ -111,6 +111,23 @@ No public route permits direct Owner-role reassignment or either Auth consume RP
 NATS ownership remains unchanged: Space audit/lifecycle effects use Space's
 transactional outbox in the existing domain stream; this table adds no new stream.
 
+## BE-116 Space audit protected contract (accepted target)
+
+This is direct protected gRPC, not a new NATS audit stream. The mutation owner
+first commits its domain mutation and durable producer outbox atomically.
+
+| Caller | Callee / RPC | Allowed scope | Runtime status |
+|---|---|---|---|
+| Role (`service:role`) | Space `AppendAuditEvent` | Closed Role action allowlist for role definitions, assignments and overrides | proto shipped; Role outbox/publisher and Space handler not implemented |
+| Chat (`service:chat`) | Space `AppendAuditEvent` | `chat_created`, `chat_updated`, `chat_deleted` for Space-attached chats | proto shipped; Chat outbox/publisher and Space handler not implemented |
+
+The one signed Bearer principal binds exact RPC, request ID and deterministic
+request hash. No caller/source-service field or raw identity metadata is accepted.
+Space owns the registry and read API; Gateway never authors entries and callers
+never write another service database. Exact replay is an empty successful ack;
+same event ID with changed payload is `ALREADY_EXISTS`. Full action/target/details
+rules are in [space-service.md](microservices/space-service.md#phase-0-space-audit-ledger-accepted-target-runtime-not-implemented).
+
 ## P3 Space lifecycle protected contracts (accepted target)
 
 All rows below use authenticated workload identities, deterministic protocol

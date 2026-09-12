@@ -49,6 +49,21 @@ service RoleService {
 }
 ```
 
+### BE-116 Space audit producer dependency (accepted target; not implemented)
+
+For every successful role definition, assignment or override mutation listed in
+the closed [Space audit registry](space-service.md#closed-action-and-writer-registry-v1),
+Role writes one canonical audit fact into a durable `role_db` producer outbox in
+the same transaction as the domain mutation. A failed or no-op mutation creates
+no new fact. A worker signs the exact deterministic
+`voice.space.v1.SpaceService/AppendAuditEvent` request as `service:role`; after
+the empty acknowledgement it marks the outbox item delivered. Retry keeps the
+same `audit_event_id` and exact payload. Role never writes `space_db`, never puts
+caller identity in the request body and cannot emit Space- or Chat-owned actions.
+
+The proto/registry exists; the Role outbox, publisher and activation remain a
+BE-116 implementation dependency.
+
 ## Идентификаторы прав (bitmask)
 
 Один канонический набор имён для **ролей в спейсе**, **оверрайдов** и проверок в сервисах. В манифестах ботов (`scopes`) используются **в основном те же строки**, плюс исключение `DM_SEND` (только боты; см. [features/bots.md](../features/bots.md)).

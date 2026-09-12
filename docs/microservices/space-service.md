@@ -113,7 +113,8 @@ service SpaceService {
 | TransferOwnership | ✓ | Disabled | Production still denies before dependencies. Auth proof consume/receipt lookup, Role v2, and the Space protocol-2 journal through terminal evidence, ordinary freeze and the ready-row scan are shipped foundations. Network recovery/orchestration, capability activation, public operation idempotency and the Gateway/Flutter vertical remain open. See § Ownership lifecycle principal transport. |
 | AddBotMember, RemoveBotMember | ✓ | ✓ | |
 | ListTemplates, CreateFromTemplate | ✓ | ✗ | |
-| GetAuditLog | ✓ | ✓ | `created_at DESC, id DESC`; opaque timestamp+UUID keyset cursor; default 50/max 100; exact `SPACE_VIEW_AUDIT_LOG` check, owner-only fallback only when Role Service is unwired. Filters and REST/Flutter surfaces remain backlog |
+| GetAuditLog | ✓ | Partial | Current handler has newest-first keyset paging and exact `SPACE_VIEW_AUDIT_LOG`; the additive actor/action/time proto filters are shipped, while filter execution, signed cursor v1 and REST/Flutter surfaces remain backlog |
+| AppendAuditEvent | ✓ | ✗ | Protected Role/Chat audit ingestion contract; runtime verifier, idempotent store and producer outboxes remain backlog |
 | AreCoMembers | ✓ | ✓ | S2S co-membership check |
 | SyncSpaceProSubscription | ✓ | ✓ | Subscription sync |
 
@@ -131,7 +132,7 @@ permission subset и Owner lifecycle paths определены в
 `ApplyOwnershipTransfer`/`CompensateOwnershipTransfer` с проверенным
 `operation_id`.
 
-`GetAuditLog` читает только строки запрошенного `space_id` и возвращает все поля `AuditLogEntry`. Ошибка Role Service закрывает доступ (`UNAVAILABLE`), явный deny даёт `PERMISSION_DENIED`, malformed cursor — `INVALID_ARGUMENT`. Наличие RPC не означает полноту аудита: writers для части действий, фильтры по actor/action и клиентские REST/Flutter поверхности остаются в [backend backlog](../todo/backend.md).
+`GetAuditLog` читает только строки запрошенного `space_id` и возвращает все поля `AuditLogEntry`. Ошибка Role Service закрывает доступ (`UNAVAILABLE`), явный deny даёт `PERMISSION_DENIED`, malformed cursor — `INVALID_ARGUMENT`. Proto уже содержит additive actor/action/time filters; текущий handler их ещё не исполняет и не выпускает signed cursor v1. Writers и клиентские REST/Flutter поверхности остаются в [backend backlog](../todo/backend.md).
 
 **Invite permissions:** shipped `CreateInvite`, `RevokeInvite` and `ListInvites`
 handlers use the exact `SPACE_MANAGE_INVITES` decision. An unavailable configured
@@ -140,22 +141,116 @@ Role Service fails closed. While Role is intentionally unwired, the shared
 the A2 target does not retain this fallback after signed Role integration is
 required.
 
-## Phase-0 Space audit ledger (target; not implemented)
+## Phase-0 Space audit ledger (accepted target; runtime not implemented)
 
-Space owns an immutable audit registry for every administrative mutation, including
-invite lifecycle, membership/moderation, role and owner transfer, tree/room changes
-and settings. The mutation transaction writes an outbox row with the same
-`audit_event_id`; the publisher delivers exactly once to the logical audit effect
-(idempotent consumers dedupe by that ID). A failed mutation produces no audit row.
-While a Space is live, records retain 365 days; `details` is canonical, redacted
-and capped at 4 KiB. Accepted P3 purge is the exception: ordinary audit rows are
-deleted after mandatory lifecycle facts are reduced to the sole minimal
-tombstone, which retains until `purged_at + 365 days`.
+Space owns one immutable audit registry for administrative mutations. The wire
+`AuditLogEntry.id`, ingestion `audit_event_id` and `audit_log.id` are the same UUID.
+`action` remains an exact lower `snake_case` string so additive writers do not
+break protobuf or JSON consumers. Unknown action filters are valid and return an
+empty result rather than validation failure.
 
-`GetAuditLog` adds action/actor/time filters and uses an HMAC-signed cursor bound to
-`space_id` and the full filter set. A changed filter/cursor, invalid signature or
-expired cursor is `INVALID_ARGUMENT`; no cursor may be replayed against another
-Space or disclosure scope. Existing current RPC/storage do not yet meet this target.
+### Closed action and writer registry v1
+
+| Mutation owner | Allowed actions | Canonical target |
+|---|---|---|
+| Space | `space_created`, `space_updated` | `space`; the same `space_id` |
+| Space | `ownership_transferred` | `profile`; the new owner profile |
+| Space | `invite_created`, `invite_revoked` | `invite`; the invite ID |
+| Space | `member_kicked`, `member_timed_out`, `member_timeout_removed` | `profile`; the affected profile |
+| Space | `member_banned`, `member_unbanned` | `account`; the affected account |
+| Space | `category_created`, `category_updated`, `category_deleted` | `category`; the category ID |
+| Space | `voice_room_created`, `voice_room_updated`, `voice_room_deleted` | `voice_room`; the room ID |
+| Space | `tree_node_upserted`, `tree_node_removed` | `tree_node`; the node ID |
+| Space | `tree_reordered` | `space`; the same `space_id` |
+| Role | `role_created`, `role_updated`, `role_deleted`, `default_join_role_set` | `role`; the role ID |
+| Role | `roles_reordered` | `space`; the same `space_id` |
+| Role | `role_assigned`, `role_revoked` | `profile`; the affected profile; details bind the role |
+| Role | `chat_override_set`, `chat_override_removed` | `chat`; the affected Space-attached chat |
+| Role | `voice_room_override_set`, `voice_room_override_removed` | `voice_room`; the affected room |
+| Chat | `chat_created`, `chat_updated`, `chat_deleted` | `chat`; the Space-attached chat ID |
+
+Join/leave are ordinary self-service membership events and are outside audit v1.
+Space delete/restore/purge facts belong to BE-245. Bot mass cleanup and
+`DeleteRolesCreatedByProfile` are not implicit audit actions; adding them needs a
+separate product decision. Gateway never authors an audit event.
+
+Space writes its local mutation, audit row and durable audit outbox row in one
+`space_db` transaction. Failed/no-op mutations produce no new audit effect. Role
+and Chat write the domain mutation plus a durable producer outbox in their own DB
+transaction, then deliver the fact through protected
+`AppendAuditEvent(AppendAuditEventRequest)`. Composite `POST S/chats` produces one
+`chat_created` only after the complete Chat+tree outcome; its internal
+`UpsertTreeNode` must not create a duplicate user-visible effect.
+
+`AppendAuditEvent` accepts only signed `service:role` or `service:chat` principals
+in the single Bearer metadata credential defined by
+[ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md). Caller identity is
+never a request field. The principal binds the exact full RPC, `x-request-id` and
+SHA-256 of deterministic serialization of all request fields; unknown request
+fields are rejected before handler execution. Space applies the caller/action
+allowlist above. Exact replay of the same `audit_event_id` and canonical payload
+returns the empty success response; the same ID with any changed field is
+`ALREADY_EXISTS`. Space-local writers never call this RPC, and Role/Chat never
+write directly to `space_db`.
+
+Every request field is semantically required: UUID fields and strings are
+nonempty, `details_json` is at least `{}`, and `occurred_at` is present and a valid
+Timestamp. Space persists `occurred_at` as the entry `created_at`. The request
+uses ordinary proto3 strings so empty values fail validation rather than carrying
+presence semantics. The empty response accepts and preserves unknown fields after
+known validation for forward-compatible acknowledgement handling.
+
+### Target and details registry v1
+
+`target_type` is one of `space`, `invite`, `profile`, `account`, `role`, `chat`,
+`voice_room`, `category`, `tree_node`; `target_id` is always a UUID. Aggregate
+actions such as `space_updated`, `roles_reordered` and `tree_reordered` target the
+Space itself. `details_json` is always a nonempty canonical JSON object string,
+including `{}` when no details are needed. Server-owned typed builders enforce
+the following allowlist:
+
+| Action family | Allowed detail keys |
+|---|---|
+| update actions | `changed_fields` |
+| `invite_created` | optional `max_uses`, optional `expires_at`; never the invite code |
+| ban/timeout | optional normalized `reason`; timeout also has `duration_seconds` |
+| `role_assigned`, `role_revoked` | `role_id` |
+| chat/voice overrides | `role_id`, `allow_mask`, `deny_mask` |
+| `tree_node_upserted` | `kind`, exactly one referenced `chat_id` or `voice_room_id`, optional `category_id`, `sort_order`, `is_pinned`, optional `pin_order` |
+| reorder actions | `count`; never the complete UUID list |
+| all other actions | `{}` or only the minimal controlled scalar documented for that action |
+
+After JSONB normalization, `octet_length(details::text)` is at most 4096. Generic
+request dumps are forbidden. Details never contain JWT/principal/proof/password,
+TOTP or backup codes, session/header/IP, email/phone, invite code, URLs, or message
+content. A normalized moderation reason is the sole privileged sensitive field
+required by the product audit UX and remains protected by `SPACE_VIEW_AUDIT_LOG`.
+
+### Query, cursor and retention v1
+
+`GetAuditLogRequest` filters by optional `actor_profile_id` UUID, optional exact
+nonempty `action`, inclusive `from` and exclusive `to`. Present-empty scalar
+filters are `INVALID_ARGUMENT`; absent means no filter. Timestamps are valid UTC
+instants and, when both are present, require `from < to`. Page size is 1..100,
+default 50. Results are ordered `created_at DESC,id DESC`.
+
+The first page fixes an upper `(created_at,id)` snapshot ceiling. Cursor v1 uses
+HMAC-SHA-256 and binds `kid`, version, `space_id`, authenticated
+`viewer_profile_id`, scope `space.audit.read.v1`, normalized actor/action/from/to,
+exact page size, the first-page ceiling, last returned tuple, `issued_at` and
+`expires_at`. UUIDs normalize to lowercase, timestamps to UTC RFC3339Nano, and
+absent remains distinct from present-empty. Lifetime is 15 minutes from the first
+page and ACL is rechecked on every page. Query rows are at or below the ceiling
+and strictly after the last key in descending keyset order. Changed filters/page
+size, foreign Space/viewer/scope, bad MAC, unknown key or expiry are
+`INVALID_ARGUMENT`; later access loss remains the corresponding ACL denial. The
+cutover accepts no legacy unsigned cursor; a caller starts again at the first page.
+
+While a Space is live, ordinary audit rows retain 365 days and only the
+Space-owned retention worker removes expired rows. Accepted P3 purge is the other
+allowed deletion path: ordinary rows are removed after mandatory lifecycle facts
+are reduced to the sole minimal tombstone, retained until `purged_at + 365 days`.
+Current runtime/storage do not yet meet this target.
 
 
 The current `TransferOwnershipRequest` only carries `space_id` and
@@ -298,7 +393,7 @@ message UnpinTreeNodeRequest {
 }
 ```
 
-**Rules:** pinned nodes render above unpinned in same `category_id`; `ReorderSpaceTree` respects pin group; audit `space.tree_node_upserted` includes **`is_pinned`**, **`pin_order`** (R2-A15). ≠ Quick Access (profile rail) ≠ folder pin (Chat inbox).
+**Rules:** pinned nodes render above unpinned in same `category_id`; `ReorderSpaceTree` respects pin group; audit `tree_node_upserted` includes **`is_pinned`**, **`pin_order`** (R2-A15). ≠ Quick Access (profile rail) ≠ folder pin (Chat inbox).
 
 ## Публикуемые события (→ NATS)
 
