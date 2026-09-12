@@ -100,8 +100,8 @@ func (s *UserGRPC) ClearVerification(ctx context.Context, req *userv1.ClearVerif
 // per-profile/source monotonic revision. Source rows remain internal; public reads expose
 // only the resolved verification status.
 func (s *UserGRPC) ApplyVerificationSourceState(ctx context.Context, req *userv1.ApplyVerificationSourceStateRequest) (*userv1.ApplyVerificationSourceStateResponse, error) {
-	if !authctx.IsInternalService(ctx) {
-		return nil, status.Error(codes.PermissionDenied, "internal only")
+	if !authctx.IsExactInternalCaller(ctx, "auth") {
+		return nil, status.Error(codes.PermissionDenied, "auth caller only")
 	}
 	profileID, err := uuid.Parse(strings.TrimSpace(req.GetProfileId()))
 	if err != nil {

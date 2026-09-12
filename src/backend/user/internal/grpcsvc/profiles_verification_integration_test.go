@@ -336,7 +336,7 @@ func TestApplyVerificationSourceState_ResolvesPrecedenceAndRejectsStaleUpdates(t
 	require.Equal(t, "youtube", statusResp.GetVerificationStatus().GetBadge())
 }
 
-func TestApplyVerificationSourceState_RejectsPublicCallerAndInvalidSource(t *testing.T) {
+func TestApplyVerificationSourceState_RequiresExactAuthCaller(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -350,14 +350,29 @@ func TestApplyVerificationSourceState_RejectsPublicCallerAndInvalidSource(t *tes
 		VALUES ($1, $2, 'private', '0001', 'Private', true)`, pid, uuid.New())
 	require.NoError(t, err)
 
-	_, err = cli.ApplyVerificationSourceState(ctx, &userv1.ApplyVerificationSourceStateRequest{
+	validRequest := &userv1.ApplyVerificationSourceStateRequest{
 		ProfileId: pid.String(), Source: "twitch", Revision: 1, Verified: true,
-	})
-	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	}
+	for _, caller := range []context.Context{
+		ctx,
+		metadata.AppendToOutgoingContext(ctx, authctx.HeaderInternalCaller, "social"),
+		metadata.AppendToOutgoingContext(ctx, authctx.HeaderInternalCaller, "Auth"),
+		metadata.AppendToOutgoingContext(ctx, authctx.HeaderInternalCaller, " auth "),
+		metadata.AppendToOutgoingContext(ctx, authctx.HeaderInternalCaller, "auth", authctx.HeaderInternalCaller, "auth"),
+		metadata.AppendToOutgoingContext(ctx, authctx.HeaderInternalCaller, "auth", authctx.HeaderInternalCaller, "social"),
+	} {
+		_, err = cli.ApplyVerificationSourceState(caller, validRequest)
+		require.Equal(t, codes.PermissionDenied, status.Code(err))
+	}
 
 	s2s := metadata.AppendToOutgoingContext(ctx, authctx.HeaderInternalCaller, "auth")
+	resp, err := cli.ApplyVerificationSourceState(s2s, validRequest)
+	require.NoError(t, err)
+	require.True(t, resp.GetApplied())
+	require.Equal(t, "personal", resp.GetVerificationStatus().GetVerificationType())
+
 	_, err = cli.ApplyVerificationSourceState(s2s, &userv1.ApplyVerificationSourceStateRequest{
-		ProfileId: pid.String(), Source: "steam", Revision: 1, Verified: true,
+		ProfileId: pid.String(), Source: "steam", Revision: 2, Verified: true,
 	})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
