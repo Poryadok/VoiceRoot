@@ -10,7 +10,8 @@ public record TokenClaims(
     String subscriptionTier,
     Instant expiresAt,
     String jti,
-    String accountType) {
+    String accountType,
+    long sessionEpoch) {
   public String normalizedAccountType() {
     if (accountType == null || accountType.isBlank()) {
       return "regular";

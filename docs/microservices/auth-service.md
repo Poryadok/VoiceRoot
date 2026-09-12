@@ -384,7 +384,7 @@ Compose strict proof не завершает rollout для всех окруж�
 operational acceptance. Immediate account-targeted close через Redis Pub/Sub пока
 не реализован; authority остаются strict JWT/floor проверки.
 
-## Space deletion proof and recovery (P3 target; not implemented)
+## Space deletion proof and recovery (P3 Auth slice implemented)
 
 This is a distinct `space_delete` family and never reuses ownership-transfer
 tokens, rows or receipts. Public `IssueSpaceDeletionProof` binds account, active
@@ -414,3 +414,15 @@ Only Auth workload identity has that distinct key; staff and break-glass have no
 access. Rotation is `P90D`, maximum restorable-backup age is `P30D`, missing key
 fails closed, and destruction waits for every dependent receipt and backup.
 This pseudonymous evidence is accepted as compatible with account erasure.
+
+The Auth implementation is enabled with `auth.persistence=jdbc`. Flyway
+`V13__space_deletion_proofs.sql` and the equivalent golang-migrate
+`000014_space_deletion_proofs.up.sql` create the separate hash-only proof and
+receipt store. The ordinary listener exposes only issue; consume, committed-only
+lookup and acknowledgement are available only on the protected listener to a
+verified `service:space` principal. Issue resolves its actor only from the
+`Authorization` metadata of the current request; missing metadata fails with
+`UNAUTHENTICATED` and never falls back to a remembered credential from another
+request. Deployments must provide the dedicated `ReceiptErasureKeyring` before
+account erasure can pseudonymize or recover receipts; an absent or missing
+retained key fails closed.
