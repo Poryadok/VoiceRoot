@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -62,6 +63,12 @@ func (s *SpaceStore) BanMember(
 			return scoped.BanMember(ctx, spaceID, accountID, bannedBy, reason, evictProfileID)
 		})
 	}
+	details, err := json.Marshal(struct {
+		Reason *string `json:"reason,omitempty"`
+	}{Reason: reason})
+	if err != nil {
+		return err
+	}
 	tx, err := s.db().Begin(ctx)
 	if err != nil {
 		return err
@@ -111,8 +118,8 @@ ON CONFLICT (space_id, account_id) DO UPDATE SET
 
 	_, err = tx.Exec(ctx, `
 INSERT INTO audit_log (space_id, actor_profile_id, action, target_type, target_id, details)
-VALUES ($1, $2, 'member_banned', 'account', $3, '{}')
-`, spaceID, bannedBy, accountID)
+VALUES ($1, $2, 'member_banned', 'account', $3, $4::jsonb)
+`, spaceID, bannedBy, accountID, details)
 	if err != nil {
 		return err
 	}
@@ -137,11 +144,11 @@ func (s *SpaceStore) UnbanMember(ctx context.Context, spaceID, accountID, actor 
 	if tag.RowsAffected() == 0 {
 		return pgx.ErrNoRows
 	}
-	_, _ = s.db().Exec(ctx, `
+	_, err = s.db().Exec(ctx, `
 INSERT INTO audit_log (space_id, actor_profile_id, action, target_type, target_id, details)
 VALUES ($1, $2, 'member_unbanned', 'account', $3, '{}')
 `, spaceID, actor, accountID)
-	return nil
+	return err
 }
 
 // ListBans returns active bans for a space.
@@ -196,7 +203,14 @@ func (s *SpaceStore) SetMemberTimeout(
 		return ErrInvalidTimeoutDuration
 	}
 	until := time.Now().UTC().Add(time.Duration(durationSeconds) * time.Second)
-	_, err := s.db().Exec(ctx, `
+	details, err := json.Marshal(struct {
+		DurationSeconds int32   `json:"duration_seconds"`
+		Reason          *string `json:"reason,omitempty"`
+	}{DurationSeconds: durationSeconds, Reason: reason})
+	if err != nil {
+		return err
+	}
+	_, err = s.db().Exec(ctx, `
 INSERT INTO space_member_timeouts (space_id, profile_id, timed_out_until, timed_out_by_profile_id, reason)
 VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (space_id, profile_id) DO UPDATE SET
@@ -208,11 +222,11 @@ ON CONFLICT (space_id, profile_id) DO UPDATE SET
 	if err != nil {
 		return err
 	}
-	_, _ = s.db().Exec(ctx, `
+	_, err = s.db().Exec(ctx, `
 INSERT INTO audit_log (space_id, actor_profile_id, action, target_type, target_id, details)
-VALUES ($1, $2, 'member_timed_out', 'profile', $3, '{}')
-`, spaceID, actor, profileID)
-	return nil
+VALUES ($1, $2, 'member_timed_out', 'profile', $3, $4::jsonb)
+`, spaceID, actor, profileID, details)
+	return err
 }
 
 // RemoveMemberTimeout clears an active timeout.
@@ -234,11 +248,11 @@ DELETE FROM space_member_timeouts WHERE space_id = $1 AND profile_id = $2
 	if tag.RowsAffected() == 0 {
 		return pgx.ErrNoRows
 	}
-	_, _ = s.db().Exec(ctx, `
+	_, err = s.db().Exec(ctx, `
 INSERT INTO audit_log (space_id, actor_profile_id, action, target_type, target_id, details)
 VALUES ($1, $2, 'member_timeout_removed', 'profile', $3, '{}')
 `, spaceID, actor, profileID)
-	return nil
+	return err
 }
 
 // IsProfileTimedOut reports whether profile is currently timed out in space.

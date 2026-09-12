@@ -19,44 +19,75 @@ import (
 	"voice/backend/subscription/internal/limits"
 	"voice/backend/subscription/internal/store"
 
-	subscriptionv1 "voice.app/voice/subscription/v1"
 	spacev1 "voice.app/voice/space/v1"
+	subscriptionv1 "voice.app/voice/subscription/v1"
 )
 
 // SubscriptionGRPC implements voice.subscription.v1.SubscriptionService.
 type SubscriptionGRPC struct {
 	subscriptionv1.UnimplementedSubscriptionServiceServer
-	Store   *store.SubscriptionStore
-	Catalog *catalog.ProductCatalog
+	Store             *store.SubscriptionStore
+	Catalog           *catalog.ProductCatalog
+	ProviderEventKeys ProviderEventHMACKeySource
+	CloudPayments     CloudPaymentsWebhookVerifier
+	ProviderRenewals  ProviderRenewalCanceller
 	// UserProfiles optional; when set, downgrade delegates profile freeze to User service.
 	UserProfiles UserProfileDowngradeClient
-		// SpaceEntitlements optional; syncs space_db entitlement cache after Space Pro webhook.
-		SpaceEntitlements SpaceProSyncClient
-		Analytics    interface {
-			Publish(ctx context.Context, subject, sourceService, eventType string, props map[string]any) error
-			PublishWithAccount(ctx context.Context, subject, sourceService, eventType, accountID string, props map[string]any) error
-		}
-		DomainEvents interface {
-			PublishPlanStarted(ctx context.Context, accountID, plan string) error
-			PublishPlanCancelled(ctx context.Context, accountID, plan string) error
-			PublishPlanExpired(ctx context.Context, accountID, plan string) error
-			PublishDowngrade(ctx context.Context, accountID, plan string) error
-			PublishPaymentSuccess(ctx context.Context, accountID, provider string) error
-			PublishPaymentFailed(ctx context.Context, accountID, provider string) error
-			PublishSpaceProStarted(ctx context.Context, spaceID, purchaserAccountID string) error
-			PublishSpaceProExpired(ctx context.Context, spaceID string) error
-			PublishGraceReminder(ctx context.Context, accountID, plan string, day int32) error
-		}
+	// SpaceEntitlements optional; syncs space_db entitlement cache after Space Pro webhook.
+	SpaceEntitlements SpaceProSyncClient
+	Analytics         interface {
+		Publish(ctx context.Context, subject, sourceService, eventType string, props map[string]any) error
+		PublishWithAccount(ctx context.Context, subject, sourceService, eventType, accountID string, props map[string]any) error
 	}
+	DomainEvents interface {
+		PublishPlanStarted(ctx context.Context, accountID, plan string) error
+		PublishPlanCancelled(ctx context.Context, accountID, plan string) error
+		PublishPlanExpired(ctx context.Context, accountID, plan string) error
+		PublishDowngrade(ctx context.Context, accountID, plan string) error
+		PublishPaymentSuccess(ctx context.Context, accountID, provider string) error
+		PublishPaymentFailed(ctx context.Context, accountID, provider string) error
+		PublishSpaceProStarted(ctx context.Context, spaceID, purchaserAccountID string) error
+		PublishSpaceProExpired(ctx context.Context, spaceID string) error
+		PublishGraceReminder(ctx context.Context, accountID, plan string, day int32) error
+	}
+}
 
-	// SpaceProSyncClient mirrors SpaceService.SyncSpaceProSubscription for entitlement cache updates.
-	type SpaceProSyncClient interface {
-		SyncSpaceProSubscription(ctx context.Context, in *spacev1.SyncSpaceProSubscriptionRequest, opts ...grpc.CallOption) (*spacev1.SyncSpaceProSubscriptionResponse, error)
-	}
+// SpaceProSyncClient mirrors SpaceService.SyncSpaceProSubscription for entitlement cache updates.
+type SpaceProSyncClient interface {
+	SyncSpaceProSubscription(ctx context.Context, in *spacev1.SyncSpaceProSubscriptionRequest, opts ...grpc.CallOption) (*spacev1.SyncSpaceProSubscriptionResponse, error)
+}
 
 // UserProfileDowngradeClient applies profile selection on subscription downgrade.
 type UserProfileDowngradeClient interface {
 	ApplyDowngradeProfiles(ctx context.Context, accountID uuid.UUID, keptProfileIDs []uuid.UUID) error
+}
+
+// ProviderEventHMACKeySource supplies the active purpose-scoped key. Webhook
+// handling additionally requires ProviderEventHMACVerificationKeySource so all
+// retained versions remain replay authority across rotation.
+type ProviderEventHMACKeySource interface {
+	CurrentProviderEventHMACKey(ctx context.Context, provider string) (version string, key []byte, err error)
+}
+
+type ProviderEventHMACKey struct {
+	Version string
+	Key     []byte
+}
+
+type ProviderEventHMACVerificationKeySource interface {
+	ProviderEventHMACVerificationKeys(ctx context.Context, provider string) ([]ProviderEventHMACKey, error)
+}
+
+// CloudPaymentsWebhookVerifier verifies provider authentication and returns
+// the canonical event binding consumed by the shared transactional path.
+type CloudPaymentsWebhookVerifier interface {
+	VerifyAndDecodeCloudPaymentsWebhook(ctx context.Context, rawBody, signature string) (eventID, eventType, spaceID, purchaserAccountID string, details []byte, err error)
+}
+
+// ProviderRenewalCanceller is the credential-free boundary for durable purge
+// retries. Provider credentials stay behind its implementation.
+type ProviderRenewalCanceller interface {
+	CancelSpaceRenewal(ctx context.Context, provider, providerSubscriptionID, idempotencyKey string) error
 }
 
 // NewSubscriptionGRPC constructs the gRPC service.
@@ -272,11 +303,19 @@ func (s *SubscriptionGRPC) HandlePaddleWebhook(ctx context.Context, req *subscri
 			if err != nil {
 				return nil, status.Error(codes.InvalidArgument, err.Error())
 			}
-			if _, err := s.Store.ActivateSpacePro(ctx, spaceID, purchaserID, ev.EventID, details); err != nil {
-				if errors.Is(err, store.ErrDuplicateBillingEvent) {
-					return &subscriptionv1.HandlePaddleWebhookResponse{}, nil
-				}
+			if s.ProviderEventKeys == nil {
+				return nil, status.Error(codes.FailedPrecondition, "provider event HMAC key source not configured")
+			}
+			keys, err := s.providerEventHMACKeys(ctx, "paddle")
+			if err != nil {
+				return nil, status.Error(codes.FailedPrecondition, "provider event HMAC key unavailable")
+			}
+			_, replayed, err := s.Store.ActivateSpaceProProviderEventWithKeys(ctx, "paddle", []byte(ev.EventID), "space_pro_activated", providerStoreKeys(keys), spaceID, purchaserID, details)
+			if err != nil {
 				return nil, status.Error(codes.Internal, err.Error())
+			}
+			if replayed {
+				return &subscriptionv1.HandlePaddleWebhookResponse{}, nil
 			}
 			s.publishPaymentEvent(ctx, "analytics.subscription.payment_success", "payment_success", purchaserID.String(), plan, ev.EventID)
 			s.publishDomainSpaceProStarted(ctx, spaceID.String(), purchaserID.String())
@@ -356,7 +395,7 @@ func (s *SubscriptionGRPC) HandlePaddleWebhook(ctx context.Context, req *subscri
 					return nil, status.Error(codes.Internal, err.Error())
 				}
 				if row != nil {
-					if _, err := s.Store.FinalizeSpaceProCancellation(ctx, row.ID); err != nil {
+					if _, err := s.Store.FinalizeSpaceProCancellation(ctx, spaceID, row.ID); err != nil {
 						return nil, status.Error(codes.Internal, err.Error())
 					}
 					s.publishDomainSpaceProExpired(ctx, spaceID.String())
@@ -484,7 +523,78 @@ func (s *SubscriptionGRPC) handlePremiumLifecycleWebhook(ctx context.Context, ev
 }
 
 func (s *SubscriptionGRPC) HandleCloudPaymentsWebhook(ctx context.Context, req *subscriptionv1.HandleCloudPaymentsWebhookRequest) (*subscriptionv1.HandleCloudPaymentsWebhookResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "cloudpayments webhook not implemented")
+	if s == nil || s.CloudPayments == nil {
+		return nil, status.Error(codes.FailedPrecondition, "cloudpayments webhook verifier not configured")
+	}
+	eventID, eventType, rawSpaceID, rawPurchaserID, details, err := s.CloudPayments.VerifyAndDecodeCloudPaymentsWebhook(ctx, req.GetRawBody(), req.GetSignature())
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, err.Error())
+	}
+	if eventType != "subscription.activated" || strings.TrimSpace(eventID) == "" {
+		return nil, status.Error(codes.InvalidArgument, "unsupported cloudpayments event")
+	}
+	spaceID, err := parseUUIDField("space_id", rawSpaceID)
+	if err != nil {
+		return nil, err
+	}
+	purchaserID, err := parseUUIDField("purchaser_account_id", rawPurchaserID)
+	if err != nil {
+		return nil, err
+	}
+	if s.ProviderEventKeys == nil {
+		return nil, status.Error(codes.FailedPrecondition, "provider event HMAC key source not configured")
+	}
+	keys, err := s.providerEventHMACKeys(ctx, "cloudpayments")
+	if err != nil {
+		return nil, status.Error(codes.FailedPrecondition, "provider event HMAC key unavailable")
+	}
+	_, replayed, err := s.Store.ActivateSpaceProProviderEventWithKeys(ctx, "cloudpayments", []byte(eventID), "space_pro_activated", providerStoreKeys(keys), spaceID, purchaserID, details)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if !replayed {
+		s.publishPaymentEvent(ctx, "analytics.subscription.payment_success", "payment_success", purchaserID.String(), "space_pro", eventID)
+		s.publishDomainSpaceProStarted(ctx, spaceID.String(), purchaserID.String())
+		s.syncSpaceProCache(ctx, spaceID.String(), purchaserID.String(), "active")
+	}
+	return &subscriptionv1.HandleCloudPaymentsWebhookResponse{}, nil
+}
+
+func (s *SubscriptionGRPC) providerEventHMACKeys(ctx context.Context, provider string) ([]ProviderEventHMACKey, error) {
+	version, key, err := s.ProviderEventKeys.CurrentProviderEventHMACKey(ctx, provider)
+	if err != nil || strings.TrimSpace(version) == "" || len(key) == 0 {
+		return nil, errors.New("current provider event HMAC key unavailable")
+	}
+	keys := []ProviderEventHMACKey{{Version: strings.TrimSpace(version), Key: append([]byte(nil), key...)}}
+	verificationSource, ok := s.ProviderEventKeys.(ProviderEventHMACVerificationKeySource)
+	if !ok {
+		return nil, errors.New("retained provider event HMAC keys unavailable")
+	}
+	retained, err := verificationSource.ProviderEventHMACVerificationKeys(ctx, provider)
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]struct{}{keys[0].Version: {}}
+	for _, retainedKey := range retained {
+		retainedKey.Version = strings.TrimSpace(retainedKey.Version)
+		if retainedKey.Version == "" || len(retainedKey.Key) == 0 {
+			return nil, errors.New("retained provider event HMAC key unavailable")
+		}
+		if _, duplicate := seen[retainedKey.Version]; duplicate {
+			continue
+		}
+		seen[retainedKey.Version] = struct{}{}
+		keys = append(keys, ProviderEventHMACKey{Version: retainedKey.Version, Key: append([]byte(nil), retainedKey.Key...)})
+	}
+	return keys, nil
+}
+
+func providerStoreKeys(keys []ProviderEventHMACKey) []store.ProviderEventHMACKey {
+	out := make([]store.ProviderEventHMACKey, 0, len(keys))
+	for _, key := range keys {
+		out = append(out, store.ProviderEventHMACKey{Version: key.Version, Key: key.Key})
+	}
+	return out
 }
 
 func (s *SubscriptionGRPC) GetBillingHistory(ctx context.Context, req *subscriptionv1.GetBillingHistoryRequest) (*subscriptionv1.GetBillingHistoryResponse, error) {

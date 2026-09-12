@@ -45,6 +45,13 @@ func (s *RoleStore) transitionOwnerRole(ctx context.Context, action string, in O
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, in.OperationID.String()); err != nil {
 		return uuid.Nil, err
 	}
+	var retired bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM role_space_lifecycle WHERE space_id=$1 AND retired_at IS NOT NULL)`, in.SpaceID).Scan(&retired); err != nil {
+		return uuid.Nil, err
+	}
+	if retired {
+		return uuid.Nil, ErrSpaceRetired
+	}
 
 	// A durable compensation is terminal, including when it fenced an Apply
 	// that had not reached this lock yet. Check it before replaying Apply success.

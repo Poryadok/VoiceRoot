@@ -100,7 +100,15 @@ func (s *ProfileSpaceSearchStore) UpsertSpace(ctx context.Context, doc SpaceDocu
 	if s == nil || s.Pool == nil {
 		return fmt.Errorf("space search store unavailable")
 	}
-	_, err := s.Pool.Exec(ctx, `
+	tx, err := beginGovernedTx(ctx, s.Pool)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	if err := lifecycleGateSpace(ctx, tx, doc.SpaceID); err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `
 		INSERT INTO space_search_documents (space_id, name, description, visibility, member_count, updated_at)
 		VALUES ($1, $2, $3, $4, $5, now())
 		ON CONFLICT (space_id) DO UPDATE SET
@@ -111,15 +119,29 @@ func (s *ProfileSpaceSearchStore) UpsertSpace(ctx context.Context, doc SpaceDocu
 			updated_at = now()`,
 		doc.SpaceID, doc.Name, doc.Description, doc.Visibility, doc.MemberCount,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (s *ProfileSpaceSearchStore) DeleteSpace(ctx context.Context, spaceID uuid.UUID) error {
 	if s == nil || s.Pool == nil {
 		return fmt.Errorf("space search store unavailable")
 	}
-	_, err := s.Pool.Exec(ctx, `DELETE FROM space_search_documents WHERE space_id = $1`, spaceID)
-	return err
+	tx, err := beginGovernedTx(ctx, s.Pool)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	if err := lifecycleGateSpace(ctx, tx, spaceID); err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `DELETE FROM space_search_documents WHERE space_id = $1`, spaceID)
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 type spaceCursor struct {
@@ -162,6 +184,14 @@ func (s *ProfileSpaceSearchStore) SearchSpaces(ctx context.Context, query string
 		limit = defaultPageSize
 	}
 	pat := "%" + escapeLikePattern(query) + "%"
+	tx, err := beginGovernedTx(ctx, s.Pool)
+	if err != nil {
+		return nil, "", err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	if err := lifecycleGateAnySpaceSearch(ctx, tx, query); err != nil {
+		return nil, "", err
+	}
 
 	var after *spaceCursor
 	if cursor != nil && strings.TrimSpace(*cursor) != "" {
@@ -186,7 +216,7 @@ func (s *ProfileSpaceSearchStore) SearchSpaces(ctx context.Context, query string
 		ORDER BY name ASC, space_id ASC
 		LIMIT $%d`, where, len(args))
 
-	rows, err := s.Pool.Query(ctx, sql, args...)
+	rows, err := tx.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, "", err
 	}
@@ -217,6 +247,9 @@ func (s *ProfileSpaceSearchStore) SearchSpaces(ctx context.Context, query string
 		next = c
 		hits = hits[:limit]
 	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, "", err
+	}
 	return hits, next, nil
 }
 
@@ -224,24 +257,47 @@ func (s *ProfileSpaceSearchStore) UpsertChat(ctx context.Context, chatID uuid.UU
 	if s == nil || s.Pool == nil {
 		return fmt.Errorf("chat search store unavailable")
 	}
-	_, err := s.Pool.Exec(ctx, `
+	tx, err := beginGovernedTx(ctx, s.Pool)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	if err := lifecycleGateChat(ctx, tx, chatID); err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `
 		INSERT INTO chat_search_documents (chat_id, title, updated_at)
 		VALUES ($1, $2, now())
 		ON CONFLICT (chat_id) DO UPDATE SET title = EXCLUDED.title, updated_at = now()`,
 		chatID, title,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (s *ProfileSpaceSearchStore) SearchChats(ctx context.Context, query string, limit int) ([]uuid.UUID, error) {
 	if s == nil || s.Pool == nil {
 		return nil, fmt.Errorf("chat search store unavailable")
 	}
+	tx, err := beginGovernedTx(ctx, s.Pool)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	var blocked bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM chat_search_documents c JOIN search_space_chat_manifest_items p ON p.chat_id=c.chat_id JOIN search_space_lifecycle_fences f ON f.space_id=p.space_id AND f.deletion_operation_id=p.deletion_operation_id WHERE f.state IN ('FROZEN','PURGE_DECIDED','PURGED') AND c.title ILIKE '%' || $1 || '%')`, query).Scan(&blocked); err != nil {
+		return nil, err
+	}
+	if blocked {
+		return nil, fmt.Errorf("chat projection frozen")
+	}
 	if limit <= 0 {
 		limit = defaultPageSize
 	}
 	pat := "%" + escapeLikePattern(query) + "%"
-	rows, err := s.Pool.Query(ctx, `
+	rows, err := tx.Query(ctx, `
 		SELECT chat_id
 		FROM chat_search_documents
 		WHERE title ILIKE $1 ESCAPE '\'
@@ -260,5 +316,11 @@ func (s *ProfileSpaceSearchStore) SearchChats(ctx context.Context, query string,
 		}
 		out = append(out, id)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return out, nil
 }

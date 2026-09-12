@@ -18,6 +18,7 @@ func TestProfileSpaceSearchStore_ProfileILIKE_postgres(t *testing.T) {
 	ctx := context.Background()
 	migrationPath := filepath.Join(searchModuleRepoRoot(t), "src", "backend", "migrations", "search_db", "000001_init.up.sql")
 	pool := integrationtest.StartPostgres(t, ctx, "searchdb", migrationPath)
+	integrationtest.ApplySQLFile(t, ctx, pool, searchModuleRepoRoot(t), filepath.Join("src", "backend", "migrations", "search_db", "000003_space_lifecycle.up.sql"))
 	integrationtest.ApplySQLFile(t, ctx, pool, searchModuleRepoRoot(t), filepath.Join("src", "backend", "migrations", "search_db", "000002_verification_type.up.sql"))
 
 	viewer := uuid.New()
@@ -62,6 +63,7 @@ func TestProfileSpaceSearchStore_ExcludesBlockedProfiles_postgres(t *testing.T) 
 	ctx := context.Background()
 	migrationPath := filepath.Join(searchModuleRepoRoot(t), "src", "backend", "migrations", "search_db", "000001_init.up.sql")
 	pool := integrationtest.StartPostgres(t, ctx, "searchdb", migrationPath)
+	integrationtest.ApplySQLFile(t, ctx, pool, searchModuleRepoRoot(t), filepath.Join("src", "backend", "migrations", "search_db", "000003_space_lifecycle.up.sql"))
 	integrationtest.ApplySQLFile(t, ctx, pool, searchModuleRepoRoot(t), filepath.Join("src", "backend", "migrations", "search_db", "000002_verification_type.up.sql"))
 
 	viewer := uuid.New()
@@ -98,6 +100,7 @@ func TestProfileSpaceSearchStore_SpaceVisibilityFilter_postgres(t *testing.T) {
 	ctx := context.Background()
 	migrationPath := filepath.Join(searchModuleRepoRoot(t), "src", "backend", "migrations", "search_db", "000001_init.up.sql")
 	pool := integrationtest.StartPostgres(t, ctx, "searchdb", migrationPath)
+	integrationtest.ApplySQLFile(t, ctx, pool, searchModuleRepoRoot(t), filepath.Join("src", "backend", "migrations", "search_db", "000003_space_lifecycle.up.sql"))
 
 	publicID := uuid.New()
 	inviteID := uuid.New()

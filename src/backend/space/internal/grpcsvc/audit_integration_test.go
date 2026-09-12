@@ -1,6 +1,7 @@
 package grpcsvc
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
@@ -217,6 +218,50 @@ func TestGetAuditLog_MalformedCursor_InvalidArgument(t *testing.T) {
 	}
 }
 
+func TestGetAuditLog_SignedCursorRejectsCrossSpaceAndAccessScopeReplay(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	owner, _, ownerCtx := profileFixture(t)
+	ctx := context.Background()
+	pool := startSpacePostgresForTest(t, ctx)
+	applySpaceMigration(t, ctx, pool)
+	roles := &auditPermissionRoleStub{allowed: true}
+	client, cleanup := startSpaceGRPCTestServer(t, pool, withRoleClient(roles))
+	t.Cleanup(cleanup)
+	first, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Signed cursor source"})
+	require.NoError(t, err)
+	second, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Signed cursor other"})
+	require.NoError(t, err)
+	firstID := uuid.MustParse(first.GetSpace().GetId())
+	secondID := uuid.MustParse(second.GetSpace().GetId())
+	now := time.Now().UTC()
+	insertSpaceAuditEntry(t, ctx, pool, firstID, uuid.New(), owner, "member_banned", "account", `{}`, now)
+	insertSpaceAuditEntry(t, ctx, pool, firstID, uuid.New(), owner, "member_unbanned", "account", `{}`, now.Add(-time.Minute))
+	insertSpaceAuditEntry(t, ctx, pool, secondID, uuid.New(), owner, "member_banned", "account", `{}`, now)
+	insertSpaceAuditEntry(t, ctx, pool, secondID, uuid.New(), owner, "member_unbanned", "account", `{}`, now.Add(-time.Minute))
+
+	page, err := client.GetAuditLog(ownerCtx, &spacev1.GetAuditLogRequest{
+		SpaceId: firstID.String(), Page: &commonv1.CursorPageRequest{PageSize: 1},
+	})
+	require.NoError(t, err)
+	cursor := page.GetAuditLogList().GetNextCursor()
+	require.NotEmpty(t, cursor)
+	_, err = client.GetAuditLog(ownerCtx, &spacev1.GetAuditLogRequest{
+		SpaceId: secondID.String(), Page: &commonv1.CursorPageRequest{PageSize: 1, Cursor: cursor},
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	otherReader := uuid.New()
+	_, err = pool.Exec(ctx, `INSERT INTO space_members(space_id,profile_id) VALUES($1,$2)`, firstID, otherReader)
+	require.NoError(t, err)
+	otherCtx := withAccountProfileCtx(context.Background(), uuid.New(), otherReader)
+	_, err = client.GetAuditLog(otherCtx, &spacev1.GetAuditLogRequest{
+		SpaceId: firstID.String(), Page: &commonv1.CursorPageRequest{PageSize: 1, Cursor: cursor},
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
 func TestGetAuditLog_OwnerFallbackOnlyWhenRolesUnwired(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
@@ -396,6 +441,7 @@ func TestGetAuditLog_CrossInstance_WaitsForSpaceMutationSaga(t *testing.T) {
 		Store:          &store.SpaceStore{Pool: pool},
 		Roles:          roles,
 		MutationLocker: store.NewSpaceMutationLocker(lockPoolB),
+		AuditCursorKey: bytes.Repeat([]byte{0xa7}, 32),
 	}
 
 	transferDone := make(chan error, 1)
