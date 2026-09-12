@@ -76,11 +76,12 @@ spec:
       targetPort: 6379
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: voice-redis
   namespace: voice-prod
 spec:
+  serviceName: voice-redis
   replicas: 1
   selector:
     matchLabels:
@@ -96,6 +97,17 @@ spec:
           args: ["redis-server", "--appendonly", "yes"]
           ports:
             - containerPort: 6379
+          volumeMounts:
+            - name: redisdata
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: redisdata
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
 ---
 apiVersion: v1
 kind: Service
@@ -114,11 +126,12 @@ spec:
       targetPort: 8222
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: voice-nats
   namespace: voice-prod
 spec:
+  serviceName: voice-nats
   replicas: 1
   selector:
     matchLabels:
@@ -138,9 +151,14 @@ spec:
           volumeMounts:
             - name: jsdata
               mountPath: /data
-      volumes:
-        - name: jsdata
-          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: jsdata
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
 ---
 apiVersion: v1
 kind: Service
@@ -158,12 +176,13 @@ spec:
     - name: rtc-tcp
       port: 7881
       targetPort: 7881
-      nodePort: 30881
+      protocol: TCP
+      nodePort: 30981
     - name: rtc-udp
       port: 7882
       targetPort: 7882
       protocol: UDP
-      nodePort: 30882
+      nodePort: 30982
     - name: metrics
       port: 6789
       targetPort: 6789
@@ -201,25 +220,8 @@ spec:
               readOnly: true
       volumes:
         - name: livekit-config
-          configMap:
-            name: voice-livekit-config
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: voice-livekit-config
-  namespace: voice-prod
-data:
-  livekit.yaml: |
-    port: 7880
-    rtc:
-      tcp_port: 7881
-      udp_port: 7882
-      use_external_ip: true
-    prometheus:
-      port: 6789
-    keys:
-      __LIVEKIT_API_KEY__: __LIVEKIT_API_SECRET__
+          secret:
+            secretName: voice-livekit-config
 ---
 apiVersion: v1
 kind: Service

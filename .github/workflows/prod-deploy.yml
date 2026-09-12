@@ -52,6 +52,9 @@ jobs:
 
       - uses: azure/setup-kubectl@v5
 
+      - name: Verify production manifest invariants
+        run: python3 scripts/prod/prod_infra_invariants_test.py
+
       - name: Configure kubeconfig
         run: |
           set -eux
@@ -80,6 +83,7 @@ jobs:
           VOICE_WEB_INGRESS_HOST: ${{ vars.VOICE_PROD_WEB_INGRESS_HOST }}
           VOICE_ADMIN_INGRESS_HOST: ${{ vars.VOICE_PROD_ADMIN_INGRESS_HOST }}
           VOICE_LIVEKIT_INGRESS_HOST: ${{ vars.VOICE_PROD_LIVEKIT_INGRESS_HOST }}
+          VOICE_LIVEKIT_NODE_IP: ${{ vars.VOICE_PROD_LIVEKIT_NODE_IP }}
           VOICE_GATEWAY_TLS_SECRET: ${{ vars.VOICE_PROD_GATEWAY_TLS_SECRET }}
           VOICE_K8S_NAMESPACE: ${{ vars.VOICE_PROD_K8S_NAMESPACE }}
           VOICE_IMAGE_PULL_SECRET: ${{ vars.VOICE_PROD_IMAGE_PULL_SECRET }}

@@ -34,14 +34,17 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: voice-admin-http
+  name: voice-admin-https
   namespace: voice-prod
   labels:
     app.kubernetes.io/name: voice-admin
   annotations:
-    traefik.ingress.kubernetes.io/router.entrypoints: web
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
 spec:
   ingressClassName: traefik
+  tls:
+    - hosts: [__ADMIN_INGRESS_HOST__]
+      secretName: voice-origin-tls
   rules:
     - host: __ADMIN_INGRESS_HOST__
       http:
