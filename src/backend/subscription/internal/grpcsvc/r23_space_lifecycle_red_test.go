@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -914,11 +915,19 @@ FOR EACH ROW EXECUTE FUNCTION r23_require_provider_fence_before_business_write()
 
 func r23WaitForBlockedSubscriptionTransactions(t *testing.T, ctx context.Context, pool *pgxpool.Pool, want int) {
 	t.Helper()
+	// The barrier, fence transition, queued read, and queued mutation occupy all
+	// four connections in pgxpool's default configuration. Querying
+	// pg_stat_activity through that pool would then wait for a connection instead
+	// of observing those three PostgreSQL lock waiters.
+	monitor, err := pgx.Connect(ctx, pool.Config().ConnString())
+	require.NoError(t, err)
+	defer monitor.Close(context.Background())
+
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 	for {
 		var blocked int
-		err := pool.QueryRow(ctx, `
+		err = monitor.QueryRow(ctx, `
 SELECT count(*) FROM pg_stat_activity
 WHERE datname=current_database() AND pid<>pg_backend_pid() AND wait_event_type='Lock'`).Scan(&blocked)
 		require.NoError(t, err)
