@@ -68,6 +68,11 @@ CREATE TABLE IF NOT EXISTS space_subscriptions (
 	created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS subscription_space_lifecycle_fences (
+	space_id UUID PRIMARY KEY,
+	state TEXT NOT NULL
+);
 `
 
 // TestRunner_EmitsGraceRemindersOnDays1_3_7 documents subscription.md grace notifications.
