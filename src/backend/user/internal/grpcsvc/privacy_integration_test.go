@@ -515,7 +515,8 @@ VALUES ($1, $2, 'owner', '4444', 'Owner', true),
 	})
 	require.NoError(t, err)
 	require.Equal(t, "online", resp.GetPresenceStatus().GetStatus())
-	require.NotNil(t, resp.GetPresenceStatus().GetLastSeen(), "personal preset permits a friend to read last seen")
+	require.Nil(t, resp.GetPresenceStatus().GetLastSeen(),
+		"personal show_last_seen=friends excludes a guest unless include_guests is selected")
 	require.Empty(t, resp.GetPresenceStatus().GetGameTitle(),
 		"guest viewer must not see game status when guest audience is excluded")
 }
@@ -764,6 +765,8 @@ VALUES ($1, $2, 'owner', '4444', 'Owner', true),
 	})
 	require.NoError(t, err)
 	require.Equal(t, "online", resp.GetPresenceStatus().GetStatus())
+	require.NotNil(t, resp.GetPresenceStatus().GetLastSeen(),
+		"personal show_last_seen=friends permits the authenticated friend")
 }
 
 // TestGetBulkPresence_FriendsOnly_FiltersStranger documents bulk presence applies same privacy rules.
