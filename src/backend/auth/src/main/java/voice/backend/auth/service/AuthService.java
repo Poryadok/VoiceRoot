@@ -276,6 +276,26 @@ public class AuthService {
     return claims;
   }
 
+  /** Resolves the account/profile/epoch carried by an ordinary user access credential. */
+  public voice.backend.auth.spacedeletionproof.DeletionProofActor spaceDeletionProofActor(
+      String accessToken) {
+    TokenClaims claims = validate(accessToken);
+    try {
+      UUID accountId = UUID.fromString(claims.userId());
+      UUID profileId = UUID.fromString(claims.profileId());
+      if (!accountId.toString().equals(claims.userId())
+          || !profileId.toString().equals(claims.profileId())
+          || claims.sessionEpoch() <= 0) {
+        throw new IllegalArgumentException();
+      }
+      return new voice.backend.auth.spacedeletionproof.DeletionProofActor(
+          accountId, profileId, claims.sessionEpoch());
+    } catch (RuntimeException malformed) {
+      if (malformed instanceof AuthException auth) throw auth;
+      throw new AuthException("invalid_token");
+    }
+  }
+
   public String jwksJson() {
     return jwtService.jwksJson();
   }

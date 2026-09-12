@@ -336,10 +336,89 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
   }
 
   private voice.backend.auth.ownershipproof.OwnershipTransferProofService ownershipProofs;
+  private voice.backend.auth.spacedeletionproof.SpaceDeletionProofService spaceDeletionProofs;
 
   @org.springframework.beans.factory.annotation.Autowired(required = false)
   public void configureOwnershipProofService(voice.backend.auth.ownershipproof.OwnershipTransferProofService service) {
     this.ownershipProofs = service;
+  }
+
+  @org.springframework.beans.factory.annotation.Autowired(required = false)
+  public void configureSpaceDeletionProofService(
+      voice.backend.auth.spacedeletionproof.SpaceDeletionProofService service) {
+    this.spaceDeletionProofs = service;
+  }
+
+  @Override
+  public void issueSpaceDeletionProof(
+      app.voice.auth.v1.IssueSpaceDeletionProofRequest request,
+      StreamObserver<app.voice.auth.v1.IssueSpaceDeletionProofResponse> responseObserver) {
+    runSpaceDeletionProof(responseObserver, () -> {
+      rejectUnknownFields(request);
+      var actor = authService.spaceDeletionProofActor(currentAuthorization());
+      var binding = new voice.backend.auth.spacedeletionproof.DeletionProofBinding(
+          actor.accountId(), actor.profileId(), actor.sessionEpoch(),
+          deletionUuid(request.getSpaceId()), deletionUuid(request.getOperationId()));
+      var issued = requireSpaceDeletionProofService().issue(
+          binding, request.getConfirmationName(), request.getPassword(),
+          request.getTotpCode(), request.getBackupCode());
+      return app.voice.auth.v1.IssueSpaceDeletionProofResponse.newBuilder()
+          .setProof(issued.proof()).setExpiresAt(toTimestamp(issued.expiresAt())).build();
+    });
+  }
+
+  @Override
+  public void consumeSpaceDeletionProof(
+      app.voice.auth.v1.ConsumeSpaceDeletionProofRequest request,
+      StreamObserver<app.voice.auth.v1.ConsumeSpaceDeletionProofResponse> responseObserver) {
+    runSpaceDeletionProof(responseObserver, () -> {
+      rejectUnknownFields(request);
+      requireProtocolVersion(request.getProtocolVersion());
+      requireProofPrincipal("service", "space");
+      var binding = new voice.backend.auth.spacedeletionproof.DeletionProofBinding(
+          deletionUuid(request.getAccountId()), deletionUuid(request.getProfileId()),
+          request.getSessionEpoch(), deletionUuid(request.getSpaceId()),
+          deletionUuid(request.getOperationId()));
+      var receipt = requireSpaceDeletionProofService().consume(
+          binding, request.getConfirmationName(), request.getProof());
+      return app.voice.auth.v1.ConsumeSpaceDeletionProofResponse.newBuilder()
+          .setReceipt(receipt).build();
+    });
+  }
+
+  @Override
+  public void getSpaceDeletionProofReceipt(
+      app.voice.auth.v1.GetSpaceDeletionProofReceiptRequest request,
+      StreamObserver<app.voice.auth.v1.GetSpaceDeletionProofReceiptResponse> responseObserver) {
+    runSpaceDeletionProof(responseObserver, () -> {
+      rejectUnknownFields(request);
+      requireProtocolVersion(request.getProtocolVersion());
+      requireProofPrincipal("service", "space");
+      var lookup = new voice.backend.auth.spacedeletionproof.DeletionProofLookup(
+          deletionUuid(request.getAccountId()), deletionUuid(request.getProfileId()),
+          request.getSessionEpoch(), deletionUuid(request.getSpaceId()),
+          deletionUuid(request.getOperationId()), request.getConfirmationNameSha256().toByteArray(),
+          request.getProofDigestSha256().toByteArray());
+      return app.voice.auth.v1.GetSpaceDeletionProofReceiptResponse.newBuilder()
+          .setReceipt(requireSpaceDeletionProofService().lookup(lookup)).build();
+    });
+  }
+
+  @Override
+  public void acknowledgeSpaceDeletionProofReceipt(
+      app.voice.auth.v1.AcknowledgeSpaceDeletionProofReceiptRequest request,
+      StreamObserver<app.voice.auth.v1.AcknowledgeSpaceDeletionProofReceiptResponse> responseObserver) {
+    runSpaceDeletionProof(responseObserver, () -> {
+      rejectUnknownFields(request);
+      requireProtocolVersion(request.getProtocolVersion());
+      requireProofPrincipal("service", "space");
+      var acknowledgement = new voice.backend.auth.spacedeletionproof.DeletionProofAcknowledgement(
+          deletionUuid(request.getReceiptId()), deletionUuid(request.getSpaceId()),
+          deletionUuid(request.getOperationId()), request.getReceiptSha256().toByteArray());
+      Instant acknowledgedAt = requireSpaceDeletionProofService().acknowledge(acknowledgement);
+      return app.voice.auth.v1.AcknowledgeSpaceDeletionProofReceiptResponse.newBuilder()
+          .setAcknowledgedAt(toTimestamp(acknowledgedAt)).build();
+    });
   }
 
   @Override
@@ -409,6 +488,34 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
     return ownershipProofs;
   }
 
+  private voice.backend.auth.spacedeletionproof.SpaceDeletionProofService
+      requireSpaceDeletionProofService() {
+    if (spaceDeletionProofs == null) {
+      throw Status.UNAVAILABLE.withDescription("space deletion proof unavailable").asRuntimeException();
+    }
+    return spaceDeletionProofs;
+  }
+
+  private static void rejectUnknownFields(com.google.protobuf.Message request) {
+    if (!request.getUnknownFields().asMap().isEmpty()) {
+      throw new IllegalArgumentException("unknown authority fields");
+    }
+  }
+
+  private static void requireProtocolVersion(int version) {
+    if (version != 1) throw new IllegalArgumentException("invalid protocol version");
+  }
+
+  private static java.util.UUID deletionUuid(String value) {
+    try {
+      java.util.UUID parsed = java.util.UUID.fromString(value);
+      if (!parsed.toString().equals(value)) throw new IllegalArgumentException();
+      return parsed;
+    } catch (RuntimeException malformed) {
+      throw new IllegalArgumentException("invalid deletion proof binding");
+    }
+  }
+
   private static java.util.UUID proofUuid(String value) {
     if (value == null || !value.matches("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")) {
       throw new IllegalArgumentException("invalid proof binding");
@@ -430,6 +537,27 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
     } catch (RuntimeException unavailable) {
       // Never disclose factor/proof material, JDBC details or request payloads.
       observer.onError(Status.UNAVAILABLE.withDescription("ownership proof unavailable").asRuntimeException());
+    }
+  }
+
+  private <T> void runSpaceDeletionProof(StreamObserver<T> observer, GrpcCall<T> call) {
+    try {
+      T result = call.execute();
+      observer.onNext(result);
+      observer.onCompleted();
+    } catch (voice.backend.auth.spacedeletionproof.DeletionProofDeniedException denied) {
+      observer.onError(Status.PERMISSION_DENIED
+          .withDescription("space deletion proof denied").asRuntimeException());
+    } catch (io.grpc.StatusRuntimeException status) {
+      observer.onError(status);
+    } catch (AuthException credential) {
+      observer.onError(toGrpcStatus(credential).asRuntimeException());
+    } catch (IllegalArgumentException malformed) {
+      observer.onError(Status.INVALID_ARGUMENT
+          .withDescription("invalid space deletion proof request").asRuntimeException());
+    } catch (RuntimeException unavailable) {
+      observer.onError(Status.UNAVAILABLE
+          .withDescription("space deletion proof unavailable").asRuntimeException());
     }
   }
   private <T> void run(StreamObserver<T> observer, GrpcCall<T> call) {
@@ -504,5 +632,13 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
       return authorization;
     }
     return lastAccessToken();
+  }
+
+  private static String currentAuthorization() {
+    String authorization = AuthorizationServerInterceptor.AUTHORIZATION.get();
+    if (authorization == null || authorization.isBlank()) {
+      throw new AuthException("invalid_token");
+    }
+    return authorization;
   }
 }

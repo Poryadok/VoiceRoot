@@ -12,6 +12,12 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
   public static final String ISSUE_RPC = "/voice.auth.v1.AuthService/IssueOwnershipTransferProof";
   public static final String CONSUME_RPC = "/voice.auth.v1.AuthService/ConsumeOwnershipTransferProof";
   public static final String LOOKUP_RPC = "/voice.auth.v1.AuthService/GetOwnershipTransferReceipt";
+  public static final String SPACE_DELETE_CONSUME_RPC =
+      "/voice.auth.v1.AuthService/ConsumeSpaceDeletionProof";
+  public static final String SPACE_DELETE_LOOKUP_RPC =
+      "/voice.auth.v1.AuthService/GetSpaceDeletionProofReceipt";
+  public static final String SPACE_DELETE_ACK_RPC =
+      "/voice.auth.v1.AuthService/AcknowledgeSpaceDeletionProofReceipt";
   private static final Set<String> RAW = Set.of("x-profile-id", "x-account-id", "x-user-id", "x-actor-id", "x-internal-caller");
   private final AuthPrincipalVerifier verifier;
   private final Runnable cleanup;
@@ -27,7 +33,9 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
   @Override public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
       ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
     String rpc = "/" + call.getMethodDescriptor().getFullMethodName();
-    if (!ISSUE_RPC.equals(rpc) && !CONSUME_RPC.equals(rpc) && !LOOKUP_RPC.equals(rpc)) return next.startCall(call, headers);
+    if (!ISSUE_RPC.equals(rpc) && !CONSUME_RPC.equals(rpc) && !LOOKUP_RPC.equals(rpc)
+        && !SPACE_DELETE_CONSUME_RPC.equals(rpc) && !SPACE_DELETE_LOOKUP_RPC.equals(rpc)
+        && !SPACE_DELETE_ACK_RPC.equals(rpc)) return next.startCall(call, headers);
     final String token, requestId;
     try {
       if (verifier == null) throw new IllegalArgumentException();
