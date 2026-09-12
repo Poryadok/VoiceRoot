@@ -120,7 +120,7 @@ func TestPresenceForViewer_invisibleMaskedForOthers(t *testing.T) {
 	require.Empty(t, masked.GetStatus())
 	require.Empty(t, masked.GetCustomStatus())
 	require.Empty(t, masked.GetGameTitle())
-	require.Equal(t, int64(99), masked.GetLastSeen().AsTime().Unix())
+	require.Nil(t, masked.GetLastSeen(), "viewer without a permitted show_last_seen audience must not receive the timestamp")
 
 	selfCtx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(
 		authctx.HeaderProfileID, target.String(),
@@ -129,4 +129,5 @@ func TestPresenceForViewer_invisibleMaskedForOthers(t *testing.T) {
 	require.Equal(t, "invisible", selfView.GetStatus())
 	require.Equal(t, "secret", selfView.GetCustomStatus())
 	require.Equal(t, "Dota", selfView.GetGameTitle())
+	require.Equal(t, int64(99), selfView.GetLastSeen().AsTime().Unix())
 }

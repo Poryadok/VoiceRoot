@@ -16,6 +16,7 @@ type PrivacyRow struct {
 	ProfileID             uuid.UUID
 	Preset                string
 	ShowOnline            privacy.Audience
+	ShowLastSeen          privacy.Audience
 	ShowGameStatus        privacy.Audience
 	ShowMmRating          privacy.Audience
 	ShowPhone             privacy.Audience
@@ -49,7 +50,7 @@ func (s *PrivacyStore) GetByProfileID(ctx context.Context, profileID uuid.UUID) 
 	}
 	row, err := scanPrivacy(s.pool.QueryRow(ctx, `
 SELECT profile_id, preset,
-       show_online_audience, show_game_status_audience, show_mm_rating_audience, show_phone_audience, show_stories_audience,
+       show_online_audience, show_last_seen_audience, show_game_status_audience, show_mm_rating_audience, show_phone_audience, show_stories_audience,
        allow_phone_search_audience, allow_dm_audience, allow_calls_audience, allow_chat_space_invites_audience,
        allow_files_audience, allow_voice_messages_audience, allow_friend_requests_audience,
        allow_guest_dm, allow_forward, show_read_receipts, updated_at
@@ -87,6 +88,7 @@ func PrivacyRowFromSettings(profileID uuid.UUID, s privacy.Settings) PrivacyRow 
 		ProfileID:             profileID,
 		Preset:                s.Preset,
 		ShowOnline:            s.ShowOnline,
+		ShowLastSeen:          s.ShowLastSeen,
 		ShowGameStatus:        s.ShowGameStatus,
 		ShowMmRating:          s.ShowMmRating,
 		ShowPhone:             s.ShowPhone,
@@ -109,6 +111,10 @@ func (s *PrivacyStore) Upsert(ctx context.Context, row PrivacyRow) (*PrivacyRow,
 		return nil, errPrivacyStoreNotConfigured
 	}
 	showOnline, err := privacy.MarshalJSON(row.ShowOnline)
+	if err != nil {
+		return nil, err
+	}
+	showLastSeen, err := privacy.MarshalJSON(row.ShowLastSeen)
 	if err != nil {
 		return nil, err
 	}
@@ -159,14 +165,15 @@ func (s *PrivacyStore) Upsert(ctx context.Context, row PrivacyRow) (*PrivacyRow,
 	return scanPrivacy(s.pool.QueryRow(ctx, `
 INSERT INTO privacy_settings (
   profile_id, preset,
-  show_online_audience, show_game_status_audience, show_mm_rating_audience, show_phone_audience, show_stories_audience,
+  show_online_audience, show_last_seen_audience, show_game_status_audience, show_mm_rating_audience, show_phone_audience, show_stories_audience,
   allow_phone_search_audience, allow_dm_audience, allow_calls_audience, allow_chat_space_invites_audience,
   allow_files_audience, allow_voice_messages_audience, allow_friend_requests_audience,
   allow_guest_dm, allow_forward, show_read_receipts
-) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
 ON CONFLICT (profile_id) DO UPDATE SET
   preset = EXCLUDED.preset,
   show_online_audience = EXCLUDED.show_online_audience,
+  show_last_seen_audience = EXCLUDED.show_last_seen_audience,
   show_game_status_audience = EXCLUDED.show_game_status_audience,
   show_mm_rating_audience = EXCLUDED.show_mm_rating_audience,
   show_phone_audience = EXCLUDED.show_phone_audience,
@@ -183,12 +190,12 @@ ON CONFLICT (profile_id) DO UPDATE SET
   show_read_receipts = EXCLUDED.show_read_receipts,
   updated_at = now()
 RETURNING profile_id, preset,
-  show_online_audience, show_game_status_audience, show_mm_rating_audience, show_phone_audience, show_stories_audience,
+  show_online_audience, show_last_seen_audience, show_game_status_audience, show_mm_rating_audience, show_phone_audience, show_stories_audience,
   allow_phone_search_audience, allow_dm_audience, allow_calls_audience, allow_chat_space_invites_audience,
   allow_files_audience, allow_voice_messages_audience, allow_friend_requests_audience,
   allow_guest_dm, allow_forward, show_read_receipts, updated_at`,
 		row.ProfileID, row.Preset,
-		showOnline, showGameStatus, showMmRating, showPhone, showStories,
+		showOnline, showLastSeen, showGameStatus, showMmRating, showPhone, showStories,
 		allowPhoneSearch, allowDM, allowCalls, allowInvites, allowFiles, allowVoice, allowFriendRequests,
 		row.AllowGuestDM, row.AllowForward, row.ShowReadReceipts,
 	))
@@ -196,12 +203,12 @@ RETURNING profile_id, preset,
 
 func scanPrivacy(row pgx.Row) (*PrivacyRow, error) {
 	var out PrivacyRow
-	var showOnline, showGameStatus, showMmRating, showPhone, showStories []byte
+	var showOnline, showLastSeen, showGameStatus, showMmRating, showPhone, showStories []byte
 	var allowPhoneSearch, allowDM, allowCalls, allowInvites, allowFiles, allowVoice, allowFriendRequests []byte
 	if err := row.Scan(
 		&out.ProfileID,
 		&out.Preset,
-		&showOnline, &showGameStatus, &showMmRating, &showPhone, &showStories,
+		&showOnline, &showLastSeen, &showGameStatus, &showMmRating, &showPhone, &showStories,
 		&allowPhoneSearch, &allowDM, &allowCalls, &allowInvites, &allowFiles, &allowVoice, &allowFriendRequests,
 		&out.AllowGuestDM,
 		&out.AllowForward,
@@ -212,6 +219,9 @@ func scanPrivacy(row pgx.Row) (*PrivacyRow, error) {
 	}
 	var err error
 	if out.ShowOnline, err = privacy.UnmarshalJSON(showOnline); err != nil {
+		return nil, err
+	}
+	if out.ShowLastSeen, err = privacy.UnmarshalJSON(showLastSeen); err != nil {
 		return nil, err
 	}
 	if out.ShowGameStatus, err = privacy.UnmarshalJSON(showGameStatus); err != nil {

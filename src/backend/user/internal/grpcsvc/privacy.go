@@ -124,6 +124,7 @@ func (s *UserGRPC) UpdatePrivacySettings(ctx context.Context, req *userv1.Update
 		ProfileID:             profileID,
 		Preset:                strings.TrimSpace(in.GetPreset()),
 		ShowOnline:            privacy.FromProto(in.GetShowOnline()),
+		ShowLastSeen:          privacy.FromProto(in.GetShowLastSeen()),
 		ShowGameStatus:        privacy.FromProto(in.GetShowGameStatus()),
 		ShowMmRating:          privacy.FromProto(in.GetShowMmRating()),
 		ShowPhone:             privacy.FromProto(in.GetShowPhone()),
@@ -180,6 +181,7 @@ func validatePrivacySettings(ps *userv1.PrivacySettings) error {
 		a    privacy.Audience
 	}{
 		{"show_online", privacy.FromProto(ps.GetShowOnline())},
+		{"show_last_seen", privacy.FromProto(ps.GetShowLastSeen())},
 		{"show_game_status", privacy.FromProto(ps.GetShowGameStatus())},
 		{"show_mm_rating", privacy.FromProto(ps.GetShowMmRating())},
 		{"show_phone", privacy.FromProto(ps.GetShowPhone())},
@@ -217,6 +219,7 @@ func privacyRowToProto(row *store.PrivacyRow) *userv1.PrivacySettings {
 		ProfileId:             row.ProfileID.String(),
 		Preset:                row.Preset,
 		ShowOnline:            privacy.ToProto(row.ShowOnline),
+		ShowLastSeen:          privacy.ToProto(row.ShowLastSeen),
 		ShowGameStatus:        privacy.ToProto(row.ShowGameStatus),
 		ShowMmRating:          privacy.ToProto(row.ShowMmRating),
 		ShowPhone:             privacy.ToProto(row.ShowPhone),

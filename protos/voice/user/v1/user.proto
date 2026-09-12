@@ -230,6 +230,8 @@ message PrivacySettings {
   // Binary DM-only read receipt visibility. Unset values from older clients
   // default to true; false suppresses this profile's public read cursor.
   optional bool show_read_receipts = 20;
+  // Independent audience for the durable/interim "last seen" timestamp.
+  PrivacyAudience show_last_seen = 21;
 }
 
 message UpdatePresenceRequest {

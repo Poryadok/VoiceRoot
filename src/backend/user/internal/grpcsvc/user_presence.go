@@ -88,9 +88,6 @@ func (s *UserGRPC) GetPresence(ctx context.Context, req *userv1.GetPresenceReque
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	if snap != nil && snap.Live && !s.mayViewOnlineStatus(ctx, profileID) {
-		return &userv1.GetPresenceResponse{PresenceStatus: presenceSnapshotToProto(profileID, nil)}, nil
-	}
 	return &userv1.GetPresenceResponse{PresenceStatus: s.presenceForViewer(ctx, profileID, snap)}, nil
 }
 
@@ -140,15 +137,35 @@ func (s *UserGRPC) mayViewGameStatus(ctx context.Context, targetProfile uuid.UUI
 	return ok
 }
 
+func (s *UserGRPC) mayViewLastSeen(ctx context.Context, targetProfile uuid.UUID) bool {
+	viewerProfile, hasViewer := authctx.ProfileID(ctx)
+	if hasViewer && viewerProfile == targetProfile {
+		return true
+	}
+	privacyStore := s.privacyStore()
+	if privacyStore == nil || !hasViewer {
+		return false
+	}
+	row, err := privacyStore.GetByProfileID(ctx, targetProfile)
+	if err != nil || row == nil {
+		return false
+	}
+	ok, err := s.audienceMatcher().Allowed(ctx, targetProfile, viewerProfile, row.ShowLastSeen, guestguard.IsGuest(ctx))
+	return err == nil && ok
+}
+
 func (s *UserGRPC) presenceForViewer(ctx context.Context, profileID uuid.UUID, snap *store.PresenceSnapshot) *userv1.PresenceStatus {
-	if snap != nil && snap.Live && isInvisiblePresence(snap.Status) && !isSelfViewer(ctx, profileID) {
+	if snap != nil && snap.Live && (isInvisiblePresence(snap.Status) || !s.mayViewOnlineStatus(ctx, profileID)) && !isSelfViewer(ctx, profileID) {
 		// presence.md: invisible displays as offline for others.
-		return presenceSnapshotToProto(profileID, &store.PresenceSnapshot{
+		snap = &store.PresenceSnapshot{
 			Live:         false,
 			LastSeenUnix: snap.LastSeenUnix,
-		})
+		}
 	}
 	out := presenceSnapshotToProto(profileID, snap)
+	if !s.mayViewLastSeen(ctx, profileID) {
+		out.LastSeen = nil
+	}
 	if snap != nil && snap.Live && snap.GameTitle != "" && !s.mayViewGameStatus(ctx, profileID) {
 		out.GameTitle = nil
 	}
@@ -199,10 +216,6 @@ func (s *UserGRPC) GetBulkPresence(ctx context.Context, req *userv1.GetBulkPrese
 	out := make(map[string]*userv1.PresenceStatus, len(m))
 	for id, snap := range m {
 		if _, ok := visible[id]; !ok {
-			continue
-		}
-		if snap != nil && snap.Live && !s.mayViewOnlineStatus(ctx, id) {
-			out[id.String()] = presenceSnapshotToProto(id, nil)
 			continue
 		}
 		out[id.String()] = s.presenceForViewer(ctx, id, snap)

@@ -513,6 +513,7 @@ VALUES ($1, $2, 'owner', '4444', 'Owner', true),
 	})
 	require.NoError(t, err)
 	require.Equal(t, "online", resp.GetPresenceStatus().GetStatus())
+	require.NotNil(t, resp.GetPresenceStatus().GetLastSeen(), "personal preset permits a friend to read last seen")
 	require.Empty(t, resp.GetPresenceStatus().GetGameTitle(),
 		"guest viewer must not see game status when guest audience is excluded")
 }
@@ -803,6 +804,7 @@ VALUES ($1, $2, 'owner', '4444', 'Owner', true),
 	})
 	require.NoError(t, err)
 	require.Empty(t, resp.GetByProfileId()[ownerProfile.String()].GetStatus())
+	require.Nil(t, resp.GetByProfileId()[ownerProfile.String()].GetLastSeen(), "stranger must not receive last seen")
 }
 
 // TestGetProfile_BlockedPair_NotFound documents privacy.md block UX: opaque not found for blocked profiles.
