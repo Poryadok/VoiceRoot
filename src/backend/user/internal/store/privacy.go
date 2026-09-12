@@ -221,7 +221,7 @@ func scanPrivacy(row pgx.Row) (*PrivacyRow, error) {
 	if out.ShowOnline, err = privacy.UnmarshalJSON(showOnline); err != nil {
 		return nil, err
 	}
-	if out.ShowLastSeen, err = privacy.UnmarshalJSON(showLastSeen); err != nil {
+	if out.ShowLastSeen, err = showLastSeenAudienceFromColumn(showLastSeen, out.Preset); err != nil {
 		return nil, err
 	}
 	if out.ShowGameStatus, err = privacy.UnmarshalJSON(showGameStatus); err != nil {
@@ -258,4 +258,14 @@ func scanPrivacy(row pgx.Row) (*PrivacyRow, error) {
 		return nil, err
 	}
 	return &out, nil
+}
+
+// showLastSeenAudienceFromColumn preserves the explicit persisted audience. A
+// NULL column is the expand-phase representation written by an older User
+// binary, so its documented preset-specific default is computed at read time.
+func showLastSeenAudienceFromColumn(raw []byte, preset string) (privacy.Audience, error) {
+	if raw == nil {
+		return privacy.SettingsForPreset(preset).ShowLastSeen, nil
+	}
+	return privacy.UnmarshalJSON(raw)
 }

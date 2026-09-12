@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -92,7 +93,7 @@ func (s *UserGRPC) GetPresence(ctx context.Context, req *userv1.GetPresenceReque
 }
 
 func (s *UserGRPC) mayViewOnlineStatus(ctx context.Context, targetProfile uuid.UUID) bool {
-	viewerProfile, hasViewer := authctx.ProfileID(ctx)
+	viewerProfile, hasViewer := exactPresenceViewerProfile(ctx)
 	if hasViewer && viewerProfile == targetProfile {
 		return true
 	}
@@ -115,7 +116,7 @@ func (s *UserGRPC) mayViewOnlineStatus(ctx context.Context, targetProfile uuid.U
 }
 
 func (s *UserGRPC) mayViewGameStatus(ctx context.Context, targetProfile uuid.UUID) bool {
-	viewerProfile, hasViewer := authctx.ProfileID(ctx)
+	viewerProfile, hasViewer := exactPresenceViewerProfile(ctx)
 	if hasViewer && viewerProfile == targetProfile {
 		return true
 	}
@@ -138,7 +139,7 @@ func (s *UserGRPC) mayViewGameStatus(ctx context.Context, targetProfile uuid.UUI
 }
 
 func (s *UserGRPC) mayViewLastSeen(ctx context.Context, targetProfile uuid.UUID) bool {
-	viewerProfile, hasViewer := authctx.ProfileID(ctx)
+	viewerProfile, hasViewer := exactPresenceViewerProfile(ctx)
 	if hasViewer && viewerProfile == targetProfile {
 		return true
 	}
@@ -152,6 +153,25 @@ func (s *UserGRPC) mayViewLastSeen(ctx context.Context, targetProfile uuid.UUID)
 	}
 	ok, err := s.audienceMatcher().Allowed(ctx, targetProfile, viewerProfile, row.ShowLastSeen, guestguard.IsGuest(ctx))
 	return err == nil && ok
+}
+
+// exactPresenceViewerProfile is intentionally narrower than authctx.ProfileID for
+// User presence reads. Ambiguous identity metadata is viewerless, so self-dependent
+// online, game, and last-seen decisions all fail closed in the same way.
+func exactPresenceViewerProfile(ctx context.Context) (uuid.UUID, bool) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return uuid.Nil, false
+	}
+	values := md.Get(authctx.HeaderProfileID)
+	if len(values) != 1 || values[0] == "" {
+		return uuid.Nil, false
+	}
+	id, err := uuid.Parse(values[0])
+	if err != nil {
+		return uuid.Nil, false
+	}
+	return id, true
 }
 
 func (s *UserGRPC) presenceForViewer(ctx context.Context, profileID uuid.UUID, snap *store.PresenceSnapshot) *userv1.PresenceStatus {
@@ -173,7 +193,7 @@ func (s *UserGRPC) presenceForViewer(ctx context.Context, profileID uuid.UUID, s
 }
 
 func isSelfViewer(ctx context.Context, profileID uuid.UUID) bool {
-	viewer, ok := authctx.ProfileID(ctx)
+	viewer, ok := exactPresenceViewerProfile(ctx)
 	return ok && viewer == profileID
 }
 

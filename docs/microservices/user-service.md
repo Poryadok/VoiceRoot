@@ -101,6 +101,13 @@ message PrivacySettings {
 
 Read-path enforcement for `show_last_seen` — § «Heartbeat» below; feature UX — [presence.md](../features/presence.md), [privacy.md](../features/privacy.md).
 
+**Rollout `show_last_seen`:** migration `000013` is an expand migration. Its
+column remains nullable while old User Service binaries can still INSERT/UPSERT
+`privacy_settings` without it. A new reader treats only NULL as the documented
+preset-specific default (`personal` friends, `gaming` everyone, `work` space
+members); an explicit JSON audience is authoritative. Contracting nullability
+requires a later release after all writers send the field.
+
 ## Модель данных
 
 ```
