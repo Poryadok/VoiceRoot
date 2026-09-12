@@ -429,7 +429,14 @@ from first page; current ACL is rechecked each page. Changed filter/page size,
 invalid/expired cursor is `400 invalid_argument`; access loss still denies even
 with a valid cursor. No cursor creates access to a frozen/purged Space. Durable
 ledger/outbox/retention semantics remain in
-[space-service.md](space-service.md#phase-0-space-audit-ledger-target-not-implemented).
+[space-service.md](space-service.md#phase-0-space-audit-ledger-accepted-target-runtime-not-implemented).
+
+The proto mapping is exact: query `actor_profile_id` and `action` populate the
+presence-aware optional scalar fields 3 and 4; `from` and `to` populate Timestamp
+fields 5 and 6; `cursor`/`page_size` remain inside field 2 `page`. Omitted scalar
+filters remain absent. A present empty scalar is invalid and is never normalized
+to absence. Gateway authors no audit event; Role/Chat ingestion uses only the
+protected internal contract documented by Space.
 
 ### Retry and activation
 

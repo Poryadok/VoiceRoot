@@ -153,6 +153,10 @@ Prepare/decision/Finalize-or-Abort path reaches one matching terminal outcome.
 - Фильтрация по типу события и по конкретному модератору
 - Каждая запись: дата, кто сделал, что сделал, с кем / с чем
 
+Точные lower `snake_case` action names, target types, допустимые поля
+`details_json`, writer ownership и правила redaction/retention зафиксированы в
+[Space Service](../microservices/space-service.md#phase-0-space-audit-ledger-accepted-target-runtime-not-implemented).
+
 ## Pin элемента дерева спейса
 
 Закреп узла (`space_tree_nodes`: text chat или voice room) вверху категории или корня дерева.
