@@ -66,7 +66,7 @@ func ownershipTransferStoreError(err error) error {
 	switch {
 	case errors.Is(err, store.ErrOwnershipTransferConflict):
 		return status.Error(codes.AlreadyExists, "ownership transfer operation conflicts with recorded request")
-	case errors.Is(err, store.ErrOwnershipTransferMissing), errors.Is(err, store.ErrOwnershipTransferState):
+	case errors.Is(err, store.ErrOwnershipTransferMissing), errors.Is(err, store.ErrOwnershipTransferState), errors.Is(err, store.ErrSpaceRetired):
 		return status.Error(codes.FailedPrecondition, "ownership transfer state does not match")
 	default:
 		return status.Error(codes.Internal, err.Error())

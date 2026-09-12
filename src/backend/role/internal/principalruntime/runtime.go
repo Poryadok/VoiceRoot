@@ -153,7 +153,7 @@ var ownershipV2Methods = []string{
 }
 
 func isOwnershipMethod(method string) bool {
-	if method == rolev1.RoleService_GetOwnershipTransferCapabilities_FullMethodName {
+	if method == rolev1.RoleService_GetOwnershipTransferCapabilities_FullMethodName || method == rolev1.RoleService_RetireSpace_FullMethodName {
 		return true
 	}
 	for _, allowed := range ownershipV2Methods {

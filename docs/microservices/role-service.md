@@ -466,7 +466,7 @@ Retired spaces cannot be recreated by bootstrap. These scoped-integrity rules
 also apply while transfer entrypoints remain disabled; implementing them does
 not activate the v2 ownership feature.
 
-## P3 permanent Space retirement (accepted target; not implemented)
+## P3 permanent Space retirement
 
 `RetireSpace` is protected-listener only and accepts `protocol_version=1`,
 canonical Space/deletion IDs, positive generation, `purge_decided_at` and exact
@@ -493,3 +493,13 @@ The immutable request fields are `protocol_version`, `space_id`,
 `request_sha256`, `manifest_sha256` and database `retired_at`. Receipt-wrapper
 unknown fields are preserved after known-field validation; request and nested
 unknown fields are rejected before mutation.
+
+The implementation lives behind Role's authenticated TLS listener. Migration
+`000012_space_retirement` extends `role_space_lifecycle` and stores permanent
+compact evidence in `role_space_retirement_receipts`; its database-derived
+`full_bytes_retain_until` permits one-way request/receipt byte compaction only
+after 30 days. The ordinary listener rejects `RetireSpace` before dispatch.
+The compact row retains every immutable request field, because
+[`ARCHITECTURE_REQUIREMENTS.md`](../ARCHITECTURE_REQUIREMENTS.md) requires
+semantic and byte/hash equality and explicitly says that a hash alone is
+insufficient.
