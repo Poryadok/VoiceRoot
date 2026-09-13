@@ -3,7 +3,9 @@ package grpcsvc
 import (
 	"context"
 	"path/filepath"
+	"sort"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -157,6 +159,119 @@ func TestMessagingThreads_getThreadMessagesPaginates(t *testing.T) {
 	ml2 := page2.GetMessageList()
 	require.Len(t, ml2.GetMessages(), 1)
 	require.False(t, ml2.GetHasMore())
+}
+
+// TestMessagingThreads_listThreadsPaginatesByLatestReply documents ListThreads keyset pagination.
+func TestMessagingThreads_listThreadsPaginatesByLatestReply(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applyThreadMessagingMigrations(t, ctx, pool)
+
+	chatID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+	client, _ := startMessagingServer(t, pool)
+
+	parents := make([]string, 0, 3)
+	replyIDs := make([]string, 0, 3)
+	for i := 0; i < 3; i++ {
+		parent := sendRegular(t, ctx, client, acctA, profA, chatDMRef(chatID), "thread root", nil)
+		parentID := parent.GetId()
+		parents = append(parents, parentID)
+		reply := sendRegular(t, ctx, client, acctA, profA, chatDMRef(chatID), "thread reply", &parentID)
+		replyIDs = append(replyIDs, reply.GetId())
+	}
+	baseReplyAt := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	for i, replyID := range replyIDs {
+		repliedAt := baseReplyAt
+		if i == 2 {
+			repliedAt = repliedAt.Add(time.Second)
+		}
+		_, err := pool.Exec(ctx, `UPDATE messages SET created_at = $2 WHERE id = $1`, replyID, repliedAt)
+		require.NoError(t, err)
+	}
+	tiedParents := append([]string(nil), parents[:2]...)
+	sort.Sort(sort.Reverse(sort.StringSlice(tiedParents)))
+	wantOrder := append([]string{parents[2]}, tiedParents...)
+
+	page1, err := client.ListThreads(withProfileCtx(ctx, acctA, profA), &messagingv1.ListThreadsRequest{
+		Chat: chatDMRef(chatID),
+		Page: &commonv1.CursorPageRequest{PageSize: 2},
+	})
+	require.NoError(t, err)
+	threads1 := page1.GetThreadList()
+	require.Len(t, threads1.GetThreads(), 2)
+	require.Equal(t, wantOrder[:2], threadParentIDs(threads1.GetThreads()), "threads must sort by latest reply, then parent ID descending")
+	require.NotEmpty(t, threads1.GetNextCursor(), "a non-terminal page must expose a cursor")
+
+	page1Repeat, err := client.ListThreads(withProfileCtx(ctx, acctA, profA), &messagingv1.ListThreadsRequest{
+		Chat: chatDMRef(chatID),
+		Page: &commonv1.CursorPageRequest{PageSize: 2},
+	})
+	require.NoError(t, err)
+	require.Equal(t, threadParentIDs(threads1.GetThreads()), threadParentIDs(page1Repeat.GetThreadList().GetThreads()), "first-page order must be stable")
+
+	page2, err := client.ListThreads(withProfileCtx(ctx, acctA, profA), &messagingv1.ListThreadsRequest{
+		Chat: chatDMRef(chatID),
+		Page: &commonv1.CursorPageRequest{Cursor: threads1.GetNextCursor(), PageSize: 2},
+	})
+	require.NoError(t, err)
+	threads2 := page2.GetThreadList()
+	require.Len(t, threads2.GetThreads(), 1)
+	require.Empty(t, threads2.GetNextCursor(), "terminal page must not expose a cursor")
+	require.Equal(t, wantOrder[2:], threadParentIDs(threads2.GetThreads()))
+
+	seen := make(map[string]struct{}, 3)
+	for _, id := range append(threadParentIDs(threads1.GetThreads()), threadParentIDs(threads2.GetThreads())...) {
+		_, duplicate := seen[id]
+		require.False(t, duplicate, "cursor pages must not repeat a thread")
+		seen[id] = struct{}{}
+	}
+	require.Len(t, seen, len(wantOrder))
+	for _, parentID := range wantOrder {
+		_, found := seen[parentID]
+		require.True(t, found, "thread %s must appear on exactly one page", parentID)
+	}
+
+	_, err = client.ListThreads(withProfileCtx(ctx, acctA, profA), &messagingv1.ListThreadsRequest{
+		Chat: chatDMRef(chatID),
+		Page: &commonv1.CursorPageRequest{Cursor: "not-a-valid-thread-cursor", PageSize: 2},
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func threadParentIDs(threads []*messagingv1.ThreadSummary) []string {
+	ids := make([]string, 0, len(threads))
+	for _, thread := range threads {
+		ids = append(ids, thread.GetThreadParentId())
+	}
+	return ids
+}
+
+// TestMessagingThreads_listThreadsChecksMembershipBeforeListing keeps thread summaries private.
+func TestMessagingThreads_listThreadsChecksMembershipBeforeListing(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applyThreadMessagingMigrations(t, ctx, pool)
+
+	chatID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+	client, _ := startMessagingServer(t, pool)
+
+	parent := sendRegular(t, ctx, client, acctA, profA, chatDMRef(chatID), "thread root", nil)
+	parentID := parent.GetId()
+	sendRegular(t, ctx, client, acctA, profA, chatDMRef(chatID), "thread reply", &parentID)
+
+	_, err := client.ListThreads(withProfileCtx(ctx, uuid.New(), uuid.New()), &messagingv1.ListThreadsRequest{
+		Chat: chatDMRef(chatID),
+		Page: &commonv1.CursorPageRequest{PageSize: 2},
+	})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
 // TestMessagingThreads_groupThreadsDisabledRejectsReply documents group default threads_enabled=false.

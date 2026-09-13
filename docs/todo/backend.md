@@ -509,7 +509,6 @@
 ### Messaging
 
 
-- [ ] **[Messaging] `ListThreads` pagination stub** — `ThreadList.next_cursor` in proto never populated; store has limit-only query.
 - [ ] **[Messaging] `message_attachments` target table not migrated** — spec DDL; implementation uses `messages.attachments` JSONB + indexes (`000008_shared_media_indexes`).
 - [ ] **[Messaging] Test holes on forward / GetMessage** — forward tests cover DM/group attribution only; no channel forward, E2E forward, commentary, or `GetMessage` integration test.
 - [ ] **[Messaging] NATS publish best-effort** — DB commit succeeds, JetStream failure only logged (`logPublishError`); no outbox/retry.

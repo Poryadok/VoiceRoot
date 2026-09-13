@@ -308,15 +308,24 @@ type ThreadSummaryRow struct {
 	LastReplyPreview string
 }
 
-// ListThreads returns thread roots in a chat ordered by latest reply.
-func (s *MessagesStore) ListThreads(ctx context.Context, chatID uuid.UUID, limit int) ([]ThreadSummaryRow, error) {
+// ListThreads returns thread roots in a chat in stable latest-reply-first order.
+// cursor, when present, continues strictly after its final prior result.
+func (s *MessagesStore) ListThreads(ctx context.Context, chatID uuid.UUID, cursor *ThreadCursor, limit int) ([]ThreadSummaryRow, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("messages store: pool not configured")
 	}
 	if limit < 1 {
 		limit = 20
 	}
+	fetch := limit + 1
+	var cursorAt any
+	var cursorID any
+	if cursor != nil {
+		cursorAt = cursor.LastReplyAt
+		cursorID = cursor.ThreadID
+	}
 	rows, err := s.Pool.Query(ctx, `
+WITH thread_summaries AS (
 SELECT m.thread_parent_id,
        COUNT(*)::int AS reply_count,
        MAX(m.created_at) AS last_reply_at,
@@ -326,9 +335,14 @@ SELECT m.thread_parent_id,
 FROM messages m
 WHERE m.chat_id = $1 AND m.thread_parent_id IS NOT NULL AND m.deleted_at IS NULL
 GROUP BY m.thread_parent_id
-ORDER BY last_reply_at DESC
-LIMIT $2
-`, chatID, limit)
+)
+SELECT thread_parent_id, reply_count, last_reply_at, last_preview
+FROM thread_summaries
+WHERE $2::timestamptz IS NULL
+   OR (last_reply_at, thread_parent_id) < ($2::timestamptz, $3::uuid)
+ORDER BY last_reply_at DESC, thread_parent_id DESC
+LIMIT $4
+`, chatID, cursorAt, cursorID, fetch)
 	if err != nil {
 		return nil, err
 	}

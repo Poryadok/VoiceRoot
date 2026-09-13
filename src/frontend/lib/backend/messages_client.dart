@@ -70,9 +70,7 @@ class MessageMention {
 
   static String encodeJson(List<MessageMention> mentions) {
     if (mentions.isEmpty) return '[]';
-    return jsonEncode(
-      mentions.map((m) => m.toJson()).toList(growable: false),
-    );
+    return jsonEncode(mentions.map((m) => m.toJson()).toList(growable: false));
   }
 }
 
@@ -355,6 +353,27 @@ class MessageListData {
   }
 }
 
+class ThreadSummaryData {
+  const ThreadSummaryData({
+    required this.threadParentId,
+    required this.replyCount,
+    this.lastReplyAt,
+    this.lastReplyPreview,
+  });
+
+  final String threadParentId;
+  final int replyCount;
+  final DateTime? lastReplyAt;
+  final String? lastReplyPreview;
+}
+
+class ThreadListData {
+  const ThreadListData({required this.threads, this.nextCursor});
+
+  final List<ThreadSummaryData> threads;
+  final String? nextCursor;
+}
+
 /// Shared media tab kind (roles/threads (docs/features/roles.md) — docs/features/search.md).
 enum SharedMediaTabKind { media, files, links, voice }
 
@@ -410,8 +429,7 @@ class SharedMediaItemData {
 
   bool get isLink => externalUrl != null && externalUrl!.isNotEmpty;
   bool get isVideo => attachmentType == 'video';
-  bool get isE2eEncrypted =>
-      e2eKeyWire != null && e2eKeyWire!.isNotEmpty;
+  bool get isE2eEncrypted => e2eKeyWire != null && e2eKeyWire!.isNotEmpty;
 }
 
 class SharedMediaListData {
@@ -477,28 +495,26 @@ class VoiceMessagesClient {
     if (cursor != null && cursor.isNotEmpty) params['cursor'] = cursor;
     if (pageSize != null) params['page_size'] = '$pageSize';
 
-    final uri = _gateway.replace(path: '/api/v1/messages', queryParameters: params);
+    final uri = _gateway.replace(
+      path: '/api/v1/messages',
+      queryParameters: params,
+    );
     final result = await _gateway.getProto(
       uri,
       authorization: authorization,
       createEmpty: messaging_pb.GetMessagesResponse.create,
     );
-    return _map(
-      result,
-      (data) {
-        final list = messageListFromProto(
-          data.hasMessageList()
-              ? data.messageList
-              : messaging_pb.MessageList(),
-        );
-        return MessageListData(
-          messages: list.messages,
-          nextCursor: list.nextCursor,
-          hasMore: list.hasMore,
-          dmPeerState: data.hasDmPeerState() ? data.dmPeerState : null,
-        );
-      },
-    );
+    return _map(result, (data) {
+      final list = messageListFromProto(
+        data.hasMessageList() ? data.messageList : messaging_pb.MessageList(),
+      );
+      return MessageListData(
+        messages: list.messages,
+        nextCursor: list.nextCursor,
+        hasMore: list.hasMore,
+        dmPeerState: data.hasDmPeerState() ? data.dmPeerState : null,
+      );
+    });
   }
 
   Future<MessagesApiResult<MessageListData>> getThreadMessages({
@@ -527,11 +543,51 @@ class VoiceMessagesClient {
     return _map(
       result,
       (data) => messageListFromProto(
-        data.hasMessageList()
-            ? data.messageList
-            : messaging_pb.MessageList(),
+        data.hasMessageList() ? data.messageList : messaging_pb.MessageList(),
       ),
     );
+  }
+
+  Future<MessagesApiResult<ThreadListData>> listThreads({
+    required String authorization,
+    required String chatId,
+    String? cursor,
+    int? pageSize,
+  }) async {
+    final params = <String, String>{'chat_id': chatId};
+    if (cursor != null && cursor.isNotEmpty) params['cursor'] = cursor;
+    if (pageSize != null) params['page_size'] = '$pageSize';
+    final uri = _gateway.replace(
+      path: '/api/v1/messages/threads',
+      queryParameters: params,
+    );
+    final result = await _gateway.getProto(
+      uri,
+      authorization: authorization,
+      createEmpty: messaging_pb.ListThreadsResponse.create,
+    );
+    return _map(result, (data) {
+      final list = data.hasThreadList()
+          ? data.threadList
+          : messaging_pb.ThreadList();
+      return ThreadListData(
+        threads: list.threads
+            .map<ThreadSummaryData>(
+              (thread) => ThreadSummaryData(
+                threadParentId: thread.threadParentId,
+                replyCount: thread.replyCount,
+                lastReplyAt: thread.hasLastReplyAt()
+                    ? thread.lastReplyAt.toDateTime()
+                    : null,
+                lastReplyPreview: thread.hasLastReplyPreview()
+                    ? thread.lastReplyPreview
+                    : null,
+              ),
+            )
+            .toList(growable: false),
+        nextCursor: list.nextCursor.isEmpty ? null : list.nextCursor,
+      );
+    });
   }
 
   Future<MessagesApiResult<VoiceMessage>> sendMessage({
@@ -689,9 +745,7 @@ class VoiceMessagesClient {
     return _map(
       result,
       (data) => messageListFromProto(
-        data.hasMessageList()
-            ? data.messageList
-            : messaging_pb.MessageList(),
+        data.hasMessageList() ? data.messageList : messaging_pb.MessageList(),
       ),
     );
   }

@@ -1148,9 +1148,17 @@ func (s *MessagingGRPC) ListThreads(ctx context.Context, req *messagingv1.ListTh
 	if limit > maxPageSize {
 		limit = maxPageSize
 	}
-	rows, err := s.Messages.ListThreads(ctx, chatID, limit)
+	cursor, err := store.DecodeThreadCursor(req.GetPage().GetCursor())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid page cursor")
+	}
+	rows, err := s.Messages.ListThreads(ctx, chatID, cursor, limit)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
+	}
+	hasMore := len(rows) > limit
+	if hasMore {
+		rows = rows[:limit]
 	}
 	threads := make([]*messagingv1.ThreadSummary, 0, len(rows))
 	for _, row := range rows {
@@ -1165,8 +1173,13 @@ func (s *MessagingGRPC) ListThreads(ctx context.Context, req *messagingv1.ListTh
 		}
 		threads = append(threads, item)
 	}
+	nextCursor := ""
+	if hasMore && len(rows) > 0 {
+		last := rows[len(rows)-1]
+		nextCursor = store.EncodeThreadCursor(last.LastReplyAt, last.ThreadParentID)
+	}
 	return &messagingv1.ListThreadsResponse{
-		ThreadList: &messagingv1.ThreadList{Threads: threads},
+		ThreadList: &messagingv1.ThreadList{Threads: threads, NextCursor: nextCursor},
 	}, nil
 }
 

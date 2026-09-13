@@ -63,6 +63,27 @@ func (t *transcoder) serveMessages(w http.ResponseWriter, r *http.Request, rest 
 		writeProtoJSON(w, http.StatusOK, resp)
 		return true
 
+	case r.Method == http.MethodGet && rest == "threads":
+		req := &messagingv1.ListThreadsRequest{
+			Chat: &chatv1.ChatRef{Id: queryFirst(r, "chat_id")},
+		}
+		page := &commonv1.CursorPageRequest{}
+		_ = decodeQueryJSON(page, queryFirst(r, "page"))
+		if page.Cursor == "" {
+			page.Cursor = queryFirst(r, "cursor")
+		}
+		if page.PageSize == 0 {
+			page.PageSize = parseInt32Query(queryFirst(r, "page_size"))
+		}
+		req.Page = page
+		resp, err := t.clients.messaging.ListThreads(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
 	case r.Method == http.MethodGet && rest == "":
 		req := &messagingv1.GetMessagesRequest{
 			Chat: &chatv1.ChatRef{Id: queryFirst(r, "chat_id")},

@@ -77,7 +77,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceMessagesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
 
       final result = await client.getMessages(
         authorization: auth,
@@ -101,7 +103,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceMessagesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
 
       final result = await client.getMessages(
         authorization: auth,
@@ -139,7 +143,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceMessagesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
 
       final result = await client.getThreadMessages(
         authorization: auth,
@@ -171,7 +177,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceMessagesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
 
       final result = await client.getPinnedMessages(
         authorization: auth,
@@ -207,7 +215,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceMessagesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.getMessages(
         authorization: auth,
         chatId: 'chat-1',
@@ -247,7 +257,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceMessagesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.getMessages(authorization: auth, chatId: 'chat-1');
       final message =
           (r as MessagesApiOk<MessageListData>).data.messages.single;
@@ -272,7 +284,9 @@ void main() {
             200,
           );
         });
-        final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+        final client = VoiceMessagesClient(
+          gateway: gatewayHttpForTest(mock, config: config),
+        );
         final r = await client.getMessages(
           authorization: auth,
           chatId: 'chat-1',
@@ -281,6 +295,56 @@ void main() {
         expect(r, isA<MessagesApiOk<MessageListData>>());
         expect((r as MessagesApiOk<MessageListData>).data.messages, isEmpty);
         expect(r.data.hasMore, isFalse);
+      },
+    );
+  });
+
+  group('VoiceMessagesClient.listThreads', () {
+    test(
+      'GET /api/v1/messages/threads maps cursor and thread summaries',
+      () async {
+        final mock = MockClient((req) async {
+          expect(req.method, 'GET');
+          expect(req.url.path, '/api/v1/messages/threads');
+          expect(req.url.queryParameters['chat_id'], 'chat-1');
+          expect(req.url.queryParameters['cursor'], 'cursor-1');
+          expect(req.url.queryParameters['page_size'], '2');
+          return http.Response(
+            jsonEncode({
+              'thread_list': {
+                'threads': [
+                  {
+                    'thread_parent_id': 'parent-1',
+                    'reply_count': 3,
+                    'last_reply_at': '2024-01-03T00:00:00Z',
+                    'last_reply_preview': 'Latest reply',
+                  },
+                ],
+                'next_cursor': 'cursor-2',
+              },
+            }),
+            200,
+          );
+        });
+        final client = VoiceMessagesClient(
+          gateway: gatewayHttpForTest(mock, config: config),
+        );
+
+        final result = await client.listThreads(
+          authorization: auth,
+          chatId: 'chat-1',
+          cursor: 'cursor-1',
+          pageSize: 2,
+        );
+
+        expect(result, isA<MessagesApiOk<ThreadListData>>());
+        final data = (result as MessagesApiOk<ThreadListData>).data;
+        expect(data.nextCursor, 'cursor-2');
+        expect(data.threads, hasLength(1));
+        expect(data.threads.single.threadParentId, 'parent-1');
+        expect(data.threads.single.replyCount, 3);
+        expect(data.threads.single.lastReplyPreview, 'Latest reply');
+        expect(data.threads.single.lastReplyAt, DateTime.utc(2024, 1, 3));
       },
     );
   });
@@ -303,7 +367,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceMessagesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.sendMessage(
         authorization: auth,
         chatId: 'chat-1',
@@ -336,7 +402,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceMessagesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.sendMessage(
         authorization: auth,
         chatId: 'chat-1',
@@ -350,7 +418,10 @@ void main() {
       );
       expect(r, isA<MessagesApiOk<VoiceMessage>>());
       final msg = (r as MessagesApiOk<VoiceMessage>).data;
-      expect(msg.mentions.single.targetId, '22222222-2222-2222-2222-222222222222');
+      expect(
+        msg.mentions.single.targetId,
+        '22222222-2222-2222-2222-222222222222',
+      );
     });
 
     test('POST /api/v1/messages/send includes attachments_json', () async {
@@ -376,7 +447,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceMessagesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.sendMessage(
         authorization: auth,
         chatId: 'chat-1',
@@ -409,7 +482,9 @@ void main() {
         expect(body['last_read_message_id'], 'msg-9');
         return http.Response('{}', 200);
       });
-      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceMessagesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.markRead(
         authorization: auth,
         chatId: 'chat-1',
@@ -439,7 +514,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceMessagesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.editMessage(
         authorization: auth,
         messageId: 'msg-1',
@@ -456,7 +533,9 @@ void main() {
         expect(req.url.queryParameters['scope'], 'me');
         return http.Response('', 204);
       });
-      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceMessagesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.deleteMessage(
         authorization: auth,
         messageId: 'msg-1',
@@ -483,7 +562,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceMessagesClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceMessagesClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.getReadState(
         authorization: auth,
         chatId: 'chat-1',
