@@ -946,6 +946,14 @@ func TestUpdateSpace_AllowGuests_ControlsInviteAdmission(t *testing.T) {
 	err = pool.QueryRow(context.Background(), `SELECT use_count FROM invites WHERE code = $1`, inv.GetInvite().GetCode()).Scan(&useCount)
 	require.NoError(t, err)
 	require.Equal(t, int32(1), useCount, "existing membership retry must not consume an invite")
+
+	_, err = client.RevokeInvite(ownerCtx, &spacev1.RevokeInviteRequest{InviteId: inv.GetInvite().GetId()})
+	require.NoError(t, err)
+	_, err = client.JoinByInvite(guestCtx, &spacev1.JoinByInviteRequest{Code: inv.GetInvite().GetCode()})
+	require.Equal(t, codes.NotFound, status.Code(err), "revocation must gate an existing guest retry")
+	err = pool.QueryRow(context.Background(), `SELECT use_count FROM invites WHERE code = $1`, inv.GetInvite().GetCode()).Scan(&useCount)
+	require.NoError(t, err)
+	require.Equal(t, int32(1), useCount, "revoked retry must not consume an invite")
 }
 
 func TestUpdateSpace_AllowGuests_NonOwnerDenied(t *testing.T) {

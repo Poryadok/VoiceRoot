@@ -351,6 +351,11 @@ FOR UPDATE
 	if err != nil {
 		return nil, err
 	}
+	// The handler lookup can be stale across instances. Revocation always gates
+	// the join path, including an otherwise idempotent guest membership retry.
+	if inv.RevokedAt != nil {
+		return nil, ErrInviteRevoked
+	}
 	if !guest {
 		if err := s.validateInviteForJoin(inv, now); err != nil {
 			return nil, err
