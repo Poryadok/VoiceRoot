@@ -7,11 +7,14 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	commonv1 "voice.app/voice/common/v1"
 
 	chatv1 "voice.app/voice/chat/v1"
 
 	"voice/backend/notification/internal/s2s"
 )
+
+const memberPageSize = 500
 
 // Member is one chat participant with inbox routing metadata.
 type Member struct {
@@ -51,11 +54,63 @@ func (l *GRPCLister) ListMembers(ctx context.Context, chatID string) ([]Member, 
 	if chatID == "" {
 		return nil, fmt.Errorf("chat members: chat_id required")
 	}
-	resp, err := l.client.ListMembers(s2s.Context(ctx), &chatv1.ListMembersRequest{ChatId: chatID})
-	if err != nil {
-		return nil, err
+	return listAllMemberPages(ctx, chatID, func(ctx context.Context, req *chatv1.ListMembersRequest) (*chatv1.ListMembersResponse, error) {
+		return l.client.ListMembers(s2s.Context(ctx), req)
+	})
+}
+
+type memberPageFetcher func(context.Context, *chatv1.ListMembersRequest) (*chatv1.ListMembersResponse, error)
+
+// listAllMemberPages resolves complete, valid recipient metadata before the
+// caller can route an event. A partial or malformed listing is never safe to
+// treat as an empty recipient set.
+func listAllMemberPages(ctx context.Context, chatID string, fetch memberPageFetcher) ([]Member, error) {
+	if fetch == nil {
+		return nil, fmt.Errorf("chat members: page fetcher unavailable")
 	}
-	return membersFromList(resp.GetMemberList()), nil
+	var out []Member
+	cursor := ""
+	seenCursors := make(map[string]struct{})
+	seenProfiles := make(map[string]struct{})
+	for {
+		resp, err := fetch(ctx, &chatv1.ListMembersRequest{
+			ChatId: chatID,
+			Page:   &commonv1.CursorPageRequest{Cursor: cursor, PageSize: memberPageSize},
+		})
+		if err != nil {
+			return nil, err
+		}
+		list := resp.GetMemberList()
+		if list == nil {
+			return nil, fmt.Errorf("chat members: missing member list")
+		}
+		for _, member := range list.GetMembers() {
+			if member == nil || strings.TrimSpace(member.GetProfileId()) == "" {
+				return nil, fmt.Errorf("chat members: invalid member metadata")
+			}
+			profileID := strings.TrimSpace(member.GetProfileId())
+			if _, duplicate := seenProfiles[profileID]; duplicate {
+				return nil, fmt.Errorf("chat members: duplicate member metadata")
+			}
+			seenProfiles[profileID] = struct{}{}
+		}
+		next := strings.TrimSpace(list.GetNextCursor())
+		if len(list.GetMembers()) == 0 && cursor != "" {
+			return nil, fmt.Errorf("chat members: empty continuation page")
+		}
+		if len(list.GetMembers()) == 0 && next != "" {
+			return nil, fmt.Errorf("chat members: empty initial page with continuation")
+		}
+		out = append(out, membersFromList(list)...)
+		if next == "" {
+			return out, nil
+		}
+		if _, duplicate := seenCursors[next]; duplicate || next == cursor {
+			return nil, fmt.Errorf("chat members: non-progressing member cursor")
+		}
+		seenCursors[next] = struct{}{}
+		cursor = next
+	}
 }
 
 func membersFromList(list *chatv1.MemberList) []Member {
@@ -90,13 +145,13 @@ func (l *GRPCLister) ListMemberProfileIDs(ctx context.Context, chatID string) ([
 	return out, nil
 }
 
-// NoopLister returns empty members (MessageSent push skipped when chat service unavailable).
+// NoopLister fails closed so MessageSent retries while Chat metadata is unavailable.
 type NoopLister struct{}
 
 func (NoopLister) ListMemberProfileIDs(context.Context, string) ([]string, error) {
-	return nil, nil
+	return nil, fmt.Errorf("chat members lister unavailable")
 }
 
 func (NoopLister) ListMembers(context.Context, string) ([]Member, error) {
-	return nil, nil
+	return nil, fmt.Errorf("chat members lister unavailable")
 }

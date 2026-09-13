@@ -281,3 +281,26 @@ func TestMessagePusher_MutedChatSkipsPush(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, rec.sent)
 }
+
+func TestMessagePusher_SendSilentPreservesGroupingButMarksPushSilent(t *testing.T) {
+	rec := &recordingFCM{}
+	profileID := uuid.New()
+	err := (&dispatch.MessagePusher{
+		Tokens: &fakeTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
+			profileID: {{Token: "tok-fcm", PushService: "fcm"}},
+		}},
+		Pusher:   &dispatch.PushDispatcher{FCM: rec},
+		Grouping: grouping.NewMemoryStore(),
+	}).SendPush(context.Background(), map[string]delivery.DeliveryDecision{
+		profileID.String(): {Push: true, InApp: true},
+	}, delivery.DeliveryInput{ChatID: "chat-1", Type: delivery.TypeNewMessage}, push.Payload{
+		Body:   "Hello",
+		Data:   map[string]string{"type": "new_message"},
+		Silent: true,
+	}, "Hello")
+
+	require.NoError(t, err)
+	require.Len(t, rec.sent, 1)
+	require.True(t, rec.sent[0].Silent)
+	require.NotEmpty(t, rec.sent[0].CollapseTag)
+}
