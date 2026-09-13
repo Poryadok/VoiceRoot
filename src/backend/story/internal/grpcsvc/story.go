@@ -91,9 +91,9 @@ func (s *StoryGRPC) CreateStory(ctx context.Context, req *storyv1.CreateStoryReq
 	if err != nil {
 		return nil, status.Error(codes.Unauthenticated, "profile required")
 	}
-	storyType := strings.TrimSpace(req.GetType())
+	storyType := storyMediaTypeString(req.GetTypeEnum())
 	if storyType == "" {
-		storyType = storyMediaTypeString(req.GetTypeEnum())
+		storyType = strings.TrimSpace(req.GetType())
 	}
 	if storyType == "" {
 		return nil, status.Error(codes.InvalidArgument, "type is required")

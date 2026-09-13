@@ -84,7 +84,10 @@ func TestCreateStory_requiresContentForMediaType(t *testing.T) {
 
 	ctx := withProfile(context.Background(), uuid.New(), uuid.New())
 	whitespace := "  \t "
+	textContent := "legacy text must not override type_enum"
+	mediaID := uuid.NewString()
 	photo := storyv1.StoryMediaType_STORY_MEDIA_TYPE_PHOTO
+	text := storyv1.StoryMediaType_STORY_MEDIA_TYPE_TEXT
 	for _, tc := range []struct {
 		name string
 		req  *storyv1.CreateStoryRequest
@@ -94,6 +97,8 @@ func TestCreateStory_requiresContentForMediaType(t *testing.T) {
 		{name: "photo without media_file_id", req: &storyv1.CreateStoryRequest{Type: "photo"}},
 		{name: "video without media_file_id", req: &storyv1.CreateStoryRequest{Type: "video"}},
 		{name: "photo enum without media_file_id", req: &storyv1.CreateStoryRequest{TypeEnum: &photo}},
+		{name: "photo enum overrides legacy text", req: &storyv1.CreateStoryRequest{Type: "text", TypeEnum: &photo, TextContent: &textContent}},
+		{name: "text enum overrides legacy photo", req: &storyv1.CreateStoryRequest{Type: "photo", TypeEnum: &text, MediaFileId: &mediaID}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := client.CreateStory(ctx, tc.req)
