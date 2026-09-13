@@ -79,6 +79,19 @@ type downloadEventPresigner struct {
 	getErr error
 }
 
+type recordingDownloadPresigner struct {
+	getInput r2file.GetPresignInput
+}
+
+func (*recordingDownloadPresigner) PresignPut(context.Context, r2file.PutPresignInput) (string, error) {
+	return "https://r2.example/upload", nil
+}
+
+func (p *recordingDownloadPresigner) PresignGet(_ context.Context, in r2file.GetPresignInput) (string, error) {
+	p.getInput = in
+	return "https://r2.example/thumbnail", nil
+}
+
 func (downloadEventPresigner) PresignPut(context.Context, r2file.PutPresignInput) (string, error) {
 	return "https://r2.example/upload", nil
 }
@@ -317,6 +330,35 @@ func TestGetFileURL_DownloadedPublisherFailureIsBestEffort(t *testing.T) {
 		fileID:              fileID.String(),
 		downloaderProfileID: profileID.String(),
 	}}, events.downloaded)
+}
+
+func TestGetFileURL_ThumbnailUsesThumbnailKeyWithoutDownloadEvent(t *testing.T) {
+	ctx := context.Background()
+	pool := startFileGatePostgres(t, ctx)
+	events := &spyFileEvents{}
+	profileID := uuid.New()
+	fileID := uuid.New()
+	thumbnailKey := "processed/" + fileID.String() + "/thumb.webp"
+	seedDownloadEventFile(t, ctx, pool, fileID, profileID, "ready")
+	_, err := pool.Exec(ctx, "UPDATE files SET thumbnail_r2_key = $2 WHERE id = $1", fileID, thumbnailKey)
+	require.NoError(t, err)
+	presigner := &recordingDownloadPresigner{}
+
+	client := dialEventTestGRPC(t, New(Deps{
+		Files:     store.NewFilesStore(pool),
+		Presigner: presigner,
+		Events:    events,
+	}))
+	resp, err := client.GetFileURL(fileGateCtx(ctx, uuid.New(), profileID), &filev1.GetFileURLRequest{
+		FileId:  fileID.String(),
+		Variant: filev1.FileURLVariant_FILE_URL_VARIANT_THUMBNAIL,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "https://r2.example/thumbnail", resp.GetPresignedGetUrl())
+	require.Equal(t, thumbnailKey, presigner.getInput.Key)
+	require.Equal(t, r2file.DefaultURLTTL, presigner.getInput.TTL)
+	require.Empty(t, events.downloaded)
 }
 
 func TestCheckQuota_PremiumLimit(t *testing.T) {

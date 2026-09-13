@@ -119,7 +119,16 @@ func (t *transcoder) serveFiles(w http.ResponseWriter, r *http.Request, rest str
 		if fileID == "" || strings.Contains(fileID, "/") {
 			return false
 		}
-		resp, err := t.clients.file.GetFileURL(ctx, &filev1.GetFileURLRequest{FileId: fileID})
+		req := &filev1.GetFileURLRequest{FileId: fileID}
+		switch queryFirst(r, "variant") {
+		case "":
+		case "thumbnail":
+			req.Variant = filev1.FileURLVariant_FILE_URL_VARIANT_THUMBNAIL
+		default:
+			writeGRPCError(w, status.Error(codes.InvalidArgument, "invalid file URL variant"))
+			return true
+		}
+		resp, err := t.clients.file.GetFileURL(ctx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true
