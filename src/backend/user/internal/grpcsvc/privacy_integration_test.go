@@ -949,7 +949,11 @@ VALUES ($1, $2, 'workowner', '4501', 'Owner', true),
 	seedPrivacyPreset(ctx, t, privacyStore, ownerProfile, "work")
 	seedPrivacyPreset(ctx, t, privacyStore, personalProfile, "personal")
 
-	viewerCtx := withUserAuthCtx(ctx, viewerAccount, viewerProfile)
+	// This calls mayViewLastSeen directly, so model the handler's incoming
+	// metadata rather than the outgoing client metadata used by RPC tests.
+	viewerCtx := metadata.NewIncomingContext(ctx, metadata.Pairs(
+		authctx.HeaderProfileID, viewerProfile.String(),
+	))
 	cases := []struct {
 		name      string
 		target    uuid.UUID
