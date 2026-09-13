@@ -2,6 +2,8 @@ package grpcsvc
 
 import (
 	"context"
+	"encoding/base64"
+	"sort"
 	"testing"
 	"time"
 
@@ -283,27 +285,22 @@ func TestModerationPlatform_ListReports_stableCursorPagination(t *testing.T) {
 
 	modCtx := withInternalModCtx(ctx, uuid.New())
 	base := time.Date(2026, 9, 13, 12, 0, 0, 0, time.UTC)
-	created := make([]string, 0, 5)
+	created := make([]string, 0, 6)
 	for _, spec := range []struct {
 		category string
 		at       time.Time
 	}{
 		{category: "harassment", at: base.Add(5 * time.Minute)},
 		{category: "harassment", at: base.Add(4 * time.Minute)},
-		{category: "fake", at: base.Add(3 * time.Minute)},
-		{category: "spam", at: base.Add(2 * time.Minute)},
-		{category: "other", at: base.Add(time.Minute)},
+		{category: "harassment", at: base.Add(3 * time.Minute)},
+		{category: "offensive", at: base},
+		{category: "offensive", at: base},
+		{category: "offensive", at: base},
 	} {
 		report, err := client.CreateReport(withReporterProfile(ctx, uuid.New()), &moderationv1.CreateReportRequest{
-			TargetType: "user",
-			TargetId:   uuid.New().String(),
-			Category:   spec.category,
-			Description: func() *string {
-				if spec.category == "other" {
-					return strPtr("needs review")
-				}
-				return nil
-			}(),
+			TargetType:   "user",
+			TargetId:     uuid.New().String(),
+			Category:     spec.category,
 			EvidenceJson: `{}`,
 		})
 		require.NoError(t, err)
@@ -311,13 +308,16 @@ func TestModerationPlatform_ListReports_stableCursorPagination(t *testing.T) {
 		_, err = pool.Exec(ctx, `UPDATE reports SET created_at = $2 WHERE id = $1`, report.GetReport().GetId(), spec.at)
 		require.NoError(t, err)
 	}
+	tieIDs := append([]string(nil), created[3:]...)
+	sort.Slice(tieIDs, func(i, j int) bool { return tieIDs[i] > tieIDs[j] })
+	want := append(append([]string(nil), created[:3]...), tieIDs...)
 
 	page1, err := client.ListReports(modCtx, &moderationv1.ListReportsRequest{
 		StatusFilter: "pending",
 		Page:         &commonv1.CursorPageRequest{PageSize: 2},
 	})
 	require.NoError(t, err)
-	require.Equal(t, []string{created[0], created[1]}, reportIDs(page1.GetReportList().GetReports()))
+	require.Equal(t, want[:2], reportIDs(page1.GetReportList().GetReports()))
 	require.NotEmpty(t, page1.GetReportList().GetNextCursor())
 
 	page2, err := client.ListReports(modCtx, &moderationv1.ListReportsRequest{
@@ -328,7 +328,7 @@ func TestModerationPlatform_ListReports_stableCursorPagination(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	require.Equal(t, []string{created[2], created[3]}, reportIDs(page2.GetReportList().GetReports()))
+	require.Equal(t, want[2:4], reportIDs(page2.GetReportList().GetReports()))
 	require.NotEmpty(t, page2.GetReportList().GetNextCursor())
 
 	page3, err := client.ListReports(modCtx, &moderationv1.ListReportsRequest{
@@ -339,8 +339,12 @@ func TestModerationPlatform_ListReports_stableCursorPagination(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	require.Equal(t, []string{created[4]}, reportIDs(page3.GetReportList().GetReports()))
+	require.Equal(t, want[4:], reportIDs(page3.GetReportList().GetReports()))
 	require.Empty(t, page3.GetReportList().GetNextCursor())
+	seen := append(reportIDs(page1.GetReportList().GetReports()), reportIDs(page2.GetReportList().GetReports())...)
+	seen = append(seen, reportIDs(page3.GetReportList().GetReports())...)
+	require.Equal(t, want, seen)
+	require.Len(t, distinctReportIDs(seen), len(want), "every report must appear exactly once across pages")
 
 	empty, err := client.ListReports(modCtx, &moderationv1.ListReportsRequest{
 		StatusFilter: "resolved",
@@ -350,10 +354,20 @@ func TestModerationPlatform_ListReports_stableCursorPagination(t *testing.T) {
 	require.Empty(t, empty.GetReportList().GetReports())
 	require.Empty(t, empty.GetReportList().GetNextCursor())
 
-	_, err = client.ListReports(modCtx, &moderationv1.ListReportsRequest{
-		Page: &commonv1.CursorPageRequest{PageSize: 2, Cursor: "not-a-cursor"},
-	})
-	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	validTimestamp := base.Format(time.RFC3339Nano)
+	validID := uuid.New().String()
+	for _, cursor := range []string{
+		"not-a-cursor",
+		base64.RawURLEncoding.EncodeToString([]byte("not-json")),
+		base64.RawURLEncoding.EncodeToString([]byte(`{"p":1,"i":"` + validID + `"}`)),
+		base64.RawURLEncoding.EncodeToString([]byte(`{"p":1,"s":"not-a-timestamp","i":"` + validID + `"}`)),
+		base64.RawURLEncoding.EncodeToString([]byte(`{"p":1,"s":"` + validTimestamp + `","i":"not-a-uuid"}`)),
+	} {
+		_, err = client.ListReports(modCtx, &moderationv1.ListReportsRequest{
+			Page: &commonv1.CursorPageRequest{PageSize: 2, Cursor: cursor},
+		})
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+	}
 }
 
 func reportIDs(reports []*moderationv1.Report) []string {
@@ -362,6 +376,14 @@ func reportIDs(reports []*moderationv1.Report) []string {
 		ids = append(ids, report.GetId())
 	}
 	return ids
+}
+
+func distinctReportIDs(ids []string) map[string]struct{} {
+	unique := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		unique[id] = struct{}{}
+	}
+	return unique
 }
 
 func TestModerationPlatform_IsShadowBanned(t *testing.T) {
