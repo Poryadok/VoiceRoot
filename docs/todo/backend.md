@@ -246,7 +246,6 @@
 
 - [x] **[Search] Reverse-direction / bidirectional block on SearchUsers/SearchGlobal** — `filterProfileHits` + `AccountPairBlocked`. Remaining: User `SearchProfiles` (`/api/v1/users/search`) и SQL `BlockedAccountIDs` pre-filter (outgoing) — post-filter закрывает.
 - [ ] **[Search] JetStream `DeliverNew` → no historical backfill — consumers only index events after subscription; deploy/reset leaves `search_db` empty for past messages/profiles unless manual per-chat reindex.** — `src/backend/search/internal/indexer/consumer.go`
-- [ ] **[Search] Index update failures silently acked — handler logs `search index update failed` but does not `Nak`; failed upserts are lost permanently.** — `src/backend/search/internal/indexer/consumer.go`
 - [ ] **[Search] Chat/space projection staleness after create — indexer handles only `ChatCreated` / `SpaceCreated`; no handlers for group rename (`UpdateGroupChat`), space update (`UpdateSpace`), visibility change, or `SpaceTreeChanged`.** — `src/backend/search/internal/indexer/chat_space_indexer.go`; upstream: `src/backend/chat/internal/grpcsvc/group.go`, `src/backend/space/internal/grpcsvc/space.go`
 - [ ] **[Search] `ReindexChat` not admin-gated — spec (`docs/microservices/search-service.md`) says admin; any authenticated profile with read access can trigger full chat backfill. No Gateway HTTP route.** — `src/backend/search/internal/grpcsvc/search.go` (`ReindexChat`); absent from `src/backend/gateway/transcode_search.go`
 
