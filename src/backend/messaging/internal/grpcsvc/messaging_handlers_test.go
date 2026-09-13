@@ -330,3 +330,103 @@ func TestValidateAttachments(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, n)
 }
+
+func TestValidateForwardAttachments(t *testing.T) {
+	t.Parallel()
+	sourceChatID := uuid.New()
+	originalUploadChatID := uuid.New()
+	fileID := uuid.New().String()
+	reForwardFileID := uuid.New().String()
+	dm := chatv1.ChatType_CHAT_TYPE_DM
+
+	s := &MessagingGRPC{Files: stubFiles{byID: map[string]*filev1.FileMetadata{
+		fileID: {
+			Id:         fileID,
+			Status:     "ready",
+			FileType:   "image",
+			ScanResult: "clean",
+			Chat:       &chatv1.ChatRef{Id: sourceChatID.String(), Type: &dm},
+		},
+		reForwardFileID: {
+			Id:         reForwardFileID,
+			Status:     "ready",
+			FileType:   "image",
+			ScanResult: "skipped",
+			Chat:       &chatv1.ChatRef{Id: originalUploadChatID.String(), Type: &dm},
+		},
+	}}}
+
+	// The File Service authorization result governs forward access. A copied
+	// attachment may retain any legacy upload-chat value, including one from an
+	// earlier forward, so ForwardMessage does not compare that value here.
+	n, err := s.validateForwardAttachments(context.Background(),
+		`[{"file_id":"`+fileID+`","type":"image"}]`, "")
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
+	n, err = s.validateForwardAttachments(context.Background(),
+		`[{"file_id":"`+reForwardFileID+`","type":"image"}]`, "")
+	require.NoError(t, err, "re-forward validates File access without assuming an immediate source-chat link")
+	require.Equal(t, 1, n)
+
+	_, err = s.validateForwardAttachments(context.Background(), "not-json", "")
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	_, err = s.validateForwardAttachments(context.Background(),
+		`[{"type":"location","lat":55.75}]`, "location")
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	_, err = s.validateForwardAttachments(context.Background(),
+		`[{"type":"article","url":"http://example.com"}]`, "article")
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	_, err = s.validateForwardAttachments(context.Background(),
+		`[{"type":"sticker","file_id":"`+fileID+`","pack_id":"`+uuid.New().String()+`"}]`, "sticker")
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	sNoFiles := &MessagingGRPC{}
+	_, err = sNoFiles.validateForwardAttachments(context.Background(),
+		`[{"file_id":"`+fileID+`","type":"image"}]`, "")
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	n, err = sNoFiles.validateForwardAttachments(context.Background(),
+		`[{"type":"location","lat":55.75,"lon":37.61}]`, "location")
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
+	n, err = sNoFiles.validateForwardAttachments(context.Background(),
+		`[{"type":"article","url":"https://example.com"}]`, "article")
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
+
+	missing := &MessagingGRPC{Files: stubFiles{}}
+	_, err = missing.validateForwardAttachments(context.Background(),
+		`[{"file_id":"`+fileID+`","type":"image"}]`, "")
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+
+	notReady := &MessagingGRPC{Files: stubFiles{byID: map[string]*filev1.FileMetadata{
+		fileID: {Id: fileID, Status: "processing", FileType: "image", ScanResult: "clean"},
+	}}}
+	_, err = notReady.validateForwardAttachments(context.Background(),
+		`[{"file_id":"`+fileID+`","type":"image"}]`, "")
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+
+	s.Files = stubFiles{byID: map[string]*filev1.FileMetadata{
+		fileID: {
+			Id: fileID, Status: "ready", FileType: "image", ScanResult: "infected",
+			Chat: &chatv1.ChatRef{Id: sourceChatID.String(), Type: &dm},
+		},
+	}}
+	_, err = s.validateForwardAttachments(context.Background(),
+		`[{"file_id":"`+fileID+`","type":"image"}]`, "")
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+
+	mismatch := &MessagingGRPC{Files: stubFiles{byID: map[string]*filev1.FileMetadata{
+		fileID: {Id: fileID, Status: "ready", FileType: "video", ScanResult: "clean"},
+	}}}
+	_, err = mismatch.validateForwardAttachments(context.Background(),
+		`[{"file_id":"`+fileID+`","type":"image"}]`, "")
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	down := &MessagingGRPC{Files: stubFiles{err: errors.New("file svc unavailable")}}
+	_, err = down.validateForwardAttachments(context.Background(),
+		`[{"file_id":"`+fileID+`","type":"image"}]`, "")
+	require.Equal(t, codes.Internal, status.Code(err))
+}

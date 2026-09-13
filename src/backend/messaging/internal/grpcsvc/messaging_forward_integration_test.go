@@ -424,6 +424,88 @@ func (s allowForwardStub) AllowForward(_ context.Context, profileID uuid.UUID) (
 	return true, nil
 }
 
+type forwardPrivacySpy struct {
+	calls int
+}
+
+func (s *forwardPrivacySpy) AllowDMAudience(context.Context, uuid.UUID) (privacy.Audience, error) {
+	s.calls++
+	return privacy.EveryoneWithGuests(), nil
+}
+
+func (s *forwardPrivacySpy) AllowGuestDM(context.Context, uuid.UUID) (bool, error) {
+	s.calls++
+	return true, nil
+}
+
+func (s *forwardPrivacySpy) AllowFilesAudience(context.Context, uuid.UUID) (privacy.Audience, error) {
+	s.calls++
+	return privacy.EveryoneWithGuests(), nil
+}
+
+func (s *forwardPrivacySpy) AllowVoiceMessagesAudience(context.Context, uuid.UUID) (privacy.Audience, error) {
+	s.calls++
+	return privacy.EveryoneWithGuests(), nil
+}
+
+func (s *forwardPrivacySpy) AllowForward(context.Context, uuid.UUID) (bool, error) {
+	s.calls++
+	return true, nil
+}
+
+// TestMessagingForwardMessage_invalidAttachmentStopsBeforePrivacyOrWrite proves
+// malformed persisted payloads are rejected before ForwardMessage invokes any
+// privacy dependency, inserts commentary/a forward, or publishes events.
+func TestMessagingForwardMessage_invalidAttachmentStopsBeforePrivacyOrWrite(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applyBaseMessagingMigrations(t, ctx, pool)
+
+	sourceChat, targetChat := uuid.New(), uuid.New()
+	forwarder, author, targetPeer := uuid.New(), uuid.New(), uuid.New()
+	account := uuid.New()
+	seedDMChat(t, ctx, pool, sourceChat, forwarder, author)
+	seedDMChat(t, ctx, pool, targetChat, forwarder, targetPeer)
+
+	privacySpy := &forwardPrivacySpy{}
+	events := &spyMessageEvents{}
+	svc := startMessagingDirect(t, pool)
+	svc.DeletedAccounts = allowDeletedAccounts{}
+	svc.UserProfiles = allowProfileAccounts{}
+	svc.Blocks = boolBlocks(false)
+	svc.Privacy = privacySpy
+	svc.MessageEvents = events
+
+	source, err := svc.SendMessage(profileCtx(account, author), &messagingv1.SendMessageRequest{
+		Chat: chatDMRef(sourceChat), Content: "stored source", AttachmentsJson: "[]", MentionsJson: "[]",
+	})
+	require.NoError(t, err)
+	// `attachments` is JSONB, so persist a valid JSON scalar rather than an
+	// impossible malformed blob. The handler must still reject it because the
+	// wire contract requires a JSON array.
+	_, err = pool.Exec(ctx, `UPDATE messages SET attachments = '"not-json"'::jsonb WHERE id = $1`, uuid.MustParse(source.GetMessage().GetId()))
+	require.NoError(t, err)
+
+	privacySpy.calls = 0
+	events.reset()
+	var messagesBefore int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM messages`).Scan(&messagesBefore))
+
+	commentary := "must not be inserted"
+	_, err = svc.ForwardMessage(profileCtx(account, forwarder), &messagingv1.ForwardMessageRequest{
+		SourceMessageId: source.GetMessage().GetId(),
+		TargetChat:      chatDMRef(targetChat),
+		Commentary:      &commentary,
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.Zero(t, privacySpy.calls)
+	require.Zero(t, events.eventCount())
+	var messagesAfter int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM messages`).Scan(&messagesAfter))
+	require.Equal(t, messagesBefore, messagesAfter)
+}
+
 // TestMessagingForwardMessage_authorAllowForwardFalseDenied documents FW-04 / privacy.md:
 // ForwardMessage is PermissionDenied when the original author's allow_forward is false.
 func TestMessagingForwardMessage_authorAllowForwardFalseDenied(t *testing.T) {
