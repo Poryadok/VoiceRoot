@@ -191,18 +191,18 @@ func (s *MatchmakingGRPC) BanFromMM(ctx context.Context, req *matchmakingv1.BanF
 	if req.Reason != nil {
 		reason = strings.TrimSpace(req.GetReason())
 	}
-	if err := s.Bans.InsertMMPeerBan(ctx, store.InsertMMPeerBanParams{
+	created, err := s.Bans.InsertMMPeerBanIfAbsent(ctx, store.InsertMMPeerBanParams{
 		BannerProfileID: bannerID,
 		TargetProfileID: targetID,
 		Reason:          reason,
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, status.Errorf(codes.Internal, "ban: %v", err)
 	}
-	if s.Events != nil {
+	if created && s.Events != nil {
 		_ = s.Events.PublishPlayerBanned(ctx, mmevents.PlayerBannedEvent{
-			BannerProfileID: bannerID.String(),
-			TargetProfileID: targetID.String(),
-			Reason:          reason,
+			ProfileID: targetID.String(),
+			Reason:    reason,
 		})
 	}
 	return &matchmakingv1.BanFromMMResponse{}, nil

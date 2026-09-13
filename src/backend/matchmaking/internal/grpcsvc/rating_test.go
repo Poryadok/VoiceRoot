@@ -12,10 +12,21 @@ import (
 	"google.golang.org/grpc/status"
 
 	"voice/backend/matchmaking/internal/criteria"
+	"voice/backend/matchmaking/internal/mmevents"
 	"voice/backend/matchmaking/internal/store"
 
 	matchmakingv1 "voice.app/voice/matchmaking/v1"
 )
+
+type recordingPlayerBannedPublisher struct {
+	mmevents.NoopPublisher
+	events []mmevents.PlayerBannedEvent
+}
+
+func (p *recordingPlayerBannedPublisher) PublishPlayerBanned(_ context.Context, event mmevents.PlayerBannedEvent) error {
+	p.events = append(p.events, event)
+	return nil
+}
 
 func seedPendingDuoMatchForGame(t *testing.T, ctx context.Context, srv *MatchmakingGRPC, gameID, profileB uuid.UUID) (matchID string, profileA uuid.UUID) {
 	t.Helper()
@@ -287,6 +298,62 @@ func TestBanFromMM_UsesTargetProfileID(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, statusResp.GetMmBanStatus().GetBanned())
+}
+
+func TestBanFromMM_PublishesOnceAfterNewPeerBan(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startDB(t, ctx)
+	srv := ratingTestServer(t, pool)
+	publisher := &recordingPlayerBannedPublisher{}
+	srv.Events = publisher
+	banner := uuid.New()
+	target := uuid.New()
+	reason := " toxic "
+	req := &matchmakingv1.BanFromMMRequest{TargetProfileId: target.String(), Reason: &reason}
+
+	_, err := srv.BanFromMM(ctxWithProfile(banner), req)
+	require.NoError(t, err)
+	require.Equal(t, []mmevents.PlayerBannedEvent{{
+		ProfileID: target.String(),
+		Reason:    "toxic",
+	}}, publisher.events)
+
+	_, err = srv.BanFromMM(ctxWithProfile(banner), req)
+	require.NoError(t, err)
+	require.Len(t, publisher.events, 1, "idempotent ban must not create another event")
+}
+
+func TestBanFromMM_FailuresDoNotPublish(t *testing.T) {
+	t.Parallel()
+	banner := uuid.New()
+	target := uuid.New()
+
+	t.Run("invalid target", func(t *testing.T) {
+		publisher := &recordingPlayerBannedPublisher{}
+		srv := &MatchmakingGRPC{Bans: &store.BanStore{}, Events: publisher}
+		_, err := srv.BanFromMM(ctxWithProfile(banner), &matchmakingv1.BanFromMMRequest{TargetProfileId: "not-a-uuid"})
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+		require.Empty(t, publisher.events)
+	})
+
+	t.Run("missing actor", func(t *testing.T) {
+		publisher := &recordingPlayerBannedPublisher{}
+		srv := &MatchmakingGRPC{Bans: &store.BanStore{}, Events: publisher}
+		_, err := srv.BanFromMM(context.Background(), &matchmakingv1.BanFromMMRequest{TargetProfileId: target.String()})
+		require.Equal(t, codes.Unauthenticated, status.Code(err))
+		require.Empty(t, publisher.events)
+	})
+
+	t.Run("store failure", func(t *testing.T) {
+		publisher := &recordingPlayerBannedPublisher{}
+		srv := &MatchmakingGRPC{Bans: &store.BanStore{}, Events: publisher}
+		_, err := srv.BanFromMM(ctxWithProfile(banner), &matchmakingv1.BanFromMMRequest{TargetProfileId: target.String()})
+		require.Equal(t, codes.Internal, status.Code(err))
+		require.Empty(t, publisher.events)
+	})
 }
 
 func TestRateMatch_ActiveMatchRejected(t *testing.T) {
