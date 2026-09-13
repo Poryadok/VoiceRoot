@@ -536,9 +536,9 @@ func (s *SpaceGRPC) lookupChatInfo(ctx context.Context, nodes []*store.TreeNodeR
 	info, err := s.Chats.GetChatNames(ctx, ids)
 	if err != nil {
 		if s.Logger != nil {
-			s.Logger.Warn("space chat lookup for tree", slog.String("error", err.Error()))
+			s.Logger.Warn("space chat lookup failed")
 		}
-		return nil
+		return info
 	}
 	return info
 }
