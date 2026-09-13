@@ -70,6 +70,8 @@ func TestJetStreamPublisher_MessageSentRoundTrip(t *testing.T) {
 	require.NotNil(t, sent.ContentType)
 	require.Equal(t, "photo", sent.GetContentType())
 	require.True(t, sent.GetSendSilent())
+	require.False(t, sent.GetWasScheduled())
+	require.Nil(t, sent.ScheduledAt)
 }
 
 func TestJetStreamPublisher_RequestIDHeader(t *testing.T) {

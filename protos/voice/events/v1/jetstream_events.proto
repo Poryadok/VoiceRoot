@@ -198,6 +198,10 @@ message MessageSent {
   optional string content_type = 7;
   // Mirrors SendMessageRequest.send_silent for Notification policy.
   bool send_silent = 8;
+  // True only when Messaging dispatches a previously accepted schedule.
+  bool was_scheduled = 9;
+  // Original scheduled_at for time-based schedules; absent for when-online.
+  optional google.protobuf.Timestamp scheduled_at = 10;
 }
 
 message MentionAdded {
