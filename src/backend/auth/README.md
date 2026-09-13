@@ -36,10 +36,12 @@ revision maps in order to the next golang-migrate revision (`V2` → `000003`, �
 `V14` → `000015`). Keep these layouts aligned when adding Auth-owned DDL.
 
 Do not mix both tools on one database without a deliberate Flyway baseline; Path A
-is the default. To check the repository layout before a change, list both paths in
-numeric order:
+is the default. To check the repository layout before a change, run the following
+from the repository root; the command makes the Auth service working directory
+explicit and lists both paths in numeric order:
 
 ```powershell
+Set-Location src/backend/auth
 Get-ChildItem src/main/resources/db/migration/V*.sql |
   Sort-Object { [int](($_.Name -replace '^V(\d+)__.*$', '$1')) }
 Get-ChildItem ../migrations/auth_db/*.*.sql | Sort-Object Name
