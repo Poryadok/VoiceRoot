@@ -200,8 +200,16 @@ class _StandaloneChatGuestSettingsSectionState
           _allowGuests = data.allowGuests;
           _updating = false;
         });
-        await ref.read(chatListControllerProvider.notifier).loadInitial();
-        if (mounted) setState(() => _allowGuests = null);
+        final reloaded = await ref
+            .read(chatListControllerProvider.notifier)
+            .reloadInitial();
+        final refreshedChatExists = ref
+            .read(chatListControllerProvider)
+            .items
+            .any((item) => item.chatId == widget.chatId);
+        if (mounted && reloaded && refreshedChatExists) {
+          setState(() => _allowGuests = null);
+        }
       case ChatsApiFailure(:final message):
         setState(() => _updating = false);
         ScaffoldMessenger.of(context).showSnackBar(

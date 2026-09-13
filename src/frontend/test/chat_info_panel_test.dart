@@ -362,6 +362,103 @@ void main() {
     expect(find.text('forbidden'), findsOneWidget);
   });
 
+  testWidgets(
+    'a failed refresh retains the successful guest admission update',
+    (tester) async {
+      var listCalls = 0;
+      await tester.pumpWidget(
+        testApp(
+          home: const SizedBox(
+            height: 700,
+            width: 400,
+            child: ChatInfoPanel(chatId: 'refresh-failure-group'),
+          ),
+          client: MockClient((req) async {
+            if (req.url.path == '/api/v1/chats') {
+              listCalls++;
+              if (listCalls > 1) {
+                return http.Response(
+                  jsonEncode({
+                    'error': 'unavailable',
+                    'message': 'reload failed',
+                  }),
+                  503,
+                );
+              }
+              return http.Response(
+                jsonEncode({
+                  'chat_list': {
+                    'items': [
+                      {
+                        'chat': {
+                          'id': 'refresh-failure-group',
+                          'type': 'CHAT_TYPE_GROUP',
+                          'creator_profile_id': 'prof-test',
+                          'allow_guests': false,
+                        },
+                      },
+                    ],
+                  },
+                }),
+                200,
+              );
+            }
+            if (req.url.path == '/api/v1/chats/refresh-failure-group/members') {
+              return http.Response(
+                jsonEncode({
+                  'member_list': {
+                    'members': [
+                      {'profile_id': 'prof-test', 'role': 'owner'},
+                    ],
+                  },
+                }),
+                200,
+              );
+            }
+            if (req.url.path == '/api/v1/chats/refresh-failure-group') {
+              return http.Response(
+                jsonEncode({
+                  'chat': {
+                    'id': 'refresh-failure-group',
+                    'type': 'CHAT_TYPE_GROUP',
+                    'creator_profile_id': 'prof-test',
+                    'allow_guests': true,
+                  },
+                }),
+                200,
+              );
+            }
+            if (req.url.path.contains('/shared-media')) {
+              return http.Response(
+                jsonEncode({
+                  'shared_media_list': {'items': []},
+                }),
+                200,
+              );
+            }
+            return http.Response('{}', 404);
+          }),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(StandaloneChatGuestSettingsSection.toggleKey),
+      );
+      await tester.pumpAndSettle();
+
+      expect(listCalls, greaterThanOrEqualTo(2));
+      expect(
+        tester
+            .widget<SwitchListTile>(
+              find.byKey(StandaloneChatGuestSettingsSection.toggleKey),
+            )
+            .value,
+        isTrue,
+      );
+    },
+  );
+
   testWidgets('channel admins see the control but Space channels do not', (
     tester,
   ) async {
