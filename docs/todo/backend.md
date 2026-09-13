@@ -50,11 +50,6 @@
 - [x] **[User] OAuth verification goes through User Service** — Auth uses source-scoped
   `ApplyVerificationSourceState` with durable revisions/retry; direct `user_db` writes were removed.
 
-### Analytics
-
-
-- [ ] **[Analytics] Event loss on ClickHouse failure / crash** — NATS messages are consumed and acked before durable CH write; failed flushes only re-queue in process memory (`d:\Git\Voice\src\backend\analytics\internal\consumer\runner.go`, `d:\Git\Voice\src\backend\analytics\internal\buffer\accumulator.go`). Process restart after a failed flush drops data permanently.
-
 ### Matchmaking
 
 
@@ -165,7 +160,7 @@
 
 - [ ] **[User] Premium animated GIF avatar is a dead path** — premium gate in `user_avatar.go` but `image/gif` rejected by `r2avatar/validate.go` (`TestValidateUploadParams_rejectsGifInPhase1`); conflicts with `docs/features/user-profile.md`. `GetSettings`/`UpdateSettings` **есть** (`user_settings.go`). `GetPrivacySettings` ownership check **есть** (non-S2S → `GetOwnedProfile`).
 - [ ] **[User] `SetPrimaryProfile` отсутствует** — `is_primary` только bootstrap; phone search всегда primary.
-- [ ] **[User] NATS contract gaps** — missing `user.game_detected`, `user.settings_changed` ([user-service.md](../microservices/user-service.md)); `PublishProfileUpdated` / `PublishVerified` emit stub `ProfileCreated` without `changed_fields` / `verification_type`; `PublishProfileSwitched` drops `old_profile_id` (`src/backend/user/internal/userevents/jetstream.go`).
+- [x] **[User] NATS contract gaps** — **done:** `user.game_detected` and `user.settings_changed` publish their documented payloads; `user.profile_updated` carries `changed_fields`, `user.verified` carries `verification_type`, and `user.profile_switched` carries `old_profile_id` / `new_profile_id` while retaining legacy `profile_id` compatibility. — `protos/voice/events/v1/jetstream_events.proto`, `src/backend/user/internal/userevents/jetstream.go`, [user-service.md](../microservices/user-service.md).
 - [ ] **[User] Durable `last_seen_at` (PostgreSQL)** — spec requires PG persistence for header; code retains interim Redis-only 30-day timestamp — [presence.md](../features/presence.md), [user-service.md](../microservices/user-service.md). `show_last_seen` proto/DDL and viewer-aware interim read filter are shipped.
 - [x] **[User] `show_last_seen` privacy enforcement** — **done:** additive `PrivacySettings.show_last_seen`, `privacy_settings` DDL, preset defaults, and fail-closed viewer-aware `GetPresence`/`GetBulkPresence` filtering of interim timestamp. Durable PostgreSQL last-seen and WS fan-out remain separate — [user-service.md](../microservices/user-service.md).
 - [ ] **[User] Homoglyph-normalized search not implemented** — anti-spoof on create only (`src/backend/user/internal/store/verification.go`); `SearchProfilesAfter` uses raw `ILIKE` (`src/backend/user/internal/store/profile_search.go`); spec requires normalized lookup (`docs/features/verification.md`).
@@ -205,7 +200,6 @@
 
 
 - [ ] **[Bot] Inbound chat message events → bot webhook/poll not implemented** — `docs/microservices/bot-service.md` describes `NATS: message in whitelisted chat → Bot Service`; code only **publishes** `bot.events` (`internal/botevents/jetstream.go`, wired in `main.go`), no consumer/subscriber anywhere under `src/backend/bot/`.
-- [ ] **[Bot] Deferred follow-up uses wrong `ChatRef` type** — `lookupInteraction` always returns `CHAT_TYPE_CHANNEL` (`internal/grpcsvc/interaction.go`), breaking deferred `SendBotMessage` / `CompleteInteraction` for group (and DM) chats.
 - [ ] **[Bot] Redis gRPC rate limiter fails open** — on Redis error, requests proceed unlimited (`internal/ratelimit/redis_limiter.go`); staging sets `BOT_REDIS_ADDR` in `deploy/staging/services.yaml`.
 - [ ] **[Bot] `GetChatMessagesForBot` → `Unimplemented` если Messaging unset / history path** — privileged `TEXT_CHAT_READ_HISTORY`; без Messaging live — Unimplemented. Portal CSRF/manifest — [admin.md](admin.md).
 - [ ] **[Bot] Token / webhook-secret rotation does not invalidate active sessions** — `RegenerateToken` / `RegenerateWebhookSecret` only update DB; no hub deferred-token purge per `docs/features/bots.md` §tokens.
@@ -233,13 +227,13 @@
 - [ ] **[Messaging] Group/channel per-message view counts remain future** — `text-chat.md` requires a deduplicated per-message view counter; this is separate from the shipped per-member `MarkRead`/`GetReadState`/`GetBulkReadState`/`GetChatListMetadata` unread/read metadata contract and is not an A1 gate.
 - [ ] **[Messaging] `ForwardMessage` attachment `validateRichPayload` gaps vs `SendMessage`** — shadow-ban / ghost_only on forward+commentary closed (PR #126/#131); remaining: attachment `validateRichPayload` parity with SendMessage (`messaging_grpc.go` `ForwardMessage`).
 - [ ] **[Messaging] `content_type`: article, location, video_note, music** — **partial (parallel track):** `messages.content_type` column + `SendMessage`/`Message.content_type` proto; location/article send without `file_id`; `video_note`/`music` payload validation still open — [messaging-service.md](../microservices/messaging-service.md) — **P0**
-- [ ] **[Messaging / C-002, P-008] schedule lifecycle (`schedule_message`, `send_when_online`)** — Contract: `SendMessage.delivery_schedule` oneof (timestamp / `true` online / absent immediate), strict future 365-day bound and response union; one idempotency namespace `(chat_id, sender_profile_id, client_message_id)` returns matching replay but rejects a mismatch; owner-only pending list and pending-only update/cancel/send-now; Messaging worker uses viewer-aware live recipient presence, one transactional message/outbox transition, retryable transient errors and permanent `failed` without replay events. PR #310 already shipped `send_silent` request, durable persistence and `MessageSent.send_silent = 8`; P-008 then adds only `was_scheduled = 9` and optional `scheduled_at = 10`. Composer and Notification consumption remain open separately. Not yet in proto/code. — [messaging-service.md](../microservices/messaging-service.md) § Scheduled messages — **P0**
+- [ ] **[Messaging / C-002, P-008] schedule lifecycle (`schedule_message`, `send_when_online`)** — **foundation shipped:** additive `delivery_schedule`/scheduled-RPC contracts, `scheduled_messages` migration and `MessageSent.was_scheduled = 9` / optional `scheduled_at = 10`; populated schedule arms fail closed until handler ownership. Open: validation, shared immediate/scheduled idempotency ledger or advisory lock, owner lifecycle handlers, worker/presence, atomic message/outbox dispatch and producer usage. PR #310 owns `send_silent`. Composer and Notification consumption remain separate. — [messaging-service.md](../microservices/messaging-service.md) § Scheduled messages — **P0**
 - [x] **[Messaging] `GetChatListMetadata` preview DTO** — **done (Batch 13 + parallel track):** `last_message_content_type` from durable `messages.content_type` with attachment inference fallback; `is_outgoing` + `delivery_state` shipped (Batch 12).
 - [x] **[Messaging] Durable `last_message_delivery_state`** — `read_receipts.last_delivered_message_id`, consumer on `message.delivery_ack`, derivation in `GetChatListMetadata` (Batch 12).
-- [ ] **[Messaging / C-002, P-008] scheduled RPCs + handler** — part of the lifecycle vertical above: `ListScheduledMessages` is chat-scoped, pending-only and owner-only; `UpdateScheduledMessage`, `CancelScheduledMessage` and `SendScheduledMessageNow` use caller-owned transition semantics and race guards. Proto + integration test. — [messaging-service.md](../microservices/messaging-service.md) § Scheduled RPC shape — **P0**
+- [ ] **[Messaging / C-002, P-008] scheduled RPC handlers** — wire declarations are shipped; implement chat-scoped owner-only pending list and caller-owned update/cancel/send-now transitions with race guards. — [messaging-service.md](../microservices/messaging-service.md) § Scheduled RPC shape — **P0**
 - [ ] **[Messaging] File processed → preview refresh consumer** — NATS handler on `file.processed` to update list metadata / invalidate cache — [messaging-service.md](../microservices/messaging-service.md)
 - [ ] **[Messaging/Subscription] Premium multi-reaction limit enforcement** — after subscription entitlement doc lands
-- [ ] **[Messaging / C-002, P-008] `message.sent` event** — part of the lifecycle vertical above. **Partial:** JetStream `MessageSent.content_type` and PR #310's `send_silent = 8` are shipped; P-008 adds only `was_scheduled = 9` and optional `scheduled_at = 10`.
+- [ ] **[Messaging / C-002, P-008] scheduled `message.sent` producer** — event fields are shipped; dispatch must set `was_scheduled` and original timed `scheduled_at` only in the later worker/send-now slice.
 
 ### Search
 
@@ -265,7 +259,7 @@
 - [x] **[Chat] Handlers: Quick Access** — enforce limit 15; `AddQuickAccess` idempotent; integration test reorder (**Batch 17**: `quick_access.go`, store + gRPC tests).
 - [x] **[Chat] Archive removes Quick Access** — `ArchiveChat(archived=true)` calls `RemoveQuickAccess` (**Batch 18**).
 - [x] **[Chat] Incoming message keeps an archived chat archived** — removed obsolete DM `AutoUnarchiveDMRecipients`; `message.sent` preserves `is_archived=true` while retaining activity and declined-DM re-contact handling; main/archive inbox regressions cover the contract. Canon: [text-chat.md](../features/text-chat.md) § «Архивирование».
-- [ ] **[Notification] Archived-chat message suppression** — suppress push and notification-center row while retaining the unread badge. Canon: [notifications.md](../features/notifications.md) § «Архивированные чаты».
+- [x] **[Notification] Archived-chat message suppression** — Notification reads Chat member archive metadata, suppresses push and notification-center routing fail-closed when recipient metadata is absent, while Chat retains unread/activity ownership. Canon: [notifications.md](../features/notifications.md) § «Архивированные чаты».
 - [x] **[Chat] Gateway REST** — folder RPCs + `GET /chats?folder_id=` (**Batch 19**): `GET/POST /api/v1/chats/folders`, `PATCH/DELETE …/folders/{id}`, `POST/DELETE …/folders/{id}/chats`, `PUT …/chats/order`, `POST/DELETE …/chats/{chatId}/pin`; Quick Access REST — **done (Batch 17)**; `inbox=archive` on `GET /chats` — **done Batch 15**.
 
 ### Telegram-parity audit — open CODE (2026-08-28)
@@ -304,7 +298,7 @@
 
 
 - [ ] **[Notification] `friend_request` delivery зависит от Social NATS** — publisher + `social_events_consumer.go` есть; проверить wiring `NATS_URL` на notification в k8s. Тихие часы/settings **пишутся в БД** (`store/settings.go`) — клиентский dual-write: [client.md](client.md).
-- [ ] **[Notification] `send_silent` consumption** — read flag from `message.sent`; suppress push sound/badge rules; in-app policy — [notification-service.md](../microservices/notification-service.md)
+- [x] **[Notification] `send_silent` consumption** — `message.sent.send_silent` now maps to platform push silence/no-badge controls while preserving grouping and in-app/unread policy — [notification-service.md](../microservices/notification-service.md)
 - [ ] **[Notification] `reply` delivery** — `reply` marked in the notification contract but Realtime maps thread replies to `new_message`; add producer/fan-out support and routing coverage — [notifications.md](../features/notifications.md), `src/backend/realtime/in_app_notification_fanout.go`
 - [ ] **[Notification] `system` in-app / Gateway gaps (T-023)** — Moderation NATS consumer produces `system` push for sanctions and narrowly skips presence until an in-app path exists. Still missing/undefined: Notification→Realtime transport + payload + dedupe, final account→profiles semantics, Flutter presentation, other system producers, and Gateway REST exposure — `src/backend/notification/moderation_events_consumer.go`; `src/backend/notification/internal/grpcsvc/server.go`; `src/backend/gateway/transcode_notifications.go`; `src/backend/realtime/`
 

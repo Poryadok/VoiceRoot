@@ -79,6 +79,7 @@ func TestMessagingSendMessage_dmUserMention(t *testing.T) {
 		Content:         "hey @" + profB.String(),
 		AttachmentsJson: "[]",
 		MentionsJson:    mentionsJSON,
+		SendSilent:      true,
 	})
 	require.NoError(t, err)
 	require.JSONEq(t, mentionsJSON, sent.GetMessage().GetMentionsJson())
@@ -88,6 +89,41 @@ func TestMessagingSendMessage_dmUserMention(t *testing.T) {
 	require.Equal(t, "true", snap[0][3])
 	require.Len(t, mentionEv, 1)
 	require.Equal(t, profB.String(), mentionEv[0][3])
+	require.Equal(t, "true", mentionEv[0][4])
+}
+
+func TestMessagingEditMessage_SilentMessageMentionPreservesSilent(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applyBaseMessagingMigrations(t, ctx, pool)
+
+	chatID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+
+	spy := &spyMessageEvents{}
+	client, _ := startMessagingServerWired(t, pool, messagingWire{MessageEvents: spy})
+	sent, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat:            chatDMRef(chatID),
+		Content:         "initial",
+		AttachmentsJson: "[]",
+		MentionsJson:    "[]",
+		SendSilent:      true,
+	})
+	require.NoError(t, err)
+
+	_, err = client.EditMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.EditMessageRequest{
+		MessageId: sent.GetMessage().GetId(),
+		Content:   "hey @" + profB.String(),
+	})
+	require.NoError(t, err)
+	_, mentionEv, _, _, _ := spy.snapshot()
+	require.Len(t, mentionEv, 1)
+	require.Equal(t, profB.String(), mentionEv[0][3])
+	require.Equal(t, "true", mentionEv[0][4])
 }
 
 // TestMessagingSendMessage_mentionNonMemberRejected ensures unknown profile cannot be mentioned.
@@ -220,7 +256,7 @@ VALUES ($1, 'group', $2, 0, $3)
 	client, _ := startMessagingServerWired(t, pool, messagingWire{
 		MessageEvents: spy,
 		RolePermissions: selectiveRolePerms{allow: map[string]bool{
-			permissions.TextChatSendMessages:      true,
+			permissions.TextChatSendMessages:     true,
 			permissions.TextChatMentionAllOnline: true,
 		}},
 		UserPresence: testPresence{online: []uuid.UUID{profC}},
