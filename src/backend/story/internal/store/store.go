@@ -32,16 +32,16 @@ type StoryStore struct {
 
 // StoryRow is a persisted story record.
 type StoryRow struct {
-	ID                uuid.UUID
-	AuthorProfileID   uuid.UUID
-	Type              string
-	MediaFileID       *uuid.UUID
-	TextContent       *string
-	TextStyleJSON     *string
-	GameTag           *string
-	IsLookingForParty bool
-	LFPCriteriaJSON   *string
-	MentionProfileIDs string
+	ID                     uuid.UUID
+	AuthorProfileID        uuid.UUID
+	Type                   string
+	MediaFileID            *uuid.UUID
+	TextContent            *string
+	TextStyleJSON          *string
+	GameTag                *string
+	IsLookingForParty      bool
+	LFPCriteriaJSON        *string
+	MentionProfileIDs      string
 	ViewCount              int
 	Visibility             string
 	VisibilityAudienceJSON *string
@@ -86,14 +86,14 @@ type PaginatedStories struct {
 }
 
 type CreateStoryInput struct {
-	AuthorProfileID   uuid.UUID
-	Type              string
-	MediaFileID       *uuid.UUID
-	TextContent       *string
-	TextStyleJSON     *string
-	GameTag           *string
-	IsLookingForParty bool
-	LFPCriteriaJSON   *string
+	AuthorProfileID        uuid.UUID
+	Type                   string
+	MediaFileID            *uuid.UUID
+	TextContent            *string
+	TextStyleJSON          *string
+	GameTag                *string
+	IsLookingForParty      bool
+	LFPCriteriaJSON        *string
 	MentionProfileIDs      string
 	Visibility             string
 	VisibilityAudienceJSON *string
@@ -751,7 +751,11 @@ func (s *StoryStore) AddToHighlight(ctx context.Context, highlightID, profileID,
 		return ErrForbidden
 	}
 	var storyAuthor uuid.UUID
-	err = s.Pool.QueryRow(ctx, `SELECT author_profile_id FROM stories WHERE id = $1 AND deleted_at IS NULL`, storyID).Scan(&storyAuthor)
+	var archived bool
+	err = s.Pool.QueryRow(ctx, `
+SELECT author_profile_id, expired_at IS NOT NULL AND archived_until > now()
+FROM stories
+WHERE id = $1 AND deleted_at IS NULL`, storyID).Scan(&storyAuthor, &archived)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -759,6 +763,9 @@ func (s *StoryStore) AddToHighlight(ctx context.Context, highlightID, profileID,
 		return err
 	}
 	if storyAuthor != profileID {
+		return ErrForbidden
+	}
+	if !archived {
 		return ErrForbidden
 	}
 	_, err = s.Pool.Exec(ctx, `

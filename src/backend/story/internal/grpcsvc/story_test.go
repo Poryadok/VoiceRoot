@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -15,9 +16,9 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/test/bufconn"
 
+	"voice/backend/pkg/integrationtest"
 	grpcsvc "voice/backend/story/internal/grpcsvc"
 	"voice/backend/story/internal/store"
-	"voice/backend/pkg/integrationtest"
 
 	storyv1 "voice.app/voice/story/v1"
 )
@@ -68,6 +69,17 @@ func withProfile(ctx context.Context, accountID, profileID uuid.UUID) context.Co
 		"x-voice-profile-id", profileID.String(),
 	)
 	return metadata.NewOutgoingContext(ctx, md)
+}
+
+func expireStoryForHighlight(t *testing.T, st *store.StoryStore, storyID string) {
+	t.Helper()
+	id, err := uuid.Parse(storyID)
+	require.NoError(t, err)
+	row, err := st.GetStory(context.Background(), id)
+	require.NoError(t, err)
+	n, err := st.MarkExpiredStories(context.Background(), row.ExpiresAt.Add(time.Second))
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
 }
 
 func TestCreateStory_text(t *testing.T) {
@@ -171,7 +183,7 @@ func TestGetHighlights_returnsProfileCollections(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
-	client, _, cleanup := startStoryGRPC(t)
+	client, st, cleanup := startStoryGRPC(t)
 	defer cleanup()
 
 	profile := uuid.New()
@@ -187,6 +199,7 @@ func TestGetHighlights_returnsProfileCollections(t *testing.T) {
 	hl, err := client.CreateHighlight(ctx, &storyv1.CreateHighlightRequest{Name: "Wins"})
 	require.NoError(t, err)
 	require.NotEmpty(t, hl.GetHighlight().GetId())
+	expireStoryForHighlight(t, st, created.GetStory().GetId())
 
 	_, err = client.AddToHighlight(ctx, &storyv1.AddToHighlightRequest{
 		HighlightId: hl.GetHighlight().GetId(),
