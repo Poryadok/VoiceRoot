@@ -2139,11 +2139,13 @@ class RateMatchRequest extends $pb.GeneratedMessage {
     $core.String? matchId,
     $core.String? ratedProfileId,
     $core.int? stars,
+    $core.bool? skip,
   }) {
     final result = create();
     if (matchId != null) result.matchId = matchId;
     if (ratedProfileId != null) result.ratedProfileId = ratedProfileId;
     if (stars != null) result.stars = stars;
+    if (skip != null) result.skip = skip;
     return result;
   }
 
@@ -2164,6 +2166,7 @@ class RateMatchRequest extends $pb.GeneratedMessage {
     ..aOS(1, _omitFieldNames ? '' : 'matchId')
     ..aOS(2, _omitFieldNames ? '' : 'ratedProfileId')
     ..aI(3, _omitFieldNames ? '' : 'stars')
+    ..aOB(4, _omitFieldNames ? '' : 'skip')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2203,8 +2206,7 @@ class RateMatchRequest extends $pb.GeneratedMessage {
   @$pb.TagNumber(2)
   void clearRatedProfileId() => $_clearField(2);
 
-  /// A value in 1..5 submits a score. Zero explicitly skips this teammate and
-  /// does not create a rating or update that player's aggregate.
+  /// A value in 1..5 submits a score.
   @$pb.TagNumber(3)
   $core.int get stars => $_getIZ(2);
   @$pb.TagNumber(3)
@@ -2213,6 +2215,16 @@ class RateMatchRequest extends $pb.GeneratedMessage {
   $core.bool hasStars() => $_has(2);
   @$pb.TagNumber(3)
   void clearStars() => $_clearField(3);
+
+  /// Explicitly skips this teammate. A skip creates no rating or aggregate.
+  @$pb.TagNumber(4)
+  $core.bool get skip => $_getBF(3);
+  @$pb.TagNumber(4)
+  set skip($core.bool value) => $_setBool(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasSkip() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearSkip() => $_clearField(4);
 }
 
 class GetPlayerRatingRequest extends $pb.GeneratedMessage {

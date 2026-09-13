@@ -90,9 +90,6 @@ func (s *MatchmakingGRPC) RateMatch(ctx context.Context, req *matchmakingv1.Rate
 	if raterID == ratedID {
 		return nil, status.Error(codes.InvalidArgument, "cannot rate self")
 	}
-	if req.Stars == nil {
-		return nil, status.Error(codes.InvalidArgument, "stars is required")
-	}
 	stars := int(req.GetStars())
 
 	match, err := s.Matches.Get(ctx, matchID)
@@ -111,9 +108,12 @@ func (s *MatchmakingGRPC) RateMatch(ctx context.Context, req *matchmakingv1.Rate
 	if match.Status != store.MatchStatusCompleted {
 		return nil, status.Error(codes.FailedPrecondition, "match not completed")
 	}
-	// A zero value is an explicit per-teammate skip. It deliberately leaves no
-	// rating row or aggregate, so a later 1–5 score remains possible.
-	if stars == 0 {
+	if req.GetSkip() {
+		if stars != 0 {
+			return nil, status.Error(codes.InvalidArgument, "skip cannot include stars")
+		}
+		// An explicit per-teammate skip deliberately leaves no rating row or
+		// aggregate, so a later 1–5 score remains possible.
 		return &matchmakingv1.RateMatchResponse{}, nil
 	}
 

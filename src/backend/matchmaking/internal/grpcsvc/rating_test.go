@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
 
 	"voice/backend/matchmaking/internal/criteria"
 	"voice/backend/matchmaking/internal/store"
@@ -127,7 +126,7 @@ func TestRateMatch_PersistsStarsForTeammate(t *testing.T) {
 	_, err = srv.RateMatch(ctxWithProfile(profileA), &matchmakingv1.RateMatchRequest{
 		MatchId:        matchID,
 		RatedProfileId: profileB.String(),
-		Stars:          proto.Int32(5),
+		Stars:          5,
 	})
 	require.NoError(t, err)
 }
@@ -149,7 +148,7 @@ func TestRateMatch_DuplicateRejected(t *testing.T) {
 	req := &matchmakingv1.RateMatchRequest{
 		MatchId:        matchID,
 		RatedProfileId: profileB.String(),
-		Stars:          proto.Int32(4),
+		Stars:          4,
 	}
 	_, err = srv.RateMatch(ctxWithProfile(profileA), req)
 	require.NoError(t, err)
@@ -175,7 +174,7 @@ func TestRateMatch_ExplicitSkipDoesNotPersistOrBlockScore(t *testing.T) {
 	skip := &matchmakingv1.RateMatchRequest{
 		MatchId:        matchID,
 		RatedProfileId: profileB.String(),
-		Stars:          proto.Int32(0),
+		Skip:           true,
 	}
 	_, err = srv.RateMatch(ctxWithProfile(profileA), skip)
 	require.NoError(t, err)
@@ -194,7 +193,7 @@ func TestRateMatch_ExplicitSkipDoesNotPersistOrBlockScore(t *testing.T) {
 	score := &matchmakingv1.RateMatchRequest{
 		MatchId:        matchID,
 		RatedProfileId: profileB.String(),
-		Stars:          proto.Int32(4),
+		Stars:          4,
 	}
 	_, err = srv.RateMatch(ctxWithProfile(profileA), score)
 	require.NoError(t, err)
@@ -203,7 +202,7 @@ func TestRateMatch_ExplicitSkipDoesNotPersistOrBlockScore(t *testing.T) {
 	require.Equal(t, codes.AlreadyExists, status.Code(err))
 }
 
-func TestRateMatch_OmittedStarsRejected(t *testing.T) {
+func TestRateMatch_ZeroStarsWithoutSkipRejected(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -220,6 +219,29 @@ func TestRateMatch_OmittedStarsRejected(t *testing.T) {
 	_, err = srv.RateMatch(ctxWithProfile(profileA), &matchmakingv1.RateMatchRequest{
 		MatchId:        matchID,
 		RatedProfileId: profileB.String(),
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func TestRateMatch_SkipWithScoreRejected(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startDB(t, ctx)
+	srv := ratingTestServer(t, pool)
+	matchID, profileA, profileB := activateDuoMatchViaGRPC(t, ctx, srv)
+
+	_, err := srv.CompleteMatch(ctxWithProfile(profileA), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	require.NoError(t, err)
+	_, err = srv.CompleteMatch(ctxWithProfile(profileB), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	require.NoError(t, err)
+
+	_, err = srv.RateMatch(ctxWithProfile(profileA), &matchmakingv1.RateMatchRequest{
+		MatchId:        matchID,
+		RatedProfileId: profileB.String(),
+		Stars:          4,
+		Skip:           true,
 	})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
@@ -241,7 +263,7 @@ func TestGetPlayerRating_ReturnsAggregate(t *testing.T) {
 	_, err = srv.RateMatch(ctxWithProfile(profileA), &matchmakingv1.RateMatchRequest{
 		MatchId:        matchID,
 		RatedProfileId: profileB.String(),
-		Stars:          proto.Int32(5),
+		Stars:          5,
 	})
 	require.NoError(t, err)
 
@@ -282,7 +304,7 @@ func TestGetPlayerRating_GamesPlayedCountsCompletedMatchesNotRatings(t *testing.
 	require.NoError(t, err)
 
 	_, err = srv.RateMatch(ctxWithProfile(profileA1), &matchmakingv1.RateMatchRequest{
-		MatchId: match1, RatedProfileId: profileB.String(), Stars: proto.Int32(5),
+		MatchId: match1, RatedProfileId: profileB.String(), Stars: 5,
 	})
 	require.NoError(t, err)
 
@@ -368,7 +390,7 @@ func TestRateMatch_ActiveMatchRejected(t *testing.T) {
 	_, err := srv.RateMatch(ctxWithProfile(profileA), &matchmakingv1.RateMatchRequest{
 		MatchId:        matchID,
 		RatedProfileId: profileB.String(),
-		Stars:          proto.Int32(3),
+		Stars:          3,
 	})
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))
 }
@@ -385,7 +407,7 @@ func TestRateMatch_NotParticipantDenied(t *testing.T) {
 	_, err := srv.RateMatch(ctxWithProfile(uuid.New()), &matchmakingv1.RateMatchRequest{
 		MatchId:        matchID,
 		RatedProfileId: profileB.String(),
-		Stars:          proto.Int32(3),
+		Stars:          3,
 	})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
