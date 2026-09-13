@@ -8,13 +8,16 @@ import (
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/privacy"
 	"voice/backend/story/internal/grpcsvc"
 	"voice/backend/story/internal/jobs"
+	"voice/backend/story/internal/s2s"
 	"voice/backend/story/internal/storyevents"
 
 	chatv1 "voice.app/voice/chat/v1"
@@ -164,22 +167,26 @@ func (f *FileDeleter) DeleteFile(ctx context.Context, fileID string) error {
 	return err
 }
 
-// FileMetadataReader loads file metadata for story validation.
+// FileMetadataReader loads caller-authorized File metadata for Story validation.
 type FileMetadataReader struct {
 	client filev1.FileServiceClient
 }
 
-func (f *FileMetadataReader) GetFileDurationSeconds(ctx context.Context, fileID uuid.UUID) (int32, error) {
+func (f *FileMetadataReader) GetStoryMediaMetadata(ctx context.Context, fileID uuid.UUID) (grpcsvc.StoryMediaMetadata, error) {
 	if f == nil || f.client == nil {
-		return 0, nil
+		return grpcsvc.StoryMediaMetadata{}, status.Error(codes.Unavailable, "file client is unavailable")
 	}
-	resp, err := f.client.GetFileMetadata(ctx, &filev1.GetFileMetadataRequest{FileId: fileID.String()})
+	resp, err := f.client.GetFileMetadata(s2s.ForwardIncomingMetadata(ctx), &filev1.GetFileMetadataRequest{FileId: fileID.String()})
 	if err != nil {
-		return 0, err
+		return grpcsvc.StoryMediaMetadata{}, err
 	}
 	meta := resp.GetFileMetadata()
-	if meta == nil || meta.DurationSeconds == nil {
-		return 0, nil
+	if meta == nil {
+		return grpcsvc.StoryMediaMetadata{}, status.Error(codes.Unavailable, "file metadata is unavailable")
 	}
-	return meta.GetDurationSeconds(), nil
+	uploaderProfileID, err := uuid.Parse(meta.GetUploaderProfileId())
+	if err != nil || uploaderProfileID == uuid.Nil {
+		return grpcsvc.StoryMediaMetadata{}, status.Error(codes.Unavailable, "file metadata has invalid uploader")
+	}
+	return grpcsvc.StoryMediaMetadata{UploaderProfileID: uploaderProfileID, Status: meta.GetStatus(), ScanResult: meta.GetScanResult(), FileType: meta.GetFileType(), DurationSeconds: meta.DurationSeconds, HasChatContext: meta.GetChat() != nil}, nil
 }

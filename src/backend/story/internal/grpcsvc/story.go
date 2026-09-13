@@ -41,9 +41,21 @@ type StoryAudienceChecker interface {
 	privacy.SpaceCoMembership
 }
 
-// FileMetadataChecker validates uploaded media metadata (e.g. video duration).
+// StoryMediaMetadata is the File-owned metadata needed to validate Story media.
+// File remains the authority for caller-scoped media access; Story compares the
+// authenticated author with the returned uploader before persisting a reference.
+type StoryMediaMetadata struct {
+	UploaderProfileID uuid.UUID
+	Status            string
+	ScanResult        string
+	FileType          string
+	DurationSeconds   *int32
+	HasChatContext    bool
+}
+
+// FileMetadataChecker reads caller-authorized metadata for Story media validation.
 type FileMetadataChecker interface {
-	GetFileDurationSeconds(ctx context.Context, fileID uuid.UUID) (int32, error)
+	GetStoryMediaMetadata(ctx context.Context, fileID uuid.UUID) (StoryMediaMetadata, error)
 }
 
 // SubscriptionChecker resolves Premium entitlement for anonymous story views.
@@ -120,13 +132,9 @@ func (s *StoryGRPC) CreateStory(ctx context.Context, req *storyv1.CreateStoryReq
 	} else {
 		visibility, visAudienceJSON = s.capCreateStoryVisibility(ctx, profileID, visibility, visAudienceJSON)
 	}
-	if storyType == "video" && mediaID != nil && s.Files != nil {
-		secs, durErr := s.Files.GetFileDurationSeconds(ctx, *mediaID)
-		if durErr != nil {
-			return nil, status.Error(codes.InvalidArgument, "invalid media_file_id")
-		}
-		if secs > 60 {
-			return nil, status.Error(codes.InvalidArgument, "video duration must be at most 60 seconds")
+	if mediaID != nil {
+		if err := s.validateStoryMedia(ctx, profileID, storyType, *mediaID); err != nil {
+			return nil, err
 		}
 	}
 	row, err := s.Store.CreateStory(ctx, store.CreateStoryInput{
@@ -153,6 +161,55 @@ func (s *StoryGRPC) CreateStory(ctx context.Context, req *storyv1.CreateStoryReq
 	return &storyv1.CreateStoryResponse{Story: rowToProtoForViewer(row, profileID)}, nil
 }
 
+// validateStoryMedia applies the File-owned checks that are available to Story.
+// A File response cannot currently attest context_story; see docs/todo/backend.md.
+func (s *StoryGRPC) validateStoryMedia(ctx context.Context, authorProfileID uuid.UUID, storyType string, mediaID uuid.UUID) error {
+	if s.Files == nil {
+		return status.Error(codes.FailedPrecondition, "file validation is unavailable")
+	}
+	meta, err := s.Files.GetStoryMediaMetadata(ctx, mediaID)
+	if err != nil {
+		switch status.Code(err) {
+		case codes.PermissionDenied:
+			return status.Error(codes.PermissionDenied, "media_file_id is not owned by profile")
+		case codes.NotFound:
+			return status.Error(codes.NotFound, "media_file_id not found")
+		default:
+			return status.Error(codes.FailedPrecondition, "media_file_id cannot be validated")
+		}
+	}
+	if meta.UploaderProfileID == uuid.Nil || meta.UploaderProfileID != authorProfileID {
+		return status.Error(codes.PermissionDenied, "media_file_id is not owned by profile")
+	}
+	if meta.HasChatContext {
+		return status.Error(codes.FailedPrecondition, "media_file_id is not valid for a story")
+	}
+	if strings.TrimSpace(meta.Status) != "ready" {
+		return status.Error(codes.FailedPrecondition, "media_file_id is not ready")
+	}
+	switch strings.TrimSpace(meta.ScanResult) {
+	case "clean", "skipped":
+	default:
+		return status.Error(codes.FailedPrecondition, "media_file_id has not passed scanning")
+	}
+	switch storyType {
+	case "photo":
+		if strings.TrimSpace(meta.FileType) != "image" {
+			return status.Error(codes.InvalidArgument, "photo story requires an image media_file_id")
+		}
+	case "video":
+		if strings.TrimSpace(meta.FileType) != "video" {
+			return status.Error(codes.InvalidArgument, "video story requires a video media_file_id")
+		}
+		if meta.DurationSeconds == nil {
+			return status.Error(codes.FailedPrecondition, "video duration is unavailable")
+		}
+		if *meta.DurationSeconds > 60 {
+			return status.Error(codes.InvalidArgument, "video duration must be at most 60 seconds")
+		}
+	}
+	return nil
+}
 func (s *StoryGRPC) HideStoryFromFeed(ctx context.Context, req *storyv1.HideStoryFromFeedRequest) (*storyv1.HideStoryFromFeedResponse, error) {
 	if !isInternalRequest(ctx) {
 		return nil, status.Error(codes.PermissionDenied, "internal access required")
@@ -673,6 +730,11 @@ func (s *StoryGRPC) CreateLookingForParty(ctx context.Context, req *storyv1.Crea
 			return nil, status.Error(codes.InvalidArgument, "invalid media_file_id")
 		}
 		mediaID = &parsed
+	}
+	if mediaID != nil {
+		if err := s.validateStoryMedia(ctx, profileID, "", *mediaID); err != nil {
+			return nil, err
+		}
 	}
 	row, err := s.Store.CreateStory(ctx, store.CreateStoryInput{
 		AuthorProfileID:   profileID,

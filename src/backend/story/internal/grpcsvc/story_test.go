@@ -15,9 +15,9 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/test/bufconn"
 
+	"voice/backend/pkg/integrationtest"
 	grpcsvc "voice/backend/story/internal/grpcsvc"
 	"voice/backend/story/internal/store"
-	"voice/backend/pkg/integrationtest"
 
 	storyv1 "voice.app/voice/story/v1"
 )
@@ -37,6 +37,11 @@ func migrationSQL(t *testing.T) string {
 
 func startStoryGRPC(t *testing.T) (storyv1.StoryServiceClient, *store.StoryStore, func()) {
 	t.Helper()
+	return startStoryGRPCWithFiles(t, nil)
+}
+
+func startStoryGRPCWithFiles(t *testing.T, files grpcsvc.FileMetadataChecker) (storyv1.StoryServiceClient, *store.StoryStore, func()) {
+	t.Helper()
 	ctx := context.Background()
 	pool := integrationtest.StartPostgres(t, ctx, "storygrpc", "")
 	_, err := pool.Exec(ctx, migrationSQL(t))
@@ -44,6 +49,7 @@ func startStoryGRPC(t *testing.T) (storyv1.StoryServiceClient, *store.StoryStore
 
 	st := &store.StoryStore{Pool: pool}
 	svc := grpcsvc.NewStoryGRPC(st)
+	svc.Files = files
 
 	lis := bufconn.Listen(1024 * 1024)
 	s := grpc.NewServer()
