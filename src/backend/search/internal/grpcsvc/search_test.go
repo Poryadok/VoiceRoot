@@ -447,6 +447,67 @@ func TestSearchGlobal_QueryTooLong_InvalidArgument(t *testing.T) {
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
+func TestRequireQuery_UnicodeRuneLimit(t *testing.T) {
+	t.Parallel()
+
+	valid, err := requireQuery(strings.Repeat("界", maxQueryLen))
+	require.NoError(t, err)
+	require.Equal(t, strings.Repeat("界", maxQueryLen), valid)
+
+	_, err = requireQuery(strings.Repeat("界", maxQueryLen+1))
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func TestSearchRPCs_QueryTooLong_InvalidArgument(t *testing.T) {
+	t.Parallel()
+	client := startSearchGRPCTestServer(t, &SearchGRPC{})
+	ctx := ctxWithProfile(uuid.New())
+	longQuery := strings.Repeat("a", maxQueryLen+1)
+
+	tests := []struct {
+		name string
+		call func() error
+	}{
+		{
+			name: "in chat",
+			call: func() error {
+				_, err := client.SearchInChat(ctx, &searchv1.SearchInChatRequest{
+					Chat:  &chatv1.ChatRef{Id: uuid.New().String()},
+					Query: longQuery,
+				})
+				return err
+			},
+		},
+		{
+			name: "global",
+			call: func() error {
+				_, err := client.SearchGlobal(ctx, &searchv1.SearchGlobalRequest{Query: longQuery})
+				return err
+			},
+		},
+		{
+			name: "users",
+			call: func() error {
+				_, err := client.SearchUsers(ctx, &searchv1.SearchUsersRequest{Query: longQuery})
+				return err
+			},
+		},
+		{
+			name: "spaces",
+			call: func() error {
+				_, err := client.SearchSpaces(ctx, &searchv1.SearchSpacesRequest{Query: longQuery})
+				return err
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, codes.InvalidArgument, status.Code(tt.call()))
+		})
+	}
+}
+
 func TestSearchInChat_Unauthenticated(t *testing.T) {
 	t.Parallel()
 	client := startSearchGRPCTestServer(t, &SearchGRPC{Messages: &stubMessageSearch{}})

@@ -3,6 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
@@ -141,7 +142,7 @@ func requireQuery(q string) (string, error) {
 	if q == "" {
 		return "", status.Error(codes.InvalidArgument, "query required")
 	}
-	if len(q) > maxQueryLen {
+	if utf8.RuneCountInString(q) > maxQueryLen {
 		return "", status.Error(codes.InvalidArgument, "query too long")
 	}
 	return q, nil

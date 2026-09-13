@@ -31,6 +31,9 @@ service SearchService {
 }
 ```
 
+All four search RPCs require a non-empty query after trimming whitespace and
+reject queries longer than 128 Unicode code points with `InvalidArgument`.
+
 ## Стратегия масштабирования
 
 Полная **пороговая матрица** (когда именно v1→v2→v3, Meili vs ES, правила двойной записи): [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) — разделы «Полнотекстовый поиск» и «Пороговая матрица».
