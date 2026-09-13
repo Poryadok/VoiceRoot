@@ -11,10 +11,38 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
 import voice.backend.auth.config.AuthProperties;
 import voice.backend.auth.repository.InMemoryLinkedIdentityRepository;
+import voice.backend.auth.repository.VerificationSourceSyncTarget;
 import voice.backend.auth.userdb.NoOpUserVerificationSync;
 
 /** Compose stub IdP path: configured client + non-mock code hits token URL then Helix/YPP. */
 class LinkedAccountsServiceStubIdpTest {
+
+  @Test
+  void staleProfileUnlinkLeavesIdentityRevisionAndDurableTargetUntouched() {
+    UUID accountId = UUID.randomUUID();
+    UUID linkedProfileId = UUID.randomUUID();
+    UUID staleProfileId = UUID.randomUUID();
+    InMemoryLinkedIdentityRepository repository = new InMemoryLinkedIdentityRepository();
+    repository.linkActive(
+        accountId,
+        linkedProfileId,
+        LinkedAccountsService.PLATFORM_TWITCH,
+        "tw-stale",
+        "partner",
+        new byte[] {1},
+        null);
+    VerificationSourceSyncTarget before = repository.listPendingVerificationSyncTargets().getFirst();
+    LinkedAccountsService service =
+        new LinkedAccountsService(new NoOpUserVerificationSync(), repository, new AuthProperties.OAuth());
+
+    service.unlinkTwitch(accountId, staleProfileId);
+
+    var active =
+        repository.findActive(accountId, linkedProfileId, LinkedAccountsService.PLATFORM_TWITCH);
+    assertThat(active).isPresent();
+    assertThat(active.orElseThrow().version()).isEqualTo(before.revision());
+    assertThat(repository.listPendingVerificationSyncTargets()).containsExactly(before);
+  }
 
   @Test
   void twitchComposeCodeExchangesTokenThenGrantsPartnerBadge() throws Exception {
