@@ -18,7 +18,7 @@
         {
           "refId": "A",
           "queryType": "sql",
-          "rawSql": "SELECT date, uniqMerge(unique_users) AS dau FROM voice.dau_mv GROUP BY date ORDER BY date",
+          "rawSql": "SELECT toDate(timestamp) AS date, uniqExact(user_id_hashed) AS dau FROM voice.events_logical WHERE user_id_hashed != '' GROUP BY date ORDER BY date",
           "format": 1
         }
       ]
@@ -33,7 +33,7 @@
         {
           "refId": "A",
           "queryType": "sql",
-          "rawSql": "SELECT date, event_type, sum(event_count) AS cnt FROM voice.events_by_type_mv GROUP BY date, event_type ORDER BY date",
+          "rawSql": "SELECT toDate(timestamp) AS date, event_type, count() AS cnt FROM voice.events_logical GROUP BY date, event_type ORDER BY date",
           "format": 1
         }
       ]
@@ -48,7 +48,7 @@
         {
           "refId": "A",
           "queryType": "sql",
-          "rawSql": "SELECT sum(event_count) FROM voice.events_by_type_mv WHERE event_type = 'profile_created' AND date = today()",
+          "rawSql": "SELECT count() FROM voice.events_logical WHERE event_type = 'profile_created' AND toDate(timestamp) = today()",
           "format": 1
         }
       ]

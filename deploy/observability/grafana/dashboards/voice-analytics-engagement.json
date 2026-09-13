@@ -18,7 +18,7 @@
         {
           "refId": "A",
           "queryType": "sql",
-          "rawSql": "SELECT date, sum(event_count) AS messages FROM voice.events_by_type_mv WHERE event_type = 'message_sent' GROUP BY date ORDER BY date",
+          "rawSql": "SELECT toDate(timestamp) AS date, count() AS messages FROM voice.events_logical WHERE event_type = 'message_sent' GROUP BY date ORDER BY date",
           "format": 1
         }
       ]
@@ -33,7 +33,7 @@
         {
           "refId": "A",
           "queryType": "sql",
-          "rawSql": "SELECT date, sum(event_count) AS calls FROM voice.events_by_type_mv WHERE event_type = 'call_started' GROUP BY date ORDER BY date",
+          "rawSql": "SELECT toDate(timestamp) AS date, count() AS calls FROM voice.events_logical WHERE event_type = 'call_started' GROUP BY date ORDER BY date",
           "format": 1
         }
       ]
@@ -48,7 +48,7 @@
         {
           "refId": "A",
           "queryType": "sql",
-          "rawSql": "SELECT date, sum(event_count) AS searches FROM voice.events_by_type_mv WHERE event_type = 'mm_search_started' GROUP BY date ORDER BY date",
+          "rawSql": "SELECT toDate(timestamp) AS date, count() AS searches FROM voice.events_logical WHERE event_type = 'mm_search_started' GROUP BY date ORDER BY date",
           "format": 1
         }
       ]

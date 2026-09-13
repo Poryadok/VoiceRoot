@@ -48,7 +48,7 @@
 |-----|--------|
 | Обычный пользователь (Flutter) | **Нет** — `/api/v1/analytics/**` → **403** |
 | Staff / модератор с platform role | JWT + проверка роли персонала на Gateway → dashboards, export |
-| S2S / сервисы | Ingest через NATS и gRPC `AnalyticsIngestService`, не через публичный REST |
+| S2S / сервисы | Domain/telemetry NATS is restart-durable; gRPC `AnalyticsIngestService` is accepted into the in-memory batch only and is not crash-durable; neither uses public REST |
 
 Export и широкие metrics-запросы **обязательно** пишут audit log (subject, маршрут, время) на Gateway. Детали RBAC — [api-gateway.md](../microservices/api-gateway.md).
 
@@ -58,7 +58,7 @@ Export и широкие metrics-запросы **обязательно** пи�
 
 ### Источники событий
 
-1. **Domain streams** — Messaging, Chat, User, Social, Voice, Matchmaking, Story, Bot, … публикуют в JetStream; Analytics подписывается адаптерами и нормализует в `AnalyticsEvent`.
+1. **Domain streams** — Messaging, Chat, User, Social, Voice, Matchmaking, Story, Bot, … публикуют в JetStream; Analytics подписывается адаптерами и нормализует в `AnalyticsEvent`. Source consumers share a v2 durable/queue, resume unacknowledged backlog after pod restart, and ACK only after ClickHouse succeeds. Redelivery is deduplicated by stable `event_id` in official reads.
 2. **Direct telemetry** — сервисы без отдельного domain stream шлют в `analytics.{service}.{event}`:
    - Notification — доставка push
    - Search — запросы, zero-result

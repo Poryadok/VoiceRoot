@@ -140,9 +140,17 @@ func (a *Accumulator) Flush(ctx context.Context) error {
 		for _, ack := range acks {
 			_ = ack.Nak()
 		}
-		if len(acks) == 0 {
+		// JetStream redelivers NAKed entries. Direct gRPC entries have no broker
+		// acknowledgement, so retain each one even when the failed batch is mixed.
+		var retry []pendingEntry
+		for _, entry := range batch {
+			if len(entry.acks) == 0 {
+				retry = append(retry, entry)
+			}
+		}
+		if len(retry) > 0 {
 			a.mu.Lock()
-			a.pending = append(batch, a.pending...)
+			a.pending = append(retry, a.pending...)
 			a.mu.Unlock()
 		}
 		return err
