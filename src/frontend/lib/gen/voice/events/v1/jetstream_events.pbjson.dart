@@ -779,6 +779,7 @@ const MessageSent$json = {
       '10': 'contentType',
       '17': true
     },
+    {'1': 'send_silent', '3': 8, '4': 1, '5': 8, '10': 'sendSilent'},
   ],
   '8': [
     {'1': '_thread_parent_id'},
@@ -792,8 +793,8 @@ final $typed_data.Uint8List messageSentDescriptor = $convert.base64Decode(
     'gCIAEoCVIGY2hhdElkEioKEXNlbmRlcl9wcm9maWxlX2lkGAMgASgJUg9zZW5kZXJQcm9maWxl'
     'SWQSIQoMaGFzX21lbnRpb25zGAQgASgIUgtoYXNNZW50aW9ucxItChB0aHJlYWRfcGFyZW50X2'
     'lkGAUgASgJSABSDnRocmVhZFBhcmVudElkiAEBEhUKBmlzX2UyZRgGIAEoCFIFaXNFMmUSJgoM'
-    'Y29udGVudF90eXBlGAcgASgJSAFSC2NvbnRlbnRUeXBliAEBQhMKEV90aHJlYWRfcGFyZW50X2'
-    'lkQg8KDV9jb250ZW50X3R5cGU=');
+    'Y29udGVudF90eXBlGAcgASgJSAFSC2NvbnRlbnRUeXBliAEBEh8KC3NlbmRfc2lsZW50GAggAS'
+    'gIUgpzZW5kU2lsZW50QhMKEV90aHJlYWRfcGFyZW50X2lkQg8KDV9jb250ZW50X3R5cGU=');
 
 @$core.Deprecated('Use mentionAddedDescriptor instead')
 const MentionAdded$json = {

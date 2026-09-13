@@ -196,6 +196,8 @@ message MessageSent {
   bool is_e2e = 6;
   // snake_case store value: text | photo | video | … (docs/microservices/messaging-service.md)
   optional string content_type = 7;
+  // Mirrors SendMessageRequest.send_silent for Notification policy.
+  bool send_silent = 8;
 }
 
 message MentionAdded {

@@ -2289,6 +2289,7 @@ class MessageSent extends $pb.GeneratedMessage {
     $core.String? threadParentId,
     $core.bool? isE2e,
     $core.String? contentType,
+    $core.bool? sendSilent,
   }) {
     final result = create();
     if (messageId != null) result.messageId = messageId;
@@ -2298,6 +2299,7 @@ class MessageSent extends $pb.GeneratedMessage {
     if (threadParentId != null) result.threadParentId = threadParentId;
     if (isE2e != null) result.isE2e = isE2e;
     if (contentType != null) result.contentType = contentType;
+    if (sendSilent != null) result.sendSilent = sendSilent;
     return result;
   }
 
@@ -2322,6 +2324,7 @@ class MessageSent extends $pb.GeneratedMessage {
     ..aOS(5, _omitFieldNames ? '' : 'threadParentId')
     ..aOB(6, _omitFieldNames ? '' : 'isE2e')
     ..aOS(7, _omitFieldNames ? '' : 'contentType')
+    ..aOB(8, _omitFieldNames ? '' : 'sendSilent')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2406,6 +2409,16 @@ class MessageSent extends $pb.GeneratedMessage {
   $core.bool hasContentType() => $_has(6);
   @$pb.TagNumber(7)
   void clearContentType() => $_clearField(7);
+
+  /// Mirrors SendMessageRequest.send_silent for Notification policy.
+  @$pb.TagNumber(8)
+  $core.bool get sendSilent => $_getBF(7);
+  @$pb.TagNumber(8)
+  set sendSilent($core.bool value) => $_setBool(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasSendSilent() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearSendSilent() => $_clearField(8);
 }
 
 class MentionAdded extends $pb.GeneratedMessage {

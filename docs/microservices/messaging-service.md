@@ -19,7 +19,7 @@ CRUD сообщений для всех типов чатов (DM, тексто�
 - Read receipts (последнее прочитанное сообщение на пользователя на чат)
 - Вложения (ссылки на File Service): photo, video, document, voice, video_note, music, article, location — см. [text-chat.md](../features/text-chat.md) § Attach menu
 - Stickers / GIF — `content_type=STICKER|GIF` + File `file_id`; composer **😊 panel only** (не 📎 attach) — § Stickers and GIF
-- Send options: `send_silent`, `scheduled_at`, `send_when_online` — контракт ниже; **not yet in proto/code** — см. [todo/backend.md](../todo/backend.md)
+- Send options: `send_silent` is shipped in `SendMessageRequest`, durable `messages` storage and `message.sent`; composer and Notification consumption remain open. `scheduled_at` and `send_when_online` remain contract-only — см. [todo/backend.md](../todo/backend.md)
 - Лимит 4000 символов
 - Догрузка истории после offline / reconnect: сначала глобальная сверка inbox через Chat `ListChats`, затем **per `chat_id`** через `GetMessages` с курсором (`after_message_id` / `last_message_id`) для выбранного чата; правила fallback — [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md). Не путать с полем **`s`** в WebSocket Gateway (Realtime) — это нумерация live-событий, не курсор БД
 
@@ -78,12 +78,13 @@ service MessagingService {
 | `GetChatListMetadata` | ✓ | per-member unread + preview/content metadata; DM-only delivery ticks; non-members → `PERMISSION_DENIED` |
 | `ListSharedMedia` | ✓ | shared media tabs in chat info |
 | `DeleteMessage` (`DeleteScope.FOR_ME` / `FOR_EVERYONE`) | ✓ | `FOR_ME` soft-hides for caller only |
-| `SendMessage` send options (`send_silent`, `scheduled_at`, `send_when_online`) | ✗ | spec below; not in proto |
+| `SendMessage.send_silent` | ✓ | durable `messages.send_silent` and `message.sent.send_silent`; composer and Notification consumption remain open |
+| `SendMessage` schedule options (`scheduled_at`, `send_when_online`) | ✗ | spec below; not in proto |
 | `UpdateScheduledMessage` | ✗ | spec below |
 
 ### `SendMessageRequest` (spec)
 
-Поля поверх текущего proto (**not yet in proto/code** — [todo/backend.md](../todo/backend.md)):
+`send_silent` is in the current proto and producer path. Remaining fields are planned (**not yet in proto/code** — [todo/backend.md](../todo/backend.md)):
 
 | Поле | Тип | Семантика |
 |------|-----|-----------|
@@ -369,11 +370,11 @@ read_receipts
 
 ### Shipped implementation notes (2026-08-28)
 
-**Migrations shipped:** `messages`, `read_receipts`, `reactions`, `pins`, `thread_parent_id`, `forward_*`, `ghost_only` (platform shadow-ban column — **DB only**, not yet on `SendMessageRequest` proto), E2E columns.
+**Migrations shipped:** `messages`, `read_receipts`, `reactions`, `pins`, `thread_parent_id`, `forward_*`, `ghost_only` (platform shadow-ban column — **DB only**, not yet on `SendMessageRequest` proto), E2E columns, `send_silent`.
 
-**Handlers shipped beyond basic message CRUD:** threads (`GetThreadMessages`, `ListThreads`), reactions, pins (limit **5**/chat), per-member `MarkRead`/`GetReadState`/`GetBulkReadState` for DM/group/channel, `GetChatListMetadata` with per-member unread/preview metadata and non-member denial, `ListSharedMedia`, `DeleteMessage` with `DeleteScope.FOR_ME`, idempotent `client_message_id` on `SendMessage`, E2E pre-key RPCs.
+**Handlers shipped beyond basic message CRUD:** threads (`GetThreadMessages`, `ListThreads`), reactions, pins (limit **5**/chat), per-member `MarkRead`/`GetReadState`/`GetBulkReadState` for DM/group/channel, `GetChatListMetadata` with per-member unread/preview metadata and non-member denial, `ListSharedMedia`, `DeleteMessage` with `DeleteScope.FOR_ME`, idempotent `client_message_id` and durable `send_silent` producer propagation on `SendMessage`, E2E pre-key RPCs.
 
-**Gaps vs full spec:** `send_silent` / schedule / typed `content_type`, `message_attachments` table, `RecordMessageView`, `UpdateScheduledMessage` — см. § ниже и [todo/backend.md](../todo/backend.md).
+**Gaps vs full spec:** composer and Notification consumption for `send_silent`, schedule, typed `content_type`, `message_attachments` table, `RecordMessageView`, `UpdateScheduledMessage` — см. § ниже и [todo/backend.md](../todo/backend.md).
 
 **Attachment validation (code):** `validateAttachments` today requires `file_id` on each attachment — blocks normative `location` / `article` payloads without File row until validation branches on `content_type` (**code backlog**, R3-A06).
 
@@ -547,7 +548,7 @@ messages (deployed — simplified)
 | `message.unpinned`       | message_id, chat_id, unpinned_by             |
 | `message.forwarded`      | message_id, source_chat_id, target_chat_id   |
 
-**`message.sent` notes:** `send_silent` drives Notification push policy and is owned by **PR #310** as `MessageSent.send_silent = 8`. This scheduling slice must not claim or renumber it. After PR #310 lands, it adds only `was_scheduled = 9` and `optional scheduled_at = 10`; they describe the original schedule intent for audit and client strip cleanup. A pending create, idempotent replay, update, cancel or terminal failure emits no `message.sent`; a successfully dispatched scheduled row emits exactly one normal `message.sent`. **Code gap:** the current JetStream proto still has neither #310's field 8 nor schedule fields 9–10; do not implement those fields out of sequence.
+**`message.sent` notes:** `send_silent` drives Notification push policy and is shipped by PR #310 as `MessageSent.send_silent = 8`; the scheduling slice does not renumber or duplicate it. It adds only `was_scheduled = 9` and `optional scheduled_at = 10`, which describe original schedule intent for audit and client strip cleanup. A pending create, idempotent replay, update, cancel or terminal failure emits no `message.sent`; a successfully dispatched scheduled row emits exactly one normal `message.sent`. `content_type` and `send_silent` are already in the JetStream proto and Messaging producer; schedule metadata remains unimplemented.
 
 **`message.read`:** публикуется при `MarkRead`; Realtime fan-out как WS `message_read`. **Code-ok**.
 
