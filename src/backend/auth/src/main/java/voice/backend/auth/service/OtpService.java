@@ -84,7 +84,7 @@ public class OtpService {
       throw new AuthException("validation_failed");
     }
     String throttleKey = account.id().toString();
-    throttle.checkCanSend(throttleKey);
+    throttle.reserveSend(throttleKey);
     String code = generateCode();
     Instant now = Instant.now(clock);
     otpCodes.create(account.id(), codec.hash(code), type, now.plus(OTP_TTL), now);
@@ -96,7 +96,6 @@ public class OtpService {
     } catch (RuntimeException ex) {
       throw new AuthException("auth_unavailable");
     }
-    throttle.recordSend(throttleKey);
   }
 
   public AuthSession verifyOtp(VerifyOtpCommand command, AuthService authService) {

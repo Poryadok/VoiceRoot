@@ -17,6 +17,12 @@
 - Отзыв всех сессий через Auth-owned `session_epoch`; strict-потребители Gateway и Realtime проверяют floor fail-closed
 - 2FA (TOTP — Google Authenticator и аналоги)
 - JWT blacklist (Redis, для логаута и ротации)
+- OTP throttling в Auth-owned Redis: `auth:otp:send:<account_id>` резервируется
+  одним `SET NX PX` до создания/отправки кода; `auth:otp:verify:<account_id>`
+  считает неуспешные проверки одним `INCR`+`PEXPIRE` Lua-вызовом. Defaults из
+  архитектурного канона: один resend в минуту и три failed verify за десять
+  минут. Redis error, corrupt counter или невозможный ответ закрывают OTP flow
+  c `auth_unavailable`; ключи и Redis error detail клиенту не выдаются.
 - Гостевые аккаунты (30-дневный TTL, ограниченные права)
 - Конвертация гостевого аккаунта в полноценный
 - Soft delete аккаунта (30-дневный grace period)

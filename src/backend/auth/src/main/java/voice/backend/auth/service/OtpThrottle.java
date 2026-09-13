@@ -1,12 +1,13 @@
 package voice.backend.auth.service;
 
-/** Redis-backed OTP send/verify rate limits (docs/features/auth-and-contacts.md). */
+/** Auth-owned OTP send/verify throttling. Implementations must fail closed on unavailable state. */
 public interface OtpThrottle {
-  void checkCanSend(String key);
+  /** Atomically reserves the documented resend cooldown before a code is created or sent. */
+  void reserveSend(String key);
 
-  void recordSend(String key);
-
+  /** Rejects verification when the documented failure window is already exhausted. */
   void checkCanVerify(String key);
 
+  /** Atomically records a failed verification attempt. */
   void recordFailedVerify(String key);
 }

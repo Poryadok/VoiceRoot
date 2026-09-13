@@ -15,16 +15,16 @@ public class InMemoryOtpThrottle implements OtpThrottle {
   private final Map<String, AttemptWindow> verifyAttempts = new ConcurrentHashMap<>();
 
   @Override
-  public void checkCanSend(String key) {
-    Long last = lastSendAt.get(key);
-    if (last != null && System.currentTimeMillis() - last < SEND_WINDOW.toMillis()) {
-      throw new AuthException("otp_rate_limited");
-    }
-  }
-
-  @Override
-  public void recordSend(String key) {
-    lastSendAt.put(key, System.currentTimeMillis());
+  public void reserveSend(String key) {
+    long now = System.currentTimeMillis();
+    lastSendAt.compute(
+        key,
+        (ignored, previous) -> {
+          if (previous != null && now - previous < SEND_WINDOW.toMillis()) {
+            throw new AuthException("otp_rate_limited");
+          }
+          return now;
+        });
   }
 
   @Override

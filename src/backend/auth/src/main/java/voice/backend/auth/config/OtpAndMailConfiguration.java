@@ -53,8 +53,8 @@ public class OtpAndMailConfiguration {
 
   @Bean
   @ConditionalOnBean(StringRedisTemplate.class)
-  OtpThrottle redisOtpThrottle(StringRedisTemplate redis) {
-    return new RedisOtpThrottle(redis);
+  OtpThrottle redisOtpThrottle(StringRedisTemplate redis, AuthProperties properties) {
+    return new RedisOtpThrottle(redis, properties.getRedis().getOtp());
   }
 
   @Bean
