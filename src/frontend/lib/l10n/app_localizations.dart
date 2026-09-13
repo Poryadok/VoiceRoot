@@ -1814,6 +1814,30 @@ abstract class AppLocalizations {
   /// **'Attach file'**
   String get chatAttachFile;
 
+  /// No description provided for @chatAttachmentBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'File blocked. Choose another file.'**
+  String get chatAttachmentBlocked;
+
+  /// No description provided for @chatAttachmentPickAnother.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose another file'**
+  String get chatAttachmentPickAnother;
+
+  /// No description provided for @chatAttachmentScanFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'File scan failed. Try again.'**
+  String get chatAttachmentScanFailed;
+
+  /// No description provided for @chatAttachmentUploadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not upload file. Try again.'**
+  String get chatAttachmentUploadFailed;
+
   /// No description provided for @composerEmojiPanelTitle.
   ///
   /// In en, this message translates to:
