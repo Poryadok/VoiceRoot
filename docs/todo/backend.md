@@ -122,7 +122,7 @@
 - [x] **[File] Originals kept after image processing** — processed keys written, source `r2_key` not removed (`d:\Git\Voice\src\backend\file\internal\imgproc\webp.go`; contradicts `d:\Git\Voice\docs\features\file-storage.md`).
 - [ ] **[File] `CheckQuota` ignores premium** — always returns `r2file.MaxFreeFileBytes` as limit (`d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go` L449–454); README says subscription quotas beyond free tier are out of scope.
 - [ ] **[File] ffmpeg GIF→MP4 / video 720p / PDF first-page thumb отсутствуют** — image WebP inline в `ConfirmUpload`; video as-is. README: dedup out of scope. `ListFiles` REST **есть**; cursor/`filter_chat` — см. Common File.
-- [ ] **[File] Infected-file: ConfirmUpload может вернуть 200 с `scan_result=infected`** — нет Notification fan-out; клиент не показывает блок.
+- [ ] **[File] Infected-file Notification fan-out contract is undefined** — Gateway now maps `scan_result=infected` to `412 file_infected` and scanner failure to `412 file_scan_failed`; Flutter discards the blocked attachment, prevents `SendMessage` and offers to pick another file. `FileScanResult` has no documented recipient/attachment authority for Notification, and `files.chat_id` is only upload context, so no consumer or Realtime fan-out is implemented until that contract is specified.
 
 ### Protos/Pkg
 
