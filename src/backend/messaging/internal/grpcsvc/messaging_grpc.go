@@ -1239,6 +1239,14 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 	}
+	attachments := strings.TrimSpace(source.AttachmentsJSON)
+	if attachments == "" {
+		attachments = "[]"
+	}
+	contentType := store.EffectiveContentType(source.ContentType, source.Content, attachments)
+	if _, err := s.validateForwardAttachments(ctx, attachments, contentType); err != nil {
+		return nil, err
+	}
 
 	withoutAttribution := req.GetWithoutAttribution()
 
@@ -1291,14 +1299,6 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 			}
 			return nil, status.Error(codes.Internal, err.Error())
 		}
-	}
-	attachments := strings.TrimSpace(source.AttachmentsJSON)
-	if attachments == "" {
-		attachments = "[]"
-	}
-	contentType := store.EffectiveContentType(source.ContentType, source.Content, attachments)
-	if _, err := s.validateForwardAttachments(ctx, attachments, contentType); err != nil {
-		return nil, err
 	}
 	if attachments != "[]" {
 		if err := s.checkAttachmentPrivacyForSend(ctx, targetChatID, profileID, attachments); err != nil {
