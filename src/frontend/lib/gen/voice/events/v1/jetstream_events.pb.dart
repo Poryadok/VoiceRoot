@@ -2427,6 +2427,7 @@ class MentionAdded extends $pb.GeneratedMessage {
     $core.String? chatId,
     $core.String? senderProfileId,
     $core.Iterable<$core.String>? mentionedProfileIds,
+    $core.bool? sendSilent,
   }) {
     final result = create();
     if (messageId != null) result.messageId = messageId;
@@ -2434,6 +2435,7 @@ class MentionAdded extends $pb.GeneratedMessage {
     if (senderProfileId != null) result.senderProfileId = senderProfileId;
     if (mentionedProfileIds != null)
       result.mentionedProfileIds.addAll(mentionedProfileIds);
+    if (sendSilent != null) result.sendSilent = sendSilent;
     return result;
   }
 
@@ -2455,6 +2457,7 @@ class MentionAdded extends $pb.GeneratedMessage {
     ..aOS(2, _omitFieldNames ? '' : 'chatId')
     ..aOS(3, _omitFieldNames ? '' : 'senderProfileId')
     ..pPS(4, _omitFieldNames ? '' : 'mentionedProfileIds')
+    ..aOB(5, _omitFieldNames ? '' : 'sendSilent')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2505,6 +2508,17 @@ class MentionAdded extends $pb.GeneratedMessage {
 
   @$pb.TagNumber(4)
   $pb.PbList<$core.String> get mentionedProfileIds => $_getList(3);
+
+  /// Mirrors MessageSent.send_silent so mention push does not introduce an
+  /// audible duplicate for a silent message.
+  @$pb.TagNumber(5)
+  $core.bool get sendSilent => $_getBF(4);
+  @$pb.TagNumber(5)
+  set sendSilent($core.bool value) => $_setBool(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasSendSilent() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearSendSilent() => $_clearField(5);
 }
 
 class MessageEdited extends $pb.GeneratedMessage {
