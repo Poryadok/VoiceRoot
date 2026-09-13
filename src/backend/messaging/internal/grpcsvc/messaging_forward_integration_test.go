@@ -481,7 +481,10 @@ func TestMessagingForwardMessage_invalidAttachmentStopsBeforePrivacyOrWrite(t *t
 		Chat: chatDMRef(sourceChat), Content: "stored source", AttachmentsJson: "[]", MentionsJson: "[]",
 	})
 	require.NoError(t, err)
-	_, err = pool.Exec(ctx, `UPDATE messages SET attachments_json = 'not-json' WHERE id = $1`, uuid.MustParse(source.GetMessage().GetId()))
+	// `attachments` is JSONB, so persist a valid JSON scalar rather than an
+	// impossible malformed blob. The handler must still reject it because the
+	// wire contract requires a JSON array.
+	_, err = pool.Exec(ctx, `UPDATE messages SET attachments = '"not-json"'::jsonb WHERE id = $1`, uuid.MustParse(source.GetMessage().GetId()))
 	require.NoError(t, err)
 
 	privacySpy.calls = 0
