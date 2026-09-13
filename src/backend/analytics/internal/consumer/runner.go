@@ -94,16 +94,37 @@ func (r *Runner) Start(ctx context.Context, natsURL, _ string) error {
 	return ctx.Err()
 }
 
+// ensureAnalyticsDurable creates the shared push consumer before any process
+// binds to it. A subsequent Bind subscription does not own or delete it.
+func ensureAnalyticsDurable(js nats.JetStreamContext, stream, subject, durable, queue string) error {
+	_, createErr := js.AddConsumer(stream, &nats.ConsumerConfig{
+		Durable:        durable,
+		DeliverSubject: "_INBOX.voice.analytics." + durable,
+		DeliverGroup:   queue,
+		FilterSubject:  subject,
+		DeliverPolicy:  nats.DeliverNewPolicy,
+		AckPolicy:      nats.AckExplicitPolicy,
+	})
+	if createErr == nil {
+		return nil
+	}
+	info, infoErr := js.ConsumerInfo(stream, durable)
+	if infoErr != nil {
+		return createErr
+	}
+	config := info.Config
+	if config.FilterSubject != subject || config.DeliverGroup != queue || config.DeliverSubject == "" || config.AckPolicy != nats.AckExplicitPolicy {
+		return fmt.Errorf("analytics durable %s has incompatible existing configuration", durable)
+	}
+	return nil
+}
+
 func (r *Runner) subscribe(ctx context.Context, js nats.JetStreamContext, stream, subject, durable, queue string, handler nats.MsgHandler) (*nats.Subscription, error) {
 	return subscribeJetStreamWithRetry(ctx, r.Logger, stream, func() (*nats.Subscription, error) {
-		return subscribeCreateOrBind(
-			func() (*nats.Subscription, error) {
-				return js.QueueSubscribe(subject, queue, handler, nats.Durable(durable), nats.BindStream(stream), nats.DeliverNew(), nats.ManualAck())
-			},
-			func() (*nats.Subscription, error) {
-				return js.QueueSubscribe("", queue, handler, nats.Bind(stream, durable), nats.ManualAck())
-			},
-		)
+		if err := ensureAnalyticsDurable(js, stream, subject, durable, queue); err != nil {
+			return nil, err
+		}
+		return js.QueueSubscribe(subject, queue, handler, nats.Bind(stream, durable), nats.ManualAck())
 	})
 }
 
@@ -292,6 +313,7 @@ func (r *Runner) handleRoleMsg(m *nats.Msg) error {
 	return r.appendWithSourceAck(r.Mapper.FromRoleSubject(m.Subject, m.Data), "", m)
 }
 func (r *Runner) handleAnalyticsMsg(m *nats.Msg) error {
+	sourceEventID := analyticsEnvelopeEventID(m.Data)
 	ev := r.Mapper.FromAnalyticsSubject(m.Subject, m.Data)
 	if ev == nil {
 		var parsed analyticsv1.AnalyticsEvent
@@ -302,5 +324,16 @@ func (r *Runner) handleAnalyticsMsg(m *nats.Msg) error {
 		}
 		ev = &parsed
 	}
-	return r.appendWithSourceAck(ev, ev.GetEventId(), m)
+	return r.appendWithSourceAck(ev, sourceEventID, m)
+}
+
+func analyticsEnvelopeEventID(data []byte) string {
+	var parsed analyticsv1.AnalyticsEvent
+	if err := protojson.Unmarshal(data, &parsed); err == nil {
+		return parsed.GetEventId()
+	}
+	if err := proto.Unmarshal(data, &parsed); err == nil {
+		return parsed.GetEventId()
+	}
+	return ""
 }

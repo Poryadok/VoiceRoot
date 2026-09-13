@@ -112,7 +112,7 @@ for uid in voice-analytics-ingest voice-analytics-product voice-analytics-engage
 done
 
 assert_clickhouse_query "SELECT 1"
-assert_clickhouse_query "SELECT date, uniqMerge(unique_users) AS dau FROM voice.dau_mv GROUP BY date ORDER BY date LIMIT 1"
-assert_clickhouse_query "SELECT date, sum(event_count) AS cnt FROM voice.events_by_type_mv GROUP BY date LIMIT 1"
+assert_clickhouse_query "SELECT toDate(timestamp) AS date, uniqExact(user_id_hashed) AS dau FROM voice.events_logical WHERE user_id_hashed != '' GROUP BY date ORDER BY date LIMIT 1"
+assert_clickhouse_query "SELECT toDate(timestamp) AS date, count() AS cnt FROM voice.events_logical GROUP BY date LIMIT 1"
 
 echo "Grafana analytics dashboard smoke passed."

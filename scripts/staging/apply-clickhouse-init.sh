@@ -85,6 +85,11 @@ clickhouse_schema_ready() {
     clickhouse-client --query "EXISTS TABLE voice.events" 2>/dev/null | grep -qx '1'
 }
 
+clickhouse_logical_view_ready() {
+  kubectl exec -n "${NS}" voice-clickhouse-0 -- \
+    clickhouse-client --query "EXISTS TABLE voice.events_logical" 2>/dev/null | grep -qx '1'
+}
+
 apply_clickhouse_init_sql() {
   echo "Applying ClickHouse init SQL via voice-clickhouse-0 (local client)..."
   kubectl exec -i -n "${NS}" voice-clickhouse-0 -- clickhouse-client --multiquery < "${SQL_FILE}"
@@ -100,8 +105,16 @@ kubectl_apply_configmap "${CM_NAME}" "${NS}" \
   --from-file=001_events.sql="${SQL_FILE}"
 
 if clickhouse_schema_ready; then
-  echo "ClickHouse schema already present (voice.events); skipping DDL"
-  kubectl delete job "${JOB_NAME}" -n "${NS}" --ignore-not-found >/dev/null 2>&1 || true
+  echo "ClickHouse raw schema already present; applying additive idempotent DDL"
+  wait_clickhouse_native
+  sync_clickhouse_password_from_secret || true
+  wait_clickhouse_remote_auth
+  apply_clickhouse_init_sql
+  if ! clickhouse_logical_view_ready; then
+    echo "ERROR: ClickHouse DDL applied but voice.events_logical is missing" >&2
+    exit 1
+  fi
+  echo "ClickHouse additive init complete."
   exit 0
 fi
 
@@ -117,6 +130,11 @@ apply_clickhouse_init_sql
 
 if ! clickhouse_schema_ready; then
   echo "ERROR: ClickHouse init SQL applied but voice.events is missing" >&2
+  exit 1
+fi
+
+if ! clickhouse_logical_view_ready; then
+  echo "ERROR: ClickHouse init SQL applied but voice.events_logical is missing" >&2
   exit 1
 fi
 

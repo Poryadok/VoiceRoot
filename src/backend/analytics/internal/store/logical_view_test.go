@@ -24,3 +24,12 @@ func TestOfficialAnalyticsQueriesReadLogicalEvents(t *testing.T) {
 	require.Contains(t, text, "voice.events_logical")
 	require.NotContains(t, strings.ReplaceAll(text, "voice.events_logical", ""), "voice.events")
 }
+
+func TestStagingClickHouseApplyAlwaysAppliesAdditiveLogicalView(t *testing.T) {
+	script, err := os.ReadFile("../../../../../scripts/staging/apply-clickhouse-init.sh")
+	require.NoError(t, err)
+	text := string(script)
+	require.Contains(t, text, "clickhouse_logical_view_ready")
+	require.Contains(t, text, "applying additive idempotent DDL")
+	require.Contains(t, text, "apply_clickhouse_init_sql")
+}
