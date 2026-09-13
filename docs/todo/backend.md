@@ -503,7 +503,7 @@
 ### Messaging
 
 
-- [ ] **[Messaging] `ListThreads` pagination stub** — `ThreadList.next_cursor` in proto never populated; store has limit-only query.
+- [ ] **[Messaging] `ListThreads` bounded successor** — legacy store aggregates `messages` with a limit-only query. Implement the Messaging-owned per-viewer versioned AVL read model, durable Chat membership outbox/inbox, journal/backfill/readiness, cursor state and live visibility revocation defined in `docs/microservices/messaging-service.md` and `docs/testing/listthreads-versioned-readmodel-exec-plan.md`; do not activate cursor pagination through candidate-limited SQL.
 - [ ] **[Messaging] `message_attachments` target table not migrated** — spec DDL; implementation uses `messages.attachments` JSONB + indexes (`000008_shared_media_indexes`).
 - [ ] **[Messaging] Test holes on forward / GetMessage** — forward tests cover DM/group attribution only; no channel forward, E2E forward, commentary, or `GetMessage` integration test.
 - [ ] **[Messaging] NATS publish best-effort** — DB commit succeeds, JetStream failure only logged (`logPublishError`); no outbox/retry.
