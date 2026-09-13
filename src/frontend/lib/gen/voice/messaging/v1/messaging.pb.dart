@@ -38,6 +38,7 @@ class SendMessageRequest extends $pb.GeneratedMessage {
     $core.bool? postedAsChat,
     $core.bool? isE2e,
     MessageContentType? contentType,
+    $core.bool? sendSilent,
   }) {
     final result = create();
     if (chat != null) result.chat = chat;
@@ -50,6 +51,7 @@ class SendMessageRequest extends $pb.GeneratedMessage {
     if (postedAsChat != null) result.postedAsChat = postedAsChat;
     if (isE2e != null) result.isE2e = isE2e;
     if (contentType != null) result.contentType = contentType;
+    if (sendSilent != null) result.sendSilent = sendSilent;
     return result;
   }
 
@@ -80,6 +82,7 @@ class SendMessageRequest extends $pb.GeneratedMessage {
     ..aOB(9, _omitFieldNames ? '' : 'isE2e')
     ..aE<MessageContentType>(10, _omitFieldNames ? '' : 'contentType',
         enumValues: MessageContentType.values)
+    ..aOB(11, _omitFieldNames ? '' : 'sendSilent')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -193,6 +196,16 @@ class SendMessageRequest extends $pb.GeneratedMessage {
   $core.bool hasContentType() => $_has(9);
   @$pb.TagNumber(10)
   void clearContentType() => $_clearField(10);
+
+  /// Deliver push without sound or badge increment; persists through message.sent.
+  @$pb.TagNumber(11)
+  $core.bool get sendSilent => $_getBF(10);
+  @$pb.TagNumber(11)
+  set sendSilent($core.bool value) => $_setBool(10, value);
+  @$pb.TagNumber(11)
+  $core.bool hasSendSilent() => $_has(10);
+  @$pb.TagNumber(11)
+  void clearSendSilent() => $_clearField(11);
 }
 
 class EditMessageRequest extends $pb.GeneratedMessage {

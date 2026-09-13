@@ -33,7 +33,7 @@ type spyMessageEvents struct {
 	forwarded [][4]string // message_id, source_chat_id, target_chat_id, forwarder_profile_id
 }
 
-func (s *spyMessageEvents) PublishMessageSent(_ context.Context, messageID, chatID, senderProfileID string, hasMentions bool, _ string, _ bool, _ string) error {
+func (s *spyMessageEvents) PublishMessageSent(_ context.Context, messageID, chatID, senderProfileID string, hasMentions bool, _ string, _ bool, _ string, _ bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	flag := "false"
@@ -178,6 +178,7 @@ func TestMessagingGRPC_JetStream_MessageSentRoundTrip(t *testing.T) {
 		AttachmentsJson: "[]",
 		MentionsJson:    "[]",
 		MessageKind:     &mk,
+		SendSilent:      true,
 	})
 	require.NoError(t, err)
 	msgID := sendResp.GetMessage().GetId()
@@ -194,6 +195,55 @@ func TestMessagingGRPC_JetStream_MessageSentRoundTrip(t *testing.T) {
 	require.Equal(t, chatID.String(), sent.GetChatId())
 	require.Equal(t, profA.String(), sent.GetSenderProfileId())
 	require.False(t, sent.GetHasMentions())
+	require.True(t, sent.GetSendSilent())
+
+	var persistedSilent bool
+	require.NoError(t, pool.QueryRow(ctx, `SELECT send_silent FROM messages WHERE id = $1`, msgID).Scan(&persistedSilent))
+	require.True(t, persistedSilent)
+}
+
+func TestMessagingGRPC_MessageSentAbsentSendSilentDefaultsFalse(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applyBaseMessagingMigrations(t, ctx, pool)
+
+	chatID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+
+	natsSrv := startMessagingJSTestServer(t)
+	natsURL := natsSrv.ClientURL()
+	nc, err := nats.Connect(natsURL)
+	require.NoError(t, err)
+	t.Cleanup(nc.Close)
+	sub, err := nc.SubscribeSync(contractMessageSentSubject)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sub.Unsubscribe() })
+
+	jsPub, err := messageevents.NewJetStreamPublisher(natsURL)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = jsPub.Close() })
+	client, _ := startMessagingServerWired(t, pool, messagingWire{MessageEvents: jsPub})
+
+	resp, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
+		Chat:         chatDMRef(chatID),
+		Content:      "legacy default",
+		MentionsJson: "[]",
+	})
+	require.NoError(t, err)
+
+	raw, err := sub.NextMsg(5 * time.Second)
+	require.NoError(t, err)
+	var env eventsv1.MessageStreamEvent
+	require.NoError(t, proto.Unmarshal(raw.Data, &env))
+	require.False(t, env.GetMessageSent().GetSendSilent())
+
+	var persistedSilent bool
+	require.NoError(t, pool.QueryRow(ctx, `SELECT send_silent FROM messages WHERE id = $1`, resp.GetMessage().GetId()).Scan(&persistedSilent))
+	require.False(t, persistedSilent)
 }
 
 func TestMessagingGRPC_MessageEvents_SendEditDelete(t *testing.T) {
