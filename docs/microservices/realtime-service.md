@@ -143,7 +143,7 @@ replace roster recovery.
 | `typing`             | Кто-то печатает                                                     |
 | `presence_update`    | Смена статуса пользователя                                          |
 | `chat_update`        | Изменение чата/группы                                               |
-| `role_update`        | Изменение role policy из `role.events`; `role.chat_override_set` и `role.chat_override_removed` доставляются только текущим подписчикам указанного `d.chat_id`. Payload сохраняет `subject`, `space_id`, `chat_id`, `role_id`; клиент инвалидирует локальную permission policy и перечитывает нужный scope. Voice-room override events не имеют WS fan-out, пока не определён authoritative индекс voice-room подписок. |
+| `role_update`        | Доставка изменения role policy из `role.events`; `role.chat_override_set` и `role.chat_override_removed` доставляются только текущим подписчикам указанного `d.chat_id`. Payload сохраняет `subject`, `space_id`, `chat_id`, `role_id`. Voice-room override events не имеют WS fan-out, пока не определён authoritative индекс voice-room подписок. |
 | `member_add`         | Новый участник                                                      |
 | `member_remove`      | Участник удалён                                                     |
 | `dm_peer_deleted`    | Удалён второй участник уже известного DM; `d.chat_id` + `d.recipient_profile_id`, только для designated surviving profile, без deleted identity; live-ускорение, не durable history/replay |

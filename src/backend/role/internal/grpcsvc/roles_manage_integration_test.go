@@ -26,6 +26,7 @@ type recordedRoleCreatedEvent struct {
 }
 
 type recordedOverrideSetEvent struct {
+	spaceID    string
 	resourceID string
 	roleID     string
 }
@@ -53,31 +54,31 @@ func (p *recordingRoleEvents) createdEvents() []recordedRoleCreatedEvent {
 	return append([]recordedRoleCreatedEvent(nil), p.created...)
 }
 
-func (p *recordingRoleEvents) PublishChatOverrideSet(_ context.Context, _ string, chatID, roleID string) error {
+func (p *recordingRoleEvents) PublishChatOverrideSet(_ context.Context, spaceID, chatID, roleID string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.chatOverrideSets = append(p.chatOverrideSets, recordedOverrideSetEvent{resourceID: chatID, roleID: roleID})
+	p.chatOverrideSets = append(p.chatOverrideSets, recordedOverrideSetEvent{spaceID: spaceID, resourceID: chatID, roleID: roleID})
 	return nil
 }
 
-func (p *recordingRoleEvents) PublishChatOverrideRemoved(_ context.Context, _ string, chatID, roleID string) error {
+func (p *recordingRoleEvents) PublishChatOverrideRemoved(_ context.Context, spaceID, chatID, roleID string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.chatOverrideRemovals = append(p.chatOverrideRemovals, recordedOverrideSetEvent{resourceID: chatID, roleID: roleID})
+	p.chatOverrideRemovals = append(p.chatOverrideRemovals, recordedOverrideSetEvent{spaceID: spaceID, resourceID: chatID, roleID: roleID})
 	return nil
 }
 
-func (p *recordingRoleEvents) PublishVoiceOverrideSet(_ context.Context, _ string, voiceRoomID, roleID string) error {
+func (p *recordingRoleEvents) PublishVoiceOverrideSet(_ context.Context, spaceID, voiceRoomID, roleID string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.voiceOverrideSets = append(p.voiceOverrideSets, recordedOverrideSetEvent{resourceID: voiceRoomID, roleID: roleID})
+	p.voiceOverrideSets = append(p.voiceOverrideSets, recordedOverrideSetEvent{spaceID: spaceID, resourceID: voiceRoomID, roleID: roleID})
 	return nil
 }
 
-func (p *recordingRoleEvents) PublishVoiceOverrideRemoved(_ context.Context, _ string, voiceRoomID, roleID string) error {
+func (p *recordingRoleEvents) PublishVoiceOverrideRemoved(_ context.Context, spaceID, voiceRoomID, roleID string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.voiceOverrideRemovals = append(p.voiceOverrideRemovals, recordedOverrideSetEvent{resourceID: voiceRoomID, roleID: roleID})
+	p.voiceOverrideRemovals = append(p.voiceOverrideRemovals, recordedOverrideSetEvent{spaceID: spaceID, resourceID: voiceRoomID, roleID: roleID})
 	return nil
 }
 
@@ -215,7 +216,7 @@ func TestSetChatOverride_PublishesCurrentSetEvent(t *testing.T) {
 		DenyMask: sendMask,
 	})
 	require.NoError(t, err)
-	require.Equal(t, []recordedOverrideSetEvent{{resourceID: chatID, roleID: memberRoleID.String()}}, events.chatOverrideSetEvents())
+	require.Equal(t, []recordedOverrideSetEvent{{spaceID: spaceID.String(), resourceID: chatID, roleID: memberRoleID.String()}}, events.chatOverrideSetEvents())
 }
 
 // TestSetVoiceRoomOverride_PublishesCurrentSetEvent characterizes the
@@ -246,7 +247,7 @@ func TestSetVoiceRoomOverride_PublishesCurrentSetEvent(t *testing.T) {
 		DenyMask:    speakMask,
 	})
 	require.NoError(t, err)
-	require.Equal(t, []recordedOverrideSetEvent{{resourceID: voiceRoomID, roleID: memberRoleID.String()}}, events.voiceOverrideSetEvents())
+	require.Equal(t, []recordedOverrideSetEvent{{spaceID: spaceID.String(), resourceID: voiceRoomID, roleID: memberRoleID.String()}}, events.voiceOverrideSetEvents())
 }
 
 func TestRemoveChatOverride_PublishesOnlyForDeletedRow(t *testing.T) {
@@ -289,7 +290,7 @@ func TestRemoveChatOverride_PublishesOnlyForDeletedRow(t *testing.T) {
 		RoleId:  memberRoleID,
 	})
 	require.NoError(t, err)
-	require.Equal(t, []recordedOverrideSetEvent{{resourceID: chatID, roleID: memberRoleID}}, events.chatOverrideRemovalEvents())
+	require.Equal(t, []recordedOverrideSetEvent{{spaceID: spaceID.String(), resourceID: chatID, roleID: memberRoleID}}, events.chatOverrideRemovalEvents())
 
 	// The repeated delete is an idempotent no-op and must not produce a second invalidation.
 	_, err = client.RemoveChatOverride(ctxWithProfile(ownerID), &rolev1.RemoveChatOverrideRequest{
@@ -298,7 +299,7 @@ func TestRemoveChatOverride_PublishesOnlyForDeletedRow(t *testing.T) {
 		RoleId:  memberRoleID,
 	})
 	require.NoError(t, err)
-	require.Equal(t, []recordedOverrideSetEvent{{resourceID: chatID, roleID: memberRoleID}}, events.chatOverrideRemovalEvents())
+	require.Equal(t, []recordedOverrideSetEvent{{spaceID: spaceID.String(), resourceID: chatID, roleID: memberRoleID}}, events.chatOverrideRemovalEvents())
 
 	list, err := client.GetChatOverrides(context.Background(), &rolev1.GetChatOverridesRequest{
 		SpaceId:    spaceID.String(),
@@ -328,11 +329,11 @@ func TestRemoveVoiceRoomOverride_PublishesOnlyForDeletedRow(t *testing.T) {
 	request := &rolev1.RemoveVoiceRoomOverrideRequest{SpaceId: spaceID.String(), VoiceRoomId: voiceRoomID, RoleId: memberRoleID}
 	_, err := client.RemoveVoiceRoomOverride(ctxWithProfile(ownerID), request)
 	require.NoError(t, err)
-	require.Equal(t, []recordedOverrideSetEvent{{resourceID: voiceRoomID, roleID: memberRoleID}}, events.voiceOverrideRemovalEvents())
+	require.Equal(t, []recordedOverrideSetEvent{{spaceID: spaceID.String(), resourceID: voiceRoomID, roleID: memberRoleID}}, events.voiceOverrideRemovalEvents())
 
 	_, err = client.RemoveVoiceRoomOverride(ctxWithProfile(ownerID), request)
 	require.NoError(t, err)
-	require.Equal(t, []recordedOverrideSetEvent{{resourceID: voiceRoomID, roleID: memberRoleID}}, events.voiceOverrideRemovalEvents())
+	require.Equal(t, []recordedOverrideSetEvent{{spaceID: spaceID.String(), resourceID: voiceRoomID, roleID: memberRoleID}}, events.voiceOverrideRemovalEvents())
 }
 
 func TestCreateRole_RequiresManageRolesPermission(t *testing.T) {
