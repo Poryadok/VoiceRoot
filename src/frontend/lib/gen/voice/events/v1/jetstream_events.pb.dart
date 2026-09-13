@@ -2290,6 +2290,8 @@ class MessageSent extends $pb.GeneratedMessage {
     $core.bool? isE2e,
     $core.String? contentType,
     $core.bool? sendSilent,
+    $core.bool? wasScheduled,
+    $0.Timestamp? scheduledAt,
   }) {
     final result = create();
     if (messageId != null) result.messageId = messageId;
@@ -2300,6 +2302,8 @@ class MessageSent extends $pb.GeneratedMessage {
     if (isE2e != null) result.isE2e = isE2e;
     if (contentType != null) result.contentType = contentType;
     if (sendSilent != null) result.sendSilent = sendSilent;
+    if (wasScheduled != null) result.wasScheduled = wasScheduled;
+    if (scheduledAt != null) result.scheduledAt = scheduledAt;
     return result;
   }
 
@@ -2325,6 +2329,9 @@ class MessageSent extends $pb.GeneratedMessage {
     ..aOB(6, _omitFieldNames ? '' : 'isE2e')
     ..aOS(7, _omitFieldNames ? '' : 'contentType')
     ..aOB(8, _omitFieldNames ? '' : 'sendSilent')
+    ..aOB(9, _omitFieldNames ? '' : 'wasScheduled')
+    ..aOM<$0.Timestamp>(10, _omitFieldNames ? '' : 'scheduledAt',
+        subBuilder: $0.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2419,6 +2426,28 @@ class MessageSent extends $pb.GeneratedMessage {
   $core.bool hasSendSilent() => $_has(7);
   @$pb.TagNumber(8)
   void clearSendSilent() => $_clearField(8);
+
+  /// True only when Messaging dispatches a previously accepted schedule.
+  @$pb.TagNumber(9)
+  $core.bool get wasScheduled => $_getBF(8);
+  @$pb.TagNumber(9)
+  set wasScheduled($core.bool value) => $_setBool(8, value);
+  @$pb.TagNumber(9)
+  $core.bool hasWasScheduled() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearWasScheduled() => $_clearField(9);
+
+  /// Original scheduled_at for time-based schedules; absent for when-online.
+  @$pb.TagNumber(10)
+  $0.Timestamp get scheduledAt => $_getN(9);
+  @$pb.TagNumber(10)
+  set scheduledAt($0.Timestamp value) => $_setField(10, value);
+  @$pb.TagNumber(10)
+  $core.bool hasScheduledAt() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearScheduledAt() => $_clearField(10);
+  @$pb.TagNumber(10)
+  $0.Timestamp ensureScheduledAt() => $_ensure(9);
 }
 
 class MentionAdded extends $pb.GeneratedMessage {

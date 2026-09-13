@@ -95,6 +95,12 @@ func (s *MessagingGRPC) threadPolicyDeps() threadPolicyDeps {
 }
 
 func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMessageRequest) (*messagingv1.SendMessageResponse, error) {
+	// P-008 establishes the wire contract first. Until the schedule handler slice
+	// owns durable creation, reject a populated arm so it cannot silently take
+	// the existing immediate insert/event path.
+	if req != nil && req.DeliverySchedule != nil {
+		return nil, status.Error(codes.Unimplemented, "scheduled delivery is not implemented")
+	}
 	if s == nil || s.Messages == nil {
 		return nil, status.Error(codes.FailedPrecondition, "messaging persistence not configured")
 	}
