@@ -157,6 +157,51 @@ func TestRateMatch_DuplicateRejected(t *testing.T) {
 	require.Equal(t, codes.AlreadyExists, status.Code(err))
 }
 
+func TestRateMatch_ExplicitSkipDoesNotPersistOrBlockScore(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startDB(t, ctx)
+	srv := ratingTestServer(t, pool)
+	matchID, profileA, profileB := activateDuoMatchViaGRPC(t, ctx, srv)
+
+	_, err := srv.CompleteMatch(ctxWithProfile(profileA), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	require.NoError(t, err)
+	_, err = srv.CompleteMatch(ctxWithProfile(profileB), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	require.NoError(t, err)
+
+	skip := &matchmakingv1.RateMatchRequest{
+		MatchId:        matchID,
+		RatedProfileId: profileB.String(),
+		Stars:          0,
+	}
+	_, err = srv.RateMatch(ctxWithProfile(profileA), skip)
+	require.NoError(t, err)
+
+	var ratingRows, aggregateRows int
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM match_ratings WHERE match_id = $1 AND rater_profile_id = $2 AND rated_profile_id = $3`,
+		matchID, profileA, profileB,
+	).Scan(&ratingRows))
+	require.Zero(t, ratingRows)
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM player_ratings WHERE profile_id = $1`, profileB,
+	).Scan(&aggregateRows))
+	require.Zero(t, aggregateRows)
+
+	score := &matchmakingv1.RateMatchRequest{
+		MatchId:        matchID,
+		RatedProfileId: profileB.String(),
+		Stars:          4,
+	}
+	_, err = srv.RateMatch(ctxWithProfile(profileA), score)
+	require.NoError(t, err)
+
+	_, err = srv.RateMatch(ctxWithProfile(profileA), score)
+	require.Equal(t, codes.AlreadyExists, status.Code(err))
+}
+
 func TestGetPlayerRating_ReturnsAggregate(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
