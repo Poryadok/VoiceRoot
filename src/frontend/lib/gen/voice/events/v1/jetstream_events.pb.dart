@@ -2290,6 +2290,8 @@ class MessageSent extends $pb.GeneratedMessage {
     $core.bool? isE2e,
     $core.String? contentType,
     $core.bool? sendSilent,
+    $core.bool? wasScheduled,
+    $0.Timestamp? scheduledAt,
   }) {
     final result = create();
     if (messageId != null) result.messageId = messageId;
@@ -2300,6 +2302,8 @@ class MessageSent extends $pb.GeneratedMessage {
     if (isE2e != null) result.isE2e = isE2e;
     if (contentType != null) result.contentType = contentType;
     if (sendSilent != null) result.sendSilent = sendSilent;
+    if (wasScheduled != null) result.wasScheduled = wasScheduled;
+    if (scheduledAt != null) result.scheduledAt = scheduledAt;
     return result;
   }
 
@@ -2325,6 +2329,9 @@ class MessageSent extends $pb.GeneratedMessage {
     ..aOB(6, _omitFieldNames ? '' : 'isE2e')
     ..aOS(7, _omitFieldNames ? '' : 'contentType')
     ..aOB(8, _omitFieldNames ? '' : 'sendSilent')
+    ..aOB(9, _omitFieldNames ? '' : 'wasScheduled')
+    ..aOM<$0.Timestamp>(10, _omitFieldNames ? '' : 'scheduledAt',
+        subBuilder: $0.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2419,6 +2426,28 @@ class MessageSent extends $pb.GeneratedMessage {
   $core.bool hasSendSilent() => $_has(7);
   @$pb.TagNumber(8)
   void clearSendSilent() => $_clearField(8);
+
+  /// True only when Messaging dispatches a previously accepted schedule.
+  @$pb.TagNumber(9)
+  $core.bool get wasScheduled => $_getBF(8);
+  @$pb.TagNumber(9)
+  set wasScheduled($core.bool value) => $_setBool(8, value);
+  @$pb.TagNumber(9)
+  $core.bool hasWasScheduled() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearWasScheduled() => $_clearField(9);
+
+  /// Original scheduled_at for time-based schedules; absent for when-online.
+  @$pb.TagNumber(10)
+  $0.Timestamp get scheduledAt => $_getN(9);
+  @$pb.TagNumber(10)
+  set scheduledAt($0.Timestamp value) => $_setField(10, value);
+  @$pb.TagNumber(10)
+  $core.bool hasScheduledAt() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearScheduledAt() => $_clearField(10);
+  @$pb.TagNumber(10)
+  $0.Timestamp ensureScheduledAt() => $_ensure(9);
 }
 
 class MentionAdded extends $pb.GeneratedMessage {
@@ -2427,6 +2456,7 @@ class MentionAdded extends $pb.GeneratedMessage {
     $core.String? chatId,
     $core.String? senderProfileId,
     $core.Iterable<$core.String>? mentionedProfileIds,
+    $core.bool? sendSilent,
   }) {
     final result = create();
     if (messageId != null) result.messageId = messageId;
@@ -2434,6 +2464,7 @@ class MentionAdded extends $pb.GeneratedMessage {
     if (senderProfileId != null) result.senderProfileId = senderProfileId;
     if (mentionedProfileIds != null)
       result.mentionedProfileIds.addAll(mentionedProfileIds);
+    if (sendSilent != null) result.sendSilent = sendSilent;
     return result;
   }
 
@@ -2455,6 +2486,7 @@ class MentionAdded extends $pb.GeneratedMessage {
     ..aOS(2, _omitFieldNames ? '' : 'chatId')
     ..aOS(3, _omitFieldNames ? '' : 'senderProfileId')
     ..pPS(4, _omitFieldNames ? '' : 'mentionedProfileIds')
+    ..aOB(5, _omitFieldNames ? '' : 'sendSilent')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2505,6 +2537,17 @@ class MentionAdded extends $pb.GeneratedMessage {
 
   @$pb.TagNumber(4)
   $pb.PbList<$core.String> get mentionedProfileIds => $_getList(3);
+
+  /// Mirrors MessageSent.send_silent so mention push does not introduce an
+  /// audible duplicate for a silent message.
+  @$pb.TagNumber(5)
+  $core.bool get sendSilent => $_getBF(4);
+  @$pb.TagNumber(5)
+  set sendSilent($core.bool value) => $_setBool(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasSendSilent() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearSendSilent() => $_clearField(5);
 }
 
 class MessageEdited extends $pb.GeneratedMessage {

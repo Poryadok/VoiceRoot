@@ -6,5 +6,8 @@ type Payload struct {
 	Body        string
 	CollapseTag string
 	Counter     int
-	Data        map[string]string
+	// Silent delivers a visible push without sound or a badge increment where
+	// the platform supports those controls. It does not affect in-app routing.
+	Silent bool
+	Data   map[string]string
 }
