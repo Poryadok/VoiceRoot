@@ -24,9 +24,9 @@ type threadCursor struct {
 	PageSize     int       `json:"s"`
 	LastReplyAt  time.Time `json:"l"`
 	LastParentID uuid.UUID `json:"i"`
-	CeilingAt    time.Time `json:"a"`
+	SnapshotAt   time.Time `json:"a"`
+	CeilingAt    time.Time `json:"u"`
 	CeilingID    uuid.UUID `json:"z"`
-	CeilingMsgID uuid.UUID `json:"m"`
 	ExpiresAt    time.Time `json:"e"`
 }
 

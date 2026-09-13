@@ -81,8 +81,8 @@ type MessagingGRPC struct {
 	PreKeyBundles *store.E2EPreKeyStore
 	// Logger emits structured nats_publish errors when JetStream publish fails after a successful RPC.
 	Logger *slog.Logger
-	// ThreadCursorSecret signs ListThreads cursors. Production supplies it through
-	// MESSAGING_THREAD_CURSOR_HMAC_SECRET; an empty value is deterministic only for tests.
+	// ThreadCursorSecret signs ListThreads cursors. It must be at least 32 bytes;
+	// production supplies it through MESSAGING_THREAD_CURSOR_HMAC_SECRET.
 	ThreadCursorSecret []byte
 	// ThreadCursorTTL defaults to 15 minutes when unset.
 	ThreadCursorTTL time.Duration
@@ -799,7 +799,7 @@ func (s *MessagingGRPC) GetMessages(ctx context.Context, req *messagingv1.GetMes
 		if errors.Is(err, store.ErrNotChatMember) {
 			return nil, status.Error(codes.PermissionDenied, "not a chat member")
 		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, status.Error(codes.Unavailable, "chat membership unavailable")
 	}
 	chatType, err := s.resolveAuthoritativeChatType(ctx, chatID, profileID)
 	if err != nil {
@@ -1153,7 +1153,7 @@ func (s *MessagingGRPC) ListThreads(ctx context.Context, req *messagingv1.ListTh
 		if errors.Is(err, store.ErrNotChatMember) {
 			return nil, status.Error(codes.PermissionDenied, "not a chat member")
 		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, status.Error(codes.Unavailable, "chat membership unavailable")
 	}
 	pageSize := req.GetPage().GetPageSize()
 	if pageSize < 0 || pageSize > maxPageSize {
@@ -1164,28 +1164,30 @@ func (s *MessagingGRPC) ListThreads(ctx context.Context, req *messagingv1.ListTh
 		limit = defaultPageSize
 	}
 	secret := s.ThreadCursorSecret
-	if len(secret) == 0 {
-		secret = []byte("messaging-thread-cursor-test-secret")
+	if len(secret) < 32 {
+		return nil, status.Error(codes.FailedPrecondition, "thread cursor signing key unavailable")
 	}
 	ttl := s.ThreadCursorTTL
 	if ttl <= 0 {
 		ttl = threadCursorTTL
 	}
-	var afterAt, ceilingAt time.Time
-	var afterID, ceilingID, ceilingMessageID uuid.UUID
+	var afterAt, ceilingAt, snapshotAt time.Time
+	var afterID, ceilingID uuid.UUID
+	var signedCursor *threadCursor
 	if raw := req.GetPage().GetCursor(); raw != "" {
 		cursor, err := verifyThreadCursor(secret, raw, time.Now())
 		if err != nil || cursor.ChatID != chatID || cursor.ProfileID != profileID || cursor.PageSize != limit {
 			return nil, status.Error(codes.InvalidArgument, "invalid page cursor")
 		}
-		afterAt, afterID, ceilingAt, ceilingID, ceilingMessageID = cursor.LastReplyAt, cursor.LastParentID, cursor.CeilingAt, cursor.CeilingID, cursor.CeilingMsgID
+		signedCursor = &cursor
+		afterAt, afterID, ceilingAt, ceilingID, snapshotAt = cursor.LastReplyAt, cursor.LastParentID, cursor.CeilingAt, cursor.CeilingID, cursor.SnapshotAt
 	} else {
-		ceilingMessageID, err = s.Messages.ThreadSnapshotCeiling(ctx, chatID)
+		snapshotAt, err = s.Messages.ThreadSnapshotCeiling(ctx, chatID)
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 	}
-	rows, err := s.Messages.ListThreads(ctx, chatID, profileID, limit+1, afterAt, afterID, ceilingAt, ceilingID, ceilingMessageID)
+	rows, err := s.Messages.ListThreads(ctx, chatID, profileID, limit+1, afterAt, afterID, ceilingAt, ceilingID, snapshotAt)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -1212,7 +1214,11 @@ func (s *MessagingGRPC) ListThreads(ctx context.Context, req *messagingv1.ListTh
 			ceilingAt, ceilingID = rows[0].LastReplyAt, rows[0].ThreadParentID
 		}
 		last := rows[len(rows)-1]
-		next, err = signThreadCursor(secret, threadCursor{ChatID: chatID, ProfileID: profileID, PageSize: limit, LastReplyAt: last.LastReplyAt, LastParentID: last.ThreadParentID, CeilingAt: ceilingAt, CeilingID: ceilingID, CeilingMsgID: ceilingMessageID, ExpiresAt: time.Now().Add(ttl)})
+		expiresAt := time.Now().Add(ttl)
+		if signedCursor != nil {
+			expiresAt = signedCursor.ExpiresAt
+		}
+		next, err = signThreadCursor(secret, threadCursor{ChatID: chatID, ProfileID: profileID, PageSize: limit, LastReplyAt: last.LastReplyAt, LastParentID: last.ThreadParentID, SnapshotAt: snapshotAt, CeilingAt: ceilingAt, CeilingID: ceilingID, ExpiresAt: expiresAt})
 		if err != nil {
 			return nil, status.Error(codes.Internal, fmt.Sprintf("sign page cursor: %v", err))
 		}

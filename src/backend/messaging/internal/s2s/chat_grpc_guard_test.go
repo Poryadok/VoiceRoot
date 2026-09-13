@@ -24,6 +24,13 @@ type stubChatListMembers struct {
 	err     error
 }
 
+func (s *stubChatListMembers) GetChat(_ context.Context, req *chatv1.GetChatRequest) (*chatv1.GetChatResponse, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return &chatv1.GetChatResponse{Chat: &chatv1.Chat{Id: req.GetChatId()}}, nil
+}
+
 func (s *stubChatListMembers) ListMembers(_ context.Context, _ *chatv1.ListMembersRequest) (*chatv1.ListMembersResponse, error) {
 	if s.err != nil {
 		return nil, s.err
@@ -79,9 +86,7 @@ func TestGRPCChatGuard_EnsureMember(t *testing.T) {
 
 	t.Run("not member", func(t *testing.T) {
 		t.Parallel()
-		conn, cleanup := startBufconnChat(t, &stubChatListMembers{members: []*chatv1.ChatMember{
-			{ProfileId: peer.String()},
-		}})
+		conn, cleanup := startBufconnChat(t, &stubChatListMembers{err: status.Error(codes.PermissionDenied, "denied")})
 		t.Cleanup(cleanup)
 		g := NewGRPCChatGuard(chatv1.NewChatServiceClient(conn))
 		err := g.EnsureMember(context.Background(), chatID, self)
@@ -121,8 +126,6 @@ func TestGRPCChatGuard_DMOtherProfileID(t *testing.T) {
 	_, err = g.DMOtherProfileID(context.Background(), chatID, peer)
 	require.NoError(t, err)
 
-	err = g.EnsureMember(context.Background(), chatID, uuid.New())
-	require.ErrorIs(t, err, store.ErrNotChatMember)
 }
 
 func TestGRPCChatGuard_DMOtherProfileID_edgeCases(t *testing.T) {

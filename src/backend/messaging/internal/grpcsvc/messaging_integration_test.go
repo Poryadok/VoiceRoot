@@ -159,6 +159,7 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 		PreKeyBundles:       &store.E2EPreKeyStore{Pool: pool},
 		Logger:              w.Logger,
 		ChatTypeResolver:    w.ChatTypeResolver,
+		ThreadCursorSecret:  []byte("messaging-thread-cursor-test-secret"),
 	}
 	w.wireDeletedAccounts(t, messagingSvc)
 	messagingv1.RegisterMessagingServiceServer(srv, messagingSvc)
@@ -240,16 +241,17 @@ func startMessagingDirect(t *testing.T, pool *pgxpool.Pool) *MessagingGRPC {
 	t.Helper()
 	guard := &store.SQLChatGuard{Pool: pool}
 	return &MessagingGRPC{
-		Messages:         &store.MessagesStore{Pool: pool},
-		Reactions:        &store.ReactionsStore{Pool: pool},
-		Pins:             &store.PinsStore{Pool: pool},
-		SharedMedia:      &store.SharedMediaStore{Pool: pool},
-		ChatGuard:        guard,
-		ChatTypeResolver: &store.SQLChatTypeResolver{Pool: pool},
-		Moderation:       &store.SQLModerationGuard{Pool: pool},
-		ChatMentionsMeta: &store.SQLChatMentionsMeta{Pool: pool},
-		ChatThreadPolicy: &store.SQLChatThreadPolicy{Pool: pool},
-		PreKeyBundles:    &store.E2EPreKeyStore{Pool: pool},
+		Messages:           &store.MessagesStore{Pool: pool},
+		Reactions:          &store.ReactionsStore{Pool: pool},
+		Pins:               &store.PinsStore{Pool: pool},
+		SharedMedia:        &store.SharedMediaStore{Pool: pool},
+		ChatGuard:          guard,
+		ChatTypeResolver:   &store.SQLChatTypeResolver{Pool: pool},
+		Moderation:         &store.SQLModerationGuard{Pool: pool},
+		ChatMentionsMeta:   &store.SQLChatMentionsMeta{Pool: pool},
+		ChatThreadPolicy:   &store.SQLChatThreadPolicy{Pool: pool},
+		PreKeyBundles:      &store.E2EPreKeyStore{Pool: pool},
+		ThreadCursorSecret: []byte("messaging-thread-cursor-test-secret"),
 	}
 }
 

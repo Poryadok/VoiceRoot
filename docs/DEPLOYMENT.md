@@ -328,6 +328,29 @@ kubectl wait --for=condition=complete job/voice-migrate-bot-db -n "$NS" --timeou
 
 Re-run only when new migration files ship; use a new Job name or delete the completed Job before re-apply.
 
+### Messaging `ListThreads` cursor and `messaging_db` index rollout
+
+`MESSAGING_THREAD_CURSOR_HMAC_SECRET` is required whenever Messaging starts with
+`DATABASE_URL`: it must contain at least 32 bytes, be mounted from
+`voice-app-secrets`, be identical on every Messaging replica, and have no
+fallback value. `MESSAGING_THREAD_CURSOR_TTL` is an optional positive duration
+(default `15m`); a cursor keeps the expiry fixed by its first page. Rotate the
+HMAC key only in an explicit Messaging deploy, accepting that existing cursors
+become invalid.
+
+`messages_thread_list_visible_idx` belongs only to `messaging_db`. Its
+`CREATE INDEX CONCURRENTLY` statement cannot run in a transaction-wrapped
+golang-migrate Job, and it must never be added to the existing
+`voice-migrate-voice-db` / `voice_db` runner path.
+`scripts/staging/apply-migrate-jobs.sh` runs the dedicated
+`voice-migrate-messaging-thread-list-index` Job from
+`deploy/templates/migrate-messaging-thread-list-index-job.yaml`. It mounts only
+`000016_thread_list_snapshot_index.up.sql`, verifies that `messaging_db` is
+clean at version 15 or already at 16, executes the concurrent statement through
+`psql` outside the generic transaction-wrapped runner, then records version 16
+only after success. The script waits for the Job; keep the previous Messaging
+deployment serving during index creation.
+
 ### `voice_db` lifecycle migration and readiness
 
 `voice_db` is owned by Voice Service. Apply

@@ -88,6 +88,7 @@ FILE_R2_SECRET_ACCESS_KEY="${FILE_R2_SECRET_ACCESS_KEY:-}"
 FILE_R2_BUCKET="${FILE_R2_BUCKET:-voice-staging-files}"
 AUTH_TOTP_ENCRYPTION_KEY="$(generate_auth_secret)"
 ACCOUNT_DELETE_TOKEN_SECRET="$(generate_auth_secret)"
+MESSAGING_THREAD_CURSOR_HMAC_SECRET="$(generate_auth_secret)"
 
 echo "Bootstrapping ${SECRET_NAME} in ${NS} (Postgres user voice, test JWT key)"
 
@@ -131,6 +132,7 @@ kubectl_apply_bootstrap_secret "$SECRET_NAME" \
   --from-literal=CHAT_DATABASE_URL="$(pg_url chat_db)" \
   --from-literal=SPACE_DATABASE_URL="$(pg_url space_db)" \
   --from-literal=MESSAGING_DATABASE_URL="$(pg_url messaging_db)" \
+  --from-literal=MESSAGING_THREAD_CURSOR_HMAC_SECRET="$MESSAGING_THREAD_CURSOR_HMAC_SECRET" \
   --from-literal=FILE_DATABASE_URL="$(pg_url file_db)" \
   --from-literal=ROLE_DATABASE_URL="$(pg_url role_db)" \
   --from-literal=MATCHMAKING_DATABASE_URL="$(pg_url matchmaking_db)" \

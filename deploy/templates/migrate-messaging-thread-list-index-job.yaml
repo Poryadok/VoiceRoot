@@ -1,0 +1,61 @@
+# Non-transactional migration Job for messaging_db/000016 only.
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: voice-migrate-messaging-thread-list-index
+  namespace: __K_NAMESPACE__
+  labels:
+    app.kubernetes.io/name: voice-migrate-messaging-thread-list-index
+    app.kubernetes.io/component: migration
+spec:
+  ttlSecondsAfterFinished: 86400
+  backoffLimit: 2
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: voice-migrate-messaging-thread-list-index
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: postgres:16-alpine
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              rfc3986_encode_component() (
+                value=$1
+                encoded=
+                for byte in $(printf '%s' "${value}" | LC_ALL=C od -An -v -tx1); do
+                  case "${byte}" in
+                    2d|2e|3[0-9]|4[1-9a-f]|5[0-9a]|5f|6[1-9a-f]|7[0-9a]|7e)
+                      encoded="${encoded}$(printf "\\$(printf '%03o' "$((0x${byte}))")")"
+                      ;;
+                    *) encoded="${encoded}%$(printf '%s' "${byte}" | tr '[:lower:]' '[:upper:]')" ;;
+                  esac
+                done
+                printf '%s' "${encoded}"
+              )
+              user="$(rfc3986_encode_component "${POSTGRES_USER}")"
+              password="$(rfc3986_encode_component "${POSTGRES_PASSWORD}")"
+              database_url="postgres://${user}:${password}@${POSTGRES_HOST}:5432/messaging_db?sslmode=disable"
+              version="$(psql "${database_url}" -At -c 'SELECT version FROM schema_migrations LIMIT 1')"
+              case "${version}" in
+                16) exit 0 ;;
+                15)
+                  psql "${database_url}" -v ON_ERROR_STOP=1 -f /migrations/000016_thread_list_snapshot_index.up.sql
+                  psql "${database_url}" -v ON_ERROR_STOP=1 -c 'UPDATE schema_migrations SET version = 16, dirty = false WHERE version = 15 AND dirty = false'
+                  ;;
+                *) echo "messaging_db must be clean at migration version 15 or 16; got ${version}" >&2; exit 1 ;;
+              esac
+          env:
+            - {name: POSTGRES_USER, value: voice}
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: voice-app-secrets, key: POSTGRES_PASSWORD}}
+            - {name: POSTGRES_HOST, value: voice-postgres}
+          volumeMounts:
+            - {name: migrations, mountPath: /migrations, readOnly: true}
+      volumes:
+        - name: migrations
+          configMap: {name: voice-messaging-thread-list-index-migration, optional: false}

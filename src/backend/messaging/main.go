@@ -297,8 +297,8 @@ func main() {
 			logger.Warn("CHAT_DATABASE_URL not set; thread policy checks disabled")
 		}
 		threadCursorSecret := []byte(strings.TrimSpace(os.Getenv("MESSAGING_THREAD_CURSOR_HMAC_SECRET")))
-		if len(threadCursorSecret) == 0 {
-			log.Fatal("MESSAGING_THREAD_CURSOR_HMAC_SECRET is required when DATABASE_URL is set")
+		if len(threadCursorSecret) < 32 {
+			log.Fatal("MESSAGING_THREAD_CURSOR_HMAC_SECRET must be at least 32 bytes")
 		}
 		threadCursorTTL := 15 * time.Minute
 		if rawTTL := strings.TrimSpace(os.Getenv("MESSAGING_THREAD_CURSOR_TTL")); rawTTL != "" {

@@ -15,7 +15,8 @@ import (
 	commonv1 "voice.app/voice/common/v1"
 )
 
-// GRPCChatGuard validates membership via ChatService.ListMembers (S2S; forwards caller metadata).
+// GRPCChatGuard validates a caller's membership with ChatService.GetChat and
+// uses ListMembers only where a member collection is actually needed.
 type GRPCChatGuard struct {
 	Client chatv1.ChatServiceClient
 }
@@ -71,17 +72,16 @@ func (g *GRPCChatGuard) DMReceiptVisibilityTargets(ctx context.Context, profileI
 	}
 }
 
-func (g *GRPCChatGuard) EnsureMember(ctx context.Context, chatID, profileID uuid.UUID) error {
-	members, err := g.dmMembers(ctx, chatID)
+func (g *GRPCChatGuard) EnsureMember(ctx context.Context, chatID, _ uuid.UUID) error {
+	if g == nil || g.Client == nil {
+		return status.Error(codes.FailedPrecondition, "chat service not configured")
+	}
+	ctx = ForwardIncomingMetadata(ctx)
+	_, err := g.Client.GetChat(ctx, &chatv1.GetChatRequest{ChatId: chatID.String()})
 	if err != nil {
 		return grpcMemberErr(err)
 	}
-	for _, m := range members {
-		if strings.EqualFold(m.GetProfileId(), profileID.String()) {
-			return nil
-		}
-	}
-	return store.ErrNotChatMember
+	return nil
 }
 
 func (g *GRPCChatGuard) DMOtherProfileID(ctx context.Context, chatID, profileID uuid.UUID) (uuid.UUID, error) {

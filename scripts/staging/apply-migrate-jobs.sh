@@ -143,4 +143,25 @@ apply_migrate voice_db \
   voice-migrate-voice-db \
   voice-voice-db-migrations
 
+apply_messaging_thread_list_index() {
+  local migration="${ROOT}/src/backend/migrations/messaging_db/000016_thread_list_snapshot_index.up.sql"
+  local template="${ROOT}/deploy/templates/migrate-messaging-thread-list-index-job.yaml"
+  local job_name=voice-migrate-messaging-thread-list-index
+  local cm_name=voice-messaging-thread-list-index-migration
+  [ -f "${migration}" ] || { echo "ERROR: missing ${migration}" >&2; exit 1; }
+  if kubectl get job "${job_name}" -n "${NS}" -o jsonpath='{.status.succeeded}' 2>/dev/null | grep -qx '1'; then
+    echo "messaging thread-list index migration already succeeded; skipping"
+    return 0
+  fi
+  kubectl delete job "${job_name}" -n "${NS}" --ignore-not-found
+  kubectl_apply_configmap "${cm_name}" "${NS}" --from-file="${migration}"
+  substitute '' < "${template}" | kubectl apply -f -
+  if ! kubectl wait --for=condition=complete "job/${job_name}" -n "${NS}" --timeout=300s; then
+    dump_migrate_job_logs "${job_name}"
+    exit 1
+  fi
+}
+
+apply_messaging_thread_list_index
+
 echo "Staging DB migrate jobs complete."

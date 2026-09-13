@@ -2,8 +2,12 @@ package grpcsvc
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +20,7 @@ import (
 	chatv1 "voice.app/voice/chat/v1"
 	commonv1 "voice.app/voice/common/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
+	"voice/backend/messaging/internal/store"
 )
 
 // applyThreadMessagingMigrations applies chat + messaging schemas used by roles/threads (docs/features/roles.md) thread tests.
@@ -27,6 +32,7 @@ func applyThreadMessagingMigrations(t *testing.T, ctx context.Context, pool *pgx
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000004_delete_for_me.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000010_ghost_only.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000012_messages_content_type.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000007_thread_index.up.sql"))
@@ -565,6 +571,412 @@ func TestMessagingListThreads_viewerPrivacyContract(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, []string{parentID}, threadParentIDs(visible.GetThreadList().GetThreads()))
 	})
+}
+
+// TestMessagingListThreads_ghostVisibilityContract protects the platform
+// moderation boundary for both a root and its reply: a ghost thread remains
+// observable to its sender but is absent for another real chat member.
+func TestMessagingListThreads_ghostVisibilityContract(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applyThreadMessagingMigrations(t, ctx, pool)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000010_ghost_only.up.sql"))
+
+	chatID, senderProfileID, otherProfileID, accountID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	seedChannelChat(t, ctx, pool, chatID, senderProfileID)
+	_, err := pool.Exec(ctx, `INSERT INTO chat_members (chat_id, profile_id, role) VALUES ($1, $2, 'member')`, chatID, otherProfileID)
+	require.NoError(t, err)
+	svc := startMessagingDirect(t, pool)
+	chat := chatChannelRef(chatID)
+
+	t.Run("ghost root", func(t *testing.T) {
+		parent := sendPostedAsChatDirect(t, ctx, svc, accountID, senderProfileID, chat, "ghost root")
+		parentID := parent.GetId()
+		_, err := svc.SendMessage(incomingProfileCtx(ctx, accountID, senderProfileID), &messagingv1.SendMessageRequest{
+			Chat: chat, Content: "visible only to sender", ThreadParentId: &parentID, AttachmentsJson: "[]", MentionsJson: "[]",
+		})
+		require.NoError(t, err)
+		_, err = pool.Exec(ctx, `UPDATE messages SET ghost_only = true WHERE id = $1`, uuid.MustParse(parentID))
+		require.NoError(t, err)
+		assertGhostThreadVisibility(t, ctx, svc, accountID, senderProfileID, otherProfileID, chat, parentID)
+	})
+
+	t.Run("ghost reply", func(t *testing.T) {
+		parent := sendPostedAsChatDirect(t, ctx, svc, accountID, senderProfileID, chat, "normal root")
+		parentID := parent.GetId()
+		reply, err := svc.SendMessage(incomingProfileCtx(ctx, accountID, senderProfileID), &messagingv1.SendMessageRequest{
+			Chat: chat, Content: "ghost reply", ThreadParentId: &parentID, AttachmentsJson: "[]", MentionsJson: "[]",
+		})
+		require.NoError(t, err)
+		_, err = pool.Exec(ctx, `UPDATE messages SET ghost_only = true WHERE id = $1`, uuid.MustParse(reply.GetMessage().GetId()))
+		require.NoError(t, err)
+		assertGhostThreadVisibility(t, ctx, svc, accountID, senderProfileID, otherProfileID, chat, parentID)
+	})
+}
+
+func assertGhostThreadVisibility(t *testing.T, ctx context.Context, svc *MessagingGRPC, accountID, senderProfileID, otherProfileID uuid.UUID, chat *chatv1.ChatRef, parentID string) {
+	t.Helper()
+	self, err := svc.ListThreads(incomingProfileCtx(ctx, accountID, senderProfileID), &messagingv1.ListThreadsRequest{Chat: chat})
+	require.NoError(t, err)
+	require.Contains(t, threadParentIDs(self.GetThreadList().GetThreads()), parentID)
+
+	other, err := svc.ListThreads(incomingProfileCtx(ctx, accountID, otherProfileID), &messagingv1.ListThreadsRequest{Chat: chat})
+	require.NoError(t, err)
+	require.NotContains(t, threadParentIDs(other.GetThreadList().GetThreads()), parentID)
+}
+
+// TestMessagingListThreads_cursorDoesNotCarryInvisibleMessageID ensures an
+// opaque cursor does not disclose a ghost row through its snapshot watermark.
+func TestMessagingListThreads_cursorDoesNotCarryInvisibleMessageID(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applyThreadMessagingMigrations(t, ctx, pool)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000010_ghost_only.up.sql"))
+
+	chatID, senderProfileID, otherProfileID, accountID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	seedChannelChat(t, ctx, pool, chatID, senderProfileID)
+	_, err := pool.Exec(ctx, `INSERT INTO chat_members (chat_id, profile_id, role) VALUES ($1, $2, 'member')`, chatID, otherProfileID)
+	require.NoError(t, err)
+	svc := startMessagingDirect(t, pool)
+	chat := chatChannelRef(chatID)
+	for range 2 {
+		parent := sendPostedAsChatDirect(t, ctx, svc, accountID, senderProfileID, chat, "visible root")
+		parentID := parent.GetId()
+		_, err = svc.SendMessage(incomingProfileCtx(ctx, accountID, senderProfileID), &messagingv1.SendMessageRequest{Chat: chat, Content: "visible reply", ThreadParentId: &parentID, AttachmentsJson: "[]", MentionsJson: "[]"})
+		require.NoError(t, err)
+	}
+	ghostParent := sendPostedAsChatDirect(t, ctx, svc, accountID, senderProfileID, chat, "ghost root")
+	ghostParentID := uuid.MustParse(ghostParent.GetId())
+	ghostReply, err := svc.SendMessage(incomingProfileCtx(ctx, accountID, senderProfileID), &messagingv1.SendMessageRequest{Chat: chat, Content: "ghost reply", ThreadParentId: ptrString(ghostParentID.String()), AttachmentsJson: "[]", MentionsJson: "[]"})
+	require.NoError(t, err)
+	ceilingID := uuid.MustParse("ffffffff-ffff-ffff-ffff-ffffffffffff")
+	_, err = pool.Exec(ctx, `UPDATE messages SET id = $1 WHERE id = $2`, ceilingID, ghostParentID)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE messages SET thread_parent_id = $1, ghost_only = true WHERE id = $2`, ceilingID, uuid.MustParse(ghostReply.GetMessage().GetId()))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE messages SET ghost_only = true WHERE id = $1`, ceilingID)
+	require.NoError(t, err)
+
+	page, err := svc.ListThreads(incomingProfileCtx(ctx, accountID, otherProfileID), &messagingv1.ListThreadsRequest{Chat: chat, Page: &commonv1.CursorPageRequest{PageSize: 1}})
+	require.NoError(t, err)
+	cursor, err := verifyThreadCursor([]byte("messaging-thread-cursor-test-secret"), page.GetThreadList().GetNextCursor(), time.Now())
+	require.NoError(t, err)
+	encoded, err := json.Marshal(cursor)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), ceilingID.String(), "cursor must not carry an invisible message ID")
+}
+
+func TestMessagingListThreads_cursorKeepsOriginalExpiry(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applyThreadMessagingMigrations(t, ctx, pool)
+	chatID, profileID, accountID := uuid.New(), uuid.New(), uuid.New()
+	seedChannelChat(t, ctx, pool, chatID, profileID)
+	svc := startMessagingDirect(t, pool)
+	chat := chatChannelRef(chatID)
+	for range 3 {
+		parent := sendPostedAsChatDirect(t, ctx, svc, accountID, profileID, chat, "root")
+		parentID := parent.GetId()
+		_, err := svc.SendMessage(incomingProfileCtx(ctx, accountID, profileID), &messagingv1.SendMessageRequest{Chat: chat, Content: "reply", ThreadParentId: &parentID, AttachmentsJson: "[]", MentionsJson: "[]"})
+		require.NoError(t, err)
+	}
+	first, err := svc.ListThreads(incomingProfileCtx(ctx, accountID, profileID), &messagingv1.ListThreadsRequest{Chat: chat, Page: &commonv1.CursorPageRequest{PageSize: 1}})
+	require.NoError(t, err)
+	firstCursor, err := verifyThreadCursor([]byte("messaging-thread-cursor-test-secret"), first.GetThreadList().GetNextCursor(), time.Now())
+	require.NoError(t, err)
+	second, err := svc.ListThreads(incomingProfileCtx(ctx, accountID, profileID), &messagingv1.ListThreadsRequest{Chat: chat, Page: &commonv1.CursorPageRequest{Cursor: first.GetThreadList().GetNextCursor(), PageSize: 1}})
+	require.NoError(t, err)
+	secondCursor, err := verifyThreadCursor([]byte("messaging-thread-cursor-test-secret"), second.GetThreadList().GetNextCursor(), time.Now())
+	require.NoError(t, err)
+	require.Equal(t, firstCursor.ExpiresAt, secondCursor.ExpiresAt, "later pages must retain the first cursor expiry")
+}
+
+func TestMessagingListThreads_cursorSecretIsRequiredAndAtLeast32Bytes(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applyThreadMessagingMigrations(t, ctx, pool)
+	chatID, profileID, accountID := uuid.New(), uuid.New(), uuid.New()
+	seedChannelChat(t, ctx, pool, chatID, profileID)
+	chat := chatChannelRef(chatID)
+	for _, secret := range [][]byte{nil, []byte(strings.Repeat("x", 31))} {
+		svc := startMessagingDirect(t, pool)
+		svc.ThreadCursorSecret = secret
+		_, err := svc.ListThreads(incomingProfileCtx(ctx, accountID, profileID), &messagingv1.ListThreadsRequest{Chat: chat})
+		require.Equal(t, codes.FailedPrecondition, status.Code(err), "invalid cursor key length=%d", len(secret))
+	}
+}
+
+func functionSource(t *testing.T, source, signature string) string {
+	t.Helper()
+	start := strings.Index(source, signature)
+	require.GreaterOrEqual(t, start, 0, "missing function %s", signature)
+	bodyStart := strings.Index(source[start:], "{")
+	require.GreaterOrEqual(t, bodyStart, 0, "missing function body %s", signature)
+	bodyStart += start
+	depth := 0
+	for i := bodyStart; i < len(source); i++ {
+		switch source[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return source[start : i+1]
+			}
+		}
+	}
+	t.Fatalf("unterminated function %s", signature)
+	return ""
+}
+
+// TestThreadSnapshotCeilingUsesCreatedAtHighWater binds the persistence
+// contract to both ends of the implementation: the snapshot producer must
+// derive created_at, and ListThreads must compare message created_at against it
+// rather than admitting rows by UUID.
+func TestThreadSnapshotCeilingUsesCreatedAtHighWater(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "messaging", "internal", "store", "messages_store.go"))
+	require.NoError(t, err)
+	source := string(raw)
+	ceiling := functionSource(t, source, "func (s *MessagesStore) ThreadSnapshotCeiling")
+	listThreads := functionSource(t, source, "func (s *MessagesStore) ListThreads")
+	require.True(t, strings.Contains(ceiling, "MAX(created_at)"), "ThreadSnapshotCeiling must derive the database created_at high-water")
+	require.Regexp(t, `m\.created_at\s*<=\s*\$[0-9]+`, listThreads, "ListThreads must apply the created_at snapshot predicate to messages")
+	require.NotRegexp(t, `m\.id\s*<=\s*\$[0-9]+`, listThreads, "ListThreads must not use a UUID snapshot ceiling")
+}
+
+// TestMessagingListThreads_createdAtSnapshotExcludesLaterLowerUUID is the
+// deterministic behavioral companion to the SQL contract. The post-page-one
+// thread has a UUID lower than every existing row; only its later database
+// creation time may exclude it from the old cursor snapshot.
+func TestMessagingListThreads_createdAtSnapshotExcludesLaterLowerUUID(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applyThreadMessagingMigrations(t, ctx, pool)
+	chatID, profileID, accountID := uuid.New(), uuid.New(), uuid.New()
+	seedGroupChat(t, ctx, pool, chatID, profileID, uuid.New())
+	setChatThreadSettings(t, ctx, pool, chatID, true, true)
+	svc := startMessagingDirect(t, pool)
+	chat := chatGroupRef(chatID)
+	preSnapshotParentIDs := make([]string, 0, 2)
+	for range 2 {
+		parent := sendRegularDirect(t, ctx, svc, accountID, profileID, chat, "before snapshot")
+		parentID := parent.GetId()
+		preSnapshotParentIDs = append(preSnapshotParentIDs, parentID)
+		_, err := svc.SendMessage(incomingProfileCtx(ctx, accountID, profileID), &messagingv1.SendMessageRequest{Chat: chat, Content: "before reply", ThreadParentId: &parentID, AttachmentsJson: "[]", MentionsJson: "[]"})
+		require.NoError(t, err)
+	}
+	page1, err := svc.ListThreads(incomingProfileCtx(ctx, accountID, profileID), &messagingv1.ListThreadsRequest{Chat: chat, Page: &commonv1.CursorPageRequest{PageSize: 1}})
+	require.NoError(t, err)
+	cursor := page1.GetThreadList().GetNextCursor()
+	require.NotEmpty(t, cursor)
+	pageOneParentID := page1.GetThreadList().GetThreads()[0].GetThreadParentId()
+
+	laterParent := sendRegularDirect(t, ctx, svc, accountID, profileID, chat, "later root with lower UUID")
+	laterParentID := uuid.MustParse(laterParent.GetId())
+	laterReply, err := svc.SendMessage(incomingProfileCtx(ctx, accountID, profileID), &messagingv1.SendMessageRequest{Chat: chat, Content: "later reply with lower UUID", ThreadParentId: ptrString(laterParentID.String()), AttachmentsJson: "[]", MentionsJson: "[]"})
+	require.NoError(t, err)
+	lowParentID := uuid.MustParse("00000000-0000-4000-8000-000000000001")
+	lowReplyID := uuid.MustParse("00000000-0000-4000-8000-000000000002")
+	_, err = pool.Exec(ctx, `UPDATE messages SET id = $1 WHERE id = $2`, lowParentID, laterParentID)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE messages SET id = $1, thread_parent_id = $2 WHERE id = $3`, lowReplyID, lowParentID, uuid.MustParse(laterReply.GetMessage().GetId()))
+	require.NoError(t, err)
+
+	page2, err := svc.ListThreads(incomingProfileCtx(ctx, accountID, profileID), &messagingv1.ListThreadsRequest{Chat: chat, Page: &commonv1.CursorPageRequest{Cursor: cursor, PageSize: 1}})
+	require.NoError(t, err)
+	pageTwoParentIDs := threadParentIDs(page2.GetThreadList().GetThreads())
+	require.Len(t, pageTwoParentIDs, 1, "page two must still return the eligible pre-snapshot thread")
+	require.NotEqual(t, pageOneParentID, pageTwoParentIDs[0], "page two must not duplicate page one")
+	require.Contains(t, preSnapshotParentIDs, pageTwoParentIDs[0], "page two must return a pre-snapshot thread")
+	require.NotContains(t, pageTwoParentIDs, lowParentID.String(), "later-created row must stay outside the original created_at snapshot even with a lower UUID")
+}
+
+type liveThreadRevocationScene struct {
+	chat              *chatv1.ChatRef
+	ownerProfileID    uuid.UUID
+	otherProfileID    uuid.UUID
+	accountID         uuid.UUID
+	targetParentID    string
+	targetReplyID     string
+	pageOneParentID   string
+	pageOneNextCursor string
+	svc               *MessagingGRPC
+	pool              *pgxpool.Pool
+}
+
+func newLiveThreadRevocationScene(t *testing.T) liveThreadRevocationScene {
+	t.Helper()
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applyThreadMessagingMigrations(t, ctx, pool)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000010_ghost_only.up.sql"))
+	chatID, ownerProfileID, otherProfileID, accountID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	seedGroupChat(t, ctx, pool, chatID, ownerProfileID, otherProfileID)
+	setChatThreadSettings(t, ctx, pool, chatID, true, true)
+	svc := startMessagingDirect(t, pool)
+	chat := chatGroupRef(chatID)
+
+	parentIDs := make([]string, 0, 3)
+	replyByParent := make(map[string]string, 3)
+	for i := 0; i < 3; i++ {
+		parent := sendRegularDirect(t, ctx, svc, accountID, ownerProfileID, chat, "ordinary root")
+		parentID := parent.GetId()
+		reply, err := svc.SendMessage(incomingProfileCtx(ctx, accountID, ownerProfileID), &messagingv1.SendMessageRequest{Chat: chat, Content: "ordinary preview", ThreadParentId: &parentID, AttachmentsJson: "[]", MentionsJson: "[]"})
+		require.NoError(t, err)
+		parentIDs = append(parentIDs, parentID)
+		replyByParent[parentID] = reply.GetMessage().GetId()
+	}
+	// Equal times force parent ID as the stable pagination tie-breaker.
+	tie := time.Date(2026, time.September, 14, 12, 0, 0, 0, time.UTC)
+	_, err := pool.Exec(ctx, `UPDATE messages SET created_at = $2 WHERE chat_id = $1 AND thread_parent_id IS NOT NULL`, chatID, tie)
+	require.NoError(t, err)
+	sort.Sort(sort.Reverse(sort.StringSlice(parentIDs)))
+	_, err = pool.Exec(ctx, `UPDATE messages SET content = 'TARGET-ROOT' WHERE id = $1`, uuid.MustParse(parentIDs[1]))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE messages SET content = 'TARGET-PREVIEW' WHERE id = $1`, uuid.MustParse(replyByParent[parentIDs[1]]))
+	require.NoError(t, err)
+	page1, err := svc.ListThreads(incomingProfileCtx(ctx, accountID, ownerProfileID), &messagingv1.ListThreadsRequest{Chat: chat, Page: &commonv1.CursorPageRequest{PageSize: 1}})
+	require.NoError(t, err)
+	require.Equal(t, []string{parentIDs[0]}, threadParentIDs(page1.GetThreadList().GetThreads()))
+	require.NotEmpty(t, page1.GetThreadList().GetNextCursor())
+	return liveThreadRevocationScene{
+		chat: chat, ownerProfileID: ownerProfileID, otherProfileID: otherProfileID, accountID: accountID,
+		targetParentID: parentIDs[1], targetReplyID: replyByParent[parentIDs[1]], pageOneParentID: parentIDs[0],
+		pageOneNextCursor: page1.GetThreadList().GetNextCursor(), svc: svc, pool: pool,
+	}
+}
+
+func assertPageTwoRevocation(t *testing.T, ctx context.Context, scene liveThreadRevocationScene, viewerProfileID uuid.UUID, cursor string) {
+	t.Helper()
+	page2, err := scene.svc.ListThreads(incomingProfileCtx(ctx, scene.accountID, viewerProfileID), &messagingv1.ListThreadsRequest{Chat: scene.chat, Page: &commonv1.CursorPageRequest{Cursor: cursor, PageSize: 1}})
+	require.NoError(t, err)
+	seen := make(map[string]struct{}, len(page2.GetThreadList().GetThreads()))
+	for _, thread := range page2.GetThreadList().GetThreads() {
+		require.NotEqual(t, scene.targetParentID, thread.GetThreadParentId(), "revoked thread ID must not appear on page two")
+		require.NotEqual(t, scene.pageOneParentID, thread.GetThreadParentId(), "page two must not duplicate page one")
+		require.NotEqual(t, "TARGET-PREVIEW", thread.GetLastReplyPreview(), "revoked preview must not appear on page two")
+		_, duplicate := seen[thread.GetThreadParentId()]
+		require.False(t, duplicate, "page two must not contain duplicate thread IDs")
+		seen[thread.GetThreadParentId()] = struct{}{}
+	}
+}
+
+// TestMessagingListThreads_pageTwoReevaluatesLiveRevocations verifies the
+// narrow contract: snapshot admission is fixed, but root/reply visibility is
+// re-evaluated before every cursor page.
+func TestMessagingListThreads_pageTwoReevaluatesLiveRevocations(t *testing.T) {
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name        string
+		scope       messagingv1.DeleteScope
+		targetReply bool
+	}{
+		{name: "for everyone root", scope: messagingv1.DeleteScope_DELETE_SCOPE_FOR_EVERYONE},
+		{name: "for everyone reply", scope: messagingv1.DeleteScope_DELETE_SCOPE_FOR_EVERYONE, targetReply: true},
+		{name: "for me root", scope: messagingv1.DeleteScope_DELETE_SCOPE_FOR_ME},
+		{name: "for me reply", scope: messagingv1.DeleteScope_DELETE_SCOPE_FOR_ME, targetReply: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			scene := newLiveThreadRevocationScene(t)
+			messageID := scene.targetParentID
+			if tc.targetReply {
+				messageID = scene.targetReplyID
+			}
+			_, err := scene.svc.DeleteMessage(incomingProfileCtx(ctx, scene.accountID, scene.ownerProfileID), &messagingv1.DeleteMessageRequest{MessageId: messageID, Scope: ptrDeleteScope(tc.scope)})
+			require.NoError(t, err)
+			assertPageTwoRevocation(t, ctx, scene, scene.ownerProfileID, scene.pageOneNextCursor)
+		})
+	}
+
+	for _, targetReply := range []bool{false, true} {
+		t.Run("ghost "+map[bool]string{false: "root", true: "reply"}[targetReply], func(t *testing.T) {
+			scene := newLiveThreadRevocationScene(t)
+			// Reissue page one as the other member; the old cursor is bound to its viewer.
+			page1, err := scene.svc.ListThreads(incomingProfileCtx(ctx, scene.accountID, scene.otherProfileID), &messagingv1.ListThreadsRequest{Chat: scene.chat, Page: &commonv1.CursorPageRequest{PageSize: 1}})
+			require.NoError(t, err)
+			messageID := scene.targetParentID
+			if targetReply {
+				messageID = scene.targetReplyID
+			}
+			_, err = scene.pool.Exec(ctx, `UPDATE messages SET ghost_only = true WHERE id = $1`, uuid.MustParse(messageID))
+			require.NoError(t, err)
+			assertPageTwoRevocation(t, ctx, scene, scene.otherProfileID, page1.GetThreadList().GetNextCursor())
+			self, err := scene.svc.ListThreads(incomingProfileCtx(ctx, scene.accountID, scene.ownerProfileID), &messagingv1.ListThreadsRequest{Chat: scene.chat})
+			require.NoError(t, err)
+			require.Contains(t, threadParentIDs(self.GetThreadList().GetThreads()), scene.targetParentID, "ghost sender retains self visibility")
+		})
+	}
+}
+
+type listThreadsFaultGuard struct{ err error }
+
+func (g listThreadsFaultGuard) EnsureMember(context.Context, uuid.UUID, uuid.UUID) error {
+	return g.err
+}
+func (listThreadsFaultGuard) DMOtherProfileID(context.Context, uuid.UUID, uuid.UUID) (uuid.UUID, error) {
+	return uuid.Nil, nil
+}
+func (listThreadsFaultGuard) OtherMemberProfileIDs(context.Context, uuid.UUID, uuid.UUID) ([]uuid.UUID, error) {
+	return nil, nil
+}
+func (listThreadsFaultGuard) MemberRole(context.Context, uuid.UUID, uuid.UUID) (string, error) {
+	return "", nil
+}
+
+func TestMessagingListThreads_membershipDependencyMapsToUnavailable(t *testing.T) {
+	svc := &MessagingGRPC{Messages: &store.MessagesStore{}, ChatGuard: listThreadsFaultGuard{err: errors.New("chat unavailable")}}
+	_, err := svc.ListThreads(incomingProfileCtx(context.Background(), uuid.New(), uuid.New()), &messagingv1.ListThreadsRequest{Chat: chatChannelRef(uuid.New())})
+	require.Equal(t, codes.Unavailable, status.Code(err))
+}
+
+func TestMessagingListThreads_realChatMembershipHasNoHundredMemberSeam(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applyThreadMessagingMigrations(t, ctx, pool)
+	chatID, ownerProfileID, accountID := uuid.New(), uuid.New(), uuid.New()
+	seedChannelChat(t, ctx, pool, chatID, ownerProfileID)
+	var readerProfileID uuid.UUID
+	for i := 0; i < 101; i++ {
+		profileID := uuid.New()
+		_, err := pool.Exec(ctx, `INSERT INTO chat_members (chat_id, profile_id, role) VALUES ($1, $2, 'member')`, chatID, profileID)
+		require.NoError(t, err)
+		if i == 100 {
+			readerProfileID = profileID
+		}
+	}
+	svc := startMessagingDirect(t, pool)
+	chat := chatChannelRef(chatID)
+	parent := sendPostedAsChatDirect(t, ctx, svc, accountID, ownerProfileID, chat, "root")
+	parentID := parent.GetId()
+	_, err := svc.SendMessage(incomingProfileCtx(ctx, accountID, ownerProfileID), &messagingv1.SendMessageRequest{Chat: chat, Content: "reply", ThreadParentId: &parentID, AttachmentsJson: "[]", MentionsJson: "[]"})
+	require.NoError(t, err)
+	listed, err := svc.ListThreads(incomingProfileCtx(ctx, accountID, readerProfileID), &messagingv1.ListThreadsRequest{Chat: chat})
+	require.NoError(t, err)
+	require.Equal(t, []string{parentID}, threadParentIDs(listed.GetThreadList().GetThreads()))
+}
+
+func TestMessagingThreadListIndexMigrationUsesConcurrentCreate(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "messaging_db", "000016_thread_list_snapshot_index.up.sql"))
+	require.NoError(t, err)
+	require.Contains(t, strings.ToUpper(string(raw)), "CREATE INDEX CONCURRENTLY IF NOT EXISTS")
+}
+
+func TestMessagingThreadListIndexDoesNotUseVoiceDBMigrationRunner(t *testing.T) {
+	root := repoRoot(t)
+	runner, err := os.ReadFile(filepath.Join(root, "scripts", "staging", "apply-migrate-jobs.sh"))
+	require.NoError(t, err)
+	require.NotContains(t, string(runner), "apply_migrate messaging_db", "the concurrent index must not use the transaction-wrapped generic runner")
+	require.Contains(t, string(runner), "apply_messaging_thread_list_index")
+
+	docs, err := os.ReadFile(filepath.Join(root, "docs", "DEPLOYMENT.md"))
+	require.NoError(t, err)
+	deployment := string(docs)
+	messagingStart := strings.Index(deployment, "### Messaging `ListThreads` cursor and `messaging_db` index rollout")
+	voiceStart := strings.Index(deployment, "### `voice_db` lifecycle migration and readiness")
+	require.GreaterOrEqual(t, messagingStart, 0)
+	require.Greater(t, voiceStart, messagingStart)
+	require.NotContains(t, deployment[voiceStart:], "Messaging thread-list index")
+	require.Contains(t, deployment[messagingStart:voiceStart], "voice-migrate-messaging-thread-list-index")
 }
 
 func TestMessagingListThreads_normalReadAccessAcrossChatTypes(t *testing.T) {
