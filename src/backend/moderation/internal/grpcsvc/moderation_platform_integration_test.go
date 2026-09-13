@@ -13,6 +13,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	chatv1 "voice.app/voice/chat/v1"
+	commonv1 "voice.app/voice/common/v1"
 
 	moderationv1 "voice.app/voice/moderation/v1"
 )
@@ -269,6 +270,98 @@ func TestModerationPlatform_ListReports_queueFilter_content_vs_spaces(t *testing
 		require.Equal(t, "space", r.GetTargetType())
 	}
 	require.Len(t, spacesList.GetReportList().GetReports(), 1)
+}
+
+func TestModerationPlatform_ListReports_stableCursorPagination(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startModerationPostgresPlatform(t, ctx)
+	client, cleanup := startModerationGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	modCtx := withInternalModCtx(ctx, uuid.New())
+	base := time.Date(2026, 9, 13, 12, 0, 0, 0, time.UTC)
+	created := make([]string, 0, 5)
+	for _, spec := range []struct {
+		category string
+		at       time.Time
+	}{
+		{category: "harassment", at: base.Add(5 * time.Minute)},
+		{category: "harassment", at: base.Add(4 * time.Minute)},
+		{category: "fake", at: base.Add(3 * time.Minute)},
+		{category: "spam", at: base.Add(2 * time.Minute)},
+		{category: "other", at: base.Add(time.Minute)},
+	} {
+		report, err := client.CreateReport(withReporterProfile(ctx, uuid.New()), &moderationv1.CreateReportRequest{
+			TargetType: "user",
+			TargetId:   uuid.New().String(),
+			Category:   spec.category,
+			Description: func() *string {
+				if spec.category == "other" {
+					return strPtr("needs review")
+				}
+				return nil
+			}(),
+			EvidenceJson: `{}`,
+		})
+		require.NoError(t, err)
+		created = append(created, report.GetReport().GetId())
+		_, err = pool.Exec(ctx, `UPDATE reports SET created_at = $2 WHERE id = $1`, report.GetReport().GetId(), spec.at)
+		require.NoError(t, err)
+	}
+
+	page1, err := client.ListReports(modCtx, &moderationv1.ListReportsRequest{
+		StatusFilter: "pending",
+		Page:         &commonv1.CursorPageRequest{PageSize: 2},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{created[0], created[1]}, reportIDs(page1.GetReportList().GetReports()))
+	require.NotEmpty(t, page1.GetReportList().GetNextCursor())
+
+	page2, err := client.ListReports(modCtx, &moderationv1.ListReportsRequest{
+		StatusFilter: "pending",
+		Page: &commonv1.CursorPageRequest{
+			PageSize: 2,
+			Cursor:   page1.GetReportList().GetNextCursor(),
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{created[2], created[3]}, reportIDs(page2.GetReportList().GetReports()))
+	require.NotEmpty(t, page2.GetReportList().GetNextCursor())
+
+	page3, err := client.ListReports(modCtx, &moderationv1.ListReportsRequest{
+		StatusFilter: "pending",
+		Page: &commonv1.CursorPageRequest{
+			PageSize: 2,
+			Cursor:   page2.GetReportList().GetNextCursor(),
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{created[4]}, reportIDs(page3.GetReportList().GetReports()))
+	require.Empty(t, page3.GetReportList().GetNextCursor())
+
+	empty, err := client.ListReports(modCtx, &moderationv1.ListReportsRequest{
+		StatusFilter: "resolved",
+		Page:         &commonv1.CursorPageRequest{PageSize: 2},
+	})
+	require.NoError(t, err)
+	require.Empty(t, empty.GetReportList().GetReports())
+	require.Empty(t, empty.GetReportList().GetNextCursor())
+
+	_, err = client.ListReports(modCtx, &moderationv1.ListReportsRequest{
+		Page: &commonv1.CursorPageRequest{PageSize: 2, Cursor: "not-a-cursor"},
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func reportIDs(reports []*moderationv1.Report) []string {
+	ids := make([]string, 0, len(reports))
+	for _, report := range reports {
+		ids = append(ids, report.GetId())
+	}
+	return ids
 }
 
 func TestModerationPlatform_IsShadowBanned(t *testing.T) {
