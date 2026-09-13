@@ -72,6 +72,8 @@ func StartArchivePurgeWorker(ctx context.Context, st *store.StoryStore, deleter 
 		return
 	}
 	go func() {
+		runArchivePurge(ctx, st, deleter, logger)
+
 		ticker := time.NewTicker(24 * time.Hour)
 		defer ticker.Stop()
 		for {
@@ -79,13 +81,20 @@ func StartArchivePurgeWorker(ctx context.Context, st *store.StoryStore, deleter 
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				n, err := RunArchivePurgeOnce(context.Background(), st, deleter, time.Now().UTC())
-				if err != nil && logger != nil {
-					logger.Error("story archive purge", slog.String("error", err.Error()))
-				} else if n > 0 && logger != nil {
-					logger.Info("story archive purge", slog.Int64("purged", n))
-				}
+				runArchivePurge(ctx, st, deleter, logger)
 			}
 		}
 	}()
+}
+
+func runArchivePurge(ctx context.Context, st *store.StoryStore, deleter FileDeleter, logger *slog.Logger) {
+	if ctx.Err() != nil {
+		return
+	}
+	n, err := RunArchivePurgeOnce(ctx, st, deleter, time.Now().UTC())
+	if err != nil && logger != nil {
+		logger.Error("story archive purge", slog.String("error", err.Error()))
+	} else if n > 0 && logger != nil {
+		logger.Info("story archive purge", slog.Int64("purged", n))
+	}
 }
