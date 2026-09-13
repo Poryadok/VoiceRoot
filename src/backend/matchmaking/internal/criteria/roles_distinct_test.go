@@ -5,8 +5,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"voice/backend/matchmaking/internal/criteria"
 	"voice/backend/matchmaking/internal/config"
+	"voice/backend/matchmaking/internal/criteria"
 )
 
 func TestCompatible_AllowsDistinctRolesForStackMode(t *testing.T) {
@@ -31,5 +31,21 @@ func TestRolesDistinct_RejectsDuplicateRoles(t *testing.T) {
 		{Self: criteria.SelfCriteria{Role: "Mid"}},
 		{Self: criteria.SelfCriteria{Role: "Carry"}},
 	}
+	require.False(t, criteria.RolesDistinct(group, mode))
+}
+
+func TestRolesDistinct_RequiresDiversityAcrossFull10SlotLobby(t *testing.T) {
+	t.Parallel()
+	mode := config.Mode{Slots: 10, RolesRequired: true}
+	group := make([]criteria.SearchCriteria, mode.Slots)
+	for i := range group {
+		group[i] = criteria.SearchCriteria{
+			Self: criteria.SelfCriteria{Role: string(rune('A' + i))},
+		}
+	}
+
+	require.True(t, criteria.RolesDistinct(group, mode))
+
+	group[len(group)-1].Self.Role = group[0].Self.Role
 	require.False(t, criteria.RolesDistinct(group, mode))
 }
