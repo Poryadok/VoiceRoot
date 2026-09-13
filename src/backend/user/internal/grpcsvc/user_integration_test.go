@@ -123,6 +123,8 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 		require.Equal(t, "alice", resp.GetProfile().GetUsername())
 		require.Equal(t, "0001", resp.GetProfile().GetDiscriminator())
 		require.True(t, resp.GetProfile().GetIsPrimary())
+		// An unconfigured nullable column stays unset on the optional protobuf field.
+		require.Nil(t, resp.GetProfile().CustomStatus)
 	})
 
 	t.Run("GetProfile by handle", func(t *testing.T) {

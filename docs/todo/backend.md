@@ -614,7 +614,7 @@
 - [ ] **[Subscription] Default webhook secret in prod path — `test-webhook-secret` if `PADDLE_WEBHOOK_SECRET` unset** — `src/backend/subscription/internal/billing/paddle.go`
 - [ ] **[Subscription] Duplicate `DELETE` in `ActivatePremium`** — `src/backend/subscription/internal/store/store.go` (lines 95–99)
 - [ ] **[Subscription] E2E / test gaps — no compose/live CloudPayments, provider-side cancel, personal grace→downstream notification/freeze, Space Pro failed-payment grace, or billing history scenario.** Personal grace expiry has service integration coverage; Space Pro webhook→join live is `TestComposeSpaceProMemberCap_live` (#14). — `src/frontend/test/billing_e2e_live_test.dart`; `src/backend/gateway/compose_billing_live_test.go`; `src/backend/subscription/internal/grpcsvc/lifecycle_integration_test.go`
-- [ ] **[Subscription] Premium cosmetic gaps outside Subscription module — e.g. custom status not persisted; anonymous view tracked separately in `docs/todo/backend.md`** — `src/backend/user/internal/grpcsvc/user.go`; `docs/todo/backend.md` (Anonymous view)
+- [ ] **[Subscription] Premium cosmetic enforcement gaps outside Subscription module — profile custom status has no Premium tier gate; anonymous view tracked separately in `docs/todo/backend.md`** — `src/backend/user/internal/grpcsvc/user.go`; `docs/todo/backend.md` (Anonymous view)
 - [ ] **[Subscription] Doc/constant drift — free space join 100 vs 50; free voice 360p vs 480p in different docs; not unified in limits** — `docs/features/subscription.md`; `docs/microservices/subscription-service.md`; `src/backend/subscription/internal/testfixtures/limits.go`
 
 ### File
