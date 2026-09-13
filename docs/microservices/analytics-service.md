@@ -8,7 +8,7 @@
 
 **Язык**: Go
 **OLAP БД**: ClickHouse
-**Буфер**: in-memory batch accumulator (flush 5s / 1000 events)
+**Буфер**: JetStream durable backlog + in-memory batch accumulator (flush 5s / 1000 events; ACK только после успешной записи ClickHouse)
 
 ## Ответственность
 
@@ -39,7 +39,7 @@ analytics.* publishers ──► ingest gRPC ──┤
                               AnalyticsQueryService (staff REST via Gateway)
 ```
 
-Пайплайн ingest → ClickHouse → staff query API; operational метрики — Prometheus `/metrics`.
+Пайплайн JetStream ingest → ClickHouse → staff query API; operational метрики — Prometheus `/metrics`. Каждый source использует service-wide v2 durable/queue; первый controlled cutover создаёт consumer с `DeliverNew`, последующие pod/restart bind-ятся к нему и возобновляют pending backlog. Источник с UUID `event_id` сохраняет его; legacy source получает детерминированный UUID из JetStream stream/sequence. `voice.events_logical` даёт официальным reads один логический ряд на `event_id`, сохраняя raw evidence в `voice.events`. Прямой `AnalyticsIngestService` gRPC принимает запись в память и не является crash-durable transport.
 
 ## API (gRPC + REST)
 
@@ -162,4 +162,3 @@ tombstone fields, proof/factor data or participant detail. Aggregates may remain
 indefinitely only as de-identified counts and cannot keep a row keyed by a raw
 deleted Space UUID. Analytics keys are never reused for Space, Auth or
 Subscription HMAC purposes.
-

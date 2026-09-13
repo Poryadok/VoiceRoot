@@ -29,7 +29,7 @@
 | Bot Service          | `bot_db`          | —                         | —                                |
 | Federation Service   | `federation_db` (planned, **not provisioned**) | —                         | —                                |
 | Story Service        | `story_db`        | —                         | медиа через File, R2             |
-| Analytics Service    | —                 | in-memory batch buffer      | ClickHouse (`voice` DB)          |
+| Analytics Service    | —                 | —                           | JetStream durable backlog + ClickHouse (`voice` DB) |
 
 Разделение Redis между Gateway и Auth: [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md) («Redis: API Gateway и Auth Service»).
 
@@ -132,7 +132,7 @@ foreign keys to profile/account owners.
 
 ## Redis: один кластер или несколько
 
-В документации зоны использования разные (Gateway, Auth, User presence, Realtime, Voice, Notification, Matchmaking, Analytics buffer). На старте обычно **один Redis** с разделением по ключам/префиксам; при росте — вынести Realtime / Matchmaking в отдельные инстансы по нагрузке.
+В документации зоны использования разные (Gateway, Auth, User presence, Realtime, Voice, Notification, Matchmaking). На старте обычно **один Redis** с разделением по ключам/префиксам; при росте — вынести Realtime / Matchmaking в отдельные инстансы по нагрузке.
 
 For the Voice namespace, Redis loss is repairable from PostgreSQL only when no
 open divergence incident blocks the operation. TTL expiry, flush, equality, or

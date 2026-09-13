@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -20,36 +22,39 @@ import (
 	"voice/backend/pkg/natslog"
 )
 
-// Runner subscribes to domain and analytics JetStream subjects.
+const analyticsDurablePrefix = "analytics_v2_"
+
+// Runner subscribes to domain and analytics JetStream subjects only while ClickHouse persistence is ready.
 type Runner struct {
-	Mapper adapters.Mapper
-	Buffer *buffer.Accumulator
-	Logger *slog.Logger
+	Mapper           adapters.Mapper
+	Buffer           *buffer.Accumulator
+	Logger           *slog.Logger
+	PersistenceReady bool
 }
 
-func (r *Runner) Start(ctx context.Context, natsURL, instanceID string) error {
+func analyticsDurableName(source string) string {
+	return analyticsDurablePrefix + strings.TrimSpace(source)
+}
+
+// The queue group intentionally matches the service-wide durable so pods share one source backlog.
+func analyticsQueueName(source string) string { return analyticsDurableName(source) }
+
+func (r *Runner) Start(ctx context.Context, natsURL, _ string) error {
 	if r == nil || r.Buffer == nil {
 		return fmt.Errorf("analytics consumer: missing buffer")
+	}
+	if !r.PersistenceReady {
+		return fmt.Errorf("analytics consumer: ClickHouse persistence is not ready")
 	}
 	url := strings.TrimSpace(natsURL)
 	if url == "" {
 		return fmt.Errorf("analytics consumer: missing NATS_URL")
 	}
-	nc, err := nats.Connect(url,
-		nats.Name("voice-analytics"),
-		nats.Timeout(10*time.Second),
-		nats.RetryOnFailedConnect(true),
-		nats.MaxReconnects(-1),
-		nats.ReconnectWait(time.Second),
-	)
+	nc, err := nats.Connect(url, nats.Name("voice-analytics"), nats.Timeout(10*time.Second), nats.RetryOnFailedConnect(true), nats.MaxReconnects(-1), nats.ReconnectWait(time.Second))
 	if err != nil {
 		return fmt.Errorf("nats connect: %w", err)
 	}
-	go func() {
-		<-ctx.Done()
-		_ = nc.Drain()
-	}()
-
+	go func() { <-ctx.Done(); _ = nc.Drain() }()
 	js, err := nc.JetStream()
 	if err != nil {
 		return fmt.Errorf("jetstream: %w", err)
@@ -58,36 +63,16 @@ func (r *Runner) Start(ctx context.Context, natsURL, instanceID string) error {
 		return err
 	}
 
-	inst := strings.ReplaceAll(strings.TrimSpace(instanceID), "-", "")
-	if inst == "" {
-		inst = "default"
-	}
-
 	type subSpec struct {
-		stream  string
-		subject string
-		name    string
-		handler func(*nats.Msg) error
+		stream, subject, name string
+		handler               func(*nats.Msg) error
 	}
 	specs := []subSpec{
-		{"message_events", ">", "msg", r.wrapProto(r.handleMessageProto)},
-		{"user_events", "user.>", "user", r.wrapProto(r.handleUserProto)},
-		{"chat_events", ">", "chat", r.wrapProto(r.handleChatProto)},
-		{"matchmaking_events", "mm.>", "mm", r.wrapProto(r.handleMatchmakingProto)},
-		{"voice_events", "voice.>", "voice", r.wrapProto(r.handleVoiceProto)},
-		{"story_events", "story.>", "story", r.wrapProto(r.handleStoryProto)},
-		{"bot_events", "bot.>", "bot", r.wrapProto(r.handleBotProto)},
-		{"social_events", "social.>", "social", r.wrapProto(r.handleSocialProto)},
-		{"role_events", "role.>", "role", r.handleRoleMsg},
-		{"file_events", "file.>", "file", r.wrapProto(r.handleFileProto)},
-		{"subscription_events", "subscription.>", "subscription", r.wrapProto(r.handleSubscriptionProto)},
-		{"moderation_events", "moderation.>", "moderation", r.wrapProto(r.handleModerationProto)},
-		{"analytics_events", "analytics.>", "telemetry", r.handleAnalyticsMsg},
+		{"message_events", ">", "msg", r.wrapProto(r.handleMessageProto)}, {"user_events", "user.>", "user", r.wrapProto(r.handleUserProto)}, {"chat_events", ">", "chat", r.wrapProto(r.handleChatProto)}, {"matchmaking_events", "mm.>", "mm", r.wrapProto(r.handleMatchmakingProto)}, {"voice_events", "voice.>", "voice", r.wrapProto(r.handleVoiceProto)}, {"story_events", "story.>", "story", r.wrapProto(r.handleStoryProto)}, {"bot_events", "bot.>", "bot", r.wrapProto(r.handleBotProto)}, {"social_events", "social.>", "social", r.wrapProto(r.handleSocialProto)}, {"role_events", "role.>", "role", r.handleRoleMsg}, {"file_events", "file.>", "file", r.wrapProto(r.handleFileProto)}, {"subscription_events", "subscription.>", "subscription", r.wrapProto(r.handleSubscriptionProto)}, {"moderation_events", "moderation.>", "moderation", r.wrapProto(r.handleModerationProto)}, {"analytics_events", "analytics.>", "telemetry", r.handleAnalyticsMsg},
 	}
-
 	for _, spec := range specs {
 		spec := spec
-		durable := "analytics_" + spec.name + "_" + inst
+		durable := analyticsDurableName(spec.name)
 		handler := func(msg *nats.Msg) {
 			if err := spec.handler(msg); err != nil {
 				jetStreamConsumeAck(msg, err)
@@ -99,35 +84,24 @@ func (r *Runner) Start(ctx context.Context, natsURL, instanceID string) error {
 			}
 			natslog.LogConsume(r.Logger, msg, slog.LevelInfo, "analytics event consumed")
 		}
-		sub, err := r.subscribe(ctx, js, spec.stream, spec.subject, durable, handler)
+		sub, err := r.subscribe(ctx, js, spec.stream, spec.subject, durable, analyticsQueueName(spec.name), handler)
 		if err != nil {
 			return err
 		}
-		go func(s *nats.Subscription) {
-			<-ctx.Done()
-			_ = s.Unsubscribe()
-		}(sub)
+		go func(s *nats.Subscription) { <-ctx.Done(); _ = s.Unsubscribe() }(sub)
 	}
 	<-ctx.Done()
 	return ctx.Err()
 }
 
-// subscribe waits for a publisher-owned stream instead of permanently stopping the
-// analytics consumer when Analytics starts before that publisher. Existing durable
-// consumers still bind by name after a restart.
-func (r *Runner) subscribe(ctx context.Context, js nats.JetStreamContext, stream, subject, durable string, handler nats.MsgHandler) (*nats.Subscription, error) {
+func (r *Runner) subscribe(ctx context.Context, js nats.JetStreamContext, stream, subject, durable, queue string, handler nats.MsgHandler) (*nats.Subscription, error) {
 	return subscribeJetStreamWithRetry(ctx, r.Logger, stream, func() (*nats.Subscription, error) {
 		return subscribeCreateOrBind(
 			func() (*nats.Subscription, error) {
-				return js.Subscribe(subject, handler,
-					nats.Durable(durable),
-					nats.BindStream(stream),
-					nats.DeliverNew(),
-					nats.ManualAck(),
-				)
+				return js.QueueSubscribe(subject, queue, handler, nats.Durable(durable), nats.BindStream(stream), nats.DeliverNew(), nats.ManualAck())
 			},
 			func() (*nats.Subscription, error) {
-				return js.Subscribe("", handler, nats.Bind(stream, durable), nats.ManualAck())
+				return js.QueueSubscribe("", queue, handler, nats.Bind(stream, durable), nats.ManualAck())
 			},
 		)
 	})
@@ -137,48 +111,33 @@ func isJetStreamNotFound(err error) bool {
 	if err == nil {
 		return false
 	}
-	var createBindErr *createBindSubscriptionError
-	if errors.As(err, &createBindErr) {
-		return isJetStreamNotFound(createBindErr.createErr)
+	var e *createBindSubscriptionError
+	if errors.As(err, &e) {
+		return isJetStreamNotFound(e.createErr)
 	}
-	if errors.Is(err, nats.ErrStreamNotFound) {
-		return true
-	}
-	return strings.Contains(strings.ToLower(err.Error()), "stream not found")
+	return errors.Is(err, nats.ErrStreamNotFound) || strings.Contains(strings.ToLower(err.Error()), "stream not found")
 }
 
-// createBindSubscriptionError retains the primary create failure as the only
-// retry-classification input. The bind error adds diagnostics but must never turn
-// a permanent create failure into a retryable one.
-type createBindSubscriptionError struct {
-	createErr error
-	bindErr   error
-}
+type createBindSubscriptionError struct{ createErr, bindErr error }
 
 func (e *createBindSubscriptionError) Error() string {
 	return fmt.Sprintf("create durable: %v; bind existing durable: %v", e.createErr, e.bindErr)
 }
-
 func (e *createBindSubscriptionError) Unwrap() error { return e.createErr }
-
-// subscribeCreateOrBind creates a durable consumer, or binds to the durable one
-// created by an earlier Analytics process. A missing publisher stream must reach
-// the caller unchanged so it is the only retryable startup condition.
 func subscribeCreateOrBind(create, bind func() (*nats.Subscription, error)) (*nats.Subscription, error) {
-	sub, createErr := create()
-	if createErr == nil {
+	sub, err := create()
+	if err == nil {
 		return sub, nil
 	}
-	if isJetStreamNotFound(createErr) {
-		return nil, createErr
+	if isJetStreamNotFound(err) {
+		return nil, err
 	}
 	sub, bindErr := bind()
 	if bindErr == nil {
 		return sub, nil
 	}
-	return nil, &createBindSubscriptionError{createErr: createErr, bindErr: bindErr}
+	return nil, &createBindSubscriptionError{err, bindErr}
 }
-
 func subscribeJetStreamWithRetry(ctx context.Context, logger *slog.Logger, stream string, subscribe func() (*nats.Subscription, error)) (*nats.Subscription, error) {
 	delay := time.Second
 	for {
@@ -190,11 +149,7 @@ func subscribeJetStreamWithRetry(ctx context.Context, logger *slog.Logger, strea
 			return nil, fmt.Errorf("subscribe %s: %w", stream, err)
 		}
 		if logger != nil {
-			logger.Info("analytics JetStream stream not ready, retrying",
-				slog.String("stream", stream),
-				slog.Duration("retry_in", delay),
-				slog.String("error", err.Error()),
-			)
+			logger.Info("analytics JetStream stream not ready, retrying", slog.String("stream", stream), slog.Duration("retry_in", delay), slog.String("error", err.Error()))
 		}
 		select {
 		case <-ctx.Done():
@@ -206,32 +161,41 @@ func subscribeJetStreamWithRetry(ctx context.Context, logger *slog.Logger, strea
 		}
 	}
 }
-
 func ensureAnalyticsStream(js nats.JetStreamContext) error {
 	if _, err := js.StreamInfo("analytics_events"); err == nil {
 		return nil
 	}
-	_, err := js.AddStream(&nats.StreamConfig{
-		Name:      "analytics_events",
-		Subjects:  []string{"analytics.>"},
-		Retention: nats.LimitsPolicy,
-		MaxAge:    7 * 24 * time.Hour,
-	})
+	_, err := js.AddStream(&nats.StreamConfig{Name: "analytics_events", Subjects: []string{"analytics.>"}, Retention: nats.LimitsPolicy, MaxAge: 7 * 24 * time.Hour})
 	return err
 }
-
 func (r *Runner) wrapProto(fn func([]byte, *nats.Msg) error) func(*nats.Msg) error {
-	return func(msg *nats.Msg) error {
-		return fn(msg.Data, msg)
-	}
+	return func(msg *nats.Msg) error { return fn(msg.Data, msg) }
 }
 
-func (r *Runner) appendWithAck(ev *analyticsv1.AnalyticsEvent, msg *nats.Msg) {
-	if ev == nil || ev.GetEventId() == "" {
+func normalizeSourceEventID(candidate string, msg *nats.Msg) string {
+	if id, err := uuid.Parse(strings.TrimSpace(candidate)); err == nil {
+		return id.String()
+	}
+	if msg == nil {
+		return ""
+	}
+	meta, err := msg.Metadata()
+	if err != nil || strings.TrimSpace(meta.Stream) == "" || meta.Sequence.Stream == 0 {
+		return ""
+	}
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("voice.analytics.jetstream.v1\x00"+meta.Stream+"\x00"+strconv.FormatUint(meta.Sequence.Stream, 10))).String()
+}
+
+func (r *Runner) appendWithSourceAck(ev *analyticsv1.AnalyticsEvent, sourceEventID string, msg *nats.Msg) error {
+	if ev == nil {
 		if msg != nil {
 			_ = msg.Ack()
 		}
-		return
+		return nil
+	}
+	ev.EventId = normalizeSourceEventID(sourceEventID, msg)
+	if ev.GetEventId() == "" {
+		return errors.New("analytics event has no stable source identity")
 	}
 	var ack buffer.MsgAck
 	if msg != nil {
@@ -240,129 +204,103 @@ func (r *Runner) appendWithAck(ev *analyticsv1.AnalyticsEvent, msg *nats.Msg) {
 	r.Buffer.AppendWithAck(ev, ack)
 	metrics.EventsIngested.Inc()
 	if ev.GetTimestamp() != nil {
-		lag := time.Since(ev.GetTimestamp().AsTime()).Seconds()
-		if lag >= 0 {
+		if lag := time.Since(ev.GetTimestamp().AsTime()).Seconds(); lag >= 0 {
 			metrics.IngestLag.Observe(lag)
 		}
 	}
 	metrics.BufferDepth.Set(float64(r.Buffer.PendingCount()))
+	return nil
 }
-
-func (r *Runner) handleUserProto(data []byte, msg *nats.Msg) error {
-	var env eventsv1.UserStreamEvent
-	if err := proto.Unmarshal(data, &env); err != nil {
+func (r *Runner) handleUserProto(d []byte, m *nats.Msg) error {
+	var e eventsv1.UserStreamEvent
+	if err := proto.Unmarshal(d, &e); err != nil {
 		return err
 	}
-	r.appendWithAck(r.Mapper.FromUser(&env), msg)
-	return nil
+	return r.appendWithSourceAck(r.Mapper.FromUser(&e), e.GetEventId(), m)
 }
-
-func (r *Runner) handleMessageProto(data []byte, msg *nats.Msg) error {
-	var env eventsv1.MessageStreamEvent
-	if err := proto.Unmarshal(data, &env); err != nil {
+func (r *Runner) handleMessageProto(d []byte, m *nats.Msg) error {
+	var e eventsv1.MessageStreamEvent
+	if err := proto.Unmarshal(d, &e); err != nil {
 		return err
 	}
-	r.appendWithAck(r.Mapper.FromMessage(&env), msg)
-	return nil
+	return r.appendWithSourceAck(r.Mapper.FromMessage(&e), e.GetEventId(), m)
 }
-
-func (r *Runner) handleChatProto(data []byte, msg *nats.Msg) error {
-	var env eventsv1.ChatStreamEvent
-	if err := proto.Unmarshal(data, &env); err != nil {
+func (r *Runner) handleChatProto(d []byte, m *nats.Msg) error {
+	var e eventsv1.ChatStreamEvent
+	if err := proto.Unmarshal(d, &e); err != nil {
 		return err
 	}
-	r.appendWithAck(r.Mapper.FromChat(&env), msg)
-	return nil
+	return r.appendWithSourceAck(r.Mapper.FromChat(&e), e.GetEventId(), m)
 }
-
-func (r *Runner) handleMatchmakingProto(data []byte, msg *nats.Msg) error {
-	var env eventsv1.MatchmakingStreamEvent
-	if err := proto.Unmarshal(data, &env); err != nil {
+func (r *Runner) handleMatchmakingProto(d []byte, m *nats.Msg) error {
+	var e eventsv1.MatchmakingStreamEvent
+	if err := proto.Unmarshal(d, &e); err != nil {
 		return err
 	}
-	r.appendWithAck(r.Mapper.FromMatchmaking(&env), msg)
-	return nil
+	return r.appendWithSourceAck(r.Mapper.FromMatchmaking(&e), e.GetEventId(), m)
 }
-
-func (r *Runner) handleVoiceProto(data []byte, msg *nats.Msg) error {
-	var env eventsv1.VoiceStreamEvent
-	if err := proto.Unmarshal(data, &env); err != nil {
+func (r *Runner) handleVoiceProto(d []byte, m *nats.Msg) error {
+	var e eventsv1.VoiceStreamEvent
+	if err := proto.Unmarshal(d, &e); err != nil {
 		return err
 	}
-	r.appendWithAck(r.Mapper.FromVoice(&env), msg)
-	return nil
+	return r.appendWithSourceAck(r.Mapper.FromVoice(&e), e.GetEventId(), m)
 }
-
-func (r *Runner) handleStoryProto(data []byte, msg *nats.Msg) error {
-	var env eventsv1.StoryStreamEvent
-	if err := proto.Unmarshal(data, &env); err != nil {
+func (r *Runner) handleStoryProto(d []byte, m *nats.Msg) error {
+	var e eventsv1.StoryStreamEvent
+	if err := proto.Unmarshal(d, &e); err != nil {
 		return err
 	}
-	r.appendWithAck(r.Mapper.FromStory(&env), msg)
-	return nil
+	return r.appendWithSourceAck(r.Mapper.FromStory(&e), e.GetEventId(), m)
 }
-
-func (r *Runner) handleBotProto(data []byte, msg *nats.Msg) error {
-	var env eventsv1.BotStreamEvent
-	if err := proto.Unmarshal(data, &env); err != nil {
+func (r *Runner) handleBotProto(d []byte, m *nats.Msg) error {
+	var e eventsv1.BotStreamEvent
+	if err := proto.Unmarshal(d, &e); err != nil {
 		return err
 	}
-	r.appendWithAck(r.Mapper.FromBot(&env), msg)
-	return nil
+	return r.appendWithSourceAck(r.Mapper.FromBot(&e), e.GetEventId(), m)
 }
-
-func (r *Runner) handleSocialProto(data []byte, msg *nats.Msg) error {
-	var env eventsv1.SocialStreamEvent
-	if err := proto.Unmarshal(data, &env); err != nil {
+func (r *Runner) handleSocialProto(d []byte, m *nats.Msg) error {
+	var e eventsv1.SocialStreamEvent
+	if err := proto.Unmarshal(d, &e); err != nil {
 		return err
 	}
-	r.appendWithAck(r.Mapper.FromSocial(&env), msg)
-	return nil
+	return r.appendWithSourceAck(r.Mapper.FromSocial(&e), e.GetEventId(), m)
 }
-
-func (r *Runner) handleFileProto(data []byte, msg *nats.Msg) error {
-	var env eventsv1.FileStreamEvent
-	if err := proto.Unmarshal(data, &env); err != nil {
+func (r *Runner) handleFileProto(d []byte, m *nats.Msg) error {
+	var e eventsv1.FileStreamEvent
+	if err := proto.Unmarshal(d, &e); err != nil {
 		return err
 	}
-	r.appendWithAck(r.Mapper.FromFile(&env), msg)
-	return nil
+	return r.appendWithSourceAck(r.Mapper.FromFile(&e), e.GetEventId(), m)
 }
-
-func (r *Runner) handleSubscriptionProto(data []byte, msg *nats.Msg) error {
-	var env eventsv1.SubscriptionStreamEvent
-	if err := proto.Unmarshal(data, &env); err != nil {
+func (r *Runner) handleSubscriptionProto(d []byte, m *nats.Msg) error {
+	var e eventsv1.SubscriptionStreamEvent
+	if err := proto.Unmarshal(d, &e); err != nil {
 		return err
 	}
-	r.appendWithAck(r.Mapper.FromSubscription(&env), msg)
-	return nil
+	return r.appendWithSourceAck(r.Mapper.FromSubscription(&e), e.GetEventId(), m)
 }
-
-func (r *Runner) handleModerationProto(data []byte, msg *nats.Msg) error {
-	var env eventsv1.ModerationStreamEvent
-	if err := proto.Unmarshal(data, &env); err != nil {
+func (r *Runner) handleModerationProto(d []byte, m *nats.Msg) error {
+	var e eventsv1.ModerationStreamEvent
+	if err := proto.Unmarshal(d, &e); err != nil {
 		return err
 	}
-	r.appendWithAck(r.Mapper.FromModeration(&env), msg)
-	return nil
+	return r.appendWithSourceAck(r.Mapper.FromModeration(&e), e.GetEventId(), m)
 }
-
-func (r *Runner) handleRoleMsg(msg *nats.Msg) error {
-	r.appendWithAck(r.Mapper.FromRoleSubject(msg.Subject, msg.Data), msg)
-	return nil
+func (r *Runner) handleRoleMsg(m *nats.Msg) error {
+	return r.appendWithSourceAck(r.Mapper.FromRoleSubject(m.Subject, m.Data), "", m)
 }
-
-func (r *Runner) handleAnalyticsMsg(msg *nats.Msg) error {
-	ev := r.Mapper.FromAnalyticsSubject(msg.Subject, msg.Data)
+func (r *Runner) handleAnalyticsMsg(m *nats.Msg) error {
+	ev := r.Mapper.FromAnalyticsSubject(m.Subject, m.Data)
 	if ev == nil {
 		var parsed analyticsv1.AnalyticsEvent
-		if err := protojson.Unmarshal(msg.Data, &parsed); err != nil {
-			if err2 := proto.Unmarshal(msg.Data, &parsed); err2 != nil {
+		if err := protojson.Unmarshal(m.Data, &parsed); err != nil {
+			if err2 := proto.Unmarshal(m.Data, &parsed); err2 != nil {
 				return err
 			}
 		}
 		ev = &parsed
 	}
-	r.appendWithAck(ev, msg)
-	return nil
+	return r.appendWithSourceAck(ev, ev.GetEventId(), m)
 }

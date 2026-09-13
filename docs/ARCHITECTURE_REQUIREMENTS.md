@@ -281,7 +281,7 @@ Space↔Voice bearer; его нельзя расширять или исполь
 
 ## Аналитика: пороги эволюции пайплайна
 
-Пайплайн: NATS → Analytics Service → буфер (Redis) → ClickHouse ([microservices/analytics-service.md](microservices/analytics-service.md)). Ниже — **когда усложнять**, а не «вечно наращивать двойную запись без цели».
+Пайплайн: JetStream durable backlog → Analytics Service → in-memory batch buffer → ClickHouse ([microservices/analytics-service.md](microservices/analytics-service.md)). После успешной записи ClickHouse consumer ACK-ит источник; при ошибке JetStream redelivers событие. Прямой gRPC ingest остаётся ack-less и не даёт crash-durability. Ниже — **когда усложнять**, а не «вечно наращивать двойную запись без цели».
 
 | Сигнал             | Порядок величины / условие                                                                       | Типичный следующий шаг                                                                                 |
 |--------------------|--------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------|
