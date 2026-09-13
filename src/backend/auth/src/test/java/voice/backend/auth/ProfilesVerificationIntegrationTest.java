@@ -515,7 +515,7 @@ class ProfilesVerificationIntegrationTest {
   }
 
   @Test
-  void unlinkAfterProfileSwitchReconcilesTheProfileThatOwnedTheRevokedLink() throws Exception {
+  void unlinkAfterProfileSwitchLeavesThePreviouslyLinkedProfileUntouched() throws Exception {
     JsonNode registered = registerSession("unlink-profile-switch@example.com");
     String linkedProfileId = registered.get("profile_id").asText();
     String accountId = registered.get("account_id").asText();
@@ -548,12 +548,12 @@ class ProfilesVerificationIntegrationTest {
                 .header("Authorization", "Bearer " + currentAccess))
         .andExpect(status().isNoContent());
 
-    assertThat(userGrpc.verificationType(linkedProfileId)).isEqualTo("none");
+    assertThat(userGrpc.verificationType(linkedProfileId)).isEqualTo("personal");
     assertThat(userGrpc.verificationType(currentProfileId.toString())).isEqualTo("personal");
   }
 
   @Test
-  void activeProviderCannotMoveProfilesAndUnlinkThenRelinkConvergesBothProfiles() throws Exception {
+  void activeProviderCannotMoveProfilesThroughAStaleUnlink() throws Exception {
     HttpServer mockTwitch = partnerTwitchServer("tw-profile-boundary");
     mockTwitch.start();
     linkedAccountsService.setTwitchEndpointsForTests(
@@ -601,7 +601,6 @@ class ProfilesVerificationIntegrationTest {
           .andExpect(status().isConflict())
           .andExpect(jsonPath("$.error").value("linked_account_profile_conflict"));
 
-      userGrpc.failNextClearVerification();
       mockMvc
           .perform(
               post("/api/v1/auth/linked-accounts/twitch/unlink")
@@ -615,14 +614,14 @@ class ProfilesVerificationIntegrationTest {
                   .header("Authorization", "Bearer " + accessB)
                   .contentType("application/json")
                   .content("{\"code\":\"mock-code\",\"redirect_uri\":\"http://127.0.0.1/cb\"}"))
-          .andExpect(status().isOk());
+          .andExpect(status().isConflict())
+          .andExpect(jsonPath("$.error").value("linked_account_profile_conflict"));
 
-      assertThat(userGrpc.verificationType(profileA)).isEqualTo("none");
-      assertThat(userGrpc.verificationType(profileB.toString())).isEqualTo("personal");
+      assertThat(userGrpc.verificationType(profileA)).isEqualTo("personal");
       mockMvc
           .perform(get("/api/v1/auth/linked-accounts").header("Authorization", "Bearer " + accessB))
           .andExpect(status().isOk())
-          .andExpect(jsonPath("$.linked_accounts[0].profile_id").value(profileB.toString()));
+          .andExpect(jsonPath("$.linked_accounts[0].profile_id").value(profileA));
     } finally {
       mockTwitch.stop(0);
     }
