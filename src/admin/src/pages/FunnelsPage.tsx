@@ -1,20 +1,27 @@
 import { useEffect, useState } from "react";
 import { fetchFunnel, type FunnelStep } from "../api/analytics";
 import { AnalyticsSubnav } from "../components/AnalyticsSubnav";
+import { AnalyticsTimeRangeFilter, AnalyticsTimeRangeScope, useAnalyticsTimeRange } from "../components/AnalyticsTimeRange";
 
-export function FunnelsPage() {
+function FunnelsContent() {
   const [steps, setSteps] = useState<FunnelStep[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const { range } = useAnalyticsTimeRange();
 
   useEffect(() => {
-    fetchFunnel("registration")
-      .then((r) => setSteps(r.steps ?? []))
-      .catch((e: Error) => setError(e.message));
-  }, []);
+    let active = true;
+    setError(null);
+    const request = range ? fetchFunnel("registration", range) : fetchFunnel("registration");
+    void request
+      .then((r) => { if (active) setSteps(r.steps ?? []); })
+      .catch((e: Error) => { if (active) setError(e.message); });
+    return () => { active = false; };
+  }, [range]);
 
   return (
     <>
       <AnalyticsSubnav />
+      <AnalyticsTimeRangeFilter />
       <section>
       <h2>Registration funnel</h2>
       {error ? <p className="error">{error}</p> : null}
@@ -37,4 +44,8 @@ export function FunnelsPage() {
     </section>
     </>
   );
+}
+
+export function FunnelsPage() {
+  return <AnalyticsTimeRangeScope><FunnelsContent /></AnalyticsTimeRangeScope>;
 }
