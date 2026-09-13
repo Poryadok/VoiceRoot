@@ -72,9 +72,10 @@ existing URL route to `FileService.GetFileURL`. `GET
 /api/v1/files/{id}/url?variant=thumbnail` maps `thumbnail` to
 `FILE_URL_VARIANT_THUMBNAIL`; an omitted `variant` maps to
 `FILE_URL_VARIANT_UNSPECIFIED` and preserves the current download selection.
-No other query value is accepted: it is passed to File as an invalid variant,
-which returns `InvalidArgument`. Gateway keeps the authenticated caller and
-the request's `FileAccessSelector`/File ACL contract intact; it does not make
+Gateway rejects every other query value locally as `InvalidArgument` / HTTP 400;
+it forwards only an omitted variant or exact `thumbnail` to File. Gateway keeps
+the authenticated caller and the request's `FileAccessSelector`/File ACL
+contract intact; it does not make
 R2 keys or direct object URLs public. The response remains the File
 `presigned_get_url` and `expires_at` pair. See [file-service.md](file-service.md#thumbnail-url-variant-accepted-not-implemented).
 
