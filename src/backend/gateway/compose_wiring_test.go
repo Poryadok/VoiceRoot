@@ -58,10 +58,22 @@ func TestComposeWiring_yaml(t *testing.T) {
 	require.Contains(t, yml, "MATCHMAKING_GRPC_LISTEN: :9090")
 	require.Contains(t, yml, "CHAT_GRPC_ADDR: chat:9090")
 	require.Contains(t, yml, "VOICE_GRPC_ADDR: voice:9090")
-	// Unique to matchmaking: Chat/Voice squad + Space queue gate + rating privacy (k8s envFrom).
-	require.Contains(t, yml, "      CHAT_GRPC_ADDR: chat:9090\n      VOICE_GRPC_ADDR: voice:9090\n      USER_GRPC_ADDR: user:9090\n      SOCIAL_GRPC_ADDR: social:9090\n      SPACE_GRPC_ADDR: space:9090\n")
 	require.Contains(t, yml, "matchmaking_db")
 	require.Contains(t, yml, `"matchmaking":"matchmaking:9090"`)
+}
+
+// TestComposeMatchmakingRatingPrivacyWiring_yaml keeps local Compose aligned
+// with the S2S clients that enforce show_mm_rating audiences. Without the User
+// client Matchmaking intentionally keeps its documented degraded passthrough,
+// so every dependency must be explicit in the app stack.
+func TestComposeMatchmakingRatingPrivacyWiring_yaml(t *testing.T) {
+	t.Parallel()
+
+	root := repoRootFromTest(t)
+	yml := readComposeYAML(t, root)
+
+	require.Contains(t, yml, "      CHAT_GRPC_ADDR: chat:9090\n      VOICE_GRPC_ADDR: voice:9090\n      USER_GRPC_ADDR: user:9090\n      SOCIAL_GRPC_ADDR: social:9090\n      SPACE_GRPC_ADDR: space:9090\n")
+	require.Contains(t, yml, "      space:\n        condition: service_healthy\n      user:\n        condition: service_healthy\n      social:\n        condition: service_healthy\n      nats:")
 }
 
 func repoRootFromTest(t *testing.T) string {
