@@ -682,7 +682,7 @@
 
 - [x] **[Role] Server comment** — `RoleGRPC` now identifies the implemented service without stale red-phase wording. — `src/backend/role/internal/grpcsvc/server.go`
 - [x] **[Role] README status** — describes the implemented role and permission surface. — `src/backend/role/README.md`
-- [x] **[Role] Dual-scope effective mask regression** — `TestGetEffectiveMask_DualScopeOverridesApplyIndependently` exercises one `GetEffectiveMask` call with chat and voice-room overrides: each scope remains isolated and deny wins within its own override. — `src/backend/role/internal/store/roles_custom_integration_test.go`
+- [x] **[Role] Dual-scope effective mask regression** — `TestGetEffectiveMask_DualScopeOverridesApplySequentially` exercises one `GetEffectiveMask` call with chat and voice-room overrides: chat is applied before voice without clobbering its result, and deny wins over overlapping allow in each override. The canon does not restrict permission-bit categories by node type. — `src/backend/role/internal/store/roles_custom_integration_test.go`
 - [x] **[Role] `CreateRole` hierarchy validation — non-owner with `SPACE_MANAGE_ROLES` may create only below their top role; equal/higher denial leaves no role or event, Owner bypass is covered.** — `src/backend/role/internal/grpcsvc/roles.go`, `roles_manage_integration_test.go`
 - [ ] **[Role] Guest role under-exercised — default join falls back to Member; Guest mask (`SPACE_VIEW` only) rarely applies unless `SetDefaultJoinRole` points to Guest.** — `src/backend/role/permissions/permissions.go`, `internal/store/roles.go`
 
