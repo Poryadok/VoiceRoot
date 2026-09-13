@@ -110,6 +110,176 @@ void main() {
     pending.complete(http.Response('{}', 200));
   });
 
+  testWidgets(
+    'standalone group owner can update guest admission and refreshes',
+    (tester) async {
+      var allowGuests = false;
+      var updateCalls = 0;
+      final client = MockClient((req) async {
+        if (req.url.path == '/api/v1/chats') {
+          return http.Response(
+            jsonEncode({
+              'chat_list': {
+                'items': [
+                  {
+                    'chat': {
+                      'id': 'standalone-group',
+                      'type': 'CHAT_TYPE_GROUP',
+                      'creator_profile_id': 'prof-test',
+                      'allow_guests': allowGuests,
+                    },
+                  },
+                ],
+              },
+            }),
+            200,
+          );
+        }
+        if (req.url.path == '/api/v1/chats/standalone-group/members') {
+          return http.Response(
+            jsonEncode({
+              'member_list': {
+                'members': [
+                  {'profile_id': 'prof-test', 'role': 'owner'},
+                ],
+              },
+            }),
+            200,
+          );
+        }
+        if (req.url.path == '/api/v1/chats/standalone-group' &&
+            req.method == 'PATCH') {
+          final body = jsonDecode(req.body) as Map<String, dynamic>;
+          expect(body['allow_guests'], true);
+          updateCalls++;
+          allowGuests = true;
+          return http.Response(
+            jsonEncode({
+              'chat': {
+                'id': 'standalone-group',
+                'type': 'CHAT_TYPE_GROUP',
+                'creator_profile_id': 'prof-test',
+                'allow_guests': true,
+              },
+            }),
+            200,
+          );
+        }
+        if (req.url.path.contains('/shared-media')) {
+          return http.Response(
+            jsonEncode({
+              'shared_media_list': {'items': []},
+            }),
+            200,
+          );
+        }
+        return http.Response('{}', 404);
+      });
+
+      await tester.pumpWidget(
+        testApp(
+          home: const SizedBox(
+            height: 700,
+            width: 400,
+            child: ChatInfoPanel(chatId: 'standalone-group'),
+          ),
+          client: client,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(StandaloneChatGuestSettingsSection.toggleKey),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<SwitchListTile>(
+              find.byKey(StandaloneChatGuestSettingsSection.toggleKey),
+            )
+            .value,
+        isFalse,
+      );
+
+      await tester.tap(
+        find.byKey(StandaloneChatGuestSettingsSection.toggleKey),
+      );
+      await tester.pumpAndSettle();
+
+      expect(updateCalls, 1);
+      expect(
+        tester
+            .widget<SwitchListTile>(
+              find.byKey(StandaloneChatGuestSettingsSection.toggleKey),
+            )
+            .value,
+        isTrue,
+      );
+    },
+  );
+
+  testWidgets('guest admission control stays hidden for a regular member', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      testApp(
+        home: const SizedBox(
+          height: 700,
+          width: 400,
+          child: ChatInfoPanel(chatId: 'member-group'),
+        ),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/chats') {
+            return http.Response(
+              jsonEncode({
+                'chat_list': {
+                  'items': [
+                    {
+                      'chat': {
+                        'id': 'member-group',
+                        'type': 'CHAT_TYPE_GROUP',
+                        'creator_profile_id': 'other-profile',
+                        'allow_guests': false,
+                      },
+                    },
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/chats/member-group/members') {
+            return http.Response(
+              jsonEncode({
+                'member_list': {
+                  'members': [
+                    {'profile_id': 'prof-test', 'role': 'member'},
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path.contains('/shared-media')) {
+            return http.Response(
+              jsonEncode({
+                'shared_media_list': {'items': []},
+              }),
+              200,
+            );
+          }
+          return http.Response('{}', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(StandaloneChatGuestSettingsSection.toggleKey),
+      findsNothing,
+    );
+  });
+
   testWidgets('shared media backend failures use localized copy', (
     tester,
   ) async {

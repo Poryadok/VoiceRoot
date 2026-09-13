@@ -4340,6 +4340,18 @@ abstract class AppLocalizations {
   /// **'Register'**
   String get guestSaveAccountReminderCta;
 
+  /// No description provided for @chatAllowGuestsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow guests'**
+  String get chatAllowGuestsTitle;
+
+  /// No description provided for @chatAllowGuestsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Let invited guest accounts enter this chat.'**
+  String get chatAllowGuestsSubtitle;
+
   /// No description provided for @privacyShowOnlineIncludeGuests.
   ///
   /// In en, this message translates to:
