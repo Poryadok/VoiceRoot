@@ -152,9 +152,14 @@ func (s *VoiceGRPC) ensureVoiceJoinPermission(ctx context.Context, spaceID, prof
 }
 
 func voiceSessionToProto(call voicestore.Call) *callsv1.VoiceSession {
-	return &callsv1.VoiceSession{
+	out := &callsv1.VoiceSession{
 		RoomId:          call.RoomID,
 		LivekitRoomName: call.LivekitRoomName,
 		VoiceRoomId:     call.VoiceRoomID,
 	}
+	if hasPersistedRoomBinding(call) {
+		spaceID := call.SpaceID
+		out.SpaceId = &spaceID
+	}
+	return out
 }

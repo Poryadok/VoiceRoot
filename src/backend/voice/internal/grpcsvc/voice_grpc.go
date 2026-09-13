@@ -581,6 +581,10 @@ func callToProto(call voicestore.Call) *callsv1.CallSession {
 		vr := call.VoiceRoomID
 		out.VoiceRoomId = &vr
 	}
+	if hasPersistedRoomBinding(call) {
+		spaceID := call.SpaceID
+		out.SpaceId = &spaceID
+	}
 	if !call.StartedAt.IsZero() {
 		out.StartedAt = timestamppb.New(call.StartedAt)
 	}
@@ -702,11 +706,22 @@ func mediaKindString(kind callsv1.CallMediaKind) string {
 	return "audio"
 }
 
+// hasPersistedRoomBinding validates a locator, not current membership or permission.
+func hasPersistedRoomBinding(call voicestore.Call) bool {
+	return call.IsVoiceRoom() && uuid.Validate(call.VoiceRoomID) == nil && uuid.Validate(call.SpaceID) == nil
+}
+
 func (s *VoiceGRPC) publishCallStarted(ctx context.Context, call voicestore.Call) {
 	if s.Events == nil {
 		return
 	}
-	if err := s.Events.PublishCallStarted(ctx, &eventsv1.CallStarted{
+	roomType := "call"
+	if call.IsGroupVoice() {
+		roomType = "group_voice"
+	} else if call.IsVoiceRoom() {
+		roomType = "voice_room"
+	}
+	event := &eventsv1.CallStarted{
 		RoomId:             call.RoomID,
 		ProfileIds:         call.ProfileIDs(),
 		ChatId:             call.ChatID,
@@ -714,7 +729,13 @@ func (s *VoiceGRPC) publishCallStarted(ctx context.Context, call voicestore.Call
 		CalleeProfileId:    call.CalleeProfileID,
 		MediaKind:          mediaKindString(call.MediaKind),
 		LivekitRoomName:    call.LivekitRoomName,
-	}); err != nil {
+		RoomType:           &roomType,
+	}
+	if hasPersistedRoomBinding(call) {
+		roomID, spaceID := call.VoiceRoomID, call.SpaceID
+		event.VoiceRoomId, event.SpaceId = &roomID, &spaceID
+	}
+	if err := s.Events.PublishCallStarted(ctx, event); err != nil {
 		s.logPublishError(ctx, "voice.call_started", err, slog.String("room_id", call.RoomID))
 	}
 }
