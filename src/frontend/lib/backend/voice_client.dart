@@ -61,7 +61,7 @@ class VoiceCallSession {
   /// Space room identity, distinct from the active call's [roomId].
   final String? voiceRoomId;
 
-  /// Known room context; absent from the current active-session protobuf.
+  /// Server-persisted room locator, not a current authorization grant.
   /// This value alone does not establish canonical room authorization.
   final String? spaceId;
   final DateTime? expiresAt;
@@ -153,6 +153,8 @@ class VoiceCallsClient {
         final session = data['voice_session'];
         if (session is! Map<String, dynamic> ||
             session['voice_room_id'] != voiceRoomId ||
+            (session.containsKey('space_id') &&
+                session['space_id'] != spaceId) ||
             voiceRoomId.isEmpty ||
             session['room_id'] is! String ||
             (session['room_id'] as String).trim().isEmpty ||
@@ -219,9 +221,9 @@ class VoiceCallsClient {
   }) async {
     final uri = groupChatId == null
         ? _gateway.resolve('/api/v1/voice/calls/active')
-        : _gateway.resolve('/api/v1/voice/calls/active').replace(
-            queryParameters: {'chat_id': groupChatId},
-          );
+        : _gateway
+              .resolve('/api/v1/voice/calls/active')
+              .replace(queryParameters: {'chat_id': groupChatId});
     final result = await _gateway.getProto(
       uri,
       authorization: authorization,
@@ -516,7 +518,8 @@ class VoiceCallsClient {
     return _mapJson(result, voiceRoomParticipantStatesFromJson);
   }
 
-  Future<VoiceApiResult<VoiceCallSession>> _postSession<T extends GeneratedMessage>(
+  Future<VoiceApiResult<VoiceCallSession>>
+  _postSession<T extends GeneratedMessage>(
     String path,
     String authorization,
     GeneratedMessage body,
