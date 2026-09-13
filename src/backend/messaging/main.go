@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -295,6 +296,17 @@ func main() {
 		} else {
 			logger.Warn("CHAT_DATABASE_URL not set; thread policy checks disabled")
 		}
+		threadCursorSecret := []byte(strings.TrimSpace(os.Getenv("MESSAGING_THREAD_CURSOR_HMAC_SECRET")))
+		if len(threadCursorSecret) == 0 {
+			log.Fatal("MESSAGING_THREAD_CURSOR_HMAC_SECRET is required when DATABASE_URL is set")
+		}
+		threadCursorTTL := 15 * time.Minute
+		if rawTTL := strings.TrimSpace(os.Getenv("MESSAGING_THREAD_CURSOR_TTL")); rawTTL != "" {
+			threadCursorTTL, err = time.ParseDuration(rawTTL)
+			if err != nil || threadCursorTTL <= 0 {
+				log.Fatal("MESSAGING_THREAD_CURSOR_TTL must be a positive duration")
+			}
+		}
 		messagingv1.RegisterMessagingServiceServer(grpcSrv, &grpcsvc.MessagingGRPC{
 			Messages:          &store.MessagesStore{Pool: pool},
 			Reactions:         &store.ReactionsStore{Pool: pool},
@@ -330,6 +342,8 @@ func main() {
 			UserPresence:        userPresence,
 			PlatformMod:         platformMod,
 			Logger:              logger,
+			ThreadCursorSecret:  threadCursorSecret,
+			ThreadCursorTTL:     threadCursorTTL,
 		})
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcListen))

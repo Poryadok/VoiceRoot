@@ -322,6 +322,7 @@ spec:
           ports: [{containerPort: 8080}, {containerPort: 9090}]
           env:
             - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: MESSAGING_DATABASE_URL}}}
+            - {name: MESSAGING_THREAD_CURSOR_HMAC_SECRET, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: MESSAGING_THREAD_CURSOR_HMAC_SECRET}}}
             - {name: CHAT_DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: CHAT_DATABASE_URL}}}
             - {name: SPACE_DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: SPACE_DATABASE_URL}}}
             - {name: MESSAGING_GRPC_LISTEN, value: ":9090"}

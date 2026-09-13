@@ -104,6 +104,18 @@ Sticker/GIF bytes live in **`file_db`** (`files`); send payloads in **`messaging
 
 ---
 
+### `messaging_db` (Messaging Service)
+
+`messages_thread_list_visible_idx` is a partial `(chat_id, thread_parent_id,
+created_at DESC)` index over non-deleted replies. It supports the viewer-filtered
+thread aggregate used by `ListThreads`; per-profile `message_hides` remains the
+visibility authority. Its opaque 15-minute snapshot cursor is HMAC-signed with
+the deployment secret `MESSAGING_THREAD_CURSOR_HMAC_SECRET`, which must be shared
+by every Messaging replica and is not persisted in PostgreSQL. The expiry is
+configured by positive duration `MESSAGING_THREAD_CURSOR_TTL` (default `15m`).
+
+---
+
 ### `voice_db` (Voice Service)
 
 Voice owns `voice_room_instances`, `voice_room_memberships`,

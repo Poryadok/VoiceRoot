@@ -70,7 +70,7 @@ service MessagingService {
 | RPC | Handler | Notes |
 |-----|---------|-------|
 | `GetThreadMessages` | ✓ | thread replies |
-| `ListThreads` | ✓ | channel thread index |
+| `ListThreads` | ✓ | DM/group/channel index; viewer-safe signed snapshot cursor, default 50 and max 100 |
 | `PinMessage` / `UnpinMessage` / `GetPinnedMessages` | ✓ | limit **5**/chat (`MaxPinsPerChat`); 6th → `ResourceExhausted` |
 | `UnpinMessagesBySenderInChats` | ✓ | bot cleanup |
 | `UploadPreKeyBundle` / `GetPreKeyBundle` | ✓ | DM E2E pre-keys |
@@ -370,9 +370,9 @@ read_receipts
 
 ### Shipped implementation notes (2026-08-28)
 
-**Migrations shipped:** `messages`, `read_receipts`, `reactions`, `pins`, `thread_parent_id`, `forward_*`, `ghost_only` (platform shadow-ban column — **DB only**, not yet on `SendMessageRequest` proto), E2E columns, `send_silent`.
+**Migrations shipped:** `messages`, `read_receipts`, `reactions`, `pins`, `thread_parent_id`, `forward_*`, `ghost_only` (platform shadow-ban column — **DB only**, not yet on `SendMessageRequest` proto), E2E columns, `send_silent`, and the partial visible-reply index used by `ListThreads` snapshots.
 
-**Handlers shipped beyond basic message CRUD:** threads (`GetThreadMessages`, `ListThreads`), reactions, pins (limit **5**/chat), per-member `MarkRead`/`GetReadState`/`GetBulkReadState` for DM/group/channel, `GetChatListMetadata` with per-member unread/preview metadata and non-member denial, `ListSharedMedia`, `DeleteMessage` with `DeleteScope.FOR_ME`, idempotent `client_message_id` and durable `send_silent` producer propagation on `SendMessage`, E2E pre-key RPCs.
+**Handlers shipped beyond basic message CRUD:** threads (`GetThreadMessages`, `ListThreads`), reactions, pins (limit **5**/chat), per-member `MarkRead`/`GetReadState`/`GetBulkReadState` for DM/group/channel, `GetChatListMetadata` with per-member unread/preview metadata and non-member denial, `ListSharedMedia`, `DeleteMessage` with `DeleteScope.FOR_ME`, idempotent `client_message_id` and durable `send_silent` producer propagation on `SendMessage`, E2E pre-key RPCs. `ListThreads` checks membership before cursor decoding; it omits roots or replies hidden for that profile, orders by `(last_reply_at DESC, thread_parent_id DESC)`, uses N+1 lookahead and an HMAC snapshot bound to chat, profile and effective page size. Production requires `MESSAGING_THREAD_CURSOR_HMAC_SECRET`; `MESSAGING_THREAD_CURSOR_TTL` defaults to `15m` and must be positive.
 
 **Gaps vs full spec:** composer and Notification consumption for `send_silent`, schedule, typed `content_type`, `message_attachments` table, `RecordMessageView`, `UpdateScheduledMessage` — см. § ниже и [todo/backend.md](../todo/backend.md).
 

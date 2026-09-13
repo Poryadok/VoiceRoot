@@ -164,12 +164,13 @@ message ThreadSummary {
 
 message ListThreadsRequest {
   voice.chat.v1.ChatRef chat = 1;
+  // page_size defaults to 50, accepts 1..100, and a cursor binds chat, profile and effective size for 15 minutes.
   voice.common.v1.CursorPageRequest page = 2;
 }
 
 message ThreadList {
   repeated ThreadSummary threads = 1;
-  string next_cursor = 2;
+  string next_cursor = 2; // opaque signed snapshot cursor; empty when no more visible threads
 }
 
 message AddReactionRequest {

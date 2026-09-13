@@ -308,27 +308,37 @@ type ThreadSummaryRow struct {
 	LastReplyPreview string
 }
 
-// ListThreads returns thread roots in a chat ordered by latest reply.
-func (s *MessagesStore) ListThreads(ctx context.Context, chatID uuid.UUID, limit int) ([]ThreadSummaryRow, error) {
+// ListThreads returns visible thread roots in descending (last_reply_at, parent_id) order.
+func (s *MessagesStore) ListThreads(ctx context.Context, chatID, viewerProfileID uuid.UUID, limit int, afterAt time.Time, afterParentID uuid.UUID, ceilingAt time.Time, ceilingParentID, ceilingMessageID uuid.UUID) ([]ThreadSummaryRow, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("messages store: pool not configured")
 	}
 	if limit < 1 {
-		limit = 20
+		limit = 1
 	}
 	rows, err := s.Pool.Query(ctx, `
-SELECT m.thread_parent_id,
-       COUNT(*)::int AS reply_count,
-       MAX(m.created_at) AS last_reply_at,
-       (SELECT LEFT(content, 120) FROM messages lm
-        WHERE lm.chat_id = $1 AND lm.thread_parent_id = m.thread_parent_id AND lm.deleted_at IS NULL
-        ORDER BY lm.created_at DESC LIMIT 1) AS last_preview
-FROM messages m
-WHERE m.chat_id = $1 AND m.thread_parent_id IS NOT NULL AND m.deleted_at IS NULL
-GROUP BY m.thread_parent_id
-ORDER BY last_reply_at DESC
-LIMIT $2
-`, chatID, limit)
+WITH visible_replies AS (
+  SELECT m.thread_parent_id, m.created_at, m.content
+  FROM messages m
+  WHERE m.chat_id = $1 AND m.thread_parent_id IS NOT NULL AND m.deleted_at IS NULL
+    AND ($7::uuid IS NULL OR m.id <= $7)
+    AND NOT EXISTS (SELECT 1 FROM message_hides h WHERE h.message_id = m.id AND h.profile_id = $2)
+), visible_threads AS (
+  SELECT r.thread_parent_id, COUNT(*)::int AS reply_count, MAX(r.created_at) AS last_reply_at,
+         (SELECT LEFT(v.content, 120) FROM visible_replies v WHERE v.thread_parent_id = r.thread_parent_id ORDER BY v.created_at DESC LIMIT 1) AS last_preview
+  FROM visible_replies r
+  WHERE EXISTS (SELECT 1 FROM messages root WHERE root.id = r.thread_parent_id AND root.chat_id = $1 AND root.deleted_at IS NULL
+                AND ($7::uuid IS NULL OR root.id <= $7)
+                AND NOT EXISTS (SELECT 1 FROM message_hides h WHERE h.message_id = root.id AND h.profile_id = $2))
+  GROUP BY r.thread_parent_id
+)
+SELECT thread_parent_id, reply_count, last_reply_at, last_preview
+FROM visible_threads
+WHERE ($3::timestamptz IS NULL OR (last_reply_at, thread_parent_id) < ($3, $4::uuid))
+  AND ($5::timestamptz IS NULL OR (last_reply_at, thread_parent_id) <= ($5, $6::uuid))
+ORDER BY last_reply_at DESC, thread_parent_id DESC
+LIMIT $8
+`, chatID, viewerProfileID, nullableTime(afterAt), nullableUUID(afterParentID), nullableTime(ceilingAt), nullableUUID(ceilingParentID), nullableUUID(ceilingMessageID), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -346,6 +356,33 @@ LIMIT $2
 		out = append(out, row)
 	}
 	return out, rows.Err()
+}
+
+func (s *MessagesStore) ThreadSnapshotCeiling(ctx context.Context, chatID uuid.UUID) (uuid.UUID, error) {
+	if s == nil || s.Pool == nil {
+		return uuid.Nil, errors.New("messages store: pool not configured")
+	}
+	var id *uuid.UUID
+	if err := s.Pool.QueryRow(ctx, `SELECT (SELECT id FROM messages WHERE chat_id = $1 ORDER BY id DESC LIMIT 1)`, chatID).Scan(&id); err != nil {
+		return uuid.Nil, err
+	}
+	if id == nil {
+		return uuid.Nil, nil
+	}
+	return *id, nil
+}
+
+func nullableTime(v time.Time) any {
+	if v.IsZero() {
+		return nil
+	}
+	return v
+}
+func nullableUUID(v uuid.UUID) any {
+	if v == uuid.Nil {
+		return nil
+	}
+	return v
 }
 
 func (s *MessagesStore) listMessagesFiltered(ctx context.Context, chatID, viewerProfileID uuid.UUID, mode ListMode, refID *uuid.UUID, limit int, mainFeedOnly bool, threadParentID *uuid.UUID) ([]MessageRow, error) {

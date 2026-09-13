@@ -1110,8 +1110,9 @@ func (x *ThreadSummary) GetLastReplyPreview() string {
 }
 
 type ListThreadsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Chat          *v1.ChatRef            `protobuf:"bytes,1,opt,name=chat,proto3" json:"chat,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Chat  *v1.ChatRef            `protobuf:"bytes,1,opt,name=chat,proto3" json:"chat,omitempty"`
+	// page_size defaults to 50, accepts 1..100, and a cursor binds chat, profile and effective size for 15 minutes.
 	Page          *v11.CursorPageRequest `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1164,7 +1165,7 @@ func (x *ListThreadsRequest) GetPage() *v11.CursorPageRequest {
 type ThreadList struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Threads       []*ThreadSummary       `protobuf:"bytes,1,rep,name=threads,proto3" json:"threads,omitempty"`
-	NextCursor    string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
+	NextCursor    string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"` // opaque signed snapshot cursor; empty when no more visible threads
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

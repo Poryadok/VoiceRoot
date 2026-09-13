@@ -372,6 +372,8 @@ services:
     environment:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/messaging_db?sslmode=disable
+      MESSAGING_THREAD_CURSOR_HMAC_SECRET: ${MESSAGING_THREAD_CURSOR_HMAC_SECRET:-voice-compose-thread-cursor-dev-secret}
+      MESSAGING_THREAD_CURSOR_TTL: ${MESSAGING_THREAD_CURSOR_TTL:-15m}
       CHAT_DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/chat_db?sslmode=disable
       SPACE_DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/space_db?sslmode=disable
       MESSAGING_GRPC_LISTEN: :9090

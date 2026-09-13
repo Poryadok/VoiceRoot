@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -79,6 +81,11 @@ type MessagingGRPC struct {
 	PreKeyBundles *store.E2EPreKeyStore
 	// Logger emits structured nats_publish errors when JetStream publish fails after a successful RPC.
 	Logger *slog.Logger
+	// ThreadCursorSecret signs ListThreads cursors. Production supplies it through
+	// MESSAGING_THREAD_CURSOR_HMAC_SECRET; an empty value is deterministic only for tests.
+	ThreadCursorSecret []byte
+	// ThreadCursorTTL defaults to 15 minutes when unset.
+	ThreadCursorTTL time.Duration
 }
 
 // ChatRolePermissions checks permissions scoped to a text chat in a space.
@@ -1133,24 +1140,52 @@ func (s *MessagingGRPC) ListThreads(ctx context.Context, req *messagingv1.ListTh
 	if err := validateChatRefMessaging(req.GetChat()); err != nil {
 		return nil, err
 	}
-	if s.ChatGuard != nil {
-		if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
-			if errors.Is(err, store.ErrNotChatMember) {
-				return nil, status.Error(codes.PermissionDenied, "not a chat member")
-			}
+	if isNilDependency(s.ChatGuard) {
+		return nil, status.Error(codes.Unavailable, "chat membership unavailable")
+	}
+	if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
+		if errors.Is(err, store.ErrNotChatMember) {
+			return nil, status.Error(codes.PermissionDenied, "not a chat member")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	pageSize := req.GetPage().GetPageSize()
+	if pageSize < 0 || pageSize > maxPageSize {
+		return nil, status.Error(codes.InvalidArgument, "page_size must be between 0 and 100")
+	}
+	limit := int(pageSize)
+	if limit == 0 {
+		limit = defaultPageSize
+	}
+	secret := s.ThreadCursorSecret
+	if len(secret) == 0 {
+		secret = []byte("messaging-thread-cursor-test-secret")
+	}
+	ttl := s.ThreadCursorTTL
+	if ttl <= 0 {
+		ttl = threadCursorTTL
+	}
+	var afterAt, ceilingAt time.Time
+	var afterID, ceilingID, ceilingMessageID uuid.UUID
+	if raw := req.GetPage().GetCursor(); raw != "" {
+		cursor, err := verifyThreadCursor(secret, raw, time.Now())
+		if err != nil || cursor.ChatID != chatID || cursor.ProfileID != profileID || cursor.PageSize != limit {
+			return nil, status.Error(codes.InvalidArgument, "invalid page cursor")
+		}
+		afterAt, afterID, ceilingAt, ceilingID, ceilingMessageID = cursor.LastReplyAt, cursor.LastParentID, cursor.CeilingAt, cursor.CeilingID, cursor.CeilingMsgID
+	} else {
+		ceilingMessageID, err = s.Messages.ThreadSnapshotCeiling(ctx, chatID)
+		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 	}
-	limit := int(req.GetPage().GetPageSize())
-	if limit <= 0 {
-		limit = defaultPageSize
-	}
-	if limit > maxPageSize {
-		limit = maxPageSize
-	}
-	rows, err := s.Messages.ListThreads(ctx, chatID, limit)
+	rows, err := s.Messages.ListThreads(ctx, chatID, profileID, limit+1, afterAt, afterID, ceilingAt, ceilingID, ceilingMessageID)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
+	}
+	hasMore := len(rows) > limit
+	if hasMore {
+		rows = rows[:limit]
 	}
 	threads := make([]*messagingv1.ThreadSummary, 0, len(rows))
 	for _, row := range rows {
@@ -1165,8 +1200,19 @@ func (s *MessagingGRPC) ListThreads(ctx context.Context, req *messagingv1.ListTh
 		}
 		threads = append(threads, item)
 	}
+	next := ""
+	if hasMore {
+		if ceilingAt.IsZero() {
+			ceilingAt, ceilingID = rows[0].LastReplyAt, rows[0].ThreadParentID
+		}
+		last := rows[len(rows)-1]
+		next, err = signThreadCursor(secret, threadCursor{ChatID: chatID, ProfileID: profileID, PageSize: limit, LastReplyAt: last.LastReplyAt, LastParentID: last.ThreadParentID, CeilingAt: ceilingAt, CeilingID: ceilingID, CeilingMsgID: ceilingMessageID, ExpiresAt: time.Now().Add(ttl)})
+		if err != nil {
+			return nil, status.Error(codes.Internal, fmt.Sprintf("sign page cursor: %v", err))
+		}
+	}
 	return &messagingv1.ListThreadsResponse{
-		ThreadList: &messagingv1.ThreadList{Threads: threads},
+		ThreadList: &messagingv1.ThreadList{Threads: threads, NextCursor: next},
 	}, nil
 }
 
