@@ -214,7 +214,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 		slog.String("request_id", requestID),
 	)
 	var writeMu sync.Mutex
-	reg := hub.attachAccountConn(instanceID, connID, claims.UserID, claims.ProfileID, 32)
+	reg := hub.attachAccountTypeConn(instanceID, connID, claims.UserID, claims.AccountType, claims.ProfileID, 32)
 	guard := policy.newConnectionGuard(c, claims, &writeMu)
 	reg.setWriteGuard(func() bool { return guard.authorizeWrite("fanout") })
 	lastTypingStart := make(map[string]time.Time)
@@ -637,19 +637,12 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 					}
 					cancel()
 				}
-				obsStatus, obsCustom := presenceWireForObservers(status, custom)
 				chatCopy := hub.chatIDs(reg)
 				for _, c := range chatCopy {
-					dChat, _ := json.Marshal(map[string]any{
-						"chat_id":       c,
-						"profile_id":    claims.ProfileID,
-						"status":        obsStatus,
-						"custom_status": obsCustom,
-					})
-					hub.broadcastPresenceInChatExcept(c, claims.ProfileID, instanceID, connID, dChat)
+					hub.broadcastPrivatePresenceInChatExcept(c, claims.ProfileID, status, instanceID, connID, svcLogger)
 					if rf != nil {
 						ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-						if err := rf.PublishPresenceChat(ctx, c, claims.ProfileID, obsStatus, obsCustom, connID); err != nil {
+						if err := rf.PublishPresenceChat(ctx, c, claims.ProfileID, status, custom, connID); err != nil {
 							svcLogger.Warn("ws redis publish presence chat failed", slog.String("error", err.Error()))
 						}
 						cancel()

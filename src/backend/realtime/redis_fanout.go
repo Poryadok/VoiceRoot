@@ -13,9 +13,9 @@ const (
 	defaultRedisProfilePrefix = "voice:rt:prof:"
 	defaultRedisFanoutChannel = "voice:rt:fanout"
 
-	fanoutMsgMarkRead      = "mark_read"
-	fanoutMsgPresence      = "presence"
-	fanoutMsgDeliveryAck   = "delivery_ack"
+	fanoutMsgMarkRead    = "mark_read"
+	fanoutMsgPresence    = "presence"
+	fanoutMsgDeliveryAck = "delivery_ack"
 )
 
 type redisFanoutPayload struct {
@@ -219,16 +219,7 @@ func (f *redisFanout) runSubscriber(ctx context.Context) error {
 				f.hub.broadcastMarkReadSameProfileExcept(p.ProfileID, p.SrcInstance, p.SrcConn, d)
 			case fanoutMsgPresence:
 				if p.ChatID != "" {
-					d, err := json.Marshal(map[string]any{
-						"chat_id":         p.ChatID,
-						"profile_id":      p.ProfileID,
-						"status":          p.Status,
-						"custom_status":   p.CustomStatus,
-					})
-					if err != nil {
-						continue
-					}
-					f.hub.broadcastPresenceInChatExcept(p.ChatID, p.ProfileID, p.SrcInstance, p.SrcConn, d)
+					f.hub.broadcastPrivatePresenceInChatExcept(p.ChatID, p.ProfileID, p.Status, p.SrcInstance, p.SrcConn, svcLogger)
 				} else {
 					d, err := json.Marshal(map[string]any{
 						"profile_id":    p.ProfileID,
