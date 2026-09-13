@@ -193,7 +193,7 @@ Implemented in `delivery/router.go` → `DecideRouting`; message path enriches v
 
 ### `send_silent` consumption
 
-Wire name on `SendMessage` / `message.sent`: **`send_silent`** (bool). Notification consumer on `message.sent`:
+Wire name on `SendMessage` / `message.sent`: **`send_silent`** (bool). The derived `message.mention_added` event mirrors the flag so its push cannot introduce an audible duplicate. Notification consumer:
 
 | Channel | `send_silent=true` |
 |---------|-------------------|
@@ -204,7 +204,7 @@ Wire name on `SendMessage` / `message.sent`: **`send_silent`** (bool). Notificat
 
 Composer label — [text-chat.md](../features/text-chat.md) § Send options; [screen-controls.md](../design/screen-controls.md) §3.6c #1.
 
-**Code gap:** Messaging now produces the field from `SendMessageRequest` through durable storage into JetStream; Notification consumption remains unimplemented — [todo/backend.md](../todo/backend.md).
+**Implementation:** Notification consumes the durable `message.sent.send_silent` field and projects it to APNs/FCM/Web Push while preserving grouping; Chat remains the owner of unread/activity and Realtime in-app delivery.
 
 ### Quiet hours
 
