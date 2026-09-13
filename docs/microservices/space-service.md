@@ -95,7 +95,7 @@ service SpaceService {
 
 | RPC | Proto | Handler | Notes |
 |-----|-------|---------|-------|
-| CreateSpace, UpdateSpace, GetSpace, ListMySpaces | ✓ | ✓ | |
+| CreateSpace, UpdateSpace, GetSpace, ListMySpaces | ✓ | ✓ | `UpdateSpace.allow_guests` is an owner/admin (`SPACE_MANAGE_SETTINGS`) opt-in; guest admission is invite-only and fail-closed. |
 | UpdateSpaceMmConfig | ✓ | ✓ | MM config on space |
 | DeleteSpace | ✓ | Disabled | Obsolete owner-only hard delete is blocked at the DB boundary; BE-245 must schedule the 7-day hidden/frozen recovery window and freeze the public status mapping |
 | RestoreSpace | ✗ | ✗ | Target owner-only restore during recovery window |
@@ -105,7 +105,7 @@ service SpaceService {
 | **ListSpaceTree** | ✓ | ✓ | **Omitted from earlier doc inventory** |
 | Create/Update/Delete Category | ✓ | ✓ | |
 | PinTreeNode, UnpinTreeNode | ✓ | ✓ | Migration `000007_tree_pin`; handlers and event payload shipped |
-| CreateInvite, GetInvite, JoinByInvite | ✓ | ✓ | |
+| CreateInvite, GetInvite, JoinByInvite | ✓ | ✓ | Guest `JoinByInvite` requires a valid invite and `space.allow_guests=true`; ban, cap, privacy/block and default-role checks remain in the ordinary join path. Composable entry policy remains backlog. |
 | **RevokeInvite, ListInvites** | ✓ | ✓ | Exact `SPACE_MANAGE_INVITES` permission; owner retains the canonical Role bypass |
 | JoinSpace, LeaveSpace | ✓ | ✓ | Composable AND entry policy and invite-safe verifier pipeline remain backlog — [todo/backend.md](../todo/backend.md) |
 | KickMember, BanMember, UnbanMember, ListMembers, ListBans | ✓ | ✓ | |

@@ -49,7 +49,7 @@ func applySpaceMigrationsThrough7ForStoreTest(t *testing.T, ctx context.Context,
 	for _, name := range []string{
 		"000001_init.up.sql", "000002_tree.up.sql", "000003_invites.up.sql",
 		"000004_moderation.up.sql", "000005_space_subscriptions.up.sql",
-		"000006_allow_guests.up.sql", "000007_tree_pin.up.sql",
+		"000006_allow_guests.up.sql", "000007_tree_pin.up.sql", "000016_allow_guests_fail_closed.up.sql",
 	} {
 		migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", name)
 		sqlBytes, err := os.ReadFile(migrationPath)
@@ -231,4 +231,61 @@ func TestSpaceStore_UpdateSpace_IconAndBanner(t *testing.T) {
 	require.NotNil(t, updated.BannerURL)
 	require.Equal(t, icon, *updated.IconURL)
 	require.Equal(t, banner, *updated.BannerURL)
+}
+
+func TestSpaceStore_AllowGuests_DefaultsFalseAndUpdates(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startSpacePostgresForStoreTest(t, ctx)
+	applySpaceMigrationForStoreTest(t, ctx, pool)
+	st := &SpaceStore{Pool: pool}
+	row, err := st.CreateSpace(ctx, uuid.New(), "Guest admission", "", "private")
+	require.NoError(t, err)
+	require.False(t, row.AllowGuests)
+
+	allow := true
+	updated, err := st.UpdateSpace(ctx, row.ID, UpdateSpaceInput{AllowGuests: &allow})
+	require.NoError(t, err)
+	require.True(t, updated.AllowGuests)
+}
+
+func TestAllowGuestsFailClosedMigration_BackfillsLegacyRowsAndDefault(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startSpacePostgresForStoreTest(t, ctx)
+	for _, name := range []string{
+		"000001_init.up.sql", "000002_tree.up.sql", "000003_invites.up.sql",
+		"000004_moderation.up.sql", "000005_space_subscriptions.up.sql", "000006_allow_guests.up.sql",
+	} {
+		migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", name)
+		sqlBytes, err := os.ReadFile(migrationPath)
+		require.NoError(t, err)
+		_, err = pool.Exec(ctx, string(sqlBytes))
+		require.NoError(t, err)
+	}
+	st := &SpaceStore{Pool: pool}
+	legacy, err := st.CreateSpace(ctx, uuid.New(), "Legacy open admission", "", "private")
+	require.NoError(t, err)
+	require.True(t, legacy.AllowGuests, "000006 historically defaulted open")
+
+	migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", "000016_allow_guests_fail_closed.up.sql")
+	sqlBytes, err := os.ReadFile(migrationPath)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(sqlBytes))
+	require.NoError(t, err)
+
+	var legacyAllowGuests bool
+	err = pool.QueryRow(ctx, `SELECT allow_guests FROM spaces WHERE id = $1`, legacy.ID).Scan(&legacyAllowGuests)
+	require.NoError(t, err)
+	require.False(t, legacyAllowGuests)
+	createdAfterMigration, err := st.CreateSpace(ctx, uuid.New(), "New closed admission", "", "private")
+	require.NoError(t, err)
+	var newAllowGuests bool
+	err = pool.QueryRow(ctx, `SELECT allow_guests FROM spaces WHERE id = $1`, createdAfterMigration.ID).Scan(&newAllowGuests)
+	require.NoError(t, err)
+	require.False(t, newAllowGuests)
 }

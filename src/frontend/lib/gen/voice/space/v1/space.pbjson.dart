@@ -150,6 +150,7 @@ const Space$json = {
       '10': 'purgeAfter',
       '17': true
     },
+    {'1': 'allow_guests', '3': 18, '4': 1, '5': 8, '10': 'allowGuests'},
   ],
   '8': [
     {'1': '_icon_url'},
@@ -174,8 +175,9 @@ final $typed_data.Uint8List spaceDescriptor = $convert.base64Decode(
     'cm90b2J1Zi5UaW1lc3RhbXBSCXVwZGF0ZWRBdBJTChVkZWxldGlvbl9zY2hlZHVsZWRfYXQYEC'
     'ABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wSAJSE2RlbGV0aW9uU2NoZWR1bGVkQXSI'
     'AQESQAoLcHVyZ2VfYWZ0ZXIYESABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wSANSCn'
-    'B1cmdlQWZ0ZXKIAQFCCwoJX2ljb25fdXJsQg0KC19iYW5uZXJfdXJsQhgKFl9kZWxldGlvbl9z'
-    'Y2hlZHVsZWRfYXRCDgoMX3B1cmdlX2FmdGVy');
+    'B1cmdlQWZ0ZXKIAQESIQoMYWxsb3dfZ3Vlc3RzGBIgASgIUgthbGxvd0d1ZXN0c0ILCglfaWNv'
+    'bl91cmxCDQoLX2Jhbm5lcl91cmxCGAoWX2RlbGV0aW9uX3NjaGVkdWxlZF9hdEIOCgxfcHVyZ2'
+    'VfYWZ0ZXI=');
 
 @$core.Deprecated('Use createSpaceRequestDescriptor instead')
 const CreateSpaceRequest$json = {
@@ -261,6 +263,15 @@ const UpdateSpaceRequest$json = {
       '10': 'mmConfigJson',
       '17': true
     },
+    {
+      '1': 'allow_guests',
+      '3': 10,
+      '4': 1,
+      '5': 8,
+      '9': 8,
+      '10': 'allowGuests',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_name'},
@@ -271,6 +282,7 @@ const UpdateSpaceRequest$json = {
     {'1': '_entry_requirement'},
     {'1': '_entry_questions_json'},
     {'1': '_mm_config_json'},
+    {'1': '_allow_guests'},
   ],
 };
 
@@ -282,9 +294,10 @@ final $typed_data.Uint8List updateSpaceRequestDescriptor = $convert.base64Decode
     'liYW5uZXJVcmyIAQESIwoKdmlzaWJpbGl0eRgGIAEoCUgEUgp2aXNpYmlsaXR5iAEBEjAKEWVu'
     'dHJ5X3JlcXVpcmVtZW50GAcgASgJSAVSEGVudHJ5UmVxdWlyZW1lbnSIAQESNQoUZW50cnlfcX'
     'Vlc3Rpb25zX2pzb24YCCABKAlIBlISZW50cnlRdWVzdGlvbnNKc29uiAEBEikKDm1tX2NvbmZp'
-    'Z19qc29uGAkgASgJSAdSDG1tQ29uZmlnSnNvbogBAUIHCgVfbmFtZUIOCgxfZGVzY3JpcHRpb2'
-    '5CCwoJX2ljb25fdXJsQg0KC19iYW5uZXJfdXJsQg0KC192aXNpYmlsaXR5QhQKEl9lbnRyeV9y'
-    'ZXF1aXJlbWVudEIXChVfZW50cnlfcXVlc3Rpb25zX2pzb25CEQoPX21tX2NvbmZpZ19qc29u');
+    'Z19qc29uGAkgASgJSAdSDG1tQ29uZmlnSnNvbogBARImCgxhbGxvd19ndWVzdHMYCiABKAhICF'
+    'ILYWxsb3dHdWVzdHOIAQFCBwoFX25hbWVCDgoMX2Rlc2NyaXB0aW9uQgsKCV9pY29uX3VybEIN'
+    'CgtfYmFubmVyX3VybEINCgtfdmlzaWJpbGl0eUIUChJfZW50cnlfcmVxdWlyZW1lbnRCFwoVX2'
+    'VudHJ5X3F1ZXN0aW9uc19qc29uQhEKD19tbV9jb25maWdfanNvbkIPCg1fYWxsb3dfZ3Vlc3Rz');
 
 @$core.Deprecated('Use updateSpaceMmConfigRequestDescriptor instead')
 const UpdateSpaceMmConfigRequest$json = {

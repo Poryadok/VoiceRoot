@@ -642,7 +642,7 @@
 - [ ] **[Space] Member `nickname` in schema, no update RPC** — `src/backend/migrations/space_db/000001_init.up.sql`, `protos/voice/space/v1/space.proto`
 - [ ] **[Space] QR join — product doc only, no Space API** — `docs/features/spaces.md`
 - [ ] **[Space] Space-level `mm_config` for matchmaking — column exists, unused** — `src/backend/migrations/space_db/000001_init.up.sql`
-- [ ] **[Space] `allow_guests` is incomplete and defaults open in migration `000006`** — change target/default to `false`, add owner/admin API to toggle, require valid invite, and enforce Space+chat fail-closed guest access with negative tests — `src/backend/migrations/space_db/000006_allow_guests.up.sql`, `src/backend/space/internal/store/invite.go`, [spaces.md](../features/spaces.md).
+- [ ] **[Docs/Space/Chat/Role/Messaging] Freeze Space-chat guest access decision contract** — define the authoritative owner and protected RPC/event projection for `is_guest && space.allow_guests && chat.allow_guests && space_membership && TEXT_CHAT_VIEW`, including the supported mutation path for `chats.allow_guests`, caller principals, request/response fields, fail-closed dependency behavior, disable semantics for existing guest members, and enforcement points in Space tree, Chat list/get, Messaging send/history/read state, and Realtime delivery. Until accepted, Space `allow_guests` gates only new `JoinByInvite` membership admission and Chat keeps Space-chat `allow_guests` mutation disabled. — [spaces.md](../features/spaces.md), [text-chat.md](../features/text-chat.md), [chat-service.md](../microservices/chat-service.md).
 
 ### Moderation
 

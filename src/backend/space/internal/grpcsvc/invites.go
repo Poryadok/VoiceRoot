@@ -71,6 +71,8 @@ func mapInviteStoreErr(err error) error {
 		return status.Error(codes.ResourceExhausted, "space member cap reached")
 	case errors.Is(err, store.ErrAccountBanned):
 		return status.Error(codes.PermissionDenied, "account is banned from this space")
+	case errors.Is(err, store.ErrGuestsNotAllowed):
+		return status.Error(codes.PermissionDenied, "guests not allowed in this space")
 	default:
 		return mapSpaceStoreError(err)
 	}
@@ -231,15 +233,6 @@ func (s *SpaceGRPC) JoinByInvite(ctx context.Context, req *spacev1.JoinByInviteR
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing account")
 	}
-	if guestguard.IsGuest(ctx) {
-		allow, err := s.Store.AllowGuestsForInvite(ctx, code)
-		if err != nil {
-			return nil, mapInviteStoreErr(err)
-		}
-		if !allow {
-			return nil, status.Error(codes.PermissionDenied, "guests not allowed in this space")
-		}
-	}
 	inv, err := s.Store.GetInviteByCode(ctx, code)
 	if err != nil {
 		return nil, mapSpaceStoreError(err)
@@ -268,7 +261,12 @@ func (s *SpaceGRPC) JoinByInvite(ctx context.Context, req *spacev1.JoinByInviteR
 	if err != nil {
 		return nil, mapSpaceStoreError(err)
 	}
-	member, err := s.Store.JoinByInvite(ctx, code, profileID, accountID)
+	var member *store.MembershipRow
+	if guestguard.IsGuest(ctx) {
+		member, err = s.Store.JoinGuestByInvite(ctx, code, profileID, accountID)
+	} else {
+		member, err = s.Store.JoinByInvite(ctx, code, profileID, accountID)
+	}
 	if err != nil {
 		return nil, mapInviteStoreErr(err)
 	}
