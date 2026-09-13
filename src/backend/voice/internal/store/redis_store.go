@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 
 	callsv1 "voice.app/voice/calls/v1"
 )
+
+const expiredRingingScanCount = 128
 
 type RedisCallStore struct {
 	client *redis.Client
@@ -232,22 +235,40 @@ func (s *RedisCallStore) UpdateVoiceState(ctx context.Context, roomID, profileID
 }
 
 func (s *RedisCallStore) ListExpiredRinging(ctx context.Context, now time.Time) ([]Call, error) {
-	keys, err := s.client.Keys(ctx, s.prefix+"call:*").Result()
-	if err != nil {
-		return nil, err
-	}
 	var out []Call
-	for _, key := range keys {
-		b, err := s.client.Get(ctx, key).Bytes()
+	callKeyPrefix := s.callKey("")
+	seen := make(map[string]struct{})
+	var cursor uint64
+	for {
+		keys, nextCursor, err := s.client.Scan(ctx, cursor, callKeyPrefix+"*", expiredRingingScanCount).Result()
 		if err != nil {
-			continue
+			return nil, err
 		}
-		var call Call
-		if err := json.Unmarshal(b, &call); err != nil {
-			continue
+		for _, key := range keys {
+			roomID, ok := strings.CutPrefix(key, callKeyPrefix)
+			if !ok || roomID == "" {
+				continue
+			}
+			if _, duplicate := seen[key]; duplicate {
+				continue
+			}
+			seen[key] = struct{}{}
+
+			b, err := s.client.Get(ctx, key).Bytes()
+			if err != nil {
+				continue
+			}
+			var call Call
+			if err := json.Unmarshal(b, &call); err != nil || call.RoomID != roomID {
+				continue
+			}
+			if call.Status == callsv1.CallStatus_CALL_STATUS_RINGING && !call.ExpiresAt.IsZero() && now.After(call.ExpiresAt) {
+				out = append(out, call)
+			}
 		}
-		if call.Status == callsv1.CallStatus_CALL_STATUS_RINGING && !call.ExpiresAt.IsZero() && now.After(call.ExpiresAt) {
-			out = append(out, call)
+		cursor = nextCursor
+		if cursor == 0 {
+			break
 		}
 	}
 	return out, nil
