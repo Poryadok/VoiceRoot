@@ -40,14 +40,14 @@ spec:
               user="$(rfc3986_encode_component "${POSTGRES_USER}")"
               password="$(rfc3986_encode_component "${POSTGRES_PASSWORD}")"
               database_url="postgres://${user}:${password}@${POSTGRES_HOST}:5432/messaging_db?sslmode=disable"
-              version="$(psql "${database_url}" -At -c 'SELECT version FROM schema_migrations LIMIT 1')"
-              case "${version}" in
-                16) exit 0 ;;
-                15)
+              state="$(psql "${database_url}" -At -F ':' -c 'SELECT version, dirty FROM schema_migrations LIMIT 1')"
+              case "${state}" in
+                16:f) exit 0 ;;
+                15:f)
                   psql "${database_url}" -v ON_ERROR_STOP=1 -f /migrations/000016_thread_list_snapshot_index.up.sql
                   psql "${database_url}" -v ON_ERROR_STOP=1 -c 'UPDATE schema_migrations SET version = 16, dirty = false WHERE version = 15 AND dirty = false'
                   ;;
-                *) echo "messaging_db must be clean at migration version 15 or 16; got ${version}" >&2; exit 1 ;;
+                *) echo "messaging_db must be clean at migration version 15 or 16; got ${state}" >&2; exit 1 ;;
               esac
           env:
             - {name: POSTGRES_USER, value: voice}

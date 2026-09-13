@@ -61,6 +61,15 @@ def assert_persistent_workload(resources: list[dict], name: str, volume: str, mo
 
 
 def main() -> None:
+    bootstrap = (ROOT / "scripts" / "prod" / "bootstrap-app-secrets.sh").read_text(encoding="utf-8")
+    prod_secret_example = (PROD / "secret.example.yaml").read_text(encoding="utf-8")
+    # Validate the exact intended producer, rather than counting secret literals:
+    # new bootstrap keys must be independently generated with enough entropy.
+    if '--from-literal=MESSAGING_THREAD_CURSOR_HMAC_SECRET="$(random_hex 32)"' not in bootstrap:
+        fail("production bootstrap must generate MESSAGING_THREAD_CURSOR_HMAC_SECRET independently")
+    if "MESSAGING_THREAD_CURSOR_HMAC_SECRET" not in prod_secret_example:
+        fail("production secret example must require MESSAGING_THREAD_CURSOR_HMAC_SECRET")
+
     manifest_paths = [
         PROD / "infra.yaml",
         PROD / "flutter-web.yaml",

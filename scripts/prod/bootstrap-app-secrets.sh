@@ -55,6 +55,7 @@ kubectl create secret generic "${SECRET_NAME}" \
   --from-file=AUTH_JWT_PRIVATE_KEY="${jwt_file}" \
   --from-literal=AUTH_TOTP_ENCRYPTION_KEY="$(random_hex 32)" \
   --from-literal=ACCOUNT_DELETE_TOKEN_SECRET="$(random_hex 32)" \
+  --from-literal=MESSAGING_THREAD_CURSOR_HMAC_SECRET="$(random_hex 32)" \
   --from-literal=AUTH_RESEND_API_KEY= \
   --from-literal='AUTH_RESEND_FROM=Voice <noreply@voice.invalid>' \
   --from-literal=USER_R2_ENDPOINT= \

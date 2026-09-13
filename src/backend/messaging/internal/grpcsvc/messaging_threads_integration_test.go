@@ -395,9 +395,11 @@ func TestMessagingListThreads_cursorPaginationSnapshotContract(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// Equal reply times make the UUID tie-breaker observable.
-	tie := time.Date(2026, time.September, 14, 12, 0, 0, 0, time.UTC)
-	_, err := pool.Exec(ctx, `UPDATE messages SET created_at = $2 WHERE chat_id = $1 AND thread_parent_id IS NOT NULL`, chatID, tie)
+	// Equal pre-snapshot times make the UUID tie-breaker observable. Set every
+	// existing row into the past so the subsequently inserted rows are truly
+	// later in the database-created-time snapshot contract.
+	tie := time.Now().UTC().Add(-time.Minute).Truncate(time.Microsecond)
+	_, err := pool.Exec(ctx, `UPDATE messages SET created_at = $2 WHERE chat_id = $1`, chatID, tie)
 	require.NoError(t, err)
 	sort.Sort(sort.Reverse(sort.StringSlice(parentIDs)))
 
@@ -958,7 +960,21 @@ func TestMessagingListThreads_realChatMembershipHasNoHundredMemberSeam(t *testin
 func TestMessagingThreadListIndexMigrationUsesConcurrentCreate(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "messaging_db", "000016_thread_list_snapshot_index.up.sql"))
 	require.NoError(t, err)
-	require.Contains(t, strings.ToUpper(string(raw)), "CREATE INDEX CONCURRENTLY IF NOT EXISTS")
+	migration := string(raw)
+	require.Contains(t, strings.ToUpper(migration), "CREATE INDEX CONCURRENTLY IF NOT EXISTS")
+	require.Contains(t, migration, "(chat_id, thread_parent_id, created_at DESC, id DESC)")
+	require.Contains(t, migration, "INCLUDE (sender_profile_id, ghost_only)")
+	require.Contains(t, migration, "WHERE thread_parent_id IS NOT NULL AND deleted_at IS NULL")
+}
+
+func TestMessagingListThreadsUsesPageBoundedCandidatesAndPreviews(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "messaging", "internal", "store", "messages_store.go"))
+	require.NoError(t, err)
+	source := functionSource(t, string(raw), "func (s *MessagesStore) ListThreads")
+	require.Contains(t, source, "candidate_threads AS")
+	require.Contains(t, source, "LIMIT $8", "the candidate set must be bounded by the requested page size plus one")
+	require.Contains(t, source, "LEFT JOIN LATERAL", "previews must be looked up only for bounded candidates")
+	require.Contains(t, source, "LIMIT 1", "each candidate must have at most one preview lookup")
 }
 
 func TestMessagingThreadListIndexDoesNotUseVoiceDBMigrationRunner(t *testing.T) {
@@ -977,6 +993,29 @@ func TestMessagingThreadListIndexDoesNotUseVoiceDBMigrationRunner(t *testing.T) 
 	require.Greater(t, voiceStart, messagingStart)
 	require.NotContains(t, deployment[voiceStart:], "Messaging thread-list index")
 	require.Contains(t, deployment[messagingStart:voiceStart], "voice-migrate-messaging-thread-list-index")
+}
+
+func TestMessagingThreadListMigrationRunnerRejectsDirtyState(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(repoRoot(t), "deploy", "templates", "migrate-messaging-thread-list-index-job.yaml"))
+	require.NoError(t, err)
+	template := string(raw)
+	require.Contains(t, template, "SELECT version, dirty FROM schema_migrations")
+	require.Contains(t, template, "15:f)")
+	require.Contains(t, template, "16:f)")
+	require.Contains(t, template, "must be clean at migration version 15 or 16")
+	require.NotContains(t, template, "15:t)")
+	require.NotContains(t, template, "16:t)")
+}
+
+func TestProductionMessagingCursorSecretBootstrapContract(t *testing.T) {
+	root := repoRoot(t)
+	bootstrap, err := os.ReadFile(filepath.Join(root, "scripts", "prod", "bootstrap-app-secrets.sh"))
+	require.NoError(t, err)
+	require.Contains(t, string(bootstrap), "--from-literal=MESSAGING_THREAD_CURSOR_HMAC_SECRET=\"$(random_hex 32)\"")
+
+	template, err := os.ReadFile(filepath.Join(root, "deploy", "prod", "secret.example.yaml"))
+	require.NoError(t, err)
+	require.Contains(t, string(template), "MESSAGING_THREAD_CURSOR_HMAC_SECRET")
 }
 
 func TestMessagingListThreads_normalReadAccessAcrossChatTypes(t *testing.T) {

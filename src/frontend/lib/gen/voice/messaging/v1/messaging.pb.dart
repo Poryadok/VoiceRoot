@@ -1543,6 +1543,7 @@ class ListThreadsRequest extends $pb.GeneratedMessage {
   @$pb.TagNumber(1)
   $1.ChatRef ensureChat() => $_ensure(0);
 
+  /// page_size defaults to 50, accepts 1..100, and a cursor binds chat, profile and effective size for 15 minutes.
   @$pb.TagNumber(2)
   $3.CursorPageRequest get page => $_getN(1);
   @$pb.TagNumber(2)

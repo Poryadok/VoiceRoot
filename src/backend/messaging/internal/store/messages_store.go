@@ -324,22 +324,29 @@ WITH visible_replies AS (
     AND ($7::timestamptz IS NULL OR m.created_at <= $7)
     AND (NOT m.ghost_only OR m.sender_profile_id = $2)
     AND NOT EXISTS (SELECT 1 FROM message_hides h WHERE h.message_id = m.id AND h.profile_id = $2)
-), visible_threads AS (
-  SELECT r.thread_parent_id, COUNT(*)::int AS reply_count, MAX(r.created_at) AS last_reply_at,
-         (SELECT LEFT(v.content, 120) FROM visible_replies v WHERE v.thread_parent_id = r.thread_parent_id ORDER BY v.created_at DESC LIMIT 1) AS last_preview
+), candidate_threads AS (
+  SELECT r.thread_parent_id, COUNT(*)::int AS reply_count, MAX(r.created_at) AS last_reply_at
   FROM visible_replies r
   WHERE EXISTS (SELECT 1 FROM messages root WHERE root.id = r.thread_parent_id AND root.chat_id = $1 AND root.deleted_at IS NULL
                 AND ($7::timestamptz IS NULL OR root.created_at <= $7)
                 AND (NOT root.ghost_only OR root.sender_profile_id = $2)
                 AND NOT EXISTS (SELECT 1 FROM message_hides h WHERE h.message_id = root.id AND h.profile_id = $2))
   GROUP BY r.thread_parent_id
+  HAVING ($3::timestamptz IS NULL OR (MAX(r.created_at), r.thread_parent_id) < ($3, $4::uuid))
+     AND ($5::timestamptz IS NULL OR (MAX(r.created_at), r.thread_parent_id) <= ($5, $6::uuid))
+  ORDER BY MAX(r.created_at) DESC, r.thread_parent_id DESC
+  LIMIT $8
 )
-SELECT thread_parent_id, reply_count, last_reply_at, last_preview
-FROM visible_threads
-WHERE ($3::timestamptz IS NULL OR (last_reply_at, thread_parent_id) < ($3, $4::uuid))
-  AND ($5::timestamptz IS NULL OR (last_reply_at, thread_parent_id) <= ($5, $6::uuid))
-ORDER BY last_reply_at DESC, thread_parent_id DESC
-LIMIT $8
+SELECT c.thread_parent_id, c.reply_count, c.last_reply_at, preview.content
+FROM candidate_threads c
+LEFT JOIN LATERAL (
+  SELECT LEFT(v.content, 120) AS content
+  FROM visible_replies v
+  WHERE v.thread_parent_id = c.thread_parent_id
+  ORDER BY v.created_at DESC
+  LIMIT 1
+) preview ON true
+ORDER BY c.last_reply_at DESC, c.thread_parent_id DESC
 `, chatID, viewerProfileID, nullableTime(afterAt), nullableUUID(afterParentID), nullableTime(ceilingAt), nullableUUID(ceilingParentID), nullableTime(snapshotAt), limit)
 	if err != nil {
 		return nil, err

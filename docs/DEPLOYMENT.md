@@ -338,7 +338,10 @@ fallback value. `MESSAGING_THREAD_CURSOR_TTL` is an optional positive duration
 HMAC key only in an explicit Messaging deploy, accepting that existing cursors
 become invalid.
 
-`messages_thread_list_visible_idx` belongs only to `messaging_db`. Its
+`messages_thread_list_visible_idx` is the partial `(chat_id, thread_parent_id,
+created_at DESC, id DESC) INCLUDE (sender_profile_id, ghost_only)` index used
+by the page-size-plus-one candidate and lateral-preview plan, and belongs only
+to `messaging_db`. Its
 `CREATE INDEX CONCURRENTLY` statement cannot run in a transaction-wrapped
 golang-migrate Job, and it must never be added to the existing
 `voice-migrate-voice-db` / `voice_db` runner path.

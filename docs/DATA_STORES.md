@@ -106,10 +106,11 @@ Sticker/GIF bytes live in **`file_db`** (`files`); send payloads in **`messaging
 
 ### `messaging_db` (Messaging Service)
 
-`messages_thread_list_visible_idx` is a partial `(chat_id, created_at DESC,
-thread_parent_id DESC)` index over non-deleted replies. It bounds the snapshot
-candidate scan before the viewer-filtered
-thread aggregate used by `ListThreads`; per-profile `message_hides` remains the
+`messages_thread_list_visible_idx` is a partial `(chat_id, thread_parent_id,
+created_at DESC, id DESC) INCLUDE (sender_profile_id, ghost_only)` index over
+non-deleted replies. It supports the bounded (at most page-size-plus-one)
+candidate-thread scan and lateral preview lookup used by `ListThreads`;
+per-profile `message_hides` remains the
 visibility authority. A ListThreads snapshot fixes the database-created-time
 high-water on page one, rather than a UUID or client clock. New writes therefore
 wait for a new snapshot, while deletes, per-viewer hides, and `ghost_only`

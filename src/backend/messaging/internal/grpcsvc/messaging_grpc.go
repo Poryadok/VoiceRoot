@@ -799,7 +799,7 @@ func (s *MessagingGRPC) GetMessages(ctx context.Context, req *messagingv1.GetMes
 		if errors.Is(err, store.ErrNotChatMember) {
 			return nil, status.Error(codes.PermissionDenied, "not a chat member")
 		}
-		return nil, status.Error(codes.Unavailable, "chat membership unavailable")
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	chatType, err := s.resolveAuthoritativeChatType(ctx, chatID, profileID)
 	if err != nil {
