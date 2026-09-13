@@ -4961,6 +4961,9 @@ class CallStarted extends $pb.GeneratedMessage {
     $core.String? calleeProfileId,
     $core.String? mediaKind,
     $core.String? livekitRoomName,
+    $core.String? voiceRoomId,
+    $core.String? spaceId,
+    $core.String? roomType,
   }) {
     final result = create();
     if (roomId != null) result.roomId = roomId;
@@ -4971,6 +4974,9 @@ class CallStarted extends $pb.GeneratedMessage {
     if (calleeProfileId != null) result.calleeProfileId = calleeProfileId;
     if (mediaKind != null) result.mediaKind = mediaKind;
     if (livekitRoomName != null) result.livekitRoomName = livekitRoomName;
+    if (voiceRoomId != null) result.voiceRoomId = voiceRoomId;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (roomType != null) result.roomType = roomType;
     return result;
   }
 
@@ -4995,6 +5001,9 @@ class CallStarted extends $pb.GeneratedMessage {
     ..aOS(5, _omitFieldNames ? '' : 'calleeProfileId')
     ..aOS(6, _omitFieldNames ? '' : 'mediaKind')
     ..aOS(7, _omitFieldNames ? '' : 'livekitRoomName')
+    ..aOS(8, _omitFieldNames ? '' : 'voiceRoomId')
+    ..aOS(9, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(10, _omitFieldNames ? '' : 'roomType')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -5072,6 +5081,34 @@ class CallStarted extends $pb.GeneratedMessage {
   $core.bool hasLivekitRoomName() => $_has(6);
   @$pb.TagNumber(7)
   void clearLivekitRoomName() => $_clearField(7);
+
+  /// Complete persisted locator pair for voice_room sessions; not a permission grant.
+  @$pb.TagNumber(8)
+  $core.String get voiceRoomId => $_getSZ(7);
+  @$pb.TagNumber(8)
+  set voiceRoomId($core.String value) => $_setString(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasVoiceRoomId() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearVoiceRoomId() => $_clearField(8);
+
+  @$pb.TagNumber(9)
+  $core.String get spaceId => $_getSZ(8);
+  @$pb.TagNumber(9)
+  set spaceId($core.String value) => $_setString(8, value);
+  @$pb.TagNumber(9)
+  $core.bool hasSpaceId() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearSpaceId() => $_clearField(9);
+
+  @$pb.TagNumber(10)
+  $core.String get roomType => $_getSZ(9);
+  @$pb.TagNumber(10)
+  set roomType($core.String value) => $_setString(9, value);
+  @$pb.TagNumber(10)
+  $core.bool hasRoomType() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearRoomType() => $_clearField(10);
 }
 
 class CallEnded extends $pb.GeneratedMessage {

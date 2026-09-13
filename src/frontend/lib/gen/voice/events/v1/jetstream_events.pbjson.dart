@@ -1578,6 +1578,38 @@ const CallStarted$json = {
     {'1': 'callee_profile_id', '3': 5, '4': 1, '5': 9, '10': 'calleeProfileId'},
     {'1': 'media_kind', '3': 6, '4': 1, '5': 9, '10': 'mediaKind'},
     {'1': 'livekit_room_name', '3': 7, '4': 1, '5': 9, '10': 'livekitRoomName'},
+    {
+      '1': 'voice_room_id',
+      '3': 8,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'voiceRoomId',
+      '17': true
+    },
+    {
+      '1': 'space_id',
+      '3': 9,
+      '4': 1,
+      '5': 9,
+      '9': 1,
+      '10': 'spaceId',
+      '17': true
+    },
+    {
+      '1': 'room_type',
+      '3': 10,
+      '4': 1,
+      '5': 9,
+      '9': 2,
+      '10': 'roomType',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_voice_room_id'},
+    {'1': '_space_id'},
+    {'1': '_room_type'},
   ],
 };
 
@@ -1587,7 +1619,10 @@ final $typed_data.Uint8List callStartedDescriptor = $convert.base64Decode(
     'ADKAlSCnByb2ZpbGVJZHMSFwoHY2hhdF9pZBgDIAEoCVIGY2hhdElkEjAKFGluaXRpYXRvcl9w'
     'cm9maWxlX2lkGAQgASgJUhJpbml0aWF0b3JQcm9maWxlSWQSKgoRY2FsbGVlX3Byb2ZpbGVfaW'
     'QYBSABKAlSD2NhbGxlZVByb2ZpbGVJZBIdCgptZWRpYV9raW5kGAYgASgJUgltZWRpYUtpbmQS'
-    'KgoRbGl2ZWtpdF9yb29tX25hbWUYByABKAlSD2xpdmVraXRSb29tTmFtZQ==');
+    'KgoRbGl2ZWtpdF9yb29tX25hbWUYByABKAlSD2xpdmVraXRSb29tTmFtZRInCg12b2ljZV9yb2'
+    '9tX2lkGAggASgJSABSC3ZvaWNlUm9vbUlkiAEBEh4KCHNwYWNlX2lkGAkgASgJSAFSB3NwYWNl'
+    'SWSIAQESIAoJcm9vbV90eXBlGAogASgJSAJSCHJvb21UeXBliAEBQhAKDl92b2ljZV9yb29tX2'
+    'lkQgsKCV9zcGFjZV9pZEIMCgpfcm9vbV90eXBl');
 
 @$core.Deprecated('Use callEndedDescriptor instead')
 const CallEnded$json = {

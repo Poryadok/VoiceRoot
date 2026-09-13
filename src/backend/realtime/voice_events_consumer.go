@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/proto"
 
@@ -171,7 +172,7 @@ func voiceEventBytesToFanout(data []byte) (profileIDs []string, env fanoutEnvelo
 		if ev == nil || ev.GetRoomId() == "" || len(ev.GetProfileIds()) == 0 {
 			return nil, fanoutEnvelope{}, false
 		}
-		d, err := json.Marshal(map[string]any{
+		payload := map[string]any{
 			"room_id":              ev.GetRoomId(),
 			"chat_id":              ev.GetChatId(),
 			"initiator_profile_id": ev.GetInitiatorProfileId(),
@@ -179,7 +180,15 @@ func voiceEventBytesToFanout(data []byte) (profileIDs []string, env fanoutEnvelo
 			"profile_ids":          ev.GetProfileIds(),
 			"media_kind":           ev.GetMediaKind(),
 			"livekit_room_name":    ev.GetLivekitRoomName(),
-		})
+		}
+		if ev.GetRoomType() != "" {
+			payload["room_type"] = ev.GetRoomType()
+		}
+		if ev.GetRoomType() == "voice_room" && uuid.Validate(ev.GetVoiceRoomId()) == nil && uuid.Validate(ev.GetSpaceId()) == nil {
+			payload["voice_room_id"] = ev.GetVoiceRoomId()
+			payload["space_id"] = ev.GetSpaceId()
+		}
+		d, err := json.Marshal(payload)
 		if err != nil {
 			return nil, fanoutEnvelope{}, false
 		}
