@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -88,14 +89,11 @@ func (s *UserGRPC) GetPresence(ctx context.Context, req *userv1.GetPresenceReque
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	if snap != nil && snap.Live && !s.mayViewOnlineStatus(ctx, profileID) {
-		return &userv1.GetPresenceResponse{PresenceStatus: presenceSnapshotToProto(profileID, nil)}, nil
-	}
 	return &userv1.GetPresenceResponse{PresenceStatus: s.presenceForViewer(ctx, profileID, snap)}, nil
 }
 
 func (s *UserGRPC) mayViewOnlineStatus(ctx context.Context, targetProfile uuid.UUID) bool {
-	viewerProfile, hasViewer := authctx.ProfileID(ctx)
+	viewerProfile, hasViewer := exactPresenceViewerProfile(ctx)
 	if hasViewer && viewerProfile == targetProfile {
 		return true
 	}
@@ -118,7 +116,7 @@ func (s *UserGRPC) mayViewOnlineStatus(ctx context.Context, targetProfile uuid.U
 }
 
 func (s *UserGRPC) mayViewGameStatus(ctx context.Context, targetProfile uuid.UUID) bool {
-	viewerProfile, hasViewer := authctx.ProfileID(ctx)
+	viewerProfile, hasViewer := exactPresenceViewerProfile(ctx)
 	if hasViewer && viewerProfile == targetProfile {
 		return true
 	}
@@ -140,15 +138,54 @@ func (s *UserGRPC) mayViewGameStatus(ctx context.Context, targetProfile uuid.UUI
 	return ok
 }
 
+func (s *UserGRPC) mayViewLastSeen(ctx context.Context, targetProfile uuid.UUID) bool {
+	viewerProfile, hasViewer := exactPresenceViewerProfile(ctx)
+	if hasViewer && viewerProfile == targetProfile {
+		return true
+	}
+	privacyStore := s.privacyStore()
+	if privacyStore == nil || !hasViewer {
+		return false
+	}
+	row, err := privacyStore.GetByProfileID(ctx, targetProfile)
+	if err != nil || row == nil {
+		return false
+	}
+	ok, err := s.audienceMatcher().Allowed(ctx, targetProfile, viewerProfile, row.ShowLastSeen, guestguard.IsGuest(ctx))
+	return err == nil && ok
+}
+
+// exactPresenceViewerProfile is intentionally narrower than authctx.ProfileID for
+// User presence reads. Ambiguous identity metadata is viewerless, so self-dependent
+// online, game, and last-seen decisions all fail closed in the same way.
+func exactPresenceViewerProfile(ctx context.Context) (uuid.UUID, bool) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return uuid.Nil, false
+	}
+	values := md.Get(authctx.HeaderProfileID)
+	if len(values) != 1 || values[0] == "" {
+		return uuid.Nil, false
+	}
+	id, err := uuid.Parse(values[0])
+	if err != nil {
+		return uuid.Nil, false
+	}
+	return id, true
+}
+
 func (s *UserGRPC) presenceForViewer(ctx context.Context, profileID uuid.UUID, snap *store.PresenceSnapshot) *userv1.PresenceStatus {
-	if snap != nil && snap.Live && isInvisiblePresence(snap.Status) && !isSelfViewer(ctx, profileID) {
+	if snap != nil && snap.Live && (isInvisiblePresence(snap.Status) || !s.mayViewOnlineStatus(ctx, profileID)) && !isSelfViewer(ctx, profileID) {
 		// presence.md: invisible displays as offline for others.
-		return presenceSnapshotToProto(profileID, &store.PresenceSnapshot{
+		snap = &store.PresenceSnapshot{
 			Live:         false,
 			LastSeenUnix: snap.LastSeenUnix,
-		})
+		}
 	}
 	out := presenceSnapshotToProto(profileID, snap)
+	if !s.mayViewLastSeen(ctx, profileID) {
+		out.LastSeen = nil
+	}
 	if snap != nil && snap.Live && snap.GameTitle != "" && !s.mayViewGameStatus(ctx, profileID) {
 		out.GameTitle = nil
 	}
@@ -156,7 +193,7 @@ func (s *UserGRPC) presenceForViewer(ctx context.Context, profileID uuid.UUID, s
 }
 
 func isSelfViewer(ctx context.Context, profileID uuid.UUID) bool {
-	viewer, ok := authctx.ProfileID(ctx)
+	viewer, ok := exactPresenceViewerProfile(ctx)
 	return ok && viewer == profileID
 }
 
@@ -199,10 +236,6 @@ func (s *UserGRPC) GetBulkPresence(ctx context.Context, req *userv1.GetBulkPrese
 	out := make(map[string]*userv1.PresenceStatus, len(m))
 	for id, snap := range m {
 		if _, ok := visible[id]; !ok {
-			continue
-		}
-		if snap != nil && snap.Live && !s.mayViewOnlineStatus(ctx, id) {
-			out[id.String()] = presenceSnapshotToProto(id, nil)
 			continue
 		}
 		out[id.String()] = s.presenceForViewer(ctx, id, snap)

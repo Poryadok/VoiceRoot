@@ -729,6 +729,14 @@ const PrivacySettings$json = {
       '10': 'showReadReceipts',
       '17': true
     },
+    {
+      '1': 'show_last_seen',
+      '3': 21,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.user.v1.PrivacyAudience',
+      '10': 'showLastSeen'
+    },
   ],
   '8': [
     {'1': '_preset_enum'},
@@ -760,8 +768,9 @@ final $typed_data.Uint8List privacySettingsDescriptor = $convert.base64Decode(
     'aWVuY2VSCmFsbG93RmlsZXMSUAoUYWxsb3dfdm9pY2VfbWVzc2FnZXMYEiABKAsyHi52b2ljZS'
     '51c2VyLnYxLlByaXZhY3lBdWRpZW5jZVISYWxsb3dWb2ljZU1lc3NhZ2VzEigKDWFsbG93X2Zv'
     'cndhcmQYEyABKAhIAVIMYWxsb3dGb3J3YXJkiAEBEjEKEnNob3dfcmVhZF9yZWNlaXB0cxgUIA'
-    'EoCEgCUhBzaG93UmVhZFJlY2VpcHRziAEBQg4KDF9wcmVzZXRfZW51bUIQCg5fYWxsb3dfZm9y'
-    'd2FyZEIVChNfc2hvd19yZWFkX3JlY2VpcHRz');
+    'EoCEgCUhBzaG93UmVhZFJlY2VpcHRziAEBEkQKDnNob3dfbGFzdF9zZWVuGBUgASgLMh4udm9p'
+    'Y2UudXNlci52MS5Qcml2YWN5QXVkaWVuY2VSDHNob3dMYXN0U2VlbkIOCgxfcHJlc2V0X2VudW'
+    '1CEAoOX2FsbG93X2ZvcndhcmRCFQoTX3Nob3dfcmVhZF9yZWNlaXB0cw==');
 
 @$core.Deprecated('Use updatePresenceRequestDescriptor instead')
 const UpdatePresenceRequest$json = {

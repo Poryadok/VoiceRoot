@@ -54,7 +54,7 @@ Until PostgreSQL `last_seen_at` ships, User Service persists **interim** last ac
 | `voice:user:presence:{profile_id}` (hash) | **5 min** | Every heartbeat / `UpdatePresence` / WS activity |
 | `voice:user:last_seen:{profile_id}` (string, unix ts) | **30 days** | Same heartbeat — updated on **every** upsert, not only offline transition |
 
-**Read path today:** `GetPresence` / `GetBulkPresence` merge live hash (if exists) with `last_seen` string when session expired. **Gap:** no viewer-aware `show_last_seen` filter; invisible/offline may leak timestamp to unauthorized viewers — [user-service.md](../microservices/user-service.md), [todo/backend.md](../todo/backend.md).
+**Read path today:** `GetPresence` / `GetBulkPresence` merge live hash (if exists) with `last_seen` string when session expired and filter that timestamp per `(viewer_profile_id, target_profile_id)` and `show_last_seen`. Viewerless calls, missing privacy rows and Social/Space lookup errors fail closed; invisible/offline cannot leak a hidden timestamp.
 
 **Target (PG):** on offline transition / graceful disconnect, flush `last_seen_at` to PostgreSQL; Redis string becomes cache only. Rounding table below applies to durable PG value.
 
@@ -98,7 +98,7 @@ Each `UpdatePresence` (client heartbeat ~60 s or WS ping):
 
 **Enforcement:** User Service `GetBulkPresence` / `GetPresence` **фильтрует** `last_seen` на read path по `(viewer_profile_id, target_profile_id)` + Social friends/contacts + `show_last_seen` audience. Live online status использует отдельное поле `show_online`. Header chat room **не** обходит фильтр.
 
-См. [privacy.md](privacy.md) § «Видимость данных» (поле `show_last_seen` — normative; добавляется в `PrivacySettings` proto вместе с PG `last_seen_at`).
+См. [privacy.md](privacy.md) § «Видимость данных» (поле `show_last_seen` есть в `PrivacySettings`; durable PG `last_seen_at` остаётся отдельной работой).
 
 ### Last seen rounding
 

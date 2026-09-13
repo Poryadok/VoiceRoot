@@ -20,6 +20,7 @@ func PresetSettings(preset string) (showOnline, showGameStatus, showMmRating, sh
 type Settings struct {
 	Preset                string
 	ShowOnline            Audience
+	ShowLastSeen          Audience
 	ShowGameStatus        Audience
 	ShowMmRating          Audience
 	ShowPhone             Audience
@@ -42,6 +43,7 @@ func SettingsForPreset(preset string) Settings {
 	return Settings{
 		Preset:                preset,
 		ShowOnline:            showOnline,
+		ShowLastSeen:          lastSeenAudienceForPreset(preset),
 		ShowGameStatus:        showGameStatus,
 		ShowMmRating:          showMmRating,
 		ShowPhone:             showPhone,
@@ -56,5 +58,16 @@ func SettingsForPreset(preset string) Settings {
 		AllowGuestDM:          preset == "gaming",
 		AllowForward:          true,
 		ShowReadReceipts:      true,
+	}
+}
+
+func lastSeenAudienceForPreset(preset string) Audience {
+	switch preset {
+	case "personal":
+		return FriendsOnly()
+	case "work":
+		return SpaceMembersOnly()
+	default:
+		return EveryoneWithGuests()
 	}
 }

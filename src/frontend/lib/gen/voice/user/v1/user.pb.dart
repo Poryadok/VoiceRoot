@@ -1642,6 +1642,7 @@ class PrivacySettings extends $pb.GeneratedMessage {
     PrivacyAudience? allowVoiceMessages,
     $core.bool? allowForward,
     $core.bool? showReadReceipts,
+    PrivacyAudience? showLastSeen,
   }) {
     final result = create();
     if (profileId != null) result.profileId = profileId;
@@ -1666,6 +1667,7 @@ class PrivacySettings extends $pb.GeneratedMessage {
       result.allowVoiceMessages = allowVoiceMessages;
     if (allowForward != null) result.allowForward = allowForward;
     if (showReadReceipts != null) result.showReadReceipts = showReadReceipts;
+    if (showLastSeen != null) result.showLastSeen = showLastSeen;
     return result;
   }
 
@@ -1715,6 +1717,8 @@ class PrivacySettings extends $pb.GeneratedMessage {
         subBuilder: PrivacyAudience.create)
     ..aOB(19, _omitFieldNames ? '' : 'allowForward')
     ..aOB(20, _omitFieldNames ? '' : 'showReadReceipts')
+    ..aOM<PrivacyAudience>(21, _omitFieldNames ? '' : 'showLastSeen',
+        subBuilder: PrivacyAudience.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1936,6 +1940,18 @@ class PrivacySettings extends $pb.GeneratedMessage {
   $core.bool hasShowReadReceipts() => $_has(18);
   @$pb.TagNumber(20)
   void clearShowReadReceipts() => $_clearField(20);
+
+  /// Independent audience for the durable/interim "last seen" timestamp.
+  @$pb.TagNumber(21)
+  PrivacyAudience get showLastSeen => $_getN(19);
+  @$pb.TagNumber(21)
+  set showLastSeen(PrivacyAudience value) => $_setField(21, value);
+  @$pb.TagNumber(21)
+  $core.bool hasShowLastSeen() => $_has(19);
+  @$pb.TagNumber(21)
+  void clearShowLastSeen() => $_clearField(21);
+  @$pb.TagNumber(21)
+  PrivacyAudience ensureShowLastSeen() => $_ensure(19);
 }
 
 class UpdatePresenceRequest extends $pb.GeneratedMessage {

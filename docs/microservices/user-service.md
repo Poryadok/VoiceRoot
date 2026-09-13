@@ -85,21 +85,28 @@ service UserService {
 source. Public `GetVerificationStatus` возвращает итоговый status/badge и не раскрывает
 provider source rows.
 
-**`PrivacySettings` sketch (spec — not yet in proto/DDL):**
+**`PrivacySettings` V1 contract (implemented in proto, DDL and User store):**
 
 ```protobuf
 message PrivacySettings {
   string profile_id = 1;
   PrivacyPreset preset = 2;
   PrivacyAudience show_online = 3;
-  PrivacyAudience show_last_seen = 4;   // «был(а) N назад» — independent from show_online
-  bool show_read_receipts = 5;          // DM ✓✓ opt-out; default true — [privacy.md](../features/privacy.md) § Read receipts
-  PrivacyAudience show_game_status = 6;
+  // Additive field 21 in the canonical proto; independent from show_online.
+  PrivacyAudience show_last_seen = 21;
+  optional bool show_read_receipts = 20; // DM ✓✓ opt-out; default true — [privacy.md](../features/privacy.md) § Read receipts
   // … allow_dm, allow_friend_requests, allow_forward, allow_guest_dm, …
 }
 ```
 
 Read-path enforcement for `show_last_seen` — § «Heartbeat» below; feature UX — [presence.md](../features/presence.md), [privacy.md](../features/privacy.md).
+
+**Rollout `show_last_seen`:** migration `000013` is an expand migration. Its
+column remains nullable while old User Service binaries can still INSERT/UPSERT
+`privacy_settings` without it. A new reader treats only NULL as the documented
+preset-specific default (`personal` friends, `gaming` everyone, `work` space
+members); an explicit JSON audience is authoritative. Contracting nullability
+requires a later release after all writers send the field.
 
 ## Модель данных
 
@@ -172,13 +179,13 @@ Redis-only interim **недостаточен** для long-tail «был 2 не
 | 3 | If status enum changed → publish `user.presence_changed` with `old_status`, `new_status`; for the first live observation `old_status` is empty and `new_status` is the canonical current status. Same-enum heartbeats still complete steps 1–2 but publish nothing. |
 | 4 | Realtime fan-out `presence_update` to friends/subscribers **after** privacy filter (spec) |
 
-**`show_last_seen` enforcement:** when `show_last_seen = nobody` (or viewer not in allowed audience for `friends`), `GetPresence` / `GetBulkPresence` **omit** `last_seen_at` / `last_seen` timestamp (live online may still respect `show_online`). Invisible: live status shown as offline to others; **must not** leak `last_seen` when hidden. Header «был(а)…» in DM — [presence.md](../features/presence.md). **Code gap:** field not in proto/DDL; no read-time filter — [todo/backend.md](../todo/backend.md).
+**`show_last_seen` enforcement:** when `show_last_seen = nobody` (or viewer is outside its allowed audience), `GetPresence` / `GetBulkPresence` **omit** `last_seen` timestamp (live online independently respects `show_online`). Self may read it; viewerless calls, missing privacy rows and audience dependency errors fail closed. Invisible is shown as offline to others and never leaks a hidden timestamp. Header «был(а)…» in DM — [presence.md](../features/presence.md). Durable PostgreSQL `last_seen_at` remains separate — [todo/backend.md](../todo/backend.md).
 
 ### Current code vs full spec
 
-**Deployed migrations** используют `profiles`, `onboarding_state` и
-`profile_verification_sources`.
-`privacy_settings` и расширенные Premium-поля — **not yet in proto/code**.
+**Deployed migrations** используют `profiles`, `onboarding_state`,
+`privacy_settings` и `profile_verification_sources`. V1 privacy settings are
+implemented in proto/code; extended Premium fields remain a separate gap.
 
 ```
 profiles

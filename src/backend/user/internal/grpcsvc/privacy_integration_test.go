@@ -2,6 +2,7 @@ package grpcsvc
 
 import (
 	"context"
+	"errors"
 	"net"
 	"testing"
 
@@ -266,6 +267,8 @@ VALUES ($1, $2, 'nofwd', '5555', 'NoFwd', true)`,
 	require.NoError(t, err)
 	require.False(t, after.GetPrivacySettings().GetAllowForward())
 	require.False(t, after.GetPrivacySettings().GetShowReadReceipts())
+	require.True(t, after.GetPrivacySettings().GetShowLastSeen().GetIncludeGuests(),
+		"an older client omitting show_last_seen must preserve the stored gaming default")
 	require.Equal(t, profileID.String(), events.profileID)
 	require.Equal(t, `[{"key":"show_read_receipts","value":false}]`, events.changedKeysJSON)
 
@@ -513,6 +516,8 @@ VALUES ($1, $2, 'owner', '4444', 'Owner', true),
 	})
 	require.NoError(t, err)
 	require.Equal(t, "online", resp.GetPresenceStatus().GetStatus())
+	require.Nil(t, resp.GetPresenceStatus().GetLastSeen(),
+		"personal show_last_seen=friends excludes a guest unless include_guests is selected")
 	require.Empty(t, resp.GetPresenceStatus().GetGameTitle(),
 		"guest viewer must not see game status when guest audience is excluded")
 }
@@ -761,6 +766,8 @@ VALUES ($1, $2, 'owner', '4444', 'Owner', true),
 	})
 	require.NoError(t, err)
 	require.Equal(t, "online", resp.GetPresenceStatus().GetStatus())
+	require.NotNil(t, resp.GetPresenceStatus().GetLastSeen(),
+		"personal show_last_seen=friends permits the authenticated friend")
 }
 
 // TestGetBulkPresence_FriendsOnly_FiltersStranger documents bulk presence applies same privacy rules.
@@ -803,6 +810,7 @@ VALUES ($1, $2, 'owner', '4444', 'Owner', true),
 	})
 	require.NoError(t, err)
 	require.Empty(t, resp.GetByProfileId()[ownerProfile.String()].GetStatus())
+	require.Nil(t, resp.GetByProfileId()[ownerProfile.String()].GetLastSeen(), "stranger must not receive last seen")
 }
 
 // TestGetProfile_BlockedPair_NotFound documents privacy.md block UX: opaque not found for blocked profiles.
@@ -839,4 +847,135 @@ VALUES ($1, $2, 'blocked', '7777', 'Blocked', true)`,
 	})
 	require.Error(t, err)
 	require.Equal(t, codes.NotFound, status.Code(err))
+}
+
+// TestPresence_ExactViewerMetadata_UsesTheSameFilterForDirectAndBulkReads
+// locks down shared read-side presence identity: online, game and last_seen all
+// treat duplicate or malformed profile metadata as viewerless.
+func TestLastSeen_ExactViewerMetadata_UsesTheSameFilterForDirectAndBulkReads(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
+	applyUserPrivacyMigrations(t, ctx, pool)
+
+	ownerAccount, ownerProfile := uuid.New(), uuid.New()
+	friendAccount, friendProfile := uuid.New(), uuid.New()
+	_, err := pool.Exec(ctx, `
+INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+VALUES ($1, $2, 'lastseenowner', '4401', 'Owner', true),
+       ($3, $4, 'lastseenfriend', '4402', 'Friend', true)`,
+		ownerProfile, ownerAccount, friendProfile, friendAccount)
+	require.NoError(t, err)
+	seedPrivacyPreset(ctx, t, store.NewPrivacyStore(pool), ownerProfile, "personal")
+
+	mr := miniredis.RunT(t)
+	t.Cleanup(func() { mr.Close() })
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb,
+		func(s *UserGRPC) { s.SocialGraph = alwaysFriendsGraph{} },
+	)
+	_, err = cli.UpdatePresence(withUserAuthCtx(ctx, ownerAccount, ownerProfile), &userv1.UpdatePresenceRequest{Status: "online"})
+	require.NoError(t, err)
+
+	friendCtx := withUserAuthCtx(ctx, friendAccount, friendProfile)
+	friend, err := cli.GetPresence(friendCtx, &userv1.GetPresenceRequest{ProfileId: ownerProfile.String()})
+	require.NoError(t, err)
+	require.NotNil(t, friend.GetPresenceStatus().GetLastSeen())
+
+	bulk, err := cli.GetBulkPresence(friendCtx, &userv1.GetBulkPresenceRequest{ProfileIds: []string{ownerProfile.String()}})
+	require.NoError(t, err)
+	require.NotNil(t, bulk.GetByProfileId()[ownerProfile.String()].GetLastSeen(), "bulk and direct reads share last-seen filtering")
+
+	for name, viewerCtx := range map[string]context.Context{
+		"viewerless":               context.Background(),
+		"s2s without profile":      metadata.AppendToOutgoingContext(context.Background(), authctx.HeaderInternalCaller, "social"),
+		"malformed profile":        metadata.AppendToOutgoingContext(context.Background(), authctx.HeaderProfileID, "not-a-uuid"),
+		"duplicate matching first": metadata.AppendToOutgoingContext(context.Background(), authctx.HeaderProfileID, ownerProfile.String(), authctx.HeaderProfileID, friendProfile.String()),
+	} {
+		t.Run(name, func(t *testing.T) {
+			resp, err := cli.GetPresence(viewerCtx, &userv1.GetPresenceRequest{ProfileId: ownerProfile.String()})
+			require.NoError(t, err)
+			require.Empty(t, resp.GetPresenceStatus().GetStatus(), "ambiguous or absent viewer identity must not become self for online visibility")
+			require.Nil(t, resp.GetPresenceStatus().GetLastSeen(), "ambiguous or absent viewer identity must not disclose last_seen")
+			bulk, err := cli.GetBulkPresence(viewerCtx, &userv1.GetBulkPresenceRequest{ProfileIds: []string{ownerProfile.String()}})
+			require.NoError(t, err)
+			status := bulk.GetByProfileId()[ownerProfile.String()]
+			require.Empty(t, status.GetStatus(), "bulk must use the same exact viewer identity")
+			require.Nil(t, status.GetLastSeen())
+		})
+	}
+}
+
+type lastSeenFailingSocialGraph struct{}
+
+func (lastSeenFailingSocialGraph) AreFriends(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return false, errors.New("social unavailable")
+}
+func (lastSeenFailingSocialGraph) AreFriendsOfFriends(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return false, errors.New("social unavailable")
+}
+
+type lastSeenFailingSpaceGraph struct{}
+
+func (lastSeenFailingSpaceGraph) AreCoMembers(context.Context, uuid.UUID, uuid.UUID, []string) (bool, error) {
+	return false, errors.New("space unavailable")
+}
+
+// TestLastSeen_SpaceAudienceAndDependencyErrorsFailClosed covers the work
+// preset's space audience and verifies dependency failures suppress only the
+// timestamp decision rather than creating an allow fallback.
+func TestLastSeen_SpaceAudienceAndDependencyErrorsFailClosed(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
+	applyUserPrivacyMigrations(t, ctx, pool)
+
+	ownerAccount, ownerProfile := uuid.New(), uuid.New()
+	personalAccount, personalProfile := uuid.New(), uuid.New()
+	viewerAccount, viewerProfile := uuid.New(), uuid.New()
+	_, err := pool.Exec(ctx, `
+INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+VALUES ($1, $2, 'workowner', '4501', 'Owner', true),
+       ($3, $4, 'personalowner', '4502', 'Personal Owner', true),
+       ($5, $6, 'workviewer', '4503', 'Viewer', true)`,
+		ownerProfile, ownerAccount, personalProfile, personalAccount, viewerProfile, viewerAccount)
+	require.NoError(t, err)
+	privacyStore := store.NewPrivacyStore(pool)
+	seedPrivacyPreset(ctx, t, privacyStore, ownerProfile, "work")
+	seedPrivacyPreset(ctx, t, privacyStore, personalProfile, "personal")
+
+	// This calls mayViewLastSeen directly, so model the handler's incoming
+	// metadata rather than the outgoing client metadata used by RPC tests.
+	viewerCtx := metadata.NewIncomingContext(ctx, metadata.Pairs(
+		authctx.HeaderProfileID, viewerProfile.String(),
+	))
+	cases := []struct {
+		name      string
+		target    uuid.UUID
+		configure func(*UserGRPC)
+		want      bool
+	}{
+		{
+			name:   "shared space allows",
+			target: ownerProfile,
+			configure: func(s *UserGRPC) {
+				s.SpaceCoMembership = stubSpaceCoMembership{co: map[string]bool{privacyPairKey(ownerProfile, viewerProfile): true}}
+			},
+			want: true,
+		},
+		{name: "social dependency failure denies", target: personalProfile, configure: func(s *UserGRPC) { s.SocialGraph = lastSeenFailingSocialGraph{} }},
+		{name: "space dependency failure denies", target: ownerProfile, configure: func(s *UserGRPC) { s.SpaceCoMembership = lastSeenFailingSpaceGraph{} }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &UserGRPC{Privacy: privacyStore}
+			tc.configure(s)
+			require.Equal(t, tc.want, s.mayViewLastSeen(viewerCtx, tc.target))
+		})
+	}
 }
