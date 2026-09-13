@@ -2,22 +2,33 @@ package voice.backend.auth.service;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.UUID;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import voice.backend.auth.config.AuthProperties;
 
 /**
- * Auth-owned Redis OTP limits. Each state change is one Lua command so concurrent Auth instances
- * share the same cooldown and verification window. Redis faults deliberately deny the operation.
+ * Auth-owned Redis OTP limits. Redis Lua serializes every admission across Auth instances. A
+ * verification key is a sorted-set sliding window, not a fixed counter window.
  */
 public class RedisOtpThrottle implements OtpThrottle {
   private static final String RESERVE_SEND_LUA =
       "return redis.call('SET', KEYS[1], '1', 'NX', 'PX', ARGV[1]) and 1 or 0";
-  private static final String RECORD_FAILURE_LUA =
-      "local count = redis.call('INCR', KEYS[1])\n"
-          + "if count == 1 then redis.call('PEXPIRE', KEYS[1], ARGV[1]) end\n"
-          + "return count";
+  private static final String ADMIT_VERIFY_LUA =
+      "local ttl = redis.call('PTTL', KEYS[1])\n"
+          + "if ttl == -1 then return redis.error_reply('otp verify state missing ttl') end\n"
+          + "local time = redis.call('TIME')\n"
+          + "local now = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)\n"
+          + "local window = tonumber(ARGV[1])\n"
+          + "local limit = tonumber(ARGV[2])\n"
+          + "redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', now - window)\n"
+          + "local count = redis.call('ZCARD', KEYS[1])\n"
+          + "if count == 0 then redis.call('DEL', KEYS[1]) end\n"
+          + "if count >= limit then return 0 end\n"
+          + "redis.call('ZADD', KEYS[1], now, ARGV[3])\n"
+          + "redis.call('PEXPIRE', KEYS[1], window)\n"
+          + "return 1";
 
   private final StringRedisTemplate redis;
   private final String prefix;
@@ -25,7 +36,7 @@ public class RedisOtpThrottle implements OtpThrottle {
   private final long verifyWindowMillis;
   private final int maxVerifyAttempts;
   private final DefaultRedisScript<Long> reserveSendScript = script(RESERVE_SEND_LUA);
-  private final DefaultRedisScript<Long> recordFailureScript = script(RECORD_FAILURE_LUA);
+  private final DefaultRedisScript<Long> admitVerifyScript = script(ADMIT_VERIFY_LUA);
 
   public RedisOtpThrottle(StringRedisTemplate redis, AuthProperties.Redis.Otp properties) {
     if (redis == null || properties == null) {
@@ -58,37 +69,25 @@ public class RedisOtpThrottle implements OtpThrottle {
   }
 
   @Override
-  public void checkCanVerify(String key) {
-    try {
-      String value = redis.opsForValue().get(verifyKey(key));
-      if (value == null) {
-        return;
-      }
-      long attempts = Long.parseLong(value);
-      if (attempts < 0) {
-        unavailable();
-      }
-      if (attempts >= maxVerifyAttempts) {
-        throw new AuthException("otp_rate_limited");
-      }
-    } catch (AuthException ex) {
-      throw ex;
-    } catch (RuntimeException ex) {
-      unavailable(ex);
+  public void admitVerify(String key) {
+    Long admitted =
+        execute(
+            admitVerifyScript,
+            verifyKey(key),
+            Long.toString(verifyWindowMillis),
+            Integer.toString(maxVerifyAttempts),
+            UUID.randomUUID().toString());
+    if (admitted == null || admitted == 0L) {
+      throw new AuthException("otp_rate_limited");
     }
-  }
-
-  @Override
-  public void recordFailedVerify(String key) {
-    Long attempts = execute(recordFailureScript, verifyKey(key), Long.toString(verifyWindowMillis));
-    if (attempts == null || attempts < 1) {
+    if (admitted != 1L) {
       unavailable();
     }
   }
 
-  private Long execute(DefaultRedisScript<Long> script, String key, String argument) {
+  private Long execute(DefaultRedisScript<Long> script, String key, String... arguments) {
     try {
-      return redis.execute(script, List.of(key), argument);
+      return redis.execute(script, List.of(key), (Object[]) arguments);
     } catch (DataAccessException ex) {
       throw new AuthException("auth_unavailable");
     } catch (RuntimeException ex) {
@@ -133,10 +132,6 @@ public class RedisOtpThrottle implements OtpThrottle {
   }
 
   private static void unavailable() {
-    throw new AuthException("auth_unavailable");
-  }
-
-  private static void unavailable(RuntimeException ignored) {
     throw new AuthException("auth_unavailable");
   }
 }

@@ -14,7 +14,6 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.data.redis.core.script.RedisScript;
 import voice.backend.auth.config.AuthProperties;
 
@@ -22,7 +21,7 @@ class RedisOtpThrottleTest {
   @Test
   void resendUsesOneAtomicSetNxWithConfiguredCooldownAndAuthPrefix() {
     StringRedisTemplate redis = mock(StringRedisTemplate.class);
-    when(redis.execute(any(RedisScript.class), anyList(), any())).thenReturn(1L);
+    when(redis.execute(any(RedisScript.class), anyList(), any(Object[].class))).thenReturn(1L);
     AuthProperties.Redis.Otp config = config();
     config.setPrefix("tenant:auth:otp");
     config.setSendCooldown(Duration.ofSeconds(17));
@@ -39,50 +38,26 @@ class RedisOtpThrottleTest {
   }
 
   @Test
-  void resendLimitAndRedisFailureExposeOnlyCoarseAuthErrors() {
+  void verifyAdmissionIsAtomicSlidingWindowAndRedisFailureIsCoarse() {
     StringRedisTemplate redis = mock(StringRedisTemplate.class);
-    when(redis.execute(any(RedisScript.class), anyList(), any())).thenReturn(0L);
-    RedisOtpThrottle throttle = new RedisOtpThrottle(redis, config());
-    assertThatThrownBy(() -> throttle.reserveSend("account-1"))
-        .isInstanceOf(AuthException.class).hasMessage("otp_rate_limited");
-
-    when(redis.execute(any(RedisScript.class), anyList(), any()))
-        .thenThrow(new DataAccessResourceFailureException("redis hostname leaked"));
-    assertThatThrownBy(() -> throttle.reserveSend("account-1"))
-        .isInstanceOf(AuthException.class).hasMessage("auth_unavailable");
-  }
-
-  @Test
-  void failedVerificationUsesOneAtomicCounterAndSetsTtlOnlyOnFirstAttempt() {
-    StringRedisTemplate redis = mock(StringRedisTemplate.class);
-    when(redis.execute(any(RedisScript.class), anyList(), any())).thenReturn(1L);
+    when(redis.execute(any(RedisScript.class), anyList(), any(Object[].class))).thenReturn(1L);
     AuthProperties.Redis.Otp config = config();
     config.setVerifyWindow(Duration.ofSeconds(23));
 
-    new RedisOtpThrottle(redis, config).recordFailedVerify("account-1");
+    new RedisOtpThrottle(redis, config).admitVerify("account-1");
 
     ArgumentCaptor<RedisScript<Long>> script = scriptCaptor();
     ArgumentCaptor<List<String>> keys = keysCaptor();
-    ArgumentCaptor<Object> argument = ArgumentCaptor.forClass(Object.class);
-    verify(redis).execute(script.capture(), keys.capture(), argument.capture());
-    assertThat(script.getValue().getScriptAsString()).contains("'INCR'", "count == 1", "'PEXPIRE'");
+    verify(redis).execute(script.capture(), keys.capture(), any(Object[].class));
+    assertThat(script.getValue().getScriptAsString())
+        .contains("'ZREMRANGEBYSCORE'", "'ZCARD'", "'ZADD'", "'PEXPIRE'", "'PTTL'");
     assertThat(keys.getValue()).containsExactly("auth:otp:verify:account-1");
-    assertThat(argument.getValue()).isEqualTo("23000");
-  }
 
-  @Test
-  void exhaustedWindowAndCorruptRedisStateFailClosed() {
-    StringRedisTemplate redis = mock(StringRedisTemplate.class);
-    ValueOperations<String, String> values = mock(ValueOperations.class);
-    when(redis.opsForValue()).thenReturn(values);
-    when(values.get("auth:otp:verify:account-1")).thenReturn("3");
-    RedisOtpThrottle throttle = new RedisOtpThrottle(redis, config());
-    assertThatThrownBy(() -> throttle.checkCanVerify("account-1"))
-        .isInstanceOf(AuthException.class).hasMessage("otp_rate_limited");
-
-    when(values.get("auth:otp:verify:account-1")).thenReturn("not-a-counter");
-    assertThatThrownBy(() -> throttle.checkCanVerify("account-1"))
-        .isInstanceOf(AuthException.class).hasMessage("auth_unavailable");
+    when(redis.execute(any(RedisScript.class), anyList(), any(Object[].class)))
+        .thenThrow(new DataAccessResourceFailureException("redis hostname leaked"));
+    assertThatThrownBy(() -> new RedisOtpThrottle(redis, config).admitVerify("account-1"))
+        .isInstanceOf(AuthException.class)
+        .hasMessage("auth_unavailable");
   }
 
   @Test

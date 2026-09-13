@@ -105,14 +105,13 @@ public class OtpService {
     }
     Account account = resolveAccount(command, authService);
     String throttleKey = account.id().toString();
-    throttle.checkCanVerify(throttleKey);
+    throttle.admitVerify(throttleKey);
     Instant now = Instant.now(clock);
     OtpCodeRecord record =
         otpCodes
             .findLatestValid(account.id(), type, now)
             .orElseThrow(() -> new AuthException("invalid_otp"));
     if (!codec.hash(command.code().trim()).equals(record.codeHash())) {
-      throttle.recordFailedVerify(throttleKey);
       throw new AuthException("invalid_otp");
     }
     if ("email_verify".equals(type) && "guest".equals(account.type())) {
@@ -148,14 +147,13 @@ public class OtpService {
             .orElseThrow(() -> new AuthException("invalid_credentials"));
     ensureActive(account);
     String throttleKey = account.id().toString();
-    throttle.checkCanVerify(throttleKey);
+    throttle.admitVerify(throttleKey);
     Instant now = Instant.now(clock);
     OtpCodeRecord record =
         otpCodes
             .findLatestValid(account.id(), "password_reset", now)
             .orElseThrow(() -> new AuthException("invalid_otp"));
     if (!codec.hash(command.code().trim()).equals(record.codeHash())) {
-      throttle.recordFailedVerify(throttleKey);
       throw new AuthException("invalid_otp");
     }
     otpCodes.markUsed(record.id(), now);
