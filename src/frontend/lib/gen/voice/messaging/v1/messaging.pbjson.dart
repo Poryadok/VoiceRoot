@@ -194,6 +194,7 @@ const SendMessageRequest$json = {
       '10': 'contentType',
       '17': true
     },
+    {'1': 'send_silent', '3': 11, '4': 1, '5': 8, '10': 'sendSilent'},
   ],
   '8': [
     {'1': '_client_message_id'},
@@ -215,9 +216,10 @@ final $typed_data.Uint8List sendMessageRequestDescriptor = $convert.base64Decode
     '9raW5kGAcgASgOMh8udm9pY2UubWVzc2FnaW5nLnYxLk1lc3NhZ2VLaW5kSAJSC21lc3NhZ2VL'
     'aW5kiAEBEikKDnBvc3RlZF9hc19jaGF0GAggASgISANSDHBvc3RlZEFzQ2hhdIgBARIaCgZpc1'
     '9lMmUYCSABKAhIBFIFaXNFMmWIAQESTgoMY29udGVudF90eXBlGAogASgOMiYudm9pY2UubWVz'
-    'c2FnaW5nLnYxLk1lc3NhZ2VDb250ZW50VHlwZUgFUgtjb250ZW50VHlwZYgBAUIUChJfY2xpZW'
-    '50X21lc3NhZ2VfaWRCEwoRX3RocmVhZF9wYXJlbnRfaWRCDwoNX21lc3NhZ2Vfa2luZEIRCg9f'
-    'cG9zdGVkX2FzX2NoYXRCCQoHX2lzX2UyZUIPCg1fY29udGVudF90eXBl');
+    'c2FnaW5nLnYxLk1lc3NhZ2VDb250ZW50VHlwZUgFUgtjb250ZW50VHlwZYgBARIfCgtzZW5kX3'
+    'NpbGVudBgLIAEoCFIKc2VuZFNpbGVudEIUChJfY2xpZW50X21lc3NhZ2VfaWRCEwoRX3RocmVh'
+    'ZF9wYXJlbnRfaWRCDwoNX21lc3NhZ2Vfa2luZEIRCg9fcG9zdGVkX2FzX2NoYXRCCQoHX2lzX2'
+    'UyZUIPCg1fY29udGVudF90eXBl');
 
 @$core.Deprecated('Use editMessageRequestDescriptor instead')
 const EditMessageRequest$json = {
