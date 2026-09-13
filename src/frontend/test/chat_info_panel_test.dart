@@ -659,6 +659,134 @@ void main() {
     },
   );
 
+  testWidgets(
+    'a completed update cannot use a disposed chat while its refresh is pending',
+    (tester) async {
+      const firstChatId = 'refresh-pending-group-a';
+      const secondChatId = 'refresh-pending-group-b';
+      final pendingReload = Completer<http.Response>();
+      var listCalls = 0;
+      var selectedChatId = firstChatId;
+      late StateSetter selectChat;
+      final client = MockClient((req) async {
+        if (req.url.path == '/api/v1/chats') {
+          listCalls++;
+          if (listCalls > 1) return pendingReload.future;
+          return http.Response(
+            jsonEncode({
+              'chat_list': {
+                'items': [
+                  for (final chatId in [firstChatId, secondChatId])
+                    {
+                      'chat': {
+                        'id': chatId,
+                        'type': 'CHAT_TYPE_GROUP',
+                        'creator_profile_id': 'prof-test',
+                        'allow_guests': false,
+                      },
+                    },
+                ],
+              },
+            }),
+            200,
+          );
+        }
+        if (req.url.path.endsWith('/members')) {
+          return http.Response(
+            jsonEncode({
+              'member_list': {
+                'members': [
+                  {'profile_id': 'prof-test', 'role': 'owner'},
+                ],
+              },
+            }),
+            200,
+          );
+        }
+        if (req.url.path == '/api/v1/chats/$firstChatId' &&
+            req.method == 'PATCH') {
+          return http.Response(
+            jsonEncode({
+              'chat': {
+                'id': firstChatId,
+                'type': 'CHAT_TYPE_GROUP',
+                'creator_profile_id': 'prof-test',
+                'allow_guests': true,
+              },
+            }),
+            200,
+          );
+        }
+        if (req.url.path.contains('/shared-media')) {
+          return http.Response(
+            jsonEncode({
+              'shared_media_list': {'items': []},
+            }),
+            200,
+          );
+        }
+        return http.Response('{}', 404);
+      });
+
+      await tester.pumpWidget(
+        testApp(
+          home: StatefulBuilder(
+            builder: (context, setState) {
+              selectChat = setState;
+              return SizedBox(
+                height: 700,
+                width: 400,
+                child: ChatInfoPanel(chatId: selectedChatId),
+              );
+            },
+          ),
+          client: client,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(StandaloneChatGuestSettingsSection.toggleKey),
+      );
+      await tester.pump();
+      expect(listCalls, 2);
+
+      selectChat(() => selectedChatId = secondChatId);
+      await tester.pumpAndSettle();
+      pendingReload.complete(
+        http.Response(
+          jsonEncode({
+            'chat_list': {
+              'items': [
+                for (final chatId in [firstChatId, secondChatId])
+                  {
+                    'chat': {
+                      'id': chatId,
+                      'type': 'CHAT_TYPE_GROUP',
+                      'creator_profile_id': 'prof-test',
+                      'allow_guests': chatId == firstChatId,
+                    },
+                  },
+              ],
+            },
+          }),
+          200,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(
+        tester
+            .widget<SwitchListTile>(
+              find.byKey(StandaloneChatGuestSettingsSection.toggleKey),
+            )
+            .value,
+        isFalse,
+      );
+    },
+  );
+
   testWidgets('shared media backend failures use localized copy', (
     tester,
   ) async {

@@ -203,11 +203,12 @@ class _StandaloneChatGuestSettingsSectionState
         final reloaded = await ref
             .read(chatListControllerProvider.notifier)
             .reloadInitial();
+        if (!mounted) return;
         final refreshedChatExists = ref
             .read(chatListControllerProvider)
             .items
             .any((item) => item.chatId == widget.chatId);
-        if (mounted && reloaded && refreshedChatExists) {
+        if (reloaded && refreshedChatExists) {
           setState(() => _allowGuests = null);
         }
       case ChatsApiFailure(:final message):
