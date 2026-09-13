@@ -44,6 +44,7 @@ service VoiceService {
   rpc JoinVoiceRoom(JoinVoiceRoomRequest) returns (JoinVoiceRoomResponse);
   rpc LeaveVoiceRoom(LeaveVoiceRoomRequest) returns (LeaveVoiceRoomResponse);
   rpc MoveToVoiceRoom(MoveToVoiceRoomRequest) returns (MoveToVoiceRoomResponse);
+  rpc MoveVoiceRoomParticipant(MoveVoiceRoomParticipantRequest) returns (MoveVoiceRoomParticipantResponse);
   rpc GetJoinToken(GetJoinTokenRequest) returns (GetJoinTokenResponse);
   rpc UpdateVoiceState(UpdateVoiceStateRequest) returns (UpdateVoiceStateResponse);
   rpc GetVoiceStates(GetVoiceStatesRequest) returns (GetVoiceStatesResponse);
@@ -138,8 +139,9 @@ deadline bridge semantics (D2/D3) также остаются отдельным
 and `POST /participants/{profile_id}/move` (moderator). `space_id` is path-bound
 and never asserted by the client in a body/header. All actions use the Gateway
 derived delegated-user principal; no client-provided profile or Space identity is
-authoritative. The final proto must add a distinct moderator-move RPC; it must not
-reuse self move with an asserted actor.
+authoritative. `MoveToVoiceRoom` is self-only; the distinct
+`MoveVoiceRoomParticipant` RPC accepts an explicit target and never treats a
+client-provided actor as authoritative.
 
 For this surface: unauthenticated is `401 unauthenticated`; absent Space/room is
 `404 not_found` only after a caller is entitled to discover it; a caller without

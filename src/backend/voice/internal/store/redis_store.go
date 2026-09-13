@@ -16,6 +16,11 @@ type RedisCallStore struct {
 	prefix string
 }
 
+type redisVoiceRoomMoveLedger struct {
+	Request VoiceRoomMoveRequest `json:"request"`
+	Result  VoiceRoomMoveResult  `json:"result"`
+}
+
 func NewRedisCallStore(client *redis.Client, prefix string) *RedisCallStore {
 	if prefix == "" {
 		prefix = "voice:"
@@ -171,6 +176,152 @@ func (s *RedisCallStore) AddParticipant(ctx context.Context, roomID, profileID s
 	}
 	if err := s.save(ctx, call); err != nil {
 		return Call{}, err
+	}
+	return call, nil
+}
+
+func (s *RedisCallStore) FindVoiceRoomMove(ctx context.Context, req VoiceRoomMoveRequest) (VoiceRoomMoveResult, bool, error) {
+	b, err := s.client.Get(ctx, s.moveOperationKey(req.ActorProfileID, req.OperationID)).Bytes()
+	if errors.Is(err, redis.Nil) {
+		return VoiceRoomMoveResult{}, false, nil
+	}
+	if err != nil {
+		return VoiceRoomMoveResult{}, false, err
+	}
+	var prior redisVoiceRoomMoveLedger
+	if err := json.Unmarshal(b, &prior); err != nil {
+		return VoiceRoomMoveResult{}, false, err
+	}
+	if !sameVoiceRoomMoveRequest(prior.Request, req) {
+		return VoiceRoomMoveResult{}, false, ErrOperationConflict
+	}
+	prior.Result.Replayed = true
+	return prior.Result, true, nil
+}
+
+// MoveVoiceRoomParticipant uses WATCH/EXEC over both room projections, the
+// subject session and the operation ledger.  A concurrent join/leave retries
+// instead of exposing an intermediate roster where the participant is absent
+// from both rooms.
+func (s *RedisCallStore) MoveVoiceRoomParticipant(ctx context.Context, req VoiceRoomMoveRequest) (VoiceRoomMoveResult, error) {
+	var result VoiceRoomMoveResult
+	for attempt := 0; attempt < 4; attempt++ {
+		keys := []string{s.moveOperationKey(req.ActorProfileID, req.OperationID), s.activeVoiceRoomKey(req.FromVoiceRoomID), s.activeVoiceRoomKey(req.ToVoiceRoomID), s.activeKey(req.ParticipantProfileID)}
+		for _, voiceRoomID := range []string{req.FromVoiceRoomID, req.ToVoiceRoomID} {
+			roomID, err := s.client.Get(ctx, s.activeVoiceRoomKey(voiceRoomID)).Result()
+			if err == nil && roomID != "" {
+				keys = append(keys, s.callKey(roomID))
+			} else if err != nil && !errors.Is(err, redis.Nil) {
+				return VoiceRoomMoveResult{}, err
+			}
+		}
+		err := s.client.Watch(ctx, func(tx *redis.Tx) error {
+			ledger, err := tx.Get(ctx, s.moveOperationKey(req.ActorProfileID, req.OperationID)).Bytes()
+			if err == nil {
+				var prior redisVoiceRoomMoveLedger
+				if err := json.Unmarshal(ledger, &prior); err != nil {
+					return err
+				}
+				if !sameVoiceRoomMoveRequest(prior.Request, req) {
+					return ErrOperationConflict
+				}
+				prior.Result.Replayed = true
+				result = prior.Result
+				return nil
+			}
+			if !errors.Is(err, redis.Nil) {
+				return err
+			}
+			source, err := s.getVoiceRoomCallTx(ctx, tx, req.FromVoiceRoomID)
+			if err != nil {
+				return err
+			}
+			if !source.IsParticipant(req.ParticipantProfileID) || source.SpaceID != req.SpaceID {
+				return ErrInvalidState
+			}
+			destination, err := s.getVoiceRoomCallTx(ctx, tx, req.ToVoiceRoomID)
+			destinationExists := err == nil
+			if err != nil && !errors.Is(err, ErrNotFound) {
+				return err
+			}
+			if destinationExists {
+				if destination.SpaceID != req.SpaceID || !destination.IsVoiceRoom() || destination.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE {
+					return ErrInvalidState
+				}
+				if !destination.IsParticipant(req.ParticipantProfileID) && len(destination.States) >= req.MaxParticipants {
+					return ErrRoomFull
+				}
+			} else {
+				destination = Call{RoomID: req.DestinationRoomID, LivekitRoomName: "voice-room-" + req.ToVoiceRoomID, VoiceRoomID: req.ToVoiceRoomID, SpaceID: req.SpaceID, SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, InitiatorProfileID: req.ParticipantProfileID, MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE, States: map[string]ParticipantState{req.ParticipantProfileID: {ProfileID: req.ParticipantProfileID}}}
+			}
+			delete(source.States, req.ParticipantProfileID)
+			source = removeScreenSharesForProfile(source, req.ParticipantProfileID)
+			if len(source.States) == 0 {
+				source.Status, source.EndedAt = callsv1.CallStatus_CALL_STATUS_ENDED, req.Now
+			}
+			if destinationExists && !destination.IsParticipant(req.ParticipantProfileID) {
+				destination.States[req.ParticipantProfileID] = ParticipantState{ProfileID: req.ParticipantProfileID}
+			}
+			result = VoiceRoomMoveResult{Source: source, Destination: destination}
+			ledgerJSON, err := json.Marshal(redisVoiceRoomMoveLedger{Request: req, Result: result})
+			if err != nil {
+				return err
+			}
+			sourceJSON, err := json.Marshal(source)
+			if err != nil {
+				return err
+			}
+			destinationJSON, err := json.Marshal(destination)
+			if err != nil {
+				return err
+			}
+			_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+				pipe.Set(ctx, s.callKey(source.RoomID), sourceJSON, 24*time.Hour)
+				pipe.Set(ctx, s.callKey(destination.RoomID), destinationJSON, 24*time.Hour)
+				if source.Status == callsv1.CallStatus_CALL_STATUS_ACTIVE {
+					pipe.Set(ctx, s.activeVoiceRoomKey(source.VoiceRoomID), source.RoomID, 24*time.Hour)
+				} else {
+					pipe.Del(ctx, s.activeVoiceRoomKey(source.VoiceRoomID))
+				}
+				pipe.Set(ctx, s.activeVoiceRoomKey(destination.VoiceRoomID), destination.RoomID, 24*time.Hour)
+				pipe.Set(ctx, s.activeKey(req.ParticipantProfileID), destination.RoomID, 24*time.Hour)
+				pipe.Set(ctx, s.moveOperationKey(req.ActorProfileID, req.OperationID), ledgerJSON, 24*time.Hour)
+				return nil
+			})
+			return err
+		}, keys...)
+		if errors.Is(err, redis.TxFailedErr) {
+			continue
+		}
+		if err != nil {
+			return VoiceRoomMoveResult{}, err
+		}
+		return result, nil
+	}
+	return VoiceRoomMoveResult{}, redis.TxFailedErr
+}
+
+func (s *RedisCallStore) getVoiceRoomCallTx(ctx context.Context, tx *redis.Tx, voiceRoomID string) (Call, error) {
+	roomID, err := tx.Get(ctx, s.activeVoiceRoomKey(voiceRoomID)).Result()
+	if errors.Is(err, redis.Nil) {
+		return Call{}, ErrNotFound
+	}
+	if err != nil {
+		return Call{}, err
+	}
+	b, err := tx.Get(ctx, s.callKey(roomID)).Bytes()
+	if errors.Is(err, redis.Nil) {
+		return Call{}, ErrNotFound
+	}
+	if err != nil {
+		return Call{}, err
+	}
+	var call Call
+	if err := json.Unmarshal(b, &call); err != nil {
+		return Call{}, err
+	}
+	if !call.IsVoiceRoom() || call.VoiceRoomID != voiceRoomID || call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE {
+		return Call{}, ErrNotFound
 	}
 	return call, nil
 }
@@ -361,4 +512,8 @@ func (s *RedisCallStore) activeChatKey(chatID string) string {
 
 func (s *RedisCallStore) activeVoiceRoomKey(voiceRoomID string) string {
 	return s.prefix + "active_voice_room:" + voiceRoomID
+}
+
+func (s *RedisCallStore) moveOperationKey(actorProfileID, operationID string) string {
+	return s.prefix + "voice_move_operation:" + actorProfileID + ":" + operationID
 }
