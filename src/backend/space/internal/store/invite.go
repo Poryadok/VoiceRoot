@@ -351,8 +351,10 @@ FOR UPDATE
 	if err != nil {
 		return nil, err
 	}
-	if err := s.validateInviteForJoin(inv, now); err != nil {
-		return nil, err
+	if !guest {
+		if err := s.validateInviteForJoin(inv, now); err != nil {
+			return nil, err
+		}
 	}
 	banned, err := s.IsAccountBanned(ctx, inv.SpaceID, accountID)
 	if err != nil {
@@ -377,6 +379,9 @@ WHERE space_id = $1 AND profile_id = $2
 		return existing, nil
 	}
 	if guest {
+		if err := s.validateInviteForJoin(inv, now); err != nil {
+			return nil, err
+		}
 		var allowGuests bool
 		// Take the exclusive space-row lock before the later member_count update.
 		// A shared lock here would let concurrent guest joins deadlock while both

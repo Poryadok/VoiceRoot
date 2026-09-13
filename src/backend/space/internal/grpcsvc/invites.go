@@ -245,11 +245,14 @@ func (s *SpaceGRPC) JoinByInvite(ctx context.Context, req *spacev1.JoinByInviteR
 		return nil, err
 	}
 	defer release()
-	if inv.ExpiresAt != nil && !inv.ExpiresAt.After(time.Now().UTC()) {
-		return nil, status.Error(codes.FailedPrecondition, "invite expired")
-	}
-	if inv.MaxUses != nil && inv.UseCount >= *inv.MaxUses {
-		return nil, status.Error(codes.FailedPrecondition, "invite max uses reached")
+	isGuest := guestguard.IsGuest(ctx)
+	if !isGuest {
+		if inv.ExpiresAt != nil && !inv.ExpiresAt.After(time.Now().UTC()) {
+			return nil, status.Error(codes.FailedPrecondition, "invite expired")
+		}
+		if inv.MaxUses != nil && inv.UseCount >= *inv.MaxUses {
+			return nil, status.Error(codes.FailedPrecondition, "invite max uses reached")
+		}
 	}
 	if err := s.ensureJoinInvitePrivacy(ctx, profileID, inv.CreatorProfileID); err != nil {
 		return nil, err
@@ -262,7 +265,7 @@ func (s *SpaceGRPC) JoinByInvite(ctx context.Context, req *spacev1.JoinByInviteR
 		return nil, mapSpaceStoreError(err)
 	}
 	var member *store.MembershipRow
-	if guestguard.IsGuest(ctx) {
+	if isGuest {
 		member, err = s.Store.JoinGuestByInvite(ctx, code, profileID, accountID)
 	} else {
 		member, err = s.Store.JoinByInvite(ctx, code, profileID, accountID)

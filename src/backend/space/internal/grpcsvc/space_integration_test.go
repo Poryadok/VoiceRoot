@@ -915,7 +915,8 @@ func TestUpdateSpace_AllowGuests_ControlsInviteAdmission(t *testing.T) {
 	require.False(t, created.GetSpace().GetAllowGuests())
 	spaceID := created.GetSpace().GetId()
 
-	inv, err := client.CreateInvite(ownerCtx, &spacev1.CreateInviteRequest{SpaceId: spaceID})
+	maxUses := int32(1)
+	inv, err := client.CreateInvite(ownerCtx, &spacev1.CreateInviteRequest{SpaceId: spaceID, MaxUses: &maxUses})
 	require.NoError(t, err)
 	_, err = client.JoinByInvite(guestCtx, &spacev1.JoinByInviteRequest{Code: inv.GetInvite().GetCode()})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
@@ -941,9 +942,10 @@ func TestUpdateSpace_AllowGuests_ControlsInviteAdmission(t *testing.T) {
 	retried, err := client.JoinByInvite(guestCtx, &spacev1.JoinByInviteRequest{Code: inv.GetInvite().GetCode()})
 	require.NoError(t, err)
 	require.Equal(t, guestProfile.String(), retried.GetSpaceMembership().GetProfileId())
-	storedInvite, err = client.GetInvite(ownerCtx, &spacev1.GetInviteRequest{Code: inv.GetInvite().GetCode()})
+	var useCount int32
+	err = pool.QueryRow(context.Background(), `SELECT use_count FROM invites WHERE code = $1`, inv.GetInvite().GetCode()).Scan(&useCount)
 	require.NoError(t, err)
-	require.Equal(t, int32(1), storedInvite.GetInvite().GetUseCount(), "existing membership retry must not consume an invite")
+	require.Equal(t, int32(1), useCount, "existing membership retry must not consume an invite")
 }
 
 func TestUpdateSpace_AllowGuests_NonOwnerDenied(t *testing.T) {
