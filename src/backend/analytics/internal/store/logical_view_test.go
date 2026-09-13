@@ -22,7 +22,10 @@ func TestOfficialAnalyticsQueriesReadLogicalEvents(t *testing.T) {
 	require.NoError(t, err)
 	text := string(query)
 	require.Contains(t, text, "voice.events_logical")
-	require.NotContains(t, strings.ReplaceAll(text, "voice.events_logical", ""), "voice.events")
+	rawWithoutLogicalView := strings.ReplaceAll(text, "voice.events_logical", "")
+	require.NotContains(t, rawWithoutLogicalView, "voice.events")
+	require.NotContains(t, text, "voice.dau_mv")
+	require.NotContains(t, text, "voice.events_by_type_mv")
 }
 
 func TestStagingClickHouseApplyAlwaysAppliesAdditiveLogicalView(t *testing.T) {

@@ -60,8 +60,8 @@ func (s *CHStore) DashboardMetrics(ctx context.Context, dashboardType string, fr
 			dauDate = from
 		}
 		dau, err := s.scalar(ctx, `
-SELECT uniqMerge(unique_users) FROM voice.dau_mv
-WHERE date = toDate(?)`, dauDate)
+SELECT uniqExact(user_id_hashed) FROM voice.events_logical
+WHERE user_id_hashed != '' AND toDate(timestamp) = toDate(?)`, dauDate)
 		if err != nil {
 			return nil, err
 		}
