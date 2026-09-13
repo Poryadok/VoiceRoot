@@ -351,6 +351,9 @@ FOR UPDATE
 	if err != nil {
 		return nil, err
 	}
+	if inv == nil {
+		return nil, ErrInviteNotFound
+	}
 	// The handler lookup can be stale across instances. Revocation always gates
 	// the join path, including an otherwise idempotent guest membership retry.
 	if inv.RevokedAt != nil {

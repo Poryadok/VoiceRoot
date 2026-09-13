@@ -72,6 +72,16 @@ func TestInvite_Join_IncrementsUseCount(t *testing.T) {
 	require.True(t, ok)
 }
 
+func TestInvite_GuestJoin_MissingCodeReturnsNotFound(t *testing.T) {
+	ctx := context.Background()
+	pool := startSpacePostgresForStoreTest(t, ctx)
+	applySpaceMigrationForStoreTest(t, ctx, pool)
+	st := &SpaceStore{Pool: pool}
+
+	_, err := st.JoinGuestByInvite(ctx, "missing-code", uuid.New(), uuid.New())
+	require.ErrorIs(t, err, ErrInviteNotFound)
+}
+
 // TestInvite_GuestJoinsAcrossStoresSerializeSpaceUpdate proves two concurrent
 // guest joins with distinct invites do not deadlock while both increment the
 // space member counter. Separate stores model independent service instances.
