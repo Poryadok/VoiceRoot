@@ -189,8 +189,8 @@ func TestGetVoiceRoomOverrides_SetAndList(t *testing.T) {
 }
 
 // TestSetChatOverride_PublishesCurrentSetEvent characterizes the documented
-// role.chat_override_set event. Removal intentionally has no parallel event:
-// that gap is tracked in docs/todo/backend.md.
+// role.chat_override_set event. Removal is covered separately because its
+// event is emitted only when the delete actually removes an override row.
 func TestSetChatOverride_PublishesCurrentSetEvent(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
