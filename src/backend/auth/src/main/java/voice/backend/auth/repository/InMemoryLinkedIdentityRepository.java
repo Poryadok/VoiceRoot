@@ -83,9 +83,9 @@ public class InMemoryLinkedIdentityRepository implements LinkedIdentityRepositor
   }
 
   @Override
-  public Optional<LinkedIdentity> findActive(UUID accountId, String platform) {
+  public Optional<LinkedIdentity> findActive(UUID accountId, UUID profileId, String platform) {
     LinkedIdentity row = byAccountPlatform.get(key(accountId, platform));
-    if (row == null || !"active".equals(row.status())) {
+    if (row == null || !"active".equals(row.status()) || !profileId.equals(row.profileId())) {
       return Optional.empty();
     }
     return Optional.of(row);

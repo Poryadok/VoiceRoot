@@ -180,10 +180,10 @@ public class LinkedAccountsService {
   }
 
   private void unlinkPlatform(UUID accountId, UUID profileId, String platform) {
-    // The JWT profile can have changed since the account linked this provider.
-    // Reconcile the profile stored on the row actually revoked, never the caller's current profile.
+    // The JWT profile is the requested source owner. A stale profile session must not
+    // revoke a provider source belonging to another profile of the same account.
     linkedIdentities
-        .findActive(accountId, platform)
+        .findActive(accountId, profileId, platform)
         .flatMap(linkedIdentities::revokeIfUnchanged)
         .ifPresent(revoked -> syncPendingTargetsSafely());
   }

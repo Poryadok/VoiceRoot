@@ -137,7 +137,7 @@ public class JdbcLinkedIdentityRepository implements LinkedIdentityRepository {
   }
 
   @Override
-  public Optional<LinkedIdentity> findActive(UUID accountId, String platform) {
+  public Optional<LinkedIdentity> findActive(UUID accountId, UUID profileId, String platform) {
     return jdbc
         .query(
             """
@@ -145,11 +145,13 @@ public class JdbcLinkedIdentityRepository implements LinkedIdentityRepository {
                access_token_encrypted, refresh_token_encrypted, status,
                source_revision
             FROM linked_identities
-            WHERE account_id = :accountId AND platform = :platform AND status = 'active'
+            WHERE account_id = :accountId AND profile_id = :profileId
+              AND platform = :platform AND status = 'active'
             LIMIT 1
             """,
             new MapSqlParameterSource()
                 .addValue("accountId", accountId)
+                .addValue("profileId", profileId)
                 .addValue("platform", platform),
             ROW_MAPPER)
         .stream()
