@@ -305,7 +305,7 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 			for _, pid := range mentionTargets {
 				ids = append(ids, pid.String())
 			}
-			if err := s.MessageEvents.PublishMentionAdded(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), ids); err != nil {
+			if err := s.MessageEvents.PublishMentionAdded(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), ids, saved.SendSilent); err != nil {
 				s.logPublishError(ctx, "message.mention_added", err, slog.String("message_id", saved.ID.String()), slog.String("chat_id", saved.ChatID.String()))
 			}
 		}
@@ -705,7 +705,7 @@ func (s *MessagingGRPC) EditMessage(ctx context.Context, req *messagingv1.EditMe
 			for _, pid := range mentionTargets {
 				ids = append(ids, pid.String())
 			}
-			if err := s.MessageEvents.PublishMentionAdded(ctx, updated.ID.String(), updated.ChatID.String(), updated.SenderProfileID.String(), ids); err != nil {
+			if err := s.MessageEvents.PublishMentionAdded(ctx, updated.ID.String(), updated.ChatID.String(), updated.SenderProfileID.String(), ids, updated.SendSilent); err != nil {
 				s.logPublishError(ctx, "message.mention_added", err, slog.String("message_id", updated.ID.String()), slog.String("chat_id", updated.ChatID.String()))
 			}
 		}

@@ -116,6 +116,9 @@ func routeMessageNotification(
 		if err != nil {
 			return err
 		}
+		if err := validateMessageMemberRows(memberRows, ev.GetSenderProfileId()); err != nil {
+			return err
+		}
 		senderID, _ := uuid.Parse(ev.GetSenderProfileId())
 		if ev.GetThreadParentId() != "" {
 			parentAuthor, err := parentMessageAuthor(ctx, enrich, ev.GetThreadParentId())
@@ -124,12 +127,16 @@ func routeMessageNotification(
 			}
 			raw := handler.HandleMessageReply(ctx, ev, parentAuthor)
 			decisions := enrichDecisions(ctx, pusher, raw, senderID, ev.GetChatId(), delivery.TypeReply)
-			decisions = deliveryForMember(decisions, memberByProfileID(memberRows, parentAuthor))
+			decisions, err = deliveryForMember(decisions, memberByProfileID(memberRows, parentAuthor))
+			if err != nil {
+				return err
+			}
 			preview, senderLabel := pushCopyFields(ctx, enrich, ev.GetMessageId(), ev.GetSenderProfileId())
 			deepLink := messagePushDeepLink(ev.GetChatId(), ev.GetMessageId())
 			payload := push.Payload{
-				Title: pushcopy.TitleForSender(senderLabel, "Reply"),
-				Body:  pushcopy.MessageBody(preview),
+				Title:  pushcopy.TitleForSender(senderLabel, "Reply"),
+				Body:   pushcopy.MessageBody(preview),
+				Silent: ev.GetSendSilent(),
 				Data: map[string]string{
 					"type":              string(delivery.TypeReply),
 					"chat_id":           ev.GetChatId(),
@@ -145,7 +152,7 @@ func routeMessageNotification(
 			}, payload, payload.Body)
 		}
 		if len(memberRows) == 0 {
-			return nil
+			return fmt.Errorf("message notification: recipient routing metadata unavailable")
 		}
 		raw := handler.HandleMessageSent(ctx, ev, memberRows)
 		preview, senderLabel := pushCopyFields(ctx, enrich, ev.GetMessageId(), ev.GetSenderProfileId())
@@ -156,14 +163,18 @@ func routeMessageNotification(
 			decisions := enrichDecisions(ctx, pusher, map[string]delivery.DeliveryDecision{
 				profileID: baseDecision,
 			}, senderID, ev.GetChatId(), typ)
-			decisions = deliveryForMember(decisions, member)
+			decisions, err = deliveryForMember(decisions, member)
+			if err != nil {
+				return err
+			}
 			titleFallback := "New message"
 			if typ == delivery.TypeMessageRequest {
 				titleFallback = "Message request"
 			}
 			payload := push.Payload{
-				Title: pushcopy.TitleForSender(senderLabel, titleFallback),
-				Body:  pushcopy.MessageBody(preview),
+				Title:  pushcopy.TitleForSender(senderLabel, titleFallback),
+				Body:   pushcopy.MessageBody(preview),
+				Silent: ev.GetSendSilent(),
 				Data: map[string]string{
 					"type":              string(typ),
 					"chat_id":           ev.GetChatId(),
@@ -193,17 +204,25 @@ func routeMessageNotification(
 		if err != nil {
 			return err
 		}
+		if err := validateMessageMemberRows(memberRows, ev.GetSenderProfileId()); err != nil {
+			return err
+		}
 		for profileID, decision := range decisions {
-			decisions[profileID] = deliveryForMember(
+			routed, err := deliveryForMember(
 				map[string]delivery.DeliveryDecision{profileID: decision},
 				memberByProfileID(memberRows, profileID),
-			)[profileID]
+			)
+			if err != nil {
+				return err
+			}
+			decisions[profileID] = routed[profileID]
 		}
 		preview, senderLabel := pushCopyFields(ctx, enrich, ev.GetMessageId(), ev.GetSenderProfileId())
 		deepLink := messagePushDeepLink(ev.GetChatId(), ev.GetMessageId())
 		payload := push.Payload{
-			Title: pushcopy.TitleForSender(senderLabel, "Mention"),
-			Body:  pushcopy.MentionBody(preview),
+			Title:  pushcopy.TitleForSender(senderLabel, "Mention"),
+			Body:   pushcopy.MentionBody(preview),
+			Silent: ev.GetSendSilent(),
 			Data: map[string]string{
 				"type":              string(delivery.TypeMention),
 				"chat_id":           ev.GetChatId(),
@@ -224,9 +243,22 @@ func routeMessageNotification(
 
 func listChatMembers(ctx context.Context, members chatmembers.Lister, chatID string) ([]chatmembers.Member, error) {
 	if members == nil {
-		return nil, nil
+		return nil, fmt.Errorf("chat members lister unavailable")
 	}
 	return members.ListMembers(ctx, chatID)
+}
+
+func validateMessageMemberRows(rows []chatmembers.Member, senderProfileID string) error {
+	if len(rows) == 0 {
+		return fmt.Errorf("message notification: recipient routing metadata unavailable")
+	}
+	senderProfileID = strings.TrimSpace(senderProfileID)
+	for _, row := range rows {
+		if row.ProfileID == senderProfileID {
+			return nil
+		}
+	}
+	return fmt.Errorf("message notification: sender routing metadata unavailable")
 }
 
 func memberByProfileID(rows []chatmembers.Member, profileID string) chatmembers.Member {
@@ -235,7 +267,7 @@ func memberByProfileID(rows []chatmembers.Member, profileID string) chatmembers.
 			return row
 		}
 	}
-	return chatmembers.Member{ProfileID: profileID}
+	return chatmembers.Member{}
 }
 
 func notificationTypeForInbox(inboxBucket string) delivery.NotificationType {
@@ -247,16 +279,19 @@ func notificationTypeForInbox(inboxBucket string) delivery.NotificationType {
 
 // deliveryForMember suppresses notification delivery for archived chats. Chat
 // remains responsible for unread counters and archive membership state.
-func deliveryForMember(base map[string]delivery.DeliveryDecision, member chatmembers.Member) map[string]delivery.DeliveryDecision {
+func deliveryForMember(base map[string]delivery.DeliveryDecision, member chatmembers.Member) (map[string]delivery.DeliveryDecision, error) {
+	if strings.TrimSpace(member.ProfileID) == "" {
+		return nil, fmt.Errorf("message notification: recipient routing metadata unavailable")
+	}
 	if !member.IsArchived {
-		return base
+		return base, nil
 	}
 	for profileID, decision := range base {
 		decision.Push = false
 		decision.InApp = false
 		base[profileID] = decision
 	}
-	return base
+	return base, nil
 }
 
 func enrichDecisions(

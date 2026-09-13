@@ -209,6 +209,9 @@ message MentionAdded {
   string chat_id = 2;
   string sender_profile_id = 3;
   repeated string mentioned_profile_ids = 4;
+  // Mirrors MessageSent.send_silent so mention push does not introduce an
+  // audible duplicate for a silent message.
+  bool send_silent = 5;
 }
 
 message MessageEdited {
