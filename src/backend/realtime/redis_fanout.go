@@ -19,16 +19,17 @@ const (
 )
 
 type redisFanoutPayload struct {
-	T            string `json:"t,omitempty"`
-	ChatID       string `json:"chat_id,omitempty"`
-	MessageID    string `json:"message_id,omitempty"`
-	ProfileID    string `json:"profile_id,omitempty"`
-	SenderID     string `json:"sender_id,omitempty"`
-	Status       string `json:"status,omitempty"`
-	CustomStatus string `json:"custom_status,omitempty"`
-	Kind         string `json:"kind,omitempty"`
-	SrcInstance  string `json:"src_instance,omitempty"`
-	SrcConn      string `json:"src_conn,omitempty"`
+	T            string   `json:"t,omitempty"`
+	ChatID       string   `json:"chat_id,omitempty"`
+	ChatIDs      []string `json:"chat_ids,omitempty"`
+	MessageID    string   `json:"message_id,omitempty"`
+	ProfileID    string   `json:"profile_id,omitempty"`
+	SenderID     string   `json:"sender_id,omitempty"`
+	Status       string   `json:"status,omitempty"`
+	CustomStatus string   `json:"custom_status,omitempty"`
+	Kind         string   `json:"kind,omitempty"`
+	SrcInstance  string   `json:"src_instance,omitempty"`
+	SrcConn      string   `json:"src_conn,omitempty"`
 }
 
 type redisFanoutConfig struct {
@@ -161,12 +162,21 @@ func (f *redisFanout) PublishPresenceProfile(ctx context.Context, profileID, sta
 }
 
 func (f *redisFanout) PublishPresenceChat(ctx context.Context, chatID, profileID, status, customStatus, srcConn string) error {
+	return f.PublishPresenceChats(ctx, []string{chatID}, profileID, status, customStatus, srcConn)
+}
+
+// PublishPresenceChats carries all sender subscriptions in one event so each
+// remote instance can deduplicate shared recipients before User lookups.
+func (f *redisFanout) PublishPresenceChats(ctx context.Context, chatIDs []string, profileID, status, customStatus, srcConn string) error {
 	if f == nil || f.rdb == nil {
+		return nil
+	}
+	if len(chatIDs) == 0 {
 		return nil
 	}
 	msg := redisFanoutPayload{
 		T:            fanoutMsgPresence,
-		ChatID:       chatID,
+		ChatIDs:      chatIDs,
 		ProfileID:    profileID,
 		Status:       status,
 		CustomStatus: customStatus,
@@ -218,8 +228,16 @@ func (f *redisFanout) runSubscriber(ctx context.Context) error {
 				}
 				f.hub.broadcastMarkReadSameProfileExcept(p.ProfileID, p.SrcInstance, p.SrcConn, d)
 			case fanoutMsgPresence:
-				if p.ChatID != "" {
-					f.hub.broadcastPrivatePresenceInChatExcept(p.ChatID, p.ProfileID, p.Status, p.SrcInstance, p.SrcConn, svcLogger)
+				chatIDs := append([]string(nil), p.ChatIDs...)
+				if len(chatIDs) == 0 && p.ChatID != "" {
+					chatIDs = append(chatIDs, p.ChatID)
+				}
+				if len(chatIDs) > 0 {
+					// The source already performed this local fan-out before publishing.
+					if p.SrcInstance == f.instanceID {
+						continue
+					}
+					f.hub.broadcastPrivatePresenceInChatsExcept(chatIDs, p.ProfileID, p.Status, p.SrcInstance, p.SrcConn, svcLogger)
 				} else {
 					d, err := json.Marshal(map[string]any{
 						"profile_id":    p.ProfileID,

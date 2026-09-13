@@ -48,6 +48,11 @@ type wsHub struct {
 	dmPairByChat        map[string]dmAccountPair
 	dmChatsByPair       map[dmAccountPair]*dmPairIndexEntry
 	presenceViewer      presenceViewer
+	presenceFanout      *presencePrivacyFanoutCoordinator
+}
+
+type presencePrivacyFanoutCoordinator struct {
+	sem chan struct{}
 }
 
 type dmAccountPair struct {
@@ -352,6 +357,9 @@ func newWSHub() *wsHub {
 		byProfile:     make(map[string]map[*connReg]struct{}),
 		dmPairByChat:  make(map[string]dmAccountPair),
 		dmChatsByPair: make(map[dmAccountPair]*dmPairIndexEntry),
+		presenceFanout: &presencePrivacyFanoutCoordinator{
+			sem: make(chan struct{}, presencePrivacyFanoutConcurrency),
+		},
 	}
 }
 
@@ -591,13 +599,15 @@ func (h *wsHub) broadcastPresenceToProfiles(profileIDs []string, viewer presence
 }
 
 func (h *wsHub) fanoutPrivatePresence(targets map[*connReg]string, viewer presenceViewer, targetProfileID, sourceStatus string, logger *slog.Logger) {
+	if h == nil || h.presenceFanout == nil {
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	sem := make(chan struct{}, presencePrivacyFanoutConcurrency)
 	var wg sync.WaitGroup
 	for reg, chatID := range targets {
 		select {
-		case sem <- struct{}{}:
+		case h.presenceFanout.sem <- struct{}{}:
 		case <-ctx.Done():
 			wg.Wait()
 			return
@@ -605,7 +615,7 @@ func (h *wsHub) fanoutPrivatePresence(targets map[*connReg]string, viewer presen
 		wg.Add(1)
 		go func(reg *connReg, chatID string) {
 			defer wg.Done()
-			defer func() { <-sem }()
+			defer func() { <-h.presenceFanout.sem }()
 			d, err := presenceFanoutPayload(ctx, viewer, targetProfileID, sourceStatus, reg, chatID)
 			if err != nil {
 				if logger != nil {
