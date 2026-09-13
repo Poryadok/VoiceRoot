@@ -200,7 +200,6 @@ func TestListChatOverrides_ReturnsRows(t *testing.T) {
 // voice processing, and deny wins when either override carries both values.
 // The role contract does not restrict permission-bit categories by node type.
 func TestGetEffectiveMask_DualScopeOverridesApplySequentially(t *testing.T) {
-func TestGetEffectiveMask_DualScopeOverridesApplyIndependently(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
