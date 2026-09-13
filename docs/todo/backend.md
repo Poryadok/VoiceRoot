@@ -325,7 +325,6 @@
 - [ ] **[Story] Feed degrades to global scan when Social fails** — `GetStoryFeed` falls back to `ListActiveStoriesPaginated` (all active rows) if `ListFeedAuthorIDs` errors; only post-filtered by `canViewStory`. Path: `src/backend/story/internal/grpcsvc/story.go` (`GetStoryFeed`); related: `src/backend/story/internal/privacy/friends.go`, `src/backend/gateway/compose_stories_degradation_live_test.go` (checks liveness only).
 - [ ] **[Story] `DeleteStory` orphans R2 media** — soft-delete only; purge worker targets `expired_at IS NOT NULL`, so early-deleted stories never reach `RunArchivePurgeOnce` / `FileDeleter`. Paths: `src/backend/story/internal/store/store.go` (`DeleteStory`), `src/backend/story/internal/jobs/jobs.go`.
 - [x] **[Story] Moderation cannot hide stories from feeds** — `HideStoryFromFeed` + `hidden_from_feed_at`; non-author feed/GetStory filtered. Residual: Moderation `ResolveReport` does not yet call Story hide RPC. Paths: `src/backend/story/`; `protos/voice/story/v1/story.proto`.
-- [ ] **[Story] GET reactions REST missing** — gRPC `GetStoryReactions` exists; Gateway only maps `POST …/reactions`. Flutter `getStoryReactions` GET will 404. Paths: `src/backend/gateway/transcode_stories.go`; `src/frontend/lib/backend/stories_client.dart`.
 
 ### Voice
 
