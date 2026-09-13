@@ -108,6 +108,14 @@ func (s *MatchmakingGRPC) RateMatch(ctx context.Context, req *matchmakingv1.Rate
 	if match.Status != store.MatchStatusCompleted {
 		return nil, status.Error(codes.FailedPrecondition, "match not completed")
 	}
+	if req.GetSkip() {
+		if stars != 0 {
+			return nil, status.Error(codes.InvalidArgument, "skip cannot include stars")
+		}
+		// An explicit per-teammate skip deliberately leaves no rating row or
+		// aggregate, so a later 1–5 score remains possible.
+		return &matchmakingv1.RateMatchResponse{}, nil
+	}
 
 	err = s.Ratings.InsertMatchRating(ctx, store.InsertMatchRatingParams{
 		MatchID:        matchID,
