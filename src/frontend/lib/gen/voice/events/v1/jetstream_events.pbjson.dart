@@ -127,6 +127,33 @@ const UserStreamEvent$json = {
       '9': 0,
       '10': 'presenceChange'
     },
+    {
+      '1': 'profile_updated',
+      '3': 21,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.ProfileUpdated',
+      '9': 0,
+      '10': 'profileUpdated'
+    },
+    {
+      '1': 'profile_verified',
+      '3': 22,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.ProfileVerified',
+      '9': 0,
+      '10': 'profileVerified'
+    },
+    {
+      '1': 'game_detected',
+      '3': 23,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.GameDetected',
+      '9': 0,
+      '10': 'gameDetected'
+    },
   ],
   '8': [
     {'1': 'payload'},
@@ -152,7 +179,11 @@ final $typed_data.Uint8List userStreamEventDescriptor = $convert.base64Decode(
     'MiAudm9pY2UuZXZlbnRzLnYxLlByb2ZpbGVTd2l0Y2hlZEgAUg9wcm9maWxlU3dpdGNoZWQSTQ'
     'oQc2V0dGluZ3NfY2hhbmdlZBgTIAEoCzIgLnZvaWNlLmV2ZW50cy52MS5TZXR0aW5nc0NoYW5n'
     'ZWRIAFIPc2V0dGluZ3NDaGFuZ2VkEkoKD3ByZXNlbmNlX2NoYW5nZRgUIAEoCzIfLnZvaWNlLm'
-    'V2ZW50cy52MS5QcmVzZW5jZUNoYW5nZUgAUg5wcmVzZW5jZUNoYW5nZUIJCgdwYXlsb2Fk');
+    'V2ZW50cy52MS5QcmVzZW5jZUNoYW5nZUgAUg5wcmVzZW5jZUNoYW5nZRJKCg9wcm9maWxlX3Vw'
+    'ZGF0ZWQYFSABKAsyHy52b2ljZS5ldmVudHMudjEuUHJvZmlsZVVwZGF0ZWRIAFIOcHJvZmlsZV'
+    'VwZGF0ZWQSTQoQcHJvZmlsZV92ZXJpZmllZBgWIAEoCzIgLnZvaWNlLmV2ZW50cy52MS5Qcm9m'
+    'aWxlVmVyaWZpZWRIAFIPcHJvZmlsZVZlcmlmaWVkEkQKDWdhbWVfZGV0ZWN0ZWQYFyABKAsyHS'
+    '52b2ljZS5ldmVudHMudjEuR2FtZURldGVjdGVkSABSDGdhbWVEZXRlY3RlZEIJCgdwYXlsb2Fk');
 
 @$core.Deprecated('Use userRegisteredDescriptor instead')
 const UserRegistered$json = {
@@ -268,13 +299,16 @@ const ProfileSwitched$json = {
   '2': [
     {'1': 'profile_id', '3': 1, '4': 1, '5': 9, '10': 'profileId'},
     {'1': 'account_id', '3': 2, '4': 1, '5': 9, '10': 'accountId'},
+    {'1': 'old_profile_id', '3': 3, '4': 1, '5': 9, '10': 'oldProfileId'},
+    {'1': 'new_profile_id', '3': 4, '4': 1, '5': 9, '10': 'newProfileId'},
   ],
 };
 
 /// Descriptor for `ProfileSwitched`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List profileSwitchedDescriptor = $convert.base64Decode(
     'Cg9Qcm9maWxlU3dpdGNoZWQSHQoKcHJvZmlsZV9pZBgBIAEoCVIJcHJvZmlsZUlkEh0KCmFjY2'
-    '91bnRfaWQYAiABKAlSCWFjY291bnRJZA==');
+    '91bnRfaWQYAiABKAlSCWFjY291bnRJZBIkCg5vbGRfcHJvZmlsZV9pZBgDIAEoCVIMb2xkUHJv'
+    'ZmlsZUlkEiQKDm5ld19wcm9maWxlX2lkGAQgASgJUgxuZXdQcm9maWxlSWQ=');
 
 @$core.Deprecated('Use settingsChangedDescriptor instead')
 const SettingsChanged$json = {
@@ -282,13 +316,63 @@ const SettingsChanged$json = {
   '2': [
     {'1': 'profile_id', '3': 1, '4': 1, '5': 9, '10': 'profileId'},
     {'1': 'changed_keys_json', '3': 2, '4': 1, '5': 9, '10': 'changedKeysJson'},
+    {'1': 'changed_keys', '3': 3, '4': 3, '5': 9, '10': 'changedKeys'},
   ],
 };
 
 /// Descriptor for `SettingsChanged`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List settingsChangedDescriptor = $convert.base64Decode(
     'Cg9TZXR0aW5nc0NoYW5nZWQSHQoKcHJvZmlsZV9pZBgBIAEoCVIJcHJvZmlsZUlkEioKEWNoYW'
-    '5nZWRfa2V5c19qc29uGAIgASgJUg9jaGFuZ2VkS2V5c0pzb24=');
+    '5nZWRfa2V5c19qc29uGAIgASgJUg9jaGFuZ2VkS2V5c0pzb24SIQoMY2hhbmdlZF9rZXlzGAMg'
+    'AygJUgtjaGFuZ2VkS2V5cw==');
+
+@$core.Deprecated('Use profileUpdatedDescriptor instead')
+const ProfileUpdated$json = {
+  '1': 'ProfileUpdated',
+  '2': [
+    {'1': 'profile_id', '3': 1, '4': 1, '5': 9, '10': 'profileId'},
+    {'1': 'changed_fields', '3': 2, '4': 3, '5': 9, '10': 'changedFields'},
+  ],
+};
+
+/// Descriptor for `ProfileUpdated`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List profileUpdatedDescriptor = $convert.base64Decode(
+    'Cg5Qcm9maWxlVXBkYXRlZBIdCgpwcm9maWxlX2lkGAEgASgJUglwcm9maWxlSWQSJQoOY2hhbm'
+    'dlZF9maWVsZHMYAiADKAlSDWNoYW5nZWRGaWVsZHM=');
+
+@$core.Deprecated('Use profileVerifiedDescriptor instead')
+const ProfileVerified$json = {
+  '1': 'ProfileVerified',
+  '2': [
+    {'1': 'profile_id', '3': 1, '4': 1, '5': 9, '10': 'profileId'},
+    {
+      '1': 'verification_type',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '10': 'verificationType'
+    },
+  ],
+};
+
+/// Descriptor for `ProfileVerified`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List profileVerifiedDescriptor = $convert.base64Decode(
+    'Cg9Qcm9maWxlVmVyaWZpZWQSHQoKcHJvZmlsZV9pZBgBIAEoCVIJcHJvZmlsZUlkEisKEXZlcm'
+    'lmaWNhdGlvbl90eXBlGAIgASgJUhB2ZXJpZmljYXRpb25UeXBl');
+
+@$core.Deprecated('Use gameDetectedDescriptor instead')
+const GameDetected$json = {
+  '1': 'GameDetected',
+  '2': [
+    {'1': 'profile_id', '3': 1, '4': 1, '5': 9, '10': 'profileId'},
+    {'1': 'game_name', '3': 2, '4': 1, '5': 9, '10': 'gameName'},
+  ],
+};
+
+/// Descriptor for `GameDetected`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List gameDetectedDescriptor = $convert.base64Decode(
+    'CgxHYW1lRGV0ZWN0ZWQSHQoKcHJvZmlsZV9pZBgBIAEoCVIJcHJvZmlsZUlkEhsKCWdhbWVfbm'
+    'FtZRgCIAEoCVIIZ2FtZU5hbWU=');
 
 @$core.Deprecated('Use presenceChangeDescriptor instead')
 const PresenceChange$json = {

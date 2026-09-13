@@ -246,9 +246,29 @@ func (s *UserGRPC) UpdateSettings(ctx context.Context, req *userv1.UpdateSetting
 		prefs, _ = s.Profiles.GetNotificationPrefsJSON(ctx, profileID)
 	}
 	if s.Events != nil {
-		_ = s.Events.PublishProfileUpdated(ctx, profileID.String(), accountID.String(), `["settings"]`)
+		changedKeys := settingsChangedKeys(in)
+		if len(changedKeys) > 0 {
+			_ = s.Events.PublishSettingsChanged(ctx, profileID.String(), changedKeys)
+		}
 	}
 	return &userv1.UpdateSettingsResponse{UserSettings: settingsRowToProto(row, prefs)}, nil
+}
+
+func settingsChangedKeys(in *userv1.UserSettings) []string {
+	if in == nil {
+		return nil
+	}
+	changedKeys := make([]string, 0, 3)
+	if strings.TrimSpace(in.GetLanguage()) != "" {
+		changedKeys = append(changedKeys, "language")
+	}
+	if strings.TrimSpace(in.GetTheme()) != "" {
+		changedKeys = append(changedKeys, "theme")
+	}
+	if strings.TrimSpace(in.GetNotificationPrefsJson()) != "" {
+		changedKeys = append(changedKeys, "notification_prefs_json")
+	}
+	return changedKeys
 }
 
 func settingsRowToProto(row *store.ProfileRow, notificationPrefsJSON string) *userv1.UserSettings {

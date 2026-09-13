@@ -62,15 +62,15 @@ func startUserPrivacyTestServer(t *testing.T, pool *store.ProfileStore, privacy 
 type alwaysFriendsGraph struct{}
 
 type receiptRevocationEventsRecorder struct {
-	profileID       string
-	changedKeysJSON string
+	profileID   string
+	changedKeys []string
 }
 
 func (r *receiptRevocationEventsRecorder) PublishProfileCreated(context.Context, string, string) error {
 	return nil
 }
 
-func (r *receiptRevocationEventsRecorder) PublishProfileUpdated(context.Context, string, string, string) error {
+func (r *receiptRevocationEventsRecorder) PublishProfileUpdated(context.Context, string, []string) error {
 	return nil
 }
 
@@ -78,7 +78,7 @@ func (r *receiptRevocationEventsRecorder) PublishProfileSwitched(context.Context
 	return nil
 }
 
-func (r *receiptRevocationEventsRecorder) PublishVerified(context.Context, string, string, string) error {
+func (r *receiptRevocationEventsRecorder) PublishVerified(context.Context, string, string) error {
 	return nil
 }
 
@@ -86,9 +86,13 @@ func (r *receiptRevocationEventsRecorder) PublishPresenceChanged(context.Context
 	return nil
 }
 
-func (r *receiptRevocationEventsRecorder) PublishSettingsChanged(_ context.Context, profileID, changedKeysJSON string) error {
+func (r *receiptRevocationEventsRecorder) PublishSettingsChanged(_ context.Context, profileID string, changedKeys []string) error {
 	r.profileID = profileID
-	r.changedKeysJSON = changedKeysJSON
+	r.changedKeys = changedKeys
+	return nil
+}
+
+func (r *receiptRevocationEventsRecorder) PublishGameDetected(context.Context, string, string) error {
 	return nil
 }
 
@@ -270,7 +274,7 @@ VALUES ($1, $2, 'nofwd', '5555', 'NoFwd', true)`,
 	require.True(t, after.GetPrivacySettings().GetShowLastSeen().GetIncludeGuests(),
 		"an older client omitting show_last_seen must preserve the stored gaming default")
 	require.Equal(t, profileID.String(), events.profileID)
-	require.Equal(t, `[{"key":"show_read_receipts","value":false}]`, events.changedKeysJSON)
+	require.Equal(t, []string{"show_read_receipts"}, events.changedKeys)
 
 	s2sCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderInternalCaller, "messaging")
 	s2s, err := cli.GetPrivacySettings(s2sCtx, &userv1.GetPrivacySettingsRequest{

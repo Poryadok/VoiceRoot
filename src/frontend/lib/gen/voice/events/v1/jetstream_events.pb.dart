@@ -31,6 +31,9 @@ enum UserStreamEvent_Payload {
   profileSwitched,
   settingsChanged,
   presenceChange,
+  profileUpdated,
+  profileVerified,
+  gameDetected,
   notSet
 }
 
@@ -49,6 +52,9 @@ class UserStreamEvent extends $pb.GeneratedMessage {
     ProfileSwitched? profileSwitched,
     SettingsChanged? settingsChanged,
     PresenceChange? presenceChange,
+    ProfileUpdated? profileUpdated,
+    ProfileVerified? profileVerified,
+    GameDetected? gameDetected,
   }) {
     final result = create();
     if (eventId != null) result.eventId = eventId;
@@ -67,6 +73,9 @@ class UserStreamEvent extends $pb.GeneratedMessage {
     if (profileSwitched != null) result.profileSwitched = profileSwitched;
     if (settingsChanged != null) result.settingsChanged = settingsChanged;
     if (presenceChange != null) result.presenceChange = presenceChange;
+    if (profileUpdated != null) result.profileUpdated = profileUpdated;
+    if (profileVerified != null) result.profileVerified = profileVerified;
+    if (gameDetected != null) result.gameDetected = gameDetected;
     return result;
   }
 
@@ -92,6 +101,9 @@ class UserStreamEvent extends $pb.GeneratedMessage {
     18: UserStreamEvent_Payload.profileSwitched,
     19: UserStreamEvent_Payload.settingsChanged,
     20: UserStreamEvent_Payload.presenceChange,
+    21: UserStreamEvent_Payload.profileUpdated,
+    22: UserStreamEvent_Payload.profileVerified,
+    23: UserStreamEvent_Payload.gameDetected,
     0: UserStreamEvent_Payload.notSet
   };
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
@@ -99,7 +111,7 @@ class UserStreamEvent extends $pb.GeneratedMessage {
       package:
           const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
       createEmptyInstance: create)
-    ..oo(0, [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20])
+    ..oo(0, [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23])
     ..aOS(1, _omitFieldNames ? '' : 'eventId')
     ..aOM<$0.Timestamp>(2, _omitFieldNames ? '' : 'occurredAt',
         subBuilder: $0.Timestamp.create)
@@ -125,6 +137,12 @@ class UserStreamEvent extends $pb.GeneratedMessage {
         subBuilder: SettingsChanged.create)
     ..aOM<PresenceChange>(20, _omitFieldNames ? '' : 'presenceChange',
         subBuilder: PresenceChange.create)
+    ..aOM<ProfileUpdated>(21, _omitFieldNames ? '' : 'profileUpdated',
+        subBuilder: ProfileUpdated.create)
+    ..aOM<ProfileVerified>(22, _omitFieldNames ? '' : 'profileVerified',
+        subBuilder: ProfileVerified.create)
+    ..aOM<GameDetected>(23, _omitFieldNames ? '' : 'gameDetected',
+        subBuilder: GameDetected.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -157,6 +175,9 @@ class UserStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(18)
   @$pb.TagNumber(19)
   @$pb.TagNumber(20)
+  @$pb.TagNumber(21)
+  @$pb.TagNumber(22)
+  @$pb.TagNumber(23)
   UserStreamEvent_Payload whichPayload() =>
       _UserStreamEvent_PayloadByTag[$_whichOneof(0)]!;
   @$pb.TagNumber(10)
@@ -170,6 +191,9 @@ class UserStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(18)
   @$pb.TagNumber(19)
   @$pb.TagNumber(20)
+  @$pb.TagNumber(21)
+  @$pb.TagNumber(22)
+  @$pb.TagNumber(23)
   void clearPayload() => $_clearField($_whichOneof(0));
 
   @$pb.TagNumber(1)
@@ -312,6 +336,39 @@ class UserStreamEvent extends $pb.GeneratedMessage {
   void clearPresenceChange() => $_clearField(20);
   @$pb.TagNumber(20)
   PresenceChange ensurePresenceChange() => $_ensure(12);
+
+  @$pb.TagNumber(21)
+  ProfileUpdated get profileUpdated => $_getN(13);
+  @$pb.TagNumber(21)
+  set profileUpdated(ProfileUpdated value) => $_setField(21, value);
+  @$pb.TagNumber(21)
+  $core.bool hasProfileUpdated() => $_has(13);
+  @$pb.TagNumber(21)
+  void clearProfileUpdated() => $_clearField(21);
+  @$pb.TagNumber(21)
+  ProfileUpdated ensureProfileUpdated() => $_ensure(13);
+
+  @$pb.TagNumber(22)
+  ProfileVerified get profileVerified => $_getN(14);
+  @$pb.TagNumber(22)
+  set profileVerified(ProfileVerified value) => $_setField(22, value);
+  @$pb.TagNumber(22)
+  $core.bool hasProfileVerified() => $_has(14);
+  @$pb.TagNumber(22)
+  void clearProfileVerified() => $_clearField(22);
+  @$pb.TagNumber(22)
+  ProfileVerified ensureProfileVerified() => $_ensure(14);
+
+  @$pb.TagNumber(23)
+  GameDetected get gameDetected => $_getN(15);
+  @$pb.TagNumber(23)
+  set gameDetected(GameDetected value) => $_setField(23, value);
+  @$pb.TagNumber(23)
+  $core.bool hasGameDetected() => $_has(15);
+  @$pb.TagNumber(23)
+  void clearGameDetected() => $_clearField(23);
+  @$pb.TagNumber(23)
+  GameDetected ensureGameDetected() => $_ensure(15);
 }
 
 class UserRegistered extends $pb.GeneratedMessage {
@@ -830,10 +887,14 @@ class ProfileSwitched extends $pb.GeneratedMessage {
   factory ProfileSwitched({
     $core.String? profileId,
     $core.String? accountId,
+    $core.String? oldProfileId,
+    $core.String? newProfileId,
   }) {
     final result = create();
     if (profileId != null) result.profileId = profileId;
     if (accountId != null) result.accountId = accountId;
+    if (oldProfileId != null) result.oldProfileId = oldProfileId;
+    if (newProfileId != null) result.newProfileId = newProfileId;
     return result;
   }
 
@@ -853,6 +914,8 @@ class ProfileSwitched extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'profileId')
     ..aOS(2, _omitFieldNames ? '' : 'accountId')
+    ..aOS(3, _omitFieldNames ? '' : 'oldProfileId')
+    ..aOS(4, _omitFieldNames ? '' : 'newProfileId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -874,6 +937,7 @@ class ProfileSwitched extends $pb.GeneratedMessage {
       $pb.GeneratedMessage.$_defaultFor<ProfileSwitched>(create);
   static ProfileSwitched? _defaultInstance;
 
+  /// Legacy active profile field; equal to new_profile_id.
   @$pb.TagNumber(1)
   $core.String get profileId => $_getSZ(0);
   @$pb.TagNumber(1)
@@ -891,16 +955,36 @@ class ProfileSwitched extends $pb.GeneratedMessage {
   $core.bool hasAccountId() => $_has(1);
   @$pb.TagNumber(2)
   void clearAccountId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get oldProfileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set oldProfileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasOldProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearOldProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get newProfileId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set newProfileId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasNewProfileId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearNewProfileId() => $_clearField(4);
 }
 
 class SettingsChanged extends $pb.GeneratedMessage {
   factory SettingsChanged({
     $core.String? profileId,
     $core.String? changedKeysJson,
+    $core.Iterable<$core.String>? changedKeys,
   }) {
     final result = create();
     if (profileId != null) result.profileId = profileId;
     if (changedKeysJson != null) result.changedKeysJson = changedKeysJson;
+    if (changedKeys != null) result.changedKeys.addAll(changedKeys);
     return result;
   }
 
@@ -920,6 +1004,7 @@ class SettingsChanged extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'profileId')
     ..aOS(2, _omitFieldNames ? '' : 'changedKeysJson')
+    ..pPS(3, _omitFieldNames ? '' : 'changedKeys')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -950,6 +1035,7 @@ class SettingsChanged extends $pb.GeneratedMessage {
   @$pb.TagNumber(1)
   void clearProfileId() => $_clearField(1);
 
+  /// Deprecated JSON representation retained for existing consumers.
   @$pb.TagNumber(2)
   $core.String get changedKeysJson => $_getSZ(1);
   @$pb.TagNumber(2)
@@ -958,6 +1044,204 @@ class SettingsChanged extends $pb.GeneratedMessage {
   $core.bool hasChangedKeysJson() => $_has(1);
   @$pb.TagNumber(2)
   void clearChangedKeysJson() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $pb.PbList<$core.String> get changedKeys => $_getList(2);
+}
+
+class ProfileUpdated extends $pb.GeneratedMessage {
+  factory ProfileUpdated({
+    $core.String? profileId,
+    $core.Iterable<$core.String>? changedFields,
+  }) {
+    final result = create();
+    if (profileId != null) result.profileId = profileId;
+    if (changedFields != null) result.changedFields.addAll(changedFields);
+    return result;
+  }
+
+  ProfileUpdated._();
+
+  factory ProfileUpdated.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ProfileUpdated.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ProfileUpdated',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'profileId')
+    ..pPS(2, _omitFieldNames ? '' : 'changedFields')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ProfileUpdated clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ProfileUpdated copyWith(void Function(ProfileUpdated) updates) =>
+      super.copyWith((message) => updates(message as ProfileUpdated))
+          as ProfileUpdated;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ProfileUpdated create() => ProfileUpdated._();
+  @$core.override
+  ProfileUpdated createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ProfileUpdated getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ProfileUpdated>(create);
+  static ProfileUpdated? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get profileId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set profileId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProfileId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProfileId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $pb.PbList<$core.String> get changedFields => $_getList(1);
+}
+
+class ProfileVerified extends $pb.GeneratedMessage {
+  factory ProfileVerified({
+    $core.String? profileId,
+    $core.String? verificationType,
+  }) {
+    final result = create();
+    if (profileId != null) result.profileId = profileId;
+    if (verificationType != null) result.verificationType = verificationType;
+    return result;
+  }
+
+  ProfileVerified._();
+
+  factory ProfileVerified.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ProfileVerified.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ProfileVerified',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'profileId')
+    ..aOS(2, _omitFieldNames ? '' : 'verificationType')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ProfileVerified clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ProfileVerified copyWith(void Function(ProfileVerified) updates) =>
+      super.copyWith((message) => updates(message as ProfileVerified))
+          as ProfileVerified;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ProfileVerified create() => ProfileVerified._();
+  @$core.override
+  ProfileVerified createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ProfileVerified getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ProfileVerified>(create);
+  static ProfileVerified? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get profileId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set profileId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProfileId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProfileId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get verificationType => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set verificationType($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasVerificationType() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearVerificationType() => $_clearField(2);
+}
+
+class GameDetected extends $pb.GeneratedMessage {
+  factory GameDetected({
+    $core.String? profileId,
+    $core.String? gameName,
+  }) {
+    final result = create();
+    if (profileId != null) result.profileId = profileId;
+    if (gameName != null) result.gameName = gameName;
+    return result;
+  }
+
+  GameDetected._();
+
+  factory GameDetected.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GameDetected.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GameDetected',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'profileId')
+    ..aOS(2, _omitFieldNames ? '' : 'gameName')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GameDetected clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GameDetected copyWith(void Function(GameDetected) updates) =>
+      super.copyWith((message) => updates(message as GameDetected))
+          as GameDetected;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GameDetected create() => GameDetected._();
+  @$core.override
+  GameDetected createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GameDetected getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GameDetected>(create);
+  static GameDetected? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get profileId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set profileId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProfileId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProfileId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get gameName => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set gameName($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasGameName() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearGameName() => $_clearField(2);
 }
 
 class PresenceChange extends $pb.GeneratedMessage {

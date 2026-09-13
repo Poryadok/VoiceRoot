@@ -83,6 +83,29 @@ func TestPresenceTransitionForSnapshot_PublishesOnlyCanonicalEnumTransitions(t *
 	}
 }
 
+func TestShouldPublishGameDetected(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		previous *store.PresenceSnapshot
+		gameName string
+		want     bool
+	}{
+		{name: "first non-empty title", previous: &store.PresenceSnapshot{}, gameName: "Dota 2", want: true},
+		{name: "new title", previous: &store.PresenceSnapshot{Live: true, GameTitle: "Dota 2"}, gameName: "Counter-Strike 2", want: true},
+		{name: "same title", previous: &store.PresenceSnapshot{Live: true, GameTitle: "Dota 2"}, gameName: "Dota 2", want: false},
+		{name: "clear title", previous: &store.PresenceSnapshot{Live: true, GameTitle: "Dota 2"}, gameName: "", want: false},
+		{name: "whitespace title", previous: &store.PresenceSnapshot{Live: true}, gameName: "  ", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, shouldPublishGameDetected(tt.previous, tt.gameName))
+		})
+	}
+}
+
 func TestPresenceChangeProto_DeltaFieldsRoundTripWithLegacyCurrentStatus(t *testing.T) {
 	want := &eventsv1.PresenceChange{
 		ProfileId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
