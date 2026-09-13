@@ -30,7 +30,7 @@ func applyThreadMessagingMigrations(t *testing.T, ctx context.Context, pool *pgx
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000012_messages_content_type.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000007_thread_index.up.sql"))
-	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000015_thread_list_snapshot_index.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000016_thread_list_snapshot_index.up.sql"))
 }
 
 func setChatThreadSettings(t *testing.T, ctx context.Context, pool *pgxpool.Pool, chatID uuid.UUID, threadsEnabled, allowUserMainFeed bool) {

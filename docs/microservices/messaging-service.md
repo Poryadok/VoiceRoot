@@ -19,7 +19,7 @@ CRUD сообщений для всех типов чатов (DM, тексто�
 - Read receipts (последнее прочитанное сообщение на пользователя на чат)
 - Вложения (ссылки на File Service): photo, video, document, voice, video_note, music, article, location — см. [text-chat.md](../features/text-chat.md) § Attach menu
 - Stickers / GIF — `content_type=STICKER|GIF` + File `file_id`; composer **😊 panel only** (не 📎 attach) — § Stickers and GIF
-- Send options: `send_silent` is shipped in `SendMessageRequest`, durable `messages` storage and `message.sent`; composer and Notification consumption remain open. `scheduled_at` and `send_when_online` remain contract-only — см. [todo/backend.md](../todo/backend.md)
+- Send options: `send_silent` is shipped in `SendMessageRequest`, durable `messages` storage, `message.sent` and Notification push consumption; composer remains open. P-008 ships schedule wire fields, `scheduled_messages` storage and a fail-closed send gate; handlers, worker, producer usage and UI remain open — см. [todo/backend.md](../todo/backend.md)
 - Лимит 4000 символов
 - Догрузка истории после offline / reconnect: сначала глобальная сверка inbox через Chat `ListChats`, затем **per `chat_id`** через `GetMessages` с курсором (`after_message_id` / `last_message_id`) для выбранного чата; правила fallback — [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md). Не путать с полем **`s`** в WebSocket Gateway (Realtime) — это нумерация live-событий, не курсор БД
 
@@ -60,8 +60,11 @@ service MessagingService {
   rpc UploadPreKeyBundle(UploadPreKeyBundleRequest) returns (UploadPreKeyBundleResponse);
   rpc GetPreKeyBundle(GetPreKeyBundleRequest) returns (GetPreKeyBundleResponse);
 
-  // Scheduled messages — contract only; not yet in proto
-  // rpc ListScheduledMessages / UpdateScheduledMessage / CancelScheduledMessage / SendScheduledMessageNow
+  // Scheduled message wire contract. Handler implementations remain open.
+  rpc ListScheduledMessages(ListScheduledMessagesRequest) returns (ListScheduledMessagesResponse);
+  rpc UpdateScheduledMessage(UpdateScheduledMessageRequest) returns (UpdateScheduledMessageResponse);
+  rpc CancelScheduledMessage(CancelScheduledMessageRequest) returns (CancelScheduledMessageResponse);
+  rpc SendScheduledMessageNow(SendScheduledMessageNowRequest) returns (SendScheduledMessageNowResponse);
 }
 ```
 
@@ -78,13 +81,13 @@ service MessagingService {
 | `GetChatListMetadata` | ✓ | per-member unread + preview/content metadata; DM-only delivery ticks; non-members → `PERMISSION_DENIED` |
 | `ListSharedMedia` | ✓ | shared media tabs in chat info |
 | `DeleteMessage` (`DeleteScope.FOR_ME` / `FOR_EVERYONE`) | ✓ | `FOR_ME` soft-hides for caller only |
-| `SendMessage.send_silent` | ✓ | durable `messages.send_silent` and `message.sent.send_silent`; composer and Notification consumption remain open |
-| `SendMessage` schedule options (`scheduled_at`, `send_when_online`) | ✗ | spec below; not in proto |
-| `UpdateScheduledMessage` | ✗ | spec below |
+| `SendMessage.send_silent` | ✓ | durable `messages.send_silent`, `message.sent.send_silent` and Notification push consumption; composer remains open |
+| `SendMessage` schedule options (`scheduled_at`, `send_when_online`) | partial | wire contract is present but populated options fail closed until the handler slice |
+| Scheduled RPCs | ✗ | declarations are shipped; handlers remain open |
 
 ### `SendMessageRequest` (spec)
 
-`send_silent` is in the current proto and producer path. Remaining fields are planned (**not yet in proto/code** — [todo/backend.md](../todo/backend.md)):
+`send_silent` and `delivery_schedule` are in the current proto. `content_payload` remains a future typed-content extension:
 
 | Поле | Тип | Семантика |
 |------|-----|-----------|
@@ -137,7 +140,7 @@ enum MessageContentType {
 
 ### Scheduled messages (lifecycle)
 
-Контракт ниже — минимальный lifecycle C-002 для будущего proto/code; он не означает, что RPC или таблица уже существуют.
+P-008 ships the additive wire contract and durable table foundation below. Populated schedule arms fail closed until lifecycle handlers and the worker own validation and dispatch.
 
 **Request/response union.** После PR #310 `SendMessageRequest` сохраняет его `send_silent = 11` и добавляет optional `oneof delivery_schedule`: `scheduled_at = 12` или literal `send_when_online = 13`; отсутствие oneof означает immediate send. `scheduled_at` принимает только UTC instant строго позже server `now()` и не дальше **365 дней** от него. `send_when_online` допустим только в DM и ждёт именно live `ONLINE` получателя. Ответ использует два additive поля, но семантически является union:
 
@@ -150,7 +153,7 @@ message SendMessageResponse {
 
 Семантически сервер заполняет ровно одно из двух полей; schedule create никогда не маскируется под уже сохранённый `Message`, а один idempotent retry возвращает исходный вариант union. Невалидный oneof, `send_when_online=false`, non-DM online delivery, instant не в будущем или горизонт более 365 дней возвращают `INVALID_ARGUMENT`.
 
-**Storage:** таблица `scheduled_messages` в `messaging_db` (**not yet in proto/code**):
+**Storage:** таблица `scheduled_messages` в `messaging_db` is shipped as foundation migration `000015`; lifecycle handlers and worker remain open:
 
 ```
 scheduled_messages
@@ -182,7 +185,7 @@ scheduled_messages
 
 Composer UX — [text-chat.md](../features/text-chat.md) § Send options; strip — [screen-controls.md](../design/screen-controls.md) §3.6 #13–17. Cross-service summary — [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) § Push-уведомления (send options).
 
-### Scheduled RPC shape (spec — not yet in proto)
+### Scheduled RPC shape (wire contract shipped; handlers open)
 
 ```protobuf
 rpc UpdateScheduledMessage(UpdateScheduledMessageRequest) returns (UpdateScheduledMessageResponse);
@@ -192,12 +195,11 @@ rpc SendScheduledMessageNow(SendScheduledMessageNowRequest) returns (SendSchedul
 
 message UpdateScheduledMessageRequest {
   string scheduled_message_id = 1;
-  // Fields mirror SendMessage payload; only applied while status=pending.
-  optional string content = 2;
-  optional google.protobuf.Struct content_payload = 3;
+  // Complete replacement payload; only applied while status=pending.
+  optional ScheduledMessagePayload payload = 2;
   oneof delivery_schedule {
-    google.protobuf.Timestamp scheduled_at = 4;
-    bool send_when_online = 5;
+    google.protobuf.Timestamp scheduled_at = 3;
+    bool send_when_online = 4;
   }
 }
 ```
@@ -370,11 +372,11 @@ read_receipts
 
 ### Shipped implementation notes (2026-08-28)
 
-**Migrations shipped:** `messages`, `read_receipts`, `reactions`, `pins`, `thread_parent_id`, `forward_*`, `ghost_only` (platform shadow-ban column — **DB only**, not yet on `SendMessageRequest` proto), E2E columns, `send_silent`, and the partial visible-reply index used by `ListThreads` snapshots.
+**Migrations shipped:** `messages`, `read_receipts`, `reactions`, `pins`, `thread_parent_id`, `forward_*`, `ghost_only` (platform shadow-ban column — **DB only**, not yet on `SendMessageRequest` proto), E2E columns, `send_silent`, `scheduled_messages` foundation, and the partial visible-reply index used by `ListThreads` snapshots.
 
 **Handlers shipped beyond basic message CRUD:** threads (`GetThreadMessages`, `ListThreads`), reactions, pins (limit **5**/chat), per-member `MarkRead`/`GetReadState`/`GetBulkReadState` for DM/group/channel, `GetChatListMetadata` with per-member unread/preview metadata and non-member denial, `ListSharedMedia`, `DeleteMessage` with `DeleteScope.FOR_ME`, idempotent `client_message_id` and durable `send_silent` producer propagation on `SendMessage`, E2E pre-key RPCs. `ListThreads` checks membership before cursor decoding; it omits roots or replies hidden for that profile, orders by `(last_reply_at DESC, thread_parent_id DESC)`, uses N+1 lookahead and an HMAC snapshot bound to chat, profile and effective page size. Production requires `MESSAGING_THREAD_CURSOR_HMAC_SECRET`; `MESSAGING_THREAD_CURSOR_TTL` defaults to `15m` and must be positive.
 
-**Gaps vs full spec:** composer and Notification consumption for `send_silent`, schedule, typed `content_type`, `message_attachments` table, `RecordMessageView`, `UpdateScheduledMessage` — см. § ниже и [todo/backend.md](../todo/backend.md).
+**Gaps vs full spec:** composer for `send_silent`; scheduled handlers, worker and event producer usage; typed `content_type`, `message_attachments` table and `RecordMessageView` — см. § ниже и [todo/backend.md](../todo/backend.md).
 
 **Attachment validation (code):** `validateAttachments` today requires `file_id` on each attachment — blocks normative `location` / `article` payloads without File row until validation branches on `content_type` (**code backlog**, R3-A06).
 
@@ -548,7 +550,7 @@ messages (deployed — simplified)
 | `message.unpinned`       | message_id, chat_id, unpinned_by             |
 | `message.forwarded`      | message_id, source_chat_id, target_chat_id   |
 
-**`message.sent` notes:** `send_silent` drives Notification push policy and is shipped by PR #310 as `MessageSent.send_silent = 8`; the scheduling slice does not renumber or duplicate it. It adds only `was_scheduled = 9` and `optional scheduled_at = 10`, which describe original schedule intent for audit and client strip cleanup. A pending create, idempotent replay, update, cancel or terminal failure emits no `message.sent`; a successfully dispatched scheduled row emits exactly one normal `message.sent`. `content_type` and `send_silent` are already in the JetStream proto and Messaging producer; schedule metadata remains unimplemented.
+**`message.sent` notes:** `send_silent` drives Notification push policy and is shipped by PR #310 as `MessageSent.send_silent = 8`; the scheduling slice does not renumber or duplicate it. It adds `was_scheduled = 9` and `optional scheduled_at = 10`, which remain unset by the immediate producer until the schedule dispatch slice owns them. A pending create, idempotent replay, update, cancel or terminal failure must emit no `message.sent`; a successfully dispatched scheduled row must emit exactly one normal `message.sent` when that worker is implemented.
 
 **`message.read`:** публикуется при `MarkRead`; Realtime fan-out как WS `message_read`. **Code-ok**.
 
