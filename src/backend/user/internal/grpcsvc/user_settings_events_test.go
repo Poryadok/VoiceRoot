@@ -56,5 +56,5 @@ func TestPublishSettingsChanges_PreservesLegacyProfileUpdate(t *testing.T) {
 	publishSettingsChanges(context.Background(), recorder, "profile-1", []string{"language", "theme"})
 	require.Equal(t, []string{"settings"}, recorder.profileUpdated)
 	require.Equal(t, []string{"language", "theme"}, recorder.settingsKeys)
-	require.Empty(t, recorder.settingsJSON)
+	require.Equal(t, `["language","theme"]`, recorder.settingsJSON)
 }

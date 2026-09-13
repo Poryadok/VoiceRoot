@@ -2,6 +2,7 @@ package grpcsvc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 
@@ -255,8 +256,9 @@ func publishSettingsChanges(ctx context.Context, events UserEventsPublisher, pro
 	if events == nil || len(changedKeys) == 0 {
 		return
 	}
+	changedKeysJSON, _ := json.Marshal(changedKeys)
 	_ = events.PublishProfileUpdated(ctx, profileID, []string{"settings"})
-	_ = events.PublishSettingsChanged(ctx, profileID, changedKeys, "")
+	_ = events.PublishSettingsChanged(ctx, profileID, changedKeys, string(changedKeysJSON))
 }
 
 func settingsChangedKeys(in *userv1.UserSettings) []string {
