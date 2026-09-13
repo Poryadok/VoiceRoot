@@ -810,6 +810,7 @@ const MentionAdded$json = {
       '5': 9,
       '10': 'mentionedProfileIds'
     },
+    {'1': 'send_silent', '3': 5, '4': 1, '5': 8, '10': 'sendSilent'},
   ],
 };
 
@@ -817,8 +818,8 @@ const MentionAdded$json = {
 final $typed_data.Uint8List mentionAddedDescriptor = $convert.base64Decode(
     'CgxNZW50aW9uQWRkZWQSHQoKbWVzc2FnZV9pZBgBIAEoCVIJbWVzc2FnZUlkEhcKB2NoYXRfaW'
     'QYAiABKAlSBmNoYXRJZBIqChFzZW5kZXJfcHJvZmlsZV9pZBgDIAEoCVIPc2VuZGVyUHJvZmls'
-    'ZUlkEjIKFW1lbnRpb25lZF9wcm9maWxlX2lkcxgEIAMoCVITbWVudGlvbmVkUHJvZmlsZUlkcw'
-    '==');
+    'ZUlkEjIKFW1lbnRpb25lZF9wcm9maWxlX2lkcxgEIAMoCVITbWVudGlvbmVkUHJvZmlsZUlkcx'
+    'IfCgtzZW5kX3NpbGVudBgFIAEoCFIKc2VuZFNpbGVudA==');
 
 @$core.Deprecated('Use messageEditedDescriptor instead')
 const MessageEdited$json = {

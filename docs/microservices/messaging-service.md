@@ -540,7 +540,7 @@ messages (deployed — simplified)
 | `message.sent`           | message_id, chat_id, sender_id, has_mentions, **content_type**, **send_silent**, **was_scheduled** (bool), **scheduled_at** (nullable — original intent time) |
 | `message.read`           | chat_id, profile_id, last_read_message_id    |
 | `message.delivery_ack`   | chat_id, profile_id, message_id (persist delivery cursor; publisher: Realtime on client `delivery_ack`) |
-| `message.mention_added`  | message_id, chat_id, **sender_profile_id**, mentioned_profile_ids |
+| `message.mention_added`  | message_id, chat_id, **sender_profile_id**, mentioned_profile_ids, **send_silent** |
 | `message.edited`         | message_id, chat_id                          |
 | `message.deleted`        | message_id, chat_id                          |
 | `message.reaction_added` | message_id, profile_id, emoji                |
