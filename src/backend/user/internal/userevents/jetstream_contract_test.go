@@ -70,11 +70,12 @@ func TestJetStreamPublisher_UserContractPayloads(t *testing.T) {
 			name:    "settings changed",
 			subject: subjectSettingsChanged,
 			publish: func() error {
-				return pub.PublishSettingsChanged(context.Background(), "profile-4", []string{"language", "theme"})
+				return pub.PublishSettingsChanged(context.Background(), "profile-4", []string{"show_read_receipts"}, `[{"key":"show_read_receipts","value":false}]`)
 			},
 			assert: func(env *eventsv1.UserStreamEvent) {
 				require.Equal(t, "profile-4", env.GetSettingsChanged().GetProfileId())
-				require.Equal(t, []string{"language", "theme"}, env.GetSettingsChanged().GetChangedKeys())
+				require.Equal(t, []string{"show_read_receipts"}, env.GetSettingsChanged().GetChangedKeys())
+				require.Equal(t, `[{"key":"show_read_receipts","value":false}]`, env.GetSettingsChanged().GetChangedKeysJson())
 			},
 		},
 	}

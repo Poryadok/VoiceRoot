@@ -46,6 +46,6 @@ func (r *profilesVerificationEventsRecorder) PublishGameDetected(_ context.Conte
 	return nil
 }
 
-func (r *profilesVerificationEventsRecorder) PublishSettingsChanged(_ context.Context, _ string, _ []string) error {
+func (r *profilesVerificationEventsRecorder) PublishSettingsChanged(_ context.Context, _ string, _ []string, _ string) error {
 	return nil
 }

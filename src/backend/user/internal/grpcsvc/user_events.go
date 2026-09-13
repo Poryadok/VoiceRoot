@@ -10,5 +10,5 @@ type UserEventsPublisher interface {
 	PublishVerified(ctx context.Context, profileID, verificationType string) error
 	PublishPresenceChanged(ctx context.Context, profileID, oldStatus, newStatus string) error
 	PublishGameDetected(ctx context.Context, profileID, gameName string) error
-	PublishSettingsChanged(ctx context.Context, profileID string, changedKeys []string) error
+	PublishSettingsChanged(ctx context.Context, profileID string, changedKeys []string, changedKeysJSON string) error
 }

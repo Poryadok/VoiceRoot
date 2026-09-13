@@ -231,10 +231,14 @@ func (p *JetStreamPublisher) PublishGameDetected(ctx context.Context, profileID,
 }
 
 // PublishSettingsChanged emits user.settings_changed after a committed settings update.
-func (p *JetStreamPublisher) PublishSettingsChanged(ctx context.Context, profileID string, changedKeys []string) error {
+func (p *JetStreamPublisher) PublishSettingsChanged(ctx context.Context, profileID string, changedKeys []string, changedKeysJSON string) error {
 	env := &eventsv1.UserStreamEvent{
 		EventId: uuid.NewString(), OccurredAt: timestamppb.New(time.Now().UTC()),
-		Payload: &eventsv1.UserStreamEvent_SettingsChanged{SettingsChanged: &eventsv1.SettingsChanged{ProfileId: profileID, ChangedKeys: changedKeys}},
+		Payload: &eventsv1.UserStreamEvent_SettingsChanged{SettingsChanged: &eventsv1.SettingsChanged{
+			ProfileId:       profileID,
+			ChangedKeys:     changedKeys,
+			ChangedKeysJson: changedKeysJSON,
+		}},
 	}
 	return p.publishProto(ctx, subjectSettingsChanged, env)
 }
