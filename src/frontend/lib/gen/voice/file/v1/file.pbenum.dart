@@ -123,6 +123,29 @@ class FileScanOutcome extends $pb.ProtobufEnum {
   const FileScanOutcome._(super.value, super.name);
 }
 
+/// Selects the stored representation for a presigned file URL.
+class FileURLVariant extends $pb.ProtobufEnum {
+  /// Backward-compatible default: converted representation when present, otherwise r2_key.
+  static const FileURLVariant FILE_URL_VARIANT_UNSPECIFIED =
+      FileURLVariant._(0, _omitEnumNames ? '' : 'FILE_URL_VARIANT_UNSPECIFIED');
+
+  /// Thumbnail representation. The request fails when thumbnail_r2_key is unavailable.
+  static const FileURLVariant FILE_URL_VARIANT_THUMBNAIL =
+      FileURLVariant._(1, _omitEnumNames ? '' : 'FILE_URL_VARIANT_THUMBNAIL');
+
+  static const $core.List<FileURLVariant> values = <FileURLVariant>[
+    FILE_URL_VARIANT_UNSPECIFIED,
+    FILE_URL_VARIANT_THUMBNAIL,
+  ];
+
+  static final $core.List<FileURLVariant?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 1);
+  static FileURLVariant? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const FileURLVariant._(super.value, super.name);
+}
+
 class FileReferenceOwnerType extends $pb.ProtobufEnum {
   static const FileReferenceOwnerType FILE_REFERENCE_OWNER_TYPE_UNSPECIFIED =
       FileReferenceOwnerType._(
