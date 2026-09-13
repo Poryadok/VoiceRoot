@@ -194,3 +194,48 @@ func TestListChatOverrides_ReturnsRows(t *testing.T) {
 	require.Len(t, rows, 1)
 	require.Equal(t, sendMask, rows[0].Deny)
 }
+
+// TestGetEffectiveMask_DualScopeOverridesApplyIndependently covers a combined
+// chat and voice-room decision: each scope changes only its own permission bits,
+// and deny wins when a scope carries both allow and deny for the same bit.
+func TestGetEffectiveMask_DualScopeOverridesApplyIndependently(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := StartRoleDBForStoreTest(t, ctx)
+	ApplyRoleMigrationsForStoreTest(t, ctx, pool)
+	s := &RoleStore{Pool: pool}
+
+	spaceID := uuid.New()
+	profileID := uuid.New()
+	chatID := uuid.New()
+	voiceRoomID := uuid.New()
+	require.NoError(t, s.BootstrapSystemRoles(ctx, spaceID))
+
+	memberRoleID, err := s.RoleIDByName(ctx, spaceID, permissions.RoleMember)
+	require.NoError(t, err)
+	require.NoError(t, s.AssignMemberRole(ctx, spaceID, profileID, memberRoleID, profileID))
+
+	sendMessages, err := permissions.MaskFor(permissions.TextChatSendMessages)
+	require.NoError(t, err)
+	manageMessages, err := permissions.MaskFor(permissions.TextChatManageMessages)
+	require.NoError(t, err)
+	voiceJoin, err := permissions.MaskFor(permissions.VoiceJoin)
+	require.NoError(t, err)
+	voiceSpeak, err := permissions.MaskFor(permissions.VoiceSpeak)
+	require.NoError(t, err)
+	voiceMuteOthers, err := permissions.MaskFor(permissions.VoiceMuteOthers)
+	require.NoError(t, err)
+
+	require.NoError(t, s.SetChatOverride(ctx, chatID, memberRoleID, manageMessages, sendMessages))
+	require.NoError(t, s.SetVoiceRoomOverride(ctx, voiceRoomID, memberRoleID, voiceSpeak|voiceMuteOthers, voiceSpeak))
+
+	mask, err := s.GetEffectiveMask(ctx, spaceID, profileID, &chatID, &voiceRoomID)
+	require.NoError(t, err)
+	require.Zero(t, mask&sendMessages, "chat deny must stay denied in a dual-scope decision")
+	require.NotZero(t, mask&manageMessages, "chat allow must not leak away after voice processing")
+	require.NotZero(t, mask&voiceJoin, "chat override must not affect a distinct voice permission")
+	require.Zero(t, mask&voiceSpeak, "voice deny must beat its allow in the same override")
+	require.NotZero(t, mask&voiceMuteOthers, "voice allow must apply without changing chat bits")
+}
