@@ -80,15 +80,16 @@ func TestStartArchivePurgeWorker_runsOnceOnStartup(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	dbCtx := context.Background()
+	workerCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	pool := integrationtest.StartPostgres(t, ctx, "storystartuppurge", "")
-	_, err := pool.Exec(ctx, migrationSQL(t))
+	pool := integrationtest.StartPostgres(t, dbCtx, "storystartuppurge", "")
+	_, err := pool.Exec(dbCtx, migrationSQL(t))
 	require.NoError(t, err)
 	st := &store.StoryStore{Pool: pool}
 	mediaID := uuid.New()
 	storyID := uuid.New()
-	_, err = pool.Exec(ctx, `
+	_, err = pool.Exec(dbCtx, `
 INSERT INTO stories (
   id, author_profile_id, type, media_file_id, mention_profile_ids,
   visibility, expires_at, archived_until, created_at, expired_at
@@ -97,16 +98,16 @@ INSERT INTO stories (
 	require.NoError(t, err)
 
 	deleter := &recordingFileDeleter{}
-	jobs.StartArchivePurgeWorker(ctx, st, deleter, nil)
+	jobs.StartArchivePurgeWorker(workerCtx, st, deleter, nil)
 
 	require.Eventually(t, func() bool {
 		var exists bool
-		err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM stories WHERE id = $1)`, storyID).Scan(&exists)
+		err := pool.QueryRow(dbCtx, `SELECT EXISTS(SELECT 1 FROM stories WHERE id = $1)`, storyID).Scan(&exists)
 		return err == nil && !exists
 	}, 5*time.Second, 25*time.Millisecond, "startup must not wait for the daily ticker")
 	require.Equal(t, []string{mediaID.String()}, deleter.deletedIDs())
 
-	_, err = jobs.RunArchivePurgeOnce(ctx, st, deleter, time.Now().UTC())
+	_, err = jobs.RunArchivePurgeOnce(dbCtx, st, deleter, time.Now().UTC())
 	require.NoError(t, err)
 	require.Equal(t, []string{mediaID.String()}, deleter.deletedIDs(), "a later run is idempotent after startup cleanup")
 }
