@@ -477,7 +477,7 @@ func TestMessagingForwardMessage_invalidAttachmentStopsBeforePrivacyOrWrite(t *t
 	svc.Privacy = privacySpy
 	svc.MessageEvents = events
 
-	source, err := svc.SendMessage(withProfileCtx(ctx, account, author), &messagingv1.SendMessageRequest{
+	source, err := svc.SendMessage(profileCtx(account, author), &messagingv1.SendMessageRequest{
 		Chat: chatDMRef(sourceChat), Content: "stored source", AttachmentsJson: "[]", MentionsJson: "[]",
 	})
 	require.NoError(t, err)
@@ -490,7 +490,7 @@ func TestMessagingForwardMessage_invalidAttachmentStopsBeforePrivacyOrWrite(t *t
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM messages`).Scan(&messagesBefore))
 
 	commentary := "must not be inserted"
-	_, err = svc.ForwardMessage(withProfileCtx(ctx, account, forwarder), &messagingv1.ForwardMessageRequest{
+	_, err = svc.ForwardMessage(profileCtx(account, forwarder), &messagingv1.ForwardMessageRequest{
 		SourceMessageId: source.GetMessage().GetId(),
 		TargetChat:      chatDMRef(targetChat),
 		Commentary:      &commentary,
