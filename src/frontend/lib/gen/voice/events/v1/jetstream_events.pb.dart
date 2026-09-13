@@ -8089,6 +8089,7 @@ enum MatchmakingStreamEvent_Payload {
   searchCancelled,
   matchCompleted,
   searchNudge,
+  playerBanned,
   notSet
 }
 
@@ -8103,6 +8104,7 @@ class MatchmakingStreamEvent extends $pb.GeneratedMessage {
     SearchCancelled? searchCancelled,
     MatchCompleted? matchCompleted,
     SearchNudge? searchNudge,
+    PlayerBanned? playerBanned,
   }) {
     final result = create();
     if (eventId != null) result.eventId = eventId;
@@ -8114,6 +8116,7 @@ class MatchmakingStreamEvent extends $pb.GeneratedMessage {
     if (searchCancelled != null) result.searchCancelled = searchCancelled;
     if (matchCompleted != null) result.matchCompleted = matchCompleted;
     if (searchNudge != null) result.searchNudge = searchNudge;
+    if (playerBanned != null) result.playerBanned = playerBanned;
     return result;
   }
 
@@ -8135,6 +8138,7 @@ class MatchmakingStreamEvent extends $pb.GeneratedMessage {
     14: MatchmakingStreamEvent_Payload.searchCancelled,
     15: MatchmakingStreamEvent_Payload.matchCompleted,
     16: MatchmakingStreamEvent_Payload.searchNudge,
+    17: MatchmakingStreamEvent_Payload.playerBanned,
     0: MatchmakingStreamEvent_Payload.notSet
   };
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
@@ -8142,7 +8146,7 @@ class MatchmakingStreamEvent extends $pb.GeneratedMessage {
       package:
           const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
       createEmptyInstance: create)
-    ..oo(0, [10, 11, 12, 13, 14, 15, 16])
+    ..oo(0, [10, 11, 12, 13, 14, 15, 16, 17])
     ..aOS(1, _omitFieldNames ? '' : 'eventId')
     ..aOM<$0.Timestamp>(2, _omitFieldNames ? '' : 'occurredAt',
         subBuilder: $0.Timestamp.create)
@@ -8160,6 +8164,8 @@ class MatchmakingStreamEvent extends $pb.GeneratedMessage {
         subBuilder: MatchCompleted.create)
     ..aOM<SearchNudge>(16, _omitFieldNames ? '' : 'searchNudge',
         subBuilder: SearchNudge.create)
+    ..aOM<PlayerBanned>(17, _omitFieldNames ? '' : 'playerBanned',
+        subBuilder: PlayerBanned.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -8189,6 +8195,7 @@ class MatchmakingStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(14)
   @$pb.TagNumber(15)
   @$pb.TagNumber(16)
+  @$pb.TagNumber(17)
   MatchmakingStreamEvent_Payload whichPayload() =>
       _MatchmakingStreamEvent_PayloadByTag[$_whichOneof(0)]!;
   @$pb.TagNumber(10)
@@ -8198,6 +8205,7 @@ class MatchmakingStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(14)
   @$pb.TagNumber(15)
   @$pb.TagNumber(16)
+  @$pb.TagNumber(17)
   void clearPayload() => $_clearField($_whichOneof(0));
 
   @$pb.TagNumber(1)
@@ -8296,6 +8304,17 @@ class MatchmakingStreamEvent extends $pb.GeneratedMessage {
   void clearSearchNudge() => $_clearField(16);
   @$pb.TagNumber(16)
   SearchNudge ensureSearchNudge() => $_ensure(8);
+
+  @$pb.TagNumber(17)
+  PlayerBanned get playerBanned => $_getN(9);
+  @$pb.TagNumber(17)
+  set playerBanned(PlayerBanned value) => $_setField(17, value);
+  @$pb.TagNumber(17)
+  $core.bool hasPlayerBanned() => $_has(9);
+  @$pb.TagNumber(17)
+  void clearPlayerBanned() => $_clearField(17);
+  @$pb.TagNumber(17)
+  PlayerBanned ensurePlayerBanned() => $_ensure(9);
 }
 
 class SearchStarted extends $pb.GeneratedMessage {
@@ -8938,6 +8957,73 @@ class RatingSubmitted extends $pb.GeneratedMessage {
   $core.bool hasStars() => $_has(3);
   @$pb.TagNumber(4)
   void clearStars() => $_clearField(4);
+}
+
+class PlayerBanned extends $pb.GeneratedMessage {
+  factory PlayerBanned({
+    $core.String? profileId,
+    $core.String? reason,
+  }) {
+    final result = create();
+    if (profileId != null) result.profileId = profileId;
+    if (reason != null) result.reason = reason;
+    return result;
+  }
+
+  PlayerBanned._();
+
+  factory PlayerBanned.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory PlayerBanned.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'PlayerBanned',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'profileId')
+    ..aOS(2, _omitFieldNames ? '' : 'reason')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PlayerBanned clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PlayerBanned copyWith(void Function(PlayerBanned) updates) =>
+      super.copyWith((message) => updates(message as PlayerBanned))
+          as PlayerBanned;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static PlayerBanned create() => PlayerBanned._();
+  @$core.override
+  PlayerBanned createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static PlayerBanned getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<PlayerBanned>(create);
+  static PlayerBanned? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get profileId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set profileId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProfileId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProfileId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get reason => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set reason($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasReason() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearReason() => $_clearField(2);
 }
 
 enum StoryStreamEvent_Payload {

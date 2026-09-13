@@ -658,6 +658,7 @@ message MatchmakingStreamEvent {
     SearchCancelled search_cancelled = 14;
     MatchCompleted match_completed = 15;
     SearchNudge search_nudge = 16;
+    PlayerBanned player_banned = 17;
   }
 }
 
@@ -710,6 +711,11 @@ message RatingSubmitted {
   string rater_profile_id = 2;
   string rated_profile_id = 3;
   int32 stars = 4;
+}
+
+message PlayerBanned {
+  string profile_id = 1;
+  string reason = 2;
 }
 
 // --- story.events ---

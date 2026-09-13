@@ -2648,6 +2648,15 @@ const MatchmakingStreamEvent$json = {
       '9': 0,
       '10': 'searchNudge'
     },
+    {
+      '1': 'player_banned',
+      '3': 17,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.PlayerBanned',
+      '9': 0,
+      '10': 'playerBanned'
+    },
   ],
   '8': [
     {'1': 'payload'},
@@ -2667,7 +2676,8 @@ final $typed_data.Uint8List matchmakingStreamEventDescriptor = $convert.base64De
     'ZWFyY2hDYW5jZWxsZWRIAFIPc2VhcmNoQ2FuY2VsbGVkEkoKD21hdGNoX2NvbXBsZXRlZBgPIA'
     'EoCzIfLnZvaWNlLmV2ZW50cy52MS5NYXRjaENvbXBsZXRlZEgAUg5tYXRjaENvbXBsZXRlZBJB'
     'CgxzZWFyY2hfbnVkZ2UYECABKAsyHC52b2ljZS5ldmVudHMudjEuU2VhcmNoTnVkZ2VIAFILc2'
-    'VhcmNoTnVkZ2VCCQoHcGF5bG9hZA==');
+    'VhcmNoTnVkZ2USRAoNcGxheWVyX2Jhbm5lZBgRIAEoCzIdLnZvaWNlLmV2ZW50cy52MS5QbGF5'
+    'ZXJCYW5uZWRIAFIMcGxheWVyQmFubmVkQgkKB3BheWxvYWQ=');
 
 @$core.Deprecated('Use searchStartedDescriptor instead')
 const SearchStarted$json = {
@@ -2810,6 +2820,20 @@ final $typed_data.Uint8List ratingSubmittedDescriptor = $convert.base64Decode(
     'Cg9SYXRpbmdTdWJtaXR0ZWQSGQoIbWF0Y2hfaWQYASABKAlSB21hdGNoSWQSKAoQcmF0ZXJfcH'
     'JvZmlsZV9pZBgCIAEoCVIOcmF0ZXJQcm9maWxlSWQSKAoQcmF0ZWRfcHJvZmlsZV9pZBgDIAEo'
     'CVIOcmF0ZWRQcm9maWxlSWQSFAoFc3RhcnMYBCABKAVSBXN0YXJz');
+
+@$core.Deprecated('Use playerBannedDescriptor instead')
+const PlayerBanned$json = {
+  '1': 'PlayerBanned',
+  '2': [
+    {'1': 'profile_id', '3': 1, '4': 1, '5': 9, '10': 'profileId'},
+    {'1': 'reason', '3': 2, '4': 1, '5': 9, '10': 'reason'},
+  ],
+};
+
+/// Descriptor for `PlayerBanned`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List playerBannedDescriptor = $convert.base64Decode(
+    'CgxQbGF5ZXJCYW5uZWQSHQoKcHJvZmlsZV9pZBgBIAEoCVIJcHJvZmlsZUlkEhYKBnJlYXNvbh'
+    'gCIAEoCVIGcmVhc29u');
 
 @$core.Deprecated('Use storyStreamEventDescriptor instead')
 const StoryStreamEvent$json = {

@@ -462,7 +462,7 @@
 ### Matchmaking
 
 
-- [ ] **[Matchmaking] `mm.player_banned` never published** — Stream subject registered (`mmevents/publisher.go`) but `BanFromMM` does not emit it (`grpcsvc/rating.go`).
+- [x] **[Matchmaking] `mm.player_banned` publication** — `BanFromMM` emits one protobuf `MatchmakingStreamEvent.player_banned` on `mm.player_banned` only when a peer ban is newly inserted; repeated idempotent bans do not republish (`grpcsvc/rating.go`, `store/bans.go`, `mmevents/publisher.go`; `TestBanFromMM_PublishesOnceAfterNewPeerBan`).
 - [ ] **[Matchmaking] Popular-games ordering missing** — `ListGames` sorts by `created_at DESC` (`store/games.go`). Spec wants popularity by active queue depth (`docs/features/game-catalog.md`).
 - [ ] **[Matchmaking] `CreateGame` lacks `icon_url` / `external_id`** — Columns exist (`migrations/matchmaking_db/000001_init.up.sql`, `store/games.go`) but `CreateGame` only persists name+config (`grpcsvc/server.go`).
 - [ ] **[Matchmaking] Party / voice-derived MM absent** — `PartyStore` is a stub (`store/parties.go`); `StartSearch` always validates `partySize=1` (`grpcsvc/search.go`, `criteria/criteria.go`). Voice join/leave reset flow from spec not implementable yet.
