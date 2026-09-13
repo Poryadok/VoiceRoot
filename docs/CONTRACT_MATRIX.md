@@ -33,6 +33,12 @@
 
 ## WebSocket
 
+Voice active/join responses проецируют optional `space_id` из сохранённой полной
+room-привязки. WS `call_started` допускает additive `room_type`, `voice_room_id` и
+`space_id`, сохраняя прежнюю аудиторию участников и поддержку legacy payload.
+Правила отсутствующих или неполных полей — в
+[Voice Service](microservices/voice-service.md#привязка-комнаты-в-ответах-и-событиях).
+
 | Путь   | Назначение |
 |--------|------------|
 | `/ws`  | Upgrade и прокси на **Realtime Service** (live-события, `s` / `resume`); см. [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md) |

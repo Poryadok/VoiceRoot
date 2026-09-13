@@ -130,3 +130,38 @@ func newRedisCallStoreForTest(t *testing.T, prefix string) (*RedisCallStore, *re
 	require.NoError(t, client.Ping(context.Background()).Err())
 	return NewRedisCallStore(client, prefix), client
 }
+
+func TestRedisCallStore_RestoresPersistedRoomBindingAcrossInstances(t *testing.T) {
+	for _, tc := range []struct{ name, space string }{
+		{"complete tuple", "22222222-2222-4222-8222-222222222222"},
+		{"legacy without space", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := t.Context()
+			first, client := newRedisCallStoreForTest(t, "binding-test:")
+			room := "11111111-1111-4111-8111-111111111111"
+			call, err := first.CreateCall(ctx, Call{RoomID: "33333333-3333-4333-8333-333333333333", VoiceRoomID: room, SpaceID: tc.space, LivekitRoomName: "lk-restored", SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, InitiatorProfileID: "owner", MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE})
+			require.NoError(t, err)
+			raw, err := client.Get(ctx, first.callKey(call.RoomID)).Result()
+			require.NoError(t, err)
+			if tc.space == "" {
+				require.NotContains(t, raw, `"space_id"`)
+			} else {
+				require.Contains(t, raw, tc.space)
+			}
+			restarted := NewRedisCallStore(client, "binding-test:")
+			byID, err := restarted.GetCall(ctx, call.RoomID)
+			require.NoError(t, err)
+			active, err := restarted.GetActiveCall(ctx, "owner")
+			require.NoError(t, err)
+			for _, got := range []Call{byID, active} {
+				require.Equal(t, call.RoomID, got.RoomID)
+				require.Equal(t, room, got.VoiceRoomID)
+				require.Equal(t, tc.space, got.SpaceID)
+				require.Equal(t, call.SessionKind, got.SessionKind)
+				require.Equal(t, "lk-restored", got.LivekitRoomName)
+				require.True(t, got.IsActiveForProfile("owner"))
+			}
+		})
+	}
+}
