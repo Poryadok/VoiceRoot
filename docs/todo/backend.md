@@ -169,7 +169,7 @@
 - [ ] **[User] Durable `last_seen_at` (PostgreSQL)** — spec requires PG persistence for header; code retains interim Redis-only 30-day timestamp — [presence.md](../features/presence.md), [user-service.md](../microservices/user-service.md). `show_last_seen` proto/DDL and viewer-aware interim read filter are shipped.
 - [x] **[User] `show_last_seen` privacy enforcement** — **done:** additive `PrivacySettings.show_last_seen`, `privacy_settings` DDL, preset defaults, and fail-closed viewer-aware `GetPresence`/`GetBulkPresence` filtering of interim timestamp. Durable PostgreSQL last-seen and WS fan-out remain separate — [user-service.md](../microservices/user-service.md).
 - [ ] **[User] Homoglyph-normalized search not implemented** — anti-spoof on create only (`src/backend/user/internal/store/verification.go`); `SearchProfilesAfter` uses raw `ILIKE` (`src/backend/user/internal/store/profile_search.go`); spec requires normalized lookup (`docs/features/verification.md`).
-- [ ] **[User] Premium custom status not gated** — `UpdatePresence` accepts `custom_status` for all tiers (`src/backend/user/internal/grpcsvc/user_presence.go`); spec: Premium only. `UpdateProfile.custom_status` не persist в DDL (только Redis presence).
+- [ ] **[User] Premium custom status not gated** — `UpdatePresence` and `UpdateProfile` accept `custom_status` for all tiers (`src/backend/user/internal/grpcsvc/user_presence.go`, `src/backend/user/internal/grpcsvc/user.go`); spec: Premium only.
 
 ### Analytics
 
@@ -444,7 +444,6 @@
 ### User
 
 
-- [ ] **[User] `UpdateProfile.custom_status` ignored** — comment "not persisted in current DDL" (`src/backend/user/internal/grpcsvc/user.go`); only Redis presence path works.
 - [ ] **BE-131 [User] Org DNS verification lifecycle** — pending DNS request needs TTL: exactly one active request; a new Start atomically expires the prior request; Check accepts only the current unexpired request; an old TXT never grants a badge; verifier unavailability does not consume the request. Source: `src/backend/user/internal/store/verification.go`.
 - [x] **[User] `README.md` status** — describes the implemented RPC surface and keeps residual gaps explicit (`src/backend/user/README.md`).
 

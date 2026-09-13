@@ -193,24 +193,61 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 	t.Run("UpdateProfile ok", func(t *testing.T) {
 		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
 		bio := "Voice gamer and duo queue enjoyer"
+		customStatus := "building Voice"
 		resp, err := cli.UpdateProfile(mdCtx, &userv1.UpdateProfileRequest{
-			ProfileId:   pid.String(),
-			DisplayName: proto.String("Alice II"),
-			Bio:         proto.String(bio),
-			Locale:      proto.String("en"),
-			Theme:       proto.String("light"),
+			ProfileId:    pid.String(),
+			DisplayName:  proto.String("Alice II"),
+			Bio:          proto.String(bio),
+			CustomStatus: &customStatus,
+			Locale:       proto.String("en"),
+			Theme:        proto.String("light"),
 		})
 		require.NoError(t, err)
 		require.Equal(t, "Alice II", resp.GetProfile().GetDisplayName())
 		require.Equal(t, bio, resp.GetProfile().GetBio())
 		require.Equal(t, "en", resp.GetProfile().GetLocale())
 		require.Equal(t, "light", resp.GetProfile().GetTheme())
+		require.NotNil(t, resp.GetProfile().CustomStatus)
+		require.Equal(t, customStatus, resp.GetProfile().GetCustomStatus())
 
 		reloaded, err := cli.GetProfile(ctx, &userv1.GetProfileRequest{
 			By: &userv1.GetProfileRequest_ProfileId{ProfileId: pid.String()},
 		})
 		require.NoError(t, err)
 		require.Equal(t, bio, reloaded.GetProfile().GetBio())
+		require.NotNil(t, reloaded.GetProfile().CustomStatus)
+		require.Equal(t, customStatus, reloaded.GetProfile().GetCustomStatus())
+
+		// Omission leaves the durable profile value untouched, independently of
+		// the ephemeral UpdatePresence custom_status field.
+		_, err = cli.UpdateProfile(mdCtx, &userv1.UpdateProfileRequest{
+			ProfileId: pid.String(),
+			Theme:     proto.String("dark"),
+		})
+		require.NoError(t, err)
+		reloaded, err = cli.GetProfile(ctx, &userv1.GetProfileRequest{
+			By: &userv1.GetProfileRequest_ProfileId{ProfileId: pid.String()},
+		})
+		require.NoError(t, err)
+		require.NotNil(t, reloaded.GetProfile().CustomStatus)
+		require.Equal(t, customStatus, reloaded.GetProfile().GetCustomStatus())
+
+		// An explicit empty optional value stays present on the profile, so callers
+		// can distinguish it from an omitted field (and from an unset SQL NULL).
+		emptyStatus := ""
+		resp, err = cli.UpdateProfile(mdCtx, &userv1.UpdateProfileRequest{
+			ProfileId:    pid.String(),
+			CustomStatus: &emptyStatus,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, resp.GetProfile().CustomStatus)
+		require.Empty(t, resp.GetProfile().GetCustomStatus())
+		reloaded, err = cli.GetProfile(ctx, &userv1.GetProfileRequest{
+			By: &userv1.GetProfileRequest_ProfileId{ProfileId: pid.String()},
+		})
+		require.NoError(t, err)
+		require.NotNil(t, reloaded.GetProfile().CustomStatus)
+		require.Empty(t, reloaded.GetProfile().GetCustomStatus())
 	})
 
 	t.Run("CreateAvatarPresignedUpload unauthenticated", func(t *testing.T) {

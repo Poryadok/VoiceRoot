@@ -199,7 +199,10 @@ func (s *UserGRPC) UpdateProfile(ctx context.Context, req *userv1.UpdateProfileR
 		}
 		in.AccentColor = &accent
 	}
-	// custom_status not persisted in v1 DDL.
+	if req.CustomStatus != nil {
+		// An explicitly supplied empty value is durable and distinct from omission.
+		in.CustomStatus = req.CustomStatus
+	}
 
 	row, err := s.Profiles.UpdateOwnedProfile(ctx, accountID, profileID, in)
 	if err != nil {
@@ -221,6 +224,9 @@ func (s *UserGRPC) UpdateProfile(ctx context.Context, req *userv1.UpdateProfileR
 		}
 		if in.BannerURL != nil {
 			changed = append(changed, "banner_url")
+		}
+		if in.CustomStatus != nil {
+			changed = append(changed, "custom_status")
 		}
 		if in.Locale != nil {
 			changed = append(changed, "locale")
@@ -408,6 +414,9 @@ func rowToProto(p *store.ProfileRow) *userv1.Profile {
 	}
 	if p.Bio != nil {
 		out.Bio = proto.String(*p.Bio)
+	}
+	if p.CustomStatus != nil {
+		out.CustomStatus = proto.String(*p.CustomStatus)
 	}
 	if p.VerificationBadge != nil {
 		out.VerificationBadge = proto.String(*p.VerificationBadge)
