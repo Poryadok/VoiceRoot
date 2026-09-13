@@ -19,7 +19,7 @@ CRUD сообщений для всех типов чатов (DM, тексто�
 - Read receipts (последнее прочитанное сообщение на пользователя на чат)
 - Вложения (ссылки на File Service): photo, video, document, voice, video_note, music, article, location — см. [text-chat.md](../features/text-chat.md) § Attach menu
 - Stickers / GIF — `content_type=STICKER|GIF` + File `file_id`; composer **😊 panel only** (не 📎 attach) — § Stickers and GIF
-- Send options: `send_silent` is shipped in `SendMessageRequest`, durable `messages` storage and `message.sent`; composer and Notification consumption remain open. P-008 ships schedule wire fields, `scheduled_messages` storage and a fail-closed send gate; handlers, worker, producer usage and UI remain open — см. [todo/backend.md](../todo/backend.md)
+- Send options: `send_silent` is shipped in `SendMessageRequest`, durable `messages` storage, `message.sent` and Notification push consumption; composer remains open. P-008 ships schedule wire fields, `scheduled_messages` storage and a fail-closed send gate; handlers, worker, producer usage and UI remain open — см. [todo/backend.md](../todo/backend.md)
 - Лимит 4000 символов
 - Догрузка истории после offline / reconnect: сначала глобальная сверка inbox через Chat `ListChats`, затем **per `chat_id`** через `GetMessages` с курсором (`after_message_id` / `last_message_id`) для выбранного чата; правила fallback — [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md). Не путать с полем **`s`** в WebSocket Gateway (Realtime) — это нумерация live-событий, не курсор БД
 
@@ -81,7 +81,7 @@ service MessagingService {
 | `GetChatListMetadata` | ✓ | per-member unread + preview/content metadata; DM-only delivery ticks; non-members → `PERMISSION_DENIED` |
 | `ListSharedMedia` | ✓ | shared media tabs in chat info |
 | `DeleteMessage` (`DeleteScope.FOR_ME` / `FOR_EVERYONE`) | ✓ | `FOR_ME` soft-hides for caller only |
-| `SendMessage.send_silent` | ✓ | durable `messages.send_silent` and `message.sent.send_silent`; composer and Notification consumption remain open |
+| `SendMessage.send_silent` | ✓ | durable `messages.send_silent`, `message.sent.send_silent` and Notification push consumption; composer remains open |
 | `SendMessage` schedule options (`scheduled_at`, `send_when_online`) | partial | wire contract is present but populated options fail closed until the handler slice |
 | Scheduled RPCs | ✗ | declarations are shipped; handlers remain open |
 
@@ -376,7 +376,7 @@ read_receipts
 
 **Handlers shipped beyond basic message CRUD:** threads (`GetThreadMessages`, `ListThreads`), reactions, pins (limit **5**/chat), per-member `MarkRead`/`GetReadState`/`GetBulkReadState` for DM/group/channel, `GetChatListMetadata` with per-member unread/preview metadata and non-member denial, `ListSharedMedia`, `DeleteMessage` with `DeleteScope.FOR_ME`, idempotent `client_message_id` and durable `send_silent` producer propagation on `SendMessage`, E2E pre-key RPCs.
 
-**Gaps vs full spec:** composer and Notification consumption for `send_silent`; scheduled handlers, worker and event producer usage; typed `content_type`, `message_attachments` table and `RecordMessageView` — см. § ниже и [todo/backend.md](../todo/backend.md).
+**Gaps vs full spec:** composer for `send_silent`; scheduled handlers, worker and event producer usage; typed `content_type`, `message_attachments` table and `RecordMessageView` — см. § ниже и [todo/backend.md](../todo/backend.md).
 
 **Attachment validation (code):** `validateAttachments` today requires `file_id` on each attachment — blocks normative `location` / `article` payloads without File row until validation branches on `content_type` (**code backlog**, R3-A06).
 
