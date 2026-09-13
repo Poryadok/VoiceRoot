@@ -32,10 +32,12 @@ type recordedOverrideSetEvent struct {
 
 type recordingRoleEvents struct {
 	roleevents.NoopPublisher
-	mu                sync.Mutex
-	created           []recordedRoleCreatedEvent
-	chatOverrideSets  []recordedOverrideSetEvent
-	voiceOverrideSets []recordedOverrideSetEvent
+	mu                    sync.Mutex
+	created               []recordedRoleCreatedEvent
+	chatOverrideSets      []recordedOverrideSetEvent
+	chatOverrideRemovals  []recordedOverrideSetEvent
+	voiceOverrideSets     []recordedOverrideSetEvent
+	voiceOverrideRemovals []recordedOverrideSetEvent
 }
 
 func (p *recordingRoleEvents) PublishRoleCreated(_ context.Context, spaceID, roleID, name string) error {
@@ -51,17 +53,31 @@ func (p *recordingRoleEvents) createdEvents() []recordedRoleCreatedEvent {
 	return append([]recordedRoleCreatedEvent(nil), p.created...)
 }
 
-func (p *recordingRoleEvents) PublishChatOverrideSet(_ context.Context, chatID, roleID string) error {
+func (p *recordingRoleEvents) PublishChatOverrideSet(_ context.Context, _ string, chatID, roleID string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.chatOverrideSets = append(p.chatOverrideSets, recordedOverrideSetEvent{resourceID: chatID, roleID: roleID})
 	return nil
 }
 
-func (p *recordingRoleEvents) PublishVoiceOverrideSet(_ context.Context, voiceRoomID, roleID string) error {
+func (p *recordingRoleEvents) PublishChatOverrideRemoved(_ context.Context, _ string, chatID, roleID string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.chatOverrideRemovals = append(p.chatOverrideRemovals, recordedOverrideSetEvent{resourceID: chatID, roleID: roleID})
+	return nil
+}
+
+func (p *recordingRoleEvents) PublishVoiceOverrideSet(_ context.Context, _ string, voiceRoomID, roleID string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.voiceOverrideSets = append(p.voiceOverrideSets, recordedOverrideSetEvent{resourceID: voiceRoomID, roleID: roleID})
+	return nil
+}
+
+func (p *recordingRoleEvents) PublishVoiceOverrideRemoved(_ context.Context, _ string, voiceRoomID, roleID string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.voiceOverrideRemovals = append(p.voiceOverrideRemovals, recordedOverrideSetEvent{resourceID: voiceRoomID, roleID: roleID})
 	return nil
 }
 
@@ -71,10 +87,22 @@ func (p *recordingRoleEvents) chatOverrideSetEvents() []recordedOverrideSetEvent
 	return append([]recordedOverrideSetEvent(nil), p.chatOverrideSets...)
 }
 
+func (p *recordingRoleEvents) chatOverrideRemovalEvents() []recordedOverrideSetEvent {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]recordedOverrideSetEvent(nil), p.chatOverrideRemovals...)
+}
+
 func (p *recordingRoleEvents) voiceOverrideSetEvents() []recordedOverrideSetEvent {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return append([]recordedOverrideSetEvent(nil), p.voiceOverrideSets...)
+}
+
+func (p *recordingRoleEvents) voiceOverrideRemovalEvents() []recordedOverrideSetEvent {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]recordedOverrideSetEvent(nil), p.voiceOverrideRemovals...)
 }
 
 func bootstrapRoleManagerAtPositionTwo(t *testing.T, s *store.RoleStore) (spaceID, ownerID, actorID uuid.UUID) {
@@ -221,13 +249,14 @@ func TestSetVoiceRoomOverride_PublishesCurrentSetEvent(t *testing.T) {
 	require.Equal(t, []recordedOverrideSetEvent{{resourceID: voiceRoomID, roleID: memberRoleID.String()}}, events.voiceOverrideSetEvents())
 }
 
-func TestRemoveChatOverride_ClearsRow(t *testing.T) {
+func TestRemoveChatOverride_PublishesOnlyForDeletedRow(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
 	s, cleanup := startRoleStoreTest(t)
 	defer cleanup()
-	client, stop := startRoleGRPCTestServer(t, s.Pool)
+	events := &recordingRoleEvents{}
+	client, stop := startRoleGRPCTestServer(t, s.Pool, func(svc *RoleGRPC) { svc.Events = events })
 	defer stop()
 
 	spaceID := uuid.New()
@@ -260,6 +289,16 @@ func TestRemoveChatOverride_ClearsRow(t *testing.T) {
 		RoleId:  memberRoleID,
 	})
 	require.NoError(t, err)
+	require.Equal(t, []recordedOverrideSetEvent{{resourceID: chatID, roleID: memberRoleID}}, events.chatOverrideRemovalEvents())
+
+	// The repeated delete is an idempotent no-op and must not produce a second invalidation.
+	_, err = client.RemoveChatOverride(ctxWithProfile(ownerID), &rolev1.RemoveChatOverrideRequest{
+		SpaceId: spaceID.String(),
+		Chat:    &chatv1.ChatRef{Id: chatID},
+		RoleId:  memberRoleID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []recordedOverrideSetEvent{{resourceID: chatID, roleID: memberRoleID}}, events.chatOverrideRemovalEvents())
 
 	list, err := client.GetChatOverrides(context.Background(), &rolev1.GetChatOverridesRequest{
 		SpaceId:    spaceID.String(),
@@ -267,6 +306,33 @@ func TestRemoveChatOverride_ClearsRow(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Empty(t, list.GetOverrideList().GetOverrides())
+}
+
+func TestRemoveVoiceRoomOverride_PublishesOnlyForDeletedRow(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	s, cleanup := startRoleStoreTest(t)
+	defer cleanup()
+	events := &recordingRoleEvents{}
+	client, stop := startRoleGRPCTestServer(t, s.Pool, func(svc *RoleGRPC) { svc.Events = events })
+	defer stop()
+
+	spaceID := uuid.New()
+	ownerID := uuid.New()
+	voiceRoomID := uuid.New().String()
+	require.NoError(t, s.BootstrapSpaceRoles(context.Background(), spaceID, ownerID))
+	memberRoleID := roleIDsByName(t, s, spaceID)[permissions.RoleMember].String()
+	require.NoError(t, s.SetVoiceRoomOverride(context.Background(), uuid.MustParse(voiceRoomID), uuid.MustParse(memberRoleID), 0, 1))
+
+	request := &rolev1.RemoveVoiceRoomOverrideRequest{SpaceId: spaceID.String(), VoiceRoomId: voiceRoomID, RoleId: memberRoleID}
+	_, err := client.RemoveVoiceRoomOverride(ctxWithProfile(ownerID), request)
+	require.NoError(t, err)
+	require.Equal(t, []recordedOverrideSetEvent{{resourceID: voiceRoomID, roleID: memberRoleID}}, events.voiceOverrideRemovalEvents())
+
+	_, err = client.RemoveVoiceRoomOverride(ctxWithProfile(ownerID), request)
+	require.NoError(t, err)
+	require.Equal(t, []recordedOverrideSetEvent{{resourceID: voiceRoomID, roleID: memberRoleID}}, events.voiceOverrideRemovalEvents())
 }
 
 func TestCreateRole_RequiresManageRolesPermission(t *testing.T) {

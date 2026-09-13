@@ -9,8 +9,10 @@ type Publisher interface {
 	PublishRoleDeleted(ctx context.Context, spaceID, roleID string) error
 	PublishRoleAssigned(ctx context.Context, spaceID, profileID, roleID string) error
 	PublishRoleRevoked(ctx context.Context, spaceID, profileID, roleID string) error
-	PublishChatOverrideSet(ctx context.Context, chatID, roleID string) error
-	PublishVoiceOverrideSet(ctx context.Context, voiceRoomID, roleID string) error
+	PublishChatOverrideSet(ctx context.Context, spaceID, chatID, roleID string) error
+	PublishChatOverrideRemoved(ctx context.Context, spaceID, chatID, roleID string) error
+	PublishVoiceOverrideSet(ctx context.Context, spaceID, voiceRoomID, roleID string) error
+	PublishVoiceOverrideRemoved(ctx context.Context, spaceID, voiceRoomID, roleID string) error
 }
 
 // NoopPublisher discards events (tests / degraded mode).
@@ -25,5 +27,15 @@ func (NoopPublisher) PublishRoleAssigned(context.Context, string, string, string
 	return nil
 }
 func (NoopPublisher) PublishRoleRevoked(context.Context, string, string, string) error { return nil }
-func (NoopPublisher) PublishChatOverrideSet(context.Context, string, string) error     { return nil }
-func (NoopPublisher) PublishVoiceOverrideSet(context.Context, string, string) error    { return nil }
+func (NoopPublisher) PublishChatOverrideSet(context.Context, string, string, string) error {
+	return nil
+}
+func (NoopPublisher) PublishChatOverrideRemoved(context.Context, string, string, string) error {
+	return nil
+}
+func (NoopPublisher) PublishVoiceOverrideSet(context.Context, string, string, string) error {
+	return nil
+}
+func (NoopPublisher) PublishVoiceOverrideRemoved(context.Context, string, string, string) error {
+	return nil
+}

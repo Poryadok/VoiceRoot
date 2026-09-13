@@ -143,6 +143,7 @@ replace roster recovery.
 | `typing`             | Кто-то печатает                                                     |
 | `presence_update`    | Смена статуса пользователя                                          |
 | `chat_update`        | Изменение чата/группы                                               |
+| `role_update`        | Изменение role policy из `role.events`; `role.chat_override_set` и `role.chat_override_removed` доставляются только текущим подписчикам указанного `d.chat_id`. Payload сохраняет `subject`, `space_id`, `chat_id`, `role_id`; клиент инвалидирует локальную permission policy и перечитывает нужный scope. Voice-room override events не имеют WS fan-out, пока не определён authoritative индекс voice-room подписок. |
 | `member_add`         | Новый участник                                                      |
 | `member_remove`      | Участник удалён                                                     |
 | `dm_peer_deleted`    | Удалён второй участник уже известного DM; `d.chat_id` + `d.recipient_profile_id`, только для designated surviving profile, без deleted identity; live-ускорение, не durable history/replay |
@@ -230,7 +231,7 @@ unsupported payload that it intentionally does not fan out.
 ## Конфигурация (NATS / JetStream)
 
 - **`NATS_URL`** — URL NATS Server с JetStream (порт **4222**). В Compose: `nats://nats:4222`; с хоста: `nats://127.0.0.1:${NATS_PORT:-4222}` (см. [`docker-compose.yml`](../../docker-compose.yml)).
-- Подписки на доменные потоки для fan-out и отзыва доступа — в первую очередь **`message.events`** (consume: `message.sent`, …; **publish:** client `delivery_ack` → `message.delivery_ack`), **`chat.events`**, **`social.user_blocked`** из `social.events` и с Фазы 2 **`voice.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)); детали subject/consumer — в реализации сервиса.
+- Подписки на доменные потоки для fan-out и отзыва доступа — в первую очередь **`message.events`** (consume: `message.sent`, …; **publish:** client `delivery_ack` → `message.delivery_ack`), **`chat.events`**, **`social.user_blocked`** из `social.events`, **`role.events`** для role policy и с Фазы 2 **`voice.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)); детали subject/consumer — в реализации сервиса.
 - **`REALTIME_CHAT_GRPC_ADDR`** (опционально) — gRPC адрес **Chat Service** для bootstrap списка DM при открытии WebSocket и проверки lazy `subscribe` через `GetChat` (например `chat:50051` в compose). Если не задан, сервер **не** вызывает Chat и **не** шлёт `subscription_sync`; valid lazy `subscribe` fail-closed с generic `permission_denied`, а не создаёт неподтверждённую подписку. TLS/insecure — как принято в окружении (локально часто plaintext внутри mesh).
 - **`REALTIME_USER_GRPC_ADDR`** (опционально) — User Service для записи presence при WS `presence_update` и разрешения `dm_peer_profile_id → account_id` перед DM block decision.
 - **`REALTIME_SOCIAL_GRPC_ADDR`** (опционально) — Social Service `ListFriends` для fan-out `user.presence_changed` и `IsBlocked` в обе стороны для DM subscription policy. Если User/Social policy dependency отсутствует или ошибается, DM bootstrap/lazy subscribe fail-closed.
