@@ -113,10 +113,11 @@ void main() {
   testWidgets(
     'standalone group owner can update guest admission and refreshes',
     (tester) async {
-      var allowGuests = false;
       var updateCalls = 0;
+      var listCalls = 0;
       final client = MockClient((req) async {
         if (req.url.path == '/api/v1/chats') {
+          listCalls++;
           return http.Response(
             jsonEncode({
               'chat_list': {
@@ -126,7 +127,9 @@ void main() {
                       'id': 'standalone-group',
                       'type': 'CHAT_TYPE_GROUP',
                       'creator_profile_id': 'prof-test',
-                      'allow_guests': allowGuests,
+                      // The reload is authoritative: another admin may have
+                      // changed the setting while this update was in flight.
+                      'allow_guests': false,
                     },
                   },
                 ],
@@ -152,7 +155,6 @@ void main() {
           final body = jsonDecode(req.body) as Map<String, dynamic>;
           expect(body['allow_guests'], true);
           updateCalls++;
-          allowGuests = true;
           return http.Response(
             jsonEncode({
               'chat': {
@@ -207,13 +209,14 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(updateCalls, 1);
+      expect(listCalls, greaterThanOrEqualTo(2));
       expect(
         tester
             .widget<SwitchListTile>(
               find.byKey(StandaloneChatGuestSettingsSection.toggleKey),
             )
             .value,
-        isTrue,
+        isFalse,
       );
     },
   );
@@ -279,6 +282,285 @@ void main() {
       findsNothing,
     );
   });
+
+  testWidgets('a failed guest admission update keeps the authoritative value', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      testApp(
+        home: const SizedBox(
+          height: 700,
+          width: 400,
+          child: ChatInfoPanel(chatId: 'failed-update-group'),
+        ),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/chats') {
+            return http.Response(
+              jsonEncode({
+                'chat_list': {
+                  'items': [
+                    {
+                      'chat': {
+                        'id': 'failed-update-group',
+                        'type': 'CHAT_TYPE_GROUP',
+                        'creator_profile_id': 'prof-test',
+                        'allow_guests': true,
+                      },
+                    },
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/chats/failed-update-group/members') {
+            return http.Response(
+              jsonEncode({
+                'member_list': {
+                  'members': [
+                    {'profile_id': 'prof-test', 'role': 'owner'},
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/chats/failed-update-group') {
+            return http.Response(
+              jsonEncode({
+                'error': 'permission_denied',
+                'message': 'forbidden',
+              }),
+              403,
+            );
+          }
+          if (req.url.path.contains('/shared-media')) {
+            return http.Response(
+              jsonEncode({
+                'shared_media_list': {'items': []},
+              }),
+              200,
+            );
+          }
+          return http.Response('{}', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(StandaloneChatGuestSettingsSection.toggleKey));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<SwitchListTile>(
+            find.byKey(StandaloneChatGuestSettingsSection.toggleKey),
+          )
+          .value,
+      isTrue,
+    );
+    expect(find.text('forbidden'), findsOneWidget);
+  });
+
+  testWidgets('channel admins see the control but Space channels do not', (
+    tester,
+  ) async {
+    const standaloneChannel = 'standalone-channel';
+    const spaceChannel = 'space-channel';
+    var selectedChatId = standaloneChannel;
+    late StateSetter selectChat;
+    await tester.pumpWidget(
+      testApp(
+        home: StatefulBuilder(
+          builder: (context, setState) {
+            selectChat = setState;
+            return SizedBox(
+              height: 700,
+              width: 400,
+              child: ChatInfoPanel(chatId: selectedChatId),
+            );
+          },
+        ),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/chats') {
+            return http.Response(
+              jsonEncode({
+                'chat_list': {
+                  'items': [
+                    {
+                      'chat': {
+                        'id': standaloneChannel,
+                        'type': 'CHAT_TYPE_CHANNEL',
+                        'creator_profile_id': 'other-profile',
+                      },
+                    },
+                    {
+                      'chat': {
+                        'id': spaceChannel,
+                        'type': 'CHAT_TYPE_CHANNEL',
+                        'space_id': 'space-1',
+                        'creator_profile_id': 'other-profile',
+                      },
+                    },
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path.endsWith('/members')) {
+            return http.Response(
+              jsonEncode({
+                'member_list': {
+                  'members': [
+                    {'profile_id': 'prof-test', 'role': 'admin'},
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path.contains('/shared-media')) {
+            return http.Response(
+              jsonEncode({
+                'shared_media_list': {'items': []},
+              }),
+              200,
+            );
+          }
+          return http.Response('{}', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(StandaloneChatGuestSettingsSection.toggleKey),
+      findsOneWidget,
+    );
+
+    selectChat(() => selectedChatId = spaceChannel);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(StandaloneChatGuestSettingsSection.toggleKey),
+      findsNothing,
+    );
+  });
+
+  testWidgets(
+    'a pending update for the previous chat does not change the next chat',
+    (tester) async {
+      const firstChatId = 'standalone-group-a';
+      const secondChatId = 'standalone-group-b';
+      final pendingUpdate = Completer<http.Response>();
+      var selectedChatId = firstChatId;
+      late StateSetter selectChat;
+      final client = MockClient((req) async {
+        if (req.url.path == '/api/v1/chats') {
+          return http.Response(
+            jsonEncode({
+              'chat_list': {
+                'items': [
+                  for (final chatId in [firstChatId, secondChatId])
+                    {
+                      'chat': {
+                        'id': chatId,
+                        'type': 'CHAT_TYPE_GROUP',
+                        'creator_profile_id': 'prof-test',
+                        'allow_guests': false,
+                      },
+                    },
+                ],
+              },
+            }),
+            200,
+          );
+        }
+        if (req.url.path == '/api/v1/chats/$firstChatId/members' ||
+            req.url.path == '/api/v1/chats/$secondChatId/members') {
+          return http.Response(
+            jsonEncode({
+              'member_list': {
+                'members': [
+                  {'profile_id': 'prof-test', 'role': 'owner'},
+                ],
+              },
+            }),
+            200,
+          );
+        }
+        if (req.url.path == '/api/v1/chats/$firstChatId' &&
+            req.method == 'PATCH') {
+          return pendingUpdate.future;
+        }
+        if (req.url.path.contains('/shared-media')) {
+          return http.Response(
+            jsonEncode({
+              'shared_media_list': {'items': []},
+            }),
+            200,
+          );
+        }
+        return http.Response('{}', 404);
+      });
+
+      await tester.pumpWidget(
+        testApp(
+          home: StatefulBuilder(
+            builder: (context, setState) {
+              selectChat = setState;
+              return SizedBox(
+                height: 700,
+                width: 400,
+                child: ChatInfoPanel(chatId: selectedChatId),
+              );
+            },
+          ),
+          client: client,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(StandaloneChatGuestSettingsSection.toggleKey),
+      );
+      await tester.pump();
+
+      selectChat(() => selectedChatId = secondChatId);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<SwitchListTile>(
+              find.byKey(StandaloneChatGuestSettingsSection.toggleKey),
+            )
+            .value,
+        isFalse,
+      );
+
+      pendingUpdate.complete(
+        http.Response(
+          jsonEncode({
+            'chat': {
+              'id': firstChatId,
+              'type': 'CHAT_TYPE_GROUP',
+              'creator_profile_id': 'prof-test',
+              'allow_guests': true,
+            },
+          }),
+          200,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        tester
+            .widget<SwitchListTile>(
+              find.byKey(StandaloneChatGuestSettingsSection.toggleKey),
+            )
+            .value,
+        isFalse,
+      );
+    },
+  );
 
   testWidgets('shared media backend failures use localized copy', (
     tester,

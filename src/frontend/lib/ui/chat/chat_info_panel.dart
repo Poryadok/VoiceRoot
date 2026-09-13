@@ -89,7 +89,10 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
           ),
           Divider(height: 1, color: voice.borderDefault),
         ],
-        StandaloneChatGuestSettingsSection(chatId: widget.chatId),
+        StandaloneChatGuestSettingsSection(
+          key: ValueKey(widget.chatId),
+          chatId: widget.chatId,
+        ),
         if (spaceId != null)
           _ChatOverrideBar(spaceId: spaceId, chatId: widget.chatId),
         if (spaceId != null && widget.isGroup)
@@ -198,6 +201,7 @@ class _StandaloneChatGuestSettingsSectionState
           _updating = false;
         });
         await ref.read(chatListControllerProvider.notifier).loadInitial();
+        if (mounted) setState(() => _allowGuests = null);
       case ChatsApiFailure(:final message):
         setState(() => _updating = false);
         ScaffoldMessenger.of(context).showSnackBar(
