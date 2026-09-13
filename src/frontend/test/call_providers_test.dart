@@ -19,6 +19,7 @@ import 'package:voice_frontend/settings/voice_input_settings.dart';
 import 'package:voice_frontend/state/call_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
+import 'package:voice_frontend/state/screen_share_providers.dart';
 
 import 'support/gateway_test_client.dart';
 
@@ -449,7 +450,7 @@ void main() {
     expect(container.read(callControllerProvider).phase, CallPhase.active);
   });
 
-  test('syncs ringing incoming call when realtime link connects', () async {
+  test('syncs ringing incoming call after accepted realtime hello', () async {
     final session = _ringingSession(
       initiator: 'prof-caller',
       callee: 'prof-test',
@@ -481,14 +482,634 @@ void main() {
     addTearDown(realtime.close);
 
     container.read(callControllerProvider);
-    container.read(realtimeLinkStatusProvider.notifier).state =
-        RealtimeLinkStatus.connected;
+    container
+        .read(realtimeHelloBindingProvider.notifier)
+        .state = const RealtimeHelloBinding(
+      generation: 1,
+      bindingGeneration: 1,
+      profileId: 'prof-test',
+      authorization: 'Bearer test-access',
+    );
     await drainMicrotasks();
 
     final call = container.read(callControllerProvider);
     expect(call.phase, CallPhase.incoming);
     expect(call.session?.roomId, session.roomId);
   });
+
+  test(
+    'a stale hello snapshot cannot replace a newer lifecycle room',
+    () async {
+      final activeSnapshot = Completer<http.Response>();
+      final realtime = StreamController<RealtimeFrame>.broadcast();
+      final boundRealtime =
+          StreamController<ProfileBoundRealtimeFrame>.broadcast();
+      final container = _callTestContainer(
+        client: MockClient((request) async {
+          if (request.url.path.endsWith('/calls/active')) {
+            return activeSnapshot.future;
+          }
+          return http.Response('{}', 404);
+        }),
+        realtime: realtime,
+        boundRealtime: boundRealtime,
+        fakeRoom: _FakeLiveKitRoom(),
+        activeProfileId: 'prof-test',
+      );
+      addTearDown(container.dispose);
+      addTearDown(realtime.close);
+      addTearDown(boundRealtime.close);
+      final binding = const RealtimeHelloBinding(
+        generation: 10,
+        bindingGeneration: 10,
+        profileId: 'prof-test',
+        authorization: 'Bearer test-access',
+      );
+
+      container.read(callControllerProvider);
+      container.read(realtimeHelloBindingProvider.notifier).state = binding;
+      await drainMicrotasks();
+      boundRealtime.add(
+        ProfileBoundRealtimeFrame(
+          binding: binding,
+          frame: RealtimeFrame(
+            op: 'call_incoming',
+            data: _sessionJson(
+              roomId: 'lifecycle-room',
+              initiator: 'prof-peer',
+              callee: 'prof-test',
+            ),
+          ),
+        ),
+      );
+      await drainMicrotasks();
+      activeSnapshot.complete(
+        http.Response(
+          jsonEncode({
+            'call_session': _sessionJson(
+              roomId: 'stale-snapshot-room',
+              initiator: 'prof-peer',
+              callee: 'prof-test',
+            ),
+          }),
+          200,
+        ),
+      );
+      await drainMicrotasks();
+
+      final call = container.read(callControllerProvider);
+      expect(call.phase, CallPhase.incoming);
+      expect(call.session?.roomId, 'lifecycle-room');
+    },
+  );
+
+  test(
+    'call_started supersedes a pending hello snapshot and restores LiveKit',
+    () async {
+      final staleSnapshot = Completer<http.Response>();
+      var activeRequests = 0;
+      final realtime = StreamController<RealtimeFrame>.broadcast();
+      final boundRealtime =
+          StreamController<ProfileBoundRealtimeFrame>.broadcast();
+      final room = _FakeLiveKitRoom();
+      final container = _callTestContainer(
+        client: MockClient((request) async {
+          if (request.url.path.endsWith('/calls/active')) {
+            activeRequests++;
+            if (activeRequests == 1) return staleSnapshot.future;
+            return http.Response(
+              jsonEncode({
+                'call_session': _sessionJson(
+                  roomId: 'fresh-active-room',
+                  initiator: 'prof-peer',
+                  callee: 'prof-test',
+                  status: 'CALL_STATUS_ACTIVE',
+                ),
+              }),
+              200,
+            );
+          }
+          if (request.url.path.endsWith('/states')) {
+            return http.Response('{"participants":[]}', 200);
+          }
+          if (request.url.path.endsWith('/token')) {
+            return http.Response(
+              jsonEncode({'jwt': 'jwt', 'livekit_url': 'ws://livekit:7880'}),
+              200,
+            );
+          }
+          return http.Response('{}', 404);
+        }),
+        realtime: realtime,
+        boundRealtime: boundRealtime,
+        fakeRoom: room,
+        activeProfileId: 'prof-test',
+      );
+      addTearDown(container.dispose);
+      addTearDown(realtime.close);
+      addTearDown(boundRealtime.close);
+      final binding = const RealtimeHelloBinding(
+        generation: 15,
+        bindingGeneration: 15,
+        profileId: 'prof-test',
+        authorization: 'Bearer test-access',
+      );
+
+      container.read(callControllerProvider);
+      container.read(realtimeHelloBindingProvider.notifier).state = binding;
+      await drainMicrotasks();
+      expect(activeRequests, 1);
+
+      boundRealtime.add(
+        ProfileBoundRealtimeFrame(
+          binding: binding,
+          frame: const RealtimeFrame(op: 'call_started'),
+        ),
+      );
+      await drainMicrotasks();
+
+      expect(activeRequests, 2);
+      expect(container.read(callControllerProvider).phase, CallPhase.active);
+      expect(
+        container.read(callControllerProvider).session?.roomId,
+        'fresh-active-room',
+      );
+      expect(room.connectCalls, 1);
+
+      staleSnapshot.complete(
+        http.Response(
+          jsonEncode({
+            'call_session': _sessionJson(
+              roomId: 'stale-active-room',
+              initiator: 'prof-peer',
+              callee: 'prof-test',
+              status: 'CALL_STATUS_ACTIVE',
+            ),
+          }),
+          200,
+        ),
+      );
+      await drainMicrotasks();
+
+      expect(
+        container.read(callControllerProvider).session?.roomId,
+        'fresh-active-room',
+      );
+      expect(room.connectCalls, 1);
+    },
+  );
+
+  test(
+    'a null hello snapshot cannot disconnect a newer lifecycle room',
+    () async {
+      final activeSnapshot = Completer<http.Response>();
+      final realtime = StreamController<RealtimeFrame>.broadcast();
+      final boundRealtime =
+          StreamController<ProfileBoundRealtimeFrame>.broadcast();
+      final room = _FakeLiveKitRoom();
+      final container = _callTestContainer(
+        client: MockClient((request) async {
+          if (request.url.path.endsWith('/calls/active')) {
+            return activeSnapshot.future;
+          }
+          return http.Response('{}', 404);
+        }),
+        realtime: realtime,
+        boundRealtime: boundRealtime,
+        fakeRoom: room,
+        activeProfileId: 'prof-test',
+      );
+      addTearDown(container.dispose);
+      addTearDown(realtime.close);
+      addTearDown(boundRealtime.close);
+      final binding = const RealtimeHelloBinding(
+        generation: 11,
+        bindingGeneration: 11,
+        profileId: 'prof-test',
+        authorization: 'Bearer test-access',
+      );
+
+      container.read(callControllerProvider);
+      container.read(realtimeHelloBindingProvider.notifier).state = binding;
+      await drainMicrotasks();
+      boundRealtime.add(
+        ProfileBoundRealtimeFrame(
+          binding: binding,
+          frame: RealtimeFrame(
+            op: 'call_incoming',
+            data: _sessionJson(
+              roomId: 'newer-room',
+              initiator: 'prof-peer',
+              callee: 'prof-test',
+            ),
+          ),
+        ),
+      );
+      await drainMicrotasks();
+      activeSnapshot.complete(http.Response('{}', 404));
+      await drainMicrotasks();
+
+      expect(container.read(callControllerProvider).phase, CallPhase.incoming);
+      expect(
+        container.read(callControllerProvider).session?.roomId,
+        'newer-room',
+      );
+      expect(room.endDisconnectCalled, isFalse);
+    },
+  );
+
+  test(
+    'screen lifecycle changes win over an in-flight voice-state snapshot',
+    () async {
+      final voiceStates = Completer<http.Response>();
+      final realtime = StreamController<RealtimeFrame>.broadcast();
+      final boundRealtime =
+          StreamController<ProfileBoundRealtimeFrame>.broadcast();
+      final session = VoiceCallSession(
+        roomId: 'screen-room',
+        livekitRoomName: 'voice-dm-screen-room',
+        chatId: 'chat-1',
+        initiatorProfileId: 'prof-test',
+        calleeProfileId: 'prof-peer',
+        mediaKind: VoiceCallMediaKind.audio,
+        status: VoiceCallStatus.active,
+      );
+      final container = _callTestContainer(
+        client: MockClient((request) async {
+          if (request.url.path.endsWith('/calls/active')) {
+            return http.Response(
+              jsonEncode({
+                'call_session': _sessionJson(
+                  roomId: session.roomId,
+                  initiator: session.initiatorProfileId,
+                  callee: session.calleeProfileId,
+                  status: 'CALL_STATUS_ACTIVE',
+                ),
+              }),
+              200,
+            );
+          }
+          if (request.url.path.endsWith('/states')) return voiceStates.future;
+          if (request.url.path.endsWith('/token')) {
+            return http.Response(
+              jsonEncode({'jwt': 'jwt', 'livekit_url': 'ws://livekit:7880'}),
+              200,
+            );
+          }
+          return http.Response('{}', 404);
+        }),
+        realtime: realtime,
+        boundRealtime: boundRealtime,
+        fakeRoom: _FakeLiveKitRoom(),
+        activeProfileId: 'prof-test',
+      );
+      addTearDown(container.dispose);
+      addTearDown(realtime.close);
+      addTearDown(boundRealtime.close);
+      final binding = const RealtimeHelloBinding(
+        generation: 12,
+        bindingGeneration: 12,
+        profileId: 'prof-test',
+        authorization: 'Bearer test-access',
+      );
+
+      container.read(callControllerProvider);
+      container.read(realtimeHelloBindingProvider.notifier).state = binding;
+      await drainMicrotasks();
+      boundRealtime.add(
+        ProfileBoundRealtimeFrame(
+          binding: binding,
+          frame: RealtimeFrame(
+            op: 'screen_share_started',
+            data: {'room_id': session.roomId, 'profile_id': 'prof-peer'},
+          ),
+        ),
+      );
+      boundRealtime.add(
+        ProfileBoundRealtimeFrame(
+          binding: binding,
+          frame: RealtimeFrame(
+            op: 'screen_share_stopped',
+            data: {'room_id': session.roomId, 'profile_id': 'prof-peer'},
+          ),
+        ),
+      );
+      await drainMicrotasks();
+      voiceStates.complete(
+        http.Response(
+          jsonEncode({
+            'participants': [
+              {'profile_id': 'prof-peer', 'is_screen_sharing': true},
+            ],
+          }),
+          200,
+        ),
+      );
+      await drainMicrotasks();
+
+      expect(
+        container.read(callControllerProvider).session?.roomId,
+        session.roomId,
+      );
+      expect(container.read(screenShareControllerProvider).streams, isEmpty);
+    },
+  );
+
+  test('a different-room snapshot replaces stale runtime fields', () async {
+    final activeSnapshot = Completer<http.Response>();
+    final realtime = StreamController<RealtimeFrame>.broadcast();
+    final oldSession = VoiceCallSession(
+      roomId: 'old-room',
+      livekitRoomName: 'voice-dm-old-room',
+      chatId: 'chat-1',
+      initiatorProfileId: 'prof-test',
+      calleeProfileId: 'prof-peer',
+      mediaKind: VoiceCallMediaKind.audio,
+      status: VoiceCallStatus.active,
+    );
+    final container = _callTestContainer(
+      client: MockClient((request) async {
+        if (request.url.path.endsWith('/calls/active')) {
+          return activeSnapshot.future;
+        }
+        if (request.url.path.endsWith('/states')) {
+          return http.Response('{"participants":[]}', 200);
+        }
+        if (request.url.path.endsWith('/token')) {
+          return http.Response(
+            jsonEncode({'jwt': 'jwt', 'livekit_url': 'ws://livekit:7880'}),
+            200,
+          );
+        }
+        return http.Response('{}', 404);
+      }),
+      realtime: realtime,
+      fakeRoom: _FakeLiveKitRoom(),
+      activeProfileId: 'prof-test',
+    );
+    addTearDown(container.dispose);
+    addTearDown(realtime.close);
+    container.read(callControllerProvider.notifier).state = CallState(
+      phase: CallPhase.active,
+      session: oldSession,
+      voiceBindingProfileId: 'prof-test',
+      isMuted: true,
+      isPttHeld: true,
+      isSpeakerMuted: true,
+      needsAudioPlaybackUnlock: true,
+      mediaTracksVersion: 5,
+    );
+    container
+        .read(realtimeHelloBindingProvider.notifier)
+        .state = const RealtimeHelloBinding(
+      generation: 13,
+      bindingGeneration: 13,
+      profileId: 'prof-test',
+      authorization: 'Bearer test-access',
+    );
+    await drainMicrotasks();
+    activeSnapshot.complete(
+      http.Response(
+        jsonEncode({
+          'call_session': _sessionJson(
+            roomId: 'replacement-room',
+            initiator: 'prof-test',
+            callee: 'prof-peer',
+            status: 'CALL_STATUS_ACTIVE',
+          ),
+        }),
+        200,
+      ),
+    );
+    await drainMicrotasks();
+
+    final call = container.read(callControllerProvider);
+    expect(call.session?.roomId, 'replacement-room');
+    expect(call.isMuted, isFalse);
+    expect(call.isPttHeld, isFalse);
+    expect(call.isSpeakerMuted, isFalse);
+    expect(call.needsAudioPlaybackUnlock, isFalse);
+    expect(call.mediaTracksVersion, 0);
+  });
+
+  test(
+    'failed hello reconciliation retries the active-call snapshot',
+    () async {
+      var activeRequests = 0;
+      final realtime = StreamController<RealtimeFrame>.broadcast();
+      final container = _callTestContainer(
+        client: MockClient((request) async {
+          if (!request.url.path.endsWith('/calls/active')) {
+            return http.Response('{}', 404);
+          }
+          activeRequests++;
+          if (activeRequests == 1) return http.Response('{}', 500);
+          return http.Response(
+            jsonEncode({
+              'call_session': _sessionJson(
+                roomId: 'retry-room',
+                initiator: 'prof-peer',
+                callee: 'prof-test',
+              ),
+            }),
+            200,
+          );
+        }),
+        realtime: realtime,
+        fakeRoom: _FakeLiveKitRoom(),
+        activeProfileId: 'prof-test',
+      );
+      addTearDown(container.dispose);
+      addTearDown(realtime.close);
+
+      container.read(callControllerProvider);
+      container
+          .read(realtimeHelloBindingProvider.notifier)
+          .state = const RealtimeHelloBinding(
+        generation: 14,
+        bindingGeneration: 14,
+        profileId: 'prof-test',
+        authorization: 'Bearer test-access',
+      );
+      await drainMicrotasks();
+      expect(activeRequests, 1);
+      await Future<void>.delayed(const Duration(seconds: 3));
+      await drainMicrotasks();
+
+      expect(activeRequests, 2);
+      expect(container.read(callControllerProvider).phase, CallPhase.incoming);
+      expect(
+        container.read(callControllerProvider).session?.roomId,
+        'retry-room',
+      );
+    },
+  );
+
+  test(
+    'same-room active reconciliation preserves active LiveKit state',
+    () async {
+      final session = VoiceCallSession(
+        roomId: 'room-1',
+        livekitRoomName: 'voice-dm-room-1',
+        chatId: 'chat-1',
+        initiatorProfileId: 'prof-test',
+        calleeProfileId: 'prof-peer',
+        mediaKind: VoiceCallMediaKind.audio,
+        status: VoiceCallStatus.active,
+      );
+      final client = MockClient((req) async {
+        if (req.url.path.endsWith('/calls/active')) {
+          return http.Response(
+            jsonEncode({
+              'call_session': _sessionJson(
+                roomId: session.roomId,
+                initiator: 'prof-test',
+                callee: session.calleeProfileId,
+                status: 'CALL_STATUS_ACTIVE',
+              ),
+            }),
+            200,
+          );
+        }
+        if (req.url.path.endsWith('/states')) {
+          return http.Response('{"participants":[]}', 200);
+        }
+        return http.Response('{}', 404);
+      });
+      final realtime = StreamController<RealtimeFrame>.broadcast();
+      final room = _FakeLiveKitRoom();
+      final container = _callTestContainer(
+        client: client,
+        realtime: realtime,
+        fakeRoom: room,
+        activeProfileId: 'prof-test',
+      );
+      addTearDown(container.dispose);
+      addTearDown(realtime.close);
+      container.read(callControllerProvider.notifier).state = CallState(
+        phase: CallPhase.active,
+        session: session,
+        voiceBindingProfileId: 'prof-test',
+        isMuted: true,
+        isPttHeld: true,
+        isSpeakerMuted: true,
+        needsAudioPlaybackUnlock: true,
+        mediaTracksVersion: 4,
+      );
+      container
+          .read(realtimeHelloBindingProvider.notifier)
+          .state = const RealtimeHelloBinding(
+        generation: 7,
+        bindingGeneration: 7,
+        profileId: 'prof-test',
+        authorization: 'Bearer test-access',
+      );
+      await drainMicrotasks();
+      expect(container.read(callControllerProvider).phase, CallPhase.active);
+      expect(container.read(callControllerProvider).isMuted, isTrue);
+      expect(container.read(callControllerProvider).isPttHeld, isTrue);
+      expect(container.read(callControllerProvider).isSpeakerMuted, isTrue);
+      expect(
+        container.read(callControllerProvider).needsAudioPlaybackUnlock,
+        isTrue,
+      );
+      expect(container.read(callControllerProvider).mediaTracksVersion, 4);
+      expect(room.connectCalls, 0);
+    },
+  );
+
+  test(
+    'another profile hello cannot clear profile-owned voice state',
+    () async {
+      final realtime = StreamController<RealtimeFrame>.broadcast();
+      final room = _FakeLiveKitRoom();
+      final container = _callTestContainer(
+        client: MockClient((_) async => http.Response('{}', 404)),
+        realtime: realtime,
+        fakeRoom: room,
+        activeProfileId: 'profile-a',
+      );
+      addTearDown(container.dispose);
+      addTearDown(realtime.close);
+      final session = VoiceCallSession(
+        roomId: 'room-1',
+        livekitRoomName: 'voice-dm-room-1',
+        chatId: 'chat-1',
+        initiatorProfileId: 'profile-a',
+        calleeProfileId: 'profile-b',
+        mediaKind: VoiceCallMediaKind.audio,
+        status: VoiceCallStatus.active,
+      );
+      container.read(callControllerProvider.notifier).state = CallState(
+        phase: CallPhase.active,
+        session: session,
+        voiceBindingProfileId: 'profile-a',
+      );
+      final auth = container.read(authControllerProvider.notifier);
+      final previous = auth.state.session!;
+      auth.state = auth.state.copyWith(
+        session: AuthSession(
+          accessToken: previous.accessToken,
+          refreshToken: previous.refreshToken,
+          accountId: previous.accountId,
+          activeProfileId: 'profile-b',
+          expiresInSeconds: previous.expiresInSeconds,
+        ),
+      );
+      container
+          .read(realtimeHelloBindingProvider.notifier)
+          .state = const RealtimeHelloBinding(
+        generation: 8,
+        bindingGeneration: 8,
+        profileId: 'profile-b',
+        authorization: 'Bearer test-access',
+      );
+      await drainMicrotasks();
+      expect(
+        container.read(callControllerProvider).session?.roomId,
+        session.roomId,
+      );
+      expect(room.endDisconnectCalled, isFalse);
+    },
+  );
+
+  test(
+    'null voice snapshot clears stale screen projection without a session',
+    () async {
+      final realtime = StreamController<RealtimeFrame>.broadcast();
+      final container = _callTestContainer(
+        client: MockClient((_) async => http.Response('{}', 404)),
+        realtime: realtime,
+        fakeRoom: _FakeLiveKitRoom(),
+        activeProfileId: 'prof-test',
+      );
+      addTearDown(container.dispose);
+      addTearDown(realtime.close);
+      container
+          .read(screenShareControllerProvider.notifier)
+          .state = const ScreenShareUiState(
+        streams: [
+          ActiveScreenShare(
+            roomId: 'stale-room',
+            profileId: 'prof-peer',
+            streamId: 'stale-stream',
+          ),
+        ],
+        selectedProfileId: 'prof-peer',
+      );
+      container.read(callControllerProvider);
+      container
+          .read(realtimeHelloBindingProvider.notifier)
+          .state = const RealtimeHelloBinding(
+        generation: 9,
+        bindingGeneration: 9,
+        profileId: 'prof-test',
+        authorization: 'Bearer test-access',
+      );
+      await drainMicrotasks();
+      expect(container.read(screenShareControllerProvider).streams, isEmpty);
+    },
+  );
 
   test('LiveKit connect failure ends call and surfaces error', () async {
     var endCalls = 0;

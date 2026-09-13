@@ -147,14 +147,13 @@ class CallController extends StateNotifier<CallState> {
       profileBoundRealtimeEventProvider,
       (_, next) => next.whenData(_onProfileBoundRealtimeFrame),
     );
-    _linkSub = _ref.listen<RealtimeLinkStatus>(realtimeLinkStatusProvider, (
-      prev,
-      next,
-    ) {
-      if (next == RealtimeLinkStatus.connected) {
-        unawaited(_syncActiveCallIfIdle());
-      }
-    }, fireImmediately: true);
+    _linkSub = _ref.listen<RealtimeHelloBinding?>(
+      realtimeHelloBindingProvider,
+      (_, binding) {
+        if (binding != null) unawaited(_reconcileActiveVoice(binding));
+      },
+      fireImmediately: true,
+    );
     _inputSub = _ref.listen<VoiceInputSettings>(voiceInputSettingsProvider, (
       prev,
       next,
@@ -165,10 +164,14 @@ class CallController extends StateNotifier<CallState> {
 
   final Ref _ref;
   ProviderSubscription<AsyncValue<ProfileBoundRealtimeFrame>>? _eventsSub;
-  ProviderSubscription<RealtimeLinkStatus>? _linkSub;
+  ProviderSubscription<RealtimeHelloBinding?>? _linkSub;
   ProviderSubscription<VoiceInputSettings>? _inputSub;
   VoiceLiveKitRoom? _room;
   Future<void> Function()? _pendingVoiceRetry;
+  Timer? _voiceReconcileRetryTimer;
+  int _voiceReconcileGeneration = 0;
+  int _screenProjectionGeneration = 0;
+  Set<String> _authoritativeScreenSharers = const {};
 
   @override
   set state(CallState value) {
@@ -699,6 +702,7 @@ class CallController extends StateNotifier<CallState> {
           state = state.copyWith(
             mediaTracksVersion: state.mediaTracksVersion + 1,
           );
+          _reconcileScreenShareProjection(session);
         };
         _room = room;
         try {
@@ -720,6 +724,7 @@ class CallController extends StateNotifier<CallState> {
             clearOutgoingTarget: true,
           );
           await _applyEffectiveMicMute();
+          _reconcileScreenShareProjection(session);
         } on Object {
           if (!mounted ||
               !_isConnectCurrent(connectGeneration, connectRoomId)) {
@@ -795,6 +800,18 @@ class CallController extends StateNotifier<CallState> {
     RealtimeFrame frame, {
     required String bindingProfileId,
   }) {
+    // A lifecycle frame can arrive while the REST snapshot requested by hello
+    // is in flight. It is newer evidence for this binding, so that response
+    // must not clear or replace the event-derived session when it completes.
+    switch (frame.op) {
+      case 'call_incoming' ||
+          'call_accepted' ||
+          'call_declined' ||
+          'call_missed' ||
+          'call_ended' ||
+          'call_started':
+        ++_voiceReconcileGeneration;
+    }
     switch (frame.op) {
       case 'call_incoming':
         final session = _sessionFromFrame(frame, VoiceCallStatus.ringing);
@@ -815,6 +832,14 @@ class CallController extends StateNotifier<CallState> {
             );
           }
         }
+      case 'call_started':
+        // The event is newer than an in-flight REST snapshot but carries only
+        // a partial session. Re-read the authoritative active session instead
+        // of leaving the controller in a cancelled reconciliation generation.
+        final binding = _ref.read(realtimeHelloBindingProvider);
+        if (binding != null && binding.profileId == bindingProfileId) {
+          unawaited(_reconcileActiveVoice(binding));
+        }
       case 'call_accepted':
         final current = state.session;
         final activeProfileId = _ref
@@ -825,6 +850,36 @@ class CallController extends StateNotifier<CallState> {
             activeProfileId == current.initiatorProfileId) {
           state = state.copyWith(phase: CallPhase.connecting);
           unawaited(_connectLiveKit(current));
+        }
+      case 'screen_share_started':
+        ++_screenProjectionGeneration;
+        final current = state.session;
+        final roomID = frame.data?['room_id'] as String?;
+        final profileID = frame.data?['profile_id'] as String?;
+        if (current != null &&
+            roomID == current.roomId &&
+            profileID != null &&
+            profileID.isNotEmpty) {
+          _authoritativeScreenSharers = {
+            ..._authoritativeScreenSharers,
+            profileID,
+          };
+          _reconcileScreenShareProjection(current);
+        }
+      case 'screen_share_stopped':
+        ++_screenProjectionGeneration;
+        final current = state.session;
+        final roomID = frame.data?['room_id'] as String?;
+        final profileID = frame.data?['profile_id'] as String?;
+        if (current != null &&
+            roomID == current.roomId &&
+            profileID != null &&
+            profileID.isNotEmpty) {
+          _authoritativeScreenSharers = {
+            for (final id in _authoritativeScreenSharers)
+              if (id != profileID) id,
+          };
+          _reconcileScreenShareProjection(current);
         }
       case 'call_declined' || 'call_missed' || 'call_ended':
         final current = state.session;
@@ -850,11 +905,161 @@ class CallController extends StateNotifier<CallState> {
     );
   }
 
-  Future<void> _syncActiveCallIfIdle() async {
-    if (state.phase != CallPhase.idle) return;
+  Future<void> _reconcileActiveVoice(RealtimeHelloBinding binding) async {
     final auth = _ref.read(authorizationHeaderProvider);
-    if (auth == null) return;
-    await _tryRecoverActiveCall(auth);
+    if (auth == null ||
+        auth != binding.authorization ||
+        _ref.read(authControllerProvider).activeProfileId !=
+            binding.profileId ||
+        _ref.read(realtimeHelloBindingProvider)?.generation !=
+            binding.generation) {
+      return;
+    }
+    final ownedProfileID = state.voiceBindingProfileId;
+    if (ownedProfileID != null && ownedProfileID != binding.profileId) return;
+    final generation = ++_voiceReconcileGeneration;
+    final result = await _ref
+        .read(voiceCallsClientProvider)
+        .getActiveCall(authorization: auth);
+    if (!_isCurrentVoiceReconciliation(generation, binding)) return;
+    switch (result) {
+      case VoiceApiFailure():
+        _scheduleVoiceReconciliationRetry(binding);
+      case VoiceApiOk(:final data):
+        _voiceReconcileRetryTimer?.cancel();
+        final session = data;
+        if (session == null) {
+          await _clearReconciledVoiceState(binding.profileId);
+          if (!_isCurrentVoiceReconciliation(generation, binding)) return;
+          return;
+        }
+        final activeProfileId = binding.profileId;
+        if (session.status == VoiceCallStatus.ringing) {
+          if (session.isGroupVoice) return;
+          if (session.initiatorProfileId == activeProfileId) {
+            _applySession(session, CallPhase.outgoing);
+          } else if (session.calleeProfileId == activeProfileId) {
+            _applySession(session, CallPhase.incoming);
+          }
+          return;
+        }
+        if (session.status != VoiceCallStatus.active) return;
+        final previousRoomID = state.session?.roomId;
+        final wasActiveSameRoom =
+            previousRoomID == session.roomId && state.phase == CallPhase.active;
+        if (previousRoomID != session.roomId) {
+          await _room?.disconnect();
+          if (!_isCurrentVoiceReconciliation(generation, binding)) return;
+          _room = null;
+          _authoritativeScreenSharers = const {};
+          _ref.read(screenShareControllerProvider.notifier).clearForRoomEnd();
+        }
+        if (wasActiveSameRoom) {
+          // The authoritative session may refresh, but the already connected
+          // room owns runtime toggles and media state until it is replaced.
+          state = state.copyWith(session: session);
+        } else {
+          _applySession(session, CallPhase.connecting);
+        }
+        await _reconcileVoiceStates(
+          authorization: auth,
+          session: session,
+          generation: generation,
+          binding: binding,
+        );
+        if (!_isCurrentVoiceReconciliation(generation, binding)) return;
+        if (!wasActiveSameRoom) {
+          await _connectLiveKit(session);
+        }
+    }
+  }
+
+  bool _isCurrentVoiceReconciliation(
+    int generation,
+    RealtimeHelloBinding binding,
+  ) {
+    return mounted &&
+        generation == _voiceReconcileGeneration &&
+        _ref.read(realtimeHelloBindingProvider)?.generation ==
+            binding.generation &&
+        _ref.read(authControllerProvider).activeProfileId ==
+            binding.profileId &&
+        _ref.read(authorizationHeaderProvider) == binding.authorization;
+  }
+
+  void _scheduleVoiceReconciliationRetry(RealtimeHelloBinding binding) {
+    _voiceReconcileRetryTimer?.cancel();
+    _voiceReconcileRetryTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted &&
+          _ref.read(realtimeHelloBindingProvider)?.generation ==
+              binding.generation) {
+        unawaited(_reconcileActiveVoice(binding));
+      }
+    });
+  }
+
+  Future<void> _clearReconciledVoiceState(String bindingProfileId) async {
+    if (state.voiceBindingProfileId != null &&
+        state.voiceBindingProfileId != bindingProfileId) {
+      return;
+    }
+    ++_connectGeneration;
+    final staleRoom = _room;
+    _room = null;
+    _authoritativeScreenSharers = const {};
+    if (!mounted) return;
+    state = const CallState();
+    _ref.read(screenShareControllerProvider.notifier).clearForRoomEnd();
+    unawaited(staleRoom?.disconnect());
+  }
+
+  Future<void> _reconcileVoiceStates({
+    required String authorization,
+    required VoiceCallSession session,
+    required int generation,
+    required RealtimeHelloBinding binding,
+  }) async {
+    final screenGeneration = _screenProjectionGeneration;
+    final result = await _ref
+        .read(voiceCallsClientProvider)
+        .getCallVoiceStates(
+          authorization: authorization,
+          roomId: session.roomId,
+        );
+    if (!_isCurrentVoiceReconciliation(generation, binding) ||
+        state.session?.roomId != session.roomId ||
+        screenGeneration != _screenProjectionGeneration) {
+      return;
+    }
+    switch (result) {
+      case VoiceApiFailure():
+        _scheduleVoiceReconciliationRetry(binding);
+      case VoiceApiOk(:final data):
+        _authoritativeScreenSharers = data
+            .where((participant) => participant.isScreenSharing)
+            .map((participant) => participant.profileId)
+            .toSet();
+        _reconcileScreenShareProjection(session);
+    }
+  }
+
+  void _reconcileScreenShareProjection(VoiceCallSession session) {
+    if (!mounted || state.session?.roomId != session.roomId) return;
+    final selfID = _ref.read(authControllerProvider).activeProfileId;
+    final room = _room;
+    _ref
+        .read(screenShareControllerProvider.notifier)
+        .reconcileSnapshot(
+          roomId: session.roomId,
+          sharingProfileIds: _authoritativeScreenSharers,
+          localProfileId: selfID,
+          hasLocalTrack: room?.localScreenShareTrack() != null,
+          hasRemoteTrack: (profileID) =>
+              room
+                  ?.remoteScreenShareTracks(participantIdentity: profileID)
+                  .isNotEmpty ??
+              false,
+        );
   }
 
   Future<bool> _tryRecoverActiveCall(String auth) async {
@@ -930,6 +1135,7 @@ class CallController extends StateNotifier<CallState> {
     _eventsSub?.close();
     _linkSub?.close();
     _inputSub?.close();
+    _voiceReconcileRetryTimer?.cancel();
     unawaited(_room?.disconnect());
     super.dispose();
   }

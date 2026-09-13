@@ -192,6 +192,17 @@ type readResult struct {
 	err error
 }
 
+func closeFanoutOverflow(c *websocket.Conn, reg *connReg, writeMu *sync.Mutex) {
+	writeMu.Lock()
+	defer writeMu.Unlock()
+	reg.beforeOverflowClose(1013, "fanout_overflow")
+	_ = c.WriteControl(
+		websocket.CloseMessage,
+		websocket.FormatCloseMessage(1013, "fanout_overflow"),
+		time.Now().Add(10*time.Second),
+	)
+}
+
 func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLister, hub *wsHub, rf *redisFanout, instanceID string, presence presenceUpdater, dap deliveryAckPublisher, requestID string, upgradeAt time.Time, policy wsSessionEpochPolicy) {
 	connID := uuid.NewString()
 	observeWSConnectSuccess()
@@ -311,8 +322,22 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 	}()
 
 	for {
+		// Once overflow is signalled it must win over already queued fan-out.
+		// This keeps lifecycle recovery bounded even when the queue was full.
 		select {
+		case <-reg.overflow:
+			closeFanoutOverflow(c, reg, &writeMu)
+			return
+		default:
+		}
+		select {
+		case <-reg.overflow:
+			// A lifecycle fan-out cannot be silently lost. This connection is
+			// the only slow recipient; do not stall or evict healthy peers.
+			closeFanoutOverflow(c, reg, &writeMu)
+			return
 		case env := <-reg.fanout:
+			reg.beforeFanoutWrite()
 			if err := write(env.Op, env.D); err != nil {
 				return
 			}

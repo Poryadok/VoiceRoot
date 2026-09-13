@@ -19,14 +19,21 @@ type fanoutEnvelope struct {
 
 // connReg is one authenticated WebSocket registered for cross-connection fan-out.
 type connReg struct {
-	instanceID string
-	connID     string
-	accountID  string
-	profileID  string
-	fanout     chan fanoutEnvelope
-	chats      map[string]struct{}
-	guardMu    sync.RWMutex
-	writeGuard func() bool
+	instanceID   string
+	connID       string
+	accountID    string
+	profileID    string
+	fanout       chan fanoutEnvelope
+	overflow     chan struct{}
+	overflowOnce sync.Once
+	chats        map[string]struct{}
+	guardMu      sync.RWMutex
+	writeGuard   func() bool
+	// The hooks are test seams. The production path leaves both nil.
+	// fanoutWriteHook runs immediately before a queued fan-out is written;
+	// overflowCloseHook observes the single overflow close attempt.
+	fanoutWriteHook   func()
+	overflowCloseHook func(code int, reason string)
 }
 
 type wsHub struct {
@@ -276,22 +283,62 @@ func (r *connReg) setWriteGuard(guard func() bool) {
 	r.guardMu.Unlock()
 }
 
-func (r *connReg) enqueue(env fanoutEnvelope, blocking bool) {
+func (r *connReg) setFanoutWriteHook(hook func()) {
+	r.guardMu.Lock()
+	r.fanoutWriteHook = hook
+	r.guardMu.Unlock()
+}
+
+func (r *connReg) beforeFanoutWrite() {
+	r.guardMu.RLock()
+	hook := r.fanoutWriteHook
+	r.guardMu.RUnlock()
+	if hook != nil {
+		hook()
+	}
+}
+
+func (r *connReg) setOverflowCloseHook(hook func(code int, reason string)) {
+	r.guardMu.Lock()
+	r.overflowCloseHook = hook
+	r.guardMu.Unlock()
+}
+
+func (r *connReg) beforeOverflowClose(code int, reason string) {
+	r.guardMu.RLock()
+	hook := r.overflowCloseHook
+	r.guardMu.RUnlock()
+	if hook != nil {
+		hook(code, reason)
+	}
+}
+
+type fanoutEnqueueResult uint8
+
+const (
+	fanoutEnqueued fanoutEnqueueResult = iota
+	fanoutDropped
+	fanoutDisconnectOnOverflow
+)
+
+func (r *connReg) enqueue(env fanoutEnvelope, disconnectOnOverflow bool) fanoutEnqueueResult {
 	r.guardMu.RLock()
 	guard := r.writeGuard
 	r.guardMu.RUnlock()
 	if guard != nil {
 		if !guard() {
-			return
+			return fanoutDropped
 		}
-	}
-	if blocking {
-		r.fanout <- env
-		return
 	}
 	select {
 	case r.fanout <- env:
+		return fanoutEnqueued
 	default:
+		if !disconnectOnOverflow {
+			return fanoutDropped
+		}
+		r.overflowOnce.Do(func() { close(r.overflow) })
+		return fanoutDisconnectOnOverflow
 	}
 }
 
@@ -315,6 +362,7 @@ func (h *wsHub) attachAccountConn(instanceID, connID, accountID, profileID strin
 		accountID:  canonicalUUID(accountID),
 		profileID:  profileID,
 		fanout:     make(chan fanoutEnvelope, fanoutBuf),
+		overflow:   make(chan struct{}),
 		chats:      make(map[string]struct{}),
 	}
 	if profileID == "" {
@@ -568,10 +616,13 @@ func (h *wsHub) broadcastToChat(chatID string, env fanoutEnvelope, logger *slog.
 	}
 }
 
-func profileFanoutBlocks(op string) bool {
+// profileFanoutDisconnectsOnOverflow lists lifecycle state transitions that a
+// slow recipient must reconcile rather than silently miss. Enqueue remains
+// zero-wait: the overflowing recipient alone is closed by its WS loop.
+func profileFanoutDisconnectsOnOverflow(op string) bool {
 	switch op {
 	case "call_incoming", "call_accepted", "call_declined", "call_missed", "call_ended",
-		"screen_share_started", "screen_share_stopped":
+		"call_started", "screen_share_started", "screen_share_stopped":
 		return true
 	default:
 		return false
@@ -594,6 +645,7 @@ func (h *wsHub) broadcastToProfile(profileID string, env fanoutEnvelope, logger 
 		logger.LogAttrs(context.Background(), slog.LevelDebug, "ws fanout", fanoutLogAttrs("", profileID, env.Op, requestID, targets)...)
 	}
 	for _, reg := range targets {
-		reg.enqueue(env, profileFanoutBlocks(env.Op))
+		result := reg.enqueue(env, profileFanoutDisconnectsOnOverflow(env.Op))
+		observeWSFanoutEnqueue(result)
 	}
 }

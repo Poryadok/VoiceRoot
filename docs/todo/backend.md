@@ -729,6 +729,7 @@
 ### Realtime
 
 
+- [x] **[Realtime] Slow profile fan-out blocked a JetStream callback** — bounded zero-wait enqueue: eight call/screen lifecycle ops close only the overflowing connection with `1013 fanout_overflow`; all other ops (including `voice_state_update`) are lossy. Voice/Message durable callbacks ACK after every bounded local attempt, including malformed event discard.
 - [x] **[Realtime] Coverage artifacts committed** — удалены ровно шесть tracked-артефактов (`$prof`, `coverage`, `coverage_profile`, `coverage_profile.out`, `notif_cov`, `notif_cov.out`) из `src/backend/realtime/`; `.gitignore` теперь предотвращает их повторное появление.
 - [ ] **[Realtime] Unknown inbound ops silently dropped** — `ws.go` `default` branch ignores unrecognized client ops (no `error` frame).
 - [ ] **[Realtime] Server does not emit WebSocket ping frames** — liveness is client `heartbeat` + 90s read deadline (`ws.go`); doc mentions “ping-pong” but implementation is app-level heartbeat only.

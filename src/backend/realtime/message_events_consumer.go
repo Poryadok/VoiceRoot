@@ -216,31 +216,46 @@ func messageEventLogAttrs(data []byte) []slog.Attr {
 func subscribeMessageEvents(js nats.JetStreamContext, hub *wsHub, instanceID string, logger *slog.Logger) (*nats.Subscription, error) {
 	durable := consumerDurableName(instanceID)
 	handler := func(msg *nats.Msg) {
-		attrs := messageEventLogAttrs(msg.Data)
-		if mentionAddedFromBytes(msg.Data) != nil {
-			natslog.LogConsume(logger, msg, slog.LevelInfo, "message event consumed", attrs...)
-			dispatchMessageStreamEvent(hub, msg.Data, msg.Header, logger, natslog.RequestIDFromMsg(msg))
-			return
-		}
-		if _, _, ok := messageEventBytesToFanout(msg.Data); ok {
-			natslog.LogConsume(logger, msg, slog.LevelInfo, "message event consumed", attrs...)
-			dispatchMessageStreamEvent(hub, msg.Data, msg.Header, logger, natslog.RequestIDFromMsg(msg))
-			return
-		}
-		natslog.LogConsume(logger, msg, slog.LevelWarn, "unknown message event payload", attrs...)
+		consumeMessageEventMessage(msg, hub, logger, func(message *nats.Msg) error {
+			return message.Ack()
+		})
 	}
 	sub, err := js.Subscribe("message.>", handler,
 		nats.Durable(durable),
 		nats.BindStream(jsStreamMessageEvents),
 		nats.DeliverNew(),
+		nats.ManualAck(),
 	)
 	if err != nil {
-		sub, err = js.Subscribe("", handler, nats.Bind(jsStreamMessageEvents, durable))
+		sub, err = js.Subscribe("", handler,
+			nats.Bind(jsStreamMessageEvents, durable),
+			nats.ManualAck(),
+		)
 		if err != nil {
 			return nil, fmt.Errorf("jetstream subscribe message.events: %w", err)
 		}
 	}
 	return sub, nil
+}
+
+func consumeMessageEventMessage(msg *nats.Msg, hub *wsHub, logger *slog.Logger, ack func(*nats.Msg) error) {
+	defer func() {
+		if err := ack(msg); err != nil && logger != nil {
+			logger.Warn("message event ack failed", slog.String("error", err.Error()))
+		}
+	}()
+	attrs := messageEventLogAttrs(msg.Data)
+	if mentionAddedFromBytes(msg.Data) != nil {
+		natslog.LogConsume(logger, msg, slog.LevelInfo, "message event consumed", attrs...)
+		dispatchMessageStreamEvent(hub, msg.Data, msg.Header, logger, natslog.RequestIDFromMsg(msg))
+		return
+	}
+	if _, _, ok := messageEventBytesToFanout(msg.Data); ok {
+		natslog.LogConsume(logger, msg, slog.LevelInfo, "message event consumed", attrs...)
+		dispatchMessageStreamEvent(hub, msg.Data, msg.Header, logger, natslog.RequestIDFromMsg(msg))
+		return
+	}
+	natslog.LogConsume(logger, msg, slog.LevelWarn, "unknown message event payload", attrs...)
 }
 
 // runMessageEventsConsumer subscribes to JetStream stream message_events and fans out to the local hub.

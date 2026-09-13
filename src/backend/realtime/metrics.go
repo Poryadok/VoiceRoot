@@ -10,10 +10,11 @@ import (
 )
 
 type realtimeMetrics struct {
-	connectionsActive prometheus.Gauge
-	connectTotal      *prometheus.CounterVec
-	helloDuration     prometheus.Histogram
-	natsConsumeLag    *prometheus.GaugeVec
+	connectionsActive  prometheus.Gauge
+	connectTotal       *prometheus.CounterVec
+	helloDuration      prometheus.Histogram
+	natsConsumeLag     *prometheus.GaugeVec
+	fanoutEnqueueTotal *prometheus.CounterVec
 }
 
 var rtMetrics *realtimeMetrics
@@ -37,18 +38,40 @@ func initRealtimeMetrics(reg *prometheus.Registry) *realtimeMetrics {
 			Name: "realtime_nats_consume_lag",
 			Help: "JetStream consumer pending messages (stream lag).",
 		}, []string{"stream", "consumer"}),
+		fanoutEnqueueTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "realtime_ws_fanout_enqueue_total",
+			Help: "Profile fan-out enqueue outcomes; labels are a bounded policy set.",
+		}, []string{"outcome"}),
 	}
 	reg.MustRegister(
 		m.connectionsActive,
 		m.connectTotal,
 		m.helloDuration,
 		m.natsConsumeLag,
+		m.fanoutEnqueueTotal,
 	)
 	// CounterVec/GaugeVec children are omitted from /metrics until label sets exist.
 	m.connectTotal.WithLabelValues("success")
 	m.connectTotal.WithLabelValues("fail")
+	m.fanoutEnqueueTotal.WithLabelValues("enqueued")
+	m.fanoutEnqueueTotal.WithLabelValues("dropped")
+	m.fanoutEnqueueTotal.WithLabelValues("disconnect_on_overflow")
 	rtMetrics = m
 	return m
+}
+
+func observeWSFanoutEnqueue(result fanoutEnqueueResult) {
+	if rtMetrics == nil {
+		return
+	}
+	switch result {
+	case fanoutEnqueued:
+		rtMetrics.fanoutEnqueueTotal.WithLabelValues("enqueued").Inc()
+	case fanoutDisconnectOnOverflow:
+		rtMetrics.fanoutEnqueueTotal.WithLabelValues("disconnect_on_overflow").Inc()
+	default:
+		rtMetrics.fanoutEnqueueTotal.WithLabelValues("dropped").Inc()
+	}
 }
 
 func observeWSConnectFail() {
