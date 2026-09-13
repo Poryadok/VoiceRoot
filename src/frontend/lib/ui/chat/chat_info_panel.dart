@@ -74,8 +74,7 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
     final voice = VoiceColors.of(context);
     final spaceId = _spaceIdForChat(ref, widget.chatId);
 
-    return Column(
-      key: ChatInfoPanel.panelKey,
+    final header = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (widget.isGroup) ...[
@@ -102,7 +101,9 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
           ),
         if (!widget.isGroup) DmE2eSettingsSection(chatId: widget.chatId),
         ChatNotificationOverridesSection(chatId: widget.chatId),
-        TabBar(
+      ],
+    );
+    final tabs = TabBar(
           controller: _tabs,
           isScrollable: true,
           tabs: [
@@ -111,9 +112,20 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
             Tab(key: ChatInfoPanel.linksTabKey, text: l10n.chatSharedMediaTabLinks),
             Tab(key: ChatInfoPanel.voiceTabKey, text: l10n.chatSharedMediaTabVoice),
           ],
-        ),
-        Expanded(
-          child: TabBarView(
+        );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final mediaHeight = constraints.maxHeight < 640 ? 248.0 : constraints.maxHeight * 0.4;
+        return Column(
+          key: ChatInfoPanel.panelKey,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: SingleChildScrollView(child: header)),
+            tabs,
+            SizedBox(
+              height: mediaHeight,
+              child: TabBarView(
             controller: _tabs,
             children: [
               _SharedMediaTab(chatId: widget.chatId, kind: SharedMediaTabKind.media),
@@ -122,8 +134,10 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
               _SharedMediaTab(chatId: widget.chatId, kind: SharedMediaTabKind.voice),
             ],
           ),
-        ),
-      ],
+            ),
+          ],
+        );
+      },
     );
   }
 }
