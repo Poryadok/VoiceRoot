@@ -64,7 +64,7 @@ func (s *GRPCSpaceCoMembership) AreCoMembers(ctx context.Context, profileA, prof
 	if s == nil || s.Client == nil {
 		return false, nil
 	}
-	resp, err := s.Client.AreCoMembers(ctx, &spacev1.AreCoMembersRequest{
+	resp, err := s.Client.AreCoMembers(privacyS2SContext(ctx), &spacev1.AreCoMembersRequest{
 		ProfileIdA: profileA.String(),
 		ProfileIdB: profileB.String(),
 		SpaceIds:   spaceIDs,
