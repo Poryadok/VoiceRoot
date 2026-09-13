@@ -16,23 +16,23 @@ import (
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 
-	grpcsvc "voice/backend/notification/internal/grpcsvc"
 	"voice/backend/notification/internal/apns"
 	"voice/backend/notification/internal/chatmembers"
 	"voice/backend/notification/internal/delivery"
 	"voice/backend/notification/internal/dispatch"
-	"voice/backend/notification/internal/fcm"
 	"voice/backend/notification/internal/email"
+	"voice/backend/notification/internal/fcm"
 	"voice/backend/notification/internal/grouping"
+	grpcsvc "voice/backend/notification/internal/grpcsvc"
 	"voice/backend/notification/internal/presence"
 	"voice/backend/notification/internal/pushenrich"
 	"voice/backend/notification/internal/s2s"
 	"voice/backend/notification/internal/store"
-	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/analyticsevents"
+	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
-	"voice/backend/pkg/runtimeconfig"
 	voiceprom "voice/backend/pkg/promhttp"
+	"voice/backend/pkg/runtimeconfig"
 
 	notificationv1 "voice.app/voice/notification/v1"
 )
@@ -131,7 +131,7 @@ func main() {
 		var chatLister chatmembers.Lister = chatmembers.NoopLister{}
 		if chatAddr := strings.TrimSpace(os.Getenv("CHAT_GRPC_ADDR")); chatAddr != "" {
 			if cl, err := chatmembers.NewGRPCLister(chatAddr); err != nil {
-				logger.Warn("chat members lister unavailable; MessageSent push skipped", slog.Any("error", err))
+				logger.Warn("chat members lister unavailable; message events will retry", slog.Any("error", err))
 			} else {
 				chatLister = cl
 				logger.Info("chat members lister enabled", slog.String("addr", chatAddr))
@@ -223,9 +223,9 @@ func main() {
 		}
 		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))...)
 		notifySvc := &grpcsvc.NotificationGRPC{
-			Tokens:    tokenStore,
-			Settings:  settingsStore,
-			Pusher:    pusher,
+			Tokens:   tokenStore,
+			Settings: settingsStore,
+			Pusher:   pusher,
 		}
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			if pub, err := analyticsevents.NewJetStreamPublisher(natsURL); err == nil {

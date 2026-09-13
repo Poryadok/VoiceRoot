@@ -25,6 +25,7 @@ const (
 	subjectProfileSwitched = "user.profile_switched"
 	subjectProfileVerified = "user.verified"
 	subjectPresenceChanged = "user.presence_changed"
+	subjectGameDetected    = "user.game_detected"
 	subjectSettingsChanged = "user.settings_changed"
 )
 
@@ -73,6 +74,7 @@ func (p *JetStreamPublisher) ensureStream() error {
 			subjectProfileSwitched,
 			subjectProfileVerified,
 			subjectPresenceChanged,
+			subjectGameDetected,
 			subjectSettingsChanged,
 		}
 		if info, err := p.js.StreamInfo(streamName); err == nil {
@@ -149,16 +151,15 @@ func (p *JetStreamPublisher) PublishProfileCreated(ctx context.Context, profileI
 	return p.publishProto(ctx, subjectProfileCreated, env)
 }
 
-// PublishProfileUpdated emits user.profile_updated using the profile_created arm
-// so search indexers can upsert without requiring regenerated protobuf stubs.
-func (p *JetStreamPublisher) PublishProfileUpdated(ctx context.Context, profileID, accountID, _ string) error {
+// PublishProfileUpdated emits user.profile_updated after a committed profile mutation.
+func (p *JetStreamPublisher) PublishProfileUpdated(ctx context.Context, profileID string, changedFields []string) error {
 	env := &eventsv1.UserStreamEvent{
 		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.New(time.Now().UTC()),
-		Payload: &eventsv1.UserStreamEvent_ProfileCreated{
-			ProfileCreated: &eventsv1.ProfileCreated{
-				ProfileId: profileID,
-				AccountId: accountID,
+		Payload: &eventsv1.UserStreamEvent_ProfileUpdated{
+			ProfileUpdated: &eventsv1.ProfileUpdated{
+				ProfileId:     profileID,
+				ChangedFields: changedFields,
 			},
 		},
 	}
@@ -167,14 +168,15 @@ func (p *JetStreamPublisher) PublishProfileUpdated(ctx context.Context, profileI
 
 // PublishProfileSwitched emits user.profile_switched.
 func (p *JetStreamPublisher) PublishProfileSwitched(ctx context.Context, accountID, oldProfileID, newProfileID string) error {
-	_ = oldProfileID
 	env := &eventsv1.UserStreamEvent{
 		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.New(time.Now().UTC()),
 		Payload: &eventsv1.UserStreamEvent_ProfileSwitched{
 			ProfileSwitched: &eventsv1.ProfileSwitched{
-				AccountId: accountID,
-				ProfileId: newProfileID,
+				AccountId:    accountID,
+				ProfileId:    newProfileID,
+				OldProfileId: oldProfileID,
+				NewProfileId: newProfileID,
 			},
 		},
 	}
@@ -182,18 +184,17 @@ func (p *JetStreamPublisher) PublishProfileSwitched(ctx context.Context, account
 }
 
 // PublishVerified emits user.verified.
-func (p *JetStreamPublisher) PublishVerified(ctx context.Context, profileID, accountID, verificationType string) error {
+func (p *JetStreamPublisher) PublishVerified(ctx context.Context, profileID, verificationType string) error {
 	env := &eventsv1.UserStreamEvent{
 		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.New(time.Now().UTC()),
-		Payload: &eventsv1.UserStreamEvent_ProfileCreated{
-			ProfileCreated: &eventsv1.ProfileCreated{
-				ProfileId: profileID,
-				AccountId: accountID,
+		Payload: &eventsv1.UserStreamEvent_ProfileVerified{
+			ProfileVerified: &eventsv1.ProfileVerified{
+				ProfileId:        profileID,
+				VerificationType: verificationType,
 			},
 		},
 	}
-	_ = verificationType
 	return p.publishProto(ctx, subjectProfileVerified, env)
 }
 
@@ -217,11 +218,27 @@ func (p *JetStreamPublisher) PublishPresenceChanged(ctx context.Context, profile
 	return p.publishProto(ctx, subjectPresenceChanged, newPresenceChangedEvent(profileID, oldStatus, newStatus))
 }
 
+// PublishGameDetected emits user.game_detected after a new non-empty game title is persisted.
+func (p *JetStreamPublisher) PublishGameDetected(ctx context.Context, profileID, gameName string) error {
+	env := &eventsv1.UserStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.UserStreamEvent_GameDetected{
+			GameDetected: &eventsv1.GameDetected{ProfileId: profileID, GameName: gameName},
+		},
+	}
+	return p.publishProto(ctx, subjectGameDetected, env)
+}
+
 // PublishSettingsChanged emits user.settings_changed after a committed settings update.
-func (p *JetStreamPublisher) PublishSettingsChanged(ctx context.Context, profileID, changedKeysJSON string) error {
+func (p *JetStreamPublisher) PublishSettingsChanged(ctx context.Context, profileID string, changedKeys []string, changedKeysJSON string) error {
 	env := &eventsv1.UserStreamEvent{
 		EventId: uuid.NewString(), OccurredAt: timestamppb.New(time.Now().UTC()),
-		Payload: &eventsv1.UserStreamEvent_SettingsChanged{SettingsChanged: &eventsv1.SettingsChanged{ProfileId: profileID, ChangedKeysJson: changedKeysJSON}},
+		Payload: &eventsv1.UserStreamEvent_SettingsChanged{SettingsChanged: &eventsv1.SettingsChanged{
+			ProfileId:       profileID,
+			ChangedKeys:     changedKeys,
+			ChangedKeysJson: changedKeysJSON,
+		}},
 	}
 	return p.publishProto(ctx, subjectSettingsChanged, env)
 }
