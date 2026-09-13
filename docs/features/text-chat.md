@@ -256,10 +256,10 @@ Normative menu — [screen-controls.md](../design/screen-controls.md) §3.6c. **
 | Опция | Wire / RPC | Поведение |
 |-------|------------|-----------|
 | **Send without sound** | `send_silent=true` на `SendMessageRequest`; propagates в `message.sent.send_silent` | Push без звука; in-app badge/unread как обычно — [notifications.md](notifications.md) § «Send without sound» |
-| **Schedule message** | `scheduled_at` на `SendMessageRequest`; row в `scheduled_messages` | Strip над composer; **edit** через `UpdateScheduledMessage` (только `status=pending`); cancel / send-now — см. [messaging-service.md](../microservices/messaging-service.md) § Scheduled messages |
-| **Send when online** | `send_when_online=true` | Queued до presence `online` у получателя (**DM only**); invisible/offline у получателя — очередь держится; отмена до dispatch; GRP/CH → validation §3.6f |
+| **Schedule message** | `SendMessageRequest.delivery_schedule.scheduled_at` | Возвращает `ScheduledMessage`, а не sent `Message`; strip над composer; edit/cancel/send-now доступны только создателю pending row — см. [messaging-service.md](../microservices/messaging-service.md) § Scheduled messages |
+| **Send when online** | `SendMessageRequest.delivery_schedule.send_when_online=true` | Второй вариант того же `delivery_schedule` oneof: queued до live presence `online` у получателя (**DM only**); invisible/offline у получателя — очередь держится; отмена до dispatch; GRP/CH → validation §3.6f |
 
-> **Implementation status:** `send_silent` is shipped in `SendMessageRequest`, durable Messaging storage, `message.sent` and Notification push consumption; composer remains open. `scheduled_at`, `send_when_online`, `UpdateScheduledMessage` and the `scheduled_messages` table are **not yet in proto/code**; normative contract — [messaging-service.md](../microservices/messaging-service.md) § Send options, § Scheduled messages ([todo/backend.md](../todo/backend.md)).
+> **Implementation status:** `send_silent` is shipped in `SendMessageRequest`, durable Messaging storage, `message.sent` and Notification push consumption; composer remains open. `delivery_schedule` oneof, scheduled RPCs/table and the semantic schedule result union are **not yet in proto/code**. Scheduled event metadata uses `was_scheduled = 9` and optional `scheduled_at = 10` after the shipped `MessageSent.send_silent = 8`. Normative contract — [messaging-service.md](../microservices/messaging-service.md) § Send options, § Scheduled messages ([todo/backend.md](../todo/backend.md)).
 
 ### Side panel (desktop) / sheets (mobile)
 

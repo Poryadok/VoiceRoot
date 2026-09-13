@@ -24,8 +24,8 @@ type ProfileHydrator interface {
 
 // ProfileIndexer handles user.events profile payloads.
 type ProfileIndexer struct {
-	Store     ProfileStore
-	Profiles  ProfileHydrator
+	Store    ProfileStore
+	Profiles ProfileHydrator
 }
 
 // Handle processes profile_created and profile_updated events.
@@ -45,7 +45,7 @@ func (idx *ProfileIndexer) upsert(ctx context.Context, profileRaw string) error 
 	}
 	profileID, err := uuid.Parse(profileRaw)
 	if err != nil {
-		return fmt.Errorf("invalid profile_id: %w", err)
+		return newPermanentConsumeError("invalid profile_id: %w", err)
 	}
 	accountID, username, discriminator, displayName, verificationType, err := idx.Profiles.LoadProfile(ctx, profileID)
 	if err != nil {
