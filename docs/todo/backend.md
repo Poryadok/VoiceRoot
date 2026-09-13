@@ -570,7 +570,6 @@
 
 
 - [x] **[Voice] `GetVoiceStates` populates commander/floor fields** — `is_commander`, `hand_raised`, `has_floor`, `is_broadcasting` in store + GetVoiceStates + state events (П.11 / VC-07).
-- [x] **[Voice] Group voice cap mismatch in microservice doc** — **done:** `voice-service.md` distinguishes the text-group membership limit (**500**) from the temporary group voice-room participant cap (**32**, `MaxGroupVoiceParticipants`).
 - [ ] **[Voice] E2E coverage gaps vs PLAN “shipped”** — present: DM signaling (`TestComposeVoiceCall1to1_live`), optional bidirectional audio (`compose_voice_call_media_live_test.go`), Flutter `group_voice` / `spaces_voice` / `screen_share` API tests. Missing: compose live test for **space** voice + screen share with Role guard; no staging **RTC/media** smoke; `group_voice` E2E never exercises `LeaveCall` multi-participant behavior.
 - [ ] **[Voice] `ListExpiredRinging` on Redis uses `KEYS`** — `voice:call:*` scan; risky under load.
 - [ ] **[Voice] Stale service README** — still says “scaffold / out of scope” while PLAN marks voice shipped.
