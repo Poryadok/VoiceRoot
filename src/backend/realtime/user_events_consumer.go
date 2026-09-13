@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -23,24 +22,6 @@ func userConsumerDurableName(instanceID string) string {
 		id = "unknown"
 	}
 	return "rt_" + strings.ReplaceAll(id, "-", "") + "_user"
-}
-
-// presenceWireForObservers maps stored presence to what peers should see (presence.md invisible).
-func presenceWireForObservers(status, customStatus string) (wireStatus, wireCustom string) {
-	st := strings.TrimSpace(strings.ToLower(status))
-	if st == "invisible" {
-		return "", ""
-	}
-	return status, customStatus
-}
-
-func presenceChangeFanoutPayload(profileID, status, customStatus string) (json.RawMessage, error) {
-	wireStatus, wireCustom := presenceWireForObservers(status, customStatus)
-	return json.Marshal(map[string]any{
-		"profile_id":    profileID,
-		"status":        wireStatus,
-		"custom_status": wireCustom,
-	})
 }
 
 func dispatchPresenceChangeToFriends(hub *wsHub, friends friendLister, viewer presenceViewer, profileID, status string, logger *slog.Logger, requestID string) {

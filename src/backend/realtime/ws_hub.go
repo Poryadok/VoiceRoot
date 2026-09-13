@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -582,29 +583,27 @@ func (h *wsHub) broadcastPresenceToProfiles(profileIDs []string, viewer presence
 		}
 	}
 	h.mu.RUnlock()
-	targets := make([]*connReg, 0, len(targetsByReg))
+	targets := make(map[*connReg]string, len(targetsByReg))
 	for reg := range targetsByReg {
-		targets = append(targets, reg)
+		targets[reg] = chatID
 	}
-	h.fanoutPrivatePresence(targets, viewer, targetProfileID, sourceStatus, chatID, logger)
+	h.fanoutPrivatePresence(targets, viewer, targetProfileID, sourceStatus, logger)
 }
 
-func (h *wsHub) fanoutPrivatePresence(targets []*connReg, viewer presenceViewer, targetProfileID, sourceStatus, chatID string, logger *slog.Logger) {
+func (h *wsHub) fanoutPrivatePresence(targets map[*connReg]string, viewer presenceViewer, targetProfileID, sourceStatus string, logger *slog.Logger) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	sem := make(chan struct{}, presencePrivacyFanoutConcurrency)
 	var wg sync.WaitGroup
-	for _, reg := range targets {
+	for reg, chatID := range targets {
 		select {
 		case sem <- struct{}{}:
 		case <-ctx.Done():
-			break
-		}
-		if ctx.Err() != nil {
-			break
+			wg.Wait()
+			return
 		}
 		wg.Add(1)
-		go func(reg *connReg) {
+		go func(reg *connReg, chatID string) {
 			defer wg.Done()
 			defer func() { <-sem }()
 			d, err := presenceFanoutPayload(ctx, viewer, targetProfileID, sourceStatus, reg, chatID)
@@ -615,7 +614,7 @@ func (h *wsHub) fanoutPrivatePresence(targets []*connReg, viewer presenceViewer,
 				return
 			}
 			reg.enqueue(fanoutEnvelope{Op: "presence_update", D: d}, false)
-		}(reg)
+		}(reg, chatID)
 	}
 	wg.Wait()
 }
@@ -624,25 +623,50 @@ func (h *wsHub) fanoutPrivatePresence(targets []*connReg, viewer presenceViewer,
 // documented User presence read path. Missing/error policy dependencies fail
 // closed; same-profile synchronization is handled by a separate private path.
 func (h *wsHub) broadcastPrivatePresenceInChatExcept(chatID, senderProfileID, sourceStatus, excludeInstance, excludeConn string, logger *slog.Logger) {
-	chatID = canonicalChatID(chatID)
+	h.broadcastPrivatePresenceInChatsExcept([]string{chatID}, senderProfileID, sourceStatus, excludeInstance, excludeConn, logger)
+}
+
+// broadcastPrivatePresenceInChatsExcept fans out one privacy-filtered update
+// per recipient across all chat subscriptions for one presence transition.
+func (h *wsHub) broadcastPrivatePresenceInChatsExcept(chatIDs []string, senderProfileID, sourceStatus, excludeInstance, excludeConn string, logger *slog.Logger) {
 	viewer := h.viewer()
-	if chatID == "" || viewer == nil {
+	if len(chatIDs) == 0 || viewer == nil {
 		return
 	}
+	canonicalChatIDs := make([]string, 0, len(chatIDs))
+	seenChats := make(map[string]struct{}, len(chatIDs))
+	for _, chatID := range chatIDs {
+		chatID = canonicalChatID(chatID)
+		if chatID == "" {
+			continue
+		}
+		if _, seen := seenChats[chatID]; seen {
+			continue
+		}
+		seenChats[chatID] = struct{}{}
+		canonicalChatIDs = append(canonicalChatIDs, chatID)
+	}
+	if len(canonicalChatIDs) == 0 {
+		return
+	}
+	sort.Strings(canonicalChatIDs)
 	h.mu.RLock()
-	m := h.byChat[chatID]
-	var targets []*connReg
-	for reg := range m {
-		if reg.instanceID == excludeInstance && reg.connID == excludeConn {
-			continue
+	targets := make(map[*connReg]string)
+	for _, chatID := range canonicalChatIDs {
+		for reg := range h.byChat[chatID] {
+			if reg.instanceID == excludeInstance && reg.connID == excludeConn {
+				continue
+			}
+			if senderProfileID != "" && reg.profileID == senderProfileID {
+				continue
+			}
+			if _, exists := targets[reg]; !exists {
+				targets[reg] = chatID
+			}
 		}
-		if senderProfileID != "" && reg.profileID == senderProfileID {
-			continue
-		}
-		targets = append(targets, reg)
 	}
 	h.mu.RUnlock()
-	h.fanoutPrivatePresence(targets, viewer, senderProfileID, sourceStatus, chatID, logger)
+	h.fanoutPrivatePresence(targets, viewer, senderProfileID, sourceStatus, logger)
 }
 
 const fanoutConnIDsLogCap = 8

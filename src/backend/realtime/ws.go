@@ -638,8 +638,8 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 					cancel()
 				}
 				chatCopy := hub.chatIDs(reg)
+				hub.broadcastPrivatePresenceInChatsExcept(chatCopy, claims.ProfileID, status, instanceID, connID, svcLogger)
 				for _, c := range chatCopy {
-					hub.broadcastPrivatePresenceInChatExcept(c, claims.ProfileID, status, instanceID, connID, svcLogger)
 					if rf != nil {
 						ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 						if err := rf.PublishPresenceChat(ctx, c, claims.ProfileID, status, custom, connID); err != nil {

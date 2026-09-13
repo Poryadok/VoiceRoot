@@ -82,16 +82,6 @@ func requireNoPresenceFanout(t *testing.T, reg *connReg) {
 	}
 }
 
-func TestPresenceWireForObservers_invisible(t *testing.T) {
-	st, custom := presenceWireForObservers("invisible", "busy")
-	require.Empty(t, st)
-	require.Empty(t, custom)
-
-	st, custom = presenceWireForObservers("dnd", "focus")
-	require.Equal(t, "dnd", st)
-	require.Equal(t, "focus", custom)
-}
-
 func TestDispatchPresenceChangeToFriends_fansOut(t *testing.T) {
 	hub := newWSHub()
 	friendReg := hub.attachConn("i1", "c-friend", "friend-1", 8)
@@ -216,6 +206,39 @@ func TestDispatchPresenceChangeToFriends_policyErrorFailsClosed(t *testing.T) {
 	dispatchPresenceChangeToFriends(hub, friends, viewer, "actor-1", "online", nil, "")
 
 	requireNoPresenceFanout(t, friendReg)
+}
+
+func TestBroadcastPrivatePresenceInChatsExcept_deduplicatesSharedRecipients(t *testing.T) {
+	hub := newWSHub()
+	sender := hub.attachConn("i1", "c-sender", "actor-1", 8)
+	recipient := hub.attachConn("i1", "c-recipient", "friend-1", 8)
+	t.Cleanup(func() {
+		hub.unregisterConn(sender)
+		hub.unregisterConn(recipient)
+	})
+	firstChat := "11111111-1111-1111-1111-111111111111"
+	secondChat := "22222222-2222-2222-2222-222222222222"
+	for _, chatID := range []string{firstChat, secondChat} {
+		require.True(t, hub.addChat(sender, chatID))
+		require.True(t, hub.addChat(recipient, chatID))
+	}
+	viewer := &stubPresenceViewer{byViewer: map[string]viewerPresence{
+		"friend-1": {Status: "online"},
+	}}
+	hub.setPresenceViewer(viewer)
+
+	hub.broadcastPrivatePresenceInChatsExcept([]string{secondChat, firstChat}, "actor-1", "online", "i1", "c-sender", nil)
+
+	var d map[string]any
+	select {
+	case env := <-recipient.fanout:
+		d = mustPresencePayload(t, env)
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected one deduplicated presence_update")
+	}
+	require.Equal(t, firstChat, d["chat_id"], "first canonical chat gives the recipient one deterministic event")
+	require.Equal(t, []presenceViewerCall{{targetProfileID: "actor-1", viewerProfileID: "friend-1", viewerAccountType: "regular"}}, viewer.Calls())
+	requireNoPresenceFanout(t, recipient)
 }
 
 func TestRunUserEventsConsumer_JetStreamToFriendHub(t *testing.T) {
