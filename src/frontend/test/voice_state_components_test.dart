@@ -47,7 +47,7 @@ void main() {
       expect(find.byIcon(Icons.inbox_outlined), findsOneWidget);
       expect(
         tester.getSemantics(find.byType(VoiceStatePanel)),
-        matchesSemantics(label: 'Nothing here yet\nNothing here yet'),
+        matchesSemantics(label: 'Nothing here yet'),
       );
       expect(find.byType(OutlinedButton), findsNothing);
     } finally {
