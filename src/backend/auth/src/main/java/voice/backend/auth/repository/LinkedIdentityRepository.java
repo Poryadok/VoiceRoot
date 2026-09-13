@@ -18,7 +18,7 @@ public interface LinkedIdentityRepository {
 
   List<LinkedIdentity> listAllActive();
 
-  Optional<LinkedIdentity> findActive(UUID accountId, String platform);
+  Optional<LinkedIdentity> findActive(UUID accountId, UUID profileId, String platform);
 
   /** Revokes only the exact active snapshot and returns the row actually revoked. */
   Optional<LinkedIdentity> revokeIfUnchanged(LinkedIdentity expected);

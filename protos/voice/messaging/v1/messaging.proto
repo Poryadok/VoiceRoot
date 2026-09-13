@@ -90,6 +90,8 @@ message SendMessageRequest {
   optional bool posted_as_chat = 8;
   optional bool is_e2e = 9;
   optional MessageContentType content_type = 10;
+  // Deliver push without sound or badge increment; persists through message.sent.
+  bool send_silent = 11;
 }
 
 message EditMessageRequest {
