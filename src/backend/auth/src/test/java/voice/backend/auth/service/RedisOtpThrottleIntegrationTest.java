@@ -58,6 +58,9 @@ class RedisOtpThrottleIntegrationTest {
     throttle.admitVerify("sliding");
     Thread.sleep(350);
     throttle.admitVerify("sliding");
+    assertThatThrownBy(() -> throttle.admitVerify("sliding"))
+        .isInstanceOf(AuthException.class)
+        .hasMessage("otp_rate_limited");
   }
 
   @Test

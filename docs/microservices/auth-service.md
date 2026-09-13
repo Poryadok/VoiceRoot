@@ -21,7 +21,7 @@
   одним `SET NX PX` до создания/отправки кода; `auth:otp:verify:<account_id>`
   ведёт атомарное admission до сравнения кода в Redis sorted-set sliding window
   одним Lua-вызовом. Defaults из
-  архитектурного канона: один resend в минуту и три failed verify за десять
+  архитектурного канона: один resend в минуту и три OTP verification attempts за десять
   минут. Redis error, corrupt Redis state или невозможный ответ закрывают OTP flow
   c `auth_unavailable`; ключи и Redis error detail клиенту не выдаются.
   In-memory throttle допустим только при явном `auth.persistence=memory` для
