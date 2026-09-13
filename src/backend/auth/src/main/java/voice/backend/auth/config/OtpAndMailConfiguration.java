@@ -53,13 +53,12 @@ public class OtpAndMailConfiguration {
   }
 
   @Bean
-  @ConditionalOnBean(StringRedisTemplate.class)
+  @ConditionalOnProperty(name = "auth.persistence", havingValue = "jdbc", matchIfMissing = true)
   OtpThrottle redisOtpThrottle(StringRedisTemplate redis, AuthProperties properties) {
     return new RedisOtpThrottle(redis, properties.getRedis().getOtp());
   }
 
   @Bean
-  @ConditionalOnMissingBean(OtpThrottle.class)
   @ConditionalOnProperty(name = "auth.persistence", havingValue = "memory")
   OtpThrottle inMemoryOtpThrottle() {
     return new InMemoryOtpThrottle();
