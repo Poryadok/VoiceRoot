@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"log/slog"
 	"net"
@@ -56,7 +57,7 @@ func main() {
 
 	flusher := func(flushCtx context.Context, rows []store.EventRow) error {
 		if chStore == nil {
-			return nil
+			return fmt.Errorf("clickhouse persistence unavailable")
 		}
 		start := time.Now()
 		err := chStore.InsertBatch(flushCtx, rows)
@@ -75,7 +76,7 @@ func main() {
 	defer acc.Stop()
 
 	var grpcSrv *grpc.Server
-	if chStore != nil || acc != nil {
+	if chStore != nil {
 		ingest := &grpcsvc.IngestGRPC{Buffer: acc}
 		query := &grpcsvc.QueryGRPC{Store: chStore}
 		lis, err := net.Listen("tcp", grpcAddr)
@@ -93,18 +94,15 @@ func main() {
 		}()
 	}
 
-	if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
+	if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" && chStore != nil {
 		runner := &consumer.Runner{
-			Mapper: adapters.Mapper{HashKey: hashKey},
-			Buffer: acc,
-			Logger: logger,
-		}
-		instanceID := strings.TrimSpace(os.Getenv("HOSTNAME"))
-		if instanceID == "" {
-			instanceID = "local"
+			Mapper:           adapters.Mapper{HashKey: hashKey},
+			Buffer:           acc,
+			Logger:           logger,
+			PersistenceReady: chStore != nil,
 		}
 		go func() {
-			if err := runner.Start(ctx, natsURL, instanceID); err != nil && ctx.Err() == nil {
+			if err := runner.Start(ctx, natsURL, ""); err != nil && ctx.Err() == nil {
 				logger.Error("analytics consumer stopped", slog.Any("error", err))
 			}
 		}()

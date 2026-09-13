@@ -15,7 +15,7 @@ type QueryFilters struct {
 const retentionCohortQuery = `
 WITH cohort AS (
   SELECT user_id_hashed, toDate(min(timestamp)) AS cohort_date
-  FROM voice.events
+  FROM voice.events_logical
   WHERE event_type = 'user_registered' AND user_id_hashed != ''
     AND timestamp >= ? AND timestamp < ?
   GROUP BY user_id_hashed
@@ -26,7 +26,7 @@ activity AS (
     maxIf(1, toDate(e.timestamp) = c.cohort_date + 7) AS d7,
     maxIf(1, toDate(e.timestamp) = c.cohort_date + 30) AS d30
   FROM cohort c
-  LEFT JOIN voice.events e ON e.user_id_hashed = c.user_id_hashed
+  LEFT JOIN voice.events_logical e ON e.user_id_hashed = c.user_id_hashed
   GROUP BY c.cohort_date, c.user_id_hashed
 )
 SELECT cohort_date,
@@ -60,8 +60,8 @@ func (s *CHStore) DashboardMetrics(ctx context.Context, dashboardType string, fr
 			dauDate = from
 		}
 		dau, err := s.scalar(ctx, `
-SELECT uniqMerge(unique_users) FROM voice.dau_mv
-WHERE date = toDate(?)`, dauDate)
+SELECT uniqExact(user_id_hashed) FROM voice.events_logical
+WHERE user_id_hashed != '' AND toDate(timestamp) = toDate(?)`, dauDate)
 		if err != nil {
 			return nil, err
 		}
@@ -70,7 +70,7 @@ WHERE date = toDate(?)`, dauDate)
 			wauStart = from
 		}
 		wau, err := s.scalar(ctx, `
-SELECT uniqExact(user_id_hashed) FROM voice.events
+SELECT uniqExact(user_id_hashed) FROM voice.events_logical
 WHERE user_id_hashed != '' AND timestamp >= ? AND timestamp < ?`, wauStart, to)
 		if err != nil {
 			return nil, err
@@ -80,13 +80,13 @@ WHERE user_id_hashed != '' AND timestamp >= ? AND timestamp < ?`, wauStart, to)
 			mauStart = from
 		}
 		mau, err := s.scalar(ctx, `
-SELECT uniqExact(user_id_hashed) FROM voice.events
+SELECT uniqExact(user_id_hashed) FROM voice.events_logical
 WHERE user_id_hashed != '' AND timestamp >= ? AND timestamp < ?`, mauStart, to)
 		if err != nil {
 			return nil, err
 		}
 		regs, err := s.scalar(ctx, `
-SELECT count() FROM voice.events
+SELECT count() FROM voice.events_logical
 WHERE event_type = 'user_registered' AND timestamp >= ? AND timestamp < ?`, from, to)
 		if err != nil {
 			return nil, err
@@ -97,13 +97,13 @@ WHERE event_type = 'user_registered' AND timestamp >= ? AND timestamp < ?`, from
 		out["registrations"] = regs
 	case "engagement":
 		msgs, err := s.scalar(ctx, `
-SELECT count() FROM voice.events
+SELECT count() FROM voice.events_logical
 WHERE event_type = 'message_sent' AND timestamp >= ? AND timestamp < ?`, from, to)
 		if err != nil {
 			return nil, err
 		}
 		calls, err := s.scalar(ctx, `
-SELECT count() FROM voice.events
+SELECT count() FROM voice.events_logical
 WHERE event_type IN ('call_started','call_ended') AND timestamp >= ? AND timestamp < ?`, from, to)
 		if err != nil {
 			return nil, err
@@ -112,13 +112,13 @@ WHERE event_type IN ('call_started','call_ended') AND timestamp >= ? AND timesta
 		out["call_events"] = calls
 	case "revenue":
 		paid, err := s.scalar(ctx, `
-SELECT count() FROM voice.events
+SELECT count() FROM voice.events_logical
 WHERE event_type = 'payment_success' AND timestamp >= ? AND timestamp < ?`, from, to)
 		if err != nil {
 			return nil, err
 		}
 		failed, err := s.scalar(ctx, `
-SELECT count() FROM voice.events
+SELECT count() FROM voice.events_logical
 WHERE event_type = 'payment_failed' AND timestamp >= ? AND timestamp < ?`, from, to)
 		if err != nil {
 			return nil, err
@@ -128,7 +128,7 @@ WHERE event_type = 'payment_failed' AND timestamp >= ? AND timestamp < ?`, from,
 	case "health":
 		eventType := resolveHealthEventType(filters)
 		reqs, err := s.scalar(ctx, `
-SELECT count() FROM voice.events
+SELECT count() FROM voice.events_logical
 WHERE event_type = ? AND timestamp >= ? AND timestamp < ?`, eventType, from, to)
 		if err != nil {
 			return nil, err
@@ -136,13 +136,13 @@ WHERE event_type = ? AND timestamp >= ? AND timestamp < ?`, eventType, from, to)
 		out["gateway_requests"] = reqs
 	case "moderation":
 		reports, err := s.scalar(ctx, `
-SELECT count() FROM voice.events
+SELECT count() FROM voice.events_logical
 WHERE event_type = 'report_created' AND timestamp >= ? AND timestamp < ?`, from, to)
 		if err != nil {
 			return nil, err
 		}
 		sanctions, err := s.scalar(ctx, `
-SELECT count() FROM voice.events
+SELECT count() FROM voice.events_logical
 WHERE event_type = 'sanction_applied' AND timestamp >= ? AND timestamp < ?`, from, to)
 		if err != nil {
 			return nil, err
@@ -171,7 +171,7 @@ func (s *CHStore) FunnelSteps(ctx context.Context, name string, from, to time.Ti
 	case "registration":
 		for _, et := range []string{"user_registered", "profile_created", "message_sent"} {
 			n, err := s.scalar(ctx, `
-SELECT count() FROM voice.events WHERE event_type = ? AND timestamp >= ? AND timestamp < ?`,
+SELECT count() FROM voice.events_logical WHERE event_type = ? AND timestamp >= ? AND timestamp < ?`,
 				et, from, to)
 			if err != nil {
 				return nil, err
@@ -221,7 +221,7 @@ func (s *CHStore) ExportEvents(ctx context.Context, from, to time.Time, eventTyp
 	q := `SELECT event_id, event_type, source_service, timestamp,
 		user_id_hashed, profile_id_hashed, properties,
 		ifNull(session_id,''), ifNull(platform,''), ifNull(app_version,''), ifNull(region,'')
-		FROM voice.events WHERE timestamp >= ? AND timestamp < ?`
+		FROM voice.events_logical WHERE timestamp >= ? AND timestamp < ?`
 	args := []any{from, to}
 	if strings.TrimSpace(eventType) != "" {
 		q += ` AND event_type = ?`
@@ -256,7 +256,7 @@ func (s *CHStore) CountEvents(ctx context.Context, eventType string, since time.
 		return 0, fmt.Errorf("clickhouse store unavailable")
 	}
 	row := s.conn.QueryRow(ctx, `
-SELECT count() FROM voice.events
+SELECT count() FROM voice.events_logical
 WHERE event_type = ? AND timestamp >= ?`, eventType, since)
 	var v uint64
 	if err := row.Scan(&v); err != nil {
