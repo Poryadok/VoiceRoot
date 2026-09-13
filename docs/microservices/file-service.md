@@ -43,6 +43,38 @@ service FileService {
 }
 ```
 
+### Thumbnail URL variant (accepted, not implemented)
+
+The next compatible extension of `GetFileURLRequest` is:
+
+```protobuf
+enum FileURLVariant {
+  FILE_URL_VARIANT_UNSPECIFIED = 0;
+  FILE_URL_VARIANT_THUMBNAIL = 1;
+}
+
+message GetFileURLRequest {
+  string file_id = 1;
+  FileAccessSelector access = 2;
+  FileURLVariant variant = 3;
+}
+```
+
+`FILE_URL_VARIANT_UNSPECIFIED` preserves the delivered selection rule:
+`converted_r2_key`, when present, otherwise the original deliverable. The
+existing `GetFileURLResponse` remains exactly `presigned_get_url` plus
+`expires_at`; its one-hour TTL is unchanged.
+
+`FILE_URL_VARIANT_THUMBNAIL` selects **only** `thumbnail_r2_key`. It must never
+fall back to `converted_r2_key`, `r2_key`, an original, a generated placeholder,
+or an R2 key exposed to the caller. An absent thumbnail returns gRPC
+`FailedPrecondition`; any unrecognised enum value returns `InvalidArgument`.
+
+The request retains `FileAccessSelector`, and File performs the same ACL,
+reference/capability, file-state and `FILE_READ_SURFACE_URL` checks before
+creating either URL. The returned URL is presigned; direct R2 object URLs or
+keys are not public API.
+
 ## Модель данных
 
 ```
@@ -303,4 +335,3 @@ Activation requires sealed deterministic backfills from every owner, dual-write
 catch-up, a `LIVE` fence for every Space-scoped reference and zero remaining
 file_id-only callers. Full lifecycle/operation receipts retain 30 days after
 completion; permanent compact PURGED fence state survives identifier reuse.
-

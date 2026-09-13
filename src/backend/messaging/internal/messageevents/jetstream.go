@@ -216,7 +216,7 @@ func messageEventLogAttrs(env *eventsv1.MessageStreamEvent) []slog.Attr {
 }
 
 // PublishMessageSent implements MessageEventsPublisher.
-func (p *JetStreamPublisher) PublishMessageSent(ctx context.Context, messageID, chatID, senderProfileID string, hasMentions bool, threadParentID string, isE2E bool, contentType string) error {
+func (p *JetStreamPublisher) PublishMessageSent(ctx context.Context, messageID, chatID, senderProfileID string, hasMentions bool, threadParentID string, isE2E bool, contentType string, sendSilent bool) error {
 	sent := &eventsv1.MessageSent{
 		MessageId:       messageID,
 		ChatId:          chatID,
@@ -224,6 +224,7 @@ func (p *JetStreamPublisher) PublishMessageSent(ctx context.Context, messageID, 
 		HasMentions:     hasMentions,
 		ThreadParentId:  ptrIfNonEmpty(threadParentID),
 		IsE2E:           isE2E,
+		SendSilent:      sendSilent,
 	}
 	if ct := strings.TrimSpace(contentType); ct != "" {
 		sent.ContentType = &ct

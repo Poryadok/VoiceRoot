@@ -276,6 +276,7 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 		GhostOnly:       ghostOnly,
 		IsE2E:           isE2E,
 		ContentType:     contentType,
+		SendSilent:      req.GetSendSilent(),
 	}
 	saved, err := s.Messages.InsertMessage(ctx, row)
 	if err != nil {
@@ -290,7 +291,7 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 		if saved.ThreadParentID != nil {
 			threadParentID = saved.ThreadParentID.String()
 		}
-		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), hasMentions, threadParentID, saved.IsE2E, store.EffectiveContentType(saved.ContentType, saved.Content, saved.AttachmentsJSON)); err != nil {
+		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), hasMentions, threadParentID, saved.IsE2E, store.EffectiveContentType(saved.ContentType, saved.Content, saved.AttachmentsJSON), saved.SendSilent); err != nil {
 			s.logPublishError(ctx, "message.sent", err, slog.String("message_id", saved.ID.String()), slog.String("chat_id", saved.ChatID.String()))
 		}
 		if hasMentions {
@@ -1376,7 +1377,7 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if s.MessageEvents != nil && !ghostOnly {
-		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), false, "", saved.IsE2E, store.EffectiveContentType(saved.ContentType, saved.Content, saved.AttachmentsJSON)); err != nil {
+		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), false, "", saved.IsE2E, store.EffectiveContentType(saved.ContentType, saved.Content, saved.AttachmentsJSON), saved.SendSilent); err != nil {
 			s.logPublishError(ctx, "message.sent", err, slog.String("message_id", saved.ID.String()), slog.String("chat_id", saved.ChatID.String()))
 		}
 		if !withoutAttribution {
@@ -1409,7 +1410,7 @@ func (s *MessagingGRPC) insertForwardCommentary(ctx context.Context, chatID, pro
 		return status.Error(codes.Internal, err.Error())
 	}
 	if s.MessageEvents != nil && !ghostOnly {
-		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), false, "", false, "text"); err != nil {
+		if err := s.MessageEvents.PublishMessageSent(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), false, "", false, "text", saved.SendSilent); err != nil {
 			s.logPublishError(ctx, "message.sent", err, slog.String("message_id", saved.ID.String()), slog.String("chat_id", saved.ChatID.String()))
 		}
 	}

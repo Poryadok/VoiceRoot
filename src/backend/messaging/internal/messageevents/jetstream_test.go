@@ -54,7 +54,7 @@ func TestJetStreamPublisher_MessageSentRoundTrip(t *testing.T) {
 	t.Cleanup(func() { _ = pub.Close() })
 
 	const mid, cid, sid = "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222", "33333333-3333-3333-3333-333333333333"
-	require.NoError(t, pub.PublishMessageSent(ctx, mid, cid, sid, false, "", false, "photo"))
+	require.NoError(t, pub.PublishMessageSent(ctx, mid, cid, sid, false, "", false, "photo", true))
 
 	msg, err := sub.NextMsg(3 * time.Second)
 	require.NoError(t, err)
@@ -69,6 +69,7 @@ func TestJetStreamPublisher_MessageSentRoundTrip(t *testing.T) {
 	require.Equal(t, sid, sent.GetSenderProfileId())
 	require.NotNil(t, sent.ContentType)
 	require.Equal(t, "photo", sent.GetContentType())
+	require.True(t, sent.GetSendSilent())
 }
 
 func TestJetStreamPublisher_RequestIDHeader(t *testing.T) {
@@ -88,11 +89,14 @@ func TestJetStreamPublisher_RequestIDHeader(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = pub.Close() })
 
-	require.NoError(t, pub.PublishMessageSent(ctx, "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222", "33333333-3333-3333-3333-333333333333", true, "", false, ""))
+	require.NoError(t, pub.PublishMessageSent(ctx, "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222", "33333333-3333-3333-3333-333333333333", true, "", false, "", false))
 
 	msg, err := sub.NextMsg(3 * time.Second)
 	require.NoError(t, err)
 	require.Equal(t, "req-header-test", msg.Header.Get(correlation.RequestIDHeader))
+	var env eventsv1.MessageStreamEvent
+	require.NoError(t, proto.Unmarshal(msg.Data, &env))
+	require.False(t, env.GetMessageSent().GetSendSilent())
 }
 
 func TestJetStreamPublisher_MessageEditedAndDeleted(t *testing.T) {
@@ -314,7 +318,7 @@ func TestJetStreamPublisher_ensureStreamAlreadyExists(t *testing.T) {
 	pub, err := NewJetStreamPublisher(s.ClientURL())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = pub.Close() })
-	require.NoError(t, pub.PublishMessageSent(context.Background(), "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "cccccccc-cccc-cccc-cccc-cccccccccccc", false, "", false, ""))
+	require.NoError(t, pub.PublishMessageSent(context.Background(), "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "cccccccc-cccc-cccc-cccc-cccccccccccc", false, "", false, "", false))
 	require.NoError(t, pub.EnsureStream())
 }
 
