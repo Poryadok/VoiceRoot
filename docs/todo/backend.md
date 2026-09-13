@@ -401,7 +401,7 @@
 ### Protos/Pkg
 
 
-- [ ] **[Protos/Pkg] Auth proto duplication without sync gate** — canonical `protos/voice/auth/v1/auth.proto` vs copy `src/backend/auth/src/main/proto/voice/auth/v1/auth.proto` (already diverges in comments); no CI compare step.
+- [x] **[Protos/Pkg] Auth proto duplication sync gate** — the protobuf CI gate compares canonical `protos/voice/auth/v1/auth.proto` with the Auth Maven copy `src/backend/auth/src/main/proto/voice/auth/v1/auth.proto`; a change to either path triggers the check. Fixture regression coverage verifies matching copies, comment-only differences, wire mismatches, missing-copy diagnostics, and the CI wiring.
 - [ ] **[Protos/Pkg] Federation protos orphaned from service** — `protos/voice/s2s/v1/s2s.proto`, `federation_management.proto` codegen to Flutter (`src/frontend/lib/gen/voice/s2s/`) and Go hubs, but `src/backend/federation/go.mod` depends only on `voice/backend/pkg` (scaffold; deferred per `docs/PLAN.md`).
 - [ ] **[Protos/Pkg] `common.proto` under-specified** — `protos/voice/common/v1/common.proto` has pagination only; no shared idempotency/actor/ref types despite `docs/ARCHITECTURE_REQUIREMENTS.md` idempotency key and `messaging.proto` inline idempotency contract.
 - [ ] **[Protos/Pkg] Analytics taxonomy vs proto** — `docs/MICROSERVICES.md` analytics examples include `file_downloaded`, `space_left`, `voice_room_created`, `message_forward`, notification push metrics; no corresponding arms in `jetstream_events.proto` and no publishers found.
