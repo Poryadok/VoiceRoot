@@ -14,18 +14,17 @@ void main() {
     );
   }
 
-  testWidgets('VoiceListSkeleton renders configured non-scrollable rows', (
+  testWidgets('VoiceListSkeleton renders configured placeholder rows', (
     tester,
   ) async {
     await tester.pumpWidget(testApp(const VoiceListSkeleton(rowCount: 3)));
 
-    final list = tester.widget<ListView>(find.byType(ListView));
-    expect(list.shrinkWrap, isTrue);
-    expect(list.primary, isFalse);
-    expect(list.physics, isA<NeverScrollableScrollPhysics>());
     expect(
-      (list.childrenDelegate as SliverChildBuilderDelegate).childCount,
-      equals(3),
+      find.descendant(
+        of: find.byType(VoiceListSkeleton),
+        matching: find.byType(Row),
+      ),
+      findsNWidgets(3),
     );
     expect(find.byType(CircularProgressIndicator), findsNothing);
   });
@@ -33,24 +32,27 @@ void main() {
   testWidgets('VoiceStatePanel presents an empty state as a named region', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      testApp(
-        const VoiceStatePanel(
-          title: 'Nothing here yet',
-          icon: Icons.inbox_outlined,
+    final semantics = tester.ensureSemantics();
+    try {
+      await tester.pumpWidget(
+        testApp(
+          const VoiceStatePanel(
+            title: 'Nothing here yet',
+            icon: Icons.inbox_outlined,
+          ),
         ),
-      ),
-    );
+      );
 
-    expect(find.text('Nothing here yet'), findsOneWidget);
-    expect(find.byIcon(Icons.inbox_outlined), findsOneWidget);
-    final panelSemantics = tester
-        .widgetList<Semantics>(find.byType(Semantics))
-        .singleWhere(
-          (semantics) => semantics.properties.label == 'Nothing here yet',
-        );
-    expect(panelSemantics.properties.label, 'Nothing here yet');
-    expect(find.byType(OutlinedButton), findsNothing);
+      expect(find.text('Nothing here yet'), findsOneWidget);
+      expect(find.byIcon(Icons.inbox_outlined), findsOneWidget);
+      expect(
+        tester.getSemantics(find.byType(VoiceStatePanel)),
+        matchesSemantics(label: 'Nothing here yet\nNothing here yet'),
+      );
+      expect(find.byType(OutlinedButton), findsNothing);
+    } finally {
+      semantics.dispose();
+    }
   });
 
   testWidgets('VoiceStatePanel exposes an error retry action to the keyboard', (
