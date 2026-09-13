@@ -364,7 +364,6 @@
 
 ### Multi-Profile
 
-- [ ] **[Multi-Profile] Soft-deleted profiles still count toward limit** — `CountByAccountID` has no `deleted_at IS NULL` filter (`src/backend/user/internal/store/profile.go`); blocks re-create after delete per archive semantics in `docs/features/multi-profile.md`.
 - [x] **[Multi-Profile] Auth `switch-profile` uses User Service** — Auth calls the existing
   `User.SwitchProfile` contract before issuing the replacement JWT; direct profile SQL was removed.
 - [ ] **[Multi-Profile] Premium profile limit unreliable** — `CreateProfile` gates on JWT `subscription_tier` (`user.go`); tier stuck at `free` until Auth↔Subscription wired (см. [Subscription] JWT tier).
