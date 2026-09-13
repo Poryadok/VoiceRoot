@@ -355,6 +355,22 @@ func (s *MessagingGRPC) validateAttachments(ctx context.Context, chatID uuid.UUI
 	if err := json.Unmarshal([]byte(raw), &attachments); err != nil {
 		return 0, status.Error(codes.InvalidArgument, "attachments_json must be a JSON array")
 	}
+	return s.validateParsedAttachments(ctx, &chatID, attachments, contentType)
+}
+
+// validateForwardAttachments validates copied attachment payloads with the same
+// rich-content rules as SendMessage. File Service access is evaluated for the
+// forwarding profile, but the source file must not be required to belong to
+// the destination chat: forwarded media retains its source chat linkage.
+func (s *MessagingGRPC) validateForwardAttachments(ctx context.Context, raw, contentType string) (int, error) {
+	var attachments []messageAttachment
+	if err := json.Unmarshal([]byte(raw), &attachments); err != nil {
+		return 0, status.Error(codes.InvalidArgument, "attachments_json must be a JSON array")
+	}
+	return s.validateParsedAttachments(ctx, nil, attachments, contentType)
+}
+
+func (s *MessagingGRPC) validateParsedAttachments(ctx context.Context, chatID *uuid.UUID, attachments []messageAttachment, contentType string) (int, error) {
 	if len(attachments) == 0 {
 		return 0, nil
 	}
@@ -373,7 +389,7 @@ func (s *MessagingGRPC) validateAttachments(ctx context.Context, chatID uuid.UUI
 	return s.validateFileBackedAttachments(ctx, chatID, attachments)
 }
 
-func (s *MessagingGRPC) validateFileBackedAttachments(ctx context.Context, chatID uuid.UUID, attachments []messageAttachment) (int, error) {
+func (s *MessagingGRPC) validateFileBackedAttachments(ctx context.Context, chatID *uuid.UUID, attachments []messageAttachment) (int, error) {
 	if s.Files == nil {
 		return 0, status.Error(codes.FailedPrecondition, "file metadata lookup is not configured")
 	}
@@ -401,7 +417,7 @@ func (s *MessagingGRPC) validateFileBackedAttachments(ctx context.Context, chatI
 		if meta.GetStatus() != "ready" {
 			return 0, status.Error(codes.FailedPrecondition, "attachment file is not ready")
 		}
-		if meta.GetChat().GetId() != chatID.String() {
+		if chatID != nil && meta.GetChat().GetId() != chatID.String() {
 			return 0, status.Error(codes.FailedPrecondition, "attachment file is not linked to chat")
 		}
 		switch meta.GetScanResult() {
@@ -1280,6 +1296,10 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 	if attachments == "" {
 		attachments = "[]"
 	}
+	contentType := store.EffectiveContentType(source.ContentType, source.Content, attachments)
+	if _, err := s.validateForwardAttachments(ctx, attachments, contentType); err != nil {
+		return nil, err
+	}
 	if attachments != "[]" {
 		if err := s.checkAttachmentPrivacyForSend(ctx, targetChatID, profileID, attachments); err != nil {
 			return nil, err
@@ -1337,7 +1357,7 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 		MentionsJSON:    "[]",
 		GhostOnly:       ghostOnly,
 		IsE2E:           source.IsE2E,
-		ContentType:     store.EffectiveContentType(source.ContentType, source.Content, attachments),
+		ContentType:     contentType,
 	}
 	kind := messagingv1.MessageKind_MESSAGE_KIND_FORWARD
 	if withoutAttribution {
