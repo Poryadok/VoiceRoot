@@ -76,9 +76,18 @@ SHA-256 от содержимого файла считается при заг�
 ## Presigned URL — TTL и обновление
 
 - **TTL**: 1 час с момента генерации
-- **Клиентская логика**: при получении `403` или `410` на presigned URL клиент вызывает `GET /api/files/{id}/url` — сервер генерирует новую ссылку; клиент повторяет запрос
+- **Клиентская логика**: при получении `403` или `410` на presigned URL клиент вызывает `GET /api/v1/files/{id}/url` с тем же вариантом (`?variant=thumbnail` для thumbnail) — сервер генерирует новую ссылку; клиент повторяет запрос
 - **Зачем**: пользователь держит чат открытым часами — ссылки протухнут; lazy refresh решает это прозрачно без перезагрузки чата
 - Дополнительный эффект: если история чата утечёт из кэша — старые presigned URL всё равно не работают без обновления
+
+## Thumbnail URL variant (accepted, not implemented)
+
+`thumbnail_r2_key` остаётся внутренним storage key и никогда не становится
+клиентским URL. Thumbnail получают только через существующую URL surface после
+того же access check, что и основной файл. Контракт и реализация находятся в
+[file-service.md](../microservices/file-service.md#thumbnail-url-variant-accepted-not-implemented);
+до их поставки Flutter сохраняет `previewUrl == null`, а не подставляет R2 key
+или вымышленный URL.
 
 ## Не делаем
 
@@ -112,4 +121,3 @@ it never discovers a replacement set. A blob enters `GC_PENDING` only at zero
 live references across all owner types. Logical deletion completes at durable
 access denial/GC handoff; physical R2 removal retries until every object key is
 confirmed absent.
-
