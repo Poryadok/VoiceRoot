@@ -25,7 +25,7 @@ CRUD сообщений для всех типов чатов (DM, тексто�
 
 ### Идемпотентность отправки
 
-`SendMessage` принимает опциональный **`client_message_id`** (UUID), уникальный в разрезе **`(chat_id, sender_profile_id)`** (в proto — пара `chat` + идентичность отправителя из контекста запроса). Повтор запроса с тем же ключом **не создаёт** вторую строку в `messages`. Нормативная семантика: **gRPC `OK`** и тело **`SendMessageResponse` с тем же `Message`**, что и при первом успешном сохранении (тот же `id` и полезная нагрузка). Код **`ALREADY_EXISTS`** для этого сценария **не** используем — один канонический идемпотентный успех. Без ключа при сетевых ретраях возможны дубликаты.
+`SendMessage` принимает опциональный **`client_message_id`** (UUID), уникальный в разрезе **`(chat_id, sender_profile_id)`** (в proto — пара `chat` + идентичность отправителя из контекста запроса). Это одна namespace и для immediate `Message`, и для pending `ScheduledMessage`: повтор запроса с тем же ключом не создаёт ни вторую строку в `messages`, ни вторую scheduled row. Повтор **того же нормализованного тела** возвращает gRPC `OK` и тот же вариант `SendMessageResponse` с тем же ID; pending replay возвращает current `ScheduledMessage`, включая связанный `sent_message_id` после dispatch. Тот же ключ с другим payload, `send_silent`, schedule mode/time или immediate-vs-scheduled режимом — `ALREADY_EXISTS`; сервер не меняет уже созданный объект и не публикует новый event. Нормализация игнорирует порядок ключей JSON object, но сохраняет порядок array и включает defaults/derived type в fingerprint. Проверка immediate и scheduled путей атомарна (общий idempotency ledger либо transaction advisory lock), а не две независимые unique indexes. Поэтому запрет `ALREADY_EXISTS` относится только к корректному retry. Без ключа при сетевых ретраях возможны дубликаты.
 
 ## API (gRPC)
 
@@ -60,8 +60,8 @@ service MessagingService {
   rpc UploadPreKeyBundle(UploadPreKeyBundleRequest) returns (UploadPreKeyBundleResponse);
   rpc GetPreKeyBundle(GetPreKeyBundleRequest) returns (GetPreKeyBundleResponse);
 
-  // Scheduled messages — not yet in proto
-  // rpc ListScheduledMessages / CancelScheduledMessage / SendScheduledMessageNow / UpdateScheduledMessage
+  // Scheduled messages — contract only; not yet in proto
+  // rpc ListScheduledMessages / UpdateScheduledMessage / CancelScheduledMessage / SendScheduledMessageNow
 }
 ```
 
@@ -88,15 +88,14 @@ service MessagingService {
 | Поле | Тип | Семантика |
 |------|-----|-----------|
 | `client_message_id` | UUID, optional | Идемпотентность — см. выше |
-| `send_silent` | bool, default false | Push без звука; Notification Service читает флаг из события `message.sent` |
-| `scheduled_at` | `google.protobuf.Timestamp`, optional | Отложенная отправка; см. § Scheduled messages |
-| `send_when_online` | bool, default false | Только **DM**: держать в очереди до `online` у получателя; игнорируется если задан `scheduled_at` |
+| `send_silent` | bool, default false; **field 11, PR #310** | Push без звука; Notification Service читает флаг из события `message.sent` |
+| `delivery_schedule` | `oneof { google.protobuf.Timestamp scheduled_at; bool send_when_online }`, optional | Нет варианта — immediate send. `scheduled_at` ставит отложенную отправку; `send_when_online=true` — только DM. См. § Scheduled messages |
 | `content_type` | enum, optional | Тип полезной нагрузки для preview / shared media — см. § Content types |
 | `content_payload` | `google.protobuf.Struct` или typed oneof | Структурированное тело для `article` / `location` / `video_note` / `music` |
 
 **Правила:**
 
-- `scheduled_at` и `send_when_online=true` **взаимоисключающие** (валидация `INVALID_ARGUMENT`).
+- `delivery_schedule` — настоящий `oneof`: одновременно timestamp и `send_when_online` задать нельзя. `send_when_online=false` не является вариантом расписания.
 - `send_when_online` только для `chat_type = dm`; для group/channel — `INVALID_ARGUMENT`.
 - Timezone: клиент передаёт **UTC instant**; UI показывает локаль профиля отправителя.
 - Silent + scheduled: silent применяется в момент фактической отправки worker'ом.
@@ -137,6 +136,19 @@ enum MessageContentType {
 
 ### Scheduled messages (lifecycle)
 
+Контракт ниже — минимальный lifecycle C-002 для будущего proto/code; он не означает, что RPC или таблица уже существуют.
+
+**Request/response union.** После PR #310 `SendMessageRequest` сохраняет его `send_silent = 11` и добавляет optional `oneof delivery_schedule`: `scheduled_at = 12` или literal `send_when_online = 13`; отсутствие oneof означает immediate send. `scheduled_at` принимает только UTC instant строго позже server `now()` и не дальше **365 дней** от него. `send_when_online` допустим только в DM и ждёт именно live `ONLINE` получателя. Ответ использует два additive поля, но семантически является union:
+
+```protobuf
+message SendMessageResponse {
+  Message message = 1;                    // immediate send
+  ScheduledMessage scheduled_message = 2; // accepted pending schedule
+}
+```
+
+Семантически сервер заполняет ровно одно из двух полей; schedule create никогда не маскируется под уже сохранённый `Message`, а один idempotent retry возвращает исходный вариант union. Невалидный oneof, `send_when_online=false`, non-DM online delivery, instant не в будущем или горизонт более 365 дней возвращают `INVALID_ARGUMENT`.
+
 **Storage:** таблица `scheduled_messages` в `messaging_db` (**not yet in proto/code**):
 
 ```
@@ -144,40 +156,52 @@ scheduled_messages
 ├── id (UUID)
 ├── chat_id, sender_profile_id
 ├── payload (jsonb — mirror SendMessage fields minus schedule flags)
-├── scheduled_at (TIMESTAMPTZ, UTC)
-├── send_when_online (bool)
-├── status (pending | sent | cancelled)
+├── schedule_kind (at | when_online)
+├── scheduled_at (TIMESTAMPTZ, UTC, nullable only for when_online)
+├── status (pending | sent | cancelled | failed)
+├── sent_message_id, dispatch_event_id (nullable)
+├── attempt_count, next_attempt_at, last_error_code, failed_at (nullable)
+├── dispatch_lease_owner, dispatch_lease_expires_at (internal)
 ├── created_at, updated_at
 └── UNIQUE(chat_id, sender_profile_id, client_message_id) WHERE client_message_id IS NOT NULL
 ```
 
-| Операция | Поведение |
-|----------|-----------|
-| **Create** | `SendMessage` с `scheduled_at` и/или `send_when_online` → row `pending`; **не** публикует `message.sent` до dispatch |
-| **Worker dispatch** | Cron/worker каждые ~30s: `scheduled_at <= now()` OR (`send_when_online` AND recipient `online` via User `GetPresence`) → insert `messages`, publish `message.sent`, mark `sent` |
-| **Cancel** | `CancelScheduledMessage` → `cancelled`; race с worker: first commit wins; повтор cancel → `NOT_FOUND` / idempotent OK |
-| **Send now** | `SendScheduledMessageNow` → немедленный dispatch |
-| **Edit** | `UpdateScheduledMessage` — replace `payload` / `scheduled_at` while `status=pending`; reject if worker already dispatched |
-| **Max horizon** | **365 days** от `now()`; beyond → `INVALID_ARGUMENT` |
-| **Invisible sender** | Отправитель `invisible` **не** блокирует dispatch scheduled; `send_when_online` ждёт **получателя** |
+`payload` excludes `schedule`; the oneof above is represented by `schedule_kind` plus nullable `scheduled_at`. Pending create is idempotent in the same `(chat_id, sender_profile_id, client_message_id)` namespace as immediate sends, with the mismatch rule in § Идемпотентность отправки.
+
+| Операция | Нормативное поведение |
+|----------|------------------------|
+| **Create** | `SendMessage` with a schedule atomically creates one `pending` row and returns `scheduled_message`; it publishes no `message.sent` or other replay event. Without a schedule it follows the existing immediate path and returns `message`. |
+| **List** | `ListScheduledMessages(chat_id, page)` returns only `pending` rows for that chat **owned by the caller**. Chat membership does not reveal another sender's pending payload. |
+| **Update** | `UpdateScheduledMessage(scheduled_message_id, payload?, schedule?)` replaces supplied fields only while caller owns a `pending` row. Omitted payload retains its value; an omitted `delivery_schedule` **retains the existing schedule and never means immediate dispatch**. At least one of payload or schedule must be present. It returns that `ScheduledMessage`; it cannot turn a pending row into an immediate send. `chat`, sender and `client_message_id` are immutable. |
+| **Cancel** | `CancelScheduledMessage(scheduled_message_id)` changes the caller-owned `pending` row to `cancelled`. Repeating cancel on an owned cancelled row returns idempotent `OK`; sent/failed is `FAILED_PRECONDITION`; an absent/not-owned ID is `NOT_FOUND`. |
+| **Send now** | `SendScheduledMessageNow(scheduled_message_id)` claims the caller-owned pending row and executes the normal message insert/outbox transaction immediately. On success it returns the linked `Message`; repeat after `sent` returns `OK` with that same Message. Cancelled/failed is `FAILED_PRECONDITION`; it is not a create retry and does not reuse the original `client_message_id`. |
+| **Race** | Worker, Cancel, Update and SendNow condition their transition on `status=pending`; exactly one wins. Losers read the resulting state and return `FAILED_PRECONDITION`, never a duplicate message. |
+
+**Worker, presence and retry boundary.** A Messaging-owned worker claims due `at` rows, or checks User's viewer-aware live `GetPresence`/`GetBulkPresence` before claiming a DM `when_online` row. It sends only exact `ONLINE`; idle, DND, invisible, offline or hidden/empty presence retain the row. Durable last-seen is never a substitute for live presence, and Messaging does not call Realtime. Before the message/outbox transaction commits, User timeout/unavailable, DB errors and other transient dispatch failures release the claim, retain `pending`, increase `attempt_count` and retry with bounded exponential backoff; absence of online presence is not an attempt. An authoritative permanent deny/not-found/invalid state, or policy-bounded exhaustion of these pre-commit attempts, records terminal `failed` with a safe failure code and publishes no `message.sent`. The successful transaction writes a preallocated message ID, `messages`, Messaging outbox, `sent_message_id` and `scheduled_messages.status=sent` together. **After that commit the schedule stays `sent`:** the stable outbox retains immutable `dispatch_event_id` and alone retries JetStream publication until PubAck. A post-commit NATS publish failure never reclaims the schedule, reinserts the message or changes it to `failed`. Sender invisibility does not block a schedule; online delivery observes the **recipient** only.
 
 Composer UX — [text-chat.md](../features/text-chat.md) § Send options; strip — [screen-controls.md](../design/screen-controls.md) §3.6 #13–17. Cross-service summary — [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) § Push-уведомления (send options).
 
-### `UpdateScheduledMessage` (spec — not yet in proto)
+### Scheduled RPC shape (spec — not yet in proto)
 
 ```protobuf
 rpc UpdateScheduledMessage(UpdateScheduledMessageRequest) returns (UpdateScheduledMessageResponse);
+rpc ListScheduledMessages(ListScheduledMessagesRequest) returns (ListScheduledMessagesResponse);
+rpc CancelScheduledMessage(CancelScheduledMessageRequest) returns (CancelScheduledMessageResponse);
+rpc SendScheduledMessageNow(SendScheduledMessageNowRequest) returns (SendScheduledMessageNowResponse);
 
 message UpdateScheduledMessageRequest {
   string scheduled_message_id = 1;
   // Fields mirror SendMessage payload; only applied while status=pending.
   optional string content = 2;
   optional google.protobuf.Struct content_payload = 3;
-  optional google.protobuf.Timestamp scheduled_at = 4;
+  oneof delivery_schedule {
+    google.protobuf.Timestamp scheduled_at = 4;
+    bool send_when_online = 5;
+  }
 }
 ```
 
-**Rules:** `NOT_FOUND` if id missing or not owned by caller; `FAILED_PRECONDITION` if `status != pending` (worker race); `INVALID_ARGUMENT` for horizon / mutual exclusion with `send_when_online` (same as create). Successful edit does **not** publish `message.sent` until dispatch.
+`ListScheduledMessagesRequest` carries `chat` and cursor page; it is pending-only, owner-only and stably cursored by `(created_at, id)`. A non-member is `PERMISSION_DENIED`; a missing chat is `NOT_FOUND`; there is no global scheduled inbox, recipient list, admin list, `GetScheduledMessage` RPC or Realtime API. `UpdateScheduledMessage` uses the same oneof and validation as create; omitting its `delivery_schedule` retains the stored schedule, never selects immediate send, and successful update does not publish `message.sent`. Mutation IDs that are absent or not owned return `NOT_FOUND`; apart from idempotent cancel, a non-pending lifecycle state returns `FAILED_PRECONDITION`.
 
 ### `GetChatListMetadata` / `ChatListItem` preview
 
@@ -523,7 +547,7 @@ messages (deployed — simplified)
 | `message.unpinned`       | message_id, chat_id, unpinned_by             |
 | `message.forwarded`      | message_id, source_chat_id, target_chat_id   |
 
-**`message.sent` notes:** `send_silent` drives Notification push policy. `was_scheduled` / `scheduled_at` — audit и client strip cleanup. **Code gap:** JetStream proto сегодня без silent/schedule/content_type — **not yet in proto** (`jetstream_events.proto`).
+**`message.sent` notes:** `send_silent` drives Notification push policy and is owned by **PR #310** as `MessageSent.send_silent = 8`. This scheduling slice must not claim or renumber it. After PR #310 lands, it adds only `was_scheduled = 9` and `optional scheduled_at = 10`; they describe the original schedule intent for audit and client strip cleanup. A pending create, idempotent replay, update, cancel or terminal failure emits no `message.sent`; a successfully dispatched scheduled row emits exactly one normal `message.sent`. **Code gap:** the current JetStream proto still has neither #310's field 8 nor schedule fields 9–10; do not implement those fields out of sequence.
 
 **`message.read`:** публикуется при `MarkRead`; Realtime fan-out как WS `message_read`. **Code-ok**.
 
