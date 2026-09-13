@@ -2203,6 +2203,8 @@ class RateMatchRequest extends $pb.GeneratedMessage {
   @$pb.TagNumber(2)
   void clearRatedProfileId() => $_clearField(2);
 
+  /// A value in 1..5 submits a score. Zero explicitly skips this teammate and
+  /// does not create a rating or update that player's aggregate.
   @$pb.TagNumber(3)
   $core.int get stars => $_getIZ(2);
   @$pb.TagNumber(3)

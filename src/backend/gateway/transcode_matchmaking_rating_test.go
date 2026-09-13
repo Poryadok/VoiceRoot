@@ -111,6 +111,28 @@ func TestTranscodeMatchmakingRateMatch(t *testing.T) {
 	require.Equal(t, int32(5), grpcRec.lastRate.GetStars())
 }
 
+func TestTranscodeMatchmakingSkipRatingPreservesZeroPresence(t *testing.T) {
+	t.Parallel()
+	grpcRec := &recordingMatchmakingRatingGRPC{}
+	conn, cleanup := startBufconnMatchmakingConn(t, grpcRec)
+	t.Cleanup(cleanup)
+
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
+		transcoder: &transcoder{clients: grpcClients{matchmaking: matchmakingv1.NewMatchmakingServiceClient(conn)}},
+	})
+	rec := performRequest(h, http.MethodPost, "/api/v1/matchmaking/matches/match-1/rate", `{"ratedProfileId":"profile-2","stars":0}`, map[string]string{
+		"Authorization": "Bearer valid-user-token",
+		"Content-Type":  "application/json",
+	})
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NotNil(t, grpcRec.lastRate)
+	require.NotNil(t, grpcRec.lastRate.Stars)
+	require.Zero(t, grpcRec.lastRate.GetStars())
+}
+
 func TestTranscodeMatchmakingGetPlayerRating(t *testing.T) {
 	t.Parallel()
 	grpcRec := &recordingMatchmakingRatingGRPC{}

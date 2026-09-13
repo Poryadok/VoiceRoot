@@ -708,14 +708,18 @@ const RateMatchRequest$json = {
   '2': [
     {'1': 'match_id', '3': 1, '4': 1, '5': 9, '10': 'matchId'},
     {'1': 'rated_profile_id', '3': 2, '4': 1, '5': 9, '10': 'ratedProfileId'},
-    {'1': 'stars', '3': 3, '4': 1, '5': 5, '10': 'stars'},
+    {'1': 'stars', '3': 3, '4': 1, '5': 5, '9': 0, '10': 'stars', '17': true},
+  ],
+  '8': [
+    {'1': '_stars'},
   ],
 };
 
 /// Descriptor for `RateMatchRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List rateMatchRequestDescriptor = $convert.base64Decode(
     'ChBSYXRlTWF0Y2hSZXF1ZXN0EhkKCG1hdGNoX2lkGAEgASgJUgdtYXRjaElkEigKEHJhdGVkX3'
-    'Byb2ZpbGVfaWQYAiABKAlSDnJhdGVkUHJvZmlsZUlkEhQKBXN0YXJzGAMgASgFUgVzdGFycw==');
+    'Byb2ZpbGVfaWQYAiABKAlSDnJhdGVkUHJvZmlsZUlkEhkKBXN0YXJzGAMgASgFSABSBXN0YXJz'
+    'iAEBQggKBl9zdGFycw==');
 
 @$core.Deprecated('Use getPlayerRatingRequestDescriptor instead')
 const GetPlayerRatingRequest$json = {

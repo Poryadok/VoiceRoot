@@ -90,6 +90,9 @@ func (s *MatchmakingGRPC) RateMatch(ctx context.Context, req *matchmakingv1.Rate
 	if raterID == ratedID {
 		return nil, status.Error(codes.InvalidArgument, "cannot rate self")
 	}
+	if req.Stars == nil {
+		return nil, status.Error(codes.InvalidArgument, "stars is required")
+	}
 	stars := int(req.GetStars())
 
 	match, err := s.Matches.Get(ctx, matchID)

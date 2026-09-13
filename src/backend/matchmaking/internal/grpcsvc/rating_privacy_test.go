@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"voice/backend/pkg/privacy"
 
@@ -47,7 +48,7 @@ func TestGetPlayerRating_GuestViewerDeniedWhenGuestAudienceExcluded(t *testing.T
 	_, err = srv.RateMatch(ctxWithProfile(profileA), &matchmakingv1.RateMatchRequest{
 		MatchId:        matchID,
 		RatedProfileId: profileB.String(),
-		Stars:          5,
+		Stars:          proto.Int32(5),
 	})
 	require.NoError(t, err)
 

@@ -225,7 +225,7 @@ message RateMatchRequest {
   string rated_profile_id = 2;
   // A value in 1..5 submits a score. Zero explicitly skips this teammate and
   // does not create a rating or update that player's aggregate.
-  int32 stars = 3;
+  optional int32 stars = 3;
 }
 
 message GetPlayerRatingRequest {
