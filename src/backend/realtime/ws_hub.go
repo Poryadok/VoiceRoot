@@ -629,13 +629,6 @@ func (h *wsHub) fanoutPrivatePresence(targets map[*connReg]string, viewer presen
 	wg.Wait()
 }
 
-// broadcastPrivatePresenceInChatExcept filters each chat recipient through the
-// documented User presence read path. Missing/error policy dependencies fail
-// closed; same-profile synchronization is handled by a separate private path.
-func (h *wsHub) broadcastPrivatePresenceInChatExcept(chatID, senderProfileID, sourceStatus, excludeInstance, excludeConn string, logger *slog.Logger) {
-	h.broadcastPrivatePresenceInChatsExcept([]string{chatID}, senderProfileID, sourceStatus, excludeInstance, excludeConn, logger)
-}
-
 // broadcastPrivatePresenceInChatsExcept fans out one privacy-filtered update
 // per recipient across all chat subscriptions for one presence transition.
 func (h *wsHub) broadcastPrivatePresenceInChatsExcept(chatIDs []string, senderProfileID, sourceStatus, excludeInstance, excludeConn string, logger *slog.Logger) {
