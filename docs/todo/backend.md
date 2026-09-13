@@ -50,11 +50,6 @@
 - [x] **[User] OAuth verification goes through User Service** — Auth uses source-scoped
   `ApplyVerificationSourceState` with durable revisions/retry; direct `user_db` writes were removed.
 
-### Analytics
-
-
-- [ ] **[Analytics] Event loss on ClickHouse failure / crash** — NATS messages are consumed and acked before durable CH write; failed flushes only re-queue in process memory (`d:\Git\Voice\src\backend\analytics\internal\consumer\runner.go`, `d:\Git\Voice\src\backend\analytics\internal\buffer\accumulator.go`). Process restart after a failed flush drops data permanently.
-
 ### Matchmaking
 
 
