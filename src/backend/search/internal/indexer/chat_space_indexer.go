@@ -34,9 +34,9 @@ type SpaceHydrator interface {
 
 // ChatSpaceIndexer handles chat.events payloads for search projections.
 type ChatSpaceIndexer struct {
-	Chats   ChatProjectionStore
-	Spaces  SpaceProjectionStore
-	ChatAPI ChatHydrator
+	Chats    ChatProjectionStore
+	Spaces   SpaceProjectionStore
+	ChatAPI  ChatHydrator
 	SpaceAPI SpaceHydrator
 }
 
@@ -61,7 +61,7 @@ func (idx *ChatSpaceIndexer) handleChatCreated(ctx context.Context, chatRaw stri
 	}
 	chatID, err := uuid.Parse(chatRaw)
 	if err != nil {
-		return fmt.Errorf("invalid chat_id: %w", err)
+		return newPermanentConsumeError("invalid chat_id: %w", err)
 	}
 	title, err := idx.ChatAPI.LoadChatTitle(ctx, chatID)
 	if err != nil {
@@ -76,7 +76,7 @@ func (idx *ChatSpaceIndexer) handleSpaceCreated(ctx context.Context, spaceRaw st
 	}
 	spaceID, err := uuid.Parse(spaceRaw)
 	if err != nil {
-		return fmt.Errorf("invalid space_id: %w", err)
+		return newPermanentConsumeError("invalid space_id: %w", err)
 	}
 	name, description, visibility, memberCount, err := idx.SpaceAPI.LoadSpace(ctx, spaceID)
 	if err != nil {

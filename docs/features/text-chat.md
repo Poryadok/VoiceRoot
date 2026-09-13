@@ -259,7 +259,7 @@ Normative menu — [screen-controls.md](../design/screen-controls.md) §3.6c. **
 | **Schedule message** | `scheduled_at` на `SendMessageRequest`; row в `scheduled_messages` | Strip над composer; **edit** через `UpdateScheduledMessage` (только `status=pending`); cancel / send-now — см. [messaging-service.md](../microservices/messaging-service.md) § Scheduled messages |
 | **Send when online** | `send_when_online=true` | Queued до presence `online` у получателя (**DM only**); invisible/offline у получателя — очередь держится; отмена до dispatch; GRP/CH → validation §3.6f |
 
-> **Proto gap:** `send_silent`, `scheduled_at`, `send_when_online`, `UpdateScheduledMessage`, `scheduled_messages` table — **not yet in proto/code**; normative contract — [messaging-service.md](../microservices/messaging-service.md) § Send options, § Scheduled messages ([todo/backend.md](../todo/backend.md)).
+> **Implementation gap:** `send_silent` is shipped in `SendMessageRequest`, durable Messaging storage and `message.sent`; composer and Notification consumption remain open. `scheduled_at`, `send_when_online`, `UpdateScheduledMessage` and the `scheduled_messages` table are **not yet in proto/code**; normative contract — [messaging-service.md](../microservices/messaging-service.md) § Send options, § Scheduled messages ([todo/backend.md](../todo/backend.md)).
 
 ### Side panel (desktop) / sheets (mobile)
 
