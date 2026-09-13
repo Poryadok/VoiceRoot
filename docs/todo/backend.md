@@ -205,7 +205,7 @@
 
 
 - [ ] **[Bot] Inbound chat message events → bot webhook/poll not implemented** — `docs/microservices/bot-service.md` describes `NATS: message in whitelisted chat → Bot Service`; code only **publishes** `bot.events` (`internal/botevents/jetstream.go`, wired in `main.go`), no consumer/subscriber anywhere under `src/backend/bot/`.
-- [ ] **[Bot] Deferred follow-up uses wrong `ChatRef` type** — `lookupInteraction` always returns `CHAT_TYPE_CHANNEL` (`internal/grpcsvc/interaction.go`), breaking deferred `SendBotMessage` / `CompleteInteraction` for group (and DM) chats.
+- [x] **[Bot] Deferred follow-up preserves `ChatRef` type** — interaction payload persists `chat_type`; `lookupInteraction` restores DM/group/channel (with legacy channel fallback) for deferred `SendBotMessage` / `CompleteInteraction`. Covered by `interaction_deferred_chat_type_test.go`.
 - [ ] **[Bot] Redis gRPC rate limiter fails open** — on Redis error, requests proceed unlimited (`internal/ratelimit/redis_limiter.go`); staging sets `BOT_REDIS_ADDR` in `deploy/staging/services.yaml`.
 - [ ] **[Bot] `GetChatMessagesForBot` → `Unimplemented` если Messaging unset / history path** — privileged `TEXT_CHAT_READ_HISTORY`; без Messaging live — Unimplemented. Portal CSRF/manifest — [admin.md](admin.md).
 - [ ] **[Bot] Token / webhook-secret rotation does not invalidate active sessions** — `RegenerateToken` / `RegenerateWebhookSecret` only update DB; no hub deferred-token purge per `docs/features/bots.md` §tokens.
