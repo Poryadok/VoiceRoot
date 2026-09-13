@@ -265,7 +265,7 @@
 - [x] **[Chat] Handlers: Quick Access** — enforce limit 15; `AddQuickAccess` idempotent; integration test reorder (**Batch 17**: `quick_access.go`, store + gRPC tests).
 - [x] **[Chat] Archive removes Quick Access** — `ArchiveChat(archived=true)` calls `RemoveQuickAccess` (**Batch 18**).
 - [x] **[Chat] Incoming message keeps an archived chat archived** — removed obsolete DM `AutoUnarchiveDMRecipients`; `message.sent` preserves `is_archived=true` while retaining activity and declined-DM re-contact handling; main/archive inbox regressions cover the contract. Canon: [text-chat.md](../features/text-chat.md) § «Архивирование».
-- [ ] **[Notification] Archived-chat message suppression** — suppress push and notification-center row while retaining the unread badge. Canon: [notifications.md](../features/notifications.md) § «Архивированные чаты».
+- [x] **[Notification] Archived-chat message suppression** — Notification reads Chat member archive metadata, suppresses push and notification-center routing fail-closed when recipient metadata is absent, while Chat retains unread/activity ownership. Canon: [notifications.md](../features/notifications.md) § «Архивированные чаты».
 - [x] **[Chat] Gateway REST** — folder RPCs + `GET /chats?folder_id=` (**Batch 19**): `GET/POST /api/v1/chats/folders`, `PATCH/DELETE …/folders/{id}`, `POST/DELETE …/folders/{id}/chats`, `PUT …/chats/order`, `POST/DELETE …/chats/{chatId}/pin`; Quick Access REST — **done (Batch 17)**; `inbox=archive` on `GET /chats` — **done Batch 15**.
 
 ### Telegram-parity audit — open CODE (2026-08-28)
@@ -304,7 +304,7 @@
 
 
 - [ ] **[Notification] `friend_request` delivery зависит от Social NATS** — publisher + `social_events_consumer.go` есть; проверить wiring `NATS_URL` на notification в k8s. Тихие часы/settings **пишутся в БД** (`store/settings.go`) — клиентский dual-write: [client.md](client.md).
-- [ ] **[Notification] `send_silent` consumption** — read flag from `message.sent`; suppress push sound/badge rules; in-app policy — [notification-service.md](../microservices/notification-service.md)
+- [x] **[Notification] `send_silent` consumption** — `message.sent.send_silent` now maps to platform push silence/no-badge controls while preserving grouping and in-app/unread policy — [notification-service.md](../microservices/notification-service.md)
 - [ ] **[Notification] `reply` delivery** — `reply` marked in the notification contract but Realtime maps thread replies to `new_message`; add producer/fan-out support and routing coverage — [notifications.md](../features/notifications.md), `src/backend/realtime/in_app_notification_fanout.go`
 - [ ] **[Notification] `system` in-app / Gateway gaps (T-023)** — Moderation NATS consumer produces `system` push for sanctions and narrowly skips presence until an in-app path exists. Still missing/undefined: Notification→Realtime transport + payload + dedupe, final account→profiles semantics, Flutter presentation, other system producers, and Gateway REST exposure — `src/backend/notification/moderation_events_consumer.go`; `src/backend/notification/internal/grpcsvc/server.go`; `src/backend/gateway/transcode_notifications.go`; `src/backend/realtime/`
 
