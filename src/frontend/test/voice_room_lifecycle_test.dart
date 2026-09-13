@@ -35,6 +35,181 @@ void _expectCanonicalRequest(http.Request request, String action) {
 }
 
 void main() {
+  group('server persisted Space binding projection', () {
+    for (final id in [
+      'AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA',
+      'AAAAAAAAAAAA4AAA8AAAAAAAAAAAAAAA',
+      '{AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA}',
+      'URN:UUID:AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA',
+    ]) {
+      test('active mapper preserves accepted UUID spelling $id', () {
+        final active = voiceCallSessionFromProto(
+          calls_pb.CallSession(
+            roomId: _roomId,
+            roomTypeEnum:
+                calls_pb.VoiceSessionKind.VOICE_SESSION_KIND_VOICE_ROOM,
+            voiceRoomId: id,
+            spaceId: id,
+          ),
+        );
+        expect(active.sessionKind, VoiceSessionKind.voiceRoom);
+        expect(active.voiceRoomId, id);
+        expect(active.spaceId, id);
+      });
+      test('join mapper preserves accepted UUID spelling $id', () {
+        final joined = voiceRoomSessionFromJson({
+          'voice_session': {
+            'room_id': _roomId,
+            'livekit_room_name': 'lk-room',
+            'voice_room_id': id,
+            'space_id': id,
+          },
+        });
+        expect(joined.roomId, _roomId);
+        expect(joined.livekitRoomName, 'lk-room');
+        expect(joined.voiceRoomId, id);
+        expect(joined.spaceId, id);
+      });
+    }
+
+    for (final binding in <(String?, String?)>[
+      (_voiceRoomId, null),
+      (_voiceRoomId, ''),
+      (_voiceRoomId, 'bad'),
+      (_voiceRoomId, ' $_spaceId'),
+      (null, _spaceId),
+      ('', _spaceId),
+      ('bad', _spaceId),
+      ('$_voiceRoomId ', _spaceId),
+    ]) {
+      test('incomplete tuple $binding exposes no Space in either mapper', () {
+        final (room, space) = binding;
+        final active = voiceCallSessionFromProto(
+          calls_pb.CallSession(
+            roomId: _roomId,
+            roomType: 'voice_room',
+            voiceRoomId: room,
+            spaceId: space,
+          ),
+        );
+        expect(active.roomId, _roomId);
+        expect(active.voiceRoomId, room == null || room.isEmpty ? null : room);
+        expect(active.spaceId, isNull);
+        final joined = voiceRoomSessionFromJson({
+          'voice_session': {
+            'room_id': _roomId,
+            'livekit_room_name': 'lk-room',
+            'voice_room_id': ?room,
+            'space_id': ?space,
+          },
+        });
+        expect(joined.voiceRoomId, room ?? '');
+        expect(joined.spaceId, isNull);
+      });
+    }
+
+    for (final kind in ['call', 'group_voice', 'unknown']) {
+      test('$kind cannot acquire Space from incidental room tuple', () {
+        final session = voiceCallSessionFromProto(
+          calls_pb.CallSession(
+            roomId: _roomId,
+            roomType: kind,
+            voiceRoomId: _voiceRoomId,
+            spaceId: _spaceId,
+          ),
+        );
+        expect(session.spaceId, isNull);
+        expect(session.voiceRoomId, _voiceRoomId);
+      });
+    }
+
+    test(
+      'active HTTP protobuf JSON maps server tuple through domain',
+      () async {
+        var requests = 0;
+        final client = VoiceCallsClient(
+          gateway: gatewayHttpForTest(
+            MockClient((request) async {
+              requests++;
+              expect(request.method, 'GET');
+              expect(request.url.path, '/api/v1/voice/calls/active');
+              expect(request.headers['Authorization'], _auth);
+              return utf8JsonResponse(
+                jsonEncode({
+                  'call_session': {
+                    'room_id': _roomId,
+                    'voice_room_id': _voiceRoomId,
+                    'space_id': _spaceId,
+                    'room_type_enum': 'VOICE_SESSION_KIND_VOICE_ROOM',
+                    'status': 'CALL_STATUS_ACTIVE',
+                    'livekit_room_name': 'lk-restored',
+                  },
+                }),
+              );
+            }),
+          ),
+        );
+        final result = await client.getActiveCall(authorization: _auth);
+        expect(requests, 1);
+        expect(result, isA<VoiceApiOk<VoiceCallSession?>>());
+        final session = (result as VoiceApiOk<VoiceCallSession?>).data!;
+        expect(session.roomId, _roomId);
+        expect(session.voiceRoomId, _voiceRoomId);
+        expect(session.spaceId, _spaceId);
+        expect(session.sessionKind, VoiceSessionKind.voiceRoom);
+        expect(session.status, VoiceCallStatus.active);
+        expect(session.livekitRoomName, 'lk-restored');
+      },
+    );
+
+    for (final serverSpace in [
+      null,
+      _spaceId,
+      '55555555-5555-4555-8555-555555555555',
+      '',
+      'bad',
+    ]) {
+      test(
+        'canonical join checks optional server Space $serverSpace',
+        () async {
+          var requests = 0;
+          final response = _roomResponse();
+          if (serverSpace != null) {
+            (response['voice_session'] as Map<String, dynamic>)['space_id'] =
+                serverSpace;
+          }
+          final client = VoiceCallsClient(
+            canonicalRoomLifecycleEnabled: true,
+            gateway: gatewayHttpForTest(
+              MockClient((request) async {
+                requests++;
+                _expectCanonicalRequest(request, 'join');
+                return utf8JsonResponse(jsonEncode(response));
+              }),
+            ),
+          );
+          final result = await client.joinSpaceVoiceRoom(
+            authorization: _auth,
+            spaceId: _spaceId,
+            voiceRoomId: _voiceRoomId,
+            operationId: _operationId,
+          );
+          expect(requests, 1);
+          if (serverSpace == null || serverSpace == _spaceId) {
+            expect(result, isA<VoiceApiOk<VoiceRoomSession>>());
+            final session = (result as VoiceApiOk<VoiceRoomSession>).data;
+            expect(session.spaceId, _spaceId);
+            expect(session.voiceRoomId, _voiceRoomId);
+            expect(session.roomId, _roomId);
+          } else {
+            expect(result, isA<VoiceApiFailure>());
+            expect((result as VoiceApiFailure).errorCode, 'invalid_response');
+          }
+        },
+      );
+    }
+  });
+
   group('Space room session identity', () {
     test('mapper preserves voice room ID without inventing Space ID', () {
       final session = voiceCallSessionFromProto(
