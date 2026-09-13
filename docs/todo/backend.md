@@ -561,7 +561,6 @@
 - [ ] **[Story] Highlights lack `visibility_audience` JSONB** — only coarse `visibility` TEXT; no space multiselect per [stories.md](../features/stories.md) §Highlights. Paths: `src/backend/migrations/story_db/000001_init.up.sql`, `src/backend/story/internal/grpcsvc/story.go` (`canViewHighlight`).
 - [ ] **[Story] `AddToHighlight` allows active stories** — spec says “from archive”; store only checks author ownership, not `expired_at`. Path: `src/backend/story/internal/store/store.go` (`AddToHighlight`).
 - [ ] **[Story] Archive purge worker delayed first run** — 24h ticker, no startup `RunArchivePurgeOnce`. Path: `src/backend/story/internal/jobs/jobs.go` (`StartArchivePurgeWorker`).
-- [ ] **[Story] Weak content validation** — no required `text_content` for `text`, no required `media_file_id` for `photo`/`video`. Path: `src/backend/story/internal/grpcsvc/story.go` (`CreateStory`).
 - [ ] **[Story] `game_tag` unvalidated** — free string, no Matchmaking catalog lookup. Path: `src/backend/story/internal/grpcsvc/story.go`.
 - [ ] **[Story] No compose/live E2E for LFP** — Gateway unit test only. Paths: `src/backend/gateway/transcode_stories_test.go`; no `compose_*lfp*` / Flutter LFP create flow in CI ([`.github/ci/e2e-features.yml`](../../.github/ci/e2e-features.yml)).
 - [ ] **[Story] Stale service README** — still says “scaffold”. Path: `src/backend/story/README.md`.
