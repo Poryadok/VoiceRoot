@@ -38,7 +38,10 @@ var sha256Re = regexp.MustCompile(`^[a-fA-F0-9]{64}$`)
 
 const defaultRetentionDays = 90
 
-var ErrNotChatMember = errors.New("not a chat member")
+var (
+	ErrNotChatMember           = errors.New("not a chat member")
+	ErrProcessedOutputTooLarge = errors.New("processed output exceeds storage cap")
+)
 
 type ChatGuard interface {
 	EnsureMember(ctx context.Context, chatID, profileID uuid.UUID) error
@@ -309,6 +312,9 @@ func (s *FileGRPC) ConfirmUpload(ctx context.Context, req *filev1.ConfirmUploadR
 	}
 	row, err = s.files.ConfirmUpload(ctx, fileID, strings.ToLower(sha))
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, status.Error(codes.FailedPrecondition, "file upload is already confirmed")
+		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	row, err = s.scanConfirmedFile(ctx, row, uploaded)
@@ -319,27 +325,50 @@ func (s *FileGRPC) ConfirmUpload(ctx context.Context, req *filev1.ConfirmUploadR
 		_ = s.events.PublishFileScanInfected(ctx, row.ID.String(), row.UploaderProfileID.String())
 		return &filev1.ConfirmUploadResponse{FileMetadata: fileRowToProto(row)}, nil
 	}
-	if row.Status != "ready" {
+	if row.Status == "failed" {
 		return &filev1.ConfirmUploadResponse{FileMetadata: fileRowToProto(row)}, nil
 	}
-	_ = s.events.PublishFileUploaded(ctx, row.ID.String(), row.UploaderProfileID.String())
 	originalKey := row.R2Key
 	if row.FileType == "image" && !row.IsE2E && s.processor != nil {
 		processed, err := s.processor.ProcessImage(ctx, row)
 		if err != nil {
+			if errors.Is(err, ErrProcessedOutputTooLarge) {
+				failed, updateErr := s.files.ApplyScanResult(ctx, fileID, "failed", "error")
+				if updateErr != nil {
+					return nil, status.Error(codes.Internal, updateErr.Error())
+				}
+				_ = s.events.PublishFileProcessed(ctx, failed.ID.String(), failed.Status, "", "")
+				if s.deleter != nil {
+					if deleteErr := s.deleter.DeleteObject(ctx, originalKey); deleteErr != nil {
+						slog.Default().WarnContext(ctx, "oversized processed upload cleanup failed", slog.String("file_id", row.ID.String()), slog.String("r2_key", originalKey), slog.String("error", deleteErr.Error()))
+					}
+				}
+				return &filev1.ConfirmUploadResponse{FileMetadata: fileRowToProto(failed)}, nil
+			}
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 		row, err = s.files.ApplyImageProcessing(ctx, fileID, processed.ConvertedR2Key, processed.ThumbnailR2Key, processed.Width, processed.Height)
 		if err != nil {
+			if s.deleter != nil {
+				if cleanupErr := r2file.DeleteKeys(ctx, s.deleter, processed.ConvertedR2Key, processed.ThumbnailR2Key); cleanupErr != nil {
+					slog.Default().WarnContext(ctx, "uncommitted processed upload cleanup failed", slog.String("file_id", fileID.String()), slog.String("error", cleanupErr.Error()))
+				}
+			}
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 		_ = s.events.PublishFileProcessed(ctx, row.ID.String(), row.Status, processed.ConvertedR2Key, processed.ThumbnailR2Key)
 		if s.deleter != nil {
 			if err := s.deleter.DeleteObject(ctx, originalKey); err != nil {
-				return nil, status.Error(codes.Internal, err.Error())
+				slog.Default().WarnContext(ctx, "processed original cleanup failed", slog.String("file_id", row.ID.String()), slog.String("r2_key", originalKey), slog.String("error", err.Error()))
 			}
 		}
+	} else if row.Status == "processing" {
+		row, err = s.files.ApplyScanResult(ctx, fileID, "ready", row.ScanResult)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
 	}
+	_ = s.events.PublishFileUploaded(ctx, row.ID.String(), row.UploaderProfileID.String())
 	return &filev1.ConfirmUploadResponse{FileMetadata: fileRowToProto(row)}, nil
 }
 
@@ -355,11 +384,7 @@ func (s *FileGRPC) scanConfirmedFile(ctx context.Context, row store.FileRow, upl
 		return row, nil
 	}
 	if s.scanner == nil || s.reader == nil {
-		updated, err := s.files.ApplyScanResult(ctx, row.ID, "ready", "skipped")
-		if err != nil {
-			return store.FileRow{}, status.Error(codes.Internal, err.Error())
-		}
-		return updated, nil
+		return row, nil
 	}
 	bytes := uploaded
 	if bytes == nil {
@@ -381,7 +406,7 @@ func (s *FileGRPC) scanConfirmedFile(ctx context.Context, row store.FileRow, upl
 		}
 		return updated, status.Error(codes.Internal, err.Error())
 	}
-	statusValue := "ready"
+	statusValue := "processing"
 	if outcome == "infected" || outcome == "error" {
 		statusValue = "failed"
 	}
