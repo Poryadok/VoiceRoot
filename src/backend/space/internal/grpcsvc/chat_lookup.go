@@ -2,11 +2,11 @@ package grpcsvc
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
-
-	"voice/backend/space/internal/s2s"
+	"google.golang.org/grpc/metadata"
 
 	chatv1 "voice.app/voice/chat/v1"
 )
@@ -49,11 +49,13 @@ func (g *grpcChatLookup) GetChatNames(ctx context.Context, chatIDs []uuid.UUID) 
 	if g == nil || g.client == nil || len(chatIDs) == 0 {
 		return nil, nil
 	}
-	ctx = s2s.ForwardIncomingMetadata(ctx)
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs("x-voice-internal-caller", "space"))
 	out := make(map[uuid.UUID]ChatInfo, len(chatIDs))
+	lookupFailed := false
 	for _, id := range chatIDs {
 		resp, err := g.client.GetChat(ctx, &chatv1.GetChatRequest{ChatId: id.String()})
 		if err != nil {
+			lookupFailed = true
 			continue
 		}
 		chat := resp.GetChat()
@@ -65,6 +67,9 @@ func (g *grpcChatLookup) GetChatNames(ctx context.Context, chatIDs []uuid.UUID) 
 			info.Name = chat.GetName()
 		}
 		out[id] = info
+	}
+	if lookupFailed {
+		return out, errors.New("chat lookup failed")
 	}
 	return out, nil
 }
