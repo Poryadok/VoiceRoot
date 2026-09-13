@@ -864,10 +864,22 @@ const MessageSent$json = {
       '17': true
     },
     {'1': 'send_silent', '3': 8, '4': 1, '5': 8, '10': 'sendSilent'},
+    {'1': 'was_scheduled', '3': 9, '4': 1, '5': 8, '10': 'wasScheduled'},
+    {
+      '1': 'scheduled_at',
+      '3': 10,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '9': 2,
+      '10': 'scheduledAt',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_thread_parent_id'},
     {'1': '_content_type'},
+    {'1': '_scheduled_at'},
   ],
 };
 
@@ -878,7 +890,10 @@ final $typed_data.Uint8List messageSentDescriptor = $convert.base64Decode(
     'SWQSIQoMaGFzX21lbnRpb25zGAQgASgIUgtoYXNNZW50aW9ucxItChB0aHJlYWRfcGFyZW50X2'
     'lkGAUgASgJSABSDnRocmVhZFBhcmVudElkiAEBEhUKBmlzX2UyZRgGIAEoCFIFaXNFMmUSJgoM'
     'Y29udGVudF90eXBlGAcgASgJSAFSC2NvbnRlbnRUeXBliAEBEh8KC3NlbmRfc2lsZW50GAggAS'
-    'gIUgpzZW5kU2lsZW50QhMKEV90aHJlYWRfcGFyZW50X2lkQg8KDV9jb250ZW50X3R5cGU=');
+    'gIUgpzZW5kU2lsZW50EiMKDXdhc19zY2hlZHVsZWQYCSABKAhSDHdhc1NjaGVkdWxlZBJCCgxz'
+    'Y2hlZHVsZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wSAJSC3NjaGVkdW'
+    'xlZEF0iAEBQhMKEV90aHJlYWRfcGFyZW50X2lkQg8KDV9jb250ZW50X3R5cGVCDwoNX3NjaGVk'
+    'dWxlZF9hdA==');
 
 @$core.Deprecated('Use mentionAddedDescriptor instead')
 const MentionAdded$json = {
@@ -894,6 +909,7 @@ const MentionAdded$json = {
       '5': 9,
       '10': 'mentionedProfileIds'
     },
+    {'1': 'send_silent', '3': 5, '4': 1, '5': 8, '10': 'sendSilent'},
   ],
 };
 
@@ -901,8 +917,8 @@ const MentionAdded$json = {
 final $typed_data.Uint8List mentionAddedDescriptor = $convert.base64Decode(
     'CgxNZW50aW9uQWRkZWQSHQoKbWVzc2FnZV9pZBgBIAEoCVIJbWVzc2FnZUlkEhcKB2NoYXRfaW'
     'QYAiABKAlSBmNoYXRJZBIqChFzZW5kZXJfcHJvZmlsZV9pZBgDIAEoCVIPc2VuZGVyUHJvZmls'
-    'ZUlkEjIKFW1lbnRpb25lZF9wcm9maWxlX2lkcxgEIAMoCVITbWVudGlvbmVkUHJvZmlsZUlkcw'
-    '==');
+    'ZUlkEjIKFW1lbnRpb25lZF9wcm9maWxlX2lkcxgEIAMoCVITbWVudGlvbmVkUHJvZmlsZUlkcx'
+    'IfCgtzZW5kX3NpbGVudBgFIAEoCFIKc2VuZFNpbGVudA==');
 
 @$core.Deprecated('Use messageEditedDescriptor instead')
 const MessageEdited$json = {
