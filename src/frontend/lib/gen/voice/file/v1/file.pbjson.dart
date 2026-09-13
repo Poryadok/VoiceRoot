@@ -78,6 +78,20 @@ final $typed_data.Uint8List fileScanOutcomeDescriptor = $convert.base64Decode(
     'AhIeChpGSUxFX1NDQU5fT1VUQ09NRV9JTkZFQ1RFRBADEhsKF0ZJTEVfU0NBTl9PVVRDT01FX0'
     'VSUk9SEAQSHQoZRklMRV9TQ0FOX09VVENPTUVfU0tJUFBFRBAF');
 
+@$core.Deprecated('Use fileURLVariantDescriptor instead')
+const FileURLVariant$json = {
+  '1': 'FileURLVariant',
+  '2': [
+    {'1': 'FILE_URL_VARIANT_UNSPECIFIED', '2': 0},
+    {'1': 'FILE_URL_VARIANT_THUMBNAIL', '2': 1},
+  ],
+};
+
+/// Descriptor for `FileURLVariant`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List fileURLVariantDescriptor = $convert.base64Decode(
+    'Cg5GaWxlVVJMVmFyaWFudBIgChxGSUxFX1VSTF9WQVJJQU5UX1VOU1BFQ0lGSUVEEAASHgoaRk'
+    'lMRV9VUkxfVkFSSUFOVF9USFVNQk5BSUwQAQ==');
+
 @$core.Deprecated('Use fileReferenceOwnerTypeDescriptor instead')
 const FileReferenceOwnerType$json = {
   '1': 'FileReferenceOwnerType',
@@ -389,13 +403,22 @@ const GetFileURLRequest$json = {
       '6': '.voice.file.v1.FileAccessSelector',
       '10': 'access'
     },
+    {
+      '1': 'variant',
+      '3': 3,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.file.v1.FileURLVariant',
+      '10': 'variant'
+    },
   ],
 };
 
 /// Descriptor for `GetFileURLRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List getFileURLRequestDescriptor = $convert.base64Decode(
     'ChFHZXRGaWxlVVJMUmVxdWVzdBIXCgdmaWxlX2lkGAEgASgJUgZmaWxlSWQSOQoGYWNjZXNzGA'
-    'IgASgLMiEudm9pY2UuZmlsZS52MS5GaWxlQWNjZXNzU2VsZWN0b3JSBmFjY2Vzcw==');
+    'IgASgLMiEudm9pY2UuZmlsZS52MS5GaWxlQWNjZXNzU2VsZWN0b3JSBmFjY2VzcxI3Cgd2YXJp'
+    'YW50GAMgASgOMh0udm9pY2UuZmlsZS52MS5GaWxlVVJMVmFyaWFudFIHdmFyaWFudA==');
 
 @$core.Deprecated('Use getFileMetadataRequestDescriptor instead')
 const GetFileMetadataRequest$json = {
