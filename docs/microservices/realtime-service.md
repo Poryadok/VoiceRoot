@@ -210,6 +210,20 @@ Routing rules (presence, quiet hours, `send_silent`, mute) — [notification-ser
 | Read cursor | REST `MarkRead` if chat was open; do not rely on WS-only `mark_read` |
 | Ephemeral delivery | Live `delivery_ack` only; list ✓✓ from durable metadata |
 | Live events | New `hello` + optional `resume` (new `s` stream; no event journal replay) |
+| Active voice / screen share | After every newly accepted `hello`, request Voice `GetActiveCall`; `null` closes stale LiveKit binding and clears the screen projection, while active response replaces the local session. `GetVoiceStates` owns the current sharer list and current LiveKit tracks gate renderability. REST error retains state and retries; stale hello/profile result is ignored. |
+
+### Fan-out pressure
+
+Each connection has a bounded queue and fan-out never waits on a slow recipient.
+Ordinary ephemeral operations, including `voice_state_update`, are lossy when
+the queue is full. For profile lifecycle `call_incoming`, `call_accepted`,
+`call_declined`, `call_missed`, `call_ended`, `call_started`,
+`screen_share_started`, and `screen_share_stopped`, overflow closes **only** the
+full connection with WebSocket code `1013` and reason `fanout_overflow`; healthy
+recipients continue receiving the same fan-out in their own order. There is no
+retry, eviction, or reorder. The JetStream consumer completes all local enqueue
+attempts and ACKs the source message afterward, including a malformed or
+unsupported payload that it intentionally does not fan out.
 
 ### Операции (Client → Server)
 

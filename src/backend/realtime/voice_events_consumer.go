@@ -246,28 +246,43 @@ func voiceEventLogAttrs(data []byte) []slog.Attr {
 func subscribeVoiceEvents(js nats.JetStreamContext, hub *wsHub, instanceID string, logger *slog.Logger) (*nats.Subscription, error) {
 	durable := voiceConsumerDurableName(instanceID)
 	handler := func(msg *nats.Msg) {
-		attrs := voiceEventLogAttrs(msg.Data)
-		if profileIDs, fe, ok := voiceEventBytesToFanout(msg.Data); ok {
-			natslog.LogConsume(logger, msg, slog.LevelInfo, "voice event consumed", attrs...)
-			for _, profileID := range compactProfiles(profileIDs...) {
-				hub.broadcastToProfile(profileID, fe, logger, natslog.RequestIDFromMsg(msg))
-			}
-			return
-		}
-		natslog.LogConsume(logger, msg, slog.LevelWarn, "unknown voice event payload", attrs...)
+		consumeVoiceEventMessage(msg, hub, logger, func(message *nats.Msg) error {
+			return message.Ack()
+		})
 	}
 	sub, err := js.Subscribe("voice.>", handler,
 		nats.Durable(durable),
 		nats.BindStream(jsStreamVoiceEvents),
 		nats.DeliverNew(),
+		nats.ManualAck(),
 	)
 	if err != nil {
-		sub, err = js.Subscribe("", handler, nats.Bind(jsStreamVoiceEvents, durable))
+		sub, err = js.Subscribe("", handler,
+			nats.Bind(jsStreamVoiceEvents, durable),
+			nats.ManualAck(),
+		)
 		if err != nil {
 			return nil, fmt.Errorf("jetstream subscribe voice.events: %w", err)
 		}
 	}
 	return sub, nil
+}
+
+func consumeVoiceEventMessage(msg *nats.Msg, hub *wsHub, logger *slog.Logger, ack func(*nats.Msg) error) {
+	defer func() {
+		if err := ack(msg); err != nil && logger != nil {
+			logger.Warn("voice event ack failed", slog.String("error", err.Error()))
+		}
+	}()
+	attrs := voiceEventLogAttrs(msg.Data)
+	if profileIDs, fe, ok := voiceEventBytesToFanout(msg.Data); ok {
+		natslog.LogConsume(logger, msg, slog.LevelInfo, "voice event consumed", attrs...)
+		for _, profileID := range compactProfiles(profileIDs...) {
+			hub.broadcastToProfile(profileID, fe, logger, natslog.RequestIDFromMsg(msg))
+		}
+		return
+	}
+	natslog.LogConsume(logger, msg, slog.LevelWarn, "unknown voice event payload", attrs...)
 }
 
 func runVoiceEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instanceID string, logger *slog.Logger) error {
