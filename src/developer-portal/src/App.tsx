@@ -54,6 +54,8 @@ function Portal() {
   const secretDialogRef = useRef<HTMLElement>(null);
   const secretDialogOpenerRef = useRef<HTMLElement | null>(null);
   const secretDialogWasOpenRef = useRef(false);
+  const shouldRefocusSecretDialogRef = useRef(false);
+  const [secretDialogFocusGeneration, setSecretDialogFocusGeneration] = useState(0);
   const hasOneShotSecrets = Boolean(botToken || webhookSecret);
 
   useEffect(() => {
@@ -64,6 +66,9 @@ function Portal() {
           ? document.activeElement
           : null;
         secretDialogRef.current?.querySelector<HTMLElement>('button:not([disabled])')?.focus();
+      } else if (shouldRefocusSecretDialogRef.current) {
+        shouldRefocusSecretDialogRef.current = false;
+        secretDialogRef.current?.querySelector<HTMLElement>('button:not([disabled])')?.focus();
       }
       return;
     }
@@ -73,7 +78,7 @@ function Portal() {
       secretDialogOpenerRef.current?.focus();
       secretDialogOpenerRef.current = null;
     }
-  }, [hasOneShotSecrets]);
+  }, [hasOneShotSecrets, secretDialogFocusGeneration]);
 
   const applyBotToEditForm = useCallback((bot: BotSummary | undefined) => {
     setEditName(bot?.name ?? '');
@@ -248,10 +253,15 @@ function Portal() {
     }
     try {
       await navigator.clipboard.writeText(secret);
+      const hasRemainingSecret = kind === 'bot token' ? Boolean(webhookSecret) : Boolean(botToken);
       if (kind === 'bot token') {
         setBotToken('');
       } else {
         setWebhookSecret('');
+      }
+      if (hasRemainingSecret) {
+        shouldRefocusSecretDialogRef.current = true;
+        setSecretDialogFocusGeneration((generation) => generation + 1);
       }
       setStatus(`${kind === 'bot token' ? 'Bot token' : 'Webhook secret'} copied and cleared from the portal`);
     } catch {
@@ -342,11 +352,11 @@ function Portal() {
     setSelectedBotId(id);
     setBotToken(body.token_response?.token ?? '');
     setWebhookSecret(body.webhook_secret_response?.webhook_secret ?? '');
-    setStatus(`Registered bot ${id}`);
     await refreshBots();
     if (id) {
       await loadBotCatalog(id);
     }
+    setStatus(`Registered bot ${id}`);
   }
 
   async function revokeAndRegenerateBotToken() {
@@ -417,10 +427,7 @@ function Portal() {
         inert={hasOneShotSecrets || undefined}
         aria-hidden={hasOneShotSecrets || undefined}
         onClickCapture={(event) => {
-          if (
-            hasOneShotSecrets
-            && !(event.target instanceof Element && event.target.closest('[data-secret-modal-logout]'))
-          ) {
+          if (hasOneShotSecrets) {
             event.preventDefault();
             event.stopPropagation();
           }
@@ -429,7 +436,7 @@ function Portal() {
       <header className="topbar">
         <h1>Voice Developer Portal</h1>
         {loggedIn ? (
-          <button type="button" data-secret-modal-logout onClick={logout}>Sign out</button>
+          <button type="button" onClick={logout}>Sign out</button>
         ) : oauthDisabled ? (
           <span className="hint">OAuth disabled (dev paste JWT)</span>
         ) : (
@@ -618,7 +625,7 @@ function Portal() {
       )}
 
       </main>
-      <p className="status portal-status" role="status">{status}</p>
+      {!hasOneShotSecrets && <p className="status portal-status" role="status">{status}</p>}
       {loggedIn && !getAccessToken() && <p className="status error" role="status">Session expired</p>}
       {hasOneShotSecrets && (
         <div className="secret-dialog-backdrop">
@@ -632,6 +639,7 @@ function Portal() {
           >
             <h2 id="one-shot-secrets-title">Copy one-shot secrets</h2>
             <p>Copy each value now. The portal clears it after copying or when this dialog is closed.</p>
+            {status && <p className="status" role="status">{status}</p>}
             {botToken && (
               <section className="secret-value">
                 <h3>Bot token</h3>
