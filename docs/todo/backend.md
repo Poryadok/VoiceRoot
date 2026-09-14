@@ -286,7 +286,6 @@
 - [x] **[Chat] `MuteChat` / `ArchiveChat`** — `mute_archive.go`.
 - [x] **[Chat] Group `last_message_at` never updated from message stream** — **done:** `TouchLastMessageAt` updates `type IN ('dm','group','channel')` (`dm.go`); store IT `last_message_at_integration_test.go`.
 - [x] **[Chat] Group last_message_at from message stream** — **done:** same as above.
-- [ ] **[Chat] `ListChats` omits `Chat.topic`** — list SQL/mapping already includes `e2e_enabled`, `space_id`, `slow_mode_seconds`, `threads_enabled` and `allow_user_main_feed`; only `topic` is absent from the selected `ChatRow` fields — [chat-service.md](../microservices/chat-service.md).
 - [x] **[Chat] `UpdateChat` ignores thread settings** — **done (Batch 27b):** `threads_enabled` / `allow_user_main_feed` persisted via `UpdateGroupChat`.
 - [x] **[Chat] `UpdateChat` rejects channels** — **done (Batch 27b):** `UpdateChat` allows `group` and `channel`; topic/thread flags via Chat API.
 - [ ] **[Chat] Subscription S2S not integrated** — doc dependency (`docs/microservices/chat-service.md`); limit hardcoded `GroupMemberLimit = 500` (`src/backend/chat/internal/store/group.go`). No subscription-tier differentiation.
