@@ -1,150 +1,136 @@
+// Package subscriptionconsume holds the local, fail-closed personal entitlement
+// projection used by File. It deliberately has no legacy event consumer: only a
+// complete revisioned entitlement snapshot may update this projection.
 package subscriptionconsume
 
 import (
-	"context"
-	"fmt"
+	"errors"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/nats-io/nats.go"
-	"google.golang.org/protobuf/proto"
-
-	eventsv1 "voice.app/voice/events/v1"
 )
 
-const streamName = "subscription_events"
+var (
+	// ErrInvalidSnapshot means the candidate cannot safely update a projection.
+	ErrInvalidSnapshot = errors.New("subscription entitlement: invalid snapshot")
+	// ErrConflictingRevision means a revision was reused with different facts.
+	ErrConflictingRevision = errors.New("subscription entitlement: conflicting revision")
+)
 
-// TierCache stores account subscription tiers updated from subscription.events.
+// EntitlementState is the canonical personal entitlement state.
+type EntitlementState string
+
+const (
+	StateActive      EntitlementState = "ACTIVE"
+	StateGracePeriod EntitlementState = "GRACE_PERIOD"
+	StateInactive    EntitlementState = "INACTIVE"
+)
+
+// EntitlementSnapshot is the pre-wire local state core of a personal entitlement
+// fact. The eventual enforcement consumer additionally validates the complete
+// envelope, event ID/hash, inbox and snapshot-reconciliation protocol.
+type EntitlementSnapshot struct {
+	AccountID     string
+	Revision      uint64
+	State         EntitlementState
+	EntitledUntil time.Time
+}
+
+// ApplyResult describes whether a snapshot changed the projection.
+type ApplyResult uint8
+
+const (
+	ApplyApplied ApplyResult = iota + 1
+	ApplyDuplicate
+	ApplyStale
+	ApplyConflict
+	ApplyInvalid
+)
+
+// Err exposes the actionable error category for rejected snapshots.
+func (r ApplyResult) Err() error {
+	switch r {
+	case ApplyConflict:
+		return ErrConflictingRevision
+	case ApplyInvalid:
+		return ErrInvalidSnapshot
+	default:
+		return nil
+	}
+}
+
+// TierCache stores the newest complete entitlement snapshot for each account.
 type TierCache struct {
 	mu    sync.RWMutex
-	tiers map[string]string
+	tiers map[string]EntitlementSnapshot
 }
 
-// NewTierCache returns an empty tier cache (unknown accounts resolve to free).
+// NewTierCache returns an empty projection. Unknown accounts fail closed to free.
 func NewTierCache() *TierCache {
-	return &TierCache{tiers: make(map[string]string)}
+	return &TierCache{tiers: make(map[string]EntitlementSnapshot)}
 }
 
-// SetTier records the tier for an account ID.
-func (c *TierCache) SetTier(accountID, tier string) {
-	if c == nil || strings.TrimSpace(accountID) == "" || strings.TrimSpace(tier) == "" {
-		return
+// Apply atomically applies a complete snapshot by aggregate revision. A later
+// revision wins; an earlier one is stale; a conflicting same revision is rejected.
+func (c *TierCache) Apply(snapshot EntitlementSnapshot) ApplyResult {
+	if c == nil || !validSnapshot(snapshot) {
+		return ApplyInvalid
 	}
+	key := normalizedAccountID(snapshot.AccountID)
+	snapshot.AccountID = key
+	snapshot.EntitledUntil = snapshot.EntitledUntil.UTC().Round(0)
 	c.mu.Lock()
-	c.tiers[strings.ToLower(strings.TrimSpace(accountID))] = strings.ToLower(strings.TrimSpace(tier))
-	c.mu.Unlock()
+	defer c.mu.Unlock()
+	current, exists := c.tiers[key]
+	if !exists || snapshot.Revision > current.Revision {
+		c.tiers[key] = snapshot
+		return ApplyApplied
+	}
+	if snapshot.Revision < current.Revision {
+		return ApplyStale
+	}
+	if snapshot == current {
+		return ApplyDuplicate
+	}
+	return ApplyConflict
 }
 
-// Tier returns the cached tier or "free".
-func (c *TierCache) Tier(accountID string) string {
+// TierAt returns premium only while a current ACTIVE or GRACE_PERIOD snapshot
+// grants it. Equality at entitled_until is deliberately free.
+func (c *TierCache) TierAt(accountID string, now time.Time) string {
 	if c == nil {
 		return "free"
 	}
-	accountID = strings.ToLower(strings.TrimSpace(accountID))
-	if accountID == "" {
+	key := normalizedAccountID(accountID)
+	if key == "" {
 		return "free"
 	}
 	c.mu.RLock()
-	tier, ok := c.tiers[accountID]
+	snapshot, ok := c.tiers[key]
 	c.mu.RUnlock()
-	if !ok || tier == "" {
+	if !ok || !now.Before(snapshot.EntitledUntil) {
 		return "free"
 	}
-	return tier
-}
-
-// ApplySubscriptionEvent updates tier cache from a domain event.
-func ApplySubscriptionEvent(cache *TierCache, env *eventsv1.SubscriptionStreamEvent) {
-	if cache == nil || env == nil {
-		return
-	}
-	switch p := env.GetPayload().(type) {
-	case *eventsv1.SubscriptionStreamEvent_PlanStarted:
-		if started := p.PlanStarted; started != nil {
-			cache.SetTier(started.GetAccountId(), tierFromPlan(started.GetPlan()))
-		}
-	case *eventsv1.SubscriptionStreamEvent_PlanCancelled:
-		if cancelled := p.PlanCancelled; cancelled != nil {
-			cache.SetTier(cancelled.GetAccountId(), "free")
-		}
-	case *eventsv1.SubscriptionStreamEvent_PaymentFailed:
-			// payment_failed → grace_period: entitlements stay active (docs/features/subscription.md).
-			_ = p
-		case *eventsv1.SubscriptionStreamEvent_PlanExpired:
-		if expired := p.PlanExpired; expired != nil {
-			cache.SetTier(expired.GetAccountId(), "free")
-		}
-	case *eventsv1.SubscriptionStreamEvent_Downgrade:
-		if downgrade := p.Downgrade; downgrade != nil {
-			cache.SetTier(downgrade.GetAccountId(), "free")
-		}
-	case *eventsv1.SubscriptionStreamEvent_PaymentSuccess:
-		// payment_success alone does not change tier; plan_started is authoritative.
-		_ = p
-	}
-}
-
-func tierFromPlan(plan string) string {
-	switch strings.ToLower(strings.TrimSpace(plan)) {
-	case "premium", "space_pro":
+	switch snapshot.State {
+	case StateActive, StateGracePeriod:
 		return "premium"
 	default:
 		return "free"
 	}
 }
 
-// Run starts a durable JetStream consumer on subscription.> and applies events to cache.
-func Run(ctx context.Context, natsURL, durable string, cache *TierCache) error {
-	if cache == nil {
-		return fmt.Errorf("subscription consumer: missing tier cache")
+func validSnapshot(snapshot EntitlementSnapshot) bool {
+	if normalizedAccountID(snapshot.AccountID) == "" || snapshot.Revision == 0 || snapshot.EntitledUntil.IsZero() {
+		return false
 	}
-	url := strings.TrimSpace(natsURL)
-	if url == "" {
-		return fmt.Errorf("subscription consumer: missing NATS_URL")
+	switch snapshot.State {
+	case StateActive, StateGracePeriod, StateInactive:
+		return true
+	default:
+		return false
 	}
-	if strings.TrimSpace(durable) == "" {
-		durable = "subscription_tier_default"
-	}
-	nc, err := nats.Connect(url,
-		nats.Name("voice-subscription-consumer"),
-		nats.Timeout(10*time.Second),
-		nats.RetryOnFailedConnect(true),
-		nats.MaxReconnects(-1),
-		nats.ReconnectWait(time.Second),
-	)
-	if err != nil {
-		return fmt.Errorf("nats connect: %w", err)
-	}
-	go func() {
-		<-ctx.Done()
-		_ = nc.Drain()
-	}()
+}
 
-	js, err := nc.JetStream()
-	if err != nil {
-		return fmt.Errorf("jetstream: %w", err)
-	}
-
-	handler := func(msg *nats.Msg) {
-		var env eventsv1.SubscriptionStreamEvent
-		if err := proto.Unmarshal(msg.Data, &env); err != nil {
-			return
-		}
-		ApplySubscriptionEvent(cache, &env)
-	}
-
-	sub, err := js.Subscribe("subscription.>", handler, nats.Durable(durable), nats.BindStream(streamName), nats.DeliverNew())
-	if err != nil {
-		sub, err = js.Subscribe("", handler, nats.Bind(streamName, durable))
-		if err != nil {
-			return fmt.Errorf("subscribe subscription.events: %w", err)
-		}
-	}
-	go func() {
-		<-ctx.Done()
-		_ = sub.Unsubscribe()
-	}()
-	<-ctx.Done()
-	return ctx.Err()
+func normalizedAccountID(accountID string) string {
+	return strings.ToLower(strings.TrimSpace(accountID))
 }
