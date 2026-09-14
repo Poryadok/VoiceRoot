@@ -150,6 +150,48 @@ describe("FunnelsPage", () => {
       });
     });
   });
+
+  it("does not fetch an inverse range and recovers with a corrected UTC funnel range", async () => {
+    render(
+      <MemoryRouter>
+        <FunnelsPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("started");
+    fireEvent.change(screen.getByLabelText("From"), {
+      target: { value: "2026-01-31T00:00" },
+    });
+    await waitFor(() => {
+      expect(analytics.fetchFunnel).toHaveBeenLastCalledWith("registration", {
+        from: "2026-01-31T00:00:00Z",
+      });
+    });
+
+    const callsBeforeInverseRange = vi.mocked(analytics.fetchFunnel).mock.calls.length;
+    fireEvent.change(screen.getByLabelText("To"), {
+      target: { value: "2026-01-01T00:00" },
+    });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("From must be before or equal to To.");
+    expect(screen.getByLabelText("From")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText("To")).toHaveAttribute("aria-invalid", "true");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(analytics.fetchFunnel).toHaveBeenCalledTimes(callsBeforeInverseRange);
+
+    fireEvent.change(screen.getByLabelText("To"), {
+      target: { value: "2026-02-01T00:00" },
+    });
+    await waitFor(() => {
+      expect(analytics.fetchFunnel).toHaveBeenLastCalledWith("registration", {
+        from: "2026-01-31T00:00:00Z",
+        to: "2026-02-01T00:00:00Z",
+      });
+    });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("From")).toHaveAttribute("aria-invalid", "false");
+    expect(screen.getByLabelText("To")).toHaveAttribute("aria-invalid", "false");
+  });
 });
 
 describe("RetentionPage", () => {
@@ -177,6 +219,48 @@ describe("RetentionPage", () => {
         to: "2026-01-31T00:00:00Z",
       });
     });
+  });
+
+  it("does not fetch an inverse range and recovers with a corrected UTC retention range", async () => {
+    render(
+      <MemoryRouter>
+        <RetentionPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("No cohort data for the selected range.");
+    fireEvent.change(screen.getByLabelText("From"), {
+      target: { value: "2026-01-31T00:00" },
+    });
+    await waitFor(() => {
+      expect(analytics.fetchRetention).toHaveBeenLastCalledWith({
+        from: "2026-01-31T00:00:00Z",
+      });
+    });
+
+    const callsBeforeInverseRange = vi.mocked(analytics.fetchRetention).mock.calls.length;
+    fireEvent.change(screen.getByLabelText("To"), {
+      target: { value: "2026-01-01T00:00" },
+    });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("From must be before or equal to To.");
+    expect(screen.getByLabelText("From")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText("To")).toHaveAttribute("aria-invalid", "true");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(analytics.fetchRetention).toHaveBeenCalledTimes(callsBeforeInverseRange);
+
+    fireEvent.change(screen.getByLabelText("To"), {
+      target: { value: "2026-02-01T00:00" },
+    });
+    await waitFor(() => {
+      expect(analytics.fetchRetention).toHaveBeenLastCalledWith({
+        from: "2026-01-31T00:00:00Z",
+        to: "2026-02-01T00:00:00Z",
+      });
+    });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("From")).toHaveAttribute("aria-invalid", "false");
+    expect(screen.getByLabelText("To")).toHaveAttribute("aria-invalid", "false");
   });
 });
 
