@@ -106,7 +106,7 @@ func (s *DMStore) listCustomFolderChatsPage(ctx context.Context, profileID, fold
 	}
 
 	query := `
-SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
+SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.topic, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
        c.slow_mode_seconds, c.threads_enabled, c.allow_user_main_feed, c.e2e_enabled, m.inbox_bucket,
        COALESCE(c.last_message_at, c.created_at) AS sort_at,
        fc.is_pinned, fc.pin_order, fc.sort_order AS folder_sort
@@ -159,7 +159,7 @@ func (s *DMStore) listSystemFolderChatsPage(ctx context.Context, profileID, fold
 	}
 
 	query := `
-SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
+SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.topic, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
        c.slow_mode_seconds, c.threads_enabled, c.allow_user_main_feed, c.e2e_enabled, m.inbox_bucket,
        COALESCE(c.last_message_at, c.created_at) AS sort_at,
        COALESCE(fc.is_pinned, false), fc.pin_order, COALESCE(fc.sort_order, 0) AS folder_sort
@@ -215,7 +215,7 @@ func (s *DMStore) listSystemFolderChatsPageWithSpaces(ctx context.Context, profi
 
 	query := `
 WITH candidates AS (
-  SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
+  SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.topic, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
          c.slow_mode_seconds, c.threads_enabled, c.allow_user_main_feed, c.e2e_enabled, m.inbox_bucket,
          COALESCE(c.last_message_at, c.created_at) AS sort_at,
          COALESCE(fc.is_pinned, false) AS is_pinned, fc.pin_order, COALESCE(fc.sort_order, 0) AS folder_sort
@@ -227,7 +227,7 @@ WITH candidates AS (
 
   UNION ALL
 
-  SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
+  SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.topic, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
          c.slow_mode_seconds, c.threads_enabled, c.allow_user_main_feed, c.e2e_enabled, 'main'::text AS inbox_bucket,
          COALESCE(c.last_message_at, c.created_at) AS sort_at,
          COALESCE(fc.is_pinned, false), fc.pin_order, COALESCE(fc.sort_order, 0)
@@ -253,7 +253,7 @@ ranked AS (
     CASE WHEN is_pinned THEN 0 ELSE 1 END AS pin_rank
   FROM deduped
 )
-SELECT id, type, space_id, name, avatar_url, creator_profile_id, last_message_at, created_at, updated_at,
+SELECT id, type, space_id, name, avatar_url, topic, creator_profile_id, last_message_at, created_at, updated_at,
        slow_mode_seconds, threads_enabled, allow_user_main_feed, e2e_enabled, inbox_bucket, sort_at,
        is_pinned, pin_order, folder_sort
 FROM ranked
@@ -319,7 +319,7 @@ func scanFolderListChatRow(rows pgx.Rows) (*ChatRow, folderPinState, error) {
 	var id, creator uuid.UUID
 	var chatType string
 	var spaceID *uuid.UUID
-	var name, avatarURL sql.NullString
+	var name, avatarURL, topic sql.NullString
 	var lastMsg sql.NullTime
 	var createdAt, updatedAt time.Time
 	var slowMode int32
@@ -328,7 +328,7 @@ func scanFolderListChatRow(rows pgx.Rows) (*ChatRow, folderPinState, error) {
 	var folderSort int32
 	var inboxBucket string
 	var sortAt time.Time
-	if err := rows.Scan(&id, &chatType, &spaceID, &name, &avatarURL, &creator, &lastMsg, &createdAt, &updatedAt,
+	if err := rows.Scan(&id, &chatType, &spaceID, &name, &avatarURL, &topic, &creator, &lastMsg, &createdAt, &updatedAt,
 		&slowMode, &threadsEnabled, &allowMainFeed, &e2eEnabled, &inboxBucket, &sortAt,
 		&isPinned, &pinOrder, &folderSort); err != nil {
 		return nil, folderPinState{}, err
@@ -360,6 +360,10 @@ func scanFolderListChatRow(rows pgx.Rows) (*ChatRow, folderPinState, error) {
 	if avatarURL.Valid {
 		a := avatarURL.String
 		row.AvatarURL = &a
+	}
+	if topic.Valid {
+		v := topic.String
+		row.Topic = &v
 	}
 	pin := folderPinState{IsPinned: isPinned, FolderSort: folderSort}
 	if pinOrder.Valid {

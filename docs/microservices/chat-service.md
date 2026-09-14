@@ -250,7 +250,7 @@ CREATE INDEX quick_access_profile_order_idx ON quick_access_chats (profile_id, s
 - для `inbox=main` membership-строки и space-чаты (`group`/`channel` по `space_id`) пагинируются **единым SQL UNION** в store (`listChatsPageMainWithSpaces`); gRPC передаёт `spaceIDs` из S2S Space `ListMemberSpaceIDs` на каждой странице;
 - сортировка: `COALESCE(last_message_at, created_at)` DESC, tie-break `chats.id` DESC;
 - page size default 50, max 100.
-- list SQL and `chatRowToProto` hydrate `space_id`, slow mode, thread flags and `e2e_enabled`; residual partial-object gap: `topic` is not selected by list queries.
+- list SQL and `chatRowToProto` hydrate `space_id`, slow mode, thread flags, `e2e_enabled` and nullable `topic`.
 
 **Full inbox spec:** `folder_id` filter — **shipped (Batch 19)**; **`inbox=archive`** + **Quick Access RPC/DDL** — shipped (Batch 15/17).
 

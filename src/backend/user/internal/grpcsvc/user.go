@@ -2,7 +2,6 @@ package grpcsvc
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -89,6 +88,9 @@ func (s *UserGRPC) GetProfile(ctx context.Context, req *userv1.GetProfileRequest
 		if blocked {
 			return nil, status.Error(codes.NotFound, "profile not found")
 		}
+	}
+	if viewerAccountID, ok := authctx.AccountID(ctx); ok && viewerAccountID == row.AccountID {
+		return &userv1.GetProfileResponse{Profile: ownerRowToProto(row)}, nil
 	}
 	return &userv1.GetProfileResponse{Profile: rowToProto(row)}, nil
 }
@@ -199,7 +201,24 @@ func (s *UserGRPC) UpdateProfile(ctx context.Context, req *userv1.UpdateProfileR
 		}
 		in.AccentColor = &accent
 	}
-	// custom_status not persisted in v1 DDL.
+	if req.CustomStatus != nil {
+		// An explicitly supplied empty value is durable and distinct from omission.
+		in.CustomStatus = req.CustomStatus
+	}
+
+	// Resolve ownership before entitlement so a foreign profile remains opaque.
+	// This read-only check also prevents a denied custom-status request from
+	// partially applying any other supplied fields.
+	owned, err := s.Profiles.GetOwnedProfile(ctx, accountID, profileID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if owned == nil {
+		return nil, status.Error(codes.NotFound, "profile not found or not owned")
+	}
+	if req.CustomStatus != nil && *req.CustomStatus != "" && authctx.SubscriptionTier(ctx) != "premium" {
+		return nil, status.Error(codes.FailedPrecondition, "custom status requires premium subscription")
+	}
 
 	row, err := s.Profiles.UpdateOwnedProfile(ctx, accountID, profileID, in)
 	if err != nil {
@@ -222,6 +241,9 @@ func (s *UserGRPC) UpdateProfile(ctx context.Context, req *userv1.UpdateProfileR
 		if in.BannerURL != nil {
 			changed = append(changed, "banner_url")
 		}
+		if in.CustomStatus != nil {
+			changed = append(changed, "custom_status")
+		}
 		if in.Locale != nil {
 			changed = append(changed, "locale")
 		}
@@ -231,10 +253,11 @@ func (s *UserGRPC) UpdateProfile(ctx context.Context, req *userv1.UpdateProfileR
 		if in.AccentColor != nil {
 			changed = append(changed, "accent_color")
 		}
-		fieldsJSON, _ := json.Marshal(changed)
-		_ = s.Events.PublishProfileUpdated(ctx, row.ID.String(), row.AccountID.String(), string(fieldsJSON))
+		if len(changed) > 0 {
+			_ = s.Events.PublishProfileUpdated(ctx, row.ID.String(), changed)
+		}
 	}
-	return &userv1.UpdateProfileResponse{Profile: rowToProto(row)}, nil
+	return &userv1.UpdateProfileResponse{Profile: ownerRowToProto(row)}, nil
 }
 
 func (s *UserGRPC) CreateProfile(ctx context.Context, req *userv1.CreateProfileRequest) (*userv1.CreateProfileResponse, error) {
@@ -358,7 +381,7 @@ func (s *UserGRPC) ListMyProfiles(ctx context.Context, _ *userv1.ListMyProfilesR
 	}
 	out := make([]*userv1.Profile, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, rowToProto(r))
+		out = append(out, ownerRowToProto(r))
 	}
 	return &userv1.ListMyProfilesResponse{
 		ProfileList: &userv1.ProfileList{Profiles: out},
@@ -419,6 +442,16 @@ func rowToProto(p *store.ProfileRow) *userv1.Profile {
 		out.AccentColor = proto.String(*p.AccentColor)
 	}
 	out.IsGuestAccount = p.IsGuestAccount
+	return out
+}
+
+// ownerRowToProto adds durable fields that are intentionally unavailable from
+// public and viewerless profile projections.
+func ownerRowToProto(p *store.ProfileRow) *userv1.Profile {
+	out := rowToProto(p)
+	if p.CustomStatus != nil {
+		out.CustomStatus = proto.String(*p.CustomStatus)
+	}
 	return out
 }
 

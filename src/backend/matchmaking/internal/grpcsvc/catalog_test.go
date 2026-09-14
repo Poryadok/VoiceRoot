@@ -89,6 +89,39 @@ func TestUpdateGame_Unauthenticated(t *testing.T) {
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
 }
 
+// TestUpdateGame_NonStaffDeniedBeforeStoreUse documents the game-catalog rule:
+// only platform staff may publish or change catalog entries. A regular
+// authenticated profile must be denied before request validation or any store
+// mutation is attempted.
+func TestUpdateGame_NonStaffDeniedBeforeStoreUse(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		req  *matchmakingv1.UpdateGameRequest
+	}{
+		{
+			name: "invalid game id",
+			req:  &matchmakingv1.UpdateGameRequest{GameId: "not-a-uuid"},
+		},
+		{
+			name: "invalid config",
+			req: func() *matchmakingv1.UpdateGameRequest {
+				configJSON := `{"regions":[],"modes":[]}`
+				return &matchmakingv1.UpdateGameRequest{
+					GameId:     uuid.New().String(),
+					ConfigJson: &configJSON,
+				}
+			}(),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := &MatchmakingGRPC{}
+			_, err := srv.UpdateGame(ctxWithProfile(uuid.New()), tc.req)
+			require.Equal(t, codes.PermissionDenied, status.Code(err))
+		})
+	}
+}
+
 func TestListGames_StoreUnavailable(t *testing.T) {
 	t.Parallel()
 	srv := &MatchmakingGRPC{}
@@ -228,6 +261,39 @@ func TestUpdateGame_ChangesName(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, "Renamed Arena", resp.GetGame().GetName())
+}
+
+func TestUpdateGame_NonStaffLeavesConfigUnchanged(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startDB(t, ctx)
+	srv := &MatchmakingGRPC{Games: &store.GameStore{Pool: pool}}
+	staff := ctxWithStaff(uuid.New())
+	created, err := srv.CreateGame(staff, &matchmakingv1.CreateGameRequest{
+		Name:       "Protected Catalog Entry",
+		ConfigJson: validConfigJSON(),
+	})
+	require.NoError(t, err)
+
+	updatedConfig := config.MustMarshal(config.GameConfig{
+		Regions: []string{"na"},
+		Modes: []config.Mode{{
+			Name: "3v3", Slots: 6, PartySizeMin: 1, PartySizeMax: 3,
+			Roles: []config.Role{{Name: "Support", Required: true}},
+			Ranks: []config.Rank{{Name: "Silver", Value: 1}},
+		}},
+	})
+	_, err = srv.UpdateGame(ctxWithProfile(uuid.New()), &matchmakingv1.UpdateGameRequest{
+		GameId:     created.GetGame().GetId(),
+		ConfigJson: &updatedConfig,
+	})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	stored, err := srv.GetGame(ctx, &matchmakingv1.GetGameRequest{GameId: created.GetGame().GetId()})
+	require.NoError(t, err)
+	require.Equal(t, created.GetGame().GetConfigJson(), stored.GetGame().GetConfigJson())
 }
 
 func TestCreateGame_NonStaffDenied(t *testing.T) {

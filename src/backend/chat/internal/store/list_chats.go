@@ -88,7 +88,7 @@ func (s *DMStore) ListChatsPage(ctx context.Context, viewerProfileID uuid.UUID, 
 	if cursor == "" {
 		if archivedOnly {
 			rows, err = s.Pool.Query(ctx, `
-SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
+SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.topic, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
        c.slow_mode_seconds, c.threads_enabled, c.allow_user_main_feed, c.e2e_enabled, m.inbox_bucket,
        COALESCE(c.last_message_at, c.created_at) AS sort_at
 FROM chats c
@@ -99,7 +99,7 @@ LIMIT $2
 `, viewerProfileID, fetch)
 		} else {
 			rows, err = s.Pool.Query(ctx, `
-SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
+SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.topic, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
        c.slow_mode_seconds, c.threads_enabled, c.allow_user_main_feed, c.e2e_enabled, m.inbox_bucket,
        COALESCE(c.last_message_at, c.created_at) AS sort_at
 FROM chats c
@@ -111,7 +111,7 @@ LIMIT $2
 		}
 	} else if archivedOnly {
 		rows, err = s.Pool.Query(ctx, `
-SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
+SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.topic, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
        c.slow_mode_seconds, c.threads_enabled, c.allow_user_main_feed, c.e2e_enabled, m.inbox_bucket,
        COALESCE(c.last_message_at, c.created_at) AS sort_at
 FROM chats c
@@ -129,7 +129,7 @@ LIMIT $4
 `, viewerProfileID, sortTS, chatID, fetch)
 	} else {
 		rows, err = s.Pool.Query(ctx, `
-SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
+SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.topic, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
        c.slow_mode_seconds, c.threads_enabled, c.allow_user_main_feed, c.e2e_enabled, m.inbox_bucket,
        COALESCE(c.last_message_at, c.created_at) AS sort_at
 FROM chats c
@@ -172,7 +172,7 @@ LIMIT $4
 }
 
 const listChatsSelectColumns = `
-       c.id, c.type, c.space_id, c.name, c.avatar_url, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
+       c.id, c.type, c.space_id, c.name, c.avatar_url, c.topic, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
        c.slow_mode_seconds, c.threads_enabled, c.allow_user_main_feed, c.e2e_enabled, m.inbox_bucket,
        COALESCE(c.last_message_at, c.created_at) AS sort_at`
 
@@ -203,7 +203,7 @@ WITH candidates AS (
 
   UNION ALL
 
-  SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
+  SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.topic, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
          c.slow_mode_seconds, c.threads_enabled, c.allow_user_main_feed, c.e2e_enabled, 'main'::text AS inbox_bucket,
          COALESCE(c.last_message_at, c.created_at) AS sort_at
   FROM chats c
@@ -218,12 +218,12 @@ WITH candidates AS (
     )
 ),
 deduped AS (
-  SELECT DISTINCT ON (id) id, type, space_id, name, avatar_url, creator_profile_id, last_message_at, created_at, updated_at,
+  SELECT DISTINCT ON (id) id, type, space_id, name, avatar_url, topic, creator_profile_id, last_message_at, created_at, updated_at,
          slow_mode_seconds, threads_enabled, allow_user_main_feed, e2e_enabled, inbox_bucket, sort_at
   FROM candidates
   ORDER BY id, sort_at DESC
 )
-SELECT id, type, space_id, name, avatar_url, creator_profile_id, last_message_at, created_at, updated_at,
+SELECT id, type, space_id, name, avatar_url, topic, creator_profile_id, last_message_at, created_at, updated_at,
        slow_mode_seconds, threads_enabled, allow_user_main_feed, e2e_enabled, inbox_bucket, sort_at
 FROM deduped
 WHERE true` + cursorFilter + `
@@ -260,14 +260,14 @@ func scanListChatPageRows(rows pgx.Rows) ([]*ChatRow, error) {
 		var id, creator uuid.UUID
 		var chatType string
 		var spaceID *uuid.UUID
-		var name, avatarURL sql.NullString
+		var name, avatarURL, topic sql.NullString
 		var lastMsg sql.NullTime
 		var createdAt, updatedAt time.Time
 		var slowMode int32
 		var threadsEnabled, allowMainFeed, e2eEnabled bool
 		var inboxBucket string
 		var sortAt time.Time
-		if err := rows.Scan(&id, &chatType, &spaceID, &name, &avatarURL, &creator, &lastMsg, &createdAt, &updatedAt,
+		if err := rows.Scan(&id, &chatType, &spaceID, &name, &avatarURL, &topic, &creator, &lastMsg, &createdAt, &updatedAt,
 			&slowMode, &threadsEnabled, &allowMainFeed, &e2eEnabled, &inboxBucket, &sortAt); err != nil {
 			return nil, err
 		}
@@ -298,6 +298,10 @@ func scanListChatPageRows(rows pgx.Rows) ([]*ChatRow, error) {
 			a := avatarURL.String
 			row.AvatarURL = &a
 		}
+		if topic.Valid {
+			v := topic.String
+			row.Topic = &v
+		}
 		out = append(out, row)
 	}
 	if err := rows.Err(); err != nil {
@@ -316,7 +320,7 @@ func (s *DMStore) ListSpaceChatsForProfile(ctx context.Context, viewerProfileID 
 		return nil, nil
 	}
 	rows, err := s.Pool.Query(ctx, `
-SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
+SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.topic, c.creator_profile_id, c.last_message_at, c.created_at, c.updated_at,
        c.threads_enabled, c.allow_user_main_feed, c.e2e_enabled, c.slow_mode_seconds,
        COALESCE(c.last_message_at, c.created_at) AS sort_at
 FROM chats c
@@ -337,13 +341,13 @@ ORDER BY sort_at DESC, c.id DESC
 		var id, creator uuid.UUID
 		var chatType string
 		var spaceID *uuid.UUID
-		var name, avatarURL sql.NullString
+		var name, avatarURL, topic sql.NullString
 		var lastMsg sql.NullTime
 		var createdAt, updatedAt time.Time
 		var threadsEnabled, allowMainFeed, e2eEnabled bool
 		var slowMode int32
 		var sortAt time.Time
-		if err := rows.Scan(&id, &chatType, &spaceID, &name, &avatarURL, &creator, &lastMsg, &createdAt, &updatedAt,
+		if err := rows.Scan(&id, &chatType, &spaceID, &name, &avatarURL, &topic, &creator, &lastMsg, &createdAt, &updatedAt,
 			&threadsEnabled, &allowMainFeed, &e2eEnabled, &slowMode, &sortAt); err != nil {
 			return nil, err
 		}
@@ -373,6 +377,10 @@ ORDER BY sort_at DESC, c.id DESC
 		if avatarURL.Valid {
 			a := avatarURL.String
 			row.AvatarURL = &a
+		}
+		if topic.Valid {
+			v := topic.String
+			row.Topic = &v
 		}
 		out = append(out, row)
 	}

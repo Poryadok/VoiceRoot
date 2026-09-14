@@ -4,6 +4,8 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -20,11 +22,12 @@ import (
 
 type recordingSearchGRPC struct {
 	searchv1.UnimplementedSearchServiceServer
-	lastMD      metadata.MD
-	lastInChat  *searchv1.SearchInChatRequest
-	lastGlobal  *searchv1.SearchGlobalRequest
-	lastUsers   *searchv1.SearchUsersRequest
-	lastSpaces  *searchv1.SearchSpacesRequest
+	calls      int
+	lastMD     metadata.MD
+	lastInChat *searchv1.SearchInChatRequest
+	lastGlobal *searchv1.SearchGlobalRequest
+	lastUsers  *searchv1.SearchUsersRequest
+	lastSpaces *searchv1.SearchSpacesRequest
 }
 
 func (s *recordingSearchGRPC) captureMD(ctx context.Context) {
@@ -33,6 +36,7 @@ func (s *recordingSearchGRPC) captureMD(ctx context.Context) {
 }
 
 func (s *recordingSearchGRPC) SearchInChat(ctx context.Context, req *searchv1.SearchInChatRequest) (*searchv1.SearchInChatResponse, error) {
+	s.calls++
 	s.captureMD(ctx)
 	s.lastInChat = req
 	return &searchv1.SearchInChatResponse{
@@ -48,19 +52,21 @@ func (s *recordingSearchGRPC) SearchInChat(ctx context.Context, req *searchv1.Se
 }
 
 func (s *recordingSearchGRPC) SearchGlobal(ctx context.Context, req *searchv1.SearchGlobalRequest) (*searchv1.SearchGlobalResponse, error) {
+	s.calls++
 	s.captureMD(ctx)
 	s.lastGlobal = req
 	return &searchv1.SearchGlobalResponse{
 		GlobalSearchResults: &searchv1.GlobalSearchResults{
-			Messages: []*searchv1.SearchHit{{MessageId: "msg-global", ChatId: "chat-1", Snippet: "global hit"}},
-			ProfileIds: []string{"profile-1"},
+			Messages:     []*searchv1.SearchHit{{MessageId: "msg-global", ChatId: "chat-1", Snippet: "global hit"}},
+			ProfileIds:   []string{"profile-1"},
 			MatchedChats: []*chatv1.ChatRef{{Id: "chat-1"}},
-			SpaceIds: []string{"space-1"},
+			SpaceIds:     []string{"space-1"},
 		},
 	}, nil
 }
 
 func (s *recordingSearchGRPC) SearchUsers(ctx context.Context, req *searchv1.SearchUsersRequest) (*searchv1.SearchUsersResponse, error) {
+	s.calls++
 	s.captureMD(ctx)
 	s.lastUsers = req
 	return &searchv1.SearchUsersResponse{
@@ -69,6 +75,7 @@ func (s *recordingSearchGRPC) SearchUsers(ctx context.Context, req *searchv1.Sea
 }
 
 func (s *recordingSearchGRPC) SearchSpaces(ctx context.Context, req *searchv1.SearchSpacesRequest) (*searchv1.SearchSpacesResponse, error) {
+	s.calls++
 	s.captureMD(ctx)
 	s.lastSpaces = req
 	return &searchv1.SearchSpacesResponse{
@@ -254,5 +261,108 @@ func TestTranscodeSearchPropagatesVoiceHeaders(t *testing.T) {
 	}
 	if got := grpcRec.lastMD.Get("x-voice-profile-id"); len(got) != 1 || got[0] != "profile-1" {
 		t.Fatalf("x-voice-profile-id = %v, want profile-1", got)
+	}
+}
+
+func TestTranscodeSearchRejectsInvalidRawQueryBeforeGRPC(t *testing.T) {
+	routes := []string{
+		"/api/v1/search/in-chat?chat_id=chat-1&q=",
+		"/api/v1/search/global?q=",
+		"/api/v1/search/users?q=",
+		"/api/v1/search/spaces?q=",
+	}
+	invalidQueries := []struct {
+		name    string
+		encoded string
+		message string
+	}{
+		{name: "invalid leading byte", encoded: "%FF", message: "query invalid UTF-8"},
+		{name: "invalid continuation", encoded: "%E2%28%A1", message: "query invalid UTF-8"},
+		{name: "truncated sequence", encoded: "%E2%82", message: "query invalid UTF-8"},
+		{name: "513 decoded bytes", encoded: strings.Repeat("a", 513), message: "query too long"},
+	}
+
+	for _, route := range routes {
+		for _, query := range invalidQueries {
+			t.Run(route+" "+query.name, func(t *testing.T) {
+				grpcRec := &recordingSearchGRPC{}
+				conn, cleanup := startBufconnSearchConn(t, grpcRec)
+				t.Cleanup(cleanup)
+				h := newGatewayForContract(t, gatewayTestOptions{
+					tokenClaims: map[string]tokenClaims{"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"}},
+					transcoder:  &transcoder{clients: grpcClients{search: searchv1.NewSearchServiceClient(conn)}},
+				})
+
+				rec := performRequest(h, http.MethodGet, route+query.encoded, "", map[string]string{"Authorization": "Bearer valid-user-token"})
+				require.Equal(t, http.StatusBadRequest, rec.Code, "body=%s", rec.Body.String())
+				var body struct {
+					ErrorCode string `json:"error_code"`
+					Message   string `json:"message"`
+				}
+				decodeJSON(t, rec.Body, &body)
+				require.Equal(t, "invalid_argument", body.ErrorCode)
+				require.Equal(t, query.message, body.Message)
+				require.Zero(t, grpcRec.calls)
+			})
+		}
+	}
+}
+
+func TestTranscodeSearchForwards512ByteUnicodeQuery(t *testing.T) {
+	routes := []struct {
+		name  string
+		path  string
+		query func(*recordingSearchGRPC) string
+	}{
+		{name: "in chat", path: "/api/v1/search/in-chat?chat_id=chat-1&q=", query: func(s *recordingSearchGRPC) string { return s.lastInChat.GetQuery() }},
+		{name: "global", path: "/api/v1/search/global?q=", query: func(s *recordingSearchGRPC) string { return s.lastGlobal.GetQuery() }},
+		{name: "users", path: "/api/v1/search/users?q=", query: func(s *recordingSearchGRPC) string { return s.lastUsers.GetQuery() }},
+		{name: "spaces", path: "/api/v1/search/spaces?q=", query: func(s *recordingSearchGRPC) string { return s.lastSpaces.GetQuery() }},
+	}
+	query := strings.Repeat("😀", 128)
+
+	for _, route := range routes {
+		t.Run(route.name, func(t *testing.T) {
+			grpcRec := &recordingSearchGRPC{}
+			conn, cleanup := startBufconnSearchConn(t, grpcRec)
+			t.Cleanup(cleanup)
+			h := newGatewayForContract(t, gatewayTestOptions{
+				tokenClaims: map[string]tokenClaims{"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"}},
+				transcoder:  &transcoder{clients: grpcClients{search: searchv1.NewSearchServiceClient(conn)}},
+			})
+
+			rec := performRequest(h, http.MethodGet, route.path+url.QueryEscape(query), "", map[string]string{"Authorization": "Bearer valid-user-token"})
+			require.Equal(t, http.StatusOK, rec.Code, "body=%s", rec.Body.String())
+			require.Equal(t, 1, grpcRec.calls)
+			require.Equal(t, query, route.query(grpcRec))
+		})
+	}
+}
+
+func TestTranscodeSearchAuthenticationPrecedesRawQueryValidation(t *testing.T) {
+	routes := []string{
+		"/api/v1/search/in-chat?chat_id=chat-1&q=%FF",
+		"/api/v1/search/global?q=%FF",
+		"/api/v1/search/users?q=%FF",
+		"/api/v1/search/spaces?q=%FF",
+		"/api/v1/search/in-chat?chat_id=chat-1&q=" + strings.Repeat("a", 513),
+		"/api/v1/search/global?q=" + strings.Repeat("a", 513),
+		"/api/v1/search/users?q=" + strings.Repeat("a", 513),
+		"/api/v1/search/spaces?q=" + strings.Repeat("a", 513),
+	}
+
+	for _, route := range routes {
+		t.Run(route, func(t *testing.T) {
+			grpcRec := &recordingSearchGRPC{}
+			conn, cleanup := startBufconnSearchConn(t, grpcRec)
+			t.Cleanup(cleanup)
+			h := newGatewayForContract(t, gatewayTestOptions{
+				transcoder: &transcoder{clients: grpcClients{search: searchv1.NewSearchServiceClient(conn)}},
+			})
+
+			rec := performRequest(h, http.MethodGet, route, "", nil)
+			require.Equal(t, http.StatusUnauthorized, rec.Code, "body=%s", rec.Body.String())
+			require.Zero(t, grpcRec.calls)
+		})
 	}
 }

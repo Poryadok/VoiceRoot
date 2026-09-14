@@ -2,6 +2,7 @@ package grpcsvc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 
@@ -246,9 +247,35 @@ func (s *UserGRPC) UpdateSettings(ctx context.Context, req *userv1.UpdateSetting
 		prefs, _ = s.Profiles.GetNotificationPrefsJSON(ctx, profileID)
 	}
 	if s.Events != nil {
-		_ = s.Events.PublishProfileUpdated(ctx, profileID.String(), accountID.String(), `["settings"]`)
+		publishSettingsChanges(ctx, s.Events, profileID.String(), settingsChangedKeys(in))
 	}
 	return &userv1.UpdateSettingsResponse{UserSettings: settingsRowToProto(row, prefs)}, nil
+}
+
+func publishSettingsChanges(ctx context.Context, events UserEventsPublisher, profileID string, changedKeys []string) {
+	if events == nil || len(changedKeys) == 0 {
+		return
+	}
+	changedKeysJSON, _ := json.Marshal(changedKeys)
+	_ = events.PublishProfileUpdated(ctx, profileID, []string{"settings"})
+	_ = events.PublishSettingsChanged(ctx, profileID, changedKeys, string(changedKeysJSON))
+}
+
+func settingsChangedKeys(in *userv1.UserSettings) []string {
+	if in == nil {
+		return nil
+	}
+	changedKeys := make([]string, 0, 3)
+	if strings.TrimSpace(in.GetLanguage()) != "" {
+		changedKeys = append(changedKeys, "language")
+	}
+	if strings.TrimSpace(in.GetTheme()) != "" {
+		changedKeys = append(changedKeys, "theme")
+	}
+	if strings.TrimSpace(in.GetNotificationPrefsJson()) != "" {
+		changedKeys = append(changedKeys, "notification_prefs_json")
+	}
+	return changedKeys
 }
 
 func settingsRowToProto(row *store.ProfileRow, notificationPrefsJSON string) *userv1.UserSettings {
