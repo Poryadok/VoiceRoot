@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,11 +20,14 @@ import (
 )
 
 type recordingFileDeleter struct {
+	mu      sync.Mutex
 	deleted []string
 	errs    []error
 }
 
 func (r *recordingFileDeleter) DeleteFile(_ context.Context, fileID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.deleted = append(r.deleted, fileID)
 	if len(r.errs) != 0 {
 		err := r.errs[0]
@@ -31,6 +35,29 @@ func (r *recordingFileDeleter) DeleteFile(_ context.Context, fileID string) erro
 		return err
 	}
 	return nil
+}
+
+func (r *recordingFileDeleter) deletedIDs() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.deleted...)
+}
+
+type cancellationObservingFileDeleter struct {
+	started  chan struct{}
+	canceled chan error
+	release  chan struct{}
+}
+
+func (d *cancellationObservingFileDeleter) DeleteFile(ctx context.Context, _ string) error {
+	d.started <- struct{}{}
+	select {
+	case <-ctx.Done():
+		d.canceled <- ctx.Err()
+		return ctx.Err()
+	case <-d.release:
+		return nil
+	}
 }
 
 type purgeBarrierFileDeleter struct {
@@ -176,8 +203,68 @@ INSERT INTO stories (
 	n, err := jobs.RunArchivePurgeOnce(ctx, st, deleter, time.Now().UTC())
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n)
-	require.Equal(t, []string{mediaID.String()}, deleter.deleted,
+	require.Equal(t, []string{mediaID.String()}, deleter.deletedIDs(),
 		"archive purge worker must invoke FileDeleter.DeleteFile for purged story media IDs")
+}
+
+func TestStartArchivePurgeWorker_runsOnceOnStartup(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	st, dbCtx := startArchivePurgeStore(t)
+	storyID, mediaID := seedExpiredMediaStory(t, dbCtx, st)
+	workerCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	deleter := &recordingFileDeleter{}
+	jobs.StartArchivePurgeWorker(workerCtx, st, deleter, nil)
+
+	require.Eventually(t, func() bool {
+		_, err := st.GetStory(dbCtx, storyID)
+		return errors.Is(err, store.ErrNotFound)
+	}, 5*time.Second, 25*time.Millisecond, "startup must not wait for the daily purge ticker")
+	require.Equal(t, []string{mediaID.String()}, deleter.deletedIDs())
+
+	_, err := jobs.RunArchivePurgeOnce(dbCtx, st, deleter, time.Now().UTC())
+	require.NoError(t, err)
+	require.Equal(t, []string{mediaID.String()}, deleter.deletedIDs(), "a later run is idempotent after startup cleanup")
+}
+
+// The service shutdown context is the lifetime boundary for startup dispatch.
+// Once cancellation reaches the File call, that call returns and the worker's
+// next select observes ctx.Done instead of scheduling another purge tick.
+func TestStartArchivePurgeWorker_propagatesServiceCancellationToStartupDispatch(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	st, dbCtx := startArchivePurgeStore(t)
+	_, _ = seedExpiredMediaStory(t, dbCtx, st)
+	workerCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	deleter := &cancellationObservingFileDeleter{
+		started:  make(chan struct{}, 1),
+		canceled: make(chan error, 1),
+		release:  make(chan struct{}),
+	}
+	defer close(deleter.release)
+	jobs.StartArchivePurgeWorker(workerCtx, st, deleter, nil)
+
+	// This is a causal barrier, not a scheduler-delay assertion: cancellation
+	// happens only after the startup dispatch has entered File.DeleteFile.
+	select {
+	case <-deleter.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("startup dispatch did not reach File.DeleteFile")
+	}
+	cancel()
+
+	select {
+	case err := <-deleter.canceled:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(time.Second):
+		t.Fatal("service cancellation was not propagated to the in-flight startup dispatch")
+	}
 }
 
 func TestArchivePurgeWorker_retainsHighlightedMediaUntilUnlinked(t *testing.T) {
