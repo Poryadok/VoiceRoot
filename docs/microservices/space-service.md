@@ -29,6 +29,13 @@
 
 ## API (gRPC)
 
+The Social privacy transport exposes only `AreCoMembers` on a dedicated TLS
+listener (9091). Signature, request binding, expiry, Redis replay admission and
+the `service:social` allow-list are checked before domain/store access. The
+domain wrapper also requires the verified principal. An ordinary 9090 call with
+a raw Social marker is rejected; other existing callers migrate separately.
+See [deployment and rotation](../DEPLOYMENT.md#social-privacy-principals).
+
 ```protobuf
 service SpaceService {
   // Пространства

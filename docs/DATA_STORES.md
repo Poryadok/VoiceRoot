@@ -12,12 +12,12 @@
 |----------------------|-------------------|---------------------------|----------------------------------|
 | API Gateway          | —                 | rate limit, JWT blacklist; session-epoch floor | —                  |
 | Auth Service         | `auth_db`         | blacklist, session-epoch floor, principal replay, limits, OTP | —            |
-| User Service         | `user_db`         | presence cache            | —                                |
+| User Service         | `user_db`         | presence cache; Social principal replay | —                         |
 | Social Service       | `social_db`       | —                         | —                                |
 | Chat Service         | `chat_db`         | —                         | —                                |
 | Messaging Service    | `messaging_db`    | —                         | NATS JetStream (publish)         |
 | Realtime Service     | —                 | Pub/Sub, WS registry; session-epoch floor read/check | NATS (не БД)          |
-| Space Service        | `space_db`        | —                         | —                                |
+| Space Service        | `space_db`        | Social principal replay   | —                                |
 | Role Service         | `role_db`         | Shared principal replay Redis | —                                |
 | Voice Service        | `voice_db`        | active-call compatibility projection + lifecycle admission/receipt mirror | LiveKit |
 | File Service         | `file_db`         | —                         | R2, воркеры конвертации          |
@@ -172,6 +172,14 @@ authority остаётся за JWT/floor validation.
 
 
 ### Role ownership principal replay
+
+Social privacy consumers also use shared Redis configured by
+`USER_PRINCIPAL_REPLAY_REDIS_ADDR` and `SPACE_PRINCIPAL_REPLAY_REDIS_ADDR`.
+Keys are `user:principal:replay:<sha256(issuer + NUL + jti)>` and
+`space:principal:replay:<sha256(issuer + NUL + jti)>`. Each verified attempt
+requires atomic SET NX with a relative TTL covering the remaining JWT lifetime,
+rounded up to milliseconds. Redis failure denies the request before the domain
+store; no process-local fallback replaces shared replay admission.
 
 The dedicated ownership transport uses shared Redis configured by
 `ROLE_PRINCIPAL_REPLAY_REDIS_ADDR`. Keys are
