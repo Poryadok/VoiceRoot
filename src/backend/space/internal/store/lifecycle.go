@@ -85,12 +85,41 @@ func (s *SpaceStore) ReserveLifecycleSchedule(ctx context.Context, accountID, ac
 	if err := lockLifecycleSpace(ctx, tx, spaceID); err != nil {
 		return nil, err
 	}
+	// Resolve an exact retry before current-owner/name checks. The reservation
+	// is immutable and may already have progressed beyond SCHEDULE_PENDING.
+	if _, err := loadLifecycleOperation(ctx, tx, operationID); err == nil {
+		if err := validateStoredLifecycleOperation(ctx, tx, operationID, accountID, actorProfileID, spaceID, sessionEpoch, requestHash, confirmationHash, proofDigest); err != nil {
+			return nil, err
+		}
+		saved, err := loadLifecycle(ctx, tx, spaceID, true)
+		if err != nil {
+			return nil, err
+		}
+		if saved.Snapshot().DeletionOperationID != operationID.String() {
+			return nil, ErrLifecycleConflict
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return nil, err
+		}
+		return saved, nil
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
+	}
 	var ownerID uuid.UUID
 	var currentName string
 	if err := tx.QueryRow(ctx, `SELECT owner_profile_id,name FROM spaces WHERE id=$1 FOR UPDATE`, spaceID).Scan(&ownerID, &currentName); err != nil {
 		return nil, err
 	}
 	if ownerID != actorProfileID || currentName != request.GetConfirmationName() {
+		return nil, ErrLifecycleConflict
+	}
+	// A new intent cannot replace a durable operation at the same phase and
+	// generation. A subsequent deletion cycle needs a separate generation flow.
+	var hasLifecycle bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM space_lifecycle_aggregates WHERE space_id=$1)`, spaceID).Scan(&hasLifecycle); err != nil {
+		return nil, err
+	}
+	if hasLifecycle {
 		return nil, ErrLifecycleConflict
 	}
 
@@ -796,13 +825,15 @@ func persistLifecycleOutbox(ctx context.Context, db spaceStoreDB, snapshot space
 		command, execErr := db.Exec(ctx, `INSERT INTO space_lifecycle_outbox(
 			event_id,space_id,deletion_operation_id,generation,event_type,state,occurred_at,event_bytes,event_sha256)
 			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
-			ON CONFLICT (event_id) DO UPDATE SET state=EXCLUDED.state,occurred_at=EXCLUDED.occurred_at,
+			ON CONFLICT (event_id) DO UPDATE SET
+			state=CASE WHEN space_lifecycle_outbox.state='DELIVERED' THEN 'DELIVERED' ELSE EXCLUDED.state END,
+			occurred_at=EXCLUDED.occurred_at,
 			event_bytes=EXCLUDED.event_bytes,event_sha256=EXCLUDED.event_sha256
 			WHERE space_lifecycle_outbox.space_id=EXCLUDED.space_id
 			AND space_lifecycle_outbox.deletion_operation_id=EXCLUDED.deletion_operation_id
 			AND space_lifecycle_outbox.generation=EXCLUDED.generation
 			AND space_lifecycle_outbox.event_type=EXCLUDED.event_type
-			AND space_lifecycle_outbox.state IN ('BLOCKED',EXCLUDED.state)
+			AND space_lifecycle_outbox.state IN ('BLOCKED',EXCLUDED.state,'DELIVERED')
 			AND (space_lifecycle_outbox.event_bytes IS NULL OR space_lifecycle_outbox.event_bytes=EXCLUDED.event_bytes)
 			AND (space_lifecycle_outbox.event_sha256 IS NULL OR space_lifecycle_outbox.event_sha256=EXCLUDED.event_sha256)`,
 			uuid.MustParse(projected.EventID), spaceID, operationID, int64(projected.Generation), item.kind,
