@@ -13,10 +13,10 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
-	grpcsvc "voice/backend/story/internal/grpcsvc"
-	"voice/backend/story/internal/store"
 	"voice/backend/pkg/integrationtest"
 	"voice/backend/pkg/privacy"
+	grpcsvc "voice/backend/story/internal/grpcsvc"
+	"voice/backend/story/internal/store"
 
 	storyv1 "voice.app/voice/story/v1"
 )
@@ -159,7 +159,7 @@ func TestHighlight_addRemoveDeleteFlow(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
-	client, _, cleanup := startStoryGRPC(t)
+	client, st, cleanup := startStoryGRPC(t)
 	defer cleanup()
 
 	profile := uuid.New()
@@ -172,6 +172,7 @@ func TestHighlight_addRemoveDeleteFlow(t *testing.T) {
 
 	hl, err := client.CreateHighlight(ctx, &storyv1.CreateHighlightRequest{Name: "Flow"})
 	require.NoError(t, err)
+	expireStoryForHighlight(t, st, story.GetStory().GetId())
 
 	_, err = client.AddToHighlight(ctx, &storyv1.AddToHighlightRequest{
 		HighlightId: hl.GetHighlight().GetId(),
