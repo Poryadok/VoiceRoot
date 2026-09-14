@@ -59,6 +59,13 @@ func TestValidate_RejectsMissingRoleWhenRequired(t *testing.T) {
 	require.ErrorIs(t, err, ErrRoleRequired)
 }
 
+func TestValidate_RejectsUnknownRoleWhenRequired(t *testing.T) {
+	t.Parallel()
+	c := SearchCriteria{Region: "eu", Self: SelfCriteria{Role: "Jungler", Rank: "Herald"}}
+	_, err := Validate(c, testGameCfg(), "5v5 Ranked", 1)
+	require.ErrorIs(t, err, ErrInvalidRole)
+}
+
 func TestValidate_RejectsPartySizeBelowMin(t *testing.T) {
 	t.Parallel()
 	cfg := testGameCfg()

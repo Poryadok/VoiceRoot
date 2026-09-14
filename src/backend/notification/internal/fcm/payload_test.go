@@ -51,3 +51,12 @@ func TestBuildFCMMessage_EmptyToken(t *testing.T) {
 	_, err := fcm.BuildFCMMessage("", push.Payload{Body: "x"})
 	require.Error(t, err)
 }
+
+func TestBuildFCMMessage_SilentDisablesAndroidSoundAndBadge(t *testing.T) {
+	msg, err := fcm.BuildFCMMessage("device-token", push.Payload{Title: "New message", Body: "hello", Silent: true})
+	require.NoError(t, err)
+	require.NotNil(t, msg.Android)
+	require.NotNil(t, msg.Android.Notification)
+	require.Empty(t, msg.Android.Notification.Sound)
+	require.Nil(t, msg.Android.Notification.NotificationCount)
+}
