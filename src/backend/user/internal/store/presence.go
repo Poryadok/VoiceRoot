@@ -13,7 +13,7 @@ import (
 
 // TTLs from docs/microservices/user-service.md (presence cache heartbeat).
 const (
-	PresenceSessionTTL = 5 * time.Minute
+	PresenceSessionTTL  = 5 * time.Minute
 	presenceLastSeenTTL = 30 * 24 * time.Hour
 )
 
@@ -45,12 +45,14 @@ func lastSeenRedisKey(profileID uuid.UUID) string {
 
 // PresenceUpsert is one heartbeat / status update for a profile.
 type PresenceUpsert struct {
-	Status         string
-	StatusEnum     int32
-	GameTitle      string
-	CustomStatus   string
-	CallInfoJSON   string
-	Now            time.Time
+	Status       string
+	StatusEnum   int32
+	GameTitle    string
+	CustomStatus string
+	// PreserveCustomStatus distinguishes omission from an explicit clear.
+	PreserveCustomStatus bool
+	CallInfoJSON         string
+	Now                  time.Time
 }
 
 // PresenceSnapshot is Redis-backed presence for one profile (live session and/or last_seen).
@@ -73,7 +75,7 @@ redis.call('HSET', KEYS[1],
   'status', ARGV[1],
   'status_enum', ARGV[2],
   'game_title', ARGV[3],
-  'custom_status', ARGV[4],
+  'custom_status', (ARGV[9] == '1' and (previous[4] or '') or ARGV[4]),
   'call_info_json', ARGV[5],
   'ts_unix', ARGV[6])
 redis.call('EXPIRE', KEYS[1], ARGV[7])
@@ -110,11 +112,19 @@ func (s *PresenceStore) UpsertAndGetPrevious(ctx context.Context, profileID uuid
 		ts,
 		strconv.FormatInt(int64(PresenceSessionTTL/time.Second), 10),
 		strconv.FormatInt(int64(presenceLastSeenTTL/time.Second), 10),
+		boolToRedisArg(in.PreserveCustomStatus),
 	).Result()
 	if err != nil {
 		return nil, err
 	}
 	return presenceSnapshotFromUpsertScript(result)
+}
+
+func boolToRedisArg(value bool) string {
+	if value {
+		return "1"
+	}
+	return "0"
 }
 
 func presenceSnapshotFromUpsertScript(result any) (*PresenceSnapshot, error) {

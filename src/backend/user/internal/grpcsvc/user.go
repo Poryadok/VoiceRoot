@@ -90,6 +90,9 @@ func (s *UserGRPC) GetProfile(ctx context.Context, req *userv1.GetProfileRequest
 			return nil, status.Error(codes.NotFound, "profile not found")
 		}
 	}
+	if viewerAccountID, ok := authctx.AccountID(ctx); ok && viewerAccountID == row.AccountID {
+		return &userv1.GetProfileResponse{Profile: ownerRowToProto(row)}, nil
+	}
 	return &userv1.GetProfileResponse{Profile: rowToProto(row)}, nil
 }
 
@@ -204,6 +207,20 @@ func (s *UserGRPC) UpdateProfile(ctx context.Context, req *userv1.UpdateProfileR
 		in.CustomStatus = req.CustomStatus
 	}
 
+	// Resolve ownership before entitlement so a foreign profile remains opaque.
+	// This read-only check also prevents a denied custom-status request from
+	// partially applying any other supplied fields.
+	owned, err := s.Profiles.GetOwnedProfile(ctx, accountID, profileID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if owned == nil {
+		return nil, status.Error(codes.NotFound, "profile not found or not owned")
+	}
+	if req.CustomStatus != nil && *req.CustomStatus != "" && authctx.SubscriptionTier(ctx) != "premium" {
+		return nil, status.Error(codes.FailedPrecondition, "custom status requires premium subscription")
+	}
+
 	row, err := s.Profiles.UpdateOwnedProfile(ctx, accountID, profileID, in)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -240,7 +257,7 @@ func (s *UserGRPC) UpdateProfile(ctx context.Context, req *userv1.UpdateProfileR
 		fieldsJSON, _ := json.Marshal(changed)
 		_ = s.Events.PublishProfileUpdated(ctx, row.ID.String(), row.AccountID.String(), string(fieldsJSON))
 	}
-	return &userv1.UpdateProfileResponse{Profile: rowToProto(row)}, nil
+	return &userv1.UpdateProfileResponse{Profile: ownerRowToProto(row)}, nil
 }
 
 func (s *UserGRPC) CreateProfile(ctx context.Context, req *userv1.CreateProfileRequest) (*userv1.CreateProfileResponse, error) {
@@ -364,7 +381,7 @@ func (s *UserGRPC) ListMyProfiles(ctx context.Context, _ *userv1.ListMyProfilesR
 	}
 	out := make([]*userv1.Profile, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, rowToProto(r))
+		out = append(out, ownerRowToProto(r))
 	}
 	return &userv1.ListMyProfilesResponse{
 		ProfileList: &userv1.ProfileList{Profiles: out},
@@ -415,9 +432,6 @@ func rowToProto(p *store.ProfileRow) *userv1.Profile {
 	if p.Bio != nil {
 		out.Bio = proto.String(*p.Bio)
 	}
-	if p.CustomStatus != nil {
-		out.CustomStatus = proto.String(*p.CustomStatus)
-	}
 	if p.VerificationBadge != nil {
 		out.VerificationBadge = proto.String(*p.VerificationBadge)
 	}
@@ -428,6 +442,16 @@ func rowToProto(p *store.ProfileRow) *userv1.Profile {
 		out.AccentColor = proto.String(*p.AccentColor)
 	}
 	out.IsGuestAccount = p.IsGuestAccount
+	return out
+}
+
+// ownerRowToProto adds durable fields that are intentionally unavailable from
+// public and viewerless profile projections.
+func ownerRowToProto(p *store.ProfileRow) *userv1.Profile {
+	out := rowToProto(p)
+	if p.CustomStatus != nil {
+		out.CustomStatus = proto.String(*p.CustomStatus)
+	}
 	return out
 }
 
