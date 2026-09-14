@@ -500,7 +500,9 @@ VALUES ($1, $2, 'owner', '4444', 'Owner', true),
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
 
-	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb)
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb,
+		func(s *UserGRPC) { s.Blocks = stubProfileBlocks{} },
+	)
 
 	_, err = cli.UpdatePrivacySettings(withUserAuthCtx(ctx, ownerAccount, ownerProfile), &userv1.UpdatePrivacySettingsRequest{
 		ProfileId: ownerProfile.String(),
@@ -577,7 +579,10 @@ VALUES ($1, $2, 'owner', '4444', 'Owner', true),
 	t.Cleanup(func() { _ = rdb.Close() })
 
 	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb,
-		func(s *UserGRPC) { s.SocialGraph = alwaysFriendsGraph{} },
+		func(s *UserGRPC) {
+			s.SocialGraph = alwaysFriendsGraph{}
+			s.Blocks = stubProfileBlocks{}
+		},
 	)
 
 	_, err = cli.UpdatePresence(withUserAuthCtx(ctx, ownerAccount, ownerProfile), &userv1.UpdatePresenceRequest{
@@ -719,7 +724,9 @@ VALUES ($1, $2, 'owner', '4444', 'Owner', true),
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
 
-	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb)
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb,
+		func(s *UserGRPC) { s.Blocks = stubProfileBlocks{} },
+	)
 
 	_, err = cli.UpdatePresence(withUserAuthCtx(ctx, ownerAccount, ownerProfile), &userv1.UpdatePresenceRequest{
 		Status: "online",
@@ -760,7 +767,10 @@ VALUES ($1, $2, 'owner', '4444', 'Owner', true),
 	t.Cleanup(func() { _ = rdb.Close() })
 
 	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb,
-		func(s *UserGRPC) { s.SocialGraph = alwaysFriendsGraph{} },
+		func(s *UserGRPC) {
+			s.SocialGraph = alwaysFriendsGraph{}
+			s.Blocks = stubProfileBlocks{}
+		},
 	)
 
 	_, err = cli.UpdatePresence(withUserAuthCtx(ctx, ownerAccount, ownerProfile), &userv1.UpdatePresenceRequest{

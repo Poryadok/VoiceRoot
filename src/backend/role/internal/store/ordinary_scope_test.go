@@ -137,9 +137,13 @@ func TestOrdinaryStorePreparedFence(t *testing.T) {
 		{"ReorderRoles_empty", func(f ordinaryScopeFixture) (any, error) { return nil, f.s.ReorderRoles(ctx, f.space, nil) }},
 		{"ListChatOverrides", func(f ordinaryScopeFixture) (any, error) { return f.s.ListChatOverrides(ctx, f.space, &f.chat) }},
 		{"ListVoiceRoomOverrides", func(f ordinaryScopeFixture) (any, error) { return f.s.ListVoiceRoomOverrides(ctx, f.space, &f.voice) }},
-		{"RemoveChatOverride", func(f ordinaryScopeFixture) (any, error) { return nil, f.s.RemoveChatOverride(ctx, f.chat, f.custom) }},
+		{"RemoveChatOverride", func(f ordinaryScopeFixture) (any, error) {
+			_, err := f.s.RemoveChatOverride(ctx, f.chat, f.custom)
+			return nil, err
+		}},
 		{"RemoveVoiceRoomOverride", func(f ordinaryScopeFixture) (any, error) {
-			return nil, f.s.RemoveVoiceRoomOverride(ctx, f.voice, f.custom)
+			_, err := f.s.RemoveVoiceRoomOverride(ctx, f.voice, f.custom)
+			return nil, err
 		}},
 		{"SetDefaultJoinRole", func(f ordinaryScopeFixture) (any, error) { return nil, f.s.SetDefaultJoinRole(ctx, f.space, f.custom) }},
 		{"GetDefaultJoinRole", func(f ordinaryScopeFixture) (any, error) { return f.s.GetDefaultJoinRole(ctx, f.space) }},

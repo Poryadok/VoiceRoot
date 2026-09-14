@@ -19,12 +19,17 @@ Apply against the matching database only; do not run one folder against another 
 
 `auth_db` is owned by the Auth service. The same schema can be applied in **two** ways; use **exactly one** per database (mutual exclusion — do not run golang-migrate on `auth_db` and then start Auth with default Flyway on the same DB, or Flyway will try `V1` against existing tables and fail).
 
-| Path | Who applies | Order | Auth startup |
-|------|-------------|-------|----------------|
-| **A — Flyway (default)** | Auth on boot | Single script: `V1__auth_schema.sql` | `AUTH_FLYWAY_ENABLED` omitted or `true` |
-| **B — golang-migrate** | Ops / CLI / Docker `migrate` | `000001_init` **then** `000002_refresh_tokens_access_jti` (do not skip `000002` if JDBC refresh uses `access_jti`) | `AUTH_FLYWAY_ENABLED=false` |
+| Path | Who applies | Current ordered layout | Auth startup |
+|------|-------------|------------------------|--------------|
+| **A — Flyway (default)** | Auth on boot | `V1__auth_schema.sql` … `V14__verification_source_sync.sql` | `AUTH_FLYWAY_ENABLED` omitted or `true` |
+| **B — golang-migrate** | Ops / CLI / Docker `migrate` | `000001_init` … `000015_verification_source_sync`, each with `.up.sql` and `.down.sql` | `AUTH_FLYWAY_ENABLED=false` |
 
-**Equivalence (current schema):** Flyway `V1` ≡ golang-migrate `000001` + `000002` applied in sequence. Future DDL changes should keep Flyway `Vn` and `auth_db/NNNNNN_*.up.sql` in lockstep.
+**Equivalence (current schema):** Flyway `V1` contains the initial schema and
+the `refresh_tokens.access_jti` change represented by golang-migrate
+`000001_init` followed by `000002_refresh_tokens_access_jti`. Every later
+Flyway revision maps in order to the next golang-migrate revision (`V2` →
+`000003`, …, `V14` → `000015`). Keep these layouts in lockstep for future
+Auth-owned DDL.
 
 **Examples below** run migrate only for **Go-owned** databases (`user_db`, `social_db`, `chat_db`, `messaging_db`). For `auth_db`, use Path A (start Auth) or Path B (migrate then Auth with Flyway disabled) — see [Auth README](../auth/README.md).
 
