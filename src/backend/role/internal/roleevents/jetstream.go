@@ -15,14 +15,16 @@ import (
 )
 
 const (
-	streamName           = "role_events"
-	subjectRoleCreated   = "role.created"
-	subjectRoleUpdated   = "role.updated"
-	subjectRoleDeleted   = "role.deleted"
-	subjectRoleAssigned  = "role.assigned"
-	subjectRoleRevoked   = "role.revoked"
-	subjectChatOverride  = "role.chat_override_set"
-	subjectVoiceOverride = "role.voice_override_set"
+	streamName                  = "role_events"
+	subjectRoleCreated          = "role.created"
+	subjectRoleUpdated          = "role.updated"
+	subjectRoleDeleted          = "role.deleted"
+	subjectRoleAssigned         = "role.assigned"
+	subjectRoleRevoked          = "role.revoked"
+	subjectChatOverride         = "role.chat_override_set"
+	subjectChatOverrideRemoved  = "role.chat_override_removed"
+	subjectVoiceOverride        = "role.voice_override_set"
+	subjectVoiceOverrideRemoved = "role.voice_override_removed"
 )
 
 type roleEventPayload struct {
@@ -76,7 +78,8 @@ func (p *JetStreamPublisher) ensureStream() error {
 		subjects := []string{
 			subjectRoleCreated, subjectRoleUpdated, subjectRoleDeleted,
 			subjectRoleAssigned, subjectRoleRevoked,
-			subjectChatOverride, subjectVoiceOverride,
+			subjectChatOverride, subjectChatOverrideRemoved,
+			subjectVoiceOverride, subjectVoiceOverrideRemoved,
 		}
 		if info, err := p.js.StreamInfo(streamName); err == nil {
 			for _, subj := range subjects {
@@ -156,12 +159,20 @@ func (p *JetStreamPublisher) PublishRoleRevoked(ctx context.Context, spaceID, pr
 	return p.publish(ctx, subjectRoleRevoked, roleEventPayload{SpaceID: spaceID, ProfileID: profileID, RoleID: roleID})
 }
 
-func (p *JetStreamPublisher) PublishChatOverrideSet(ctx context.Context, chatID, roleID string) error {
-	return p.publish(ctx, subjectChatOverride, roleEventPayload{ChatID: chatID, RoleID: roleID})
+func (p *JetStreamPublisher) PublishChatOverrideSet(ctx context.Context, spaceID, chatID, roleID string) error {
+	return p.publish(ctx, subjectChatOverride, roleEventPayload{SpaceID: spaceID, ChatID: chatID, RoleID: roleID})
 }
 
-func (p *JetStreamPublisher) PublishVoiceOverrideSet(ctx context.Context, voiceRoomID, roleID string) error {
-	return p.publish(ctx, subjectVoiceOverride, roleEventPayload{VoiceRoomID: voiceRoomID, RoleID: roleID})
+func (p *JetStreamPublisher) PublishChatOverrideRemoved(ctx context.Context, spaceID, chatID, roleID string) error {
+	return p.publish(ctx, subjectChatOverrideRemoved, roleEventPayload{SpaceID: spaceID, ChatID: chatID, RoleID: roleID})
+}
+
+func (p *JetStreamPublisher) PublishVoiceOverrideSet(ctx context.Context, spaceID, voiceRoomID, roleID string) error {
+	return p.publish(ctx, subjectVoiceOverride, roleEventPayload{SpaceID: spaceID, VoiceRoomID: voiceRoomID, RoleID: roleID})
+}
+
+func (p *JetStreamPublisher) PublishVoiceOverrideRemoved(ctx context.Context, spaceID, voiceRoomID, roleID string) error {
+	return p.publish(ctx, subjectVoiceOverrideRemoved, roleEventPayload{SpaceID: spaceID, VoiceRoomID: voiceRoomID, RoleID: roleID})
 }
 
 func streamHasSubject(info *nats.StreamInfo, subject string) bool {

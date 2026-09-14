@@ -387,6 +387,7 @@ public class AuthProperties {
 
   public static class Redis {
     private String blacklistPrefix = "jwt:blacklist:";
+    private final Otp otp = new Otp();
 
     public String getBlacklistPrefix() {
       return blacklistPrefix;
@@ -394,6 +395,37 @@ public class AuthProperties {
 
     public void setBlacklistPrefix(String blacklistPrefix) {
       this.blacklistPrefix = blacklistPrefix;
+    }
+
+    public Otp getOtp() {
+      return otp;
+    }
+
+    /** Defaults are the public Auth OTP policy: three attempts in ten minutes, one resend/minute. */
+    public static class Otp {
+      private String prefix = "auth:otp:";
+      private Duration sendCooldown = Duration.ofMinutes(1);
+      private Duration verifyWindow = Duration.ofMinutes(10);
+      private int maxVerifyAttempts = 3;
+
+      public String getPrefix() { return prefix; }
+      public void setPrefix(String prefix) {
+        if (prefix == null || prefix.isBlank()) throw new IllegalArgumentException("auth.redis.otp.prefix must not be blank");
+        this.prefix = prefix;
+      }
+      public Duration getSendCooldown() { return sendCooldown; }
+      public void setSendCooldown(Duration sendCooldown) { this.sendCooldown = positive(sendCooldown, "send-cooldown"); }
+      public Duration getVerifyWindow() { return verifyWindow; }
+      public void setVerifyWindow(Duration verifyWindow) { this.verifyWindow = positive(verifyWindow, "verify-window"); }
+      public int getMaxVerifyAttempts() { return maxVerifyAttempts; }
+      public void setMaxVerifyAttempts(int maxVerifyAttempts) {
+        if (maxVerifyAttempts < 1) throw new IllegalArgumentException("auth.redis.otp.max-verify-attempts must be positive");
+        this.maxVerifyAttempts = maxVerifyAttempts;
+      }
+      private static Duration positive(Duration value, String name) {
+        if (value == null || value.isZero() || value.isNegative()) throw new IllegalArgumentException("auth.redis.otp." + name + " must be positive");
+        return value;
+      }
     }
   }
 

@@ -7,6 +7,7 @@ import { FunnelsPage } from "./pages/FunnelsPage";
 import { ProductAnalyticsPage } from "./pages/ProductAnalyticsPage";
 import { DashboardMetricsPage } from "./pages/DashboardMetricsPage";
 import { RetentionPage } from "./pages/RetentionPage";
+import { AnalyticsTimeRangeProvider } from "./components/AnalyticsTimeRange";
 import { CreateGamePage } from "./pages/CreateGamePage";
 import { QueuePage } from "./pages/QueuePage";
 import { AppealsPage } from "./pages/AppealsPage";
@@ -95,6 +96,7 @@ function AdminShell() {
   }
 
   return (
+    <AnalyticsTimeRangeProvider>
     <Layout onSignOut={() => { clearSession(); setLoggedIn(false); }}>
       <Routes>
         <Route path="/" element={<Navigate to="/queue" replace />} />
@@ -113,6 +115,7 @@ function AdminShell() {
         <Route path="/analytics/export" element={<AnalyticsExportPage />} />
       </Routes>
     </Layout>
+    </AnalyticsTimeRangeProvider>
   );
 }
 

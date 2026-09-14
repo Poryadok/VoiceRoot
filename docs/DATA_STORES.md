@@ -28,7 +28,7 @@
 | Subscription Service | `subscription_db` | —                         | Paddle, CloudPayments            |
 | Bot Service          | `bot_db`          | —                         | —                                |
 | Federation Service   | `federation_db` (planned, **not provisioned**) | —                         | —                                |
-| Story Service        | `story_db`        | —                         | медиа через File, R2             |
+| Story Service        | `story_db`        | —                         | медиа через File, R2; durable archive-media deletion outbox |
 | Analytics Service    | —                 | —                           | JetStream durable backlog + ClickHouse (`voice` DB) |
 
 Разделение Redis между Gateway и Auth: [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md) («Redis: API Gateway и Auth Service»).

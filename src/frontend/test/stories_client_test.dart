@@ -120,6 +120,43 @@ void main() {
     });
   });
 
+  group('VoiceStoriesClient.getStoryReactions', () {
+    test(
+      'GET /api/v1/stories/{id}/reactions parses the author reaction list',
+      () async {
+        final mock = MockClient((req) async {
+          expect(req.method, 'GET');
+          expect(req.url.path, '/api/v1/stories/story-1/reactions');
+          expect(req.headers['Authorization'], auth);
+          return http.Response.bytes(
+            utf8.encode(
+              jsonEncode({
+                'reactions': [
+                  {'reactor_profile_id': 'profile-2', 'emoji': '🔥'},
+                ],
+              }),
+            ),
+            200,
+            headers: const {'content-type': 'application/json; charset=utf-8'},
+          );
+        });
+        final client = VoiceStoriesClient(
+          gateway: gatewayHttpForTest(mock, config: config),
+        );
+        final result = await client.getStoryReactions(
+          authorization: auth,
+          storyId: 'story-1',
+        );
+        expect(result, isA<StoriesApiOk<List<StoryReactionData>>>());
+        final reactions =
+            (result as StoriesApiOk<List<StoryReactionData>>).data;
+        expect(reactions, hasLength(1));
+        expect(reactions.single.reactorProfileId, 'profile-2');
+        expect(reactions.single.emoji, '🔥');
+      },
+    );
+  });
+
   group('VoiceStoriesClient.respondToLfpStory', () {
     test('POST lfp-response sends protojson response_type only', () async {
       final mock = MockClient((req) async {
