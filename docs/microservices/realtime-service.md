@@ -100,15 +100,85 @@ Two producers may emit WS `notification` for the same message; clients **dedupe*
 ### Phase-0 Space-room roster fan-out (target; не реализовано)
 
 Voice publishes versioned room lifecycle events only after its authoritative
-mutation commits. Realtime fans them out to authenticated Space watchers under the
-same roster audience policy as Voice: full `profile_id`/state only to
-`SPACE_VIEW_MEMBER_LIST`; other Space members get aggregate occupancy deltas only.
-No client-selected `space_id`, profile ID or subscription target can widen this
-audience. Each envelope has `room_id`, authorization `epoch`, monotonic `version`,
-`event_id` and a payload valid for that audience. Dedupe is by `event_id`; clients
-require contiguous versions and fetch the signed Voice snapshot on a gap, reconnect
-or epoch change. The ordinary WebSocket `s` remains connection-local and does not
-replace roster recovery.
+mutation commits. Before publish it resolves current Space membership and
+`SPACE_VIEW_MEMBER_LIST` through server-owned Space/Role dependencies and writes
+two explicit recipient sets into the trusted event: `full_profile_ids` and
+`occupancy_profile_ids`. Dependency uncertainty drops the event fail-closed and
+requires snapshot reconciliation; Realtime never computes or widens either set.
+It delivers each already-shaped payload to every active tab of the named profiles.
+No client-selected `space_id`, profile ID, subscription target or Redis registry
+entry is audience authority.
+
+Full recipients receive participant identity and voice/screen state. Occupancy
+recipients receive only `room_id`, `roster_epoch`, `projection=occupancy`,
+`projection_version`, `event_id`, `occurred_at` and `occupant_count`; they never
+receive a participant ID, display snapshot, mute/deafen/video/speaking state,
+screen-share owner/stream, role, or an internal recipient list. A mutation that
+does not change occupancy emits no occupancy event and does not advance its
+projection version.
+
+`roster_epoch` is a Voice-owned disclosure/snapshot generation, distinct from
+LiveKit `media_epoch`, Space access generation and Role policy epoch. Permission,
+membership-authority or room-incarnation changes that can move a viewer between
+disclosure classes start a new positive `roster_epoch`; the client discards the
+old projection and fetches a new signed snapshot. Within one epoch, Voice keeps
+independent contiguous counters per `(room_id, projection)`:
+
+- `projection=full` advances for participant join/leave and every disclosed
+  voice/screen state change;
+- `projection=occupancy` advances only when `occupant_count` changes.
+
+Thus aggregate viewers need no redacted no-op for a full-only state mutation and
+cannot see a false gap. Dedupe is by UUID `event_id`; ordering/recovery key is
+`(room_id, roster_epoch, projection, projection_version)`. Clients buffer the
+matching live projection during snapshot, then apply only contiguous versions.
+A duplicate event ID is ignored; a version gap, epoch change, reconnect or
+projection-class change fetches the matching signed Voice snapshot. `occurred_at`
+is diagnostic only. The ordinary WebSocket `s` remains connection-local and does
+not replace roster recovery.
+
+### Voice participant lifecycle fan-out (shipped compatibility contract)
+
+This contract applies only to the existing participant-targeted Voice events. It
+does **not** implement or weaken the Phase-0 Space watcher/roster contract above.
+Voice is the recipient authority: Realtime uses only the explicit recipient IDs
+inside the trusted `VoiceStreamEvent`, delivers to every active WebSocket tab of
+each named profile, and never expands the audience from `chat_id`, `room_id`,
+`space_id`, a client subscription, or the Redis connection registry. Duplicate
+recipient IDs are compacted before fan-out. Each connection still passes the
+normal session-epoch write guard.
+
+Every delivered payload includes the outer Voice envelope's UUID `event_id` and
+UTC RFC 3339 `occurred_at`. Clients deduplicate Voice lifecycle frames by
+`event_id`; `occurred_at` is diagnostic chronology, not an ordering authority.
+An envelope without a valid UUID event ID, valid timestamp, or the operation's
+authoritative recipient set is discarded fail-closed and ACKed as malformed
+after the bounded local attempt; Realtime does not synthesize an audience.
+
+| WS op | Voice-authoritative recipients | Public `d` fields in addition to `event_id`, `occurred_at` |
+|---|---|---|
+| `call_incoming` | `callee_profile_id` only | `room_id`, `chat_id`, `initiator_profile_id`, `callee_profile_id`, `media_kind`, `livekit_room_name`, `expires_at` |
+| `call_accepted` | every unique `profile_ids` entry | `room_id`, `chat_id`, `accepted_by_profile_id`, `profile_ids`, `media_kind`, `livekit_room_name` |
+| `call_declined` | every unique `profile_ids` entry | `room_id`, `chat_id`, `declined_by_profile_id`, `profile_ids` |
+| `call_missed` | unique non-empty `initiator_profile_id`, `callee_profile_id` | `room_id`, `chat_id`, `initiator_profile_id`, `callee_profile_id` |
+| `call_ended` | every unique `profile_ids` entry | `room_id`, `duration_seconds`, `profile_ids`, `reason`, `ended_by_profile_id` |
+| `call_started` | every unique `profile_ids` entry | current call/session locator fields; the complete `voice_room_id` / `space_id` pair is included only for `room_type=voice_room` |
+| `voice_state_update` | every unique `profile_ids` entry | `room_id`, changed `profile_id`, compatibility `profile_ids`, and only the optional fields present in the source: `is_muted`, `is_deafened`, `is_video_on`, `is_commander`, `hand_raised`, `has_floor`, `is_broadcasting` |
+| `screen_share_started`, `screen_share_stopped` | every unique `profile_ids` entry | `room_id`, sharing `profile_id`, `stream_id`; routing `profile_ids` are not copied into `d` |
+| `voice_member_joined` | every unique `notify_profile_ids` entry; never the joined profile merely because it joined | `room_id`, `voice_room_id`, `space_id`, `joined_profile_id`, compatibility `profile_ids` snapshot |
+
+The table freezes disclosure for the existing participant audience only. A
+future Space watcher event must carry the Phase-0 audience-specific redacted or
+full payload plus `(roster_epoch, projection, projection_version, event_id)` from
+Voice; Realtime must not reuse the participant list as an inferred Space audience.
+
+JetStream preserves delivery to the consumer, but this compatibility stream has
+no durable client replay and no cross-connection total order. WebSocket `s` is
+the delivery order of one connection only. Duplicate/redelivered `event_id`
+frames may occur across reconnects. After each new `hello`, the client reconciles
+`GetActiveCall`; `GetVoiceStates` owns the current room state/screen-share
+projection. Space roster recovery continues to use the Phase-0 projection key,
+not `s` or `occurred_at`.
 
 | op             | Описание                                              |
 |----------------|-------------------------------------------------------|
@@ -126,7 +196,7 @@ replace roster recovery.
 |----------------------|---------------------------------------------------------------------|
 | `hello`              | Инициализация после подключения (начало новой сессии нумерации `s`); `d.conn_id` — server-assigned id сессии WebSocket для корреляции логов (опционально для клиента) |
 | `heartbeat_ack`      | Подтверждение heartbeat                                             |
-| `subscription_sync`  | Снимок подписок DM после `hello` (см. раздел «Подписки»): `d.scope` = `dm`, `d.chat_ids`, `d.source` = `chat`, `d.degraded` при ошибке S2S к Chat |
+| `subscription_sync`  | Снимок всех видимых Chat-подписок после `hello` (см. раздел «Подписки»): `d.scope` = `all`, `d.chat_ids`, `d.source` = `chat`, `d.degraded` при ошибке S2S к Chat |
 | `subscribe_ack`      | Подтверждение `subscribe`: `d.chat_id`                              |
 | `unsubscribe_ack`    | Подтверждение `unsubscribe`: `d.chat_id`                          |
 | `error`              | Ошибка клиентской операции: malformed UUID сохраняет `invalid_subscribe` / `invalid_unsubscribe`; valid lazy `subscribe`, который Chat не разрешил или не смог проверить, возвращает generic `d.code=permission_denied`, `d.message=chat subscription denied`, `d.chat_id` |
@@ -143,6 +213,7 @@ replace roster recovery.
 | `typing`             | Кто-то печатает                                                     |
 | `presence_update`    | Смена статуса пользователя                                          |
 | `chat_update`        | Изменение чата/группы                                               |
+| `role_update`        | Доставка изменения role policy из `role.events`; `role.chat_override_set` и `role.chat_override_removed` доставляются только текущим подписчикам указанного `d.chat_id`. Payload сохраняет `subject`, `space_id`, `chat_id`, `role_id`. Voice-room override events не имеют WS fan-out, пока не определён authoritative индекс voice-room подписок. |
 | `member_add`         | Новый участник                                                      |
 | `member_remove`      | Участник удалён                                                     |
 | `dm_peer_deleted`    | Удалён второй участник уже известного DM; `d.chat_id` + `d.recipient_profile_id`, только для designated surviving profile, без deleted identity; live-ускорение, не durable history/replay |
@@ -230,7 +301,7 @@ unsupported payload that it intentionally does not fan out.
 ## Конфигурация (NATS / JetStream)
 
 - **`NATS_URL`** — URL NATS Server с JetStream (порт **4222**). В Compose: `nats://nats:4222`; с хоста: `nats://127.0.0.1:${NATS_PORT:-4222}` (см. [`docker-compose.yml`](../../docker-compose.yml)).
-- Подписки на доменные потоки для fan-out и отзыва доступа — в первую очередь **`message.events`** (consume: `message.sent`, …; **publish:** client `delivery_ack` → `message.delivery_ack`), **`chat.events`**, **`social.user_blocked`** из `social.events` и с Фазы 2 **`voice.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)); детали subject/consumer — в реализации сервиса.
+- Подписки на доменные потоки для fan-out и отзыва доступа — в первую очередь **`message.events`** (consume: `message.sent`, …; **publish:** client `delivery_ack` → `message.delivery_ack`), **`chat.events`**, **`social.user_blocked`** из `social.events`, **`role.events`** для role policy и с Фазы 2 **`voice.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)); детали subject/consumer — в реализации сервиса.
 - **`REALTIME_CHAT_GRPC_ADDR`** (опционально) — gRPC адрес **Chat Service** для bootstrap списка DM при открытии WebSocket и проверки lazy `subscribe` через `GetChat` (например `chat:50051` в compose). Если не задан, сервер **не** вызывает Chat и **не** шлёт `subscription_sync`; valid lazy `subscribe` fail-closed с generic `permission_denied`, а не создаёт неподтверждённую подписку. TLS/insecure — как принято в окружении (локально часто plaintext внутри mesh).
 - **`REALTIME_USER_GRPC_ADDR`** (опционально) — gRPC-адрес User Service для записи presence при WS `presence_update`, разрешения `dm_peer_profile_id → account_id` перед DM block decision и viewer-aware `GetPresence` перед fan-out приватного presence. Realtime передаёт в `GetPresence` identity и account type конкретного получателя, а правила аудитории применяет User; локально Realtime их не воспроизводит. Если адрес не задан, viewer-aware presence fan-out не выполняется; ошибка или пустой ответ User подавляет только затронутое эфемерное обновление этого получателя (fail-closed).
 - **`REALTIME_SOCIAL_GRPC_ADDR`** (опционально) — Social Service `ListFriends` для fan-out `user.presence_changed` и `IsBlocked` в обе стороны для DM subscription policy. Если User/Social policy dependency отсутствует или ошибается, DM bootstrap/lazy subscribe fail-closed.
@@ -261,15 +332,20 @@ Redis и проверка JWT остаются correctness path.
 - Presence друзей
 - Персональные уведомления
 
-**Shipped today:** DM bootstrap via Chat `ListChats` (см. ниже); groups/spaces/friend presence — lazy `subscribe` / partial; см. [todo/backend.md](../todo/backend.md) § Realtime subscription bootstrap.
+**Shipped today:** all chats visible through Chat `ListChats` (DM, group and
+channel) are bootstrapped and re-authorized; friend presence uses the separate
+`user.presence_changed` stream. Space voice-room/tree watcher bootstrap remains
+unimplemented and must use the authoritative Phase-0 audience contract rather
+than a client chat subscription; см. [todo/backend.md](../todo/backend.md) § Realtime.
 
-### DM ([text-chat.md](../features/text-chat.md)): список из Chat vs lazy `subscribe`
+### Chat bootstrap and DM block policy
 
-Требование выше («все активные чаты») для **DM** в реализации app stack разбивается так:
+Требование выше («все активные чаты») в app stack разбивается так; для
+DM дополнительно применяется account-level block policy:
 
 | Подход | Описание |
 |--------|----------|
-| **Bootstrap из Chat (основной)** | После `hello`, если задан `REALTIME_CHAT_GRPC_ADDR`, Realtime вызывает Chat Service **`ListChats`** (постранично), затем повторно авторизует каждый chat через `GetChat`. Для **DM** он получает peer через `ListMembers`, разрешает peer account через User `GetProfile` и вызывает Social `IsBlocked` в обе стороны. Block даёт чистый deny; ошибка Chat/User/Social исключает chat и выставляет `degraded=true`. Клиент получает **`subscription_sync`** только с разрешёнными отсортированными `chat_ids`. |
+| **Bootstrap из Chat (основной)** | После `hello`, если задан `REALTIME_CHAT_GRPC_ADDR`, Realtime вызывает Chat Service **`ListChats`** (постранично) для всех видимых chat types, затем повторно авторизует каждый chat через `GetChat`. Для **DM** он получает peer через `ListMembers`, разрешает peer account через User `GetProfile` и вызывает Social `IsBlocked` в обе стороны. Block даёт чистый deny; ошибка Chat/User/Social исключает chat и выставляет `degraded=true`. Клиент получает **`subscription_sync`** только с разрешёнными отсортированными `chat_ids`. |
 | **Lazy `subscribe`** | Клиент шлёт `subscribe` с `chat_id`. Перед `subscribe_ack` Realtime применяет тот же Chat membership и DM Social account-pair policy. Block, unknown, nonmember, deleted-for-self, dependency failure или timeout возвращают только generic `permission_denied`; внутренние причины не раскрываются. Non-DM сохраняет Chat membership semantics и не применяет DM block pair как взаимный запрет общего канала. |
 | **Chat не сконфигурирован** | Bootstrap не выполняется; lazy `subscribe` **не** служит fallback для ACL и fail-closed с generic `permission_denied`. Для продакшена DM MVP ожидается заданный адрес Chat. |
 | **Ошибка Chat при bootstrap** | Всё равно отправляется `subscription_sync` с `degraded: true` и пустым `chat_ids`; клиенту следует опереться на REST список чатов и при необходимости прислать `subscribe` по известным `chat_id`. |

@@ -35,7 +35,7 @@ description: >-
 
 ```toml
 # treehouse.toml в корне репозитория
-max_trees = 16
+max_trees = 21
 root = "."
 ```
 
@@ -182,4 +182,3 @@ treehouse --version
 | Git safety | `AGENTS.md` / `.agent/AGENTS.md` |
 | Machine setup + hooks | `docs/DEV_SETUP.md` |
 | Upstream treehouse | https://github.com/kunchenguid/treehouse |
-

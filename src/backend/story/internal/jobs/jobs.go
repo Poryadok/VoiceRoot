@@ -165,7 +165,7 @@ func StartArchivePurgeWorker(ctx context.Context, st *store.StoryStore, deleter 
 		defer purgeTicker.Stop()
 		defer dispatchTicker.Stop()
 		run := func() {
-			n, err := RunArchivePurgeOnce(context.Background(), st, deleter, time.Now().UTC())
+			n, err := RunArchivePurgeOnce(ctx, st, deleter, time.Now().UTC())
 			if err != nil && logger != nil {
 				logger.Error("story archive purge", slog.String("error", err.Error()))
 			} else if n > 0 && logger != nil {

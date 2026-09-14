@@ -11,12 +11,16 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	grpcsvc "voice/backend/file/internal/grpcsvc"
 	"voice/backend/file/internal/store"
 )
 
 type memObjectStore struct {
 	objects      map[string][]byte
 	contentTypes map[string]string
+	putKeys      []string
+	deletedKeys  []string
+	failPutAt    int
 }
 
 func (m *memObjectStore) ReadObject(_ context.Context, key string, _ int64) ([]byte, error) {
@@ -28,6 +32,10 @@ func (m *memObjectStore) ReadObject(_ context.Context, key string, _ int64) ([]b
 }
 
 func (m *memObjectStore) PutObject(_ context.Context, key, contentType string, data []byte) error {
+	m.putKeys = append(m.putKeys, key)
+	if m.failPutAt > 0 && len(m.putKeys) == m.failPutAt {
+		return errString("put failed")
+	}
 	if m.objects == nil {
 		m.objects = make(map[string][]byte)
 	}
@@ -36,6 +44,12 @@ func (m *memObjectStore) PutObject(_ context.Context, key, contentType string, d
 	}
 	m.objects[key] = append([]byte(nil), data...)
 	m.contentTypes[key] = contentType
+	return nil
+}
+
+func (m *memObjectStore) DeleteObject(_ context.Context, key string) error {
+	m.deletedKeys = append(m.deletedKeys, key)
+	delete(m.objects, key)
 	return nil
 }
 
@@ -55,7 +69,7 @@ func TestProcessor_ProcessImage(t *testing.T) {
 		SizeBytes: int64(buf.Len()),
 	}
 
-	proc := Processor{Reader: mem, Writer: mem}
+	proc := Processor{Reader: mem, Writer: mem, Deleter: mem}
 	out, err := proc.ProcessImage(context.Background(), row)
 	require.NoError(t, err)
 	require.Equal(t, int32(640), out.Width)
@@ -90,7 +104,7 @@ func TestProcessor_ProcessImage_smallImageKeepsThumbDimensions(t *testing.T) {
 		SizeBytes: int64(buf.Len()),
 	}
 
-	proc := Processor{Reader: mem, Writer: mem}
+	proc := Processor{Reader: mem, Writer: mem, Deleter: mem}
 	out, err := proc.ProcessImage(context.Background(), row)
 	require.NoError(t, err)
 	require.Equal(t, int32(64), out.Width)
@@ -99,4 +113,47 @@ func TestProcessor_ProcessImage_smallImageKeepsThumbDimensions(t *testing.T) {
 
 func isWebP(data []byte) bool {
 	return len(data) >= 12 && string(data[0:4]) == "RIFF" && string(data[8:12]) == "WEBP"
+}
+
+func TestEncodeWebPWithinCap_AcceptsExactBoundaryAndRejectsOverflow(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 1, 1))
+	encoder := func(_ image.Image, _ float32) ([]byte, error) { return make([]byte, 10), nil }
+	encoded, err := encodeWebPWithinCap(img, 85, 10, encoder)
+	require.NoError(t, err)
+	require.Len(t, encoded, 10)
+
+	_, err = encodeWebPWithinCap(img, 85, 9, encoder)
+	require.ErrorIs(t, err, grpcsvc.ErrProcessedOutputTooLarge)
+}
+
+func TestProcessor_ProcessImage_RejectsOversizedDerivativesBeforeWrites(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 1, 1))
+	var raw bytes.Buffer
+	require.NoError(t, png.Encode(&raw, img))
+	mem := &memObjectStore{objects: map[string][]byte{"attachments/test/large.png": raw.Bytes()}}
+	proc := Processor{
+		Reader:  mem,
+		Writer:  mem,
+		Deleter: mem,
+		encode: func(_ image.Image, _ float32) ([]byte, error) {
+			return make([]byte, maxProcessedImageBytes+1), nil
+		},
+	}
+	_, err := proc.ProcessImage(context.Background(), store.FileRow{ID: uuid.New(), R2Key: "attachments/test/large.png", SizeBytes: int64(raw.Len())})
+	require.ErrorIs(t, err, grpcsvc.ErrProcessedOutputTooLarge)
+	require.Empty(t, mem.putKeys)
+	require.Empty(t, mem.deletedKeys)
+}
+
+func TestProcessor_ProcessImage_CleansBothDeterministicKeysAfterPartialWrite(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 1, 1))
+	var raw bytes.Buffer
+	require.NoError(t, png.Encode(&raw, img))
+	mem := &memObjectStore{objects: map[string][]byte{"attachments/test/partial.png": raw.Bytes()}, failPutAt: 2}
+	fileID := uuid.New()
+	proc := Processor{Reader: mem, Writer: mem, Deleter: mem}
+	_, err := proc.ProcessImage(context.Background(), store.FileRow{ID: fileID, R2Key: "attachments/test/partial.png", SizeBytes: int64(raw.Len())})
+	require.Error(t, err)
+	require.Equal(t, []string{"processed/" + fileID.String() + "/full.webp", "processed/" + fileID.String() + "/thumb.webp"}, mem.deletedKeys)
+	require.NotContains(t, mem.objects, "processed/"+fileID.String()+"/full.webp")
 }

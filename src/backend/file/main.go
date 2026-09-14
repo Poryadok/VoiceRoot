@@ -106,7 +106,7 @@ func main() {
 		var deleter r2file.ObjectDeleter
 		if presigner != nil {
 			reader = presigner
-			processor = imgproc.Processor{Reader: presigner, Writer: presigner}
+			processor = imgproc.Processor{Reader: presigner, Writer: presigner, Deleter: presigner}
 			deleter = presigner
 		}
 		var eventPub fileevents.Publisher = fileevents.NoopPublisher{}

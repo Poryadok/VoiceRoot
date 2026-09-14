@@ -293,10 +293,12 @@ ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test bu
 	$(BASH) "$(ROOT)/scripts/ci/e2e-manifest_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/compose-e2e-smoke_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/check-auth-testcontainers-reports_test.sh"
+	$(BASH) "$(ROOT)/scripts/ci/check-auth-proto-sync_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/compose-a1-multi-account-proof_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/compose-a1-flutter-profile-handoff_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/compose-file-attachment-restart-proof_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/a1-flutter-profile-handoff-ci-reachability_test.sh"
+	$(BASH) "$(ROOT)/scripts/staging/setup-github-runner_test.sh"
 
 e2e-manifest-helper-test:
 	$(BASH) "$(ROOT)/scripts/ci/e2e-manifest_helper_test.sh"

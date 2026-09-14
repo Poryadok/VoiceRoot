@@ -2045,6 +2045,8 @@ class RealtimeHub {
   RealtimeTransport? _helloAcceptedConnection;
   _RealtimeHubBinding? _helloAcceptedBinding;
   RealtimeHelloBinding? _helloBinding;
+  int? _lastSequence;
+  int? _resumeLastSequence;
 
   RealtimeLinkStatus get status => _status;
   Stream<RealtimeFrame> get events => _eventController.stream;
@@ -2182,6 +2184,10 @@ class RealtimeHub {
     RealtimeFrame frame,
   ) {
     if (!_isActive(binding, connection)) return;
+    _lastSequence = RealtimeProtocol.trackSequence(
+      _lastSequence,
+      frame.sequence,
+    );
     if (!_eventController.isClosed) {
       _eventController.add(frame);
     }
@@ -2198,6 +2204,11 @@ class RealtimeHub {
       );
       _helloBinding = helloBinding;
       _ref.read(realtimeHelloBindingProvider.notifier).state = helloBinding;
+      final resumeLastSequence = _resumeLastSequence;
+      _resumeLastSequence = null;
+      if (resumeLastSequence != null) {
+        connection.sendResume(lastSequence: resumeLastSequence);
+      }
       // Message catch-up after reconnect is REST-only (see ARCHITECTURE_REQUIREMENTS).
       return;
     }
@@ -2234,7 +2245,10 @@ class RealtimeHub {
       if (!_isCurrent(binding)) return;
       if (requiresActiveConnection) {
         if (connection == null || !_isActive(binding, connection)) return;
-        await _tearDownConnection(expected: connection);
+        await _tearDownConnection(
+          expected: connection,
+          preserveLastSequence: true,
+        );
       } else if (_connection != null) {
         return;
       }
@@ -2245,10 +2259,19 @@ class RealtimeHub {
     });
   }
 
-  Future<void> _tearDownConnection({RealtimeTransport? expected}) async {
+  Future<void> _tearDownConnection({
+    RealtimeTransport? expected,
+    bool preserveLastSequence = false,
+  }) async {
     if (expected != null && !identical(_connection, expected)) return;
     final connection = _connection;
     final frameSub = _frameSub;
+    if (preserveLastSequence &&
+        connection != null &&
+        identical(_helloAcceptedConnection, connection)) {
+      _resumeLastSequence = _lastSequence;
+    }
+    _lastSequence = null;
     if (identical(_connection, connection)) _connection = null;
     if (identical(_frameSub, frameSub)) _frameSub = null;
     if (identical(_helloAcceptedConnection, connection)) {
@@ -2272,6 +2295,8 @@ class RealtimeHub {
     _helloAcceptedConnection = null;
     _helloAcceptedBinding = null;
     _helloBinding = null;
+    _lastSequence = null;
+    _resumeLastSequence = null;
     if (!_disposed) {
       _ref.read(realtimeHelloBindingProvider.notifier).state = null;
     }
@@ -2305,6 +2330,8 @@ class RealtimeHub {
     if (_disposed) return;
     _reconnectTimer?.cancel();
     _reconnectAttempt = 0;
+    _lastSequence = null;
+    _resumeLastSequence = null;
     await _tearDownConnection();
     if (!_isCurrent(binding)) return;
     final config = _ref.read(gatewayConfigProvider);

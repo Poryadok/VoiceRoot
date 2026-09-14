@@ -73,7 +73,7 @@ service MessagingService {
 | RPC | Handler | Notes |
 |-----|---------|-------|
 | `GetThreadMessages` | ✓ | thread replies |
-| `ListThreads` | ✓ | channel thread index |
+| `ListThreads` | partial | legacy limit-only index is shipped; bounded per-viewer versioned read-model successor is required before pagination activation |
 | `PinMessage` / `UnpinMessage` / `GetPinnedMessages` | ✓ | limit **5**/chat (`MaxPinsPerChat`); 6th → `ResourceExhausted` |
 | `UnpinMessagesBySenderInChats` | ✓ | bot cleanup |
 | `UploadPreKeyBundle` / `GetPreKeyBundle` | ✓ | DM E2E pre-keys |
@@ -85,6 +85,17 @@ service MessagingService {
 | `SendMessage` schedule options (`scheduled_at`, `send_when_online`) | partial | wire contract is present but populated options fail closed until the handler slice |
 | Scheduled RPCs | ✗ | declarations are shipped; handlers remain open |
 
+### ListThreads: versioned per-viewer read model (accepted successor)
+
+`ListThreads` currently has only a legacy limit-only index. Its bounded cursor successor is a **Messaging-owned** read model in `messaging_db`; it does not scan/aggregate `messages` while serving a page and does not use a candidate-limited SQL fallback. Chat remains the membership authority.
+
+Before parsing a cursor, every call performs authoritative `EnsureMember`. A missing or `BUILDING` viewer projection returns `UNAVAILABLE` with the fixed public text `thread list unavailable`; it never returns an empty page or legacy results. Chat supplies durable, idempotently consumed membership-outbox events: `event_id`, `chat_id`, `profile_id`, monotonic `membership_revision`, and `joined|removed|left`.
+
+Messaging stores per-viewer lifecycle/root state, a per-chat mutation journal, immutable path-copied AVL nodes in activity and parent-ID orders, HMAC-bound cursor states, and a deduplicating membership inbox. Page one captures READY roots/high-water at the mutation serialization point. The cursor is v2: a random state ID plus HMAC-bound chat/profile/effective page size/snapshot/original expiry, with no message or thread identifiers. It represents the remaining set, so pages keep `(last_reply_at DESC, thread_parent_id DESC)` and cannot duplicate a parent.
+
+Every local root/reply/edit/delete/hide/ghost mutation appends a change and projects heads in the same transaction. `FOR_ME`, `FOR_EVERYONE`, ghost and hide revocations apply live to unexpired cursor states. Pending fan-out marks a state `UPDATING` and reads fail `UNAVAILABLE`; new visibility grants appear only in new snapshots. Public errors are `Unauthenticated`, `InvalidArgument`, `PermissionDenied`, `FailedPrecondition`, or the opaque unavailable error; implementation errors never expose `err.Error()`.
+
+A builder enumerates authoritative memberships, takes a repeatable-read baseline, bulk-builds both trees, replays post-baseline journal changes and CASes to READY only at zero lag. Cursor states expire after 15 minutes without renewal. GC preserves nodes reachable from READY heads/unexpired cursors and retains the journal through the oldest BUILDING baseline. Activation requires readiness, zero lag, root invariants and sampled dual reads. The full execution/RED contract is [listthreads-versioned-readmodel-exec-plan.md](../testing/listthreads-versioned-readmodel-exec-plan.md).
 ### `SendMessageRequest` (spec)
 
 `send_silent` and `delivery_schedule` are in the current proto. `content_payload` remains a future typed-content extension:

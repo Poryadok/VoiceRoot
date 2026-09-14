@@ -63,7 +63,7 @@ void main() {
 
       realtimeB = await ctx.connectSubscribed(sessionB, chatId);
       addTearDown(realtimeB.dispose);
-      realtimeB.sendResume();
+      realtimeB.sendResume(lastSequence: lastS!);
 
       final history = await messages.getMessages(
         authorization: sessionB.authorizationHeader,

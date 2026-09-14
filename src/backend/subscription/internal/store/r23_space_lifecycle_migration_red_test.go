@@ -731,7 +731,8 @@ func r23SeedOneEvidenceRow(t *testing.T, ctx context.Context, pool *pgxpool.Pool
 	case "subscription_provider_event_fences":
 		require.NoError(t, r23InsertProviderFence(ctx, pool, "paddle", bytesOf(32, 4), "accepted", "v1"))
 	case "subscription_space_lifecycle_operations":
-		require.NoError(t, r23InsertLifecycleOperation(ctx, pool, uuid.New(), uuid.New(), 1, time.Now().UTC(), time.Now().UTC().Add(30*24*time.Hour)))
+		completedAt := time.Now().UTC()
+		require.NoError(t, r23InsertLifecycleOperation(ctx, pool, uuid.New(), uuid.New(), 1, completedAt, completedAt.Add(30*24*time.Hour)))
 	case "subscription_space_lifecycle_fences":
 		require.NoError(t, r23InsertLifecycleFence(ctx, pool, uuid.New(), uuid.New(), 1, "FROZEN"))
 	default:
