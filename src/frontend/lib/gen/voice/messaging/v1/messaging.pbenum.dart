@@ -92,6 +92,40 @@ class SharedMediaKind extends $pb.ProtobufEnum {
   const SharedMediaKind._(super.value, super.name);
 }
 
+class ScheduledMessageStatus extends $pb.ProtobufEnum {
+  static const ScheduledMessageStatus SCHEDULED_MESSAGE_STATUS_UNSPECIFIED =
+      ScheduledMessageStatus._(
+          0, _omitEnumNames ? '' : 'SCHEDULED_MESSAGE_STATUS_UNSPECIFIED');
+  static const ScheduledMessageStatus SCHEDULED_MESSAGE_STATUS_PENDING =
+      ScheduledMessageStatus._(
+          1, _omitEnumNames ? '' : 'SCHEDULED_MESSAGE_STATUS_PENDING');
+  static const ScheduledMessageStatus SCHEDULED_MESSAGE_STATUS_SENT =
+      ScheduledMessageStatus._(
+          2, _omitEnumNames ? '' : 'SCHEDULED_MESSAGE_STATUS_SENT');
+  static const ScheduledMessageStatus SCHEDULED_MESSAGE_STATUS_CANCELLED =
+      ScheduledMessageStatus._(
+          3, _omitEnumNames ? '' : 'SCHEDULED_MESSAGE_STATUS_CANCELLED');
+  static const ScheduledMessageStatus SCHEDULED_MESSAGE_STATUS_FAILED =
+      ScheduledMessageStatus._(
+          4, _omitEnumNames ? '' : 'SCHEDULED_MESSAGE_STATUS_FAILED');
+
+  static const $core.List<ScheduledMessageStatus> values =
+      <ScheduledMessageStatus>[
+    SCHEDULED_MESSAGE_STATUS_UNSPECIFIED,
+    SCHEDULED_MESSAGE_STATUS_PENDING,
+    SCHEDULED_MESSAGE_STATUS_SENT,
+    SCHEDULED_MESSAGE_STATUS_CANCELLED,
+    SCHEDULED_MESSAGE_STATUS_FAILED,
+  ];
+
+  static final $core.List<ScheduledMessageStatus?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 4);
+  static ScheduledMessageStatus? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const ScheduledMessageStatus._(super.value, super.name);
+}
+
 /// Payload type for list preview labels (docs/microservices/messaging-service.md § Content types).
 class MessageContentType extends $pb.ProtobufEnum {
   static const MessageContentType MESSAGE_CONTENT_TYPE_UNSPECIFIED =

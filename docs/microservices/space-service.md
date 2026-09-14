@@ -95,7 +95,7 @@ service SpaceService {
 
 | RPC | Proto | Handler | Notes |
 |-----|-------|---------|-------|
-| CreateSpace, UpdateSpace, GetSpace, ListMySpaces | ✓ | ✓ | |
+| CreateSpace, UpdateSpace, GetSpace, ListMySpaces | ✓ | ✓ | `UpdateSpace.allow_guests` is an owner/admin (`SPACE_MANAGE_SETTINGS`) opt-in; guest admission is invite-only and fail-closed. |
 | UpdateSpaceMmConfig | ✓ | ✓ | MM config on space |
 | DeleteSpace | ✓ | Disabled | Obsolete owner-only hard delete is blocked at the DB boundary; BE-245 must schedule the 7-day hidden/frozen recovery window and freeze the public status mapping |
 | RestoreSpace | ✗ | ✗ | Target owner-only restore during recovery window |
@@ -105,7 +105,7 @@ service SpaceService {
 | **ListSpaceTree** | ✓ | ✓ | **Omitted from earlier doc inventory** |
 | Create/Update/Delete Category | ✓ | ✓ | |
 | PinTreeNode, UnpinTreeNode | ✓ | ✓ | Migration `000007_tree_pin`; handlers and event payload shipped |
-| CreateInvite, GetInvite, JoinByInvite | ✓ | ✓ | |
+| CreateInvite, GetInvite, JoinByInvite | ✓ | ✓ | Guest `JoinByInvite` requires a valid invite and `space.allow_guests=true`; ban, cap, privacy/block and default-role checks remain in the ordinary join path. Composable entry policy remains backlog. |
 | **RevokeInvite, ListInvites** | ✓ | ✓ | Exact `SPACE_MANAGE_INVITES` permission; owner retains the canonical Role bypass |
 | JoinSpace, LeaveSpace | ✓ | ✓ | Composable AND entry policy and invite-safe verifier pipeline remain backlog — [todo/backend.md](../todo/backend.md) |
 | KickMember, BanMember, UnbanMember, ListMembers, ListBans | ✓ | ✓ | |
@@ -117,6 +117,32 @@ service SpaceService {
 | AppendAuditEvent | ✓ | ✗ | Protected Role/Chat audit ingestion contract; runtime verifier, idempotent store and producer outboxes remain backlog |
 | AreCoMembers | ✓ | ✓ | S2S co-membership check |
 | SyncSpaceProSubscription | ✓ | ✓ | Subscription sync |
+
+### Migration runbook -- fail-closed guest admission
+
+`000016_allow_guests_fail_closed` is a forward-only security correction. It sets
+`spaces.allow_guests` to `false` for every legacy row and changes the column default
+to `false`; its DOWN intentionally refuses to run because the previous per-Space
+open/closed state cannot be reconstructed safely.
+
+For staging or production, take and retain a restorable `space_db` backup/PITR point
+before applying this migration. Apply `000016` before enabling a Space binary that
+uses the new admission path. Record the migration version, the pre-migration count
+and post-migration count of `allow_guests = true` (the postcondition is zero), and
+the default evidence from `information_schema.columns.column_default` (it must be
+`false`). A temporary denial of a guest is safe; a temporary admission is not.
+
+Recovery never runs the DOWN migration. Roll an application back only while retaining
+the hardened schema and data when compatible. If database restoration is unavoidable,
+restore the pre-migration backup into an isolated database, validate it, perform a
+separately reviewed cutover, and then apply a forward security fix. Never restore over
+the live source database.
+
+The implemented scope is new Space membership through `JoinByInvite` only: a guest
+needs a valid invite and explicit `space.allow_guests=true`. Disabling the flag does
+not evict existing guests, revoke their memberships, or retroactively remove
+downstream access. It does not implement `entry_policy`, the Space+Chat effective
+access rule, Chat R3-A15, or Chat/Messaging/Realtime enforcement.
 
 ### Phase-0 S2S decision callers (target)
 
