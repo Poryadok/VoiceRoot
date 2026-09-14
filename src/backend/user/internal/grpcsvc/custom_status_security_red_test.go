@@ -120,6 +120,115 @@ VALUES ($1, $2, 'projectionowner', '7002', 'Owner', true, 'durable-secret'),
 			require.Nil(t, many.GetProfileList().GetProfiles()[0].CustomStatus)
 		})
 	}
+
+	search, err := cli.SearchProfiles(withUserAuthCtx(ctx, foreignAccount, foreignProfile), &userv1.SearchProfilesRequest{Query: "projectionowner"})
+	require.NoError(t, err)
+	require.NotEmpty(t, search.GetProfileList().GetProfiles())
+	require.Nil(t, search.GetProfileList().GetProfiles()[0].CustomStatus,
+		"SearchProfiles must use the public projection, never the owner-scoped durable custom status")
+}
+
+// Each case remains independent so one missing gate cannot mask the remaining
+// acceptance contracts in a fail-fast integration test.
+func TestCustomStatusWritePrecedenceAndPresenceOmission_RED(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
+	integrationtest.ApplyUserDBMigrations(t, ctx, pool, repoRoot(t))
+	ownerAccount, ownerProfile, foreignAccount, foreignProfile := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	_, err := pool.Exec(ctx, `INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary, custom_status) VALUES
+($1,$2,'precedenceowner','7011','Owner',true,'before'), ($3,$4,'precedenceforeign','7012','Foreign',true,NULL)`, ownerProfile, ownerAccount, foreignProfile, foreignAccount)
+	require.NoError(t, err)
+	mr := miniredis.RunT(t)
+	t.Cleanup(mr.Close)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb)
+
+	t.Run("foreign nonempty stays opaque not found", func(t *testing.T) {
+		value := "forbidden"
+		_, err := cli.UpdateProfile(withProfileTier(ctx, foreignAccount, foreignProfile, "free"), &userv1.UpdateProfileRequest{ProfileId: ownerProfile.String(), CustomStatus: &value})
+		require.Equal(t, codes.NotFound, status.Code(err))
+	})
+	t.Run("missing tier denies nonempty durable write", func(t *testing.T) {
+		value := "forbidden"
+		_, err := cli.UpdateProfile(withUserAuthCtx(ctx, ownerAccount, ownerProfile), &userv1.UpdateProfileRequest{ProfileId: ownerProfile.String(), CustomStatus: &value})
+		require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	})
+	t.Run("invalid presence input wins over entitlement", func(t *testing.T) {
+		value := "forbidden"
+		_, err := cli.UpdatePresence(withProfileTier(ctx, ownerAccount, ownerProfile, "free"), &userv1.UpdatePresenceRequest{Status: "invalid", CustomStatus: &value})
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+	t.Run("omitted presence custom status preserves existing value", func(t *testing.T) {
+		before := "session-before"
+		_, err := cli.UpdatePresence(withProfileTier(ctx, ownerAccount, ownerProfile, "premium"), &userv1.UpdatePresenceRequest{Status: "online", CustomStatus: &before})
+		require.NoError(t, err)
+		_, err = cli.UpdatePresence(withProfileTier(ctx, ownerAccount, ownerProfile, "premium"), &userv1.UpdatePresenceRequest{Status: "idle"})
+		require.NoError(t, err)
+		snapshot, err := store.NewPresenceStore(rdb).Get(ctx, ownerProfile)
+		require.NoError(t, err)
+		require.Equal(t, before, snapshot.CustomStatus)
+	})
+}
+
+// Denial must happen before either store write or event publication.  Keeping
+// this separate from entitlement assertions ensures it runs on an unfixed tip.
+func TestCustomStatusDeniedWrites_HaveNoEventsOrPresenceMutation_RED(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
+	integrationtest.ApplyUserDBMigrations(t, ctx, pool, repoRoot(t))
+	accountID, profileID := uuid.New(), uuid.New()
+	_, err := pool.Exec(ctx, `INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary) VALUES ($1,$2,'noeventowner','7013','Owner',true)`, profileID, accountID)
+	require.NoError(t, err)
+	mr := miniredis.RunT(t)
+	t.Cleanup(mr.Close)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+	events := &customStatusEventsRecorder{}
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb, func(s *UserGRPC) { s.Events = events })
+
+	seed := "before"
+	_, err = cli.UpdatePresence(withProfileTier(ctx, accountID, profileID, "premium"), &userv1.UpdatePresenceRequest{Status: "online", CustomStatus: &seed})
+	require.NoError(t, err)
+	events.presence = 0
+	denied := "denied"
+	_, err = cli.UpdatePresence(withProfileTier(ctx, accountID, profileID, "free"), &userv1.UpdatePresenceRequest{Status: "idle", CustomStatus: &denied})
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	snapshot, err := store.NewPresenceStore(rdb).Get(ctx, profileID)
+	require.NoError(t, err)
+	require.Equal(t, "online", snapshot.Status)
+	require.Equal(t, seed, snapshot.CustomStatus)
+	require.Zero(t, events.presence)
+
+	_, err = cli.UpdateProfile(withProfileTier(ctx, accountID, profileID, "free"), &userv1.UpdateProfileRequest{ProfileId: profileID.String(), CustomStatus: &denied})
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	require.Zero(t, events.profile)
+}
+
+type customStatusEventsRecorder struct{ profile, presence int }
+
+func (r *customStatusEventsRecorder) PublishProfileCreated(context.Context, string, string) error {
+	return nil
+}
+func (r *customStatusEventsRecorder) PublishProfileUpdated(context.Context, string, string, string) error {
+	r.profile++
+	return nil
+}
+func (r *customStatusEventsRecorder) PublishProfileSwitched(context.Context, string, string, string) error {
+	return nil
+}
+func (r *customStatusEventsRecorder) PublishVerified(context.Context, string, string, string) error {
+	return nil
+}
+func (r *customStatusEventsRecorder) PublishPresenceChanged(context.Context, string, string, string) error {
+	r.presence++
+	return nil
 }
 
 // TestCustomStatus_PresenceAudienceAndBlockFailClosed applies the existing

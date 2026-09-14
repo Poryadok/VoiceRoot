@@ -194,6 +194,7 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 
 	t.Run("UpdateProfile ok", func(t *testing.T) {
 		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
+		mdCtx = metadata.AppendToOutgoingContext(mdCtx, authctx.HeaderSubscriptionTier, "premium")
 		bio := "Voice gamer and duo queue enjoyer"
 		customStatus := "building Voice"
 		resp, err := cli.UpdateProfile(mdCtx, &userv1.UpdateProfileRequest{
