@@ -317,7 +317,7 @@ func (s *RoleGRPC) setChatOverride(ctx context.Context, req *rolev1.SetChatOverr
 		return nil, ordinaryStoreError(err)
 	}
 	if s.Events != nil {
-		_ = s.Events.PublishChatOverrideSet(ctx, chatID.String(), roleID.String())
+		_ = s.Events.PublishChatOverrideSet(ctx, spaceID.String(), chatID.String(), roleID.String())
 	}
 	return &rolev1.SetChatOverrideResponse{}, nil
 }

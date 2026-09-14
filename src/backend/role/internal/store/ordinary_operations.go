@@ -176,14 +176,26 @@ func (s *RoleStore) ListVoiceRoomOverrides(ctx context.Context, spaceID uuid.UUI
 	})
 }
 
-// RemoveChatOverride executes within its ordinary space transaction.
-func (s *RoleStore) RemoveChatOverride(ctx context.Context, chatID, roleID uuid.UUID) error {
-	return s.WithinRole(ctx, roleID, func(scoped *RoleStore) error { return scoped.unscopedRemoveChatOverride(ctx, chatID, roleID) })
+// RemoveChatOverride executes within its ordinary space transaction and reports whether it removed a row.
+func (s *RoleStore) RemoveChatOverride(ctx context.Context, chatID, roleID uuid.UUID) (bool, error) {
+	removed := false
+	err := s.WithinRole(ctx, roleID, func(scoped *RoleStore) error {
+		var err error
+		removed, err = scoped.unscopedRemoveChatOverride(ctx, chatID, roleID)
+		return err
+	})
+	return removed, err
 }
 
-// RemoveVoiceRoomOverride executes within its ordinary space transaction.
-func (s *RoleStore) RemoveVoiceRoomOverride(ctx context.Context, voiceRoomID, roleID uuid.UUID) error {
-	return s.WithinRole(ctx, roleID, func(scoped *RoleStore) error { return scoped.unscopedRemoveVoiceRoomOverride(ctx, voiceRoomID, roleID) })
+// RemoveVoiceRoomOverride executes within its ordinary space transaction and reports whether it removed a row.
+func (s *RoleStore) RemoveVoiceRoomOverride(ctx context.Context, voiceRoomID, roleID uuid.UUID) (bool, error) {
+	removed := false
+	err := s.WithinRole(ctx, roleID, func(scoped *RoleStore) error {
+		var err error
+		removed, err = scoped.unscopedRemoveVoiceRoomOverride(ctx, voiceRoomID, roleID)
+		return err
+	})
+	return removed, err
 }
 
 // SetDefaultJoinRole executes within its ordinary space transaction.

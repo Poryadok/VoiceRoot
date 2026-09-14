@@ -250,7 +250,7 @@ CREATE INDEX quick_access_profile_order_idx ON quick_access_chats (profile_id, s
 - для `inbox=main` membership-строки и space-чаты (`group`/`channel` по `space_id`) пагинируются **единым SQL UNION** в store (`listChatsPageMainWithSpaces`); gRPC передаёт `spaceIDs` из S2S Space `ListMemberSpaceIDs` на каждой странице;
 - сортировка: `COALESCE(last_message_at, created_at)` DESC, tie-break `chats.id` DESC;
 - page size default 50, max 100.
-- list SQL and `chatRowToProto` hydrate `space_id`, slow mode, thread flags and `e2e_enabled`; residual partial-object gap: `topic` is not selected by list queries.
+- list SQL and `chatRowToProto` hydrate `space_id`, slow mode, thread flags, `e2e_enabled` and nullable `topic`.
 
 **Full inbox spec:** `folder_id` filter — **shipped (Batch 19)**; **`inbox=archive`** + **Quick Access RPC/DDL** — shipped (Batch 15/17).
 
@@ -520,3 +520,40 @@ waits for Messaging completion and File acceptance of Chat-owned reference
 releases, then removes chats/navigation and returns an immutable completion
 receipt. Full request/receipt bytes retain 30 days from this participant's
 completion; compact terminal fence is permanent.
+
+### P3 terminal purge prerequisite proof seam (decision required)
+
+The accepted ordering above is not yet representable by the wire. The current
+`voice.chat.v1.PurgeSpaceRequest` contains only the generic `SpacePurgeRequest`;
+it carries neither Messaging's participant-3 completion receipt nor File's
+acceptance receipt for the exact `CHAT` producer release. Messaging exposes no
+purge-receipt lookup, and File's `GetSpacePurgeReceipt` returns File's overall
+participant receipt rather than the required producer-release acceptance; no
+canonical lookup currently binds these two prerequisite receipts to Chat purge.
+Therefore the current request is insufficient authority for destructive Chat
+cleanup: `PurgeSpace` must remain fail-closed, must preserve the saved chats and
+`PURGE_DECIDED` fence, and must not create a completion receipt.
+
+Before implementation, one docs/proto decision must define all of these as one
+contract:
+
+- **proof transport:** deterministic receipt bytes embedded in and covered by
+  the Chat purge request hash, or authenticated request-bound receipt lookup
+  RPCs; unsigned metadata or a coordinator assertion is not proof;
+- **issuers:** only Messaging may issue its participant-3 purge completion, and
+  only File may issue `ReleaseSpaceDeletionProducerReferencesReceipt` for the
+  exact `FILE_REFERENCE_PRODUCER_ID_CHAT` release;
+- **release caller/retry owner:** either Chat calls File and durably stores the
+  accepted receipt before local deletion, or Space obtains and binds that File
+  receipt before calling Chat; the retry owner and response-loss recovery must
+  be explicit;
+- **binding:** protocol, Space/deletion IDs, purge generation, source schedule
+  generation, root/chat manifest hashes, participant/producer IDs, exact
+  reference aggregate hash and deterministic request/receipt bytes are all
+  cross-checked; hash equality by itself is insufficient;
+- **resume acceptance:** exact proof replay after timeout/restart returns the
+  same outcome, while missing, reordered or changed proof cannot advance local
+  deletion and never causes work-set recapture.
+
+This section records the owner decision still required; it does not choose or
+reserve protobuf field numbers.

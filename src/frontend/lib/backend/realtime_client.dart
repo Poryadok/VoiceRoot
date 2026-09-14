@@ -74,6 +74,8 @@ abstract interface class RealtimeTransport {
 
   Future<void> dispose();
 
+  void sendResume({required int lastSequence});
+
   void sendSubscribe(String chatId);
 
   void sendMarkRead({required String chatId, required String messageId});
@@ -166,10 +168,9 @@ class VoiceRealtimeConnection implements RealtimeTransport {
     }
   }
 
-  void sendResume() {
-    final last = _lastSequence;
-    if (last == null) return;
-    sendOp('resume', {'last_s': last});
+  @override
+  void sendResume({required int lastSequence}) {
+    sendOp('resume', {'last_s': lastSequence});
   }
 
   @override

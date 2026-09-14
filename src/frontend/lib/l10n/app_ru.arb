@@ -1015,6 +1015,8 @@
   "guestConvertRefreshStatus": "Обновить статус аккаунта",
   "guestSaveAccountReminder": "Зарегистрируйте аккаунт, чтобы не потерять доступ.",
   "guestSaveAccountReminderCta": "Зарегистрироваться",
+  "chatAllowGuestsTitle": "Разрешить гостей",
+  "chatAllowGuestsSubtitle": "Разрешить приглашённым гостевым аккаунтам входить в этот чат.",
   "privacyShowOnlineIncludeGuests": "Гостевые аккаунты видят мой онлайн-статус",
   "gameCatalogTitle": "Каталог игр",
   "gameCatalogEntry": "Каталог игр",

@@ -28,7 +28,7 @@
 | Subscription Service | `subscription_db` | —                         | Paddle, CloudPayments            |
 | Bot Service          | `bot_db`          | —                         | —                                |
 | Federation Service   | `federation_db` (planned, **not provisioned**) | —                         | —                                |
-| Story Service        | `story_db`        | —                         | медиа через File, R2             |
+| Story Service        | `story_db`        | —                         | медиа через File, R2; durable archive-media deletion outbox |
 | Analytics Service    | —                 | —                           | JetStream durable backlog + ClickHouse (`voice` DB) |
 
 Разделение Redis между Gateway и Auth: [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md) («Redis: API Gateway и Auth Service»).
@@ -104,6 +104,19 @@ Sticker/GIF bytes live in **`file_db`** (`files`); send payloads in **`messaging
 
 ---
 
+### `messaging_db` (Messaging Service): ListThreads successor (accepted target)
+
+The bounded `ListThreads` successor keeps all projection state in `messaging_db` and has **no cross-database foreign keys**. Chat remains the membership authority and delivers durable membership events through an outbox; Messaging records consumed events idempotently.
+
+| Durable data | Purpose |
+|---|---|
+| `thread_list_viewers` | Per `(chat_id, profile_id)` membership revision, `BUILDING|READY|REVOKED` state, baseline/applied journal sequence, immutable root IDs, high-water, revision and timestamps. |
+| `thread_list_changes` | Ordered per-chat journal emitted in the same Messaging transaction as each root/reply/edit/delete/hide/ghost mutation. |
+| immutable activity/id AVL nodes | Path-copied visible-thread trees, keyed by activity and parent ID; nodes carry exact count/latest reply/preview. |
+| `thread_list_cursor_states` | Unexpired immutable roots and remaining-set page state, bound to chat/profile/page size/snapshot/original expiry/revision. |
+| membership inbox | Durable Chat event deduplication and monotonic revision fence. |
+
+The build worker retains journal entries through the minimum `BUILDING` baseline watermark. Cursor/node GC after 15 minutes preserves nodes reachable from READY heads or unexpired cursor states. This accepted target is not yet migrated or activated; execution details live in [listthreads-versioned-readmodel-exec-plan.md](testing/listthreads-versioned-readmodel-exec-plan.md).
 ### `voice_db` (Voice Service)
 
 Voice owns `voice_room_instances`, `voice_room_memberships`,

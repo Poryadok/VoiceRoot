@@ -1083,6 +1083,8 @@
   "guestConvertRefreshStatus": "Refresh account status",
   "guestSaveAccountReminder": "Register your account so you do not lose access.",
   "guestSaveAccountReminderCta": "Register",
+  "chatAllowGuestsTitle": "Allow guests",
+  "chatAllowGuestsSubtitle": "Let invited guest accounts enter this chat.",
   "privacyShowOnlineIncludeGuests": "Guest accounts can see my online status",
   "gameCatalogTitle": "Game catalog",
   "gameCatalogEntry": "Browse games",
