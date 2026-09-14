@@ -163,7 +163,7 @@ after the bounded local attempt; Realtime does not synthesize an audience.
 | `call_missed` | unique non-empty `initiator_profile_id`, `callee_profile_id` | `room_id`, `chat_id`, `initiator_profile_id`, `callee_profile_id` |
 | `call_ended` | every unique `profile_ids` entry | `room_id`, `duration_seconds`, `profile_ids`, `reason`, `ended_by_profile_id` |
 | `call_started` | every unique `profile_ids` entry | current call/session locator fields; the complete `voice_room_id` / `space_id` pair is included only for `room_type=voice_room` |
-| `voice_state_update` | every unique `profile_ids` entry | `room_id`, changed `profile_id`, mute/deafen/video state and compatibility `profile_ids` |
+| `voice_state_update` | every unique `profile_ids` entry | `room_id`, changed `profile_id`, compatibility `profile_ids`, and only the optional fields present in the source: `is_muted`, `is_deafened`, `is_video_on`, `is_commander`, `hand_raised`, `has_floor`, `is_broadcasting` |
 | `screen_share_started`, `screen_share_stopped` | every unique `profile_ids` entry | `room_id`, sharing `profile_id`, `stream_id`; routing `profile_ids` are not copied into `d` |
 | `voice_member_joined` | every unique `notify_profile_ids` entry; never the joined profile merely because it joined | `room_id`, `voice_room_id`, `space_id`, `joined_profile_id`, compatibility `profile_ids` snapshot |
 
