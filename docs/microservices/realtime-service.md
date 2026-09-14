@@ -196,7 +196,7 @@ not `s` or `occurred_at`.
 |----------------------|---------------------------------------------------------------------|
 | `hello`              | Инициализация после подключения (начало новой сессии нумерации `s`); `d.conn_id` — server-assigned id сессии WebSocket для корреляции логов (опционально для клиента) |
 | `heartbeat_ack`      | Подтверждение heartbeat                                             |
-| `subscription_sync`  | Снимок подписок DM после `hello` (см. раздел «Подписки»): `d.scope` = `dm`, `d.chat_ids`, `d.source` = `chat`, `d.degraded` при ошибке S2S к Chat |
+| `subscription_sync`  | Снимок всех видимых Chat-подписок после `hello` (см. раздел «Подписки»): `d.scope` = `all`, `d.chat_ids`, `d.source` = `chat`, `d.degraded` при ошибке S2S к Chat |
 | `subscribe_ack`      | Подтверждение `subscribe`: `d.chat_id`                              |
 | `unsubscribe_ack`    | Подтверждение `unsubscribe`: `d.chat_id`                          |
 | `error`              | Ошибка клиентской операции: malformed UUID сохраняет `invalid_subscribe` / `invalid_unsubscribe`; valid lazy `subscribe`, который Chat не разрешил или не смог проверить, возвращает generic `d.code=permission_denied`, `d.message=chat subscription denied`, `d.chat_id` |
@@ -332,15 +332,20 @@ Redis и проверка JWT остаются correctness path.
 - Presence друзей
 - Персональные уведомления
 
-**Shipped today:** DM bootstrap via Chat `ListChats` (см. ниже); groups/spaces/friend presence — lazy `subscribe` / partial; см. [todo/backend.md](../todo/backend.md) § Realtime subscription bootstrap.
+**Shipped today:** all chats visible through Chat `ListChats` (DM, group and
+channel) are bootstrapped and re-authorized; friend presence uses the separate
+`user.presence_changed` stream. Space voice-room/tree watcher bootstrap remains
+unimplemented and must use the authoritative Phase-0 audience contract rather
+than a client chat subscription; см. [todo/backend.md](../todo/backend.md) § Realtime.
 
-### DM ([text-chat.md](../features/text-chat.md)): список из Chat vs lazy `subscribe`
+### Chat bootstrap and DM block policy
 
-Требование выше («все активные чаты») для **DM** в реализации app stack разбивается так:
+Требование выше («все активные чаты») в app stack разбивается так; для
+DM дополнительно применяется account-level block policy:
 
 | Подход | Описание |
 |--------|----------|
-| **Bootstrap из Chat (основной)** | После `hello`, если задан `REALTIME_CHAT_GRPC_ADDR`, Realtime вызывает Chat Service **`ListChats`** (постранично), затем повторно авторизует каждый chat через `GetChat`. Для **DM** он получает peer через `ListMembers`, разрешает peer account через User `GetProfile` и вызывает Social `IsBlocked` в обе стороны. Block даёт чистый deny; ошибка Chat/User/Social исключает chat и выставляет `degraded=true`. Клиент получает **`subscription_sync`** только с разрешёнными отсортированными `chat_ids`. |
+| **Bootstrap из Chat (основной)** | После `hello`, если задан `REALTIME_CHAT_GRPC_ADDR`, Realtime вызывает Chat Service **`ListChats`** (постранично) для всех видимых chat types, затем повторно авторизует каждый chat через `GetChat`. Для **DM** он получает peer через `ListMembers`, разрешает peer account через User `GetProfile` и вызывает Social `IsBlocked` в обе стороны. Block даёт чистый deny; ошибка Chat/User/Social исключает chat и выставляет `degraded=true`. Клиент получает **`subscription_sync`** только с разрешёнными отсортированными `chat_ids`. |
 | **Lazy `subscribe`** | Клиент шлёт `subscribe` с `chat_id`. Перед `subscribe_ack` Realtime применяет тот же Chat membership и DM Social account-pair policy. Block, unknown, nonmember, deleted-for-self, dependency failure или timeout возвращают только generic `permission_denied`; внутренние причины не раскрываются. Non-DM сохраняет Chat membership semantics и не применяет DM block pair как взаимный запрет общего канала. |
 | **Chat не сконфигурирован** | Bootstrap не выполняется; lazy `subscribe` **не** служит fallback для ACL и fail-closed с generic `permission_denied`. Для продакшена DM MVP ожидается заданный адрес Chat. |
 | **Ошибка Chat при bootstrap** | Всё равно отправляется `subscription_sync` с `degraded: true` и пустым `chat_ids`; клиенту следует опереться на REST список чатов и при необходимости прислать `subscribe` по известным `chat_id`. |
