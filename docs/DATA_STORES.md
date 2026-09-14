@@ -208,3 +208,63 @@ keep 30 days from that participant's completion. Delivered outbox rows keep 30
 days from `delivered_at`, and processed inbox rows keep 30 days from
 `processed_at`. Role retirement and participant PURGED fences are permanent.
 The Space tombstone keeps 365 days from `purged_at`.
+
+## A7 subscription lifecycle storage inventory (accepted target)
+
+| Store owner | Additive durable data |
+|---|---|
+| `subscription_db` | permanent personal/Space aggregate revision, normalized provider outcome/order evidence, immutable provider-neutral lifecycle journal, leased event/reminder outbox, current-entitlement snapshot rows |
+| `auth_db` | subscription event inbox and durable personal tier/revision/deadline projection used for JWT issuance |
+| `user_db` | subscription event inbox/projection, downgrade pending selection and subscription-specific profile freeze provenance |
+| `file_db` | immutable `retention_account_id` per exact reference, subscription event inbox/projection and revision-serialized retention deadlines |
+| `space_db` | subscription event inbox and revisioned Space Pro projection including grace |
+| `voice_db` | subscription event inbox and revisioned Space Pro admission projection; personal quality uses Auth's short-lived trusted entitlement claim |
+| `notification_db` | subscription event inbox/projection, unique in-app reminder and leased push dispatch outbox |
+| Analytics ClickHouse ingest | canonical event-ID dedupe and complete lifecycle reason mapping; no Analytics PostgreSQL database |
+
+Account deletion adds an opaque `deletion_fence_id`, one-use cycle/`purge_at`, a
+Subscription participant receipt and permanent purpose-scoped HMAC tombstone.
+Every service schedules its own DB-time purge and erases raw
+personal/purchaser identifiers and payload bytes at `P30D` even if another
+participant is offline; receipts are asynchronous evidence, not a gate. This
+applies to A7 stores and Analytics even when `P400D` has not
+elapsed; recorded JetStream sequences carrying those raw IDs are deleted and
+receipted. Offline/backup restore must apply the protected permanent purge-fence
+snapshot before serving, then emit a late receipt. Only replay
+hashes/IDs/revisions/terminal outcomes remain. The HMAC row
+is excluded from raw entitlement snapshots and cannot recreate billing detail.
+A still-paid Space aggregate remains under `space_id` with
+`purchaser_deleted=true`; only its raw payer field is cleared, so period-end
+convergence does not depend on the purged account identity.
+
+An unconfirmed provider cancellation never delays privacy purge. A minimal
+random-ID cancellation escrow may retain only provider + opaque subscription/
+cancel handle, with no raw account/purchaser link or payment detail. Only the
+cancellation worker identity can read it; terminal provider receipt immediately
+crypto-shreds the handle, while the permanent HMAC fence retains the outcome.
+
+For a pre-delete backup that knows only the old aggregate ID, an allowlisted
+participant uses Subscription's non-logging batch legacy-key lookup. Subscription
+computes purpose HMACs internally and returns only purge fence/cycle/time; a match
+is locally erased before serving. No consumer receives HMAC keys or a reversible
+raw-ID mapping.
+
+These rows are target inventory, not a shipment claim. No consumer writes
+`subscription_db`, and Subscription writes no consumer database. Stable event
+bytes cross the boundary at least once; each local transaction commits its
+effect before ACK. Bootstrap/restore uses the protected current-entitlement
+snapshot because JetStream MaxAge is not source of truth. Details:
+[subscription-lifecycle-convergence-exec-plan.md](testing/subscription-lifecycle-convergence-exec-plan.md).
+
+Authoritative lifecycle journal rows and delivered event outbox rows retain
+`P400D` after delivery; processed enforcement inbox IDs/hashes and canonical
+Analytics dedupe rows retain at least the same `P400D`. Undelivered entitlement
+rows are retained without deadline. Reminder schedule and notification dispatch
+rows that miss their window become terminal `SUPPRESSED`/`EXPIRED`, not deleted;
+their logical IDs/terminal outcomes also retain `P400D`, while verbose provider
+attempt bodies may be redacted after `P30D`. Durable poison quarantine stores the
+exact bytes/hash/error for `P400D`; after bounded delivery attempts the stream
+message is terminated/moved to DLQ with an alert, never ACKed as successfully
+applied. Billing/provider records keep their separate legal retention only in
+the pseudonymized/minimized form allowed by the account-deletion contract; that
+policy overrides generic `P400D` raw-payload retention.

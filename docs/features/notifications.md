@@ -12,6 +12,7 @@
 | Запрос в друзья                      | `friend_request`         | ✓    |
 | Матч найден в ММ                     | `match_found`            | ✓    |
 | Системные (безопасность, обновления) | `system`                 | ✓    |
+| Напоминание grace подписки           | `subscription_grace_reminder` | target |
 | Кто-то зашёл в голосовую комнату     | `voice_member_joined`    | ✓    |
 
 **Naming:** feature catalog uses **`new_message`** for ordinary chat traffic (DM after accept, group, channel). Service-layer alias `new_dm` (notification-service historical) maps to the same wire type — prefer `new_message` in product docs and Realtime payloads.
@@ -112,3 +113,15 @@ push-eligible.
 ## Уведомления во время войс-чата
 
 - Показываются как оверлей внутри приложения — войс не прерывается
+
+## Subscription grace reminder (accepted A7 target)
+
+`subscription_grace_reminder` создаёт одну logical/in-app запись на D1, D3 и D7
+текущего grace revision, с обычными settings/presence/quiet-hours правилами.
+FCM/APNs сигнал доставляется at-least-once с тем же client/collapse ID: внешний
+provider не даёт транзакционного exactly-once, а клиент схлопывает повтор.
+Личная подписка адресуется primary profile платящего аккаунта; Space Pro —
+primary profile purchaser с контекстом Space. Renewal/оплата подавляет оставшиеся
+reminders. Email не используется: он по-прежнему только для auth-событий.
+Durable dedupe и stale/out-of-order правила —
+[subscription-lifecycle-convergence-exec-plan.md](../testing/subscription-lifecycle-convergence-exec-plan.md).

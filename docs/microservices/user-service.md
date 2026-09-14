@@ -258,3 +258,36 @@ sequence, поэтому первый новый provider update не проиг
 - **Space Service** — `AreCoMembers` для проверки privacy-аудитории `space_members` (User подключает S2S-клиент через `SPACE_GRPC_ADDR`)
 - **Redis** — presence кэш (TTL 5 мин, heartbeat)
 - **File Service** — загрузка аватара/баннера; **not yet deployed** as standalone service — минимальный R2/presigned для статичного аватара может жить в User ([user-profile.md](../features/user-profile.md), [PLAN.md](../PLAN.md))
+
+## Subscription downgrade projection (A7 accepted target; not implemented)
+
+User owns a durable personal-entitlement projection and consumer inbox keyed by
+Subscription's aggregate revision. `GRACE_PERIOD` keeps all profiles usable.
+During scheduled cancellation or grace, the primary ID reserves one slot and,
+when an eligible secondary exists, the picker requires the exact pair of primary
+plus one distinct owned, non-deleted profile that is not disabled or frozen for
+another reason, without freezing yet. The selection is bound to
+Subscription's stable `downgrade_cycle_id`, which survives only the direct
+successor `INACTIVE` transition and an intervening failed-payment grace, but is
+cleared by recovery/resume/renewal or a new `STARTED` activation; exact replay is
+idempotent.
+Retaining the primary ID never clears an independent disabled/frozen reason.
+
+The first `INACTIVE` revision with more than two non-deleted profiles applies the
+stored pair atomically; if absent/invalid, it uses primary plus the
+earliest-created eligible secondary. With no eligible secondary it selects only
+the primary slot and never revives unrelated disabled state. Every other
+non-deleted profile receives a separate subscription-freeze overlay, including
+one already disabled for another reason, so later removal of that reason cannot
+exceed the free limit.
+A selection from a cleared/different cycle after recovery is rejected without
+mutation. If the current profile is not kept, Flutter refreshes
+profile/token context to a kept profile before returning to the app.
+
+Subscription-owned freeze provenance is stored separately from soft deletion,
+moderation and other disabled states. Every later `ACTIVE` result, including a
+new purchase/`STARTED`, unfreezes every and only subscription-frozen profile and
+clears the old cycle/pending selection; it never
+revives deleted or otherwise disabled data. Full replay/order and RED evidence is
+in
+[subscription-lifecycle-convergence-exec-plan.md](../testing/subscription-lifecycle-convergence-exec-plan.md).

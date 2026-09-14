@@ -80,7 +80,7 @@ room-привязки. WS `call_started` допускает additive `room_type`
 | `chat.events`          | Chat, Space       | Analytics, Notification, Realtime |
 | `voice.events`         | Voice             | Analytics, Notification, Realtime |
 | `moderation.events`    | Moderation        | Analytics, Notification, User |
-| `subscription.events`  | Subscription      | Analytics, User, Space, File, Notification |
+| `subscription.events`  | Subscription      | Auth, Analytics, User, Space, Voice, File, Notification |
 | `file.events`          | File              | Analytics, Messaging (preview update) |
 | `matchmaking.events`   | Matchmaking       | Analytics, Notification, Voice, Chat |
 | `story.events`         | Story             | Analytics, Notification, Matchmaking |
@@ -94,6 +94,16 @@ room-привязки. WS `call_started` допускает additive `room_type`
 | `analytics_events`  | Notification, Search, Gateway, Subscription, Moderation (direct `analytics.*`) | Analytics |
 
 Domain JetStream streams (`message_events`, `user_events`, …) are also consumed by **Analytics** via stream adapters (dual ingest). Subject pattern: `analytics.{service}.{event}`.
+
+For A7, `subscription.entitlement_changed` is the sole cross-service entitlement
+authority. It is a complete monotonic aggregate snapshot delivered from a
+transactional outbox with stable `event_id`/`Nats-Msg-Id`; every named consumer
+uses a service-owned durable dedupe path. Enforcement consumers use transactional
+inbox/projection and protected snapshot reconciliation; Analytics uses canonical
+event-ID ClickHouse dedupe plus protected lifecycle-journal replay. Legacy
+subscription subjects remain compatibility/telemetry facts, not a second tier
+authority. Contract and RED evidence:
+[subscription-lifecycle-convergence-exec-plan.md](testing/subscription-lifecycle-convergence-exec-plan.md).
 
 Продуктовая аналитика дополнительно консьюмит subject’ы вида `analytics.*` (см. раздел «Аналитика» в [MICROSERVICES.md](MICROSERVICES.md)).
 
