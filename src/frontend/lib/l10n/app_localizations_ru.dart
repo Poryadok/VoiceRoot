@@ -2386,6 +2386,13 @@ class AppLocalizationsRu extends AppLocalizations {
   String get guestSaveAccountReminderCta => 'Зарегистрироваться';
 
   @override
+  String get chatAllowGuestsTitle => 'Разрешить гостей';
+
+  @override
+  String get chatAllowGuestsSubtitle =>
+      'Разрешить приглашённым гостевым аккаунтам входить в этот чат.';
+
+  @override
   String get privacyShowOnlineIncludeGuests =>
       'Гостевые аккаунты видят мой онлайн-статус';
 

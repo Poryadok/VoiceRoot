@@ -2372,6 +2372,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get guestSaveAccountReminderCta => 'Register';
 
   @override
+  String get chatAllowGuestsTitle => 'Allow guests';
+
+  @override
+  String get chatAllowGuestsSubtitle =>
+      'Let invited guest accounts enter this chat.';
+
+  @override
   String get privacyShowOnlineIncludeGuests =>
       'Guest accounts can see my online status';
 
