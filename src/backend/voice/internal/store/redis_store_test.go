@@ -174,37 +174,70 @@ func TestRedisCallStore_MoveConcurrentPublicAddAndRemoveKeepSingleActiveRoster(t
 			space, sourceID, destinationID, target, actor := "space", "source", "destination", "target", "actor"
 			source, err := store.CreateCall(ctx, Call{RoomID: "source-call", VoiceRoomID: sourceID, SpaceID: space, SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, InitiatorProfileID: target, MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE})
 			require.NoError(t, err)
-			start, errs := make(chan struct{}), make(chan error, 2)
+			type outcome struct {
+				move bool
+				err  error
+			}
+			start, outcomes := make(chan struct{}), make(chan outcome, 2)
 			go func() {
 				<-start
 				_, err := store.MoveVoiceRoomParticipant(ctx, VoiceRoomMoveRequest{ActorProfileID: actor, ParticipantProfileID: target, OperationID: "operation", FromVoiceRoomID: sourceID, ToVoiceRoomID: destinationID, SpaceID: space, MaxParticipants: MaxVoiceRoomParticipants, DestinationRoomID: "destination-call", Now: time.Unix(1_700_000_000, 0).UTC()})
-				errs <- err
+				outcomes <- outcome{move: true, err: err}
 			}()
 			go func() {
 				<-start
 				if remove {
 					_, err := store.RemoveParticipant(ctx, source.RoomID, target)
-					errs <- err
+					outcomes <- outcome{err: err}
 					return
 				}
 				_, err := store.AddParticipant(ctx, source.RoomID, "independent-joiner", MaxVoiceRoomParticipants)
-				errs <- err
+				outcomes <- outcome{err: err}
 			}()
 			close(start)
-			<-errs
-			<-errs
+			first, second := <-outcomes, <-outcomes
+			moveOutcome, writerOutcome := first, second
+			if !moveOutcome.move {
+				moveOutcome, writerOutcome = second, first
+			}
 			sourceAfter, sourceErr := store.GetCallByVoiceRoomID(ctx, sourceID)
 			destinationAfter, destinationErr := store.GetCallByVoiceRoomID(ctx, destinationID)
 			inSource := sourceErr == nil && sourceAfter.IsParticipant(target)
 			inDestination := destinationErr == nil && destinationAfter.IsParticipant(target)
-			require.NotEqual(t, inSource, inDestination, "public writers and move must serialize: target is in exactly one roster")
-			active, err := store.GetActiveCall(ctx, target)
-			require.NoError(t, err)
-			if inSource {
+			require.False(t, inSource && inDestination, "no committed state may place the target in both rosters")
+			sourceIndex, sourceIndexErr := store.client.Get(ctx, store.activeVoiceRoomKey(sourceID)).Result()
+			destinationIndex, destinationIndexErr := store.client.Get(ctx, store.activeVoiceRoomKey(destinationID)).Result()
+			switch {
+			case inSource:
+				require.False(t, inDestination)
+				require.NoError(t, sourceIndexErr)
+				require.Equal(t, sourceAfter.RoomID, sourceIndex)
+				require.ErrorIs(t, destinationIndexErr, redis.Nil)
+				require.Empty(t, destinationIndex)
+				active, err := store.GetActiveCall(ctx, target)
+				require.NoError(t, err)
 				require.Equal(t, sourceAfter.RoomID, active.RoomID)
-			} else {
+			case inDestination:
+				require.False(t, inSource)
+				require.ErrorIs(t, sourceIndexErr, redis.Nil)
+				require.Empty(t, sourceIndex)
+				require.NoError(t, destinationIndexErr)
+				require.Equal(t, destinationAfter.RoomID, destinationIndex)
+				active, err := store.GetActiveCall(ctx, target)
+				require.NoError(t, err)
 				require.True(t, inDestination)
 				require.Equal(t, destinationAfter.RoomID, active.RoomID)
+				require.NoError(t, moveOutcome.err)
+			default:
+				require.True(t, remove, "only a winning public remove may leave the target in neither roster")
+				require.NoError(t, writerOutcome.err)
+				require.Error(t, moveOutcome.err)
+				require.ErrorIs(t, sourceIndexErr, redis.Nil)
+				require.ErrorIs(t, destinationIndexErr, redis.Nil)
+				_, err := store.GetActiveCall(ctx, target)
+				require.ErrorIs(t, err, ErrNotFound)
+				_, err = store.client.Get(ctx, store.activeKey(target)).Result()
+				require.ErrorIs(t, err, redis.Nil)
 			}
 		})
 	}
@@ -232,15 +265,31 @@ func TestRedisCallStore_CompetingMovesChooseOneDestination(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, []string{"destination-call-a", "destination-call-b"}, active.RoomID)
 	terminalDestinations := 0
-	for _, dest := range []string{"destination-a", "destination-b"} {
-		call, err := store.GetCallByVoiceRoomID(ctx, dest)
-		if err == nil && call.IsParticipant(target) {
+	for _, candidate := range []struct{ room, callID, operation string }{
+		{room: "destination-a", callID: "destination-call-a", operation: "op-a"},
+		{room: "destination-b", callID: "destination-call-b", operation: "op-b"},
+	} {
+		index, indexErr := client.Get(ctx, store.activeVoiceRoomKey(candidate.room)).Result()
+		ledgerKey := store.moveOperationKey(actor, candidate.operation)
+		if indexErr == nil {
 			terminalDestinations++
-			require.Equal(t, call.RoomID, client.Get(ctx, store.activeVoiceRoomKey(dest)).Val())
+			require.Equal(t, candidate.callID, index)
+			call, err := store.GetCall(ctx, candidate.callID)
+			require.NoError(t, err)
+			require.True(t, call.IsParticipant(target))
+			require.Equal(t, call.RoomID, active.RoomID)
+			require.Equal(t, call.RoomID, client.Get(ctx, store.activeKey(target)).Val())
+			require.NotEmpty(t, client.Get(ctx, ledgerKey).Val())
+			require.GreaterOrEqual(t, client.TTL(ctx, ledgerKey).Val(), 23*time.Hour)
+			continue
 		}
+		require.ErrorIs(t, indexErr, redis.Nil)
+		_, callErr := client.Get(ctx, store.callKey(candidate.callID)).Result()
+		require.ErrorIs(t, callErr, redis.Nil, "losing destination must not retain a call document")
+		_, ledgerErr := client.Get(ctx, ledgerKey).Result()
+		require.ErrorIs(t, ledgerErr, redis.Nil, "losing operation must not claim a terminal receipt")
 	}
 	require.Equal(t, 1, terminalDestinations, "competing moves cannot leave duplicate or lost roster membership")
-	require.Equal(t, active.RoomID, client.Get(ctx, store.activeKey(target)).Val())
 	sourceAfter, err := store.GetCall(ctx, "source-call")
 	require.NoError(t, err)
 	require.False(t, sourceAfter.IsParticipant(target), "the committed source document must exclude the moved target")
@@ -248,8 +297,6 @@ func TestRedisCallStore_CompetingMovesChooseOneDestination(t *testing.T) {
 	sourceIndex, err := client.Get(ctx, store.activeVoiceRoomKey(sourceID)).Result()
 	require.ErrorIs(t, err, redis.Nil)
 	require.Empty(t, sourceIndex, "an ended source document must not retain its voice-room index")
-	ledgerCount := client.Exists(ctx, store.moveOperationKey(actor, "op-a"), store.moveOperationKey(actor, "op-b")).Val()
-	require.EqualValues(t, 1, ledgerCount, "only the terminal move may persist a 24-hour operation receipt")
 }
 
 func boolCount(values ...bool) int {
