@@ -47,7 +47,10 @@ func RunArchivePurgeOnceWithFileTimeout(ctx context.Context, st *store.StoryStor
 	if deleter == nil {
 		return batch.Stories, nil
 	}
-	ops, err := st.ClaimMediaDeletion(ctx, 100, time.Minute)
+	// Lease only the operation this tick can attempt. Pre-leasing a batch would
+	// leave later rows fenced behind a timed-out File call and risk stale-token
+	// delivery after their leases expire.
+	ops, err := st.ClaimMediaDeletion(ctx, 1, time.Minute)
 	if err != nil {
 		return 0, err
 	}

@@ -48,6 +48,16 @@ type blockingFileDeleter struct {
 	finished chan struct{}
 }
 
+type cooperativeDeadlineFileDeleter struct {
+	started chan string
+}
+
+func (d *cooperativeDeadlineFileDeleter) DeleteFile(ctx context.Context, fileID string) error {
+	d.started <- fileID
+	<-ctx.Done()
+	return ctx.Err()
+}
+
 func (d *blockingFileDeleter) DeleteFile(context.Context, string) error {
 	d.started <- struct{}{}
 	<-d.release
@@ -406,6 +416,39 @@ func TestArchivePurgeOutbox_fileDeadlineRequeuesWithoutBlockingLaterTick(t *test
 
 	close(timedOut.release)
 	<-timedOut.finished
+}
+
+func TestArchivePurgeOutbox_cooperativeDeadlineClaimsOnlyOneOperationPerTick(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	st, ctx := startArchivePurgeStore(t)
+	_, firstMediaID := seedExpiredMediaStory(t, ctx, st)
+	_, secondMediaID := seedExpiredMediaStory(t, ctx, st)
+	timedOut := &cooperativeDeadlineFileDeleter{started: make(chan string, 1)}
+	runDone := make(chan error, 1)
+	go func() {
+		_, err := jobs.RunArchivePurgeOnceWithFileTimeout(ctx, st, timedOut, time.Now().UTC(), 20*time.Millisecond)
+		runDone <- err
+	}()
+	timedOutFileID := <-timedOut.started
+	require.NoError(t, <-runDone)
+
+	var failed, untouched, leased int
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT count(*) FILTER (WHERE attempt_count=1 AND last_error LIKE '%deadline exceeded%'), count(*) FILTER (WHERE attempt_count=0), count(*) FILTER (WHERE lease_token IS NOT NULL) FROM story_media_deletion_outbox`).Scan(&failed, &untouched, &leased))
+	require.Equal(t, 1, failed, "only the File call that reached its deadline is failed for retry")
+	require.Equal(t, 1, untouched, "unattempted work must remain ready instead of being pre-leased behind a timeout")
+	require.Zero(t, leased, "no stale lease may remain after the bounded tick returns")
+
+	nextTick := &recordingFileDeleter{}
+	_, err := jobs.RunArchivePurgeOnceWithFileTimeout(ctx, st, nextTick, time.Now().UTC(), time.Second)
+	require.NoError(t, err)
+	require.Len(t, nextTick.deleted, 1, "next tick processes one ready operation without a stale-token File call")
+	require.Contains(t, []string{firstMediaID.String(), secondMediaID.String()}, nextTick.deleted[0])
+	require.NotEqual(t, timedOutFileID, nextTick.deleted[0], "next tick must process the previously unclaimed row, not retry a stale timed-out lease")
+	var remaining int
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT count(*) FROM story_media_deletion_outbox`).Scan(&remaining))
+	require.Equal(t, 1, remaining, "next tick completes only the previously unclaimed operation")
 }
 
 func TestArchivePurgeOutbox_twoDispatchersRejectStaleAck(t *testing.T) {
