@@ -100,15 +100,42 @@ Two producers may emit WS `notification` for the same message; clients **dedupe*
 ### Phase-0 Space-room roster fan-out (target; не реализовано)
 
 Voice publishes versioned room lifecycle events only after its authoritative
-mutation commits. Realtime fans them out to authenticated Space watchers under the
-same roster audience policy as Voice: full `profile_id`/state only to
-`SPACE_VIEW_MEMBER_LIST`; other Space members get aggregate occupancy deltas only.
-No client-selected `space_id`, profile ID or subscription target can widen this
-audience. Each envelope has `room_id`, authorization `epoch`, monotonic `version`,
-`event_id` and a payload valid for that audience. Dedupe is by `event_id`; clients
-require contiguous versions and fetch the signed Voice snapshot on a gap, reconnect
-or epoch change. The ordinary WebSocket `s` remains connection-local and does not
-replace roster recovery.
+mutation commits. Before publish it resolves current Space membership and
+`SPACE_VIEW_MEMBER_LIST` through server-owned Space/Role dependencies and writes
+two explicit recipient sets into the trusted event: `full_profile_ids` and
+`occupancy_profile_ids`. Dependency uncertainty drops the event fail-closed and
+requires snapshot reconciliation; Realtime never computes or widens either set.
+It delivers each already-shaped payload to every active tab of the named profiles.
+No client-selected `space_id`, profile ID, subscription target or Redis registry
+entry is audience authority.
+
+Full recipients receive participant identity and voice/screen state. Occupancy
+recipients receive only `room_id`, `roster_epoch`, `projection=occupancy`,
+`projection_version`, `event_id`, `occurred_at` and `occupant_count`; they never
+receive a participant ID, display snapshot, mute/deafen/video/speaking state,
+screen-share owner/stream, role, or an internal recipient list. A mutation that
+does not change occupancy emits no occupancy event and does not advance its
+projection version.
+
+`roster_epoch` is a Voice-owned disclosure/snapshot generation, distinct from
+LiveKit `media_epoch`, Space access generation and Role policy epoch. Permission,
+membership-authority or room-incarnation changes that can move a viewer between
+disclosure classes start a new positive `roster_epoch`; the client discards the
+old projection and fetches a new signed snapshot. Within one epoch, Voice keeps
+independent contiguous counters per `(room_id, projection)`:
+
+- `projection=full` advances for participant join/leave and every disclosed
+  voice/screen state change;
+- `projection=occupancy` advances only when `occupant_count` changes.
+
+Thus aggregate viewers need no redacted no-op for a full-only state mutation and
+cannot see a false gap. Dedupe is by UUID `event_id`; ordering/recovery key is
+`(room_id, roster_epoch, projection, projection_version)`. Clients buffer the
+matching live projection during snapshot, then apply only contiguous versions.
+A duplicate event ID is ignored; a version gap, epoch change, reconnect or
+projection-class change fetches the matching signed Voice snapshot. `occurred_at`
+is diagnostic only. The ordinary WebSocket `s` remains connection-local and does
+not replace roster recovery.
 
 ### Voice participant lifecycle fan-out (shipped compatibility contract)
 
@@ -142,16 +169,16 @@ after the bounded local attempt; Realtime does not synthesize an audience.
 
 The table freezes disclosure for the existing participant audience only. A
 future Space watcher event must carry the Phase-0 audience-specific redacted or
-full payload plus `(epoch, version, event_id)` from Voice; Realtime must not reuse
-the participant list as an inferred Space audience.
+full payload plus `(roster_epoch, projection, projection_version, event_id)` from
+Voice; Realtime must not reuse the participant list as an inferred Space audience.
 
 JetStream preserves delivery to the consumer, but this compatibility stream has
 no durable client replay and no cross-connection total order. WebSocket `s` is
 the delivery order of one connection only. Duplicate/redelivered `event_id`
 frames may occur across reconnects. After each new `hello`, the client reconciles
 `GetActiveCall`; `GetVoiceStates` owns the current room state/screen-share
-projection. Space roster recovery continues to use the Phase-0
-`(epoch, version, event_id)` rule, not `s` or `occurred_at`.
+projection. Space roster recovery continues to use the Phase-0 projection key,
+not `s` or `occurred_at`.
 
 | op             | Описание                                              |
 |----------------|-------------------------------------------------------|
