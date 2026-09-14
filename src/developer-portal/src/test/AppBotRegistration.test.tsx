@@ -236,6 +236,139 @@ describe('App bot registration and selection', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Copy one-shot secrets' })).not.toBeInTheDocument());
   });
 
+  it('moves focus into the one-shot-secret dialog, traps Tab, and restores the opener after Escape clears secrets', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ bot_list: { bots: [] } }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          bot: { id: BOT_A, name: 'Focus Bot' },
+          token_response: { token: 'focus-token' },
+          webhook_secret_response: { webhook_secret: 'focus-webhook-secret' },
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ bot_list: { bots: [{ id: BOT_A, name: 'Focus Bot' }] } }))
+      .mockResolvedValueOnce(botDetailResponse(BOT_A, 'Focus Bot', '[]'))
+      .mockResolvedValueOnce(jsonResponse({ command_list: { commands_json: '[]' } }))
+      .mockResolvedValueOnce(jsonResponse({ manifest_yaml: '' }))
+      .mockResolvedValueOnce(jsonResponse({ command_list: { commands_json: '[]' } }))
+      .mockResolvedValueOnce(jsonResponse({ manifest_yaml: '' }));
+
+    setupLoggedIn(fetchMock);
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByTestId('bot-register')).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText('Bot name'), { target: { value: 'Focus Bot' } });
+    const opener = screen.getByRole('button', { name: 'Register bot' });
+    opener.focus();
+    fireEvent.click(opener);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Copy one-shot secrets' });
+    const firstControl = within(dialog).getByRole('button', { name: 'Copy bot token' });
+    const lastControl = within(dialog).getByRole('button', { name: 'Close and clear' });
+    expect(document.activeElement).toBe(firstControl);
+
+    lastControl.focus();
+    fireEvent.keyDown(lastControl, { key: 'Tab' });
+    expect(document.activeElement).toBe(firstControl);
+
+    firstControl.focus();
+    fireEvent.keyDown(firstControl, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(lastControl);
+
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Copy one-shot secrets' })).not.toBeInTheDocument());
+    expect(screen.queryByText('focus-token')).not.toBeInTheDocument();
+    expect(screen.queryByText('focus-webhook-secret')).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it('blocks background actions while a one-shot-secret dialog is open', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          bot_list: { bots: [{ id: BOT_A, name: 'Background Bot' }] },
+        }),
+      )
+      .mockResolvedValueOnce(botDetailResponse(BOT_A, 'Background Bot', '[]'))
+      .mockResolvedValueOnce(jsonResponse({ command_list: { commands_json: '[]' } }))
+      .mockResolvedValueOnce(jsonResponse({ manifest_yaml: '' }))
+      .mockResolvedValueOnce(jsonResponse({ token_response: { token: 'background-token' } }));
+
+    setupLoggedIn(fetchMock);
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Revoke & regenerate bot token' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke & regenerate bot token' }));
+    await screen.findByRole('dialog', { name: 'Copy one-shot secrets' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+
+    expect(screen.getByRole('dialog', { name: 'Copy one-shot secrets' })).toHaveTextContent('background-token');
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+  });
+
+  it('keeps a one-shot secret visible and reports a status when copying fails', async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error('permission denied'));
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          bot_list: { bots: [{ id: BOT_A, name: 'Clipboard Bot' }] },
+        }),
+      )
+      .mockResolvedValueOnce(botDetailResponse(BOT_A, 'Clipboard Bot', '[]'))
+      .mockResolvedValueOnce(jsonResponse({ command_list: { commands_json: '[]' } }))
+      .mockResolvedValueOnce(jsonResponse({ manifest_yaml: '' }))
+      .mockResolvedValueOnce(jsonResponse({ token_response: { token: 'clipboard-token' } }));
+
+    setupLoggedIn(fetchMock);
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Revoke & regenerate bot token' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke & regenerate bot token' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Copy one-shot secrets' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Copy bot token' }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('clipboard-token'));
+    expect(dialog).toHaveTextContent('clipboard-token');
+    expect(screen.getByText('Could not copy the secret; it remains visible until copied or dismissed.')).toBeInTheDocument();
+  });
+
+  it('keeps a one-shot secret visible and explains when Clipboard API is unavailable', async () => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: undefined,
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          bot_list: { bots: [{ id: BOT_A, name: 'No Clipboard Bot' }] },
+        }),
+      )
+      .mockResolvedValueOnce(botDetailResponse(BOT_A, 'No Clipboard Bot', '[]'))
+      .mockResolvedValueOnce(jsonResponse({ command_list: { commands_json: '[]' } }))
+      .mockResolvedValueOnce(jsonResponse({ manifest_yaml: '' }))
+      .mockResolvedValueOnce(jsonResponse({ token_response: { token: 'no-clipboard-token' } }));
+
+    setupLoggedIn(fetchMock);
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Revoke & regenerate bot token' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke & regenerate bot token' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Copy one-shot secrets' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Copy bot token' }));
+
+    expect(dialog).toHaveTextContent('no-clipboard-token');
+    expect(screen.getByText('Clipboard is unavailable; copy the secret manually before closing this dialog.')).toBeInTheDocument();
+  });
+
   it('shows privileged scope warnings in registration and edit forms', async () => {
     const fetchMock = vi
       .fn()
