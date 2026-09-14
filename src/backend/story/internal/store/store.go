@@ -416,7 +416,7 @@ ORDER BY created_at`, storyID)
 	return out, rows.Err()
 }
 
-// ListArchivedStoriesForPurge returns expired stories past archived_until with media ids.
+// ListArchivedStoriesForPurge returns expired, unhighlighted stories past archived_until with media ids.
 func (s *StoryStore) ListArchivedStoriesForPurge(ctx context.Context, now time.Time) ([]ArchivedStoryMedia, error) {
 	if s == nil || s.Pool == nil {
 		return nil, ErrNotImplemented
@@ -424,7 +424,10 @@ func (s *StoryStore) ListArchivedStoriesForPurge(ctx context.Context, now time.T
 	rows, err := s.Pool.Query(ctx, `
 SELECT id, media_file_id
 FROM stories
-WHERE archived_until <= $1 AND expired_at IS NOT NULL`, now.UTC())
+WHERE archived_until <= $1 AND expired_at IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM highlight_stories WHERE story_id = stories.id
+  )`, now.UTC())
 	if err != nil {
 		return nil, err
 	}
@@ -824,13 +827,17 @@ FROM highlights WHERE profile_id = $1 ORDER BY sort_order, created_at`, profileI
 	return out, rows.Err()
 }
 
-// PurgeArchivedStories deletes stories past archived_until.
+// PurgeArchivedStories deletes unhighlighted stories past archived_until.
 func (s *StoryStore) PurgeArchivedStories(ctx context.Context, now time.Time) (int64, error) {
 	if s == nil || s.Pool == nil {
 		return 0, ErrNotImplemented
 	}
 	tag, err := s.Pool.Exec(ctx, `
-DELETE FROM stories WHERE archived_until <= $1 AND expired_at IS NOT NULL`, now.UTC())
+	DELETE FROM stories
+	WHERE archived_until <= $1 AND expired_at IS NOT NULL
+	  AND NOT EXISTS (
+	    SELECT 1 FROM highlight_stories WHERE story_id = stories.id
+	  )`, now.UTC())
 	if err != nil {
 		return 0, err
 	}

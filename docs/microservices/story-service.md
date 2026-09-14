@@ -138,7 +138,7 @@ highlight_stories
 ## Background Jobs
 
 - **Expiry worker**: каждую минуту — пометить expired stories (TTL 24h)
-- **Archive cleanup**: ежедневно — удалить stories старше 30 дней из архива
+- **Archive cleanup**: ежедневно — удалить stories старше 30 дней из архива и их медиа, кроме стори, которые ещё состоят хотя бы в одном Highlight; после удаления из последнего Highlight такая стори снова eligible для cleanup
 - **LFP matcher**: при создании "ищу пати" Story Service публикует `story.lfp_created` в JetStream; **потребитель Matchmaking Service (авто-заявка из LFP-стори) отложен** — Matchmaking пока не подписан на этот subject
 
 ## Публикуемые события (→ NATS)
@@ -162,5 +162,4 @@ highlight_stories
 - **Matchmaking Service** — (через NATS, **deferred**) автоматическая заявка "ищу пати" из `story.lfp_created`
 - **Notification Service** — (через NATS) уведомления об упоминаниях
 - **Subscription Service** — проверка Premium (анонимный просмотр)
-
 
