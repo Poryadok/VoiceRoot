@@ -91,12 +91,18 @@ func (s *StoryGRPC) CreateStory(ctx context.Context, req *storyv1.CreateStoryReq
 	if err != nil {
 		return nil, status.Error(codes.Unauthenticated, "profile required")
 	}
-	storyType := strings.TrimSpace(req.GetType())
+	storyType := storyMediaTypeString(req.GetTypeEnum())
 	if storyType == "" {
-		storyType = storyMediaTypeString(req.GetTypeEnum())
+		storyType = strings.TrimSpace(req.GetType())
 	}
 	if storyType == "" {
 		return nil, status.Error(codes.InvalidArgument, "type is required")
+	}
+	if storyType == "text" && strings.TrimSpace(req.GetTextContent()) == "" {
+		return nil, status.Error(codes.InvalidArgument, "text_content is required for text stories")
+	}
+	if (storyType == "photo" || storyType == "video") && strings.TrimSpace(req.GetMediaFileId()) == "" {
+		return nil, status.Error(codes.InvalidArgument, "media_file_id is required for photo and video stories")
 	}
 	var mediaID *uuid.UUID
 	if req.MediaFileId != nil && strings.TrimSpace(*req.MediaFileId) != "" {
