@@ -88,6 +88,26 @@ func seedExpiredMediaStory(t *testing.T, ctx context.Context, st *store.StorySto
 	return storyID, mediaID
 }
 
+func TestArchivePurgeOutbox_stageSurvivesRestart(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	st, ctx := startArchivePurgeStore(t)
+	storyID, mediaID := seedExpiredMediaStory(t, ctx, st)
+	batch, err := st.StageArchivePurgeBatch(ctx, 1)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, batch.Stories)
+	_, err = st.GetStory(ctx, storyID)
+	require.ErrorIs(t, err, store.ErrNotFound)
+	ops, err := st.ClaimMediaDeletion(ctx, 1, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, ops, 1)
+	require.Equal(t, mediaID, ops[0].MediaFileID)
+	ok, err := st.CompleteMediaDeletion(ctx, ops[0].OperationID, ops[0].LeaseToken)
+	require.NoError(t, err)
+	require.True(t, ok)
+}
+
 func (d *purgeBarrierFileDeleter) DeleteFile(ctx context.Context, fileID string) error {
 	_, d.callbackLookup = d.store.GetStory(ctx, d.storyID)
 	d.started <- struct{}{}
