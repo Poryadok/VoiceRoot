@@ -738,14 +738,43 @@ func (s *StoryStore) DeleteHighlight(ctx context.Context, highlightID, profileID
 	if s == nil || s.Pool == nil {
 		return ErrNotImplemented
 	}
-	tag, err := s.Pool.Exec(ctx, `DELETE FROM highlights WHERE id = $1 AND profile_id = $2`, highlightID, profileID)
+	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	if tag.RowsAffected() == 0 {
+	defer func() { _ = tx.Rollback(ctx) }()
+	var owner uuid.UUID
+	if err = tx.QueryRow(ctx, `SELECT profile_id FROM highlights WHERE id=$1 FOR UPDATE`, highlightID).Scan(&owner); errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
+	} else if err != nil {
+		return err
 	}
-	return nil
+	if owner != profileID {
+		return ErrForbidden
+	}
+	rows, err := tx.Query(ctx, `SELECT story_id FROM highlight_stories WHERE highlight_id=$1 ORDER BY story_id FOR UPDATE`, highlightID)
+	if err != nil {
+		return err
+	}
+	var ids []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	for _, id := range ids {
+		if _, err = tx.Exec(ctx, `SELECT 1 FROM stories WHERE id=$1 FOR UPDATE`, id); err != nil {
+			return err
+		}
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM highlights WHERE id=$1`, highlightID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // AddToHighlight links a story to a highlight.
@@ -753,8 +782,13 @@ func (s *StoryStore) AddToHighlight(ctx context.Context, highlightID, profileID,
 	if s == nil || s.Pool == nil {
 		return ErrNotImplemented
 	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
 	var owner uuid.UUID
-	err := s.Pool.QueryRow(ctx, `SELECT profile_id FROM highlights WHERE id = $1`, highlightID).Scan(&owner)
+	err = tx.QueryRow(ctx, `SELECT profile_id FROM highlights WHERE id = $1 FOR UPDATE`, highlightID).Scan(&owner)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -766,10 +800,10 @@ func (s *StoryStore) AddToHighlight(ctx context.Context, highlightID, profileID,
 	}
 	var storyAuthor uuid.UUID
 	var archived bool
-	err = s.Pool.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 SELECT author_profile_id, expired_at IS NOT NULL AND archived_until > now()
 FROM stories
-WHERE id = $1 AND deleted_at IS NULL`, storyID).Scan(&storyAuthor, &archived)
+WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, storyID).Scan(&storyAuthor, &archived)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -782,11 +816,14 @@ WHERE id = $1 AND deleted_at IS NULL`, storyID).Scan(&storyAuthor, &archived)
 	if !archived {
 		return ErrForbidden
 	}
-	_, err = s.Pool.Exec(ctx, `
+	_, err = tx.Exec(ctx, `
 INSERT INTO highlight_stories (highlight_id, story_id, sort_order, added_at)
 VALUES ($1, $2, 0, now())
 ON CONFLICT (highlight_id, story_id) DO NOTHING`, highlightID, storyID)
-	return err
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // RemoveFromHighlight unlinks a story from a highlight.
@@ -794,18 +831,31 @@ func (s *StoryStore) RemoveFromHighlight(ctx context.Context, highlightID, profi
 	if s == nil || s.Pool == nil {
 		return ErrNotImplemented
 	}
-	tag, err := s.Pool.Exec(ctx, `
-DELETE FROM highlight_stories hs
-USING highlights h
-WHERE hs.highlight_id = h.id AND h.id = $1 AND h.profile_id = $2 AND hs.story_id = $3`,
-		highlightID, profileID, storyID)
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var owner uuid.UUID
+	if err = tx.QueryRow(ctx, `SELECT profile_id FROM highlights WHERE id=$1 FOR UPDATE`, highlightID).Scan(&owner); errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	} else if err != nil {
+		return err
+	}
+	if owner != profileID {
+		return ErrForbidden
+	}
+	if _, err = tx.Exec(ctx, `SELECT 1 FROM stories WHERE id=$1 FOR UPDATE`, storyID); err != nil {
+		return err
+	}
+	tag, err := tx.Exec(ctx, `DELETE FROM highlight_stories WHERE highlight_id=$1 AND story_id=$2`, highlightID, storyID)
 	if err != nil {
 		return err
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrNotFound
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
 // GetHighlights lists highlights for profileID.

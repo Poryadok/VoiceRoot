@@ -75,25 +75,35 @@ func StartExpiryWorker(ctx context.Context, st *store.StoryStore, pub storyevent
 	}()
 }
 
-// StartArchivePurgeWorker deletes archived stories past retention daily.
+// StartArchivePurgeWorker stages retention cleanup daily and dispatches durable
+// media deletion work immediately at startup and on a short retry interval.
 func StartArchivePurgeWorker(ctx context.Context, st *store.StoryStore, deleter FileDeleter, logger *slog.Logger) {
 	if st == nil {
 		return
 	}
 	go func() {
-		ticker := time.NewTicker(24 * time.Hour)
-		defer ticker.Stop()
+		purgeTicker := time.NewTicker(24 * time.Hour)
+		dispatchTicker := time.NewTicker(time.Minute)
+		defer purgeTicker.Stop()
+		defer dispatchTicker.Stop()
+		run := func() {
+			n, err := RunArchivePurgeOnce(context.Background(), st, deleter, time.Now().UTC())
+			if err != nil && logger != nil {
+				logger.Error("story archive purge", slog.String("error", err.Error()))
+			} else if n > 0 && logger != nil {
+				logger.Info("story archive purge", slog.Int64("purged", n))
+			}
+		}
+		run()
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-ticker.C:
-				n, err := RunArchivePurgeOnce(context.Background(), st, deleter, time.Now().UTC())
-				if err != nil && logger != nil {
-					logger.Error("story archive purge", slog.String("error", err.Error()))
-				} else if n > 0 && logger != nil {
-					logger.Info("story archive purge", slog.Int64("purged", n))
-				}
+			case <-purgeTicker.C:
+				run()
+			case <-dispatchTicker.C:
+				// RunArchivePurgeOnce also claims expired leases; staging is bounded.
+				run()
 			}
 		}
 	}()
