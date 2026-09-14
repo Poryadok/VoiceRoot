@@ -116,7 +116,7 @@ func TestWorker_TwoCompatibleSoloSessionsMatchFor2SlotGame(t *testing.T) {
 	require.Equal(t, 1, events.matchFound, "mm.match_found must be published once")
 }
 
-func TestWorker_TenCompatibleSoloSessionsMatchForSeeded10SlotGame(t *testing.T) {
+func TestWorker_TenCompatibleSoloSessionsMatchForSeededRoleRequired10SlotGame(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -125,23 +125,20 @@ func TestWorker_TenCompatibleSoloSessionsMatchForSeeded10SlotGame(t *testing.T) 
 	store.ApplyMatchmakingMigrationsForStoreTest(t, ctx, pool)
 
 	games := &store.GameStore{Pool: pool}
-	seeded, err := games.Search(ctx, "counter-strike", 10)
+	seeded, err := games.Search(ctx, "dota", 10)
 	require.NoError(t, err)
 	require.Len(t, seeded, 1)
 	game := seeded[0]
-	require.Equal(t, "Counter-Strike 2", game.Name)
+	require.Equal(t, "Dota 2", game.Name)
 	require.Len(t, game.Config.Modes, 1)
 	mode := game.Config.Modes[0]
 	require.Equal(t, 10, mode.Slots)
-	require.False(t, mode.RolesRequired)
+	require.True(t, mode.RolesRequired)
+	require.Less(t, len(mode.Roles), mode.Slots)
 
 	sessions := &store.SessionStore{Pool: pool}
 	matches := &store.MatchStore{Pool: pool}
 	timeout := time.Now().UTC().Add(30 * time.Minute)
-	crit := criteria.MustMarshal(criteria.SearchCriteria{
-		Region: "eu",
-		Self:   criteria.SelfCriteria{Rank: "Gold"},
-	})
 
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
@@ -154,11 +151,20 @@ func TestWorker_TenCompatibleSoloSessionsMatchForSeeded10SlotGame(t *testing.T) 
 	sessionIDs := make([]uuid.UUID, 0, mode.Slots)
 	now := time.Now().UTC()
 	for i := 0; i < mode.Slots; i++ {
+		crit := criteria.SearchCriteria{
+			Region: "eu",
+			Self: criteria.SelfCriteria{
+				Role: mode.Roles[i%len(mode.Roles)].Name,
+				Rank: "Herald",
+			},
+		}
+		_, err := criteria.Validate(crit, game.Config, mode.Name, 1)
+		require.NoError(t, err)
 		sess, err := sessions.Create(ctx, store.CreateSessionParams{
 			ProfileID: uuid.New(),
 			GameID:    game.ID,
 			Mode:      mode.Name,
-			Criteria:  crit,
+			Criteria:  criteria.MustMarshal(crit),
 			TimeoutAt: timeout,
 		})
 		require.NoError(t, err)

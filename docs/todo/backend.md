@@ -53,7 +53,7 @@
 ### Matchmaking
 
 
-- [ ] **[Matchmaking] Party snapshot из voice roster отсутствует** — `PartyStore` stub; `StartSearch` валидирует `partySize=1`. Нет сброса очереди при leave/join войса (`docs/features/matchmaking.md`). Pairwise `rolesCompatible` уже требует **distinct** roles (`criteria/criteria.go`); live 10-stack matcher + `RolesDistinct` на полном лобби — тонко (нет compose на seeded 10-slot).
+- [ ] **[Matchmaking] Party snapshot из voice roster отсутствует** — `PartyStore` stub; `StartSearch` валидирует `partySize=1`. Нет сброса очереди при leave/join войса (`docs/features/matchmaking.md`). V1 валидирует обязательную self-reported роль по каталогу и допускает повторы; будущая balanced matchmaking функция должна отдельно определить квоты, уникальность и распределение ролей.
 - [x] **[Matchmaking] Platform MM ban fail-closed + S2S** — `StartSearch` / matcher fail-closed when `BanStore` nil (`platform_ban_degradation_test.go`, `worker_ban_degradation_test.go`, **#73**); Moderation `mm_ban` → `ApplyPlatformMMBan` / revoke (`sanctions.go`).
 ### Role
 
