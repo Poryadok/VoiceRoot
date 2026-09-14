@@ -14,25 +14,34 @@ type FileDeleter interface {
 	DeleteFile(ctx context.Context, fileID string) error
 }
 
-// RunArchivePurgeOnce deletes R2 media for purged stories, then removes archived rows.
+// RunArchivePurgeOnce commits logical deletion before any external File call, then
+// dispatches durable media operations. File deletion is at-least-once by file id.
 func RunArchivePurgeOnce(ctx context.Context, st *store.StoryStore, deleter FileDeleter, now time.Time) (int64, error) {
 	if st == nil || st.Pool == nil {
 		return 0, nil
 	}
-	media, err := st.ListArchivedStoriesForPurge(ctx, now)
+	batch, err := st.StageArchivePurgeBatch(ctx, 100)
 	if err != nil {
 		return 0, err
 	}
-	if deleter != nil {
-		for _, row := range media {
-			if row.MediaFileID != nil {
-				if err := deleter.DeleteFile(ctx, row.MediaFileID.String()); err != nil {
-					return 0, err
-				}
-			}
+	if deleter == nil {
+		return batch.Stories, nil
+	}
+	ops, err := st.ClaimMediaDeletion(ctx, 100, time.Minute)
+	if err != nil {
+		return 0, err
+	}
+	for _, op := range ops {
+		if err := deleter.DeleteFile(ctx, op.MediaFileID.String()); err != nil {
+			_, _ = st.FailMediaDeletion(ctx, op.OperationID, op.LeaseToken, err)
+			continue
+		}
+		_, err := st.CompleteMediaDeletion(ctx, op.OperationID, op.LeaseToken)
+		if err != nil {
+			return 0, err
 		}
 	}
-	return st.PurgeArchivedStories(ctx, now)
+	return batch.Stories, nil
 }
 
 // StartExpiryWorker marks stories expired past TTL every minute and publishes story.expired.

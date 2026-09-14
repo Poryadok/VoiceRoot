@@ -30,6 +30,17 @@ type StoryStore struct {
 	Pool *pgxpool.Pool
 }
 
+type ArchivePurgeBatch struct {
+	Stories int64
+}
+
+type MediaDeletionOperation struct {
+	OperationID uuid.UUID
+	StoryID     uuid.UUID
+	MediaFileID uuid.UUID
+	LeaseToken  uuid.UUID
+}
+
 // StoryRow is a persisted story record.
 type StoryRow struct {
 	ID                     uuid.UUID
@@ -842,4 +853,111 @@ func (s *StoryStore) PurgeArchivedStories(ctx context.Context, now time.Time) (i
 		return 0, err
 	}
 	return tag.RowsAffected(), nil
+}
+
+// StageArchivePurgeBatch atomically deletes expired, unhighlighted stories and
+// records any media deletion side effect. File deletion must happen after this commit.
+func (s *StoryStore) StageArchivePurgeBatch(ctx context.Context, limit int) (ArchivePurgeBatch, error) {
+	if s == nil || s.Pool == nil {
+		return ArchivePurgeBatch{}, ErrNotImplemented
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return ArchivePurgeBatch{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	rows, err := tx.Query(ctx, `
+SELECT s.id, s.media_file_id FROM stories s
+WHERE s.expired_at IS NOT NULL AND s.archived_until <= now()
+  AND NOT EXISTS (SELECT 1 FROM highlight_stories hs WHERE hs.story_id=s.id)
+ORDER BY s.archived_until, s.id LIMIT $1 FOR UPDATE OF s SKIP LOCKED`, limit)
+	if err != nil {
+		return ArchivePurgeBatch{}, err
+	}
+	defer rows.Close()
+	type candidate struct {
+		id    uuid.UUID
+		media *uuid.UUID
+	}
+	var cs []candidate
+	for rows.Next() {
+		var c candidate
+		if err := rows.Scan(&c.id, &c.media); err != nil {
+			return ArchivePurgeBatch{}, err
+		}
+		cs = append(cs, c)
+	}
+	if err := rows.Err(); err != nil {
+		return ArchivePurgeBatch{}, err
+	}
+	for _, c := range cs {
+		if c.media != nil {
+			_, err = tx.Exec(ctx, `INSERT INTO story_media_deletion_outbox (operation_id,story_id,media_file_id,available_at,created_at,updated_at) VALUES ($1,$1,$2,now(),now(),now()) ON CONFLICT (operation_id) DO NOTHING`, c.id, *c.media)
+			if err != nil {
+				return ArchivePurgeBatch{}, err
+			}
+		}
+		tag, err := tx.Exec(ctx, `DELETE FROM stories s WHERE s.id=$1 AND s.expired_at IS NOT NULL AND s.archived_until <= now() AND NOT EXISTS (SELECT 1 FROM highlight_stories hs WHERE hs.story_id=s.id)`, c.id)
+		if err != nil {
+			return ArchivePurgeBatch{}, err
+		}
+		if tag.RowsAffected() != 1 {
+			return ArchivePurgeBatch{}, fmt.Errorf("archive purge eligibility changed for %s", c.id)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return ArchivePurgeBatch{}, err
+	}
+	return ArchivePurgeBatch{Stories: int64(len(cs))}, nil
+}
+
+func (s *StoryStore) ClaimMediaDeletion(ctx context.Context, limit int, lease time.Duration) ([]MediaDeletionOperation, error) {
+	if s == nil || s.Pool == nil {
+		return nil, ErrNotImplemented
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	if lease <= 0 {
+		lease = time.Minute
+	}
+	token := uuid.New()
+	rows, err := s.Pool.Query(ctx, `
+WITH candidate AS (SELECT operation_id FROM story_media_deletion_outbox WHERE available_at<=now() AND (lease_until IS NULL OR lease_until<=now()) ORDER BY available_at,operation_id LIMIT $1 FOR UPDATE SKIP LOCKED)
+UPDATE story_media_deletion_outbox o SET lease_token=$2, lease_until=now()+$3::interval, attempt_count=attempt_count+1, updated_at=now() FROM candidate c WHERE o.operation_id=c.operation_id RETURNING o.operation_id,o.story_id,o.media_file_id,o.lease_token`, limit, token, lease.String())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []MediaDeletionOperation
+	for rows.Next() {
+		var o MediaDeletionOperation
+		if err := rows.Scan(&o.OperationID, &o.StoryID, &o.MediaFileID, &o.LeaseToken); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
+}
+
+func (s *StoryStore) CompleteMediaDeletion(ctx context.Context, operationID, token uuid.UUID) (bool, error) {
+	if s == nil || s.Pool == nil {
+		return false, ErrNotImplemented
+	}
+	tag, err := s.Pool.Exec(ctx, `DELETE FROM story_media_deletion_outbox WHERE operation_id=$1 AND lease_token=$2`, operationID, token)
+	return tag.RowsAffected() == 1, err
+}
+func (s *StoryStore) FailMediaDeletion(ctx context.Context, operationID, token uuid.UUID, cause error) (bool, error) {
+	if s == nil || s.Pool == nil {
+		return false, ErrNotImplemented
+	}
+	msg := ""
+	if cause != nil {
+		msg = cause.Error()
+	}
+	tag, err := s.Pool.Exec(ctx, `UPDATE story_media_deletion_outbox SET lease_token=NULL,lease_until=NULL,available_at=now()+interval '1 second',last_error=$3,last_error_at=now(),updated_at=now() WHERE operation_id=$1 AND lease_token=$2`, operationID, token, msg)
+	return tag.RowsAffected() == 1, err
 }
