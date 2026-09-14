@@ -203,8 +203,11 @@ func (s *UserGRPC) presenceForViewerAccount(ctx context.Context, targetAccountID
 // presenceBlockedForViewer makes Social blocks a fail-closed privacy boundary
 // for live presence. AccountPairBlocked itself checks both directions.
 func (s *UserGRPC) presenceBlockedForViewer(ctx context.Context, targetAccountID, targetProfileID uuid.UUID) bool {
-	if isSelfViewer(ctx, targetProfileID) || s.Blocks == nil {
+	if isSelfViewer(ctx, targetProfileID) {
 		return false
+	}
+	if s.Blocks == nil {
+		return true
 	}
 	viewerAccountID, ok := authctx.AccountID(ctx)
 	if !ok {
