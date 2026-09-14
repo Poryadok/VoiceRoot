@@ -72,12 +72,12 @@ func matchTestServer(t *testing.T, pool *pgxpool.Pool, provisioner squadProvisio
 		mr.Close()
 	})
 	return &MatchmakingGRPC{
-		Games:        &store.GameStore{Pool: pool},
-		Sessions:     &store.SessionStore{Pool: pool},
-		Matches:      &store.MatchStore{Pool: pool},
-		Queue:        &queue.RedisQueue{Client: rdb, Prefix: "match-test"},
-		Events:       mmevents.NoopPublisher{},
-		Squad:        provisioner,
+		Games:    &store.GameStore{Pool: pool},
+		Sessions: &store.SessionStore{Pool: pool},
+		Matches:  &store.MatchStore{Pool: pool},
+		Queue:    &queue.RedisQueue{Client: rdb, Prefix: "match-test"},
+		Events:   mmevents.NoopPublisher{},
+		Squad:    provisioner,
 	}
 }
 
@@ -152,6 +152,73 @@ func TestRespondToMatch_AcceptAllActivatesMatch(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "active", got.GetMatch().GetStatus())
 	require.Len(t, got.GetMatch().GetProfileIds(), 2)
+}
+
+func TestRespondToMatch_AcceptRetryBeforeOtherResponsesIsIdempotent(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startDB(t, ctx)
+	srv := matchTestServer(t, pool, &stubSquadProvisioner{})
+	matchID, profileA, _ := seedPendingDuoMatch(t, ctx, srv)
+	req := &matchmakingv1.RespondToMatchRequest{MatchId: matchID, Accept: true}
+
+	first, err := srv.RespondToMatch(ctxWithProfile(profileA), req)
+	require.NoError(t, err)
+	require.Equal(t, store.MatchStatusPendingAccept, first.GetMatch().GetStatus())
+
+	retry, err := srv.RespondToMatch(ctxWithProfile(profileA), req)
+	require.NoError(t, err, "retrying an accepted terminal proposal response must preserve its successful outcome")
+	require.Equal(t, store.MatchStatusPendingAccept, retry.GetMatch().GetStatus())
+	proposal, err := srv.Matches.GetProposalForProfile(ctx, uuid.MustParse(matchID), profileA)
+	require.NoError(t, err)
+	require.Equal(t, store.ProposalResponseAccepted, proposal.Response)
+}
+
+func TestRespondToMatch_AcceptRetryAfterActivationIsIdempotent(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startDB(t, ctx)
+	srv := matchTestServer(t, pool, &stubSquadProvisioner{})
+	matchID, profileA, profileB := seedPendingDuoMatch(t, ctx, srv)
+	req := &matchmakingv1.RespondToMatchRequest{MatchId: matchID, Accept: true}
+
+	first, err := srv.RespondToMatch(ctxWithProfile(profileA), req)
+	require.NoError(t, err)
+	_, err = srv.RespondToMatch(ctxWithProfile(profileB), req)
+	require.NoError(t, err)
+
+	retry, err := srv.RespondToMatch(ctxWithProfile(profileA), req)
+	require.NoError(t, err, "retrying an accepted response after activation must preserve its successful outcome")
+	require.Equal(t, store.MatchStatusActive, retry.GetMatch().GetStatus())
+
+	match, err := srv.Matches.Get(ctx, uuid.MustParse(matchID))
+	require.NoError(t, err)
+	require.Equal(t, store.MatchStatusActive, match.Status)
+	session, err := srv.Sessions.Get(ctx, uuid.MustParse(first.GetSearchSession().GetId()))
+	require.NoError(t, err)
+	require.Equal(t, store.SessionStatusMatched, session.Status)
+}
+
+func TestRespondToMatch_DeclineAfterActivationIsRejected(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startDB(t, ctx)
+	srv := matchTestServer(t, pool, &stubSquadProvisioner{})
+	matchID, profileA, profileB := seedPendingDuoMatch(t, ctx, srv)
+
+	_, err := srv.RespondToMatch(ctxWithProfile(profileA), &matchmakingv1.RespondToMatchRequest{MatchId: matchID, Accept: true})
+	require.NoError(t, err)
+	_, err = srv.RespondToMatch(ctxWithProfile(profileB), &matchmakingv1.RespondToMatchRequest{MatchId: matchID, Accept: true})
+	require.NoError(t, err)
+
+	_, err = srv.RespondToMatch(ctxWithProfile(profileA), &matchmakingv1.RespondToMatchRequest{MatchId: matchID, Accept: false})
+	require.Equal(t, codes.FailedPrecondition, status.Code(err), "only an accepted response can be retried after activation")
 }
 
 func TestRespondToMatch_ProvisionErrorUnavailableIncludesCause(t *testing.T) {

@@ -40,7 +40,7 @@ func (s *MatchmakingGRPC) CompleteMatch(ctx context.Context, req *matchmakingv1.
 		return nil, status.Error(codes.PermissionDenied, "not a match participant")
 	}
 
-	updated, err := s.Matches.CompleteMatchLeave(ctx, matchID, profileID)
+	updated, completedNow, err := s.Matches.CompleteMatchLeaveWithTransition(ctx, matchID, profileID)
 	if errors.Is(err, store.ErrNotMatchParticipant) {
 		return nil, status.Error(codes.PermissionDenied, "not a match participant")
 	}
@@ -51,7 +51,7 @@ func (s *MatchmakingGRPC) CompleteMatch(ctx context.Context, req *matchmakingv1.
 		return nil, status.Errorf(codes.Internal, "complete match: %v", err)
 	}
 
-	if updated.Status == store.MatchStatusCompleted && before.Status != store.MatchStatusCompleted && s.Events != nil {
+	if completedNow && s.Events != nil {
 		duration := int64(0)
 		if updated.CompletedAt != nil {
 			duration = int64(updated.CompletedAt.Sub(updated.CreatedAt).Seconds())
@@ -105,7 +105,14 @@ func (s *MatchmakingGRPC) RateMatch(ctx context.Context, req *matchmakingv1.Rate
 	if !matchHasProfile(match, ratedID) {
 		return nil, status.Error(codes.InvalidArgument, "rated user not in match")
 	}
-	if match.Status != store.MatchStatusCompleted {
+	// The rating overlay is shown when this participant leaves the squad
+	// (docs/features/matchmaking.md).  The final participant's leave changes
+	// the match to completed, while earlier leavers may rate immediately after
+	// their own recorded departure.
+	if match.Status == store.MatchStatusActive && !match.HasLeft(raterID) {
+		return nil, status.Error(codes.FailedPrecondition, "participant has not left match")
+	}
+	if match.Status != store.MatchStatusActive && match.Status != store.MatchStatusCompleted {
 		return nil, status.Error(codes.FailedPrecondition, "match not completed")
 	}
 	if req.GetSkip() {
@@ -139,10 +146,10 @@ func (s *MatchmakingGRPC) RateMatch(ctx context.Context, req *matchmakingv1.Rate
 
 	if s.Events != nil {
 		_ = s.Events.PublishRatingSubmitted(ctx, mmevents.RatingSubmittedEvent{
-			MatchID:         matchID.String(),
-			RaterProfileID:  raterID.String(),
-			RatedProfileID:  ratedID.String(),
-			Stars:           int32(stars),
+			MatchID:        matchID.String(),
+			RaterProfileID: raterID.String(),
+			RatedProfileID: ratedID.String(),
+			Stars:          int32(stars),
 		})
 	}
 
@@ -171,10 +178,10 @@ func (s *MatchmakingGRPC) GetPlayerRating(ctx context.Context, req *matchmakingv
 	}
 	return &matchmakingv1.GetPlayerRatingResponse{
 		PlayerRating: &matchmakingv1.PlayerRating{
-			ProfileId:    pr.ProfileID.String(),
-			GameId:       pr.GameID.String(),
-			RatingValue:  pr.RatingValue,
-			GamesPlayed:  pr.GamesPlayed,
+			ProfileId:   pr.ProfileID.String(),
+			GameId:      pr.GameID.String(),
+			RatingValue: pr.RatingValue,
+			GamesPlayed: pr.GamesPlayed,
 		},
 	}, nil
 }

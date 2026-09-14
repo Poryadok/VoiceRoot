@@ -2,6 +2,7 @@ package grpcsvc
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,6 +22,25 @@ import (
 type recordingPlayerBannedPublisher struct {
 	mmevents.NoopPublisher
 	events []mmevents.PlayerBannedEvent
+}
+
+type recordingMatchCompletedPublisher struct {
+	mmevents.NoopPublisher
+	mu     sync.Mutex
+	events []mmevents.MatchCompletedEvent
+}
+
+func (p *recordingMatchCompletedPublisher) PublishMatchCompleted(_ context.Context, event mmevents.MatchCompletedEvent) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.events = append(p.events, event)
+	return nil
+}
+
+func (p *recordingMatchCompletedPublisher) Events() []mmevents.MatchCompletedEvent {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]mmevents.MatchCompletedEvent(nil), p.events...)
 }
 
 func (p *recordingPlayerBannedPublisher) PublishPlayerBanned(_ context.Context, event mmevents.PlayerBannedEvent) error {
@@ -120,6 +140,66 @@ func TestCompleteMatch_AllLeftSetsCompleted(t *testing.T) {
 	require.Equal(t, "completed", resp.GetMatch().GetStatus())
 }
 
+func TestCompleteMatch_ConcurrentFinalRetryPublishesOnce(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startDB(t, ctx)
+	srv := ratingTestServer(t, pool)
+	publisher := &recordingMatchCompletedPublisher{}
+	srv.Events = publisher
+	matchID, profileA, profileB := activateDuoMatchViaGRPC(t, ctx, srv)
+
+	_, err := srv.CompleteMatch(ctxWithProfile(profileA), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	require.NoError(t, err)
+
+	conn, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer conn.Release()
+	tx, err := conn.Begin(ctx)
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx, "SELECT 1 FROM matches WHERE id = $1 FOR UPDATE", matchID)
+	require.NoError(t, err)
+
+	start := make(chan struct{})
+	errs := make(chan error, 2)
+	request := &matchmakingv1.CompleteMatchRequest{MatchId: matchID}
+	for range 2 {
+		go func() {
+			<-start
+			_, callErr := srv.CompleteMatch(ctxWithProfile(profileB), request)
+			errs <- callErr
+		}()
+	}
+	close(start)
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		var waiting int
+		err = pool.QueryRow(ctx, `
+			SELECT COUNT(*)
+			FROM pg_stat_activity
+			WHERE datname = current_database()
+			  AND wait_event_type = 'Lock'
+			  AND query LIKE '%FOR UPDATE%'
+		`).Scan(&waiting)
+		require.NoError(t, err)
+		if waiting >= 2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("both final retries did not reach the match row lock")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	require.NoError(t, tx.Commit(ctx))
+
+	require.NoError(t, <-errs)
+	require.NoError(t, <-errs)
+	require.Len(t, publisher.Events(), 1, "duplicate final CompleteMatch retries must emit mm.match_completed once")
+}
+
 func TestRateMatch_PersistsStarsForTeammate(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
@@ -140,6 +220,40 @@ func TestRateMatch_PersistsStarsForTeammate(t *testing.T) {
 		Stars:          5,
 	})
 	require.NoError(t, err)
+}
+
+func TestRateMatch_AllowsParticipantToRateAfterTheirOwnLeave(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startDB(t, ctx)
+	srv := ratingTestServer(t, pool)
+	matchID, profileA, profileB := activateDuoMatchViaGRPC(t, ctx, srv)
+
+	left, err := srv.CompleteMatch(ctxWithProfile(profileA), &matchmakingv1.CompleteMatchRequest{
+		MatchId: matchID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, store.MatchStatusActive, left.GetMatch().GetStatus())
+
+	_, err = srv.RateMatch(ctxWithProfile(profileA), &matchmakingv1.RateMatchRequest{
+		MatchId:        matchID,
+		RatedProfileId: profileB.String(),
+		Stars:          5,
+	})
+	require.NoError(t, err, "a participant must be able to rate teammates when they leave the squad")
+
+	var ratingRows, totalRatings int
+	require.NoError(t, pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM match_ratings
+		WHERE match_id = $1 AND rater_profile_id = $2 AND rated_profile_id = $3
+	`, matchID, profileA, profileB).Scan(&ratingRows))
+	require.Equal(t, 1, ratingRows)
+	require.NoError(t, pool.QueryRow(ctx, `
+		SELECT total_ratings_received FROM player_ratings WHERE profile_id = $1
+	`, profileB).Scan(&totalRatings))
+	require.Equal(t, 1, totalRatings)
 }
 
 func TestRateMatch_DuplicateRejected(t *testing.T) {
