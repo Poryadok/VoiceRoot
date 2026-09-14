@@ -80,6 +80,12 @@ Subject pattern и матрица streams — [CONTRACT_MATRIX.md](../CONTRACT_M
 | **Search** | Queries/day, zero-result rate, avg click position |
 | **Voice** | Concurrent calls, avg duration, screen shares, codec mix |
 
+The Search and Voice rows are named product targets, not a complete Query API
+contract. Their formulas, point types, filters, privacy-safe source facts and
+raw-TTL behavior remain blocked by the
+[Search/Voice dashboard RED contract](../testing/analytics-search-voice-dashboard-contract.md);
+the backend must not substitute convenient event counters for these metrics.
+
 Grafana: `voice-analytics-*.json` в [`deploy/observability/grafana/`](../../deploy/observability/grafana/). Admin UI дублирует ключевые product-панели через REST.
 
 ---

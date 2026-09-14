@@ -136,6 +136,14 @@ GROUP BY date, event_type;
 | Search     | Queries/day, zero-result rate, avg result click position                     |
 | Voice      | Concurrent calls, avg call duration, screen shares, codec distribution       |
 
+`Search` and `Voice` in this table are target product panels. They are not yet
+supported `dashboard_type` values and the metric labels alone do not define a
+backend contract. Required point/time/filter semantics, source facts, privacy
+rules and retention behavior are tracked in the
+[Search/Voice dashboard RED contract](../testing/analytics-search-voice-dashboard-contract.md).
+No query implementation may infer codec usage from configuration, zero search
+results from message-only hits, or concurrency/duration from coarse event counts.
+
 ## Публикуемые события
 
 Analytics Service — чистый consumer, не публикует события в NATS.
