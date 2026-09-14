@@ -283,7 +283,7 @@ describe('App bot registration and selection', () => {
     expect(document.activeElement).toBe(opener);
   });
 
-  it('keeps focus and destructive background actions out of the one-shot-secret dialog', async () => {
+  it('makes the whole portal background inaccessible while the one-shot-secret dialog is open', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
@@ -303,15 +303,17 @@ describe('App bot registration and selection', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Revoke & regenerate bot token' }));
     const dialog = await screen.findByRole('dialog', { name: 'Copy one-shot secrets' });
     const copyButton = within(dialog).getByRole('button', { name: 'Copy bot token' });
-    const rotateWebhookSecret = screen.getByRole('button', { name: 'Rotate webhook secret' });
+    const portalBackground = screen.getByRole('main');
+
+    expect(portalBackground).toHaveAttribute('inert');
+    expect(portalBackground).toHaveAttribute('aria-hidden', 'true');
+    expect(portalBackground).not.toContainElement(dialog);
+    expect(screen.queryByRole('button', { name: 'Rotate webhook secret' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
 
     copyButton.focus();
     fireEvent.keyDown(copyButton, { key: 'Tab', shiftKey: true });
     expect(document.activeElement).toBe(within(dialog).getByRole('button', { name: 'Close and clear' }));
-
-    fireEvent.click(rotateWebhookSecret);
-
-    expect(document.activeElement).not.toBe(rotateWebhookSecret);
     expect(fetchMock).toHaveBeenCalledTimes(5);
     expect(screen.getByRole('dialog', { name: 'Copy one-shot secrets' })).toHaveTextContent('background-token');
   });
