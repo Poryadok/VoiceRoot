@@ -289,6 +289,57 @@ describe('App bot registration and selection', () => {
     expect(document.activeElement).toBe(opener);
   });
 
+  it('keeps focus in the dialog after copying one of two secrets, then traps Tab and Escape clears the remaining secret', async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ bot_list: { bots: [] } }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          bot: { id: BOT_A, name: 'Partial copy Bot' },
+          token_response: { token: 'partial-copy-token' },
+          webhook_secret_response: { webhook_secret: 'partial-copy-webhook-secret' },
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ bot_list: { bots: [{ id: BOT_A, name: 'Partial copy Bot' }] } }))
+      .mockResolvedValueOnce(botDetailResponse(BOT_A, 'Partial copy Bot', '[]'))
+      .mockResolvedValueOnce(jsonResponse({ command_list: { commands_json: '[]' } }))
+      .mockResolvedValueOnce(jsonResponse({ manifest_yaml: '' }))
+      .mockResolvedValueOnce(jsonResponse({ command_list: { commands_json: '[]' } }))
+      .mockResolvedValueOnce(jsonResponse({ manifest_yaml: '' }));
+
+    setupLoggedIn(fetchMock);
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByTestId('bot-register')).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText('Bot name'), { target: { value: 'Partial copy Bot' } });
+    await user.click(screen.getByRole('button', { name: 'Register bot' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Copy one-shot secrets' });
+    await user.click(within(dialog).getByRole('button', { name: 'Copy bot token' }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('partial-copy-token'));
+    const remainingCopy = within(dialog).getByRole('button', { name: 'Copy webhook secret' });
+    const close = within(dialog).getByRole('button', { name: 'Close and clear' });
+    await waitFor(() => expect(document.activeElement).toBe(remainingCopy));
+
+    await user.tab();
+    expect(document.activeElement).toBe(close);
+    await user.tab();
+    expect(document.activeElement).toBe(remainingCopy);
+    await user.tab({ shift: true });
+    expect(document.activeElement).toBe(close);
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Copy one-shot secrets' })).not.toBeInTheDocument());
+    expect(screen.queryByText('partial-copy-webhook-secret')).not.toBeInTheDocument();
+  });
+
   it('makes the whole portal background inaccessible while the one-shot-secret dialog is open', async () => {
     const user = userEvent.setup();
     const fetchMock = vi
@@ -355,7 +406,10 @@ describe('App bot registration and selection', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Register bot' }));
 
     await screen.findByRole('dialog', { name: 'Copy one-shot secrets' });
-    fireEvent.click(screen.getByRole('button', { name: 'Sign out', hidden: true }));
+    const portalBackground = screen.getByRole('main', { hidden: true });
+    const signOutButton = screen.getByRole('button', { name: 'Sign out' });
+    expect(portalBackground).not.toContainElement(signOutButton);
+    fireEvent.click(signOutButton);
 
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Copy one-shot secrets' })).not.toBeInTheDocument());
     expect(screen.queryByText('logout-token')).not.toBeInTheDocument();
@@ -391,7 +445,7 @@ describe('App bot registration and selection', () => {
 
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('clipboard-token'));
     await waitFor(() => expect(dialog).toHaveTextContent('clipboard-token'));
-    expect(screen.getByRole('status')).toHaveTextContent('Could not copy the secret; it remains visible until copied or dismissed.');
+    expect(within(dialog).getByRole('status')).toHaveTextContent('Could not copy the secret; it remains visible until copied or dismissed.');
   });
 
   it('keeps a one-shot secret visible and explains when Clipboard API is unavailable', async () => {
