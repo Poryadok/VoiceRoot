@@ -40,7 +40,7 @@ func (s *UserGRPC) UpdatePresence(ctx context.Context, req *userv1.UpdatePresenc
 	in := store.PresenceUpsert{
 		Status:       st,
 		StatusEnum:   enum,
-		GameTitle:    req.GetGameTitle(),
+		GameTitle:    strings.TrimSpace(req.GetGameTitle()),
 		CustomStatus: req.GetCustomStatus(),
 		CallInfoJSON: req.GetCallInfoJson(),
 		Now:          time.Now().UTC(),
@@ -53,7 +53,18 @@ func (s *UserGRPC) UpdatePresence(ctx context.Context, req *userv1.UpdatePresenc
 	if publish && s.Events != nil {
 		_ = s.Events.PublishPresenceChanged(ctx, profileID.String(), oldStatus, newStatus)
 	}
+	if shouldPublishGameDetected(previous, in.GameTitle) && s.Events != nil {
+		_ = s.Events.PublishGameDetected(ctx, profileID.String(), in.GameTitle)
+	}
 	return &userv1.UpdatePresenceResponse{}, nil
+}
+
+func shouldPublishGameDetected(previous *store.PresenceSnapshot, gameTitle string) bool {
+	gameTitle = strings.TrimSpace(gameTitle)
+	if gameTitle == "" {
+		return false
+	}
+	return previous == nil || strings.TrimSpace(previous.GameTitle) != gameTitle
 }
 
 func presenceTransitionForSnapshot(previous *store.PresenceSnapshot, newStatus string, newEnum int32) (oldStatus, currentStatus string, publish bool) {

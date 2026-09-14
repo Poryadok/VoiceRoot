@@ -46,7 +46,7 @@ func TestHighlight_updateDeleteRemove(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
-	client, _, cleanup := startStoryGRPC(t)
+	client, st, cleanup := startStoryGRPC(t)
 	defer cleanup()
 
 	profile := uuid.New()
@@ -67,6 +67,7 @@ func TestHighlight_updateDeleteRemove(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, "B", updated.GetHighlight().GetName())
+	expireStoryForHighlight(t, st, created.GetStory().GetId())
 
 	_, err = client.AddToHighlight(ctx, &storyv1.AddToHighlightRequest{
 		HighlightId: hl.GetHighlight().GetId(),
