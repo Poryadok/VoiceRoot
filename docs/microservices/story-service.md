@@ -164,4 +164,3 @@ highlight_stories
 - **Matchmaking Service** — (через NATS, **deferred**) автоматическая заявка "ищу пати" из `story.lfp_created`
 - **Notification Service** — (через NATS) уведомления об упоминаниях
 - **Subscription Service** — проверка Premium (анонимный просмотр)
-
