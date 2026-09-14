@@ -1067,7 +1067,12 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         bytes: uploadBytes,
       );
       if (!mounted || _isDmPeerDeleted()) return;
-      if (confirmed is! FilesApiOk<FileMetadataData>) return;
+      if (confirmed is! FilesApiOk<FileMetadataData>) {
+        if (confirmed is FilesApiFailure) {
+          _showAttachmentConfirmFailure(confirmed, imagesOnly: imagesOnly);
+        }
+        return;
+      }
       final metadata = confirmed.data;
       final err = await ref
           .read(chatRoomControllerProvider(widget.chatId).notifier)
@@ -1097,6 +1102,28 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
 
   bool _isDmPeerDeleted() =>
       ref.read(chatRoomControllerProvider(widget.chatId)).isDmPeerDeleted;
+
+  void _showAttachmentConfirmFailure(
+    FilesApiFailure failure, {
+    required bool imagesOnly,
+  }) {
+    if (!mounted) return;
+    final l10n = AppLocalizations.of(context)!;
+    final message = switch (failure.errorCode) {
+      'file_infected' => l10n.chatAttachmentBlocked,
+      'file_scan_failed' => l10n.chatAttachmentScanFailed,
+      _ => l10n.chatAttachmentUploadFailed,
+    };
+    final action = SnackBarAction(
+      label: failure.errorCode == 'file_infected'
+          ? l10n.chatAttachmentPickAnother
+          : l10n.commonRetry,
+      onPressed: () => unawaited(_attachAndSend(imagesOnly: imagesOnly)),
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), action: action),
+    );
+  }
 
   Future<void> _showMessageActions(VoiceMessage message, bool isMine) async {
     String? spaceId;

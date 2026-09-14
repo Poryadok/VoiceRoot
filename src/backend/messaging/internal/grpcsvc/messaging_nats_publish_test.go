@@ -26,7 +26,7 @@ const contractMessageSentSubject = "message.sent"
 type spyMessageEvents struct {
 	mu        sync.Mutex
 	sent      [][4]string // message_id, chat_id, sender_profile_id, has_mentions
-	mentions  [][4]string // message_id, chat_id, sender_profile_id, mentioned_ids_csv
+	mentions  [][5]string // message_id, chat_id, sender_profile_id, mentioned_ids_csv, send_silent
 	edited    [][2]string
 	deleted   [][2]string
 	read      [][3]string // message_id, chat_id, profile_id
@@ -44,10 +44,14 @@ func (s *spyMessageEvents) PublishMessageSent(_ context.Context, messageID, chat
 	return nil
 }
 
-func (s *spyMessageEvents) PublishMentionAdded(_ context.Context, messageID, chatID, senderProfileID string, mentionedProfileIDs []string) error {
+func (s *spyMessageEvents) PublishMentionAdded(_ context.Context, messageID, chatID, senderProfileID string, mentionedProfileIDs []string, sendSilent bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.mentions = append(s.mentions, [4]string{messageID, chatID, senderProfileID, strings.Join(mentionedProfileIDs, ",")})
+	flag := "false"
+	if sendSilent {
+		flag = "true"
+	}
+	s.mentions = append(s.mentions, [5]string{messageID, chatID, senderProfileID, strings.Join(mentionedProfileIDs, ","), flag})
 	return nil
 }
 
@@ -112,10 +116,10 @@ func (s *spyMessageEvents) reset() {
 	s.forwarded = nil
 }
 
-func (s *spyMessageEvents) snapshot() (sent [][4]string, mentions [][4]string, edited [][2]string, deleted [][2]string, read [][3]string) {
+func (s *spyMessageEvents) snapshot() (sent [][4]string, mentions [][5]string, edited [][2]string, deleted [][2]string, read [][3]string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return append([][4]string(nil), s.sent...), append([][4]string(nil), s.mentions...), append([][2]string(nil), s.edited...), append([][2]string(nil), s.deleted...), append([][3]string(nil), s.read...)
+	return append([][4]string(nil), s.sent...), append([][5]string(nil), s.mentions...), append([][2]string(nil), s.edited...), append([][2]string(nil), s.deleted...), append([][3]string(nil), s.read...)
 }
 
 func startMessagingJSTestServer(t *testing.T) *server.Server {

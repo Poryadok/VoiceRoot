@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -25,34 +24,11 @@ func userConsumerDurableName(instanceID string) string {
 	return "rt_" + strings.ReplaceAll(id, "-", "") + "_user"
 }
 
-// presenceWireForObservers maps stored presence to what peers should see (presence.md invisible).
-func presenceWireForObservers(status, customStatus string) (wireStatus, wireCustom string) {
-	st := strings.TrimSpace(strings.ToLower(status))
-	if st == "invisible" {
-		return "", ""
-	}
-	return status, customStatus
-}
-
-func presenceChangeFanoutPayload(profileID, status, customStatus string) (json.RawMessage, error) {
-	wireStatus, wireCustom := presenceWireForObservers(status, customStatus)
-	return json.Marshal(map[string]any{
-		"profile_id":    profileID,
-		"status":        wireStatus,
-		"custom_status": wireCustom,
-	})
-}
-
-func dispatchPresenceChangeToFriends(hub *wsHub, friends friendLister, profileID, status string, logger *slog.Logger, requestID string) {
+func dispatchPresenceChangeToFriends(hub *wsHub, friends friendLister, viewer presenceViewer, profileID, status string, logger *slog.Logger, requestID string) {
 	if hub == nil || strings.TrimSpace(profileID) == "" {
 		return
 	}
-	d, err := presenceChangeFanoutPayload(profileID, status, "")
-	if err != nil {
-		return
-	}
-	env := fanoutEnvelope{Op: "presence_update", D: d}
-	if friends == nil {
+	if friends == nil || viewer == nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -67,12 +43,14 @@ func dispatchPresenceChangeToFriends(hub *wsHub, friends friendLister, profileID
 		}
 		return
 	}
+	friendIDs := make([]string, 0, len(ids))
 	for _, friendID := range ids {
 		if friendID == "" || friendID == profileID {
 			continue
 		}
-		hub.broadcastToProfile(friendID, env, logger, requestID)
+		friendIDs = append(friendIDs, friendID)
 	}
+	hub.broadcastPresenceToProfiles(friendIDs, viewer, profileID, status, "", logger, requestID)
 }
 
 func userEventBytesToPresence(data []byte) (profileID, status string, ok bool) {
@@ -102,7 +80,7 @@ func userEventLogAttrs(data []byte) []slog.Attr {
 	return attrs
 }
 
-func subscribeUserEvents(js nats.JetStreamContext, hub *wsHub, friends friendLister, instanceID string, logger *slog.Logger) (*nats.Subscription, error) {
+func subscribeUserEvents(js nats.JetStreamContext, hub *wsHub, friends friendLister, viewer presenceViewer, instanceID string, logger *slog.Logger) (*nats.Subscription, error) {
 	durable := userConsumerDurableName(instanceID)
 	handler := func(msg *nats.Msg) {
 		attrs := userEventLogAttrs(msg.Data)
@@ -115,7 +93,7 @@ func subscribeUserEvents(js nats.JetStreamContext, hub *wsHub, friends friendLis
 			return
 		}
 		natslog.LogConsume(logger, msg, slog.LevelInfo, "user presence event consumed", attrs...)
-		dispatchPresenceChangeToFriends(hub, friends, profileID, status, logger, natslog.RequestIDFromMsg(msg))
+		dispatchPresenceChangeToFriends(hub, friends, viewer, profileID, status, logger, natslog.RequestIDFromMsg(msg))
 	}
 	sub, err := js.Subscribe("user.presence_changed", handler,
 		nats.Durable(durable),
@@ -131,7 +109,7 @@ func subscribeUserEvents(js nats.JetStreamContext, hub *wsHub, friends friendLis
 	return sub, nil
 }
 
-func runUserEventsConsumer(ctx context.Context, hub *wsHub, friends friendLister, natsURL, instanceID string, logger *slog.Logger) error {
+func runUserEventsConsumer(ctx context.Context, hub *wsHub, friends friendLister, viewer presenceViewer, natsURL, instanceID string, logger *slog.Logger) error {
 	if hub == nil || strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("user events consumer: missing hub or NATS URL")
 	}
@@ -147,7 +125,7 @@ func runUserEventsConsumer(ctx context.Context, hub *wsHub, friends friendLister
 	}
 
 	sub, err := subscribeJetStreamWithRetry(ctx, "realtime user.events", func() (*nats.Subscription, error) {
-		return subscribeUserEvents(js, hub, friends, instanceID, logger)
+		return subscribeUserEvents(js, hub, friends, viewer, instanceID, logger)
 	})
 	if err != nil {
 		return err

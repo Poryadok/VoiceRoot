@@ -33,6 +33,13 @@ func TestReportListCursor_empty(t *testing.T) {
 func TestReportListCursor_invalid(t *testing.T) {
 	t.Parallel()
 
-	_, _, _, err := decodeReportListCursor("not-a-cursor")
-	require.ErrorIs(t, err, ErrInvalidReportListCursor)
+	for _, cursor := range []string{
+		"not-a-cursor",
+		encodeReportListCursor(0, time.Now().UTC(), uuid.New()),
+		encodeReportListCursor(5, time.Now().UTC(), uuid.New()),
+		encodeReportListCursor(1, time.Now().UTC(), uuid.Nil),
+	} {
+		_, _, _, err := decodeReportListCursor(cursor)
+		require.ErrorIs(t, err, ErrInvalidReportListCursor)
+	}
 }
