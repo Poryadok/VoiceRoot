@@ -23,11 +23,71 @@ func (s mmRatingPrivacyStub) ShowMmRatingAudience(context.Context, uuid.UUID) (p
 	return s.audience, nil
 }
 
+type mmRatingFriendsStub struct {
+	friends bool
+}
+
+func (s mmRatingFriendsStub) AreFriends(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return s.friends, nil
+}
+
+func (s mmRatingFriendsStub) AreFriendsOfFriends(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return false, nil
+}
+
+type mmRatingSpaceStub struct {
+	coMembers bool
+}
+
+func (s mmRatingSpaceStub) AreCoMembers(context.Context, uuid.UUID, uuid.UUID, []string) (bool, error) {
+	return s.coMembers, nil
+}
+
 func ctxWithGuestProfile(profileID uuid.UUID) context.Context {
 	return metadata.NewIncomingContext(context.Background(), metadata.Pairs(
 		"x-voice-profile-id", profileID.String(),
 		"x-voice-account-type", "guest",
 	))
+}
+
+func TestEnsureMmRatingVisible_ConfiguredDependenciesFilterUnauthorizedViewer(t *testing.T) {
+	t.Parallel()
+
+	owner := uuid.New()
+	viewer := uuid.New()
+	ctx := ctxWithProfile(viewer)
+
+	for _, tc := range []struct {
+		name string
+		srv  *MatchmakingGRPC
+	}{
+		{
+			name: "friends audience denies non-friend",
+			srv: &MatchmakingGRPC{
+				RatingPrivacy: mmRatingPrivacyStub{audience: privacy.FriendsOnly()},
+				RatingFriends: mmRatingFriendsStub{friends: false},
+			},
+		},
+		{
+			name: "space-members audience denies non-member",
+			srv: &MatchmakingGRPC{
+				RatingPrivacy:           mmRatingPrivacyStub{audience: privacy.SpaceMembersOnly()},
+				RatingSpaceCoMembership: mmRatingSpaceStub{coMembers: false},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.srv.ensureMmRatingVisible(ctx, owner)
+			require.Equal(t, codes.PermissionDenied, status.Code(err))
+		})
+	}
+}
+
+func TestEnsureMmRatingVisible_WithoutUserDependencyKeepsDegradedPassthrough(t *testing.T) {
+	t.Parallel()
+
+	err := (&MatchmakingGRPC{}).ensureMmRatingVisible(ctxWithProfile(uuid.New()), uuid.New())
+	require.NoError(t, err)
 }
 
 func TestGetPlayerRating_GuestViewerDeniedWhenGuestAudienceExcluded(t *testing.T) {
