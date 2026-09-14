@@ -23,6 +23,7 @@ for service in social user space; do
 done
 # Service images run as UID 65532; private files stay 0600 and service-scoped.
 # No CA private key is stored in a mounted volume.
+rm -f /tmp/ca.key
 chown -R 65532:65532 /signing /social /user /space
 chmod 700 /signing /social /user /space
 chmod 644 /ca/ca.crt
