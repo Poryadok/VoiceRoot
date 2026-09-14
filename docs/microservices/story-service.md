@@ -168,9 +168,25 @@ story_media_deletion_outbox
 
 ## Зависимости
 
-- **File Service** — хранение медиа сторис
+- **File Service** — хранение медиа сторис и protected `ValidateStoryMedia`
 - **User Service** — настройки приватности (кто видит сторис)
 - **Social Service** — список друзей для фильтрации видимости
 - **Matchmaking Service** — (через NATS, **deferred**) автоматическая заявка "ищу пати" из `story.lfp_created`
 - **Notification Service** — (через NATS) уведомления об упоминаниях
 - **Subscription Service** — проверка Premium (анонимный просмотр)
+
+## Story media admission (contract; implementation pending)
+
+`CreateStory` has a closed type set: `photo`, `video`, `text`. Photo/video
+require one valid media UUID and must obtain File's protected empty-success
+attestation; text forbids media and does not call File. Story must create a new
+outgoing Phase-0 context with only its service credential and request ID, and
+must not forward Gateway/client identity metadata or use `GetFileMetadata`.
+Downstream credential, transport, deadline and dependency failures map to a
+non-sensitive `Unavailable`; File's `InvalidArgument`, `NotFound`,
+`PermissionDenied` and `FailedPrecondition` remain public operation codes.
+
+Until the product canon selects an LFP media kind and video policy, media-less
+LFP remains supported and any non-empty LFP `media_file_id` fails closed with
+`FailedPrecondition` before File, persistence or an event. Exact Story-ID
+claim/reference binding remains separate File-reference work.

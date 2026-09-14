@@ -152,6 +152,39 @@ final $typed_data.Uint8List fileReferenceProducerIdDescriptor = $convert.base64D
     'RklMRV9SRUZFUkVOQ0VfUFJPRFVDRVJfSURfQ0hBVBACEigKJEZJTEVfUkVGRVJFTkNFX1BST0'
     'RVQ0VSX0lEX01FU1NBR0lORxAD');
 
+@$core.Deprecated('Use validateStoryMediaRequestDescriptor instead')
+const ValidateStoryMediaRequest$json = {
+  '1': 'ValidateStoryMediaRequest',
+  '2': [
+    {'1': 'file_id', '3': 1, '4': 1, '5': 9, '10': 'fileId'},
+    {'1': 'author_profile_id', '3': 2, '4': 1, '5': 9, '10': 'authorProfileId'},
+    {
+      '1': 'expected_story_type',
+      '3': 3,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.story.v1.StoryMediaType',
+      '10': 'expectedStoryType'
+    },
+  ],
+};
+
+/// Descriptor for `ValidateStoryMediaRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List validateStoryMediaRequestDescriptor = $convert.base64Decode(
+    'ChlWYWxpZGF0ZVN0b3J5TWVkaWFSZXF1ZXN0EhcKB2ZpbGVfaWQYASABKAlSBmZpbGVJZBIqCh'
+    'FhdXRob3JfcHJvZmlsZV9pZBgCIAEoCVIPYXV0aG9yUHJvZmlsZUlkEk4KE2V4cGVjdGVkX3N0'
+    'b3J5X3R5cGUYAyABKA4yHi52b2ljZS5zdG9yeS52MS5TdG9yeU1lZGlhVHlwZVIRZXhwZWN0ZW'
+    'RTdG9yeVR5cGU=');
+
+@$core.Deprecated('Use validateStoryMediaResponseDescriptor instead')
+const ValidateStoryMediaResponse$json = {
+  '1': 'ValidateStoryMediaResponse',
+};
+
+/// Descriptor for `ValidateStoryMediaResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List validateStoryMediaResponseDescriptor =
+    $convert.base64Decode('ChpWYWxpZGF0ZVN0b3J5TWVkaWFSZXNwb25zZQ==');
+
 @$core.Deprecated('Use requestUploadRequestDescriptor instead')
 const RequestUploadRequest$json = {
   '1': 'RequestUploadRequest',

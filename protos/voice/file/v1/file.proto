@@ -43,6 +43,8 @@ enum FileScanOutcome {
 
 // Uploads, R2, scanning. HTTP: /api/v1/files/**.
 service FileService {
+  // @voice.security=protected;callers=service:story
+  rpc ValidateStoryMedia(ValidateStoryMediaRequest) returns (ValidateStoryMediaResponse);
   rpc RequestUpload(RequestUploadRequest) returns (RequestUploadResponse);
   rpc ConfirmUpload(ConfirmUploadRequest) returns (ConfirmUploadResponse);
   // @voice.security=public_gateway;callers=service:gateway
@@ -84,6 +86,15 @@ service FileService {
   // @voice.security=protected;callers=service:space
   rpc GetSpacePurgeReceipt(voice.file.v1.GetSpacePurgeReceiptRequest) returns (voice.file.v1.GetSpacePurgeReceiptResponse);
 }
+
+// @voice.unknown_fields=reject
+message ValidateStoryMediaRequest {
+  string file_id = 1;
+  string author_profile_id = 2;
+  voice.story.v1.StoryMediaType expected_story_type = 3;
+}
+
+message ValidateStoryMediaResponse {}
 
 message RequestUploadRequest {
   string original_name = 1;
