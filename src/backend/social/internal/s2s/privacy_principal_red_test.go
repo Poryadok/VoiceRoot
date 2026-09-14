@@ -28,7 +28,8 @@ func TestGRPCUserPrivacy_UsesOnlyVerifiedSocialPrincipalMetadata(t *testing.T) {
 		"x-request-id", "attacker-request-id",
 	)
 	ctx := metadata.NewIncomingContext(context.Background(), callerMetadata)
-	_, err := (&GRPCUserPrivacy{Client: userv1.NewUserServiceClient(conn)}).AllowFriendRequestsAudience(ctx, uuid.New())
+	issuer, _ := testSocialIssuer(t)
+	_, err := (&GRPCUserPrivacy{Client: userv1.NewUserServiceClient(conn), Issuer: issuer}).AllowFriendRequestsAudience(ctx, uuid.New())
 	require.NoError(t, err)
 
 	// A caller cannot choose any outbound identity. The adapter owns this exact
