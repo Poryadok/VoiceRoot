@@ -21,10 +21,10 @@ An expired Story that belongs to any Highlight remains readable through that Hig
 ## Milestones
 
 - [x] Record Sol’s DB-first/outbox contract and add RED documentation/test contracts.
-- [ ] Add `story_db/000004_archive_purge_outbox` and load it in all Story integration migration helpers.
-- [ ] Replace pre-delete File calls with one transactional, bounded `StageArchivePurgeBatch`.
-- [ ] Make Highlight add/remove/delete membership transactions lock affected rows in UUID order.
-- [ ] Add a leased outbox dispatcher with retry/backoff and idempotent File deletion.
+- [x] Add `story_db/000004_archive_purge_outbox` and load it in all Story integration migration helpers.
+- [x] Replace pre-delete File calls with one transactional, bounded `StageArchivePurgeBatch`.
+- [x] Make Highlight add/remove/delete membership transactions lock affected rows in UUID order.
+- [x] Add a leased outbox dispatcher with retry/backoff and idempotent File deletion.
 - [ ] Pass hosted CI integration coverage and independent review.
 
 ## Detailed Steps
@@ -36,9 +36,9 @@ An expired Story that belongs to any Highlight remains readable through that Hig
 5. Replace `RunArchivePurgeOnce` pre-delete File calls with staging plus a startup/short-interval dispatcher. A dispatcher claims ready or expired rows using a token/fenced lease, calls File only after the Story is absent, deletes only its own completed lease, and backoffs failures or ambiguous outcomes. File deletion is idempotent by immutable File ID.
 6. Update `migrationSQL` helpers so hosted Story integration tests apply migration 000004. Keep every race test channel/barrier driven; do not use sleeps.
 
-## RED Test Scaffolds
+## Hosted integration coverage
 
-The first two contracts are executable now: `TestArchivePurgeOutboxMigrationContract` is red until migration 000004 exists, and `TestArchivePurgeWorker_addDuringPurgeCannotLeaveBrokenHighlight` is red against the current pre-delete File call when run in hosted integration CI. The following test scaffolds are mandatory before GREEN implementation; their fixtures use injected DB time and channels, never sleeps.
+The following tests are executable hosted integration coverage. They use explicit database/dispatcher barriers and direct DB-time transitions; no test sleeps or starts a local harness.
 
 | Scenario | Fixture/barrier | Green assertion |
 | --- | --- | --- |
@@ -51,7 +51,7 @@ The first two contracts are executable now: `TestArchivePurgeOutboxMigrationCont
 
 ## Validation
 
-- [ ] `go test -short ./...` from `src/backend/story` compiles and passes after implementation.
+- [x] `go test -short ./...` from `src/backend/story` compiles and passes after implementation.
 - [ ] Hosted `backend-go-integration-pr (story)` runs full Story integration tests, including deterministic add-first/purge-first, final-unlink/add, two-dispatcher, lease reclaim, failure/ambiguous/post-delete crash, text-only, and callback-after-logical-delete cases.
 - [ ] Hosted `backend-go (story)`, `golangci`, and PR `ci-gate` are green for the exact PR SHA.
 - [ ] Independent review confirms docs, migration, locks, outbox and tests agree with Sol’s contract.
@@ -61,8 +61,8 @@ The first two contracts are executable now: `TestArchivePurgeOutboxMigrationCont
 - [x] Earlier guard restricted adding a Story to Highlights until it entered the archive.
 - [x] Independent review found the FileDeleter-before-delete TOCTOU; prior simple `NOT EXISTS` guard is insufficient.
 - [x] Sol selected DB-first logical purge plus Story-owned outbox.
-- [x] Added uncommitted RED migration-schema and race contracts; local full integration execution is intentionally prohibited.
-- [ ] Await RED review before production implementation.
+- [x] Added executable hosted integration coverage for migration, stage/restart, callback-after-logical-delete, retries, stale leases, final unlink/Add, text-only, and scanner rerun; local full integration execution is intentionally prohibited.
+- [x] Independent review accepted the completed production/test cycle before hosted CI.
 
 ## Decisions
 

@@ -20,10 +20,16 @@ import (
 
 type recordingFileDeleter struct {
 	deleted []string
+	errs    []error
 }
 
 func (r *recordingFileDeleter) DeleteFile(_ context.Context, fileID string) error {
 	r.deleted = append(r.deleted, fileID)
+	if len(r.errs) != 0 {
+		err := r.errs[0]
+		r.errs = r.errs[1:]
+		return err
+	}
 	return nil
 }
 
@@ -34,42 +40,6 @@ type purgeBarrierFileDeleter struct {
 	storyID        uuid.UUID
 	callbackLookup error
 	deleted        []string
-}
-
-// archivePurgeOutboxScenario is the test-only seam every hosted outbox test will
-// receive from the GREEN implementation. Its channels are explicit barriers;
-// tests must advance DB time through the implementation's injected clock and
-// must never use a sleep to observe a lease or an external File call.
-type archivePurgeOutboxScenario struct {
-	stageCommitted  chan struct{}
-	addCommitted    chan struct{}
-	purgeAttempted  chan struct{}
-	fileCallStarted chan struct{}
-	fileCallRelease chan struct{}
-	firstLeaseLost  chan struct{}
-	secondLeaseDone chan struct{}
-	scannerRerun    chan struct{}
-}
-
-func newArchivePurgeOutboxScenario() archivePurgeOutboxScenario {
-	return archivePurgeOutboxScenario{
-		stageCommitted:  make(chan struct{}, 1),
-		addCommitted:    make(chan struct{}, 1),
-		purgeAttempted:  make(chan struct{}, 1),
-		fileCallStarted: make(chan struct{}, 1),
-		fileCallRelease: make(chan struct{}),
-		firstLeaseLost:  make(chan struct{}, 1),
-		secondLeaseDone: make(chan struct{}, 1),
-		scannerRerun:    make(chan struct{}, 1),
-	}
-}
-
-func requireHostedArchivePurgeScaffold(t *testing.T, scenario string) {
-	t.Helper()
-	if testing.Short() {
-		t.Skip("hosted-only archive outbox scaffold: " + scenario)
-	}
-	t.Skip("RED scaffold: wire " + scenario + " to StageArchivePurgeBatch and the leased dispatcher")
 }
 
 func startArchivePurgeStore(t *testing.T) (*store.StoryStore, context.Context) {
@@ -312,48 +282,208 @@ func TestArchivePurgeOutboxMigrationContract(t *testing.T) {
 		"outbox must survive DB-first deletion and therefore cannot FK to stories")
 }
 
-// The scenarios below deliberately compile during RED while the durable outbox
-// API does not yet exist. They reserve test names, channel barriers, and exact
-// hosted-only invariants before implementation; GREEN work replaces the skip
-// helper with concrete StoryStore/job calls without changing the assertions.
 func TestArchivePurgeOutbox_postCommitCrashRecovery(t *testing.T) {
-	s := newArchivePurgeOutboxScenario()
-	_ = s.stageCommitted
-	requireHostedArchivePurgeScaffold(t, "post-commit crash: restart dispatcher, retain absent Story, and deliver one durable operation")
+	if testing.Short() {
+		t.Skip()
+	}
+	st, ctx := startArchivePurgeStore(t)
+	storyID, mediaID := seedExpiredMediaStory(t, ctx, st)
+	batch, err := st.StageArchivePurgeBatch(ctx, 1)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, batch.Stories)
+	_, err = st.GetStory(ctx, storyID)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	// Simulate a process crash after File accepted the deletion but before the
+	// dispatcher CAS acknowledgement: the durable row must be leased again.
+	first, err := st.ClaimMediaDeletion(ctx, 1, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, first, 1)
+	require.Equal(t, mediaID, first[0].MediaFileID)
+	firstFileCall := &recordingFileDeleter{}
+	require.NoError(t, firstFileCall.DeleteFile(ctx, mediaID.String()))
+	require.Equal(t, []string{mediaID.String()}, firstFileCall.deleted,
+		"the first dispatcher reached File before its process crashed")
+	_, err = st.Pool.Exec(ctx, `UPDATE story_media_deletion_outbox SET lease_until=now()-interval '1 second' WHERE operation_id=$1`, first[0].OperationID)
+	require.NoError(t, err)
+
+	deleter := &recordingFileDeleter{}
+	n, err := jobs.RunArchivePurgeOnce(ctx, st, deleter, time.Now().UTC())
+	require.NoError(t, err)
+	require.Zero(t, n, "recovery dispatch must not restage a deleted story")
+	require.Equal(t, []string{mediaID.String()}, deleter.deleted,
+		"recovery retries the immutable id; File NotFound is mapped to success by clients.FileDeleter")
+	var count int
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT count(*) FROM story_media_deletion_outbox WHERE operation_id=$1`, storyID).Scan(&count))
+	require.Zero(t, count)
 }
 
 func TestArchivePurgeOutbox_retriesFailureAndAmbiguousFileResult(t *testing.T) {
-	s := newArchivePurgeOutboxScenario()
-	_ = s.fileCallStarted
-	_ = s.fileCallRelease
-	requireHostedArchivePurgeScaffold(t, "definite and ambiguous File failures: persist retry/backoff and finish idempotently")
+	if testing.Short() {
+		t.Skip()
+	}
+	st, ctx := startArchivePurgeStore(t)
+	storyID, mediaID := seedExpiredMediaStory(t, ctx, st)
+	deleter := &recordingFileDeleter{errs: []error{errors.New("transport response lost"), errors.New("definite File failure")}}
+
+	_, err := jobs.RunArchivePurgeOnce(ctx, st, deleter, time.Now().UTC())
+	require.NoError(t, err)
+	for attempt, wantError := range []string{"transport response lost", "definite File failure"} {
+		var attempts int64
+		var lastError *string
+		var lastErrorAt *time.Time
+		var availableAt, updatedAt time.Time
+		require.NoError(t, st.Pool.QueryRow(ctx, `SELECT attempt_count,last_error,last_error_at,available_at,updated_at FROM story_media_deletion_outbox WHERE operation_id=$1`, storyID).Scan(&attempts, &lastError, &lastErrorAt, &availableAt, &updatedAt))
+		require.EqualValues(t, attempt+1, attempts)
+		require.NotNil(t, lastError)
+		require.Contains(t, *lastError, wantError)
+		require.NotNil(t, lastErrorAt)
+		require.True(t, availableAt.After(updatedAt), "failure must persist a DB-time retry delay before the next claim")
+		_, err = st.Pool.Exec(ctx, `UPDATE story_media_deletion_outbox SET available_at=now()-interval '1 second' WHERE operation_id=$1`, storyID)
+		require.NoError(t, err)
+		if attempt == 0 {
+			_, err = jobs.RunArchivePurgeOnce(ctx, st, deleter, time.Now().UTC())
+			require.NoError(t, err)
+		}
+	}
+	_, err = jobs.RunArchivePurgeOnce(ctx, st, deleter, time.Now().UTC())
+	require.NoError(t, err)
+	require.Equal(t, []string{mediaID.String(), mediaID.String(), mediaID.String()}, deleter.deleted,
+		"both an ambiguous response and a definite failure retry by the immutable file id")
+	var count int
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT count(*) FROM story_media_deletion_outbox WHERE operation_id=$1`, storyID).Scan(&count))
+	require.Zero(t, count, "successful third delivery removes only its leased durable operation")
 }
 
 func TestArchivePurgeOutbox_twoDispatchersRejectStaleAck(t *testing.T) {
-	s := newArchivePurgeOutboxScenario()
-	_ = s.firstLeaseLost
-	_ = s.secondLeaseDone
-	requireHostedArchivePurgeScaffold(t, "two dispatcher lease race: reclaim expired lease and reject stale acknowledgement")
+	if testing.Short() {
+		t.Skip()
+	}
+	st, ctx := startArchivePurgeStore(t)
+	storyID, mediaID := seedExpiredMediaStory(t, ctx, st)
+	_, err := st.StageArchivePurgeBatch(ctx, 1)
+	require.NoError(t, err)
+	firstDeleter := &purgeBarrierFileDeleter{started: make(chan struct{}, 1), release: make(chan struct{}), store: st, storyID: storyID}
+	firstDone := make(chan error, 1)
+	go func() {
+		_, runErr := jobs.RunArchivePurgeOnce(ctx, st, firstDeleter, time.Now().UTC())
+		firstDone <- runErr
+	}()
+	<-firstDeleter.started
+	_, err = st.Pool.Exec(ctx, `UPDATE story_media_deletion_outbox SET lease_until=now()-interval '1 second' WHERE operation_id=$1`, storyID)
+	require.NoError(t, err)
+	secondDeleter := &recordingFileDeleter{}
+	_, err = jobs.RunArchivePurgeOnce(ctx, st, secondDeleter, time.Now().UTC())
+	require.NoError(t, err)
+	require.Equal(t, []string{mediaID.String()}, secondDeleter.deleted)
+	close(firstDeleter.release)
+	require.NoError(t, <-firstDone, "stale completion is a harmless CAS miss after a second dispatcher finished")
+	var count int
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT count(*) FROM story_media_deletion_outbox WHERE operation_id=$1`, storyID).Scan(&count))
+	require.Zero(t, count)
 }
 
 func TestArchivePurgeOutbox_finalUnlinkConcurrentWithAdd(t *testing.T) {
-	s := newArchivePurgeOutboxScenario()
-	_ = s.stageCommitted
-	_ = s.fileCallStarted
-	requireHostedArchivePurgeScaffold(t, "final unlink versus Add: committed link retains media or purge makes Add NotFound")
+	if testing.Short() {
+		t.Skip()
+	}
+	st, ctx := startArchivePurgeStore(t)
+	storyID, mediaID := seedExpiredMediaStory(t, ctx, st)
+	profileID := uuid.New()
+	_, err := st.Pool.Exec(ctx, `UPDATE stories SET author_profile_id=$2 WHERE id=$1`, storyID, profileID)
+	require.NoError(t, err)
+	first, err := st.CreateHighlight(ctx, profileID, "First", "everyone")
+	require.NoError(t, err)
+	second, err := st.CreateHighlight(ctx, profileID, "Second", "everyone")
+	require.NoError(t, err)
+	require.NoError(t, st.AddToHighlight(ctx, first.ID, profileID, storyID))
+
+	// Holding the Story lock creates a deterministic barrier: both membership
+	// transactions acquire their owning Highlight first and then contend for the
+	// same Story. Whichever commits first, the Add commit must leave one link.
+	lockTx, err := st.Pool.Begin(ctx)
+	require.NoError(t, err)
+	var locked int
+	err = lockTx.QueryRow(ctx, `SELECT 1 FROM stories WHERE id=$1 FOR UPDATE`, storyID).Scan(&locked)
+	require.NoError(t, err)
+	arrived := make(chan struct{}, 2)
+	st.BeforeHighlightStoryLock = func() { arrived <- struct{}{} }
+	defer func() { st.BeforeHighlightStoryLock = nil }()
+	start := make(chan struct{})
+	removeDone := make(chan error, 1)
+	addDone := make(chan error, 1)
+	go func() {
+		<-start
+		removeDone <- st.RemoveFromHighlight(ctx, first.ID, profileID, storyID)
+	}()
+	go func() {
+		<-start
+		addDone <- st.AddToHighlight(ctx, second.ID, profileID, storyID)
+	}()
+	close(start)
+	<-arrived
+	<-arrived
+	require.NoError(t, lockTx.Commit(ctx))
+	require.NoError(t, <-removeDone)
+	require.NoError(t, <-addDone)
+	var links int
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT count(*) FROM highlight_stories WHERE story_id=$1`, storyID).Scan(&links))
+	require.Equal(t, 1, links)
+
+	deleter := &recordingFileDeleter{}
+	n, err := jobs.RunArchivePurgeOnce(ctx, st, deleter, time.Now().UTC())
+	require.NoError(t, err)
+	require.Zero(t, n, "the concurrent Add commit preserves a link when the prior final link is removed")
+	require.Empty(t, deleter.deleted)
+	require.NoError(t, st.RemoveFromHighlight(ctx, second.ID, profileID, storyID))
+
+	// Last unlink has a distinct outcome: only after the final link commits may
+	// the scanner stage an irreversible File deletion.
+	n, err = jobs.RunArchivePurgeOnce(ctx, st, deleter, time.Now().UTC())
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+	require.Equal(t, []string{mediaID.String()}, deleter.deleted)
 }
 
 func TestArchivePurgeOutbox_addFirstMakesPurgeSkipWithoutFileCall(t *testing.T) {
-	s := newArchivePurgeOutboxScenario()
-	_ = s.addCommitted
-	_ = s.purgeAttempted
-	_ = s.fileCallStarted
-	requireHostedArchivePurgeScaffold(t, "Add-first versus purge: after Add commit, StageArchivePurgeBatch skips the Story and FileDeleter has zero calls")
+	if testing.Short() {
+		t.Skip()
+	}
+	st, ctx := startArchivePurgeStore(t)
+	storyID, _ := seedExpiredMediaStory(t, ctx, st)
+	profileID := uuid.New()
+	_, err := st.Pool.Exec(ctx, `UPDATE stories SET author_profile_id=$2 WHERE id=$1`, storyID, profileID)
+	require.NoError(t, err)
+	highlight, err := st.CreateHighlight(ctx, profileID, "Permanent", "everyone")
+	require.NoError(t, err)
+	require.NoError(t, st.AddToHighlight(ctx, highlight.ID, profileID, storyID))
+	deleter := &recordingFileDeleter{}
+	n, err := jobs.RunArchivePurgeOnce(ctx, st, deleter, time.Now().UTC())
+	require.NoError(t, err)
+	require.Zero(t, n)
+	require.Empty(t, deleter.deleted, "an Add commit before scanner selection wins and prevents File deletion")
+	_, err = st.GetStory(ctx, storyID)
+	require.NoError(t, err)
 }
 
 func TestArchivePurgeOutbox_textOnlyAndScannerRerunAreIdempotent(t *testing.T) {
-	s := newArchivePurgeOutboxScenario()
-	_ = s.stageCommitted
-	_ = s.scannerRerun
-	requireHostedArchivePurgeScaffold(t, "text-only plus scanner rerun: logical delete has no outbox row; media operation uses immutable story ID and is not duplicated")
+	if testing.Short() {
+		t.Skip()
+	}
+	st, ctx := startArchivePurgeStore(t)
+	textID := uuid.New()
+	_, err := st.Pool.Exec(ctx, `INSERT INTO stories (id,author_profile_id,type,text_content,mention_profile_ids,visibility,expires_at,archived_until,created_at,expired_at) VALUES ($1,$2,'text','gone','[]','everyone',now()-interval '32 days',now()-interval '1 hour',now()-interval '32 days',now()-interval '31 days')`, textID, uuid.New())
+	require.NoError(t, err)
+	mediaStoryID, mediaID := seedExpiredMediaStory(t, ctx, st)
+	batch, err := st.StageArchivePurgeBatch(ctx, 100)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, batch.Stories)
+	secondBatch, err := st.StageArchivePurgeBatch(ctx, 100)
+	require.NoError(t, err)
+	require.Zero(t, secondBatch.Stories, "scanner rerun after committed logical deletion cannot duplicate work")
+	var textOps, mediaOps int
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT count(*) FROM story_media_deletion_outbox WHERE operation_id=$1`, textID).Scan(&textOps))
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT count(*) FROM story_media_deletion_outbox WHERE operation_id=$1 AND story_id=$1 AND media_file_id=$2`, mediaStoryID, mediaID).Scan(&mediaOps))
+	require.Zero(t, textOps, "text-only archive cleanup has no File outbox operation")
+	require.Equal(t, 1, mediaOps, "one immutable story id produces exactly one media deletion operation")
 }

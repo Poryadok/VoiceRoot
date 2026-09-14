@@ -28,6 +28,11 @@ var (
 // StoryStore persists stories, views, reactions, and highlights.
 type StoryStore struct {
 	Pool *pgxpool.Pool
+
+	// BeforeHighlightStoryLock is an optional deterministic test observer. It
+	// runs after a Highlight is locked and immediately before its Story lock.
+	// Production wiring leaves it nil.
+	BeforeHighlightStoryLock func()
 }
 
 type ArchivePurgeBatch struct {
@@ -798,10 +803,13 @@ func (s *StoryStore) AddToHighlight(ctx context.Context, highlightID, profileID,
 	if owner != profileID {
 		return ErrForbidden
 	}
+	if s.BeforeHighlightStoryLock != nil {
+		s.BeforeHighlightStoryLock()
+	}
 	var storyAuthor uuid.UUID
 	var archived bool
 	err = tx.QueryRow(ctx, `
-SELECT author_profile_id, expired_at IS NOT NULL AND archived_until > now()
+SELECT author_profile_id, expired_at IS NOT NULL
 FROM stories
 WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, storyID).Scan(&storyAuthor, &archived)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -844,6 +852,9 @@ func (s *StoryStore) RemoveFromHighlight(ctx context.Context, highlightID, profi
 	}
 	if owner != profileID {
 		return ErrForbidden
+	}
+	if s.BeforeHighlightStoryLock != nil {
+		s.BeforeHighlightStoryLock()
 	}
 	if _, err = tx.Exec(ctx, `SELECT 1 FROM stories WHERE id=$1 FOR UPDATE`, storyID); err != nil {
 		return err
@@ -888,26 +899,28 @@ FROM highlights WHERE profile_id = $1 ORDER BY sort_order, created_at`, profileI
 	return out, rows.Err()
 }
 
-// PurgeArchivedStories deletes unhighlighted stories past archived_until.
-func (s *StoryStore) PurgeArchivedStories(ctx context.Context, now time.Time) (int64, error) {
+// PurgeArchivedStories is the compatibility entrypoint for callers that need
+// a bounded logical purge at an explicit cutoff. It still uses the durable
+// outbox transaction; direct deletion would orphan media after the Story row
+// is gone. The worker uses StageArchivePurgeBatch and DB time instead.
+func (s *StoryStore) PurgeArchivedStories(ctx context.Context, cutoff time.Time) (int64, error) {
 	if s == nil || s.Pool == nil {
 		return 0, ErrNotImplemented
 	}
-	tag, err := s.Pool.Exec(ctx, `
-	DELETE FROM stories
-	WHERE archived_until <= $1 AND expired_at IS NOT NULL
-	  AND NOT EXISTS (
-	    SELECT 1 FROM highlight_stories WHERE story_id = stories.id
-	  )`, now.UTC())
+	batch, err := s.stageArchivePurgeBatch(ctx, 100, &cutoff)
 	if err != nil {
 		return 0, err
 	}
-	return tag.RowsAffected(), nil
+	return batch.Stories, nil
 }
 
 // StageArchivePurgeBatch atomically deletes expired, unhighlighted stories and
 // records any media deletion side effect. File deletion must happen after this commit.
 func (s *StoryStore) StageArchivePurgeBatch(ctx context.Context, limit int) (ArchivePurgeBatch, error) {
+	return s.stageArchivePurgeBatch(ctx, limit, nil)
+}
+
+func (s *StoryStore) stageArchivePurgeBatch(ctx context.Context, limit int, cutoff *time.Time) (ArchivePurgeBatch, error) {
 	if s == nil || s.Pool == nil {
 		return ArchivePurgeBatch{}, ErrNotImplemented
 	}
@@ -921,13 +934,12 @@ func (s *StoryStore) StageArchivePurgeBatch(ctx context.Context, limit int) (Arc
 	defer func() { _ = tx.Rollback(ctx) }()
 	rows, err := tx.Query(ctx, `
 SELECT s.id, s.media_file_id FROM stories s
-WHERE s.expired_at IS NOT NULL AND s.archived_until <= now()
+WHERE s.expired_at IS NOT NULL AND s.archived_until <= COALESCE($2::timestamptz, now())
   AND NOT EXISTS (SELECT 1 FROM highlight_stories hs WHERE hs.story_id=s.id)
-ORDER BY s.archived_until, s.id LIMIT $1 FOR UPDATE OF s SKIP LOCKED`, limit)
+ORDER BY s.archived_until, s.id LIMIT $1 FOR UPDATE OF s SKIP LOCKED`, limit, cutoff)
 	if err != nil {
 		return ArchivePurgeBatch{}, err
 	}
-	defer rows.Close()
 	type candidate struct {
 		id    uuid.UUID
 		media *uuid.UUID
@@ -943,6 +955,7 @@ ORDER BY s.archived_until, s.id LIMIT $1 FOR UPDATE OF s SKIP LOCKED`, limit)
 	if err := rows.Err(); err != nil {
 		return ArchivePurgeBatch{}, err
 	}
+	rows.Close()
 	for _, c := range cs {
 		if c.media != nil {
 			_, err = tx.Exec(ctx, `INSERT INTO story_media_deletion_outbox (operation_id,story_id,media_file_id,available_at,created_at,updated_at) VALUES ($1,$1,$2,now(),now(),now()) ON CONFLICT (operation_id) DO NOTHING`, c.id, *c.media)
@@ -950,7 +963,7 @@ ORDER BY s.archived_until, s.id LIMIT $1 FOR UPDATE OF s SKIP LOCKED`, limit)
 				return ArchivePurgeBatch{}, err
 			}
 		}
-		tag, err := tx.Exec(ctx, `DELETE FROM stories s WHERE s.id=$1 AND s.expired_at IS NOT NULL AND s.archived_until <= now() AND NOT EXISTS (SELECT 1 FROM highlight_stories hs WHERE hs.story_id=s.id)`, c.id)
+		tag, err := tx.Exec(ctx, `DELETE FROM stories s WHERE s.id=$1 AND s.expired_at IS NOT NULL AND s.archived_until <= COALESCE($2::timestamptz, now()) AND NOT EXISTS (SELECT 1 FROM highlight_stories hs WHERE hs.story_id=s.id)`, c.id, cutoff)
 		if err != nil {
 			return ArchivePurgeBatch{}, err
 		}

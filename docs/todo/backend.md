@@ -551,7 +551,7 @@
 
 - [ ] **[Story] `visibility_audience` not writable via API** — DB column + read path exist; `CreateStoryRequest` has no audience JSON; `visibilityFromRequest("custom")` stores `privacy.Nobody()`. Blocks real space/custom per-story audience (Batch 7 covers Flutter picker; backend contract gap). Paths: `protos/voice/story/v1/story.proto`, `src/backend/story/internal/grpcsvc/audience.go`, `src/backend/migrations/story_db/000002_visibility_audience.up.sql`.
 - [ ] **[Story] Highlights lack `visibility_audience` JSONB** — only coarse `visibility` TEXT; no space multiselect per [stories.md](../features/stories.md) §Highlights. Paths: `src/backend/migrations/story_db/000001_init.up.sql`, `src/backend/story/internal/grpcsvc/story.go` (`canViewHighlight`).
-- [ ] **[Story] `AddToHighlight` allows active stories** — spec says “from archive”; store only checks author ownership, not `expired_at`. Path: `src/backend/story/internal/store/store.go` (`AddToHighlight`).
+- [x] **[Story] `AddToHighlight` allows active stories** — fixed: store requires `expired_at` while locking the Story before it creates a Highlight membership. Path: `src/backend/story/internal/store/store.go` (`AddToHighlight`).
 - [ ] **[Story] Archive purge worker delayed first run** — 24h ticker, no startup `RunArchivePurgeOnce`. Path: `src/backend/story/internal/jobs/jobs.go` (`StartArchivePurgeWorker`).
 - [ ] **[Story] Weak content validation** — no required `text_content` for `text`, no required `media_file_id` for `photo`/`video`. Path: `src/backend/story/internal/grpcsvc/story.go` (`CreateStory`).
 - [ ] **[Story] `game_tag` unvalidated** — free string, no Matchmaking catalog lookup. Path: `src/backend/story/internal/grpcsvc/story.go`.
