@@ -101,18 +101,28 @@ func writeGRPCError(w http.ResponseWriter, err error) {
 func writeVoiceRoomMoveError(w http.ResponseWriter, err error) {
 	st, ok := status.FromError(err)
 	if !ok {
-		writeGRPCError(w, err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error_code": "internal", "message": "internal error"})
 		return
 	}
 	w.Header().Set("X-Voice-GRPC-Code", st.Code().String())
-	switch st.Code() {
-	case codes.FailedPrecondition:
-		writeJSON(w, http.StatusConflict, map[string]string{"error_code": "failed_precondition", "message": "voice room move is no longer possible"})
-	case codes.Unavailable:
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error_code": "unavailable", "message": "voice room roster unavailable"})
-	default:
-		writeGRPCError(w, err)
+	type moveError struct {
+		status        int
+		code, message string
 	}
+	table := map[codes.Code]moveError{
+		codes.InvalidArgument:    {http.StatusBadRequest, "invalid_argument", "invalid voice room move request"},
+		codes.Unauthenticated:    {http.StatusUnauthorized, "unauthenticated", "authentication required"},
+		codes.PermissionDenied:   {http.StatusForbidden, "permission_denied", "voice room move not permitted"},
+		codes.NotFound:           {http.StatusNotFound, "not_found", "voice room not found"},
+		codes.FailedPrecondition: {http.StatusConflict, "failed_precondition", "voice room move is no longer possible"},
+		codes.ResourceExhausted:  {http.StatusTooManyRequests, "resource_exhausted", "voice room is full"},
+		codes.Unavailable:        {http.StatusServiceUnavailable, "unavailable", "voice room roster unavailable"},
+	}
+	entry, found := table[st.Code()]
+	if !found {
+		entry = moveError{http.StatusInternalServerError, "internal", "internal error"}
+	}
+	writeJSON(w, entry.status, map[string]string{"error_code": entry.code, "message": entry.message})
 }
 
 // grpcStatusDomainErrorCode returns app error keys carried in gRPC status messages

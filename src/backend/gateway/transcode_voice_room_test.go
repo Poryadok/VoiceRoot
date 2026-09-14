@@ -223,6 +223,43 @@ func TestWriteGRPCError_UnrelatedFailedPreconditionRemains412(t *testing.T) {
 	resp := httptest.NewRecorder()
 	writeGRPCError(resp, status.Error(codes.FailedPrecondition, "registration_conflict"))
 	require.Equal(t, http.StatusPreconditionFailed, resp.Code)
+	var envelope struct {
+		ErrorCode string `json:"error_code"`
+		Message   string `json:"message"`
+	}
+	decodeJSON(t, resp.Body, &envelope)
+	require.Equal(t, "registration_conflict", envelope.ErrorCode)
+	require.Equal(t, "registration_conflict", envelope.Message)
+}
+
+func TestWriteVoiceRoomMoveError_UsesFiniteMessagesForEveryTransportClass(t *testing.T) {
+	for code, expected := range map[codes.Code]struct {
+		status int
+		key    string
+	}{
+		codes.InvalidArgument:    {http.StatusBadRequest, "invalid_argument"},
+		codes.Unauthenticated:    {http.StatusUnauthorized, "unauthenticated"},
+		codes.PermissionDenied:   {http.StatusForbidden, "permission_denied"},
+		codes.NotFound:           {http.StatusNotFound, "not_found"},
+		codes.FailedPrecondition: {http.StatusConflict, "failed_precondition"},
+		codes.ResourceExhausted:  {http.StatusTooManyRequests, "resource_exhausted"},
+		codes.Unavailable:        {http.StatusServiceUnavailable, "unavailable"},
+		codes.Internal:           {http.StatusInternalServerError, "internal"},
+	} {
+		t.Run(code.String(), func(t *testing.T) {
+			resp := httptest.NewRecorder()
+			writeVoiceRoomMoveError(resp, status.Error(code, "backend diagnostic must never reach REST"))
+			require.Equal(t, expected.status, resp.Code)
+			var envelope struct {
+				ErrorCode string `json:"error_code"`
+				Message   string `json:"message"`
+			}
+			decodeJSON(t, resp.Body, &envelope)
+			require.Equal(t, expected.key, envelope.ErrorCode)
+			require.NotEmpty(t, envelope.Message)
+			require.NotContains(t, envelope.Message, "backend diagnostic")
+		})
+	}
 }
 
 func TestTranscodeSpaceVoiceRoomMoveFailedPreconditionUsesConflictEnvelope(t *testing.T) {
