@@ -33,7 +33,7 @@ An expired Story that belongs to any Highlight remains readable through that Hig
 2. Add migration `000004_archive_purge_outbox`: `highlight_stories(story_id)` index; partial expired Story purge index; `story_media_deletion_outbox` without an FK to `stories`, immutable operation ID equal to the Story ID, File ID, availability, attempt/error fields, timestamps, lease token/until, and ready-claim index.
 3. Implement `StageArchivePurgeBatch` in one `story_db` transaction using PostgreSQL time, a bounded ordered candidate query and `FOR UPDATE OF stories SKIP LOCKED`. It inserts media operations then rechecks eligibility while deleting; any mismatch rolls back. Text-only Stories have no outbox operation.
 4. Make Highlight membership mutations lock the owning Highlight and affected Stories in UUID order. Add blocks behind a staged purge and returns NotFound after purge commits; purge skips an Add-held lock and observes its committed link. Remove and Highlight deletion serialize the final-link transition.
-5. Replace `RunArchivePurgeOnce` pre-delete File calls with staging plus a startup/short-interval dispatcher. A dispatcher claims ready or expired rows using a token/fenced lease, calls File only after the Story is absent, deletes only its own completed lease, and backoffs failures or ambiguous outcomes. File deletion is idempotent by immutable File ID.
+5. Replace `RunArchivePurgeOnce` pre-delete File calls with staging plus a startup/short-interval dispatcher. A dispatcher claims ready or expired rows using a token/fenced lease, calls File only after the Story is absent, deletes only its own completed lease, and backs off failures or ambiguous outcomes with capped exponential DB-time delays. Every File call has a bounded deadline, so an unresponsive client releases its lease for a later tick. File deletion is idempotent by immutable File ID.
 6. Update `migrationSQL` helpers so hosted Story integration tests apply migration 000004. Keep every race test channel/barrier driven; do not use sleeps.
 
 ## Hosted integration coverage
@@ -48,6 +48,7 @@ The following tests are executable hosted integration coverage. They use explici
 | Final unlink concurrent with add | An archived Story is in two Highlights. Remove one link, then gate the transaction which removes the final link while another Add is ready. | A committed Add retains the Story/media; a committed purge makes the Add `NotFound`; neither interleaving leaves a link to deleted media. |
 | Add-first concurrent with purge | Commit Add through an `addCommitted` channel, then release the purge scanner through `purgeAttempted`; FileDeleter exposes `fileCallStarted`. | Purge skips the linked Story and `fileCallStarted` receives no event; Story/media/link remain intact. |
 | Text-only and scanner rerun | Stage text-only and media Stories, then invoke the scanner twice with the same DB time. | Text-only deletes with no outbox row; media creates one immutable operation and rerun creates no duplicate. |
+| Unresponsive File call | A non-cooperative deleter blocks behind a channel while the dispatcher deadline expires; a second tick through that same deleter runs while the call remains in flight. | The runner returns, persists `DeadlineExceeded` retry state, releases the lease, and the second tick persists a retry without spawning another blocked File call. An independent dispatcher can still reclaim an expired lease. |
 
 ## Validation
 
@@ -61,7 +62,7 @@ The following tests are executable hosted integration coverage. They use explici
 - [x] Earlier guard restricted adding a Story to Highlights until it entered the archive.
 - [x] Independent review found the FileDeleter-before-delete TOCTOU; prior simple `NOT EXISTS` guard is insufficient.
 - [x] Sol selected DB-first logical purge plus Story-owned outbox.
-- [x] Added executable hosted integration coverage for migration, stage/restart, callback-after-logical-delete, retries, stale leases, final unlink/Add, text-only, and scanner rerun; local full integration execution is intentionally prohibited.
+- [x] Added executable hosted integration coverage for migration, stage/restart, callback-after-logical-delete, retries, stale leases, final unlink/Add, text-only, scanner rerun, and a non-cooperative File deadline; local full integration execution is intentionally prohibited.
 - [x] Independent review accepted the completed production/test cycle before hosted CI.
 
 ## Decisions

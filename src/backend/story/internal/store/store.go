@@ -1021,6 +1021,46 @@ func (s *StoryStore) FailMediaDeletion(ctx context.Context, operationID, token u
 	if cause != nil {
 		msg = cause.Error()
 	}
-	tag, err := s.Pool.Exec(ctx, `UPDATE story_media_deletion_outbox SET lease_token=NULL,lease_until=NULL,available_at=now()+interval '1 second',last_error=$3,last_error_at=now(),updated_at=now() WHERE operation_id=$1 AND lease_token=$2`, operationID, token, msg)
-	return tag.RowsAffected() == 1, err
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var attempts int64
+	err = tx.QueryRow(ctx, `SELECT attempt_count FROM story_media_deletion_outbox WHERE operation_id=$1 AND lease_token=$2 FOR UPDATE`, operationID, token).Scan(&attempts)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	backoff := mediaDeletionRetryDelay(attempts)
+	backoffInterval := fmt.Sprintf("%d seconds", int64(backoff/time.Second))
+	tag, err := tx.Exec(ctx, `UPDATE story_media_deletion_outbox SET lease_token=NULL,lease_until=NULL,available_at=now()+$4::interval,last_error=$3,last_error_at=now(),updated_at=now() WHERE operation_id=$1 AND lease_token=$2`, operationID, token, msg, backoffInterval)
+	if err != nil {
+		return false, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
+const (
+	mediaDeletionInitialRetry = time.Second
+	mediaDeletionMaxRetry     = 5 * time.Minute
+)
+
+func mediaDeletionRetryDelay(attempts int64) time.Duration {
+	if attempts <= 1 {
+		return mediaDeletionInitialRetry
+	}
+	delay := mediaDeletionInitialRetry
+	for i := int64(1); i < attempts && delay < mediaDeletionMaxRetry; i++ {
+		delay *= 2
+		if delay >= mediaDeletionMaxRetry {
+			return mediaDeletionMaxRetry
+		}
+	}
+	return delay
 }

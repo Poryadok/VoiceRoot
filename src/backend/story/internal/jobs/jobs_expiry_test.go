@@ -42,6 +42,19 @@ type purgeBarrierFileDeleter struct {
 	deleted        []string
 }
 
+type blockingFileDeleter struct {
+	started  chan struct{}
+	release  chan struct{}
+	finished chan struct{}
+}
+
+func (d *blockingFileDeleter) DeleteFile(context.Context, string) error {
+	d.started <- struct{}{}
+	<-d.release
+	d.finished <- struct{}{}
+	return nil
+}
+
 func startArchivePurgeStore(t *testing.T) (*store.StoryStore, context.Context) {
 	t.Helper()
 	ctx := context.Background()
@@ -338,7 +351,8 @@ func TestArchivePurgeOutbox_retriesFailureAndAmbiguousFileResult(t *testing.T) {
 		require.NotNil(t, lastError)
 		require.Contains(t, *lastError, wantError)
 		require.NotNil(t, lastErrorAt)
-		require.True(t, availableAt.After(updatedAt), "failure must persist a DB-time retry delay before the next claim")
+		require.Equal(t, time.Second<<attempt, availableAt.Sub(updatedAt),
+			"failure must persist capped attempt-dependent exponential backoff using DB time")
 		_, err = st.Pool.Exec(ctx, `UPDATE story_media_deletion_outbox SET available_at=now()-interval '1 second' WHERE operation_id=$1`, storyID)
 		require.NoError(t, err)
 		if attempt == 0 {
@@ -353,6 +367,45 @@ func TestArchivePurgeOutbox_retriesFailureAndAmbiguousFileResult(t *testing.T) {
 	var count int
 	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT count(*) FROM story_media_deletion_outbox WHERE operation_id=$1`, storyID).Scan(&count))
 	require.Zero(t, count, "successful third delivery removes only its leased durable operation")
+}
+
+func TestArchivePurgeOutbox_fileDeadlineRequeuesWithoutBlockingLaterTick(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	st, ctx := startArchivePurgeStore(t)
+	storyID, _ := seedExpiredMediaStory(t, ctx, st)
+	timedOut := &blockingFileDeleter{started: make(chan struct{}, 1), release: make(chan struct{}), finished: make(chan struct{}, 1)}
+	runDone := make(chan error, 1)
+	go func() {
+		_, err := jobs.RunArchivePurgeOnceWithFileTimeout(ctx, st, timedOut, time.Now().UTC(), 20*time.Millisecond)
+		runDone <- err
+	}()
+	<-timedOut.started
+	require.NoError(t, <-runDone, "deadline failure is recorded as retryable work rather than blocking the dispatcher")
+
+	var attempts int64
+	var lastError *string
+	var leaseToken *uuid.UUID
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT attempt_count,last_error,lease_token FROM story_media_deletion_outbox WHERE operation_id=$1`, storyID).Scan(&attempts, &lastError, &leaseToken))
+	require.EqualValues(t, 1, attempts)
+	require.NotNil(t, lastError)
+	require.Contains(t, *lastError, context.DeadlineExceeded.Error())
+	require.Nil(t, leaseToken, "timed-out File call releases its lease for a later dispatcher tick")
+
+	// The timed-out implementation ignores cancellation. A second tick must
+	// still return immediately and persist its retry instead of spawning a
+	// second stuck File goroutine.
+	secondStoryID, _ := seedExpiredMediaStory(t, ctx, st)
+	_, err := jobs.RunArchivePurgeOnceWithFileTimeout(ctx, st, timedOut, time.Now().UTC(), time.Second)
+	require.NoError(t, err)
+	var busyError *string
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT last_error FROM story_media_deletion_outbox WHERE operation_id=$1`, secondStoryID).Scan(&busyError))
+	require.NotNil(t, busyError)
+	require.Contains(t, *busyError, "already in flight")
+
+	close(timedOut.release)
+	<-timedOut.finished
 }
 
 func TestArchivePurgeOutbox_twoDispatchersRejectStaleAck(t *testing.T) {
