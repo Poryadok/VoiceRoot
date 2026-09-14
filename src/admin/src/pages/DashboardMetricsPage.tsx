@@ -20,9 +20,12 @@ function DashboardMetricsContent({ dashboardType }: DashboardMetricsPageProps) {
   const [metrics, setMetrics] = useState<MetricPoint[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const { range } = useAnalyticsTimeRange();
+  const { range, isRangeValid } = useAnalyticsTimeRange();
 
   useEffect(() => {
+    if (!isRangeValid) {
+      return;
+    }
     let active = true;
     setLoading(true);
     setError(null);
@@ -32,7 +35,7 @@ function DashboardMetricsContent({ dashboardType }: DashboardMetricsPageProps) {
       .catch((e: Error) => { if (active) setError(e.message); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [dashboardType, range]);
+  }, [dashboardType, isRangeValid, range]);
 
   return (
     <>

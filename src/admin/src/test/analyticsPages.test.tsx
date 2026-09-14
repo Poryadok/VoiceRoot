@@ -82,6 +82,46 @@ describe("DashboardMetricsPage", () => {
       expect(analytics.fetchDashboard).toHaveBeenLastCalledWith("engagement");
     });
   });
+
+  it("does not fetch an inverse UTC range and resumes after the range is corrected", async () => {
+    render(
+      <MemoryRouter>
+        <DashboardMetricsPage dashboardType="engagement" />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("messages_sent");
+
+    fireEvent.change(screen.getByLabelText("From"), {
+      target: { value: "2026-01-31T00:00" },
+    });
+    await waitFor(() => {
+      expect(analytics.fetchDashboard).toHaveBeenLastCalledWith("engagement", {
+        from: "2026-01-31T00:00:00Z",
+      });
+    });
+
+    const callsBeforeInverseRange = vi.mocked(analytics.fetchDashboard).mock.calls.length;
+    fireEvent.change(screen.getByLabelText("To"), {
+      target: { value: "2026-01-01T00:00" },
+    });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("From must be before or equal to To.");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(analytics.fetchDashboard).toHaveBeenCalledTimes(callsBeforeInverseRange);
+
+    fireEvent.change(screen.getByLabelText("To"), {
+      target: { value: "2026-01-31T00:00" },
+    });
+
+    await waitFor(() => {
+      expect(analytics.fetchDashboard).toHaveBeenLastCalledWith("engagement", {
+        from: "2026-01-31T00:00:00Z",
+        to: "2026-01-31T00:00:00Z",
+      });
+    });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
 });
 
 describe("FunnelsPage", () => {

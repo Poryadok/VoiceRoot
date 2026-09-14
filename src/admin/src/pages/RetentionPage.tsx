@@ -7,9 +7,12 @@ function RetentionContent() {
   const [cohorts, setCohorts] = useState<RetentionCohort[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const { range } = useAnalyticsTimeRange();
+  const { range, isRangeValid } = useAnalyticsTimeRange();
 
   useEffect(() => {
+    if (!isRangeValid) {
+      return;
+    }
     let active = true;
     setLoading(true);
     setError(null);
@@ -19,7 +22,7 @@ function RetentionContent() {
       .catch((e: Error) => { if (active) setError(e.message); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [range]);
+  }, [isRangeValid, range]);
 
   return (
     <>

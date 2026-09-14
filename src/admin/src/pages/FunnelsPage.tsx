@@ -6,9 +6,12 @@ import { AnalyticsTimeRangeFilter, AnalyticsTimeRangeScope, useAnalyticsTimeRang
 function FunnelsContent() {
   const [steps, setSteps] = useState<FunnelStep[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const { range } = useAnalyticsTimeRange();
+  const { range, isRangeValid } = useAnalyticsTimeRange();
 
   useEffect(() => {
+    if (!isRangeValid) {
+      return;
+    }
     let active = true;
     setError(null);
     const request = range ? fetchFunnel("registration", range) : fetchFunnel("registration");
@@ -16,7 +19,7 @@ function FunnelsContent() {
       .then((r) => { if (active) setSteps(r.steps ?? []); })
       .catch((e: Error) => { if (active) setError(e.message); });
     return () => { active = false; };
-  }, [range]);
+  }, [isRangeValid, range]);
 
   return (
     <>
