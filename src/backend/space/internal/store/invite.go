@@ -19,6 +19,7 @@ var (
 	ErrInviteExpired      = errors.New("invite expired")
 	ErrInviteMaxUses      = errors.New("invite max uses reached")
 	ErrAlreadySpaceMember = errors.New("already a space member")
+	ErrGuestsNotAllowed   = errors.New("guests not allowed in this space")
 )
 
 // InviteRow is a row from invites.
@@ -305,6 +306,16 @@ func (s *SpaceStore) validateInviteForJoin(inv *InviteRow, now time.Time) error 
 // JoinByInvite adds profile to space and increments use_count atomically.
 // If already a member, returns existing membership without incrementing use_count.
 func (s *SpaceStore) JoinByInvite(ctx context.Context, code string, profileID, accountID uuid.UUID) (*MembershipRow, error) {
+	return s.joinByInvite(ctx, code, profileID, accountID, false)
+}
+
+// JoinGuestByInvite adds a guest only when the Space owner has explicitly
+// enabled guest admission. It evaluates the flag under the invite transaction.
+func (s *SpaceStore) JoinGuestByInvite(ctx context.Context, code string, profileID, accountID uuid.UUID) (*MembershipRow, error) {
+	return s.joinByInvite(ctx, code, profileID, accountID, true)
+}
+
+func (s *SpaceStore) joinByInvite(ctx context.Context, code string, profileID, accountID uuid.UUID, guest bool) (*MembershipRow, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("space store: pool not configured")
 	}
@@ -318,7 +329,7 @@ func (s *SpaceStore) JoinByInvite(ctx context.Context, code string, profileID, a
 			return spaceID, err
 		}
 		return withResolvedOwnershipScopeValue(s, ctx, resolve, func(scoped *SpaceStore) (*MembershipRow, error) {
-			return scoped.JoinByInvite(ctx, code, profileID, accountID)
+			return scoped.joinByInvite(ctx, code, profileID, accountID, guest)
 		}, func() (*MembershipRow, error) {
 			return nil, ErrInviteNotFound
 		})
@@ -340,8 +351,18 @@ FOR UPDATE
 	if err != nil {
 		return nil, err
 	}
-	if err := s.validateInviteForJoin(inv, now); err != nil {
-		return nil, err
+	if inv == nil {
+		return nil, ErrInviteNotFound
+	}
+	// The handler lookup can be stale across instances. Revocation always gates
+	// the join path, including an otherwise idempotent guest membership retry.
+	if inv.RevokedAt != nil {
+		return nil, ErrInviteRevoked
+	}
+	if !guest {
+		if err := s.validateInviteForJoin(inv, now); err != nil {
+			return nil, err
+		}
 	}
 	banned, err := s.IsAccountBanned(ctx, inv.SpaceID, accountID)
 	if err != nil {
@@ -364,6 +385,21 @@ WHERE space_id = $1 AND profile_id = $2
 			return nil, err
 		}
 		return existing, nil
+	}
+	if guest {
+		if err := s.validateInviteForJoin(inv, now); err != nil {
+			return nil, err
+		}
+		var allowGuests bool
+		// Take the exclusive space-row lock before the later member_count update.
+		// A shared lock here would let concurrent guest joins deadlock while both
+		// transactions attempt to upgrade it through UPDATE spaces.
+		if err := tx.QueryRow(ctx, `SELECT allow_guests FROM spaces WHERE id = $1 FOR UPDATE`, inv.SpaceID).Scan(&allowGuests); err != nil {
+			return nil, err
+		}
+		if !allowGuests {
+			return nil, ErrGuestsNotAllowed
+		}
 	}
 
 	cap, err := memberCapTx(ctx, tx, inv.SpaceID)
@@ -527,7 +563,7 @@ func (s *SpaceStore) AllowGuestsForInvite(ctx context.Context, code string) (boo
 	}
 	var allow bool
 	err := s.db().QueryRow(ctx, `
-SELECT COALESCE(sp.allow_guests, true)
+SELECT sp.allow_guests
 FROM invites i
 JOIN spaces sp ON sp.id = i.space_id
 WHERE i.code = $1`, code).Scan(&allow)

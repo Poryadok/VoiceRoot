@@ -68,11 +68,19 @@ func (p *ordinaryScopeEvents) PublishRoleRevoked(context.Context, string, string
 	p.record()
 	return nil
 }
-func (p *ordinaryScopeEvents) PublishChatOverrideSet(context.Context, string, string) error {
+func (p *ordinaryScopeEvents) PublishChatOverrideSet(context.Context, string, string, string) error {
 	p.record()
 	return nil
 }
-func (p *ordinaryScopeEvents) PublishVoiceOverrideSet(context.Context, string, string) error {
+func (p *ordinaryScopeEvents) PublishChatOverrideRemoved(context.Context, string, string, string) error {
+	p.record()
+	return nil
+}
+func (p *ordinaryScopeEvents) PublishVoiceOverrideSet(context.Context, string, string, string) error {
+	p.record()
+	return nil
+}
+func (p *ordinaryScopeEvents) PublishVoiceOverrideRemoved(context.Context, string, string, string) error {
 	p.record()
 	return nil
 }

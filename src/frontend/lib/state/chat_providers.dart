@@ -302,9 +302,16 @@ class ChatListController extends StateNotifier<ChatListState> {
   }
 
   Future<void> loadInitial() async {
+    await _loadInitial();
+  }
+
+  /// Reloads the active chat list and reports whether the response was applied.
+  Future<bool> reloadInitial() => _loadInitial();
+
+  Future<bool> _loadInitial() async {
     final generation = ++_loadGeneration;
     final session = _ref.read(authControllerProvider).session;
-    if (session == null) return;
+    if (session == null) return false;
     final auth = session.authorizationHeader;
     final profileId = session.activeProfileId;
     final inbox = _ref.read(chatInboxProvider);
@@ -321,13 +328,13 @@ class ChatListController extends StateNotifier<ChatListState> {
     final result = await _ref
         .read(voiceChatsClientProvider)
         .listChats(authorization: auth, inbox: inbox, folderId: folderId);
-    if (!mounted) return;
+    if (!mounted) return false;
     if (generation != _loadGeneration ||
         !_matchesSession(profileId, auth) ||
         _ref.read(chatInboxProvider) != inbox ||
         (inbox != 'requests' &&
             _ref.read(selectedChatFolderIdProvider) != folderId)) {
-      return;
+      return false;
     }
     switch (result) {
       case ChatsApiOk(:final data):
@@ -337,6 +344,7 @@ class ChatListController extends StateNotifier<ChatListState> {
           nextCursor: data.nextCursor,
           profileId: profileId,
         );
+        return true;
       case ChatsApiFailure(:final message, :final statusCode):
         state = state.copyWith(
           isLoading: false,
@@ -344,6 +352,7 @@ class ChatListController extends StateNotifier<ChatListState> {
           errorStatusCode: statusCode,
           clearNextCursor: true,
         );
+        return false;
     }
   }
 

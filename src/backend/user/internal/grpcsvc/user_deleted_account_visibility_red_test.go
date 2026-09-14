@@ -84,7 +84,7 @@ func TestUserGRPC_DeletedAccountsCheckerContract(t *testing.T) {
 	setDeletedAccountChecker(t, svc, checker)
 }
 
-func startDeletedAccountVisibilityServer(t *testing.T, checker *deletedAccountCheckerStub) (context.Context, *store.ProfileStore, *store.PrivacyStore, userv1.UserServiceClient) {
+func startDeletedAccountVisibilityServer(t *testing.T, checker *deletedAccountCheckerStub, configure ...func(*UserGRPC)) (context.Context, *store.ProfileStore, *store.PrivacyStore, userv1.UserServiceClient) {
 	t.Helper()
 	ctx := context.Background()
 	pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
@@ -101,6 +101,9 @@ func startDeletedAccountVisibilityServer(t *testing.T, checker *deletedAccountCh
 		Profiles: profiles,
 		Privacy:  privacyStore,
 		Presence: store.NewPresenceStore(rdb),
+	}
+	for _, configureService := range configure {
+		configureService(svc)
 	}
 	setDeletedAccountChecker(t, svc, checker)
 
@@ -232,7 +235,9 @@ func TestDeletedAccountProfiles_DoNotRevealPresence(t *testing.T) {
 	activeAccount, activeProfile := uuid.New(), uuid.New()
 	viewerAccount, viewerProfile := uuid.New(), uuid.New()
 	checker := &deletedAccountCheckerStub{deleted: make(map[uuid.UUID]struct{})}
-	ctx, profiles, privacyStore, client := startDeletedAccountVisibilityServer(t, checker)
+	ctx, profiles, privacyStore, client := startDeletedAccountVisibilityServer(t, checker,
+		func(s *UserGRPC) { s.Blocks = stubProfileBlocks{} },
+	)
 	insertVisibleProfile(t, ctx, profiles, ownerProfile, ownerAccount, "deletedpresence", "0001", true)
 	insertVisibleProfile(t, ctx, profiles, activeProfile, activeAccount, "activepresence", "0002", true)
 	insertVisibleProfile(t, ctx, profiles, viewerProfile, viewerAccount, "presenceviewer", "0003", true)

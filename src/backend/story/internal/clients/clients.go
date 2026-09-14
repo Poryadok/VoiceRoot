@@ -8,8 +8,10 @@ import (
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/privacy"
@@ -161,7 +163,16 @@ func (f *FileDeleter) DeleteFile(ctx context.Context, fileID string) error {
 		return nil
 	}
 	_, err := f.client.DeleteFile(ctx, &filev1.DeleteFileRequest{FileId: fileID})
+	if isIdempotentDeleteResult(err) {
+		// The durable outbox may retry after File performed the deletion but
+		// its acknowledgement was lost. Absence is the desired final state.
+		return nil
+	}
 	return err
+}
+
+func isIdempotentDeleteResult(err error) bool {
+	return status.Code(err) == codes.NotFound
 }
 
 // FileMetadataReader loads file metadata for story validation.
