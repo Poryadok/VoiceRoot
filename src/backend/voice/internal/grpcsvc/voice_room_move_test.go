@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -127,4 +128,8 @@ func TestMoveVoiceRoomParticipant_OperationConflictIsFailedPrecondition(t *testi
 	_, err = f.svc.MoveVoiceRoomParticipant(voiceTestCtx(f.actor), changed)
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))
 	require.Equal(t, "operation id conflicts with a different request", status.Convert(err).Message())
+}
+
+func TestMoveStoreErr_RetryExhaustionIsUnavailable(t *testing.T) {
+	require.Equal(t, codes.Unavailable, status.Code(moveStoreErr(redis.TxFailedErr)))
 }

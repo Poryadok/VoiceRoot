@@ -223,3 +223,20 @@ func TestWriteGRPCError_UnrelatedFailedPreconditionRemains412(t *testing.T) {
 	writeGRPCError(resp, status.Error(codes.FailedPrecondition, "registration_conflict"))
 	require.Equal(t, http.StatusPreconditionFailed, resp.Code)
 }
+
+func TestTranscodeSpaceVoiceRoomMoveFailedPreconditionUsesConflictEnvelope(t *testing.T) {
+	grpcRec := &recordingVoiceRooms{moveSelfErr: status.Error(codes.FailedPrecondition, "stale source backend diagnostic")}
+	conn, cleanup := startBufconnVoiceConn(t, grpcRec)
+	t.Cleanup(cleanup)
+	tc := &transcoder{clients: grpcClients{voice: callsv1.NewVoiceServiceClient(conn)}}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/spaces/space-path/voice-rooms/source-path/move", strings.NewReader(`{"to_voice_room_id":"dest-path","operation_id":"op-path"}`))
+	resp := httptest.NewRecorder()
+	require.True(t, tc.serveSpacesVoiceRooms(resp, req, "space-path/voice-rooms/source-path/move"))
+	require.Equal(t, http.StatusConflict, resp.Code, "body=%s", resp.Body.String())
+	var envelope struct {
+		ErrorCode, Message string `json:"error_code"`
+	}
+	decodeJSON(t, resp.Body, &envelope)
+	require.Equal(t, "failed_precondition", envelope.ErrorCode)
+	require.Contains(t, []string{"voice room move is no longer possible", "voice room move conflicts with current state"}, envelope.Message)
+}

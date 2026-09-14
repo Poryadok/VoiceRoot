@@ -229,3 +229,24 @@ func TestRedisCallStore_CompetingMovesChooseOneDestination(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, []string{"destination-call-a", "destination-call-b"}, active.RoomID)
 }
+
+func TestRedisCallStore_MoveFailureLeavesRosterIndexesAndLedgerUntouched(t *testing.T) {
+	ctx := context.Background()
+	store, client := newRedisCallStoreForTest(t, "voice-move-rollback:")
+	source, err := store.CreateCall(ctx, Call{RoomID: "source-call", VoiceRoomID: "source", SpaceID: "space", SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, InitiatorProfileID: "target", MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE})
+	require.NoError(t, err)
+	before, err := store.GetCall(ctx, source.RoomID)
+	require.NoError(t, err)
+	// A cancelled Redis transaction must commit no part of the roster/session/index/ledger transition.
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	_, err = store.MoveVoiceRoomParticipant(cancelled, VoiceRoomMoveRequest{ActorProfileID: "actor", ParticipantProfileID: "target", OperationID: "op", FromVoiceRoomID: "source", ToVoiceRoomID: "destination", SpaceID: "space", MaxParticipants: MaxVoiceRoomParticipants, DestinationRoomID: "destination-call", Now: time.Now().UTC()})
+	require.Error(t, err)
+	after, err := store.GetCall(ctx, source.RoomID)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+	_, err = store.GetCallByVoiceRoomID(ctx, "destination")
+	require.ErrorIs(t, err, ErrNotFound)
+	require.Equal(t, "source-call", client.Get(ctx, store.activeKey("target")).Val())
+	require.False(t, client.Exists(ctx, store.moveOperationKey("actor", "op")).Val() > 0)
+}
