@@ -81,10 +81,10 @@ public class RedisOtpThrottle implements OtpThrottle {
             Long.toString(verifyWindowMillis),
             Integer.toString(maxVerifyAttempts),
             UUID.randomUUID().toString());
-    if (admitted == null || admitted == 0L) {
+    if (Long.valueOf(0L).equals(admitted)) {
       throw new AuthException("otp_rate_limited");
     }
-    if (admitted != 1L) {
+    if (!Long.valueOf(1L).equals(admitted)) {
       unavailable();
     }
   }
