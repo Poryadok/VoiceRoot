@@ -17,6 +17,22 @@
 - Отзыв всех сессий через Auth-owned `session_epoch`; strict-потребители Gateway и Realtime проверяют floor fail-closed
 - 2FA (TOTP — Google Authenticator и аналоги)
 - JWT blacklist (Redis, для логаута и ротации)
+
+### Subscription claims (A7 accepted target; not implemented)
+
+Auth consumes the complete revisioned personal
+`subscription.entitlement_changed` snapshot into a transactional `auth_db`
+inbox/projection. Access JWT adds `subscription_revision` and
+`subscription_entitled_until` beside `subscription_tier`. Paid benefit ends at
+deadline equality even when the access token remains otherwise valid. A service
+that reaches that boundary calls Subscription-owned
+`ResolveEntitlementAtBoundary` with the claim revision as `minimum_revision`;
+Auth is not a second decision owner and dependency failure cannot extend Premium.
+
+Auth creates its durable consumer before a protected one-watermark snapshot,
+applies `INACTIVE` tombstones, then drains queued events. The current optional
+in-memory NATS tier store is not an authority/restore path. Full replay and RED
+contract: [subscription-lifecycle-convergence-exec-plan.md](../testing/subscription-lifecycle-convergence-exec-plan.md).
 - OTP throttling в Auth-owned Redis: `auth:otp:send:<account_id>` резервируется
   одним `SET NX PX` до создания/отправки кода; `auth:otp:verify:<account_id>`
   ведёт атомарное admission до сравнения кода в Redis sorted-set sliding window

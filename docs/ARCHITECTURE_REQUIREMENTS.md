@@ -395,6 +395,24 @@ consumers atomically insert `(consumer_name,event_id)`, apply generation-aware
 state, commit, then ACK. An offline authority projection beyond stream MaxAge
 must reconcile a complete owner snapshot before serving.
 
+Subscription entitlement replication uses the same durability rule but a
+complete account/Space snapshot and Subscription-owned aggregate revision.
+Billing mutation and immutable event/reminder outbox commit together; Auth,
+User, File, Space, Voice and Notification commit inbox + projection/effect;
+Analytics deduplicates canonical IDs in its service-native ClickHouse ingest
+before ACK. Duplicate/out-of-order delivery cannot regress a higher revision,
+and recovery beyond stream MaxAge requires protected current-entitlement
+snapshot reconciliation. The accepted contract and RED matrix are
+[subscription-lifecycle-convergence-exec-plan.md](testing/subscription-lifecycle-convergence-exec-plan.md).
+Account deletion is a first-class entitlement transition: personal access ends
+immediately, provider renewal cancellation is outboxed, restore never silently
+resumes billing, and each participant independently erases raw IDs at `P30D` by
+an opaque deletion fence. Receipts are evidence rather than a gate; offline
+restore applies the permanent purge-fence snapshot before serving.
+A restored consumer that knows only a legacy raw aggregate key must first use
+Subscription's allowlisted non-logging HMAC lookup and purge a matching fence;
+consumers never receive HMAC keys or reversible tombstone mappings.
+
 Space, Auth and Subscription HMAC purposes use three distinct KMS/HSM families,
 never Analytics keys. Only the corresponding workload identity may compute each;
 general staff and break-glass access are absent. Each rotates every `P90D`, uses
