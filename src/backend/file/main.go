@@ -147,8 +147,8 @@ func main() {
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
 		}
-		sharedOptions := grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))
-		options := append(append([]grpc.ServerOption{}, sharedOptions...), grpc.ChainUnaryInterceptor(principalgrpc.OrdinaryUnaryInterceptor()))
+		ordinaryObservation, protectedObservation := fileObservability(logger, metricsReg)
+		options := append(ordinaryObservation, grpc.ChainUnaryInterceptor(principalgrpc.OrdinaryUnaryInterceptor()))
 		grpcSrv = grpc.NewServer(options...)
 		service := grpcsvc.New(grpcsvc.Deps{
 			Files:     filesStore,
@@ -166,7 +166,7 @@ func main() {
 			if err != nil {
 				log.Fatalf("file principal listen: %v", err)
 			}
-			protectedOptions := append(append([]grpc.ServerOption{}, sharedOptions...), protectedRuntime.ServerOptions()...)
+			protectedOptions := append(protectedObservation, protectedRuntime.ServerOptions()...)
 			protectedSrv = grpc.NewServer(protectedOptions...)
 			filev1.RegisterFileServiceServer(protectedSrv, service)
 			go func() {
@@ -219,4 +219,13 @@ func main() {
 			log.Fatal(err)
 		}
 	}
+}
+
+func fileObservability(logger *slog.Logger, registry *prometheus.Registry) ([]grpc.ServerOption, []grpc.ServerOption) {
+	metrics := grpcmw.UnaryMetricsForRegistry(registry)
+	ordinary := []grpc.ServerOption{grpc.ChainUnaryInterceptor(grpcmw.UnaryRecovery(logger), metrics, grpcmw.UnaryAccessLog(logger))}
+	// Unverified request IDs are attacker-controlled. Protected denials export
+	// bounded gRPC outcome metrics without logging headers or panic payloads.
+	protected := []grpc.ServerOption{grpc.ChainUnaryInterceptor(grpcmw.UnaryRecovery(nil), metrics)}
+	return ordinary, protected
 }
