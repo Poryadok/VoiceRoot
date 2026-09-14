@@ -187,7 +187,7 @@ func TestRedisCallStore_MoveConcurrentPublicAddAndRemoveKeepSingleActiveRoster(t
 					errs <- err
 					return
 				}
-				_, err := store.AddParticipant(ctx, source.RoomID, target, MaxVoiceRoomParticipants)
+				_, err := store.AddParticipant(ctx, source.RoomID, "independent-joiner", MaxVoiceRoomParticipants)
 				errs <- err
 			}()
 			close(start)
