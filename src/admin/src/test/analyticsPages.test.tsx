@@ -4,11 +4,13 @@ import { MemoryRouter } from "react-router-dom";
 import { DashboardMetricsPage } from "../pages/DashboardMetricsPage";
 import { FunnelsPage } from "../pages/FunnelsPage";
 import { RetentionPage } from "../pages/RetentionPage";
+import { AnalyticsExportPage } from "../pages/AnalyticsExportPage";
 import { AnalyticsTimeRangeProvider } from "../components/AnalyticsTimeRange";
 import * as analytics from "../api/analytics";
 
 vi.mock("../api/analytics", () => ({
   fetchDashboard: vi.fn(),
+  exportAnalytics: vi.fn(),
   fetchFunnel: vi.fn(),
   fetchRetention: vi.fn(),
 }));
@@ -24,6 +26,7 @@ beforeEach(() => {
     steps: [{ step: "started", count: 42 }],
   });
   vi.mocked(analytics.fetchRetention).mockResolvedValue({ cohorts: [] });
+  vi.mocked(analytics.exportAnalytics).mockResolvedValue(new Blob(["metric,value\n"], { type: "text/csv" }));
 });
 
 describe("DashboardMetricsPage", () => {
@@ -261,6 +264,53 @@ describe("RetentionPage", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.getByLabelText("From")).toHaveAttribute("aria-invalid", "false");
     expect(screen.getByLabelText("To")).toHaveAttribute("aria-invalid", "false");
+  });
+});
+
+describe("AnalyticsExportPage", () => {
+  it("uses the UTC time-range UI, blocks inverse bounds, and forwards corrected bounds to export", async () => {
+    render(
+      <MemoryRouter>
+        <AnalyticsExportPage />
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(screen.getByLabelText("From"), {
+      target: { value: "2026-01-31T00:00" },
+    });
+    fireEvent.change(screen.getByLabelText("To"), {
+      target: { value: "2026-01-01T00:00" },
+    });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("From must be before or equal to To.");
+    fireEvent.click(screen.getByRole("button", { name: "Download CSV" }));
+    expect(analytics.exportAnalytics).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText("To"), {
+      target: { value: "2026-02-01T00:00" },
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Download CSV" }));
+    await waitFor(() => {
+      expect(analytics.exportAnalytics).toHaveBeenCalledWith("csv", undefined, {
+        from: "2026-01-31T00:00:00Z",
+        to: "2026-02-01T00:00:00Z",
+      });
+    });
+
+    fireEvent.change(screen.getByLabelText("Event type filter (optional)"), {
+      target: { value: "message_sent" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Download JSON" }));
+    await waitFor(() => {
+      expect(analytics.exportAnalytics).toHaveBeenCalledWith("json", "message_sent", {
+        from: "2026-01-31T00:00:00Z",
+        to: "2026-02-01T00:00:00Z",
+      });
+    });
   });
 });
 
