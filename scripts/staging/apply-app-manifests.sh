@@ -50,9 +50,12 @@ scale_auth_down_if_needed() {
   kubectl wait --for=delete pod -l app=voice-auth -n "${NS}" --timeout=180s 2>/dev/null || true
 }
 
+bash "${ROOT}/scripts/staging/check-social-principal-secrets.sh"
 scale_auth_down_if_needed
 
 render "${ROOT}/deploy/staging/services.yaml" | kubectl apply -f -
+sed "s|__K_NAMESPACE__|${NS}|g" \
+  "${ROOT}/deploy/templates/network-policy-social-privacy-principal.yaml" | kubectl apply -f -
 render "${ROOT}/deploy/staging/gateway-deployment.yaml" | kubectl apply -f -
 
 if auth_pre_scale_needed; then

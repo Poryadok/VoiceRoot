@@ -236,6 +236,18 @@ services:
       retries: 12
       start_period: 45s
 
+  social-principal-init:
+    profiles: ["app"]
+    build:
+      context: ./docker/social-principal
+    restart: "no"
+    volumes:
+      - social_principal_keys:/signing
+      - social_principal_tls:/social
+      - user_principal_tls:/user
+      - space_principal_tls:/space
+      - social_principal_ca:/ca
+
   social:
     profiles: ["app"]
     build:
@@ -245,9 +257,26 @@ services:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/social_db?sslmode=disable
       SOCIAL_GRPC_LISTEN: :9090
+      SOCIAL_PRINCIPAL_SIGNING_KEYS_DIR: /etc/voice/principal/keys
+      SOCIAL_PRINCIPAL_ACTIVE_KID: current
+      SOCIAL_PRINCIPAL_JWKS_LISTEN: :8443
+      SOCIAL_PRINCIPAL_TLS_CERT_FILE: /etc/voice/principal/tls/tls.crt
+      SOCIAL_PRINCIPAL_TLS_KEY_FILE: /etc/voice/principal/tls/tls.key
+      USER_PRINCIPAL_GRPC_ADDR: user:9091
+      USER_PRINCIPAL_TLS_CA_FILE: /etc/voice/principal/ca/ca.crt
+      USER_PRINCIPAL_TLS_SERVER_NAME: user
+      SPACE_PRINCIPAL_GRPC_ADDR: space:9091
+      SPACE_PRINCIPAL_TLS_CA_FILE: /etc/voice/principal/ca/ca.crt
+      SPACE_PRINCIPAL_TLS_SERVER_NAME: space
       USER_GRPC_ADDR: user:9090
       AUTH_GRPC_ADDR: auth:9090
+    volumes:
+      - social_principal_keys:/etc/voice/principal/keys:ro
+      - social_principal_tls:/etc/voice/principal/tls:ro
+      - social_principal_ca:/etc/voice/principal/ca:ro
     depends_on:
+      social-principal-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       compose-db-init:
@@ -270,6 +299,12 @@ services:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/user_db?sslmode=disable
       USER_GRPC_ADDR: :9090
+      USER_PRINCIPAL_GRPC_LISTEN: :9091
+      USER_PRINCIPAL_TLS_CERT_FILE: /etc/voice/principal/tls/tls.crt
+      USER_PRINCIPAL_TLS_KEY_FILE: /etc/voice/principal/tls/tls.key
+      USER_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
+      S2S_JWKS_URLS_JSON: '{"social":"https://social:8443/.well-known/jwks.json"}'
+      S2S_JWKS_CA_FILE: /etc/voice/principal/ca/ca.crt
       SOCIAL_GRPC_ADDR: social:9090
       AUTH_GRPC_ADDR: auth:9090
       USER_REDIS_ADDR: redis:6379
@@ -281,7 +316,12 @@ services:
       USER_R2_BUCKET: ${USER_R2_BUCKET:-}
       USER_R2_PUBLIC_BASE_URL: ${USER_R2_PUBLIC_BASE_URL:-}
       USER_DNS_STUB_URL: http://verification-stub:4180/dns-txt
+    volumes:
+      - user_principal_tls:/etc/voice/principal/tls:ro
+      - social_principal_ca:/etc/voice/principal/ca:ro
     depends_on:
+      social-principal-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       compose-db-init:
@@ -786,12 +826,25 @@ services:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/space_db?sslmode=disable
       SPACE_GRPC_LISTEN: :9090
+      SPACE_PRINCIPAL_GRPC_LISTEN: :9091
+      SPACE_PRINCIPAL_TLS_CERT_FILE: /etc/voice/principal/tls/tls.crt
+      SPACE_PRINCIPAL_TLS_KEY_FILE: /etc/voice/principal/tls/tls.key
+      SPACE_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
+      S2S_JWKS_URLS_JSON: '{"social":"https://social:8443/.well-known/jwks.json"}'
+      S2S_JWKS_CA_FILE: /etc/voice/principal/ca/ca.crt
       ROLE_GRPC_ADDR: role:9090
       USER_GRPC_ADDR: user:9090
       CHAT_GRPC_ADDR: chat:9090
       SOCIAL_GRPC_ADDR: social:9090
       NATS_URL: nats://nats:4222
+    volumes:
+      - space_principal_tls:/etc/voice/principal/tls:ro
+      - social_principal_ca:/etc/voice/principal/ca:ro
     depends_on:
+      social-principal-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       compose-db-init:
@@ -1100,6 +1153,11 @@ services:
       start_period: 30s
 
 volumes:
+  social_principal_keys:
+  social_principal_tls:
+  user_principal_tls:
+  space_principal_tls:
+  social_principal_ca:
   voice_pgdata:
   voice_redis:
   voice_nats_js:
