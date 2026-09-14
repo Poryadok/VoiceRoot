@@ -72,7 +72,7 @@ func (s *UserGRPC) SetVerification(ctx context.Context, req *userv1.SetVerificat
 		return nil, status.Error(codes.NotFound, "profile not found")
 	}
 	if s.Events != nil {
-		_ = s.Events.PublishVerified(ctx, row.ID.String(), row.AccountID.String(), vType)
+		_ = s.Events.PublishVerified(ctx, row.ID.String(), vType)
 	}
 	return &userv1.SetVerificationResponse{VerificationStatus: verificationStatusFromRow(row)}, nil
 }
@@ -128,7 +128,7 @@ func (s *UserGRPC) ApplyVerificationSourceState(ctx context.Context, req *userv1
 		return nil, status.Error(codes.NotFound, "profile not found")
 	}
 	if applied && s.Events != nil {
-		_ = s.Events.PublishVerified(ctx, row.ID.String(), row.AccountID.String(), row.VerificationType)
+		_ = s.Events.PublishVerified(ctx, row.ID.String(), row.VerificationType)
 	}
 	return &userv1.ApplyVerificationSourceStateResponse{
 		VerificationStatus: verificationStatusFromRow(row),
@@ -216,7 +216,7 @@ func (s *UserGRPC) CheckOrganizationVerification(ctx context.Context, req *userv
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if s.Events != nil {
-		_ = s.Events.PublishVerified(ctx, updated.ID.String(), updated.AccountID.String(), "organization")
+		_ = s.Events.PublishVerified(ctx, updated.ID.String(), "organization")
 	}
 	return &userv1.CheckOrganizationVerificationResponse{
 		VerificationStatus: verificationStatusFromRow(updated),
