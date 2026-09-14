@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBanStore_InsertMMPeerBanPersistsBan(t *testing.T) {
+func TestBanStore_InsertMMPeerBanIfAbsentPersistsAndReportsIdempotency(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -20,15 +20,23 @@ func TestBanStore_InsertMMPeerBanPersistsBan(t *testing.T) {
 	target := uuid.New()
 	bans := &BanStore{Pool: pool}
 
-	err := bans.InsertMMPeerBan(ctx, InsertMMPeerBanParams{
+	created, err := bans.InsertMMPeerBanIfAbsent(ctx, InsertMMPeerBanParams{
 		BannerProfileID: banner,
 		TargetProfileID: target,
 	})
 	require.NoError(t, err)
+	require.True(t, created)
 
 	banned, err := bans.IsPeerBanned(ctx, banner, target)
 	require.NoError(t, err)
 	require.True(t, banned)
+
+	created, err = bans.InsertMMPeerBanIfAbsent(ctx, InsertMMPeerBanParams{
+		BannerProfileID: banner,
+		TargetProfileID: target,
+	})
+	require.NoError(t, err)
+	require.False(t, created)
 }
 
 func TestBanStore_IsPeerBannedFalseWhenNoBan(t *testing.T) {

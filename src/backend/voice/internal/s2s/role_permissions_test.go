@@ -96,6 +96,18 @@ func TestGRPCRolePermissions_EnsureMuteOthers_unavailable(t *testing.T) {
 	require.Equal(t, codes.Unavailable, status.Code(err))
 }
 
+func TestGRPCRolePermissions_EnsureVoiceMoveOthers_UsesSourceRoom(t *testing.T) {
+	t.Parallel()
+	spaceID, profileID, voiceRoomID := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	cli := &recordingRoleClient{allowed: true}
+	err := NewGRPCRolePermissions(cli).EnsureVoiceMoveOthers(context.Background(), spaceID, profileID, voiceRoomID)
+	require.NoError(t, err)
+	require.Equal(t, permVoiceMoveOthers, cli.lastReq.GetPermissionName())
+	require.Equal(t, spaceID, cli.lastReq.GetSpaceId())
+	require.Equal(t, profileID, cli.lastReq.GetProfileId())
+	require.Equal(t, voiceRoomID, cli.lastReq.GetVoiceRoomId())
+}
+
 func TestGRPCRolePermissions_EnsureVoiceSpeak_passesVoiceRoomID(t *testing.T) {
 	t.Parallel()
 	spaceID := uuid.NewString()
