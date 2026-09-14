@@ -25,3 +25,17 @@ func TestReceiptOptOutProfileIDAcceptsOnlyExplicitFalse(t *testing.T) {
 	_, ok = receiptOptOutProfileID(encode(`[{"key":"allow_dm","value":false}]`))
 	require.False(t, ok)
 }
+
+func TestReceiptOptOutProfileIDAcceptsTypedKeysWithLegacyFalseValue(t *testing.T) {
+	profileID := uuid.New()
+	b, err := proto.Marshal(&eventsv1.UserStreamEvent{Payload: &eventsv1.UserStreamEvent_SettingsChanged{SettingsChanged: &eventsv1.SettingsChanged{
+		ProfileId:       profileID.String(),
+		ChangedKeys:     []string{"show_read_receipts"},
+		ChangedKeysJson: `[{"key":"show_read_receipts","value":false}]`,
+	}}})
+	require.NoError(t, err)
+
+	got, ok := receiptOptOutProfileID(b)
+	require.True(t, ok)
+	require.Equal(t, profileID, got)
+}

@@ -120,7 +120,7 @@ quiet_hours
 | **Trigger** | `message.sent` with `content_type=STICKER \| GIF` |
 | **Push title** | Sender display name (same as text) |
 | **Push body** | Label **«Sticker»** / **«GIF»** when `content` empty; optional thumb from File presigned URL or `preview_url` |
-| **In-app** | Group by `chat_id`; unread badge unless mute / `send_silent` |
+| **In-app** | Group by `chat_id`; unread badge and in-app row as usual unless mute; `send_silent` affects push sound/badge only |
 | **Presence routing** | Standard `DecideRouting` |
 
 См. [messaging-service.md](messaging-service.md) § Stickers and GIF; [notifications.md](../features/notifications.md).
@@ -193,7 +193,7 @@ Implemented in `delivery/router.go` → `DecideRouting`; message path enriches v
 
 ### `send_silent` consumption
 
-Wire name on `SendMessage` / `message.sent`: **`send_silent`** (bool). Notification consumer on `message.sent`:
+Wire name on `SendMessage` / `message.sent`: **`send_silent`** (bool). The derived `message.mention_added` event mirrors the flag so its push cannot introduce an audible duplicate. Notification consumer:
 
 | Channel | `send_silent=true` |
 |---------|-------------------|
@@ -204,7 +204,7 @@ Wire name on `SendMessage` / `message.sent`: **`send_silent`** (bool). Notificat
 
 Composer label — [text-chat.md](../features/text-chat.md) § Send options; [screen-controls.md](../design/screen-controls.md) §3.6c #1.
 
-**Code gap:** field absent from `messaging.proto` / JetStream `message.sent` proto — [todo/backend.md](../todo/backend.md).
+**Implementation:** Notification consumes the durable `message.sent.send_silent` field and projects it to APNs/FCM/Web Push while preserving grouping; Chat remains the owner of unread/activity and Realtime in-app delivery.
 
 ### Quiet hours
 

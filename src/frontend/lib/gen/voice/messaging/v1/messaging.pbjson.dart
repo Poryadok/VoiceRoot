@@ -66,6 +66,25 @@ final $typed_data.Uint8List sharedMediaKindDescriptor = $convert.base64Decode(
     'GwoXU0hBUkVEX01FRElBX0tJTkRfTElOS1MQAxIbChdTSEFSRURfTUVESUFfS0lORF9WT0lDRR'
     'AE');
 
+@$core.Deprecated('Use scheduledMessageStatusDescriptor instead')
+const ScheduledMessageStatus$json = {
+  '1': 'ScheduledMessageStatus',
+  '2': [
+    {'1': 'SCHEDULED_MESSAGE_STATUS_UNSPECIFIED', '2': 0},
+    {'1': 'SCHEDULED_MESSAGE_STATUS_PENDING', '2': 1},
+    {'1': 'SCHEDULED_MESSAGE_STATUS_SENT', '2': 2},
+    {'1': 'SCHEDULED_MESSAGE_STATUS_CANCELLED', '2': 3},
+    {'1': 'SCHEDULED_MESSAGE_STATUS_FAILED', '2': 4},
+  ],
+};
+
+/// Descriptor for `ScheduledMessageStatus`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List scheduledMessageStatusDescriptor = $convert.base64Decode(
+    'ChZTY2hlZHVsZWRNZXNzYWdlU3RhdHVzEigKJFNDSEVEVUxFRF9NRVNTQUdFX1NUQVRVU19VTl'
+    'NQRUNJRklFRBAAEiQKIFNDSEVEVUxFRF9NRVNTQUdFX1NUQVRVU19QRU5ESU5HEAESIQodU0NI'
+    'RURVTEVEX01FU1NBR0VfU1RBVFVTX1NFTlQQAhImCiJTQ0hFRFVMRURfTUVTU0FHRV9TVEFUVV'
+    'NfQ0FOQ0VMTEVEEAMSIwofU0NIRURVTEVEX01FU1NBR0VfU1RBVFVTX0ZBSUxFRBAE');
+
 @$core.Deprecated('Use messageContentTypeDescriptor instead')
 const MessageContentType$json = {
   '1': 'MessageContentType',
@@ -149,7 +168,7 @@ const SendMessageRequest$json = {
       '3': 3,
       '4': 1,
       '5': 9,
-      '9': 0,
+      '9': 1,
       '10': 'clientMessageId',
       '17': true
     },
@@ -160,7 +179,7 @@ const SendMessageRequest$json = {
       '3': 6,
       '4': 1,
       '5': 9,
-      '9': 1,
+      '9': 2,
       '10': 'threadParentId',
       '17': true
     },
@@ -170,7 +189,7 @@ const SendMessageRequest$json = {
       '4': 1,
       '5': 14,
       '6': '.voice.messaging.v1.MessageKind',
-      '9': 2,
+      '9': 3,
       '10': 'messageKind',
       '17': true
     },
@@ -179,23 +198,42 @@ const SendMessageRequest$json = {
       '3': 8,
       '4': 1,
       '5': 8,
-      '9': 3,
+      '9': 4,
       '10': 'postedAsChat',
       '17': true
     },
-    {'1': 'is_e2e', '3': 9, '4': 1, '5': 8, '9': 4, '10': 'isE2e', '17': true},
+    {'1': 'is_e2e', '3': 9, '4': 1, '5': 8, '9': 5, '10': 'isE2e', '17': true},
     {
       '1': 'content_type',
       '3': 10,
       '4': 1,
       '5': 14,
       '6': '.voice.messaging.v1.MessageContentType',
-      '9': 5,
+      '9': 6,
       '10': 'contentType',
       '17': true
     },
+    {'1': 'send_silent', '3': 11, '4': 1, '5': 8, '10': 'sendSilent'},
+    {
+      '1': 'scheduled_at',
+      '3': 12,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '9': 0,
+      '10': 'scheduledAt'
+    },
+    {
+      '1': 'send_when_online',
+      '3': 13,
+      '4': 1,
+      '5': 8,
+      '9': 0,
+      '10': 'sendWhenOnline'
+    },
   ],
   '8': [
+    {'1': 'delivery_schedule'},
     {'1': '_client_message_id'},
     {'1': '_thread_parent_id'},
     {'1': '_message_kind'},
@@ -209,15 +247,192 @@ const SendMessageRequest$json = {
 final $typed_data.Uint8List sendMessageRequestDescriptor = $convert.base64Decode(
     'ChJTZW5kTWVzc2FnZVJlcXVlc3QSKgoEY2hhdBgBIAEoCzIWLnZvaWNlLmNoYXQudjEuQ2hhdF'
     'JlZlIEY2hhdBIYCgdjb250ZW50GAIgASgJUgdjb250ZW50Ei8KEWNsaWVudF9tZXNzYWdlX2lk'
-    'GAMgASgJSABSD2NsaWVudE1lc3NhZ2VJZIgBARIpChBhdHRhY2htZW50c19qc29uGAQgASgJUg'
+    'GAMgASgJSAFSD2NsaWVudE1lc3NhZ2VJZIgBARIpChBhdHRhY2htZW50c19qc29uGAQgASgJUg'
     '9hdHRhY2htZW50c0pzb24SIwoNbWVudGlvbnNfanNvbhgFIAEoCVIMbWVudGlvbnNKc29uEi0K'
-    'EHRocmVhZF9wYXJlbnRfaWQYBiABKAlIAVIOdGhyZWFkUGFyZW50SWSIAQESRwoMbWVzc2FnZV'
-    '9raW5kGAcgASgOMh8udm9pY2UubWVzc2FnaW5nLnYxLk1lc3NhZ2VLaW5kSAJSC21lc3NhZ2VL'
-    'aW5kiAEBEikKDnBvc3RlZF9hc19jaGF0GAggASgISANSDHBvc3RlZEFzQ2hhdIgBARIaCgZpc1'
-    '9lMmUYCSABKAhIBFIFaXNFMmWIAQESTgoMY29udGVudF90eXBlGAogASgOMiYudm9pY2UubWVz'
-    'c2FnaW5nLnYxLk1lc3NhZ2VDb250ZW50VHlwZUgFUgtjb250ZW50VHlwZYgBAUIUChJfY2xpZW'
-    '50X21lc3NhZ2VfaWRCEwoRX3RocmVhZF9wYXJlbnRfaWRCDwoNX21lc3NhZ2Vfa2luZEIRCg9f'
-    'cG9zdGVkX2FzX2NoYXRCCQoHX2lzX2UyZUIPCg1fY29udGVudF90eXBl');
+    'EHRocmVhZF9wYXJlbnRfaWQYBiABKAlIAlIOdGhyZWFkUGFyZW50SWSIAQESRwoMbWVzc2FnZV'
+    '9raW5kGAcgASgOMh8udm9pY2UubWVzc2FnaW5nLnYxLk1lc3NhZ2VLaW5kSANSC21lc3NhZ2VL'
+    'aW5kiAEBEikKDnBvc3RlZF9hc19jaGF0GAggASgISARSDHBvc3RlZEFzQ2hhdIgBARIaCgZpc1'
+    '9lMmUYCSABKAhIBVIFaXNFMmWIAQESTgoMY29udGVudF90eXBlGAogASgOMiYudm9pY2UubWVz'
+    'c2FnaW5nLnYxLk1lc3NhZ2VDb250ZW50VHlwZUgGUgtjb250ZW50VHlwZYgBARIfCgtzZW5kX3'
+    'NpbGVudBgLIAEoCFIKc2VuZFNpbGVudBI/CgxzY2hlZHVsZWRfYXQYDCABKAsyGi5nb29nbGUu'
+    'cHJvdG9idWYuVGltZXN0YW1wSABSC3NjaGVkdWxlZEF0EioKEHNlbmRfd2hlbl9vbmxpbmUYDS'
+    'ABKAhIAFIOc2VuZFdoZW5PbmxpbmVCEwoRZGVsaXZlcnlfc2NoZWR1bGVCFAoSX2NsaWVudF9t'
+    'ZXNzYWdlX2lkQhMKEV90aHJlYWRfcGFyZW50X2lkQg8KDV9tZXNzYWdlX2tpbmRCEQoPX3Bvc3'
+    'RlZF9hc19jaGF0QgkKB19pc19lMmVCDwoNX2NvbnRlbnRfdHlwZQ==');
+
+@$core.Deprecated('Use scheduledMessagePayloadDescriptor instead')
+const ScheduledMessagePayload$json = {
+  '1': 'ScheduledMessagePayload',
+  '2': [
+    {'1': 'content', '3': 1, '4': 1, '5': 9, '10': 'content'},
+    {'1': 'attachments_json', '3': 2, '4': 1, '5': 9, '10': 'attachmentsJson'},
+    {'1': 'mentions_json', '3': 3, '4': 1, '5': 9, '10': 'mentionsJson'},
+    {
+      '1': 'thread_parent_id',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'threadParentId',
+      '17': true
+    },
+    {
+      '1': 'message_kind',
+      '3': 5,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.messaging.v1.MessageKind',
+      '9': 1,
+      '10': 'messageKind',
+      '17': true
+    },
+    {
+      '1': 'posted_as_chat',
+      '3': 6,
+      '4': 1,
+      '5': 8,
+      '9': 2,
+      '10': 'postedAsChat',
+      '17': true
+    },
+    {'1': 'is_e2e', '3': 7, '4': 1, '5': 8, '9': 3, '10': 'isE2e', '17': true},
+    {
+      '1': 'content_type',
+      '3': 8,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.messaging.v1.MessageContentType',
+      '9': 4,
+      '10': 'contentType',
+      '17': true
+    },
+    {'1': 'send_silent', '3': 9, '4': 1, '5': 8, '10': 'sendSilent'},
+  ],
+  '8': [
+    {'1': '_thread_parent_id'},
+    {'1': '_message_kind'},
+    {'1': '_posted_as_chat'},
+    {'1': '_is_e2e'},
+    {'1': '_content_type'},
+  ],
+};
+
+/// Descriptor for `ScheduledMessagePayload`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List scheduledMessagePayloadDescriptor = $convert.base64Decode(
+    'ChdTY2hlZHVsZWRNZXNzYWdlUGF5bG9hZBIYCgdjb250ZW50GAEgASgJUgdjb250ZW50EikKEG'
+    'F0dGFjaG1lbnRzX2pzb24YAiABKAlSD2F0dGFjaG1lbnRzSnNvbhIjCg1tZW50aW9uc19qc29u'
+    'GAMgASgJUgxtZW50aW9uc0pzb24SLQoQdGhyZWFkX3BhcmVudF9pZBgEIAEoCUgAUg50aHJlYW'
+    'RQYXJlbnRJZIgBARJHCgxtZXNzYWdlX2tpbmQYBSABKA4yHy52b2ljZS5tZXNzYWdpbmcudjEu'
+    'TWVzc2FnZUtpbmRIAVILbWVzc2FnZUtpbmSIAQESKQoOcG9zdGVkX2FzX2NoYXQYBiABKAhIAl'
+    'IMcG9zdGVkQXNDaGF0iAEBEhoKBmlzX2UyZRgHIAEoCEgDUgVpc0UyZYgBARJOCgxjb250ZW50'
+    'X3R5cGUYCCABKA4yJi52b2ljZS5tZXNzYWdpbmcudjEuTWVzc2FnZUNvbnRlbnRUeXBlSARSC2'
+    'NvbnRlbnRUeXBliAEBEh8KC3NlbmRfc2lsZW50GAkgASgIUgpzZW5kU2lsZW50QhMKEV90aHJl'
+    'YWRfcGFyZW50X2lkQg8KDV9tZXNzYWdlX2tpbmRCEQoPX3Bvc3RlZF9hc19jaGF0QgkKB19pc1'
+    '9lMmVCDwoNX2NvbnRlbnRfdHlwZQ==');
+
+@$core.Deprecated('Use scheduledMessageDescriptor instead')
+const ScheduledMessage$json = {
+  '1': 'ScheduledMessage',
+  '2': [
+    {'1': 'id', '3': 1, '4': 1, '5': 9, '10': 'id'},
+    {
+      '1': 'chat',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.chat.v1.ChatRef',
+      '10': 'chat'
+    },
+    {'1': 'sender_profile_id', '3': 3, '4': 1, '5': 9, '10': 'senderProfileId'},
+    {
+      '1': 'payload',
+      '3': 4,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.messaging.v1.ScheduledMessagePayload',
+      '10': 'payload'
+    },
+    {
+      '1': 'client_message_id',
+      '3': 5,
+      '4': 1,
+      '5': 9,
+      '9': 1,
+      '10': 'clientMessageId',
+      '17': true
+    },
+    {
+      '1': 'scheduled_at',
+      '3': 6,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '9': 0,
+      '10': 'scheduledAt'
+    },
+    {
+      '1': 'send_when_online',
+      '3': 7,
+      '4': 1,
+      '5': 8,
+      '9': 0,
+      '10': 'sendWhenOnline'
+    },
+    {
+      '1': 'status',
+      '3': 8,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.messaging.v1.ScheduledMessageStatus',
+      '10': 'status'
+    },
+    {
+      '1': 'created_at',
+      '3': 9,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'createdAt'
+    },
+    {
+      '1': 'updated_at',
+      '3': 10,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'updatedAt'
+    },
+    {
+      '1': 'sent_message_id',
+      '3': 11,
+      '4': 1,
+      '5': 9,
+      '9': 2,
+      '10': 'sentMessageId',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': 'delivery_schedule'},
+    {'1': '_client_message_id'},
+    {'1': '_sent_message_id'},
+  ],
+};
+
+/// Descriptor for `ScheduledMessage`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List scheduledMessageDescriptor = $convert.base64Decode(
+    'ChBTY2hlZHVsZWRNZXNzYWdlEg4KAmlkGAEgASgJUgJpZBIqCgRjaGF0GAIgASgLMhYudm9pY2'
+    'UuY2hhdC52MS5DaGF0UmVmUgRjaGF0EioKEXNlbmRlcl9wcm9maWxlX2lkGAMgASgJUg9zZW5k'
+    'ZXJQcm9maWxlSWQSRQoHcGF5bG9hZBgEIAEoCzIrLnZvaWNlLm1lc3NhZ2luZy52MS5TY2hlZH'
+    'VsZWRNZXNzYWdlUGF5bG9hZFIHcGF5bG9hZBIvChFjbGllbnRfbWVzc2FnZV9pZBgFIAEoCUgB'
+    'Ug9jbGllbnRNZXNzYWdlSWSIAQESPwoMc2NoZWR1bGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3'
+    'RvYnVmLlRpbWVzdGFtcEgAUgtzY2hlZHVsZWRBdBIqChBzZW5kX3doZW5fb25saW5lGAcgASgI'
+    'SABSDnNlbmRXaGVuT25saW5lEkIKBnN0YXR1cxgIIAEoDjIqLnZvaWNlLm1lc3NhZ2luZy52MS'
+    '5TY2hlZHVsZWRNZXNzYWdlU3RhdHVzUgZzdGF0dXMSOQoKY3JlYXRlZF9hdBgJIAEoCzIaLmdv'
+    'b2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBSCWNyZWF0ZWRBdBI5Cgp1cGRhdGVkX2F0GAogASgLMh'
+    'ouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcFIJdXBkYXRlZEF0EisKD3NlbnRfbWVzc2FnZV9p'
+    'ZBgLIAEoCUgCUg1zZW50TWVzc2FnZUlkiAEBQhMKEWRlbGl2ZXJ5X3NjaGVkdWxlQhQKEl9jbG'
+    'llbnRfbWVzc2FnZV9pZEISChBfc2VudF9tZXNzYWdlX2lk');
 
 @$core.Deprecated('Use editMessageRequestDescriptor instead')
 const EditMessageRequest$json = {
@@ -1011,13 +1226,228 @@ const SendMessageResponse$json = {
       '6': '.voice.messaging.v1.Message',
       '10': 'message'
     },
+    {
+      '1': 'scheduled_message',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.messaging.v1.ScheduledMessage',
+      '10': 'scheduledMessage'
+    },
   ],
 };
 
 /// Descriptor for `SendMessageResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List sendMessageResponseDescriptor = $convert.base64Decode(
     'ChNTZW5kTWVzc2FnZVJlc3BvbnNlEjUKB21lc3NhZ2UYASABKAsyGy52b2ljZS5tZXNzYWdpbm'
-    'cudjEuTWVzc2FnZVIHbWVzc2FnZQ==');
+    'cudjEuTWVzc2FnZVIHbWVzc2FnZRJRChFzY2hlZHVsZWRfbWVzc2FnZRgCIAEoCzIkLnZvaWNl'
+    'Lm1lc3NhZ2luZy52MS5TY2hlZHVsZWRNZXNzYWdlUhBzY2hlZHVsZWRNZXNzYWdl');
+
+@$core.Deprecated('Use listScheduledMessagesRequestDescriptor instead')
+const ListScheduledMessagesRequest$json = {
+  '1': 'ListScheduledMessagesRequest',
+  '2': [
+    {
+      '1': 'chat',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.chat.v1.ChatRef',
+      '10': 'chat'
+    },
+    {
+      '1': 'page',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.CursorPageRequest',
+      '10': 'page'
+    },
+  ],
+};
+
+/// Descriptor for `ListScheduledMessagesRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List listScheduledMessagesRequestDescriptor =
+    $convert.base64Decode(
+        'ChxMaXN0U2NoZWR1bGVkTWVzc2FnZXNSZXF1ZXN0EioKBGNoYXQYASABKAsyFi52b2ljZS5jaG'
+        'F0LnYxLkNoYXRSZWZSBGNoYXQSNgoEcGFnZRgCIAEoCzIiLnZvaWNlLmNvbW1vbi52MS5DdXJz'
+        'b3JQYWdlUmVxdWVzdFIEcGFnZQ==');
+
+@$core.Deprecated('Use listScheduledMessagesResponseDescriptor instead')
+const ListScheduledMessagesResponse$json = {
+  '1': 'ListScheduledMessagesResponse',
+  '2': [
+    {
+      '1': 'scheduled_messages',
+      '3': 1,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.messaging.v1.ScheduledMessage',
+      '10': 'scheduledMessages'
+    },
+    {
+      '1': 'page',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.CursorPageResponse',
+      '10': 'page'
+    },
+  ],
+};
+
+/// Descriptor for `ListScheduledMessagesResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List listScheduledMessagesResponseDescriptor = $convert.base64Decode(
+    'Ch1MaXN0U2NoZWR1bGVkTWVzc2FnZXNSZXNwb25zZRJTChJzY2hlZHVsZWRfbWVzc2FnZXMYAS'
+    'ADKAsyJC52b2ljZS5tZXNzYWdpbmcudjEuU2NoZWR1bGVkTWVzc2FnZVIRc2NoZWR1bGVkTWVz'
+    'c2FnZXMSNwoEcGFnZRgCIAEoCzIjLnZvaWNlLmNvbW1vbi52MS5DdXJzb3JQYWdlUmVzcG9uc2'
+    'VSBHBhZ2U=');
+
+@$core.Deprecated('Use updateScheduledMessageRequestDescriptor instead')
+const UpdateScheduledMessageRequest$json = {
+  '1': 'UpdateScheduledMessageRequest',
+  '2': [
+    {
+      '1': 'scheduled_message_id',
+      '3': 1,
+      '4': 1,
+      '5': 9,
+      '10': 'scheduledMessageId'
+    },
+    {
+      '1': 'payload',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.messaging.v1.ScheduledMessagePayload',
+      '9': 1,
+      '10': 'payload',
+      '17': true
+    },
+    {
+      '1': 'scheduled_at',
+      '3': 3,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '9': 0,
+      '10': 'scheduledAt'
+    },
+    {
+      '1': 'send_when_online',
+      '3': 4,
+      '4': 1,
+      '5': 8,
+      '9': 0,
+      '10': 'sendWhenOnline'
+    },
+  ],
+  '8': [
+    {'1': 'delivery_schedule'},
+    {'1': '_payload'},
+  ],
+};
+
+/// Descriptor for `UpdateScheduledMessageRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List updateScheduledMessageRequestDescriptor = $convert.base64Decode(
+    'Ch1VcGRhdGVTY2hlZHVsZWRNZXNzYWdlUmVxdWVzdBIwChRzY2hlZHVsZWRfbWVzc2FnZV9pZB'
+    'gBIAEoCVISc2NoZWR1bGVkTWVzc2FnZUlkEkoKB3BheWxvYWQYAiABKAsyKy52b2ljZS5tZXNz'
+    'YWdpbmcudjEuU2NoZWR1bGVkTWVzc2FnZVBheWxvYWRIAVIHcGF5bG9hZIgBARI/CgxzY2hlZH'
+    'VsZWRfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wSABSC3NjaGVkdWxlZEF0'
+    'EioKEHNlbmRfd2hlbl9vbmxpbmUYBCABKAhIAFIOc2VuZFdoZW5PbmxpbmVCEwoRZGVsaXZlcn'
+    'lfc2NoZWR1bGVCCgoIX3BheWxvYWQ=');
+
+@$core.Deprecated('Use updateScheduledMessageResponseDescriptor instead')
+const UpdateScheduledMessageResponse$json = {
+  '1': 'UpdateScheduledMessageResponse',
+  '2': [
+    {
+      '1': 'scheduled_message',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.messaging.v1.ScheduledMessage',
+      '10': 'scheduledMessage'
+    },
+  ],
+};
+
+/// Descriptor for `UpdateScheduledMessageResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List updateScheduledMessageResponseDescriptor =
+    $convert.base64Decode(
+        'Ch5VcGRhdGVTY2hlZHVsZWRNZXNzYWdlUmVzcG9uc2USUQoRc2NoZWR1bGVkX21lc3NhZ2UYAS'
+        'ABKAsyJC52b2ljZS5tZXNzYWdpbmcudjEuU2NoZWR1bGVkTWVzc2FnZVIQc2NoZWR1bGVkTWVz'
+        'c2FnZQ==');
+
+@$core.Deprecated('Use cancelScheduledMessageRequestDescriptor instead')
+const CancelScheduledMessageRequest$json = {
+  '1': 'CancelScheduledMessageRequest',
+  '2': [
+    {
+      '1': 'scheduled_message_id',
+      '3': 1,
+      '4': 1,
+      '5': 9,
+      '10': 'scheduledMessageId'
+    },
+  ],
+};
+
+/// Descriptor for `CancelScheduledMessageRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List cancelScheduledMessageRequestDescriptor =
+    $convert.base64Decode(
+        'Ch1DYW5jZWxTY2hlZHVsZWRNZXNzYWdlUmVxdWVzdBIwChRzY2hlZHVsZWRfbWVzc2FnZV9pZB'
+        'gBIAEoCVISc2NoZWR1bGVkTWVzc2FnZUlk');
+
+@$core.Deprecated('Use cancelScheduledMessageResponseDescriptor instead')
+const CancelScheduledMessageResponse$json = {
+  '1': 'CancelScheduledMessageResponse',
+};
+
+/// Descriptor for `CancelScheduledMessageResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List cancelScheduledMessageResponseDescriptor =
+    $convert.base64Decode('Ch5DYW5jZWxTY2hlZHVsZWRNZXNzYWdlUmVzcG9uc2U=');
+
+@$core.Deprecated('Use sendScheduledMessageNowRequestDescriptor instead')
+const SendScheduledMessageNowRequest$json = {
+  '1': 'SendScheduledMessageNowRequest',
+  '2': [
+    {
+      '1': 'scheduled_message_id',
+      '3': 1,
+      '4': 1,
+      '5': 9,
+      '10': 'scheduledMessageId'
+    },
+  ],
+};
+
+/// Descriptor for `SendScheduledMessageNowRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List sendScheduledMessageNowRequestDescriptor =
+    $convert.base64Decode(
+        'Ch5TZW5kU2NoZWR1bGVkTWVzc2FnZU5vd1JlcXVlc3QSMAoUc2NoZWR1bGVkX21lc3NhZ2VfaW'
+        'QYASABKAlSEnNjaGVkdWxlZE1lc3NhZ2VJZA==');
+
+@$core.Deprecated('Use sendScheduledMessageNowResponseDescriptor instead')
+const SendScheduledMessageNowResponse$json = {
+  '1': 'SendScheduledMessageNowResponse',
+  '2': [
+    {
+      '1': 'message',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.messaging.v1.Message',
+      '10': 'message'
+    },
+  ],
+};
+
+/// Descriptor for `SendScheduledMessageNowResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List sendScheduledMessageNowResponseDescriptor =
+    $convert.base64Decode(
+        'Ch9TZW5kU2NoZWR1bGVkTWVzc2FnZU5vd1Jlc3BvbnNlEjUKB21lc3NhZ2UYASABKAsyGy52b2'
+        'ljZS5tZXNzYWdpbmcudjEuTWVzc2FnZVIHbWVzc2FnZQ==');
 
 @$core.Deprecated('Use editMessageResponseDescriptor instead')
 const EditMessageResponse$json = {

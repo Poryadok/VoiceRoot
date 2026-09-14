@@ -216,7 +216,7 @@ func messageEventLogAttrs(env *eventsv1.MessageStreamEvent) []slog.Attr {
 }
 
 // PublishMessageSent implements MessageEventsPublisher.
-func (p *JetStreamPublisher) PublishMessageSent(ctx context.Context, messageID, chatID, senderProfileID string, hasMentions bool, threadParentID string, isE2E bool, contentType string) error {
+func (p *JetStreamPublisher) PublishMessageSent(ctx context.Context, messageID, chatID, senderProfileID string, hasMentions bool, threadParentID string, isE2E bool, contentType string, sendSilent bool) error {
 	sent := &eventsv1.MessageSent{
 		MessageId:       messageID,
 		ChatId:          chatID,
@@ -224,6 +224,7 @@ func (p *JetStreamPublisher) PublishMessageSent(ctx context.Context, messageID, 
 		HasMentions:     hasMentions,
 		ThreadParentId:  ptrIfNonEmpty(threadParentID),
 		IsE2E:           isE2E,
+		SendSilent:      sendSilent,
 	}
 	if ct := strings.TrimSpace(contentType); ct != "" {
 		sent.ContentType = &ct
@@ -256,7 +257,7 @@ func ptrIfNonEmpty(s string) *string {
 }
 
 // PublishMentionAdded implements MessageEventsPublisher.
-func (p *JetStreamPublisher) PublishMentionAdded(ctx context.Context, messageID, chatID, senderProfileID string, mentionedProfileIDs []string) error {
+func (p *JetStreamPublisher) PublishMentionAdded(ctx context.Context, messageID, chatID, senderProfileID string, mentionedProfileIDs []string, sendSilent bool) error {
 	env := &eventsv1.MessageStreamEvent{
 		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.New(time.Now().UTC()),
@@ -266,6 +267,7 @@ func (p *JetStreamPublisher) PublishMentionAdded(ctx context.Context, messageID,
 				ChatId:              chatID,
 				SenderProfileId:     senderProfileID,
 				MentionedProfileIds: append([]string(nil), mentionedProfileIDs...),
+				SendSilent:          sendSilent,
 			},
 		},
 	}

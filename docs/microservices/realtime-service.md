@@ -210,6 +210,20 @@ Routing rules (presence, quiet hours, `send_silent`, mute) — [notification-ser
 | Read cursor | REST `MarkRead` if chat was open; do not rely on WS-only `mark_read` |
 | Ephemeral delivery | Live `delivery_ack` only; list ✓✓ from durable metadata |
 | Live events | New `hello` + optional `resume` (new `s` stream; no event journal replay) |
+| Active voice / screen share | After every newly accepted `hello`, request Voice `GetActiveCall`; `null` closes stale LiveKit binding and clears the screen projection, while active response replaces the local session. `GetVoiceStates` owns the current sharer list and current LiveKit tracks gate renderability. REST error retains state and retries; stale hello/profile result is ignored. |
+
+### Fan-out pressure
+
+Each connection has a bounded queue and fan-out never waits on a slow recipient.
+Ordinary ephemeral operations, including `voice_state_update`, are lossy when
+the queue is full. For profile lifecycle `call_incoming`, `call_accepted`,
+`call_declined`, `call_missed`, `call_ended`, `call_started`,
+`screen_share_started`, and `screen_share_stopped`, overflow closes **only** the
+full connection with WebSocket code `1013` and reason `fanout_overflow`; healthy
+recipients continue receiving the same fan-out in their own order. There is no
+retry, eviction, or reorder. The JetStream consumer completes all local enqueue
+attempts and ACKs the source message afterward, including a malformed or
+unsupported payload that it intentionally does not fan out.
 
 ### Операции (Client → Server)
 
@@ -218,7 +232,7 @@ Routing rules (presence, quiet hours, `send_silent`, mute) — [notification-ser
 - **`NATS_URL`** — URL NATS Server с JetStream (порт **4222**). В Compose: `nats://nats:4222`; с хоста: `nats://127.0.0.1:${NATS_PORT:-4222}` (см. [`docker-compose.yml`](../../docker-compose.yml)).
 - Подписки на доменные потоки для fan-out и отзыва доступа — в первую очередь **`message.events`** (consume: `message.sent`, …; **publish:** client `delivery_ack` → `message.delivery_ack`), **`chat.events`**, **`social.user_blocked`** из `social.events` и с Фазы 2 **`voice.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)); детали subject/consumer — в реализации сервиса.
 - **`REALTIME_CHAT_GRPC_ADDR`** (опционально) — gRPC адрес **Chat Service** для bootstrap списка DM при открытии WebSocket и проверки lazy `subscribe` через `GetChat` (например `chat:50051` в compose). Если не задан, сервер **не** вызывает Chat и **не** шлёт `subscription_sync`; valid lazy `subscribe` fail-closed с generic `permission_denied`, а не создаёт неподтверждённую подписку. TLS/insecure — как принято в окружении (локально часто plaintext внутри mesh).
-- **`REALTIME_USER_GRPC_ADDR`** (опционально) — User Service для записи presence при WS `presence_update` и разрешения `dm_peer_profile_id → account_id` перед DM block decision.
+- **`REALTIME_USER_GRPC_ADDR`** (опционально) — gRPC-адрес User Service для записи presence при WS `presence_update`, разрешения `dm_peer_profile_id → account_id` перед DM block decision и viewer-aware `GetPresence` перед fan-out приватного presence. Realtime передаёт в `GetPresence` identity и account type конкретного получателя, а правила аудитории применяет User; локально Realtime их не воспроизводит. Если адрес не задан, viewer-aware presence fan-out не выполняется; ошибка или пустой ответ User подавляет только затронутое эфемерное обновление этого получателя (fail-closed).
 - **`REALTIME_SOCIAL_GRPC_ADDR`** (опционально) — Social Service `ListFriends` для fan-out `user.presence_changed` и `IsBlocked` в обе стороны для DM subscription policy. Если User/Social policy dependency отсутствует или ошибается, DM bootstrap/lazy subscribe fail-closed.
 
 ## Архитектура fan-out

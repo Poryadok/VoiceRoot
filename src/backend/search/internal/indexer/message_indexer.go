@@ -58,11 +58,11 @@ func (idx *MessageIndexer) handleUpsert(ctx context.Context, chatRaw, msgRaw, se
 	}
 	chatID, err := uuid.Parse(chatRaw)
 	if err != nil {
-		return fmt.Errorf("invalid chat_id: %w", err)
+		return newPermanentConsumeError("invalid chat_id: %w", err)
 	}
 	msgID, err := uuid.Parse(msgRaw)
 	if err != nil {
-		return fmt.Errorf("invalid message_id: %w", err)
+		return newPermanentConsumeError("invalid message_id: %w", err)
 	}
 	body, createdAt, err := idx.Messaging.GetMessageBody(ctx, chatID, msgID)
 	if err != nil {
@@ -72,7 +72,7 @@ func (idx *MessageIndexer) handleUpsert(ctx context.Context, chatRaw, msgRaw, se
 	if senderRaw != "" {
 		sender, err = uuid.Parse(senderRaw)
 		if err != nil {
-			return fmt.Errorf("invalid sender_profile_id: %w", err)
+			return newPermanentConsumeError("invalid sender_profile_id: %w", err)
 		}
 	}
 	return idx.Store.Upsert(ctx, store.MessageDocument{
@@ -90,7 +90,7 @@ func (idx *MessageIndexer) handleDelete(ctx context.Context, msgRaw string) erro
 	}
 	msgID, err := uuid.Parse(msgRaw)
 	if err != nil {
-		return fmt.Errorf("invalid message_id: %w", err)
+		return newPermanentConsumeError("invalid message_id: %w", err)
 	}
 	return idx.Store.Delete(ctx, msgID)
 }

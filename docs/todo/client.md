@@ -82,7 +82,7 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 
 - [ ] **VoiceListSkeleton / VoiceStatePanel — остаточные loaders** — list loads still CPI: `chat_info_panel`, `manage_profiles_sheet` / `create_profile_sheet`, `active_sessions_screen`, `manage_folders_sheet`, `bot_install_page`, `profile_downgrade_picker_screen` (button-level CPI OK).
 
-- [ ] **VoiceListSkeleton + VoiceStatePanel widget tests** — dedicated tests отсутствуют (reconnect/onboarding/focus trap покрыты; `social_panel_test` only asserts `find.byType(VoiceListSkeleton)`).
+- [x] **VoiceListSkeleton + VoiceStatePanel widget tests** — `src/frontend/test/voice_state_components_test.dart`: `VoiceListSkeleton renders configured placeholder rows`; `VoiceStatePanel` empty-state semantics, keyboard retry action и suppression неполного action. Остаточные loader surfaces остаются отдельным пунктом выше.
 
 - [ ] **api_error_messages — расширить покрытие** — PR #128 helpers for chat/search/settings/subscription/space bots|members|invites/player profile; residual surfaces may still show raw API strings.
 
@@ -113,6 +113,7 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 - [ ] **Expired file «bones» placeholder + refresh URL** — [file-storage.md](../features/file-storage.md).
 - [ ] **Voice: local MP3 recording; ducking via `setVolume`; in-voice overlay без кражи фокуса** — [voice-chat.md](../features/voice-chat.md).
 - [ ] **[A2 Voice] Enable canonical room lifecycle after backend bindings land** — Flutter now retains the complete server-owned UUID pair `voice_room_id` / `space_id` during active-session decode and join response mapping. Missing, malformed or non-room bindings expose no new Space ID; legacy room fields remain compatible. The optional Space returned by canonical join must match its request path. This persisted locator does not grant current access. Separate `joinSpaceVoiceRoom` / `leaveSpaceVoiceRoom` client methods follow the frozen Space-scoped routes and operation ID, but are default-off and not used by the controller. Existing legacy entry and `hangUp`/failed-connect `EndCall` cleanup remain unchanged. Remaining: backend routes and operation ledger, explicit canonical session selection, room-leave cleanup with truthful failure/retry states, background/reconnect and real-media vertical proof. Never infer Space from room ID or enable the client seam from tests alone. Sources: [Voice Phase-0](../microservices/voice-service.md#phase-0-space-room-media-roster-и-lifecycle-target-не-реализовано); `src/frontend/lib/backend/voice_client.dart`; `src/frontend/lib/state/call_providers.dart`.
+- [x] **[Voice] Reconnect restores active media projection** — every accepted Realtime `hello` reconciles `GetActiveCall`; no active session clears stale LiveKit/screen UI, active session replaces it, and REST failure retains state for retry. `GetVoiceStates` is authoritative for screen sharers while LiveKit tracks gate renderability.
 - [ ] **Screen share: desktop source picker + system audio (Windows); явный simulcast 720/360/180** — [screen-share.md](../features/screen-share.md).
 - [ ] **Settings language sync** — profile.locale vs OS pref; API error codes локализация. [i18n.md](../features/i18n.md).
 - [ ] **Help FAQ vs реальный UI** — онбординг ядро complete; FAQ не совпадает со спейсами/ММ.

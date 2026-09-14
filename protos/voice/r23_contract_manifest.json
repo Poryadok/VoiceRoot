@@ -1803,6 +1803,16 @@
       "package": "voice.file.v1",
       "enums": [
         {
+          "name": "FileURLVariant",
+          "exact": true,
+          "values": {
+            "FILE_URL_VARIANT_UNSPECIFIED": 0,
+            "FILE_URL_VARIANT_THUMBNAIL": 1
+          },
+          "reserved_names": [],
+          "reserved_ranges": []
+        },
+        {
           "name": "FileReferenceOwnerType",
           "exact": true,
           "values": {
@@ -2578,6 +2588,13 @@
               "label": "LABEL_OPTIONAL",
               "type": "TYPE_MESSAGE",
               "type_name": ".voice.file.v1.FileAccessSelector"
+            },
+            {
+              "name": "variant",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_ENUM",
+              "type_name": ".voice.file.v1.FileURLVariant"
             }
           ],
           "reserved_names": [],
@@ -3147,7 +3164,7 @@
           ]
         }
       ],
-      "contract_projection_sha256": "3dbb4e5017c0e78e2375b7107d65b777ffe43d45259e241d8491b71fe8540437",
+      "contract_projection_sha256": "88500debd69207ddde085fcb13bffbe1816b92cd418e3c50d4f6061d96b7e3d2",
       "syntax": "proto3",
       "dependencies": [
         "google/protobuf/timestamp.proto",

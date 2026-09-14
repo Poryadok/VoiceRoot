@@ -59,6 +59,13 @@ service MessagingService {
   rpc UploadPreKeyBundle(UploadPreKeyBundleRequest) returns (UploadPreKeyBundleResponse);
   rpc GetPreKeyBundle(GetPreKeyBundleRequest) returns (GetPreKeyBundleResponse);
 
+  // Schedule lifecycle handlers are introduced in a later slice. These declarations
+  // establish the additive wire contract for callers and generated clients.
+  rpc ListScheduledMessages(ListScheduledMessagesRequest) returns (ListScheduledMessagesResponse);
+  rpc UpdateScheduledMessage(UpdateScheduledMessageRequest) returns (UpdateScheduledMessageResponse);
+  rpc CancelScheduledMessage(CancelScheduledMessageRequest) returns (CancelScheduledMessageResponse);
+  rpc SendScheduledMessageNow(SendScheduledMessageNowRequest) returns (SendScheduledMessageNowResponse);
+
   // @voice.security=protected;callers=service:space
   rpc ApplySpaceLifecycleFence(voice.messaging.v1.ApplySpaceLifecycleFenceRequest) returns (voice.messaging.v1.ApplySpaceLifecycleFenceResponse);
 
@@ -90,6 +97,51 @@ message SendMessageRequest {
   optional bool posted_as_chat = 8;
   optional bool is_e2e = 9;
   optional MessageContentType content_type = 10;
+  // Deliver push without sound or badge increment; persists through message.sent.
+  bool send_silent = 11;
+  oneof delivery_schedule {
+    google.protobuf.Timestamp scheduled_at = 12;
+    bool send_when_online = 13;
+  }
+}
+
+enum ScheduledMessageStatus {
+  SCHEDULED_MESSAGE_STATUS_UNSPECIFIED = 0;
+  SCHEDULED_MESSAGE_STATUS_PENDING = 1;
+  SCHEDULED_MESSAGE_STATUS_SENT = 2;
+  SCHEDULED_MESSAGE_STATUS_CANCELLED = 3;
+  SCHEDULED_MESSAGE_STATUS_FAILED = 4;
+}
+
+// The payload accepted when a schedule is created. Internal retry, lease and
+// dispatch metadata remains in Messaging storage and never crosses RPC.
+message ScheduledMessagePayload {
+  string content = 1;
+  string attachments_json = 2;
+  string mentions_json = 3;
+  optional string thread_parent_id = 4;
+  optional MessageKind message_kind = 5;
+  optional bool posted_as_chat = 6;
+  optional bool is_e2e = 7;
+  optional MessageContentType content_type = 8;
+  bool send_silent = 9;
+}
+
+// A sender-owned delayed delivery.
+message ScheduledMessage {
+  string id = 1;
+  voice.chat.v1.ChatRef chat = 2;
+  string sender_profile_id = 3;
+  ScheduledMessagePayload payload = 4;
+  optional string client_message_id = 5;
+  oneof delivery_schedule {
+    google.protobuf.Timestamp scheduled_at = 6;
+    bool send_when_online = 7;
+  }
+  ScheduledMessageStatus status = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
+  optional string sent_message_id = 11;
 }
 
 message EditMessageRequest {
@@ -271,6 +323,36 @@ message ChatListMetadata {
 }
 
 message SendMessageResponse {
+  Message message = 1;
+  ScheduledMessage scheduled_message = 2;
+}
+message ListScheduledMessagesRequest {
+  voice.chat.v1.ChatRef chat = 1;
+  voice.common.v1.CursorPageRequest page = 2;
+}
+message ListScheduledMessagesResponse {
+  repeated ScheduledMessage scheduled_messages = 1;
+  voice.common.v1.CursorPageResponse page = 2;
+}
+message UpdateScheduledMessageRequest {
+  string scheduled_message_id = 1;
+  optional ScheduledMessagePayload payload = 2;
+  oneof delivery_schedule {
+    google.protobuf.Timestamp scheduled_at = 3;
+    bool send_when_online = 4;
+  }
+}
+message UpdateScheduledMessageResponse {
+  ScheduledMessage scheduled_message = 1;
+}
+message CancelScheduledMessageRequest {
+  string scheduled_message_id = 1;
+}
+message CancelScheduledMessageResponse {}
+message SendScheduledMessageNowRequest {
+  string scheduled_message_id = 1;
+}
+message SendScheduledMessageNowResponse {
   Message message = 1;
 }
 message EditMessageResponse {

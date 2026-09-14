@@ -2,7 +2,6 @@ package grpcsvc
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -231,8 +230,9 @@ func (s *UserGRPC) UpdateProfile(ctx context.Context, req *userv1.UpdateProfileR
 		if in.AccentColor != nil {
 			changed = append(changed, "accent_color")
 		}
-		fieldsJSON, _ := json.Marshal(changed)
-		_ = s.Events.PublishProfileUpdated(ctx, row.ID.String(), row.AccountID.String(), string(fieldsJSON))
+		if len(changed) > 0 {
+			_ = s.Events.PublishProfileUpdated(ctx, row.ID.String(), changed)
+		}
 	}
 	return &userv1.UpdateProfileResponse{Profile: rowToProto(row)}, nil
 }

@@ -41,6 +41,7 @@ const serviceName = "search"
 func main() {
 	logger := httpserver.NewLogger(serviceName)
 	metricsReg := prometheus.NewRegistry()
+	consumerMetrics := indexer.NewConsumerMetrics(metricsReg)
 	httpAddr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
 		httpAddr = v
@@ -130,7 +131,7 @@ func main() {
 			}
 			msgIdx := &indexer.MessageIndexer{Store: msgStore, Messaging: messaging}
 			go func() {
-				if err := indexer.RunMessageEventsConsumer(rootCtx, natsURL, instanceID, msgIdx, logger); err != nil && rootCtx.Err() == nil {
+				if err := indexer.RunMessageEventsConsumer(rootCtx, natsURL, instanceID, msgIdx, logger, consumerMetrics); err != nil && rootCtx.Err() == nil {
 					logger.Warn("message events consumer stopped", slog.Any("error", err))
 				}
 			}()
@@ -142,7 +143,7 @@ func main() {
 			}
 			profileIdx := &indexer.ProfileIndexer{Store: profileSpaceStore, Profiles: profileHydrator}
 			go func() {
-				if err := indexer.RunUserEventsConsumer(rootCtx, natsURL, instanceID, profileIdx, logger); err != nil && rootCtx.Err() == nil {
+				if err := indexer.RunUserEventsConsumer(rootCtx, natsURL, instanceID, profileIdx, logger, consumerMetrics); err != nil && rootCtx.Err() == nil {
 					logger.Warn("user events consumer stopped", slog.Any("error", err))
 				}
 			}()
@@ -164,7 +165,7 @@ func main() {
 				SpaceAPI: spaceHydrator,
 			}
 			go func() {
-				if err := indexer.RunChatEventsConsumer(rootCtx, natsURL, instanceID, chatSpaceIdx, logger); err != nil && rootCtx.Err() == nil {
+				if err := indexer.RunChatEventsConsumer(rootCtx, natsURL, instanceID, chatSpaceIdx, logger, consumerMetrics); err != nil && rootCtx.Err() == nil {
 					logger.Warn("chat events consumer stopped", slog.Any("error", err))
 				}
 			}()

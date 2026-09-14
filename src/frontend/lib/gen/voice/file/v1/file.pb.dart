@@ -614,10 +614,12 @@ class GetFileURLRequest extends $pb.GeneratedMessage {
   factory GetFileURLRequest({
     $core.String? fileId,
     FileAccessSelector? access,
+    FileURLVariant? variant,
   }) {
     final result = create();
     if (fileId != null) result.fileId = fileId;
     if (access != null) result.access = access;
+    if (variant != null) result.variant = variant;
     return result;
   }
 
@@ -637,6 +639,8 @@ class GetFileURLRequest extends $pb.GeneratedMessage {
     ..aOS(1, _omitFieldNames ? '' : 'fileId')
     ..aOM<FileAccessSelector>(2, _omitFieldNames ? '' : 'access',
         subBuilder: FileAccessSelector.create)
+    ..aE<FileURLVariant>(3, _omitFieldNames ? '' : 'variant',
+        enumValues: FileURLVariant.values)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -677,6 +681,15 @@ class GetFileURLRequest extends $pb.GeneratedMessage {
   void clearAccess() => $_clearField(2);
   @$pb.TagNumber(2)
   FileAccessSelector ensureAccess() => $_ensure(1);
+
+  @$pb.TagNumber(3)
+  FileURLVariant get variant => $_getN(2);
+  @$pb.TagNumber(3)
+  set variant(FileURLVariant value) => $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasVariant() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearVariant() => $_clearField(3);
 }
 
 /// @voice.unknown_fields=reject

@@ -24,8 +24,8 @@ type ProfileHydrator interface {
 
 // ProfileIndexer handles user.events profile payloads.
 type ProfileIndexer struct {
-	Store     ProfileStore
-	Profiles  ProfileHydrator
+	Store    ProfileStore
+	Profiles ProfileHydrator
 }
 
 // Handle processes profile_created and profile_updated events.
@@ -36,6 +36,9 @@ func (idx *ProfileIndexer) Handle(ctx context.Context, env *eventsv1.UserStreamE
 	if created := env.GetProfileCreated(); created != nil {
 		return idx.upsert(ctx, created.GetProfileId())
 	}
+	if updated := env.GetProfileUpdated(); updated != nil {
+		return idx.upsert(ctx, updated.GetProfileId())
+	}
 	return nil
 }
 
@@ -45,7 +48,7 @@ func (idx *ProfileIndexer) upsert(ctx context.Context, profileRaw string) error 
 	}
 	profileID, err := uuid.Parse(profileRaw)
 	if err != nil {
-		return fmt.Errorf("invalid profile_id: %w", err)
+		return newPermanentConsumeError("invalid profile_id: %w", err)
 	}
 	accountID, username, discriminator, displayName, verificationType, err := idx.Profiles.LoadProfile(ctx, profileID)
 	if err != nil {

@@ -50,15 +50,10 @@
 - [x] **[User] OAuth verification goes through User Service** — Auth uses source-scoped
   `ApplyVerificationSourceState` with durable revisions/retry; direct `user_db` writes were removed.
 
-### Analytics
-
-
-- [ ] **[Analytics] Event loss on ClickHouse failure / crash** — NATS messages are consumed and acked before durable CH write; failed flushes only re-queue in process memory (`d:\Git\Voice\src\backend\analytics\internal\consumer\runner.go`, `d:\Git\Voice\src\backend\analytics\internal\buffer\accumulator.go`). Process restart after a failed flush drops data permanently.
-
 ### Matchmaking
 
 
-- [ ] **[Matchmaking] Party snapshot из voice roster отсутствует** — `PartyStore` stub; `StartSearch` валидирует `partySize=1`. Нет сброса очереди при leave/join войса (`docs/features/matchmaking.md`). Pairwise `rolesCompatible` уже требует **distinct** roles (`criteria/criteria.go`); live 10-stack matcher + `RolesDistinct` на полном лобби — тонко (нет compose на seeded 10-slot).
+- [ ] **[Matchmaking] Party snapshot из voice roster отсутствует** — `PartyStore` stub; `StartSearch` валидирует `partySize=1`. Нет сброса очереди при leave/join войса (`docs/features/matchmaking.md`). V1 валидирует обязательную self-reported роль по каталогу и допускает повторы; будущая balanced matchmaking функция должна отдельно определить квоты, уникальность и распределение ролей.
 - [x] **[Matchmaking] Platform MM ban fail-closed + S2S** — `StartSearch` / matcher fail-closed when `BanStore` nil (`platform_ban_degradation_test.go`, `worker_ban_degradation_test.go`, **#73**); Moderation `mm_ban` → `ApplyPlatformMMBan` / revoke (`sanctions.go`).
 ### Role
 
@@ -122,7 +117,7 @@
 - [x] **[File] Originals kept after image processing** — processed keys written, source `r2_key` not removed (`d:\Git\Voice\src\backend\file\internal\imgproc\webp.go`; contradicts `d:\Git\Voice\docs\features\file-storage.md`).
 - [ ] **[File] `CheckQuota` ignores premium** — always returns `r2file.MaxFreeFileBytes` as limit (`d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go` L449–454); README says subscription quotas beyond free tier are out of scope.
 - [ ] **[File] ffmpeg GIF→MP4 / video 720p / PDF first-page thumb отсутствуют** — image WebP inline в `ConfirmUpload`; video as-is. README: dedup out of scope. `ListFiles` REST **есть**; cursor/`filter_chat` — см. Common File.
-- [ ] **[File] Infected-file: ConfirmUpload может вернуть 200 с `scan_result=infected`** — нет Notification fan-out; клиент не показывает блок.
+- [ ] **[File] Infected-file Notification fan-out contract is undefined** — Gateway now maps `scan_result=infected` to `412 file_infected` and scanner failure to `412 file_scan_failed`; Flutter discards the blocked attachment, prevents `SendMessage` and offers to pick another file. `FileScanResult` has no documented recipient/attachment authority for Notification, and `files.chat_id` is only upload context, so no consumer or Realtime fan-out is implemented until that contract is specified.
 
 ### Protos/Pkg
 
@@ -165,7 +160,7 @@
 
 - [ ] **[User] Premium animated GIF avatar is a dead path** — premium gate in `user_avatar.go` but `image/gif` rejected by `r2avatar/validate.go` (`TestValidateUploadParams_rejectsGifInPhase1`); conflicts with `docs/features/user-profile.md`. `GetSettings`/`UpdateSettings` **есть** (`user_settings.go`). `GetPrivacySettings` ownership check **есть** (non-S2S → `GetOwnedProfile`).
 - [ ] **[User] `SetPrimaryProfile` отсутствует** — `is_primary` только bootstrap; phone search всегда primary.
-- [ ] **[User] NATS contract gaps** — missing `user.game_detected`, `user.settings_changed` ([user-service.md](../microservices/user-service.md)); `PublishProfileUpdated` / `PublishVerified` emit stub `ProfileCreated` without `changed_fields` / `verification_type`; `PublishProfileSwitched` drops `old_profile_id` (`src/backend/user/internal/userevents/jetstream.go`).
+- [x] **[User] NATS contract gaps** — **done:** `user.game_detected` and `user.settings_changed` publish their documented payloads; `user.profile_updated` carries `changed_fields`, `user.verified` carries `verification_type`, and `user.profile_switched` carries `old_profile_id` / `new_profile_id` while retaining legacy `profile_id` compatibility. — `protos/voice/events/v1/jetstream_events.proto`, `src/backend/user/internal/userevents/jetstream.go`, [user-service.md](../microservices/user-service.md).
 - [ ] **[User] Durable `last_seen_at` (PostgreSQL)** — spec requires PG persistence for header; code retains interim Redis-only 30-day timestamp — [presence.md](../features/presence.md), [user-service.md](../microservices/user-service.md). `show_last_seen` proto/DDL and viewer-aware interim read filter are shipped.
 - [x] **[User] `show_last_seen` privacy enforcement** — **done:** additive `PrivacySettings.show_last_seen`, `privacy_settings` DDL, preset defaults, and fail-closed viewer-aware `GetPresence`/`GetBulkPresence` filtering of interim timestamp. Durable PostgreSQL last-seen and WS fan-out remain separate — [user-service.md](../microservices/user-service.md).
 - [ ] **[User] Homoglyph-normalized search not implemented** — anti-spoof on create only (`src/backend/user/internal/store/verification.go`); `SearchProfilesAfter` uses raw `ILIKE` (`src/backend/user/internal/store/profile_search.go`); spec requires normalized lookup (`docs/features/verification.md`).
@@ -185,7 +180,6 @@
 
 
 - [x] **[Matchmaking] Decline semantics vs spec** — `handleMatchDecline` party-aware (declining party cancelled, others continue searching); cross-party IT in `grpcsvc/match_test.go` (PR #4). Compose live: `TestComposeMatchmakingCrossPartyDecline_live` (#14).
-- [ ] **[Matchmaking] MM rating privacy off in compose** — `main.go` wires `RatingPrivacy` only when `USER_GRPC_ADDR` / `SOCIAL_GRPC_ADDR` / `SPACE_GRPC_ADDR` are set; `docker-compose.yml` matchmaking service omits these (unlike k8s `envFrom` on `deploy/staging/configmap-app.yaml`). Local stack exposes ratings without privacy checks.
 - [ ] **[Matchmaking] Match squad not ephemeral** — Squad creates a normal group chat + group voice (`squad/grpc_clients.go`). `CompleteMatch` only updates MM DB (`grpcsvc/rating.go`); no Chat/Voice teardown. Contradicts “auto-delete when all leave” (`docs/features/matchmaking.md`).
 - [ ] **[Matchmaking] `UpdateGame` mutates catalog config for any caller** — Any authenticated user can change `config_json` (`grpcsvc/server.go`, `store/games.go`). Conflicts with user-game immutability (`docs/features/matchmaking.md`) and moderator-only catalog edits (`docs/features/game-catalog.md`).
 
@@ -205,7 +199,6 @@
 
 
 - [ ] **[Bot] Inbound chat message events → bot webhook/poll not implemented** — `docs/microservices/bot-service.md` describes `NATS: message in whitelisted chat → Bot Service`; code only **publishes** `bot.events` (`internal/botevents/jetstream.go`, wired in `main.go`), no consumer/subscriber anywhere under `src/backend/bot/`.
-- [ ] **[Bot] Deferred follow-up uses wrong `ChatRef` type** — `lookupInteraction` always returns `CHAT_TYPE_CHANNEL` (`internal/grpcsvc/interaction.go`), breaking deferred `SendBotMessage` / `CompleteInteraction` for group (and DM) chats.
 - [ ] **[Bot] Redis gRPC rate limiter fails open** — on Redis error, requests proceed unlimited (`internal/ratelimit/redis_limiter.go`); staging sets `BOT_REDIS_ADDR` in `deploy/staging/services.yaml`.
 - [ ] **[Bot] `GetChatMessagesForBot` → `Unimplemented` если Messaging unset / history path** — privileged `TEXT_CHAT_READ_HISTORY`; без Messaging live — Unimplemented. Portal CSRF/manifest — [admin.md](admin.md).
 - [ ] **[Bot] Token / webhook-secret rotation does not invalidate active sessions** — `RegenerateToken` / `RegenerateWebhookSecret` only update DB; no hub deferred-token purge per `docs/features/bots.md` §tokens.
@@ -233,13 +226,13 @@
 - [ ] **[Messaging] Group/channel per-message view counts remain future** — `text-chat.md` requires a deduplicated per-message view counter; this is separate from the shipped per-member `MarkRead`/`GetReadState`/`GetBulkReadState`/`GetChatListMetadata` unread/read metadata contract and is not an A1 gate.
 - [ ] **[Messaging] `ForwardMessage` attachment `validateRichPayload` gaps vs `SendMessage`** — shadow-ban / ghost_only on forward+commentary closed (PR #126/#131); remaining: attachment `validateRichPayload` parity with SendMessage (`messaging_grpc.go` `ForwardMessage`).
 - [ ] **[Messaging] `content_type`: article, location, video_note, music** — **partial (parallel track):** `messages.content_type` column + `SendMessage`/`Message.content_type` proto; location/article send without `file_id`; `video_note`/`music` payload validation still open — [messaging-service.md](../microservices/messaging-service.md) — **P0**
-- [ ] **[Messaging] `schedule_message`, `send_when_online`, `send_silent`** — **doc contract in** [messaging-service.md](../microservices/messaging-service.md) (`SendMessageRequest`, `scheduled_messages`, worker). Not yet in proto/code. — **P0**
+- [ ] **[Messaging / C-002, P-008] schedule lifecycle (`schedule_message`, `send_when_online`)** — **foundation shipped:** additive `delivery_schedule`/scheduled-RPC contracts, `scheduled_messages` migration and `MessageSent.was_scheduled = 9` / optional `scheduled_at = 10`; populated schedule arms fail closed until handler ownership. Open: validation, shared immediate/scheduled idempotency ledger or advisory lock, owner lifecycle handlers, worker/presence, atomic message/outbox dispatch and producer usage. PR #310 owns `send_silent`. Composer and Notification consumption remain separate. — [messaging-service.md](../microservices/messaging-service.md) § Scheduled messages — **P0**
 - [x] **[Messaging] `GetChatListMetadata` preview DTO** — **done (Batch 13 + parallel track):** `last_message_content_type` from durable `messages.content_type` with attachment inference fallback; `is_outgoing` + `delivery_state` shipped (Batch 12).
 - [x] **[Messaging] Durable `last_message_delivery_state`** — `read_receipts.last_delivered_message_id`, consumer on `message.delivery_ack`, derivation in `GetChatListMetadata` (Batch 12).
-- [ ] **[Messaging] `UpdateScheduledMessage` RPC + handler** — edit pending scheduled row; proto + integration test — [messaging-service.md](../microservices/messaging-service.md) — **P0**
+- [ ] **[Messaging / C-002, P-008] scheduled RPC handlers** — wire declarations are shipped; implement chat-scoped owner-only pending list and caller-owned update/cancel/send-now transitions with race guards. — [messaging-service.md](../microservices/messaging-service.md) § Scheduled RPC shape — **P0**
 - [ ] **[Messaging] File processed → preview refresh consumer** — NATS handler on `file.processed` to update list metadata / invalidate cache — [messaging-service.md](../microservices/messaging-service.md)
 - [ ] **[Messaging/Subscription] Premium multi-reaction limit enforcement** — after subscription entitlement doc lands
-- [ ] **[Messaging] `message.sent` event** — **partial (parallel track):** JetStream `MessageSent.content_type` shipped; `send_silent` + scheduled metadata still open.
+- [ ] **[Messaging / C-002, P-008] scheduled `message.sent` producer** — event fields are shipped; dispatch must set `was_scheduled` and original timed `scheduled_at` only in the later worker/send-now slice.
 
 ### Search
 
@@ -265,7 +258,7 @@
 - [x] **[Chat] Handlers: Quick Access** — enforce limit 15; `AddQuickAccess` idempotent; integration test reorder (**Batch 17**: `quick_access.go`, store + gRPC tests).
 - [x] **[Chat] Archive removes Quick Access** — `ArchiveChat(archived=true)` calls `RemoveQuickAccess` (**Batch 18**).
 - [x] **[Chat] Incoming message keeps an archived chat archived** — removed obsolete DM `AutoUnarchiveDMRecipients`; `message.sent` preserves `is_archived=true` while retaining activity and declined-DM re-contact handling; main/archive inbox regressions cover the contract. Canon: [text-chat.md](../features/text-chat.md) § «Архивирование».
-- [ ] **[Notification] Archived-chat message suppression** — suppress push and notification-center row while retaining the unread badge. Canon: [notifications.md](../features/notifications.md) § «Архивированные чаты».
+- [x] **[Notification] Archived-chat message suppression** — Notification reads Chat member archive metadata, suppresses push and notification-center routing fail-closed when recipient metadata is absent, while Chat retains unread/activity ownership. Canon: [notifications.md](../features/notifications.md) § «Архивированные чаты».
 - [x] **[Chat] Gateway REST** — folder RPCs + `GET /chats?folder_id=` (**Batch 19**): `GET/POST /api/v1/chats/folders`, `PATCH/DELETE …/folders/{id}`, `POST/DELETE …/folders/{id}/chats`, `PUT …/chats/order`, `POST/DELETE …/chats/{chatId}/pin`; Quick Access REST — **done (Batch 17)**; `inbox=archive` on `GET /chats` — **done Batch 15**.
 
 ### Telegram-parity audit — open CODE (2026-08-28)
@@ -277,12 +270,12 @@
 - [x] **[Messaging] R3-A06 — `validateAttachments` blocks rich payloads** — **done (Batch 31a):** `content_type` branches for location/article (no File row) and file-backed rich types (`sticker`, `gif`, `music`, `video_note`) with payload shape + File metadata validation — `messaging_grpc.go`, tests — [messaging-service.md](../microservices/messaging-service.md).
 - [x] **[Chat] R3-A12 — Standalone `channel` chats** — `CreateChat` without `space_id` creates standalone channel with creator as `chat_members` owner (`CreateChannelChat`); space channels unchanged — **Batch 26b**. **Batch 14:** membership `channel` rows appear in `ListChats` main inbox SQL.
 - [x] **[Chat] R3-A14 — `CreateChat`/`UpdateChat` proto fields ignored** — `topic` persisted on create; `topic`/`threads_enabled`/`allow_user_main_feed` on `UpdateChat`; channels updatable — `group.go`, store `UpdateGroupChat` — **Batch 27b**.
-- [ ] **[Chat] R3-A15 — `chats.allow_guests` behavior not wired** — migration `000007` currently defaults open, while the canonical contract is fail-closed (`false`), explicit opt-in, invite/membership required, and Space+chat AND enforcement. Add proto field, mutation handler, migration/default correction, admission enforcement, and negative tests. Canon: [chat-service.md](../microservices/chat-service.md) § Guest admission.
+- [x] **[Chat] R3-A15 — standalone group/channel guest admission** — `chat_db` migration `000012_allow_guests_fail_closed` hardens the default and backfills standalone rows; `UpdateChat` changes future standalone admission, and User guest-marker checks fail closed. Integration coverage includes group/channel opt-in, forward-only disable, migration backfill, and Space-chat rejection — `guest_admission_integration_test.go`, [chat-service.md](../microservices/chat-service.md) § Guest admission. The Space-owned scope remains open below.
 - [x] **[Chat] R3-A16 — `ListChats` space merge bugs** — unified SQL pagination for space chats on page 2+ (`listChatsPageMainWithSpaces` UNION in store; gRPC passes `spaceIDs` on every page). Prior partial fixes: Batch 13 archived filter + hydration; Batch 16 pagination.
 - [ ] **[Chat/Messaging/File] Stickers/GIF wire (R2-A32, R4-04)** — expand checklist: `chat_db` migrations `sticker_packs`/`stickers`/`profile_installed_packs`; Chat RPCs (`ListInstalledStickerPacks`, `InstallStickerPack`, `SearchGifs`, …); Gateway REST ([api-gateway.md](../microservices/api-gateway.md) § Stickers and GIF); ~~Messaging proto `STICKER`/`GIF` + send validation~~ **Messaging send validation done (Batch 31a)**; File `UPLOAD_INTENT_STICKER`/GIF transcode; `ListSharedMedia` `STICKERS` kind extension — **P0**
 - [x] **[Messaging] Durable delivery consumer** — **done (Batch 12):** Realtime JetStream `message.delivery_ack` publish (Batch 11) + Messaging consumer → `last_delivered_message_id`; list ✓✓ via `GetChatListMetadata.last_message_delivery_state`.
 - [x] **[Realtime] R3-A27 — @mention notification payload naming** — WS `mention` op uses `profile_id` (not `user_id`) in `dispatchMentionAdded` (Batch 11).
-- [ ] **[User] R3-A19 — Presence WS privacy filter (code)** — Realtime `presence_update` must apply `show_online` / omit `last_seen` per viewer — User read-path filtering is shipped, but Realtime fan-out remains open; doc in [presence.md](../features/presence.md).
+- [x] **[User] R3-A19 — Presence WS privacy filter (code)** — **done (PR #332):** Realtime resolves a User-filtered `GetPresence` snapshot for every friend and shared-chat WebSocket recipient (including Redis cross-instance chat fan-out). `show_online` controls the sparse online payload and `show_last_seen` controls its timestamp; invisible and User-policy failures emit no sensitive fields or drop the ephemeral update fail-closed. The per-recipient lookup has a shared 2-second deadline and a 16-request concurrency bound — [presence.md](../features/presence.md).
 - [x] **[Notification] R3-A23/R4-A15 — `message_request` type in code** — **done (Batch 22a):** `TypeMessageRequest` in notification delivery; push/in-app route by recipient `inbox_bucket=requests` via Chat `ListMembers.inbox_bucket` S2S; Realtime WS fan-out emits `message_request` (not `new_message`) for requests inbox — [notification-service.md](../microservices/notification-service.md). **Client toggle:** [client.md](client.md) Batch 22b.
 
 ### Chat — other
@@ -304,7 +297,7 @@
 
 
 - [ ] **[Notification] `friend_request` delivery зависит от Social NATS** — publisher + `social_events_consumer.go` есть; проверить wiring `NATS_URL` на notification в k8s. Тихие часы/settings **пишутся в БД** (`store/settings.go`) — клиентский dual-write: [client.md](client.md).
-- [ ] **[Notification] `send_silent` consumption** — read flag from `message.sent`; suppress push sound/badge rules; in-app policy — [notification-service.md](../microservices/notification-service.md)
+- [x] **[Notification] `send_silent` consumption** — `message.sent.send_silent` now maps to platform push silence/no-badge controls while preserving grouping and in-app/unread policy — [notification-service.md](../microservices/notification-service.md)
 - [ ] **[Notification] `reply` delivery** — `reply` marked in the notification contract but Realtime maps thread replies to `new_message`; add producer/fan-out support and routing coverage — [notifications.md](../features/notifications.md), `src/backend/realtime/in_app_notification_fanout.go`
 - [ ] **[Notification] `system` in-app / Gateway gaps (T-023)** — Moderation NATS consumer produces `system` push for sanctions and narrowly skips presence until an in-app path exists. Still missing/undefined: Notification→Realtime transport + payload + dedupe, final account→profiles semantics, Flutter presentation, other system producers, and Gateway REST exposure — `src/backend/notification/moderation_events_consumer.go`; `src/backend/notification/internal/grpcsvc/server.go`; `src/backend/gateway/transcode_notifications.go`; `src/backend/realtime/`
 
@@ -325,7 +318,6 @@
 - [ ] **[Story] Feed degrades to global scan when Social fails** — `GetStoryFeed` falls back to `ListActiveStoriesPaginated` (all active rows) if `ListFeedAuthorIDs` errors; only post-filtered by `canViewStory`. Path: `src/backend/story/internal/grpcsvc/story.go` (`GetStoryFeed`); related: `src/backend/story/internal/privacy/friends.go`, `src/backend/gateway/compose_stories_degradation_live_test.go` (checks liveness only).
 - [ ] **[Story] `DeleteStory` orphans R2 media** — soft-delete only; purge worker targets `expired_at IS NOT NULL`, so early-deleted stories never reach `RunArchivePurgeOnce` / `FileDeleter`. Paths: `src/backend/story/internal/store/store.go` (`DeleteStory`), `src/backend/story/internal/jobs/jobs.go`.
 - [x] **[Story] Moderation cannot hide stories from feeds** — `HideStoryFromFeed` + `hidden_from_feed_at`; non-author feed/GetStory filtered. Residual: Moderation `ResolveReport` does not yet call Story hide RPC. Paths: `src/backend/story/`; `protos/voice/story/v1/story.proto`.
-- [ ] **[Story] GET reactions REST missing** — gRPC `GetStoryReactions` exists; Gateway only maps `POST …/reactions`. Flutter `getStoryReactions` GET will 404. Paths: `src/backend/gateway/transcode_stories.go`; `src/frontend/lib/backend/stories_client.dart`.
 
 ### Voice
 
@@ -392,12 +384,10 @@
 
 - [ ] **[File] “WebP” conversion is JPEG bytes** — `encodeJPEG` with `.webp` key suffix and `Content-Type: image/jpeg` (`d:\Git\Voice\src\backend\file\internal\imgproc\webp.go`); spec requires WebP re-encode (`d:\Git\Voice\docs\features\file-storage.md`).
 - [ ] **[File] Post-conversion size caps not enforced** — spec ≤5 MB images/GIF, ≤15 MB video, ≤10 MB docs; no post-process size check (`d:\Git\Voice\docs\features\file-storage.md`).
-- [ ] **[File] Flutter drops thumb/converted keys** — `fileMetadataFromProto` never maps `thumbnail_r2_key` / `converted_r2_key` to `previewUrl` (`d:\Git\Voice\src\frontend\lib\backend\proto_mappers.dart` L452–462); unit test expects `previewUrl == null` (`d:\Git\Voice\src\frontend\test\files_client_test.dart` L122).
-- [ ] **[File] Conflicting live test** — `file_image_thumb_e2e_live_test.dart` expects `previewUrl` non-empty (`d:\Git\Voice\src\frontend\test\file_image_thumb_e2e_live_test.dart` L55) while mapper never sets it.
+- [ ] **[File/Gateway/Flutter] Implement the accepted thumbnail URL variant (P-007)** — extend existing `GetFileURLRequest` with backward-compatible `FileURLVariant variant`; `UNSPECIFIED` keeps converted→original selection, `THUMBNAIL` presigns only `thumbnail_r2_key`, without fallback. Retain `FileAccessSelector`/ACL and `FILE_READ_SURFACE_URL`; missing thumbnail → `FailedPrecondition`, invalid variant → `InvalidArgument`; response remains URL + expiry (TTL 1h). Gateway serves `GET /api/v1/files/{id}/url?variant=thumbnail`; Flutter may set `previewUrl` only from this presigned response and must retain `previewUrl == null` until the variant is implemented. Refresh the same variant after URL `403`/`410`; never expose direct R2 URLs or keys. Add proto/Gateway/File/Flutter tests, including compatibility, ACL, missing/invalid variants, no fallback and refresh. Canon: [file-service.md](../microservices/file-service.md#thumbnail-url-variant-accepted-not-implemented), [api-gateway.md](../microservices/api-gateway.md), [file-storage.md](../features/file-storage.md).
 - [ ] **[File] ClamAV E2E likely ineffective** — live test uses `eicar.com` + `text/plain` (`d:\Git\Voice\src\frontend\test\file_clamav_infected_e2e_live_test.dart`); `shouldScan` only matches `.exe`/`.zip`/`.bat` + zip/exe MIME (`d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go` L588–596) — scan skipped, confirm may succeed.
 - [ ] **[File] `ListFiles` chat filter unimplemented** — `filter_chat` → `FailedPrecondition` (`d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go` L408–410).
 - [x] **[File] Free-tier `expires_at` not set** — non-E2E free uploads have `expires_at = NULL`; retention cron has nothing to query (`d:\Git\Voice\src\backend\file\internal\grpcsvc\file_grpc.go` L163–167).
-- [ ] **[File] No thumb URL presign helper** — clients get R2 keys in metadata but no `GetThumbnailURL` / presign for `thumbnail_r2_key`.
 - [ ] **[File] Attachment lifecycle partial** — Messaging validates `ready` + chat link + scan (`d:\Git\Voice\src\backend\messaging\internal\grpcsvc\messaging_grpc.go` L312–359), but no `file_references`, no expiry placeholder UX (`d:\Git\Voice\docs\features\file-storage.md` “кучка костей”), no message preview refresh on `file.processed`.
 
 ### Protos/Pkg
@@ -470,8 +460,7 @@
 ### Matchmaking
 
 
-- [ ] **[Matchmaking] Ratings cannot be skipped** — `validateStars` enforces 1–5 only (`store/ratings.go`). Spec allows skip per participant (`docs/features/matchmaking.md`).
-- [ ] **[Matchmaking] `mm.player_banned` never published** — Stream subject registered (`mmevents/publisher.go`) but `BanFromMM` does not emit it (`grpcsvc/rating.go`).
+- [x] **[Matchmaking] `mm.player_banned` publication** — `BanFromMM` emits one protobuf `MatchmakingStreamEvent.player_banned` on `mm.player_banned` only when a peer ban is newly inserted; repeated idempotent bans do not republish (`grpcsvc/rating.go`, `store/bans.go`, `mmevents/publisher.go`; `TestBanFromMM_PublishesOnceAfterNewPeerBan`).
 - [ ] **[Matchmaking] Popular-games ordering missing** — `ListGames` sorts by `created_at DESC` (`store/games.go`). Spec wants popularity by active queue depth (`docs/features/game-catalog.md`).
 - [ ] **[Matchmaking] `CreateGame` lacks `icon_url` / `external_id`** — Columns exist (`migrations/matchmaking_db/000001_init.up.sql`, `store/games.go`) but `CreateGame` only persists name+config (`grpcsvc/server.go`).
 - [ ] **[Matchmaking] Party / voice-derived MM absent** — `PartyStore` is a stub (`store/parties.go`); `StartSearch` always validates `partySize=1` (`grpcsvc/search.go`, `criteria/criteria.go`). Voice join/leave reset flow from spec not implementable yet.
@@ -561,7 +550,7 @@
 
 - [ ] **[Story] `visibility_audience` not writable via API** — DB column + read path exist; `CreateStoryRequest` has no audience JSON; `visibilityFromRequest("custom")` stores `privacy.Nobody()`. Blocks real space/custom per-story audience (Batch 7 covers Flutter picker; backend contract gap). Paths: `protos/voice/story/v1/story.proto`, `src/backend/story/internal/grpcsvc/audience.go`, `src/backend/migrations/story_db/000002_visibility_audience.up.sql`.
 - [ ] **[Story] Highlights lack `visibility_audience` JSONB** — only coarse `visibility` TEXT; no space multiselect per [stories.md](../features/stories.md) §Highlights. Paths: `src/backend/migrations/story_db/000001_init.up.sql`, `src/backend/story/internal/grpcsvc/story.go` (`canViewHighlight`).
-- [ ] **[Story] `AddToHighlight` allows active stories** — spec says “from archive”; store only checks author ownership, not `expired_at`. Path: `src/backend/story/internal/store/store.go` (`AddToHighlight`).
+- [x] **[Story] `AddToHighlight` allows active stories** — fixed: store requires `expired_at` while locking the Story before it creates a Highlight membership. Path: `src/backend/story/internal/store/store.go` (`AddToHighlight`).
 - [ ] **[Story] Archive purge worker delayed first run** — 24h ticker, no startup `RunArchivePurgeOnce`. Path: `src/backend/story/internal/jobs/jobs.go` (`StartArchivePurgeWorker`).
 - [ ] **[Story] Weak content validation** — no required `text_content` for `text`, no required `media_file_id` for `photo`/`video`. Path: `src/backend/story/internal/grpcsvc/story.go` (`CreateStory`).
 - [ ] **[Story] `game_tag` unvalidated** — free string, no Matchmaking catalog lookup. Path: `src/backend/story/internal/grpcsvc/story.go`.
@@ -644,7 +633,7 @@
 - [ ] **[Space] Member `nickname` in schema, no update RPC** — `src/backend/migrations/space_db/000001_init.up.sql`, `protos/voice/space/v1/space.proto`
 - [ ] **[Space] QR join — product doc only, no Space API** — `docs/features/spaces.md`
 - [ ] **[Space] Space-level `mm_config` for matchmaking — column exists, unused** — `src/backend/migrations/space_db/000001_init.up.sql`
-- [ ] **[Space] `allow_guests` is incomplete and defaults open in migration `000006`** — change target/default to `false`, add owner/admin API to toggle, require valid invite, and enforce Space+chat fail-closed guest access with negative tests — `src/backend/migrations/space_db/000006_allow_guests.up.sql`, `src/backend/space/internal/store/invite.go`, [spaces.md](../features/spaces.md).
+- [ ] **[Space] R3-A15 guest admission remains incomplete** — `000006_allow_guests` defaults `spaces.allow_guests` to `true`, and `AllowGuestsForInvite` reads `COALESCE(sp.allow_guests, true)`. There is no owner/admin mutation API, and Space/Role still lacks the required `space.allow_guests && chat.allow_guests` enforcement with membership/role and negative coverage. The completed standalone Chat slice does not implement this Space-owned contract — `src/backend/migrations/space_db/000006_allow_guests.up.sql`, `src/backend/space/internal/store/invite.go`, [chat-service.md](../microservices/chat-service.md) § Guest admission.
 
 ### Moderation
 
@@ -729,6 +718,7 @@
 ### Realtime
 
 
+- [x] **[Realtime] Slow profile fan-out blocked a JetStream callback** — bounded zero-wait enqueue: eight call/screen lifecycle ops close only the overflowing connection with `1013 fanout_overflow`; all other ops (including `voice_state_update`) are lossy. Voice/Message durable callbacks ACK after every bounded local attempt, including malformed event discard.
 - [x] **[Realtime] Coverage artifacts committed** — удалены ровно шесть tracked-артефактов (`$prof`, `coverage`, `coverage_profile`, `coverage_profile.out`, `notif_cov`, `notif_cov.out`) из `src/backend/realtime/`; `.gitignore` теперь предотвращает их повторное появление.
 - [ ] **[Realtime] Unknown inbound ops silently dropped** — `ws.go` `default` branch ignores unrecognized client ops (no `error` frame).
 - [ ] **[Realtime] Server does not emit WebSocket ping frames** — liveness is client `heartbeat` + 90s read deadline (`ws.go`); doc mentions “ping-pong” but implementation is app-level heartbeat only.

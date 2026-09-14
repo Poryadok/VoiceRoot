@@ -134,10 +134,19 @@ message FileMetadata {
   optional FileScanOutcome scan_result_enum = 23;
 }
 
+// Selects the stored representation for a presigned file URL.
+enum FileURLVariant {
+  // Backward-compatible default: converted representation when present, otherwise r2_key.
+  FILE_URL_VARIANT_UNSPECIFIED = 0;
+  // Thumbnail representation. The request fails when thumbnail_r2_key is unavailable.
+  FILE_URL_VARIANT_THUMBNAIL = 1;
+}
+
 // @voice.unknown_fields=reject
 message GetFileURLRequest {
   string file_id = 1;
   voice.file.v1.FileAccessSelector access = 2;
+  FileURLVariant variant = 3;
 }
 
 // @voice.unknown_fields=reject

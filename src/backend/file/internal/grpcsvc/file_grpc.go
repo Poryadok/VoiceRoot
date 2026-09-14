@@ -230,6 +230,9 @@ func (s *FileGRPC) GetFileURL(ctx context.Context, req *filev1.GetFileURLRequest
 	if s == nil || s.files == nil {
 		return nil, status.Error(codes.FailedPrecondition, "file persistence not configured")
 	}
+	if err := validateFileURLVariant(req.GetVariant()); err != nil {
+		return nil, err
+	}
 	if s.presigner == nil {
 		return nil, status.Error(codes.FailedPrecondition, "file upload is not configured")
 	}
@@ -253,17 +256,23 @@ func (s *FileGRPC) GetFileURL(ctx context.Context, req *filev1.GetFileURLRequest
 	if row.Status != "ready" {
 		return nil, status.Error(codes.FailedPrecondition, "file is not ready")
 	}
+	key, err := fileURLKey(row, req.GetVariant())
+	if err != nil {
+		return nil, err
+	}
 	ttl := r2file.DefaultURLTTL
-	getURL, err := s.presigner.PresignGet(ctx, r2file.GetPresignInput{Key: downloadKey(row), TTL: ttl})
+	getURL, err := s.presigner.PresignGet(ctx, r2file.GetPresignInput{Key: key, TTL: ttl})
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	if err := s.events.PublishFileDownloaded(ctx, row.ID.String(), profileID.String()); err != nil {
-		slog.Default().WarnContext(ctx, "file.downloaded publish failed",
-			slog.String("file_id", row.ID.String()),
-			slog.String("downloader_profile_id", profileID.String()),
-			slog.String("error", err.Error()),
-		)
+	if req.GetVariant() == filev1.FileURLVariant_FILE_URL_VARIANT_UNSPECIFIED {
+		if err := s.events.PublishFileDownloaded(ctx, row.ID.String(), profileID.String()); err != nil {
+			slog.Default().WarnContext(ctx, "file.downloaded publish failed",
+				slog.String("file_id", row.ID.String()),
+				slog.String("downloader_profile_id", profileID.String()),
+				slog.String("error", err.Error()),
+			)
+		}
 	}
 	return &filev1.GetFileURLResponse{
 		PresignedGetUrl: getURL,
@@ -293,7 +302,11 @@ func (s *FileGRPC) ConfirmUpload(ctx context.Context, req *filev1.ConfirmUploadR
 	}
 	uploaded, err := s.readUploadBytes(ctx, row)
 	if err != nil {
-		return nil, err
+		updated, updateErr := s.files.ApplyScanResult(ctx, row.ID, "failed", "error")
+		if updateErr != nil {
+			return nil, status.Error(codes.Internal, updateErr.Error())
+		}
+		return &filev1.ConfirmUploadResponse{FileMetadata: fileRowToProto(updated)}, nil
 	}
 	if err := verifySHA256(uploaded, sha); err != nil {
 		return nil, err
@@ -361,7 +374,7 @@ func (s *FileGRPC) scanConfirmedFile(ctx context.Context, row store.FileRow, upl
 			if uerr != nil {
 				return store.FileRow{}, status.Error(codes.Internal, uerr.Error())
 			}
-			return updated, status.Error(codes.Internal, readErr.Error())
+			return updated, nil
 		}
 	}
 	outcome, err := s.scanner.ScanBytes(ctx, bytes)
@@ -370,7 +383,7 @@ func (s *FileGRPC) scanConfirmedFile(ctx context.Context, row store.FileRow, upl
 		if uerr != nil {
 			return store.FileRow{}, status.Error(codes.Internal, uerr.Error())
 		}
-		return updated, status.Error(codes.Internal, err.Error())
+		return updated, nil
 	}
 	statusValue := "ready"
 	if outcome == "infected" || outcome == "error" {
@@ -867,6 +880,32 @@ func downloadKey(row store.FileRow) string {
 		}
 	}
 	return row.R2Key
+}
+
+func fileURLKey(row store.FileRow, variant filev1.FileURLVariant) (string, error) {
+	if err := validateFileURLVariant(variant); err != nil {
+		return "", err
+	}
+	switch variant {
+	case filev1.FileURLVariant_FILE_URL_VARIANT_UNSPECIFIED:
+		return downloadKey(row), nil
+	case filev1.FileURLVariant_FILE_URL_VARIANT_THUMBNAIL:
+		if row.ThumbnailR2Key == nil || strings.TrimSpace(*row.ThumbnailR2Key) == "" {
+			return "", status.Error(codes.FailedPrecondition, "file thumbnail is not available")
+		}
+		return strings.TrimSpace(*row.ThumbnailR2Key), nil
+	}
+	return "", status.Error(codes.InvalidArgument, "invalid file URL variant")
+}
+
+func validateFileURLVariant(variant filev1.FileURLVariant) error {
+	switch variant {
+	case filev1.FileURLVariant_FILE_URL_VARIANT_UNSPECIFIED,
+		filev1.FileURLVariant_FILE_URL_VARIANT_THUMBNAIL:
+		return nil
+	default:
+		return status.Error(codes.InvalidArgument, "invalid file URL variant")
+	}
 }
 
 func (s *FileGRPC) readUploadBytes(ctx context.Context, row store.FileRow) ([]byte, error) {
