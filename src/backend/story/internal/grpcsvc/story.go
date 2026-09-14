@@ -41,9 +41,9 @@ type StoryAudienceChecker interface {
 	privacy.SpaceCoMembership
 }
 
-// FileMetadataChecker validates uploaded media metadata (e.g. video duration).
-type FileMetadataChecker interface {
-	GetFileDurationSeconds(ctx context.Context, fileID uuid.UUID) (int32, error)
+// FileMediaValidator asks File to attest the complete media admission predicate.
+type FileMediaValidator interface {
+	ValidateStoryMedia(ctx context.Context, fileID, authorID uuid.UUID, expected storyv1.StoryMediaType) error
 }
 
 // SubscriptionChecker resolves Premium entitlement for anonymous story views.
@@ -73,7 +73,7 @@ type StoryGRPC struct {
 	Friends       FriendChecker
 	Audience      StoryAudienceChecker
 	FeedAuthors   FeedAuthorLister
-	Files         FileMetadataChecker
+	Files         FileMediaValidator
 	Subscriptions SubscriptionChecker
 	Privacy       StoryPrivacyChecker
 	Chat          ChatClient
@@ -91,12 +91,19 @@ func (s *StoryGRPC) CreateStory(ctx context.Context, req *storyv1.CreateStoryReq
 	if err != nil {
 		return nil, status.Error(codes.Unauthenticated, "profile required")
 	}
-	storyType := storyMediaTypeString(req.GetTypeEnum())
-	if storyType == "" {
-		storyType = strings.TrimSpace(req.GetType())
+	storyType := strings.TrimSpace(req.GetType())
+	if req.TypeEnum != nil {
+		enumType := storyMediaTypeString(req.GetTypeEnum())
+		if enumType == "" || (storyType != "" && storyType != enumType) {
+			return nil, status.Error(codes.InvalidArgument, "invalid story type")
+		}
+		storyType = enumType
 	}
-	if storyType == "" {
-		return nil, status.Error(codes.InvalidArgument, "type is required")
+	if storyType != "photo" && storyType != "video" && storyType != "text" {
+		return nil, status.Error(codes.InvalidArgument, "invalid story type")
+	}
+	if storyType == "text" && req.MediaFileId != nil {
+		return nil, status.Error(codes.InvalidArgument, "text stories cannot contain media")
 	}
 	if storyType == "text" && strings.TrimSpace(req.GetTextContent()) == "" {
 		return nil, status.Error(codes.InvalidArgument, "text_content is required for text stories")
@@ -126,13 +133,21 @@ func (s *StoryGRPC) CreateStory(ctx context.Context, req *storyv1.CreateStoryReq
 	} else {
 		visibility, visAudienceJSON = s.capCreateStoryVisibility(ctx, profileID, visibility, visAudienceJSON)
 	}
-	if storyType == "video" && mediaID != nil && s.Files != nil {
-		secs, durErr := s.Files.GetFileDurationSeconds(ctx, *mediaID)
-		if durErr != nil {
-			return nil, status.Error(codes.InvalidArgument, "invalid media_file_id")
+	if mediaID != nil {
+		if s.Files == nil {
+			return nil, status.Error(codes.Unavailable, "story media validation unavailable")
 		}
-		if secs > 60 {
-			return nil, status.Error(codes.InvalidArgument, "video duration must be at most 60 seconds")
+		expected := storyv1.StoryMediaType_STORY_MEDIA_TYPE_PHOTO
+		if storyType == "video" {
+			expected = storyv1.StoryMediaType_STORY_MEDIA_TYPE_VIDEO
+		}
+		if err := s.Files.ValidateStoryMedia(ctx, *mediaID, profileID, expected); err != nil {
+			switch status.Code(err) {
+			case codes.InvalidArgument, codes.NotFound, codes.PermissionDenied, codes.FailedPrecondition:
+				return nil, status.Error(status.Code(err), "story media rejected")
+			default:
+				return nil, status.Error(codes.Unavailable, "story media validation unavailable")
+			}
 		}
 	}
 	row, err := s.Store.CreateStory(ctx, store.CreateStoryInput{
@@ -660,6 +675,9 @@ func (s *StoryGRPC) CreateLookingForParty(ctx context.Context, req *storyv1.Crea
 	if err != nil {
 		return nil, status.Error(codes.Unauthenticated, "profile required")
 	}
+	if req.GetMediaFileId() != "" {
+		return nil, status.Error(codes.FailedPrecondition, "LFP media policy is not defined")
+	}
 	criteria := strings.TrimSpace(req.GetCriteriaJson())
 	if criteria == "" {
 		return nil, status.Error(codes.InvalidArgument, "criteria_json is required")
@@ -672,18 +690,9 @@ func (s *StoryGRPC) CreateLookingForParty(ctx context.Context, req *storyv1.Crea
 	if visibilityRestrictiveness(lfpVisibility) > visibilityRestrictiveness(floor) {
 		return nil, status.Error(codes.InvalidArgument, "lfp visibility cannot be narrower than story privacy")
 	}
-	var mediaID *uuid.UUID
-	if req.MediaFileId != nil && strings.TrimSpace(*req.MediaFileId) != "" {
-		parsed, parseErr := uuid.Parse(strings.TrimSpace(*req.MediaFileId))
-		if parseErr != nil {
-			return nil, status.Error(codes.InvalidArgument, "invalid media_file_id")
-		}
-		mediaID = &parsed
-	}
 	row, err := s.Store.CreateStory(ctx, store.CreateStoryInput{
 		AuthorProfileID:   profileID,
 		Type:              "text",
-		MediaFileID:       mediaID,
 		IsLookingForParty: true,
 		LFPCriteriaJSON:   &criteria,
 		Visibility:        lfpVisibility,

@@ -295,7 +295,7 @@ When conversion finishes (`status=ready` or `failed`), File publishes **`file.pr
 - **Subscription Service** — проверка лимитов (размер файла, retention)
 - **Messaging Service** — (через NATS) обновление превью в сообщении после конвертации
 
-## Story media validation (contract; implementation pending)
+## Story media validation
 
 `ValidateStoryMedia` is a synchronous, read-only protected RPC. It accepts only
 the verified `service:story` principal and a request-bound Phase-0 credential;
@@ -314,9 +314,15 @@ Story to re-evaluate. `GetFileMetadata` remains Gateway-only.
 | `FailedPrecondition` | Chat/E2E/Story context, lifecycle, scan, category or video-duration predicate fails |
 | `Unavailable` | Listener or persistence is unavailable |
 
-The protected listener/verifier, replay store, TLS/JWKS configuration and
-transactional handler are deliberately not implemented by this contract RED
-slice. See `docs/todo/backend.md` for the remaining lifecycle-binding work.
+The protected listener uses `FILE_PRINCIPAL_GRPC_LISTEN`,
+`FILE_PRINCIPAL_TLS_CERT_FILE`, `FILE_PRINCIPAL_TLS_KEY_FILE` and
+`FILE_PRINCIPAL_REPLAY_REDIS_ADDR` (optional password via
+`FILE_PRINCIPAL_REPLAY_REDIS_PASSWORD`). `S2S_JWKS_URLS_JSON` must contain the
+Story HTTPS endpoint; `S2S_JWKS_CA_FILE` adds its private trust root. Cache
+settings follow Phase-0 defaults of 30s/2m/5s. Partial configuration fails startup.
+The ordinary listener returns `Unavailable` for validation and the protected
+listener rejects all other methods. See Story's deployment runbook and
+`docs/todo/backend.md` for the remaining lifecycle-binding work.
 
 ## Масштабирование
 

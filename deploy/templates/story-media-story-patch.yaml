@@ -1,0 +1,18 @@
+# Strategic merge patch for deployment/voice-story; private keys are Secret-only.
+spec:
+  template:
+    spec:
+      containers:
+        - name: story
+          env:
+            - {name: STORY_PRINCIPAL_SIGNING_KEYS_DIR, value: /run/story-principal}
+            - {name: STORY_PRINCIPAL_ACTIVE_KID, value: "__STORY_ACTIVE_KID__"}
+            - {name: FILE_PRINCIPAL_GRPC_ADDR, value: "voice-file-principal:9091"}
+            - {name: FILE_PRINCIPAL_TLS_CA_FILE, value: /run/principal-trust/ca.crt}
+            - {name: FILE_PRINCIPAL_TLS_SERVER_NAME, value: "voice-file-principal.__K_NAMESPACE__.svc"}
+          volumeMounts:
+            - {name: story-principal-keys, mountPath: /run/story-principal, readOnly: true}
+            - {name: principal-trust, mountPath: /run/principal-trust, readOnly: true}
+      volumes:
+        - {name: story-principal-keys, secret: {secretName: voice-story-principal-keys}}
+        - {name: principal-trust, secret: {secretName: voice-principal-trust}}

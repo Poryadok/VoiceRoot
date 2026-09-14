@@ -19,18 +19,20 @@ import (
 
 	"voice/backend/file/internal/clamav"
 	"voice/backend/file/internal/fileevents"
-	"voice/backend/file/internal/jobs"
 	grpcsvc "voice/backend/file/internal/grpcsvc"
 	"voice/backend/file/internal/imgproc"
+	"voice/backend/file/internal/jobs"
+	"voice/backend/file/internal/principalgrpc"
+	"voice/backend/file/internal/principalruntime"
 	"voice/backend/file/internal/r2file"
 	"voice/backend/file/internal/s2s"
 	"voice/backend/file/internal/store"
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
+	voiceprom "voice/backend/pkg/promhttp"
 	"voice/backend/pkg/runtimeconfig"
 	"voice/backend/pkg/subscriptionconsume"
-	voiceprom "voice/backend/pkg/promhttp"
 
 	chatv1 "voice.app/voice/chat/v1"
 	filev1 "voice.app/voice/file/v1"
@@ -56,6 +58,18 @@ func waitForGRPCReady(ctx context.Context, conn *grpc.ClientConn) error {
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	principalConfig, principalEnabled, err := principalruntime.LoadFromEnv()
+	if err != nil {
+		log.Fatalf("file principal config: %v", err)
+	}
+	var protectedRuntime *principalruntime.Runtime
+	if principalEnabled {
+		protectedRuntime, err = principalruntime.New(context.Background(), principalConfig)
+		if err != nil {
+			log.Fatalf("file principal runtime: %v", err)
+		}
+		defer func() { _ = protectedRuntime.Close() }()
+	}
 	metricsReg := prometheus.NewRegistry()
 	addr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
@@ -67,6 +81,7 @@ func main() {
 	}
 
 	var grpcSrv *grpc.Server
+	var protectedSrv *grpc.Server
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	if dbURL != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
@@ -132,8 +147,10 @@ func main() {
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
 		}
-		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))...)
-		filev1.RegisterFileServiceServer(grpcSrv, grpcsvc.New(grpcsvc.Deps{
+		sharedOptions := grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))
+		options := append(append([]grpc.ServerOption{}, sharedOptions...), grpc.ChainUnaryInterceptor(principalgrpc.OrdinaryUnaryInterceptor()))
+		grpcSrv = grpc.NewServer(options...)
+		service := grpcsvc.New(grpcsvc.Deps{
 			Files:     filesStore,
 			Presigner: presigner,
 			Deleter:   deleter,
@@ -142,7 +159,22 @@ func main() {
 			Processor: processor,
 			Scanner:   scanner,
 			Events:    eventPub,
-		}))
+		})
+		filev1.RegisterFileServiceServer(grpcSrv, service)
+		if protectedRuntime != nil {
+			protectedListener, err := net.Listen("tcp", principalConfig.ListenAddr)
+			if err != nil {
+				log.Fatalf("file principal listen: %v", err)
+			}
+			protectedOptions := append(append([]grpc.ServerOption{}, sharedOptions...), protectedRuntime.ServerOptions()...)
+			protectedSrv = grpc.NewServer(protectedOptions...)
+			filev1.RegisterFileServiceServer(protectedSrv, service)
+			go func() {
+				if err := protectedSrv.Serve(protectedListener); err != nil {
+					log.Fatalf("file principal serve: %v", err)
+				}
+			}()
+		}
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcListen))
 			if err := grpcSrv.Serve(lis); err != nil {
@@ -150,6 +182,9 @@ func main() {
 			}
 		}()
 	} else {
+		if principalEnabled {
+			log.Fatal("DATABASE_URL required for protected File listener")
+		}
 		logger.Warn("DATABASE_URL not set; gRPC disabled (health only)")
 	}
 
@@ -176,6 +211,9 @@ func main() {
 		defer cancel()
 		if grpcSrv != nil {
 			grpcSrv.GracefulStop()
+		}
+		if protectedSrv != nil {
+			protectedSrv.GracefulStop()
 		}
 		if err := server.Shutdown(ctx); err != nil {
 			log.Fatal(err)

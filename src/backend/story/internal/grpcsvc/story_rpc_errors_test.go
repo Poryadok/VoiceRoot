@@ -111,8 +111,7 @@ func TestCreateStory_videoAndCloseFriendsEnum(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
-	client, _, cleanup := startStoryGRPC(t)
-	defer cleanup()
+	client, _, _, _ := startStoryMediaRED(t, mediaValidatorFunc(func(context.Context, uuid.UUID, uuid.UUID, storyv1.StoryMediaType) error { return nil }))
 
 	profile := uuid.New()
 	ctx := withProfile(context.Background(), uuid.New(), profile)

@@ -171,14 +171,14 @@ authority остаётся за JWT/floor validation.
 3. Миграции: один сервис — один набор миграций на свою БД; инструменты и порядок — [OPERATIONS.md](OPERATIONS.md#миграции-бд-database-per-service).
 
 
-### Role ownership principal replay
+### File Story-media principal replay
 
-### File Story-media principal replay (contract; implementation pending)
-
-File's protected Story-media listener will use its File-owned shared Redis
+File's protected Story-media listener uses its File-owned shared Redis
 namespace `file:principal:replay:<sha256(issuer + NUL + jti)>` with SET NX and
 the remaining credential lifetime. Redis/JWKS failure or a hard-expired JWKS
 cache fails closed; this ephemeral replay key is not File-reference authority.
+
+### Role ownership principal replay
 
 The dedicated ownership transport uses shared Redis configured by
 `ROLE_PRINCIPAL_REPLAY_REDIS_ADDR`. Keys are
