@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { OAuthCallback } from './OAuthCallback';
 import { apiBase, apiFetch, oauthClientId, oauthDisabled } from './oauth/api';
 import { callbackRedirectUri } from './oauth/callback';
@@ -51,6 +51,29 @@ function Portal() {
   const [regDescription, setRegDescription] = useState('');
   const [regScopesJson, setRegScopesJson] = useState('["TEXT_CHAT_SEND_MESSAGES"]');
   const [status, setStatus] = useState('');
+  const secretDialogRef = useRef<HTMLElement>(null);
+  const secretDialogOpenerRef = useRef<HTMLElement | null>(null);
+  const secretDialogWasOpenRef = useRef(false);
+  const hasOneShotSecrets = Boolean(botToken || webhookSecret);
+
+  useEffect(() => {
+    if (hasOneShotSecrets) {
+      if (!secretDialogWasOpenRef.current) {
+        secretDialogWasOpenRef.current = true;
+        secretDialogOpenerRef.current = document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+        secretDialogRef.current?.querySelector<HTMLElement>('button:not([disabled])')?.focus();
+      }
+      return;
+    }
+
+    if (secretDialogWasOpenRef.current) {
+      secretDialogWasOpenRef.current = false;
+      secretDialogOpenerRef.current?.focus();
+      secretDialogOpenerRef.current = null;
+    }
+  }, [hasOneShotSecrets]);
 
   const applyBotToEditForm = useCallback((bot: BotSummary | undefined) => {
     setEditName(bot?.name ?? '');
@@ -184,6 +207,34 @@ function Portal() {
   function clearOneShotSecrets() {
     setBotToken('');
     setWebhookSecret('');
+  }
+
+  function handleSecretDialogKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      clearOneShotSecrets();
+      return;
+    }
+    if (event.key !== 'Tab') {
+      return;
+    }
+
+    const focusable = Array.from(
+      secretDialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled])') ?? [],
+    );
+    if (focusable.length === 0) {
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || !secretDialogRef.current?.contains(active))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
   }
 
   async function copyOneShotSecret(kind: 'bot token' | 'webhook secret') {
@@ -360,11 +411,25 @@ function Portal() {
   const manifestScopeWarnings = warningsForPrivilegedScopes(privilegedScopesInManifest(manifest));
 
   return (
-    <main className="page">
+    <>
+      <main
+        className="page"
+        inert={hasOneShotSecrets || undefined}
+        aria-hidden={hasOneShotSecrets || undefined}
+        onClickCapture={(event) => {
+          if (
+            hasOneShotSecrets
+            && !(event.target instanceof Element && event.target.closest('[data-secret-modal-logout]'))
+          ) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        }}
+      >
       <header className="topbar">
         <h1>Voice Developer Portal</h1>
         {loggedIn ? (
-          <button type="button" onClick={logout}>Sign out</button>
+          <button type="button" data-secret-modal-logout onClick={logout}>Sign out</button>
         ) : oauthDisabled ? (
           <span className="hint">OAuth disabled (dev paste JWT)</span>
         ) : (
@@ -552,11 +617,19 @@ function Portal() {
         </>
       )}
 
-      <p className="status">{status}</p>
-      {loggedIn && !getAccessToken() && <p className="status error">Session expired</p>}
-      {(botToken || webhookSecret) && (
+      </main>
+      <p className="status portal-status" role="status">{status}</p>
+      {loggedIn && !getAccessToken() && <p className="status error" role="status">Session expired</p>}
+      {hasOneShotSecrets && (
         <div className="secret-dialog-backdrop">
-          <section className="secret-dialog" role="dialog" aria-modal="true" aria-labelledby="one-shot-secrets-title">
+          <section
+            ref={secretDialogRef}
+            className="secret-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="one-shot-secrets-title"
+            onKeyDown={handleSecretDialogKeyDown}
+          >
             <h2 id="one-shot-secrets-title">Copy one-shot secrets</h2>
             <p>Copy each value now. The portal clears it after copying or when this dialog is closed.</p>
             {botToken && (
@@ -577,6 +650,6 @@ function Portal() {
           </section>
         </div>
       )}
-    </main>
+    </>
   );
 }

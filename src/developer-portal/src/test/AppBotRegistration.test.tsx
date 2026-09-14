@@ -183,6 +183,8 @@ describe('App bot registration and selection', () => {
       expect(screen.getByText('visible-token')).toBeInTheDocument();
     });
 
+    fireEvent.click(screen.getByRole('button', { name: 'Close and clear' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Copy one-shot secrets' })).not.toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: 'Bot B' }));
 
     await waitFor(() => {
@@ -237,7 +239,7 @@ describe('App bot registration and selection', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Copy one-shot secrets' })).not.toBeInTheDocument());
   });
 
-  it('moves focus into the one-shot-secret dialog, traps Tab, and restores the opener after close clears secrets', async () => {
+  it('moves focus into the one-shot-secret dialog, traps Tab, and restores the opener after Escape clears secrets', async () => {
     const user = userEvent.setup();
     const fetchMock = vi
       .fn()
@@ -280,7 +282,7 @@ describe('App bot registration and selection', () => {
     await user.tab({ shift: true });
     expect(document.activeElement).toBe(lastControl);
 
-    await user.click(lastControl);
+    await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Copy one-shot secrets' })).not.toBeInTheDocument());
     expect(screen.queryByText('focus-token')).not.toBeInTheDocument();
     expect(screen.queryByText('focus-webhook-secret')).not.toBeInTheDocument();
@@ -308,7 +310,7 @@ describe('App bot registration and selection', () => {
     const regenerateButton = screen.getByRole('button', { name: 'Revoke & regenerate bot token' });
     await user.click(regenerateButton);
     const dialog = await screen.findByRole('dialog', { name: 'Copy one-shot secrets' });
-    const portalBackground = screen.getByRole('main');
+    const portalBackground = screen.getByRole('main', { hidden: true });
     const rotateButton = within(portalBackground).getByRole('button', { name: 'Rotate webhook secret', hidden: true });
     const signOutButton = within(portalBackground).getByRole('button', { name: 'Sign out', hidden: true });
 
@@ -353,7 +355,7 @@ describe('App bot registration and selection', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Register bot' }));
 
     await screen.findByRole('dialog', { name: 'Copy one-shot secrets' });
-    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out', hidden: true }));
 
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Copy one-shot secrets' })).not.toBeInTheDocument());
     expect(screen.queryByText('logout-token')).not.toBeInTheDocument();
