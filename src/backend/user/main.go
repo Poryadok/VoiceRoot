@@ -25,6 +25,7 @@ import (
 	"voice/backend/pkg/httpserver"
 	voiceprom "voice/backend/pkg/promhttp"
 	"voice/backend/pkg/runtimeconfig"
+	"voice/backend/pkg/socialprincipal"
 	grpcsvc "voice/backend/user/internal/grpcsvc"
 	"voice/backend/user/internal/r2avatar"
 	"voice/backend/user/internal/store"
@@ -48,6 +49,21 @@ func waitForRequiredGRPCReady(ctx context.Context, conn *grpc.ClientConn) error 
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	principalConfig, principalEnabled, err := socialprincipal.LoadFromEnv("user")
+	if err != nil {
+		log.Fatalf("user privacy principal config: %v", err)
+	}
+	var privacyRuntime *socialprincipal.Runtime
+	if principalEnabled {
+		if strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
+			log.Fatal("user privacy principal requires DATABASE_URL")
+		}
+		privacyRuntime, err = socialprincipal.New(context.Background(), principalConfig)
+		if err != nil {
+			log.Fatalf("user privacy principal: %v", err)
+		}
+		defer func() { _ = privacyRuntime.Close() }()
+	}
 	metricsReg := prometheus.NewRegistry()
 	httpAddr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
@@ -201,8 +217,11 @@ func main() {
 			logger.Info("USER_DNS_STUB_URL set; org verification uses HTTP TXT fixture")
 		}
 
-		srv := grpc.NewServer(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))...)
-		userv1.RegisterUserServiceServer(srv, &grpcsvc.UserGRPC{
+		sharedOptions := grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))
+		ordinaryOptions := append([]grpc.ServerOption{}, sharedOptions...)
+		ordinaryOptions = append(ordinaryOptions, grpc.ChainUnaryInterceptor(socialprincipal.OrdinaryUnaryInterceptor("user")))
+		srv := grpc.NewServer(ordinaryOptions...)
+		userSvc := &grpcsvc.UserGRPC{
 			Profiles:            store.NewProfileStore(pool),
 			Privacy:             store.NewPrivacyStore(pool),
 			Presence:            presence,
@@ -214,7 +233,25 @@ func main() {
 			Events:              events,
 			DeletedAccounts:     deletedAccounts,
 			DNSResolver:         dnsResolver,
-		})
+		}
+		userv1.RegisterUserServiceServer(srv, userSvc)
+		defer srv.Stop()
+		if privacyRuntime != nil {
+			privacyListener, err := net.Listen("tcp", principalConfig.ListenAddr)
+			if err != nil {
+				log.Fatalf("user privacy principal listen: %v", err)
+			}
+			privacyOptions := append([]grpc.ServerOption{}, sharedOptions...)
+			privacyOptions = append(privacyOptions, privacyRuntime.ServerOptions()...)
+			privacyServer := grpc.NewServer(privacyOptions...)
+			grpcsvc.RegisterSocialPrivacyServer(privacyServer, userSvc)
+			defer privacyServer.Stop()
+			go func() {
+				if err := privacyServer.Serve(privacyListener); err != nil {
+					log.Fatalf("user privacy principal serve: %v", err)
+				}
+			}()
+		}
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcAddr))
 			if err := srv.Serve(lis); err != nil {
