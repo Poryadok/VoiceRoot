@@ -39,6 +39,7 @@
 | `POST` | `/api/v1/stories/{id}/views` | `MarkViewed` | `anonymous` (Premium) |
 | `GET` | `/api/v1/stories/{id}/viewers` | `GetViewers` | только автор |
 | `POST` | `/api/v1/stories/{id}/reactions` | `ReactToStory` | `emoji` |
+| `GET` | `/api/v1/stories/{id}/reactions` | `GetStoryReactions` | только автор |
 | `POST` | `/api/v1/stories/{id}/reply` | `ReplyToStory` | приватный ответ → DM (`chat_id`, `message_id`) |
 | `GET` | `/api/v1/stories/highlights` | `GetHighlights` | `profile_id`; фильтр по `visibility` хайлайта |
 | `POST` | `/api/v1/stories/highlights` | `CreateHighlight` | `name`, `visibility` |
@@ -66,6 +67,7 @@ service StoryService {
 
   // Реакции
   rpc ReactToStory(ReactToStoryRequest) returns (Empty);
+  rpc GetStoryReactions(GetStoryReactionsRequest) returns (GetStoryReactionsResponse); // только автор
 
   // Архив
   rpc GetArchive(GetArchiveRequest) returns (StoryList);
