@@ -1,0 +1,222 @@
+package grpcsvc
+
+import (
+	"context"
+	"testing"
+
+	"github.com/alicebob/miniredis/v2"
+	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
+
+	"voice/backend/pkg/integrationtest"
+	"voice/backend/pkg/privacy"
+	"voice/backend/user/internal/authctx"
+	"voice/backend/user/internal/store"
+
+	userv1 "voice.app/voice/user/v1"
+)
+
+// TestCustomStatus_OnlyPremiumOwnersMaySetNonEmpty_DurableAndPresence is the
+// RED contract for the two public write paths.  A free owner may explicitly
+// clear a value, but a rejected non-empty write must leave the previous value.
+func TestCustomStatus_OnlyPremiumOwnersMaySetNonEmpty_DurableAndPresence(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
+	integrationtest.ApplyUserDBMigrations(t, ctx, pool, repoRoot(t))
+
+	accountID, profileID := uuid.New(), uuid.New()
+	_, err := pool.Exec(ctx, `
+INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary, custom_status)
+VALUES ($1, $2, 'statusowner', '7001', 'Status Owner', true, 'durable-before')`, profileID, accountID)
+	require.NoError(t, err)
+
+	mr := miniredis.RunT(t)
+	t.Cleanup(mr.Close)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb)
+
+	free := withProfileTier(ctx, accountID, profileID, "free")
+	nonEmpty := "durable-denied"
+	_, err = cli.UpdateProfile(free, &userv1.UpdateProfileRequest{ProfileId: profileID.String(), CustomStatus: &nonEmpty})
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	var durable string
+	require.NoError(t, pool.QueryRow(ctx, `SELECT custom_status FROM profiles WHERE id = $1`, profileID).Scan(&durable))
+	require.Equal(t, "durable-before", durable, "a denied durable write must not mutate PostgreSQL")
+
+	premium := withProfileTier(ctx, accountID, profileID, "premium")
+	_, err = cli.UpdateProfile(premium, &userv1.UpdateProfileRequest{ProfileId: profileID.String(), CustomStatus: &nonEmpty})
+	require.NoError(t, err)
+	_, err = cli.UpdateProfile(free, &userv1.UpdateProfileRequest{ProfileId: profileID.String(), CustomStatus: stringPtr("")})
+	require.NoError(t, err, "a free owner may clear an existing durable value")
+	require.NoError(t, pool.QueryRow(ctx, `SELECT custom_status FROM profiles WHERE id = $1`, profileID).Scan(&durable))
+	require.Empty(t, durable)
+
+	presenceBefore := "presence-before"
+	_, err = cli.UpdatePresence(premium, &userv1.UpdatePresenceRequest{Status: "online", CustomStatus: &presenceBefore})
+	require.NoError(t, err)
+	presenceDenied := "presence-denied"
+	_, err = cli.UpdatePresence(free, &userv1.UpdatePresenceRequest{Status: "online", CustomStatus: &presenceDenied})
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	snapshot, err := store.NewPresenceStore(rdb).Get(ctx, profileID)
+	require.NoError(t, err)
+	require.Equal(t, presenceBefore, snapshot.CustomStatus, "a denied session write must not mutate Redis")
+
+	_, err = cli.UpdatePresence(free, &userv1.UpdatePresenceRequest{Status: "online", CustomStatus: stringPtr("")})
+	require.NoError(t, err, "a free owner may clear an existing session value")
+	snapshot, err = store.NewPresenceStore(rdb).Get(ctx, profileID)
+	require.NoError(t, err)
+	require.Empty(t, snapshot.CustomStatus)
+}
+
+// TestCustomStatus_DurableProfileProjectionIsOwnerOnly keeps profile reads from
+// becoming a bypass around the viewer-aware Presence API.
+func TestCustomStatus_DurableProfileProjectionIsOwnerOnly(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
+	integrationtest.ApplyUserDBMigrations(t, ctx, pool, repoRoot(t))
+
+	ownerAccount, ownerProfile := uuid.New(), uuid.New()
+	foreignAccount, foreignProfile := uuid.New(), uuid.New()
+	_, err := pool.Exec(ctx, `
+INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary, custom_status)
+VALUES ($1, $2, 'projectionowner', '7002', 'Owner', true, 'durable-secret'),
+       ($3, $4, 'projectionforeign', '7003', 'Foreign', true, NULL)`,
+		ownerProfile, ownerAccount, foreignProfile, foreignAccount)
+	require.NoError(t, err)
+
+	mr := miniredis.RunT(t)
+	t.Cleanup(mr.Close)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb)
+
+	owner, err := cli.GetProfile(withUserAuthCtx(ctx, ownerAccount, ownerProfile), &userv1.GetProfileRequest{By: &userv1.GetProfileRequest_ProfileId{ProfileId: ownerProfile.String()}})
+	require.NoError(t, err)
+	require.Equal(t, "durable-secret", owner.GetProfile().GetCustomStatus())
+
+	for name, readCtx := range map[string]context.Context{
+		"foreign":    withUserAuthCtx(ctx, foreignAccount, foreignProfile),
+		"viewerless": ctx,
+	} {
+		t.Run(name, func(t *testing.T) {
+			one, err := cli.GetProfile(readCtx, &userv1.GetProfileRequest{By: &userv1.GetProfileRequest_ProfileId{ProfileId: ownerProfile.String()}})
+			require.NoError(t, err)
+			require.Nil(t, one.GetProfile().CustomStatus)
+
+			many, err := cli.GetProfiles(readCtx, &userv1.GetProfilesRequest{ProfileIds: []string{ownerProfile.String()}})
+			require.NoError(t, err)
+			require.Len(t, many.GetProfileList().GetProfiles(), 1)
+			require.Nil(t, many.GetProfileList().GetProfiles()[0].CustomStatus)
+		})
+	}
+}
+
+// TestCustomStatus_PresenceAudienceAndBlockFailClosed applies the existing
+// show_online decision to custom status for both direct and bulk presence.
+func TestCustomStatus_PresenceAudienceAndBlockFailClosed(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
+	integrationtest.ApplyUserDBMigrations(t, ctx, pool, repoRoot(t))
+
+	ownerAccount, ownerProfile := uuid.New(), uuid.New()
+	viewerAccount, viewerProfile := uuid.New(), uuid.New()
+	_, err := pool.Exec(ctx, `
+INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+VALUES ($1, $2, 'presenceowner', '7004', 'Owner', true),
+       ($3, $4, 'presenceviewer', '7005', 'Viewer', true)`,
+		ownerProfile, ownerAccount, viewerProfile, viewerAccount)
+	require.NoError(t, err)
+
+	privacyStore := store.NewPrivacyStore(pool)
+	seedPrivacyPreset(ctx, t, privacyStore, ownerProfile, "personal")
+	mr := miniredis.RunT(t)
+	t.Cleanup(mr.Close)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+	profiles := store.NewProfileStore(pool)
+	cli := startUserPrivacyTestServer(t, profiles, privacyStore, rdb, func(s *UserGRPC) { s.SocialGraph = alwaysFriendsGraph{} })
+
+	custom := "present-secret"
+	_, err = cli.UpdatePresence(withProfileTier(ctx, ownerAccount, ownerProfile, "premium"), &userv1.UpdatePresenceRequest{Status: "online", CustomStatus: &custom})
+	require.NoError(t, err)
+
+	// An allowed foreign viewer and self can see the session field.
+	viewer := withUserAuthCtx(ctx, viewerAccount, viewerProfile)
+	assertCustomStatusPresentForDirectAndBulk(t, cli, viewer, ownerProfile, custom)
+	self, err := cli.GetPresence(withUserAuthCtx(ctx, ownerAccount, ownerProfile), &userv1.GetPresenceRequest{ProfileId: ownerProfile.String()})
+	require.NoError(t, err)
+	require.Equal(t, custom, self.GetPresenceStatus().GetCustomStatus())
+
+	blockedCli := startUserPrivacyTestServer(t, profiles, privacyStore, rdb, func(s *UserGRPC) {
+		s.SocialGraph = alwaysFriendsGraph{}
+		s.Blocks = stubProfileBlocks{blocked: map[string]bool{viewerAccount.String() + ":" + ownerAccount.String(): true}}
+	})
+	assertCustomStatusOmittedForDirectAndBulk(t, blockedCli, viewer, ownerProfile)
+
+	// show_online=nobody, invisible, absent/ambiguous identity, missing privacy,
+	// and dependency errors are sparse responses, never policy-reason disclosures.
+	nobody := privacy.SettingsForPreset("personal")
+	nobody.ShowOnline = privacy.Nobody()
+	_, err = privacyStore.Upsert(ctx, store.PrivacyRowFromSettings(ownerProfile, nobody))
+	require.NoError(t, err)
+	assertCustomStatusOmittedForDirectAndBulk(t, cli, viewer, ownerProfile)
+
+	personal := privacy.SettingsForPreset("personal")
+	_, err = privacyStore.Upsert(ctx, store.PrivacyRowFromSettings(ownerProfile, personal))
+	require.NoError(t, err)
+	_, err = cli.UpdatePresence(withProfileTier(ctx, ownerAccount, ownerProfile, "premium"), &userv1.UpdatePresenceRequest{Status: "invisible", CustomStatus: &custom})
+	require.NoError(t, err)
+	assertCustomStatusOmittedForDirectAndBulk(t, cli, viewer, ownerProfile)
+	_, err = cli.UpdatePresence(withProfileTier(ctx, ownerAccount, ownerProfile, "premium"), &userv1.UpdatePresenceRequest{Status: "online", CustomStatus: &custom})
+	require.NoError(t, err)
+
+	failingCli := startUserPrivacyTestServer(t, profiles, privacyStore, rdb, func(s *UserGRPC) { s.SocialGraph = lastSeenFailingSocialGraph{} })
+	assertCustomStatusOmittedForDirectAndBulk(t, failingCli, viewer, ownerProfile)
+	_, err = pool.Exec(ctx, `DELETE FROM privacy_settings WHERE profile_id = $1`, ownerProfile)
+	require.NoError(t, err)
+	assertCustomStatusOmittedForDirectAndBulk(t, cli, viewer, ownerProfile)
+	assertCustomStatusOmittedForDirectAndBulk(t, cli, context.Background(), ownerProfile)
+	ambiguous := metadata.AppendToOutgoingContext(ctx, authctx.HeaderProfileID, viewerProfile.String(), authctx.HeaderProfileID, ownerProfile.String())
+	assertCustomStatusOmittedForDirectAndBulk(t, cli, ambiguous, ownerProfile)
+}
+
+func assertCustomStatusPresentForDirectAndBulk(t *testing.T, cli userv1.UserServiceClient, ctx context.Context, profileID uuid.UUID, want string) {
+	t.Helper()
+	direct, err := cli.GetPresence(ctx, &userv1.GetPresenceRequest{ProfileId: profileID.String()})
+	require.NoError(t, err)
+	require.Equal(t, want, direct.GetPresenceStatus().GetCustomStatus())
+	bulk, err := cli.GetBulkPresence(ctx, &userv1.GetBulkPresenceRequest{ProfileIds: []string{profileID.String()}})
+	require.NoError(t, err)
+	require.Equal(t, want, bulk.GetByProfileId()[profileID.String()].GetCustomStatus())
+}
+
+func assertCustomStatusOmittedForDirectAndBulk(t *testing.T, cli userv1.UserServiceClient, ctx context.Context, profileID uuid.UUID) {
+	t.Helper()
+	direct, err := cli.GetPresence(ctx, &userv1.GetPresenceRequest{ProfileId: profileID.String()})
+	require.NoError(t, err)
+	require.Nil(t, direct.GetPresenceStatus().CustomStatus)
+	bulk, err := cli.GetBulkPresence(ctx, &userv1.GetBulkPresenceRequest{ProfileIds: []string{profileID.String()}})
+	require.NoError(t, err)
+	require.Nil(t, bulk.GetByProfileId()[profileID.String()].CustomStatus)
+}
+
+func withProfileTier(ctx context.Context, accountID, profileID uuid.UUID, tier string) context.Context {
+	ctx = withUserAuthCtx(ctx, accountID, profileID)
+	return metadata.AppendToOutgoingContext(ctx, authctx.HeaderSubscriptionTier, tier)
+}
+
+func stringPtr(s string) *string { return &s }
