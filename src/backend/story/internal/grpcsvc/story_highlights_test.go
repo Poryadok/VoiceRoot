@@ -266,6 +266,7 @@ func TestGetHighlights_filtersByHighlightVisibility(t *testing.T) {
 
 	hl, err := client.CreateHighlight(ctxAuthor, &storyv1.CreateHighlightRequest{Name: "Friends only"})
 	require.NoError(t, err)
+	expireStoryForHighlight(t, st, created.GetStory().GetId())
 	_, err = client.AddToHighlight(ctxAuthor, &storyv1.AddToHighlightRequest{
 		HighlightId: hl.GetHighlight().GetId(),
 		StoryId:     created.GetStory().GetId(),

@@ -11,8 +11,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"voice/backend/story/internal/store"
 	"voice/backend/pkg/integrationtest"
+	"voice/backend/story/internal/store"
 )
 
 func migrationSQL(t *testing.T) string {
@@ -25,7 +25,9 @@ func migrationSQL(t *testing.T) string {
 	require.NoError(t, err)
 	b3, err := os.ReadFile(filepath.Join(dir, "000003_hidden_from_feed.up.sql"))
 	require.NoError(t, err)
-	return string(b1) + "\n" + string(b2) + "\n" + string(b3)
+	b4, err := os.ReadFile(filepath.Join(dir, "000004_archive_purge_outbox.up.sql"))
+	require.NoError(t, err)
+	return string(b1) + "\n" + string(b2) + "\n" + string(b3) + "\n" + string(b4)
 }
 
 func startStoryStore(t *testing.T) *store.StoryStore {
@@ -47,9 +49,9 @@ func TestCreateStory_andGetStory(t *testing.T) {
 	text := "hello story"
 	row, err := st.CreateStory(ctx, store.CreateStoryInput{
 		AuthorProfileID: author,
-		Type:          "text",
-		TextContent:   &text,
-		Visibility:    "friends",
+		Type:            "text",
+		TextContent:     &text,
+		Visibility:      "friends",
 	})
 	require.NoError(t, err)
 	require.NotEqual(t, uuid.Nil, row.ID)
@@ -73,9 +75,9 @@ func TestDeleteStory_removesFromActive(t *testing.T) {
 	text := "delete me"
 	row, err := st.CreateStory(ctx, store.CreateStoryInput{
 		AuthorProfileID: author,
-		Type:          "text",
-		TextContent:   &text,
-		Visibility:    "friends",
+		Type:            "text",
+		TextContent:     &text,
+		Visibility:      "friends",
 	})
 	require.NoError(t, err)
 
@@ -96,9 +98,9 @@ func TestMarkViewed_incrementsViewCount(t *testing.T) {
 	text := "views"
 	row, err := st.CreateStory(ctx, store.CreateStoryInput{
 		AuthorProfileID: author,
-		Type:          "text",
-		TextContent:   &text,
-		Visibility:    "friends",
+		Type:            "text",
+		TextContent:     &text,
+		Visibility:      "friends",
 	})
 	require.NoError(t, err)
 
@@ -120,9 +122,9 @@ func TestReactToStory_upsertsEmoji(t *testing.T) {
 	text := "react"
 	row, err := st.CreateStory(ctx, store.CreateStoryInput{
 		AuthorProfileID: author,
-		Type:          "text",
-		TextContent:   &text,
-		Visibility:    "friends",
+		Type:            "text",
+		TextContent:     &text,
+		Visibility:      "friends",
 	})
 	require.NoError(t, err)
 
@@ -140,9 +142,9 @@ func TestHighlights_CRUD(t *testing.T) {
 	text := "highlight me"
 	storyRow, err := st.CreateStory(ctx, store.CreateStoryInput{
 		AuthorProfileID: profile,
-		Type:          "text",
-		TextContent:   &text,
-		Visibility:    "friends",
+		Type:            "text",
+		TextContent:     &text,
+		Visibility:      "friends",
 	})
 	require.NoError(t, err)
 
@@ -154,6 +156,9 @@ func TestHighlights_CRUD(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Clutch moments", updated.Name)
 
+	n, err := st.MarkExpiredStories(ctx, storyRow.ExpiresAt.Add(time.Second))
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
 	require.NoError(t, st.AddToHighlight(ctx, hl.ID, profile, storyRow.ID))
 
 	list, err := st.GetHighlights(ctx, profile)
@@ -169,6 +174,34 @@ func TestHighlights_CRUD(t *testing.T) {
 	require.Empty(t, list)
 }
 
+func TestAddToHighlight_requiresArchivedStory(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	st := startStoryStore(t)
+	profile := uuid.New()
+	text := "archive me first"
+	storyRow, err := st.CreateStory(ctx, store.CreateStoryInput{
+		AuthorProfileID: profile,
+		Type:            "text",
+		TextContent:     &text,
+		Visibility:      "friends",
+	})
+	require.NoError(t, err)
+
+	hl, err := st.CreateHighlight(ctx, profile, "Archive", "everyone")
+	require.NoError(t, err)
+
+	err = st.AddToHighlight(ctx, hl.ID, profile, storyRow.ID)
+	require.ErrorIs(t, err, store.ErrForbidden)
+
+	n, err := st.MarkExpiredStories(ctx, storyRow.ExpiresAt.Add(time.Second))
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+	require.NoError(t, st.AddToHighlight(ctx, hl.ID, profile, storyRow.ID))
+}
+
 func TestListArchive_afterExpiry(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
@@ -179,9 +212,9 @@ func TestListArchive_afterExpiry(t *testing.T) {
 	text := "archive"
 	row, err := st.CreateStory(ctx, store.CreateStoryInput{
 		AuthorProfileID: author,
-		Type:          "text",
-		TextContent:   &text,
-		Visibility:    "friends",
+		Type:            "text",
+		TextContent:     &text,
+		Visibility:      "friends",
 	})
 	require.NoError(t, err)
 
@@ -205,9 +238,9 @@ func TestMarkExpiredStories_transitionsState(t *testing.T) {
 	text := "ttl"
 	row, err := st.CreateStory(ctx, store.CreateStoryInput{
 		AuthorProfileID: author,
-		Type:          "text",
-		TextContent:   &text,
-		Visibility:    "friends",
+		Type:            "text",
+		TextContent:     &text,
+		Visibility:      "friends",
 	})
 	require.NoError(t, err)
 	require.Nil(t, row.ExpiredAt)
