@@ -165,3 +165,34 @@ func TestRedisCallStore_RestoresPersistedRoomBindingAcrossInstances(t *testing.T
 		})
 	}
 }
+
+// This reproduces the stale read/save outcome of a concurrent independent leave
+// writer against a move. Both writers use the same Redis server; the assertion
+// is the atomic roster/session invariant required of their shared transition.
+func TestRedisCallStore_MoveAndConcurrentRemoveCannotRestoreSourceMembership(t *testing.T) {
+	ctx := context.Background()
+	store, _ := newRedisCallStoreForTest(t, "voice-move-race:")
+	space, sourceID, destinationID, target, peer, actor := "space", "source", "destination", "target", "peer", "actor"
+	source, err := store.CreateCall(ctx, Call{RoomID: "source-call", VoiceRoomID: sourceID, SpaceID: space, SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, InitiatorProfileID: target, MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE, States: map[string]ParticipantState{target: {ProfileID: target}, peer: {ProfileID: peer}}})
+	require.NoError(t, err)
+	staleSource, err := store.GetCall(ctx, source.RoomID)
+	require.NoError(t, err)
+
+	_, err = store.MoveVoiceRoomParticipant(ctx, VoiceRoomMoveRequest{ActorProfileID: actor, ParticipantProfileID: target, OperationID: "operation", FromVoiceRoomID: sourceID, ToVoiceRoomID: destinationID, SpaceID: space, MaxParticipants: MaxVoiceRoomParticipants, DestinationRoomID: "destination-call", Now: time.Unix(1_700_000_000, 0).UTC()})
+	require.NoError(t, err)
+
+	// Current RemoveParticipant is a read/save path and can commit this stale
+	// snapshot after Move's WATCH/EXEC transaction.
+	delete(staleSource.States, peer)
+	require.NoError(t, store.save(ctx, staleSource))
+
+	sourceAfter, err := store.GetCallByVoiceRoomID(ctx, sourceID)
+	require.NoError(t, err)
+	destinationAfter, err := store.GetCallByVoiceRoomID(ctx, destinationID)
+	require.NoError(t, err)
+	require.False(t, sourceAfter.IsParticipant(target), "target must not be restored into the source by an independent writer")
+	require.True(t, destinationAfter.IsParticipant(target))
+	active, err := store.GetActiveCall(ctx, target)
+	require.NoError(t, err)
+	require.Equal(t, destinationAfter.RoomID, active.RoomID)
+}

@@ -8,19 +8,23 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 
 	callsv1 "voice.app/voice/calls/v1"
 )
 
 type recordingVoiceRooms struct {
 	callsv1.UnimplementedVoiceServiceServer
-	joinVoiceRoomID string
-	joinSpaceID     string
-	leaveVoiceRoom  string
-	statesVoiceRoom string
-	moveRequest     *callsv1.MoveVoiceRoomParticipantRequest
-	moveProfileMD   []string
+	joinVoiceRoomID    string
+	joinSpaceID        string
+	leaveVoiceRoom     string
+	statesVoiceRoom    string
+	moveRequest        *callsv1.MoveVoiceRoomParticipantRequest
+	moveProfileMD      []string
+	moveSelfErr        error
+	moveParticipantErr error
 }
 
 func TestTranscodeSpaceVoiceRoomModeratorMovePathBindsSpaceAndTarget(t *testing.T) {
@@ -44,7 +48,17 @@ func (s *recordingVoiceRooms) MoveVoiceRoomParticipant(ctx context.Context, req 
 	if md, ok := metadata.FromIncomingContext(ctx); ok {
 		s.moveProfileMD = md.Get("x-voice-profile-id")
 	}
+	if s.moveParticipantErr != nil {
+		return nil, s.moveParticipantErr
+	}
 	return &callsv1.MoveVoiceRoomParticipantResponse{}, nil
+}
+
+func (s *recordingVoiceRooms) MoveToVoiceRoom(_ context.Context, _ *callsv1.MoveToVoiceRoomRequest) (*callsv1.MoveToVoiceRoomResponse, error) {
+	if s.moveSelfErr != nil {
+		return nil, s.moveSelfErr
+	}
+	return &callsv1.MoveToVoiceRoomResponse{}, nil
 }
 
 func (s *recordingVoiceRooms) JoinVoiceRoom(_ context.Context, req *callsv1.JoinVoiceRoomRequest) (*callsv1.JoinVoiceRoomResponse, error) {
@@ -161,4 +175,51 @@ func TestTranscodeVoiceRoomModeratorMoveUsesPathTargetAndDelegatedActor(t *testi
 	require.Equal(t, "dest-1", grpcRec.moveRequest.GetToVoiceRoomId())
 	require.Equal(t, "profile-target", grpcRec.moveRequest.GetParticipantProfileId(), "the target is path-bound")
 	require.Equal(t, []string{"profile-actor"}, grpcRec.moveProfileMD, "Gateway forwards authenticated actor metadata")
+}
+
+func TestTranscodeVoiceRoomMoveFailedPreconditionUsesConflictEnvelope(t *testing.T) {
+	for _, tc := range []struct {
+		name, path string
+		configure  func(*recordingVoiceRooms)
+	}{
+		{
+			name: "self move stale source",
+			path: "/api/v1/voice/rooms/source-1/move",
+			configure: func(s *recordingVoiceRooms) {
+				s.moveSelfErr = status.Error(codes.FailedPrecondition, "backend stale source diagnostic")
+			},
+		},
+		{
+			name: "moderator changed operation id",
+			path: "/api/v1/voice/rooms/source-1/participants/profile-target/move",
+			configure: func(s *recordingVoiceRooms) {
+				s.moveParticipantErr = status.Error(codes.FailedPrecondition, "operation id conflicts with a different canonical request")
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			grpcRec := &recordingVoiceRooms{}
+			tc.configure(grpcRec)
+			conn, cleanup := startBufconnVoiceConn(t, grpcRec)
+			t.Cleanup(cleanup)
+			h := newGatewayForContract(t, gatewayTestOptions{
+				tokenClaims: map[string]tokenClaims{"valid-user-token": {UserID: "account-1", ProfileID: "profile-actor"}},
+				transcoder:  &transcoder{clients: grpcClients{voice: callsv1.NewVoiceServiceClient(conn)}},
+			})
+			resp := performRequest(h, http.MethodPost, tc.path, `{"to_voice_room_id":"dest-1","operation_id":"op-1"}`, map[string]string{"Authorization": "Bearer valid-user-token"})
+			require.Equal(t, http.StatusConflict, resp.Code, "body=%s", resp.Body.String())
+			var envelope struct {
+				ErrorCode, Message string `json:"error_code"`
+			}
+			decodeJSON(t, resp.Body, &envelope)
+			require.Equal(t, "failed_precondition", envelope.ErrorCode)
+			require.Contains(t, []string{"voice room move is no longer possible", "voice room move conflicts with current state"}, envelope.Message)
+		})
+	}
+}
+
+func TestWriteGRPCError_UnrelatedFailedPreconditionRemains412(t *testing.T) {
+	resp := httptest.NewRecorder()
+	writeGRPCError(resp, status.Error(codes.FailedPrecondition, "registration_conflict"))
+	require.Equal(t, http.StatusPreconditionFailed, resp.Code)
 }

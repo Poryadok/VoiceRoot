@@ -116,3 +116,15 @@ func TestMoveToVoiceRoom_IsSelfOnlyAndDoesNotRequireMoveOthers(t *testing.T) {
 	require.Equal(t, callsv1.VoiceRoomLifecycleMethod_VOICE_ROOM_LIFECYCLE_METHOD_SELF_MOVE, response.GetReceipt().GetMethod())
 	require.Empty(t, f.roles.moveOthersChecks)
 }
+
+func TestMoveVoiceRoomParticipant_OperationConflictIsFailedPrecondition(t *testing.T) {
+	f := newVoiceRoomMoveFixture(t)
+	op := uuid.NewString()
+	_, err := f.svc.MoveVoiceRoomParticipant(voiceTestCtx(f.actor), f.moderatorRequest(op))
+	require.NoError(t, err)
+	changed := f.moderatorRequest(op)
+	changed.ToVoiceRoomId = uuid.NewString()
+	_, err = f.svc.MoveVoiceRoomParticipant(voiceTestCtx(f.actor), changed)
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	require.Equal(t, "operation id conflicts with a different request", status.Convert(err).Message())
+}
