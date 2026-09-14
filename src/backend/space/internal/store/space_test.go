@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -288,4 +289,52 @@ func TestAllowGuestsFailClosedMigration_BackfillsLegacyRowsAndDefault(t *testing
 	err = pool.QueryRow(ctx, `SELECT allow_guests FROM spaces WHERE id = $1`, createdAfterMigration.ID).Scan(&newAllowGuests)
 	require.NoError(t, err)
 	require.False(t, newAllowGuests)
+}
+
+func TestAllowGuestsFailClosedMigration_DownRefusesAndPreservesHardenedAdmission(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startSpacePostgresForStoreTest(t, ctx)
+	for _, name := range []string{
+		"000001_init.up.sql", "000002_tree.up.sql", "000003_invites.up.sql",
+		"000004_moderation.up.sql", "000005_space_subscriptions.up.sql", "000006_allow_guests.up.sql",
+	} {
+		raw, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", name))
+		require.NoError(t, err)
+		_, err = pool.Exec(ctx, string(raw))
+		require.NoError(t, err)
+	}
+	st := &SpaceStore{Pool: pool}
+	legacy, err := st.CreateSpace(ctx, uuid.New(), "Legacy admission state", "", "private")
+	require.NoError(t, err)
+	require.True(t, legacy.AllowGuests)
+
+	upSQL, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", "000016_allow_guests_fail_closed.up.sql"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(upSQL))
+	require.NoError(t, err)
+	createdAfterHardening, err := st.CreateSpace(ctx, uuid.New(), "Hardened default", "", "private")
+	require.NoError(t, err)
+
+	downSQL, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", "000016_allow_guests_fail_closed.down.sql"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(downSQL))
+	require.Error(t, err)
+	var refusal *pgconn.PgError
+	require.ErrorAs(t, err, &refusal)
+	require.Equal(t, "P0001", refusal.Code)
+
+	for _, spaceID := range []uuid.UUID{legacy.ID, createdAfterHardening.ID} {
+		var allowGuests bool
+		require.NoError(t, pool.QueryRow(ctx, `SELECT allow_guests FROM spaces WHERE id = $1`, spaceID).Scan(&allowGuests))
+		require.False(t, allowGuests, "refusing DOWN must preserve the hardened backfill")
+	}
+	var columnDefault string
+	require.NoError(t, pool.QueryRow(ctx, `
+SELECT column_default
+FROM information_schema.columns
+WHERE table_schema = 'public' AND table_name = 'spaces' AND column_name = 'allow_guests'`).Scan(&columnDefault))
+	require.Equal(t, "false", columnDefault, "refusing DOWN must preserve the fail-closed default")
 }
