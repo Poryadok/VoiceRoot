@@ -22,18 +22,47 @@ var ErrVoiceSpeakDenied = errors.New("voice speak not permitted")
 // ErrMuteOthersDenied is returned when role permission check denies mute-others / floor control.
 var ErrMuteOthersDenied = errors.New("mute others not permitted")
 
+// ErrVoiceMoveOthersDenied is returned when a moderator lacks permission to
+// move another participant out of a voice room.
+var ErrVoiceMoveOthersDenied = errors.New("voice move others not permitted")
+
 // RolePermissionChecker validates voice-room permissions via Role Service.
 type RolePermissionChecker interface {
 	EnsureScreenShare(ctx context.Context, spaceID, profileID, voiceRoomID string) error
 	EnsureVoiceJoin(ctx context.Context, spaceID, profileID, voiceRoomID string) error
 	EnsureVoiceSpeak(ctx context.Context, spaceID, profileID, voiceRoomID string) error
 	EnsureMuteOthers(ctx context.Context, spaceID, profileID, voiceRoomID string) error
+	EnsureVoiceMoveOthers(ctx context.Context, spaceID, profileID, voiceRoomID string) error
+}
+
+func (m *mapRolePermissions) EnsureVoiceMoveOthers(_ context.Context, spaceID, profileID, _ string) error {
+	if m == nil {
+		return nil
+	}
+	space, ok := m.muteOthers[spaceID]
+	if !ok || !space[profileID] {
+		return ErrVoiceMoveOthersDenied
+	}
+	return nil
 }
 
 type mapRolePermissions struct {
 	allowed     map[string]map[string]bool // spaceID -> profileID
 	deniedRooms map[string]map[string]bool // voiceRoomID -> profileID (room override deny)
 	muteOthers  map[string]map[string]bool // spaceID -> profileID for VOICE_MUTE_OTHERS
+}
+
+func (s *VoiceGRPC) ensureVoiceMoveOthersPermission(ctx context.Context, spaceID, profileID, voiceRoomID string) error {
+	if s.Roles == nil {
+		return status.Error(codes.PermissionDenied, "voice move others permission check unavailable")
+	}
+	if err := s.Roles.EnsureVoiceMoveOthers(ctx, spaceID, profileID, voiceRoomID); err != nil {
+		if errors.Is(err, ErrVoiceMoveOthersDenied) {
+			return status.Error(codes.PermissionDenied, "voice move others not permitted")
+		}
+		return status.Error(codes.Unavailable, "voice move others permission check unavailable")
+	}
+	return nil
 }
 
 func (m *mapRolePermissions) EnsureScreenShare(_ context.Context, spaceID, profileID, _ string) error {

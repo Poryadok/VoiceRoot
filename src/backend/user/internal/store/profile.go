@@ -21,7 +21,7 @@ const (
 	profileCountPremium      = 5
 )
 
-const profileSelectCols = `id, account_id, username, discriminator, display_name, avatar_url, banner_url, bio,
+const profileSelectCols = `id, account_id, username, discriminator, display_name, avatar_url, banner_url, bio, custom_status,
 		locale, theme, is_primary, verification_type, verification_badge, frozen_at, accent_color, is_guest_account, deleted_at, created_at, updated_at`
 
 // MaxDisplayNameRunes is the maximum length of profile display_name (aligned with Discord).
@@ -37,6 +37,7 @@ type ProfileRow struct {
 	AvatarURL         *string
 	BannerURL         *string
 	Bio               *string
+	CustomStatus      *string
 	Locale            string
 	Theme             string
 	IsPrimary         bool
@@ -89,7 +90,7 @@ func scanProfile(row pgx.Row) (*ProfileRow, error) {
 	var p ProfileRow
 	err := row.Scan(
 		&p.ID, &p.AccountID, &p.Username, &p.Discriminator, &p.DisplayName,
-		&p.AvatarURL, &p.BannerURL, &p.Bio, &p.Locale, &p.Theme, &p.IsPrimary,
+		&p.AvatarURL, &p.BannerURL, &p.Bio, &p.CustomStatus, &p.Locale, &p.Theme, &p.IsPrimary,
 		&p.VerificationType, &p.VerificationBadge, &p.FrozenAt, &p.AccentColor, &p.IsGuestAccount,
 		&p.DeletedAt, &p.CreatedAt, &p.UpdatedAt,
 	)
@@ -194,13 +195,14 @@ func (s *ProfileStore) MarkAccountRegular(ctx context.Context, accountID uuid.UU
 }
 
 type UpdateProfileInput struct {
-	DisplayName *string
-	AvatarURL   *string
-	BannerURL   *string
-	Bio         *string
-	Locale      *string
-	Theme       *string
-	AccentColor *string
+	DisplayName  *string
+	AvatarURL    *string
+	BannerURL    *string
+	Bio          *string
+	CustomStatus *string
+	Locale       *string
+	Theme        *string
+	AccentColor  *string
 }
 
 func (s *ProfileStore) UpdateOwnedProfile(ctx context.Context, accountID, profileID uuid.UUID, in UpdateProfileInput) (*ProfileRow, error) {
@@ -226,6 +228,11 @@ func (s *ProfileStore) UpdateOwnedProfile(ctx context.Context, accountID, profil
 	if in.Bio != nil {
 		set = append(set, fmt.Sprintf("bio = $%d", n))
 		args = append(args, *in.Bio)
+		n++
+	}
+	if in.CustomStatus != nil {
+		set = append(set, fmt.Sprintf("custom_status = $%d", n))
+		args = append(args, *in.CustomStatus)
 		n++
 	}
 	if in.Locale != nil {

@@ -95,6 +95,12 @@ func (s *MessagingGRPC) threadPolicyDeps() threadPolicyDeps {
 }
 
 func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMessageRequest) (*messagingv1.SendMessageResponse, error) {
+	// P-008 establishes the wire contract first. Until the schedule handler slice
+	// owns durable creation, reject a populated arm so it cannot silently take
+	// the existing immediate insert/event path.
+	if req != nil && req.DeliverySchedule != nil {
+		return nil, status.Error(codes.Unimplemented, "scheduled delivery is not implemented")
+	}
 	if s == nil || s.Messages == nil {
 		return nil, status.Error(codes.FailedPrecondition, "messaging persistence not configured")
 	}
@@ -299,7 +305,7 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 			for _, pid := range mentionTargets {
 				ids = append(ids, pid.String())
 			}
-			if err := s.MessageEvents.PublishMentionAdded(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), ids); err != nil {
+			if err := s.MessageEvents.PublishMentionAdded(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), ids, saved.SendSilent); err != nil {
 				s.logPublishError(ctx, "message.mention_added", err, slog.String("message_id", saved.ID.String()), slog.String("chat_id", saved.ChatID.String()))
 			}
 		}
@@ -699,7 +705,7 @@ func (s *MessagingGRPC) EditMessage(ctx context.Context, req *messagingv1.EditMe
 			for _, pid := range mentionTargets {
 				ids = append(ids, pid.String())
 			}
-			if err := s.MessageEvents.PublishMentionAdded(ctx, updated.ID.String(), updated.ChatID.String(), updated.SenderProfileID.String(), ids); err != nil {
+			if err := s.MessageEvents.PublishMentionAdded(ctx, updated.ID.String(), updated.ChatID.String(), updated.SenderProfileID.String(), ids, updated.SendSilent); err != nil {
 				s.logPublishError(ctx, "message.mention_added", err, slog.String("message_id", updated.ID.String()), slog.String("chat_id", updated.ChatID.String()))
 			}
 		}

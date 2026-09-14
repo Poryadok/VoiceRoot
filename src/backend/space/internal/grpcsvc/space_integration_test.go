@@ -64,7 +64,7 @@ func applySpaceMigrationsThrough7(t *testing.T, ctx context.Context, pool *pgxpo
 	for _, name := range []string{
 		"000001_init.up.sql", "000002_tree.up.sql", "000003_invites.up.sql",
 		"000004_moderation.up.sql", "000005_space_subscriptions.up.sql",
-		"000006_allow_guests.up.sql", "000007_tree_pin.up.sql",
+		"000006_allow_guests.up.sql", "000007_tree_pin.up.sql", "000016_allow_guests_fail_closed.up.sql",
 	} {
 		migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", name)
 		sqlBytes, err := os.ReadFile(migrationPath)
@@ -877,24 +877,103 @@ func TestJoinByInvite_GuestBlockedWhenAllowGuestsFalse(t *testing.T) {
 
 	pool := startSpacePostgresForTest(t, context.Background())
 	applySpaceMigration(t, context.Background(), pool)
-	bg := context.Background()
-	_, err := pool.Exec(bg, `ALTER TABLE spaces ADD COLUMN IF NOT EXISTS allow_guests BOOLEAN NOT NULL DEFAULT true`)
-	require.NoError(t, err)
-
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
 	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "No guests"})
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
-	_, err = pool.Exec(bg, `UPDATE spaces SET allow_guests = false WHERE id = $1`, spaceID)
-	require.NoError(t, err)
-
 	inv, err := client.CreateInvite(ownerCtx, &spacev1.CreateInviteRequest{SpaceId: spaceID})
 	require.NoError(t, err)
 
 	_, err = client.JoinByInvite(guestCtx, &spacev1.JoinByInviteRequest{Code: inv.GetInvite().GetCode()})
 	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	storedInvite, err := client.GetInvite(ownerCtx, &spacev1.GetInviteRequest{Code: inv.GetInvite().GetCode()})
+	require.NoError(t, err)
+	require.Zero(t, storedInvite.GetInvite().GetUseCount(), "denied guest admission must not consume an invite")
+}
+
+// TestUpdateSpace_AllowGuests_ControlsInviteAdmission verifies fail-closed
+// defaults and the explicit SPACE_MANAGE_SETTINGS opt-in for guest joins.
+func TestUpdateSpace_AllowGuests_ControlsInviteAdmission(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	_, _, ownerCtx := profileFixture(t)
+	guestAccount := uuid.New()
+	guestProfile := uuid.New()
+	guestCtx := withGuestAccountProfileCtx(context.Background(), guestAccount, guestProfile)
+
+	pool := startSpacePostgresForTest(t, context.Background())
+	applySpaceMigration(t, context.Background(), pool)
+	client, cleanup := startSpaceGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Guest admission"})
+	require.NoError(t, err)
+	require.False(t, created.GetSpace().GetAllowGuests())
+	spaceID := created.GetSpace().GetId()
+
+	maxUses := int32(1)
+	inv, err := client.CreateInvite(ownerCtx, &spacev1.CreateInviteRequest{SpaceId: spaceID, MaxUses: &maxUses})
+	require.NoError(t, err)
+	_, err = client.JoinByInvite(guestCtx, &spacev1.JoinByInviteRequest{Code: inv.GetInvite().GetCode()})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	storedInvite, err := client.GetInvite(ownerCtx, &spacev1.GetInviteRequest{Code: inv.GetInvite().GetCode()})
+	require.NoError(t, err)
+	require.Zero(t, storedInvite.GetInvite().GetUseCount(), "denied guest admission must not consume an invite")
+
+	allowGuests := true
+	updated, err := client.UpdateSpace(ownerCtx, &spacev1.UpdateSpaceRequest{
+		SpaceId:     spaceID,
+		AllowGuests: &allowGuests,
+	})
+	require.NoError(t, err)
+	require.True(t, updated.GetSpace().GetAllowGuests())
+
+	joined, err := client.JoinByInvite(guestCtx, &spacev1.JoinByInviteRequest{Code: inv.GetInvite().GetCode()})
+	require.NoError(t, err)
+	require.Equal(t, guestProfile.String(), joined.GetSpaceMembership().GetProfileId())
+
+	allowGuests = false
+	_, err = client.UpdateSpace(ownerCtx, &spacev1.UpdateSpaceRequest{SpaceId: spaceID, AllowGuests: &allowGuests})
+	require.NoError(t, err)
+	retried, err := client.JoinByInvite(guestCtx, &spacev1.JoinByInviteRequest{Code: inv.GetInvite().GetCode()})
+	require.NoError(t, err)
+	require.Equal(t, guestProfile.String(), retried.GetSpaceMembership().GetProfileId())
+	var useCount int32
+	err = pool.QueryRow(context.Background(), `SELECT use_count FROM invites WHERE code = $1`, inv.GetInvite().GetCode()).Scan(&useCount)
+	require.NoError(t, err)
+	require.Equal(t, int32(1), useCount, "existing membership retry must not consume an invite")
+
+	_, err = client.RevokeInvite(ownerCtx, &spacev1.RevokeInviteRequest{InviteId: inv.GetInvite().GetId()})
+	require.NoError(t, err)
+	_, err = client.JoinByInvite(guestCtx, &spacev1.JoinByInviteRequest{Code: inv.GetInvite().GetCode()})
+	require.Equal(t, codes.NotFound, status.Code(err), "revocation must gate an existing guest retry")
+	err = pool.QueryRow(context.Background(), `SELECT use_count FROM invites WHERE code = $1`, inv.GetInvite().GetCode()).Scan(&useCount)
+	require.NoError(t, err)
+	require.Equal(t, int32(1), useCount, "revoked retry must not consume an invite")
+}
+
+func TestUpdateSpace_AllowGuests_NonOwnerDenied(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	_, _, ownerCtx := profileFixture(t)
+	_, _, otherCtx := profileFixture(t)
+	pool := startSpacePostgresForTest(t, context.Background())
+	applySpaceMigration(t, context.Background(), pool)
+	client, cleanup := startSpaceGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Protected guest admission"})
+	require.NoError(t, err)
+	allowGuests := true
+	_, err = client.UpdateSpace(otherCtx, &spacev1.UpdateSpaceRequest{
+		SpaceId:     created.GetSpace().GetId(),
+		AllowGuests: &allowGuests,
+	})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 

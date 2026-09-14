@@ -55,3 +55,20 @@ func TestBuildNotification_CollapseIDAndCounter(t *testing.T) {
 	require.Equal(t, "Vasya and 4 more messages", alert["body"])
 	require.Equal(t, "push:group:profile:chat-1", aps["thread-id"])
 }
+
+func TestBuildNotification_SilentOmitsSoundAndBadge(t *testing.T) {
+	n, err := apns.BuildNotification("app.voice", "device-token", push.Payload{Title: "New message", Body: "hello", Silent: true})
+	require.NoError(t, err)
+	b, err := apns.PayloadJSON(n)
+	require.NoError(t, err)
+	require.NotContains(t, string(b), "\"sound\"")
+	require.NotContains(t, string(b), "\"badge\"")
+}
+
+func TestBuildNotification_DefaultPushIncludesSound(t *testing.T) {
+	n, err := apns.BuildNotification("app.voice", "device-token", push.Payload{Title: "New message", Body: "hello"})
+	require.NoError(t, err)
+	b, err := apns.PayloadJSON(n)
+	require.NoError(t, err)
+	require.Contains(t, string(b), "\"sound\":\"default\"")
+}

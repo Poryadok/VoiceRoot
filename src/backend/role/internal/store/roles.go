@@ -632,20 +632,26 @@ WHERE r.space_id = $1
 	return out, rows.Err()
 }
 
-// RemoveChatOverride deletes a chat override row.
-func (s *RoleStore) unscopedRemoveChatOverride(ctx context.Context, chatID, roleID uuid.UUID) error {
-	_, err := s.db().Exec(ctx, `
+// RemoveChatOverride deletes a chat override row and reports whether it existed.
+func (s *RoleStore) unscopedRemoveChatOverride(ctx context.Context, chatID, roleID uuid.UUID) (bool, error) {
+	tag, err := s.db().Exec(ctx, `
 DELETE FROM chat_overrides WHERE chat_id = $1 AND role_id = $2
 `, chatID, roleID)
-	return err
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
 }
 
-// RemoveVoiceRoomOverride deletes a voice room override row.
-func (s *RoleStore) unscopedRemoveVoiceRoomOverride(ctx context.Context, voiceRoomID, roleID uuid.UUID) error {
-	_, err := s.db().Exec(ctx, `
+// RemoveVoiceRoomOverride deletes a voice room override row and reports whether it existed.
+func (s *RoleStore) unscopedRemoveVoiceRoomOverride(ctx context.Context, voiceRoomID, roleID uuid.UUID) (bool, error) {
+	tag, err := s.db().Exec(ctx, `
 DELETE FROM voice_room_overrides WHERE voice_room_id = $1 AND role_id = $2
 `, voiceRoomID, roleID)
-	return err
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
 }
 
 // SetDefaultJoinRole marks role_id as the default join role for space_id.
