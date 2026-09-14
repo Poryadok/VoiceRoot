@@ -236,7 +236,7 @@ describe('App bot registration and selection', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Copy one-shot secrets' })).not.toBeInTheDocument());
   });
 
-  it('moves focus into the one-shot-secret dialog, traps Tab, and restores the opener after Escape clears secrets', async () => {
+  it('moves focus into the one-shot-secret dialog, traps Tab, and restores the opener after close clears secrets', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse({ bot_list: { bots: [] } }))
@@ -276,14 +276,14 @@ describe('App bot registration and selection', () => {
     fireEvent.keyDown(firstControl, { key: 'Tab', shiftKey: true });
     expect(document.activeElement).toBe(lastControl);
 
-    fireEvent.keyDown(dialog, { key: 'Escape' });
+    fireEvent.click(lastControl);
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Copy one-shot secrets' })).not.toBeInTheDocument());
     expect(screen.queryByText('focus-token')).not.toBeInTheDocument();
     expect(screen.queryByText('focus-webhook-secret')).not.toBeInTheDocument();
     expect(document.activeElement).toBe(opener);
   });
 
-  it('blocks background actions while a one-shot-secret dialog is open', async () => {
+  it('keeps focus and destructive background actions out of the one-shot-secret dialog', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
@@ -301,12 +301,53 @@ describe('App bot registration and selection', () => {
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Revoke & regenerate bot token' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: 'Revoke & regenerate bot token' }));
-    await screen.findByRole('dialog', { name: 'Copy one-shot secrets' });
+    const dialog = await screen.findByRole('dialog', { name: 'Copy one-shot secrets' });
+    const copyButton = within(dialog).getByRole('button', { name: 'Copy bot token' });
+    const rotateWebhookSecret = screen.getByRole('button', { name: 'Rotate webhook secret' });
 
+    copyButton.focus();
+    fireEvent.keyDown(copyButton, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(within(dialog).getByRole('button', { name: 'Close and clear' }));
+
+    fireEvent.click(rotateWebhookSecret);
+
+    expect(document.activeElement).not.toBe(rotateWebhookSecret);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(screen.getByRole('dialog', { name: 'Copy one-shot secrets' })).toHaveTextContent('background-token');
+  });
+
+  it('clears both one-shot secrets and closes the dialog when logging out', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ bot_list: { bots: [] } }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          bot: { id: BOT_A, name: 'Logout Bot' },
+          token_response: { token: 'logout-token' },
+          webhook_secret_response: { webhook_secret: 'logout-webhook-secret' },
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ bot_list: { bots: [{ id: BOT_A, name: 'Logout Bot' }] } }))
+      .mockResolvedValueOnce(botDetailResponse(BOT_A, 'Logout Bot', '[]'))
+      .mockResolvedValueOnce(jsonResponse({ command_list: { commands_json: '[]' } }))
+      .mockResolvedValueOnce(jsonResponse({ manifest_yaml: '' }))
+      .mockResolvedValueOnce(jsonResponse({ command_list: { commands_json: '[]' } }))
+      .mockResolvedValueOnce(jsonResponse({ manifest_yaml: '' }));
+
+    setupLoggedIn(fetchMock);
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByTestId('bot-register')).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText('Bot name'), { target: { value: 'Logout Bot' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Register bot' }));
+
+    await screen.findByRole('dialog', { name: 'Copy one-shot secrets' });
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
 
-    expect(screen.getByRole('dialog', { name: 'Copy one-shot secrets' })).toHaveTextContent('background-token');
-    expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Copy one-shot secrets' })).not.toBeInTheDocument());
+    expect(screen.queryByText('logout-token')).not.toBeInTheDocument();
+    expect(screen.queryByText('logout-webhook-secret')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Use JWT' })).toBeInTheDocument();
   });
 
   it('keeps a one-shot secret visible and reports a status when copying fails', async () => {
@@ -336,8 +377,8 @@ describe('App bot registration and selection', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Copy bot token' }));
 
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('clipboard-token'));
-    expect(dialog).toHaveTextContent('clipboard-token');
-    expect(screen.getByText('Could not copy the secret; it remains visible until copied or dismissed.')).toBeInTheDocument();
+    await waitFor(() => expect(dialog).toHaveTextContent('clipboard-token'));
+    expect(screen.getByRole('status')).toHaveTextContent('Could not copy the secret; it remains visible until copied or dismissed.');
   });
 
   it('keeps a one-shot secret visible and explains when Clipboard API is unavailable', async () => {
@@ -365,8 +406,8 @@ describe('App bot registration and selection', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Copy one-shot secrets' });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Copy bot token' }));
 
-    expect(dialog).toHaveTextContent('no-clipboard-token');
-    expect(screen.getByText('Clipboard is unavailable; copy the secret manually before closing this dialog.')).toBeInTheDocument();
+    await waitFor(() => expect(dialog).toHaveTextContent('no-clipboard-token'));
+    expect(screen.getByRole('status')).toHaveTextContent('Clipboard is unavailable; copy the secret manually before closing this dialog.');
   });
 
   it('shows privileged scope warnings in registration and edit forms', async () => {
