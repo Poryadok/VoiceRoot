@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"voice/backend/pkg/privacy"
+	"voice/backend/pkg/socialprincipal"
 	"voice/backend/user/internal/authctx"
 	"voice/backend/user/internal/store"
 
@@ -18,13 +19,17 @@ import (
 )
 
 func (s *UserGRPC) GetPrivacySettings(ctx context.Context, req *userv1.GetPrivacySettingsRequest) (*userv1.GetPrivacySettingsResponse, error) {
+	verifiedSocial, err := socialprincipal.CheckDomain(ctx, "user", req)
+	if err != nil {
+		return nil, err
+	}
 	profileID, err := parseUUIDField("profile_id", req.GetProfileId())
 	if err != nil {
 		return nil, err
 	}
 	// S2S peers (Social/Chat/…) read any profile for audience enforcement.
 	// End-user callers may only read profiles they own.
-	if !authctx.IsInternalService(ctx) {
+	if !verifiedSocial && !authctx.IsInternalService(ctx) {
 		accountID, ok := authctx.AccountID(ctx)
 		if !ok {
 			return nil, status.Error(codes.Unauthenticated, "missing credentials")

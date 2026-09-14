@@ -23,6 +23,7 @@ import (
 	"voice/backend/pkg/httpserver"
 	voiceprom "voice/backend/pkg/promhttp"
 	"voice/backend/pkg/runtimeconfig"
+	"voice/backend/pkg/socialprincipal"
 	"voice/backend/space/internal/authctx"
 	grpcsvc "voice/backend/space/internal/grpcsvc"
 	"voice/backend/space/internal/s2s"
@@ -42,6 +43,21 @@ const (
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	principalConfig, principalEnabled, err := socialprincipal.LoadFromEnv("space")
+	if err != nil {
+		log.Fatalf("space privacy principal config: %v", err)
+	}
+	var privacyRuntime *socialprincipal.Runtime
+	if principalEnabled {
+		if strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
+			log.Fatal("space privacy principal requires DATABASE_URL")
+		}
+		privacyRuntime, err = socialprincipal.New(context.Background(), principalConfig)
+		if err != nil {
+			log.Fatalf("space privacy principal: %v", err)
+		}
+		defer func() { _ = privacyRuntime.Close() }()
+	}
 	principalIssuer, publicJWKS, err := loadSpacePrincipalIssuerFromEnv()
 	if err != nil {
 		log.Fatalf("space principal issuer: %v", err)
@@ -135,8 +151,10 @@ func main() {
 			log.Fatal("ROLE_PRINCIPAL_GRPC_ADDR is required with Role ownership TLS settings")
 		}
 
-		grpcOptions := grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))
+		sharedOptions := grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))
+		grpcOptions := append([]grpc.ServerOption{}, sharedOptions...)
 		grpcOptions = append(grpcOptions, grpc.ChainUnaryInterceptor(
+			socialprincipal.OrdinaryUnaryInterceptor("space"),
 			authctx.VerifiedServiceIdentityUnaryInterceptor(os.Getenv("SPACE_VOICE_S2S_TOKEN")),
 		))
 		grpcSrv = grpc.NewServer(grpcOptions...)
@@ -212,6 +230,22 @@ func main() {
 			defer outboxRuntime.Stop()
 		}
 		spacev1.RegisterSpaceServiceServer(grpcSrv, spaceSvc)
+		if privacyRuntime != nil {
+			privacyListener, err := net.Listen("tcp", principalConfig.ListenAddr)
+			if err != nil {
+				log.Fatalf("space privacy principal listen: %v", err)
+			}
+			privacyOptions := append([]grpc.ServerOption{}, sharedOptions...)
+			privacyOptions = append(privacyOptions, privacyRuntime.ServerOptions()...)
+			privacyServer := grpc.NewServer(privacyOptions...)
+			grpcsvc.RegisterSocialPrivacyServer(privacyServer, spaceSvc)
+			defer privacyServer.Stop()
+			go func() {
+				if err := privacyServer.Serve(privacyListener); err != nil {
+					log.Fatalf("space privacy principal serve: %v", err)
+				}
+			}()
+		}
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcListen))
 			if err := grpcSrv.Serve(lis); err != nil {

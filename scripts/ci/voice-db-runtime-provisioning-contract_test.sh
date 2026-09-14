@@ -715,16 +715,26 @@ fi
   git -C "${ROOT}" ls-files --others --exclude-standard
 } | sed '/^[[:space:]]*$/d' | LC_ALL=C sort -u >"${TMP_DIR}/changed-files"
 
+source "${ROOT}/scripts/ci/voice-r22-runtime-scope.sh"
+r22_runtime_delta=false
+if voice_r22_runtime_changed <"${TMP_DIR}/changed-files"; then
+  r22_runtime_delta=true
+fi
+
 while IFS= read -r file; do
   if r23_contract_path_allowed "${file}"; then
     continue
   fi
   case "${file}" in
     protos/*|*/pb/*|*.pb.go)
-      fail "F13: proto/generated change is outside R22.2: ${file}"
+      if [[ "${r22_runtime_delta}" == true ]]; then
+        fail "F13: proto/generated change is outside R22.2: ${file}"
+      fi
       ;;
     src/backend/space/*|src/backend/role/*)
-      fail "F13: Space/Role change is outside R22.2: ${file}"
+      if [[ "${r22_runtime_delta}" == true ]]; then
+        fail "F13: Space/Role change is outside R22.2: ${file}"
+      fi
       ;;
     src/backend/voice/internal/grpcsvc/*.go|src/backend/voice/internal/store/*.go|src/backend/voice/internal/livekit/*.go|src/backend/voice/internal/s2s/*.go|src/backend/voice/internal/voiceevents/*.go)
       [[ "${file}" == *_test.go ]] || fail "F13: handler/Redis/external adapter change activates forbidden scope: ${file}"

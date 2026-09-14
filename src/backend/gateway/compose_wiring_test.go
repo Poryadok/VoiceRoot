@@ -29,7 +29,16 @@ func TestComposeWiring_yaml(t *testing.T) {
 	require.Contains(t, yml, "\n  space:\n")
 	require.Contains(t, yml, "SPACE_GRPC_LISTEN: :9090")
 	require.Contains(t, yml, "space_db")
-	require.Contains(t, yml, "      USER_GRPC_ADDR: user:9090\n      CHAT_GRPC_ADDR: chat:9090\n      SOCIAL_GRPC_ADDR: social:9090\n      NATS_URL: nats://nats:4222\n    depends_on:\n      postgres:\n        condition: service_healthy\n      compose-db-init:\n        condition: service_completed_successfully\n      nats:\n        condition: service_healthy\n      role:\n        condition: service_healthy\n      user:\n        condition: service_healthy\n      chat:\n        condition: service_healthy\n      social:\n        condition: service_healthy\n    healthcheck:")
+	space := parseComposeYAML(t, root).Services["space"]
+	for name, value := range map[string]string{"USER_GRPC_ADDR": "user:9090", "CHAT_GRPC_ADDR": "chat:9090", "SOCIAL_GRPC_ADDR": "social:9090", "NATS_URL": "nats://nats:4222"} {
+		require.Equal(t, value, space.Environment[name])
+	}
+	for _, dependency := range []string{"postgres", "redis", "nats", "role", "user", "chat", "social"} {
+		require.Equal(t, "service_healthy", space.DependsOn[dependency].Condition)
+	}
+	for _, dependency := range []string{"compose-db-init", "social-principal-init"} {
+		require.Equal(t, "service_completed_successfully", space.DependsOn[dependency].Condition)
+	}
 
 	require.Contains(t, yml, "GATEWAY_REALTIME_UPSTREAM_URL:")
 	require.Contains(t, yml, "http://realtime:8080")
