@@ -77,6 +77,42 @@ class RedisOtpThrottleTest {
   }
 
   @Test
+  void verifyAdmissionAcceptsOneAndRateLimitsOnlyZero() {
+    StringRedisTemplate redis = mock(StringRedisTemplate.class);
+    AuthProperties.Redis.Otp config = config();
+
+    when(redis.execute(any(RedisScript.class), anyList(), any(Object[].class))).thenReturn(1L);
+    new RedisOtpThrottle(redis, config).admitVerify("admitted");
+
+    when(redis.execute(any(RedisScript.class), anyList(), any(Object[].class))).thenReturn(0L);
+    assertThatThrownBy(() -> new RedisOtpThrottle(redis, config).admitVerify("rate-limited"))
+        .isInstanceOf(AuthException.class)
+        .hasMessage("otp_rate_limited");
+  }
+
+  @Test
+  void verifyAdmissionTreatsNullRedisReplyAsAuthUnavailable() {
+    StringRedisTemplate redis = mock(StringRedisTemplate.class);
+    AuthProperties.Redis.Otp config = config();
+
+    when(redis.execute(any(RedisScript.class), anyList(), any(Object[].class))).thenReturn(null);
+    assertThatThrownBy(() -> new RedisOtpThrottle(redis, config).admitVerify("null-reply"))
+        .isInstanceOf(AuthException.class)
+        .hasMessage("auth_unavailable");
+  }
+
+  @Test
+  void verifyAdmissionTreatsImpossibleNumericRedisReplyAsAuthUnavailable() {
+    StringRedisTemplate redis = mock(StringRedisTemplate.class);
+    AuthProperties.Redis.Otp config = config();
+
+    when(redis.execute(any(RedisScript.class), anyList(), any(Object[].class))).thenReturn(2L);
+    assertThatThrownBy(() -> new RedisOtpThrottle(redis, config).admitVerify("impossible-reply"))
+        .isInstanceOf(AuthException.class)
+        .hasMessage("auth_unavailable");
+  }
+
+  @Test
   void configurationRejectsNonPositiveDurationsAndAttemptLimits() {
     AuthProperties.Redis.Otp config = config();
     assertThatThrownBy(() -> config.setSendCooldown(Duration.ZERO)).isInstanceOf(IllegalArgumentException.class);
