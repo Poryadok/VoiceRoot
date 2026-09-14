@@ -38,6 +38,22 @@ class RedisOtpThrottleTest {
   }
 
   @Test
+  void resendTreatsNullOrImpossibleRedisReplyAsAuthUnavailable() {
+    StringRedisTemplate redis = mock(StringRedisTemplate.class);
+    AuthProperties.Redis.Otp config = config();
+
+    when(redis.execute(any(RedisScript.class), anyList(), any(Object[].class))).thenReturn(null);
+    assertThatThrownBy(() -> new RedisOtpThrottle(redis, config).reserveSend("null-reply"))
+        .isInstanceOf(AuthException.class)
+        .hasMessage("auth_unavailable");
+
+    when(redis.execute(any(RedisScript.class), anyList(), any(Object[].class))).thenReturn(2L);
+    assertThatThrownBy(() -> new RedisOtpThrottle(redis, config).reserveSend("impossible-reply"))
+        .isInstanceOf(AuthException.class)
+        .hasMessage("auth_unavailable");
+  }
+
+  @Test
   void verifyAdmissionIsAtomicSlidingWindowAndRedisFailureIsCoarse() {
     StringRedisTemplate redis = mock(StringRedisTemplate.class);
     when(redis.execute(any(RedisScript.class), anyList(), any(Object[].class))).thenReturn(1L);

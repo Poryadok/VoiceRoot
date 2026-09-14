@@ -74,6 +74,21 @@ class RedisOtpThrottleIntegrationTest {
     assertThatThrownBy(() -> throttle.admitVerify("no-ttl")).isInstanceOf(AuthException.class).hasMessage("auth_unavailable");
   }
 
+  @Test
+  void realRedisCorruptOrTtlLessResendStateFailsClosedWithoutRedisDetail() {
+    StringRedisTemplate template = template(firstConnection);
+    RedisOtpThrottle throttle = throttle(template, Duration.ofSeconds(5));
+    template.opsForValue().set("auth:otp:send:corrupt", "not-a-reservation", Duration.ofSeconds(5));
+    assertThatThrownBy(() -> throttle.reserveSend("corrupt"))
+        .isInstanceOf(AuthException.class)
+        .hasMessage("auth_unavailable");
+    template.delete("auth:otp:send:corrupt");
+    template.opsForValue().set("auth:otp:send:no-ttl", "1");
+    assertThatThrownBy(() -> throttle.reserveSend("no-ttl"))
+        .isInstanceOf(AuthException.class)
+        .hasMessage("auth_unavailable");
+  }
+
   private static RedisOtpThrottle throttle(StringRedisTemplate template, Duration window) {
     AuthProperties.Redis.Otp settings = new AuthProperties.Redis.Otp();
     settings.setVerifyWindow(window);
