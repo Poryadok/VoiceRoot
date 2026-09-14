@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -27,11 +28,12 @@ import (
 )
 
 type spyFileEvents struct {
-	uploaded      []string
-	infected      []string
-	processed     []string
-	downloaded    []downloadedFileEvent
-	downloadedErr error
+	uploaded        []string
+	infected        []string
+	processed       []string
+	processedStatus []string
+	downloaded      []downloadedFileEvent
+	downloadedErr   error
 }
 
 type downloadedFileEvent struct {
@@ -49,8 +51,9 @@ func (s *spyFileEvents) PublishFileScanInfected(_ context.Context, fileID, _ str
 	return nil
 }
 
-func (s *spyFileEvents) PublishFileProcessed(_ context.Context, fileID, _, _, _ string) error {
+func (s *spyFileEvents) PublishFileProcessed(_ context.Context, fileID, status, _, _ string) error {
 	s.processed = append(s.processed, fileID)
+	s.processedStatus = append(s.processedStatus, status)
 	return nil
 }
 
@@ -124,6 +127,19 @@ func (eventProcessor) ProcessImage(_ context.Context, row store.FileRow) (ImageP
 		Width:          100,
 		Height:         100,
 	}, nil
+}
+
+type oversizedEventProcessor struct{}
+
+func (oversizedEventProcessor) ProcessImage(context.Context, store.FileRow) (ImageProcessingResult, error) {
+	return ImageProcessingResult{}, ErrProcessedOutputTooLarge
+}
+
+type recordingEventDeleter struct{ keys []string }
+
+func (d *recordingEventDeleter) DeleteObject(_ context.Context, key string) error {
+	d.keys = append(d.keys, key)
+	return nil
 }
 
 func shaHex(data []byte) string {
@@ -215,6 +231,68 @@ func TestConfirmUpload_PublishesUploadedAndProcessedForImage(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{fileID}, events.uploaded)
 	require.Equal(t, []string{fileID}, events.processed)
+}
+
+func TestConfirmUpload_OversizedProcessedImageFailsBeforeReadyAndCleansOriginal(t *testing.T) {
+	ctx := context.Background()
+	pool := startFileGatePostgres(t, ctx)
+	events := &spyFileEvents{}
+	payload := []byte("png-bytes")
+	profileID := uuid.New()
+	authed := fileGateCtx(ctx, uuid.New(), profileID)
+	client := dialEventTestGRPC(t, New(Deps{
+		Files:     store.NewFilesStore(pool),
+		Presigner: eventTestPresigner{},
+		Reader:    eventObjectReader{},
+		Processor: oversizedEventProcessor{},
+		Events:    events,
+	}))
+	uploadResp, err := client.RequestUpload(authed, &filev1.RequestUploadRequest{
+		OriginalName: "too-large.png",
+		MimeType:     "image/png",
+		SizeBytes:    int64(len(payload)),
+	})
+	require.NoError(t, err)
+	fileID := uploadResp.GetUploadResponse().GetFileId()
+	originalKey := uploadResp.GetUploadResponse().GetR2Key()
+	deleter := &recordingEventDeleter{}
+	client = dialEventTestGRPC(t, New(Deps{
+		Files:     store.NewFilesStore(pool),
+		Presigner: eventTestPresigner{},
+		Reader:    eventObjectReader{originalKey: payload},
+		Processor: oversizedEventProcessor{},
+		Deleter:   deleter,
+		Events:    events,
+	}))
+
+	confirmed, err := client.ConfirmUpload(authed, &filev1.ConfirmUploadRequest{FileId: fileID, Sha256Hash: shaHex(payload)})
+	require.NoError(t, err)
+	require.Equal(t, "failed", confirmed.GetFileMetadata().GetStatus())
+	require.Empty(t, confirmed.GetFileMetadata().GetConvertedR2Key())
+	require.Empty(t, confirmed.GetFileMetadata().GetThumbnailR2Key())
+	require.Equal(t, []string{fileID}, events.processed)
+	require.Equal(t, []string{"failed"}, events.processedStatus)
+	require.Equal(t, []string{originalKey}, deleter.keys)
+	stored, err := store.NewFilesStore(pool).GetFileByID(ctx, uuid.MustParse(fileID))
+	require.NoError(t, err)
+	require.Equal(t, "failed", stored.Status)
+	require.Nil(t, stored.ConvertedR2Key)
+	require.Nil(t, stored.ThumbnailR2Key)
+}
+
+func TestApplyScanResult_DoesNotResurrectDeletedFile(t *testing.T) {
+	ctx := context.Background()
+	pool := startFileGatePostgres(t, ctx)
+	fileID := uuid.New()
+	profileID := uuid.New()
+	seedDownloadEventFile(t, ctx, pool, fileID, profileID, "processing")
+	files := store.NewFilesStore(pool)
+	require.NoError(t, files.MarkDeleted(ctx, fileID))
+	_, err := files.ApplyScanResult(ctx, fileID, "ready", "skipped")
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	stored, err := files.GetFileByID(ctx, fileID)
+	require.NoError(t, err)
+	require.Equal(t, "deleted", stored.Status)
 }
 
 func TestGetFileURL_PublishesDownloadedOnceAfterSuccessfulPresign(t *testing.T) {
