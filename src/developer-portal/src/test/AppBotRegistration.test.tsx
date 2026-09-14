@@ -370,6 +370,7 @@ describe('App bot registration and selection', () => {
     expect(portalBackground).not.toContainElement(dialog);
     expect(rotateButton).toBeInTheDocument();
     expect(signOutButton).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
 
     await user.tab({ shift: true });
     expect(document.activeElement).toBe(within(dialog).getByRole('button', { name: 'Close and clear' }));
@@ -378,9 +379,14 @@ describe('App bot registration and selection', () => {
     await user.click(rotateButton);
     expect(fetchMock).toHaveBeenCalledTimes(5);
     expect(screen.getByRole('dialog', { name: 'Copy one-shot secrets' })).toHaveTextContent('background-token');
+    await user.click(signOutButton);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(screen.queryByRole('button', { name: 'Use JWT' })).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Copy one-shot secrets' })).toHaveTextContent('background-token');
   });
 
-  it('clears both one-shot secrets and closes the dialog when logging out', async () => {
+  it('clears both one-shot secrets before restoring the opener and allowing normal logout', async () => {
+    const user = userEvent.setup();
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse({ bot_list: { bots: [] } }))
@@ -403,17 +409,24 @@ describe('App bot registration and selection', () => {
 
     await waitFor(() => expect(screen.getByTestId('bot-register')).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText('Bot name'), { target: { value: 'Logout Bot' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Register bot' }));
+    const opener = screen.getByRole('button', { name: 'Register bot' });
+    opener.focus();
+    await user.click(opener);
 
     await screen.findByRole('dialog', { name: 'Copy one-shot secrets' });
     const portalBackground = screen.getByRole('main', { hidden: true });
-    const signOutButton = screen.getByRole('button', { name: 'Sign out' });
-    expect(portalBackground).not.toContainElement(signOutButton);
-    fireEvent.click(signOutButton);
+    expect(portalBackground).toHaveAttribute('inert');
+    expect(portalBackground).toHaveAttribute('aria-hidden', 'true');
+    await user.click(screen.getByRole('button', { name: 'Close and clear' }));
 
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Copy one-shot secrets' })).not.toBeInTheDocument());
     expect(screen.queryByText('logout-token')).not.toBeInTheDocument();
     expect(screen.queryByText('logout-webhook-secret')).not.toBeInTheDocument();
+    expect(portalBackground).not.toHaveAttribute('inert');
+    expect(portalBackground).not.toHaveAttribute('aria-hidden');
+    expect(document.activeElement).toBe(opener);
+
+    await user.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(screen.getByRole('button', { name: 'Use JWT' })).toBeInTheDocument();
   });
 
