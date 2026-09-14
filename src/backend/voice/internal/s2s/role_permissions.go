@@ -18,6 +18,7 @@ const (
 	permVoiceSpeak       = "VOICE_SPEAK"
 	permVoiceScreenShare = "VOICE_SCREEN_SHARE"
 	permVoiceMuteOthers  = "VOICE_MUTE_OTHERS"
+	permVoiceMoveOthers  = "VOICE_MOVE_OTHERS"
 )
 
 // GRPCRolePermissions validates voice-room permissions via RoleService.
@@ -43,6 +44,10 @@ func (g *GRPCRolePermissions) EnsureVoiceSpeak(ctx context.Context, spaceID, pro
 
 func (g *GRPCRolePermissions) EnsureMuteOthers(ctx context.Context, spaceID, profileID, voiceRoomID string) error {
 	return g.ensureVoicePermission(ctx, spaceID, profileID, voiceRoomID, permVoiceMuteOthers, grpcsvc.ErrMuteOthersDenied)
+}
+
+func (g *GRPCRolePermissions) EnsureVoiceMoveOthers(ctx context.Context, spaceID, profileID, voiceRoomID string) error {
+	return g.ensureVoicePermission(ctx, spaceID, profileID, voiceRoomID, permVoiceMoveOthers, grpcsvc.ErrVoiceMoveOthersDenied)
 }
 
 func (g *GRPCRolePermissions) ensureVoicePermission(ctx context.Context, spaceID, profileID, voiceRoomID, permission string, denied error) error {

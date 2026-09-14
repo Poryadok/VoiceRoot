@@ -105,6 +105,10 @@ func (s *SpaceGRPC) UpdateSpace(ctx context.Context, req *spacev1.UpdateSpaceReq
 		m := req.GetMmConfigJson()
 		in.MMConfigJSON = &m
 	}
+	if req.AllowGuests != nil {
+		allowGuests := req.GetAllowGuests()
+		in.AllowGuests = &allowGuests
+	}
 	updated, err := s.Store.UpdateSpace(ctx, spaceID, in)
 	if err != nil {
 		return nil, mapSpaceStoreError(err)

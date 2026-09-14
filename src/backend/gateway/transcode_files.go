@@ -65,8 +65,11 @@ func (t *transcoder) serveFiles(w http.ResponseWriter, r *http.Request, rest str
 		}
 		if meta := resp.GetFileMetadata(); meta != nil {
 			switch strings.TrimSpace(meta.GetScanResult()) {
-			case "infected", "error":
-				writeGRPCError(w, status.Error(codes.FailedPrecondition, "file upload rejected by malware scan"))
+			case "infected":
+				writeGRPCError(w, status.Error(codes.FailedPrecondition, "file_infected"))
+				return true
+			case "error":
+				writeGRPCError(w, status.Error(codes.FailedPrecondition, "file_scan_failed"))
 				return true
 			}
 		}
