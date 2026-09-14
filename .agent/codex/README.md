@@ -57,18 +57,18 @@ machine, run:
 powershell -ExecutionPolicy Bypass -File .agent\codex\install-local.ps1
 ```
 
-## GPT-6 Astra
+## Default model
 
-Voice selects `gpt-6-astra` in the project config. The machine's reasoning effort
+Voice selects `gpt-5.6-terra` in the project config. The machine's reasoning effort
 is inherited; permissions, providers, credentials, and service tiers remain
 machine settings. Crew profiles keep `model: inherit`.
 
 Start a new Codex task in the trusted Voice project and check its model selector.
-For an explicit CLI selection, run `codex -m gpt-6-astra` from the repository root.
+For an explicit CLI selection, run `codex -m gpt-5.6-terra` from the repository root.
 Project defaults do not replace an explicitly selected model. See OpenAI's
 [configuration precedence](https://learn.chatgpt.com/docs/config-file/config-basic).
 
-Preparation follows the official
+The earlier GPT-6 Astra preparation followed the official
 [GPT-6 Astra guide](https://developers.openai.com/api/docs/guides/latest-model?model=gpt-6-astra),
 checked on 2026-09-05, using the `openai-docs` skill. Shared working rules live in
 [`../AGENTS.md`](../AGENTS.md); the
@@ -79,5 +79,5 @@ The portable TDD skill must match its canonical source when refreshed locally.
 The migration audit found no OpenAI API call sites in `src/`, `scripts/`, or
 `.github/`. No product API migration is required. To inspect the current model
 catalog without a model request, run `codex debug models` and check for
-`gpt-6-astra`. The bundled offline catalog may lag behind the current catalog.
+`gpt-5.6-terra`. The bundled offline catalog may lag behind the current catalog.
 This inspection does not benchmark model quality or prove API access.
