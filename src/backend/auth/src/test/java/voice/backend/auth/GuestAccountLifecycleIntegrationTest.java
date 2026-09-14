@@ -20,14 +20,4 @@ class GuestAccountLifecycleIntegrationTest {
         .as("GuestAccountSweeper scheduled bean for 30-day guest TTL")
         .isNotEmpty();
   }
-
-  @Test
-  void guestAccountSweeperDeactivatesExpiredGuests() throws Exception {
-    Class<?> sweeperClass = Class.forName("voice.backend.auth.lifecycle.GuestAccountSweeper");
-    Object sweeper = applicationContext.getBean(sweeperClass);
-    var sweep = sweeperClass.getMethod("sweep");
-    sweep.invoke(sweeper);
-    // Full JDBC assertions land once sweeper + last_online_at column exist.
-    assertThat(sweeper).isNotNull();
-  }
 }

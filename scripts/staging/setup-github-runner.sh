@@ -28,6 +28,24 @@ need curl
 need tar
 need jq
 
+require_minimum_runner_version() {
+  local version="$1"
+  local major minor patch
+
+  if [[ ! "$version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+    echo "Invalid GitHub Actions runner version: ${version}" >&2
+    exit 1
+  fi
+
+  major="${BASH_REMATCH[1]}"
+  minor="${BASH_REMATCH[2]}"
+  patch="${BASH_REMATCH[3]}"
+  if (( 10#$major < 2 || (10#$major == 2 && (10#$minor < 327 || (10#$minor == 327 && 10#$patch < 1)) ) )); then
+    echo "GitHub Actions runner version 2.327.1 or newer is required; got ${version}." >&2
+    exit 1
+  fi
+}
+
 if [ -z "${RUNNER_TOKEN:-}" ]; then
   cat <<EOF
 === Self-hosted runner for ${GITHUB_REPO} ===
@@ -55,6 +73,7 @@ fi
 ARCH="x64"
 OS="linux"
 VER="${RUNNER_VERSION:-$(curl -fsSL "https://api.github.com/repos/actions/runner/releases/latest" | jq -r .tag_name | sed 's/^v//')}"
+require_minimum_runner_version "${VER}"
 PKG="actions-runner-${OS}-${ARCH}-${VER}.tar.gz"
 URL="https://github.com/actions/runner/releases/download/v${VER}/${PKG}"
 
@@ -79,7 +98,7 @@ fi
 echo
 echo "Runner configured in ${RUNNER_DIR}."
 echo "Install as a service (recommended):"
-echo "  cd ${RUNNER_DIR} && sudo ./svc.sh install ${USER} && sudo ./svc.sh start"
+echo "  cd ${RUNNER_DIR} && sudo ./svc.sh install ${USER:-$(id -un)} && sudo ./svc.sh start"
 echo
 echo "Or run interactively for a test:"
 echo "  cd ${RUNNER_DIR} && ./run.sh"

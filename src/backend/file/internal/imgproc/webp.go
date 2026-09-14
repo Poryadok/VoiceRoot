@@ -27,15 +27,24 @@ type ObjectWriter interface {
 	PutObject(ctx context.Context, key, contentType string, data []byte) error
 }
 
+// ObjectDeleter removes derivative objects after a failed write.
+type ObjectDeleter interface {
+	DeleteObject(ctx context.Context, key string) error
+}
+
 // ObjectReader reads uploaded object bytes from storage.
 type ObjectReader interface {
 	ReadObject(ctx context.Context, key string, maxBytes int64) ([]byte, error)
 }
 
+type webPEncoder func(image.Image, float32) ([]byte, error)
+
 // Processor reads the original image and writes optimized full + thumbnail WebP objects.
 type Processor struct {
-	Reader ObjectReader
-	Writer ObjectWriter
+	Reader  ObjectReader
+	Writer  ObjectWriter
+	Deleter ObjectDeleter
+	encode  webPEncoder
 }
 
 func (p Processor) ProcessImage(ctx context.Context, row store.FileRow) (grpcsvc.ImageProcessingResult, error) {
@@ -58,20 +67,27 @@ func (p Processor) ProcessImage(ctx context.Context, row store.FileRow) (grpcsvc
 	fullKey := prefix + "/full.webp"
 	thumbKey := prefix + "/thumb.webp"
 
-	fullBytes, err := encodeWebPWithinCap(src, defaultFullWebPQuality, maxProcessedImageBytes)
+	encoder := p.encode
+	if encoder == nil {
+		encoder = encodeWebP
+	}
+	fullBytes, err := encodeWebPWithinCap(src, defaultFullWebPQuality, maxProcessedImageBytes, encoder)
 	if err != nil {
 		return grpcsvc.ImageProcessingResult{}, err
 	}
-	if err := p.Writer.PutObject(ctx, fullKey, "image/webp", fullBytes); err != nil {
-		return grpcsvc.ImageProcessingResult{}, err
-	}
-
 	thumb := resizeThumb(src, thumbMaxEdge)
-	thumbBytes, err := encodeWebPWithinCap(thumb, defaultThumbWebPQuality, maxProcessedImageBytes)
+	thumbBytes, err := encodeWebPWithinCap(thumb, defaultThumbWebPQuality, maxProcessedImageBytes, encoder)
 	if err != nil {
+		return grpcsvc.ImageProcessingResult{}, err
+	}
+	// Encode and validate every derivative before writing either key. This keeps
+	// a deterministic size failure from creating a partial processed object.
+	if err := p.Writer.PutObject(ctx, fullKey, "image/webp", fullBytes); err != nil {
+		p.cleanupDerivatives(ctx, fullKey, thumbKey)
 		return grpcsvc.ImageProcessingResult{}, err
 	}
 	if err := p.Writer.PutObject(ctx, thumbKey, "image/webp", thumbBytes); err != nil {
+		p.cleanupDerivatives(ctx, fullKey, thumbKey)
 		return grpcsvc.ImageProcessingResult{}, err
 	}
 
@@ -83,10 +99,10 @@ func (p Processor) ProcessImage(ctx context.Context, row store.FileRow) (grpcsvc
 	}, nil
 }
 
-func encodeWebPWithinCap(img image.Image, startQuality float32, maxBytes int) ([]byte, error) {
+func encodeWebPWithinCap(img image.Image, startQuality float32, maxBytes int, encode webPEncoder) ([]byte, error) {
 	quality := startQuality
 	for quality >= 40 {
-		data, err := encodeWebP(img, quality)
+		data, err := encode(img, quality)
 		if err != nil {
 			return nil, err
 		}
@@ -95,7 +111,16 @@ func encodeWebPWithinCap(img image.Image, startQuality float32, maxBytes int) ([
 		}
 		quality -= 10
 	}
-	return nil, errProcessedImageTooLarge
+	return nil, grpcsvc.ErrProcessedOutputTooLarge
+}
+
+func (p Processor) cleanupDerivatives(ctx context.Context, keys ...string) {
+	if p.Deleter == nil {
+		return
+	}
+	for _, key := range keys {
+		_ = p.Deleter.DeleteObject(ctx, key)
+	}
 }
 
 func encodeWebP(img image.Image, quality float32) ([]byte, error) {
@@ -124,8 +149,7 @@ func resizeThumb(src image.Image, maxEdge int) image.Image {
 }
 
 var (
-	errNotConfigured         = errString("image processor: reader and writer required")
-	errProcessedImageTooLarge = errString("processed image exceeds storage cap")
+	errNotConfigured = errString("image processor: reader and writer required")
 )
 
 type errString string
