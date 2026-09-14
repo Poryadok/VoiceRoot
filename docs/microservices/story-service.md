@@ -133,12 +133,22 @@ highlight_stories
 ├── sort_order (int)
 ├── added_at
 └── UNIQUE(highlight_id, story_id)
+
+story_media_deletion_outbox
+├── operation_id (= story_id; immutable idempotency key)
+├── story_id (no FK: story is logically deleted before dispatch)
+├── media_file_id
+├── available_at, attempt_count, last_error_at, last_error
+├── lease_token, lease_until
+├── created_at, updated_at
+└── ready/lease claim index
 ```
 
 ## Background Jobs
 
 - **Expiry worker**: каждую минуту — пометить expired stories (TTL 24h)
-- **Archive cleanup**: ежедневно — удалить stories старше 30 дней из архива
+- **Archive cleanup**: bounded DB-first transaction locks expired unhighlighted Stories with `FOR UPDATE SKIP LOCKED`, inserts one media-deletion outbox record per media Story, then logically deletes the Stories. Text-only Stories do not create an outbox row. Highlight membership mutations lock the same Story rows, so a committed Highlight protects the Story/media, while a purge that commits first makes Add return `NotFound`.
+- **Media deletion dispatcher**: at startup and at a short interval claims ready/expired outbox leases with a token, calls File Service after the Story commit, and completes only its own lease. Failures and ambiguous File outcomes back off and retry; File deletion is idempotent by immutable file ID.
 - **LFP matcher**: при создании "ищу пати" Story Service публикует `story.lfp_created` в JetStream; **потребитель Matchmaking Service (авто-заявка из LFP-стори) отложен** — Matchmaking пока не подписан на этот subject
 
 ## Публикуемые события (→ NATS)
@@ -162,5 +172,3 @@ highlight_stories
 - **Matchmaking Service** — (через NATS, **deferred**) автоматическая заявка "ищу пати" из `story.lfp_created`
 - **Notification Service** — (через NATS) уведомления об упоминаниях
 - **Subscription Service** — проверка Premium (анонимный просмотр)
-
-
