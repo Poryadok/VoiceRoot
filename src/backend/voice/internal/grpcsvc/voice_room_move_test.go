@@ -1,6 +1,7 @@
 package grpcsvc
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -132,4 +133,22 @@ func TestMoveVoiceRoomParticipant_OperationConflictIsFailedPrecondition(t *testi
 
 func TestMoveStoreErr_RetryExhaustionIsUnavailable(t *testing.T) {
 	require.Equal(t, codes.Unavailable, status.Code(moveStoreErr(redis.TxFailedErr)))
+}
+
+type unavailableMoveCallStore struct{ voicestore.CallStore }
+
+func (unavailableMoveCallStore) MoveVoiceRoomParticipant(context.Context, voicestore.VoiceRoomMoveRequest) (voicestore.VoiceRoomMoveResult, error) {
+	return voicestore.VoiceRoomMoveResult{}, redis.TxFailedErr
+}
+
+func TestMoveVoiceRoomParticipant_RetryExhaustionIsUnavailableAndLeavesRosterUntouched(t *testing.T) {
+	f := newVoiceRoomMoveFixture(t)
+	f.svc.Calls = unavailableMoveCallStore{CallStore: f.svc.Calls}
+	_, err := f.svc.MoveVoiceRoomParticipant(voiceTestCtx(f.actor), f.moderatorRequest(uuid.NewString()))
+	require.Equal(t, codes.Unavailable, status.Code(err))
+	source, getErr := f.svc.Calls.GetCallByVoiceRoomID(t.Context(), f.source)
+	require.NoError(t, getErr)
+	require.True(t, source.IsParticipant(f.target))
+	_, getErr = f.svc.Calls.GetCallByVoiceRoomID(t.Context(), f.dest)
+	require.ErrorIs(t, getErr, voicestore.ErrNotFound)
 }

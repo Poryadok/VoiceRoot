@@ -209,7 +209,8 @@ func TestTranscodeVoiceRoomMoveFailedPreconditionUsesConflictEnvelope(t *testing
 			resp := performRequest(h, http.MethodPost, tc.path, `{"to_voice_room_id":"dest-1","operation_id":"op-1"}`, map[string]string{"Authorization": "Bearer valid-user-token"})
 			require.Equal(t, http.StatusConflict, resp.Code, "body=%s", resp.Body.String())
 			var envelope struct {
-				ErrorCode, Message string `json:"error_code"`
+				ErrorCode string `json:"error_code"`
+				Message   string `json:"message"`
 			}
 			decodeJSON(t, resp.Body, &envelope)
 			require.Equal(t, "failed_precondition", envelope.ErrorCode)
@@ -234,9 +235,81 @@ func TestTranscodeSpaceVoiceRoomMoveFailedPreconditionUsesConflictEnvelope(t *te
 	require.True(t, tc.serveSpacesVoiceRooms(resp, req, "space-path/voice-rooms/source-path/move"))
 	require.Equal(t, http.StatusConflict, resp.Code, "body=%s", resp.Body.String())
 	var envelope struct {
-		ErrorCode, Message string `json:"error_code"`
+		ErrorCode string `json:"error_code"`
+		Message   string `json:"message"`
 	}
 	decodeJSON(t, resp.Body, &envelope)
 	require.Equal(t, "failed_precondition", envelope.ErrorCode)
 	require.Contains(t, []string{"voice room move is no longer possible", "voice room move conflicts with current state"}, envelope.Message)
+}
+
+func TestTranscodeSpaceVoiceRoomModeratorMoveFailedPreconditionUsesConflictEnvelope(t *testing.T) {
+	grpcRec := &recordingVoiceRooms{moveParticipantErr: status.Error(codes.FailedPrecondition, "stale source backend diagnostic")}
+	conn, cleanup := startBufconnVoiceConn(t, grpcRec)
+	t.Cleanup(cleanup)
+	tc := &transcoder{clients: grpcClients{voice: callsv1.NewVoiceServiceClient(conn)}}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/spaces/space-path/voice-rooms/source-path/participants/target-path/move", strings.NewReader(`{"to_voice_room_id":"dest-path","operation_id":"op-path"}`))
+	resp := httptest.NewRecorder()
+	require.True(t, tc.serveSpacesVoiceRooms(resp, req, "space-path/voice-rooms/source-path/participants/target-path/move"))
+	require.Equal(t, http.StatusConflict, resp.Code, "body=%s", resp.Body.String())
+	var envelope struct {
+		ErrorCode string `json:"error_code"`
+		Message   string `json:"message"`
+	}
+	decodeJSON(t, resp.Body, &envelope)
+	require.Equal(t, "failed_precondition", envelope.ErrorCode)
+	require.Equal(t, "voice room move is no longer possible", envelope.Message)
+}
+
+func TestTranscodeVoiceRoomMoveUnavailableUsesSafeServiceUnavailableEnvelope(t *testing.T) {
+	for _, tc := range []struct {
+		name, path string
+		configure  func(*recordingVoiceRooms)
+	}{
+		{
+			name: "self move",
+			path: "/api/v1/voice/rooms/source-1/move",
+			configure: func(s *recordingVoiceRooms) {
+				s.moveSelfErr = status.Error(codes.Unavailable, "redis retry diagnostics must not reach REST")
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			grpcRec := &recordingVoiceRooms{}
+			tc.configure(grpcRec)
+			conn, cleanup := startBufconnVoiceConn(t, grpcRec)
+			t.Cleanup(cleanup)
+			h := newGatewayForContract(t, gatewayTestOptions{
+				tokenClaims: map[string]tokenClaims{"valid-user-token": {UserID: "account-1", ProfileID: "profile-actor"}},
+				transcoder:  &transcoder{clients: grpcClients{voice: callsv1.NewVoiceServiceClient(conn)}},
+			})
+			resp := performRequest(h, http.MethodPost, tc.path, `{"to_voice_room_id":"dest-1","operation_id":"op-1"}`, map[string]string{"Authorization": "Bearer valid-user-token"})
+			require.Equal(t, http.StatusServiceUnavailable, resp.Code, "body=%s", resp.Body.String())
+			var envelope struct {
+				ErrorCode string `json:"error_code"`
+				Message   string `json:"message"`
+			}
+			decodeJSON(t, resp.Body, &envelope)
+			require.Equal(t, "unavailable", envelope.ErrorCode)
+			require.Equal(t, "voice room roster unavailable", envelope.Message)
+		})
+	}
+}
+
+func TestTranscodeSpaceVoiceRoomModeratorMoveUnavailableUsesSafeServiceUnavailableEnvelope(t *testing.T) {
+	grpcRec := &recordingVoiceRooms{moveParticipantErr: status.Error(codes.Unavailable, "redis retry diagnostics must not reach REST")}
+	conn, cleanup := startBufconnVoiceConn(t, grpcRec)
+	t.Cleanup(cleanup)
+	tc := &transcoder{clients: grpcClients{voice: callsv1.NewVoiceServiceClient(conn)}}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/spaces/space-path/voice-rooms/source-path/participants/target-path/move", strings.NewReader(`{"to_voice_room_id":"dest-path","operation_id":"op-path"}`))
+	resp := httptest.NewRecorder()
+	require.True(t, tc.serveSpacesVoiceRooms(resp, req, "space-path/voice-rooms/source-path/participants/target-path/move"))
+	require.Equal(t, http.StatusServiceUnavailable, resp.Code, "body=%s", resp.Body.String())
+	var envelope struct {
+		ErrorCode string `json:"error_code"`
+		Message   string `json:"message"`
+	}
+	decodeJSON(t, resp.Body, &envelope)
+	require.Equal(t, "unavailable", envelope.ErrorCode)
+	require.Equal(t, "voice room roster unavailable", envelope.Message)
 }
