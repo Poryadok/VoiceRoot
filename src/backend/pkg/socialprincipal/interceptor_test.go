@@ -108,3 +108,33 @@ func TestOrdinaryRejectsSocialOnlyOnPrivacy(t *testing.T) {
 		}
 	}
 }
+
+func TestCredentialTemporalAndMethodScope(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	req := wrapperspb.String("profile")
+	hash, err := principal.RequestHash(req)
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name, method string
+		offset       time.Duration
+		want         codes.Code
+	}{
+		{"expired", Method("user"), -time.Minute, codes.Unauthenticated},
+		{"future", Method("user"), time.Minute, codes.Unauthenticated},
+		{"valid forbidden method", "/voice.user.v1.UserService/GetProfile", 0, codes.PermissionDenied},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "social", KeyID: "current", PrivateKey: key, Clock: func() time.Time { return time.Now().Add(tc.offset) }})
+			require.NoError(t, err)
+			token, err := issuer.IssueService(principal.ServiceInput{Audience: "user", RPC: tc.method, RequestID: "request", RequestHash: hash})
+			require.NoError(t, err)
+			verifier := &Verifier{Target: "user", Issuers: map[string]bool{"social": true}, Resolve: func(context.Context, string, string) (*rsa.PublicKey, error) { return &key.PublicKey, nil }, Replay: func(context.Context, string, string, time.Time) error { return nil }}
+			ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token, "x-request-id", "request"))
+			called := false
+			_, err = StrictUnaryInterceptor(verifier)(ctx, req, &grpc.UnaryServerInfo{FullMethod: tc.method}, func(context.Context, any) (any, error) { called = true; return req, nil })
+			require.Equal(t, tc.want, status.Code(err))
+			require.False(t, called)
+		})
+	}
+}
