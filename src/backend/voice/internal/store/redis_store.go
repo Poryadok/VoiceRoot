@@ -14,8 +14,6 @@ import (
 type RedisCallStore struct {
 	client *redis.Client
 	prefix string
-
-	beforeMoveExec func(context.Context, int, []string)
 }
 
 type redisVoiceRoomMoveLedger struct {
@@ -276,9 +274,6 @@ func (s *RedisCallStore) MoveVoiceRoomParticipant(ctx context.Context, req Voice
 			destinationJSON, err := json.Marshal(destination)
 			if err != nil {
 				return err
-			}
-			if s.beforeMoveExec != nil {
-				s.beforeMoveExec(ctx, attempt, keys)
 			}
 			_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
 				pipe.Set(ctx, s.callKey(source.RoomID), sourceJSON, 24*time.Hour)
