@@ -27,9 +27,11 @@ func searchStoreError(err error) error {
 }
 
 const (
-	defaultPageSize = 20
-	maxPageSize     = 50
-	maxQueryLen     = 128
+	defaultPageSize    = 20
+	maxPageSize        = 50
+	maxQueryCodePoints = 128
+	maxQueryLen        = maxQueryCodePoints
+	maxQueryBytes      = utf8.UTFMax * maxQueryCodePoints
 )
 
 // MessageHit is a ranked message search result.
@@ -138,12 +140,22 @@ func requireProfile(ctx context.Context) (uuid.UUID, error) {
 }
 
 func requireQuery(q string) (string, error) {
+	if len(q) > maxQueryBytes {
+		return "", status.Error(codes.InvalidArgument, "query too long")
+	}
+	if !utf8.ValidString(q) {
+		return "", status.Error(codes.InvalidArgument, "query invalid UTF-8")
+	}
 	q = strings.TrimSpace(q)
 	if q == "" {
 		return "", status.Error(codes.InvalidArgument, "query required")
 	}
-	if utf8.RuneCountInString(q) > maxQueryLen {
-		return "", status.Error(codes.InvalidArgument, "query too long")
+	codePoints := 0
+	for range q {
+		codePoints++
+		if codePoints > maxQueryCodePoints {
+			return "", status.Error(codes.InvalidArgument, "query too long")
+		}
 	}
 	return q, nil
 }
