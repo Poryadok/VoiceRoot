@@ -28,21 +28,27 @@ func BuildFCMMessage(deviceToken string, in push.Payload) (*messaging.Message, e
 			Body:  body,
 		}
 	}
-	if in.CollapseTag != "" {
+	if in.CollapseTag != "" || in.Silent {
 		msg.Android = &messaging.AndroidConfig{
-			CollapseKey: in.CollapseTag,
 			Notification: &messaging.AndroidNotification{
-				Tag: in.CollapseTag,
+				Tag:               in.CollapseTag,
+				NotificationCount: nil,
 			},
 		}
+		if in.CollapseTag != "" {
+			msg.Android.CollapseKey = in.CollapseTag
+		}
+	}
+	if in.CollapseTag != "" || in.Silent {
 		msg.Webpush = &messaging.WebpushConfig{
-			Headers: map[string]string{
-				"Topic": in.CollapseTag,
-			},
 			Notification: &messaging.WebpushNotification{
-				Title: in.Title,
-				Body:  body,
+				Title:  in.Title,
+				Body:   body,
+				Silent: in.Silent,
 			},
+		}
+		if in.CollapseTag != "" {
+			msg.Webpush.Headers = map[string]string{"Topic": in.CollapseTag}
 		}
 	}
 	return msg, nil

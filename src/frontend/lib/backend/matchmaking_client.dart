@@ -599,7 +599,8 @@ class VoiceMatchmakingClient {
     required String authorization,
     required String matchId,
     required String ratedProfileId,
-    required int stars,
+    int stars = 0,
+    bool skip = false,
   }) async {
     final result = await _gateway.postJson(
       uri: _gateway.resolve('/api/v1/matchmaking/matches/$matchId/rate'),
@@ -607,6 +608,7 @@ class VoiceMatchmakingClient {
       body: {
         'ratedProfileId': ratedProfileId,
         'stars': stars,
+        if (skip) 'skip': true,
       },
     );
     return switch (result) {
