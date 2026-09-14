@@ -757,6 +757,122 @@ void main() {
     );
   });
 
+  testWidgets('ChatRoomPanel blocks an infected attachment before sending', (
+    tester,
+  ) async {
+    var sentAttachment = false;
+    await tester.pumpWidget(
+      chatTestApp(
+        home: ChatRoomPanel(
+          chatId: 'chat-abc',
+          attachmentPicker: () async => ChatAttachmentFile(
+            bytes: Uint8List.fromList([1, 2, 3]),
+            contentType: 'application/pdf',
+            name: 'unsafe.pdf',
+          ),
+        ),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/messages') {
+            return http.Response(jsonEncode({'message_list': {'messages': []}}), 200);
+          }
+          if (req.url.path == '/api/v1/files/upload') {
+            return http.Response(
+              jsonEncode({
+                'upload_response': {
+                  'file_id': 'file-unsafe',
+                  'presigned_put_url': 'https://r2.example/upload',
+                  'r2_key': 'attachments/file-unsafe/unsafe.pdf',
+                },
+              }),
+              200,
+            );
+          }
+          if (req.method == 'PUT' && req.url.toString() == 'https://r2.example/upload') {
+            return http.Response('', 200);
+          }
+          if (req.url.path == '/api/v1/files/file-unsafe/confirm') {
+            return http.Response(
+              jsonEncode({'error_code': 'file_infected', 'message': 'file_infected'}),
+              412,
+            );
+          }
+          if (req.url.path == '/api/v1/messages/send') {
+            sentAttachment = true;
+          }
+          return http.Response('{}', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(ChatRoomPanel.attachKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('composer_attach_document')));
+    await tester.pumpAndSettle();
+
+    expect(sentAttachment, isFalse);
+    expect(find.text('File blocked. Choose another file.'), findsOneWidget);
+    expect(find.text('Choose another file'), findsOneWidget);
+  });
+
+  testWidgets('ChatRoomPanel offers retry when an attachment scan fails', (
+    tester,
+  ) async {
+    var sentAttachment = false;
+    await tester.pumpWidget(
+      chatTestApp(
+        home: ChatRoomPanel(
+          chatId: 'chat-abc',
+          attachmentPicker: () async => ChatAttachmentFile(
+            bytes: Uint8List.fromList([1, 2, 3]),
+            contentType: 'application/pdf',
+            name: 'scan.pdf',
+          ),
+        ),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/messages') {
+            return http.Response(jsonEncode({'message_list': {'messages': []}}), 200);
+          }
+          if (req.url.path == '/api/v1/files/upload') {
+            return http.Response(
+              jsonEncode({
+                'upload_response': {
+                  'file_id': 'file-scan',
+                  'presigned_put_url': 'https://r2.example/upload',
+                  'r2_key': 'attachments/file-scan/scan.pdf',
+                },
+              }),
+              200,
+            );
+          }
+          if (req.method == 'PUT' && req.url.toString() == 'https://r2.example/upload') {
+            return http.Response('', 200);
+          }
+          if (req.url.path == '/api/v1/files/file-scan/confirm') {
+            return http.Response(
+              jsonEncode({'error_code': 'file_scan_failed', 'message': 'file_scan_failed'}),
+              412,
+            );
+          }
+          if (req.url.path == '/api/v1/messages/send') {
+            sentAttachment = true;
+          }
+          return http.Response('{}', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(ChatRoomPanel.attachKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('composer_attach_document')));
+    await tester.pumpAndSettle();
+
+    expect(sentAttachment, isFalse);
+    expect(find.text('File scan failed. Try again.'), findsOneWidget);
+    expect(find.text('Try again'), findsOneWidget);
+  });
+
   testWidgets('ChatRoomPanel shows call actions from chat list peer metadata', (
     tester,
   ) async {
