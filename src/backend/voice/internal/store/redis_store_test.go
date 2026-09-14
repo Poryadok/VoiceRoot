@@ -325,6 +325,45 @@ func TestRedisCallStore_MoveFailureLeavesRosterIndexesAndLedgerUntouched(t *test
 	require.Equal(t, before, redisRawKeySnapshot(t, ctx, client, keys), "failure must retain the exact source/destination documents, both room indices, active session and ledger bytes")
 }
 
+func TestRedisCallStore_MoveRejectsStaleSourceIndexWithoutMutatingRedisProjection(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		setup func(t *testing.T, ctx context.Context, store *RedisCallStore, client *redis.Client)
+	}{
+		{
+			name: "source index points to a missing call document",
+			setup: func(t *testing.T, ctx context.Context, store *RedisCallStore, client *redis.Client) {
+				require.NoError(t, client.Set(ctx, store.activeVoiceRoomKey("source"), "source-call", 24*time.Hour).Err())
+				require.NoError(t, client.Set(ctx, store.activeKey("target"), "source-call", 24*time.Hour).Err())
+			},
+		},
+		{
+			name: "source index points to an ended call document",
+			setup: func(t *testing.T, ctx context.Context, store *RedisCallStore, client *redis.Client) {
+				_, err := store.CreateCall(ctx, Call{RoomID: "source-call", VoiceRoomID: "source", SpaceID: "space", SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, InitiatorProfileID: "target", MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE})
+				require.NoError(t, err)
+				_, err = store.SetStatus(ctx, "source-call", callsv1.CallStatus_CALL_STATUS_ENDED, time.Unix(1_700_000_100, 0).UTC())
+				require.NoError(t, err)
+				require.NoError(t, client.Set(ctx, store.activeVoiceRoomKey("source"), "source-call", 24*time.Hour).Err())
+				require.NoError(t, client.Set(ctx, store.activeKey("target"), "source-call", 24*time.Hour).Err())
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := t.Context()
+			store, client := newRedisCallStoreForTest(t, "voice-move-stale-source:")
+			tc.setup(t, ctx, store, client)
+			request := VoiceRoomMoveRequest{ActorProfileID: "actor", ParticipantProfileID: "target", OperationID: "op", FromVoiceRoomID: "source", ToVoiceRoomID: "destination", SpaceID: "space", MaxParticipants: MaxVoiceRoomParticipants, DestinationRoomID: "destination-call", Now: time.Unix(1_700_000_000, 0).UTC()}
+			keys := []string{store.callKey("source-call"), store.callKey(request.DestinationRoomID), store.activeVoiceRoomKey(request.FromVoiceRoomID), store.activeVoiceRoomKey(request.ToVoiceRoomID), store.activeKey(request.ParticipantProfileID), store.moveOperationKey(request.ActorProfileID, request.OperationID)}
+			before := redisRawKeySnapshot(t, ctx, client, keys)
+
+			_, err := store.MoveVoiceRoomParticipant(ctx, request)
+			require.ErrorIs(t, err, ErrInvalidState, "a stale source projection is an obsolete move state, never a successful move or discoverability response")
+			require.Equal(t, before, redisRawKeySnapshot(t, ctx, client, keys), "stale source rejection must preserve source/destination documents, both room indices, active session and ledger bytes")
+		})
+	}
+}
+
 func redisRawKeySnapshot(t *testing.T, ctx context.Context, client *redis.Client, keys []string) map[string]string {
 	t.Helper()
 	snapshot := make(map[string]string, len(keys))
