@@ -216,6 +216,14 @@ func (m Mapper) FromSubscription(ev *eventsv1.SubscriptionStreamEvent) *analytic
 		return m.event("payment_failed", "subscription", ev.GetOccurredAt(), p.PaymentFailed.GetAccountId(), "", map[string]any{
 			"provider": p.PaymentFailed.GetProvider(),
 		})
+	case *eventsv1.SubscriptionStreamEvent_PlanExpired:
+		return m.event("plan_expired", "subscription", ev.GetOccurredAt(), p.PlanExpired.GetAccountId(), "", map[string]any{
+			"plan": p.PlanExpired.GetPlan(),
+		})
+	case *eventsv1.SubscriptionStreamEvent_Downgrade:
+		return m.event("downgrade", "subscription", ev.GetOccurredAt(), p.Downgrade.GetAccountId(), "", map[string]any{
+			"plan": p.Downgrade.GetPlan(),
+		})
 	default:
 		return nil
 	}

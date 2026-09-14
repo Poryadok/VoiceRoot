@@ -18,6 +18,31 @@ import (
 
 const jsStreamVoiceEvents = "voice_events"
 
+type voiceEventMetadata struct {
+	eventID    string
+	occurredAt string
+}
+
+func parseVoiceEventMetadata(e *eventsv1.VoiceStreamEvent) (voiceEventMetadata, bool) {
+	if e == nil || uuid.Validate(e.GetEventId()) != nil {
+		return voiceEventMetadata{}, false
+	}
+	occurredAt := e.GetOccurredAt()
+	if occurredAt == nil || occurredAt.CheckValid() != nil {
+		return voiceEventMetadata{}, false
+	}
+	return voiceEventMetadata{
+		eventID:    e.GetEventId(),
+		occurredAt: occurredAt.AsTime().UTC().Format(time.RFC3339Nano),
+	}, true
+}
+
+func (m voiceEventMetadata) marshal(payload map[string]any) ([]byte, error) {
+	payload["event_id"] = m.eventID
+	payload["occurred_at"] = m.occurredAt
+	return json.Marshal(payload)
+}
+
 func voiceConsumerDurableName(instanceID string) string {
 	id := strings.TrimSpace(instanceID)
 	if id == "" {
@@ -31,6 +56,10 @@ func voiceEventBytesToFanout(data []byte) (profileIDs []string, env fanoutEnvelo
 	if err := proto.Unmarshal(data, &e); err != nil {
 		return nil, fanoutEnvelope{}, false
 	}
+	metadata, validMetadata := parseVoiceEventMetadata(&e)
+	if !validMetadata {
+		return nil, fanoutEnvelope{}, false
+	}
 
 	switch p := e.GetPayload().(type) {
 	case *eventsv1.VoiceStreamEvent_CallIncoming:
@@ -38,7 +67,11 @@ func voiceEventBytesToFanout(data []byte) (profileIDs []string, env fanoutEnvelo
 		if ev == nil || ev.GetRoomId() == "" || ev.GetCalleeProfileId() == "" {
 			return nil, fanoutEnvelope{}, false
 		}
-		d, err := json.Marshal(map[string]any{
+		recipients := compactProfiles(ev.GetCalleeProfileId())
+		if len(recipients) == 0 {
+			return nil, fanoutEnvelope{}, false
+		}
+		d, err := metadata.marshal(map[string]any{
 			"room_id":              ev.GetRoomId(),
 			"chat_id":              ev.GetChatId(),
 			"initiator_profile_id": ev.GetInitiatorProfileId(),
@@ -50,45 +83,57 @@ func voiceEventBytesToFanout(data []byte) (profileIDs []string, env fanoutEnvelo
 		if err != nil {
 			return nil, fanoutEnvelope{}, false
 		}
-		return []string{ev.GetCalleeProfileId()}, fanoutEnvelope{Op: "call_incoming", D: d}, true
+		return recipients, fanoutEnvelope{Op: "call_incoming", D: d}, true
 	case *eventsv1.VoiceStreamEvent_CallAccepted:
 		ev := p.CallAccepted
-		if ev == nil || ev.GetRoomId() == "" || len(ev.GetProfileIds()) == 0 {
+		if ev == nil || ev.GetRoomId() == "" {
 			return nil, fanoutEnvelope{}, false
 		}
-		d, err := json.Marshal(map[string]any{
+		recipients := compactProfiles(ev.GetProfileIds()...)
+		if len(recipients) == 0 {
+			return nil, fanoutEnvelope{}, false
+		}
+		d, err := metadata.marshal(map[string]any{
 			"room_id":                ev.GetRoomId(),
 			"chat_id":                ev.GetChatId(),
 			"accepted_by_profile_id": ev.GetAcceptedByProfileId(),
-			"profile_ids":            ev.GetProfileIds(),
+			"profile_ids":            recipients,
 			"media_kind":             ev.GetMediaKind(),
 			"livekit_room_name":      ev.GetLivekitRoomName(),
 		})
 		if err != nil {
 			return nil, fanoutEnvelope{}, false
 		}
-		return ev.GetProfileIds(), fanoutEnvelope{Op: "call_accepted", D: d}, true
+		return recipients, fanoutEnvelope{Op: "call_accepted", D: d}, true
 	case *eventsv1.VoiceStreamEvent_CallDeclined:
 		ev := p.CallDeclined
-		if ev == nil || ev.GetRoomId() == "" || len(ev.GetProfileIds()) == 0 {
+		if ev == nil || ev.GetRoomId() == "" {
 			return nil, fanoutEnvelope{}, false
 		}
-		d, err := json.Marshal(map[string]any{
+		recipients := compactProfiles(ev.GetProfileIds()...)
+		if len(recipients) == 0 {
+			return nil, fanoutEnvelope{}, false
+		}
+		d, err := metadata.marshal(map[string]any{
 			"room_id":                ev.GetRoomId(),
 			"chat_id":                ev.GetChatId(),
 			"declined_by_profile_id": ev.GetDeclinedByProfileId(),
-			"profile_ids":            ev.GetProfileIds(),
+			"profile_ids":            recipients,
 		})
 		if err != nil {
 			return nil, fanoutEnvelope{}, false
 		}
-		return ev.GetProfileIds(), fanoutEnvelope{Op: "call_declined", D: d}, true
+		return recipients, fanoutEnvelope{Op: "call_declined", D: d}, true
 	case *eventsv1.VoiceStreamEvent_CallMissed:
 		ev := p.CallMissed
 		if ev == nil || ev.GetRoomId() == "" {
 			return nil, fanoutEnvelope{}, false
 		}
-		d, err := json.Marshal(map[string]any{
+		recipients := compactProfiles(ev.GetInitiatorProfileId(), ev.GetCalleeProfileId())
+		if len(recipients) == 0 {
+			return nil, fanoutEnvelope{}, false
+		}
+		d, err := metadata.marshal(map[string]any{
 			"room_id":              ev.GetRoomId(),
 			"chat_id":              ev.GetChatId(),
 			"initiator_profile_id": ev.GetInitiatorProfileId(),
@@ -97,50 +142,77 @@ func voiceEventBytesToFanout(data []byte) (profileIDs []string, env fanoutEnvelo
 		if err != nil {
 			return nil, fanoutEnvelope{}, false
 		}
-		return compactProfiles(ev.GetInitiatorProfileId(), ev.GetCalleeProfileId()), fanoutEnvelope{Op: "call_missed", D: d}, true
+		return recipients, fanoutEnvelope{Op: "call_missed", D: d}, true
 	case *eventsv1.VoiceStreamEvent_CallEnded:
 		ev := p.CallEnded
-		if ev == nil || ev.GetRoomId() == "" || len(ev.GetProfileIds()) == 0 {
+		if ev == nil || ev.GetRoomId() == "" {
 			return nil, fanoutEnvelope{}, false
 		}
-		d, err := json.Marshal(map[string]any{
+		recipients := compactProfiles(ev.GetProfileIds()...)
+		if len(recipients) == 0 {
+			return nil, fanoutEnvelope{}, false
+		}
+		d, err := metadata.marshal(map[string]any{
 			"room_id":             ev.GetRoomId(),
 			"duration_seconds":    ev.GetDurationSeconds(),
-			"profile_ids":         ev.GetProfileIds(),
+			"profile_ids":         recipients,
 			"reason":              ev.GetReason(),
 			"ended_by_profile_id": ev.GetEndedByProfileId(),
 		})
 		if err != nil {
 			return nil, fanoutEnvelope{}, false
 		}
-		return ev.GetProfileIds(), fanoutEnvelope{Op: "call_ended", D: d}, true
+		return recipients, fanoutEnvelope{Op: "call_ended", D: d}, true
 	case *eventsv1.VoiceStreamEvent_VoiceStateChanged:
 		ev := p.VoiceStateChanged
-		if ev == nil || ev.GetRoomId() == "" || len(ev.GetProfileIds()) == 0 {
+		if ev == nil || ev.GetRoomId() == "" {
 			return nil, fanoutEnvelope{}, false
 		}
-		d, err := json.Marshal(map[string]any{
+		recipients := compactProfiles(ev.GetProfileIds()...)
+		if len(recipients) == 0 {
+			return nil, fanoutEnvelope{}, false
+		}
+		payload := map[string]any{
 			"room_id":     ev.GetRoomId(),
 			"profile_id":  ev.GetProfileId(),
-			"is_muted":    ev.GetIsMuted(),
-			"is_deafened": ev.GetIsDeafened(),
-			"is_video_on": ev.GetIsVideoOn(),
-			"profile_ids": ev.GetProfileIds(),
-		})
+			"profile_ids": recipients,
+		}
+		if ev.IsMuted != nil {
+			payload["is_muted"] = ev.GetIsMuted()
+		}
+		if ev.IsDeafened != nil {
+			payload["is_deafened"] = ev.GetIsDeafened()
+		}
+		if ev.IsVideoOn != nil {
+			payload["is_video_on"] = ev.GetIsVideoOn()
+		}
+		if ev.IsCommander != nil {
+			payload["is_commander"] = ev.GetIsCommander()
+		}
+		if ev.HandRaised != nil {
+			payload["hand_raised"] = ev.GetHandRaised()
+		}
+		if ev.HasFloor != nil {
+			payload["has_floor"] = ev.GetHasFloor()
+		}
+		if ev.IsBroadcasting != nil {
+			payload["is_broadcasting"] = ev.GetIsBroadcasting()
+		}
+		d, err := metadata.marshal(payload)
 		if err != nil {
 			return nil, fanoutEnvelope{}, false
 		}
-		return ev.GetProfileIds(), fanoutEnvelope{Op: "voice_state_update", D: d}, true
+		return recipients, fanoutEnvelope{Op: "voice_state_update", D: d}, true
 	case *eventsv1.VoiceStreamEvent_ScreenShareStarted:
 		ev := p.ScreenShareStarted
 		if ev == nil || ev.GetRoomId() == "" || ev.GetProfileId() == "" {
 			return nil, fanoutEnvelope{}, false
 		}
-		profileIDs := ev.GetProfileIds()
-		if len(profileIDs) == 0 {
-			profileIDs = []string{ev.GetProfileId()}
+		recipients := compactProfiles(ev.GetProfileIds()...)
+		if len(recipients) == 0 {
+			return nil, fanoutEnvelope{}, false
 		}
-		d, err := json.Marshal(map[string]any{
+		d, err := metadata.marshal(map[string]any{
 			"room_id":    ev.GetRoomId(),
 			"profile_id": ev.GetProfileId(),
 			"stream_id":  ev.GetStreamId(),
@@ -148,17 +220,17 @@ func voiceEventBytesToFanout(data []byte) (profileIDs []string, env fanoutEnvelo
 		if err != nil {
 			return nil, fanoutEnvelope{}, false
 		}
-		return profileIDs, fanoutEnvelope{Op: "screen_share_started", D: d}, true
+		return recipients, fanoutEnvelope{Op: "screen_share_started", D: d}, true
 	case *eventsv1.VoiceStreamEvent_ScreenShareStopped:
 		ev := p.ScreenShareStopped
 		if ev == nil || ev.GetRoomId() == "" || ev.GetProfileId() == "" {
 			return nil, fanoutEnvelope{}, false
 		}
-		profileIDs := ev.GetProfileIds()
-		if len(profileIDs) == 0 {
-			profileIDs = []string{ev.GetProfileId()}
+		recipients := compactProfiles(ev.GetProfileIds()...)
+		if len(recipients) == 0 {
+			return nil, fanoutEnvelope{}, false
 		}
-		d, err := json.Marshal(map[string]any{
+		d, err := metadata.marshal(map[string]any{
 			"room_id":    ev.GetRoomId(),
 			"profile_id": ev.GetProfileId(),
 			"stream_id":  ev.GetStreamId(),
@@ -166,10 +238,14 @@ func voiceEventBytesToFanout(data []byte) (profileIDs []string, env fanoutEnvelo
 		if err != nil {
 			return nil, fanoutEnvelope{}, false
 		}
-		return profileIDs, fanoutEnvelope{Op: "screen_share_stopped", D: d}, true
+		return recipients, fanoutEnvelope{Op: "screen_share_stopped", D: d}, true
 	case *eventsv1.VoiceStreamEvent_CallStarted:
 		ev := p.CallStarted
-		if ev == nil || ev.GetRoomId() == "" || len(ev.GetProfileIds()) == 0 {
+		if ev == nil || ev.GetRoomId() == "" {
+			return nil, fanoutEnvelope{}, false
+		}
+		recipients := compactProfiles(ev.GetProfileIds()...)
+		if len(recipients) == 0 {
 			return nil, fanoutEnvelope{}, false
 		}
 		payload := map[string]any{
@@ -177,7 +253,7 @@ func voiceEventBytesToFanout(data []byte) (profileIDs []string, env fanoutEnvelo
 			"chat_id":              ev.GetChatId(),
 			"initiator_profile_id": ev.GetInitiatorProfileId(),
 			"callee_profile_id":    ev.GetCalleeProfileId(),
-			"profile_ids":          ev.GetProfileIds(),
+			"profile_ids":          recipients,
 			"media_kind":           ev.GetMediaKind(),
 			"livekit_room_name":    ev.GetLivekitRoomName(),
 		}
@@ -188,26 +264,27 @@ func voiceEventBytesToFanout(data []byte) (profileIDs []string, env fanoutEnvelo
 			payload["voice_room_id"] = ev.GetVoiceRoomId()
 			payload["space_id"] = ev.GetSpaceId()
 		}
-		d, err := json.Marshal(payload)
+		d, err := metadata.marshal(payload)
 		if err != nil {
 			return nil, fanoutEnvelope{}, false
 		}
-		return ev.GetProfileIds(), fanoutEnvelope{Op: "call_started", D: d}, true
+		return recipients, fanoutEnvelope{Op: "call_started", D: d}, true
 	case *eventsv1.VoiceStreamEvent_VoiceMemberJoined:
 		ev := p.VoiceMemberJoined
 		if ev == nil || ev.GetRoomId() == "" || ev.GetJoinedProfileId() == "" {
 			return nil, fanoutEnvelope{}, false
 		}
-		notify := ev.GetNotifyProfileIds()
+		notify := compactProfiles(ev.GetNotifyProfileIds()...)
 		if len(notify) == 0 {
 			return nil, fanoutEnvelope{}, false
 		}
-		d, err := json.Marshal(map[string]any{
+		snapshot := compactProfiles(append(append([]string(nil), notify...), ev.GetJoinedProfileId())...)
+		d, err := metadata.marshal(map[string]any{
 			"room_id":           ev.GetRoomId(),
 			"voice_room_id":     ev.GetVoiceRoomId(),
 			"space_id":          ev.GetSpaceId(),
 			"joined_profile_id": ev.GetJoinedProfileId(),
-			"profile_ids":       append(notify, ev.GetJoinedProfileId()),
+			"profile_ids":       snapshot,
 		})
 		if err != nil {
 			return nil, fanoutEnvelope{}, false

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
@@ -19,7 +20,7 @@ func TestVoiceEventBytesToFanout_DeclineMissedAndState(t *testing.T) {
 	callee := uuid.NewString()
 
 	declined := &eventsv1.VoiceStreamEvent{
-		EventId:    "voice-decline",
+		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.Now(),
 		Payload: &eventsv1.VoiceStreamEvent_CallDeclined{
 			CallDeclined: &eventsv1.CallDeclined{
@@ -40,7 +41,7 @@ func TestVoiceEventBytesToFanout_DeclineMissedAndState(t *testing.T) {
 	}
 
 	missed := &eventsv1.VoiceStreamEvent{
-		EventId:    "voice-missed",
+		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.Now(),
 		Payload: &eventsv1.VoiceStreamEvent_CallMissed{
 			CallMissed: &eventsv1.CallMissed{
@@ -59,7 +60,7 @@ func TestVoiceEventBytesToFanout_DeclineMissedAndState(t *testing.T) {
 
 	muted := true
 	state := &eventsv1.VoiceStreamEvent{
-		EventId:    "voice-state",
+		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.Now(),
 		Payload: &eventsv1.VoiceStreamEvent_VoiceStateChanged{
 			VoiceStateChanged: &eventsv1.VoiceStateChanged{
@@ -98,7 +99,7 @@ func TestVoiceEventBytesToFanout_CallStartedAndMemberJoined(t *testing.T) {
 	member := uuid.NewString()
 
 	started := &eventsv1.VoiceStreamEvent{
-		EventId:    "voice-started",
+		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.Now(),
 		Payload: &eventsv1.VoiceStreamEvent_CallStarted{
 			CallStarted: &eventsv1.CallStarted{
@@ -121,7 +122,7 @@ func TestVoiceEventBytesToFanout_CallStartedAndMemberJoined(t *testing.T) {
 	}
 
 	joined := &eventsv1.VoiceStreamEvent{
-		EventId:    "voice-joined",
+		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.Now(),
 		Payload: &eventsv1.VoiceStreamEvent_VoiceMemberJoined{
 			VoiceMemberJoined: &eventsv1.VoiceMemberJoined{
@@ -170,7 +171,9 @@ func TestVoiceEventBytesToFanout_CallStartedRoomBindingCompatibility(t *testing.
 			if tc.kind != "" {
 				started.RoomType = proto.String(tc.kind)
 			}
-			wire, err := proto.Marshal(&eventsv1.VoiceStreamEvent{EventId: uuid.NewString(), OccurredAt: timestamppb.Now(), Payload: &eventsv1.VoiceStreamEvent_CallStarted{CallStarted: started}})
+			eventID := uuid.NewString()
+			occurredAt := timestamppb.New(voiceCompatibilityOccurredAt)
+			wire, err := proto.Marshal(&eventsv1.VoiceStreamEvent{EventId: eventID, OccurredAt: occurredAt, Payload: &eventsv1.VoiceStreamEvent_CallStarted{CallStarted: started}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -178,14 +181,12 @@ func TestVoiceEventBytesToFanout_CallStartedRoomBindingCompatibility(t *testing.
 			if !ok || frame.Op != "call_started" {
 				t.Fatalf("ok=%v frame=%+v", ok, frame)
 			}
-			if !reflect.DeepEqual(profiles, []string{owner, member}) {
-				t.Fatalf("audience changed: %v", profiles)
-			}
+			assertUniqueStringSet(t, profiles, []string{owner, member})
 			var payload map[string]any
 			if err := json.Unmarshal(frame.D, &payload); err != nil {
 				t.Fatal(err)
 			}
-			want := map[string]any{"room_id": started.RoomId, "chat_id": started.ChatId, "initiator_profile_id": owner, "callee_profile_id": "", "profile_ids": []any{owner, member}, "media_kind": "audio", "livekit_room_name": "lk-binding"}
+			want := map[string]any{"event_id": eventID, "occurred_at": occurredAt.AsTime().UTC().Format(time.RFC3339Nano), "room_id": started.RoomId, "chat_id": started.ChatId, "initiator_profile_id": owner, "callee_profile_id": "", "profile_ids": []any{owner, member}, "media_kind": "audio", "livekit_room_name": "lk-binding"}
 			if tc.kind != "" {
 				want["room_type"] = tc.kind
 			}
