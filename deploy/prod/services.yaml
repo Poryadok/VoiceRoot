@@ -86,12 +86,38 @@ spec:
       containers:
         - name: social
           image: __IMAGE_REGISTRY__/social:__IMAGE_TAG__
-          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          ports: [{containerPort: 8080}, {containerPort: 9090}, {containerPort: 8443}]
           env:
             - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: SOCIAL_DATABASE_URL}}}
             - {name: SOCIAL_GRPC_LISTEN, value: ":9090"}
+            - {name: SOCIAL_PRINCIPAL_TLS_CERT_FILE, value: "/etc/voice/principal/tls/tls.crt"}
+            - {name: SOCIAL_PRINCIPAL_TLS_KEY_FILE, value: "/etc/voice/principal/tls/tls.key"}
+            - {name: SOCIAL_PRINCIPAL_JWKS_LISTEN, value: ":8443"}
+            - {name: SOCIAL_PRINCIPAL_SIGNING_KEYS_DIR, value: "/etc/voice/principal/keys"}
+            - {name: SOCIAL_PRINCIPAL_ACTIVE_KID, valueFrom: {secretKeyRef: {name: voice-social-principal-signing, key: active-kid}}}
+            - {name: USER_PRINCIPAL_GRPC_ADDR, value: "voice-user:9091"}
+            - {name: USER_PRINCIPAL_TLS_CA_FILE, value: "/etc/voice/principal/ca/ca.crt"}
+            - {name: USER_PRINCIPAL_TLS_SERVER_NAME, value: "voice-user"}
+            - {name: SPACE_PRINCIPAL_GRPC_ADDR, value: "voice-space:9091"}
+            - {name: SPACE_PRINCIPAL_TLS_CA_FILE, value: "/etc/voice/principal/ca/ca.crt"}
+            - {name: SPACE_PRINCIPAL_TLS_SERVER_NAME, value: "voice-space"}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+          volumeMounts:
+            - {name: principal-tls, mountPath: /etc/voice/principal/tls, readOnly: true}
+            - {name: principal-ca, mountPath: /etc/voice/principal/ca, readOnly: true}
+            - {name: principal-signing, mountPath: /etc/voice/principal/keys, readOnly: true}
+      volumes:
+        - name: principal-tls
+          secret: {secretName: voice-social-principal-tls}
+        - name: principal-ca
+          secret: {secretName: voice-principal-ca}
+        - name: principal-signing
+          secret:
+            secretName: voice-social-principal-signing
+            items:
+              - {key: current.pem, path: current.pem}
+              - {key: next.pem, path: next.pem}
 ---
 apiVersion: v1
 kind: Service
@@ -100,7 +126,7 @@ metadata:
   namespace: voice-prod
 spec:
   selector: {app: voice-social}
-  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}, {name: principal-jwks, port: 8443}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -123,10 +149,19 @@ spec:
       containers:
         - name: user
           image: __IMAGE_REGISTRY__/user:__IMAGE_TAG__
-          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          ports: [{containerPort: 8080}, {containerPort: 9090}, {containerPort: 9091}]
           env:
             - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_DATABASE_URL}}}
             - {name: USER_GRPC_ADDR, value: ":9090"}
+            - {name: USER_PRINCIPAL_TLS_CERT_FILE, value: "/etc/voice/principal/tls/tls.crt"}
+            - {name: USER_PRINCIPAL_TLS_KEY_FILE, value: "/etc/voice/principal/tls/tls.key"}
+            - {name: USER_PRINCIPAL_GRPC_LISTEN, value: ":9091"}
+            - {name: USER_PRINCIPAL_REPLAY_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
+            - {name: S2S_JWKS_URLS_JSON, value: '{"social":"https://voice-social:8443/.well-known/jwks.json"}'}
+            - {name: S2S_JWKS_CA_FILE, value: "/etc/voice/principal/ca/ca.crt"}
+            - {name: S2S_JWKS_REFRESH_AFTER, value: "30s"}
+            - {name: S2S_JWKS_HARD_EXPIRY, value: "2m"}
+            - {name: S2S_UNKNOWN_KID_COOLDOWN, value: "5s"}
             - {name: USER_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
             - {name: USER_R2_ENDPOINT, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_R2_ENDPOINT}}}
             - {name: USER_R2_ACCESS_KEY_ID, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_R2_ACCESS_KEY_ID}}}
@@ -135,6 +170,14 @@ spec:
             - {name: USER_R2_PUBLIC_BASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_R2_PUBLIC_BASE_URL}}}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+          volumeMounts:
+            - {name: principal-tls, mountPath: /etc/voice/principal/tls, readOnly: true}
+            - {name: principal-ca, mountPath: /etc/voice/principal/ca, readOnly: true}
+      volumes:
+        - name: principal-tls
+          secret: {secretName: voice-user-principal-tls}
+        - name: principal-ca
+          secret: {secretName: voice-principal-ca}
 ---
 apiVersion: v1
 kind: Service
@@ -143,7 +186,7 @@ metadata:
   namespace: voice-prod
 spec:
   selector: {app: voice-user}
-  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}, {name: principal-grpc, port: 9091}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -203,12 +246,29 @@ spec:
       containers:
         - name: space
           image: __IMAGE_REGISTRY__/space:__IMAGE_TAG__
-          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          ports: [{containerPort: 8080}, {containerPort: 9090}, {containerPort: 9091}]
           env:
             - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: SPACE_DATABASE_URL}}}
             - {name: SPACE_GRPC_LISTEN, value: ":9090"}
+            - {name: SPACE_PRINCIPAL_TLS_CERT_FILE, value: "/etc/voice/principal/tls/tls.crt"}
+            - {name: SPACE_PRINCIPAL_TLS_KEY_FILE, value: "/etc/voice/principal/tls/tls.key"}
+            - {name: SPACE_PRINCIPAL_GRPC_LISTEN, value: ":9091"}
+            - {name: SPACE_PRINCIPAL_REPLAY_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
+            - {name: S2S_JWKS_URLS_JSON, value: '{"social":"https://voice-social:8443/.well-known/jwks.json"}'}
+            - {name: S2S_JWKS_CA_FILE, value: "/etc/voice/principal/ca/ca.crt"}
+            - {name: S2S_JWKS_REFRESH_AFTER, value: "30s"}
+            - {name: S2S_JWKS_HARD_EXPIRY, value: "2m"}
+            - {name: S2S_UNKNOWN_KID_COOLDOWN, value: "5s"}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+          volumeMounts:
+            - {name: principal-tls, mountPath: /etc/voice/principal/tls, readOnly: true}
+            - {name: principal-ca, mountPath: /etc/voice/principal/ca, readOnly: true}
+      volumes:
+        - name: principal-tls
+          secret: {secretName: voice-space-principal-tls}
+        - name: principal-ca
+          secret: {secretName: voice-principal-ca}
 ---
 apiVersion: v1
 kind: Service
@@ -217,7 +277,7 @@ metadata:
   namespace: voice-prod
 spec:
   selector: {app: voice-space}
-  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}, {name: principal-grpc, port: 9091}]
 ---
 apiVersion: apps/v1
 kind: Deployment

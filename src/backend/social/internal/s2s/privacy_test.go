@@ -54,13 +54,14 @@ func startBufconnUser(t *testing.T, impl userv1.UserServiceServer) (grpc.ClientC
 	}
 }
 
-func TestGRPCUserPrivacy_SendsInternalCaller(t *testing.T) {
+func TestGRPCUserPrivacy_SendsPrincipalWithoutRawIdentity(t *testing.T) {
 	t.Parallel()
 	stub := &stubUserPrivacy{}
 	conn, cleanup := startBufconnUser(t, stub)
 	t.Cleanup(cleanup)
 
-	client := &GRPCUserPrivacy{Client: userv1.NewUserServiceClient(conn)}
+	issuer, _ := testSocialIssuer(t)
+	client := &GRPCUserPrivacy{Client: userv1.NewUserServiceClient(conn), Issuer: issuer}
 	target := uuid.New()
 
 	// Incoming end-user MD must not be forwarded (would trip ownership checks).
@@ -72,7 +73,8 @@ func TestGRPCUserPrivacy_SendsInternalCaller(t *testing.T) {
 	aud, err := client.AllowFriendRequestsAudience(inCtx, target)
 	require.NoError(t, err)
 	require.True(t, aud.IsEveryoneShortcut())
-	require.Equal(t, []string{"social"}, stub.lastMD.Get("x-voice-internal-caller"))
+	require.Empty(t, stub.lastMD.Get("x-voice-internal-caller"))
+	require.Len(t, stub.lastMD.Get("authorization"), 1)
 	require.Empty(t, stub.lastMD.Get("x-voice-user-id"))
 	require.Empty(t, stub.lastMD.Get("x-voice-profile-id"))
 }

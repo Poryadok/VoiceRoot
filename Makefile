@@ -315,6 +315,7 @@ staging-app-secrets-test:
 
 .PHONY: voice-db-runtime-provisioning-contract-test
 voice-db-runtime-provisioning-contract-test:
+	$(BASH) "$(ROOT)/scripts/ci/voice-r22-runtime-scope_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/voice-db-runtime-provisioning-contract_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/apply-migrate-jobs_test.sh"
 

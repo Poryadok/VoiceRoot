@@ -125,7 +125,21 @@ blocks
 
 ## Зависимости
 
+### Privacy service principals
+
+Social calls User `GetPrivacySettings` and Space `AreCoMembers` on their
+dedicated TLS listeners using request-bound RS256 service credentials. Only
+`service:social` may use those protected privacy methods. Each attempt has a
+fresh request ID and JWT ID; incoming identity metadata is never forwarded.
+User/Space verify the signature, exact RPC/request hash/audience, expiry and
+shared Redis replay admission before accessing their stores.
+
+The narrow migration preserves Social's ordinary User `GetProfile` and
+`ListProfileIDsForAccount` lookups. A blanket network deny on User 9090 would break
+friend/contact/account flows, so ordinary privacy methods reject raw Social
+identity at the application boundary while unrelated methods migrate separately.
+This exception does not authorize raw metadata on the protected listeners.
+Deployment and rotation: [DEPLOYMENT.md](../DEPLOYMENT.md#social-privacy-principals).
+
 - **User Service** — получение профилей для списков
 - **Auth Service** — маппинг profile_id → account_id (для блокировок)
-
-

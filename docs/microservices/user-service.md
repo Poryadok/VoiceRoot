@@ -110,6 +110,16 @@ requires a later release after all writers send the field.
 
 ## Модель данных
 
+### Social privacy principal boundary
+
+The dedicated TLS listener (9091) registers only `GetPrivacySettings`; it
+requires a verified request-bound `service:social` credential and shared Redis
+replay admission before store access. The domain entrypoint verifies the Social
+identity and binding again. On ordinary 9090, a raw Social caller marker is
+rejected for this method. Existing `GetProfile` and `ListProfileIDsForAccount`
+callers retain their separate ordinary paths during the narrow migration.
+Configuration and rotation: [DEPLOYMENT.md](../DEPLOYMENT.md#social-privacy-principals).
+
 ```
 profiles
 ├── id (UUID)

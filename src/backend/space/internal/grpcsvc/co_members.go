@@ -8,9 +8,13 @@ import (
 	"google.golang.org/grpc/status"
 
 	spacev1 "voice.app/voice/space/v1"
+	"voice/backend/pkg/socialprincipal"
 )
 
 func (s *SpaceGRPC) AreCoMembers(ctx context.Context, req *spacev1.AreCoMembersRequest) (*spacev1.AreCoMembersResponse, error) {
+	if _, err := socialprincipal.CheckDomain(ctx, "space", req); err != nil {
+		return nil, err
+	}
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "space persistence not configured")
 	}

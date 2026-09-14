@@ -16,18 +16,17 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"voice/backend/pkg/grpcclient"
+	"voice/backend/pkg/grpcmw"
+	"voice/backend/pkg/httpserver"
+	voiceprom "voice/backend/pkg/promhttp"
+	"voice/backend/pkg/runtimeconfig"
 	grpcsvc "voice/backend/social/internal/grpcsvc"
 	socials2s "voice/backend/social/internal/s2s"
 	"voice/backend/social/internal/socialevents"
 	"voice/backend/social/internal/store"
-	"voice/backend/pkg/grpcclient"
-	"voice/backend/pkg/grpcmw"
-	"voice/backend/pkg/httpserver"
-	"voice/backend/pkg/runtimeconfig"
-	voiceprom "voice/backend/pkg/promhttp"
 
 	socialv1 "voice.app/voice/social/v1"
-	userv1 "voice.app/voice/user/v1"
 )
 
 const serviceName = "social"
@@ -35,6 +34,19 @@ const serviceName = "social"
 func main() {
 	logger := httpserver.NewLogger(serviceName)
 	metricsReg := prometheus.NewRegistry()
+	principalRuntime, err := loadSocialPrincipalRuntime()
+	if err != nil {
+		log.Fatalf("social principal configuration: %v", err)
+	}
+	defer principalRuntime.Close()
+	errCh := make(chan error, 2)
+	if principalRuntime.JWKS != nil {
+		listener, err := net.Listen("tcp", principalRuntime.JWKS.Addr)
+		if err != nil {
+			log.Fatalf("social principal JWKS listen: %v", err)
+		}
+		go func() { errCh <- principalRuntime.JWKS.ServeTLS(listener, "", "") }()
+	}
 	httpAddr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
 		httpAddr = v
@@ -61,16 +73,19 @@ func main() {
 		var spaceCoMembership grpcsvc.SpaceCoMembershipChecker
 		var accountProfiles grpcsvc.AccountProfilesResolver
 		var profileAccounts grpcsvc.ProfileAccountsResolver
+		if principalRuntime.User != nil {
+			privacy = principalRuntime.User
+			phoneSearchPrivacy = principalRuntime.User
+		}
+		if principalRuntime.Space != nil {
+			spaceCoMembership = principalRuntime.Space
+		}
 		if userAddr := strings.TrimSpace(os.Getenv("USER_GRPC_ADDR")); userAddr != "" {
 			uconn, err := grpc.NewClient(grpcclient.DialTarget(userAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
 				log.Fatalf("user grpc: %v", err)
 			}
 			defer func() { _ = uconn.Close() }()
-			userClient := userv1.NewUserServiceClient(uconn)
-			userPrivacy := &socials2s.GRPCUserPrivacy{Client: userClient}
-			privacy = userPrivacy
-			phoneSearchPrivacy = userPrivacy
 			accountProfiles = socials2s.NewGRPCAccountProfiles(uconn)
 			profileAccounts = socials2s.NewGRPCProfileAccounts(uconn)
 		}
@@ -81,14 +96,6 @@ func main() {
 			}
 			defer func() { _ = aconn.Close() }()
 			phoneHashes = socials2s.NewGRPCAuthPhoneHashLookup(aconn)
-		}
-		if spaceAddr := strings.TrimSpace(os.Getenv("SPACE_GRPC_ADDR")); spaceAddr != "" {
-			spconn, err := grpc.NewClient(grpcclient.DialTarget(spaceAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
-			if err != nil {
-				log.Fatalf("space grpc: %v", err)
-			}
-			defer func() { _ = spconn.Close() }()
-			spaceCoMembership = socials2s.NewGRPCSpaceCoMembership(spconn)
 		}
 
 		lis, err := net.Listen("tcp", grpcListen)
@@ -132,7 +139,6 @@ func main() {
 		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(healthHandler(serviceName), metricsReg), logger),
 	}
 	httpserver.ApplyHTTPServerTimeouts(server)
-	errCh := make(chan error, 1)
 	logger.Info("listening", slog.String("addr", httpAddr))
 	go func() {
 		errCh <- server.ListenAndServe()
@@ -148,6 +154,11 @@ func main() {
 	case <-stop:
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.ShutdownTimeoutFromEnv())
 		defer cancel()
+		if principalRuntime.JWKS != nil {
+			if err := principalRuntime.JWKS.Shutdown(ctx); err != nil {
+				logger.Error("social principal JWKS shutdown", slog.Any("error", err))
+			}
+		}
 		if grpcSrv != nil {
 			grpcSrv.GracefulStop()
 		}
