@@ -33,6 +33,11 @@ auth:
       interval: ${AUTH_ACCOUNT_DELETION_RECOVERY_INTERVAL:PT5S}
   redis:
     blacklist-prefix: "jwt:blacklist:"
+    otp:
+      prefix: "${AUTH_OTP_REDIS_PREFIX:auth:otp:}"
+      send-cooldown: ${AUTH_OTP_SEND_COOLDOWN:PT1M}
+      verify-window: ${AUTH_OTP_VERIFY_WINDOW:PT10M}
+      max-verify-attempts: ${AUTH_OTP_MAX_VERIFY_ATTEMPTS:3}
   grpc:
     port: 9090
   user-grpc:

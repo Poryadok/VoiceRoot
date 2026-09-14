@@ -316,8 +316,10 @@ idempotent по `operation_id`. Unknown caller/RPC, caller с неправиль
 | `role.deleted`      | space_id, role_id                 |
 | `role.assigned`     | space_id, profile_id, role_id     |
 | `role.revoked`      | space_id, profile_id, role_id     |
-| `role.chat_override_set`  | chat_id, role_id       |
-| `role.voice_override_set` | voice_room_id, role_id |
+| `role.chat_override_set`  | space_id, chat_id, role_id       |
+| `role.chat_override_removed` | space_id, chat_id, role_id |
+| `role.voice_override_set` | space_id, voice_room_id, role_id |
+| `role.voice_override_removed` | space_id, voice_room_id, role_id |
 
 ## Публикуемые события (→ NATS)
 

@@ -1,6 +1,7 @@
 package manifest_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -89,4 +90,63 @@ func TestValidate_rejectsOptionsAndSubcommandsTogether(t *testing.T) {
 	}
 	errs := manifest.Validate(doc)
 	require.NotEmpty(t, errs)
+}
+
+func TestParseYAML_acceptsCanonicalOptionTypes(t *testing.T) {
+	manifestYAML := `
+name: TypedBot
+commands:
+  - name: configure
+    description: Configure a game
+    options:
+      - name: title
+        type: string
+      - name: max_players
+        type: integer
+      - name: ranked
+        type: boolean
+      - name: captain
+        type: user
+      - name: destination
+        type: channel
+      - name: role
+        type: role
+      - name: rules
+        type: attachment
+`
+
+	doc, errs, err := manifest.ParseYAML(manifestYAML)
+	require.NoError(t, err)
+	require.Empty(t, errs)
+	require.Len(t, doc.Commands[0].Options, 7)
+	require.Equal(t, []string{"string", "integer", "boolean", "user", "channel", "role", "attachment"}, []string{
+		doc.Commands[0].Options[0].Type,
+		doc.Commands[0].Options[1].Type,
+		doc.Commands[0].Options[2].Type,
+		doc.Commands[0].Options[3].Type,
+		doc.Commands[0].Options[4].Type,
+		doc.Commands[0].Options[5].Type,
+		doc.Commands[0].Options[6].Type,
+	})
+}
+
+func TestParseYAML_rejectsUnknownOptionType(t *testing.T) {
+	for _, optionType := range []string{"number", "String", " string"} {
+		t.Run(optionType, func(t *testing.T) {
+			manifestYAML := fmt.Sprintf(`
+name: TypedBot
+commands:
+  - name: configure
+    description: Configure a game
+    options:
+      - name: max_players
+        type: %q
+`, optionType)
+
+			doc, errs, err := manifest.ParseYAML(manifestYAML)
+			require.Equal(t, manifest.Document{}, doc)
+			require.EqualError(t, err, "manifest invalid")
+			require.Equal(t, []string{"command configure: unknown option type: " + optionType}, errs)
+		})
+	}
 }

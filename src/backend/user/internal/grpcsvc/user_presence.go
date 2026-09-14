@@ -38,12 +38,16 @@ func (s *UserGRPC) UpdatePresence(ctx context.Context, req *userv1.UpdatePresenc
 		return nil, err
 	}
 	in := store.PresenceUpsert{
-		Status:       st,
-		StatusEnum:   enum,
-		GameTitle:    req.GetGameTitle(),
-		CustomStatus: req.GetCustomStatus(),
-		CallInfoJSON: req.GetCallInfoJson(),
-		Now:          time.Now().UTC(),
+		Status:               st,
+		StatusEnum:           enum,
+		GameTitle:            strings.TrimSpace(req.GetGameTitle()),
+		CustomStatus:         req.GetCustomStatus(),
+		PreserveCustomStatus: req.CustomStatus == nil,
+		CallInfoJSON:         req.GetCallInfoJson(),
+		Now:                  time.Now().UTC(),
+	}
+	if req.CustomStatus != nil && *req.CustomStatus != "" && authctx.SubscriptionTier(ctx) != "premium" {
+		return nil, status.Error(codes.FailedPrecondition, "custom status requires premium subscription")
 	}
 	previous, err := s.Presence.UpsertAndGetPrevious(ctx, profileID, in)
 	if err != nil {
@@ -53,7 +57,18 @@ func (s *UserGRPC) UpdatePresence(ctx context.Context, req *userv1.UpdatePresenc
 	if publish && s.Events != nil {
 		_ = s.Events.PublishPresenceChanged(ctx, profileID.String(), oldStatus, newStatus)
 	}
+	if shouldPublishGameDetected(previous, in.GameTitle) && s.Events != nil {
+		_ = s.Events.PublishGameDetected(ctx, profileID.String(), in.GameTitle)
+	}
 	return &userv1.UpdatePresenceResponse{}, nil
+}
+
+func shouldPublishGameDetected(previous *store.PresenceSnapshot, gameTitle string) bool {
+	gameTitle = strings.TrimSpace(gameTitle)
+	if gameTitle == "" {
+		return false
+	}
+	return previous == nil || strings.TrimSpace(previous.GameTitle) != gameTitle
 }
 
 func presenceTransitionForSnapshot(previous *store.PresenceSnapshot, newStatus string, newEnum int32) (oldStatus, currentStatus string, publish bool) {
@@ -89,7 +104,7 @@ func (s *UserGRPC) GetPresence(ctx context.Context, req *userv1.GetPresenceReque
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	return &userv1.GetPresenceResponse{PresenceStatus: s.presenceForViewer(ctx, profileID, snap)}, nil
+	return &userv1.GetPresenceResponse{PresenceStatus: s.presenceForViewerAccount(ctx, profiles[0].AccountID, profileID, snap)}, nil
 }
 
 func (s *UserGRPC) mayViewOnlineStatus(ctx context.Context, targetProfile uuid.UUID) bool {
@@ -175,7 +190,11 @@ func exactPresenceViewerProfile(ctx context.Context) (uuid.UUID, bool) {
 }
 
 func (s *UserGRPC) presenceForViewer(ctx context.Context, profileID uuid.UUID, snap *store.PresenceSnapshot) *userv1.PresenceStatus {
-	if snap != nil && snap.Live && (isInvisiblePresence(snap.Status) || !s.mayViewOnlineStatus(ctx, profileID)) && !isSelfViewer(ctx, profileID) {
+	return s.presenceForViewerAccount(ctx, uuid.Nil, profileID, snap)
+}
+
+func (s *UserGRPC) presenceForViewerAccount(ctx context.Context, targetAccountID, profileID uuid.UUID, snap *store.PresenceSnapshot) *userv1.PresenceStatus {
+	if snap != nil && snap.Live && (isInvisiblePresence(snap.Status) || !s.mayViewOnlineStatus(ctx, profileID) || s.presenceBlockedForViewer(ctx, targetAccountID, profileID)) && !isSelfViewer(ctx, profileID) {
 		// presence.md: invisible displays as offline for others.
 		snap = &store.PresenceSnapshot{
 			Live:         false,
@@ -190,6 +209,23 @@ func (s *UserGRPC) presenceForViewer(ctx context.Context, profileID uuid.UUID, s
 		out.GameTitle = nil
 	}
 	return out
+}
+
+// presenceBlockedForViewer makes Social blocks a fail-closed privacy boundary
+// for live presence. AccountPairBlocked itself checks both directions.
+func (s *UserGRPC) presenceBlockedForViewer(ctx context.Context, targetAccountID, targetProfileID uuid.UUID) bool {
+	if isSelfViewer(ctx, targetProfileID) {
+		return false
+	}
+	if s.Blocks == nil {
+		return true
+	}
+	viewerAccountID, ok := authctx.AccountID(ctx)
+	if !ok {
+		return true
+	}
+	blocked, err := s.Blocks.AccountPairBlocked(ctx, viewerAccountID, targetAccountID)
+	return err != nil || blocked
 }
 
 func isSelfViewer(ctx context.Context, profileID uuid.UUID) bool {
@@ -238,9 +274,18 @@ func (s *UserGRPC) GetBulkPresence(ctx context.Context, req *userv1.GetBulkPrese
 		if _, ok := visible[id]; !ok {
 			continue
 		}
-		out[id.String()] = s.presenceForViewer(ctx, id, snap)
+		out[id.String()] = s.presenceForViewerAccount(ctx, profileAccountID(profiles, id), id, snap)
 	}
 	return &userv1.GetBulkPresenceResponse{ByProfileId: out}, nil
+}
+
+func profileAccountID(profiles []*store.ProfileRow, profileID uuid.UUID) uuid.UUID {
+	for _, profile := range profiles {
+		if profile.ID == profileID {
+			return profile.AccountID
+		}
+	}
+	return uuid.Nil
 }
 
 func (s *UserGRPC) resolveOwnedActiveProfile(ctx context.Context, accountID uuid.UUID) (uuid.UUID, error) {

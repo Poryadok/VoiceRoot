@@ -196,12 +196,23 @@ Voice rollout. Эти settings не регистрируют bridge/coordinator/
 
 ### APNs / VoIP (iOS)
 
-- Notification service reads APNs credentials from env (`APNS_*` — see `src/backend/notification/internal/apns/config.go`).
-- **Staging:** copy [`deploy/staging/secret.example.yaml`](../deploy/staging/secret.example.yaml) → `secret.yaml`; set `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_PRIVATE_KEY` (Auth Key .p8 PEM), `APNS_BUNDLE_ID`, `APNS_VOIP_TOPIC`, `APNS_PRODUCTION=false` for sandbox devices.
-- **Production:** `APNS_PRODUCTION=true`, separate VoIP topic/key if required; enable Push Notifications + Background Modes (remote notifications, VoIP) in Xcode.
-- **Compose dev:** token registration E2E (`apns_e2e_live_test`, `voip_e2e_live_test`); alert delivery on device requires staging secrets above.
-- Live delivery tests: `src/frontend/test/apns_e2e_live_test.dart`, `voip_e2e_live_test.dart` (opt-in `VOICE_RUN_LIVE_INTEGRATION=true`).
+Notification Service loads APNs configuration in [`http_sender.go`](../src/backend/notification/internal/apns/http_sender.go):
 
+| Variable | Purpose |
+|----------|---------|
+| `APNS_KEY_ID`, `APNS_TEAM_ID` | Apple Auth Key ID and Developer Team ID |
+| `APNS_AUTH_KEY` | Preferred inline `.p8` PEM value |
+| `APNS_PRIVATE_KEY` | Backward-compatible inline `.p8` PEM alias used by the staging/prod secret templates |
+| `APNS_AUTH_KEY_PATH` | Optional mounted `.p8` PEM file; used only when neither inline variable is set |
+| `APNS_BUNDLE_ID` | Required iOS bundle identifier and regular APNs topic |
+| `APNS_VOIP_TOPIC` | Optional VoIP topic; defaults to `APNS_BUNDLE_ID` |
+| `APNS_PRODUCTION` | Set exactly to `false` for Apple's sandbox endpoint; any other or unset value uses production |
+
+All of `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_BUNDLE_ID` and one auth-key source are required to enable either HTTP sender. Missing or invalid credentials leave the corresponding sender in noop mode.
+
+- **Staging:** copy [`deploy/staging/secret.example.yaml`](../deploy/staging/secret.example.yaml) to `secret.yaml`; its `voice-app-secrets` template wires `APNS_PRIVATE_KEY`. Set it to the Auth Key `.p8` PEM together with `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_BUNDLE_ID`, and, when VoIP tokens are used, `APNS_VOIP_TOPIC`; keep `APNS_PRODUCTION="false"` for sandbox devices.
+- **Production:** use the production `voice-app-secrets` template, set `APNS_PRODUCTION="true"`, and provide the production key/topic values. Enable Push Notifications and Background Modes (remote notifications, VoIP) in Xcode.
+- **Compose dev:** the `notification` Compose service does not set APNs credentials and therefore uses noop senders. It still supports gateway token-registration E2E through [`apns_e2e_live_test.dart`](../src/frontend/test/apns_e2e_live_test.dart) and [`voip_e2e_live_test.dart`](../src/frontend/test/voip_e2e_live_test.dart); run either only with `VOICE_RUN_LIVE_INTEGRATION=true`. Device alert delivery needs configured staging or production credentials.
 ## Developer Portal — production OAuth (bots)
 
 PKCE OAuth for the Developer Portal is enabled in local compose (`developer-portal` service, port `9082`). Production requires matching Auth and portal configuration.

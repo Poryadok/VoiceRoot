@@ -16,6 +16,9 @@ import (
 func TestWSMarkReadFanoutSameProfileTwoConnections(t *testing.T) {
 	t.Parallel()
 	hub := permitAllTestSubscriptions(newWSHub())
+	hub.setPresenceViewer(&stubPresenceViewer{byViewer: map[string]viewerPresence{
+		"p2": {Status: "dnd", CustomStatus: "in a meeting"},
+	}})
 	v := staticTokenValidator{
 		"mobile":  {UserID: "u1", ProfileID: "prof-same"},
 		"desktop": {UserID: "u1", ProfileID: "prof-same"},
@@ -148,6 +151,9 @@ func TestWSMarkReadRejectedWithoutChatSubscription(t *testing.T) {
 func TestWSPresenceUpdateFanoutToPeerInSharedChat(t *testing.T) {
 	t.Parallel()
 	hub := permitAllTestSubscriptions(newWSHub())
+	hub.setPresenceViewer(&stubPresenceViewer{byViewer: map[string]viewerPresence{
+		"p2": {Status: "dnd", CustomStatus: "in a meeting"},
+	}})
 	v := staticTokenValidator{
 		"t1": {UserID: "a", ProfileID: "p1"},
 		"t2": {UserID: "b", ProfileID: "p2"},

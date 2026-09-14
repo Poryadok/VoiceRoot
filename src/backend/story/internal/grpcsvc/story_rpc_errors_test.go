@@ -75,6 +75,38 @@ func TestCreateStory_requiresType(t *testing.T) {
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
+func TestCreateStory_requiresContentForMediaType(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	client, _, cleanup := startStoryGRPC(t)
+	defer cleanup()
+
+	ctx := withProfile(context.Background(), uuid.New(), uuid.New())
+	whitespace := "  \t "
+	textContent := "legacy text must not override type_enum"
+	mediaID := uuid.NewString()
+	photo := storyv1.StoryMediaType_STORY_MEDIA_TYPE_PHOTO
+	text := storyv1.StoryMediaType_STORY_MEDIA_TYPE_TEXT
+	for _, tc := range []struct {
+		name string
+		req  *storyv1.CreateStoryRequest
+	}{
+		{name: "text without text_content", req: &storyv1.CreateStoryRequest{Type: "text"}},
+		{name: "text with whitespace only", req: &storyv1.CreateStoryRequest{Type: "text", TextContent: &whitespace}},
+		{name: "photo without media_file_id", req: &storyv1.CreateStoryRequest{Type: "photo"}},
+		{name: "video without media_file_id", req: &storyv1.CreateStoryRequest{Type: "video"}},
+		{name: "photo enum without media_file_id", req: &storyv1.CreateStoryRequest{TypeEnum: &photo}},
+		{name: "photo enum overrides legacy text", req: &storyv1.CreateStoryRequest{Type: "text", TypeEnum: &photo, TextContent: &textContent}},
+		{name: "text enum overrides legacy photo", req: &storyv1.CreateStoryRequest{Type: "photo", TypeEnum: &text, MediaFileId: &mediaID}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := client.CreateStory(ctx, tc.req)
+			require.Equal(t, codes.InvalidArgument, status.Code(err))
+		})
+	}
+}
+
 func TestCreateStory_videoAndCloseFriendsEnum(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
@@ -86,10 +118,12 @@ func TestCreateStory_videoAndCloseFriendsEnum(t *testing.T) {
 	ctx := withProfile(context.Background(), uuid.New(), profile)
 	video := storyv1.StoryMediaType_STORY_MEDIA_TYPE_VIDEO
 	closeFriends := storyv1.StoryAudience_STORY_AUDIENCE_CLOSE_FRIENDS
+	mediaID := uuid.NewString()
 	text := "vid"
 	resp, err := client.CreateStory(ctx, &storyv1.CreateStoryRequest{
 		TypeEnum:       &video,
 		VisibilityEnum: &closeFriends,
+		MediaFileId:    &mediaID,
 		TextContent:    &text,
 	})
 	require.NoError(t, err)
@@ -202,6 +236,44 @@ func TestAddToHighlight_foreignStoryDenied(t *testing.T) {
 		StoryId:     story.GetStory().GetId(),
 	})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+func TestAddToHighlight_requiresArchivedStory(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	client, st, cleanup := startStoryGRPC(t)
+	defer cleanup()
+
+	profile := uuid.New()
+	ctx := withProfile(context.Background(), uuid.New(), profile)
+	text := "archive me first"
+	created, err := client.CreateStory(ctx, &storyv1.CreateStoryRequest{
+		Type: "text", TextContent: &text, Visibility: "friends",
+	})
+	require.NoError(t, err)
+	hl, err := client.CreateHighlight(ctx, &storyv1.CreateHighlightRequest{Name: "Archive"})
+	require.NoError(t, err)
+
+	_, err = client.AddToHighlight(ctx, &storyv1.AddToHighlightRequest{
+		HighlightId: hl.GetHighlight().GetId(),
+		StoryId:     created.GetStory().GetId(),
+	})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	storyID, err := uuid.Parse(created.GetStory().GetId())
+	require.NoError(t, err)
+	row, err := st.GetStory(context.Background(), storyID)
+	require.NoError(t, err)
+	n, err := st.MarkExpiredStories(context.Background(), row.ExpiresAt.Add(time.Second))
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+
+	_, err = client.AddToHighlight(ctx, &storyv1.AddToHighlightRequest{
+		HighlightId: hl.GetHighlight().GetId(),
+		StoryId:     created.GetStory().GetId(),
+	})
+	require.NoError(t, err)
 }
 
 func TestGetViewers_expiredStoryEmpty(t *testing.T) {

@@ -53,12 +53,14 @@ func roleEventToFanout(subject string, data []byte) (profileID, chatID string, e
 	case strings.HasSuffix(subject, "role.assigned"),
 		strings.HasSuffix(subject, "role.revoked"):
 		return payload.ProfileID, "", env, payload.ProfileID != ""
-	case strings.HasSuffix(subject, "role.chat_override_set"):
+	case strings.HasSuffix(subject, "role.chat_override_set"),
+		strings.HasSuffix(subject, "role.chat_override_removed"):
 		return "", payload.ChatID, env, payload.ChatID != ""
 	case strings.HasSuffix(subject, "role.created"),
 		strings.HasSuffix(subject, "role.updated"),
 		strings.HasSuffix(subject, "role.deleted"),
-		strings.HasSuffix(subject, "role.voice_override_set"):
+		strings.HasSuffix(subject, "role.voice_override_set"),
+		strings.HasSuffix(subject, "role.voice_override_removed"):
 		return "", "", env, payload.SpaceID != "" || payload.ChatID != ""
 	default:
 		return "", "", fanoutEnvelope{}, false
