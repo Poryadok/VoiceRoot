@@ -117,7 +117,7 @@ Out of scope:
 ## Decisions
 
 - Security review refinement: a blanket Social-to-User 9090 NetworkPolicy deny
-  would break existing `GetProfile` and `ListAccountProfiles` adapters used by
+  would break existing `GetProfile` and `ListProfileIDsForAccount` adapters used by
   friend/contact/account flows. The narrow cutover protects only the two privacy
   methods and rejects raw Social markers there. Protected 9091 ingress is Social
   only; ordinary User 9090 remains reachable for the separately migrating RPCs.

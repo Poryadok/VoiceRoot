@@ -453,10 +453,18 @@ with an absent signer or dedicated client denies transfer before its database
 mutation. Public Auth proof confirmation remains a separate activation gate.
 ## Social privacy principals
 
+The standard local/CI Compose app generates its own 30-day credentials through
+`social-principal-init`. Named volumes isolate Social signing keys, each TLS
+leaf, and the public CA; private files are 0600 for service UID 65532 and mounted
+read-only. This bootstrap is not used for staging/production. An incomplete
+bootstrap fails rather than replacing existing material. Expired development
+credentials require a new disposable Compose project or deliberate recreation
+of that project's five principal volumes after stopping its services.
+
 User and Space expose only their privacy decision method to `service:social`
 on TLS port 9091. Social publishes the two public signing keys at
 `https://voice-social:8443/.well-known/jwks.json`. Its ordinary User connection
-remains necessary for `GetProfile` and `ListAccountProfiles`; the migration
+remains necessary for `GetProfile` and `ListProfileIDsForAccount`; the migration
 denies raw Social authority on ordinary privacy methods, without granting those
 other methods access to the protected listener.
 

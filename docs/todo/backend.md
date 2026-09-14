@@ -1,7 +1,7 @@
 # TODO — Backend
 
 - [ ] **[Social Phase-0] Migrate remaining User profile/account lookups** —
-  `GetProfile` and `ListAccountProfiles` still require ordinary User 9090 access.
+  `GetProfile` and `ListProfileIDsForAccount` still require ordinary User 9090 access.
   The privacy-principal cutover protects only `GetPrivacySettings` and Space
   `AreCoMembers`; do not apply a blanket Social→User 9090 deny until these
   separate calls have an explicit signed-principal contract and regression

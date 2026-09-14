@@ -1,5 +1,5 @@
 # Protected privacy listeners accept network traffic only from Social.
-# Ordinary User 9090 remains available for GetProfile/ListAccountProfiles until
+# Ordinary User 9090 remains available for GetProfile/ListProfileIDsForAccount until
 # those independent callers migrate. Application-level privacy denial is required.
 # Policies are additive: remove any broader 9091 ingress grants before cutover.
 apiVersion: networking.k8s.io/v1

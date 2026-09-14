@@ -86,3 +86,40 @@ func TestSocialPrivacyPrincipalRollout_StagingAndProdDeclareProtectedResources(t
 	require.Contains(t, string(policy), "9091")
 	require.Contains(t, string(policy), "9090", "unrelated profile/account lookups must survive privacy cutover")
 }
+
+func TestSocialPrivacyComposeKeepsSigningKeysIssuerOwned(t *testing.T) {
+	root := filepath.Clean(filepath.Join("..", "..", "..", ".."))
+	data, err := os.ReadFile(filepath.Join(root, "docker-compose.yml"))
+	require.NoError(t, err)
+	var compose struct {
+		Services map[string]struct {
+			Environment map[string]string `yaml:"environment"`
+			Volumes     []string          `yaml:"volumes"`
+			DependsOn   map[string]struct {
+				Condition string `yaml:"condition"`
+			} `yaml:"depends_on"`
+		} `yaml:"services"`
+	}
+	require.NoError(t, yaml.Unmarshal(data, &compose))
+	for name, service := range compose.Services {
+		for _, volume := range service.Volumes {
+			if strings.HasPrefix(volume, "social_principal_keys:") {
+				require.Contains(t, []string{"social-principal-init", "social"}, name, "private issuer keys leaked to another service")
+			}
+		}
+	}
+	for _, name := range []string{"social", "user", "space"} {
+		service := compose.Services[name]
+		require.Equal(t, "service_completed_successfully", service.DependsOn["social-principal-init"].Condition)
+		for _, volume := range service.Volumes {
+			require.True(t, strings.HasSuffix(volume, ":ro"))
+		}
+		prefix := strings.ToUpper(name) + "_PRINCIPAL_"
+		require.NotEmpty(t, service.Environment[prefix+"TLS_CERT_FILE"])
+		require.NotEmpty(t, service.Environment[prefix+"TLS_KEY_FILE"])
+		if name != "social" {
+			require.Equal(t, ":9091", service.Environment[prefix+"GRPC_LISTEN"])
+			require.Contains(t, service.Environment["S2S_JWKS_URLS_JSON"], "https://social:8443/")
+		}
+	}
+}

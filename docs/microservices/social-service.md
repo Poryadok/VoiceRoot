@@ -135,7 +135,7 @@ User/Space verify the signature, exact RPC/request hash/audience, expiry and
 shared Redis replay admission before accessing their stores.
 
 The narrow migration preserves Social's ordinary User `GetProfile` and
-`ListAccountProfiles` lookups. A blanket network deny on User 9090 would break
+`ListProfileIDsForAccount` lookups. A blanket network deny on User 9090 would break
 friend/contact/account flows, so ordinary privacy methods reject raw Social
 identity at the application boundary while unrelated methods migrate separately.
 This exception does not authorize raw metadata on the protected listeners.
@@ -143,4 +143,3 @@ Deployment and rotation: [DEPLOYMENT.md](../DEPLOYMENT.md#social-privacy-princip
 
 - **User Service** — получение профилей для списков
 - **Auth Service** — маппинг profile_id → account_id (для блокировок)
-
