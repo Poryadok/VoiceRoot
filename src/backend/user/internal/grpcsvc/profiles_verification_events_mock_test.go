@@ -20,7 +20,7 @@ func (r *profilesVerificationEventsRecorder) PublishProfileCreated(_ context.Con
 	return nil
 }
 
-func (r *profilesVerificationEventsRecorder) PublishProfileUpdated(_ context.Context, _, _, _ string) error {
+func (r *profilesVerificationEventsRecorder) PublishProfileUpdated(_ context.Context, _ string, _ []string) error {
 	return nil
 }
 
@@ -33,11 +33,19 @@ func (r *profilesVerificationEventsRecorder) PublishProfileSwitched(_ context.Co
 	return nil
 }
 
-func (r *profilesVerificationEventsRecorder) PublishVerified(_ context.Context, _, _, _ string) error {
+func (r *profilesVerificationEventsRecorder) PublishVerified(_ context.Context, _, _ string) error {
 	r.verified++
 	return nil
 }
 
 func (r *profilesVerificationEventsRecorder) PublishPresenceChanged(_ context.Context, _, _, _ string) error {
+	return nil
+}
+
+func (r *profilesVerificationEventsRecorder) PublishGameDetected(_ context.Context, _, _ string) error {
+	return nil
+}
+
+func (r *profilesVerificationEventsRecorder) PublishSettingsChanged(_ context.Context, _ string, _ []string, _ string) error {
 	return nil
 }

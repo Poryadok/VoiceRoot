@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -22,6 +24,7 @@ type connReg struct {
 	instanceID   string
 	connID       string
 	accountID    string
+	accountType  string
 	profileID    string
 	fanout       chan fanoutEnvelope
 	overflow     chan struct{}
@@ -44,6 +47,12 @@ type wsHub struct {
 	subscriptionChecker chatSubscriptionChecker
 	dmPairByChat        map[string]dmAccountPair
 	dmChatsByPair       map[dmAccountPair]*dmPairIndexEntry
+	presenceViewer      presenceViewer
+	presenceFanout      *presencePrivacyFanoutCoordinator
+}
+
+type presencePrivacyFanoutCoordinator struct {
+	sem chan struct{}
 }
 
 type dmAccountPair struct {
@@ -348,22 +357,30 @@ func newWSHub() *wsHub {
 		byProfile:     make(map[string]map[*connReg]struct{}),
 		dmPairByChat:  make(map[string]dmAccountPair),
 		dmChatsByPair: make(map[dmAccountPair]*dmPairIndexEntry),
+		presenceFanout: &presencePrivacyFanoutCoordinator{
+			sem: make(chan struct{}, presencePrivacyFanoutConcurrency),
+		},
 	}
 }
 
 func (h *wsHub) attachConn(instanceID, connID, profileID string, fanoutBuf int) *connReg {
-	return h.attachAccountConn(instanceID, connID, "", profileID, fanoutBuf)
+	return h.attachAccountTypeConn(instanceID, connID, "", "regular", profileID, fanoutBuf)
 }
 
 func (h *wsHub) attachAccountConn(instanceID, connID, accountID, profileID string, fanoutBuf int) *connReg {
+	return h.attachAccountTypeConn(instanceID, connID, accountID, "regular", profileID, fanoutBuf)
+}
+
+func (h *wsHub) attachAccountTypeConn(instanceID, connID, accountID, accountType, profileID string, fanoutBuf int) *connReg {
 	reg := &connReg{
-		instanceID: instanceID,
-		connID:     connID,
-		accountID:  canonicalUUID(accountID),
-		profileID:  profileID,
-		fanout:     make(chan fanoutEnvelope, fanoutBuf),
-		overflow:   make(chan struct{}),
-		chats:      make(map[string]struct{}),
+		instanceID:  instanceID,
+		connID:      connID,
+		accountID:   canonicalUUID(accountID),
+		accountType: strings.TrimSpace(accountType),
+		profileID:   profileID,
+		fanout:      make(chan fanoutEnvelope, fanoutBuf),
+		overflow:    make(chan struct{}),
+		chats:       make(map[string]struct{}),
 	}
 	if profileID == "" {
 		return reg
@@ -375,6 +392,24 @@ func (h *wsHub) attachAccountConn(instanceID, connID, accountID, profileID strin
 	}
 	h.byProfile[profileID][reg] = struct{}{}
 	return reg
+}
+
+func (h *wsHub) setPresenceViewer(viewer presenceViewer) {
+	if h == nil {
+		return
+	}
+	h.mu.Lock()
+	h.presenceViewer = viewer
+	h.mu.Unlock()
+}
+
+func (h *wsHub) viewer() presenceViewer {
+	if h == nil {
+		return nil
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.presenceViewer
 }
 
 func (h *wsHub) addChat(reg *connReg, chatID string) bool {
@@ -537,6 +572,104 @@ func (h *wsHub) broadcastPresenceInChatExcept(chatID, senderProfileID, excludeIn
 	for _, reg := range targets {
 		reg.enqueue(env, false)
 	}
+}
+
+const presencePrivacyFanoutConcurrency = 16
+
+// broadcastPresenceToProfiles resolves separate User-filtered snapshots for
+// friend connections under one bounded deadline. An unavailable policy
+// dependency drops only the affected recipient's ephemeral update.
+func (h *wsHub) broadcastPresenceToProfiles(profileIDs []string, viewer presenceViewer, targetProfileID, sourceStatus, chatID string, logger *slog.Logger, requestID string) {
+	if h == nil || len(profileIDs) == 0 || viewer == nil {
+		return
+	}
+	h.mu.RLock()
+	targetsByReg := make(map[*connReg]struct{})
+	for _, profileID := range profileIDs {
+		for reg := range h.byProfile[profileID] {
+			targetsByReg[reg] = struct{}{}
+		}
+	}
+	h.mu.RUnlock()
+	targets := make(map[*connReg]string, len(targetsByReg))
+	for reg := range targetsByReg {
+		targets[reg] = chatID
+	}
+	h.fanoutPrivatePresence(targets, viewer, targetProfileID, sourceStatus, logger)
+}
+
+func (h *wsHub) fanoutPrivatePresence(targets map[*connReg]string, viewer presenceViewer, targetProfileID, sourceStatus string, logger *slog.Logger) {
+	if h == nil || h.presenceFanout == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	var wg sync.WaitGroup
+	for reg, chatID := range targets {
+		select {
+		case h.presenceFanout.sem <- struct{}{}:
+		case <-ctx.Done():
+			wg.Wait()
+			return
+		}
+		wg.Add(1)
+		go func(reg *connReg, chatID string) {
+			defer wg.Done()
+			defer func() { <-h.presenceFanout.sem }()
+			d, err := presenceFanoutPayload(ctx, viewer, targetProfileID, sourceStatus, reg, chatID)
+			if err != nil {
+				if logger != nil {
+					logger.Warn("presence privacy filter failed", slog.String("target_profile_id", targetProfileID), slog.String("viewer_profile_id", reg.profileID), slog.String("error", err.Error()))
+				}
+				return
+			}
+			reg.enqueue(fanoutEnvelope{Op: "presence_update", D: d}, false)
+		}(reg, chatID)
+	}
+	wg.Wait()
+}
+
+// broadcastPrivatePresenceInChatsExcept fans out one privacy-filtered update
+// per recipient across all chat subscriptions for one presence transition.
+func (h *wsHub) broadcastPrivatePresenceInChatsExcept(chatIDs []string, senderProfileID, sourceStatus, excludeInstance, excludeConn string, logger *slog.Logger) {
+	viewer := h.viewer()
+	if len(chatIDs) == 0 || viewer == nil {
+		return
+	}
+	canonicalChatIDs := make([]string, 0, len(chatIDs))
+	seenChats := make(map[string]struct{}, len(chatIDs))
+	for _, chatID := range chatIDs {
+		chatID = canonicalChatID(chatID)
+		if chatID == "" {
+			continue
+		}
+		if _, seen := seenChats[chatID]; seen {
+			continue
+		}
+		seenChats[chatID] = struct{}{}
+		canonicalChatIDs = append(canonicalChatIDs, chatID)
+	}
+	if len(canonicalChatIDs) == 0 {
+		return
+	}
+	sort.Strings(canonicalChatIDs)
+	h.mu.RLock()
+	targets := make(map[*connReg]string)
+	for _, chatID := range canonicalChatIDs {
+		for reg := range h.byChat[chatID] {
+			if reg.instanceID == excludeInstance && reg.connID == excludeConn {
+				continue
+			}
+			if senderProfileID != "" && reg.profileID == senderProfileID {
+				continue
+			}
+			if _, exists := targets[reg]; !exists {
+				targets[reg] = chatID
+			}
+		}
+	}
+	h.mu.RUnlock()
+	h.fanoutPrivatePresence(targets, viewer, senderProfileID, sourceStatus, logger)
 }
 
 const fanoutConnIDsLogCap = 8

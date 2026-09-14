@@ -108,6 +108,14 @@ func (s *MatchmakingGRPC) RateMatch(ctx context.Context, req *matchmakingv1.Rate
 	if match.Status != store.MatchStatusCompleted {
 		return nil, status.Error(codes.FailedPrecondition, "match not completed")
 	}
+	if req.GetSkip() {
+		if stars != 0 {
+			return nil, status.Error(codes.InvalidArgument, "skip cannot include stars")
+		}
+		// An explicit per-teammate skip deliberately leaves no rating row or
+		// aggregate, so a later 1–5 score remains possible.
+		return &matchmakingv1.RateMatchResponse{}, nil
+	}
 
 	err = s.Ratings.InsertMatchRating(ctx, store.InsertMatchRatingParams{
 		MatchID:        matchID,
@@ -191,18 +199,18 @@ func (s *MatchmakingGRPC) BanFromMM(ctx context.Context, req *matchmakingv1.BanF
 	if req.Reason != nil {
 		reason = strings.TrimSpace(req.GetReason())
 	}
-	if err := s.Bans.InsertMMPeerBan(ctx, store.InsertMMPeerBanParams{
+	created, err := s.Bans.InsertMMPeerBanIfAbsent(ctx, store.InsertMMPeerBanParams{
 		BannerProfileID: bannerID,
 		TargetProfileID: targetID,
 		Reason:          reason,
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, status.Errorf(codes.Internal, "ban: %v", err)
 	}
-	if s.Events != nil {
+	if created && s.Events != nil {
 		_ = s.Events.PublishPlayerBanned(ctx, mmevents.PlayerBannedEvent{
-			BannerProfileID: bannerID.String(),
-			TargetProfileID: targetID.String(),
-			Reason:          reason,
+			ProfileID: targetID.String(),
+			Reason:    reason,
 		})
 	}
 	return &matchmakingv1.BanFromMMResponse{}, nil
