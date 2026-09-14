@@ -174,14 +174,12 @@ func (w *Worker) tryMatchQueue(ctx context.Context, spaceID *uuid.UUID, gameID u
 				}
 			}
 			compatible := true
-			groupCrits := make([]criteria.SearchCriteria, 0, len(group)+1)
 			for _, existing := range group {
 				existCrit, err := criteria.Parse(existing.Criteria)
 				if err != nil || !criteria.Compatible(existCrit, candCrit, mode) {
 					compatible = false
 					break
 				}
-				groupCrits = append(groupCrits, existCrit)
 				if w.Bans != nil {
 					banned, err := w.Bans.IsPairBanned(ctx, existing.ProfileID, candidate.ProfileID)
 					if err != nil {
@@ -198,10 +196,6 @@ func (w *Worker) tryMatchQueue(ctx context.Context, spaceID *uuid.UUID, gameID u
 				}
 			}
 			if !compatible {
-				continue
-			}
-			groupCrits = append(groupCrits, candCrit)
-			if !criteria.RolesDistinct(groupCrits, mode) {
 				continue
 			}
 			group = append(group, candidate)

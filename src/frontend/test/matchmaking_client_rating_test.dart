@@ -68,6 +68,29 @@ void main() {
     expect(result, isA<MatchmakingApiOk<void>>());
   });
 
+  test('rateMatch posts explicit skip for a teammate', () async {
+    String? body;
+    final client = VoiceMatchmakingClient(
+      gateway: GatewayHttpClient(
+        httpClient: MockClient((request) async {
+          body = request.body;
+          return http.Response('{}', 200);
+        }),
+        config: const GatewayConfig(baseUrl: 'http://api.test'),
+      ),
+    );
+
+    final result = await client.rateMatch(
+      authorization: 'Bearer t',
+      matchId: 'match-1',
+      ratedProfileId: 'p2',
+      skip: true,
+    );
+    expect(body, contains('"stars":0'));
+    expect(body, contains('"skip":true'));
+    expect(result, isA<MatchmakingApiOk<void>>());
+  });
+
   test('getPlayerRating loads aggregate from gateway', () async {
     String? path;
     String? gameIdQuery;

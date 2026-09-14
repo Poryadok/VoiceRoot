@@ -2,7 +2,6 @@ package mmevents
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -25,6 +24,7 @@ const (
 	subjectMatchFound     = "mm.match_found"
 	subjectMatchCompleted  = "mm.match_completed"
 	subjectRatingSubmitted = "mm.rating_submitted"
+	subjectPlayerBanned    = "mm.player_banned"
 	subjectSearchNudge     = "mm.search_nudge"
 	subjectSearchTimeout   = "mm.search_timeout"
 )
@@ -56,9 +56,8 @@ type RatingSubmittedEvent struct {
 
 // PlayerBannedEvent is emitted when a peer MM ban is created.
 type PlayerBannedEvent struct {
-	BannerProfileID string
-	TargetProfileID string
-	Reason          string
+	ProfileID string
+	Reason    string
 }
 
 // Publisher publishes matchmaking domain events.
@@ -144,7 +143,7 @@ func (p *JetStreamPublisher) ensureStream() error {
 				"mm.match_found",
 				"mm.match_completed",
 				"mm.rating_submitted",
-				"mm.player_banned",
+				subjectPlayerBanned,
 			},
 			Retention: nats.LimitsPolicy,
 			MaxAge:    7 * 24 * time.Hour,
@@ -171,24 +170,6 @@ func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, e
 	}
 	natslog.LogPublish(p.Logger, subject, requestID, "matchmaking event published",
 		slog.String("event_id", env.GetEventId()))
-	return nil
-}
-
-func (p *JetStreamPublisher) publishJSON(ctx context.Context, subject string, payload any) error {
-	if err := p.ensureStream(); err != nil {
-		return err
-	}
-	b, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("marshal json: %w", err)
-	}
-	requestID := correlation.FromGRPC(ctx)
-	msg := &nats.Msg{Subject: subject, Data: b, Header: nats.Header{}}
-	natslog.SetRequestIDHeader(msg.Header, requestID)
-	if _, err := p.js.PublishMsg(msg); err != nil {
-		return fmt.Errorf("jetstream publish %s: %w", subject, err)
-	}
-	natslog.LogPublish(p.Logger, subject, requestID, "matchmaking event published")
 	return nil
 }
 
@@ -313,7 +294,17 @@ func (p *JetStreamPublisher) PublishSearchCancelled(ctx context.Context, session
 
 // PublishPlayerBanned implements Publisher.
 func (p *JetStreamPublisher) PublishPlayerBanned(ctx context.Context, ev PlayerBannedEvent) error {
-	return p.publishJSON(ctx, "mm.player_banned", ev)
+	env := &eventsv1.MatchmakingStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.MatchmakingStreamEvent_PlayerBanned{
+			PlayerBanned: &eventsv1.PlayerBanned{
+				ProfileId: ev.ProfileID,
+				Reason:    ev.Reason,
+			},
+		},
+	}
+	return p.publishProto(ctx, subjectPlayerBanned, env)
 }
 
 // Close drains the NATS connection.
