@@ -1,12 +1,15 @@
 package principal
 
 import (
+	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 // Static rollout contract: production configuration must ship with the
@@ -19,6 +22,48 @@ func TestSocialPrivacyPrincipalRollout_StagingAndProdDeclareProtectedResources(t
 			services, err := os.ReadFile(filepath.Join(root, "deploy", environment, "services.yaml"))
 			require.NoError(t, err)
 			manifest := string(services)
+			deployments := map[string]map[string]any{}
+			decoder := yaml.NewDecoder(bytes.NewReader(services))
+			for {
+				var object map[string]any
+				err := decoder.Decode(&object)
+				if err == io.EOF {
+					break
+				}
+				require.NoError(t, err)
+				if object["kind"] == "Deployment" {
+					name := object["metadata"].(map[string]any)["name"].(string)
+					deployments[name] = object
+				}
+			}
+			for _, service := range []string{"social", "user", "space"} {
+				object := deployments["voice-"+service]
+				require.NotNil(t, object)
+				pod := object["spec"].(map[string]any)["template"].(map[string]any)["spec"].(map[string]any)
+				container := pod["containers"].([]any)[0].(map[string]any)
+				env := map[string]any{}
+				for _, raw := range container["env"].([]any) {
+					entry := raw.(map[string]any)
+					env[entry["name"].(string)] = entry
+				}
+				prefix := strings.ToUpper(service) + "_PRINCIPAL_"
+				for _, suffix := range []string{"TLS_CERT_FILE", "TLS_KEY_FILE"} {
+					require.Contains(t, env, prefix+suffix)
+				}
+				require.NotEmpty(t, pod["volumes"], "TLS secrets must be mounted")
+				for _, raw := range container["volumeMounts"].([]any) {
+					require.Equal(t, true, raw.(map[string]any)["readOnly"])
+				}
+				if service == "social" {
+					for _, name := range []string{"SOCIAL_PRINCIPAL_SIGNING_KEYS_DIR", "SOCIAL_PRINCIPAL_ACTIVE_KID", "USER_PRINCIPAL_GRPC_ADDR", "SPACE_PRINCIPAL_GRPC_ADDR"} {
+						require.Contains(t, env, name)
+					}
+				} else {
+					for _, name := range []string{prefix + "GRPC_LISTEN", prefix + "REPLAY_REDIS_ADDR", "S2S_JWKS_URLS_JSON", "S2S_JWKS_CA_FILE"} {
+						require.Contains(t, env, name)
+					}
+				}
+			}
 
 			for _, required := range []string{
 				"SOCIAL_PRINCIPAL_SIGNING_KEYS_DIR",
@@ -39,5 +84,5 @@ func TestSocialPrivacyPrincipalRollout_StagingAndProdDeclareProtectedResources(t
 	require.NoError(t, err)
 	require.Contains(t, string(policy), "voice-social")
 	require.Contains(t, string(policy), "9091")
-	require.False(t, strings.Contains(string(policy), "port: 9090\n    # Social"), "Social must not retain ordinary listener access")
+	require.Contains(t, string(policy), "9090", "unrelated profile/account lookups must survive privacy cutover")
 }

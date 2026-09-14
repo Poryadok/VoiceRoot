@@ -60,7 +60,8 @@ Out of scope:
    cooldown.
 5. Partial configuration fails startup. Manifests mount two distinct Social
    PKCS#8 keys read-only, configure consumer JWKS/TLS/replay settings, expose
-   protected port 9091, and deny Social access to ordinary port 9090.
+   protected port 9091. Ordinary privacy RPCs reject raw Social authority;
+   unrelated Social User profile/account lookups retain ordinary 9090 access.
 6. Rotation and cutover are documented: publish both keys, validate consumers,
    switch active kid, retain the old key for at least 35 seconds, then replace;
    no dual-auth acceptance period exists.
@@ -115,6 +116,16 @@ Out of scope:
 
 ## Decisions
 
+- Security review refinement: a blanket Social-to-User 9090 NetworkPolicy deny
+  would break existing `GetProfile` and `ListAccountProfiles` adapters used by
+  friend/contact/account flows. The narrow cutover protects only the two privacy
+  methods and rejects raw Social markers there. Protected 9091 ingress is Social
+  only; ordinary User 9090 remains reachable for the separately migrating RPCs.
+  This does not expand the protected allow-list. The owner accepted this concrete
+  refinement after comparing the Sol draft with current callers.
+- Parallel ownership: Social signer/client implementation and User/Space
+  receiver implementation use separate helper worktrees; PR owner owns deploy,
+  contract documentation, integration and final review.
 - No raw-header compatibility path: Sol explicitly selected a direct cutover.
 - `Unauthenticated` represents absent/invalid proof, replay, TLS/JWKS failure
   and raw identity; `PermissionDenied` represents a valid non-Social principal.

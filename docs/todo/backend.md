@@ -1,5 +1,13 @@
 # TODO — Backend
 
+- [ ] **[Social Phase-0] Migrate remaining User profile/account lookups** —
+  `GetProfile` and `ListAccountProfiles` still require ordinary User 9090 access.
+  The privacy-principal cutover protects only `GetPrivacySettings` and Space
+  `AreCoMembers`; do not apply a blanket Social→User 9090 deny until these
+  separate calls have an explicit signed-principal contract and regression
+  coverage for friends, contacts and account-level blocks. Source:
+  [social-service.md](../microservices/social-service.md#privacy-service-principals).
+
 [← Индекс](../TODO.md)
 
 Микросервисы, Gateway (backend), protos, NATS, compose live verification.

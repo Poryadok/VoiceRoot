@@ -451,3 +451,76 @@ principal runtime absent, ordinary health/service calls can remain available,
 but ownership transfer stays unavailable. A configured Space Role integration
 with an absent signer or dedicated client denies transfer before its database
 mutation. Public Auth proof confirmation remains a separate activation gate.
+## Social privacy principals
+
+User and Space expose only their privacy decision method to `service:social`
+on TLS port 9091. Social publishes the two public signing keys at
+`https://voice-social:8443/.well-known/jwks.json`. Its ordinary User connection
+remains necessary for `GetProfile` and `ListAccountProfiles`; the migration
+denies raw Social authority on ordinary privacy methods, without granting those
+other methods access to the protected listener.
+
+Before applying the staging/prod application manifests, provision these
+namespace-local Secrets through the environment's secret manager:
+
+| Secret | Required data |
+|---|---|
+| `voice-social-principal-signing` | `current.pem`, `next.pem`: distinct unencrypted RSA PKCS#8 private keys, at least 2048 bits; `active-kid`: `current` or `next` |
+| `voice-social-principal-tls` | `tls.crt`, `tls.key`; certificate SAN includes `voice-social` |
+| `voice-user-principal-tls` | `tls.crt`, `tls.key`; certificate SAN includes `voice-user` |
+| `voice-space-principal-tls` | `tls.crt`, `tls.key`; certificate SAN includes `voice-space` |
+| `voice-principal-ca` | `ca.crt`: trusted CA bundle for the three TLS endpoints |
+
+The manifests project only the two `.pem` entries into Social's signing
+directory and mount all key/certificate material read-only. Never put private
+keys in ConfigMaps, source control or PR evidence. Missing mounts, one key,
+identical keys, invalid TLS or partial application config must fail startup.
+If replay Redis uses authentication, set the service-specific
+`USER_PRINCIPAL_REPLAY_REDIS_PASSWORD` and
+`SPACE_PRINCIPAL_REPLAY_REDIS_PASSWORD` from Secrets as well.
+
+Social uses `SOCIAL_PRINCIPAL_SIGNING_KEYS_DIR`, `SOCIAL_PRINCIPAL_ACTIVE_KID`,
+`SOCIAL_PRINCIPAL_JWKS_LISTEN`, and `SOCIAL_PRINCIPAL_TLS_CERT_FILE` /
+`SOCIAL_PRINCIPAL_TLS_KEY_FILE`. Each protected target uses
+`USER_PRINCIPAL_GRPC_ADDR` / `SPACE_PRINCIPAL_GRPC_ADDR`, with matching
+`*_PRINCIPAL_TLS_CA_FILE` and `*_PRINCIPAL_TLS_SERVER_NAME` settings.
+Consumers use `USER_PRINCIPAL_GRPC_LISTEN` / `SPACE_PRINCIPAL_GRPC_LISTEN`,
+their `*_PRINCIPAL_TLS_CERT_FILE` / `*_PRINCIPAL_TLS_KEY_FILE`, and
+`*_PRINCIPAL_REPLAY_REDIS_ADDR`. They trust only the configured HTTPS issuer map
+in `S2S_JWKS_URLS_JSON` and `S2S_JWKS_CA_FILE`. Cache settings are
+`S2S_JWKS_REFRESH_AFTER=30s`, `S2S_JWKS_HARD_EXPIRY=2m` and
+`S2S_UNKNOWN_KID_COOLDOWN=5s`; no plaintext fallback exists.
+
+Cutover sequence:
+
+1. Provision keys, CA/certificates and replay Redis; verify each Secret in the
+   target namespace without printing its values. Deploy consumers first, with
+   9091 enabled, then the Social signer/JWKS and protected client configuration.
+   During this direct cutover failed privacy calls deny; no raw-header fallback
+   or dual-auth acceptance period is allowed.
+2. Apply [the NetworkPolicy](../deploy/templates/network-policy-social-privacy-principal.yaml)
+   after replacing `__K_NAMESPACE__`. The staging apply script includes it.
+   The CNI must enforce policies; audit additive policies so none grants broader
+   access to 9091/8443. Ordinary User 9090 stays reachable for the two explicitly
+   unmigrated lookups. Neither network reachability nor a raw marker authenticates
+   a privacy caller.
+3. Run synthetic Social privacy requests against User and Space, plus absent,
+   duplicate, forged, replayed and wrong-bound credentials; prove denied calls
+   do not reach stores. Check wrong-CA TLS failure and repeated attempts across
+   consumer replicas. Health probes alone are not transport-readiness evidence.
+4. If synthetic requests fail, keep the privacy path fail-closed while correcting
+   keys, trust or deployment; never roll back into raw-header authentication.
+
+Rotation sequence (all Social replicas must publish the same key set):
+
+1. Publish the active and peer public keys; verify consumer refresh and a
+   synthetic request signed by the peer before selecting it for live signing.
+2. Update `active-kid` in the secret manager and restart Social deployments to
+   reload the active selection. Keep both private/public keys during the rollout.
+3. After the last old-signing replica stops, retain its public key for at least
+   **35 seconds** (30-second credential plus allowed future issue skew).
+4. Replace the inactive key through the secret manager, roll out the complete
+   two-key set to every Social replica, and wait for consumer refresh/synthetic
+   proof before any later activation. An unavailable or invalid refresh does
+   not replace the last good complete set; after two minutes without a valid
+   refresh requests fail closed.
