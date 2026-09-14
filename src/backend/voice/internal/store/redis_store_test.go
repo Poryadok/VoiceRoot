@@ -166,33 +166,66 @@ func TestRedisCallStore_RestoresPersistedRoomBindingAcrossInstances(t *testing.T
 	}
 }
 
-// This reproduces the stale read/save outcome of a concurrent independent leave
-// writer against a move. Both writers use the same Redis server; the assertion
-// is the atomic roster/session invariant required of their shared transition.
-func TestRedisCallStore_MoveAndConcurrentRemoveCannotRestoreSourceMembership(t *testing.T) {
+func TestRedisCallStore_MoveConcurrentPublicAddAndRemoveKeepSingleActiveRoster(t *testing.T) {
+	for _, remove := range []bool{false, true} {
+		t.Run(map[bool]string{false: "add", true: "remove"}[remove], func(t *testing.T) {
+			ctx := context.Background()
+			store, _ := newRedisCallStoreForTest(t, "voice-move-public-writer:")
+			space, sourceID, destinationID, target, actor := "space", "source", "destination", "target", "actor"
+			source, err := store.CreateCall(ctx, Call{RoomID: "source-call", VoiceRoomID: sourceID, SpaceID: space, SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, InitiatorProfileID: target, MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE})
+			require.NoError(t, err)
+			start, errs := make(chan struct{}), make(chan error, 2)
+			go func() {
+				<-start
+				_, err := store.MoveVoiceRoomParticipant(ctx, VoiceRoomMoveRequest{ActorProfileID: actor, ParticipantProfileID: target, OperationID: "operation", FromVoiceRoomID: sourceID, ToVoiceRoomID: destinationID, SpaceID: space, MaxParticipants: MaxVoiceRoomParticipants, DestinationRoomID: "destination-call", Now: time.Unix(1_700_000_000, 0).UTC()})
+				errs <- err
+			}()
+			go func() {
+				<-start
+				if remove {
+					_, err := store.RemoveParticipant(ctx, source.RoomID, target)
+					errs <- err
+					return
+				}
+				_, err := store.AddParticipant(ctx, source.RoomID, target, MaxVoiceRoomParticipants)
+				errs <- err
+			}()
+			close(start)
+			<-errs
+			<-errs
+			sourceAfter, sourceErr := store.GetCallByVoiceRoomID(ctx, sourceID)
+			destinationAfter, destinationErr := store.GetCallByVoiceRoomID(ctx, destinationID)
+			inSource := sourceErr == nil && sourceAfter.IsParticipant(target)
+			inDestination := destinationErr == nil && destinationAfter.IsParticipant(target)
+			require.NotEqual(t, inSource, inDestination, "public writers and move must serialize: target is in exactly one roster")
+			if inDestination {
+				active, err := store.GetActiveCall(ctx, target)
+				require.NoError(t, err)
+				require.Equal(t, destinationAfter.RoomID, active.RoomID)
+			}
+		})
+	}
+}
+
+func TestRedisCallStore_CompetingMovesChooseOneDestination(t *testing.T) {
 	ctx := context.Background()
-	store, _ := newRedisCallStoreForTest(t, "voice-move-race:")
-	space, sourceID, destinationID, target, peer, actor := "space", "source", "destination", "target", "peer", "actor"
-	source, err := store.CreateCall(ctx, Call{RoomID: "source-call", VoiceRoomID: sourceID, SpaceID: space, SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, InitiatorProfileID: target, MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE, States: map[string]ParticipantState{target: {ProfileID: target}, peer: {ProfileID: peer}}})
+	store, _ := newRedisCallStoreForTest(t, "voice-competing-moves:")
+	space, sourceID, target, actor := "space", "source", "target", "actor"
+	_, err := store.CreateCall(ctx, Call{RoomID: "source-call", VoiceRoomID: sourceID, SpaceID: space, SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, InitiatorProfileID: target, MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE})
 	require.NoError(t, err)
-	staleSource, err := store.GetCall(ctx, source.RoomID)
-	require.NoError(t, err)
-
-	_, err = store.MoveVoiceRoomParticipant(ctx, VoiceRoomMoveRequest{ActorProfileID: actor, ParticipantProfileID: target, OperationID: "operation", FromVoiceRoomID: sourceID, ToVoiceRoomID: destinationID, SpaceID: space, MaxParticipants: MaxVoiceRoomParticipants, DestinationRoomID: "destination-call", Now: time.Unix(1_700_000_000, 0).UTC()})
-	require.NoError(t, err)
-
-	// Current RemoveParticipant is a read/save path and can commit this stale
-	// snapshot after Move's WATCH/EXEC transaction.
-	delete(staleSource.States, peer)
-	require.NoError(t, store.save(ctx, staleSource))
-
-	sourceAfter, err := store.GetCallByVoiceRoomID(ctx, sourceID)
-	require.NoError(t, err)
-	destinationAfter, err := store.GetCallByVoiceRoomID(ctx, destinationID)
-	require.NoError(t, err)
-	require.False(t, sourceAfter.IsParticipant(target), "target must not be restored into the source by an independent writer")
-	require.True(t, destinationAfter.IsParticipant(target))
+	start, errs := make(chan struct{}), make(chan error, 2)
+	for i, dest := range []string{"destination-a", "destination-b"} {
+		i, dest := i, dest
+		go func() {
+			<-start
+			_, err := store.MoveVoiceRoomParticipant(ctx, VoiceRoomMoveRequest{ActorProfileID: actor, ParticipantProfileID: target, OperationID: "op-" + string(rune('a'+i)), FromVoiceRoomID: sourceID, ToVoiceRoomID: dest, SpaceID: space, MaxParticipants: MaxVoiceRoomParticipants, DestinationRoomID: "destination-call-" + string(rune('a'+i)), Now: time.Unix(1_700_000_000, 0).UTC()})
+			errs <- err
+		}()
+	}
+	close(start)
+	<-errs
+	<-errs
 	active, err := store.GetActiveCall(ctx, target)
 	require.NoError(t, err)
-	require.Equal(t, destinationAfter.RoomID, active.RoomID)
+	require.Contains(t, []string{"destination-call-a", "destination-call-b"}, active.RoomID)
 }
