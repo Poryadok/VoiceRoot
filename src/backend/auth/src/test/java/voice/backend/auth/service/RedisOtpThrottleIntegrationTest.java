@@ -10,6 +10,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -87,6 +88,23 @@ class RedisOtpThrottleIntegrationTest {
     assertThatThrownBy(() -> throttle.reserveSend("no-ttl"))
         .isInstanceOf(AuthException.class)
         .hasMessage("auth_unavailable");
+  }
+
+  @Test
+  void realRedisValidResendMarkerWithPositiveTtlIsRateLimitedWithoutResettingTtl() {
+    StringRedisTemplate template = template(firstConnection);
+    RedisOtpThrottle throttle = throttle(template, Duration.ofSeconds(5));
+    String key = "auth:otp:send:valid-reservation";
+    template.opsForValue().set(key, "1", Duration.ofSeconds(5));
+    Long ttlBefore = template.getExpire(key, TimeUnit.MILLISECONDS);
+    assertThat(ttlBefore).isPositive();
+
+    assertThatThrownBy(() -> throttle.reserveSend("valid-reservation"))
+        .isInstanceOf(AuthException.class)
+        .hasMessage("otp_rate_limited");
+
+    Long ttlAfter = template.getExpire(key, TimeUnit.MILLISECONDS);
+    assertThat(ttlAfter).isPositive().isLessThanOrEqualTo(ttlBefore);
   }
 
   private static RedisOtpThrottle throttle(StringRedisTemplate template, Duration window) {
