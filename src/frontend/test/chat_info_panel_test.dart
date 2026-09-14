@@ -221,6 +221,206 @@ void main() {
     },
   );
 
+  testWidgets(
+    'guest admission stays disabled until its update and authoritative reload finish',
+    (tester) async {
+      const chatId = 'serialized-guest-admission-group';
+      final pendingPatch = Completer<http.Response>();
+      final pendingReload = Completer<http.Response>();
+      var listCalls = 0;
+      var updateCalls = 0;
+      final client = MockClient((req) async {
+        if (req.url.path == '/api/v1/chats') {
+          listCalls++;
+          if (listCalls > 1) return pendingReload.future;
+          return http.Response(
+            jsonEncode({
+              'chat_list': {
+                'items': [
+                  {
+                    'chat': {
+                      'id': chatId,
+                      'type': 'CHAT_TYPE_GROUP',
+                      'creator_profile_id': 'prof-test',
+                      'allow_guests': false,
+                    },
+                  },
+                ],
+              },
+            }),
+            200,
+          );
+        }
+        if (req.url.path == '/api/v1/chats/$chatId/members') {
+          return http.Response(
+            jsonEncode({
+              'member_list': {
+                'members': [
+                  {'profile_id': 'prof-test', 'role': 'owner'},
+                ],
+              },
+            }),
+            200,
+          );
+        }
+        if (req.url.path == '/api/v1/chats/$chatId' && req.method == 'PATCH') {
+          updateCalls++;
+          return pendingPatch.future;
+        }
+        if (req.url.path.contains('/shared-media')) {
+          return http.Response(
+            jsonEncode({
+              'shared_media_list': {'items': []},
+            }),
+            200,
+          );
+        }
+        return http.Response('{}', 404);
+      });
+
+      await tester.pumpWidget(
+        testApp(
+          home: SizedBox(
+            height: 700,
+            width: 400,
+            child: ChatInfoPanel(chatId: chatId),
+          ),
+          client: client,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final toggle = find.byKey(StandaloneChatGuestSettingsSection.toggleKey);
+      await tester.tap(toggle);
+      await tester.pump();
+      expect(updateCalls, 1);
+      expect(tester.widget<SwitchListTile>(toggle).onChanged, isNull);
+
+      await tester.tap(toggle);
+      await tester.pump();
+      expect(updateCalls, 1);
+
+      pendingPatch.complete(
+        http.Response(
+          jsonEncode({
+            'chat': {
+              'id': chatId,
+              'type': 'CHAT_TYPE_GROUP',
+              'creator_profile_id': 'prof-test',
+              'allow_guests': true,
+            },
+          }),
+          200,
+        ),
+      );
+      await tester.pump();
+      expect(tester.widget<SwitchListTile>(toggle).onChanged, isNull);
+
+      await tester.tap(toggle);
+      await tester.pump();
+      expect(updateCalls, 1);
+
+      pendingReload.complete(
+        http.Response(
+          jsonEncode({
+            'chat_list': {
+              'items': [
+                {
+                  'chat': {
+                    'id': chatId,
+                    'type': 'CHAT_TYPE_GROUP',
+                    'creator_profile_id': 'prof-test',
+                    'allow_guests': true,
+                  },
+                },
+              ],
+            },
+          }),
+          200,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(updateCalls, 1);
+      expect(tester.widget<SwitchListTile>(toggle).onChanged, isNotNull);
+      expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+    },
+  );
+
+  testWidgets('chat info fits the compact 320 by 400 panel', (tester) async {
+    tester.view
+      ..physicalSize = const Size(320, 400)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      testApp(
+        home: Builder(
+          builder: (context) => Consumer(
+            builder: (context, ref, _) => Center(
+              child: ElevatedButton(
+                onPressed: () => openChatInfoPanel(
+                  context,
+                  ref,
+                  chatId: 'compact-panel-group',
+                  isGroup: true,
+                ),
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/chats') {
+            return http.Response(
+              jsonEncode({
+                'chat_list': {
+                  'items': [
+                    {
+                      'chat': {
+                        'id': 'compact-panel-group',
+                        'type': 'CHAT_TYPE_GROUP',
+                        'creator_profile_id': 'prof-test',
+                        'allow_guests': false,
+                      },
+                    },
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path.endsWith('/members')) {
+            return http.Response(
+              jsonEncode({
+                'member_list': {
+                  'members': [
+                    {'profile_id': 'prof-test', 'role': 'owner'},
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path.contains('/shared-media')) {
+            return http.Response(
+              jsonEncode({
+                'shared_media_list': {'items': []},
+              }),
+              200,
+            );
+          }
+          return http.Response('{}', 404);
+        }),
+      ),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(ChatInfoPanel.panelKey), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('guest admission control stays hidden for a regular member', (
     tester,
   ) async {

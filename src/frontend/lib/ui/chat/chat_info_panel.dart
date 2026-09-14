@@ -116,7 +116,14 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final mediaHeight = constraints.maxHeight < 640 ? 248.0 : constraints.maxHeight * 0.4;
+        // A narrow bottom sheet can leave less than 250px for this panel
+        // after its title bar. Keep both the settings header and tab strip
+        // visible instead of forcing the fixed media area past the viewport.
+        final mediaHeight = constraints.maxHeight < 360
+            ? 112.0
+            : constraints.maxHeight < 640
+            ? 248.0
+            : constraints.maxHeight * 0.4;
         return Column(
           key: ChatInfoPanel.panelKey,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -212,7 +219,6 @@ class _StandaloneChatGuestSettingsSectionState
       case ChatsApiOk(:final data):
         setState(() {
           _allowGuests = data.allowGuests;
-          _updating = false;
         });
         final reloaded = await ref
             .read(chatListControllerProvider.notifier)
@@ -222,9 +228,12 @@ class _StandaloneChatGuestSettingsSectionState
             .read(chatListControllerProvider)
             .items
             .any((item) => item.chatId == widget.chatId);
-        if (reloaded && refreshedChatExists) {
-          setState(() => _allowGuests = null);
-        }
+        setState(() {
+          _updating = false;
+          if (reloaded && refreshedChatExists) {
+            _allowGuests = null;
+          }
+        });
       case ChatsApiFailure(:final message):
         setState(() => _updating = false);
         ScaffoldMessenger.of(context).showSnackBar(
