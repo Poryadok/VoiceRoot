@@ -24,12 +24,28 @@ Spring profile `test` sets `auth.persistence=memory` (see `src/test/resources/ap
 
 Schema for `auth_db` is defined in two places; apply it with **one** tool per database ([migrations README](../migrations/README.md) — section `auth_db` (Auth): Flyway vs golang-migrate).
 
-| Path | Mechanism | Order |
-|------|------------|-------|
-| **A — Flyway (default)** | `src/main/resources/db/migration/V*.sql` on Auth startup | `V1`–`V5` (see `db/migration/`) |
-| **B — golang-migrate** | [src/backend/migrations/auth_db/](../migrations/auth_db/) | `000001` … `000006` |
+| Path | Mechanism | Current ordered layout |
+|------|------------|------------------------|
+| **A — Flyway (default)** | `src/main/resources/db/migration/V*.sql` on Auth startup | `V1__auth_schema.sql` … `V14__verification_source_sync.sql` |
+| **B — golang-migrate** | [src/backend/migrations/auth_db/](../migrations/auth_db/) | `000001_init` … `000015_verification_source_sync`, each with `.up.sql` and `.down.sql` |
 
-**Equivalence:** keep Flyway and golang-migrate revisions aligned per [migrations README](../migrations/README.md). Do not mix both tools on the same empty DB without baselining Flyway; default is Path A.
+`auth_db` belongs to Auth in both layouts. Flyway `V1` contains the initial schema
+and the `refresh_tokens.access_jti` addition represented by golang-migrate
+`000001_init` followed by `000002_refresh_tokens_access_jti`; each later Flyway
+revision maps in order to the next golang-migrate revision (`V2` → `000003`, …,
+`V14` → `000015`). Keep these layouts aligned when adding Auth-owned DDL.
+
+Do not mix both tools on one database without a deliberate Flyway baseline; Path A
+is the default. To check the repository layout before a change, run the following
+from the repository root; the command makes the Auth service working directory
+explicit and lists both paths in numeric order:
+
+```powershell
+Set-Location src/backend/auth
+Get-ChildItem src/main/resources/db/migration/V*.sql |
+  Sort-Object { [int](($_.Name -replace '^V(\d+)__.*$', '$1')) }
+Get-ChildItem ../migrations/auth_db/*.*.sql | Sort-Object Name
+```
 
 ## Env / properties (jdbc)
 

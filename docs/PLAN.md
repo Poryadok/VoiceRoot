@@ -100,7 +100,7 @@ Scope разделён явно:
 | [Подписка](features/subscription.md) | stub | Внутренние entitlement/grace/events частично есть, но реальный checkout и provider lifecycle нельзя считать готовыми. |
 | [Хранение файлов](features/file-storage.md) | partial | Backend upload, R2, retention и SHA verification работают; основной non-E2E download/expired URL UX, dedup, async processing, transcode и previews неполны. |
 | [Наблюдаемость](features/observability.md) | partial | Код и provisioning baseline есть; live staging, полная telemetry chain, P1 routing и restore evidence не приняты. |
-| [Продуктовая аналитика](features/analytics.md) | partial | ClickHouse ingest и staff dashboards существуют; pod/restart durability, dedup, consumer health и семантика неполны, но analytics не gate бесплатного alpha. |
+| [Продуктовая аналитика](features/analytics.md) | partial | ClickHouse ingest имеет restart-durable source delivery и dedup в official reads; direct gRPC ingest остаётся memory-only, а consumer health, dashboard/query semantics и coverage неполны, но analytics не gate бесплатного alpha. |
 | [Федерация](features/federation.md) | deferred | Спека и scaffold сохраняются, реализация не планируется без отдельного решения владельца. |
 
 ## Технический дизайн сейчас

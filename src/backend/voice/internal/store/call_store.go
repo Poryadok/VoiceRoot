@@ -13,7 +13,7 @@ const (
 	MaxGroupVoiceParticipants    = 32
 	MaxVoiceRoomParticipants     = 32
 	MaxSpaceProVoiceParticipants = 128
-	MaxScreenSharesPerRoom    = 3
+	MaxScreenSharesPerRoom       = 3
 )
 
 var (
@@ -25,7 +25,35 @@ var (
 	ErrScreenShareLimit  = errors.New("screen share limit reached")
 	ErrNotScreenSharing  = errors.New("profile is not screen sharing")
 	ErrScreenShareDenied = errors.New("screen share not permitted")
+	ErrOperationConflict = errors.New("operation id conflicts with a different request")
+	// ErrMoveContention means the bounded Redis CAS retry budget was exhausted.
+	// It is deliberately distinct from a dependency outage so the transport can
+	// expose the same safe retryable result without leaking Redis details.
+	ErrMoveContention = errors.New("voice room move contention")
 )
+
+// VoiceRoomMoveRequest is the canonical, actor-bound mutation for moving one
+// participant between two already-authorized Space voice rooms.  The service
+// performs all discovery and permission checks before it reaches the store.
+type VoiceRoomMoveRequest struct {
+	ActorProfileID       string
+	ParticipantProfileID string
+	OperationID          string
+	FromVoiceRoomID      string
+	ToVoiceRoomID        string
+	SpaceID              string
+	MaxParticipants      int
+	DestinationRoomID    string
+	Now                  time.Time
+}
+
+// VoiceRoomMoveResult retains enough data for an idempotent caller to build
+// the same lifecycle receipt without repeating the roster mutation.
+type VoiceRoomMoveResult struct {
+	Source      Call
+	Destination Call
+	Replayed    bool
+}
 
 type ScreenShareEntry struct {
 	ProfileID string `json:"profile_id"`
@@ -107,13 +135,13 @@ func (c Call) IsActiveForProfile(profileID string) bool {
 }
 
 type VoiceStatePatch struct {
-	IsMuted         *bool
-	IsDeafened      *bool
-	IsVideoOn       *bool
-	IsCommander     *bool
-	HandRaised      *bool
-	HasFloor        *bool
-	IsBroadcasting  *bool
+	IsMuted        *bool
+	IsDeafened     *bool
+	IsVideoOn      *bool
+	IsCommander    *bool
+	HandRaised     *bool
+	HasFloor       *bool
+	IsBroadcasting *bool
 }
 
 type CallStore interface {
@@ -124,6 +152,8 @@ type CallStore interface {
 	SetStatus(ctx context.Context, roomID string, status callsv1.CallStatus, endedAt time.Time) (Call, error)
 	AddParticipant(ctx context.Context, roomID, profileID string, maxParticipants int) (Call, error)
 	RemoveParticipant(ctx context.Context, roomID, profileID string) (Call, error)
+	FindVoiceRoomMove(ctx context.Context, req VoiceRoomMoveRequest) (VoiceRoomMoveResult, bool, error)
+	MoveVoiceRoomParticipant(ctx context.Context, req VoiceRoomMoveRequest) (VoiceRoomMoveResult, error)
 	GetCallByVoiceRoomID(ctx context.Context, voiceRoomID string) (Call, error)
 	UpdateVoiceState(ctx context.Context, roomID, profileID string, patch VoiceStatePatch) (Call, ParticipantState, error)
 	StartScreenShare(ctx context.Context, roomID, profileID, streamID string) (Call, ScreenShareEntry, error)
@@ -135,10 +165,16 @@ type CallStore interface {
 type MemoryCallStore struct {
 	mu    sync.Mutex
 	calls map[string]Call
+	moves map[string]memoryVoiceRoomMove
+}
+
+type memoryVoiceRoomMove struct {
+	req    VoiceRoomMoveRequest
+	result VoiceRoomMoveResult
 }
 
 func NewMemoryCallStore() *MemoryCallStore {
-	return &MemoryCallStore{calls: map[string]Call{}}
+	return &MemoryCallStore{calls: map[string]Call{}, moves: map[string]memoryVoiceRoomMove{}}
 }
 
 func (s *MemoryCallStore) CreateCall(_ context.Context, call Call) (Call, error) {
@@ -251,6 +287,98 @@ func (s *MemoryCallStore) RemoveParticipant(_ context.Context, roomID, profileID
 	return call, nil
 }
 
+func (s *MemoryCallStore) MoveVoiceRoomParticipant(_ context.Context, req VoiceRoomMoveRequest) (VoiceRoomMoveResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := req.ActorProfileID + ":" + req.OperationID
+	if prior, ok := s.moves[key]; ok {
+		if !sameVoiceRoomMoveRequest(prior.req, req) {
+			return VoiceRoomMoveResult{}, ErrOperationConflict
+		}
+		prior.result.Replayed = true
+		return prior.result, nil
+	}
+	source, ok := s.callsByVoiceRoomLocked(req.FromVoiceRoomID)
+	if !ok {
+		return VoiceRoomMoveResult{}, ErrNotFound
+	}
+	if !source.IsParticipant(req.ParticipantProfileID) {
+		return VoiceRoomMoveResult{}, ErrNotParticipant
+	}
+	if source.SpaceID != req.SpaceID {
+		return VoiceRoomMoveResult{}, ErrInvalidState
+	}
+	destination, exists := s.callsByVoiceRoomLocked(req.ToVoiceRoomID)
+	if exists {
+		if !destination.IsVoiceRoom() || destination.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE || destination.SpaceID != req.SpaceID {
+			return VoiceRoomMoveResult{}, ErrInvalidState
+		}
+		if !destination.IsParticipant(req.ParticipantProfileID) && len(destination.States) >= req.MaxParticipants {
+			return VoiceRoomMoveResult{}, ErrRoomFull
+		}
+	} else {
+		destination = Call{
+			RoomID:             req.DestinationRoomID,
+			LivekitRoomName:    "voice-room-" + req.ToVoiceRoomID,
+			VoiceRoomID:        req.ToVoiceRoomID,
+			SpaceID:            req.SpaceID,
+			SessionKind:        callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM,
+			InitiatorProfileID: req.ParticipantProfileID,
+			MediaKind:          callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
+			Status:             callsv1.CallStatus_CALL_STATUS_ACTIVE,
+			States: map[string]ParticipantState{req.ParticipantProfileID: {
+				ProfileID: req.ParticipantProfileID,
+			}},
+		}
+	}
+	delete(source.States, req.ParticipantProfileID)
+	source = removeScreenSharesForProfile(source, req.ParticipantProfileID)
+	if len(source.States) == 0 {
+		source.Status = callsv1.CallStatus_CALL_STATUS_ENDED
+		source.EndedAt = req.Now
+	}
+	if exists && !destination.IsParticipant(req.ParticipantProfileID) {
+		destination.States[req.ParticipantProfileID] = ParticipantState{ProfileID: req.ParticipantProfileID}
+	}
+	s.calls[source.RoomID] = source
+	s.calls[destination.RoomID] = destination
+	result := VoiceRoomMoveResult{Source: source, Destination: destination}
+	s.moves[key] = memoryVoiceRoomMove{req: req, result: result}
+	return result, nil
+}
+
+func (s *MemoryCallStore) FindVoiceRoomMove(_ context.Context, req VoiceRoomMoveRequest) (VoiceRoomMoveResult, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	prior, ok := s.moves[req.ActorProfileID+":"+req.OperationID]
+	if !ok {
+		return VoiceRoomMoveResult{}, false, nil
+	}
+	if !sameVoiceRoomMoveRequest(prior.req, req) {
+		return VoiceRoomMoveResult{}, false, ErrOperationConflict
+	}
+	prior.result.Replayed = true
+	return prior.result, true, nil
+}
+
+func sameVoiceRoomMoveRequest(a, b VoiceRoomMoveRequest) bool {
+	return a.ActorProfileID == b.ActorProfileID &&
+		a.ParticipantProfileID == b.ParticipantProfileID &&
+		a.OperationID == b.OperationID &&
+		a.FromVoiceRoomID == b.FromVoiceRoomID &&
+		a.ToVoiceRoomID == b.ToVoiceRoomID &&
+		a.SpaceID == b.SpaceID
+}
+
+func (s *MemoryCallStore) callsByVoiceRoomLocked(voiceRoomID string) (Call, bool) {
+	for _, call := range s.calls {
+		if call.IsVoiceRoom() && call.VoiceRoomID == voiceRoomID && call.Status == callsv1.CallStatus_CALL_STATUS_ACTIVE {
+			return call, true
+		}
+	}
+	return Call{}, false
+}
+
 func (s *MemoryCallStore) GetCallByVoiceRoomID(_ context.Context, voiceRoomID string) (Call, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -300,25 +428,25 @@ func (s *MemoryCallStore) UpdateVoiceState(_ context.Context, roomID, profileID 
 	if patch.IsVideoOn != nil {
 		state.IsVideoOn = *patch.IsVideoOn
 	}
-		if patch.IsCommander != nil {
-			state.IsCommander = *patch.IsCommander
-			if !*patch.IsCommander {
-				state.IsBroadcasting = false
-			}
+	if patch.IsCommander != nil {
+		state.IsCommander = *patch.IsCommander
+		if !*patch.IsCommander {
+			state.IsBroadcasting = false
 		}
-		if patch.HandRaised != nil {
-			state.HandRaised = *patch.HandRaised
-		}
-		if patch.HasFloor != nil {
-			state.HasFloor = *patch.HasFloor
-		}
-		if patch.IsBroadcasting != nil {
-			state.IsBroadcasting = *patch.IsBroadcasting
-		}
-		call.States[profileID] = state
-		s.calls[roomID] = call
-		return call, state, nil
 	}
+	if patch.HandRaised != nil {
+		state.HandRaised = *patch.HandRaised
+	}
+	if patch.HasFloor != nil {
+		state.HasFloor = *patch.HasFloor
+	}
+	if patch.IsBroadcasting != nil {
+		state.IsBroadcasting = *patch.IsBroadcasting
+	}
+	call.States[profileID] = state
+	s.calls[roomID] = call
+	return call, state, nil
+}
 
 func (s *MemoryCallStore) ListExpiredRinging(_ context.Context, now time.Time) ([]Call, error) {
 	s.mu.Lock()

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -69,6 +70,62 @@ func TestInvite_Join_IncrementsUseCount(t *testing.T) {
 	ok, err := st.IsSpaceMember(ctx, space.ID, joiner)
 	require.NoError(t, err)
 	require.True(t, ok)
+}
+
+func TestInvite_GuestJoin_MissingCodeReturnsNotFound(t *testing.T) {
+	ctx := context.Background()
+	pool := startSpacePostgresForStoreTest(t, ctx)
+	applySpaceMigrationForStoreTest(t, ctx, pool)
+	st := &SpaceStore{Pool: pool}
+
+	_, err := st.JoinGuestByInvite(ctx, "missing-code", uuid.New(), uuid.New())
+	require.ErrorIs(t, err, ErrInviteNotFound)
+}
+
+// TestInvite_GuestJoinsAcrossStoresSerializeSpaceUpdate proves two concurrent
+// guest joins with distinct invites do not deadlock while both increment the
+// space member counter. Separate stores model independent service instances.
+func TestInvite_GuestJoinsAcrossStoresSerializeSpaceUpdate(t *testing.T) {
+	ctx := context.Background()
+	pool := startSpacePostgresForStoreTest(t, ctx)
+	applySpaceMigrationForStoreTest(t, ctx, pool)
+	ownerStore := &SpaceStore{Pool: pool}
+	owner := uuid.New()
+	space, err := ownerStore.CreateSpace(ctx, owner, "Concurrent guest admission", "", "private")
+	require.NoError(t, err)
+	allow := true
+	_, err = ownerStore.UpdateSpace(ctx, space.ID, UpdateSpaceInput{AllowGuests: &allow})
+	require.NoError(t, err)
+
+	firstInvite, err := ownerStore.CreateInvite(ctx, CreateInviteInput{SpaceID: space.ID, CreatorProfileID: owner})
+	require.NoError(t, err)
+	secondInvite, err := ownerStore.CreateInvite(ctx, CreateInviteInput{SpaceID: space.ID, CreatorProfileID: owner})
+	require.NoError(t, err)
+
+	joinCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	start := make(chan struct{})
+	errs := make(chan error, 2)
+	var wg sync.WaitGroup
+	for _, inv := range []*InviteRow{firstInvite, secondInvite} {
+		wg.Add(1)
+		go func(code string) {
+			defer wg.Done()
+			<-start
+			_, err := (&SpaceStore{Pool: pool}).JoinGuestByInvite(joinCtx, code, uuid.New(), uuid.New())
+			errs <- err
+		}(inv.Code)
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		require.NoError(t, err)
+	}
+
+	updated, err := ownerStore.GetSpace(ctx, space.ID)
+	require.NoError(t, err)
+	require.Equal(t, int32(3), updated.MemberCount)
 }
 
 func TestInvite_Join_IdempotentForExistingMember(t *testing.T) {

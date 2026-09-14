@@ -30,10 +30,28 @@ func (t *transcoder) serveVoice(w http.ResponseWriter, r *http.Request, rest str
 
 	if strings.HasPrefix(rest, "rooms/") {
 		parts := strings.Split(strings.TrimPrefix(rest, "rooms/"), "/")
-		if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" {
+		if len(parts) < 2 || strings.TrimSpace(parts[0]) == "" {
 			return false
 		}
 		voiceRoomID := strings.TrimSpace(parts[0])
+		if len(parts) == 4 && parts[1] == "participants" && strings.TrimSpace(parts[2]) != "" && parts[3] == "move" && r.Method == http.MethodPost {
+			req, err := readVoiceRoomMoveJSON(r)
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			req.FromVoiceRoomId, req.ParticipantProfileId = voiceRoomID, strings.TrimSpace(parts[2])
+			resp, err := t.clients.voice.MoveVoiceRoomParticipant(ctx, req)
+			if err != nil {
+				writeVoiceRoomMoveError(w, err)
+				return true
+			}
+			writeProtoJSON(w, http.StatusOK, resp)
+			return true
+		}
+		if len(parts) != 2 {
+			return false
+		}
 		action := parts[1]
 		switch {
 		case r.Method == http.MethodPost && action == "join":
@@ -57,6 +75,22 @@ func (t *transcoder) serveVoice(w http.ResponseWriter, r *http.Request, rest str
 			}
 			w.WriteHeader(http.StatusNoContent)
 			return true
+		case r.Method == http.MethodPost && action == "move":
+			req, err := readVoiceRoomMoveJSON(r)
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			req.FromVoiceRoomId = voiceRoomID
+			resp, err := t.clients.voice.MoveToVoiceRoom(ctx, &callsv1.MoveToVoiceRoomRequest{
+				FromVoiceRoomId: req.GetFromVoiceRoomId(), ToVoiceRoomId: req.GetToVoiceRoomId(), Space: req.GetSpace(), OperationId: req.GetOperationId(),
+			})
+			if err != nil {
+				writeVoiceRoomMoveError(w, err)
+				return true
+			}
+			writeProtoJSON(w, http.StatusOK, resp)
+			return true
 		case r.Method == http.MethodGet && action == "states":
 			statesCtx := withVoiceRoomIDMetadata(ctx, voiceRoomID)
 			resp, err := t.clients.voice.GetVoiceStates(statesCtx, &callsv1.GetVoiceStatesRequest{
@@ -72,6 +106,14 @@ func (t *transcoder) serveVoice(w http.ResponseWriter, r *http.Request, rest str
 	}
 
 	return t.serveVoiceCalls(w, r, rest, ctx)
+}
+
+func readVoiceRoomMoveJSON(r *http.Request) (*callsv1.MoveVoiceRoomParticipantRequest, error) {
+	req := &callsv1.MoveVoiceRoomParticipantRequest{}
+	if err := readProtoJSON(r, req); err != nil {
+		return nil, err
+	}
+	return req, nil
 }
 
 func readSpaceRefJSON(r *http.Request) *spacev1.SpaceRef {

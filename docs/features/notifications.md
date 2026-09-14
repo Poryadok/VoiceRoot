@@ -96,6 +96,7 @@ push-eligible.
 |-------|-----------|
 | Composer / `SendMessageRequest` | **`send_silent`** (bool) |
 | JetStream `message.sent` | **`send_silent`** |
+| JetStream `message.mention_added` | **`send_silent`** mirrors the sent message to keep mention push silent |
 | UI label | «Send without sound» / «Отправить без звука» |
 
 **Notification consumption:**

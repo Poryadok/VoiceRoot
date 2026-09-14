@@ -42,7 +42,7 @@
 
 | Path | Contract | Gap |
 |------|----------|-----|
-| WS presence fan-out to friends | Must apply `show_online` / `show_last_seen` before emit; sparse fields only | **Partial** — privacy filter + sparse payload not fully shipped |
+| WS presence fan-out to friends and shared-chat subscribers | Realtime resolves a User-filtered snapshot per WebSocket recipient before emit; `show_online` controls sparse status fields and `show_last_seen` controls the timestamp | **Implemented (PR #332):** friend, local-chat and Redis cross-instance chat fan-out use the same fail-closed filter with a shared 2-second deadline and at most 16 concurrent User lookups. Delta fields remain a separate event-contract gap. |
 | `user.presence_changed` | JetStream payload includes `old_status`, `new_status`; consumers filter by friend graph | Proto lacks delta fields today — [user-service.md](../microservices/user-service.md) |
 
 ## Interim storage (current code)
@@ -66,7 +66,7 @@ Each `UpdatePresence` (client heartbeat ~60 s or WS ping):
 2. Set `voice:user:last_seen:{profile_id}` = `ts_unix` with **30 d TTL** (always — including invisible/DND)
 3. Publish `user.presence_changed` when **status enum** changes (target spec: include `old_status`, `new_status`, `profile_id`). The first live observation has no previous enum: `old_status` is the empty string and `new_status` is the canonical current status. A heartbeat with the same enum publishes no event, but still performs steps 1–2.
 
-**Fan-out filter (spec):** Realtime WS `presence_update` delivers to subscribers who pass **`show_online`** audience check; **`last_seen` timestamp omitted** on wire when viewer fails **`show_last_seen`**. **Invisible** users appear offline to others; Notification Service treats invisible as **offline for push routing** (in-app still delivered) — [notifications.md](../features/notifications.md) § Presence routing. **Code gap:** broadcast may skip privacy filter and omit delta fields — [todo/backend.md](../todo/backend.md).
+**Fan-out filter:** Realtime WS `presence_update` resolves User Service `GetPresence` for each recipient, so **`show_online`** controls the sparse online fields and **`last_seen`** is omitted when User denies **`show_last_seen`**. **Invisible** users appear offline to others; User-policy lookup errors and a missing viewer dependency drop that recipient's ephemeral update fail-closed. Friend, local-chat and Redis cross-instance chat fan-out share a 2-second deadline with at most 16 concurrent User lookups. Notification Service treats invisible as **offline for push routing** (in-app still delivered) — [notifications.md](../features/notifications.md) § Presence routing. Delta fields in `user.presence_changed` remain a separate event-contract gap — [user-service.md](../microservices/user-service.md).
 
 ## В header chat room
 
@@ -124,4 +124,4 @@ Each `UpdatePresence` (client heartbeat ~60 s or WS ping):
 
 ## События
 
-`user.presence_changed` публикуется при смене status; target payload includes `old_status`, `new_status` — [user-service.md](../microservices/user-service.md). Realtime live fan-out to friends — **partial** in code ([todo/backend.md](../todo/backend.md)).
+`user.presence_changed` публикуется при смене status; target payload includes `old_status`, `new_status` — [user-service.md](../microservices/user-service.md). Realtime friend fan-out resolves each viewer's privacy-filtered snapshot before delivery; the event's delta fields remain separate from this delivery filter.
