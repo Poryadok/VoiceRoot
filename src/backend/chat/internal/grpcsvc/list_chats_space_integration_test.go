@@ -7,8 +7,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"voice/backend/pkg/integrationtest"
 	"voice/backend/chat/internal/store"
+	"voice/backend/pkg/integrationtest"
 
 	chatv1 "voice.app/voice/chat/v1"
 	commonv1 "voice.app/voice/common/v1"
@@ -67,7 +67,7 @@ func TestListChats_SpaceChannel_HydratesSpaceFields(t *testing.T) {
 	accMember := uuid.New()
 	seedSpaceChannelChat(t, ctx, chatPool, spacePool, chatID, spaceID, owner, member, "general")
 	_, err := chatPool.Exec(ctx, `
-UPDATE chats SET threads_enabled = true, e2e_enabled = true WHERE id = $1
+UPDATE chats SET threads_enabled = true, e2e_enabled = true, topic = 'Space announcements' WHERE id = $1
 `, chatID)
 	require.NoError(t, err)
 
@@ -83,6 +83,8 @@ UPDATE chats SET threads_enabled = true, e2e_enabled = true WHERE id = $1
 	require.Equal(t, spaceID.String(), item.GetSpaceId())
 	require.True(t, item.GetThreadsEnabled())
 	require.True(t, item.GetE2EEnabled())
+	require.NotNil(t, item.Topic)
+	require.Equal(t, "Space announcements", item.GetTopic())
 }
 
 // TestListChats_SpaceChannel_PaginationPage2 documents R3-A16: space channels appear on page 2+ via unified SQL pagination.

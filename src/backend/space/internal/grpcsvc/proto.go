@@ -22,6 +22,7 @@ func spaceRowToProto(r *store.SpaceRow) *spacev1.Space {
 		IsVerified:       r.IsVerified,
 		VerificationType: r.VerificationType,
 		EntryRequirement: r.EntryRequirement,
+		AllowGuests:      r.AllowGuests,
 		CreatedAt:        timestamppb.New(r.CreatedAt),
 		UpdatedAt:        timestamppb.New(r.UpdatedAt),
 	}

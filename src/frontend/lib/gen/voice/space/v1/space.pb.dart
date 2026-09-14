@@ -46,6 +46,7 @@ class Space extends $pb.GeneratedMessage {
     $1.Timestamp? updatedAt,
     $1.Timestamp? deletionScheduledAt,
     $1.Timestamp? purgeAfter,
+    $core.bool? allowGuests,
   }) {
     final result = create();
     if (id != null) result.id = id;
@@ -67,6 +68,7 @@ class Space extends $pb.GeneratedMessage {
     if (deletionScheduledAt != null)
       result.deletionScheduledAt = deletionScheduledAt;
     if (purgeAfter != null) result.purgeAfter = purgeAfter;
+    if (allowGuests != null) result.allowGuests = allowGuests;
     return result;
   }
 
@@ -104,6 +106,7 @@ class Space extends $pb.GeneratedMessage {
         subBuilder: $1.Timestamp.create)
     ..aOM<$1.Timestamp>(17, _omitFieldNames ? '' : 'purgeAfter',
         subBuilder: $1.Timestamp.create)
+    ..aOB(18, _omitFieldNames ? '' : 'allowGuests')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -284,6 +287,16 @@ class Space extends $pb.GeneratedMessage {
   void clearPurgeAfter() => $_clearField(17);
   @$pb.TagNumber(17)
   $1.Timestamp ensurePurgeAfter() => $_ensure(16);
+
+  /// Guest admission is explicit and defaults to false.
+  @$pb.TagNumber(18)
+  $core.bool get allowGuests => $_getBF(17);
+  @$pb.TagNumber(18)
+  set allowGuests($core.bool value) => $_setBool(17, value);
+  @$pb.TagNumber(18)
+  $core.bool hasAllowGuests() => $_has(17);
+  @$pb.TagNumber(18)
+  void clearAllowGuests() => $_clearField(18);
 }
 
 class CreateSpaceRequest extends $pb.GeneratedMessage {
@@ -375,6 +388,7 @@ class UpdateSpaceRequest extends $pb.GeneratedMessage {
     $core.String? entryRequirement,
     $core.String? entryQuestionsJson,
     $core.String? mmConfigJson,
+    $core.bool? allowGuests,
   }) {
     final result = create();
     if (spaceId != null) result.spaceId = spaceId;
@@ -387,6 +401,7 @@ class UpdateSpaceRequest extends $pb.GeneratedMessage {
     if (entryQuestionsJson != null)
       result.entryQuestionsJson = entryQuestionsJson;
     if (mmConfigJson != null) result.mmConfigJson = mmConfigJson;
+    if (allowGuests != null) result.allowGuests = allowGuests;
     return result;
   }
 
@@ -412,6 +427,7 @@ class UpdateSpaceRequest extends $pb.GeneratedMessage {
     ..aOS(7, _omitFieldNames ? '' : 'entryRequirement')
     ..aOS(8, _omitFieldNames ? '' : 'entryQuestionsJson')
     ..aOS(9, _omitFieldNames ? '' : 'mmConfigJson')
+    ..aOB(10, _omitFieldNames ? '' : 'allowGuests')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -513,6 +529,15 @@ class UpdateSpaceRequest extends $pb.GeneratedMessage {
   $core.bool hasMmConfigJson() => $_has(8);
   @$pb.TagNumber(9)
   void clearMmConfigJson() => $_clearField(9);
+
+  @$pb.TagNumber(10)
+  $core.bool get allowGuests => $_getBF(9);
+  @$pb.TagNumber(10)
+  set allowGuests($core.bool value) => $_setBool(9, value);
+  @$pb.TagNumber(10)
+  $core.bool hasAllowGuests() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearAllowGuests() => $_clearField(10);
 }
 
 class UpdateSpaceMmConfigRequest extends $pb.GeneratedMessage {
