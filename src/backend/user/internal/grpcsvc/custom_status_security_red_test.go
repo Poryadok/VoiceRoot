@@ -417,7 +417,10 @@ VALUES ($1, $2, 'presenceowner', '7004', 'Owner', true),
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
 	profiles := store.NewProfileStore(pool)
-	cli := startUserPrivacyTestServer(t, profiles, privacyStore, rdb, func(s *UserGRPC) { s.SocialGraph = alwaysFriendsGraph{} })
+	cli := startUserPrivacyTestServer(t, profiles, privacyStore, rdb, func(s *UserGRPC) {
+		s.SocialGraph = alwaysFriendsGraph{}
+		s.Blocks = stubProfileBlocks{}
+	})
 
 	custom := "present-secret"
 	_, err = cli.UpdatePresence(withProfileTier(ctx, ownerAccount, ownerProfile, "premium"), &userv1.UpdatePresenceRequest{Status: "online", CustomStatus: &custom})
@@ -461,6 +464,54 @@ VALUES ($1, $2, 'presenceowner', '7004', 'Owner', true),
 	assertCustomStatusOmittedForDirectAndBulk(t, cli, context.Background(), ownerProfile)
 	ambiguous := metadata.AppendToOutgoingContext(ctx, authctx.HeaderProfileID, viewerProfile.String(), authctx.HeaderProfileID, ownerProfile.String())
 	assertCustomStatusOmittedForDirectAndBulk(t, cli, ambiguous, ownerProfile)
+}
+
+// TestCustomStatus_PresenceMissingSocialBlockWiringFailsClosed_RED covers a
+// valid deployment with optional SOCIAL_GRPC_ADDR omitted. A missing Social
+// block checker is not evidence that an otherwise allowed foreign viewer may
+// receive a live custom status. The owner remains able to read their own
+// presence through both public shapes.
+func TestCustomStatus_PresenceMissingSocialBlockWiringFailsClosed_RED(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
+	integrationtest.ApplyUserDBMigrations(t, ctx, pool, repoRoot(t))
+
+	ownerAccount, ownerProfile := uuid.New(), uuid.New()
+	viewerAccount, viewerProfile := uuid.New(), uuid.New()
+	_, err := pool.Exec(ctx, `
+INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+VALUES ($1, $2, 'nilblocksowner', '7018', 'Owner', true),
+       ($3, $4, 'nilblocksviewer', '7019', 'Viewer', true)`,
+		ownerProfile, ownerAccount, viewerProfile, viewerAccount)
+	require.NoError(t, err)
+
+	privacyStore := store.NewPrivacyStore(pool)
+	seedPrivacyPreset(ctx, t, privacyStore, ownerProfile, "personal")
+	mr := miniredis.RunT(t)
+	t.Cleanup(mr.Close)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+	secret := "nil-block-wiring-secret"
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), privacyStore, rdb, func(s *UserGRPC) {
+		// Keep show_online independently allowed; Blocks is deliberately nil.
+		s.SocialGraph = alwaysFriendsGraph{}
+	})
+	_, err = cli.UpdatePresence(withProfileTier(ctx, ownerAccount, ownerProfile, "premium"), &userv1.UpdatePresenceRequest{
+		Status: "online", CustomStatus: &secret,
+	})
+	require.NoError(t, err)
+
+	viewer := withUserAuthCtx(ctx, viewerAccount, viewerProfile)
+	direct, err := cli.GetPresence(viewer, &userv1.GetPresenceRequest{ProfileId: ownerProfile.String()})
+	require.NoError(t, err)
+	assert.Nil(t, direct.GetPresenceStatus().CustomStatus, "foreign direct presence must fail closed when Blocks is nil")
+	bulk, err := cli.GetBulkPresence(viewer, &userv1.GetBulkPresenceRequest{ProfileIds: []string{ownerProfile.String()}})
+	require.NoError(t, err)
+	assert.Nil(t, bulk.GetByProfileId()[ownerProfile.String()].CustomStatus, "foreign bulk presence must fail closed when Blocks is nil")
+	assertCustomStatusPresentForDirectAndBulk(t, cli, withUserAuthCtx(ctx, ownerAccount, ownerProfile), ownerProfile, secret)
 }
 
 // TestCustomStatus_PresenceDependencyFailuresFailClosed is deliberately
@@ -555,6 +606,7 @@ VALUES ($1, $2, 'identityowner', '7016', 'Owner', true),
 	secret := "identity-secret"
 	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), privacyStore, rdb, func(s *UserGRPC) {
 		s.SocialGraph = alwaysFriendsGraph{}
+		s.Blocks = stubProfileBlocks{}
 	})
 	_, err = cli.UpdatePresence(withProfileTier(ctx, ownerAccount, ownerProfile, "premium"), &userv1.UpdatePresenceRequest{
 		Status: "online", CustomStatus: &secret,
