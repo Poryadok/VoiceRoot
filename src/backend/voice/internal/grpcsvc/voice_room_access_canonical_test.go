@@ -54,6 +54,9 @@ func (r *canonicalRolePermissions) EnsureVoiceSpeak(_ context.Context, spaceID, 
 func (*canonicalRolePermissions) EnsureMuteOthers(context.Context, string, string, string) error {
 	return nil
 }
+func (*canonicalRolePermissions) EnsureVoiceMoveOthers(context.Context, string, string, string) error {
+	return nil
+}
 
 type canonicalTokenIssuer struct{ joinCalls int }
 

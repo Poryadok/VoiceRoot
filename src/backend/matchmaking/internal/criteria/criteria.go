@@ -10,15 +10,15 @@ import (
 )
 
 var (
-	ErrEmptyCriteria   = errors.New("criteria is empty")
-	ErrInvalidJSON     = errors.New("invalid criteria json")
-	ErrRegionRequired  = errors.New("region is required")
-	ErrInvalidRegion   = errors.New("region not in game config")
-	ErrRoleRequired    = errors.New("self.role is required for this mode")
-	ErrInvalidRole     = errors.New("self.role not in game mode")
-	ErrRankRequired    = errors.New("self.rank is required for this mode")
-	ErrInvalidRank     = errors.New("self.rank not in game mode")
-	ErrInvalidSought   = errors.New("invalid sought rank range")
+	ErrEmptyCriteria    = errors.New("criteria is empty")
+	ErrInvalidJSON      = errors.New("invalid criteria json")
+	ErrRegionRequired   = errors.New("region is required")
+	ErrInvalidRegion    = errors.New("region not in game config")
+	ErrRoleRequired     = errors.New("self.role is required for this mode")
+	ErrInvalidRole      = errors.New("self.role not in game mode")
+	ErrRankRequired     = errors.New("self.rank is required for this mode")
+	ErrInvalidRank      = errors.New("self.rank not in game mode")
+	ErrInvalidSought    = errors.New("invalid sought rank range")
 	ErrInvalidPartySize = errors.New("party size not allowed for mode")
 )
 
@@ -154,28 +154,8 @@ func rolesCompatible(a, b SearchCriteria, mode config.Mode) bool {
 	}
 	roleA := strings.TrimSpace(a.Self.Role)
 	roleB := strings.TrimSpace(b.Self.Role)
-	if roleA == "" || roleB == "" {
+	if roleA == "" || roleB == "" || !roleInMode(mode, roleA) || !roleInMode(mode, roleB) {
 		return false
-	}
-	// Stack modes need distinct roles per slot (docs/features/matchmaking.md).
-	return roleA != roleB
-}
-
-// RolesDistinct reports whether every criteria in a proposed group has a unique role.
-func RolesDistinct(group []SearchCriteria, mode config.Mode) bool {
-	if !mode.RolesRequired {
-		return true
-	}
-	seen := make(map[string]bool, len(group))
-	for _, c := range group {
-		role := strings.TrimSpace(c.Self.Role)
-		if role == "" {
-			return false
-		}
-		if seen[role] {
-			return false
-		}
-		seen[role] = true
 	}
 	return true
 }

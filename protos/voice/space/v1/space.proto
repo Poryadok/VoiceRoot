@@ -101,6 +101,8 @@ message Space {
   google.protobuf.Timestamp updated_at = 15;
   optional google.protobuf.Timestamp deletion_scheduled_at = 16;
   optional google.protobuf.Timestamp purge_after = 17;
+  // Guest admission is explicit and defaults to false.
+  bool allow_guests = 18;
 }
 
 message CreateSpaceRequest {
@@ -119,6 +121,7 @@ message UpdateSpaceRequest {
   optional string entry_requirement = 7;
   optional string entry_questions_json = 8;
   optional string mm_config_json = 9;
+  optional bool allow_guests = 10;
 }
 
 message UpdateSpaceMmConfigRequest {

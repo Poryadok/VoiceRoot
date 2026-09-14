@@ -188,6 +188,42 @@ class MessagingServiceClient extends $grpc.Client {
     return $createUnaryCall(_$getPreKeyBundle, request, options: options);
   }
 
+  /// Schedule lifecycle handlers are introduced in a later slice. These declarations
+  /// establish the additive wire contract for callers and generated clients.
+  $grpc.ResponseFuture<$0.ListScheduledMessagesResponse> listScheduledMessages(
+    $0.ListScheduledMessagesRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$listScheduledMessages, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.UpdateScheduledMessageResponse>
+      updateScheduledMessage(
+    $0.UpdateScheduledMessageRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$updateScheduledMessage, request,
+        options: options);
+  }
+
+  $grpc.ResponseFuture<$0.CancelScheduledMessageResponse>
+      cancelScheduledMessage(
+    $0.CancelScheduledMessageRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$cancelScheduledMessage, request,
+        options: options);
+  }
+
+  $grpc.ResponseFuture<$0.SendScheduledMessageNowResponse>
+      sendScheduledMessageNow(
+    $0.SendScheduledMessageNowRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$sendScheduledMessageNow, request,
+        options: options);
+  }
+
   /// @voice.security=protected;callers=service:space
   $grpc.ResponseFuture<$0.ApplySpaceLifecycleFenceResponse>
       applySpaceLifecycleFence(
@@ -324,6 +360,27 @@ class MessagingServiceClient extends $grpc.Client {
           '/voice.messaging.v1.MessagingService/GetPreKeyBundle',
           ($0.GetPreKeyBundleRequest value) => value.writeToBuffer(),
           $0.GetPreKeyBundleResponse.fromBuffer);
+  static final _$listScheduledMessages = $grpc.ClientMethod<
+          $0.ListScheduledMessagesRequest, $0.ListScheduledMessagesResponse>(
+      '/voice.messaging.v1.MessagingService/ListScheduledMessages',
+      ($0.ListScheduledMessagesRequest value) => value.writeToBuffer(),
+      $0.ListScheduledMessagesResponse.fromBuffer);
+  static final _$updateScheduledMessage = $grpc.ClientMethod<
+          $0.UpdateScheduledMessageRequest, $0.UpdateScheduledMessageResponse>(
+      '/voice.messaging.v1.MessagingService/UpdateScheduledMessage',
+      ($0.UpdateScheduledMessageRequest value) => value.writeToBuffer(),
+      $0.UpdateScheduledMessageResponse.fromBuffer);
+  static final _$cancelScheduledMessage = $grpc.ClientMethod<
+          $0.CancelScheduledMessageRequest, $0.CancelScheduledMessageResponse>(
+      '/voice.messaging.v1.MessagingService/CancelScheduledMessage',
+      ($0.CancelScheduledMessageRequest value) => value.writeToBuffer(),
+      $0.CancelScheduledMessageResponse.fromBuffer);
+  static final _$sendScheduledMessageNow = $grpc.ClientMethod<
+          $0.SendScheduledMessageNowRequest,
+          $0.SendScheduledMessageNowResponse>(
+      '/voice.messaging.v1.MessagingService/SendScheduledMessageNow',
+      ($0.SendScheduledMessageNowRequest value) => value.writeToBuffer(),
+      $0.SendScheduledMessageNowResponse.fromBuffer);
   static final _$applySpaceLifecycleFence = $grpc.ClientMethod<
           $0.ApplySpaceLifecycleFenceRequest,
           $0.ApplySpaceLifecycleFenceResponse>(
@@ -532,6 +589,42 @@ abstract class MessagingServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.GetPreKeyBundleRequest.fromBuffer(value),
         ($0.GetPreKeyBundleResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ListScheduledMessagesRequest,
+            $0.ListScheduledMessagesResponse>(
+        'ListScheduledMessages',
+        listScheduledMessages_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ListScheduledMessagesRequest.fromBuffer(value),
+        ($0.ListScheduledMessagesResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.UpdateScheduledMessageRequest,
+            $0.UpdateScheduledMessageResponse>(
+        'UpdateScheduledMessage',
+        updateScheduledMessage_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.UpdateScheduledMessageRequest.fromBuffer(value),
+        ($0.UpdateScheduledMessageResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.CancelScheduledMessageRequest,
+            $0.CancelScheduledMessageResponse>(
+        'CancelScheduledMessage',
+        cancelScheduledMessage_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.CancelScheduledMessageRequest.fromBuffer(value),
+        ($0.CancelScheduledMessageResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.SendScheduledMessageNowRequest,
+            $0.SendScheduledMessageNowResponse>(
+        'SendScheduledMessageNow',
+        sendScheduledMessageNow_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.SendScheduledMessageNowRequest.fromBuffer(value),
+        ($0.SendScheduledMessageNowResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.ApplySpaceLifecycleFenceRequest,
             $0.ApplySpaceLifecycleFenceResponse>(
         'ApplySpaceLifecycleFence',
@@ -743,6 +836,42 @@ abstract class MessagingServiceBase extends $grpc.Service {
 
   $async.Future<$0.GetPreKeyBundleResponse> getPreKeyBundle(
       $grpc.ServiceCall call, $0.GetPreKeyBundleRequest request);
+
+  $async.Future<$0.ListScheduledMessagesResponse> listScheduledMessages_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ListScheduledMessagesRequest> $request) async {
+    return listScheduledMessages($call, await $request);
+  }
+
+  $async.Future<$0.ListScheduledMessagesResponse> listScheduledMessages(
+      $grpc.ServiceCall call, $0.ListScheduledMessagesRequest request);
+
+  $async.Future<$0.UpdateScheduledMessageResponse> updateScheduledMessage_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.UpdateScheduledMessageRequest> $request) async {
+    return updateScheduledMessage($call, await $request);
+  }
+
+  $async.Future<$0.UpdateScheduledMessageResponse> updateScheduledMessage(
+      $grpc.ServiceCall call, $0.UpdateScheduledMessageRequest request);
+
+  $async.Future<$0.CancelScheduledMessageResponse> cancelScheduledMessage_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.CancelScheduledMessageRequest> $request) async {
+    return cancelScheduledMessage($call, await $request);
+  }
+
+  $async.Future<$0.CancelScheduledMessageResponse> cancelScheduledMessage(
+      $grpc.ServiceCall call, $0.CancelScheduledMessageRequest request);
+
+  $async.Future<$0.SendScheduledMessageNowResponse> sendScheduledMessageNow_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.SendScheduledMessageNowRequest> $request) async {
+    return sendScheduledMessageNow($call, await $request);
+  }
+
+  $async.Future<$0.SendScheduledMessageNowResponse> sendScheduledMessageNow(
+      $grpc.ServiceCall call, $0.SendScheduledMessageNowRequest request);
 
   $async.Future<$0.ApplySpaceLifecycleFenceResponse>
       applySpaceLifecycleFence_Pre($grpc.ServiceCall $call,

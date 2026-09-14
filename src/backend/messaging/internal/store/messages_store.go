@@ -218,7 +218,7 @@ func (s *MessagesStore) UpdateMessageContent(ctx context.Context, messageID, sen
 	return s.UpdateMessageContentAndMentions(ctx, messageID, senderProfileID, content, nil)
 }
 
-// UpdateMessageContentAndMentions sets content, optional mentions_json, and edited_at.
+// UpdateMessageContentAndMentions sets content, optional mentions, and edited_at.
 func (s *MessagesStore) UpdateMessageContentAndMentions(ctx context.Context, messageID, senderProfileID uuid.UUID, content string, mentionsJSON *string) (*MessageRow, error) {
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("messages store: pool not configured")
@@ -233,7 +233,7 @@ RETURNING `+messageReturningCols+`
 	}
 	return scanMessageRow(s.Pool.QueryRow(ctx, `
 UPDATE messages
-SET content = $1, mentions_json = $2::jsonb, edited_at = now()
+SET content = $1, mentions = $2::jsonb, edited_at = now()
 WHERE id = $3 AND sender_profile_id = $4 AND deleted_at IS NULL
 RETURNING `+messageReturningCols+`
 `, content, *mentionsJSON, messageID, senderProfileID))

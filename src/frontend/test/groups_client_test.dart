@@ -35,7 +35,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceChatsClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceChatsClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.createGroup(
         authorization: auth,
         name: 'Friday squad',
@@ -60,7 +62,9 @@ void main() {
         body = req.body;
         return http.Response('', 204);
       });
-      final client = VoiceChatsClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceChatsClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.addGroupMembers(
         authorization: auth,
         chatId: 'group-1',
@@ -80,7 +84,9 @@ void main() {
         path = req.url.path;
         return http.Response('', 204);
       });
-      final client = VoiceChatsClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceChatsClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.removeGroupMember(
         authorization: auth,
         chatId: 'group-1',
@@ -108,7 +114,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceChatsClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceChatsClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.listGroupMembers(
         authorization: auth,
         chatId: 'group-1',
@@ -129,17 +137,79 @@ void main() {
         path = req.url.path;
         return http.Response('', 204);
       });
-      final client = VoiceChatsClient(gateway: gatewayHttpForTest(mock, config: config));
-      final r = await client.leaveGroup(
-        authorization: auth,
-        chatId: 'group-1',
+      final client = VoiceChatsClient(
+        gateway: gatewayHttpForTest(mock, config: config),
       );
+      final r = await client.leaveGroup(authorization: auth, chatId: 'group-1');
       expect(r, isA<ChatsApiOk<void>>());
       expect(path, '/api/v1/chats/group-1/leave');
     });
   });
 
   group('VoiceChatsClient.updateGroup', () {
+    test(
+      'PATCH /api/v1/chats/{chatId} preserves explicit false allow_guests',
+      () async {
+        String? body;
+        final mock = MockClient((req) async {
+          expect(req.method, 'PATCH');
+          expect(req.url.path, '/api/v1/chats/group-1');
+          body = req.body;
+          return http.Response(
+            jsonEncode({
+              'chat': {
+                'id': 'group-1',
+                'type': 'CHAT_TYPE_GROUP',
+                'creator_profile_id': 'profile-a',
+                'allow_guests': false,
+              },
+            }),
+            200,
+          );
+        });
+        final client = VoiceChatsClient(
+          gateway: gatewayHttpForTest(mock, config: config),
+        );
+
+        final result = await client.updateGroup(
+          authorization: auth,
+          chatId: 'group-1',
+          allowGuests: false,
+        );
+
+        expect(result, isA<ChatsApiOk<VoiceChat>>());
+        expect((result as ChatsApiOk<VoiceChat>).data.allowGuests, isFalse);
+        expect(
+          (jsonDecode(body!) as Map<String, dynamic>)['allow_guests'],
+          isFalse,
+        );
+      },
+    );
+
+    test('returns a permission failure from guest admission update', () async {
+      final mock = MockClient((req) async {
+        expect(req.method, 'PATCH');
+        return http.Response(
+          jsonEncode({'error': 'permission_denied', 'message': 'forbidden'}),
+          403,
+        );
+      });
+      final client = VoiceChatsClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
+
+      final result = await client.updateGroup(
+        authorization: auth,
+        chatId: 'group-1',
+        allowGuests: true,
+      );
+
+      expect(result, isA<ChatsApiFailure>());
+      final failure = result as ChatsApiFailure;
+      expect(failure.statusCode, 403);
+      expect(failure.errorCode, 'permission_denied');
+    });
+
     test('PATCH /api/v1/chats/{chatId} sets avatar_url', () async {
       String? body;
       final mock = MockClient((req) async {
@@ -158,7 +228,9 @@ void main() {
           200,
         );
       });
-      final client = VoiceChatsClient(gateway: gatewayHttpForTest(mock, config: config));
+      final client = VoiceChatsClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
       final r = await client.updateGroup(
         authorization: auth,
         chatId: 'group-1',

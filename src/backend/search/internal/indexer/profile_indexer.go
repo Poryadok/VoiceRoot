@@ -36,6 +36,9 @@ func (idx *ProfileIndexer) Handle(ctx context.Context, env *eventsv1.UserStreamE
 	if created := env.GetProfileCreated(); created != nil {
 		return idx.upsert(ctx, created.GetProfileId())
 	}
+	if updated := env.GetProfileUpdated(); updated != nil {
+		return idx.upsert(ctx, updated.GetProfileId())
+	}
 	return nil
 }
 

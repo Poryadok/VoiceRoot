@@ -2,6 +2,7 @@ package roleevents
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -28,6 +29,39 @@ func startRoleJSTestServer(t *testing.T) *server.Server {
 	}
 	t.Cleanup(func() { s.Shutdown() })
 	return s
+}
+
+func TestJetStreamPublisher_OverrideRemovalRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	s := startRoleJSTestServer(t)
+	nc, err := nats.Connect(s.ClientURL())
+	require.NoError(t, err)
+	t.Cleanup(nc.Close)
+
+	chatSub := subscribeSync(t, nc, subjectChatOverrideRemoved)
+	voiceSub := subscribeSync(t, nc, subjectVoiceOverrideRemoved)
+	pub, err := NewJetStreamPublisher(s.ClientURL())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = pub.Close() })
+
+	const spaceID = "11111111-1111-1111-1111-111111111111"
+	const roleID = "22222222-2222-2222-2222-222222222222"
+	const chatID = "33333333-3333-3333-3333-333333333333"
+	const voiceRoomID = "44444444-4444-4444-4444-444444444444"
+	require.NoError(t, pub.PublishChatOverrideRemoved(ctx, spaceID, chatID, roleID))
+	require.NoError(t, pub.PublishVoiceOverrideRemoved(ctx, spaceID, voiceRoomID, roleID))
+
+	chatMsg, err := chatSub.NextMsg(10 * time.Second)
+	require.NoError(t, err)
+	var chatPayload roleEventPayload
+	require.NoError(t, json.Unmarshal(chatMsg.Data, &chatPayload))
+	require.Equal(t, roleEventPayload{SpaceID: spaceID, ChatID: chatID, RoleID: roleID}, chatPayload)
+
+	voiceMsg, err := voiceSub.NextMsg(10 * time.Second)
+	require.NoError(t, err)
+	var voicePayload roleEventPayload
+	require.NoError(t, json.Unmarshal(voiceMsg.Data, &voicePayload))
+	require.Equal(t, roleEventPayload{SpaceID: spaceID, VoiceRoomID: voiceRoomID, RoleID: roleID}, voicePayload)
 }
 
 func subscribeSync(t *testing.T, nc *nats.Conn, subject string) *nats.Subscription {
@@ -122,6 +156,7 @@ func TestJetStreamPublisher_ChatOverrideSetRoundTrip(t *testing.T) {
 	t.Cleanup(func() { _ = pub.Close() })
 
 	require.NoError(t, pub.PublishChatOverrideSet(ctx,
+		"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
 		"cccccccc-cccc-cccc-cccc-cccccccccccc",
 		"dddddddd-dddd-dddd-dddd-dddddddddddd",
 	))
