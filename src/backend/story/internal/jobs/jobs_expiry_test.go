@@ -221,7 +221,10 @@ func TestStartArchivePurgeWorker_runsOnceOnStartup(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		_, err := st.GetStory(dbCtx, storyID)
-		return errors.Is(err, store.ErrNotFound)
+		// Logical deletion commits before outbox dispatch; observing its row
+		// disappear does not yet prove the external File call has completed.
+		deleted := deleter.deletedIDs()
+		return errors.Is(err, store.ErrNotFound) && len(deleted) == 1 && deleted[0] == mediaID.String()
 	}, 5*time.Second, 25*time.Millisecond, "startup must not wait for the daily purge ticker")
 	require.Equal(t, []string{mediaID.String()}, deleter.deletedIDs())
 
