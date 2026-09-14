@@ -35,6 +35,7 @@ func ctxWithProfileAndAccount(profileID, accountID uuid.UUID) context.Context {
 }
 
 type stubMessageSearch struct {
+	calls           int
 	lastInChatQuery string
 	lastInChatChat  uuid.UUID
 	lastGlobalQuery string
@@ -44,6 +45,7 @@ type stubMessageSearch struct {
 }
 
 func (s *stubMessageSearch) SearchInChat(_ context.Context, chatID uuid.UUID, query string, _ *string, limit int) ([]MessageHit, string, error) {
+	s.calls++
 	s.lastInChatChat = chatID
 	s.lastInChatQuery = query
 	if limit == 0 {
@@ -54,6 +56,7 @@ func (s *stubMessageSearch) SearchInChat(_ context.Context, chatID uuid.UUID, qu
 }
 
 func (s *stubMessageSearch) SearchGlobalMessages(_ context.Context, _ uuid.UUID, query string, _ *string, limit int, _ []uuid.UUID) ([]MessageHit, string, error) {
+	s.calls++
 	s.lastGlobalQuery = query
 	if limit == 0 {
 		limit = 20
@@ -63,23 +66,27 @@ func (s *stubMessageSearch) SearchGlobalMessages(_ context.Context, _ uuid.UUID,
 }
 
 type stubProfileSearch struct {
+	calls               int
 	lastQuery           string
 	lastExcludeAccounts []uuid.UUID
 	hits                []ProfileSearchHit
 }
 
 func (s *stubProfileSearch) SearchProfiles(_ context.Context, _ uuid.UUID, query string, exclude []uuid.UUID, _ int) ([]ProfileSearchHit, error) {
+	s.calls++
 	s.lastQuery = query
 	s.lastExcludeAccounts = exclude
 	return s.hits, nil
 }
 
 type stubSpaceSearch struct {
+	calls     int
 	lastQuery string
 	spaceIDs  []uuid.UUID
 }
 
 func (s *stubSpaceSearch) SearchSpaces(_ context.Context, query string, _ *string, _ int) ([]uuid.UUID, string, error) {
+	s.calls++
 	s.lastQuery = query
 	return s.spaceIDs, "", nil
 }
@@ -364,9 +371,9 @@ func TestSearchUsers_FiltersByAllowFriendRequestsAudience(t *testing.T) {
 	}
 	disc := &stubDiscoverability{
 		audienceByProfile: map[uuid.UUID]privacy.Audience{
-			friendTarget:    privacy.FriendsOnly(),
-			strangerTarget:  privacy.FriendsOnly(),
-			nobodyTarget:    privacy.Nobody(),
+			friendTarget:   privacy.FriendsOnly(),
+			strangerTarget: privacy.FriendsOnly(),
+			nobodyTarget:   privacy.Nobody(),
 		},
 		friends: map[[2]uuid.UUID]bool{
 			{viewer, friendTarget}: true,
@@ -516,4 +523,137 @@ func TestSearchInChat_Unauthenticated(t *testing.T) {
 		Query: "hello",
 	})
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
+}
+
+func TestRequireQuery_UnicodeAndBoundedEnvelope(t *testing.T) {
+	t.Parallel()
+
+	family := "👨‍👩‍👧‍👦"
+	validFamily := strings.Repeat(family, 18) + "xx"
+	invalidFamily := strings.Repeat(family, 18) + "xxx"
+	validCombining := strings.Repeat("e\u0301", 64)
+	invalidCombining := validCombining + "x"
+
+	tests := []struct {
+		name    string
+		raw     string
+		want    string
+		message string
+	}{
+		{name: "empty", raw: "", message: "query required"},
+		{name: "ascii whitespace", raw: " \t\n ", message: "query required"},
+		{name: "unicode whitespace", raw: "\u2003\u00a0", message: "query required"},
+		{name: "unicode edge whitespace is trimmed", raw: "\u2003界\u00a0", want: "界"},
+		{name: "128 ascii", raw: strings.Repeat("a", 128), want: strings.Repeat("a", 128)},
+		{name: "129 ascii", raw: strings.Repeat("a", 129), message: "query too long"},
+		{name: "128 cjk", raw: strings.Repeat("界", 128), want: strings.Repeat("界", 128)},
+		{name: "129 cjk", raw: strings.Repeat("界", 129), message: "query too long"},
+		{name: "128 four byte scalars", raw: strings.Repeat("😀", 128), want: strings.Repeat("😀", 128)},
+		{name: "129 four byte scalars", raw: strings.Repeat("😀", 129), message: "query too long"},
+		{name: "128 combining scalars", raw: validCombining, want: validCombining},
+		{name: "129 combining scalars", raw: invalidCombining, message: "query too long"},
+		{name: "128 family emoji scalars", raw: validFamily, want: validFamily},
+		{name: "129 family emoji scalars", raw: invalidFamily, message: "query too long"},
+		{name: "invalid leading byte", raw: "\xff", message: "query invalid UTF-8"},
+		{name: "invalid continuation", raw: "\xe2\x28\xa1", message: "query invalid UTF-8"},
+		{name: "truncated sequence", raw: "\xe2\x82", message: "query invalid UTF-8"},
+		{name: "512 spaces", raw: strings.Repeat(" ", 512), message: "query required"},
+		{name: "513 spaces rejects before trim", raw: strings.Repeat(" ", 513), message: "query too long"},
+		{name: "513 byte invalid input rejects before UTF-8 validation", raw: strings.Repeat("a", 512) + "\xff", message: "query too long"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := requireQuery(tt.raw)
+			if tt.message != "" {
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+				require.Equal(t, tt.message, status.Convert(err).Message())
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestSearchRPCs_UnicodeLimitAndAuthenticationPrecedence(t *testing.T) {
+	query128 := strings.Repeat("界", 128)
+	query129 := strings.Repeat("界", 129)
+
+	tests := []struct {
+		name      string
+		newServer func() (searchv1.SearchServiceClient, func() int, func() string)
+		call      func(searchv1.SearchServiceClient, context.Context, string) error
+	}{
+		{
+			name: "in chat",
+			newServer: func() (searchv1.SearchServiceClient, func() int, func() string) {
+				messages := &stubMessageSearch{}
+				return startSearchGRPCTestServer(t, &SearchGRPC{Messages: messages}), func() int { return messages.calls }, func() string { return messages.lastInChatQuery }
+			},
+			call: func(client searchv1.SearchServiceClient, ctx context.Context, query string) error {
+				_, err := client.SearchInChat(ctx, &searchv1.SearchInChatRequest{Chat: &chatv1.ChatRef{Id: uuid.New().String()}, Query: query})
+				return err
+			},
+		},
+		{
+			name: "global",
+			newServer: func() (searchv1.SearchServiceClient, func() int, func() string) {
+				messages := &stubMessageSearch{}
+				chatID := uuid.New()
+				return startSearchGRPCTestServer(t, &SearchGRPC{Messages: messages, Chats: &stubChatAccess{accessible: []uuid.UUID{chatID}}}), func() int { return messages.calls }, func() string { return messages.lastGlobalQuery }
+			},
+			call: func(client searchv1.SearchServiceClient, ctx context.Context, query string) error {
+				_, err := client.SearchGlobal(ctx, &searchv1.SearchGlobalRequest{Query: query})
+				return err
+			},
+		},
+		{
+			name: "users",
+			newServer: func() (searchv1.SearchServiceClient, func() int, func() string) {
+				profiles := &stubProfileSearch{}
+				return startSearchGRPCTestServer(t, &SearchGRPC{Profiles: profiles}), func() int { return profiles.calls }, func() string { return profiles.lastQuery }
+			},
+			call: func(client searchv1.SearchServiceClient, ctx context.Context, query string) error {
+				_, err := client.SearchUsers(ctx, &searchv1.SearchUsersRequest{Query: query})
+				return err
+			},
+		},
+		{
+			name: "spaces",
+			newServer: func() (searchv1.SearchServiceClient, func() int, func() string) {
+				spaces := &stubSpaceSearch{}
+				return startSearchGRPCTestServer(t, &SearchGRPC{Spaces: spaces}), func() int { return spaces.calls }, func() string { return spaces.lastQuery }
+			},
+			call: func(client searchv1.SearchServiceClient, ctx context.Context, query string) error {
+				_, err := client.SearchSpaces(ctx, &searchv1.SearchSpacesRequest{Query: query})
+				return err
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name+" accepts 128 multibyte scalars", func(t *testing.T) {
+			client, calls, forwarded := tt.newServer()
+			err := tt.call(client, ctxWithProfile(uuid.New()), "\u2003"+query128+"\u00a0")
+			require.NoError(t, err)
+			require.Equal(t, 1, calls())
+			require.Equal(t, query128, forwarded())
+		})
+
+		t.Run(tt.name+" rejects 129 multibyte scalars before dependencies", func(t *testing.T) {
+			client, calls, _ := tt.newServer()
+			err := tt.call(client, ctxWithProfile(uuid.New()), query129)
+			require.Equal(t, codes.InvalidArgument, status.Code(err))
+			require.Equal(t, "query too long", status.Convert(err).Message())
+			require.Zero(t, calls())
+		})
+
+		t.Run(tt.name+" authenticates before oversized query validation", func(t *testing.T) {
+			client, calls, _ := tt.newServer()
+			err := tt.call(client, context.Background(), strings.Repeat("a", 513))
+			require.Equal(t, codes.Unauthenticated, status.Code(err))
+			require.Zero(t, calls())
+		})
+	}
 }
