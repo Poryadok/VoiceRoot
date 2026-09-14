@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -119,6 +121,55 @@ func TestRedisCallStore_IndexesVoiceRoomsAndExpiredRingingCalls(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, expired, 1)
 	require.Equal(t, "room-ringing", expired[0].RoomID)
+}
+
+func TestRedisCallStore_ListExpiredRingingScansAllPagesAndSkipsMalformedEntries(t *testing.T) {
+	ctx := context.Background()
+	store, client := newRedisCallStoreForTest(t, "voice-test:")
+	now := time.Unix(1_700_000_000, 0).UTC()
+	expiresAt := now.Add(-time.Second)
+
+	empty, err := store.ListExpiredRinging(ctx, now)
+	require.NoError(t, err)
+	require.Empty(t, empty)
+
+	for i := 0; i < expiredRingingScanCount+3; i++ {
+		call := Call{
+			RoomID:    fmt.Sprintf("expired-%03d", i),
+			Status:    callsv1.CallStatus_CALL_STATUS_RINGING,
+			ExpiresAt: expiresAt,
+		}
+		require.NoError(t, putRawCall(ctx, client, store.callKey(call.RoomID), call))
+	}
+
+	// Corrupt keys and values must not make a sweeper fail or create a false match.
+	require.NoError(t, client.Set(ctx, store.callKey("invalid-json"), "{", 0).Err())
+	valid := Call{RoomID: "expired-000", Status: callsv1.CallStatus_CALL_STATUS_RINGING, ExpiresAt: expiresAt}
+	require.NoError(t, putRawCall(ctx, client, store.callKey(""), valid))
+	require.NoError(t, putRawCall(ctx, client, store.callKey("wrong-key"), valid))
+	require.NoError(t, putRawCall(ctx, client, store.callKey("active"), Call{RoomID: "active", Status: callsv1.CallStatus_CALL_STATUS_ACTIVE, ExpiresAt: expiresAt}))
+	require.NoError(t, putRawCall(ctx, client, store.callKey("future"), Call{RoomID: "future", Status: callsv1.CallStatus_CALL_STATUS_RINGING, ExpiresAt: now.Add(time.Second)}))
+	require.NoError(t, putRawCall(ctx, client, store.callKey("no-expiry"), Call{RoomID: "no-expiry", Status: callsv1.CallStatus_CALL_STATUS_RINGING}))
+
+	expired, err := store.ListExpiredRinging(ctx, now)
+	require.NoError(t, err)
+	require.Len(t, expired, expiredRingingScanCount+3)
+	roomIDs := make(map[string]struct{}, len(expired))
+	for _, call := range expired {
+		roomIDs[call.RoomID] = struct{}{}
+	}
+	for i := 0; i < expiredRingingScanCount+3; i++ {
+		_, ok := roomIDs[fmt.Sprintf("expired-%03d", i)]
+		require.True(t, ok)
+	}
+}
+
+func putRawCall(ctx context.Context, client *redis.Client, key string, call Call) error {
+	b, err := json.Marshal(call)
+	if err != nil {
+		return err
+	}
+	return client.Set(ctx, key, b, 0).Err()
 }
 
 func newRedisCallStoreForTest(t *testing.T, prefix string) (*RedisCallStore, *redis.Client) {
