@@ -12,10 +12,21 @@ import (
 	"google.golang.org/grpc/status"
 
 	"voice/backend/matchmaking/internal/criteria"
+	"voice/backend/matchmaking/internal/mmevents"
 	"voice/backend/matchmaking/internal/store"
 
 	matchmakingv1 "voice.app/voice/matchmaking/v1"
 )
+
+type recordingPlayerBannedPublisher struct {
+	mmevents.NoopPublisher
+	events []mmevents.PlayerBannedEvent
+}
+
+func (p *recordingPlayerBannedPublisher) PublishPlayerBanned(_ context.Context, event mmevents.PlayerBannedEvent) error {
+	p.events = append(p.events, event)
+	return nil
+}
 
 func seedPendingDuoMatchForGame(t *testing.T, ctx context.Context, srv *MatchmakingGRPC, gameID, profileB uuid.UUID) (matchID string, profileA uuid.UUID) {
 	t.Helper()
@@ -124,9 +135,9 @@ func TestRateMatch_PersistsStarsForTeammate(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = srv.RateMatch(ctxWithProfile(profileA), &matchmakingv1.RateMatchRequest{
-		MatchId:         matchID,
-		RatedProfileId:  profileB.String(),
-		Stars:           5,
+		MatchId:        matchID,
+		RatedProfileId: profileB.String(),
+		Stars:          5,
 	})
 	require.NoError(t, err)
 }
@@ -155,6 +166,95 @@ func TestRateMatch_DuplicateRejected(t *testing.T) {
 
 	_, err = srv.RateMatch(ctxWithProfile(profileA), req)
 	require.Equal(t, codes.AlreadyExists, status.Code(err))
+}
+
+func TestRateMatch_ExplicitSkipDoesNotPersistOrBlockScore(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startDB(t, ctx)
+	srv := ratingTestServer(t, pool)
+	matchID, profileA, profileB := activateDuoMatchViaGRPC(t, ctx, srv)
+
+	_, err := srv.CompleteMatch(ctxWithProfile(profileA), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	require.NoError(t, err)
+	_, err = srv.CompleteMatch(ctxWithProfile(profileB), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	require.NoError(t, err)
+
+	skip := &matchmakingv1.RateMatchRequest{
+		MatchId:        matchID,
+		RatedProfileId: profileB.String(),
+		Skip:           true,
+	}
+	_, err = srv.RateMatch(ctxWithProfile(profileA), skip)
+	require.NoError(t, err)
+
+	var ratingRows, aggregateRows int
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM match_ratings WHERE match_id = $1 AND rater_profile_id = $2 AND rated_profile_id = $3`,
+		matchID, profileA, profileB,
+	).Scan(&ratingRows))
+	require.Zero(t, ratingRows)
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM player_ratings WHERE profile_id = $1`, profileB,
+	).Scan(&aggregateRows))
+	require.Zero(t, aggregateRows)
+
+	score := &matchmakingv1.RateMatchRequest{
+		MatchId:        matchID,
+		RatedProfileId: profileB.String(),
+		Stars:          4,
+	}
+	_, err = srv.RateMatch(ctxWithProfile(profileA), score)
+	require.NoError(t, err)
+
+	_, err = srv.RateMatch(ctxWithProfile(profileA), score)
+	require.Equal(t, codes.AlreadyExists, status.Code(err))
+}
+
+func TestRateMatch_ZeroStarsWithoutSkipRejected(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startDB(t, ctx)
+	srv := ratingTestServer(t, pool)
+	matchID, profileA, profileB := activateDuoMatchViaGRPC(t, ctx, srv)
+
+	_, err := srv.CompleteMatch(ctxWithProfile(profileA), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	require.NoError(t, err)
+	_, err = srv.CompleteMatch(ctxWithProfile(profileB), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	require.NoError(t, err)
+
+	_, err = srv.RateMatch(ctxWithProfile(profileA), &matchmakingv1.RateMatchRequest{
+		MatchId:        matchID,
+		RatedProfileId: profileB.String(),
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func TestRateMatch_SkipWithScoreRejected(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startDB(t, ctx)
+	srv := ratingTestServer(t, pool)
+	matchID, profileA, profileB := activateDuoMatchViaGRPC(t, ctx, srv)
+
+	_, err := srv.CompleteMatch(ctxWithProfile(profileA), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	require.NoError(t, err)
+	_, err = srv.CompleteMatch(ctxWithProfile(profileB), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	require.NoError(t, err)
+
+	_, err = srv.RateMatch(ctxWithProfile(profileA), &matchmakingv1.RateMatchRequest{
+		MatchId:        matchID,
+		RatedProfileId: profileB.String(),
+		Stars:          4,
+		Skip:           true,
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
 func TestGetPlayerRating_ReturnsAggregate(t *testing.T) {
@@ -287,6 +387,62 @@ func TestBanFromMM_UsesTargetProfileID(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, statusResp.GetMmBanStatus().GetBanned())
+}
+
+func TestBanFromMM_PublishesOnceAfterNewPeerBan(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startDB(t, ctx)
+	srv := ratingTestServer(t, pool)
+	publisher := &recordingPlayerBannedPublisher{}
+	srv.Events = publisher
+	banner := uuid.New()
+	target := uuid.New()
+	reason := " toxic "
+	req := &matchmakingv1.BanFromMMRequest{TargetProfileId: target.String(), Reason: &reason}
+
+	_, err := srv.BanFromMM(ctxWithProfile(banner), req)
+	require.NoError(t, err)
+	require.Equal(t, []mmevents.PlayerBannedEvent{{
+		ProfileID: target.String(),
+		Reason:    "toxic",
+	}}, publisher.events)
+
+	_, err = srv.BanFromMM(ctxWithProfile(banner), req)
+	require.NoError(t, err)
+	require.Len(t, publisher.events, 1, "idempotent ban must not create another event")
+}
+
+func TestBanFromMM_FailuresDoNotPublish(t *testing.T) {
+	t.Parallel()
+	banner := uuid.New()
+	target := uuid.New()
+
+	t.Run("invalid target", func(t *testing.T) {
+		publisher := &recordingPlayerBannedPublisher{}
+		srv := &MatchmakingGRPC{Bans: &store.BanStore{}, Events: publisher}
+		_, err := srv.BanFromMM(ctxWithProfile(banner), &matchmakingv1.BanFromMMRequest{TargetProfileId: "not-a-uuid"})
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+		require.Empty(t, publisher.events)
+	})
+
+	t.Run("missing actor", func(t *testing.T) {
+		publisher := &recordingPlayerBannedPublisher{}
+		srv := &MatchmakingGRPC{Bans: &store.BanStore{}, Events: publisher}
+		_, err := srv.BanFromMM(context.Background(), &matchmakingv1.BanFromMMRequest{TargetProfileId: target.String()})
+		require.Equal(t, codes.Unauthenticated, status.Code(err))
+		require.Empty(t, publisher.events)
+	})
+
+	t.Run("store failure", func(t *testing.T) {
+		publisher := &recordingPlayerBannedPublisher{}
+		srv := &MatchmakingGRPC{Bans: &store.BanStore{}, Events: publisher}
+		_, err := srv.BanFromMM(ctxWithProfile(banner), &matchmakingv1.BanFromMMRequest{TargetProfileId: target.String()})
+		require.Equal(t, codes.Internal, status.Code(err))
+		require.Empty(t, publisher.events)
+	})
 }
 
 func TestRateMatch_ActiveMatchRejected(t *testing.T) {
