@@ -71,13 +71,30 @@ Out of scope:
 - [x] Record the Sol contract and a self-contained plan.
 - [x] Add executable RED contracts for outbound metadata, raw-header denial and
   deployment/listener rollout gaps.
-- [ ] Fresh independent review of RED tests.
-- [ ] Implement Social signer/config and outbound TLS clients, driving each RED
+- [x] Fresh independent review of RED tests.
+- [x] Implement Social signer/config and outbound TLS clients, driving each RED
   assertion green.
-- [ ] Implement User and Space protected runtimes and ordinary-listener denial.
-- [ ] Implement manifests, NetworkPolicies, JWKS exposure, rotation runbook and
+- [x] Implement User and Space protected runtimes and ordinary-listener denial.
+- [x] Implement manifests, NetworkPolicies, JWKS exposure, rotation runbook and
   hosted Compose coverage.
 - [ ] Independent implementation review and exact-head hosted CI.
+
+## Progress
+
+- Original RED contracts reproduced by receiver/signer owners; integrated
+  Social/User/Space short suites and principal/socialprincipal packages pass.
+  Service vet/build/lint checks pass. No local Compose, race or Testcontainers
+  execution was used.
+- Independent read-only security review found no critical/high blockers;
+  final test follow-up `4d78c5c8` was explicitly rechecked. Hosted evidence is
+  still required before merge.
+- `TestRuntimeTLSJWKSRedisIntegration` exercises shared replay across two
+  runtimes, HTTPS JWKS, TLS/wrong CA, next-key use and Redis TTL on hosted CI.
+  `social-principal-bootstrap-check.sh` runs the isolated Compose initializer
+  twice and validates certificate names, key separation and private-file modes.
+- Staging/prod secret preflight runs before any deployment mutation. Missing
+  target secret material is an activation dependency; repository credentials
+  are never reused to satisfy it.
 
 ## Detailed steps
 
@@ -135,9 +152,8 @@ Out of scope:
 
 ## Risks and follow-ups
 
-- The current manifests have no User/Space protected services or Social key
-  mount. The static rollout RED test is deliberately failing until all deploy
-  artifacts land together.
+- Manifests and read-only mounts are implemented; actual target provisioning and
+  synthetic cutover remain deployment duties described in the runbook.
 - Existing internal callers still use legacy metadata for unrelated RPCs. They
   must not be silently migrated or granted Social's allow-list in this change.
 - PR #328 remains historical until this successor exists and has linked RED
