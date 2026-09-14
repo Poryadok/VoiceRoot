@@ -376,18 +376,26 @@ type customStatusEventsRecorder struct{ profile, presence int }
 func (r *customStatusEventsRecorder) PublishProfileCreated(context.Context, string, string) error {
 	return nil
 }
-func (r *customStatusEventsRecorder) PublishProfileUpdated(context.Context, string, string, string) error {
+func (r *customStatusEventsRecorder) PublishProfileUpdated(context.Context, string, []string) error {
 	r.profile++
 	return nil
 }
 func (r *customStatusEventsRecorder) PublishProfileSwitched(context.Context, string, string, string) error {
 	return nil
 }
-func (r *customStatusEventsRecorder) PublishVerified(context.Context, string, string, string) error {
+func (r *customStatusEventsRecorder) PublishVerified(context.Context, string, string) error {
 	return nil
 }
 func (r *customStatusEventsRecorder) PublishPresenceChanged(context.Context, string, string, string) error {
 	r.presence++
+	return nil
+}
+
+func (*customStatusEventsRecorder) PublishGameDetected(context.Context, string, string) error {
+	return nil
+}
+
+func (*customStatusEventsRecorder) PublishSettingsChanged(context.Context, string, []string, string) error {
 	return nil
 }
 
