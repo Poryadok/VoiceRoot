@@ -40,6 +40,7 @@ type SpaceRow struct {
 	EntryRequirement   string
 	EntryQuestionsJSON *string
 	MMConfigJSON       *string
+	AllowGuests        bool
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
 }
@@ -51,10 +52,10 @@ type ListMySpacesPage struct {
 }
 
 const spaceSelectColumns = `id, name, description, icon_url, banner_url, visibility, owner_profile_id, member_count,
-       is_verified, verification_type, entry_requirement, entry_questions::text, mm_config::text, created_at, updated_at`
+	       is_verified, verification_type, entry_requirement, entry_questions::text, mm_config::text, allow_guests, created_at, updated_at`
 
 const spaceListSelectColumns = `s.id, s.name, s.description, s.icon_url, s.banner_url, s.visibility, s.owner_profile_id, s.member_count,
-       s.is_verified, s.verification_type, s.entry_requirement, s.entry_questions::text, s.mm_config::text, s.created_at, s.updated_at`
+	       s.is_verified, s.verification_type, s.entry_requirement, s.entry_questions::text, s.mm_config::text, s.allow_guests, s.created_at, s.updated_at`
 
 type listSpaceCursorPayload struct {
 	S string `json:"s"` // RFC3339Nano UTC, joined_at
@@ -418,7 +419,7 @@ func (s *SpaceStore) UpdateSpace(ctx context.Context, spaceID uuid.UUID, in Upda
 		})
 	}
 	if in.Name == nil && in.Description == nil && in.IconURL == nil && in.BannerURL == nil &&
-		in.Visibility == nil && in.EntryRequirement == nil && in.EntryQuestionsJSON == nil && in.MMConfigJSON == nil {
+		in.Visibility == nil && in.EntryRequirement == nil && in.EntryQuestionsJSON == nil && in.MMConfigJSON == nil && in.AllowGuests == nil {
 		return s.GetSpace(ctx, spaceID)
 	}
 	sets := make([]string, 0, 9)
@@ -464,6 +465,11 @@ func (s *SpaceStore) UpdateSpace(ctx context.Context, spaceID uuid.UUID, in Upda
 		args = append(args, *in.MMConfigJSON)
 		argN++
 	}
+	if in.AllowGuests != nil {
+		sets = append(sets, fmt.Sprintf("allow_guests = $%d", argN))
+		args = append(args, *in.AllowGuests)
+		argN++
+	}
 	sets = append(sets, "updated_at = now()")
 	args = append(args, spaceID)
 	q := fmt.Sprintf(`
@@ -485,6 +491,7 @@ type UpdateSpaceInput struct {
 	EntryRequirement   *string
 	EntryQuestionsJSON *string
 	MMConfigJSON       *string
+	AllowGuests        *bool
 }
 
 // ListMySpacesPage returns spaces the profile is a member of, ordered by joined_at DESC, space id DESC.
@@ -630,10 +637,10 @@ func scanSpaceRow(row pgx.Row) (*SpaceRow, error) {
 	var name, description, visibility, verificationType, entryRequirement string
 	var iconURL, bannerURL, entryQuestions, mmConfig sql.NullString
 	var memberCount int32
-	var isVerified bool
+	var isVerified, allowGuests bool
 	var createdAt, updatedAt time.Time
 	err := row.Scan(&id, &name, &description, &iconURL, &bannerURL, &visibility, &owner, &memberCount,
-		&isVerified, &verificationType, &entryRequirement, &entryQuestions, &mmConfig, &createdAt, &updatedAt)
+		&isVerified, &verificationType, &entryRequirement, &entryQuestions, &mmConfig, &allowGuests, &createdAt, &updatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -641,7 +648,7 @@ func scanSpaceRow(row pgx.Row) (*SpaceRow, error) {
 		return nil, err
 	}
 	return spaceRowFromScan(id, name, description, iconURL, bannerURL, visibility, owner, memberCount,
-		isVerified, verificationType, entryRequirement, entryQuestions, mmConfig, createdAt, updatedAt), nil
+		isVerified, verificationType, entryRequirement, entryQuestions, mmConfig, allowGuests, createdAt, updatedAt), nil
 }
 
 func scanSpaceRowWithJoinedAt(row pgx.Row) (*SpaceRow, time.Time, error) {
@@ -649,20 +656,20 @@ func scanSpaceRowWithJoinedAt(row pgx.Row) (*SpaceRow, time.Time, error) {
 	var name, description, visibility, verificationType, entryRequirement string
 	var iconURL, bannerURL, entryQuestions, mmConfig sql.NullString
 	var memberCount int32
-	var isVerified bool
+	var isVerified, allowGuests bool
 	var createdAt, updatedAt, joinedAt time.Time
 	err := row.Scan(&id, &name, &description, &iconURL, &bannerURL, &visibility, &owner, &memberCount,
-		&isVerified, &verificationType, &entryRequirement, &entryQuestions, &mmConfig, &createdAt, &updatedAt, &joinedAt)
+		&isVerified, &verificationType, &entryRequirement, &entryQuestions, &mmConfig, &allowGuests, &createdAt, &updatedAt, &joinedAt)
 	if err != nil {
 		return nil, time.Time{}, err
 	}
 	return spaceRowFromScan(id, name, description, iconURL, bannerURL, visibility, owner, memberCount,
-		isVerified, verificationType, entryRequirement, entryQuestions, mmConfig, createdAt, updatedAt), joinedAt.UTC(), nil
+		isVerified, verificationType, entryRequirement, entryQuestions, mmConfig, allowGuests, createdAt, updatedAt), joinedAt.UTC(), nil
 }
 
 func spaceRowFromScan(id uuid.UUID, name, description string, iconURL, bannerURL sql.NullString,
 	visibility string, owner uuid.UUID, memberCount int32, isVerified bool,
-	verificationType, entryRequirement string, entryQuestions, mmConfig sql.NullString, createdAt, updatedAt time.Time) *SpaceRow {
+	verificationType, entryRequirement string, entryQuestions, mmConfig sql.NullString, allowGuests bool, createdAt, updatedAt time.Time) *SpaceRow {
 	r := &SpaceRow{
 		ID:               id,
 		Name:             name,
@@ -673,6 +680,7 @@ func spaceRowFromScan(id uuid.UUID, name, description string, iconURL, bannerURL
 		IsVerified:       isVerified,
 		VerificationType: verificationType,
 		EntryRequirement: entryRequirement,
+		AllowGuests:      allowGuests,
 		CreatedAt:        createdAt.UTC(),
 		UpdatedAt:        updatedAt.UTC(),
 	}

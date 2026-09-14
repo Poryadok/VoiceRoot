@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../backend/chats_client.dart';
 import '../../backend/messages_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/chat_providers.dart';
@@ -73,8 +74,7 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
     final voice = VoiceColors.of(context);
     final spaceId = _spaceIdForChat(ref, widget.chatId);
 
-    return Column(
-      key: ChatInfoPanel.panelKey,
+    final header = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (widget.isGroup) ...[
@@ -88,6 +88,10 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
           ),
           Divider(height: 1, color: voice.borderDefault),
         ],
+        StandaloneChatGuestSettingsSection(
+          key: ValueKey(widget.chatId),
+          chatId: widget.chatId,
+        ),
         if (spaceId != null)
           _ChatOverrideBar(spaceId: spaceId, chatId: widget.chatId),
         if (spaceId != null && widget.isGroup)
@@ -97,7 +101,9 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
           ),
         if (!widget.isGroup) DmE2eSettingsSection(chatId: widget.chatId),
         ChatNotificationOverridesSection(chatId: widget.chatId),
-        TabBar(
+      ],
+    );
+    final tabs = TabBar(
           controller: _tabs,
           isScrollable: true,
           tabs: [
@@ -106,9 +112,27 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
             Tab(key: ChatInfoPanel.linksTabKey, text: l10n.chatSharedMediaTabLinks),
             Tab(key: ChatInfoPanel.voiceTabKey, text: l10n.chatSharedMediaTabVoice),
           ],
-        ),
-        Expanded(
-          child: TabBarView(
+        );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // A narrow bottom sheet can leave less than 250px for this panel
+        // after its title bar. Keep both the settings header and tab strip
+        // visible instead of forcing the fixed media area past the viewport.
+        final mediaHeight = constraints.maxHeight < 360
+            ? 112.0
+            : constraints.maxHeight < 640
+            ? 248.0
+            : constraints.maxHeight * 0.4;
+        return Column(
+          key: ChatInfoPanel.panelKey,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: SingleChildScrollView(child: header)),
+            tabs,
+            SizedBox(
+              height: mediaHeight,
+              child: TabBarView(
             controller: _tabs,
             children: [
               _SharedMediaTab(chatId: widget.chatId, kind: SharedMediaTabKind.media),
@@ -117,12 +141,107 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
               _SharedMediaTab(chatId: widget.chatId, kind: SharedMediaTabKind.voice),
             ],
           ),
-        ),
-      ],
+            ),
+          ],
+        );
+      },
     );
   }
 }
 
+/// Guest admission is an explicit standalone group/channel setting.
+/// Space chats are intentionally excluded: their admission is owned by Space.
+class StandaloneChatGuestSettingsSection extends ConsumerStatefulWidget {
+  const StandaloneChatGuestSettingsSection({super.key, required this.chatId});
+
+  static const Key sectionKey = Key('chat_info_allow_guests_section');
+  static const Key toggleKey = Key('chat_info_allow_guests_toggle');
+
+  final String chatId;
+
+  @override
+  ConsumerState<StandaloneChatGuestSettingsSection> createState() =>
+      _StandaloneChatGuestSettingsSectionState();
+}
+
+class _StandaloneChatGuestSettingsSectionState
+    extends ConsumerState<StandaloneChatGuestSettingsSection> {
+  bool? _allowGuests;
+  bool _updating = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final chat = chatMetadataForId(
+      ref.watch(chatListControllerProvider).items,
+      widget.chatId,
+    );
+    if (chat == null || chat.isSpaceChannel || !(chat.isGroup || chat.isChannel)) {
+      return const SizedBox.shrink();
+    }
+
+    final activeProfileId = ref.watch(authControllerProvider).activeProfileId;
+    final members = ref.watch(groupMembersProvider(widget.chatId));
+    final role = members.valueOrNull?.members
+        .where((member) => member.profileId == activeProfileId)
+        .map((member) => member.role)
+        .firstOrNull;
+    if (role != kChatRoleOwner && role != 'admin') return const SizedBox.shrink();
+
+    final l10n = AppLocalizations.of(context)!;
+    final value = _allowGuests ?? chat.allowGuests;
+    return Column(
+      key: StandaloneChatGuestSettingsSection.sectionKey,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Divider(height: 1, color: VoiceColors.of(context).borderDefault),
+        SwitchListTile(
+          key: StandaloneChatGuestSettingsSection.toggleKey,
+          title: Text(l10n.chatAllowGuestsTitle),
+          subtitle: Text(l10n.chatAllowGuestsSubtitle),
+          value: value,
+          onChanged: _updating ? null : (enabled) => _update(enabled),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _update(bool enabled) async {
+    final authorization = ref.read(authorizationHeaderProvider);
+    if (authorization == null) return;
+    setState(() => _updating = true);
+    final result = await ref.read(voiceChatsClientProvider).updateGroup(
+      authorization: authorization,
+      chatId: widget.chatId,
+      allowGuests: enabled,
+    );
+    if (!mounted) return;
+    switch (result) {
+      case ChatsApiOk(:final data):
+        setState(() {
+          _allowGuests = data.allowGuests;
+        });
+        final reloaded = await ref
+            .read(chatListControllerProvider.notifier)
+            .reloadInitial();
+        if (!mounted) return;
+        final refreshedChatExists = ref
+            .read(chatListControllerProvider)
+            .items
+            .any((item) => item.chatId == widget.chatId);
+        setState(() {
+          _updating = false;
+          if (reloaded && refreshedChatExists) {
+            _allowGuests = null;
+          }
+        });
+      case ChatsApiFailure(:final message):
+        setState(() => _updating = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message)),
+        );
+    }
+  }
+}
 class _SharedMediaTab extends ConsumerWidget {
   const _SharedMediaTab({required this.chatId, required this.kind});
 
