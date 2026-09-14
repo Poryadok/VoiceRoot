@@ -179,6 +179,16 @@ requires a new snapshot.
 
 Доменный поток JetStream: **`voice.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)).
 
+Existing participant lifecycle publishers provide the authoritative recipient
+set consumed by Realtime; Realtime does not infer recipients from a room, chat or
+Space. The envelope UUID `event_id` is the client dedupe key and `occurred_at` is
+diagnostic only. Exact per-operation recipients, public WS fields, malformed
+event handling and reconnect ordering are frozen in
+[realtime-service.md](realtime-service.md#voice-participant-lifecycle-fan-out-shipped-compatibility-contract).
+This compatibility stream is not the Phase-0 Space watcher/roster stream: the
+latter requires audience-specific disclosure plus room authorization epoch and
+monotonic roster version before it can ship.
+
 | Событие                      | Данные                                  |
 |------------------------------|-----------------------------------------|
 | `voice.call_started`         | room_id, initiator_id, type             |

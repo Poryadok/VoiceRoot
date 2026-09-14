@@ -110,6 +110,49 @@ require contiguous versions and fetch the signed Voice snapshot on a gap, reconn
 or epoch change. The ordinary WebSocket `s` remains connection-local and does not
 replace roster recovery.
 
+### Voice participant lifecycle fan-out (shipped compatibility contract)
+
+This contract applies only to the existing participant-targeted Voice events. It
+does **not** implement or weaken the Phase-0 Space watcher/roster contract above.
+Voice is the recipient authority: Realtime uses only the explicit recipient IDs
+inside the trusted `VoiceStreamEvent`, delivers to every active WebSocket tab of
+each named profile, and never expands the audience from `chat_id`, `room_id`,
+`space_id`, a client subscription, or the Redis connection registry. Duplicate
+recipient IDs are compacted before fan-out. Each connection still passes the
+normal session-epoch write guard.
+
+Every delivered payload includes the outer Voice envelope's UUID `event_id` and
+UTC RFC 3339 `occurred_at`. Clients deduplicate Voice lifecycle frames by
+`event_id`; `occurred_at` is diagnostic chronology, not an ordering authority.
+An envelope without a valid UUID event ID, valid timestamp, or the operation's
+authoritative recipient set is discarded fail-closed and ACKed as malformed
+after the bounded local attempt; Realtime does not synthesize an audience.
+
+| WS op | Voice-authoritative recipients | Public `d` fields in addition to `event_id`, `occurred_at` |
+|---|---|---|
+| `call_incoming` | `callee_profile_id` only | `room_id`, `chat_id`, `initiator_profile_id`, `callee_profile_id`, `media_kind`, `livekit_room_name`, `expires_at` |
+| `call_accepted` | every unique `profile_ids` entry | `room_id`, `chat_id`, `accepted_by_profile_id`, `profile_ids`, `media_kind`, `livekit_room_name` |
+| `call_declined` | every unique `profile_ids` entry | `room_id`, `chat_id`, `declined_by_profile_id`, `profile_ids` |
+| `call_missed` | unique non-empty `initiator_profile_id`, `callee_profile_id` | `room_id`, `chat_id`, `initiator_profile_id`, `callee_profile_id` |
+| `call_ended` | every unique `profile_ids` entry | `room_id`, `duration_seconds`, `profile_ids`, `reason`, `ended_by_profile_id` |
+| `call_started` | every unique `profile_ids` entry | current call/session locator fields; the complete `voice_room_id` / `space_id` pair is included only for `room_type=voice_room` |
+| `voice_state_update` | every unique `profile_ids` entry | `room_id`, changed `profile_id`, mute/deafen/video state and compatibility `profile_ids` |
+| `screen_share_started`, `screen_share_stopped` | every unique `profile_ids` entry | `room_id`, sharing `profile_id`, `stream_id`; routing `profile_ids` are not copied into `d` |
+| `voice_member_joined` | every unique `notify_profile_ids` entry; never the joined profile merely because it joined | `room_id`, `voice_room_id`, `space_id`, `joined_profile_id`, compatibility `profile_ids` snapshot |
+
+The table freezes disclosure for the existing participant audience only. A
+future Space watcher event must carry the Phase-0 audience-specific redacted or
+full payload plus `(epoch, version, event_id)` from Voice; Realtime must not reuse
+the participant list as an inferred Space audience.
+
+JetStream preserves delivery to the consumer, but this compatibility stream has
+no durable client replay and no cross-connection total order. WebSocket `s` is
+the delivery order of one connection only. Duplicate/redelivered `event_id`
+frames may occur across reconnects. After each new `hello`, the client reconciles
+`GetActiveCall`; `GetVoiceStates` owns the current room state/screen-share
+projection. Space roster recovery continues to use the Phase-0
+`(epoch, version, event_id)` rule, not `s` or `occurred_at`.
+
 | op             | Описание                                              |
 |----------------|-------------------------------------------------------|
 | `heartbeat`    | Keepalive (каждые 30 сек)                             |
