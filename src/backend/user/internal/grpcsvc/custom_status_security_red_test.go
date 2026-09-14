@@ -2,6 +2,7 @@ package grpcsvc
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
@@ -301,6 +302,129 @@ VALUES ($1, $2, 'presenceowner', '7004', 'Owner', true),
 	assertCustomStatusOmittedForDirectAndBulk(t, cli, context.Background(), ownerProfile)
 	ambiguous := metadata.AppendToOutgoingContext(ctx, authctx.HeaderProfileID, viewerProfile.String(), authctx.HeaderProfileID, ownerProfile.String())
 	assertCustomStatusOmittedForDirectAndBulk(t, cli, ambiguous, ownerProfile)
+}
+
+// TestCustomStatus_PresenceDependencyFailuresFailClosed is deliberately
+// separate from generic audience tests: the Space and block S2S calls are
+// privacy dependencies, and either unavailable dependency must never expose a
+// target's session custom status through either read shape.
+func TestCustomStatus_PresenceDependencyFailuresFailClosed(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
+	integrationtest.ApplyUserDBMigrations(t, ctx, pool, repoRoot(t))
+
+	ownerAccount, ownerProfile := uuid.New(), uuid.New()
+	viewerAccount, viewerProfile := uuid.New(), uuid.New()
+	_, err := pool.Exec(ctx, `
+INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+VALUES ($1, $2, 'dependencyowner', '7014', 'Owner', true),
+       ($3, $4, 'dependencyviewer', '7015', 'Viewer', true)`,
+		ownerProfile, ownerAccount, viewerProfile, viewerAccount)
+	require.NoError(t, err)
+
+	privacyStore := store.NewPrivacyStore(pool)
+	spaceOnly := privacy.Audience{SpaceMembers: true, SpaceIDs: []string{uuid.NewString()}}
+	spacePrivacy := privacy.SettingsForPreset("work")
+	spacePrivacy.ShowOnline = spaceOnly
+	_, err = privacyStore.Upsert(ctx, store.PrivacyRowFromSettings(ownerProfile, spacePrivacy))
+	require.NoError(t, err)
+	mr := miniredis.RunT(t)
+	t.Cleanup(mr.Close)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+	profiles := store.NewProfileStore(pool)
+	secret := "dependency-secret"
+
+	seed := startUserPrivacyTestServer(t, profiles, privacyStore, rdb)
+	_, err = seed.UpdatePresence(withProfileTier(ctx, ownerAccount, ownerProfile, "premium"), &userv1.UpdatePresenceRequest{
+		Status: "online", CustomStatus: &secret,
+	})
+	require.NoError(t, err)
+	viewer := withUserAuthCtx(ctx, viewerAccount, viewerProfile)
+
+	t.Run("Space membership error omits custom status", func(t *testing.T) {
+		cli := startUserPrivacyTestServer(t, profiles, privacyStore, rdb, func(s *UserGRPC) {
+			s.SpaceCoMembership = customStatusFailingSpaceMembership{}
+		})
+		assertCustomStatusOmittedForDirectAndBulk(t, cli, viewer, ownerProfile)
+	})
+
+	t.Run("block lookup error omits custom status", func(t *testing.T) {
+		// Keep the audience independently allowed: this assertion exercises the
+		// Social block dependency rather than a generic audience denial.
+		allowed := privacy.SettingsForPreset("personal")
+		_, err := privacyStore.Upsert(ctx, store.PrivacyRowFromSettings(ownerProfile, allowed))
+		require.NoError(t, err)
+		cli := startUserPrivacyTestServer(t, profiles, privacyStore, rdb, func(s *UserGRPC) {
+			s.SocialGraph = alwaysFriendsGraph{}
+			s.Blocks = customStatusFailingBlocks{}
+		})
+		assertCustomStatusOmittedForDirectAndBulk(t, cli, viewer, ownerProfile)
+	})
+}
+
+// TestCustomStatus_PresenceMalformedAndAmbiguousIdentityFailClosed proves that
+// identity parsing itself is a privacy boundary.  The allowed control prevents
+// malformed or duplicate metadata from passing merely because the fixture is
+// otherwise denied by privacy settings.
+func TestCustomStatus_PresenceMalformedAndAmbiguousIdentityFailClosed(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
+	integrationtest.ApplyUserDBMigrations(t, ctx, pool, repoRoot(t))
+
+	ownerAccount, ownerProfile := uuid.New(), uuid.New()
+	viewerAccount, viewerProfile := uuid.New(), uuid.New()
+	_, err := pool.Exec(ctx, `
+INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
+VALUES ($1, $2, 'identityowner', '7016', 'Owner', true),
+       ($3, $4, 'identityviewer', '7017', 'Viewer', true)`,
+		ownerProfile, ownerAccount, viewerProfile, viewerAccount)
+	require.NoError(t, err)
+
+	privacyStore := store.NewPrivacyStore(pool)
+	seedPrivacyPreset(ctx, t, privacyStore, ownerProfile, "personal")
+	mr := miniredis.RunT(t)
+	t.Cleanup(mr.Close)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+	secret := "identity-secret"
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), privacyStore, rdb, func(s *UserGRPC) {
+		s.SocialGraph = alwaysFriendsGraph{}
+	})
+	_, err = cli.UpdatePresence(withProfileTier(ctx, ownerAccount, ownerProfile, "premium"), &userv1.UpdatePresenceRequest{
+		Status: "online", CustomStatus: &secret,
+	})
+	require.NoError(t, err)
+
+	assertCustomStatusPresentForDirectAndBulk(t, cli, withUserAuthCtx(ctx, viewerAccount, viewerProfile), ownerProfile, secret)
+	for name, readCtx := range map[string]context.Context{
+		"malformed profile metadata": metadata.AppendToOutgoingContext(ctx, authctx.HeaderProfileID, "not-a-uuid"),
+		"ambiguous profile metadata": metadata.AppendToOutgoingContext(ctx,
+			authctx.HeaderProfileID, ownerProfile.String(),
+			authctx.HeaderProfileID, viewerProfile.String()),
+	} {
+		t.Run(name, func(t *testing.T) {
+			assertCustomStatusOmittedForDirectAndBulk(t, cli, readCtx, ownerProfile)
+		})
+	}
+}
+
+type customStatusFailingSpaceMembership struct{}
+
+func (customStatusFailingSpaceMembership) AreCoMembers(context.Context, uuid.UUID, uuid.UUID, []string) (bool, error) {
+	return false, errors.New("space unavailable")
+}
+
+type customStatusFailingBlocks struct{}
+
+func (customStatusFailingBlocks) AccountPairBlocked(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return false, errors.New("blocks unavailable")
 }
 
 func assertCustomStatusPresentForDirectAndBulk(t *testing.T, cli userv1.UserServiceClient, ctx context.Context, profileID uuid.UUID, want string) {
