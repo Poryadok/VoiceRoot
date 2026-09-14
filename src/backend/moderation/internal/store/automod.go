@@ -167,6 +167,9 @@ func decodeReportListCursor(raw string) (priority int, createdAt time.Time, repo
 	if err != nil {
 		return 0, time.Time{}, uuid.Nil, ErrInvalidReportListCursor
 	}
+	if p.P < 1 || p.P > 4 || id == uuid.Nil {
+		return 0, time.Time{}, uuid.Nil, ErrInvalidReportListCursor
+	}
 	return p.P, ts.UTC(), id, nil
 }
 

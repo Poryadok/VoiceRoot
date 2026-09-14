@@ -31,6 +31,16 @@ service SearchService {
 }
 ```
 
+For all four search RPCs, authentication middleware runs first. After
+authentication, the decoded raw query is rejected with `InvalidArgument` when
+it exceeds 512 UTF-8 bytes, before UTF-8 validation, Unicode scanning, or
+trimming. Within that bounded envelope, the query must be valid UTF-8;
+`strings.TrimSpace` applies Unicode whitespace semantics; the trimmed query
+must be non-empty; and it must contain at most 128 Unicode code points. The
+512-byte raw envelope intentionally rejects whitespace-padded queries that
+would otherwise trim to a valid value, because accepting unbounded padding
+would make the validation work unbounded and enable a denial-of-service path.
+
 ## Стратегия масштабирования
 
 Полная **пороговая матрица** (когда именно v1→v2→v3, Meili vs ES, правила двойной записи): [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) — разделы «Полнотекстовый поиск» и «Пороговая матрица».

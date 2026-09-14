@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -95,10 +96,22 @@ func (r fakeObjectReader) ReadObject(_ context.Context, key string, _ int64) ([]
 	return defaultUploadBytes, nil
 }
 
+type failingObjectReader struct{}
+
+func (failingObjectReader) ReadObject(context.Context, string, int64) ([]byte, error) {
+	return nil, errors.New("r2 unavailable")
+}
+
 type fakeScanner string
 
 func (s fakeScanner) ScanBytes(context.Context, []byte) (string, error) {
 	return string(s), nil
+}
+
+type failingScanner struct{}
+
+func (failingScanner) ScanBytes(context.Context, []byte) (string, error) {
+	return "", errors.New("clamav unavailable")
 }
 
 func TestRequestUploadRequiresProfileMetadata(t *testing.T) {
@@ -507,6 +520,79 @@ func TestConfirmUploadScansRiskyFilesAndBlocksInfectedDownload(t *testing.T) {
 	require.Equal(t, "failed", confirmed.GetFileMetadata().GetStatus())
 	require.Equal(t, "infected", confirmed.GetFileMetadata().GetScanResult())
 
+	_, err = client.GetFileURL(authed, &filev1.GetFileURLRequest{FileId: fileID})
+	require.Error(t, err)
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+}
+
+func TestConfirmUploadReturnsTerminalMetadataWhenScanFails(t *testing.T) {
+	ctx := context.Background()
+	pool := startFilePostgres(t, ctx)
+	presigner := &recordingPresigner{}
+	profileID := uuid.New()
+	authed := withFileProfile(ctx, uuid.New(), profileID)
+	client := startFileGRPCFull(t, pool, grpcsvc.Deps{
+		Presigner: presigner,
+		Reader:    fakeObjectReader{},
+		Scanner:   failingScanner{},
+	})
+	uploadResp, err := client.RequestUpload(authed, &filev1.RequestUploadRequest{
+		OriginalName: "payload.zip",
+		MimeType:     "application/zip",
+		SizeBytes:    1024,
+	})
+	require.NoError(t, err)
+	fileID := uploadResp.GetUploadResponse().GetFileId()
+	presignedKey := uploadResp.GetUploadResponse().GetR2Key()
+	client = startFileGRPCFull(t, pool, grpcsvc.Deps{
+		Presigner: presigner,
+		Reader:    fakeObjectReader{presignedKey: []byte("zip")},
+		Scanner:   failingScanner{},
+	})
+
+	confirmed, err := client.ConfirmUpload(authed, &filev1.ConfirmUploadRequest{
+		FileId:     fileID,
+		Sha256Hash: sha256Hex([]byte("zip")),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "failed", confirmed.GetFileMetadata().GetStatus())
+	require.Equal(t, "error", confirmed.GetFileMetadata().GetScanResult())
+	_, err = client.GetFileURL(authed, &filev1.GetFileURLRequest{FileId: fileID})
+	require.Error(t, err)
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+}
+
+func TestConfirmUploadReturnsTerminalMetadataWhenObjectReadFails(t *testing.T) {
+	ctx := context.Background()
+	pool := startFilePostgres(t, ctx)
+	presigner := &recordingPresigner{}
+	profileID := uuid.New()
+	authed := withFileProfile(ctx, uuid.New(), profileID)
+	client := startFileGRPCFull(t, pool, grpcsvc.Deps{
+		Presigner: presigner,
+		Reader:    fakeObjectReader{},
+		Scanner:   fakeScanner("clean"),
+	})
+	uploadResp, err := client.RequestUpload(authed, &filev1.RequestUploadRequest{
+		OriginalName: "payload.zip",
+		MimeType:     "application/zip",
+		SizeBytes:    1024,
+	})
+	require.NoError(t, err)
+	fileID := uploadResp.GetUploadResponse().GetFileId()
+	client = startFileGRPCFull(t, pool, grpcsvc.Deps{
+		Presigner: presigner,
+		Reader:    failingObjectReader{},
+		Scanner:   fakeScanner("clean"),
+	})
+
+	confirmed, err := client.ConfirmUpload(authed, &filev1.ConfirmUploadRequest{
+		FileId:     fileID,
+		Sha256Hash: defaultUploadHash,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "failed", confirmed.GetFileMetadata().GetStatus())
+	require.Equal(t, "error", confirmed.GetFileMetadata().GetScanResult())
 	_, err = client.GetFileURL(authed, &filev1.GetFileURLRequest{FileId: fileID})
 	require.Error(t, err)
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))

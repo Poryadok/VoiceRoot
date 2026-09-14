@@ -53,6 +53,8 @@ staging_infra:
 
 protos:
   - protos/**
+  # Auth Maven compiles this checked-in copy; its drift must trigger the protobuf gate too.
+  - src/backend/auth/src/main/proto/voice/auth/v1/auth.proto
 
 pkg:
   - src/backend/pkg/**

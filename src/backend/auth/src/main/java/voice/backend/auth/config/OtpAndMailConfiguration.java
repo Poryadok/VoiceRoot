@@ -2,6 +2,7 @@ package voice.backend.auth.config;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -52,13 +53,13 @@ public class OtpAndMailConfiguration {
   }
 
   @Bean
-  @ConditionalOnBean(StringRedisTemplate.class)
-  OtpThrottle redisOtpThrottle(StringRedisTemplate redis) {
-    return new RedisOtpThrottle(redis);
+  @ConditionalOnProperty(name = "auth.persistence", havingValue = "jdbc", matchIfMissing = true)
+  OtpThrottle redisOtpThrottle(StringRedisTemplate redis, AuthProperties properties) {
+    return new RedisOtpThrottle(redis, properties.getRedis().getOtp());
   }
 
   @Bean
-  @ConditionalOnMissingBean(OtpThrottle.class)
+  @ConditionalOnProperty(name = "auth.persistence", havingValue = "memory")
   OtpThrottle inMemoryOtpThrottle() {
     return new InMemoryOtpThrottle();
   }
