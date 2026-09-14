@@ -154,7 +154,7 @@ void main() {
     expect(find.textContaining('raw upstream failure'), findsNothing);
   });
 
-  testWidgets('group room shows members sheet with owner badge and kick', (
+  testWidgets('group info modal fits member and settings controls on 400x800', (
     tester,
   ) async {
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -196,7 +196,9 @@ void main() {
           }
           if (path == '/api/v1/chats/$chatId/messages') {
             return http.Response(
-              jsonEncode({'message_list': {'messages': []}}),
+              jsonEncode({
+                'message_list': {'messages': []},
+              }),
               200,
             );
           }
@@ -247,7 +249,9 @@ void main() {
           }
           if (path.startsWith('/api/v1/users/profiles/')) {
             final segments = path.split('/');
-            final id = segments.length >= 5 ? segments[4] : path.split('/').last;
+            final id = segments.length >= 5
+                ? segments[4]
+                : path.split('/').last;
             return http.Response(
               jsonEncode({
                 'profile': {
@@ -274,6 +278,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(ChatInfoPanel.panelKey), findsOneWidget);
+    expect(
+      find.byKey(StandaloneChatGuestSettingsSection.sectionKey),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(ChatNotificationOverridesSection.sectionKey),
+      findsOneWidget,
+    );
+    expect(find.byKey(ChatInfoPanel.mediaTabKey), findsOneWidget);
     expect(find.text('Owner'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.byKey(GroupMembersSheet.kickMemberKey(memberId)),
@@ -289,11 +302,13 @@ void main() {
       find.byKey(GroupMembersSheet.kickMemberKey(memberId)),
       findsOneWidget,
     );
-    expect(
-      find.byKey(GroupMembersSheet.kickMemberKey(ownerId)),
-      findsNothing,
-    );
+    expect(find.byKey(GroupMembersSheet.kickMemberKey(ownerId)), findsNothing);
     expect(find.byKey(GroupMembersSheet.leaveKey), findsOneWidget);
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'the narrow group info modal must not report a layout exception',
+    );
   });
 }
 

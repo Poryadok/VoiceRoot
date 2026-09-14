@@ -67,3 +67,30 @@ func TestProfileIndexer_ProfileCreated_UpsertsDocument(t *testing.T) {
 	require.Equal(t, accountID, rec.upserts[0].AccountID)
 	require.Equal(t, "alice", rec.upserts[0].Username)
 }
+
+func TestProfileIndexer_ProfileUpdated_UpsertsDocument(t *testing.T) {
+	t.Parallel()
+	rec := &recordingProfileStore{}
+	accountID := uuid.New()
+	profileID := uuid.New()
+	idx := &ProfileIndexer{
+		Store: rec,
+		Profiles: &stubProfileHydrator{
+			accountID: accountID,
+			username:  "alice",
+			disc:      "0001",
+			display:   "Alice updated",
+		},
+	}
+	env := &eventsv1.UserStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.UserStreamEvent_ProfileUpdated{
+			ProfileUpdated: &eventsv1.ProfileUpdated{ProfileId: profileID.String(), ChangedFields: []string{"display_name"}},
+		},
+	}
+	require.NoError(t, idx.Handle(context.Background(), env))
+	require.Len(t, rec.upserts, 1)
+	require.Equal(t, profileID, rec.upserts[0].ProfileID)
+	require.Equal(t, "Alice updated", rec.upserts[0].DisplayName)
+}
