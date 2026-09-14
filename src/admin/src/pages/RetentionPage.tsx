@@ -1,24 +1,33 @@
 import { useEffect, useState } from "react";
 import { fetchRetention, type RetentionCohort } from "../api/analytics";
 import { AnalyticsSubnav } from "../components/AnalyticsSubnav";
+import { AnalyticsTimeRangeFilter, AnalyticsTimeRangeScope, useAnalyticsTimeRange } from "../components/AnalyticsTimeRange";
 
-export function RetentionPage() {
+function RetentionContent() {
   const [cohorts, setCohorts] = useState<RetentionCohort[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const { range, isRangeValid } = useAnalyticsTimeRange();
 
   useEffect(() => {
+    if (!isRangeValid) {
+      return;
+    }
+    let active = true;
     setLoading(true);
     setError(null);
-    fetchRetention()
-      .then((r) => setCohorts(r.cohorts ?? []))
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, []);
+    const request = range ? fetchRetention(range) : fetchRetention();
+    void request
+      .then((r) => { if (active) setCohorts(r.cohorts ?? []); })
+      .catch((e: Error) => { if (active) setError(e.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [isRangeValid, range]);
 
   return (
     <>
       <AnalyticsSubnav />
+      <AnalyticsTimeRangeFilter />
       <section>
         <h2>Retention (D1 / D7 / D30)</h2>
         {loading ? <p>Loading…</p> : null}
@@ -51,4 +60,8 @@ export function RetentionPage() {
       </section>
     </>
   );
+}
+
+export function RetentionPage() {
+  return <AnalyticsTimeRangeScope><RetentionContent /></AnalyticsTimeRangeScope>;
 }
