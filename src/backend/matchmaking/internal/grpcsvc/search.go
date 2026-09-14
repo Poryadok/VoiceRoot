@@ -238,6 +238,11 @@ func (s *MatchmakingGRPC) CancelSearch(ctx context.Context, req *matchmakingv1.C
 	if sess.ProfileID != profileID {
 		return nil, status.Error(codes.PermissionDenied, "not session owner")
 	}
+	if sess.Status == store.SessionStatusCancelled {
+		// A cancelled search has already released its queue reservation.  A
+		// transport retry must preserve the successful terminal outcome.
+		return &matchmakingv1.CancelSearchResponse{}, nil
+	}
 	if sess.Status != store.SessionStatusSearching {
 		return nil, status.Error(codes.FailedPrecondition, "session not searching")
 	}
@@ -253,6 +258,13 @@ func (s *MatchmakingGRPC) CancelSearch(ctx context.Context, req *matchmakingv1.C
 	}
 
 	if _, err := deps.Sessions.Cancel(ctx, sess.ID); errors.Is(err, store.ErrSessionNotSearchable) {
+		// Another concurrent cancellation may have won between the read above
+		// and the conditional update.  Return the same terminal success only
+		// when that operation actually cancelled this session.
+		latest, getErr := deps.Sessions.Get(ctx, sess.ID)
+		if getErr == nil && latest.Status == store.SessionStatusCancelled {
+			return &matchmakingv1.CancelSearchResponse{}, nil
+		}
 		return nil, status.Error(codes.FailedPrecondition, "session not searching")
 	} else if err != nil {
 		return nil, status.Errorf(codes.Internal, "cancel session: %v", err)

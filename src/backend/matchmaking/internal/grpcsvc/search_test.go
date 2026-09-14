@@ -85,6 +85,43 @@ func TestStartSearch_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestCancelSearch_RetryAfterCancellationIsIdempotent(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startDB(t, ctx)
+	srv := searchTestServer(t, pool)
+	ctx = ctxWithProfileAccount(uuid.New(), uuid.New())
+
+	started, err := srv.StartSearch(ctx, &matchmakingv1.StartSearchRequest{
+		GameId:       dotaGameID(t, srv, ctx),
+		Mode:         "5v5 Ranked",
+		CriteriaJson: validDotaCriteriaJSON(),
+	})
+	require.NoError(t, err)
+
+	req := &matchmakingv1.CancelSearchRequest{SessionId: started.GetSearchSession().GetId()}
+	_, err = srv.CancelSearch(ctx, req)
+	require.NoError(t, err)
+	_, err = srv.CancelSearch(ctx, req)
+	require.NoError(t, err, "retrying a terminal cancellation must preserve its successful outcome")
+
+	status, err := srv.GetSearchStatus(ctx, &matchmakingv1.GetSearchStatusRequest{
+		SessionId: started.GetSearchSession().GetId(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, store.SessionStatusCancelled, status.GetSearchSession().GetStatus())
+
+	sessionID, err := uuid.Parse(started.GetSearchSession().GetId())
+	require.NoError(t, err)
+	gameID, err := uuid.Parse(started.GetSearchSession().GetGameId())
+	require.NoError(t, err)
+	queued, err := srv.Queue.ListSessionIDs(ctx, gameID, started.GetSearchSession().GetMode(), "eu", 0)
+	require.NoError(t, err)
+	require.NotContains(t, queued, sessionID)
+}
+
 func TestStartSearch_InvalidCriteriaRejected(t *testing.T) {
 	if testing.Short() {
 		t.Skip()

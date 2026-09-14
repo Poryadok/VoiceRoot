@@ -67,6 +67,21 @@ func (s *MatchmakingGRPC) RespondToMatch(ctx context.Context, req *matchmakingv1
 		return nil, status.Errorf(codes.Internal, "get match: %v", err)
 	}
 	if match.Status != store.MatchStatusPendingAccept {
+		// A final accept can be retried after the other participant's response
+		// activated the match.  Preserve that caller's successful outcome when
+		// the durable proposal proves it was this exact accepted response.
+		if req.GetAccept() && match.Status == store.MatchStatusActive {
+			proposal, proposalErr := s.Matches.GetProposalForProfile(ctx, matchID, profileID)
+			if proposalErr == nil && proposal.Response == store.ProposalResponseAccepted {
+				sess, sessionErr := s.Sessions.Get(ctx, proposal.SearchSessionID)
+				if sessionErr == nil {
+					return &matchmakingv1.RespondToMatchResponse{
+						Match:         toProtoMatch(match),
+						SearchSession: toProtoSession(sess),
+					}, nil
+				}
+			}
+		}
 		return nil, status.Error(codes.FailedPrecondition, "match not awaiting response")
 	}
 
@@ -84,6 +99,20 @@ func (s *MatchmakingGRPC) RespondToMatch(ctx context.Context, req *matchmakingv1
 
 	if _, err := s.Matches.SetProposalResponse(ctx, matchID, profileID, store.ProposalResponseAccepted); err != nil {
 		if errors.Is(err, store.ErrProposalNotFound) {
+			// The request can be replayed after a lost response.  It is a
+			// successful retry only when this participant already accepted; a
+			// decline or another terminal state must remain a failed precondition.
+			existing, getErr := s.Matches.GetProposalForProfile(ctx, matchID, profileID)
+			if getErr == nil && existing.Response == store.ProposalResponseAccepted {
+				latestMatch, matchErr := s.Matches.Get(ctx, matchID)
+				latestSession, sessionErr := s.Sessions.Get(ctx, existing.SearchSessionID)
+				if matchErr == nil && sessionErr == nil {
+					return &matchmakingv1.RespondToMatchResponse{
+						Match:         toProtoMatch(latestMatch),
+						SearchSession: toProtoSession(latestSession),
+					}, nil
+				}
+			}
 			return nil, status.Error(codes.FailedPrecondition, "already responded")
 		}
 		return nil, status.Errorf(codes.Internal, "accept match: %v", err)
@@ -105,10 +134,10 @@ func (s *MatchmakingGRPC) RespondToMatch(ctx context.Context, req *matchmakingv1
 	profileIDs := match.ProfileIDs()
 	var voiceRoomID, chatID string
 	if s.Squad != nil {
-			voiceRoomID, chatID, err = s.Squad.Provision(ctx, matchID, profileIDs)
-			if err != nil {
-				return nil, status.Errorf(codes.Unavailable, "squad provisioning unavailable: %v", err)
-			}
+		voiceRoomID, chatID, err = s.Squad.Provision(ctx, matchID, profileIDs)
+		if err != nil {
+			return nil, status.Errorf(codes.Unavailable, "squad provisioning unavailable: %v", err)
+		}
 	}
 	match, err = s.Matches.ActivateMatch(ctx, matchID, voiceRoomID, chatID)
 	if err != nil {
