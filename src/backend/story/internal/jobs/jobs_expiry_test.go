@@ -2,6 +2,7 @@ package jobs_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -104,6 +105,33 @@ func TestArchivePurgeOutbox_stageSurvivesRestart(t *testing.T) {
 	require.Len(t, ops, 1)
 	require.Equal(t, mediaID, ops[0].MediaFileID)
 	ok, err := st.CompleteMediaDeletion(ctx, ops[0].OperationID, ops[0].LeaseToken)
+	require.NoError(t, err)
+	require.True(t, ok)
+}
+
+func TestArchivePurgeOutbox_failureRequeuesAndStaleLeaseCannotComplete(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	st, ctx := startArchivePurgeStore(t)
+	_, _ = seedExpiredMediaStory(t, ctx, st)
+	_, err := st.StageArchivePurgeBatch(ctx, 1)
+	require.NoError(t, err)
+	first, err := st.ClaimMediaDeletion(ctx, 1, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, first, 1)
+	ok, err := st.FailMediaDeletion(ctx, first[0].OperationID, first[0].LeaseToken, errors.New("definite failure"))
+	require.NoError(t, err)
+	require.True(t, ok)
+	_, err = st.Pool.Exec(ctx, `UPDATE story_media_deletion_outbox SET available_at=now()-interval '1 second'`)
+	require.NoError(t, err)
+	second, err := st.ClaimMediaDeletion(ctx, 1, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, second, 1)
+	ok, err = st.CompleteMediaDeletion(ctx, first[0].OperationID, first[0].LeaseToken)
+	require.NoError(t, err)
+	require.False(t, ok)
+	ok, err = st.CompleteMediaDeletion(ctx, second[0].OperationID, second[0].LeaseToken)
 	require.NoError(t, err)
 	require.True(t, ok)
 }
