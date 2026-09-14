@@ -59,6 +59,16 @@ var allowedScopes = map[string]struct{}{
 	"SPACE_MANAGE_ROLES":        {},
 }
 
+var allowedOptionTypes = map[string]struct{}{
+	"string":     {},
+	"integer":    {},
+	"boolean":    {},
+	"user":       {},
+	"channel":    {},
+	"role":       {},
+	"attachment": {},
+}
+
 // ParseYAML validates and normalizes manifest YAML.
 func ParseYAML(raw string) (Document, []string, error) {
 	var doc Document
@@ -157,6 +167,11 @@ func validateCommands(commands []Command) []string {
 		}
 		if len(cmd.Subcommands) > 0 && len(cmd.Options) > 0 {
 			errs = append(errs, "command "+name+": cannot have both options and subcommands")
+		}
+		for _, option := range cmd.Options {
+			if _, ok := allowedOptionTypes[option.Type]; !ok {
+				errs = append(errs, "command "+name+": unknown option type: "+option.Type)
+			}
 		}
 		if len(cmd.Subcommands) == 0 {
 			if _, dup := seen[name]; dup {

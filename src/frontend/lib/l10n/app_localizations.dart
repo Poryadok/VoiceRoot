@@ -1814,6 +1814,30 @@ abstract class AppLocalizations {
   /// **'Attach file'**
   String get chatAttachFile;
 
+  /// No description provided for @chatAttachmentBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'File blocked. Choose another file.'**
+  String get chatAttachmentBlocked;
+
+  /// No description provided for @chatAttachmentPickAnother.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose another file'**
+  String get chatAttachmentPickAnother;
+
+  /// No description provided for @chatAttachmentScanFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'File scan failed. Try again.'**
+  String get chatAttachmentScanFailed;
+
+  /// No description provided for @chatAttachmentUploadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not upload file. Try again.'**
+  String get chatAttachmentUploadFailed;
+
   /// No description provided for @composerEmojiPanelTitle.
   ///
   /// In en, this message translates to:
@@ -4339,6 +4363,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Register'**
   String get guestSaveAccountReminderCta;
+
+  /// No description provided for @chatAllowGuestsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow guests'**
+  String get chatAllowGuestsTitle;
+
+  /// No description provided for @chatAllowGuestsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Let invited guest accounts enter this chat.'**
+  String get chatAllowGuestsSubtitle;
 
   /// No description provided for @privacyShowOnlineIncludeGuests.
   ///

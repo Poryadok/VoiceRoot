@@ -39,17 +39,22 @@ type voiceRolePermissionCheck struct {
 type recordingVoiceRolePermissions struct {
 	voiceSpeakErr error
 	muteOthersErr error
+	moveOthersErr error
+	voiceJoinErr  error
 
 	voiceSpeakChecks []voiceRolePermissionCheck
 	muteOthersChecks []voiceRolePermissionCheck
+	moveOthersChecks []voiceRolePermissionCheck
+	voiceJoinChecks  []voiceRolePermissionCheck
 }
 
 func (r *recordingVoiceRolePermissions) EnsureScreenShare(context.Context, string, string, string) error {
 	return nil
 }
 
-func (r *recordingVoiceRolePermissions) EnsureVoiceJoin(context.Context, string, string, string) error {
-	return nil
+func (r *recordingVoiceRolePermissions) EnsureVoiceJoin(_ context.Context, spaceID, profileID, voiceRoomID string) error {
+	r.voiceJoinChecks = append(r.voiceJoinChecks, voiceRolePermissionCheck{spaceID: spaceID, profileID: profileID, voiceRoomID: voiceRoomID})
+	return r.voiceJoinErr
 }
 
 func (r *recordingVoiceRolePermissions) EnsureVoiceSpeak(_ context.Context, spaceID, profileID, voiceRoomID string) error {
@@ -68,6 +73,11 @@ func (r *recordingVoiceRolePermissions) EnsureMuteOthers(_ context.Context, spac
 		voiceRoomID: voiceRoomID,
 	})
 	return r.muteOthersErr
+}
+
+func (r *recordingVoiceRolePermissions) EnsureVoiceMoveOthers(ctx context.Context, spaceID, profileID, voiceRoomID string) error {
+	r.moveOthersChecks = append(r.moveOthersChecks, voiceRolePermissionCheck{spaceID: spaceID, profileID: profileID, voiceRoomID: voiceRoomID})
+	return r.moveOthersErr
 }
 
 func startVoiceRoomFixture(t *testing.T) voiceRoomFixture {

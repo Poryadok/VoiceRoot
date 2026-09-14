@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 // TestComposeWiring_yaml asserts docker-compose.yml wires core gRPC upstreams,
@@ -58,10 +59,46 @@ func TestComposeWiring_yaml(t *testing.T) {
 	require.Contains(t, yml, "MATCHMAKING_GRPC_LISTEN: :9090")
 	require.Contains(t, yml, "CHAT_GRPC_ADDR: chat:9090")
 	require.Contains(t, yml, "VOICE_GRPC_ADDR: voice:9090")
-	// Unique to matchmaking: Chat/Voice squad + Space queue gate + rating privacy (k8s envFrom).
-	require.Contains(t, yml, "      CHAT_GRPC_ADDR: chat:9090\n      VOICE_GRPC_ADDR: voice:9090\n      USER_GRPC_ADDR: user:9090\n      SOCIAL_GRPC_ADDR: social:9090\n      SPACE_GRPC_ADDR: space:9090\n")
 	require.Contains(t, yml, "matchmaking_db")
 	require.Contains(t, yml, `"matchmaking":"matchmaking:9090"`)
+}
+
+// TestComposeMatchmakingRatingPrivacyWiring_yaml keeps local Compose aligned
+// with the S2S clients that enforce show_mm_rating audiences. Without the User
+// client Matchmaking intentionally keeps its documented degraded passthrough,
+// so every dependency must be explicit in the app stack.
+func TestComposeMatchmakingRatingPrivacyWiring_yaml(t *testing.T) {
+	t.Parallel()
+
+	root := repoRootFromTest(t)
+	compose := parseComposeYAML(t, root)
+	matchmaking, ok := compose.Services["matchmaking"]
+	require.True(t, ok, "matchmaking service must be present in Compose")
+
+	// The server configures these clients independently. All three are needed to
+	// enforce every show_mm_rating audience instead of retaining the documented
+	// standalone passthrough when USER_GRPC_ADDR is absent.
+	require.Equal(t, "user:9090", matchmaking.Environment["USER_GRPC_ADDR"])
+	require.Equal(t, "social:9090", matchmaking.Environment["SOCIAL_GRPC_ADDR"])
+	require.Equal(t, "space:9090", matchmaking.Environment["SPACE_GRPC_ADDR"])
+
+	for _, dependency := range []string{"user", "social", "space"} {
+		require.Equal(t, "service_healthy", matchmaking.DependsOn[dependency].Condition,
+			"matchmaking must wait for %s before privacy checks are enabled", dependency)
+	}
+}
+
+type composeYAML struct {
+	Services map[string]composeService `yaml:"services"`
+}
+
+type composeService struct {
+	Environment map[string]string           `yaml:"environment"`
+	DependsOn   map[string]composeDependsOn `yaml:"depends_on"`
+}
+
+type composeDependsOn struct {
+	Condition string `yaml:"condition"`
 }
 
 func repoRootFromTest(t *testing.T) string {
@@ -77,4 +114,12 @@ func readComposeYAML(t *testing.T, root string) string {
 	raw, err := os.ReadFile(filepath.Join(root, "docker-compose.yml"))
 	require.NoError(t, err)
 	return strings.ReplaceAll(string(raw), "\r\n", "\n")
+}
+
+func parseComposeYAML(t *testing.T, root string) composeYAML {
+	t.Helper()
+
+	var compose composeYAML
+	require.NoError(t, yaml.Unmarshal([]byte(readComposeYAML(t, root)), &compose))
+	return compose
 }
