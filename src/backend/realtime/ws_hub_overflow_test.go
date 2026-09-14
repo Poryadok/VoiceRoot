@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/nats-io/nats.go"
 	"github.com/prometheus/client_golang/prometheus"
@@ -72,6 +73,7 @@ func TestVoiceConsumerAcksAfterHealthyFanoutAttempt(t *testing.T) {
 	profileID := "profile"
 	reg := hub.attachConn("i", "healthy", profileID, 1)
 	payload, err := proto.Marshal(&eventsv1.VoiceStreamEvent{
+		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.Now(),
 		Payload: &eventsv1.VoiceStreamEvent_CallIncoming{
 			CallIncoming: &eventsv1.CallIncoming{
@@ -142,6 +144,7 @@ func TestVoiceConsumerAcksAfterSlowOverflowAndHealthyDelivery(t *testing.T) {
 	healthy := hub.attachConn("i", "healthy", profileID, 1)
 	slow.fanout <- fanoutEnvelope{Op: "older"}
 	payload, err := proto.Marshal(&eventsv1.VoiceStreamEvent{
+		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.Now(),
 		Payload: &eventsv1.VoiceStreamEvent_CallIncoming{
 			CallIncoming: &eventsv1.CallIncoming{RoomId: "room", CalleeProfileId: profileID},

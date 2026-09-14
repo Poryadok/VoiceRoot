@@ -23,7 +23,7 @@ func TestVoiceEventBytesToFanout_IncomingAcceptedEnded(t *testing.T) {
 	callee := uuid.NewString()
 
 	incoming := &eventsv1.VoiceStreamEvent{
-		EventId:    "voice-1",
+		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.Now(),
 		Payload: &eventsv1.VoiceStreamEvent_CallIncoming{
 			CallIncoming: &eventsv1.CallIncoming{
@@ -57,7 +57,7 @@ func TestVoiceEventBytesToFanout_IncomingAcceptedEnded(t *testing.T) {
 	}
 
 	accepted := &eventsv1.VoiceStreamEvent{
-		EventId:    "voice-2",
+		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.Now(),
 		Payload: &eventsv1.VoiceStreamEvent_CallAccepted{
 			CallAccepted: &eventsv1.CallAccepted{
@@ -77,7 +77,7 @@ func TestVoiceEventBytesToFanout_IncomingAcceptedEnded(t *testing.T) {
 	}
 
 	ended := &eventsv1.VoiceStreamEvent{
-		EventId:    "voice-3",
+		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.Now(),
 		Payload: &eventsv1.VoiceStreamEvent_CallEnded{
 			CallEnded: &eventsv1.CallEnded{
@@ -103,7 +103,7 @@ func TestVoiceEventBytesToFanout_ScreenShare(t *testing.T) {
 	streamID := uuid.NewString()
 
 	started := &eventsv1.VoiceStreamEvent{
-		EventId:    "voice-ss-1",
+		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.Now(),
 		Payload: &eventsv1.VoiceStreamEvent_ScreenShareStarted{
 			ScreenShareStarted: &eventsv1.ScreenShareStarted{
@@ -131,7 +131,7 @@ func TestVoiceEventBytesToFanout_ScreenShare(t *testing.T) {
 	}
 
 	stopped := &eventsv1.VoiceStreamEvent{
-		EventId:    "voice-ss-2",
+		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.Now(),
 		Payload: &eventsv1.VoiceStreamEvent_ScreenShareStopped{
 			ScreenShareStopped: &eventsv1.ScreenShareStopped{
@@ -158,10 +158,12 @@ func TestVoiceEventBytesToFanout_DeclinedAndMissedPayloads(t *testing.T) {
 	chatID := uuid.NewString()
 	caller := uuid.NewString()
 	callee := uuid.NewString()
+	declinedEventID := uuid.NewString()
+	declinedOccurredAt := timestamppb.Now()
 
 	declinedData, err := proto.Marshal(&eventsv1.VoiceStreamEvent{
-		EventId:    "voice-declined",
-		OccurredAt: timestamppb.Now(),
+		EventId:    declinedEventID,
+		OccurredAt: declinedOccurredAt,
 		Payload: &eventsv1.VoiceStreamEvent_CallDeclined{
 			CallDeclined: &eventsv1.CallDeclined{
 				RoomId:              roomID,
@@ -183,7 +185,7 @@ func TestVoiceEventBytesToFanout_DeclinedAndMissedPayloads(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantDeclinedKeys := map[string]struct{}{
-		"room_id": {}, "chat_id": {}, "declined_by_profile_id": {}, "profile_ids": {},
+		"event_id": {}, "occurred_at": {}, "room_id": {}, "chat_id": {}, "declined_by_profile_id": {}, "profile_ids": {},
 	}
 	if len(declinedPayload) != len(wantDeclinedKeys) {
 		t.Fatalf("declined payload keys=%v, want exactly %v", declinedPayload, wantDeclinedKeys)
@@ -201,6 +203,12 @@ func TestVoiceEventBytesToFanout_DeclinedAndMissedPayloads(t *testing.T) {
 	}
 	if got, want := declinedPayload["declined_by_profile_id"], callee; got != want {
 		t.Fatalf("declined_by_profile_id=%v, want %q", got, want)
+	}
+	if got, want := declinedPayload["event_id"], declinedEventID; got != want {
+		t.Fatalf("declined event_id=%v, want %q", got, want)
+	}
+	if got, want := declinedPayload["occurred_at"], declinedOccurredAt.AsTime().UTC().Format(time.RFC3339); got != want {
+		t.Fatalf("declined occurred_at=%v, want %q", got, want)
 	}
 	rawProfileIDs, ok := declinedPayload["profile_ids"].([]any)
 	if !ok {
@@ -221,9 +229,11 @@ func TestVoiceEventBytesToFanout_DeclinedAndMissedPayloads(t *testing.T) {
 		t.Fatalf("declined profile_ids=%v, want unordered collection %v", profileIDs, wantProfileIDs)
 	}
 
+	missedEventID := uuid.NewString()
+	missedOccurredAt := timestamppb.Now()
 	missedData, err := proto.Marshal(&eventsv1.VoiceStreamEvent{
-		EventId:    "voice-missed",
-		OccurredAt: timestamppb.Now(),
+		EventId:    missedEventID,
+		OccurredAt: missedOccurredAt,
 		Payload: &eventsv1.VoiceStreamEvent_CallMissed{
 			CallMissed: &eventsv1.CallMissed{
 				RoomId:             roomID,
@@ -245,6 +255,8 @@ func TestVoiceEventBytesToFanout_DeclinedAndMissedPayloads(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantMissed := map[string]any{
+		"event_id":             missedEventID,
+		"occurred_at":          missedOccurredAt.AsTime().UTC().Format(time.RFC3339),
 		"room_id":              roomID,
 		"chat_id":              chatID,
 		"initiator_profile_id": caller,
