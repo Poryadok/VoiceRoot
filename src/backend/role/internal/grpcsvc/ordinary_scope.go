@@ -54,12 +54,20 @@ func (b *ordinaryEventBuffer) PublishRoleRevoked(ctx context.Context, spaceID, p
 	return b.add(func() error { return b.target.PublishRoleRevoked(ctx, spaceID, profileID, roleID) })
 }
 
-func (b *ordinaryEventBuffer) PublishChatOverrideSet(ctx context.Context, chatID, roleID string) error {
-	return b.add(func() error { return b.target.PublishChatOverrideSet(ctx, chatID, roleID) })
+func (b *ordinaryEventBuffer) PublishChatOverrideSet(ctx context.Context, spaceID, chatID, roleID string) error {
+	return b.add(func() error { return b.target.PublishChatOverrideSet(ctx, spaceID, chatID, roleID) })
 }
 
-func (b *ordinaryEventBuffer) PublishVoiceOverrideSet(ctx context.Context, voiceRoomID, roleID string) error {
-	return b.add(func() error { return b.target.PublishVoiceOverrideSet(ctx, voiceRoomID, roleID) })
+func (b *ordinaryEventBuffer) PublishChatOverrideRemoved(ctx context.Context, spaceID, chatID, roleID string) error {
+	return b.add(func() error { return b.target.PublishChatOverrideRemoved(ctx, spaceID, chatID, roleID) })
+}
+
+func (b *ordinaryEventBuffer) PublishVoiceOverrideSet(ctx context.Context, spaceID, voiceRoomID, roleID string) error {
+	return b.add(func() error { return b.target.PublishVoiceOverrideSet(ctx, spaceID, voiceRoomID, roleID) })
+}
+
+func (b *ordinaryEventBuffer) PublishVoiceOverrideRemoved(ctx context.Context, spaceID, voiceRoomID, roleID string) error {
+	return b.add(func() error { return b.target.PublishVoiceOverrideRemoved(ctx, spaceID, voiceRoomID, roleID) })
 }
 
 func ordinaryScopeError(err error) error {

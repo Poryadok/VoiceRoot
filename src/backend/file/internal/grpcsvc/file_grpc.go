@@ -305,7 +305,11 @@ func (s *FileGRPC) ConfirmUpload(ctx context.Context, req *filev1.ConfirmUploadR
 	}
 	uploaded, err := s.readUploadBytes(ctx, row)
 	if err != nil {
-		return nil, err
+		updated, updateErr := s.files.ApplyScanResult(ctx, row.ID, "failed", "error")
+		if updateErr != nil {
+			return nil, status.Error(codes.Internal, updateErr.Error())
+		}
+		return &filev1.ConfirmUploadResponse{FileMetadata: fileRowToProto(updated)}, nil
 	}
 	if err := verifySHA256(uploaded, sha); err != nil {
 		return nil, err
@@ -395,7 +399,7 @@ func (s *FileGRPC) scanConfirmedFile(ctx context.Context, row store.FileRow, upl
 			if uerr != nil {
 				return store.FileRow{}, status.Error(codes.Internal, uerr.Error())
 			}
-			return updated, status.Error(codes.Internal, readErr.Error())
+			return updated, nil
 		}
 	}
 	outcome, err := s.scanner.ScanBytes(ctx, bytes)
@@ -404,7 +408,7 @@ func (s *FileGRPC) scanConfirmedFile(ctx context.Context, row store.FileRow, upl
 		if uerr != nil {
 			return store.FileRow{}, status.Error(codes.Internal, uerr.Error())
 		}
-		return updated, status.Error(codes.Internal, err.Error())
+		return updated, nil
 	}
 	statusValue := "processing"
 	if outcome == "infected" || outcome == "error" {

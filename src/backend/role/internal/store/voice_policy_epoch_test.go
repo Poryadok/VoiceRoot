@@ -503,7 +503,8 @@ func TestRoleVoicePolicyEpoch_EffectivePermissionMutationsAdvanceOwnerEpoch(t *t
 			if err := st.SetVoiceRoomOverride(ctx, roomID, roleID, 0, 1<<17); err != nil {
 				return err
 			}
-			return st.RemoveVoiceRoomOverride(ctx, roomID, roleID)
+			_, err := st.RemoveVoiceRoomOverride(ctx, roomID, roleID)
+			return err
 		}, "room"},
 		{"ownership freeze", func(spaceID, ownerID, roleID, profileID, roomID uuid.UUID) error {
 			_, err := pool.Exec(ctx, `INSERT INTO ownership_transfer_v2(operation_id,space_id,protocol_version,old_owner_profile_id,new_owner_profile_id,intent_bytes,intent_hash,state,prepare_request_hash) VALUES($1,$2,2,$3,$4,$5,$6,'prepared',$6)`, uuid.New(), spaceID, ownerID, profileID, []byte{1}, make([]byte, 32))

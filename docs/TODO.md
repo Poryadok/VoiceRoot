@@ -66,7 +66,7 @@ DOC-аудит закрыт (0 open DOC). Невыполненное разне�
 |------|-----|
 | [backend.md](todo/backend.md) § High § Telegram-parity audit | R3-A04–A06, A12, A14–A16; stickers/GIF wire; Realtime `message.delivery_ack` NATS; mention `profile_id` |
 | [client.md](todo/client.md) § High § Telegram-parity audit | R2-A03–A04 shell/mobile IA; R2-A05 strip done (Batch 9); R3-A11 composer a11y done (Batch 9) |
-| [product-roadmap.md](todo/product-roadmap.md) § Telegram-parity audit | Product policy DEFER: strip unread-on-back, pin cycle, archived notifications, Location tab, header idle/DND |
+| [product-roadmap.md](todo/product-roadmap.md) § Telegram-parity audit | Product policy DEFER: strip unread-on-back, pin cycle, Location tab, header idle/DND |
 | [design.md](todo/design.md) § Critical Penpot · v3 | R4-04-L04 §3.6b panel GAP frames (implementation track) |
 
 ### Топ дыр (после аудита)

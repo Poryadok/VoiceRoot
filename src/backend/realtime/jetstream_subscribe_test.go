@@ -3,6 +3,11 @@ package main
 import (
 	"context"
 	"errors"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -41,5 +46,56 @@ func TestSubscribeJetStreamWithRetry_WaitsForStream(t *testing.T) {
 	}
 	if attempts != 3 {
 		t.Fatalf("attempts = %d, want 3", attempts)
+	}
+}
+
+func TestSubscribeJetStreamWithRetryStopsWhenCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	attempts := 0
+	_, err := subscribeJetStreamWithRetry(ctx, "test", func() (*nats.Subscription, error) {
+		attempts++
+		return nil, nats.ErrStreamNotFound
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("subscribe error = %v, want context.Canceled", err)
+	}
+	if attempts != 1 {
+		t.Fatalf("attempts = %d, want 1", attempts)
+	}
+}
+
+func TestRoleEventsConsumerUsesSharedJetStreamRetry(t *testing.T) {
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve test path")
+	}
+	roleFile := filepath.Join(filepath.Dir(thisFile), "role_events_consumer.go")
+	parsed, err := parser.ParseFile(token.NewFileSet(), roleFile, nil, 0)
+	if err != nil {
+		t.Fatalf("parse %s: %v", roleFile, err)
+	}
+
+	usesSharedRetry := false
+	for _, declaration := range parsed.Decls {
+		function, ok := declaration.(*ast.FuncDecl)
+		if !ok || function.Name == nil || function.Name.Name != "runRoleEventsConsumer" {
+			continue
+		}
+		ast.Inspect(function.Body, func(node ast.Node) bool {
+			call, ok := node.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			identifier, ok := call.Fun.(*ast.Ident)
+			if ok && identifier.Name == "subscribeJetStreamWithRetry" {
+				usesSharedRetry = true
+			}
+			return true
+		})
+	}
+	if !usesSharedRetry {
+		t.Fatal("runRoleEventsConsumer must subscribe through subscribeJetStreamWithRetry")
 	}
 }
