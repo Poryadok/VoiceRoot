@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { App } from '../App';
 
 const BOT_A = '00000000-0000-0000-0000-000000000001';
@@ -187,6 +187,53 @@ describe('App bot registration and selection', () => {
     await waitFor(() => {
       expect(screen.queryByText('visible-token')).not.toBeInTheDocument();
     });
+  });
+
+  it('shows registration secrets in a copy-once dialog and clears each after copying', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ bot_list: { bots: [] } }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          bot: { id: BOT_A, name: 'Secret Bot' },
+          token_response: { token: 'registration-token' },
+          webhook_secret_response: { webhook_secret: 'registration-webhook-secret' },
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ bot_list: { bots: [{ id: BOT_A, name: 'Secret Bot' }] } }))
+      .mockResolvedValueOnce(botDetailResponse(BOT_A, 'Secret Bot', '[]'))
+      .mockResolvedValueOnce(jsonResponse({ command_list: { commands_json: '[]' } }))
+      .mockResolvedValueOnce(jsonResponse({ manifest_yaml: '' }))
+      .mockResolvedValueOnce(jsonResponse({ command_list: { commands_json: '[]' } }))
+      .mockResolvedValueOnce(jsonResponse({ manifest_yaml: '' }));
+
+    setupLoggedIn(fetchMock);
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByTestId('bot-register')).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText('Bot name'), { target: { value: 'Secret Bot' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Register bot' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Copy one-shot secrets' });
+    expect(dialog).toHaveTextContent('registration-token');
+    expect(dialog).toHaveTextContent('registration-webhook-secret');
+    expect(screen.queryByText('Bot token (shown once):')).not.toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Copy bot token' }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('registration-token'));
+    expect(dialog).not.toHaveTextContent('registration-token');
+    expect(dialog).toHaveTextContent('registration-webhook-secret');
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Copy webhook secret' }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('registration-webhook-secret'));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Copy one-shot secrets' })).not.toBeInTheDocument());
   });
 
   it('shows privileged scope warnings in registration and edit forms', async () => {

@@ -181,6 +181,33 @@ function Portal() {
     setStatus('Signed out');
   }
 
+  function clearOneShotSecrets() {
+    setBotToken('');
+    setWebhookSecret('');
+  }
+
+  async function copyOneShotSecret(kind: 'bot token' | 'webhook secret') {
+    const secret = kind === 'bot token' ? botToken : webhookSecret;
+    if (!secret) {
+      return;
+    }
+    if (!navigator.clipboard?.writeText) {
+      setStatus('Clipboard is unavailable; copy the secret manually before closing this dialog.');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(secret);
+      if (kind === 'bot token') {
+        setBotToken('');
+      } else {
+        setWebhookSecret('');
+      }
+      setStatus(`${kind === 'bot token' ? 'Bot token' : 'Webhook secret'} copied and cleared from the portal`);
+    } catch {
+      setStatus('Could not copy the secret; it remains visible until copied or dismissed.');
+    }
+  }
+
   async function selectBot(botId: string) {
     setSelectedBotId(botId);
     setBotToken('');
@@ -463,8 +490,6 @@ function Portal() {
                 </div>
               </section>
             )}
-            {botToken && <p>Bot token (shown once): <code>{botToken}</code></p>}
-            {webhookSecret && <p>Webhook secret (shown once): <code>{webhookSecret}</code></p>}
             <button type="button" disabled={!selectedBotId} onClick={() => void revokeAndRegenerateBotToken()}>
               Revoke &amp; regenerate bot token
             </button>
@@ -529,6 +554,29 @@ function Portal() {
 
       <p className="status">{status}</p>
       {loggedIn && !getAccessToken() && <p className="status error">Session expired</p>}
+      {(botToken || webhookSecret) && (
+        <div className="secret-dialog-backdrop">
+          <section className="secret-dialog" role="dialog" aria-modal="true" aria-labelledby="one-shot-secrets-title">
+            <h2 id="one-shot-secrets-title">Copy one-shot secrets</h2>
+            <p>Copy each value now. The portal clears it after copying or when this dialog is closed.</p>
+            {botToken && (
+              <section className="secret-value">
+                <h3>Bot token</h3>
+                <code>{botToken}</code>
+                <button type="button" onClick={() => void copyOneShotSecret('bot token')}>Copy bot token</button>
+              </section>
+            )}
+            {webhookSecret && (
+              <section className="secret-value">
+                <h3>Webhook secret</h3>
+                <code>{webhookSecret}</code>
+                <button type="button" onClick={() => void copyOneShotSecret('webhook secret')}>Copy webhook secret</button>
+              </section>
+            )}
+            <button type="button" className="secondary" onClick={clearOneShotSecrets}>Close and clear</button>
+          </section>
+        </div>
+      )}
     </main>
   );
 }
