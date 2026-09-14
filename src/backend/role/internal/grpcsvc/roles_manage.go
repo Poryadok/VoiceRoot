@@ -208,8 +208,12 @@ func (s *RoleGRPC) removeChatOverride(ctx context.Context, req *rolev1.RemoveCha
 	if row == nil {
 		return nil, status.Error(codes.NotFound, "role not found")
 	}
-	if err := s.Store.RemoveChatOverride(ctx, chatID, roleID); err != nil {
+	removed, err := s.Store.RemoveChatOverride(ctx, chatID, roleID)
+	if err != nil {
 		return nil, ordinaryStoreError(err)
+	}
+	if removed && s.Events != nil {
+		_ = s.Events.PublishChatOverrideRemoved(ctx, spaceID.String(), chatID.String(), roleID.String())
 	}
 	return &rolev1.RemoveChatOverrideResponse{}, nil
 }
@@ -281,7 +285,7 @@ func (s *RoleGRPC) setVoiceRoomOverride(ctx context.Context, req *rolev1.SetVoic
 		return nil, ordinaryStoreError(err)
 	}
 	if s.Events != nil {
-		_ = s.Events.PublishVoiceOverrideSet(ctx, voiceRoomID.String(), roleID.String())
+		_ = s.Events.PublishVoiceOverrideSet(ctx, spaceID.String(), voiceRoomID.String(), roleID.String())
 	}
 	return &rolev1.SetVoiceRoomOverrideResponse{}, nil
 }
@@ -316,8 +320,12 @@ func (s *RoleGRPC) removeVoiceRoomOverride(ctx context.Context, req *rolev1.Remo
 	if err != nil {
 		return nil, err
 	}
-	if err := s.Store.RemoveVoiceRoomOverride(ctx, voiceRoomID, roleID); err != nil {
+	removed, err := s.Store.RemoveVoiceRoomOverride(ctx, voiceRoomID, roleID)
+	if err != nil {
 		return nil, ordinaryStoreError(err)
+	}
+	if removed && s.Events != nil {
+		_ = s.Events.PublishVoiceOverrideRemoved(ctx, spaceID.String(), voiceRoomID.String(), roleID.String())
 	}
 	return &rolev1.RemoveVoiceRoomOverrideResponse{}, nil
 }

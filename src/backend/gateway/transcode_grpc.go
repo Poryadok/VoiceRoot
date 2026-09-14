@@ -11,9 +11,9 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	"voice/backend/pkg/correlation"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"voice/backend/pkg/correlation"
 )
 
 var protoJSONMarshal = protojson.MarshalOptions{
@@ -93,6 +93,36 @@ func writeGRPCError(w http.ResponseWriter, err error) {
 		"error_code": errorCode,
 		"message":    st.Message(),
 	})
+}
+
+// writeVoiceRoomMoveError is deliberately route-local: voice-room moves use a
+// conflict response for obsolete roster state, while every unrelated gRPC
+// FAILED_PRECONDITION keeps the generic HTTP 412 mapping above.
+func writeVoiceRoomMoveError(w http.ResponseWriter, err error) {
+	st, ok := status.FromError(err)
+	if !ok {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error_code": "internal", "message": "internal error"})
+		return
+	}
+	w.Header().Set("X-Voice-GRPC-Code", st.Code().String())
+	type moveError struct {
+		status        int
+		code, message string
+	}
+	table := map[codes.Code]moveError{
+		codes.InvalidArgument:    {http.StatusBadRequest, "invalid_argument", "invalid voice room move request"},
+		codes.Unauthenticated:    {http.StatusUnauthorized, "unauthenticated", "authentication required"},
+		codes.PermissionDenied:   {http.StatusForbidden, "permission_denied", "voice room move not permitted"},
+		codes.NotFound:           {http.StatusNotFound, "not_found", "voice room not found"},
+		codes.FailedPrecondition: {http.StatusConflict, "failed_precondition", "voice room move is no longer possible"},
+		codes.ResourceExhausted:  {http.StatusTooManyRequests, "resource_exhausted", "voice room is full"},
+		codes.Unavailable:        {http.StatusServiceUnavailable, "unavailable", "voice room roster unavailable"},
+	}
+	entry, found := table[st.Code()]
+	if !found {
+		entry = moveError{http.StatusInternalServerError, "internal", "internal error"}
+	}
+	writeJSON(w, entry.status, map[string]string{"error_code": entry.code, "message": entry.message})
 }
 
 // grpcStatusDomainErrorCode returns app error keys carried in gRPC status messages

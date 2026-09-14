@@ -17,7 +17,7 @@ workers ещё не зарегистрированы. Отсутствующий
 ## Ответственность
 
 - DM-звонки (1:1 голос/видео)
-- Групповые звонки / временные комнаты у текстовых групп (до 500 участников группы; лимит в комнате — см. [voice-chat.md](../features/voice-chat.md))
+- Групповые звонки / временные комнаты у текстовых групп (текстовая группа — до 500 участников; каждая временная voice room — до 32 участников)
 - Голосовые комнаты в спейсах (`voice_rooms`, до 32 free / 128 paid)
 - Screen share (desktop/window/tab + system audio)
 - Генерация LiveKit токенов для клиентов
@@ -44,6 +44,7 @@ service VoiceService {
   rpc JoinVoiceRoom(JoinVoiceRoomRequest) returns (JoinVoiceRoomResponse);
   rpc LeaveVoiceRoom(LeaveVoiceRoomRequest) returns (LeaveVoiceRoomResponse);
   rpc MoveToVoiceRoom(MoveToVoiceRoomRequest) returns (MoveToVoiceRoomResponse);
+  rpc MoveVoiceRoomParticipant(MoveVoiceRoomParticipantRequest) returns (MoveVoiceRoomParticipantResponse);
   rpc GetJoinToken(GetJoinTokenRequest) returns (GetJoinTokenResponse);
   rpc UpdateVoiceState(UpdateVoiceStateRequest) returns (UpdateVoiceStateResponse);
   rpc GetVoiceStates(GetVoiceStatesRequest) returns (GetVoiceStatesResponse);
@@ -138,8 +139,9 @@ deadline bridge semantics (D2/D3) также остаются отдельным
 and `POST /participants/{profile_id}/move` (moderator). `space_id` is path-bound
 and never asserted by the client in a body/header. All actions use the Gateway
 derived delegated-user principal; no client-provided profile or Space identity is
-authoritative. The final proto must add a distinct moderator-move RPC; it must not
-reuse self move with an asserted actor.
+authoritative. `MoveToVoiceRoom` is self-only; the distinct
+`MoveVoiceRoomParticipant` RPC accepts an explicit target and never treats a
+client-provided actor as authoritative.
 
 For this surface: unauthenticated is `401 unauthenticated`; absent Space/room is
 `404 not_found` only after a caller is entitled to discover it; a caller without
@@ -150,7 +152,7 @@ LiveKit dependency failure is `503 unavailable`. Every deny has no room session,
 roster or event side effect. Gateway freezes these `error_code` values instead of
 relaying arbitrary gRPC text. Mutations carry a client UUID `operation_id`; Voice
 keeps a 24-hour keyed ledger `(actor_profile_id, operation_id, method, canonical
-request)` for identical replay and rejects changed request as `409 already_exists`.
+request)` for identical replay and rejects changed request as `409 failed_precondition`.
 
 **LiveKit grant.** A Space-room grant is a 60-second LiveKit JWT bound to server
 identity, `profile_id`, `room_id`, an authorization `epoch`, and the explicit

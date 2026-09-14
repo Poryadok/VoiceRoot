@@ -257,7 +257,7 @@ func ptrIfNonEmpty(s string) *string {
 }
 
 // PublishMentionAdded implements MessageEventsPublisher.
-func (p *JetStreamPublisher) PublishMentionAdded(ctx context.Context, messageID, chatID, senderProfileID string, mentionedProfileIDs []string) error {
+func (p *JetStreamPublisher) PublishMentionAdded(ctx context.Context, messageID, chatID, senderProfileID string, mentionedProfileIDs []string, sendSilent bool) error {
 	env := &eventsv1.MessageStreamEvent{
 		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.New(time.Now().UTC()),
@@ -267,6 +267,7 @@ func (p *JetStreamPublisher) PublishMentionAdded(ctx context.Context, messageID,
 				ChatId:              chatID,
 				SenderProfileId:     senderProfileID,
 				MentionedProfileIds: append([]string(nil), mentionedProfileIDs...),
+				SendSilent:          sendSilent,
 			},
 		},
 	}

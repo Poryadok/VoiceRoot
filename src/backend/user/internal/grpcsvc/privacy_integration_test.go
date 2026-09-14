@@ -63,6 +63,7 @@ type alwaysFriendsGraph struct{}
 
 type receiptRevocationEventsRecorder struct {
 	profileID       string
+	changedKeys     []string
 	changedKeysJSON string
 }
 
@@ -70,7 +71,7 @@ func (r *receiptRevocationEventsRecorder) PublishProfileCreated(context.Context,
 	return nil
 }
 
-func (r *receiptRevocationEventsRecorder) PublishProfileUpdated(context.Context, string, string, string) error {
+func (r *receiptRevocationEventsRecorder) PublishProfileUpdated(context.Context, string, []string) error {
 	return nil
 }
 
@@ -78,7 +79,7 @@ func (r *receiptRevocationEventsRecorder) PublishProfileSwitched(context.Context
 	return nil
 }
 
-func (r *receiptRevocationEventsRecorder) PublishVerified(context.Context, string, string, string) error {
+func (r *receiptRevocationEventsRecorder) PublishVerified(context.Context, string, string) error {
 	return nil
 }
 
@@ -86,9 +87,14 @@ func (r *receiptRevocationEventsRecorder) PublishPresenceChanged(context.Context
 	return nil
 }
 
-func (r *receiptRevocationEventsRecorder) PublishSettingsChanged(_ context.Context, profileID, changedKeysJSON string) error {
+func (r *receiptRevocationEventsRecorder) PublishSettingsChanged(_ context.Context, profileID string, changedKeys []string, changedKeysJSON string) error {
 	r.profileID = profileID
+	r.changedKeys = changedKeys
 	r.changedKeysJSON = changedKeysJSON
+	return nil
+}
+
+func (r *receiptRevocationEventsRecorder) PublishGameDetected(context.Context, string, string) error {
 	return nil
 }
 
@@ -270,6 +276,7 @@ VALUES ($1, $2, 'nofwd', '5555', 'NoFwd', true)`,
 	require.True(t, after.GetPrivacySettings().GetShowLastSeen().GetIncludeGuests(),
 		"an older client omitting show_last_seen must preserve the stored gaming default")
 	require.Equal(t, profileID.String(), events.profileID)
+	require.Equal(t, []string{"show_read_receipts"}, events.changedKeys)
 	require.Equal(t, `[{"key":"show_read_receipts","value":false}]`, events.changedKeysJSON)
 
 	s2sCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderInternalCaller, "messaging")
@@ -493,7 +500,9 @@ VALUES ($1, $2, 'owner', '4444', 'Owner', true),
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
 
-	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb)
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb,
+		func(s *UserGRPC) { s.Blocks = stubProfileBlocks{} },
+	)
 
 	_, err = cli.UpdatePrivacySettings(withUserAuthCtx(ctx, ownerAccount, ownerProfile), &userv1.UpdatePrivacySettingsRequest{
 		ProfileId: ownerProfile.String(),
@@ -570,7 +579,10 @@ VALUES ($1, $2, 'owner', '4444', 'Owner', true),
 	t.Cleanup(func() { _ = rdb.Close() })
 
 	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb,
-		func(s *UserGRPC) { s.SocialGraph = alwaysFriendsGraph{} },
+		func(s *UserGRPC) {
+			s.SocialGraph = alwaysFriendsGraph{}
+			s.Blocks = stubProfileBlocks{}
+		},
 	)
 
 	_, err = cli.UpdatePresence(withUserAuthCtx(ctx, ownerAccount, ownerProfile), &userv1.UpdatePresenceRequest{
@@ -712,7 +724,9 @@ VALUES ($1, $2, 'owner', '4444', 'Owner', true),
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
 
-	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb)
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb,
+		func(s *UserGRPC) { s.Blocks = stubProfileBlocks{} },
+	)
 
 	_, err = cli.UpdatePresence(withUserAuthCtx(ctx, ownerAccount, ownerProfile), &userv1.UpdatePresenceRequest{
 		Status: "online",
@@ -753,7 +767,10 @@ VALUES ($1, $2, 'owner', '4444', 'Owner', true),
 	t.Cleanup(func() { _ = rdb.Close() })
 
 	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb,
-		func(s *UserGRPC) { s.SocialGraph = alwaysFriendsGraph{} },
+		func(s *UserGRPC) {
+			s.SocialGraph = alwaysFriendsGraph{}
+			s.Blocks = stubProfileBlocks{}
+		},
 	)
 
 	_, err = cli.UpdatePresence(withUserAuthCtx(ctx, ownerAccount, ownerProfile), &userv1.UpdatePresenceRequest{

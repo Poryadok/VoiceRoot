@@ -149,10 +149,11 @@ func (s *FilesStore) ConfirmUpload(ctx context.Context, id uuid.UUID, sha256Hash
 	err := s.Pool.QueryRow(ctx, `
 UPDATE files
 SET sha256_hash = $2,
-    status = 'ready',
+    status = 'processing',
     scan_result = CASE WHEN scan_result = 'pending' THEN 'skipped' ELSE scan_result END,
     updated_at = now()
 WHERE id = $1
+  AND status = 'pending_upload'
 RETURNING id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_hash,
           r2_key, status, file_type, width, height, duration_seconds,
           thumbnail_r2_key, converted_r2_key, chat_id, chat_type, is_e2e, expires_at,
@@ -191,8 +192,10 @@ SET converted_r2_key = $2,
     thumbnail_r2_key = $3,
     width = $4,
     height = $5,
+    status = 'ready',
     updated_at = now()
 WHERE id = $1
+  AND status = 'processing'
 RETURNING id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_hash,
           r2_key, status, file_type, width, height, duration_seconds,
           thumbnail_r2_key, converted_r2_key, chat_id, chat_type, is_e2e, expires_at,
@@ -231,6 +234,14 @@ SET status = $2,
     scan_result = $3,
     updated_at = now()
 WHERE id = $1
+  -- ConfirmUpload can fail while reading the original before it has a
+  -- verified SHA-256, so the only permitted terminal transition from
+  -- pending_upload is failure. All non-terminal scan/processing outcomes
+  -- still require the confirmed processing state.
+  AND (
+    status = 'processing'
+    OR (status = 'pending_upload' AND $2 = 'failed')
+  )
 RETURNING id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_hash,
           r2_key, status, file_type, width, height, duration_seconds,
           thumbnail_r2_key, converted_r2_key, chat_id, chat_type, is_e2e, expires_at,

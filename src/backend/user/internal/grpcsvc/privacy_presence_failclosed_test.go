@@ -85,6 +85,7 @@ VALUES ($1, $2, 'owner', '4444', 'Owner', true),
 			s.SpaceCoMembership = stubSpaceCoMembership{co: map[string]bool{
 				privacyPairKey(coworkerProfile, ownerProfile): true,
 			}}
+			s.Blocks = stubProfileBlocks{}
 		},
 	)
 

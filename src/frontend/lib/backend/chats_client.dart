@@ -41,6 +41,7 @@ class VoiceChat {
     this.threadsEnabled = false,
     this.allowUserMainFeed = true,
     this.e2eEnabled = false,
+    this.allowGuests = false,
   });
 
   final String id;
@@ -53,6 +54,7 @@ class VoiceChat {
   final bool threadsEnabled;
   final bool allowUserMainFeed;
   final bool e2eEnabled;
+  final bool allowGuests;
 
   bool get isDm => type == ChatType.CHAT_TYPE_DM.name;
   bool get isGroup => type == ChatType.CHAT_TYPE_GROUP.name;
@@ -70,6 +72,7 @@ class VoiceChat {
       threadsEnabled: json['threads_enabled'] as bool? ?? false,
       allowUserMainFeed: json['allow_user_main_feed'] as bool? ?? true,
       e2eEnabled: json['e2e_enabled'] as bool? ?? false,
+      allowGuests: json['allow_guests'] as bool? ?? false,
     );
   }
 
@@ -542,6 +545,7 @@ class VoiceChatsClient {
     String? name,
     String? avatarUrl,
     int? slowModeSeconds,
+    bool? allowGuests,
   }) async {
     final result = await _gateway.patchProto(
       uri: _gateway.resolve('/api/v1/chats/$chatId'),
@@ -550,6 +554,7 @@ class VoiceChatsClient {
         name: name,
         avatarUrl: avatarUrl,
         slowModeSeconds: slowModeSeconds,
+        allowGuests: allowGuests,
       ),
       createEmpty: chat_pb.UpdateChatResponse.create,
     );

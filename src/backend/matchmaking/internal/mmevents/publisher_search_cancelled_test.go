@@ -49,3 +49,33 @@ func TestJetStreamPublisher_SearchCancelledPublishesProtoEnvelope(t *testing.T) 
 	require.Equal(t, sessionID, cancelled.GetSessionId())
 	require.Equal(t, profileID, cancelled.GetProfileId())
 }
+
+func TestJetStreamPublisher_PlayerBannedPublishesDocumentedProtoEnvelope(t *testing.T) {
+	const (
+		profileID = "banned-profile"
+		reason    = "toxic"
+	)
+
+	capture := &captureJetStream{}
+	publisher := &JetStreamPublisher{js: capture}
+	publisher.ensureOnce.Do(func() {})
+
+	require.NoError(t, publisher.PublishPlayerBanned(context.Background(), PlayerBannedEvent{
+		ProfileID: profileID,
+		Reason:    reason,
+	}))
+	require.NotNil(t, capture.msg)
+	require.Equal(t, subjectPlayerBanned, capture.msg.Subject)
+
+	var envelope eventsv1.MatchmakingStreamEvent
+	require.NoError(t, proto.Unmarshal(capture.msg.Data, &envelope))
+	require.NotEmpty(t, envelope.GetEventId())
+	require.NotNil(t, envelope.GetOccurredAt())
+	require.NoError(t, envelope.GetOccurredAt().CheckValid())
+	require.Equal(t, envelope.GetEventId(), capture.msg.Header.Get(nats.MsgIdHdr))
+
+	banned := envelope.GetPlayerBanned()
+	require.NotNil(t, banned)
+	require.Equal(t, profileID, banned.GetProfileId())
+	require.Equal(t, reason, banned.GetReason())
+}

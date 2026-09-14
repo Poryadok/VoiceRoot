@@ -28,20 +28,36 @@ var (
 // StoryStore persists stories, views, reactions, and highlights.
 type StoryStore struct {
 	Pool *pgxpool.Pool
+
+	// BeforeHighlightStoryLock is an optional deterministic test observer. It
+	// runs after a Highlight is locked and immediately before its Story lock.
+	// Production wiring leaves it nil.
+	BeforeHighlightStoryLock func()
+}
+
+type ArchivePurgeBatch struct {
+	Stories int64
+}
+
+type MediaDeletionOperation struct {
+	OperationID uuid.UUID
+	StoryID     uuid.UUID
+	MediaFileID uuid.UUID
+	LeaseToken  uuid.UUID
 }
 
 // StoryRow is a persisted story record.
 type StoryRow struct {
-	ID                uuid.UUID
-	AuthorProfileID   uuid.UUID
-	Type              string
-	MediaFileID       *uuid.UUID
-	TextContent       *string
-	TextStyleJSON     *string
-	GameTag           *string
-	IsLookingForParty bool
-	LFPCriteriaJSON   *string
-	MentionProfileIDs string
+	ID                     uuid.UUID
+	AuthorProfileID        uuid.UUID
+	Type                   string
+	MediaFileID            *uuid.UUID
+	TextContent            *string
+	TextStyleJSON          *string
+	GameTag                *string
+	IsLookingForParty      bool
+	LFPCriteriaJSON        *string
+	MentionProfileIDs      string
 	ViewCount              int
 	Visibility             string
 	VisibilityAudienceJSON *string
@@ -86,14 +102,14 @@ type PaginatedStories struct {
 }
 
 type CreateStoryInput struct {
-	AuthorProfileID   uuid.UUID
-	Type              string
-	MediaFileID       *uuid.UUID
-	TextContent       *string
-	TextStyleJSON     *string
-	GameTag           *string
-	IsLookingForParty bool
-	LFPCriteriaJSON   *string
+	AuthorProfileID        uuid.UUID
+	Type                   string
+	MediaFileID            *uuid.UUID
+	TextContent            *string
+	TextStyleJSON          *string
+	GameTag                *string
+	IsLookingForParty      bool
+	LFPCriteriaJSON        *string
 	MentionProfileIDs      string
 	Visibility             string
 	VisibilityAudienceJSON *string
@@ -416,7 +432,7 @@ ORDER BY created_at`, storyID)
 	return out, rows.Err()
 }
 
-// ListArchivedStoriesForPurge returns expired stories past archived_until with media ids.
+// ListArchivedStoriesForPurge returns expired, unhighlighted stories past archived_until with media ids.
 func (s *StoryStore) ListArchivedStoriesForPurge(ctx context.Context, now time.Time) ([]ArchivedStoryMedia, error) {
 	if s == nil || s.Pool == nil {
 		return nil, ErrNotImplemented
@@ -424,7 +440,10 @@ func (s *StoryStore) ListArchivedStoriesForPurge(ctx context.Context, now time.T
 	rows, err := s.Pool.Query(ctx, `
 SELECT id, media_file_id
 FROM stories
-WHERE archived_until <= $1 AND expired_at IS NOT NULL`, now.UTC())
+WHERE archived_until <= $1 AND expired_at IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM highlight_stories WHERE story_id = stories.id
+  )`, now.UTC())
 	if err != nil {
 		return nil, err
 	}
@@ -724,14 +743,43 @@ func (s *StoryStore) DeleteHighlight(ctx context.Context, highlightID, profileID
 	if s == nil || s.Pool == nil {
 		return ErrNotImplemented
 	}
-	tag, err := s.Pool.Exec(ctx, `DELETE FROM highlights WHERE id = $1 AND profile_id = $2`, highlightID, profileID)
+	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	if tag.RowsAffected() == 0 {
+	defer func() { _ = tx.Rollback(ctx) }()
+	var owner uuid.UUID
+	if err = tx.QueryRow(ctx, `SELECT profile_id FROM highlights WHERE id=$1 FOR UPDATE`, highlightID).Scan(&owner); errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
+	} else if err != nil {
+		return err
 	}
-	return nil
+	if owner != profileID {
+		return ErrForbidden
+	}
+	rows, err := tx.Query(ctx, `SELECT story_id FROM highlight_stories WHERE highlight_id=$1 ORDER BY story_id FOR UPDATE`, highlightID)
+	if err != nil {
+		return err
+	}
+	var ids []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	for _, id := range ids {
+		if _, err = tx.Exec(ctx, `SELECT 1 FROM stories WHERE id=$1 FOR UPDATE`, id); err != nil {
+			return err
+		}
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM highlights WHERE id=$1`, highlightID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // AddToHighlight links a story to a highlight.
@@ -739,8 +787,13 @@ func (s *StoryStore) AddToHighlight(ctx context.Context, highlightID, profileID,
 	if s == nil || s.Pool == nil {
 		return ErrNotImplemented
 	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
 	var owner uuid.UUID
-	err := s.Pool.QueryRow(ctx, `SELECT profile_id FROM highlights WHERE id = $1`, highlightID).Scan(&owner)
+	err = tx.QueryRow(ctx, `SELECT profile_id FROM highlights WHERE id = $1 FOR UPDATE`, highlightID).Scan(&owner)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -750,8 +803,15 @@ func (s *StoryStore) AddToHighlight(ctx context.Context, highlightID, profileID,
 	if owner != profileID {
 		return ErrForbidden
 	}
+	if s.BeforeHighlightStoryLock != nil {
+		s.BeforeHighlightStoryLock()
+	}
 	var storyAuthor uuid.UUID
-	err = s.Pool.QueryRow(ctx, `SELECT author_profile_id FROM stories WHERE id = $1 AND deleted_at IS NULL`, storyID).Scan(&storyAuthor)
+	var archived bool
+	err = tx.QueryRow(ctx, `
+SELECT author_profile_id, expired_at IS NOT NULL
+FROM stories
+WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, storyID).Scan(&storyAuthor, &archived)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -761,11 +821,17 @@ func (s *StoryStore) AddToHighlight(ctx context.Context, highlightID, profileID,
 	if storyAuthor != profileID {
 		return ErrForbidden
 	}
-	_, err = s.Pool.Exec(ctx, `
+	if !archived {
+		return ErrForbidden
+	}
+	_, err = tx.Exec(ctx, `
 INSERT INTO highlight_stories (highlight_id, story_id, sort_order, added_at)
 VALUES ($1, $2, 0, now())
 ON CONFLICT (highlight_id, story_id) DO NOTHING`, highlightID, storyID)
-	return err
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // RemoveFromHighlight unlinks a story from a highlight.
@@ -773,18 +839,34 @@ func (s *StoryStore) RemoveFromHighlight(ctx context.Context, highlightID, profi
 	if s == nil || s.Pool == nil {
 		return ErrNotImplemented
 	}
-	tag, err := s.Pool.Exec(ctx, `
-DELETE FROM highlight_stories hs
-USING highlights h
-WHERE hs.highlight_id = h.id AND h.id = $1 AND h.profile_id = $2 AND hs.story_id = $3`,
-		highlightID, profileID, storyID)
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var owner uuid.UUID
+	if err = tx.QueryRow(ctx, `SELECT profile_id FROM highlights WHERE id=$1 FOR UPDATE`, highlightID).Scan(&owner); errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	} else if err != nil {
+		return err
+	}
+	if owner != profileID {
+		return ErrForbidden
+	}
+	if s.BeforeHighlightStoryLock != nil {
+		s.BeforeHighlightStoryLock()
+	}
+	if _, err = tx.Exec(ctx, `SELECT 1 FROM stories WHERE id=$1 FOR UPDATE`, storyID); err != nil {
+		return err
+	}
+	tag, err := tx.Exec(ctx, `DELETE FROM highlight_stories WHERE highlight_id=$1 AND story_id=$2`, highlightID, storyID)
 	if err != nil {
 		return err
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrNotFound
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
 // GetHighlights lists highlights for profileID.
@@ -817,15 +899,168 @@ FROM highlights WHERE profile_id = $1 ORDER BY sort_order, created_at`, profileI
 	return out, rows.Err()
 }
 
-// PurgeArchivedStories deletes stories past archived_until.
-func (s *StoryStore) PurgeArchivedStories(ctx context.Context, now time.Time) (int64, error) {
+// PurgeArchivedStories is the compatibility entrypoint for callers that need
+// a bounded logical purge at an explicit cutoff. It still uses the durable
+// outbox transaction; direct deletion would orphan media after the Story row
+// is gone. The worker uses StageArchivePurgeBatch and DB time instead.
+func (s *StoryStore) PurgeArchivedStories(ctx context.Context, cutoff time.Time) (int64, error) {
 	if s == nil || s.Pool == nil {
 		return 0, ErrNotImplemented
 	}
-	tag, err := s.Pool.Exec(ctx, `
-DELETE FROM stories WHERE archived_until <= $1 AND expired_at IS NOT NULL`, now.UTC())
+	batch, err := s.stageArchivePurgeBatch(ctx, 100, &cutoff)
 	if err != nil {
 		return 0, err
 	}
-	return tag.RowsAffected(), nil
+	return batch.Stories, nil
+}
+
+// StageArchivePurgeBatch atomically deletes expired, unhighlighted stories and
+// records any media deletion side effect. File deletion must happen after this commit.
+func (s *StoryStore) StageArchivePurgeBatch(ctx context.Context, limit int) (ArchivePurgeBatch, error) {
+	return s.stageArchivePurgeBatch(ctx, limit, nil)
+}
+
+func (s *StoryStore) stageArchivePurgeBatch(ctx context.Context, limit int, cutoff *time.Time) (ArchivePurgeBatch, error) {
+	if s == nil || s.Pool == nil {
+		return ArchivePurgeBatch{}, ErrNotImplemented
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return ArchivePurgeBatch{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	rows, err := tx.Query(ctx, `
+SELECT s.id, s.media_file_id FROM stories s
+WHERE s.expired_at IS NOT NULL AND s.archived_until <= COALESCE($2::timestamptz, now())
+  AND NOT EXISTS (SELECT 1 FROM highlight_stories hs WHERE hs.story_id=s.id)
+ORDER BY s.archived_until, s.id LIMIT $1 FOR UPDATE OF s SKIP LOCKED`, limit, cutoff)
+	if err != nil {
+		return ArchivePurgeBatch{}, err
+	}
+	type candidate struct {
+		id    uuid.UUID
+		media *uuid.UUID
+	}
+	var cs []candidate
+	for rows.Next() {
+		var c candidate
+		if err := rows.Scan(&c.id, &c.media); err != nil {
+			return ArchivePurgeBatch{}, err
+		}
+		cs = append(cs, c)
+	}
+	if err := rows.Err(); err != nil {
+		return ArchivePurgeBatch{}, err
+	}
+	rows.Close()
+	for _, c := range cs {
+		if c.media != nil {
+			_, err = tx.Exec(ctx, `INSERT INTO story_media_deletion_outbox (operation_id,story_id,media_file_id,available_at,created_at,updated_at) VALUES ($1,$1,$2,now(),now(),now()) ON CONFLICT (operation_id) DO NOTHING`, c.id, *c.media)
+			if err != nil {
+				return ArchivePurgeBatch{}, err
+			}
+		}
+		tag, err := tx.Exec(ctx, `DELETE FROM stories s WHERE s.id=$1 AND s.expired_at IS NOT NULL AND s.archived_until <= COALESCE($2::timestamptz, now()) AND NOT EXISTS (SELECT 1 FROM highlight_stories hs WHERE hs.story_id=s.id)`, c.id, cutoff)
+		if err != nil {
+			return ArchivePurgeBatch{}, err
+		}
+		if tag.RowsAffected() != 1 {
+			return ArchivePurgeBatch{}, fmt.Errorf("archive purge eligibility changed for %s", c.id)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return ArchivePurgeBatch{}, err
+	}
+	return ArchivePurgeBatch{Stories: int64(len(cs))}, nil
+}
+
+func (s *StoryStore) ClaimMediaDeletion(ctx context.Context, limit int, lease time.Duration) ([]MediaDeletionOperation, error) {
+	if s == nil || s.Pool == nil {
+		return nil, ErrNotImplemented
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	if lease <= 0 {
+		lease = time.Minute
+	}
+	token := uuid.New()
+	rows, err := s.Pool.Query(ctx, `
+WITH candidate AS (SELECT operation_id FROM story_media_deletion_outbox WHERE available_at<=now() AND (lease_until IS NULL OR lease_until<=now()) ORDER BY available_at,operation_id LIMIT $1 FOR UPDATE SKIP LOCKED)
+UPDATE story_media_deletion_outbox o SET lease_token=$2, lease_until=now()+$3::interval, attempt_count=attempt_count+1, updated_at=now() FROM candidate c WHERE o.operation_id=c.operation_id RETURNING o.operation_id,o.story_id,o.media_file_id,o.lease_token`, limit, token, lease.String())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []MediaDeletionOperation
+	for rows.Next() {
+		var o MediaDeletionOperation
+		if err := rows.Scan(&o.OperationID, &o.StoryID, &o.MediaFileID, &o.LeaseToken); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
+}
+
+func (s *StoryStore) CompleteMediaDeletion(ctx context.Context, operationID, token uuid.UUID) (bool, error) {
+	if s == nil || s.Pool == nil {
+		return false, ErrNotImplemented
+	}
+	tag, err := s.Pool.Exec(ctx, `DELETE FROM story_media_deletion_outbox WHERE operation_id=$1 AND lease_token=$2`, operationID, token)
+	return tag.RowsAffected() == 1, err
+}
+func (s *StoryStore) FailMediaDeletion(ctx context.Context, operationID, token uuid.UUID, cause error) (bool, error) {
+	if s == nil || s.Pool == nil {
+		return false, ErrNotImplemented
+	}
+	msg := ""
+	if cause != nil {
+		msg = cause.Error()
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var attempts int64
+	err = tx.QueryRow(ctx, `SELECT attempt_count FROM story_media_deletion_outbox WHERE operation_id=$1 AND lease_token=$2 FOR UPDATE`, operationID, token).Scan(&attempts)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	backoff := mediaDeletionRetryDelay(attempts)
+	backoffInterval := fmt.Sprintf("%d seconds", int64(backoff/time.Second))
+	tag, err := tx.Exec(ctx, `UPDATE story_media_deletion_outbox SET lease_token=NULL,lease_until=NULL,available_at=now()+$4::interval,last_error=$3,last_error_at=now(),updated_at=now() WHERE operation_id=$1 AND lease_token=$2`, operationID, token, msg, backoffInterval)
+	if err != nil {
+		return false, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
+const (
+	mediaDeletionInitialRetry = time.Second
+	mediaDeletionMaxRetry     = 5 * time.Minute
+)
+
+func mediaDeletionRetryDelay(attempts int64) time.Duration {
+	if attempts <= 1 {
+		return mediaDeletionInitialRetry
+	}
+	delay := mediaDeletionInitialRetry
+	for i := int64(1); i < attempts && delay < mediaDeletionMaxRetry; i++ {
+		delay *= 2
+		if delay >= mediaDeletionMaxRetry {
+			return mediaDeletionMaxRetry
+		}
+	}
+	return delay
 }
