@@ -3,21 +3,28 @@ package grpcsvc
 import (
 	"context"
 	"errors"
+	"net"
 	"testing"
+	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/grpc/test/bufconn"
 
 	"voice/backend/pkg/integrationtest"
 	"voice/backend/pkg/privacy"
 	"voice/backend/user/internal/authctx"
 	"voice/backend/user/internal/store"
 
+	socialv1 "voice.app/voice/social/v1"
 	userv1 "voice.app/voice/user/v1"
 )
 
@@ -129,6 +136,32 @@ VALUES ($1, $2, 'projectionowner', '7002', 'Owner', true, 'durable-secret'),
 		"SearchProfiles must use the public projection, never the owner-scoped durable custom status")
 }
 
+// TestCustomStatus_OwnerListMyProfilesRetainsDurableValue isolates the owner
+// projection from GetProfile and public-list projections.
+func TestCustomStatus_OwnerListMyProfilesRetainsDurableValue(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
+	integrationtest.ApplyUserDBMigrations(t, ctx, pool, repoRoot(t))
+	ownerAccount, ownerProfile := uuid.New(), uuid.New()
+	_, err := pool.Exec(ctx, `INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary, custom_status)
+VALUES ($1, $2, 'listowner', '7020', 'Owner', true, 'durable-list-secret')`, ownerProfile, ownerAccount)
+	require.NoError(t, err)
+	mr := miniredis.RunT(t)
+	t.Cleanup(mr.Close)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb)
+
+	owned, err := cli.ListMyProfiles(withUserAuthCtx(ctx, ownerAccount, ownerProfile), &userv1.ListMyProfilesRequest{})
+	require.NoError(t, err)
+	require.Len(t, owned.GetProfileList().GetProfiles(), 1)
+	require.Equal(t, "durable-list-secret", owned.GetProfileList().GetProfiles()[0].GetCustomStatus(),
+		"the owner list projection must retain the durable premium custom status")
+}
+
 // Each case remains independent so one missing gate cannot mask the remaining
 // acceptance contracts in a fail-fast integration test.
 func TestCustomStatusWritePrecedenceAndPresenceOmission_RED(t *testing.T) {
@@ -198,18 +231,144 @@ func TestCustomStatusDeniedWrites_HaveNoEventsOrPresenceMutation_RED(t *testing.
 	_, err = cli.UpdatePresence(withProfileTier(ctx, accountID, profileID, "premium"), &userv1.UpdatePresenceRequest{Status: "online", CustomStatus: &seed})
 	require.NoError(t, err)
 	events.presence = 0
+	presenceKey := "voice:user:presence:" + profileID.String()
+	lastSeenKey := "voice:user:last_seen:" + profileID.String()
+	// Make heartbeat refreshes independently observable even when the two RPCs
+	// execute inside the same wall-clock second.
+	require.NoError(t, rdb.HSet(ctx, presenceKey, "ts_unix", "1").Err())
+	require.NoError(t, rdb.Set(ctx, lastSeenKey, "1", 30*24*time.Hour).Err())
+	mr.FastForward(time.Minute)
+	presenceBefore, err := rdb.HGetAll(ctx, presenceKey).Result()
+	require.NoError(t, err)
+	presenceTTLBefore, err := rdb.TTL(ctx, presenceKey).Result()
+	require.NoError(t, err)
+	lastSeenBefore, err := rdb.Get(ctx, lastSeenKey).Result()
+	require.NoError(t, err)
+	lastSeenTTLBefore, err := rdb.TTL(ctx, lastSeenKey).Result()
+	require.NoError(t, err)
 	denied := "denied"
 	_, err = cli.UpdatePresence(withProfileTier(ctx, accountID, profileID, "free"), &userv1.UpdatePresenceRequest{Status: "idle", CustomStatus: &denied})
-	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	assert.Equal(t, codes.FailedPrecondition, status.Code(err))
 	snapshot, err := store.NewPresenceStore(rdb).Get(ctx, profileID)
 	require.NoError(t, err)
-	require.Equal(t, "online", snapshot.Status)
-	require.Equal(t, seed, snapshot.CustomStatus)
-	require.Zero(t, events.presence)
+	assert.Equal(t, "online", snapshot.Status)
+	assert.Equal(t, seed, snapshot.CustomStatus)
+	presenceAfter, err := rdb.HGetAll(ctx, presenceKey).Result()
+	require.NoError(t, err)
+	presenceTTLAfter, err := rdb.TTL(ctx, presenceKey).Result()
+	require.NoError(t, err)
+	lastSeenAfter, err := rdb.Get(ctx, lastSeenKey).Result()
+	require.NoError(t, err)
+	lastSeenTTLAfter, err := rdb.TTL(ctx, lastSeenKey).Result()
+	require.NoError(t, err)
+	assert.Equal(t, presenceBefore, presenceAfter, "a denied write must not refresh the session timestamp or any presence hash field")
+	assert.Equal(t, presenceTTLBefore, presenceTTLAfter, "a denied write must not refresh the session TTL")
+	assert.Equal(t, lastSeenBefore, lastSeenAfter, "a denied write must not refresh last_seen")
+	assert.Equal(t, lastSeenTTLBefore, lastSeenTTLAfter, "a denied write must not refresh the last_seen TTL")
+	assert.Zero(t, events.presence)
 
-	_, err = cli.UpdateProfile(withProfileTier(ctx, accountID, profileID, "free"), &userv1.UpdateProfileRequest{ProfileId: profileID.String(), CustomStatus: &denied})
-	require.Equal(t, codes.FailedPrecondition, status.Code(err))
-	require.Zero(t, events.profile)
+	profiles := store.NewProfileStore(pool)
+	durableBefore, err := profiles.GetByID(ctx, profileID)
+	require.NoError(t, err)
+	changedName := "Denied Name"
+	_, err = cli.UpdateProfile(withProfileTier(ctx, accountID, profileID, "free"), &userv1.UpdateProfileRequest{
+		ProfileId:    profileID.String(),
+		DisplayName:  &changedName,
+		CustomStatus: &denied,
+	})
+	assert.Equal(t, codes.FailedPrecondition, status.Code(err))
+	durableAfter, err := profiles.GetByID(ctx, profileID)
+	require.NoError(t, err)
+	assert.Equal(t, durableBefore, durableAfter, "a denied custom-status write must leave the complete durable profile row unchanged")
+	assert.Zero(t, events.profile)
+}
+
+// TestCustomStatus_PresenceBlocksSocialDirectionsFailClosed_RED binds User's
+// sparse presence projection to the two directed Social IsBlocked calls.  The
+// table keeps the outgoing and reverse Social answers independently executable.
+func TestCustomStatus_PresenceBlocksSocialDirectionsFailClosed_RED(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	for _, tc := range []struct {
+		name    string
+		blocked func(viewerAccount, ownerAccount uuid.UUID) map[string]bool
+	}{
+		{
+			name: "viewer blocks owner through outgoing Social IsBlocked",
+			blocked: func(viewerAccount, ownerAccount uuid.UUID) map[string]bool {
+				return map[string]bool{viewerAccount.String() + ":" + ownerAccount.String(): true}
+			},
+		},
+		{
+			name: "owner blocks viewer through reverse Social IsBlocked",
+			blocked: func(viewerAccount, ownerAccount uuid.UUID) map[string]bool {
+				return map[string]bool{ownerAccount.String() + ":" + viewerAccount.String(): true}
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			pool := integrationtest.StartPostgres(t, ctx, "userdb", "")
+			integrationtest.ApplyUserDBMigrations(t, ctx, pool, repoRoot(t))
+			ownerAccount, ownerProfile := uuid.New(), uuid.New()
+			viewerAccount, viewerProfile := uuid.New(), uuid.New()
+			_, err := pool.Exec(ctx, `INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary) VALUES
+($1,$2,'socialblockowner','7021','Owner',true), ($3,$4,'socialblockviewer','7022','Viewer',true)`,
+				ownerProfile, ownerAccount, viewerProfile, viewerAccount)
+			require.NoError(t, err)
+			privacyStore := store.NewPrivacyStore(pool)
+			seedPrivacyPreset(ctx, t, privacyStore, ownerProfile, "personal")
+			mr := miniredis.RunT(t)
+			t.Cleanup(mr.Close)
+			rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+			t.Cleanup(func() { _ = rdb.Close() })
+			blocks := startCustomStatusSocialBlocks(t, tc.blocked(viewerAccount, ownerAccount))
+			cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), privacyStore, rdb, func(s *UserGRPC) {
+				s.SocialGraph = alwaysFriendsGraph{}
+				s.Blocks = blocks
+			})
+			secret := "social-direction-secret"
+			_, err = cli.UpdatePresence(withProfileTier(ctx, ownerAccount, ownerProfile, "premium"), &userv1.UpdatePresenceRequest{Status: "online", CustomStatus: &secret})
+			require.NoError(t, err)
+
+			viewer := withUserAuthCtx(ctx, viewerAccount, viewerProfile)
+			direct, err := cli.GetPresence(viewer, &userv1.GetPresenceRequest{ProfileId: ownerProfile.String()})
+			require.NoError(t, err)
+			assert.Empty(t, direct.GetPresenceStatus().GetStatus(), "direct presence must be sparse for either Social block direction")
+			assert.Nil(t, direct.GetPresenceStatus().CustomStatus, "direct presence must be sparse for either Social block direction")
+			bulk, err := cli.GetBulkPresence(viewer, &userv1.GetBulkPresenceRequest{ProfileIds: []string{ownerProfile.String()}})
+			require.NoError(t, err)
+			assert.Empty(t, bulk.GetByProfileId()[ownerProfile.String()].GetStatus(), "bulk presence must be sparse for either Social block direction")
+			assert.Nil(t, bulk.GetByProfileId()[ownerProfile.String()].CustomStatus, "bulk presence must be sparse for either Social block direction")
+		})
+	}
+}
+
+type customStatusSocialBlocksServer struct {
+	socialv1.UnimplementedSocialServiceServer
+	blocked map[string]bool
+}
+
+func (s customStatusSocialBlocksServer) IsBlocked(_ context.Context, req *socialv1.IsBlockedRequest) (*socialv1.IsBlockedResponse, error) {
+	return &socialv1.IsBlockedResponse{Blocked: s.blocked[req.GetAccountIdA()+":"+req.GetAccountIdB()]}, nil
+}
+
+func startCustomStatusSocialBlocks(t *testing.T, blocked map[string]bool) *SocialGRPCBlocks {
+	t.Helper()
+	lis := bufconn.Listen(1024 * 1024)
+	t.Cleanup(func() { _ = lis.Close() })
+	srv := grpc.NewServer()
+	socialv1.RegisterSocialServiceServer(srv, customStatusSocialBlocksServer{blocked: blocked})
+	go func() { _ = srv.Serve(lis) }()
+	t.Cleanup(srv.Stop)
+	conn, err := grpc.NewClient("passthrough:///social-blocks",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return lis.Dial() }),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+	return NewSocialGRPCBlocks(conn)
 }
 
 type customStatusEventsRecorder struct{ profile, presence int }
