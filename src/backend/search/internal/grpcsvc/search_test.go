@@ -92,11 +92,13 @@ func (s *stubSpaceSearch) SearchSpaces(_ context.Context, query string, _ *strin
 }
 
 type stubRoleChecker struct {
+	calls    int
 	denyRead bool
 	lastChat uuid.UUID
 }
 
 func (s *stubRoleChecker) CanReadMessages(_ context.Context, _ uuid.UUID, chatID uuid.UUID) (bool, error) {
+	s.calls++
 	s.lastChat = chatID
 	return !s.denyRead, nil
 }
@@ -104,13 +106,17 @@ func (s *stubRoleChecker) CanReadMessages(_ context.Context, _ uuid.UUID, chatID
 type stubBlockList struct {
 	blockedAccounts []uuid.UUID
 	pairBlocked     map[uuid.UUID]bool
+	blockedCalls    int
+	pairCalls       int
 }
 
 func (s *stubBlockList) BlockedAccountIDs(_ context.Context) ([]uuid.UUID, error) {
+	s.blockedCalls++
 	return s.blockedAccounts, nil
 }
 
 func (s *stubBlockList) AccountPairBlocked(_ context.Context, _, other uuid.UUID) (bool, error) {
+	s.pairCalls++
 	if s.pairBlocked == nil {
 		return false, nil
 	}
@@ -118,15 +124,19 @@ func (s *stubBlockList) AccountPairBlocked(_ context.Context, _, other uuid.UUID
 }
 
 type stubChatAccess struct {
-	accessible  []uuid.UUID
-	searchChats []uuid.UUID
+	accessible      []uuid.UUID
+	searchChats     []uuid.UUID
+	accessibleCalls int
+	searchCalls     int
 }
 
 func (s *stubChatAccess) AccessibleChatIDs(_ context.Context, _ uuid.UUID) ([]uuid.UUID, error) {
+	s.accessibleCalls++
 	return s.accessible, nil
 }
 
 func (s *stubChatAccess) SearchChats(_ context.Context, _ string, _ int) ([]uuid.UUID, error) {
+	s.searchCalls++
 	if s.searchChats != nil {
 		return s.searchChats, nil
 	}
@@ -324,11 +334,16 @@ func TestSearchGlobal_ExcludesReverseBlockedUsers(t *testing.T) {
 }
 
 type stubDiscoverability struct {
-	audienceByProfile map[uuid.UUID]privacy.Audience
-	friends           map[[2]uuid.UUID]bool
+	audienceByProfile     map[uuid.UUID]privacy.Audience
+	friends               map[[2]uuid.UUID]bool
+	audienceCalls         int
+	friendsCalls          int
+	friendsOfFriendsCalls int
+	coMembersCalls        int
 }
 
 func (s *stubDiscoverability) AllowFriendRequestsAudience(_ context.Context, profileID uuid.UUID) (privacy.Audience, error) {
+	s.audienceCalls++
 	if s.audienceByProfile == nil {
 		return privacy.EveryoneWithGuests(), nil
 	}
@@ -339,6 +354,7 @@ func (s *stubDiscoverability) AllowFriendRequestsAudience(_ context.Context, pro
 }
 
 func (s *stubDiscoverability) AreFriends(_ context.Context, a, b uuid.UUID) (bool, error) {
+	s.friendsCalls++
 	if s.friends == nil {
 		return false, nil
 	}
@@ -349,11 +365,20 @@ func (s *stubDiscoverability) AreFriends(_ context.Context, a, b uuid.UUID) (boo
 }
 
 func (s *stubDiscoverability) AreFriendsOfFriends(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	s.friendsOfFriendsCalls++
 	return false, nil
 }
 
 func (s *stubDiscoverability) AreCoMembers(context.Context, uuid.UUID, uuid.UUID, []string) (bool, error) {
+	s.coMembersCalls++
 	return false, nil
+}
+
+type stubAnalytics struct{ calls int }
+
+func (s *stubAnalytics) Publish(context.Context, string, string, string, map[string]any) error {
+	s.calls++
+	return nil
 }
 
 func TestSearchUsers_FiltersByAllowFriendRequestsAudience(t *testing.T) {
@@ -582,14 +607,17 @@ func TestSearchRPCs_UnicodeLimitAndAuthenticationPrecedence(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		newServer func() (searchv1.SearchServiceClient, func() int, func() string)
+		newServer func() (searchv1.SearchServiceClient, func() map[string]int, func() int, func() string)
 		call      func(searchv1.SearchServiceClient, context.Context, string) error
 	}{
 		{
 			name: "in chat",
-			newServer: func() (searchv1.SearchServiceClient, func() int, func() string) {
+			newServer: func() (searchv1.SearchServiceClient, func() map[string]int, func() int, func() string) {
 				messages := &stubMessageSearch{}
-				return startSearchGRPCTestServer(t, &SearchGRPC{Messages: messages}), func() int { return messages.calls }, func() string { return messages.lastInChatQuery }
+				roles := &stubRoleChecker{}
+				return startSearchGRPCTestServer(t, &SearchGRPC{Messages: messages, Roles: roles}), func() map[string]int {
+					return map[string]int{"Messages.SearchInChat": messages.calls, "Roles.CanReadMessages": roles.calls}
+				}, func() int { return messages.calls }, func() string { return messages.lastInChatQuery }
 			},
 			call: func(client searchv1.SearchServiceClient, ctx context.Context, query string) error {
 				_, err := client.SearchInChat(ctx, &searchv1.SearchInChatRequest{Chat: &chatv1.ChatRef{Id: uuid.New().String()}, Query: query})
@@ -598,10 +626,34 @@ func TestSearchRPCs_UnicodeLimitAndAuthenticationPrecedence(t *testing.T) {
 		},
 		{
 			name: "global",
-			newServer: func() (searchv1.SearchServiceClient, func() int, func() string) {
+			newServer: func() (searchv1.SearchServiceClient, func() map[string]int, func() int, func() string) {
 				messages := &stubMessageSearch{}
+				profiles := &stubProfileSearch{hits: []ProfileSearchHit{{ProfileID: uuid.New(), AccountID: uuid.New()}}}
+				spaces := &stubSpaceSearch{}
+				blocks := &stubBlockList{}
 				chatID := uuid.New()
-				return startSearchGRPCTestServer(t, &SearchGRPC{Messages: messages, Chats: &stubChatAccess{accessible: []uuid.UUID{chatID}}}), func() int { return messages.calls }, func() string { return messages.lastGlobalQuery }
+				chats := &stubChatAccess{accessible: []uuid.UUID{chatID}}
+				discoverability := &stubDiscoverability{audienceByProfile: map[uuid.UUID]privacy.Audience{profiles.hits[0].ProfileID: {Friends: true, FriendsOfFriends: true, SpaceMembers: true}}}
+				analytics := &stubAnalytics{}
+				return startSearchGRPCTestServer(t, &SearchGRPC{
+						Messages: messages, Profiles: profiles, Spaces: spaces, Blocks: blocks, Chats: chats,
+						Discoverability: discoverability, Social: discoverability, SpaceMembers: discoverability, Analytics: analytics,
+					}), func() map[string]int {
+						return map[string]int{
+							"Blocks.BlockedAccountIDs":                    blocks.blockedCalls,
+							"Blocks.AccountPairBlocked":                   blocks.pairCalls,
+							"Profiles.SearchProfiles":                     profiles.calls,
+							"Discoverability.AllowFriendRequestsAudience": discoverability.audienceCalls,
+							"Social.AreFriends":                           discoverability.friendsCalls,
+							"Social.AreFriendsOfFriends":                  discoverability.friendsOfFriendsCalls,
+							"SpaceMembers.AreCoMembers":                   discoverability.coMembersCalls,
+							"Spaces.SearchSpaces":                         spaces.calls,
+							"Chats.AccessibleChatIDs":                     chats.accessibleCalls,
+							"Chats.SearchChats":                           chats.searchCalls,
+							"Messages.SearchGlobalMessages":               messages.calls,
+							"Analytics.Publish":                           analytics.calls,
+						}
+					}, func() int { return messages.calls }, func() string { return messages.lastGlobalQuery }
 			},
 			call: func(client searchv1.SearchServiceClient, ctx context.Context, query string) error {
 				_, err := client.SearchGlobal(ctx, &searchv1.SearchGlobalRequest{Query: query})
@@ -610,9 +662,23 @@ func TestSearchRPCs_UnicodeLimitAndAuthenticationPrecedence(t *testing.T) {
 		},
 		{
 			name: "users",
-			newServer: func() (searchv1.SearchServiceClient, func() int, func() string) {
-				profiles := &stubProfileSearch{}
-				return startSearchGRPCTestServer(t, &SearchGRPC{Profiles: profiles}), func() int { return profiles.calls }, func() string { return profiles.lastQuery }
+			newServer: func() (searchv1.SearchServiceClient, func() map[string]int, func() int, func() string) {
+				profiles := &stubProfileSearch{hits: []ProfileSearchHit{{ProfileID: uuid.New(), AccountID: uuid.New()}}}
+				blocks := &stubBlockList{}
+				discoverability := &stubDiscoverability{audienceByProfile: map[uuid.UUID]privacy.Audience{profiles.hits[0].ProfileID: {Friends: true, FriendsOfFriends: true, SpaceMembers: true}}}
+				return startSearchGRPCTestServer(t, &SearchGRPC{
+						Profiles: profiles, Blocks: blocks, Discoverability: discoverability, Social: discoverability, SpaceMembers: discoverability,
+					}), func() map[string]int {
+						return map[string]int{
+							"Blocks.BlockedAccountIDs":                    blocks.blockedCalls,
+							"Blocks.AccountPairBlocked":                   blocks.pairCalls,
+							"Profiles.SearchProfiles":                     profiles.calls,
+							"Discoverability.AllowFriendRequestsAudience": discoverability.audienceCalls,
+							"Social.AreFriends":                           discoverability.friendsCalls,
+							"Social.AreFriendsOfFriends":                  discoverability.friendsOfFriendsCalls,
+							"SpaceMembers.AreCoMembers":                   discoverability.coMembersCalls,
+						}
+					}, func() int { return profiles.calls }, func() string { return profiles.lastQuery }
 			},
 			call: func(client searchv1.SearchServiceClient, ctx context.Context, query string) error {
 				_, err := client.SearchUsers(ctx, &searchv1.SearchUsersRequest{Query: query})
@@ -621,9 +687,11 @@ func TestSearchRPCs_UnicodeLimitAndAuthenticationPrecedence(t *testing.T) {
 		},
 		{
 			name: "spaces",
-			newServer: func() (searchv1.SearchServiceClient, func() int, func() string) {
+			newServer: func() (searchv1.SearchServiceClient, func() map[string]int, func() int, func() string) {
 				spaces := &stubSpaceSearch{}
-				return startSearchGRPCTestServer(t, &SearchGRPC{Spaces: spaces}), func() int { return spaces.calls }, func() string { return spaces.lastQuery }
+				return startSearchGRPCTestServer(t, &SearchGRPC{Spaces: spaces}), func() map[string]int {
+					return map[string]int{"Spaces.SearchSpaces": spaces.calls}
+				}, func() int { return spaces.calls }, func() string { return spaces.lastQuery }
 			},
 			call: func(client searchv1.SearchServiceClient, ctx context.Context, query string) error {
 				_, err := client.SearchSpaces(ctx, &searchv1.SearchSpacesRequest{Query: query})
@@ -634,26 +702,36 @@ func TestSearchRPCs_UnicodeLimitAndAuthenticationPrecedence(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name+" accepts 128 multibyte scalars", func(t *testing.T) {
-			client, calls, forwarded := tt.newServer()
-			err := tt.call(client, ctxWithProfile(uuid.New()), "\u2003"+query128+"\u00a0")
+			client, _, calls, forwarded := tt.newServer()
+			err := tt.call(client, ctxWithProfileAndAccount(uuid.New(), uuid.New()), "\u2003"+query128+"\u00a0")
 			require.NoError(t, err)
 			require.Equal(t, 1, calls())
 			require.Equal(t, query128, forwarded())
 		})
 
 		t.Run(tt.name+" rejects 129 multibyte scalars before dependencies", func(t *testing.T) {
-			client, calls, _ := tt.newServer()
-			err := tt.call(client, ctxWithProfile(uuid.New()), query129)
+			client, dependencyCalls, _, _ := tt.newServer()
+			err := tt.call(client, ctxWithProfileAndAccount(uuid.New(), uuid.New()), query129)
 			require.Equal(t, codes.InvalidArgument, status.Code(err))
 			require.Equal(t, "query too long", status.Convert(err).Message())
-			require.Zero(t, calls())
+			requireNoSearchDependencyCalls(t, dependencyCalls())
 		})
 
 		t.Run(tt.name+" authenticates before oversized query validation", func(t *testing.T) {
-			client, calls, _ := tt.newServer()
+			client, dependencyCalls, _, _ := tt.newServer()
 			err := tt.call(client, context.Background(), strings.Repeat("a", 513))
 			require.Equal(t, codes.Unauthenticated, status.Code(err))
-			require.Zero(t, calls())
+			requireNoSearchDependencyCalls(t, dependencyCalls())
 		})
 	}
+}
+
+func requireNoSearchDependencyCalls(t *testing.T, calls map[string]int) {
+	t.Helper()
+	total := 0
+	for dependency, count := range calls {
+		total += count
+		require.Zerof(t, count, "%s must not be called", dependency)
+	}
+	require.Zero(t, total, "invalid request must not call any reachable dependency")
 }
