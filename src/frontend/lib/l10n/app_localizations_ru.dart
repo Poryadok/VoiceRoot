@@ -973,6 +973,21 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatAttachFile => 'Прикрепить файл';
 
   @override
+  String get chatAttachmentBlocked =>
+      'Файл заблокирован. Выберите другой файл.';
+
+  @override
+  String get chatAttachmentPickAnother => 'Выбрать другой файл';
+
+  @override
+  String get chatAttachmentScanFailed =>
+      'Не удалось проверить файл. Попробуйте снова.';
+
+  @override
+  String get chatAttachmentUploadFailed =>
+      'Не удалось загрузить файл. Попробуйте снова.';
+
+  @override
   String get composerEmojiPanelTitle => 'Эмодзи';
 
   @override

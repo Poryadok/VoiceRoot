@@ -40,6 +40,10 @@ const (
 	MessagingService_ListSharedMedia_FullMethodName              = "/voice.messaging.v1.MessagingService/ListSharedMedia"
 	MessagingService_UploadPreKeyBundle_FullMethodName           = "/voice.messaging.v1.MessagingService/UploadPreKeyBundle"
 	MessagingService_GetPreKeyBundle_FullMethodName              = "/voice.messaging.v1.MessagingService/GetPreKeyBundle"
+	MessagingService_ListScheduledMessages_FullMethodName        = "/voice.messaging.v1.MessagingService/ListScheduledMessages"
+	MessagingService_UpdateScheduledMessage_FullMethodName       = "/voice.messaging.v1.MessagingService/UpdateScheduledMessage"
+	MessagingService_CancelScheduledMessage_FullMethodName       = "/voice.messaging.v1.MessagingService/CancelScheduledMessage"
+	MessagingService_SendScheduledMessageNow_FullMethodName      = "/voice.messaging.v1.MessagingService/SendScheduledMessageNow"
 	MessagingService_ApplySpaceLifecycleFence_FullMethodName     = "/voice.messaging.v1.MessagingService/ApplySpaceLifecycleFence"
 	MessagingService_PurgeSpace_FullMethodName                   = "/voice.messaging.v1.MessagingService/PurgeSpace"
 	MessagingService_ImportSpacePurgeManifestPage_FullMethodName = "/voice.messaging.v1.MessagingService/ImportSpacePurgeManifestPage"
@@ -78,6 +82,12 @@ type MessagingServiceClient interface {
 	// Signal pre-key directory for DM E2E — docs/features/encryption.md.
 	UploadPreKeyBundle(ctx context.Context, in *UploadPreKeyBundleRequest, opts ...grpc.CallOption) (*UploadPreKeyBundleResponse, error)
 	GetPreKeyBundle(ctx context.Context, in *GetPreKeyBundleRequest, opts ...grpc.CallOption) (*GetPreKeyBundleResponse, error)
+	// Schedule lifecycle handlers are introduced in a later slice. These declarations
+	// establish the additive wire contract for callers and generated clients.
+	ListScheduledMessages(ctx context.Context, in *ListScheduledMessagesRequest, opts ...grpc.CallOption) (*ListScheduledMessagesResponse, error)
+	UpdateScheduledMessage(ctx context.Context, in *UpdateScheduledMessageRequest, opts ...grpc.CallOption) (*UpdateScheduledMessageResponse, error)
+	CancelScheduledMessage(ctx context.Context, in *CancelScheduledMessageRequest, opts ...grpc.CallOption) (*CancelScheduledMessageResponse, error)
+	SendScheduledMessageNow(ctx context.Context, in *SendScheduledMessageNowRequest, opts ...grpc.CallOption) (*SendScheduledMessageNowResponse, error)
 	// @voice.security=protected;callers=service:space
 	ApplySpaceLifecycleFence(ctx context.Context, in *ApplySpaceLifecycleFenceRequest, opts ...grpc.CallOption) (*ApplySpaceLifecycleFenceResponse, error)
 	// @voice.security=protected;callers=service:space
@@ -304,6 +314,46 @@ func (c *messagingServiceClient) GetPreKeyBundle(ctx context.Context, in *GetPre
 	return out, nil
 }
 
+func (c *messagingServiceClient) ListScheduledMessages(ctx context.Context, in *ListScheduledMessagesRequest, opts ...grpc.CallOption) (*ListScheduledMessagesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListScheduledMessagesResponse)
+	err := c.cc.Invoke(ctx, MessagingService_ListScheduledMessages_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *messagingServiceClient) UpdateScheduledMessage(ctx context.Context, in *UpdateScheduledMessageRequest, opts ...grpc.CallOption) (*UpdateScheduledMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateScheduledMessageResponse)
+	err := c.cc.Invoke(ctx, MessagingService_UpdateScheduledMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *messagingServiceClient) CancelScheduledMessage(ctx context.Context, in *CancelScheduledMessageRequest, opts ...grpc.CallOption) (*CancelScheduledMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CancelScheduledMessageResponse)
+	err := c.cc.Invoke(ctx, MessagingService_CancelScheduledMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *messagingServiceClient) SendScheduledMessageNow(ctx context.Context, in *SendScheduledMessageNowRequest, opts ...grpc.CallOption) (*SendScheduledMessageNowResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SendScheduledMessageNowResponse)
+	err := c.cc.Invoke(ctx, MessagingService_SendScheduledMessageNow_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *messagingServiceClient) ApplySpaceLifecycleFence(ctx context.Context, in *ApplySpaceLifecycleFenceRequest, opts ...grpc.CallOption) (*ApplySpaceLifecycleFenceResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ApplySpaceLifecycleFenceResponse)
@@ -367,6 +417,12 @@ type MessagingServiceServer interface {
 	// Signal pre-key directory for DM E2E — docs/features/encryption.md.
 	UploadPreKeyBundle(context.Context, *UploadPreKeyBundleRequest) (*UploadPreKeyBundleResponse, error)
 	GetPreKeyBundle(context.Context, *GetPreKeyBundleRequest) (*GetPreKeyBundleResponse, error)
+	// Schedule lifecycle handlers are introduced in a later slice. These declarations
+	// establish the additive wire contract for callers and generated clients.
+	ListScheduledMessages(context.Context, *ListScheduledMessagesRequest) (*ListScheduledMessagesResponse, error)
+	UpdateScheduledMessage(context.Context, *UpdateScheduledMessageRequest) (*UpdateScheduledMessageResponse, error)
+	CancelScheduledMessage(context.Context, *CancelScheduledMessageRequest) (*CancelScheduledMessageResponse, error)
+	SendScheduledMessageNow(context.Context, *SendScheduledMessageNowRequest) (*SendScheduledMessageNowResponse, error)
 	// @voice.security=protected;callers=service:space
 	ApplySpaceLifecycleFence(context.Context, *ApplySpaceLifecycleFenceRequest) (*ApplySpaceLifecycleFenceResponse, error)
 	// @voice.security=protected;callers=service:space
@@ -445,6 +501,18 @@ func (UnimplementedMessagingServiceServer) UploadPreKeyBundle(context.Context, *
 }
 func (UnimplementedMessagingServiceServer) GetPreKeyBundle(context.Context, *GetPreKeyBundleRequest) (*GetPreKeyBundleResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetPreKeyBundle not implemented")
+}
+func (UnimplementedMessagingServiceServer) ListScheduledMessages(context.Context, *ListScheduledMessagesRequest) (*ListScheduledMessagesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListScheduledMessages not implemented")
+}
+func (UnimplementedMessagingServiceServer) UpdateScheduledMessage(context.Context, *UpdateScheduledMessageRequest) (*UpdateScheduledMessageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateScheduledMessage not implemented")
+}
+func (UnimplementedMessagingServiceServer) CancelScheduledMessage(context.Context, *CancelScheduledMessageRequest) (*CancelScheduledMessageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CancelScheduledMessage not implemented")
+}
+func (UnimplementedMessagingServiceServer) SendScheduledMessageNow(context.Context, *SendScheduledMessageNowRequest) (*SendScheduledMessageNowResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendScheduledMessageNow not implemented")
 }
 func (UnimplementedMessagingServiceServer) ApplySpaceLifecycleFence(context.Context, *ApplySpaceLifecycleFenceRequest) (*ApplySpaceLifecycleFenceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ApplySpaceLifecycleFence not implemented")
@@ -854,6 +922,78 @@ func _MessagingService_GetPreKeyBundle_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MessagingService_ListScheduledMessages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListScheduledMessagesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServiceServer).ListScheduledMessages(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessagingService_ListScheduledMessages_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServiceServer).ListScheduledMessages(ctx, req.(*ListScheduledMessagesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MessagingService_UpdateScheduledMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateScheduledMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServiceServer).UpdateScheduledMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessagingService_UpdateScheduledMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServiceServer).UpdateScheduledMessage(ctx, req.(*UpdateScheduledMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MessagingService_CancelScheduledMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CancelScheduledMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServiceServer).CancelScheduledMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessagingService_CancelScheduledMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServiceServer).CancelScheduledMessage(ctx, req.(*CancelScheduledMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MessagingService_SendScheduledMessageNow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SendScheduledMessageNowRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServiceServer).SendScheduledMessageNow(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessagingService_SendScheduledMessageNow_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServiceServer).SendScheduledMessageNow(ctx, req.(*SendScheduledMessageNowRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _MessagingService_ApplySpaceLifecycleFence_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ApplySpaceLifecycleFenceRequest)
 	if err := dec(in); err != nil {
@@ -998,6 +1138,22 @@ var MessagingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetPreKeyBundle",
 			Handler:    _MessagingService_GetPreKeyBundle_Handler,
+		},
+		{
+			MethodName: "ListScheduledMessages",
+			Handler:    _MessagingService_ListScheduledMessages_Handler,
+		},
+		{
+			MethodName: "UpdateScheduledMessage",
+			Handler:    _MessagingService_UpdateScheduledMessage_Handler,
+		},
+		{
+			MethodName: "CancelScheduledMessage",
+			Handler:    _MessagingService_CancelScheduledMessage_Handler,
+		},
+		{
+			MethodName: "SendScheduledMessageNow",
+			Handler:    _MessagingService_SendScheduledMessageNow_Handler,
 		},
 		{
 			MethodName: "ApplySpaceLifecycleFence",

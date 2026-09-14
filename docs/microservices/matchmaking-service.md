@@ -181,6 +181,16 @@ Matcher Worker (горизонтально масштабируемый):
 - **Story Service** — (через NATS) "ищу пати" → автоматическая заявка
 - **Moderation Service** — проверка ММ-банов
 
+### Rating privacy S2S
+
+Стандартные Compose и cluster deployment обязаны задавать `USER_GRPC_ADDR`,
+`SOCIAL_GRPC_ADDR` и `SPACE_GRPC_ADDR`: вместе они применяют аудиторию
+`show_mm_rating` для друзей, друзей друзей и участников Space. Если
+`USER_GRPC_ADDR` отсутствует в минимальной standalone-конфигурации,
+Matchmaking сохраняет degraded passthrough для чтения рейтинга и не пытается
+подменить его новой privacy-политикой; `SOCIAL_GRPC_ADDR` и
+`SPACE_GRPC_ADDR` используются только после подключения User privacy client.
+
 ## P3 Space lifecycle participant (target)
 
 Matchmaking stores a durable per-Space generation fence plus immutable operation

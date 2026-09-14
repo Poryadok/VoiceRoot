@@ -23,18 +23,27 @@ type BanStore struct {
 
 // InsertMMPeerBan blocks target from matching with banner.
 func (s *BanStore) InsertMMPeerBan(ctx context.Context, p InsertMMPeerBanParams) error {
+	_, err := s.InsertMMPeerBanIfAbsent(ctx, p)
+	return err
+}
+
+// InsertMMPeerBanIfAbsent creates a peer MM ban and reports whether it was new.
+func (s *BanStore) InsertMMPeerBanIfAbsent(ctx context.Context, p InsertMMPeerBanParams) (bool, error) {
 	if s == nil || s.Pool == nil {
-		return errors.New("ban store unavailable")
+		return false, errors.New("ban store unavailable")
 	}
 	if p.BannerProfileID == p.TargetProfileID {
-		return errors.New("cannot ban self")
+		return false, errors.New("cannot ban self")
 	}
-	_, err := s.Pool.Exec(ctx, `
+	tag, err := s.Pool.Exec(ctx, `
 		INSERT INTO mm_bans (blocker_profile_id, blocked_profile_id, reason)
 		VALUES ($1, $2, NULLIF($3, ''))
 		ON CONFLICT (blocker_profile_id, blocked_profile_id) DO NOTHING
 	`, p.BannerProfileID, p.TargetProfileID, p.Reason)
-	return err
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
 }
 
 // IsPeerBanned reports whether blocker has banned target.
