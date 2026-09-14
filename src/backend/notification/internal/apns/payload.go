@@ -21,6 +21,9 @@ func BuildNotification(bundleID, deviceToken string, in push.Payload) (*apns2.No
 	} else if in.Body != "" {
 		p = p.Alert(displayBody(in))
 	}
+	if !in.Silent {
+		p = p.Sound("default")
+	}
 	for k, v := range in.Data {
 		p = p.Custom(k, v)
 	}

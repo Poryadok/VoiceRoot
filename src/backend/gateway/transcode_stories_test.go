@@ -8,7 +8,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
 	commonv1 "voice.app/voice/common/v1"
@@ -17,14 +19,16 @@ import (
 
 type recordingStoryGRPC struct {
 	storyv1.UnimplementedStoryServiceServer
-	lastCreate   *storyv1.CreateStoryRequest
-	lastFeed     *storyv1.GetStoryFeedRequest
-	lastGet      *storyv1.GetStoryRequest
-	lastViewed   *storyv1.MarkViewedRequest
-	lastReact    *storyv1.ReactToStoryRequest
-	lastHighlight *storyv1.GetHighlightsRequest
-	lastLFP      *storyv1.CreateLookingForPartyRequest
-	lastReply    *storyv1.ReplyToStoryRequest
+	lastCreate      *storyv1.CreateStoryRequest
+	lastFeed        *storyv1.GetStoryFeedRequest
+	lastGet         *storyv1.GetStoryRequest
+	lastViewed      *storyv1.MarkViewedRequest
+	lastReact       *storyv1.ReactToStoryRequest
+	lastReactions   *storyv1.GetStoryReactionsRequest
+	getReactionsErr error
+	lastHighlight   *storyv1.GetHighlightsRequest
+	lastLFP         *storyv1.CreateLookingForPartyRequest
+	lastReply       *storyv1.ReplyToStoryRequest
 }
 
 func (s *recordingStoryGRPC) CreateStory(_ context.Context, req *storyv1.CreateStoryRequest) (*storyv1.CreateStoryResponse, error) {
@@ -63,6 +67,17 @@ func (s *recordingStoryGRPC) MarkViewed(_ context.Context, req *storyv1.MarkView
 func (s *recordingStoryGRPC) ReactToStory(_ context.Context, req *storyv1.ReactToStoryRequest) (*storyv1.ReactToStoryResponse, error) {
 	s.lastReact = req
 	return &storyv1.ReactToStoryResponse{}, nil
+}
+
+func (s *recordingStoryGRPC) GetStoryReactions(_ context.Context, req *storyv1.GetStoryReactionsRequest) (*storyv1.GetStoryReactionsResponse, error) {
+	s.lastReactions = req
+	if s.getReactionsErr != nil {
+		return nil, s.getReactionsErr
+	}
+	return &storyv1.GetStoryReactionsResponse{Reactions: []*storyv1.StoryReaction{{
+		ReactorProfileId: "profile-2",
+		Emoji:            "🔥",
+	}}}, nil
 }
 
 func (s *recordingStoryGRPC) GetHighlights(_ context.Context, req *storyv1.GetHighlightsRequest) (*storyv1.GetHighlightsResponse, error) {
@@ -197,6 +212,38 @@ func TestTranscodeStories_React(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, resp.Code)
 	require.NotNil(t, rec.lastReact)
 	require.Equal(t, "🔥", rec.lastReact.GetEmoji())
+}
+
+// TestTranscodeStories_GetReactions keeps the author-only reaction list on its
+// REST route. Story Service remains responsible for author ACL and its gRPC
+// errors; Gateway must preserve both the story ID and the response payload.
+func TestTranscodeStories_GetReactions(t *testing.T) {
+	t.Parallel()
+	rec := &recordingStoryGRPC{}
+	h := newStoriesContractGateway(t, rec)
+
+	resp := performRequest(h, http.MethodGet, "/api/v1/stories/story-42/reactions", "", map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusOK, resp.Code)
+	require.NotNil(t, rec.lastReactions)
+	require.Equal(t, "story-42", rec.lastReactions.GetStoryId())
+	require.JSONEq(t, `{"reactions":[{"reactor_profile_id":"profile-2","emoji":"🔥"}]}`, resp.Body.String())
+}
+
+// TestTranscodeStories_GetReactionsPreservesAuthorACL ensures an author-only
+// Story response remains an HTTP 403 instead of exposing reactions at REST.
+func TestTranscodeStories_GetReactionsPreservesAuthorACL(t *testing.T) {
+	t.Parallel()
+	rec := &recordingStoryGRPC{
+		getReactionsErr: status.Error(codes.PermissionDenied, "only author can list reactions"),
+	}
+	h := newStoriesContractGateway(t, rec)
+
+	resp := performRequest(h, http.MethodGet, "/api/v1/stories/story-42/reactions", "", map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusForbidden, resp.Code)
 }
 
 // TestTranscodeStories_GetHighlights documents GET /api/v1/stories/highlights → GetHighlights.

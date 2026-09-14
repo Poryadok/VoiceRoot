@@ -126,7 +126,8 @@ func TestRemoveVoiceRoomOverride_DeletesRow(t *testing.T) {
 	memberRoleID, err := s.RoleIDByName(ctx, spaceID, permissions.RoleMember)
 	require.NoError(t, err)
 	require.NoError(t, s.SetVoiceRoomOverride(ctx, voiceRoomID, memberRoleID, 0, 1))
-	require.NoError(t, s.RemoveVoiceRoomOverride(ctx, voiceRoomID, memberRoleID))
+	_, err = s.RemoveVoiceRoomOverride(ctx, voiceRoomID, memberRoleID)
+	require.NoError(t, err)
 
 	rows, err := s.ListVoiceRoomOverrides(ctx, spaceID, &voiceRoomID)
 	require.NoError(t, err)

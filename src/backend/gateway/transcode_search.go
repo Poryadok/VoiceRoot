@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -13,12 +14,30 @@ import (
 	chatv1 "voice.app/voice/chat/v1"
 )
 
+const maxSearchQueryBytes = utf8.UTFMax * 128
+
+func searchQueryFromRequest(r *http.Request) (string, error) {
+	query := r.URL.Query().Get("q")
+	if len(query) > maxSearchQueryBytes {
+		return "", status.Error(codes.InvalidArgument, "query too long")
+	}
+	if !utf8.ValidString(query) {
+		return "", status.Error(codes.InvalidArgument, "query invalid UTF-8")
+	}
+	return query, nil
+}
+
 func (t *transcoder) serveSearch(w http.ResponseWriter, r *http.Request, rest string) bool {
 	ctx := withGRPCMetadata(r.Context(), r)
 	rest = strings.TrimPrefix(rest, "/")
 
 	switch {
 	case r.Method == http.MethodGet && rest == "in-chat":
+		query, err := searchQueryFromRequest(r)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
 		page := searchPageFromQuery(r)
 		chatID := queryFirst(r, "chat_id")
 		if chatID == "" {
@@ -27,7 +46,7 @@ func (t *transcoder) serveSearch(w http.ResponseWriter, r *http.Request, rest st
 		}
 		resp, err := t.clients.search.SearchInChat(ctx, &searchv1.SearchInChatRequest{
 			Chat:  &chatv1.ChatRef{Id: chatID},
-			Query: queryFirst(r, "q"),
+			Query: query,
 			Page:  page,
 		})
 		if err != nil {
@@ -38,12 +57,17 @@ func (t *transcoder) serveSearch(w http.ResponseWriter, r *http.Request, rest st
 		return true
 
 	case r.Method == http.MethodGet && rest == "global":
+		query, err := searchQueryFromRequest(r)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
 		page := searchPageFromQuery(r)
 		if page.PageSize == 0 {
 			page.PageSize = 20
 		}
 		resp, err := t.clients.search.SearchGlobal(ctx, &searchv1.SearchGlobalRequest{
-			Query: queryFirst(r, "q"),
+			Query: query,
 			Page:  page,
 		})
 		if err != nil {
@@ -54,8 +78,13 @@ func (t *transcoder) serveSearch(w http.ResponseWriter, r *http.Request, rest st
 		return true
 
 	case r.Method == http.MethodGet && rest == "users":
+		query, err := searchQueryFromRequest(r)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
 		resp, err := t.clients.search.SearchUsers(ctx, &searchv1.SearchUsersRequest{
-			Query: queryFirst(r, "q"),
+			Query: query,
 			Limit: parseInt32Query(queryFirst(r, "limit")),
 		})
 		if err != nil {
@@ -66,12 +95,17 @@ func (t *transcoder) serveSearch(w http.ResponseWriter, r *http.Request, rest st
 		return true
 
 	case r.Method == http.MethodGet && rest == "spaces":
+		query, err := searchQueryFromRequest(r)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
 		page := searchPageFromQuery(r)
 		if page.PageSize == 0 {
 			page.PageSize = 20
 		}
 		resp, err := t.clients.search.SearchSpaces(ctx, &searchv1.SearchSpacesRequest{
-			Query: queryFirst(r, "q"),
+			Query: query,
 			Page:  page,
 		})
 		if err != nil {
