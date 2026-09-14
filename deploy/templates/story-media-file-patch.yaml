@@ -1,0 +1,23 @@
+# Strategic merge patch for deployment/voice-file; see Story media admission runbook.
+spec:
+  template:
+    spec:
+      containers:
+        - name: file
+          ports:
+            - {name: principal, containerPort: 9091}
+          env:
+            - {name: FILE_PRINCIPAL_GRPC_LISTEN, value: ":9091"}
+            - {name: FILE_PRINCIPAL_TLS_CERT_FILE, value: /run/file-principal/tls.crt}
+            - {name: FILE_PRINCIPAL_TLS_KEY_FILE, value: /run/file-principal/tls.key}
+            - {name: S2S_JWKS_CA_FILE, value: /run/principal-trust/ca.crt}
+            - {name: S2S_JWKS_URLS_JSON, value: '{"story":"https://__STORY_JWKS_HOST__/.well-known/jwks.json"}'}
+            - {name: FILE_PRINCIPAL_REPLAY_REDIS_ADDR, value: "__FILE_REPLAY_REDIS_ADDR__"}
+            - name: FILE_PRINCIPAL_REPLAY_REDIS_PASSWORD
+              valueFrom: {secretKeyRef: {name: voice-file-replay, key: password}}
+          volumeMounts:
+            - {name: file-principal-tls, mountPath: /run/file-principal, readOnly: true}
+            - {name: principal-trust, mountPath: /run/principal-trust, readOnly: true}
+      volumes:
+        - {name: file-principal-tls, secret: {secretName: voice-file-principal-tls}}
+        - {name: principal-trust, secret: {secretName: voice-principal-trust}}

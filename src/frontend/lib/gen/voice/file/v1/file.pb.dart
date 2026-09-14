@@ -27,6 +27,127 @@ export 'package:protobuf/protobuf.dart' show GeneratedMessageGenericExtensions;
 
 export 'file.pbenum.dart';
 
+/// @voice.unknown_fields=reject
+class ValidateStoryMediaRequest extends $pb.GeneratedMessage {
+  factory ValidateStoryMediaRequest({
+    $core.String? fileId,
+    $core.String? authorProfileId,
+    $2.StoryMediaType? expectedStoryType,
+  }) {
+    final result = create();
+    if (fileId != null) result.fileId = fileId;
+    if (authorProfileId != null) result.authorProfileId = authorProfileId;
+    if (expectedStoryType != null) result.expectedStoryType = expectedStoryType;
+    return result;
+  }
+
+  ValidateStoryMediaRequest._();
+
+  factory ValidateStoryMediaRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ValidateStoryMediaRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ValidateStoryMediaRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.file.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'fileId')
+    ..aOS(2, _omitFieldNames ? '' : 'authorProfileId')
+    ..aE<$2.StoryMediaType>(3, _omitFieldNames ? '' : 'expectedStoryType',
+        enumValues: $2.StoryMediaType.values)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ValidateStoryMediaRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ValidateStoryMediaRequest copyWith(
+          void Function(ValidateStoryMediaRequest) updates) =>
+      super.copyWith((message) => updates(message as ValidateStoryMediaRequest))
+          as ValidateStoryMediaRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ValidateStoryMediaRequest create() => ValidateStoryMediaRequest._();
+  @$core.override
+  ValidateStoryMediaRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ValidateStoryMediaRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ValidateStoryMediaRequest>(create);
+  static ValidateStoryMediaRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get fileId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set fileId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasFileId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearFileId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get authorProfileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set authorProfileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasAuthorProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearAuthorProfileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $2.StoryMediaType get expectedStoryType => $_getN(2);
+  @$pb.TagNumber(3)
+  set expectedStoryType($2.StoryMediaType value) => $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasExpectedStoryType() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearExpectedStoryType() => $_clearField(3);
+}
+
+class ValidateStoryMediaResponse extends $pb.GeneratedMessage {
+  factory ValidateStoryMediaResponse() => create();
+
+  ValidateStoryMediaResponse._();
+
+  factory ValidateStoryMediaResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ValidateStoryMediaResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ValidateStoryMediaResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.file.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ValidateStoryMediaResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ValidateStoryMediaResponse copyWith(
+          void Function(ValidateStoryMediaResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as ValidateStoryMediaResponse))
+          as ValidateStoryMediaResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ValidateStoryMediaResponse create() => ValidateStoryMediaResponse._();
+  @$core.override
+  ValidateStoryMediaResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ValidateStoryMediaResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ValidateStoryMediaResponse>(create);
+  static ValidateStoryMediaResponse? _defaultInstance;
+}
+
 class RequestUploadRequest extends $pb.GeneratedMessage {
   factory RequestUploadRequest({
     $core.String? originalName,

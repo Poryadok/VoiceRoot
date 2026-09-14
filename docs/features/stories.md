@@ -26,6 +26,20 @@
 | Текст  | Текст на цветном фоне                                                                                                       |
 | Клип   | Короткий игровой момент — отличается от обычного видео тем, что редактор предлагает инструменты трима и выделения фрагмента |
 
+### Admission contract (staged)
+
+The current public `StoryMediaType` models only `photo`, `video`, and `text`:
+unknown values, `clip`, aliases and unspecified values are invalid until a
+separate product/proto change models Clip. Photo/video require a File-owned
+protected validation attestation; text never has media. File checks an
+unscoped, non-E2E, ready upload owned by the author, with clean/skipped scan;
+photo requires image and video requires video with duration 1..60 seconds.
+
+LFP remains a text Story. Media-less LFP is supported. Because the product canon
+does not yet select its media kind or video duration policy, non-empty LFP
+media fails closed rather than being inferred from a MIME type. Exact Story-ID
+reference claiming is separate lifecycle work.
+
 ---
 
 ## Редактор

@@ -32,6 +32,8 @@
 
 ```protobuf
 service FileService {
+  // Protected, read-only Story media attestation. Only service:story may call.
+  rpc ValidateStoryMedia(ValidateStoryMediaRequest) returns (ValidateStoryMediaResponse);
   rpc RequestUpload(RequestUploadRequest) returns (RequestUploadResponse);
   rpc ConfirmUpload(ConfirmUploadRequest) returns (ConfirmUploadResponse);
   rpc GetFileURL(GetFileURLRequest) returns (GetFileURLResponse);
@@ -292,6 +294,35 @@ When conversion finishes (`status=ready` or `failed`), File publishes **`file.pr
 - **ClamAV** — антивирусное сканирование (sidecar или отдельный pod)
 - **Subscription Service** — проверка лимитов (размер файла, retention)
 - **Messaging Service** — (через NATS) обновление превью в сообщении после конвертации
+
+## Story media validation
+
+`ValidateStoryMedia` is a synchronous, read-only protected RPC. It accepts only
+the verified `service:story` principal and a request-bound Phase-0 credential;
+it never trusts forwarded profile or caller headers. File evaluates ownership,
+unscoped/non-E2E context, ready lifecycle, clean-or-skipped scan result, and
+the closed photo/image or video/duration-1..60 predicate atomically from its
+locked File row. Its empty success response is an attestation, not metadata for
+Story to re-evaluate. `GetFileMetadata` remains Gateway-only.
+
+| gRPC code | Validation outcome |
+| --- | --- |
+| `Unauthenticated` | Credential/request-ID/Phase-0 binding, raw-header, replay, JWKS or verifier failure |
+| `PermissionDenied` | Verified caller is not `service:story`, or uploader differs |
+| `InvalidArgument` | Invalid UUID, missing/unknown/text expected type, unknown request field |
+| `NotFound` | File row is absent |
+| `FailedPrecondition` | Chat/E2E/Story context, lifecycle, scan, category or video-duration predicate fails |
+| `Unavailable` | Listener or persistence is unavailable |
+
+The protected listener uses `FILE_PRINCIPAL_GRPC_LISTEN`,
+`FILE_PRINCIPAL_TLS_CERT_FILE`, `FILE_PRINCIPAL_TLS_KEY_FILE` and
+`FILE_PRINCIPAL_REPLAY_REDIS_ADDR` (optional password via
+`FILE_PRINCIPAL_REPLAY_REDIS_PASSWORD`). `S2S_JWKS_URLS_JSON` must contain the
+Story HTTPS endpoint; `S2S_JWKS_CA_FILE` adds its private trust root. Cache
+settings follow Phase-0 defaults of 30s/2m/5s. Partial configuration fails startup.
+The ordinary listener returns `Unavailable` for validation and the protected
+listener rejects all other methods. See Story's deployment runbook and
+`docs/todo/backend.md` for the remaining lifecycle-binding work.
 
 ## Масштабирование
 

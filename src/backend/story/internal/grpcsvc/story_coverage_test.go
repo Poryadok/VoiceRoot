@@ -13,10 +13,10 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
+	"voice/backend/pkg/integrationtest"
 	grpcsvc "voice/backend/story/internal/grpcsvc"
 	"voice/backend/story/internal/store"
 	"voice/backend/story/internal/storyevents"
-	"voice/backend/pkg/integrationtest"
 
 	chatv1 "voice.app/voice/chat/v1"
 	commonv1 "voice.app/voice/common/v1"
@@ -183,8 +183,7 @@ func TestCreateStory_typeEnumAndMediaFile(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
-	client, _, cleanup := startStoryGRPC(t)
-	defer cleanup()
+	client, _, _, _ := startStoryMediaRED(t, mediaValidatorFunc(func(context.Context, uuid.UUID, uuid.UUID, storyv1.StoryMediaType) error { return nil }))
 
 	profile := uuid.New()
 	ctx := withProfile(context.Background(), uuid.New(), profile)
@@ -193,10 +192,10 @@ func TestCreateStory_typeEnumAndMediaFile(t *testing.T) {
 	enum := storyv1.StoryMediaType_STORY_MEDIA_TYPE_PHOTO
 	audience := storyv1.StoryAudience_STORY_AUDIENCE_PUBLIC
 	resp, err := client.CreateStory(ctx, &storyv1.CreateStoryRequest{
-		TypeEnum:      &enum,
+		TypeEnum:       &enum,
 		VisibilityEnum: &audience,
-		MediaFileId:   &mediaID,
-		TextContent:   &text,
+		MediaFileId:    &mediaID,
+		TextContent:    &text,
 	})
 	require.NoError(t, err)
 	require.Equal(t, "photo", resp.GetStory().GetType())

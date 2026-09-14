@@ -168,9 +168,64 @@ story_media_deletion_outbox
 
 ## Зависимости
 
-- **File Service** — хранение медиа сторис
+- **File Service** — хранение медиа сторис и protected `ValidateStoryMedia`
 - **User Service** — настройки приватности (кто видит сторис)
 - **Social Service** — список друзей для фильтрации видимости
 - **Matchmaking Service** — (через NATS, **deferred**) автоматическая заявка "ищу пати" из `story.lfp_created`
 - **Notification Service** — (через NATS) уведомления об упоминаниях
 - **Subscription Service** — проверка Premium (анонимный просмотр)
+
+## Story media admission
+
+`CreateStory` has a closed type set: `photo`, `video`, `text`. Photo/video
+require one valid media UUID and must obtain File's protected empty-success
+attestation; text forbids media and does not call File. Story must create a new
+outgoing Phase-0 context with only its service credential and request ID, and
+must not forward Gateway/client identity metadata or use `GetFileMetadata`.
+Downstream credential, transport, deadline and dependency failures map to a
+non-sensitive `Unavailable`; File's `InvalidArgument`, `NotFound`,
+`PermissionDenied` and `FailedPrecondition` remain public operation codes.
+
+Until the product canon selects an LFP media kind and video policy, media-less
+LFP remains supported and any non-empty LFP `media_file_id` fails closed with
+`FailedPrecondition` before File, persistence or an event. Exact Story-ID
+claim/reference binding remains separate File-reference work.
+
+### Protected media rollout
+
+Story loads exactly two distinct PKCS#8 RSA keys from
+`STORY_PRINCIPAL_SIGNING_KEYS_DIR`; `STORY_PRINCIPAL_ACTIVE_KID` selects the
+signer. Its HTTP server exposes sorted public keys at `GET /.well-known/jwks.json`.
+`FILE_PRINCIPAL_GRPC_ADDR`, `FILE_PRINCIPAL_TLS_CA_FILE` and
+`FILE_PRINCIPAL_TLS_SERVER_NAME` are all required when this path is configured.
+Partial configuration is a startup error; no configuration keeps media admission
+unavailable. Text and media-less LFP remain usable.
+
+Deployment owners provision Secret `voice-story-principal-keys` with exactly two
+`<kid>.pem` keys; `voice-file-principal-tls` with `tls.crt`/`tls.key` and SAN
+`voice-file-principal.<namespace>.svc`; `voice-principal-trust` with `ca.crt`
+trusting both File and Story HTTPS JWKS certificates; `voice-story-jwks-tls` for
+the HTTPS ingress; and `voice-file-replay` with Redis `password` (empty only for
+an intentionally unauthenticated isolated Redis). Never put private keys into
+ConfigMaps or Git.
+
+Substitute namespace, ingress class, JWKS host, replay Redis address and active
+key ID in the three [deployment templates](../../deploy/templates/story-media-principal-network.yaml).
+Apply the network resources, then apply
+[File patch](../../deploy/templates/story-media-file-patch.yaml) and
+[Story patch](../../deploy/templates/story-media-story-patch.yaml) with
+`kubectl patch deployment voice-file --type strategic --patch-file <file>` and
+the analogous `voice-story` command in the selected namespace. Deploy File
+first; enable Story signing and its HTTPS JWKS route before accepting media.
+No plaintext fallback exists. Service metrics expose gRPC deny codes without
+credentials or media/profile identifiers.
+
+Before enabling production traffic, verify TLS trust, the two public JWKS keys,
+successful clean image admission, forbidden foreign/chat-scoped media, ordinary
+listener denial, and fail-closed Redis/JWKS outage. The namespace policy permits
+9091 only from Story; audit other additive NetworkPolicies for broader grants.
+Rotation publishes the next public key before selecting it and keeps the old
+key for at least 30 seconds after its last signature. Roll pods when changing
+mounted signing keys: the signer loads them at startup. Rollback may disable
+media admission by removing the complete Story signing/client configuration;
+never restore raw metadata validation.

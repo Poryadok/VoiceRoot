@@ -30,6 +30,13 @@ const serviceName = "story"
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	mediaClient, mediaConn, publicJWKS, err := loadSignedStoryMediaClientFromEnv()
+	if err != nil {
+		log.Fatalf("story media principal config: %v", err)
+	}
+	if mediaConn != nil {
+		defer func() { _ = mediaConn.Close() }()
+	}
 	serviceCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	addr := ":8080"
@@ -58,6 +65,9 @@ func main() {
 		}
 		st := &store.StoryStore{Pool: pool}
 		svc := grpcsvc.NewStoryGRPC(st)
+		if mediaClient != nil {
+			svc.Files = mediaClient
+		}
 		friendChecker := privacy.NewFriendChecker(logger)
 		svc.Friends = friendChecker
 		svc.Audience = friendChecker
@@ -76,7 +86,19 @@ func main() {
 		jobs.StartArchivePurgeWorker(serviceCtx, st, fileDeleter, logger)
 	}
 
-	mux := healthHandler(serviceName)
+	mux := http.NewServeMux()
+	mux.Handle("/", healthHandler(serviceName))
+	if publicJWKS != nil {
+		mux.HandleFunc("/.well-known/jwks.json", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet {
+				w.Header().Set("Allow", http.MethodGet)
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(publicJWKS)
+		})
+	}
 	server := &http.Server{
 		Addr:    addr,
 		Handler: mux,

@@ -20,7 +20,7 @@
 | Space Service        | `space_db`        | Social principal replay   | —                                |
 | Role Service         | `role_db`         | Shared principal replay Redis | —                                |
 | Voice Service        | `voice_db`        | active-call compatibility projection + lifecycle admission/receipt mirror | LiveKit |
-| File Service         | `file_db`         | —                         | R2, воркеры конвертации          |
+| File Service         | `file_db`         | Shared principal replay Redis | R2, воркеры конвертации       |
 | Notification Service | `notification_db` | grouping push, limits     | FCM, APNs, email                 |
 | Search Service       | `search_db` (target) | —                      | Meilisearch v2, Elasticsearch v3 |
 | Matchmaking Service  | `matchmaking_db`  | очереди, locks            | —                                |
@@ -170,6 +170,13 @@ authority остаётся за JWT/floor validation.
 2. Таблицы и связи для волны v1: [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md) и секции «Модель данных» в [microservices/](microservices/) (общие правила — [DATA_MODEL.md](DATA_MODEL.md)).
 3. Миграции: один сервис — один набор миграций на свою БД; инструменты и порядок — [OPERATIONS.md](OPERATIONS.md#миграции-бд-database-per-service).
 
+
+### File Story-media principal replay
+
+File's protected Story-media listener uses its File-owned shared Redis
+namespace `file:principal:replay:<sha256(issuer + NUL + jti)>` with SET NX and
+the remaining credential lifetime. Redis/JWKS failure or a hard-expired JWKS
+cache fails closed; this ephemeral replay key is not File-reference authority.
 
 ### Role ownership principal replay
 
