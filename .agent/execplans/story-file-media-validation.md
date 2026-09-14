@@ -29,8 +29,9 @@ LFP media returns FailedPrecondition. No foreign DB reads or metadata fallback.
 - [x] Refresh existing draft by merge from master, retain history.
 - [x] Correct and complete RED evidence and independent review.
 - [x] File predicate and protected transport GREEN.
-- [ ] Story signed admission, configuration and no-write matrix GREEN.
-- [ ] Deployment contracts, independent security review, scoped CI and merge.
+- [x] Story signed admission, configuration and no-write matrix GREEN.
+- [x] Deployment contracts and independent security review.
+- [ ] Hosted CI and merge: tracked by the live PR #368 head/checks and merge state.
 
 ## Detailed steps
 
@@ -69,7 +70,17 @@ validator while preserving assertions. That run also exceeded its four-minute
 budget during existing integration setup; full run now has 15-minute budget.
 Independent review found and fixed raw whitespace LFP media and missing explicit
 CA/server-name checks. Added public-only sorted two-key loader tests, deployment
-patch/network templates and rollout/rotation runbook. Final tests/CI pending.
+patch/network templates and rollout/rotation runbook. Full File module Docker
+suite passed (grpcsvc 256.266s); Story grpcsvc passed (407.326s), all other
+Story packages passed except an existing startup-test scheduling race. The test
+had observed the DB commit before asynchronous File dispatch and asserted both
+simultaneously. e4c367cf awaits both effects within the unchanged five-second
+deadline, preserving exact-once/idempotency assertions; independent reviewer
+approved and the full jobs package passed (49.026s). Both module linters and
+short suites pass. Buf lint, host breaking, Go/Dart generation guards and
+deployment YAML structural validation pass. Security review approved 325b4e64;
+master refresh contains no changes to this scope. Hosted required checks remain
+the final gate before merge; no production deployment has been performed.
 
 ## Decisions
 
