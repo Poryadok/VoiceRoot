@@ -71,6 +71,15 @@ func requireHostedArchivePurgeScaffold(t *testing.T, scenario string) {
 	t.Skip("RED scaffold: wire " + scenario + " to StageArchivePurgeBatch and the leased dispatcher")
 }
 
+func startArchivePurgeStore(t *testing.T) (*store.StoryStore, context.Context) {
+	t.Helper()
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "storyoutbox", "")
+	_, err := pool.Exec(ctx, migrationSQL(t))
+	require.NoError(t, err)
+	return &store.StoryStore{Pool: pool}, ctx
+}
+
 func (d *purgeBarrierFileDeleter) DeleteFile(ctx context.Context, fileID string) error {
 	_, d.callbackLookup = d.store.GetStory(ctx, d.storyID)
 	d.started <- struct{}{}
