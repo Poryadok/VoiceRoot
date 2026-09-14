@@ -71,6 +71,8 @@ func mapInviteStoreErr(err error) error {
 		return status.Error(codes.ResourceExhausted, "space member cap reached")
 	case errors.Is(err, store.ErrAccountBanned):
 		return status.Error(codes.PermissionDenied, "account is banned from this space")
+	case errors.Is(err, store.ErrGuestsNotAllowed):
+		return status.Error(codes.PermissionDenied, "guests not allowed in this space")
 	default:
 		return mapSpaceStoreError(err)
 	}
@@ -231,15 +233,6 @@ func (s *SpaceGRPC) JoinByInvite(ctx context.Context, req *spacev1.JoinByInviteR
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing account")
 	}
-	if guestguard.IsGuest(ctx) {
-		allow, err := s.Store.AllowGuestsForInvite(ctx, code)
-		if err != nil {
-			return nil, mapInviteStoreErr(err)
-		}
-		if !allow {
-			return nil, status.Error(codes.PermissionDenied, "guests not allowed in this space")
-		}
-	}
 	inv, err := s.Store.GetInviteByCode(ctx, code)
 	if err != nil {
 		return nil, mapSpaceStoreError(err)
@@ -252,11 +245,14 @@ func (s *SpaceGRPC) JoinByInvite(ctx context.Context, req *spacev1.JoinByInviteR
 		return nil, err
 	}
 	defer release()
-	if inv.ExpiresAt != nil && !inv.ExpiresAt.After(time.Now().UTC()) {
-		return nil, status.Error(codes.FailedPrecondition, "invite expired")
-	}
-	if inv.MaxUses != nil && inv.UseCount >= *inv.MaxUses {
-		return nil, status.Error(codes.FailedPrecondition, "invite max uses reached")
+	isGuest := guestguard.IsGuest(ctx)
+	if !isGuest {
+		if inv.ExpiresAt != nil && !inv.ExpiresAt.After(time.Now().UTC()) {
+			return nil, status.Error(codes.FailedPrecondition, "invite expired")
+		}
+		if inv.MaxUses != nil && inv.UseCount >= *inv.MaxUses {
+			return nil, status.Error(codes.FailedPrecondition, "invite max uses reached")
+		}
 	}
 	if err := s.ensureJoinInvitePrivacy(ctx, profileID, inv.CreatorProfileID); err != nil {
 		return nil, err
@@ -268,7 +264,12 @@ func (s *SpaceGRPC) JoinByInvite(ctx context.Context, req *spacev1.JoinByInviteR
 	if err != nil {
 		return nil, mapSpaceStoreError(err)
 	}
-	member, err := s.Store.JoinByInvite(ctx, code, profileID, accountID)
+	var member *store.MembershipRow
+	if isGuest {
+		member, err = s.Store.JoinGuestByInvite(ctx, code, profileID, accountID)
+	} else {
+		member, err = s.Store.JoinByInvite(ctx, code, profileID, accountID)
+	}
 	if err != nil {
 		return nil, mapInviteStoreErr(err)
 	}

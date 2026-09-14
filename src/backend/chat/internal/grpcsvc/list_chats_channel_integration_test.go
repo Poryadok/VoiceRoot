@@ -29,8 +29,8 @@ func TestListChats_MembershipChannel_InMainInbox(t *testing.T) {
 
 	var channelID uuid.UUID
 	err := pool.QueryRow(ctx, `
-INSERT INTO chats (type, name, creator_profile_id, slow_mode_seconds, threads_enabled, allow_user_main_feed)
-VALUES ('channel', 'News', $1, 0, true, false)
+INSERT INTO chats (type, name, creator_profile_id, slow_mode_seconds, threads_enabled, allow_user_main_feed, topic)
+VALUES ('channel', 'News', $1, 0, true, false, 'Release notes')
 RETURNING id
 `, owner).Scan(&channelID)
 	require.NoError(t, err)
@@ -49,4 +49,41 @@ VALUES ($1, $2, 'owner', 'main')
 	require.Equal(t, "News", item.GetName())
 	require.True(t, item.GetThreadsEnabled())
 	require.False(t, item.GetAllowUserMainFeed())
+	require.NotNil(t, item.Topic)
+	require.Equal(t, "Release notes", item.GetTopic())
+}
+
+// TestListChats_NullTopicRemainsUnset keeps nullable topic compatible for legacy chat rows.
+func TestListChats_NullTopicRemainsUnset(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	owner := uuid.New()
+	account := uuid.New()
+	client, cleanup := startChatGRPCTestServer(t, pool, mapProfileAccounts{owner: account}, nil, nil)
+	t.Cleanup(cleanup)
+
+	var chatID uuid.UUID
+	err := pool.QueryRow(ctx, `
+INSERT INTO chats (type, name, creator_profile_id, slow_mode_seconds)
+VALUES ('group', 'Legacy group', $1, 0)
+RETURNING id
+`, owner).Scan(&chatID)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `
+INSERT INTO chat_members (chat_id, profile_id, role, inbox_bucket)
+VALUES ($1, $2, 'owner', 'main')
+`, chatID, owner)
+	require.NoError(t, err)
+
+	list, err := client.ListChats(withAccountProfileCtx(ctx, account, owner), &chatv1.ListChatsRequest{})
+	require.NoError(t, err)
+	require.Len(t, list.GetChatList().GetItems(), 1)
+	chat := list.GetChatList().GetItems()[0].GetChat()
+	require.Equal(t, chatID.String(), chat.GetId())
+	require.Nil(t, chat.Topic)
 }

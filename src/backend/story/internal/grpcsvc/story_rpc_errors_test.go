@@ -238,6 +238,44 @@ func TestAddToHighlight_foreignStoryDenied(t *testing.T) {
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
+func TestAddToHighlight_requiresArchivedStory(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	client, st, cleanup := startStoryGRPC(t)
+	defer cleanup()
+
+	profile := uuid.New()
+	ctx := withProfile(context.Background(), uuid.New(), profile)
+	text := "archive me first"
+	created, err := client.CreateStory(ctx, &storyv1.CreateStoryRequest{
+		Type: "text", TextContent: &text, Visibility: "friends",
+	})
+	require.NoError(t, err)
+	hl, err := client.CreateHighlight(ctx, &storyv1.CreateHighlightRequest{Name: "Archive"})
+	require.NoError(t, err)
+
+	_, err = client.AddToHighlight(ctx, &storyv1.AddToHighlightRequest{
+		HighlightId: hl.GetHighlight().GetId(),
+		StoryId:     created.GetStory().GetId(),
+	})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	storyID, err := uuid.Parse(created.GetStory().GetId())
+	require.NoError(t, err)
+	row, err := st.GetStory(context.Background(), storyID)
+	require.NoError(t, err)
+	n, err := st.MarkExpiredStories(context.Background(), row.ExpiresAt.Add(time.Second))
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+
+	_, err = client.AddToHighlight(ctx, &storyv1.AddToHighlightRequest{
+		HighlightId: hl.GetHighlight().GetId(),
+		StoryId:     created.GetStory().GetId(),
+	})
+	require.NoError(t, err)
+}
+
 func TestGetViewers_expiredStoryEmpty(t *testing.T) {
 	if testing.Short() {
 		t.Skip()

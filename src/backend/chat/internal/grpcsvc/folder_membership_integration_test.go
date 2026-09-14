@@ -90,3 +90,46 @@ func TestFolderMembershipGRPC_CustomFolderFlow(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))
 }
+
+// TestListChats_FolderHydratesTopic proves the folder-scoped query preserves Chat.topic.
+func TestListChats_FolderHydratesTopic(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	account := uuid.New()
+	profile := uuid.New()
+	client, cleanup := startChatGRPCTestServer(t, pool, mapProfileAccounts{profile: account}, nil, nil)
+	t.Cleanup(cleanup)
+	caller := withAccountProfileCtx(ctx, account, profile)
+
+	var chatID uuid.UUID
+	err := pool.QueryRow(ctx, `
+INSERT INTO chats (type, name, topic, creator_profile_id, slow_mode_seconds)
+VALUES ('group', 'Sprint planning', 'This week', $1, 0)
+RETURNING id
+`, profile).Scan(&chatID)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `
+INSERT INTO chat_members (chat_id, profile_id, role, inbox_bucket)
+VALUES ($1, $2, 'owner', 'main')
+`, chatID, profile)
+	require.NoError(t, err)
+
+	folder, err := client.CreateFolder(caller, &chatv1.CreateFolderRequest{Name: "Planning"})
+	require.NoError(t, err)
+	folderID := folder.GetFolder().GetId()
+	_, err = client.AddChatToFolder(caller, &chatv1.AddChatToFolderRequest{FolderId: folderID, ChatId: chatID.String()})
+	require.NoError(t, err)
+
+	list, err := client.ListChats(caller, &chatv1.ListChatsRequest{FolderId: &folderID})
+	require.NoError(t, err)
+	require.Len(t, list.GetChatList().GetItems(), 1)
+	chat := list.GetChatList().GetItems()[0].GetChat()
+	require.Equal(t, chatID.String(), chat.GetId())
+	require.NotNil(t, chat.Topic)
+	require.Equal(t, "This week", chat.GetTopic())
+}

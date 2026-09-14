@@ -26,8 +26,16 @@ import (
 
 type recordingUserGRPC struct {
 	userv1.UnimplementedUserServiceServer
-	lastMD     metadata.MD
-	lastUpdate *userv1.UpdateProfileRequest
+	lastMD       metadata.MD
+	lastUpdate   *userv1.UpdateProfileRequest
+	lastPresence *userv1.UpdatePresenceRequest
+}
+
+func (s *recordingUserGRPC) UpdatePresence(ctx context.Context, req *userv1.UpdatePresenceRequest) (*userv1.UpdatePresenceResponse, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	s.lastMD = md
+	s.lastPresence = req
+	return &userv1.UpdatePresenceResponse{}, nil
 }
 
 func (s *recordingUserGRPC) GetProfile(ctx context.Context, req *userv1.GetProfileRequest) (*userv1.GetProfileResponse, error) {

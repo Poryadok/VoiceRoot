@@ -14,6 +14,8 @@
 - Space-level матчмейкинг (future — кастомные правила пространства)
 - Соло и групповые заявки (party)
 - Точные критерии: игра, режим, роль, ранг, регион
+- При `roles_required` роль — обязательная self-reported метка из каталога;
+  повтор роли между участниками разрешён, без квот и балансировки в V1
 - Регион обязателен (нет cross-region)
 - Таймауты: 15 мин (default) / 30 мин (expanded)
 - Создание матч-отряда при матче
@@ -158,6 +160,12 @@ Matcher Worker (горизонтально масштабируемый):
 3. Проверить таймауты (15/30 мин)
 ```
 
+`roles_required` валидирует присутствие роли и её принадлежность `modes[].roles`.
+Поле `roles[].required` и контракт каталога сохраняются, но не задают уникальные
+слоты: V1 допускает одинаковые и разные валидные роли в одном предложении.
+Балансировка или role quotas требуют отдельного контракта и не выводятся из
+текущей конфигурации.
+
 ## Публикуемые события (→ NATS)
 
 Доменный поток JetStream: **`matchmaking.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)).
@@ -180,6 +188,16 @@ Matcher Worker (горизонтально масштабируемый):
 - **Notification Service** — (через NATS) уведомление о найденном матче
 - **Story Service** — (через NATS) "ищу пати" → автоматическая заявка
 - **Moderation Service** — проверка ММ-банов
+
+### Rating privacy S2S
+
+Стандартные Compose и cluster deployment обязаны задавать `USER_GRPC_ADDR`,
+`SOCIAL_GRPC_ADDR` и `SPACE_GRPC_ADDR`: вместе они применяют аудиторию
+`show_mm_rating` для друзей, друзей друзей и участников Space. Если
+`USER_GRPC_ADDR` отсутствует в минимальной standalone-конфигурации,
+Matchmaking сохраняет degraded passthrough для чтения рейтинга и не пытается
+подменить его новой privacy-политикой; `SOCIAL_GRPC_ADDR` и
+`SPACE_GRPC_ADDR` используются только после подключения User privacy client.
 
 ## P3 Space lifecycle participant (target)
 
