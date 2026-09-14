@@ -25,7 +25,9 @@ func migrationSQL(t *testing.T) string {
 	require.NoError(t, err)
 	b3, err := os.ReadFile(filepath.Join(dir, "000003_hidden_from_feed.up.sql"))
 	require.NoError(t, err)
-	return string(b1) + "\n" + string(b2) + "\n" + string(b3)
+	b4, err := os.ReadFile(filepath.Join(dir, "000004_archive_purge_outbox.up.sql"))
+	require.NoError(t, err)
+	return string(b1) + "\n" + string(b2) + "\n" + string(b3) + "\n" + string(b4)
 }
 
 func startStoryStore(t *testing.T) *store.StoryStore {
