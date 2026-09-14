@@ -43,7 +43,7 @@ func (t *transcoder) serveVoice(w http.ResponseWriter, r *http.Request, rest str
 			req.FromVoiceRoomId, req.ParticipantProfileId = voiceRoomID, strings.TrimSpace(parts[2])
 			resp, err := t.clients.voice.MoveVoiceRoomParticipant(ctx, req)
 			if err != nil {
-				writeGRPCError(w, err)
+				writeVoiceRoomMoveError(w, err)
 				return true
 			}
 			writeProtoJSON(w, http.StatusOK, resp)
@@ -86,7 +86,7 @@ func (t *transcoder) serveVoice(w http.ResponseWriter, r *http.Request, rest str
 				FromVoiceRoomId: req.GetFromVoiceRoomId(), ToVoiceRoomId: req.GetToVoiceRoomId(), Space: req.GetSpace(), OperationId: req.GetOperationId(),
 			})
 			if err != nil {
-				writeGRPCError(w, err)
+				writeVoiceRoomMoveError(w, err)
 				return true
 			}
 			writeProtoJSON(w, http.StatusOK, resp)

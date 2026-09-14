@@ -455,6 +455,8 @@ func storeErr(err error) error {
 		return status.Error(codes.FailedPrecondition, "invalid call state")
 	case errors.Is(err, voicestore.ErrOperationConflict):
 		return status.Error(codes.FailedPrecondition, "operation id conflicts with a different request")
+	case errors.Is(err, voicestore.ErrMoveContention):
+		return status.Error(codes.Unavailable, "voice room roster unavailable")
 	case errors.Is(err, voicestore.ErrRoomFull):
 		return status.Error(codes.ResourceExhausted, "voice room is full")
 	case errors.Is(err, voicestore.ErrScreenShareLimit):

@@ -26,6 +26,10 @@ var (
 	ErrNotScreenSharing  = errors.New("profile is not screen sharing")
 	ErrScreenShareDenied = errors.New("screen share not permitted")
 	ErrOperationConflict = errors.New("operation id conflicts with a different request")
+	// ErrMoveContention means the bounded Redis CAS retry budget was exhausted.
+	// It is deliberately distinct from a dependency outage so the transport can
+	// expose the same safe retryable result without leaking Redis details.
+	ErrMoveContention = errors.New("voice room move contention")
 )
 
 // VoiceRoomMoveRequest is the canonical, actor-bound mutation for moving one

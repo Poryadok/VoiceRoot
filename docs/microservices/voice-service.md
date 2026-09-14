@@ -152,7 +152,7 @@ LiveKit dependency failure is `503 unavailable`. Every deny has no room session,
 roster or event side effect. Gateway freezes these `error_code` values instead of
 relaying arbitrary gRPC text. Mutations carry a client UUID `operation_id`; Voice
 keeps a 24-hour keyed ledger `(actor_profile_id, operation_id, method, canonical
-request)` for identical replay and rejects changed request as `409 already_exists`.
+request)` for identical replay and rejects changed request as `409 failed_precondition`.
 
 **LiveKit grant.** A Space-room grant is a 60-second LiveKit JWT bound to server
 identity, `profile_id`, `room_id`, an authorization `epoch`, and the explicit

@@ -11,9 +11,9 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	"voice/backend/pkg/correlation"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"voice/backend/pkg/correlation"
 )
 
 var protoJSONMarshal = protojson.MarshalOptions{
@@ -93,6 +93,26 @@ func writeGRPCError(w http.ResponseWriter, err error) {
 		"error_code": errorCode,
 		"message":    st.Message(),
 	})
+}
+
+// writeVoiceRoomMoveError is deliberately route-local: voice-room moves use a
+// conflict response for obsolete roster state, while every unrelated gRPC
+// FAILED_PRECONDITION keeps the generic HTTP 412 mapping above.
+func writeVoiceRoomMoveError(w http.ResponseWriter, err error) {
+	st, ok := status.FromError(err)
+	if !ok {
+		writeGRPCError(w, err)
+		return
+	}
+	w.Header().Set("X-Voice-GRPC-Code", st.Code().String())
+	switch st.Code() {
+	case codes.FailedPrecondition:
+		writeJSON(w, http.StatusConflict, map[string]string{"error_code": "failed_precondition", "message": "voice room move is no longer possible"})
+	case codes.Unavailable:
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error_code": "unavailable", "message": "voice room roster unavailable"})
+	default:
+		writeGRPCError(w, err)
+	}
 }
 
 // grpcStatusDomainErrorCode returns app error keys carried in gRPC status messages

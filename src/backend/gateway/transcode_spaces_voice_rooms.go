@@ -24,7 +24,7 @@ func (t *transcoder) serveSpacesVoiceRooms(w http.ResponseWriter, r *http.Reques
 	if r.Method == http.MethodPost && len(parts) == 4 && parts[3] == "move" {
 		req, err := readVoiceRoomMoveJSON(r)
 		if err != nil {
-			writeGRPCError(w, err)
+			writeVoiceRoomMoveError(w, err)
 			return true
 		}
 		resp, err := t.clients.voice.MoveToVoiceRoom(ctx, &callsv1.MoveToVoiceRoomRequest{
@@ -34,7 +34,7 @@ func (t *transcoder) serveSpacesVoiceRooms(w http.ResponseWriter, r *http.Reques
 			OperationId:     req.GetOperationId(),
 		})
 		if err != nil {
-			writeGRPCError(w, err)
+			writeVoiceRoomMoveError(w, err)
 			return true
 		}
 		writeProtoJSON(w, http.StatusOK, resp)
@@ -43,7 +43,7 @@ func (t *transcoder) serveSpacesVoiceRooms(w http.ResponseWriter, r *http.Reques
 	if r.Method == http.MethodPost && len(parts) == 6 && parts[3] == "participants" && strings.TrimSpace(parts[4]) != "" && parts[5] == "move" {
 		req, err := readVoiceRoomMoveJSON(r)
 		if err != nil {
-			writeGRPCError(w, err)
+			writeVoiceRoomMoveError(w, err)
 			return true
 		}
 		req.FromVoiceRoomId = fromVoiceRoomID
@@ -51,7 +51,7 @@ func (t *transcoder) serveSpacesVoiceRooms(w http.ResponseWriter, r *http.Reques
 		req.Space = &spacev1.SpaceRef{Id: spaceID}
 		resp, err := t.clients.voice.MoveVoiceRoomParticipant(ctx, req)
 		if err != nil {
-			writeGRPCError(w, err)
+			writeVoiceRoomMoveError(w, err)
 			return true
 		}
 		writeProtoJSON(w, http.StatusOK, resp)
