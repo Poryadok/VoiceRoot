@@ -1,15 +1,24 @@
 import { useState } from "react";
 import { exportAnalytics } from "../api/analytics";
 import { AnalyticsSubnav } from "../components/AnalyticsSubnav";
+import {
+  AnalyticsTimeRangeFilter,
+  AnalyticsTimeRangeScope,
+  useAnalyticsTimeRange,
+} from "../components/AnalyticsTimeRange";
 
-export function AnalyticsExportPage() {
+function AnalyticsExportContent() {
   const [eventType, setEventType] = useState("");
   const [status, setStatus] = useState<string | null>(null);
+  const { range, isRangeValid } = useAnalyticsTimeRange();
 
   async function onExport(format: "csv" | "json") {
+    if (!isRangeValid) {
+      return;
+    }
     setStatus("Exporting…");
     try {
-      const blob = await exportAnalytics(format, eventType || undefined);
+      const blob = await exportAnalytics(format, eventType || undefined, range);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -25,6 +34,7 @@ export function AnalyticsExportPage() {
   return (
     <>
       <AnalyticsSubnav />
+      <AnalyticsTimeRangeFilter />
       <section>
       <h2>Export analytics</h2>
       <label>
@@ -36,10 +46,10 @@ export function AnalyticsExportPage() {
         />
       </label>
       <div className="button-row">
-        <button type="button" onClick={() => onExport("csv")}>
+        <button type="button" onClick={() => onExport("csv")} disabled={!isRangeValid}>
           Download CSV
         </button>
-        <button type="button" onClick={() => onExport("json")}>
+        <button type="button" onClick={() => onExport("json")} disabled={!isRangeValid}>
           Download JSON
         </button>
       </div>
@@ -47,4 +57,8 @@ export function AnalyticsExportPage() {
     </section>
     </>
   );
+}
+
+export function AnalyticsExportPage() {
+  return <AnalyticsTimeRangeScope><AnalyticsExportContent /></AnalyticsTimeRangeScope>;
 }
