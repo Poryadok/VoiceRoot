@@ -198,9 +198,12 @@ func TestRedisCallStore_MoveConcurrentPublicAddAndRemoveKeepSingleActiveRoster(t
 			inSource := sourceErr == nil && sourceAfter.IsParticipant(target)
 			inDestination := destinationErr == nil && destinationAfter.IsParticipant(target)
 			require.NotEqual(t, inSource, inDestination, "public writers and move must serialize: target is in exactly one roster")
-			if inDestination {
-				active, err := store.GetActiveCall(ctx, target)
-				require.NoError(t, err)
+			active, err := store.GetActiveCall(ctx, target)
+			require.NoError(t, err)
+			if inSource {
+				require.Equal(t, sourceAfter.RoomID, active.RoomID)
+			} else {
+				require.True(t, inDestination)
 				require.Equal(t, destinationAfter.RoomID, active.RoomID)
 			}
 		})
@@ -238,6 +241,13 @@ func TestRedisCallStore_CompetingMovesChooseOneDestination(t *testing.T) {
 	}
 	require.Equal(t, 1, terminalDestinations, "competing moves cannot leave duplicate or lost roster membership")
 	require.Equal(t, active.RoomID, client.Get(ctx, store.activeKey(target)).Val())
+	sourceAfter, err := store.GetCall(ctx, "source-call")
+	require.NoError(t, err)
+	require.False(t, sourceAfter.IsParticipant(target), "the committed source document must exclude the moved target")
+	require.Equal(t, callsv1.CallStatus_CALL_STATUS_ENDED, sourceAfter.Status)
+	sourceIndex, err := client.Get(ctx, store.activeVoiceRoomKey(sourceID)).Result()
+	require.ErrorIs(t, err, redis.Nil)
+	require.Empty(t, sourceIndex, "an ended source document must not retain its voice-room index")
 	ledgerCount := client.Exists(ctx, store.moveOperationKey(actor, "op-a"), store.moveOperationKey(actor, "op-b")).Val()
 	require.EqualValues(t, 1, ledgerCount, "only the terminal move may persist a 24-hour operation receipt")
 }
@@ -257,20 +267,30 @@ func TestRedisCallStore_MoveFailureLeavesRosterIndexesAndLedgerUntouched(t *test
 	store, client := newRedisCallStoreForTest(t, "voice-move-rollback:")
 	source, err := store.CreateCall(ctx, Call{RoomID: "source-call", VoiceRoomID: "source", SpaceID: "space", SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, InitiatorProfileID: "target", MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE})
 	require.NoError(t, err)
-	before, err := store.GetCall(ctx, source.RoomID)
-	require.NoError(t, err)
+	request := VoiceRoomMoveRequest{ActorProfileID: "actor", ParticipantProfileID: "target", OperationID: "op", FromVoiceRoomID: "source", ToVoiceRoomID: "destination", SpaceID: "space", MaxParticipants: MaxVoiceRoomParticipants, DestinationRoomID: "destination-call", Now: time.Now().UTC()}
+	keys := []string{store.callKey(source.RoomID), store.callKey(request.DestinationRoomID), store.activeVoiceRoomKey(request.FromVoiceRoomID), store.activeVoiceRoomKey(request.ToVoiceRoomID), store.activeKey(request.ParticipantProfileID), store.moveOperationKey(request.ActorProfileID, request.OperationID)}
+	before := redisRawKeySnapshot(t, ctx, client, keys)
 	// A cancelled Redis transaction must commit no part of the roster/session/index/ledger transition.
 	cancelled, cancel := context.WithCancel(ctx)
 	cancel()
-	_, err = store.MoveVoiceRoomParticipant(cancelled, VoiceRoomMoveRequest{ActorProfileID: "actor", ParticipantProfileID: "target", OperationID: "op", FromVoiceRoomID: "source", ToVoiceRoomID: "destination", SpaceID: "space", MaxParticipants: MaxVoiceRoomParticipants, DestinationRoomID: "destination-call", Now: time.Now().UTC()})
+	_, err = store.MoveVoiceRoomParticipant(cancelled, request)
 	require.Error(t, err)
-	after, err := store.GetCall(ctx, source.RoomID)
-	require.NoError(t, err)
-	require.Equal(t, before, after)
-	_, err = store.GetCallByVoiceRoomID(ctx, "destination")
-	require.ErrorIs(t, err, ErrNotFound)
-	require.Equal(t, "source-call", client.Get(ctx, store.activeKey("target")).Val())
-	require.False(t, client.Exists(ctx, store.moveOperationKey("actor", "op")).Val() > 0)
+	require.Equal(t, before, redisRawKeySnapshot(t, ctx, client, keys), "failure must retain the exact source/destination documents, both room indices, active session and ledger bytes")
+}
+
+func redisRawKeySnapshot(t *testing.T, ctx context.Context, client *redis.Client, keys []string) map[string]string {
+	t.Helper()
+	snapshot := make(map[string]string, len(keys))
+	for _, key := range keys {
+		value, err := client.Get(ctx, key).Result()
+		if err == nil {
+			snapshot[key] = "present:" + value
+			continue
+		}
+		require.ErrorIs(t, err, redis.Nil, "key=%s", key)
+		snapshot[key] = "absent"
+	}
+	return snapshot
 }
 
 func TestRedisCallStore_MovePersistsAtomicSnapshotAndReplayAcrossFreshInstance(t *testing.T) {
@@ -371,9 +391,13 @@ func TestRedisCallStore_MoveConcurrentPublicJoinPersistsJoinerAndKeepsTargetSing
 	inSource := source.IsParticipant(target)
 	inDestination := destinationErr == nil && destination.IsParticipant(target)
 	require.NotEqual(t, inSource, inDestination)
-	if moveErr == nil {
+	active := mustActiveCall(t, ctx, store, target)
+	if inSource {
+		require.Equal(t, source.RoomID, active.RoomID)
+	} else {
+		require.NoError(t, moveErr)
 		require.True(t, inDestination)
-		require.Equal(t, destination.RoomID, mustActiveCall(t, ctx, store, target).RoomID)
+		require.Equal(t, destination.RoomID, active.RoomID)
 	}
 }
 

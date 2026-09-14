@@ -296,6 +296,43 @@ func TestTranscodeVoiceRoomMoveUnavailableUsesSafeServiceUnavailableEnvelope(t *
 	}
 }
 
+func TestTranscodeVoiceRoomModeratorMoveUnavailableUsesSafeServiceUnavailableEnvelope(t *testing.T) {
+	grpcRec := &recordingVoiceRooms{moveParticipantErr: status.Error(codes.Unavailable, "redis retry diagnostics must not reach REST")}
+	conn, cleanup := startBufconnVoiceConn(t, grpcRec)
+	t.Cleanup(cleanup)
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{"valid-user-token": {UserID: "account-1", ProfileID: "profile-actor"}},
+		transcoder:  &transcoder{clients: grpcClients{voice: callsv1.NewVoiceServiceClient(conn)}},
+	})
+	resp := performRequest(h, http.MethodPost, "/api/v1/voice/rooms/source-1/participants/target-1/move", `{"to_voice_room_id":"dest-1","operation_id":"op-1"}`, map[string]string{"Authorization": "Bearer valid-user-token"})
+	require.Equal(t, http.StatusServiceUnavailable, resp.Code, "body=%s", resp.Body.String())
+	var envelope struct {
+		ErrorCode string `json:"error_code"`
+		Message   string `json:"message"`
+	}
+	decodeJSON(t, resp.Body, &envelope)
+	require.Equal(t, "unavailable", envelope.ErrorCode)
+	require.Equal(t, "voice room roster unavailable", envelope.Message)
+}
+
+func TestTranscodeSpaceVoiceRoomSelfMoveUnavailableUsesSafeServiceUnavailableEnvelope(t *testing.T) {
+	grpcRec := &recordingVoiceRooms{moveSelfErr: status.Error(codes.Unavailable, "redis retry diagnostics must not reach REST")}
+	conn, cleanup := startBufconnVoiceConn(t, grpcRec)
+	t.Cleanup(cleanup)
+	tc := &transcoder{clients: grpcClients{voice: callsv1.NewVoiceServiceClient(conn)}}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/spaces/space-path/voice-rooms/source-path/move", strings.NewReader(`{"to_voice_room_id":"dest-path","operation_id":"op-path"}`))
+	resp := httptest.NewRecorder()
+	require.True(t, tc.serveSpacesVoiceRooms(resp, req, "space-path/voice-rooms/source-path/move"))
+	require.Equal(t, http.StatusServiceUnavailable, resp.Code, "body=%s", resp.Body.String())
+	var envelope struct {
+		ErrorCode string `json:"error_code"`
+		Message   string `json:"message"`
+	}
+	decodeJSON(t, resp.Body, &envelope)
+	require.Equal(t, "unavailable", envelope.ErrorCode)
+	require.Equal(t, "voice room roster unavailable", envelope.Message)
+}
+
 func TestTranscodeSpaceVoiceRoomModeratorMoveUnavailableUsesSafeServiceUnavailableEnvelope(t *testing.T) {
 	grpcRec := &recordingVoiceRooms{moveParticipantErr: status.Error(codes.Unavailable, "redis retry diagnostics must not reach REST")}
 	conn, cleanup := startBufconnVoiceConn(t, grpcRec)
