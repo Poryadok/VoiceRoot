@@ -213,7 +213,7 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 		require.NotNil(t, resp.GetProfile().CustomStatus)
 		require.Equal(t, customStatus, resp.GetProfile().GetCustomStatus())
 
-		reloaded, err := cli.GetProfile(ctx, &userv1.GetProfileRequest{
+		reloaded, err := cli.GetProfile(mdCtx, &userv1.GetProfileRequest{
 			By: &userv1.GetProfileRequest_ProfileId{ProfileId: pid.String()},
 		})
 		require.NoError(t, err)
@@ -228,7 +228,7 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 			Theme:     proto.String("dark"),
 		})
 		require.NoError(t, err)
-		reloaded, err = cli.GetProfile(ctx, &userv1.GetProfileRequest{
+		reloaded, err = cli.GetProfile(mdCtx, &userv1.GetProfileRequest{
 			By: &userv1.GetProfileRequest_ProfileId{ProfileId: pid.String()},
 		})
 		require.NoError(t, err)
@@ -245,7 +245,7 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, resp.GetProfile().CustomStatus)
 		require.Empty(t, resp.GetProfile().GetCustomStatus())
-		reloaded, err = cli.GetProfile(ctx, &userv1.GetProfileRequest{
+		reloaded, err = cli.GetProfile(mdCtx, &userv1.GetProfileRequest{
 			By: &userv1.GetProfileRequest_ProfileId{ProfileId: pid.String()},
 		})
 		require.NoError(t, err)
@@ -581,7 +581,7 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String(), authctx.HeaderProfileID, pid.String())
+		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String(), authctx.HeaderProfileID, pid.String(), authctx.HeaderSubscriptionTier, "premium")
 		_, err = cli.UpdatePresence(mdCtx, &userv1.UpdatePresenceRequest{
 			Status:       "online",
 			CustomStatus: proto.String("coding"),
