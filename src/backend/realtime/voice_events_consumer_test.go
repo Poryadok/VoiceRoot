@@ -159,7 +159,7 @@ func TestVoiceEventBytesToFanout_DeclinedAndMissedPayloads(t *testing.T) {
 	caller := uuid.NewString()
 	callee := uuid.NewString()
 	declinedEventID := uuid.NewString()
-	declinedOccurredAt := timestamppb.Now()
+	declinedOccurredAt := timestamppb.New(voiceCompatibilityOccurredAt)
 
 	declinedData, err := proto.Marshal(&eventsv1.VoiceStreamEvent{
 		EventId:    declinedEventID,
@@ -207,7 +207,7 @@ func TestVoiceEventBytesToFanout_DeclinedAndMissedPayloads(t *testing.T) {
 	if got, want := declinedPayload["event_id"], declinedEventID; got != want {
 		t.Fatalf("declined event_id=%v, want %q", got, want)
 	}
-	if got, want := declinedPayload["occurred_at"], declinedOccurredAt.AsTime().UTC().Format(time.RFC3339); got != want {
+	if got, want := declinedPayload["occurred_at"], declinedOccurredAt.AsTime().UTC().Format(time.RFC3339Nano); got != want {
 		t.Fatalf("declined occurred_at=%v, want %q", got, want)
 	}
 	rawProfileIDs, ok := declinedPayload["profile_ids"].([]any)
@@ -230,7 +230,7 @@ func TestVoiceEventBytesToFanout_DeclinedAndMissedPayloads(t *testing.T) {
 	}
 
 	missedEventID := uuid.NewString()
-	missedOccurredAt := timestamppb.Now()
+	missedOccurredAt := timestamppb.New(voiceCompatibilityOccurredAt)
 	missedData, err := proto.Marshal(&eventsv1.VoiceStreamEvent{
 		EventId:    missedEventID,
 		OccurredAt: missedOccurredAt,
@@ -256,7 +256,7 @@ func TestVoiceEventBytesToFanout_DeclinedAndMissedPayloads(t *testing.T) {
 	}
 	wantMissed := map[string]any{
 		"event_id":             missedEventID,
-		"occurred_at":          missedOccurredAt.AsTime().UTC().Format(time.RFC3339),
+		"occurred_at":          missedOccurredAt.AsTime().UTC().Format(time.RFC3339Nano),
 		"room_id":              roomID,
 		"chat_id":              chatID,
 		"initiator_profile_id": caller,

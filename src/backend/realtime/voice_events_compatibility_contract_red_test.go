@@ -13,7 +13,7 @@ import (
 	eventsv1 "voice.app/voice/events/v1"
 )
 
-var voiceCompatibilityOccurredAt = time.Date(2026, time.September, 14, 9, 8, 7, 0, time.UTC)
+var voiceCompatibilityOccurredAt = time.Date(2026, time.September, 14, 9, 8, 7, 123456789, time.UTC)
 
 type voiceCompatibilityCase struct {
 	name           string
@@ -161,15 +161,31 @@ func TestVoiceEventBytesToFanout_UsesCompactedAuthoritativeRecipients(t *testing
 			if frame.Op != tc.wantOp {
 				t.Fatalf("op=%q want %q", frame.Op, tc.wantOp)
 			}
-			if !reflect.DeepEqual(profileIDs, tc.wantProfileIDs) {
-				t.Fatalf("profile_ids=%v want compacted authoritative recipients %v", profileIDs, tc.wantProfileIDs)
-			}
+			assertUniqueStringSet(t, profileIDs, tc.wantProfileIDs)
 		})
 	}
 }
 
+func assertUniqueStringSet(t *testing.T, got, want []string) {
+	t.Helper()
+	gotSet := make(map[string]struct{}, len(got))
+	for _, value := range got {
+		if _, duplicate := gotSet[value]; duplicate {
+			t.Fatalf("values=%v contain duplicate %q", got, value)
+		}
+		gotSet[value] = struct{}{}
+	}
+	wantSet := make(map[string]struct{}, len(want))
+	for _, value := range want {
+		wantSet[value] = struct{}{}
+	}
+	if !reflect.DeepEqual(gotSet, wantSet) {
+		t.Fatalf("values=%v want unique set %v", got, want)
+	}
+}
+
 func TestVoiceEventBytesToFanout_PropagatesEnvelopeMetadataToEveryOperation(t *testing.T) {
-	wantOccurredAt := voiceCompatibilityOccurredAt.Format(time.RFC3339)
+	wantOccurredAt := voiceCompatibilityOccurredAt.Format(time.RFC3339Nano)
 	for _, tc := range voiceCompatibilityCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			wire, err := proto.Marshal(tc.event)
@@ -192,6 +208,128 @@ func TestVoiceEventBytesToFanout_PropagatesEnvelopeMetadataToEveryOperation(t *t
 			}
 		})
 	}
+}
+
+func TestVoiceEventBytesToFanout_ExposesExactPublicPayloadKeys(t *testing.T) {
+	wantKeysByOp := map[string][]string{
+		"call_incoming": {
+			"event_id", "occurred_at", "room_id", "chat_id", "initiator_profile_id",
+			"callee_profile_id", "media_kind", "livekit_room_name", "expires_at",
+		},
+		"call_accepted": {
+			"event_id", "occurred_at", "room_id", "chat_id", "accepted_by_profile_id",
+			"profile_ids", "media_kind", "livekit_room_name",
+		},
+		"call_ended": {
+			"event_id", "occurred_at", "room_id", "duration_seconds", "profile_ids",
+			"reason", "ended_by_profile_id",
+		},
+		"voice_state_update": {
+			"event_id", "occurred_at", "room_id", "profile_id", "profile_ids",
+		},
+		"screen_share_started": {
+			"event_id", "occurred_at", "room_id", "profile_id", "stream_id",
+		},
+		"screen_share_stopped": {
+			"event_id", "occurred_at", "room_id", "profile_id", "stream_id",
+		},
+		"voice_member_joined": {
+			"event_id", "occurred_at", "room_id", "voice_room_id", "space_id",
+			"joined_profile_id", "profile_ids",
+		},
+	}
+
+	for _, tc := range voiceCompatibilityCases() {
+		wantKeys, covered := wantKeysByOp[tc.wantOp]
+		if !covered {
+			continue
+		}
+		t.Run(tc.name, func(t *testing.T) {
+			wire, err := proto.Marshal(tc.event)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, frame, ok := voiceEventBytesToFanout(wire)
+			if !ok {
+				t.Fatal("valid Voice event was discarded")
+			}
+			var payload map[string]any
+			if err := json.Unmarshal(frame.D, &payload); err != nil {
+				t.Fatal(err)
+			}
+			if tc.wantOp == "screen_share_started" || tc.wantOp == "screen_share_stopped" {
+				if routingIDs, disclosed := payload["profile_ids"]; disclosed {
+					t.Fatalf("screen-share payload disclosed routing profile_ids=%v", routingIDs)
+				}
+			}
+			assertExactJSONKeys(t, payload, wantKeys)
+		})
+	}
+}
+
+func assertExactJSONKeys(t *testing.T, payload map[string]any, want []string) {
+	t.Helper()
+	wantSet := make(map[string]struct{}, len(want))
+	for _, key := range want {
+		wantSet[key] = struct{}{}
+	}
+	gotSet := make(map[string]struct{}, len(payload))
+	for key := range payload {
+		gotSet[key] = struct{}{}
+	}
+	if !reflect.DeepEqual(gotSet, wantSet) {
+		t.Fatalf("payload keys=%v want exactly %v", gotSet, wantSet)
+	}
+}
+
+func jsonStringSlice(t *testing.T, value any) []string {
+	t.Helper()
+	raw, ok := value.([]any)
+	if !ok {
+		t.Fatalf("value=%T want JSON array", value)
+	}
+	result := make([]string, 0, len(raw))
+	for _, item := range raw {
+		text, ok := item.(string)
+		if !ok {
+			t.Fatalf("array item=%T want string", item)
+		}
+		result = append(result, text)
+	}
+	return result
+}
+
+func TestVoiceEventBytesToFanout_MemberJoinedBuildsSnapshotWithoutWideningRouting(t *testing.T) {
+	first := uuid.NewString()
+	second := uuid.NewString()
+	joined := uuid.NewString()
+	event := &eventsv1.VoiceStreamEvent{
+		EventId:    uuid.NewString(),
+		OccurredAt: timestamppb.New(voiceCompatibilityOccurredAt),
+		Payload: &eventsv1.VoiceStreamEvent_VoiceMemberJoined{VoiceMemberJoined: &eventsv1.VoiceMemberJoined{
+			RoomId: uuid.NewString(), VoiceRoomId: uuid.NewString(), SpaceId: uuid.NewString(),
+			JoinedProfileId: joined, NotifyProfileIds: []string{first, first, second},
+		}},
+	}
+	wire, err := proto.Marshal(event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profileIDs, frame, ok := voiceEventBytesToFanout(wire)
+	if !ok {
+		t.Fatal("valid member-joined event was discarded")
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(frame.D, &payload); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("routing remains unique notify recipients only", func(t *testing.T) {
+		assertUniqueStringSet(t, profileIDs, []string{first, second})
+	})
+	t.Run("payload snapshot is unique notify recipients plus joined profile", func(t *testing.T) {
+		assertUniqueStringSet(t, jsonStringSlice(t, payload["profile_ids"]), []string{first, second, joined})
+	})
 }
 
 func TestVoiceEventBytesToFanout_DiscardsInvalidEnvelopeMetadata(t *testing.T) {
@@ -234,6 +372,12 @@ func TestVoiceEventBytesToFanout_DoesNotInferAudienceWhenRecipientSetIsEmpty(t *
 		name  string
 		event *eventsv1.VoiceStreamEvent
 	}{
+		{
+			name: "missed call without either endpoint",
+			event: &eventsv1.VoiceStreamEvent{Payload: &eventsv1.VoiceStreamEvent_CallMissed{
+				CallMissed: &eventsv1.CallMissed{RoomId: roomID},
+			}},
+		},
 		{
 			name: "screen share started",
 			event: &eventsv1.VoiceStreamEvent{Payload: &eventsv1.VoiceStreamEvent_ScreenShareStarted{
