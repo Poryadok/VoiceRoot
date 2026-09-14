@@ -970,6 +970,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatAttachFile => 'Attach file';
 
   @override
+  String get chatAttachmentBlocked => 'File blocked. Choose another file.';
+
+  @override
+  String get chatAttachmentPickAnother => 'Choose another file';
+
+  @override
+  String get chatAttachmentScanFailed => 'File scan failed. Try again.';
+
+  @override
+  String get chatAttachmentUploadFailed => 'Could not upload file. Try again.';
+
+  @override
   String get composerEmojiPanelTitle => 'Emoji';
 
   @override
@@ -2358,6 +2370,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get guestSaveAccountReminderCta => 'Register';
+
+  @override
+  String get chatAllowGuestsTitle => 'Allow guests';
+
+  @override
+  String get chatAllowGuestsSubtitle =>
+      'Let invited guest accounts enter this chat.';
 
   @override
   String get privacyShowOnlineIncludeGuests =>

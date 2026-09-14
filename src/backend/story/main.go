@@ -14,14 +14,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
 
+	"voice/backend/pkg/grpcmw"
+	"voice/backend/pkg/httpserver"
+	"voice/backend/pkg/runtimeconfig"
 	"voice/backend/story/internal/clients"
 	grpcsvc "voice/backend/story/internal/grpcsvc"
 	"voice/backend/story/internal/jobs"
 	"voice/backend/story/internal/privacy"
 	"voice/backend/story/internal/store"
-	"voice/backend/pkg/grpcmw"
-	"voice/backend/pkg/httpserver"
-	"voice/backend/pkg/runtimeconfig"
 
 	storyv1 "voice.app/voice/story/v1"
 )
@@ -30,6 +30,8 @@ const serviceName = "story"
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	serviceCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	addr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
 		addr = v
@@ -70,8 +72,8 @@ func main() {
 		}()
 		logger.Info("story grpc listening", slog.String("addr", grpcAddr))
 
-		jobs.StartExpiryWorker(context.Background(), st, svc.Events, logger)
-		jobs.StartArchivePurgeWorker(context.Background(), st, fileDeleter, logger)
+		jobs.StartExpiryWorker(serviceCtx, st, svc.Events, logger)
+		jobs.StartArchivePurgeWorker(serviceCtx, st, fileDeleter, logger)
 	}
 
 	mux := healthHandler(serviceName)
@@ -86,14 +88,12 @@ func main() {
 		errCh <- server.ListenAndServe()
 	}()
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	select {
 	case err := <-errCh:
 		if err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
 		}
-	case <-stop:
+	case <-serviceCtx.Done():
 		if grpcSrv != nil {
 			grpcSrv.GracefulStop()
 		}

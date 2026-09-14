@@ -87,6 +87,13 @@ func TestRouteMessageNotification_MessageSent(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestRouteMessageNotification_MessageSentEmptyMetadataFailsClosed(t *testing.T) {
+	err := routeMessageNotification(context.Background(), &consumer.MessageEventHandler{Router: delivery.DecideRouting}, chatmembers.NoopLister{}, &dispatch.MessagePusher{Grouping: grouping.NewMemoryStore()}, pushenrich.NoopResolver{}, &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MessageSent{
+		MessageSent: &eventsv1.MessageSent{MessageId: uuid.NewString(), ChatId: uuid.NewString(), SenderProfileId: uuid.NewString()},
+	}})
+	require.Error(t, err)
+}
+
 func TestRouteMessageNotification_MentionAdded(t *testing.T) {
 	senderID := uuid.NewString()
 	mentionedID := uuid.NewString()
@@ -102,8 +109,46 @@ func TestRouteMessageNotification_MentionAdded(t *testing.T) {
 			},
 		},
 	}
-	err := routeMessageNotification(context.Background(), handler, chatmembers.NoopLister{}, pusher, pushenrich.NoopResolver{}, env)
+	err := routeMessageNotification(context.Background(), handler, stubChatMembers{ids: []string{senderID, mentionedID}}, pusher, pushenrich.NoopResolver{}, env)
 	require.NoError(t, err)
+}
+
+func TestRouteMessageNotification_SendSilentMarksPushWithoutSuppressingIt(t *testing.T) {
+	senderID := uuid.New()
+	recipientID := uuid.New()
+	recorder := &recordingMessageFCM{}
+	err := routeMessageNotification(context.Background(), &consumer.MessageEventHandler{Router: delivery.DecideRouting}, stubChatMembers{ids: []string{senderID.String(), recipientID.String()}}, &dispatch.MessagePusher{
+		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
+			recipientID: {{Token: "recipient-token", PushService: "fcm"}},
+		}},
+		Pusher:   &dispatch.PushDispatcher{FCM: recorder},
+		Grouping: grouping.NewMemoryStore(),
+	}, pushenrich.NoopResolver{}, &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MessageSent{
+		MessageSent: &eventsv1.MessageSent{MessageId: uuid.NewString(), ChatId: uuid.NewString(), SenderProfileId: senderID.String(), SendSilent: true},
+	}})
+
+	require.NoError(t, err)
+	require.Len(t, recorder.sent, 1)
+	require.True(t, recorder.sent[0].Silent)
+}
+
+func TestRouteMessageNotification_SilentMentionDoesNotIntroduceAudiblePush(t *testing.T) {
+	senderID := uuid.New()
+	recipientID := uuid.New()
+	recorder := &recordingMessageFCM{}
+	err := routeMessageNotification(context.Background(), &consumer.MessageEventHandler{Router: delivery.DecideRouting}, stubChatMembers{ids: []string{senderID.String(), recipientID.String()}}, &dispatch.MessagePusher{
+		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
+			recipientID: {{Token: "recipient-token", PushService: "fcm"}},
+		}},
+		Pusher:   &dispatch.PushDispatcher{FCM: recorder},
+		Grouping: grouping.NewMemoryStore(),
+	}, pushenrich.NoopResolver{}, &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MentionAdded{
+		MentionAdded: &eventsv1.MentionAdded{MessageId: uuid.NewString(), ChatId: uuid.NewString(), SenderProfileId: senderID.String(), MentionedProfileIds: []string{recipientID.String()}, SendSilent: true},
+	}})
+
+	require.NoError(t, err)
+	require.Len(t, recorder.sent, 1)
+	require.True(t, recorder.sent[0].Silent)
 }
 
 func TestRouteMessageNotification_UnknownPayload(t *testing.T) {
@@ -125,13 +170,14 @@ func TestMessageEventsJetStreamSubjectPrefix(t *testing.T) {
 func TestDeliveryForMember_ArchivedRecipientSuppressesPush(t *testing.T) {
 	for _, chatKind := range []string{"dm", "group", "channel"} {
 		t.Run(chatKind, func(t *testing.T) {
-			decision := deliveryForMember(map[string]delivery.DeliveryDecision{"recipient": {InApp: true, Push: true}}, chatmembers.Member{
+			decision, err := deliveryForMember(map[string]delivery.DeliveryDecision{"recipient": {InApp: true, Push: true}}, chatmembers.Member{
 				ProfileID:  uuid.NewString(),
 				IsArchived: true,
-			})["recipient"]
+			})
+			require.NoError(t, err)
 
-			require.False(t, decision.InApp, "archiving must suppress notification-center delivery")
-			require.False(t, decision.Push, "archived %s recipient must not receive push", chatKind)
+			require.False(t, decision["recipient"].InApp, "archiving must suppress notification-center delivery")
+			require.False(t, decision["recipient"].Push, "archived %s recipient must not receive push", chatKind)
 		})
 	}
 }
@@ -215,10 +261,24 @@ func TestRouteMessageNotification_ArchivedReplyAndMentionSuppressNotificationDel
 }
 
 func TestDeliveryForMember_ActiveRecipientPreservesRouting(t *testing.T) {
-	decision := deliveryForMember(map[string]delivery.DeliveryDecision{"recipient": {InApp: true, Push: true}}, chatmembers.Member{
+	decision, err := deliveryForMember(map[string]delivery.DeliveryDecision{"recipient": {InApp: true, Push: true}}, chatmembers.Member{
 		ProfileID: uuid.NewString(),
-	})["recipient"]
+	})
+	require.NoError(t, err)
 
-	require.True(t, decision.InApp)
-	require.True(t, decision.Push)
+	require.True(t, decision["recipient"].InApp)
+	require.True(t, decision["recipient"].Push)
+}
+
+func TestRouteMessageNotification_MissingRecipientMetadataFailsClosed(t *testing.T) {
+	senderID := uuid.NewString()
+	recipientID := uuid.NewString()
+	handler := &consumer.MessageEventHandler{Router: delivery.DecideRouting}
+	members := stubChatMembers{rows: []chatmembers.Member{{ProfileID: senderID, InboxBucket: "main"}}}
+
+	err := routeMessageNotification(context.Background(), handler, members, &dispatch.MessagePusher{Grouping: grouping.NewMemoryStore()}, parentAuthorResolver{author: recipientID}, &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MessageSent{
+		MessageSent: &eventsv1.MessageSent{MessageId: uuid.NewString(), ChatId: uuid.NewString(), SenderProfileId: senderID, ThreadParentId: stringPtr("parent-message")},
+	}})
+
+	require.Error(t, err, "missing recipient routing metadata must retry rather than send")
 }

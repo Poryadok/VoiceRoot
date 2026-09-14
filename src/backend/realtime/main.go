@@ -51,9 +51,11 @@ func main() {
 	chatLister := dialChatBootstrapLister()
 	memberInboxLister := dialChatMemberInboxLister()
 	presenceUpdater := dialPresenceUpdater()
+	presenceViewer := dialPresenceViewer()
 	friendLister := dialFriendLister()
 
 	hub := newWSHub()
+	hub.setPresenceViewer(presenceViewer)
 	subscriptionChecker := dialChatSubscriptionChecker(hub)
 	hub.memberInboxLister = memberInboxLister
 	hub.subscriptionChecker = subscriptionChecker
@@ -145,7 +147,7 @@ func main() {
 			}
 		}()
 		go func() {
-			err := runUserEventsConsumer(ctx, hub, friendLister, natsURL, instanceID, logger)
+			err := runUserEventsConsumer(ctx, hub, friendLister, presenceViewer, natsURL, instanceID, logger)
 			if err != nil && err != context.Canceled {
 				logger.Error("user.events consumer exited", slog.String("error", err.Error()))
 			}
@@ -289,6 +291,14 @@ func dialPresenceUpdater() presenceUpdater {
 		return nil
 	}
 	return newGRPCPresenceUpdater(conn)
+}
+
+func dialPresenceViewer() presenceViewer {
+	conn := dialRealtimeGRPCDependency("user presence privacy", "REALTIME_USER_GRPC_ADDR")
+	if conn == nil {
+		return nil
+	}
+	return newGRPCPresenceViewer(conn)
 }
 
 func dialFriendLister() friendLister {

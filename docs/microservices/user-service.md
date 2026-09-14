@@ -120,7 +120,7 @@ profiles
 ├── avatar_url
 ├── banner_url
 ├── bio (text, 500 chars)
-├── custom_status (text, nullable — Premium)
+├── custom_status (text, nullable — Premium; durable profile metadata, not Redis presence)
 ├── locale (en | ru)
 ├── theme (light | dark | high_contrast)
 ├── is_primary (bool)

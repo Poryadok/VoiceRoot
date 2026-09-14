@@ -34,6 +34,10 @@ func (failingRoleChecker) EnsureMuteOthers(context.Context, string, string, stri
 	return nil
 }
 
+func (failingRoleChecker) EnsureVoiceMoveOthers(context.Context, string, string, string) error {
+	return errors.New("role service unavailable")
+}
+
 func TestVoiceGRPC_StartScreenShare_RoleUnavailableDeniesSpaceRoom(t *testing.T) {
 	t.Parallel()
 	now := time.Unix(1700000000, 0).UTC()
