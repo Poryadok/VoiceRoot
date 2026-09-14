@@ -55,6 +55,163 @@
 
 
 - [ ] **[Matchmaking] Party snapshot из voice roster отсутствует** — `PartyStore` stub; `StartSearch` валидирует `partySize=1`. Нет сброса очереди при leave/join войса (`docs/features/matchmaking.md`). V1 валидирует обязательную self-reported роль по каталогу и допускает повторы; будущая balanced matchmaking функция должна отдельно определить квоты, уникальность и распределение ролей.
+
+#### A3 MM ↔ Voice party and match-squad lifecycle contract (accepted target)
+
+This is the frozen implementation contract for the A3 party/reset and ephemeral
+match-squad gaps. It follows the Phase-0 protected-principal rules in
+`ARCHITECTURE_REQUIREMENTS.md`; current `x-voice-internal-caller` and forwarded
+profile metadata are migration inputs only and confer no authority.
+
+**Authoritative party snapshot.** Add protected
+`VoiceService.GetMatchmakingPartySnapshot`, allowed only to
+`service:matchmaking`. The request contains `search_operation_id`,
+`initiator_account_id`, `initiator_profile_id` and positive
+`initiator_session_epoch`; these are subject data copied by Matchmaking only from
+the verified delegated-user principal on `StartSearch`. It contains no room ID,
+party ID or member list. The service credential is exact-RPC/request-hash bound;
+raw identity metadata, duplicate credentials and a caller other than Matchmaking
+are rejected before the handler. Party identity is profile-scoped: the initiating
+device need not own the media connection, but the authenticated profile must be
+the unique active Voice membership used for the lookup.
+
+The response has `protocol_version=1`. Voice returns one of these exact results:
+
+- `SOLO`: no active Voice membership, no `room_id`, `roster_version=0`, and the
+  sole member is `initiator_profile_id`;
+- `VOICE_ROSTER`: an active ordinary `call`, `group_voice` or `voice_room`, with
+  server-owned `room_id`, positive monotonic `roster_version`, and unique profile
+  IDs sorted by UUID bytes. The initiator occurs exactly once. Members are durable
+  memberships in `JOINED` or the still-valid at-most-30-second `RECONNECTING`
+  state. `JOINING`, `LEAVING`, `LEFT`, `EJECTED`, revoked/expired epoch and a
+  non-`ACTIVE` room are excluded. A stale locator that still points at an
+  inactive/revoked membership is `FAILED_PRECONDITION`, not `SOLO`.
+  Mute/deafen/speak state does not change party
+  eligibility. A room whose immutable purpose is `MATCH_SQUAD` is not a pre-match
+  party and returns `FAILED_PRECONDITION`; multiple active memberships for the
+  initiator are an invariant violation and fail closed.
+
+The snapshot read and `roster_version` are taken under the same Voice transaction
+boundary as membership mutations. For a concurrent join/leave, the caller sees
+either version `N` before the mutation and later receives event `N+1`, or the
+post-mutation members at `N+1`; a mixed roster/version is forbidden. Voice
+unavailability makes `StartSearch` fail without a party, sessions or queue rows.
+The public `StartSearch.party_id` is never roster authority and must be rejected
+when supplied by an external user; LFP uses its existing protected MM-owned party
+path. Matchmaking validates catalog party bounds, then atomically stores the
+initiator, source kind, source room/version and SHA-256 of the deterministic
+sorted member manifest before enqueueing one party. Every member is covered by
+the one-active-search invariant, not only the initiator.
+
+**Roster-change delivery and ordering.** Add
+`VoiceRosterMembershipChanged` to `VoiceStreamEvent` on subject
+`voice.roster_membership_changed`. The payload is exactly `protocol_version=1`,
+`room_id`, positive `roster_version`, `change=JOINED|LEFT` and `profile_id`; the envelope supplies
+UUID `event_id` and `occurred_at`. Voice increments the room version and writes
+the outbox event in the same transaction that commits the membership mutation,
+then publishes deterministic bytes with `Nats-Msg-Id=event_id`. A denied/no-op or
+an exact replay emits no new version/event.
+
+Matchmaking uses a durable pull consumer and a PostgreSQL inbox. It stores
+`event_id`, payload hash and `(room_id,roster_version)` before explicit ACK.
+Exact duplicate delivery is a no-op. Reuse of an event ID with different bytes,
+or of a room/version with different membership-change bytes, is
+`CONTRACT_MISMATCH`: cancel affected searching/pending parties fail closed and
+page immediately; never guess an ordering or discard silently. Delivery may be
+duplicated or out of order, so MM does not depend on arrival order: any valid
+JOINED/LEFT with `event.roster_version > party.source_roster_version` cancels the
+whole voice party exactly once, removes all its sessions from queues and emits
+one cancellation per session with reason `VOICE_ROSTER_CHANGED`. In
+`pending_accept`, that party is cancelled and unrelated parties return to
+searching, matching the existing own-party decline rule. An event at or below the
+captured version has no effect. A JOINED event also cancels an active `SOLO`
+search owned by that profile. A join by a profile absent from the captured
+manifest still cancels by source room ID.
+
+Events are the prompt reset path, not the sole correctness fence. Immediately
+before proposal reservation and again before squad provisioning after all accepts,
+MM calls the same protected snapshot RPC for every candidate party, including
+each `SOLO` initiator, and
+requires the exact source room, version and member-manifest hash. Mismatch applies
+the same cancellation; `UNAVAILABLE` leaves candidates unreserved/retryable and
+never creates or activates a match. This closes consumer lag and
+snapshot-to-inbox races.
+
+**Temporary resource ownership and teardown.** Normal `CreateChat`/`StartCall`
+resources are never inferred to be match resources from their name, participants
+or a forwarded header. Provisioning must use protected, Matchmaking-only
+`ChatService.CreateMatchSquadChat` and `VoiceService.CreateMatchSquadRoom`. Each
+request carries one durable UUID `operation_id`, `match_id`, the sorted participant
+manifest plus its hash; Voice additionally carries the Chat resource and Chat
+creation receipt binding. Chat/Voice atomically persist immutable
+`owner_kind=MATCH_SQUAD`, `owner_id=match_id`, creation operation, manifest hash
+and resource ID, and return an immutable creation receipt. Same-operation exact
+replay returns byte-identical stored receipt; changed bytes conflict. MM persists
+the request bytes before the first call. `UNAVAILABLE`, `DEADLINE_EXCEEDED` and an
+ambiguous lost response retry the same operation; if the second resource has a
+terminal binding/validation rejection or the match is abandoned before activation,
+MM compensates by tearing down every resource whose creation receipt it obtained.
+
+The authenticated `CompleteMatch` leave is idempotent by
+`(actor_profile_id,operation_id)` and may mark only that match participant left.
+Non-final leaves create no teardown. The transaction that records the final
+participant leave sets `matches.status=completed` and `completed_at` for rating
+and history, creates exactly one durable `match_squad_teardowns` aggregate and two
+participant rows (`CHAT`, `VOICE`) in `NOT_STARTED`; concurrent final leaves cannot
+create another operation. The teardown state is independent of match history and
+is `NOT_STARTED|IN_FLIGHT|COMPLETE|RETRYABLE_FAILURE|CONTRACT_MISMATCH`.
+Matchmaking is the sole teardown
+coordinator, while Chat and Voice remain the sole authorities for their local
+resources.
+
+MM calls protected `ChatService.TeardownMatchSquadChat` and
+`VoiceService.TeardownMatchSquadRoom`, each allowed only to
+`service:matchmaking`. The exact request is `protocol_version=1`, the stored
+`teardown_operation_id`, `match_id`, exact resource ID, creation `receipt_id` and
+participant-manifest hash. A receiver must match all fields to its immutable
+creation binding before changing state. Therefore even a valid Matchmaking
+principal cannot delete an ordinary group/chat/room or another match's resource.
+Unknown resource/receipt is `NOT_FOUND`; a binding or same-operation body mismatch
+is `FAILED_PRECONDITION` and is never converted to success.
+
+Chat atomically terminally fences the chat, removes user membership/navigation
+visibility and commits its durable `chat.deleted` outbox before returning a
+receipt. Thereafter Chat list/get/member mutations and Messaging paths guarded by
+Chat membership deny access; the receipt proves logical access teardown, not
+physical erasure of Messaging-owned retained bytes. Voice first atomically closes
+admission and grant reissue, then ejects participants, removes the Redis
+projection and confirms LiveKit room deletion or authoritative absence; it issues
+no completion receipt until these effects are confirmed. A timeout never
+manufactures a receipt. Each receipt binds stable `receipt_id`, participant kind,
+protocol/operation/match/resource/creation receipt/manifest/request hashes,
+`status=COMPLETED` and database `completed_at`; exact replay returns its stored
+bytes.
+
+MM validates and stores each receipt before marking that participant `COMPLETE`.
+Calls may run in parallel; only both exact receipts move the teardown aggregate to
+`COMPLETE` and release the single durable `mm.match_completed` outbox event. One
+success plus one outage remains pending and retries only incomplete work. Each
+attempt uses the exact stored request bytes, a fresh 10-second deadline and
+unbounded exponential retry from one second to a five-minute cap with bounded
+jitter. Fifteen minutes without progress alerts; contract mismatch pages
+immediately and is never auto-skipped. Full request/receipt bytes remain 30 days
+after aggregate completion; compact terminal `(match_id,resource_id,receipt_id,
+completed_at)` fences remain permanent. The match/history row is retained and no
+longer exposes usable Chat/Voice IDs after aggregate completion.
+
+**Required acceptance evidence.** Deterministic service/integration tests must
+prove: protected-principal negative cases and no side effects; SOLO and each
+eligible/ineligible roster state; atomic snapshot-versus-concurrent join/leave;
+client member/room/party spoof rejection; whole-party active and pending-accept
+reset; solo-on-join reset; duplicate/out-of-order/conflicting event handling;
+synchronous revalidation under delayed/missing event delivery; one teardown under
+concurrent final leaves; ordinary/cross-match resource delete denial; partial
+provision compensation; Chat access deny and Voice grant/media deny after teardown;
+dropped-response exact receipt recovery; one participant outage with restart-safe
+retry; and exactly one `mm.match_completed` only after both validated receipts.
+The A3 multi-client Compose proof is solo + voice party → roster mutation reset →
+new search/match/accept → temporary message + test-media → all leave → old Chat
+and Voice IDs denied while history remains.
 - [x] **[Matchmaking] Platform MM ban fail-closed + S2S** — `StartSearch` / matcher fail-closed when `BanStore` nil (`platform_ban_degradation_test.go`, `worker_ban_degradation_test.go`, **#73**); Moderation `mm_ban` → `ApplyPlatformMMBan` / revoke (`sanctions.go`).
 ### Role
 
@@ -181,7 +338,7 @@
 
 
 - [x] **[Matchmaking] Decline semantics vs spec** — `handleMatchDecline` party-aware (declining party cancelled, others continue searching); cross-party IT in `grpcsvc/match_test.go` (PR #4). Compose live: `TestComposeMatchmakingCrossPartyDecline_live` (#14).
-- [ ] **[Matchmaking] Match squad not ephemeral** — Squad creates a normal group chat + group voice (`squad/grpc_clients.go`). `CompleteMatch` only updates MM DB (`grpcsvc/rating.go`); no Chat/Voice teardown. Contradicts “auto-delete when all leave” (`docs/features/matchmaking.md`).
+- [ ] **[Matchmaking] Match squad not ephemeral** — Squad creates a normal group chat + group voice (`squad/grpc_clients.go`). `CompleteMatch` only updates MM DB (`grpcsvc/rating.go`); no Chat/Voice teardown. Contradicts “auto-delete when all leave” (`docs/features/matchmaking.md`). Implement the protected creation binding, durable two-participant teardown ledger and exact receipts frozen in **A3 MM ↔ Voice party and match-squad lifecycle contract** above; a normal group/call must never become teardown-authorized by inference.
 - [ ] **[Matchmaking] `UpdateGame` mutates catalog config for any caller** — Any authenticated user can change `config_json` (`grpcsvc/server.go`, `store/games.go`). Conflicts with user-game immutability (`docs/features/matchmaking.md`) and moderator-only catalog edits (`docs/features/game-catalog.md`).
 
 ### Role
