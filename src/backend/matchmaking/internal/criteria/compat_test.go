@@ -30,12 +30,12 @@ func TestCompatible_RejectsDifferentRegion(t *testing.T) {
 	require.False(t, Compatible(a, b, mode))
 }
 
-func TestCompatible_RejectsIdenticalRoles(t *testing.T) {
+func TestCompatible_AllowsIdenticalRoles(t *testing.T) {
 	t.Parallel()
 	mode := testMode()
 	a := SearchCriteria{Region: "eu", Self: SelfCriteria{Role: "Carry", Rank: "Herald"}}
 	b := SearchCriteria{Region: "eu", Self: SelfCriteria{Role: "Carry", Rank: "Herald"}}
-	require.False(t, Compatible(a, b, mode))
+	require.True(t, Compatible(a, b, mode))
 }
 
 func TestCompatible_AllowsDistinctRoles(t *testing.T) {

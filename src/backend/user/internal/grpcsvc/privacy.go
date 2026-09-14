@@ -155,12 +155,12 @@ func (s *UserGRPC) UpdatePrivacySettings(ctx context.Context, req *userv1.Update
 	// The event is emitted only after the authoritative User row is committed.
 	if !saved.ShowReadReceipts {
 		publisher, ok := s.Events.(interface {
-			PublishSettingsChanged(context.Context, string, string) error
+			PublishSettingsChanged(context.Context, string, []string, string) error
 		})
 		if !ok || publisher == nil {
 			return nil, status.Error(codes.Unavailable, "privacy receipt revocation publisher not configured")
 		}
-		if err := publisher.PublishSettingsChanged(ctx, profileID.String(), `[{"key":"show_read_receipts","value":false}]`); err != nil {
+		if err := publisher.PublishSettingsChanged(ctx, profileID.String(), []string{"show_read_receipts"}, `[{"key":"show_read_receipts","value":false}]`); err != nil {
 			return nil, status.Error(codes.Unavailable, "privacy receipt revocation enqueue failed")
 		}
 	}

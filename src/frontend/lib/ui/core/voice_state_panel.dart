@@ -38,11 +38,13 @@ class VoiceStatePanel extends StatelessWidget {
                   Icon(icon, color: voice.textSecondary, size: 28),
                   const SizedBox(height: 12),
                 ],
-                Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: voice.textPrimary,
+                ExcludeSemantics(
+                  child: Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: voice.textPrimary,
+                    ),
                   ),
                 ),
                 if (message != null && message!.isNotEmpty) ...[
