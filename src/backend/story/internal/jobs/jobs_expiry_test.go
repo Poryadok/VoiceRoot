@@ -80,6 +80,14 @@ func startArchivePurgeStore(t *testing.T) (*store.StoryStore, context.Context) {
 	return &store.StoryStore{Pool: pool}, ctx
 }
 
+func seedExpiredMediaStory(t *testing.T, ctx context.Context, st *store.StoryStore) (uuid.UUID, uuid.UUID) {
+	t.Helper()
+	storyID, mediaID := uuid.New(), uuid.New()
+	_, err := st.Pool.Exec(ctx, `INSERT INTO stories (id,author_profile_id,type,media_file_id,mention_profile_ids,visibility,expires_at,archived_until,created_at,expired_at) VALUES ($1,$2,'photo',$3,'[]','everyone',now()-interval '32 days',now()-interval '1 hour',now()-interval '32 days',now()-interval '31 days')`, storyID, uuid.New(), mediaID)
+	require.NoError(t, err)
+	return storyID, mediaID
+}
+
 func (d *purgeBarrierFileDeleter) DeleteFile(ctx context.Context, fileID string) error {
 	_, d.callbackLookup = d.store.GetStory(ctx, d.storyID)
 	d.started <- struct{}{}
