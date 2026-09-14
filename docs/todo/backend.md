@@ -554,7 +554,6 @@
 
 
 - [x] **[Voice] `GetVoiceStates` populates commander/floor fields** — `is_commander`, `hand_raised`, `has_floor`, `is_broadcasting` in store + GetVoiceStates + state events (П.11 / VC-07).
-- [ ] **[Voice] Group voice cap mismatch in microservice doc** — `voice-service.md` mentions groups up to **500**; code hard-caps room at **32** (`MaxGroupVoiceParticipants`). Tests document 32 as intentional (`voice_grpc_group_test.go`); doc is stale.
 - [ ] **[Voice] E2E coverage gaps vs PLAN “shipped”** — present: DM signaling (`TestComposeVoiceCall1to1_live`), optional bidirectional audio (`compose_voice_call_media_live_test.go`), Flutter `group_voice` / `spaces_voice` / `screen_share` API tests. Missing: compose live test for **space** voice + screen share with Role guard; no staging **RTC/media** smoke; `group_voice` E2E never exercises `LeaveCall` multi-participant behavior.
 - [ ] **[Voice] `ListExpiredRinging` on Redis uses `KEYS`** — `voice:call:*` scan; risky under load.
 - [ ] **[Voice] Stale service README** — still says “scaffold / out of scope” while PLAN marks voice shipped.
@@ -667,7 +666,6 @@
 
 - [x] **[Role] Server comment** — `RoleGRPC` now identifies the implemented service without stale red-phase wording. — `src/backend/role/internal/grpcsvc/server.go`
 - [x] **[Role] README status** — describes the implemented role and permission surface. — `src/backend/role/README.md`
-- [ ] **[Role] No test for dual-scope effective mask — chat + `voice_room_id` together in one `GetEffectiveMask` call.** — `src/backend/role/internal/store/`, `internal/grpcsvc/` tests
 - [x] **[Role] `CreateRole` hierarchy validation — non-owner with `SPACE_MANAGE_ROLES` may create only below their top role; equal/higher denial leaves no role or event, Owner bypass is covered.** — `src/backend/role/internal/grpcsvc/roles.go`, `roles_manage_integration_test.go`
 - [ ] **[Role] Guest role under-exercised — default join falls back to Member; Guest mask (`SPACE_VIEW` only) rarely applies unless `SetDefaultJoinRole` points to Guest.** — `src/backend/role/permissions/permissions.go`, `internal/store/roles.go`
 
