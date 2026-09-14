@@ -14,7 +14,11 @@ import voice.backend.auth.config.AuthProperties;
  */
 public class RedisOtpThrottle implements OtpThrottle {
   private static final String RESERVE_SEND_LUA =
-      "return redis.call('SET', KEYS[1], '1', 'NX', 'PX', ARGV[1]) and 1 or 0";
+      "if redis.call('SET', KEYS[1], '1', 'NX', 'PX', ARGV[1]) then return 1 end\n"
+          + "local marker = redis.call('GET', KEYS[1])\n"
+          + "local ttl = redis.call('PTTL', KEYS[1])\n"
+          + "if marker == '1' and ttl > 0 then return 0 end\n"
+          + "return 2";
   private static final String ADMIT_VERIFY_LUA =
       "local ttl = redis.call('PTTL', KEYS[1])\n"
           + "if ttl == -1 then return redis.error_reply('otp verify state missing ttl') end\n"
@@ -60,10 +64,10 @@ public class RedisOtpThrottle implements OtpThrottle {
   @Override
   public void reserveSend(String key) {
     Long reserved = execute(reserveSendScript, sendKey(key), Long.toString(sendCooldownMillis));
-    if (reserved == null || reserved == 0L) {
+    if (reserved != null && reserved == 0L) {
       throw new AuthException("otp_rate_limited");
     }
-    if (reserved != 1L) {
+    if (reserved == null || reserved != 1L) {
       unavailable();
     }
   }
