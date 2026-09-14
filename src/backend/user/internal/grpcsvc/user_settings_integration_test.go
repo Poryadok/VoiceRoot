@@ -16,6 +16,8 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
+	"voice/backend/pkg/principal"
+	"voice/backend/pkg/socialprincipal"
 	"voice/backend/user/internal/authctx"
 	"voice/backend/user/internal/store"
 
@@ -406,11 +408,24 @@ func TestGetPrivacySettings_InternalCaller_ReadsForeignProfile(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Social/Chat S2S must read target privacy without owning the profile.
+	// Social has cut over to the protected listener; its raw marker is rejected.
 	s2s := metadata.AppendToOutgoingContext(ctx, authctx.HeaderInternalCaller, "social")
-	resp, err := cli.GetPrivacySettings(s2s, &userv1.GetPrivacySettingsRequest{
+	req := &userv1.GetPrivacySettingsRequest{
 		ProfileId: ownerProfile.GetProfile().GetId(),
-	})
+	}
+	_, err = cli.GetPrivacySettings(s2s, req)
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+	// Chat is a separately migrated legacy caller and retains its existing path.
+	resp, err := cli.GetPrivacySettings(metadata.AppendToOutgoingContext(ctx, authctx.HeaderInternalCaller, "chat"), req)
 	require.NoError(t, err)
 	require.NotNil(t, resp.GetPrivacySettings())
+	// At the protected domain entrypoint, a verified Social request can read the
+	// persisted privacy row without granting Social end-user ownership.
+	hash, err := principal.RequestHash(req)
+	require.NoError(t, err)
+	verified := principal.WithVerified(ctx, principal.Principal{Kind: "service", Issuer: "social", Subject: "service:social", Audience: "user", RPC: socialprincipal.Method("user"), RequestHash: hash})
+	protected := &SocialPrivacyGRPC{User: &UserGRPC{Profiles: profiles, Privacy: privacy}}
+	resp, err = protected.GetPrivacySettings(verified, req)
+	require.NoError(t, err)
+	require.Equal(t, req.ProfileId, resp.GetPrivacySettings().GetProfileId())
 }
