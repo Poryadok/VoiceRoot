@@ -488,6 +488,22 @@ message UnpinTreeNodeRequest {
 - **User Service** — профили участников
 - **Social Service** — проверка блокировок при join
 
+### Space Pro failed-payment projection (A7 accepted target; not implemented)
+
+Space consumes the complete revisioned `subscription.entitlement_changed`
+snapshot into a durable inbox/projection in `space_db`. `ACTIVE` and
+`GRACE_PERIOD` both grant Pro caps; payment recovery advances the revision and
+cancels remaining Subscription-owned reminders. Only `INACTIVE` removes Pro
+growth entitlement. Existing members, tree nodes and active voice participants
+are not deleted or kicked; new joins/creates/admission are denied while their
+count is at or above the corresponding free cap.
+
+The transitional synchronous `SyncSpaceProSubscription` path may coexist during
+cutover only after it carries the identical source revision and snapshot. It
+must not race an older unversioned status over the durable event projection.
+Restart, replay, stale delivery and seven-day grace evidence is defined in
+[subscription-lifecycle-convergence-exec-plan.md](../testing/subscription-lifecycle-convergence-exec-plan.md).
+
 ### Ownership lifecycle principal transport
 
 **Staged foundation:** production Space TransferOwnership is disabled before any

@@ -145,7 +145,7 @@ Federation ──gRPC bidirectional stream──► External Node
 | `chat.events`         | Chat, Space  | Analytics, Notification, Realtime           |
 | `voice.events`        | Voice        | Analytics, Notification                     |
 | `moderation.events`   | Moderation   | Analytics, Notification, User               |
-| `subscription.events` | Subscription | Analytics, User, Space, File                |
+| `subscription.events` | Subscription | Auth, Analytics, User, Space, Voice, File, Notification |
 | `file.events`         | File         | Analytics, Messaging (preview update)       |
 | `matchmaking.events`  | Matchmaking  | Analytics, Notification, Voice, Chat        |
 | `story.events`        | Story        | Analytics, Notification, Matchmaking        |
@@ -278,4 +278,3 @@ Federation ──gRPC bidirectional stream──► External Node
 | Desktop App | Flutter 3.41+     | Windows, macOS, Linux |
 | Web App     | Flutter Web 3.41+ | Браузер               |
 | Admin Panel | React 19, Vite 7  | Модерация, аналитика  |
-

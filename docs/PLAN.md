@@ -336,3 +336,26 @@ reference authority, service-owned cleanup receipts and explicit post-purge
 data classifications. This closes the owner/docs-decision gate only. R23
 implementation, migrations, protos, RED tests, activation evidence and source
 review remain open, so no feature status in this plan changes.
+
+## Accepted A7 subscription lifecycle contract
+
+The provider-independent Premium/Space Pro lifecycle decision is accepted:
+complete revisioned `subscription.entitlement_changed` snapshots, stable
+transactional outbox IDs/bytes, leased PubAck delivery, service-owned
+inbox/projection and snapshot reconciliation, D1/D3/D7 scheduled reminder
+dedupe, per-reference File retention-account recalculation, User eligible-pair
+downgrade cycles with subscription-only unfreeze, and equivalent Space Pro
+payment-failure grace. Account delete/restore/purge is part of the closed state
+machine, including provider-cancel outbox, deadline-independent participant
+purges, asynchronous receipts and HMAC tombstone.
+Push + in-app is canonical for grace reminders; email remains auth-only.
+
+This closes only the docs-decision seam for A7 and permits independent RED/proto,
+Subscription, Auth/User, File, Space/Voice, Notification/Analytics and Flutter
+slices. Voice owns a revisioned Space Pro admission projection and accepts
+personal quality only from Auth's short-lived trusted entitlement claim.
+Runtime, migrations, generated contracts, fake-provider tests, consumer
+activation and paid-beta evidence remain open, so Subscription stays `stub` and
+A7 does not become an active product milestone. The executable acceptance matrix
+is
+[subscription-lifecycle-convergence-exec-plan.md](testing/subscription-lifecycle-convergence-exec-plan.md).
