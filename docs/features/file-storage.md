@@ -29,6 +29,18 @@ FileStorage {
 
 Retention реализуется крон-задачей: находит объекты старше порога, удаляет из R2 и помечает в БД как expired. Пользователь видит что файл "протух" — мотивирует к подписке.
 
+Принятый A7 lifecycle уточняет пересчёт exact reference: каждая durable
+reference хранит immutable `retention_account_id` проверенного аккаунта, который
+её приобретает; forwarding/reuse создаёт новую reference, а binary dedup не
+переносит retention ownership. Free reference получает `created_at + P90D`,
+Premium/grace — `expires_at=NULL`, а ещё живая reference при
+downgrade — `downgrade_effective_at + P90D`, без мгновенного удаления старых
+Premium-файлов. E2E всегда остаётся `created_at + P90D`. Возобновление может
+убрать entitlement deadline только пока reference логически существует и не
+воскрешает expired/GC данные.
+Источник и race/replay-контракт —
+[subscription-lifecycle-convergence-exec-plan.md](../testing/subscription-lifecycle-convergence-exec-plan.md).
+
 ## Автоматическая обработка при загрузке
 
 Принимаем большой файл — храним меньший. Экономит место, ускоряет загрузку.
@@ -101,6 +113,8 @@ File Service — единственный authority для durable references и
 reference key равен `(file_id, owner_type, owner_id, subresource_id?,
 scope_space_id?)`; Space-derived Message/Chat/media references обязаны иметь
 `scope_space_id`, а Story/profile reference вне Space его не получает.
+`retention_account_id` — отдельный immutable policy owner этой exact reference и
+не является частью identity tuple.
 
 Каждый URL, metadata, bulk и thumbnail/original/converted refresh выбирает либо
 один exact live reference, либо subject-bound File capability (TTL не более

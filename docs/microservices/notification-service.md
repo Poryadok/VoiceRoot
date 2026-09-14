@@ -96,6 +96,7 @@ quiet_hours
 | `incoming_call` | push (VoIP) + in-app | CallKit / PushKit — feature catalog [notifications.md](../features/notifications.md) |
 | `voice_member_joined` | push + in-app | presence check **skipped** (spec) |
 | `system` | push + in-app | — |
+| `subscription_grace_reminder` | push + in-app | A7 target: one logical/in-app row per aggregate revision/day; push at-least-once with stable client ID; standard settings, presence and quiet hours |
 
 **Naming:** `new_dm` — **deprecated alias**; use **`new_message`**. `SendNotificationRequest.notification_type` и in-app payload `d.type` — только канонические строки выше.
 
@@ -231,6 +232,36 @@ Durable read cursor — **Messaging** `MarkRead` REST/gRPC only. WS `mark_read` 
 | `notification.push_sent`      | profile_id, type, platform          |
 | `notification.push_delivered` | profile_id, type (delivery receipt) |
 | `notification.push_clicked`   | profile_id, type, deep_link         |
+
+### Subscription grace reminders (A7 accepted target; not implemented)
+
+Notification consumes both revisioned entitlement snapshots and
+`subscription.grace_reminder`. It stores the event inbox, aggregate projection
+and unique leased channel-outbox rows keyed by `(aggregate_kind, aggregate_id,
+grace_revision, day, channel)` in `notification_db`. A reminder ahead of its
+state snapshot is NAKed/retried; an older revision or aggregate no longer in
+`GRACE_PERIOD` is a recorded stale no-op. The worker retries with a stable
+logical notification/client ID. In-app insertion is exactly-once by that ID;
+FCM/APNs dispatch is at-least-once because provider acceptance and local commit
+cannot be atomic, and the client collapses repeat signals with the same ID.
+
+Personal reminders resolve the payer account's authoritative primary profile;
+Space Pro reminders resolve the purchaser account's primary profile and include
+the Space context. The wire notification type is
+`subscription_grace_reminder`; standard push + in-app settings, presence and
+quiet-hours routing apply. Email remains auth-only. D1/D3/D7 scheduling and
+crash/replay evidence are owned by
+[subscription-lifecycle-convergence-exec-plan.md](../testing/subscription-lifecycle-convergence-exec-plan.md).
+
+Immediately before external dispatch the worker compares the current
+Subscription revision/state through protected
+`ResolveEntitlementAtBoundary(minimum_revision=grace_revision)`. Recovery
+committed before that compare suppresses the row. Timeout/unavailable retries
+within the reminder window and then stores `SUPPRESSED`; it never sends on an
+assumed grace state. A provider request already
+sent may race a later recovery and cannot be recalled. Provider duplicate
+delivery remains possible; the stable logical/client ID prevents it from
+becoming a second in-app reminder and supplies the collapse key where supported.
 
 ## Зависимости
 

@@ -145,6 +145,27 @@ strict proof не завершает rollout во всех окружениях;
 - Вводить **единый стиль** для статусов перечислением (`status` + `CHECK` или отдельный тип), а не свободные строки — в спецификации каждой таблицы перечислить допустимые значения.
 - **`id`** как UUID первичный ключ — по умолчанию для всех публичных сущностей (см. п. 1).
 
+### Subscription entitlement replication (A7 accepted target)
+
+Cross-service Premium/Space Pro state is a complete snapshot keyed by
+`(aggregate_kind, aggregate_id)` with a positive Subscription-owned revision.
+Enforcement consumers persist event ID, exact payload hash and source revision
+in their own database; Analytics persists canonical event-ID dedupe in
+ClickHouse. Lower revisions are stale no-ops; the same revision with different
+snapshot bytes is a contract mismatch; a higher complete snapshot may safely
+replace local state even when an intermediate event arrives later. Account,
+profile and Space UUIDs remain references only—there are no cross-database FKs.
+At the account-deletion `P30D` boundary every participant independently purges by
+opaque deletion fence; receipts are asynchronous evidence. Subscription replaces
+raw account/purchaser identifiers and retained payload bytes with
+a purpose-scoped HMAC tombstone; snapshot APIs never expose that tombstone as a
+live/raw personal aggregate. A still-paid Space aggregate remains keyed by
+`space_id` with optional empty `purchaser_account_id` plus
+`purchaser_deleted=true`, allowing paid-through-period convergence without raw
+payer identity.
+See
+[subscription-lifecycle-convergence-exec-plan.md](testing/subscription-lifecycle-convergence-exec-plan.md).
+
 ---
 
 ## Следующие шаги

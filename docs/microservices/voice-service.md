@@ -29,6 +29,27 @@ workers ещё не зарегистрированы. Отсутствующий
 - Ограничение: один активный voice на профиль
 - Множественные screen share потоки (до 3 одновременно)
 
+### Subscription enforcement projection (A7 accepted target; not implemented)
+
+Voice consumes `subscription.entitlement_changed` for Space aggregates into a
+durable `voice_db` inbox/projection with source revision and `entitled_until`.
+`ACTIVE`/`GRACE_PERIOD` allow the Space Pro 128-participant cap; `INACTIVE` or
+deadline equality uses the free 32 cap. A higher recovery snapshot cannot be
+regressed by stale failure/expiry. Existing participants are not kicked when Pro
+ends, but new admission is denied while count is at/above the free cap.
+
+Personal paid stream quality comes only from Auth's trusted short-lived claims
+containing `subscription_tier`, `subscription_revision`, and
+`subscription_entitled_until`. At equality Voice makes a protected entitlement
+decision through Subscription-owned `ResolveEntitlementAtBoundary`, passing the
+aggregate key and claim revision as `minimum_revision`. Its budget is
+`min(500ms, remaining request deadline)`; timeout/auth/unavailable response
+denies only paid quality/cap for that decision and triggers reconciliation
+instead of extending it or breaking the base/free path. The current unversioned `GetSpaceSubscription` lookup
+is a migration path and cannot race over the revisioned projection after
+activation. Snapshot/replay tests are specified in
+[subscription-lifecycle-convergence-exec-plan.md](../testing/subscription-lifecycle-convergence-exec-plan.md).
+
 ## API (gRPC)
 
 Источник истины: [protos/voice/calls/v1/calls.proto](../../protos/voice/calls/v1/calls.proto) (`VoiceService`). Важные ответы: **`GetJoinTokenResponse`** — поля `jwt` и `expires_at` (`google.protobuf.Timestamp`, UTC); **`GetVoiceStatesResponse`** — `repeated VoiceParticipantState participants` (без промежуточной обёртки-списка).

@@ -328,6 +328,37 @@ listener rejects all other methods. See Story's deployment runbook and
 
 Upload/download — через presigned URLs (R2 обслуживает напрямую). Конвертация — отдельный пул воркеров, масштабируется по очереди задач.
 
+### Subscription retention projection (A7 accepted target; not implemented)
+
+File consumes only the revisioned authoritative
+`subscription.entitlement_changed` snapshot for personal retention. New uploads
+do not define retention ownership globally: every exact durable reference stores
+immutable `retention_account_id`, verified from the account that acquires that
+reference, plus actor/uploader profile where relevant. Forward/reuse creates a
+new reference for the forwarding account, derived subresources inherit their
+parent reference account, and binary dedup never transfers retention ownership.
+Legacy rows must be resolved from their domain owner through protected paginated
+APIs before this projection is activated; zero/ambiguous ownership blocks the
+row instead of guessing from uploader convenience fields. User's protected
+profile→account resolver must explicitly allow the authenticated File workload;
+File cannot impersonate the current `messaging|chat` callers. The existing
+legacy consumer that ACKs into an unwired in-memory cache is removed/replaced at
+cutover. Inbox insert, account
+entitlement projection and affected reference deadline changes commit in one
+`file_db` transaction.
+
+For non-E2E references, free upload starts at `created_at+P90D`, `ACTIVE` and
+`GRACE_PERIOD` clear expiry, and `INACTIVE` assigns
+`downgrade_effective_at+P90D` to each still-live reference. E2E stays
+`created_at+P90D` for every tier. Upload and expiry workers lock against the same
+source revision so a concurrent downgrade/renewal cannot commit the wrong
+policy. Renewal clears an entitlement-created deadline only for a logically live
+reference; an expired reference or blob already handed to zero-reference GC is
+never resurrected. Removing one expired reference does not delete a shared blob
+while any other live reference remains. Replay, out-of-order and RED cases are
+specified in
+[subscription-lifecycle-convergence-exec-plan.md](../testing/subscription-lifecycle-convergence-exec-plan.md).
+
 ## P3 reference authority, lifecycle fence and GC (accepted target)
 
 File is sole reference and binary-GC authority. Add service-owned blob,
