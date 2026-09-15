@@ -30,8 +30,8 @@ and failure; no new retention or PII store is introduced.
 
 ## Milestones and ownership
 
-- [ ] RED Auth caller matrix, legacy denial, request binding and peer-IP tests.
-- [ ] GREEN Auth private listener/verifier, service adapter guards, private CA.
+- [x] RED Auth caller matrix, legacy denial, request binding and peer-IP tests.
+- [x] GREEN Auth private listener/verifier, service adapter guards, private CA.
 - [ ] GREEN Social/Moderation signed caller transports with negative coverage.
 - [ ] Compose bootstrap, namespace Secret references and preflight cutover.
 - [ ] Independent security review and hosted Auth/Go/deployment CI; merge commit.
@@ -59,6 +59,15 @@ IP tests are authored separately; reviewers only read the resulting integration.
 
 ## Decisions and risks
 
+Reviewer found that standard deployment has no Gateway/Space HTTPS principal
+issuer runtime. Auth issuer configuration therefore selects complete groups:
+Social+Moderation, Gateway+Space, or both. Empty, partial or unknown groups fail
+startup. Standard deployment configures only real Social/Moderation endpoints;
+the optional Phase-0 overlay supplies actual ownership issuer endpoints.
+This corrects the initial four-required-issuer assumption, which would require
+invented inactive endpoints or unrelated ownership activation. Disabled-group
+credentials remain unauthenticated; they cannot acquire another issuer's keys.
+
 Full caller/deployment wire is part of this PR: disabling old handlers alone
 would interrupt known traffic. Application implementation and disposable Compose
 evidence do not prove staging activation. Actual namespace Secrets and live
@@ -70,4 +79,11 @@ failure is retained as evidence and is not retried again.
 
 - [x] Inspected current raw-marker callers, Auth proof listener and Phase-0 canon.
 - [x] Assigned isolated Go caller and deployment work, plus IP RED tests.
-- [ ] Implementation, validation, review and integration pending.
+- [x] Initial Auth RED: 5 boundary tests, 2 failures and 2 errors; IP RED: 13 tests,
+  12 failures. Follow-up adapter and real HTTPS CA tests also failed before GREEN.
+- [x] Focused Auth GREEN: 77 tests without skips. Console-encoder regression then
+  demonstrated missing `peer_ip` in actual JSON (14 tests, one failure), fixed in
+  the configured logback pattern without weakening the MDC checks.
+- [x] Full host `mvn -B test`: 517 tests, zero failures/errors, 109 skipped because
+  Docker is unavailable. Hosted `backend-auth` must execute all Docker suites.
+- [ ] Go caller integration, final security review and hosted verification pending.

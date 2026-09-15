@@ -82,13 +82,16 @@ public class AuthPrincipalConfiguration {
   private static Map<String, URI> endpoints(String raw) {
     try {
       JsonNode root = AuthPrincipalVerifier.JSON.readTree(raw);
-      if (root == null || !root.isObject() || !root.has("gateway") || !root.has("space")
-          || !root.has("social") || !root.has("moderation")) throw new IllegalArgumentException();
+      if (root == null || !root.isObject() || root.isEmpty()) throw new IllegalArgumentException();
+      if (root.has("gateway") != root.has("space") || root.has("social") != root.has("moderation")) {
+        throw new IllegalArgumentException();
+      }
       Map<String, URI> endpoints = new HashMap<>();
       var fields = root.fields();
       while (fields.hasNext()) {
         var field = fields.next();
-        if (!field.getKey().matches("[A-Za-z0-9][A-Za-z0-9._-]{0,127}") || !field.getValue().isTextual()) throw new IllegalArgumentException();
+        if (!Set.of("gateway", "space", "social", "moderation").contains(field.getKey())
+            || !field.getValue().isTextual()) throw new IllegalArgumentException();
         URI uri = URI.create(field.getValue().textValue());
         if (!"https".equals(uri.getScheme()) || uri.getHost() == null || uri.getRawUserInfo() != null || uri.getRawFragment() != null) throw new IllegalArgumentException();
         endpoints.put(field.getKey(), uri);

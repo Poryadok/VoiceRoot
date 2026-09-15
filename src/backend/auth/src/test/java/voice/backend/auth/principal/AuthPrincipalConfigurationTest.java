@@ -38,6 +38,25 @@ class AuthPrincipalConfigurationTest {
     }
   }
 
+  @Test void acceptsOnlyCompleteExplicitCallerGroups() {
+    for (String urls : List.of(
+        "{\"gateway\":\"https://gateway.invalid/jwks\",\"space\":\"https://space.invalid/jwks\"}",
+        "{\"social\":\"https://social.invalid/jwks\",\"moderation\":\"https://moderation.invalid/jwks\"}", VALID)) {
+      try (var interceptor = AuthPrincipalConfiguration.fromEnvironment(
+          new MockEnvironment().withProperty(URLS, urls), epochs, redis)) {
+        assertTrue(interceptor.enabled());
+      }
+    }
+    for (String urls : List.of(
+        "{\"gateway\":\"https://gateway.invalid/jwks\",\"social\":\"https://social.invalid/jwks\"}",
+        "{\"space\":\"https://space.invalid/jwks\",\"moderation\":\"https://moderation.invalid/jwks\"}",
+        "{\"unknown\":\"https://unknown.invalid/jwks\"}",
+        VALID.replace("}", ",\"unknown\":\"https://unknown.invalid/jwks\"}"))) {
+      assertThrows(IllegalArgumentException.class, () -> AuthPrincipalConfiguration.fromEnvironment(
+          new MockEnvironment().withProperty(URLS, urls), epochs, redis));
+    }
+  }
+
   @Test void completeHttpsConfigurationUsesDefaultsAndDoesNotFetchUntilRequest() {
     // These deliberately unresolvable hosts make eager fetching observable as a failure.
     var environment = new MockEnvironment().withProperty(URLS, VALID);

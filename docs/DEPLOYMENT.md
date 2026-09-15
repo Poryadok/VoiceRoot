@@ -420,8 +420,11 @@ an authentication failure and must not be treated as successful enforcement.
 | Social / Moderation | `AUTH_PRINCIPAL_GRPC_ADDR`, `AUTH_PRINCIPAL_TLS_CA_FILE`, `AUTH_PRINCIPAL_TLS_SERVER_NAME`; remove their old `AUTH_GRPC_ADDR` |
 | Moderation | `MODERATION_PRINCIPAL_SIGNING_KEYS_DIR`, `MODERATION_PRINCIPAL_ACTIVE_KID`, `MODERATION_PRINCIPAL_JWKS_LISTEN`, `MODERATION_PRINCIPAL_TLS_CERT_FILE`, `MODERATION_PRINCIPAL_TLS_KEY_FILE` |
 
-Auth's issuer map preserves existing Gateway/Space endpoints and includes Social
-and Moderation's HTTPS `/.well-known/jwks.json` endpoints. Social reuses its own
+Auth's standard issuer map contains Social and Moderation's real HTTPS
+`/.well-known/jwks.json` endpoints. Configuration selects one or both complete
+caller groups (`social`+`moderation`, `gateway`+`space`); partial/unknown groups
+fail startup. Gateway/Space ownership issuers stay disabled outside their optional
+Phase-0 overlay, which supplies actual HTTPS proxy endpoints. Social reuses its own
 existing signing/JWKS runtime; Moderation owns distinct current/next keys. Auth
 uses its shared Redis replay guard; per-process memory replay is test/local only.
 The optional Auth JWKS CA file adds trusted private roots to system roots and

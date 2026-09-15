@@ -95,7 +95,7 @@ when `S2S_JWKS_URLS_JSON` is configured. Ordinary session RPCs retain 9090:
 |---|---|
 | `AUTH_PRINCIPAL_GRPC_PORT` | Dedicated listener, default 9091; must differ from the legacy port. Port 0 is allowed only in explicit local/test profiles. |
 | `AUTH_GRPC_TLS_CERT_FILE`, `AUTH_GRPC_TLS_KEY_FILE` | Paired PEM certificate chain and private-key files for the dedicated listener. Mount from an Auth-owned secret, for example `/run/secrets/auth-grpc/tls.crt` and `tls.key`. |
-| `S2S_JWKS_URLS_JSON` | Nonempty issuer-to-HTTPS-URL object containing `gateway`, `space`, `social` and `moderation`. |
+| `S2S_JWKS_URLS_JSON` | Nonempty issuer-to-HTTPS-URL object selecting complete `gateway`+`space` and/or `social`+`moderation` groups. Empty, partial or unknown groups fail startup. Standard deployment enables only Social/Moderation; ownership uses its optional Phase-0 overlay. |
 | `S2S_JWKS_CA_FILE` | Optional PEM CA bundle added to JVM system roots. Blank, missing or invalid bundles fail startup. |
 | `S2S_JWKS_REFRESH_AFTER`, `S2S_JWKS_HARD_EXPIRY`, `S2S_UNKNOWN_KID_COOLDOWN` | Defaults `30s`, `2m`, `5s`; positive duration values, hard expiry at least refresh interval. Explicit blank/invalid values fail startup. |
 
