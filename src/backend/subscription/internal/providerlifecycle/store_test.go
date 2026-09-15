@@ -158,6 +158,42 @@ func TestNewProviderBindingRequiresAnUnoccupiedStart(t *testing.T) {
 	}
 }
 
+func TestFutureProviderFactWaitsForDatabaseTime(t *testing.T) {
+	pool := testDB(t)
+	ctx := context.Background()
+	store := Store{Pool: pool}
+	c := fakeCommand(1)
+	c.EffectiveAt = time.Now().UTC().Add(24 * time.Hour)
+	c.PeriodStart = c.EffectiveAt
+	c.PeriodEnd = c.EffectiveAt.AddDate(0, 1, 0)
+	_, err := store.Apply(ctx, c)
+	require.ErrorIs(t, err, ErrNeedsReconciliation)
+	for _, table := range []string{"subscription_provider_bindings", "subscription_provider_outcomes", "subscription_entitlement_aggregates", "subscription_event_outbox"} {
+		var count int
+		require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM "+table).Scan(&count))
+		require.Zero(t, count)
+	}
+	// A valid currently paid aggregate is not revoked by a future period-end fact.
+	c.EffectiveAt = time.Now().UTC().Add(-time.Hour)
+	c.PeriodStart = c.EffectiveAt
+	c.PeriodEnd = time.Now().UTC().Add(24 * time.Hour)
+	initial, err := store.Apply(ctx, c)
+	require.NoError(t, err)
+	futureEnd := nextCommand(c, eventsv1.EntitlementReason_ENTITLEMENT_REASON_PERIOD_ENDED, c.PeriodEnd)
+	_, err = store.Apply(ctx, futureEnd)
+	require.ErrorIs(t, err, ErrNeedsReconciliation)
+	var body []byte
+	require.NoError(t, pool.QueryRow(ctx, "SELECT payload FROM subscription_entitlement_aggregates").Scan(&body))
+	current := new(eventsv1.SubscriptionStreamEvent)
+	require.NoError(t, proto.Unmarshal(body, current))
+	require.True(t, proto.Equal(initial.Event, current))
+	var version, count int
+	require.NoError(t, pool.QueryRow(ctx, "SELECT provider_version FROM subscription_provider_bindings").Scan(&version))
+	require.Equal(t, 1, version)
+	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM subscription_event_outbox").Scan(&count))
+	require.Equal(t, 1, count)
+}
+
 func TestConcurrentProviderReplayCommitsOneEvent(t *testing.T) {
 	pool := testDB(t)
 	ctx := context.Background()

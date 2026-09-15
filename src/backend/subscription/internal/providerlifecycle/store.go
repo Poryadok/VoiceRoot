@@ -143,6 +143,16 @@ func (s Store) Apply(ctx context.Context, c Command) (Result, error) {
 		}
 		result.Disposition = "UNCHANGED"
 	default:
+		var now time.Time
+		if err = tx.QueryRow(ctx, "SELECT clock_timestamp()").Scan(&now); err != nil {
+			return Result{}, err
+		}
+		// Consumers apply current snapshots immediately. A future-effective fact
+		// needs the adapter's scheduled/reconciliation path, not an early grant
+		// or revoke. Exact replay and non-mutating order outcomes stay above.
+		if c.EffectiveAt.After(now) {
+			return Result{}, ErrNeedsReconciliation
+		}
 		if known && c.Reason == started {
 			// Reusing a provider identity does not establish a new purchase;
 			// an adapter must reconcile this instead of reviving a final expiry.
@@ -169,10 +179,6 @@ func (s Store) Apply(ctx context.Context, c Command) (Result, error) {
 		}
 		result.Disposition = "UNCHANGED"
 		if !proto.Equal(previous, snapshot) {
-			var now time.Time
-			if err = tx.QueryRow(ctx, "SELECT clock_timestamp()").Scan(&now); err != nil {
-				return Result{}, err
-			}
 			event := &eventsv1.SubscriptionStreamEvent{EventId: uuid.NewString(), OccurredAt: timestamppb.New(now), ProtocolVersion: 1, AggregateKind: c.Kind, AggregateId: c.AggregateID, AggregateRevision: revision + 1,
 				Payload: &eventsv1.SubscriptionStreamEvent_EntitlementChanged{EntitlementChanged: snapshot}}
 			if err = entitlementoutbox.Append(ctx, tx, int64(revision), event); err != nil {
