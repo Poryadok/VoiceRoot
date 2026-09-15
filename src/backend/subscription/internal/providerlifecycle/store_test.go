@@ -277,6 +277,11 @@ func TestRepurchaseKeepsRevisionAndRetiresOldProviderBinding(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "RETIRED", old.Disposition)
 	require.True(t, proto.Equal(bought.Event, old.Event))
+	lateConflict := late
+	lateConflict.EventID = uuid.NewString()
+	lateConflict.BillingPeriod = "yearly"
+	_, err = store.Apply(ctx, lateConflict)
+	require.ErrorIs(t, err, ErrContractMismatch, "new retired version still binds its exact authoritative facts")
 	conflict := expiry
 	conflict.EventID = uuid.NewString()
 	conflict.BillingPeriod = "yearly"

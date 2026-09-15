@@ -14,6 +14,18 @@ CREATE TABLE subscription_provider_bindings (
 );
 CREATE UNIQUE INDEX subscription_provider_current ON subscription_provider_bindings(aggregate_kind,aggregate_id) WHERE current_binding;
 
+-- Keep every observed version fingerprint: moving the high-water mark or
+-- retiring a binding must not permit conflicting facts for an older version.
+CREATE TABLE subscription_provider_versions (
+ provider TEXT NOT NULL,
+ provider_subscription_id TEXT NOT NULL,
+ provider_version BIGINT NOT NULL CHECK(provider_version>0),
+ facts_hash BYTEA NOT NULL CHECK(octet_length(facts_hash)=32),
+ created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+ PRIMARY KEY(provider,provider_subscription_id,provider_version),
+ FOREIGN KEY(provider,provider_subscription_id) REFERENCES subscription_provider_bindings
+);
+
 CREATE TABLE subscription_provider_outcomes (
  provider TEXT NOT NULL CHECK (provider IN ('fake','paddle','cloudpayments')),
  provider_event_id TEXT NOT NULL CHECK (octet_length(provider_event_id) BETWEEN 1 AND 512),

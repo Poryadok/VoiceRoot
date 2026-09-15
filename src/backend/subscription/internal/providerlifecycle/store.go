@@ -125,6 +125,14 @@ func (s Store) Apply(ctx context.Context, c Command) (Result, error) {
 	if known && c.Version == b.version && !bytes.Equal(b.facts, factsHash[:]) {
 		return reject()
 	}
+	var versionHash []byte
+	err = tx.QueryRow(ctx, `SELECT facts_hash FROM subscription_provider_versions WHERE provider=$1 AND provider_subscription_id=$2 AND provider_version=$3`, c.Provider, c.SubscriptionID, c.Version).Scan(&versionHash)
+	if err == nil && !bytes.Equal(versionHash, factsHash[:]) {
+		return reject()
+	}
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return Result{}, err
+	}
 	current, err := loadCurrent(ctx, tx, c)
 	if err != nil {
 		return Result{}, err
@@ -135,6 +143,11 @@ func (s Store) Apply(ctx context.Context, c Command) (Result, error) {
 		return Result{}, ErrNeedsReconciliation
 	case known && !b.current:
 		result.Disposition = "RETIRED"
+		if c.Version > b.version {
+			if _, err = tx.Exec(ctx, `UPDATE subscription_provider_bindings SET provider_version=$3,facts_hash=$4,updated_at=clock_timestamp() WHERE provider=$1 AND provider_subscription_id=$2`, c.Provider, c.SubscriptionID, c.Version, factsHash[:]); err != nil {
+				return Result{}, err
+			}
+		}
 	case known && c.Version < b.version:
 		result.Disposition = "STALE"
 	case known && c.Version == b.version:
@@ -197,6 +210,9 @@ func (s Store) Apply(ctx context.Context, c Command) (Result, error) {
 		if err != nil {
 			return Result{}, err
 		}
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO subscription_provider_versions(provider,provider_subscription_id,provider_version,facts_hash) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING`, c.Provider, c.SubscriptionID, c.Version, factsHash[:]); err != nil {
+		return Result{}, err
 	}
 	body, err := proto.MarshalOptions{Deterministic: true}.Marshal(result.Event)
 	if err != nil {
