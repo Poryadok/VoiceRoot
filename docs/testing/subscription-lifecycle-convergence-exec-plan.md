@@ -436,6 +436,29 @@ separate PR-owner.
 
 ## Progress
 
+### S2 versioned provider transition slice
+
+The next bounded slice owns the internal provider transition engine and its
+durable replay/order journal. Deterministic fake-provider commands exercise the
+same personal/Space state reducer and S1 outbox transaction: exact provider
+event replay returns its original saved outcome, stale versions cannot regress
+recovery, and conflicting bytes/facts have no entitlement effect. Grace keeps
+its original seven-day boundary for an unresolved period; cancel/grace/expiry
+share their downgrade cycle, while recovery/resume/renewal/repurchase clear it.
+Provider subscription identities remain bound to one target; repurchase keeps
+the permanent aggregate revision and retires the old provider binding.
+
+This slice remains source-disabled. It does not normalize unverified live
+Paddle/CloudPayments bytes, expose a listener, create scheduled reminder rows,
+bootstrap protected snapshots, erase account data, or switch any consumer's
+authority. Missing comparable provider versions and ambiguous transitions need
+reconciliation. Real adapters, atomic reminder scheduling, snapshot/privacy APIs
+and consumer cutover remain prerequisites for activation. The fixture's version
+is an explicit provider fact, never an arrival timestamp or NATS sequence.
+
+- [ ] SUB-R04/R05/R14 producer RED/GREEN and transactional rollback/concurrency.
+- [ ] Independent security/concurrency review and hosted PostgreSQL CI.
+
 ### S1 producer durability slice
 
 The first implementation slice adds the additive snapshot envelope and an
