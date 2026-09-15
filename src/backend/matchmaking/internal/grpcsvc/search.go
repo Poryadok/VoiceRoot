@@ -97,6 +97,12 @@ func (s *MatchmakingGRPC) startSearch(ctx context.Context, req startSearchParams
 	if !ok {
 		return store.SearchSession{}, status.Error(codes.Unauthenticated, "missing profile")
 	}
+	// A public party_id cannot name a Voice party. The frozen A3 contract
+	// requires the protected Voice snapshot to be the only roster authority.
+	// LFP's MM-owned party path bypasses this public RPC entirely.
+	if req.PartyID != nil {
+		return store.SearchSession{}, status.Error(codes.InvalidArgument, "party_id is not accepted for public search")
+	}
 	deps := s.searchDeps()
 	if deps.Sessions == nil || deps.Games == nil {
 		return store.SearchSession{}, status.Error(codes.Unavailable, "search unavailable")
@@ -164,17 +170,8 @@ func (s *MatchmakingGRPC) startSearch(ctx context.Context, req startSearchParams
 	canonical := criteria.MustMarshal(crit)
 	searchTiming := runtimeconfig.LoadSearchTiming()
 	timeoutAt := time.Now().UTC().Add(searchTiming.Timeout)
-	var partyID *uuid.UUID
-	if req.PartyID != nil && strings.TrimSpace(*req.PartyID) != "" {
-		pid, err := uuid.Parse(strings.TrimSpace(*req.PartyID))
-		if err != nil {
-			return store.SearchSession{}, status.Error(codes.InvalidArgument, "invalid party_id")
-		}
-		partyID = &pid
-	}
 	sess, err := deps.Sessions.Create(ctx, store.CreateSessionParams{
 		ProfileID: profileID,
-		PartyID:   partyID,
 		GameID:    gameID,
 		Mode:      modeName,
 		Criteria:  canonical,
