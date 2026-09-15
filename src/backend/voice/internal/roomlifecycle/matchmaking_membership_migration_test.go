@@ -158,7 +158,7 @@ FROM voice_room_memberships WHERE profile_id=$1`, seed.membershipID).Scan(&unkno
 	t.Run("new media epoch permits newer authenticated session identity", func(t *testing.T) {
 		withMember(t, func(tx pgx.Tx, seed r22MigrationRows) {
 			require.NoError(t, mmMembershipUpdate(ctx, tx, seed.membershipID, mmKnownIdentity))
-			require.NoError(t, mmMembershipUpdate(ctx, tx, seed.membershipID, "session_epoch=8,media_epoch='22222222-2222-2222-2222-222222222222'"))
+			require.NoError(t, mmMembershipUpdate(ctx, tx, seed.membershipID, "session_epoch=8,media_epoch='22222222-2222-2222-2222-222222222222',latest_grant_expires_at=NULL"))
 		})
 	})
 	for _, interval := range []string{"0 seconds", "-1 second", "30.000001 seconds"} {
@@ -196,7 +196,7 @@ FROM voice_room_memberships WHERE profile_id=$1`, seed.membershipID).Scan(&unkno
 				id, insertErr := mmInsertRoom(ctx, tx, kind, false, nil)
 				require.NoError(t, insertErr)
 				if kind != "voice_room" {
-					_, moveErr := tx.Exec(ctx, `UPDATE voice_room_memberships SET room_id=$1,space_access_epoch=NULL,role_policy_epoch=NULL WHERE profile_id=$2`, id, seed.membershipID)
+					_, moveErr := tx.Exec(ctx, `UPDATE voice_room_memberships SET room_id=$1,space_access_epoch=NULL,role_policy_epoch=NULL,media_epoch=$3,latest_grant_expires_at=NULL WHERE profile_id=$2`, id, seed.membershipID, uuid.New())
 					require.NoError(t, moveErr)
 					mmRequireRejected(t, mmMembershipUpdate(ctx, tx, seed.membershipID, "space_access_epoch=1,role_policy_epoch=1"))
 				}
