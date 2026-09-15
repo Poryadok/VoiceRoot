@@ -319,6 +319,10 @@ class ComposeTests(unittest.TestCase):
                        for volume in self.merged["auth"]["volumes"]}
         self.assertIn(("phase0_auth_principal_ca", "/run/phase0/jwks-ca", True), auth_mounts)
 
+    def test_auth_waits_for_credentials_before_starting_in_standard_compose(self):
+        self.assertEqual(self.base["auth"]["depends_on"].get("social-principal-init", {})
+                         .get("condition"), "service_completed_successfully")
+
     def test_auth_overlay_clients_trust_the_phase0_auth_certificate(self):
         for service in ("social", "moderation"):
             with self.subTest(service=service):

@@ -431,7 +431,8 @@ The optional Auth JWKS CA file adds trusted private roots to system roots and
 never disables hostname or certificate verification. Partial config fails startup.
 
 Before namespace deployment, provision `voice-auth-principal-tls` (`tls.crt`,
-`tls.key`, SAN `voice-auth`), `voice-moderation-principal-tls` (same keys, SAN
+`tls.key`, SAN `voice-auth`), `voice-moderation-principal-tls` (its own `tls.crt`
+and `tls.key`, SAN
 `voice-moderation`) and `voice-moderation-principal-signing` (`current.pem`,
 `next.pem`, `active-kid`) alongside the existing `voice-principal-ca` bundle and
 Social Secrets. Private keys are service-specific Secret mounts, never ConfigMap
@@ -439,6 +440,15 @@ values. Disposable Compose generates its own isolated material. Config tests and
 hosted integration prove source wiring; actual staging activation requires these
 Secrets and a successful live Social lookup plus Moderation suspension/restore
 run. Health checks alone do not prove it.
+
+The disposable Compose initializer now requires eight credential volumes (CA,
+Social signing/TLS, User TLS, Space TLS, Auth TLS, Moderation signing/TLS).
+An older five-volume initialization cannot mint the new leaves because its CA
+private key was deliberately discarded. It fails explicitly instead of silently
+rotating existing authority. For an existing disposable project, stop its
+principal consumers and deliberately recreate that project's credential volumes
+as one set, or use a fresh Compose project. Database volumes are not involved.
+No agent cleanup or automatic volume deletion is part of this cutover.
 
 ### Ownership lifecycle principal transport
 
