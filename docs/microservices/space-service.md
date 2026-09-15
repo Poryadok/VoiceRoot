@@ -808,6 +808,18 @@ This is a store foundation: the public recorded-owner recovery projection and
 its Gateway disclosure/status mapping remain a separate A2 vertical. It does not
 activate deletion or authorize participant cleanup.
 
+The source-disabled `internal/recoveryread` adapter prepares that read boundary:
+it verifies a Gateway delegated principal for the exact `GetSpace` request, with
+mandatory key, replay and live session-epoch dependencies. The store samples
+recorded ownership and lifecycle state under the same Space advisory lock used
+by restore/purge, and returns only `id`, `name`, `deletion_scheduled_at` and
+`purge_after`. Pending schedule phases have no invented deadline; an incomplete
+restore keeps the restricted projection. Non-owners, missing Spaces and `PURGED`
+rows are undiscoverable. A live Space must use the ordinary authorized read,
+and unavailable lifecycle authority never grants access. The adapter has no
+production handler or environment wiring. Gateway/Flutter activation and the
+ten-participant coordinator remain open.
+
 The common protected wire uses `protocol_version=1`. A lifecycle-fence request
 contains canonical `space_id`, `deletion_operation_id`, positive `generation`,
 desired `FROZEN`/`LIVE`/`PURGE_DECIDED` and `ManifestBinding(manifest_id,
