@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../backend/users_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
+import '../../state/profile_switch_coordinator.dart';
 import '../../state/social_providers.dart';
 import '../../state/subscription_providers.dart';
 import '../../theme/voice_colors.dart';
@@ -19,10 +20,10 @@ class ProfileSwitcher extends ConsumerWidget {
   Future<void> _switchProfile(WidgetRef ref, String profileId) async {
     ref.read(profileSwitchInProgressProvider.notifier).state = true;
     try {
-      final err = await ref
-          .read(authControllerProvider.notifier)
-          .switchActiveProfile(profileId);
-      if (err == null) {
+      final result = await ref
+          .read(profileSwitchCoordinatorProvider)
+          .switchTo(profileId);
+      if (result is ProfileSwitchApplied) {
         ref.invalidate(activeProfileProvider);
         ref.invalidate(profileProvider(profileId));
         ref.invalidate(myProfilesProvider);
