@@ -54,28 +54,13 @@ func (s *SpaceStore) ReserveLifecycleSchedule(ctx context.Context, accountID, ac
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("space store: pool not configured")
 	}
-	if accountID == uuid.Nil || actorProfileID == uuid.Nil || sessionEpoch <= 0 || request == nil {
-		return nil, ErrLifecycleEvidenceInvalid
-	}
-	spaceID, err := canonicalLifecycleUUID(request.GetSpaceId())
+	binding, err := lifecycleScheduleBinding(accountID, actorProfileID, sessionEpoch, request)
 	if err != nil {
 		return nil, err
 	}
-	operationID, err := canonicalLifecycleUUID(request.GetOperationId())
-	if err != nil {
-		return nil, err
-	}
-	if request.GetConfirmationName() == "" || request.GetProof() == "" || len(request.ProtoReflect().GetUnknown()) != 0 {
-		return nil, ErrLifecycleEvidenceInvalid
-	}
-	requestBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(request)
-	if err != nil {
-		return nil, err
-	}
-	requestHash := lifecycleHash("voice.space.v1.DeleteSpaceRequest", requestBytes)
-	confirmationHash := sha256.Sum256([]byte(request.GetConfirmationName()))
-	proofDigest := sha256.Sum256([]byte(request.GetProof()))
-	bindingHash := lifecycleOperationBindingHash(accountID, actorProfileID, spaceID, operationID, sessionEpoch, requestHash, confirmationHash, proofDigest)
+	spaceID, operationID := binding.spaceID, binding.operationID
+	requestHash, confirmationHash, proofDigest := toLifecycleHash(binding.requestHash), toLifecycleHash(binding.confirmationHash), toLifecycleHash(binding.proofDigest)
+	bindingHash := toLifecycleHash(binding.bindingHash)
 
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
@@ -87,8 +72,11 @@ func (s *SpaceStore) ReserveLifecycleSchedule(ctx context.Context, accountID, ac
 	}
 	// Resolve an exact retry before current-owner/name checks. The reservation
 	// is immutable and may already have progressed beyond SCHEDULE_PENDING.
-	if _, err := loadLifecycleOperation(ctx, tx, operationID); err == nil {
+	if operation, err := loadLifecycleOperation(ctx, tx, operationID); err == nil {
 		if err := validateStoredLifecycleOperation(ctx, tx, operationID, accountID, actorProfileID, spaceID, sessionEpoch, requestHash, confirmationHash, proofDigest); err != nil {
+			return nil, err
+		}
+		if err := checkLifecycleOutcomeExpiry(ctx, tx, operation); err != nil {
 			return nil, err
 		}
 		saved, err := loadLifecycle(ctx, tx, spaceID, true)
@@ -260,11 +248,15 @@ func (s *SpaceStore) CompleteLifecycleSchedule(ctx context.Context, spaceID uuid
 	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&databaseTime); err != nil {
 		return nil, spacecore.LifecycleOutboxRecord{}, err
 	}
+	completing := aggregate.Phase() == spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_FREEZE_PENDING
 	event, err := aggregate.CompleteSchedule(databaseTime.UTC())
 	if err != nil {
 		return nil, spacecore.LifecycleOutboxRecord{}, err
 	}
 	if err := persistLifecycleSnapshot(ctx, tx, aggregate.Snapshot()); err != nil {
+		return nil, spacecore.LifecycleOutboxRecord{}, err
+	}
+	if err := persistLifecycleScheduleOutcome(ctx, tx, aggregate.Snapshot(), completing); err != nil {
 		return nil, spacecore.LifecycleOutboxRecord{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -386,6 +378,9 @@ type lifecycleOperation struct {
 	requestHash, confirmationHash, proofDigest      []byte
 	bindingHash                                     []byte
 	authReceiptBytes, authReceiptHash               []byte
+	state                                           string
+	outcomeBytes, outcomeHash                       []byte
+	completedAt                                     *time.Time
 }
 
 func (o lifecycleOperation) validate() error {
@@ -408,17 +403,19 @@ func (o lifecycleOperation) validate() error {
 			return ErrLifecycleEvidenceInvalid
 		}
 	}
-	return nil
+	return validateLifecycleOutcome(o)
 }
 
 func loadLifecycleOperation(ctx context.Context, db spaceStoreDB, operationID uuid.UUID) (lifecycleOperation, error) {
 	var operation lifecycleOperation
 	err := db.QueryRow(ctx, `SELECT operation_id,account_id,actor_profile_id,space_id,session_epoch,method,
-		request_sha256,confirmation_name_sha256,proof_digest_sha256,binding_sha256,auth_receipt_bytes,auth_receipt_sha256
+		request_sha256,confirmation_name_sha256,proof_digest_sha256,binding_sha256,auth_receipt_bytes,auth_receipt_sha256,
+		state,outcome_bytes,outcome_sha256,completed_at
 		FROM space_lifecycle_operations WHERE operation_id=$1`, operationID).Scan(
 		&operation.operationID, &operation.accountID, &operation.actorProfileID, &operation.spaceID,
 		&operation.sessionEpoch, &operation.method, &operation.requestHash, &operation.confirmationHash,
-		&operation.proofDigest, &operation.bindingHash, &operation.authReceiptBytes, &operation.authReceiptHash)
+		&operation.proofDigest, &operation.bindingHash, &operation.authReceiptBytes, &operation.authReceiptHash,
+		&operation.state, &operation.outcomeBytes, &operation.outcomeHash, &operation.completedAt)
 	return operation, err
 }
 

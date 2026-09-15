@@ -254,6 +254,8 @@ func TestLifecycleOutcome_ReplayRejectsCorruptBytesHashAndMalformedRehashedRespo
 	original := readLifecycleOutcomeEvidence(t, f)
 	malformed := []byte{0xff}
 	malformedHash := lifecycleDomainHash("voice.space.v1.DeleteSpaceResponse", malformed)
+	unknown := protowire.AppendVarint(protowire.AppendTag(nil, 100, protowire.VarintType), 1)
+	unknownHash := lifecycleDomainHash("voice.space.v1.DeleteSpaceResponse", unknown)
 	for _, tc := range []struct {
 		name        string
 		bytes, hash []byte
@@ -261,6 +263,7 @@ func TestLifecycleOutcome_ReplayRejectsCorruptBytesHashAndMalformedRehashedRespo
 		{"changed bytes", malformed, original.hash},
 		{"changed hash", original.bytes, make([]byte, sha256.Size)},
 		{"malformed with matching hash", malformed, malformedHash[:]},
+		{"nonempty response with matching hash", unknown, unknownHash[:]},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, updateErr := f.st.Pool.Exec(context.Background(), `UPDATE space_lifecycle_operations SET outcome_bytes=$2,outcome_sha256=$3 WHERE operation_id=$1`, f.request.OperationId, tc.bytes, tc.hash)
@@ -298,5 +301,51 @@ func TestLifecycleOutcome_ThirtyDayExpiryUsesCompletionAndRetryDoesNotExtendIt(t
 		_, callErr = f.store.ReserveLifecycleSchedule(ctx, f.account, f.actor, 7, f.request)
 		require.Error(t, callErr, "reservation replay cannot bypass completed operation retention")
 		require.Equal(t, expired, readLifecycleOutcomeEvidence(t, f))
+	}
+}
+
+func TestLifecycleOutcome_GenericSnapshotCannotManufactureSuccessfulSchedule(t *testing.T) {
+	for _, variant := range []struct {
+		name      string
+		withEvent bool
+	}{
+		{name: "without schedule event"},
+		{name: "with stable synthetic schedule event", withEvent: true},
+	} {
+		t.Run(variant.name, func(t *testing.T) {
+			f := newLifecycleOutcomeFixture(t, 0)
+			ctx := context.Background()
+			aggregate, err := f.store.LoadLifecycle(ctx, f.space)
+			require.NoError(t, err)
+			snapshot := aggregate.Snapshot()
+			snapshot.Phase = spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_SCHEDULED
+			snapshot.ScheduledAt = time.Now().UTC().Truncate(time.Microsecond)
+			snapshot.PurgeAfter = snapshot.ScheduledAt.Add(7 * 24 * time.Hour)
+			snapshot.FenceReceipts = nil
+			snapshot.ScheduleEvent = nil
+			if variant.withEvent {
+				event, projectionErr := aggregate.ProjectedOutboxRecord("space.deletion_scheduled")
+				require.NoError(t, projectionErr)
+				event.OccurredAt = snapshot.ScheduledAt
+				snapshot.ScheduleEvent = &event
+			}
+			fabricated, err := spacecore.RestoreLifecycleAggregate(snapshot)
+			require.NoError(t, err, "fixture must exercise the accepted generic snapshot representation")
+			// Rejecting this snapshot is safe, and accepting the legacy generic
+			// representation is permitted. Neither path may promote the admitted
+			// operation without the dedicated ten-participant completion barrier.
+			_ = f.store.PersistLifecycle(ctx, fabricated)
+			requireLifecycleOutcomePending(t, f)
+			outcomes := requireLifecycleScheduleOutcome(t, f.st)
+			response, err := outcomes.ReplayLifecycleScheduleOutcome(ctx, f.account, f.actor, 7, f.request)
+			require.NoError(t, err)
+			require.Nil(t, response)
+			_, _, err = f.store.CompleteLifecycleSchedule(ctx, f.space)
+			require.Error(t, err, "a caller-supplied SCHEDULED phase or event cannot substitute for validated fence receipts")
+			requireLifecycleOutcomePending(t, f)
+			response, err = outcomes.ReplayLifecycleScheduleOutcome(ctx, f.account, f.actor, 7, f.request)
+			require.NoError(t, err)
+			require.Nil(t, response)
+		})
 	}
 }

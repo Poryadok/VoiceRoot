@@ -769,7 +769,9 @@ projection (the empty response mapped to HTTP `204`), not the current lifecycle
 aggregate. Its operation becomes `COMPLETED` atomically with `SCHEDULED` and the
 ready schedule event, with `completed_at = scheduled_at`. Exact response bytes
 and the message-domain SHA-256 are immutable; replay cannot restart the 30-day
-window. A store replay lookup validates the original account/profile/session
+window. Only the locked `CompleteLifecycleSchedule` barrier may create the first
+result; generic snapshot persistence cannot promote an admitted operation. A
+store replay lookup validates the original account/profile/session
 epoch and complete request binding before returning this result, independently
 of current owner, name or retained aggregate rows. Missing or pending outcomes
 never mean success; database time at or beyond `completed_at + 30 days` expires
