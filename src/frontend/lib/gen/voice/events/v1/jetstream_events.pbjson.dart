@@ -15,6 +15,70 @@ import 'dart:convert' as $convert;
 import 'dart:core' as $core;
 import 'dart:typed_data' as $typed_data;
 
+@$core.Deprecated('Use subscriptionAggregateKindDescriptor instead')
+const SubscriptionAggregateKind$json = {
+  '1': 'SubscriptionAggregateKind',
+  '2': [
+    {'1': 'SUBSCRIPTION_AGGREGATE_KIND_UNSPECIFIED', '2': 0},
+    {'1': 'SUBSCRIPTION_AGGREGATE_KIND_PERSONAL', '2': 1},
+    {'1': 'SUBSCRIPTION_AGGREGATE_KIND_SPACE', '2': 2},
+  ],
+};
+
+/// Descriptor for `SubscriptionAggregateKind`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List subscriptionAggregateKindDescriptor = $convert.base64Decode(
+    'ChlTdWJzY3JpcHRpb25BZ2dyZWdhdGVLaW5kEisKJ1NVQlNDUklQVElPTl9BR0dSRUdBVEVfS0'
+    'lORF9VTlNQRUNJRklFRBAAEigKJFNVQlNDUklQVElPTl9BR0dSRUdBVEVfS0lORF9QRVJTT05B'
+    'TBABEiUKIVNVQlNDUklQVElPTl9BR0dSRUdBVEVfS0lORF9TUEFDRRAC');
+
+@$core.Deprecated('Use entitlementStateDescriptor instead')
+const EntitlementState$json = {
+  '1': 'EntitlementState',
+  '2': [
+    {'1': 'ENTITLEMENT_STATE_UNSPECIFIED', '2': 0},
+    {'1': 'ENTITLEMENT_STATE_ACTIVE', '2': 1},
+    {'1': 'ENTITLEMENT_STATE_GRACE_PERIOD', '2': 2},
+    {'1': 'ENTITLEMENT_STATE_INACTIVE', '2': 3},
+  ],
+};
+
+/// Descriptor for `EntitlementState`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List entitlementStateDescriptor = $convert.base64Decode(
+    'ChBFbnRpdGxlbWVudFN0YXRlEiEKHUVOVElUTEVNRU5UX1NUQVRFX1VOU1BFQ0lGSUVEEAASHA'
+    'oYRU5USVRMRU1FTlRfU1RBVEVfQUNUSVZFEAESIgoeRU5USVRMRU1FTlRfU1RBVEVfR1JBQ0Vf'
+    'UEVSSU9EEAISHgoaRU5USVRMRU1FTlRfU1RBVEVfSU5BQ1RJVkUQAw==');
+
+@$core.Deprecated('Use entitlementReasonDescriptor instead')
+const EntitlementReason$json = {
+  '1': 'EntitlementReason',
+  '2': [
+    {'1': 'ENTITLEMENT_REASON_UNSPECIFIED', '2': 0},
+    {'1': 'ENTITLEMENT_REASON_STARTED', '2': 1},
+    {'1': 'ENTITLEMENT_REASON_RENEWED', '2': 2},
+    {'1': 'ENTITLEMENT_REASON_PAYMENT_FAILED', '2': 3},
+    {'1': 'ENTITLEMENT_REASON_PAYMENT_RECOVERED', '2': 4},
+    {'1': 'ENTITLEMENT_REASON_CANCEL_SCHEDULED', '2': 5},
+    {'1': 'ENTITLEMENT_REASON_CANCEL_RESUMED', '2': 6},
+    {'1': 'ENTITLEMENT_REASON_PERIOD_ENDED', '2': 7},
+    {'1': 'ENTITLEMENT_REASON_GRACE_EXPIRED', '2': 8},
+    {'1': 'ENTITLEMENT_REASON_ACCOUNT_DELETE_SCHEDULED', '2': 9},
+    {'1': 'ENTITLEMENT_REASON_ACCOUNT_RESTORED', '2': 10},
+    {'1': 'ENTITLEMENT_REASON_PURCHASER_PURGED', '2': 11},
+  ],
+};
+
+/// Descriptor for `EntitlementReason`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List entitlementReasonDescriptor = $convert.base64Decode(
+    'ChFFbnRpdGxlbWVudFJlYXNvbhIiCh5FTlRJVExFTUVOVF9SRUFTT05fVU5TUEVDSUZJRUQQAB'
+    'IeChpFTlRJVExFTUVOVF9SRUFTT05fU1RBUlRFRBABEh4KGkVOVElUTEVNRU5UX1JFQVNPTl9S'
+    'RU5FV0VEEAISJQohRU5USVRMRU1FTlRfUkVBU09OX1BBWU1FTlRfRkFJTEVEEAMSKAokRU5USV'
+    'RMRU1FTlRfUkVBU09OX1BBWU1FTlRfUkVDT1ZFUkVEEAQSJwojRU5USVRMRU1FTlRfUkVBU09O'
+    'X0NBTkNFTF9TQ0hFRFVMRUQQBRIlCiFFTlRJVExFTUVOVF9SRUFTT05fQ0FOQ0VMX1JFU1VNRU'
+    'QQBhIjCh9FTlRJVExFTUVOVF9SRUFTT05fUEVSSU9EX0VOREVEEAcSJAogRU5USVRMRU1FTlRf'
+    'UkVBU09OX0dSQUNFX0VYUElSRUQQCBIvCitFTlRJVExFTUVOVF9SRUFTT05fQUNDT1VOVF9ERU'
+    'xFVEVfU0NIRURVTEVEEAkSJwojRU5USVRMRU1FTlRfUkVBU09OX0FDQ09VTlRfUkVTVE9SRUQQ'
+    'ChInCiNFTlRJVExFTUVOVF9SRUFTT05fUFVSQ0hBU0VSX1BVUkdFRBAL');
+
 @$core.Deprecated('Use userStreamEventDescriptor instead')
 const UserStreamEvent$json = {
   '1': 'UserStreamEvent',
@@ -2106,6 +2170,23 @@ const SubscriptionStreamEvent$json = {
       '6': '.google.protobuf.Timestamp',
       '10': 'occurredAt'
     },
+    {'1': 'protocol_version', '3': 3, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {
+      '1': 'aggregate_kind',
+      '3': 4,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.events.v1.SubscriptionAggregateKind',
+      '10': 'aggregateKind'
+    },
+    {'1': 'aggregate_id', '3': 5, '4': 1, '5': 9, '10': 'aggregateId'},
+    {
+      '1': 'aggregate_revision',
+      '3': 6,
+      '4': 1,
+      '5': 4,
+      '10': 'aggregateRevision'
+    },
     {
       '1': 'plan_started',
       '3': 10,
@@ -2187,6 +2268,15 @@ const SubscriptionStreamEvent$json = {
       '9': 0,
       '10': 'graceReminder'
     },
+    {
+      '1': 'entitlement_changed',
+      '3': 19,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.events.v1.EntitlementChanged',
+      '9': 0,
+      '10': 'entitlementChanged'
+    },
   ],
   '8': [
     {'1': 'payload'},
@@ -2197,18 +2287,159 @@ const SubscriptionStreamEvent$json = {
 final $typed_data.Uint8List subscriptionStreamEventDescriptor = $convert.base64Decode(
     'ChdTdWJzY3JpcHRpb25TdHJlYW1FdmVudBIZCghldmVudF9pZBgBIAEoCVIHZXZlbnRJZBI7Cg'
     'tvY2N1cnJlZF9hdBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBSCm9jY3VycmVk'
-    'QXQSQQoMcGxhbl9zdGFydGVkGAogASgLMhwudm9pY2UuZXZlbnRzLnYxLlBsYW5TdGFydGVkSA'
-    'BSC3BsYW5TdGFydGVkEkcKDnBsYW5fY2FuY2VsbGVkGAsgASgLMh4udm9pY2UuZXZlbnRzLnYx'
-    'LlBsYW5DYW5jZWxsZWRIAFINcGxhbkNhbmNlbGxlZBJKCg9wYXltZW50X3N1Y2Nlc3MYDCABKA'
-    'syHy52b2ljZS5ldmVudHMudjEuUGF5bWVudFN1Y2Nlc3NIAFIOcGF5bWVudFN1Y2Nlc3MSRwoO'
-    'cGF5bWVudF9mYWlsZWQYDSABKAsyHi52b2ljZS5ldmVudHMudjEuUGF5bWVudEZhaWxlZEgAUg'
-    '1wYXltZW50RmFpbGVkEkEKDHBsYW5fZXhwaXJlZBgOIAEoCzIcLnZvaWNlLmV2ZW50cy52MS5Q'
-    'bGFuRXhwaXJlZEgAUgtwbGFuRXhwaXJlZBI6Cglkb3duZ3JhZGUYDyABKAsyGi52b2ljZS5ldm'
-    'VudHMudjEuRG93bmdyYWRlSABSCWRvd25ncmFkZRJOChFzcGFjZV9wcm9fc3RhcnRlZBgQIAEo'
-    'CzIgLnZvaWNlLmV2ZW50cy52MS5TcGFjZVByb1N0YXJ0ZWRIAFIPc3BhY2VQcm9TdGFydGVkEk'
-    '4KEXNwYWNlX3Byb19leHBpcmVkGBEgASgLMiAudm9pY2UuZXZlbnRzLnYxLlNwYWNlUHJvRXhw'
-    'aXJlZEgAUg9zcGFjZVByb0V4cGlyZWQSRwoOZ3JhY2VfcmVtaW5kZXIYEiABKAsyHi52b2ljZS'
-    '5ldmVudHMudjEuR3JhY2VSZW1pbmRlckgAUg1ncmFjZVJlbWluZGVyQgkKB3BheWxvYWQ=');
+    'QXQSKQoQcHJvdG9jb2xfdmVyc2lvbhgDIAEoDVIPcHJvdG9jb2xWZXJzaW9uElEKDmFnZ3JlZ2'
+    'F0ZV9raW5kGAQgASgOMioudm9pY2UuZXZlbnRzLnYxLlN1YnNjcmlwdGlvbkFnZ3JlZ2F0ZUtp'
+    'bmRSDWFnZ3JlZ2F0ZUtpbmQSIQoMYWdncmVnYXRlX2lkGAUgASgJUgthZ2dyZWdhdGVJZBItCh'
+    'JhZ2dyZWdhdGVfcmV2aXNpb24YBiABKARSEWFnZ3JlZ2F0ZVJldmlzaW9uEkEKDHBsYW5fc3Rh'
+    'cnRlZBgKIAEoCzIcLnZvaWNlLmV2ZW50cy52MS5QbGFuU3RhcnRlZEgAUgtwbGFuU3RhcnRlZB'
+    'JHCg5wbGFuX2NhbmNlbGxlZBgLIAEoCzIeLnZvaWNlLmV2ZW50cy52MS5QbGFuQ2FuY2VsbGVk'
+    'SABSDXBsYW5DYW5jZWxsZWQSSgoPcGF5bWVudF9zdWNjZXNzGAwgASgLMh8udm9pY2UuZXZlbn'
+    'RzLnYxLlBheW1lbnRTdWNjZXNzSABSDnBheW1lbnRTdWNjZXNzEkcKDnBheW1lbnRfZmFpbGVk'
+    'GA0gASgLMh4udm9pY2UuZXZlbnRzLnYxLlBheW1lbnRGYWlsZWRIAFINcGF5bWVudEZhaWxlZB'
+    'JBCgxwbGFuX2V4cGlyZWQYDiABKAsyHC52b2ljZS5ldmVudHMudjEuUGxhbkV4cGlyZWRIAFIL'
+    'cGxhbkV4cGlyZWQSOgoJZG93bmdyYWRlGA8gASgLMhoudm9pY2UuZXZlbnRzLnYxLkRvd25ncm'
+    'FkZUgAUglkb3duZ3JhZGUSTgoRc3BhY2VfcHJvX3N0YXJ0ZWQYECABKAsyIC52b2ljZS5ldmVu'
+    'dHMudjEuU3BhY2VQcm9TdGFydGVkSABSD3NwYWNlUHJvU3RhcnRlZBJOChFzcGFjZV9wcm9fZX'
+    'hwaXJlZBgRIAEoCzIgLnZvaWNlLmV2ZW50cy52MS5TcGFjZVByb0V4cGlyZWRIAFIPc3BhY2VQ'
+    'cm9FeHBpcmVkEkcKDmdyYWNlX3JlbWluZGVyGBIgASgLMh4udm9pY2UuZXZlbnRzLnYxLkdyYW'
+    'NlUmVtaW5kZXJIAFINZ3JhY2VSZW1pbmRlchJWChNlbnRpdGxlbWVudF9jaGFuZ2VkGBMgASgL'
+    'MiMudm9pY2UuZXZlbnRzLnYxLkVudGl0bGVtZW50Q2hhbmdlZEgAUhJlbnRpdGxlbWVudENoYW'
+    '5nZWRCCQoHcGF5bG9hZA==');
+
+@$core.Deprecated('Use entitlementChangedDescriptor instead')
+const EntitlementChanged$json = {
+  '1': 'EntitlementChanged',
+  '2': [
+    {'1': 'entitlement_id', '3': 1, '4': 1, '5': 9, '10': 'entitlementId'},
+    {'1': 'plan', '3': 2, '4': 1, '5': 9, '10': 'plan'},
+    {'1': 'account_id', '3': 3, '4': 1, '5': 9, '10': 'accountId'},
+    {'1': 'space_id', '3': 4, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'purchaser_account_id',
+      '3': 5,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'purchaserAccountId',
+      '17': true
+    },
+    {
+      '1': 'purchaser_deleted',
+      '3': 6,
+      '4': 1,
+      '5': 8,
+      '10': 'purchaserDeleted'
+    },
+    {'1': 'deletion_fence_id', '3': 7, '4': 1, '5': 9, '10': 'deletionFenceId'},
+    {
+      '1': 'deletion_cycle_id',
+      '3': 8,
+      '4': 1,
+      '5': 9,
+      '9': 1,
+      '10': 'deletionCycleId',
+      '17': true
+    },
+    {
+      '1': 'purge_at',
+      '3': 9,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'purgeAt'
+    },
+    {
+      '1': 'state',
+      '3': 10,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.events.v1.EntitlementState',
+      '10': 'state'
+    },
+    {
+      '1': 'cancel_at_period_end',
+      '3': 11,
+      '4': 1,
+      '5': 8,
+      '10': 'cancelAtPeriodEnd'
+    },
+    {
+      '1': 'downgrade_cycle_id',
+      '3': 12,
+      '4': 1,
+      '5': 9,
+      '9': 2,
+      '10': 'downgradeCycleId',
+      '17': true
+    },
+    {
+      '1': 'current_period_end',
+      '3': 13,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'currentPeriodEnd'
+    },
+    {
+      '1': 'grace_period_end',
+      '3': 14,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'gracePeriodEnd'
+    },
+    {
+      '1': 'reason',
+      '3': 15,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.events.v1.EntitlementReason',
+      '10': 'reason'
+    },
+    {
+      '1': 'effective_at',
+      '3': 16,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'effectiveAt'
+    },
+    {
+      '1': 'entitled_until',
+      '3': 17,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'entitledUntil'
+    },
+  ],
+  '8': [
+    {'1': '_purchaser_account_id'},
+    {'1': '_deletion_cycle_id'},
+    {'1': '_downgrade_cycle_id'},
+  ],
+};
+
+/// Descriptor for `EntitlementChanged`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List entitlementChangedDescriptor = $convert.base64Decode(
+    'ChJFbnRpdGxlbWVudENoYW5nZWQSJQoOZW50aXRsZW1lbnRfaWQYASABKAlSDWVudGl0bGVtZW'
+    '50SWQSEgoEcGxhbhgCIAEoCVIEcGxhbhIdCgphY2NvdW50X2lkGAMgASgJUglhY2NvdW50SWQS'
+    'GQoIc3BhY2VfaWQYBCABKAlSB3NwYWNlSWQSNQoUcHVyY2hhc2VyX2FjY291bnRfaWQYBSABKA'
+    'lIAFIScHVyY2hhc2VyQWNjb3VudElkiAEBEisKEXB1cmNoYXNlcl9kZWxldGVkGAYgASgIUhBw'
+    'dXJjaGFzZXJEZWxldGVkEioKEWRlbGV0aW9uX2ZlbmNlX2lkGAcgASgJUg9kZWxldGlvbkZlbm'
+    'NlSWQSLwoRZGVsZXRpb25fY3ljbGVfaWQYCCABKAlIAVIPZGVsZXRpb25DeWNsZUlkiAEBEjUK'
+    'CHB1cmdlX2F0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcFIHcHVyZ2VBdBI3Cg'
+    'VzdGF0ZRgKIAEoDjIhLnZvaWNlLmV2ZW50cy52MS5FbnRpdGxlbWVudFN0YXRlUgVzdGF0ZRIv'
+    'ChRjYW5jZWxfYXRfcGVyaW9kX2VuZBgLIAEoCFIRY2FuY2VsQXRQZXJpb2RFbmQSMQoSZG93bm'
+    'dyYWRlX2N5Y2xlX2lkGAwgASgJSAJSEGRvd25ncmFkZUN5Y2xlSWSIAQESSAoSY3VycmVudF9w'
+    'ZXJpb2RfZW5kGA0gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcFIQY3VycmVudFBlcm'
+    'lvZEVuZBJEChBncmFjZV9wZXJpb2RfZW5kGA4gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVz'
+    'dGFtcFIOZ3JhY2VQZXJpb2RFbmQSOgoGcmVhc29uGA8gASgOMiIudm9pY2UuZXZlbnRzLnYxLk'
+    'VudGl0bGVtZW50UmVhc29uUgZyZWFzb24SPQoMZWZmZWN0aXZlX2F0GBAgASgLMhouZ29vZ2xl'
+    'LnByb3RvYnVmLlRpbWVzdGFtcFILZWZmZWN0aXZlQXQSQQoOZW50aXRsZWRfdW50aWwYESABKA'
+    'syGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wUg1lbnRpdGxlZFVudGlsQhcKFV9wdXJjaGFz'
+    'ZXJfYWNjb3VudF9pZEIUChJfZGVsZXRpb25fY3ljbGVfaWRCFQoTX2Rvd25ncmFkZV9jeWNsZV'
+    '9pZA==');
 
 @$core.Deprecated('Use planStartedDescriptor instead')
 const PlanStarted$json = {

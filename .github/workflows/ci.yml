@@ -254,7 +254,7 @@ jobs:
         run: |
           flutter pub get
           flutter analyze --no-fatal-infos
-          flutter test
+          flutter test --reporter expanded
 
   golangci:
     needs: changes

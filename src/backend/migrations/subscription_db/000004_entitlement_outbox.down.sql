@@ -1,0 +1,2 @@
+DROP TABLE subscription_event_outbox;
+DROP TABLE subscription_entitlement_aggregates;
