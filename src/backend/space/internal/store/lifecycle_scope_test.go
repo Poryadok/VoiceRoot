@@ -51,7 +51,7 @@ func TestLifecycleScope_OrdinaryMethodsRejectEveryNonLivePhase(t *testing.T) {
 				f := newR20ScopeFixture(t, st, "")
 				seedLifecycleScopePhase(t, st, f.binding.SpaceID, phase)
 				before := lifecycleScopeSnapshot(t, st, f.binding.SpaceID)
-				assert.Error(t, tc.call(st, f))
+				assert.ErrorIs(t, tc.call(st, f), ErrLifecycleFrozen)
 				assert.Equal(t, before, lifecycleScopeSnapshot(t, st, f.binding.SpaceID), "denied ordinary operation mutated durable data")
 			})
 		}
@@ -107,7 +107,7 @@ func TestLifecycleScope_CoMembersFiltersImplicitButRejectsExplicitFrozenScope(t 
 			require.True(t, shared, "unrelated shared live Space remains usable")
 			for _, ids := range [][]uuid.UUID{{frozen.binding.SpaceID}, {live.binding.SpaceID, frozen.binding.SpaceID}, {frozen.binding.SpaceID, live.binding.SpaceID}} {
 				shared, err = st.AreCoMembers(context.Background(), frozen.owner, frozen.member, ids)
-				require.Error(t, err)
+				require.ErrorIs(t, err, ErrLifecycleFrozen)
 				require.False(t, shared)
 			}
 		})
@@ -119,7 +119,7 @@ func TestLifecycleScope_OrdinaryAccessResumesAfterCompleteRestore(t *testing.T) 
 	store, _, spaceID, operationID, _ := completeStoredSchedule(t, st)
 	ctx := context.Background()
 	_, err := st.GetSpace(ctx, spaceID)
-	require.Error(t, err)
+	require.ErrorIs(t, err, ErrLifecycleFrozen)
 	_, err = store.DecideLifecycleRecovery(ctx, spaceID, 2)
 	require.NoError(t, err)
 	transitions := requireLifecycleTransitions(t, st)
@@ -128,12 +128,12 @@ func TestLifecycleScope_OrdinaryAccessResumesAfterCompleteRestore(t *testing.T) 
 		require.NoError(t, err)
 	}
 	_, err = st.GetSpace(ctx, spaceID)
-	require.Error(t, err, "partial restoration must remain frozen")
+	require.ErrorIs(t, err, ErrLifecycleFrozen, "partial restoration must remain frozen")
 	last := lifecycleTestParticipants[len(lifecycleTestParticipants)-1]
 	_, err = transitions.RecordLifecycleFenceReceipt(ctx, lifecycleFenceReceiptFixture(t, spaceID, operationID, last, 2, commonv1.LifecycleFenceState_LIFECYCLE_FENCE_STATE_LIVE, lifecycleManifestFixture()))
 	require.NoError(t, err)
 	_, err = st.GetSpace(ctx, spaceID)
-	require.Error(t, err, "receipts alone must not publish LIVE")
+	require.ErrorIs(t, err, ErrLifecycleFrozen, "receipts alone must not publish LIVE")
 	aggregate, _, err := transitions.CompleteLifecycleRestore(ctx, spaceID)
 	require.NoError(t, err)
 	require.Equal(t, spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_LIVE, aggregate.Phase())
@@ -158,12 +158,12 @@ func TestLifecycleScope_AuthorityUncertaintyFailsClosed(t *testing.T) {
 	require.NoError(t, err)
 	for _, tc := range r20OrdinaryScopeCases() {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Error(t, tc.call(st, f), "missing authority must not be interpreted as LIVE")
+			assert.ErrorIs(t, tc.call(st, f), ErrOwnershipScopeUnavailable, "missing authority must not be interpreted as LIVE")
 			assert.Equal(t, before, r20ScopeSnapshot(t, st, f.binding.SpaceID))
 		})
 	}
 	shared, err := st.AreCoMembers(context.Background(), f.owner, f.member, nil)
-	require.Error(t, err)
+	require.ErrorIs(t, err, ErrOwnershipScopeUnavailable)
 	require.False(t, shared)
 }
 
@@ -175,7 +175,7 @@ func TestLifecycleScope_OwnershipReservationRejectsEveryNonLivePhase(t *testing.
 			seedLifecycleScopePhase(t, st, f.binding.SpaceID, phase)
 			before := lifecycleScopeSnapshot(t, st, f.binding.SpaceID)
 			_, err := st.ReserveOwnership(context.Background(), f.binding)
-			require.Error(t, err)
+			require.ErrorIs(t, err, ErrLifecycleFrozen)
 			require.Equal(t, before, lifecycleScopeSnapshot(t, st, f.binding.SpaceID))
 		})
 	}
@@ -190,7 +190,7 @@ func TestLifecycleScope_ScheduleReservationRejectsPendingOwnership(t *testing.T)
 			request.ConfirmationName = "Ownership reservation"
 			before := lifecycleScopeSnapshot(t, st, f.binding.SpaceID)
 			_, err := st.ReserveLifecycleSchedule(context.Background(), f.account, f.currentOwner, 7, request)
-			require.Error(t, err)
+			require.ErrorIs(t, err, ErrOwnershipFrozen)
 			require.Equal(t, before, lifecycleScopeSnapshot(t, st, f.binding.SpaceID))
 		})
 	}
@@ -205,7 +205,7 @@ func TestLifecycleScope_FirstAggregatePersistenceRejectsPendingOwnership(t *test
 			require.NoError(t, err)
 			require.NoError(t, aggregate.BeginSchedule(1))
 			before := lifecycleScopeSnapshot(t, st, f.binding.SpaceID)
-			require.Error(t, st.PersistLifecycle(context.Background(), aggregate))
+			require.ErrorIs(t, st.PersistLifecycle(context.Background(), aggregate), ErrOwnershipFrozen)
 			require.Equal(t, before, lifecycleScopeSnapshot(t, st, f.binding.SpaceID))
 		})
 	}
@@ -248,7 +248,7 @@ func TestLifecycleScope_OrdinaryTransactionHoldsLockUntilReadCompletes(t *testin
 	require.NoError(t, <-ordinaryDone)
 	require.NoError(t, <-reserved)
 	_, err := st.GetSpace(ctx, f.binding.SpaceID)
-	require.Error(t, err)
+	require.ErrorIs(t, err, ErrLifecycleFrozen)
 }
 
 func TestLifecycleScope_QueuedReadObservesCommittedScheduleReservation(t *testing.T) {
@@ -284,7 +284,7 @@ func TestLifecycleScope_QueuedReadObservesCommittedScheduleReservation(t *testin
 	require.NoError(t, blocker.Commit(ctx))
 	require.NoError(t, <-reserved)
 	result := <-read
-	require.Error(t, result.err)
+	require.ErrorIs(t, result.err, ErrLifecycleFrozen)
 	require.Nil(t, result.row)
 	aggregate, err := st.LoadLifecycle(ctx, f.binding.SpaceID)
 	require.NoError(t, err)

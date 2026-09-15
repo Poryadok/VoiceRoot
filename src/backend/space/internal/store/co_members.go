@@ -54,13 +54,15 @@ func (s *SpaceStore) AreCoMembers(ctx context.Context, profileA, profileB uuid.U
 			}
 		}
 		var verified []uuid.UUID
-		var frozen bool
+		var frozen, sharedLive bool
 		err = tx.QueryRow(ctx, `WITH candidate AS (
 			SELECT m1.space_id FROM space_members m1 JOIN space_members m2 ON m1.space_id=m2.space_id
 			WHERE m1.profile_id=$1 AND m2.profile_id=$2
 		) SELECT COALESCE(array_agg(space_id ORDER BY space_id),'{}'::uuid[]),
-			EXISTS(SELECT 1 FROM ownership_journal j JOIN candidate c ON c.space_id=j.space_id WHERE j.state NOT IN ('completed','aborted'))
-			FROM candidate`, profileA, profileB).Scan(&verified, &frozen)
+			EXISTS(SELECT 1 FROM ownership_journal j JOIN candidate c ON c.space_id=j.space_id WHERE j.state NOT IN ('completed','aborted')),
+			EXISTS(SELECT 1 FROM candidate c WHERE NOT EXISTS (
+				SELECT 1 FROM space_lifecycle_aggregates a WHERE a.space_id=c.space_id AND a.phase <> 'LIVE'))
+			FROM candidate`, profileA, profileB).Scan(&verified, &frozen, &sharedLive)
 		if err != nil {
 			rollback()
 			return false, fmt.Errorf("%w: %v", ErrOwnershipScopeUnavailable, err)
@@ -77,7 +79,7 @@ func (s *SpaceStore) AreCoMembers(ctx context.Context, profileA, profileB uuid.U
 		if err := tx.Commit(ctx); err != nil {
 			return false, err
 		}
-		return len(verified) != 0, nil
+		return sharedLive, nil
 	}
 	return false, ErrOwnershipFrozen
 }

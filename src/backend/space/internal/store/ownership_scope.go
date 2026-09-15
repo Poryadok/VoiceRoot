@@ -16,6 +16,7 @@ import (
 var (
 	ErrOwnershipFrozen           = errors.New("ownership operation frozen")
 	ErrOwnershipScopeUnavailable = errors.New("ownership scope unavailable")
+	ErrLifecycleFrozen           = errors.New("space deletion lifecycle frozen")
 )
 
 // OwnershipFrozenError exposes the stable classification to adapters without
@@ -73,13 +74,35 @@ func lockAndCheckOwnershipScope(ctx context.Context, tx pgx.Tx, spaceIDs []uuid.
 			return fmt.Errorf("%w: %v", ErrOwnershipScopeUnavailable, err)
 		}
 	}
+	if err := checkOwnershipJournalAvailable(ctx, tx, normalized); err != nil {
+		return err
+	}
+	return checkLifecycleAvailable(ctx, tx, normalized)
+}
+
+// Callers hold the shared Space advisory locks through their subsequent action.
+// Coordinator replays bypass these ordinary-access guards and validate their
+// own saved operation and participant evidence instead.
+func checkOwnershipJournalAvailable(ctx context.Context, db ownershipJournalQuerier, spaceIDs []uuid.UUID) error {
 	var frozen bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM ownership_journal
-		WHERE space_id=ANY($1::uuid[]) AND state NOT IN ('completed','aborted'))`, normalized).Scan(&frozen); err != nil {
+	if err := db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM ownership_journal
+		WHERE space_id=ANY($1::uuid[]) AND state NOT IN ('completed','aborted'))`, spaceIDs).Scan(&frozen); err != nil {
 		return fmt.Errorf("%w: %v", ErrOwnershipScopeUnavailable, err)
 	}
 	if frozen {
 		return ErrOwnershipFrozen
+	}
+	return nil
+}
+
+func checkLifecycleAvailable(ctx context.Context, db ownershipJournalQuerier, spaceIDs []uuid.UUID) error {
+	var frozen bool
+	if err := db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM space_lifecycle_aggregates
+		WHERE space_id=ANY($1::uuid[]) AND phase <> 'LIVE')`, spaceIDs).Scan(&frozen); err != nil {
+		return fmt.Errorf("%w: %v", ErrOwnershipScopeUnavailable, err)
+	}
+	if frozen {
+		return ErrLifecycleFrozen
 	}
 	return nil
 }
