@@ -296,9 +296,7 @@ func TestLifecycleRestoreOutcome_CorruptSavedResponseFailsClosed(t *testing.T) {
 	}{
 		{"wrong space", func(r *spacev1.RestoreSpaceResponse) { r.Space.Id = uuid.NewString() }},
 		{"nil space", func(r *spacev1.RestoreSpaceResponse) { r.Space = nil }},
-		{"unknown response", func(r *spacev1.RestoreSpaceResponse) {
-			r.ProtoReflect().SetUnknown(protowire.AppendVarint(protowire.AppendTag(nil, 100, protowire.VarintType), 1))
-		}},
+		{"invalid timestamp", func(r *spacev1.RestoreSpaceResponse) { r.Space.CreatedAt.Seconds = 253402300800 }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			corrupt := proto.Clone(saved).(*spacev1.RestoreSpaceResponse)
@@ -314,6 +312,15 @@ func TestLifecycleRestoreOutcome_CorruptSavedResponseFailsClosed(t *testing.T) {
 		})
 	}
 	_, err = f.st.Pool.Exec(ctx, `UPDATE space_lifecycle_operations SET outcome_bytes=$2,outcome_sha256=$3 WHERE operation_id=$1`, f.restore.OperationId, original.bytes, original.hash)
+	require.NoError(t, err)
+	require.True(t, proto.Equal(saved, f.replay(t, f.st)))
+	// RestoreSpaceResponse is accept_preserve, unlike its reject-unknown request.
+	// A future valid saved projection keeps its unknown fields during replay.
+	saved.ProtoReflect().SetUnknown(protowire.AppendVarint(protowire.AppendTag(nil, 100, protowire.VarintType), 1))
+	raw, err := proto.MarshalOptions{Deterministic: true}.Marshal(saved)
+	require.NoError(t, err)
+	hash := lifecycleDomainHash("voice.space.v1.RestoreSpaceResponse", raw)
+	_, err = f.st.Pool.Exec(ctx, `UPDATE space_lifecycle_operations SET outcome_bytes=$2,outcome_sha256=$3 WHERE operation_id=$1`, f.restore.OperationId, raw, hash[:])
 	require.NoError(t, err)
 	require.True(t, proto.Equal(saved, f.replay(t, f.st)))
 }
