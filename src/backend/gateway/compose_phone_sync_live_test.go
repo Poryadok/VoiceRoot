@@ -87,7 +87,7 @@ func registerComposeUserWithPhone(t *testing.T, client *http.Client, base, email
 	sess := envelope.Session
 	require.NotEmpty(t, sess.AccessToken)
 	require.NotEmpty(t, sess.ProfileID)
-	return sess
+	return completeComposeEmailVerification(t, client, base, email, sess)
 }
 
 func syncComposePhoneContacts(t *testing.T, client *http.Client, base, accessToken, phoneHash string) []string {
