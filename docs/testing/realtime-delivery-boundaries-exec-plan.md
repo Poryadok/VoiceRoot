@@ -33,10 +33,13 @@ complete Chat membership with current per-recipient Chat/Social authorization.
 
 - [x] Author regression tests before production changes and review them.
 - [x] Push RED tests and obtain hosted Realtime CI failure evidence.
-- [ ] Implement the three boundaries and preserve valid routing/presence cases.
-- [ ] Review security, metadata handling, pagination and concurrency.
-- [ ] Obtain hosted short/full Realtime tests, lint and `ci-gate` on PR head.
-- [ ] Merge current master normally if needed, then merge PR with merge commit.
+- [x] Implement the three boundaries and preserve valid routing/presence cases.
+- [x] Review security, metadata handling, pagination and concurrency.
+- [x] Obtain hosted short/full Realtime tests and lint for the implementation.
+
+Final integration is gated by the checks on the current head of PR #397,
+including `ci-gate`, and a merge commit with current master. The PR check records
+and merge record are the authority for those final integration results.
 
 No local Go executable, tests, race, Compose or localhost server may run for this
 task. Test source may use bufconn and embedded NATS only on hosted CI. Regression
@@ -58,3 +61,9 @@ job log confirms the voice override chat leak, every malformed-page regression,
 missing lookup deadline, ambient account/profile precedence and missing explicit
 identity rejection. An independent read-only security review accepted these
 tests before implementation. Production fixes follow this recorded RED state.
+
+Implementation `09c5aa42` plus normal master merge `77316765` passed hosted
+Realtime short tests and full integration (`104274564596`) in run `34936105233`;
+`golangci` also passed. A separate implementation/security reviewer approved
+the Role routing, pagination, identity stripping, response binding and
+concurrency behavior without findings. Test assertions were not weakened.
