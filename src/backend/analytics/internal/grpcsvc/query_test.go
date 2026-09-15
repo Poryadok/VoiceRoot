@@ -30,6 +30,56 @@ func TestFiltersFromReqEmpty(t *testing.T) {
 	require.Empty(t, got.EventType)
 }
 
+func TestValidatedRangeFromReqRejectsInvalidAndUnsafeBounds(t *testing.T) {
+	now := time.Date(2026, time.September, 15, 12, 0, 0, 0, time.UTC)
+	validFrom := timestamppb.New(now.Add(-48 * time.Hour))
+	validTo := timestamppb.New(now.Add(-24 * time.Hour))
+
+	tests := []struct {
+		name string
+		from *timestamppb.Timestamp
+		to   *timestamppb.Timestamp
+		want bool
+	}{
+		{name: "valid explicit UTC interval", from: validFrom, to: validTo, want: true},
+		{name: "reversed", from: validTo, to: validFrom},
+		{name: "equal", from: validFrom, to: validFrom},
+		{name: "future end", from: validFrom, to: timestamppb.New(now.Add(time.Second))},
+		{name: "invalid protobuf timestamp", from: &timestamppb.Timestamp{Seconds: 253402300800}, to: validTo},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, err := validatedRangeFromReq(tc.from, tc.to, now)
+			if tc.want {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+		})
+	}
+}
+
+func TestValidatedRangeFromReqKeepsExistingDefaultForMissingBound(t *testing.T) {
+	now := time.Date(2026, time.September, 15, 12, 0, 0, 0, time.UTC)
+	from, to, err := validatedRangeFromReq(nil, nil, now)
+	require.NoError(t, err)
+	require.Equal(t, now.Add(-30*24*time.Hour), from)
+	require.Equal(t, now, to)
+
+	from, to, err = validatedRangeFromReq(timestamppb.New(now.Add(-2*24*time.Hour)), nil, now)
+	require.NoError(t, err)
+	require.Equal(t, now.Add(-2*24*time.Hour), from)
+	require.Equal(t, now, to)
+}
+
+func TestSortedMetricNamesIsStable(t *testing.T) {
+	require.Equal(t, []string{"call_events", "messages_sent", "stories_created"}, sortedMetricNames(map[string]float64{
+		"stories_created": 1,
+		"messages_sent":   2,
+		"call_events":     3,
+	}))
+}
+
 func TestExportDataCSVHeaderIncludesOnlyHashedIdentities(t *testing.T) {
 	response := exportCSV(t, []store.EventRow{{
 		EventID:         "event-1",
