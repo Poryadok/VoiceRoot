@@ -8,7 +8,7 @@ Replace the limit-only `ListThreads` implementation with a bounded, per-viewer M
 
 - Docs: `docs/microservices/messaging-service.md` defines Messaging ownership, thread RPCs and `ghost_only`; `docs/DATA_STORES.md` requires database-per-service; `docs/ARCHITECTURE_REQUIREMENTS.md` separates Messaging history from Realtime; `docs/TESTING.md` defines TDD.
 - Decision: `tmp/slave-driver/listthreads-successor-sol-contract.md` is the 2026-09-14 Sol architecture contract. It supersedes PR #364's SQL-candidate approach.
-- Current code: `src/backend/messaging/internal/grpcsvc/messaging_grpc.go` calls the unbounded `MessagesStore.ListThreads`; `messages_store.go` aggregates `messages` on every request. The existing proto already supplies `CursorPageRequest` and `ThreadList.next_cursor`.
+- Current code: `src/backend/messaging/internal/grpcsvc/messaging_grpc.go` authorizes then returns the unavailable readiness guard. The legacy `MessagesStore.ListThreads` aggregate remains only as predecessor code, not an RPC fallback. The existing proto already supplies `CursorPageRequest` and `ThreadList.next_cursor`.
 - Constraints: Messaging owns only `messaging_db`; Chat remains membership authority. No production fallback may use the legacy aggregate. Do not run Realtime tests, race tests, Compose, localhost harnesses, or Testcontainers locally.
 
 ## Scope
@@ -68,3 +68,65 @@ Replace the limit-only `ListThreads` implementation with a bounded, per-viewer M
 - The current Chat membership path lacks the required durable outbox contract; activation is blocked until it exists and Messaging consumes it idempotently.
 - A failed or lagging projector must block the affected page rather than return stale data or fall back to SQL.
 - The final migration and backfill plan needs production rollout evidence and a retention calculation for the oldest BUILDING baseline.
+
+## Readiness containment implementation plan
+
+The full successor remains open. The currently callable aggregate ignores viewer
+hides and ghost visibility and cannot satisfy the accepted fail-closed contract.
+Until a verified projection exists, the RPC must authorize the caller and return
+`UNAVAILABLE "thread list unavailable"` without querying that aggregate. This
+temporarily makes the thread index unavailable; sending replies and loading a
+known thread through `GetThreadMessages` are outside this change.
+
+Sources inspected: the service contract above; `docs/todo/backend.md`;
+`docs/features/text-chat.md`; `docs/DATA_MODEL.md`; `docs/DATA_STORES.md`;
+`docs/TESTING.md`; Chat's `store/space_members.go` and
+`grpcsvc/space_membership.go`; Messaging's `ListThreads` handler and store.
+
+1. Delegate handler RED tests for authentication, chat validation, mandatory
+   membership authorization, denial before malformed cursor handling, opaque
+   dependency failures, context cancellation/deadline and unavailable results for
+   DM/group/channel with either empty or nonempty cursors. A zero-value store
+   requires no database; code review must separately prove no legacy invocation.
+2. Review assertions against the accepted missing-projection contract. Implement
+   the bounded readiness guard, preserving specific authorization denial and
+   cancellation codes; log concrete dependency diagnostics only server-side.
+3. Run focused tests, `go test -short ./...`, `go vet ./...` and pinned
+   `golangci-lint run ./...` in Messaging. Use hosted integration CI for affected
+   components; no local service/container harness is needed for this guard.
+4. Obtain independent security review, update evidence, push and merge only with
+   successful CI on the current head. Keep the successor TODO and all production
+   projection milestones unchecked.
+
+The authorization/outbox review must resolve how Space membership and Role
+`TEXT_CHAT_VIEW` changes reach Chat's effective membership revision. Chat currently
+reads Space's database and filters through Role; a trigger on `chat_members`
+alone cannot durably enumerate this membership set.
+
+Independent review confirmed that activation also needs DM delete/reopen
+invalidation, archived-profile eligibility and complete authoritative admission:
+the current Messaging Chat adapter reads only the first 100 members. A transport
+subject/table/backoff choice is routine implementation work; it does not resolve
+missing source revisions, an effective-viewer enumeration watermark or recovery
+from missed Space/Role invalidations. Record those semantics before implementing
+the full bridge. Keep archived domain data intact.
+
+Before the full successor GREEN cycle, replace the tagged RED scaffold's
+disconnected fixture seams with actual persistence tests: cursor registration
+and target binding, paused versus completed visibility fan-out, SQL immutable
+node enforcement, adversarial AVL traversal, persisted transaction rollback and
+real shared-node GC reachability. No production globals or constant metadata
+helpers may be introduced merely to satisfy that scaffold.
+
+Containment evidence:
+
+- [x] Focused handler RED demonstrated legacy `Internal` errors instead of
+  unavailable/permission/cancellation/configuration outcomes; the same tests
+  pass after the guard (`go test -short ./internal/grpcsvc -run ListThreads -count=1`).
+- [x] Independent test review accepted the matrix and corrected the no-store-call
+  evidence claim. Test-author delegation was unavailable due to the agent limit;
+  the lifecycle owner authored the tests before implementation.
+- [x] Independent security review confirmed no aggregate invocation, mandatory
+  membership check, opaque dependency errors and preserved cancellation codes.
+- [x] Messaging `go test -short ./...` and `go vet ./...` pass.
+- [ ] Hosted CI on the final head and merge commit.

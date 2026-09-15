@@ -1139,41 +1139,39 @@ func (s *MessagingGRPC) ListThreads(ctx context.Context, req *messagingv1.ListTh
 	if err := validateChatRefMessaging(req.GetChat()); err != nil {
 		return nil, err
 	}
-	if s.ChatGuard != nil {
-		if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
-			if errors.Is(err, store.ErrNotChatMember) {
-				return nil, status.Error(codes.PermissionDenied, "not a chat member")
-			}
-			return nil, status.Error(codes.Internal, err.Error())
+	if isNilDependency(s.ChatGuard) {
+		return nil, status.Error(codes.FailedPrecondition, "chat membership not configured")
+	}
+	// Membership must precede cursor handling, including while the projection
+	// is unavailable. Never turn an authorization denial into a fallback page.
+	if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
+		if errors.Is(err, store.ErrNotChatMember) || status.Code(err) == codes.PermissionDenied {
+			return nil, status.Error(codes.PermissionDenied, "not a chat member")
 		}
-	}
-	limit := int(req.GetPage().GetPageSize())
-	if limit <= 0 {
-		limit = defaultPageSize
-	}
-	if limit > maxPageSize {
-		limit = maxPageSize
-	}
-	rows, err := s.Messages.ListThreads(ctx, chatID, limit)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-	threads := make([]*messagingv1.ThreadSummary, 0, len(rows))
-	for _, row := range rows {
-		ts := timestamppb.New(row.LastReplyAt)
-		item := &messagingv1.ThreadSummary{
-			ThreadParentId: row.ThreadParentID.String(),
-			ReplyCount:     row.ReplyCount,
-			LastReplyAt:    ts,
+		if s.Logger != nil {
+			s.Logger.ErrorContext(ctx, "thread list membership check failed", slog.String("error", err.Error()))
 		}
-		if row.LastReplyPreview != "" {
-			item.LastReplyPreview = ptrString(row.LastReplyPreview)
-		}
-		threads = append(threads, item)
+		return nil, threadListUnavailable(err)
 	}
-	return &messagingv1.ListThreadsResponse{
-		ThreadList: &messagingv1.ThreadList{Threads: threads},
-	}, nil
+	if err := ctx.Err(); err != nil {
+		return nil, threadListUnavailable(err)
+	}
+	// The accepted successor requires a READY per-viewer projection. Until
+	// its durable membership/build contract is implemented, every projection
+	// is missing. The legacy aggregate ignores hides/ghost visibility and is
+	// unsafe even for page one; do not invoke it or restart a cursor chain.
+	return nil, threadListUnavailable(nil)
+}
+
+func threadListUnavailable(cause error) error {
+	code := codes.Unavailable
+	switch {
+	case errors.Is(cause, context.Canceled) || status.Code(cause) == codes.Canceled:
+		code = codes.Canceled
+	case errors.Is(cause, context.DeadlineExceeded) || status.Code(cause) == codes.DeadlineExceeded:
+		code = codes.DeadlineExceeded
+	}
+	return status.Error(code, "thread list unavailable")
 }
 
 func nextCursorForPage(mode store.ListMode, rows []store.MessageRow) string {
