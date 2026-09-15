@@ -56,6 +56,22 @@ services:
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/auth.key:/run/phase0/auth.key:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/truststore.p12:/run/phase0/truststore.p12:ro
       - phase0_auth_principal_ca:/run/phase0/jwks-ca:ro
+  social:
+    environment:
+      AUTH_PRINCIPAL_TLS_CA_FILE: /run/phase0/auth-principal-ca/ca.crt
+    volumes:
+      - phase0_auth_principal_ca:/run/phase0/auth-principal-ca:ro
+    depends_on:
+      phase0-auth-principal-ca-init:
+        condition: service_completed_successfully
+  moderation:
+    environment:
+      AUTH_PRINCIPAL_TLS_CA_FILE: /run/phase0/auth-principal-ca/ca.crt
+    volumes:
+      - phase0_auth_principal_ca:/run/phase0/auth-principal-ca:ro
+    depends_on:
+      phase0-auth-principal-ca-init:
+        condition: service_completed_successfully
   phase0-auth-principal-ca-init:
     profiles: ["app"]
     image: alpine:3.21

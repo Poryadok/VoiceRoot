@@ -319,12 +319,27 @@ class ComposeTests(unittest.TestCase):
                        for volume in self.merged["auth"]["volumes"]}
         self.assertIn(("phase0_auth_principal_ca", "/run/phase0/jwks-ca", True), auth_mounts)
 
+    def test_auth_overlay_clients_trust_the_phase0_auth_certificate(self):
+        for service in ("social", "moderation"):
+            with self.subTest(service=service):
+                env = self.merged[service]["environment"]
+                self.assertEqual(env["AUTH_PRINCIPAL_TLS_CA_FILE"], "/run/phase0/auth-principal-ca/ca.crt")
+                self.assertEqual(env["AUTH_PRINCIPAL_TLS_SERVER_NAME"], "auth")
+                mounts = {(volume.get("source"), volume.get("target"), volume.get("read_only", False))
+                          for volume in self.merged[service]["volumes"]}
+                self.assertIn(("phase0_auth_principal_ca", "/run/phase0/auth-principal-ca", True), mounts)
+                self.assertEqual(self.merged[service]["depends_on"]
+                                 ["phase0-auth-principal-ca-init"]["condition"],
+                                 "service_completed_successfully")
+
     def test_base_environments_and_legacy_endpoints_are_preserved(self):
         fixture_overrides = {
             ("auth", "AUTH_GRPC_TLS_CERT_FILE"),
             ("auth", "AUTH_GRPC_TLS_KEY_FILE"),
             ("auth", "S2S_JWKS_URLS_JSON"),
             ("auth", "S2S_JWKS_CA_FILE"),
+            ("social", "AUTH_PRINCIPAL_TLS_CA_FILE"),
+            ("moderation", "AUTH_PRINCIPAL_TLS_CA_FILE"),
         }
         for service, base in self.base.items():
             for name, value in base.get("environment", {}).items():
