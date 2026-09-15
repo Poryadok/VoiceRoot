@@ -53,6 +53,9 @@ scale_auth_down_if_needed() {
 
 scale_auth_down_if_needed
 
+"${ROOT}/scripts/prod/check-social-principal-secrets.sh"
+sed "s|__K_NAMESPACE__|${NS}|g" \
+  "${ROOT}/deploy/templates/network-policy-auth-principal.yaml" | kubectl apply -f -
 render "${MANIFEST_DIR}/services.yaml" | kubectl apply -f -
 render "${MANIFEST_DIR}/gateway-deployment.yaml" | kubectl apply -f -
 

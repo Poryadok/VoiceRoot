@@ -1,0 +1,69 @@
+# Auth's protected listener and the issuers it trusts are internal-only.
+# Existing Auth 9090 remains reachable for ordinary RPC callers.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: voice-auth-principal-consumers
+  namespace: __K_NAMESPACE__
+spec:
+  podSelector:
+    matchLabels: {app: voice-auth}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - {key: app, operator: In, values: [voice-social, voice-moderation]}
+      ports:
+        - {protocol: TCP, port: 9091}
+    - from:
+        - podSelector: {}
+      ports:
+        - {protocol: TCP, port: 9090}
+    - ports:
+        - {protocol: TCP, port: 8080}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: voice-auth-principal-jwks
+  namespace: __K_NAMESPACE__
+spec:
+  podSelector:
+    matchLabels: {app: voice-social}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - {key: app, operator: In, values: [voice-user, voice-space, voice-auth]}
+      ports:
+        - {protocol: TCP, port: 8443}
+    - from:
+        - podSelector: {}
+      ports:
+        - {protocol: TCP, port: 9090}
+    - ports:
+        - {protocol: TCP, port: 8080}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: voice-moderation-principal-jwks
+  namespace: __K_NAMESPACE__
+spec:
+  podSelector:
+    matchLabels: {app: voice-moderation}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app: voice-auth}
+      ports:
+        - {protocol: TCP, port: 8443}
+    - from:
+        - podSelector: {}
+      ports:
+        - {protocol: TCP, port: 9090}
+    - ports:
+        - {protocol: TCP, port: 8080}

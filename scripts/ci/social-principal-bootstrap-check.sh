@@ -15,10 +15,24 @@ compose run --rm --no-deps --entrypoint sh social-principal-init -ec '
   test "$(stat -c %u /signing/current.pem)" = 65532
   openssl pkey -in /signing/current.pem -check -noout
   openssl pkey -in /signing/next.pem -check -noout
+  test "$(stat -c %a /moderation-keys/current.pem)" = 600
+  test "$(stat -c %u /moderation-keys/current.pem)" = 65532
+  openssl pkey -in /moderation-keys/current.pem -check -noout
+  openssl pkey -in /moderation-keys/next.pem -check -noout
   current=$(openssl pkey -in /signing/current.pem -pubout 2>/dev/null | openssl dgst -sha256)
   next=$(openssl pkey -in /signing/next.pem -pubout 2>/dev/null | openssl dgst -sha256)
   test "$current" != "$next"
-  for service in social user space; do
+  moderation_current=$(openssl pkey -in /moderation-keys/current.pem -pubout 2>/dev/null | openssl dgst -sha256)
+  moderation_next=$(openssl pkey -in /moderation-keys/next.pem -pubout 2>/dev/null | openssl dgst -sha256)
+  test "$moderation_current" != "$moderation_next"
+  for service in social user space auth moderation; do
     openssl verify -CAfile /ca/ca.crt -verify_hostname "$service" "/$service/tls.crt"
+    openssl verify -CAfile /ca/ca.crt -verify_hostname "voice-$service" "/$service/tls.crt"
   done
 '
+# A partial initialized volume must fail closed instead of being silently regenerated.
+compose run --rm --no-deps --entrypoint sh social-principal-init -ec 'rm /auth/tls.key'
+if compose run --rm --no-deps social-principal-init; then
+  echo "principal initializer accepted partial Auth TLS material" >&2
+  exit 1
+fi
