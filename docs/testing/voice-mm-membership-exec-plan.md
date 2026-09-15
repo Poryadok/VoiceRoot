@@ -47,9 +47,10 @@ The existing R22 callers and `CheckSchema` remain compatible with migration 1.
 ## Milestones
 
 - [x] Docs and independently authored RED migration/model tests.
-- [x] Additive schema and gated reads pass short tests; real PostgreSQL gate pending.
+- [x] Additive schema and gated reads pass short and real PostgreSQL tests.
 - [x] Independent security/concurrency review and affected local checks.
-- [ ] Hosted PostgreSQL verification and PR merge.
+- [x] Hosted PostgreSQL verification. Final integration status is tracked by
+  [PR #391](https://github.com/Poryadok/VoiceRoot/pull/391) and its required CI gate.
 
 ## Detailed steps
 
@@ -94,7 +95,12 @@ The existing R22 callers and `CheckSchema` remain compatible with migration 1.
   generation rules (new media epoch clears grant expiry). Final static review approved.
 - [x] Added explicit legacy join/leave/self-move/moderator-move/grant compatibility
   after migrations 1+2+3, all room reads, reapply and concurrent DOWN checks.
-- [ ] Hosted PostgreSQL verification on final PR head and merge (#391).
+- [x] Full hosted PostgreSQL verification on implementation/test commit
+  `7a877bf178fede7bc8b0d1af049f9e9815e552b0`:
+  [Voice integration job](https://github.com/Poryadok/VoiceRoot/actions/runs/34934237387/job/104269668719).
+  All new migration, read, rollback-race and old-writer cases are in the non-short
+  command; the workflow was superseded after this job succeeded by the independent
+  Space master refresh. The PR's latest gate remains required before merge.
 
 ## Risks and follow-ups
 
