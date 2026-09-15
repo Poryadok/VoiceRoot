@@ -77,4 +77,39 @@ func TestMatchmakingMembershipStoreSchemaAndReads(t *testing.T) {
 	require.NotNil(t, identity.ReconnectDeadline)
 	// Stored state is evidence, not a current eligibility verdict. This old
 	// fixture's deadline is intentionally in the past; RPC policy must check it.
+	for _, tc := range []struct {
+		kind  string
+		match bool
+	}{{"call", false}, {"group_voice", false}, {"group_voice", true}} {
+		tx, err := pool.Begin(ctx)
+		require.NoError(t, err)
+		id, err := mmInsertRoom(ctx, tx, tc.kind, tc.match, nil)
+		require.NoError(t, err)
+		require.NoError(t, tx.Commit(ctx))
+		room, found, err := store.LoadMatchmakingRoom(ctx, id)
+		require.NoError(t, err)
+		require.True(t, found)
+		require.Equal(t, tc.kind, room.RoomType)
+		require.NotNil(t, room.ChatID)
+		require.Nil(t, room.SpaceID)
+		require.Nil(t, room.VoiceRoomID)
+		if tc.match {
+			require.Equal(t, "MATCH_SQUAD", room.Purpose)
+			require.NotNil(t, room.OwnerID)
+			require.NotNil(t, room.CreationOperationID)
+			require.NotNil(t, room.CreationReceiptID)
+			require.NotNil(t, room.ChatCreationReceiptID)
+			require.Len(t, room.CreationManifestHash, 32)
+		} else {
+			require.Equal(t, "ORDINARY", room.Purpose)
+		}
+		_, err = pool.Exec(ctx, `UPDATE voice_room_instances SET state='closed',closed_at=now() WHERE room_id=$1`, id)
+		require.NoError(t, err)
+		closed, found, err := store.LoadMatchmakingRoom(ctx, id)
+		require.NoError(t, err)
+		require.True(t, found)
+		require.False(t, closed.Active)
+		room.Active = false
+		require.Equal(t, room, closed)
+	}
 }

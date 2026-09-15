@@ -46,9 +46,9 @@ The existing R22 callers and `CheckSchema` remain compatible with migration 1.
 
 ## Milestones
 
-- [ ] Docs and independently authored RED migration/model tests.
-- [ ] Additive schema and gated reads pass those tests.
-- [ ] Independent security/concurrency review and affected checks.
+- [x] Docs and independently authored RED migration/model tests.
+- [x] Additive schema and gated reads pass short tests; real PostgreSQL gate pending.
+- [x] Independent security/concurrency review and affected local checks.
 - [ ] Hosted PostgreSQL verification and PR merge.
 
 ## Detailed steps
@@ -88,7 +88,13 @@ The existing R22 callers and `CheckSchema` remain compatible with migration 1.
 - [x] Read canonical contracts and confirmed #385/#386 merged.
 - [x] Acquired isolated treehouse slot 9; no overlapping schema owner.
 - [x] Model RED: focused short test fails on absent DTO/constants/store API.
-- [ ] Migration RED/implementation/review/hosted verification.
+- [x] Migration schema, model and readers implemented; no activation.
+- [x] Full short Voice tests, focused race tests, vet and pinned lint pass.
+- [x] Independent review: both fixture corrections preserve migration-1 media
+  generation rules (new media epoch clears grant expiry). Final static review approved.
+- [x] Added explicit legacy join/leave/self-move/moderator-move/grant compatibility
+  after migrations 1+2+3, all room reads, reapply and concurrent DOWN checks.
+- [ ] Hosted PostgreSQL verification on final PR head and merge (#391).
 
 ## Risks and follow-ups
 
@@ -99,3 +105,8 @@ own protected writers. No existing opaque row is automatically promoted.
 After expanded rows exist, application rollback can keep the additive schema;
 schema rollback is deliberately refused until a separately authorized migration
 preserves the new evidence.
+
+Local Docker was unavailable (missing dockerDesktopLinuxEngine pipe). Real
+PostgreSQL tests are mandatory in `backend-go-integration-pr (voice)`, whose
+non-short `go test ./...` uses PostgreSQL 16 and fails rather than skipping when
+container startup fails. The only skip in these new tests is explicit `-short`.
