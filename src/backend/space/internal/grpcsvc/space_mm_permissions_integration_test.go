@@ -114,3 +114,47 @@ func TestUpdateSpaceMmConfig_RejectsSettingsOnlyPermission(t *testing.T) {
 	})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
+
+// TestUpdateSpace_MmConfigRequiresDedicatedPermission prevents the general
+// settings endpoint from bypassing the dedicated matchmaking capability.
+func TestUpdateSpace_MmConfigRequiresDedicatedPermission(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	spaceClient, _, spaceID, _, matchmakingManagerCtx, settingsManagerCtx, cleanup := setupSpaceMmPermissionFixture(t)
+	t.Cleanup(cleanup)
+
+	configJSON := `{"game_id":"valorant","region":"na"}`
+	updated, err := spaceClient.UpdateSpace(matchmakingManagerCtx, &spacev1.UpdateSpaceRequest{
+		SpaceId:      spaceID,
+		MmConfigJson: &configJSON,
+	})
+	require.NoError(t, err)
+	require.JSONEq(t, configJSON, updated.GetSpace().GetMmConfigJson())
+
+	configJSON = `{"game_id":"pubg","region":"eu"}`
+	_, err = spaceClient.UpdateSpace(settingsManagerCtx, &spacev1.UpdateSpaceRequest{
+		SpaceId:      spaceID,
+		MmConfigJson: &configJSON,
+	})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+// TestUpdateSpace_MmManagerCannotChangeOrdinarySettings ensures a delegated
+// matchmaking manager has no implicit ordinary Space settings authority.
+func TestUpdateSpace_MmManagerCannotChangeOrdinarySettings(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	spaceClient, _, spaceID, _, matchmakingManagerCtx, _, cleanup := setupSpaceMmPermissionFixture(t)
+	t.Cleanup(cleanup)
+
+	configJSON := `{"game_id":"cs2","region":"eu"}`
+	description := "unrelated ordinary setting"
+	_, err := spaceClient.UpdateSpace(matchmakingManagerCtx, &spacev1.UpdateSpaceRequest{
+		SpaceId:      spaceID,
+		MmConfigJson: &configJSON,
+		Description:  &description,
+	})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+}

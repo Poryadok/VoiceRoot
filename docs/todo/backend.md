@@ -349,7 +349,7 @@ and Voice IDs denied while history remains.
 
 - [x] **[Matchmaking] Decline semantics vs spec** — `handleMatchDecline` party-aware (declining party cancelled, others continue searching); cross-party IT in `grpcsvc/match_test.go` (PR #4). Compose live: `TestComposeMatchmakingCrossPartyDecline_live` (#14).
 - [ ] **[Matchmaking] Match squad not ephemeral** — Squad creates a normal group chat + group voice (`squad/grpc_clients.go`). `CompleteMatch` only updates MM DB (`grpcsvc/rating.go`); no Chat/Voice teardown. Contradicts “auto-delete when all leave” (`docs/features/matchmaking.md`). Implement the protected creation binding, durable two-participant teardown ledger and exact receipts frozen in **A3 MM ↔ Voice party and match-squad lifecycle contract** above; a normal group/call must never become teardown-authorized by inference.
-- [ ] **[Matchmaking] `UpdateGame` mutates catalog config for any caller** — Any authenticated user can change `config_json` (`grpcsvc/server.go`, `store/games.go`). Conflicts with user-game immutability (`docs/features/matchmaking.md`) and moderator-only catalog edits (`docs/features/game-catalog.md`).
+- [x] **[Matchmaking] `UpdateGame` catalog authorization** — `grpcsvc.UpdateGame` requires a staff principal before parsing or accessing the store; regular profiles cannot mutate `config_json` (`catalog_test.go`). Catalog publishing/editing is staff-only per `docs/features/game-catalog.md`.
 
 ### Role
 
@@ -358,7 +358,7 @@ and Voice IDs denied while history remains.
 - [ ] **[Role] Voice chat organizer role not implemented — no system/custom role, no permission bits, no Voice-side organizer powers (mute, floor, raise-hand).** — `docs/features/roles.md` § «Организатор войс-чата»; `src/backend/role/permissions/permissions.go`
 - [ ] **[Role] Override targets not validated S2S — `SetChatOverride` / `SetVoiceRoomOverride` accept arbitrary UUIDs; doc dependency on Space/Chat validation is missing.** — `src/backend/role/internal/grpcsvc/roles.go`, `roles_manage.go`; `docs/microservices/role-service.md` § «Зависимости»
 - [ ] **[Role] `MODERATION_MANAGE_REPORTS` unused — bit exists; Moderation service has no `CheckPermission` integration.** — `src/backend/role/permissions/permissions.go`; `src/backend/moderation/`
-- [ ] **[Role] `SPACE_MANAGE_MATCHMAKING` unused — no Role checks in Matchmaking service.** — `src/backend/matchmaking/`
+- [x] **[Role/Space] `SPACE_MANAGE_MATCHMAKING`** — matchmaking configuration is owned by Space, not queue admission: `UpdateSpaceMmConfig` requires this permission; generic `UpdateSpace.mm_config_json` requires it in addition to `SPACE_MANAGE_SETTINGS` for any ordinary settings fields. Regression coverage: `space_mm_permissions_integration_test.go`.
 - [ ] **[Role] Many text-chat permission bits not enforced downstream — Messaging checks send + mentions/threads/pins; не все attach/embed/react/manage/slow-mode bits.** — `src/backend/messaging/internal/grpcsvc/messaging_grpc.go`, `threads_policy.go`
 - [x] **[Role] `SPACE_MANAGE_SETTINGS`** — `UpdateSpace` → `requireSpacePermission(..., SpaceManageSettings)` (`space.go`).
 - [ ] **[Role] Admin ≡ Owner on effective mask — `GetEffectiveMask` short-circuits Admin to `AllMask()`; Admin system role mask is also `all`. Doc algorithm step 5 («кроме Owner-specific») has no distinct owner bits, so Admin is functionally Owner for all 42 flags.** — `src/backend/role/internal/store/roles.go` (`GetEffectiveMask`), `permissions/permissions.go` (`SystemRoles`); `docs/microservices/role-service.md` § «Вычисление effective permissions»
@@ -616,9 +616,9 @@ and Voice IDs denied while history remains.
 
 - [x] **[Matchmaking] `mm.player_banned` publication** — `BanFromMM` emits one protobuf `MatchmakingStreamEvent.player_banned` on `mm.player_banned` only when a peer ban is newly inserted; repeated idempotent bans do not republish (`grpcsvc/rating.go`, `store/bans.go`, `mmevents/publisher.go`; `TestBanFromMM_PublishesOnceAfterNewPeerBan`).
 - [ ] **[Matchmaking] Popular-games ordering missing** — `ListGames` sorts by `created_at DESC` (`store/games.go`). Spec wants popularity by active queue depth (`docs/features/game-catalog.md`).
-- [ ] **[Matchmaking] `CreateGame` lacks `icon_url` / `external_id`** — Columns exist (`migrations/matchmaking_db/000001_init.up.sql`, `store/games.go`) but `CreateGame` only persists name+config (`grpcsvc/server.go`).
+- [ ] **[Matchmaking] External catalog IDs are post-v1** — `external_id` remains reserved for the documented post-v1 Steam/Riot automatic deduplication path; no public create/update field exists by design (`docs/features/game-catalog.md` §«Дедупликация»). `icon_url` is already persisted by `CreateGame` and `SubmitGameRequest`.
 - [ ] **[Matchmaking] Party / voice-derived MM absent** — `PartyStore` is a stub (`store/parties.go`); `StartSearch` always validates `partySize=1` (`grpcsvc/search.go`, `criteria/criteria.go`). Voice join/leave reset flow from spec not implementable yet.
-- [ ] **[Matchmaking] Test gaps for prod-scale modes** — No matcher test for seeded 10-slot games or role-diversity matching (`matcher/worker_test.go` uses custom 2-slot Duo only).
+- [x] **[Matchmaking] Prod-scale matcher regressions** — seeded Dota 2 10-slot role-required match is covered by `TestWorker_TenCompatibleSoloSessionsMatchForSeededRoleRequired10SlotGame`; same and distinct V1 self-reported roles are covered by `TestCompatible_AllowsSameAndDistinctRolesForStackMode`.
 
 ### Role
 
