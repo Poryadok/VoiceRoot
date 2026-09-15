@@ -541,6 +541,11 @@ message AppealSubmitted {
 message SubscriptionStreamEvent {
   string event_id = 1;
   google.protobuf.Timestamp occurred_at = 2;
+  // Required for entitlement_changed; legacy events retain their existing wire form.
+  uint32 protocol_version = 3;
+  SubscriptionAggregateKind aggregate_kind = 4;
+  string aggregate_id = 5;
+  uint64 aggregate_revision = 6;
   oneof payload {
     PlanStarted plan_started = 10;
     PlanCancelled plan_cancelled = 11;
@@ -551,7 +556,59 @@ message SubscriptionStreamEvent {
     SpaceProStarted space_pro_started = 16;
     SpaceProExpired space_pro_expired = 17;
     GraceReminder grace_reminder = 18;
+    EntitlementChanged entitlement_changed = 19;
   }
+}
+
+enum SubscriptionAggregateKind {
+  SUBSCRIPTION_AGGREGATE_KIND_UNSPECIFIED = 0;
+  SUBSCRIPTION_AGGREGATE_KIND_PERSONAL = 1;
+  SUBSCRIPTION_AGGREGATE_KIND_SPACE = 2;
+}
+
+enum EntitlementState {
+  ENTITLEMENT_STATE_UNSPECIFIED = 0;
+  ENTITLEMENT_STATE_ACTIVE = 1;
+  ENTITLEMENT_STATE_GRACE_PERIOD = 2;
+  ENTITLEMENT_STATE_INACTIVE = 3;
+}
+
+enum EntitlementReason {
+  ENTITLEMENT_REASON_UNSPECIFIED = 0;
+  ENTITLEMENT_REASON_STARTED = 1;
+  ENTITLEMENT_REASON_RENEWED = 2;
+  ENTITLEMENT_REASON_PAYMENT_FAILED = 3;
+  ENTITLEMENT_REASON_PAYMENT_RECOVERED = 4;
+  ENTITLEMENT_REASON_CANCEL_SCHEDULED = 5;
+  ENTITLEMENT_REASON_CANCEL_RESUMED = 6;
+  ENTITLEMENT_REASON_PERIOD_ENDED = 7;
+  ENTITLEMENT_REASON_GRACE_EXPIRED = 8;
+  ENTITLEMENT_REASON_ACCOUNT_DELETE_SCHEDULED = 9;
+  ENTITLEMENT_REASON_ACCOUNT_RESTORED = 10;
+  ENTITLEMENT_REASON_PURCHASER_PURGED = 11;
+}
+
+// Complete Subscription-owned snapshot. Paid benefits end at entitled_until
+// even when an expiry message has not arrived. ACCOUNT_PURGED is a separate
+// permanent deletion fence and must never be published as a raw snapshot.
+message EntitlementChanged {
+  string entitlement_id = 1;
+  string plan = 2;
+  string account_id = 3;
+  string space_id = 4;
+  optional string purchaser_account_id = 5;
+  bool purchaser_deleted = 6;
+  string deletion_fence_id = 7;
+  optional string deletion_cycle_id = 8;
+  google.protobuf.Timestamp purge_at = 9;
+  EntitlementState state = 10;
+  bool cancel_at_period_end = 11;
+  optional string downgrade_cycle_id = 12;
+  google.protobuf.Timestamp current_period_end = 13;
+  google.protobuf.Timestamp grace_period_end = 14;
+  EntitlementReason reason = 15;
+  google.protobuf.Timestamp effective_at = 16;
+  google.protobuf.Timestamp entitled_until = 17;
 }
 
 message PlanStarted {
