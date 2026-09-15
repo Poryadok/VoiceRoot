@@ -95,17 +95,23 @@ func TestAuthBoundary(t *testing.T) {
 		}
 	}
 
-	notStaff := performRequest(h, http.MethodGet, "/api/v1/analytics/reports", "", map[string]string{
-		"Authorization": "Bearer valid-user-token",
-	})
-	if notStaff.Code != http.StatusForbidden {
-		t.Fatalf("analytics non-staff status = %d, want %d", notStaff.Code, http.StatusForbidden)
-	}
+	for _, route := range []string{
+		"/api/v1/analytics/reports",
+		"/api/v1/analytics/dashboard/engagement",
+		"/api/v1/analytics/dashboard/health",
+	} {
+		notStaff := performRequest(h, http.MethodGet, route, "", map[string]string{
+			"Authorization": "Bearer valid-user-token",
+		})
+		if notStaff.Code != http.StatusForbidden {
+			t.Fatalf("analytics non-staff %s status = %d, want %d", route, notStaff.Code, http.StatusForbidden)
+		}
 
-	staff := performRequest(h, http.MethodGet, "/api/v1/analytics/reports", "", map[string]string{
-		"Authorization": "Bearer staff-token",
-	})
-	if staff.Code != http.StatusNoContent {
-		t.Fatalf("analytics staff status = %d, want %d; body=%q", staff.Code, http.StatusNoContent, staff.Body.String())
+		staff := performRequest(h, http.MethodGet, route, "", map[string]string{
+			"Authorization": "Bearer staff-token",
+		})
+		if staff.Code != http.StatusNoContent {
+			t.Fatalf("analytics staff %s status = %d, want %d; body=%q", route, staff.Code, http.StatusNoContent, staff.Body.String())
+		}
 	}
 }
