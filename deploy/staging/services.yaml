@@ -25,7 +25,7 @@ spec:
       containers:
         - name: auth
           image: __IMAGE_REGISTRY__/auth:__IMAGE_TAG__
-          ports: [{containerPort: 8080, name: http}, {containerPort: 9090, name: grpc}]
+          ports: [{containerPort: 8080, name: http}, {containerPort: 9090, name: grpc}, {containerPort: 9091, name: principal}]
           env:
             - {name: SPRING_DATASOURCE_URL, value: "jdbc:postgresql://voice-postgres:5432/auth_db"}
             - {name: SPRING_DATASOURCE_USERNAME, valueFrom: {configMapKeyRef: {name: voice-app-config, key: POSTGRES_USER}}}
@@ -48,13 +48,24 @@ spec:
             - {name: AUTH_RESEND_FROM, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: AUTH_RESEND_FROM, optional: true}}}
             - {name: AUTH_TOTP_ENCRYPTION_KEY, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: AUTH_TOTP_ENCRYPTION_KEY}}}
             - {name: ACCOUNT_DELETE_TOKEN_SECRET, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: ACCOUNT_DELETE_TOKEN_SECRET}}}
+            - {name: AUTH_PRINCIPAL_GRPC_PORT, value: "9091"}
+            - {name: AUTH_GRPC_TLS_CERT_FILE, value: "/etc/voice/principal/tls/tls.crt"}
+            - {name: AUTH_GRPC_TLS_KEY_FILE, value: "/etc/voice/principal/tls/tls.key"}
+            - {name: S2S_JWKS_URLS_JSON, value: '{"gateway":"https://voice-gateway:8443/.well-known/voice-principal-jwks.json","space":"https://voice-space:8443/.well-known/jwks.json","social":"https://voice-social:8443/.well-known/jwks.json","moderation":"https://voice-moderation:8443/.well-known/jwks.json"}'}
+            - {name: S2S_JWKS_CA_FILE, value: "/etc/voice/principal/ca/ca.crt"}
           volumeMounts:
             - {name: jwt-key, mountPath: /run/jwt.pem, subPath: jwt.pem, readOnly: true}
+            - {name: principal-tls, mountPath: /etc/voice/principal/tls, readOnly: true}
+            - {name: principal-ca, mountPath: /etc/voice/principal/ca, readOnly: true}
           startupProbe: {httpGet: {path: /health, port: http}, periodSeconds: 10, failureThreshold: 60}
           readinessProbe: {httpGet: {path: /health, port: http}, periodSeconds: 5, failureThreshold: 6}
       volumes:
         - name: jwt-key
           secret: {secretName: voice-app-secrets, items: [{key: AUTH_JWT_PRIVATE_KEY, path: jwt.pem}]}
+        - name: principal-tls
+          secret: {secretName: voice-auth-principal-tls}
+        - name: principal-ca
+          secret: {secretName: voice-principal-ca}
 ---
 apiVersion: v1
 kind: Service
@@ -63,7 +74,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-auth}
-  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}, {name: principal, port: 9091}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -101,7 +112,13 @@ spec:
             - {name: SPACE_PRINCIPAL_GRPC_ADDR, value: "voice-space:9091"}
             - {name: SPACE_PRINCIPAL_TLS_CA_FILE, value: "/etc/voice/principal/ca/ca.crt"}
             - {name: SPACE_PRINCIPAL_TLS_SERVER_NAME, value: "voice-space"}
-          envFrom: [{configMapRef: {name: voice-app-config}}]
+            - {name: LOG_LEVEL, valueFrom: {configMapKeyRef: {name: voice-app-config, key: LOG_LEVEL}}}
+            - {name: GRPC_DIAL_TIMEOUT, valueFrom: {configMapKeyRef: {name: voice-app-config, key: GRPC_DIAL_TIMEOUT}}}
+            - {name: NATS_URL, valueFrom: {configMapKeyRef: {name: voice-app-config, key: NATS_URL}}}
+            - {name: USER_GRPC_ADDR, value: "voice-user:9090"}
+            - {name: AUTH_PRINCIPAL_GRPC_ADDR, value: "voice-auth:9091"}
+            - {name: AUTH_PRINCIPAL_TLS_CA_FILE, value: "/etc/voice/principal/ca/ca.crt"}
+            - {name: AUTH_PRINCIPAL_TLS_SERVER_NAME, value: "voice-auth"}
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
           volumeMounts:
             - {name: principal-tls, mountPath: /etc/voice/principal/tls, readOnly: true}
@@ -714,12 +731,40 @@ spec:
       containers:
         - name: moderation
           image: __IMAGE_REGISTRY__/moderation:__IMAGE_TAG__
-          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          ports: [{containerPort: 8080}, {containerPort: 9090}, {containerPort: 8443}]
           env:
             - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: MODERATION_DATABASE_URL}}}
             - {name: MODERATION_GRPC_LISTEN, value: ":9090"}
-          envFrom: [{configMapRef: {name: voice-app-config}}]
+            - {name: MODERATION_PLATFORM_AUDIENCE_SIZE, value: "1000"}
+            - {name: MODERATION_PRINCIPAL_SIGNING_KEYS_DIR, value: "/etc/voice/principal/keys"}
+            - {name: MODERATION_PRINCIPAL_ACTIVE_KID, valueFrom: {secretKeyRef: {name: voice-moderation-principal-signing, key: active-kid}}}
+            - {name: MODERATION_PRINCIPAL_JWKS_LISTEN, value: ":8443"}
+            - {name: MODERATION_PRINCIPAL_TLS_CERT_FILE, value: "/etc/voice/principal/tls/tls.crt"}
+            - {name: MODERATION_PRINCIPAL_TLS_KEY_FILE, value: "/etc/voice/principal/tls/tls.key"}
+            - {name: LOG_LEVEL, valueFrom: {configMapKeyRef: {name: voice-app-config, key: LOG_LEVEL}}}
+            - {name: GRPC_DIAL_TIMEOUT, valueFrom: {configMapKeyRef: {name: voice-app-config, key: GRPC_DIAL_TIMEOUT}}}
+            - {name: NATS_URL, valueFrom: {configMapKeyRef: {name: voice-app-config, key: NATS_URL}}}
+            - {name: USER_GRPC_ADDR, value: "voice-user:9090"}
+            - {name: MATCHMAKING_GRPC_ADDR, value: "voice-matchmaking:9090"}
+            - {name: AUTH_PRINCIPAL_GRPC_ADDR, value: "voice-auth:9091"}
+            - {name: AUTH_PRINCIPAL_TLS_CA_FILE, value: "/etc/voice/principal/ca/ca.crt"}
+            - {name: AUTH_PRINCIPAL_TLS_SERVER_NAME, value: "voice-auth"}
+          volumeMounts:
+            - {name: principal-tls, mountPath: /etc/voice/principal/tls, readOnly: true}
+            - {name: principal-ca, mountPath: /etc/voice/principal/ca, readOnly: true}
+            - {name: principal-signing, mountPath: /etc/voice/principal/keys, readOnly: true}
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+      volumes:
+        - name: principal-tls
+          secret: {secretName: voice-moderation-principal-tls}
+        - name: principal-ca
+          secret: {secretName: voice-principal-ca}
+        - name: principal-signing
+          secret:
+            secretName: voice-moderation-principal-signing
+            items:
+              - {key: current.pem, path: current.pem}
+              - {key: next.pem, path: next.pem}
 ---
 apiVersion: v1
 kind: Service
@@ -728,7 +773,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-moderation}
-  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}, {name: principal-jwks, port: 8443}]
 ---
 apiVersion: apps/v1
 kind: Deployment

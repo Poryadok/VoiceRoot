@@ -218,8 +218,16 @@ services:
       AUTH_OAUTH_YOUTUBE_CLIENT_SECRET: voice-youtube-compose-secret
       AUTH_OAUTH_YOUTUBE_API_BASE_URL: http://verification-stub:4180
       AUTH_OAUTH_YOUTUBE_TOKEN_URL: http://verification-stub:4180/oauth2/token
+      # Dedicated, TLS-only service-principal listener. Keep ordinary Auth RPC on 9090.
+      AUTH_PRINCIPAL_GRPC_PORT: "9091"
+      AUTH_GRPC_TLS_CERT_FILE: /etc/voice/principal/tls/tls.crt
+      AUTH_GRPC_TLS_KEY_FILE: /etc/voice/principal/tls/tls.key
+      S2S_JWKS_URLS_JSON: '{"gateway":"https://gateway:8443/.well-known/voice-principal-jwks.json","space":"https://space:8443/.well-known/jwks.json","social":"https://social:8443/.well-known/jwks.json","moderation":"https://moderation:8443/.well-known/jwks.json"}'
+      S2S_JWKS_CA_FILE: /etc/voice/principal/ca/ca.crt
     volumes:
       - ./src/backend/auth/src/test/resources/jwt-test-private.pem:/run/jwt.pem:ro
+      - auth_principal_tls:/etc/voice/principal/tls:ro
+      - social_principal_ca:/etc/voice/principal/ca:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -246,6 +254,9 @@ services:
       - social_principal_tls:/social
       - user_principal_tls:/user
       - space_principal_tls:/space
+      - auth_principal_tls:/auth
+      - moderation_principal_keys:/moderation-keys
+      - moderation_principal_tls:/moderation
       - social_principal_ca:/ca
 
   social:
@@ -269,7 +280,9 @@ services:
       SPACE_PRINCIPAL_TLS_CA_FILE: /etc/voice/principal/ca/ca.crt
       SPACE_PRINCIPAL_TLS_SERVER_NAME: space
       USER_GRPC_ADDR: user:9090
-      AUTH_GRPC_ADDR: auth:9090
+      AUTH_PRINCIPAL_GRPC_ADDR: auth:9091
+      AUTH_PRINCIPAL_TLS_CA_FILE: /etc/voice/principal/ca/ca.crt
+      AUTH_PRINCIPAL_TLS_SERVER_NAME: auth
     volumes:
       - social_principal_keys:/etc/voice/principal/keys:ro
       - social_principal_tls:/etc/voice/principal/tls:ro
@@ -647,11 +660,24 @@ services:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/moderation_db?sslmode=disable
       MODERATION_GRPC_LISTEN: :9090
-      AUTH_GRPC_ADDR: auth:9090
+      MODERATION_PRINCIPAL_SIGNING_KEYS_DIR: /etc/voice/principal/keys
+      MODERATION_PRINCIPAL_ACTIVE_KID: current
+      MODERATION_PRINCIPAL_JWKS_LISTEN: :8443
+      MODERATION_PRINCIPAL_TLS_CERT_FILE: /etc/voice/principal/tls/tls.crt
+      MODERATION_PRINCIPAL_TLS_KEY_FILE: /etc/voice/principal/tls/tls.key
+      AUTH_PRINCIPAL_GRPC_ADDR: auth:9091
+      AUTH_PRINCIPAL_TLS_CA_FILE: /etc/voice/principal/ca/ca.crt
+      AUTH_PRINCIPAL_TLS_SERVER_NAME: auth
       USER_GRPC_ADDR: user:9090
       MODERATION_PLATFORM_AUDIENCE_SIZE: "1000"
       NATS_URL: nats://nats:4222
+    volumes:
+      - moderation_principal_keys:/etc/voice/principal/keys:ro
+      - moderation_principal_tls:/etc/voice/principal/tls:ro
+      - social_principal_ca:/etc/voice/principal/ca:ro
     depends_on:
+      social-principal-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       compose-db-init:
@@ -1157,6 +1183,9 @@ volumes:
   social_principal_tls:
   user_principal_tls:
   space_principal_tls:
+  auth_principal_tls:
+  moderation_principal_keys:
+  moderation_principal_tls:
   social_principal_ca:
   voice_pgdata:
   voice_redis:

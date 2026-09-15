@@ -15,6 +15,8 @@ import sys
 import tempfile
 import unittest
 
+import yaml
+
 
 ROOT = Path(__file__).resolve().parents[2]
 GENERATOR = ROOT / "scripts/dev/generate-phase0-fixture.py"
@@ -287,7 +289,7 @@ class ComposeTests(unittest.TestCase):
         auth = self.merged["auth"]["environment"]
         self.assertEqual(auth["AUTH_PRINCIPAL_GRPC_PORT"], "9091")
         self.assertEqual(json.loads(auth["S2S_JWKS_URLS_JSON"]), URLS)
-        self.assertNotIn("S2S_JWKS_CA_FILE", auth)
+        self.assertEqual(auth["S2S_JWKS_CA_FILE"], "/etc/voice/principal/ca/ca.crt")
         options = auth.get("JAVA_TOOL_OPTIONS", "")
         trust = re.search(r"-Djavax\.net\.ssl\.trustStore=([^\s]+)", options)
         self.assertIsNotNone(trust)
@@ -299,8 +301,15 @@ class ComposeTests(unittest.TestCase):
                 self.assertEqual(self.source_at(service, env[prefix + suffix]), f"tls/{service}.{ext}")
 
     def test_base_environments_and_legacy_endpoints_are_preserved(self):
+        fixture_overrides = {
+            ("auth", "AUTH_GRPC_TLS_CERT_FILE"),
+            ("auth", "AUTH_GRPC_TLS_KEY_FILE"),
+            ("auth", "S2S_JWKS_URLS_JSON"),
+        }
         for service, base in self.base.items():
             for name, value in base.get("environment", {}).items():
+                if (service, name) in fixture_overrides:
+                    continue
                 self.assertEqual(self.merged[service]["environment"].get(name), value,
                                  f"base environment changed: {service}/{name}")
             self.assertEqual(self.merged[service].get("ports", []), base.get("ports", []))
@@ -375,7 +384,102 @@ class ComposeTests(unittest.TestCase):
                                   ("ssl_certificate_key", "tls/proxy.key")):
             match = re.search(rf"\b{directive}\s+([^;\s]+)\s*;", config)
             self.assertIsNotNone(match)
-            self.assertEqual(self.source_at(PROXY, match.group(1)), source)
+        self.assertEqual(self.source_at(PROXY, match.group(1)), source)
+
+
+class AuthPrincipalCutoverDeploymentTests(unittest.TestCase):
+    """Offline contract for the full-stack Auth principal deployment cutover."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
+        cls.bootstrap = (ROOT / "docker/social-principal/bootstrap.sh").read_text()
+        cls.network_policy = (ROOT / "deploy/templates/network-policy-auth-principal.yaml").read_text()
+
+    def environment(self, service):
+        return self.compose["services"][service]["environment"]
+
+    def test_compose_auth_uses_private_tls_listener_and_all_trusted_issuers(self):
+        auth = self.environment("auth")
+        self.assertEqual(auth["AUTH_PRINCIPAL_GRPC_PORT"], "9091")
+        self.assertEqual(auth["AUTH_GRPC_TLS_CERT_FILE"], "/etc/voice/principal/tls/tls.crt")
+        self.assertEqual(auth["AUTH_GRPC_TLS_KEY_FILE"], "/etc/voice/principal/tls/tls.key")
+        self.assertEqual(json.loads(auth["S2S_JWKS_URLS_JSON"]), {
+            "gateway": "https://gateway:8443/.well-known/voice-principal-jwks.json",
+            "space": "https://space:8443/.well-known/jwks.json",
+            "social": "https://social:8443/.well-known/jwks.json",
+            "moderation": "https://moderation:8443/.well-known/jwks.json",
+        })
+        self.assertEqual(auth["S2S_JWKS_CA_FILE"], "/etc/voice/principal/ca/ca.crt")
+        volumes = {mount.split(":")[0] for mount in self.compose["services"]["auth"]["volumes"]}
+        self.assertTrue({"auth_principal_tls", "social_principal_ca"}.issubset(volumes))
+        self.assertNotIn("9091", " ".join(self.compose["services"]["auth"].get("ports", [])))
+
+    def test_compose_social_and_moderation_only_use_auth_private_client_contract(self):
+        for service in ("social", "moderation"):
+            with self.subTest(service=service):
+                env = self.environment(service)
+                self.assertNotIn("AUTH_GRPC_ADDR", env)
+                self.assertEqual(env["AUTH_PRINCIPAL_GRPC_ADDR"], "auth:9091")
+                self.assertEqual(env["AUTH_PRINCIPAL_TLS_CA_FILE"], "/etc/voice/principal/ca/ca.crt")
+                self.assertEqual(env["AUTH_PRINCIPAL_TLS_SERVER_NAME"], "auth")
+        moderation = self.environment("moderation")
+        self.assertEqual(moderation["MODERATION_PRINCIPAL_SIGNING_KEYS_DIR"], "/etc/voice/principal/keys")
+        self.assertEqual(moderation["MODERATION_PRINCIPAL_ACTIVE_KID"], "current")
+        self.assertEqual(moderation["MODERATION_PRINCIPAL_JWKS_LISTEN"], ":8443")
+        self.assertEqual(moderation["MODERATION_PRINCIPAL_TLS_CERT_FILE"], "/etc/voice/principal/tls/tls.crt")
+        self.assertEqual(moderation["MODERATION_PRINCIPAL_TLS_KEY_FILE"], "/etc/voice/principal/tls/tls.key")
+
+    def test_bootstrap_requires_complete_auth_and_moderation_material(self):
+        for path in ("/auth/tls.crt", "/auth/tls.key", "/moderation/tls.crt", "/moderation/tls.key",
+                     "/moderation-keys/current.pem", "/moderation-keys/next.pem"):
+            self.assertIn(path, self.bootstrap)
+        self.assertIn("for directory in /ca /signing /social /user /space /auth /moderation /moderation-keys", self.bootstrap)
+        self.assertIn("for service in social user space auth moderation", self.bootstrap)
+
+    def test_staging_and_prod_mount_exact_secrets_and_keep_auth_9090(self):
+        for environment in ("staging", "prod"):
+            with self.subTest(environment=environment):
+                documents = list(yaml.safe_load_all((ROOT / f"deploy/{environment}/services.yaml").read_text()))
+                deployments = {doc["metadata"]["name"]: doc for doc in documents
+                               if doc and doc.get("kind") == "Deployment"}
+                services = {doc["metadata"]["name"]: doc for doc in documents
+                            if doc and doc.get("kind") == "Service"}
+                auth = deployments["voice-auth"]
+                auth_env = {item["name"]: item for item in auth["spec"]["template"]["spec"]["containers"][0]["env"]}
+                self.assertEqual(auth_env["AUTH_PRINCIPAL_GRPC_PORT"]["value"], "9091")
+                self.assertEqual(auth_env["S2S_JWKS_CA_FILE"]["value"], "/etc/voice/principal/ca/ca.crt")
+                issuers = json.loads(auth_env["S2S_JWKS_URLS_JSON"]["value"])
+                self.assertEqual(set(issuers), {"gateway", "space", "social", "moderation"})
+                self.assertEqual(issuers["social"],
+                                 "https://voice-social:8443/.well-known/jwks.json")
+                self.assertEqual(issuers["moderation"],
+                                 "https://voice-moderation:8443/.well-known/jwks.json")
+                self.assertIn({"name": "grpc", "port": 9090}, services["voice-auth"]["spec"]["ports"])
+                self.assertIn({"name": "principal", "port": 9091}, services["voice-auth"]["spec"]["ports"])
+                for name, secret in (("voice-auth", "voice-auth-principal-tls"),
+                                     ("voice-moderation", "voice-moderation-principal-tls"),
+                                     ("voice-moderation", "voice-moderation-principal-signing")):
+                    spec = deployments[name]["spec"]["template"]["spec"]
+                    self.assertIn(secret, yaml.safe_dump(spec))
+                social = deployments["voice-social"]["spec"]["template"]["spec"]["containers"][0]
+                moderation = deployments["voice-moderation"]["spec"]["template"]["spec"]["containers"][0]
+                for container, hostname in ((social, "voice-auth"), (moderation, "voice-auth")):
+                    values = {item["name"]: item.get("value") for item in container["env"]}
+                    self.assertNotIn("envFrom", container)
+                    self.assertNotIn("AUTH_GRPC_ADDR", values)
+                    self.assertEqual(values["AUTH_PRINCIPAL_GRPC_ADDR"], "voice-auth:9091")
+                    self.assertEqual(values["AUTH_PRINCIPAL_TLS_SERVER_NAME"], hostname)
+                self.assertIn("voice-auth", self.network_policy)
+                self.assertIn("voice-moderation", self.network_policy)
+
+    def test_preflight_requires_auth_and_moderation_secrets_in_both_environments(self):
+        for path in (ROOT / "scripts/staging/check-social-principal-secrets.sh",
+                     ROOT / "scripts/prod/check-social-principal-secrets.sh"):
+            text = path.read_text()
+            for secret in ("voice-principal-ca", "voice-auth-principal-tls",
+                           "voice-moderation-principal-signing", "voice-moderation-principal-tls"):
+                self.assertIn(secret, text)
 
 
 if __name__ == "__main__":
