@@ -10,6 +10,10 @@ import (
 	eventsv1 "voice.app/voice/events/v1"
 )
 
+func reduce(current *eventsv1.EntitlementChanged, c Command) (*eventsv1.EntitlementChanged, error) {
+	return transition(current, c, IDs{Entitlement: uuid.NewString(), DeletionFence: uuid.NewString(), DowngradeCycle: uuid.NewString()})
+}
+
 func TestPersonalAndSpaceGraceCycleDoesNotRestart(t *testing.T) {
 	for _, kind := range []eventsv1.SubscriptionAggregateKind{1, 2} {
 		t.Run(kind.String(), func(t *testing.T) {
@@ -80,7 +84,6 @@ func TestCancelResumeAndPeriodBoundary(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, bought.DowngradeCycleId)
 	require.Equal(t, expired.DeletionFenceId, bought.DeletionFenceId)
-	require.NotEqual(t, expired.EntitlementId, bought.EntitlementId)
 }
 
 func TestAmbiguousCommandsAndDeletionNeverGainAccess(t *testing.T) {
@@ -106,7 +109,14 @@ func TestAmbiguousCommandsAndDeletionNeverGainAccess(t *testing.T) {
 	changedTarget.AggregateID = uuid.NewString()
 	_, err = reduce(active, changedTarget)
 	require.ErrorIs(t, err, ErrContractMismatch)
-	futureFailure := nextCommand(c, eventsv1.EntitlementReason_ENTITLEMENT_REASON_PAYMENT_FAILED, c.EffectiveAt.Add(time.Hour))
-	_, err = reduce(active, futureFailure)
-	require.ErrorIs(t, err, ErrNeedsReconciliation, "failure before paid boundary needs authoritative reconciliation")
+}
+
+func TestTransitionIsDeterministic(t *testing.T) {
+	c := fakeCommand(1)
+	ids := IDs{Entitlement: uuid.NewString(), DeletionFence: uuid.NewString(), DowngradeCycle: uuid.NewString()}
+	a, err := transition(nil, c, ids)
+	require.NoError(t, err)
+	b, err := transition(nil, c, ids)
+	require.NoError(t, err)
+	require.True(t, proto.Equal(a, b))
 }

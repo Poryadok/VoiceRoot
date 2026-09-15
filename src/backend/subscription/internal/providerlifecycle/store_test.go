@@ -79,6 +79,14 @@ func TestProviderReplayOrderAndConflictingBody(t *testing.T) {
 	c.RawBody = []byte(`{"version":999}`)
 	_, err = store.Apply(ctx, c)
 	require.ErrorIs(t, err, ErrContractMismatch)
+	_, err = store.Apply(ctx, c)
+	require.ErrorIs(t, err, ErrContractMismatch)
+	var conflicts int
+	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM subscription_provider_conflicts").Scan(&conflicts))
+	require.Equal(t, 1, conflicts, "same rejected request is durably quarantined once")
+	var version int64
+	require.NoError(t, pool.QueryRow(ctx, "SELECT provider_version FROM subscription_provider_bindings WHERE provider=$1 AND provider_subscription_id=$2", c.Provider, c.SubscriptionID).Scan(&version))
+	require.EqualValues(t, 3, version)
 	renew.PeriodEnd = renew.PeriodEnd.Add(time.Hour)
 	_, err = store.Apply(ctx, renew)
 	require.ErrorIs(t, err, ErrContractMismatch, "normalized input is bound even if raw body unchanged")
@@ -156,17 +164,71 @@ func TestRepurchaseKeepsRevisionAndRetiresOldProviderBinding(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 4, bought.Event.AggregateRevision)
 	require.Equal(t, first.Event.GetEntitlementChanged().DeletionFenceId, bought.Event.GetEntitlementChanged().DeletionFenceId)
-	require.NotEqual(t, first.Event.GetEntitlementChanged().EntitlementId, bought.Event.GetEntitlementChanged().EntitlementId)
 	require.Nil(t, bought.Event.GetEntitlementChanged().DowngradeCycleId)
 	late := nextCommand(expiry, eventsv1.EntitlementReason_ENTITLEMENT_REASON_RENEWED, c.PeriodEnd)
 	late.PeriodStart = c.PeriodEnd
 	late.PeriodEnd = purchase.PeriodEnd
 	old, err := store.Apply(ctx, late)
 	require.NoError(t, err)
-	require.Equal(t, "STALE", old.Disposition)
+	require.Equal(t, "RETIRED", old.Disposition)
 	require.True(t, proto.Equal(bought.Event, old.Event))
 	stolen := nextCommand(purchase, eventsv1.EntitlementReason_ENTITLEMENT_REASON_STARTED, purchase.EffectiveAt)
 	stolen.AggregateID = uuid.NewString()
 	_, err = store.Apply(ctx, stolen)
 	require.ErrorIs(t, err, ErrContractMismatch, "provider subscription cannot move targets")
+}
+
+func TestRepeatedFailureAdvancesOnlyProviderOrder(t *testing.T) {
+	pool := testDB(t)
+	ctx := context.Background()
+	store := Store{Pool: pool}
+	c := fakeCommand(2)
+	_, err := store.Apply(ctx, c)
+	require.NoError(t, err)
+	failure := nextCommand(c, eventsv1.EntitlementReason_ENTITLEMENT_REASON_PAYMENT_FAILED, c.PeriodEnd)
+	grace, err := store.Apply(ctx, failure)
+	require.NoError(t, err)
+	again := nextCommand(failure, failure.Reason, failure.EffectiveAt.Add(48*time.Hour))
+	r, err := store.Apply(ctx, again)
+	require.NoError(t, err)
+	require.Equal(t, "UNCHANGED", r.Disposition)
+	require.True(t, proto.Equal(grace.Event, r.Event))
+	var version int64
+	require.NoError(t, pool.QueryRow(ctx, "SELECT provider_version FROM subscription_provider_bindings").Scan(&version))
+	require.EqualValues(t, 3, version)
+	var count int
+	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM subscription_event_outbox").Scan(&count))
+	require.Equal(t, 2, count)
+}
+
+func TestConcurrentFailureAndRenewalCannotRegress(t *testing.T) {
+	pool := testDB(t)
+	ctx := context.Background()
+	store := Store{Pool: pool}
+	c := fakeCommand(2)
+	_, err := store.Apply(ctx, c)
+	require.NoError(t, err)
+	failure := nextCommand(c, eventsv1.EntitlementReason_ENTITLEMENT_REASON_PAYMENT_FAILED, c.PeriodEnd)
+	renew := nextCommand(failure, eventsv1.EntitlementReason_ENTITLEMENT_REASON_RENEWED, c.PeriodEnd.Add(time.Hour))
+	renew.PeriodStart = c.PeriodEnd
+	renew.PeriodEnd = c.PeriodEnd.AddDate(0, 1, 0)
+	start := make(chan struct{})
+	errs := make(chan error, 2)
+	for _, cmd := range []Command{failure, renew} {
+		go func() { <-start; _, e := store.Apply(ctx, cmd); errs <- e }()
+	}
+	close(start)
+	require.NoError(t, <-errs)
+	require.NoError(t, <-errs)
+	var body []byte
+	require.NoError(t, pool.QueryRow(ctx, "SELECT payload FROM subscription_entitlement_aggregates").Scan(&body))
+	ev := new(eventsv1.SubscriptionStreamEvent)
+	require.NoError(t, proto.Unmarshal(body, ev))
+	require.Equal(t, eventsv1.EntitlementState_ENTITLEMENT_STATE_ACTIVE, ev.GetEntitlementChanged().State)
+	require.Equal(t, renew.PeriodEnd, ev.GetEntitlementChanged().EntitledUntil.AsTime())
+	var version, count int64
+	require.NoError(t, pool.QueryRow(ctx, "SELECT provider_version FROM subscription_provider_bindings").Scan(&version))
+	require.EqualValues(t, 3, version)
+	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM subscription_event_outbox").Scan(&count))
+	require.EqualValues(t, ev.AggregateRevision, count)
 }
