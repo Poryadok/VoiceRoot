@@ -83,6 +83,10 @@ func TestLifecycleRestoreOutcome_OwnerAdmissionAndImmutablePendingReplay(t *test
 	require.NoError(t, err)
 	require.Equal(t, before.Snapshot(), after.Snapshot())
 	admitted := f.admit(t, 0)
+	second := proto.Clone(f.restore).(*spacev1.RestoreSpaceRequest)
+	second.OperationId = uuid.NewString()
+	_, err = api.ReserveLifecycleRestore(ctx, f.account, f.actor, 7, second)
+	require.Error(t, err, "even the current owner cannot join RESTORE_DECIDED with a different operation")
 	evidence := f.evidence(t)
 	require.Equal(t, "RESTORE_PENDING", evidence.state)
 	require.Nil(t, evidence.bytes)
@@ -90,14 +94,62 @@ func TestLifecycleRestoreOutcome_OwnerAdmissionAndImmutablePendingReplay(t *test
 	require.Nil(t, f.replay(t, f.st), "admission must not claim successful restore")
 	_, err = f.st.Pool.Exec(ctx, `UPDATE spaces SET name='renamed after admission',owner_profile_id=$2 WHERE id=$1`, f.space, uuid.New())
 	require.NoError(t, err)
+	_, err = f.st.Pool.Exec(ctx, `UPDATE space_lifecycle_aggregates SET scheduled_at=scheduled_at-interval '8 days',purge_after=purge_after-interval '8 days' WHERE space_id=$1`, f.space)
+	require.NoError(t, err)
+	expected, err := f.store.LoadLifecycle(ctx, f.space)
+	require.NoError(t, err)
 	replay, err := api.ReserveLifecycleRestore(ctx, f.account, f.actor, 7, f.restore)
-	require.NoError(t, err, "exact pending replay precedes mutable owner and name checks")
-	require.Equal(t, admitted.Snapshot(), replay.Snapshot())
+	require.NoError(t, err, "exact pending replay precedes mutable owner, name and expiry checks")
+	require.Equal(t, admitted.Phase(), replay.Phase())
+	require.Equal(t, expected.Snapshot(), replay.Snapshot())
 	changed := proto.Clone(f.restore).(*spacev1.RestoreSpaceRequest)
 	changed.OperationId = uuid.NewString()
 	_, err = api.ReserveLifecycleRestore(ctx, f.account, f.actor, 7, changed)
 	require.Error(t, err, "a second operation cannot replace the existing restore decision")
 	require.Equal(t, evidence, f.evidence(t))
+}
+
+func TestLifecycleRestoreOutcome_OperationIDCannotCrossDeleteRestoreMethods(t *testing.T) {
+	f := newLifecycleRestoreFixture(t)
+	api := requireLifecycleRestoreOutcome(t, f.st)
+	ctx := context.Background()
+	reusedDelete := proto.Clone(f.restore).(*spacev1.RestoreSpaceRequest)
+	reusedDelete.OperationId = f.request.OperationId
+	_, err := api.ReserveLifecycleRestore(ctx, f.account, f.actor, 7, reusedDelete)
+	require.ErrorIs(t, err, ErrLifecycleConflict)
+	before, err := f.store.LoadLifecycle(ctx, f.space)
+	require.NoError(t, err)
+	require.Equal(t, spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_SCHEDULED, before.Phase())
+	f.admit(t, 0)
+	reusedRestore := proto.Clone(f.request).(*spacev1.DeleteSpaceRequest)
+	reusedRestore.OperationId = f.restore.OperationId
+	_, err = f.store.ReserveLifecycleSchedule(ctx, f.account, f.actor, 7, reusedRestore)
+	require.ErrorIs(t, err, ErrLifecycleConflict)
+	response, err := requireLifecycleScheduleOutcome(t, f.st).ReplayLifecycleScheduleOutcome(ctx, f.account, f.actor, 7, reusedRestore)
+	require.Error(t, err)
+	require.Nil(t, response)
+	requireLifecycleOutcomeReplay(t, f.lifecycleOutcomeFixture, f.st)
+	require.Equal(t, "RESTORE_PENDING", f.evidence(t).state)
+}
+
+func TestLifecycleRestoreOutcome_CompletedResponseStillRequiresOriginalPrincipal(t *testing.T) {
+	f := newLifecycleRestoreFixture(t)
+	f.admit(t, len(lifecycleTestParticipants))
+	ctx := context.Background()
+	_, _, err := requireLifecycleTransitions(t, f.st).CompleteLifecycleRestore(ctx, f.space)
+	require.NoError(t, err)
+	api := requireLifecycleRestoreOutcome(t, f.st)
+	for _, identity := range []struct {
+		account, actor uuid.UUID
+		epoch          int64
+	}{
+		{uuid.New(), f.actor, 7}, {f.account, uuid.New(), 7}, {f.account, f.actor, 8},
+	} {
+		response, err := api.ReplayLifecycleRestoreOutcome(ctx, identity.account, identity.actor, identity.epoch, f.restore)
+		require.Error(t, err)
+		require.Nil(t, response)
+	}
+	require.NotNil(t, f.replay(t, f.st))
 }
 
 func TestLifecycleRestoreOutcome_RejectsMalformedAndChangedBindings(t *testing.T) {
