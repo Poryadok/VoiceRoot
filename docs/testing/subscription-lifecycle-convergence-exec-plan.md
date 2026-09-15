@@ -455,10 +455,22 @@ All production changes follow failing tests. PostgreSQL owns lease time and
 aggregate serialization; callers provide an expected revision within their
 billing transaction. No fixture or live handler calls the seam by default.
 
-- [ ] Snapshot contract and validation RED/GREEN.
+S1's recorded PubAck sequence is evidence of the acknowledged delivery only.
+Before activation S2 purge must also discover every retained copy after an
+ambiguous publish/retry beyond the JetStream deduplication window; one stored
+sequence cannot prove erasure of an earlier unacknowledged copy.
+
+- [x] Snapshot contract and validation RED/GREEN (including delete/purchaser privacy fields).
 - [ ] Atomic revision/snapshot/outbox storage RED/GREEN.
 - [ ] Stored-byte dispatch and stale-lease fencing RED/GREEN.
 - [ ] Security review, affected checks and CI on PR head.
+
+Local evidence: Subscription `go test -short ./...` and `golangci-lint run
+./...` pass; embedded JetStream proves stable-ID byte replay and corruption
+rejection. `buf lint`, format, breaking and Go/Dart generation pass; Auth
+`mvn -B generate-sources` succeeds. PostgreSQL tests require hosted CI because
+the local Docker Desktop engine pipe is absent. Storage tests remain open until
+that full, non-short run succeeds; short skips are not database evidence.
 
 - [x] Canon and current producer/consumer gaps audited.
 - [x] Provider-independent lifecycle, event, outbox, inbox, reminder, User,

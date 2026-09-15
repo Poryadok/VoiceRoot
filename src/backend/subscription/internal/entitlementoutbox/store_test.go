@@ -152,15 +152,67 @@ func TestAppendRejectsInvalidSnapshotWithoutMutation(t *testing.T) {
 	ctx := context.Background()
 	ev := snapshotEvent()
 	ev.ProtocolVersion = 2
-	tx, err := pool.Begin(ctx)
-	require.NoError(t, err)
-	require.Error(t, Append(ctx, tx, 0, ev))
-	require.NoError(t, tx.Commit(ctx))
+	deleted := snapshotEvent()
+	deleted.GetEntitlementChanged().Reason = eventsv1.EntitlementReason_ENTITLEMENT_REASON_ACCOUNT_DELETE_SCHEDULED
+	purged := snapshotEvent()
+	purged.AggregateKind = eventsv1.SubscriptionAggregateKind_SUBSCRIPTION_AGGREGATE_KIND_SPACE
+	sp := purged.GetEntitlementChanged()
+	sp.AccountId = ""
+	sp.SpaceId = purged.AggregateId
+	sp.Plan = "space_pro"
+	payer := uuid.NewString()
+	sp.PurchaserAccountId = &payer
+	sp.Reason = eventsv1.EntitlementReason_ENTITLEMENT_REASON_PURCHASER_PURGED
+	for _, invalid := range []*eventsv1.SubscriptionStreamEvent{ev, deleted, purged} {
+		tx, err := pool.Begin(ctx)
+		require.NoError(t, err)
+		require.ErrorIs(t, Append(ctx, tx, 0, invalid), ErrContractMismatch)
+		require.NoError(t, tx.Commit(ctx))
+	}
 	var count int
 	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM subscription_entitlement_aggregates").Scan(&count))
 	require.Zero(t, count)
 	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM subscription_event_outbox").Scan(&count))
 	require.Zero(t, count)
+}
+
+func TestRetryKeepsBytesAndFencesStaleWorkers(t *testing.T) {
+	pool := database(t)
+	ctx := context.Background()
+	ev := snapshotEvent()
+	commitEvent(t, pool, 0, ev)
+	s := Store{Pool: pool}
+	rows, err := s.Claim(ctx, 1, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.ErrorIs(t, s.Complete(ctx, rows[0], Ack{}), ErrContractMismatch)
+	require.NoError(t, s.Retry(ctx, rows[0]))
+	require.ErrorIs(t, s.Retry(ctx, rows[0]), ErrLeaseLost)
+	ready, err := s.Claim(ctx, 1, time.Minute)
+	require.NoError(t, err)
+	require.Empty(t, ready)
+	var retrySeconds float64
+	var payload []byte
+	require.NoError(t, pool.QueryRow(ctx, `SELECT EXTRACT(EPOCH FROM available_at-clock_timestamp()),payload
+		FROM subscription_event_outbox WHERE event_id=$1`, ev.EventId).Scan(&retrySeconds, &payload))
+	require.Greater(t, retrySeconds, float64(0))
+	require.LessOrEqual(t, retrySeconds, float64(300))
+	require.Equal(t, rows[0].Payload, payload)
+	_, err = pool.Exec(ctx, "UPDATE subscription_event_outbox SET available_at=clock_timestamp()-interval '1 second' WHERE event_id=$1", ev.EventId)
+	require.NoError(t, err)
+	ready, err = s.Claim(ctx, 1, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, ready, 1)
+	require.Equal(t, 2, ready[0].Attempts)
+	require.Equal(t, rows[0].EventID, ready[0].EventID)
+	require.Equal(t, rows[0].Payload, ready[0].Payload)
+	for _, bounds := range []struct {
+		limit int
+		lease time.Duration
+	}{{0, time.Minute}, {101, time.Minute}, {1, 0}, {1, 2 * time.Minute}} {
+		_, err = s.Claim(ctx, bounds.limit, bounds.lease)
+		require.Error(t, err)
+	}
 }
 
 func TestCrashRedeliveryAndExpiredLeaseCannotComplete(t *testing.T) {
@@ -245,4 +297,27 @@ func TestSnapshotValidationRejectsMalformedAuthority(t *testing.T) {
 	sp.PurchaserDeleted = true
 	sp.Reason = eventsv1.EntitlementReason_ENTITLEMENT_REASON_PURCHASER_PURGED
 	require.NoError(t, Validate(space))
+}
+
+func TestSnapshotPrivacyFieldsAreComplete(t *testing.T) {
+	deleted := snapshotEvent()
+	s := deleted.GetEntitlementChanged()
+	s.State = eventsv1.EntitlementState_ENTITLEMENT_STATE_INACTIVE
+	s.Reason = eventsv1.EntitlementReason_ENTITLEMENT_REASON_ACCOUNT_DELETE_SCHEDULED
+	s.EntitledUntil = s.EffectiveAt
+	require.ErrorIs(t, Validate(deleted), ErrContractMismatch, "delete must carry independent purge scheduling")
+	cycle := uuid.NewString()
+	s.DeletionCycleId = &cycle
+	s.PurgeAt = timestamppb.New(s.EffectiveAt.AsTime().Add(30 * 24 * time.Hour))
+	require.NoError(t, Validate(deleted))
+	space := snapshotEvent()
+	space.AggregateKind = eventsv1.SubscriptionAggregateKind_SUBSCRIPTION_AGGREGATE_KIND_SPACE
+	sp := space.GetEntitlementChanged()
+	sp.AccountId = ""
+	sp.SpaceId = space.AggregateId
+	sp.Plan = "space_pro"
+	payer := uuid.NewString()
+	sp.PurchaserAccountId = &payer
+	sp.Reason = eventsv1.EntitlementReason_ENTITLEMENT_REASON_PURCHASER_PURGED
+	require.ErrorIs(t, Validate(space), ErrContractMismatch, "purged snapshots cannot carry raw payer identity")
 }

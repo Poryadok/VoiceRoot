@@ -52,7 +52,12 @@ func TestPublishStoredBytesStableJetStreamDedup(t *testing.T) {
 	row.EventID = uuid.NewString()
 	_, err = Publish(context.Background(), js, row)
 	require.ErrorIs(t, err, ErrContractMismatch)
-	row.Payload = append(row.Payload, 0)
+	ev.EventId = row.EventID
+	row.Payload, err = proto.MarshalOptions{Deterministic: true}.Marshal(ev)
+	require.NoError(t, err)
+	corruptHash := sha256.Sum256(row.Payload)
+	row.PayloadHash = corruptHash[:]
+	row.PayloadHash[0] ^= 1
 	_, err = Publish(context.Background(), js, row)
 	require.ErrorIs(t, err, ErrContractMismatch)
 	info, err = js.StreamInfo("subscription_events")

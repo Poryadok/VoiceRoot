@@ -17,7 +17,11 @@ import 'package:protobuf/protobuf.dart' as $pb;
 import 'package:protobuf/well_known_types/google/protobuf/timestamp.pb.dart'
     as $0;
 
+import 'jetstream_events.pbenum.dart';
+
 export 'package:protobuf/protobuf.dart' show GeneratedMessageGenericExtensions;
+
+export 'jetstream_events.pbenum.dart';
 
 enum UserStreamEvent_Payload {
   userRegistered,
@@ -6656,6 +6660,7 @@ enum SubscriptionStreamEvent_Payload {
   spaceProStarted,
   spaceProExpired,
   graceReminder,
+  entitlementChanged,
   notSet
 }
 
@@ -6663,6 +6668,10 @@ class SubscriptionStreamEvent extends $pb.GeneratedMessage {
   factory SubscriptionStreamEvent({
     $core.String? eventId,
     $0.Timestamp? occurredAt,
+    $core.int? protocolVersion,
+    SubscriptionAggregateKind? aggregateKind,
+    $core.String? aggregateId,
+    $fixnum.Int64? aggregateRevision,
     PlanStarted? planStarted,
     PlanCancelled? planCancelled,
     PaymentSuccess? paymentSuccess,
@@ -6672,10 +6681,15 @@ class SubscriptionStreamEvent extends $pb.GeneratedMessage {
     SpaceProStarted? spaceProStarted,
     SpaceProExpired? spaceProExpired,
     GraceReminder? graceReminder,
+    EntitlementChanged? entitlementChanged,
   }) {
     final result = create();
     if (eventId != null) result.eventId = eventId;
     if (occurredAt != null) result.occurredAt = occurredAt;
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (aggregateKind != null) result.aggregateKind = aggregateKind;
+    if (aggregateId != null) result.aggregateId = aggregateId;
+    if (aggregateRevision != null) result.aggregateRevision = aggregateRevision;
     if (planStarted != null) result.planStarted = planStarted;
     if (planCancelled != null) result.planCancelled = planCancelled;
     if (paymentSuccess != null) result.paymentSuccess = paymentSuccess;
@@ -6685,6 +6699,8 @@ class SubscriptionStreamEvent extends $pb.GeneratedMessage {
     if (spaceProStarted != null) result.spaceProStarted = spaceProStarted;
     if (spaceProExpired != null) result.spaceProExpired = spaceProExpired;
     if (graceReminder != null) result.graceReminder = graceReminder;
+    if (entitlementChanged != null)
+      result.entitlementChanged = entitlementChanged;
     return result;
   }
 
@@ -6708,6 +6724,7 @@ class SubscriptionStreamEvent extends $pb.GeneratedMessage {
     16: SubscriptionStreamEvent_Payload.spaceProStarted,
     17: SubscriptionStreamEvent_Payload.spaceProExpired,
     18: SubscriptionStreamEvent_Payload.graceReminder,
+    19: SubscriptionStreamEvent_Payload.entitlementChanged,
     0: SubscriptionStreamEvent_Payload.notSet
   };
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
@@ -6715,10 +6732,18 @@ class SubscriptionStreamEvent extends $pb.GeneratedMessage {
       package:
           const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
       createEmptyInstance: create)
-    ..oo(0, [10, 11, 12, 13, 14, 15, 16, 17, 18])
+    ..oo(0, [10, 11, 12, 13, 14, 15, 16, 17, 18, 19])
     ..aOS(1, _omitFieldNames ? '' : 'eventId')
     ..aOM<$0.Timestamp>(2, _omitFieldNames ? '' : 'occurredAt',
         subBuilder: $0.Timestamp.create)
+    ..aI(3, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aE<SubscriptionAggregateKind>(4, _omitFieldNames ? '' : 'aggregateKind',
+        enumValues: SubscriptionAggregateKind.values)
+    ..aOS(5, _omitFieldNames ? '' : 'aggregateId')
+    ..a<$fixnum.Int64>(
+        6, _omitFieldNames ? '' : 'aggregateRevision', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
     ..aOM<PlanStarted>(10, _omitFieldNames ? '' : 'planStarted',
         subBuilder: PlanStarted.create)
     ..aOM<PlanCancelled>(11, _omitFieldNames ? '' : 'planCancelled',
@@ -6737,6 +6762,8 @@ class SubscriptionStreamEvent extends $pb.GeneratedMessage {
         subBuilder: SpaceProExpired.create)
     ..aOM<GraceReminder>(18, _omitFieldNames ? '' : 'graceReminder',
         subBuilder: GraceReminder.create)
+    ..aOM<EntitlementChanged>(19, _omitFieldNames ? '' : 'entitlementChanged',
+        subBuilder: EntitlementChanged.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -6768,6 +6795,7 @@ class SubscriptionStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(16)
   @$pb.TagNumber(17)
   @$pb.TagNumber(18)
+  @$pb.TagNumber(19)
   SubscriptionStreamEvent_Payload whichPayload() =>
       _SubscriptionStreamEvent_PayloadByTag[$_whichOneof(0)]!;
   @$pb.TagNumber(10)
@@ -6779,6 +6807,7 @@ class SubscriptionStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(16)
   @$pb.TagNumber(17)
   @$pb.TagNumber(18)
+  @$pb.TagNumber(19)
   void clearPayload() => $_clearField($_whichOneof(0));
 
   @$pb.TagNumber(1)
@@ -6801,104 +6830,420 @@ class SubscriptionStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(2)
   $0.Timestamp ensureOccurredAt() => $_ensure(1);
 
+  /// Required for entitlement_changed; legacy events retain their existing wire form.
+  @$pb.TagNumber(3)
+  $core.int get protocolVersion => $_getIZ(2);
+  @$pb.TagNumber(3)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasProtocolVersion() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearProtocolVersion() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  SubscriptionAggregateKind get aggregateKind => $_getN(3);
+  @$pb.TagNumber(4)
+  set aggregateKind(SubscriptionAggregateKind value) => $_setField(4, value);
+  @$pb.TagNumber(4)
+  $core.bool hasAggregateKind() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearAggregateKind() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get aggregateId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set aggregateId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasAggregateId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearAggregateId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $fixnum.Int64 get aggregateRevision => $_getI64(5);
+  @$pb.TagNumber(6)
+  set aggregateRevision($fixnum.Int64 value) => $_setInt64(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasAggregateRevision() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearAggregateRevision() => $_clearField(6);
+
   @$pb.TagNumber(10)
-  PlanStarted get planStarted => $_getN(2);
+  PlanStarted get planStarted => $_getN(6);
   @$pb.TagNumber(10)
   set planStarted(PlanStarted value) => $_setField(10, value);
   @$pb.TagNumber(10)
-  $core.bool hasPlanStarted() => $_has(2);
+  $core.bool hasPlanStarted() => $_has(6);
   @$pb.TagNumber(10)
   void clearPlanStarted() => $_clearField(10);
   @$pb.TagNumber(10)
-  PlanStarted ensurePlanStarted() => $_ensure(2);
+  PlanStarted ensurePlanStarted() => $_ensure(6);
 
   @$pb.TagNumber(11)
-  PlanCancelled get planCancelled => $_getN(3);
+  PlanCancelled get planCancelled => $_getN(7);
   @$pb.TagNumber(11)
   set planCancelled(PlanCancelled value) => $_setField(11, value);
   @$pb.TagNumber(11)
-  $core.bool hasPlanCancelled() => $_has(3);
+  $core.bool hasPlanCancelled() => $_has(7);
   @$pb.TagNumber(11)
   void clearPlanCancelled() => $_clearField(11);
   @$pb.TagNumber(11)
-  PlanCancelled ensurePlanCancelled() => $_ensure(3);
+  PlanCancelled ensurePlanCancelled() => $_ensure(7);
 
   @$pb.TagNumber(12)
-  PaymentSuccess get paymentSuccess => $_getN(4);
+  PaymentSuccess get paymentSuccess => $_getN(8);
   @$pb.TagNumber(12)
   set paymentSuccess(PaymentSuccess value) => $_setField(12, value);
   @$pb.TagNumber(12)
-  $core.bool hasPaymentSuccess() => $_has(4);
+  $core.bool hasPaymentSuccess() => $_has(8);
   @$pb.TagNumber(12)
   void clearPaymentSuccess() => $_clearField(12);
   @$pb.TagNumber(12)
-  PaymentSuccess ensurePaymentSuccess() => $_ensure(4);
+  PaymentSuccess ensurePaymentSuccess() => $_ensure(8);
 
   @$pb.TagNumber(13)
-  PaymentFailed get paymentFailed => $_getN(5);
+  PaymentFailed get paymentFailed => $_getN(9);
   @$pb.TagNumber(13)
   set paymentFailed(PaymentFailed value) => $_setField(13, value);
   @$pb.TagNumber(13)
-  $core.bool hasPaymentFailed() => $_has(5);
+  $core.bool hasPaymentFailed() => $_has(9);
   @$pb.TagNumber(13)
   void clearPaymentFailed() => $_clearField(13);
   @$pb.TagNumber(13)
-  PaymentFailed ensurePaymentFailed() => $_ensure(5);
+  PaymentFailed ensurePaymentFailed() => $_ensure(9);
 
   @$pb.TagNumber(14)
-  PlanExpired get planExpired => $_getN(6);
+  PlanExpired get planExpired => $_getN(10);
   @$pb.TagNumber(14)
   set planExpired(PlanExpired value) => $_setField(14, value);
   @$pb.TagNumber(14)
-  $core.bool hasPlanExpired() => $_has(6);
+  $core.bool hasPlanExpired() => $_has(10);
   @$pb.TagNumber(14)
   void clearPlanExpired() => $_clearField(14);
   @$pb.TagNumber(14)
-  PlanExpired ensurePlanExpired() => $_ensure(6);
+  PlanExpired ensurePlanExpired() => $_ensure(10);
 
   @$pb.TagNumber(15)
-  Downgrade get downgrade => $_getN(7);
+  Downgrade get downgrade => $_getN(11);
   @$pb.TagNumber(15)
   set downgrade(Downgrade value) => $_setField(15, value);
   @$pb.TagNumber(15)
-  $core.bool hasDowngrade() => $_has(7);
+  $core.bool hasDowngrade() => $_has(11);
   @$pb.TagNumber(15)
   void clearDowngrade() => $_clearField(15);
   @$pb.TagNumber(15)
-  Downgrade ensureDowngrade() => $_ensure(7);
+  Downgrade ensureDowngrade() => $_ensure(11);
 
   @$pb.TagNumber(16)
-  SpaceProStarted get spaceProStarted => $_getN(8);
+  SpaceProStarted get spaceProStarted => $_getN(12);
   @$pb.TagNumber(16)
   set spaceProStarted(SpaceProStarted value) => $_setField(16, value);
   @$pb.TagNumber(16)
-  $core.bool hasSpaceProStarted() => $_has(8);
+  $core.bool hasSpaceProStarted() => $_has(12);
   @$pb.TagNumber(16)
   void clearSpaceProStarted() => $_clearField(16);
   @$pb.TagNumber(16)
-  SpaceProStarted ensureSpaceProStarted() => $_ensure(8);
+  SpaceProStarted ensureSpaceProStarted() => $_ensure(12);
 
   @$pb.TagNumber(17)
-  SpaceProExpired get spaceProExpired => $_getN(9);
+  SpaceProExpired get spaceProExpired => $_getN(13);
   @$pb.TagNumber(17)
   set spaceProExpired(SpaceProExpired value) => $_setField(17, value);
   @$pb.TagNumber(17)
-  $core.bool hasSpaceProExpired() => $_has(9);
+  $core.bool hasSpaceProExpired() => $_has(13);
   @$pb.TagNumber(17)
   void clearSpaceProExpired() => $_clearField(17);
   @$pb.TagNumber(17)
-  SpaceProExpired ensureSpaceProExpired() => $_ensure(9);
+  SpaceProExpired ensureSpaceProExpired() => $_ensure(13);
 
   @$pb.TagNumber(18)
-  GraceReminder get graceReminder => $_getN(10);
+  GraceReminder get graceReminder => $_getN(14);
   @$pb.TagNumber(18)
   set graceReminder(GraceReminder value) => $_setField(18, value);
   @$pb.TagNumber(18)
-  $core.bool hasGraceReminder() => $_has(10);
+  $core.bool hasGraceReminder() => $_has(14);
   @$pb.TagNumber(18)
   void clearGraceReminder() => $_clearField(18);
   @$pb.TagNumber(18)
-  GraceReminder ensureGraceReminder() => $_ensure(10);
+  GraceReminder ensureGraceReminder() => $_ensure(14);
+
+  @$pb.TagNumber(19)
+  EntitlementChanged get entitlementChanged => $_getN(15);
+  @$pb.TagNumber(19)
+  set entitlementChanged(EntitlementChanged value) => $_setField(19, value);
+  @$pb.TagNumber(19)
+  $core.bool hasEntitlementChanged() => $_has(15);
+  @$pb.TagNumber(19)
+  void clearEntitlementChanged() => $_clearField(19);
+  @$pb.TagNumber(19)
+  EntitlementChanged ensureEntitlementChanged() => $_ensure(15);
+}
+
+/// Complete Subscription-owned snapshot. Paid benefits end at entitled_until
+/// even when an expiry message has not arrived. ACCOUNT_PURGED is a separate
+/// permanent deletion fence and must never be published as a raw snapshot.
+class EntitlementChanged extends $pb.GeneratedMessage {
+  factory EntitlementChanged({
+    $core.String? entitlementId,
+    $core.String? plan,
+    $core.String? accountId,
+    $core.String? spaceId,
+    $core.String? purchaserAccountId,
+    $core.bool? purchaserDeleted,
+    $core.String? deletionFenceId,
+    $core.String? deletionCycleId,
+    $0.Timestamp? purgeAt,
+    EntitlementState? state,
+    $core.bool? cancelAtPeriodEnd,
+    $core.String? downgradeCycleId,
+    $0.Timestamp? currentPeriodEnd,
+    $0.Timestamp? gracePeriodEnd,
+    EntitlementReason? reason,
+    $0.Timestamp? effectiveAt,
+    $0.Timestamp? entitledUntil,
+  }) {
+    final result = create();
+    if (entitlementId != null) result.entitlementId = entitlementId;
+    if (plan != null) result.plan = plan;
+    if (accountId != null) result.accountId = accountId;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (purchaserAccountId != null)
+      result.purchaserAccountId = purchaserAccountId;
+    if (purchaserDeleted != null) result.purchaserDeleted = purchaserDeleted;
+    if (deletionFenceId != null) result.deletionFenceId = deletionFenceId;
+    if (deletionCycleId != null) result.deletionCycleId = deletionCycleId;
+    if (purgeAt != null) result.purgeAt = purgeAt;
+    if (state != null) result.state = state;
+    if (cancelAtPeriodEnd != null) result.cancelAtPeriodEnd = cancelAtPeriodEnd;
+    if (downgradeCycleId != null) result.downgradeCycleId = downgradeCycleId;
+    if (currentPeriodEnd != null) result.currentPeriodEnd = currentPeriodEnd;
+    if (gracePeriodEnd != null) result.gracePeriodEnd = gracePeriodEnd;
+    if (reason != null) result.reason = reason;
+    if (effectiveAt != null) result.effectiveAt = effectiveAt;
+    if (entitledUntil != null) result.entitledUntil = entitledUntil;
+    return result;
+  }
+
+  EntitlementChanged._();
+
+  factory EntitlementChanged.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory EntitlementChanged.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'EntitlementChanged',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'entitlementId')
+    ..aOS(2, _omitFieldNames ? '' : 'plan')
+    ..aOS(3, _omitFieldNames ? '' : 'accountId')
+    ..aOS(4, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(5, _omitFieldNames ? '' : 'purchaserAccountId')
+    ..aOB(6, _omitFieldNames ? '' : 'purchaserDeleted')
+    ..aOS(7, _omitFieldNames ? '' : 'deletionFenceId')
+    ..aOS(8, _omitFieldNames ? '' : 'deletionCycleId')
+    ..aOM<$0.Timestamp>(9, _omitFieldNames ? '' : 'purgeAt',
+        subBuilder: $0.Timestamp.create)
+    ..aE<EntitlementState>(10, _omitFieldNames ? '' : 'state',
+        enumValues: EntitlementState.values)
+    ..aOB(11, _omitFieldNames ? '' : 'cancelAtPeriodEnd')
+    ..aOS(12, _omitFieldNames ? '' : 'downgradeCycleId')
+    ..aOM<$0.Timestamp>(13, _omitFieldNames ? '' : 'currentPeriodEnd',
+        subBuilder: $0.Timestamp.create)
+    ..aOM<$0.Timestamp>(14, _omitFieldNames ? '' : 'gracePeriodEnd',
+        subBuilder: $0.Timestamp.create)
+    ..aE<EntitlementReason>(15, _omitFieldNames ? '' : 'reason',
+        enumValues: EntitlementReason.values)
+    ..aOM<$0.Timestamp>(16, _omitFieldNames ? '' : 'effectiveAt',
+        subBuilder: $0.Timestamp.create)
+    ..aOM<$0.Timestamp>(17, _omitFieldNames ? '' : 'entitledUntil',
+        subBuilder: $0.Timestamp.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  EntitlementChanged clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  EntitlementChanged copyWith(void Function(EntitlementChanged) updates) =>
+      super.copyWith((message) => updates(message as EntitlementChanged))
+          as EntitlementChanged;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static EntitlementChanged create() => EntitlementChanged._();
+  @$core.override
+  EntitlementChanged createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static EntitlementChanged getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<EntitlementChanged>(create);
+  static EntitlementChanged? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get entitlementId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set entitlementId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasEntitlementId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearEntitlementId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get plan => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set plan($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasPlan() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearPlan() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get accountId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set accountId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasAccountId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearAccountId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get spaceId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set spaceId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasSpaceId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearSpaceId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get purchaserAccountId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set purchaserAccountId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasPurchaserAccountId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearPurchaserAccountId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.bool get purchaserDeleted => $_getBF(5);
+  @$pb.TagNumber(6)
+  set purchaserDeleted($core.bool value) => $_setBool(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasPurchaserDeleted() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearPurchaserDeleted() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.String get deletionFenceId => $_getSZ(6);
+  @$pb.TagNumber(7)
+  set deletionFenceId($core.String value) => $_setString(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasDeletionFenceId() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearDeletionFenceId() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $core.String get deletionCycleId => $_getSZ(7);
+  @$pb.TagNumber(8)
+  set deletionCycleId($core.String value) => $_setString(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasDeletionCycleId() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearDeletionCycleId() => $_clearField(8);
+
+  @$pb.TagNumber(9)
+  $0.Timestamp get purgeAt => $_getN(8);
+  @$pb.TagNumber(9)
+  set purgeAt($0.Timestamp value) => $_setField(9, value);
+  @$pb.TagNumber(9)
+  $core.bool hasPurgeAt() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearPurgeAt() => $_clearField(9);
+  @$pb.TagNumber(9)
+  $0.Timestamp ensurePurgeAt() => $_ensure(8);
+
+  @$pb.TagNumber(10)
+  EntitlementState get state => $_getN(9);
+  @$pb.TagNumber(10)
+  set state(EntitlementState value) => $_setField(10, value);
+  @$pb.TagNumber(10)
+  $core.bool hasState() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearState() => $_clearField(10);
+
+  @$pb.TagNumber(11)
+  $core.bool get cancelAtPeriodEnd => $_getBF(10);
+  @$pb.TagNumber(11)
+  set cancelAtPeriodEnd($core.bool value) => $_setBool(10, value);
+  @$pb.TagNumber(11)
+  $core.bool hasCancelAtPeriodEnd() => $_has(10);
+  @$pb.TagNumber(11)
+  void clearCancelAtPeriodEnd() => $_clearField(11);
+
+  @$pb.TagNumber(12)
+  $core.String get downgradeCycleId => $_getSZ(11);
+  @$pb.TagNumber(12)
+  set downgradeCycleId($core.String value) => $_setString(11, value);
+  @$pb.TagNumber(12)
+  $core.bool hasDowngradeCycleId() => $_has(11);
+  @$pb.TagNumber(12)
+  void clearDowngradeCycleId() => $_clearField(12);
+
+  @$pb.TagNumber(13)
+  $0.Timestamp get currentPeriodEnd => $_getN(12);
+  @$pb.TagNumber(13)
+  set currentPeriodEnd($0.Timestamp value) => $_setField(13, value);
+  @$pb.TagNumber(13)
+  $core.bool hasCurrentPeriodEnd() => $_has(12);
+  @$pb.TagNumber(13)
+  void clearCurrentPeriodEnd() => $_clearField(13);
+  @$pb.TagNumber(13)
+  $0.Timestamp ensureCurrentPeriodEnd() => $_ensure(12);
+
+  @$pb.TagNumber(14)
+  $0.Timestamp get gracePeriodEnd => $_getN(13);
+  @$pb.TagNumber(14)
+  set gracePeriodEnd($0.Timestamp value) => $_setField(14, value);
+  @$pb.TagNumber(14)
+  $core.bool hasGracePeriodEnd() => $_has(13);
+  @$pb.TagNumber(14)
+  void clearGracePeriodEnd() => $_clearField(14);
+  @$pb.TagNumber(14)
+  $0.Timestamp ensureGracePeriodEnd() => $_ensure(13);
+
+  @$pb.TagNumber(15)
+  EntitlementReason get reason => $_getN(14);
+  @$pb.TagNumber(15)
+  set reason(EntitlementReason value) => $_setField(15, value);
+  @$pb.TagNumber(15)
+  $core.bool hasReason() => $_has(14);
+  @$pb.TagNumber(15)
+  void clearReason() => $_clearField(15);
+
+  @$pb.TagNumber(16)
+  $0.Timestamp get effectiveAt => $_getN(15);
+  @$pb.TagNumber(16)
+  set effectiveAt($0.Timestamp value) => $_setField(16, value);
+  @$pb.TagNumber(16)
+  $core.bool hasEffectiveAt() => $_has(15);
+  @$pb.TagNumber(16)
+  void clearEffectiveAt() => $_clearField(16);
+  @$pb.TagNumber(16)
+  $0.Timestamp ensureEffectiveAt() => $_ensure(15);
+
+  @$pb.TagNumber(17)
+  $0.Timestamp get entitledUntil => $_getN(16);
+  @$pb.TagNumber(17)
+  set entitledUntil($0.Timestamp value) => $_setField(17, value);
+  @$pb.TagNumber(17)
+  $core.bool hasEntitledUntil() => $_has(16);
+  @$pb.TagNumber(17)
+  void clearEntitledUntil() => $_clearField(17);
+  @$pb.TagNumber(17)
+  $0.Timestamp ensureEntitledUntil() => $_ensure(16);
 }
 
 class PlanStarted extends $pb.GeneratedMessage {
