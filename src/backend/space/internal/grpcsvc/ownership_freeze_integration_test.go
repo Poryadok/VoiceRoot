@@ -48,6 +48,7 @@ func applyR20OwnershipFreezePrerequisites(t *testing.T, ctx context.Context, poo
 		"000008_ownership_journal.up.sql", "000009_ownership_journal_decision.up.sql",
 		"000010_ownership_journal_commit.up.sql", "000011_voice_access_epoch.up.sql",
 		"000013_space_lifecycle.up.sql",
+		"000017_lifecycle_restore_outcome.up.sql",
 	} {
 		raw, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", name))
 		require.NoError(t, err)
