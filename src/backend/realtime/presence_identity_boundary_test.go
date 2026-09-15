@@ -26,6 +26,7 @@ const boundaryBlockedAccount = "44444444-4444-4444-4444-444444444444"
 type boundaryPresenceServer struct {
 	userv1.UnimplementedUserServiceServer
 	metadata chan metadata.MD
+	responseProfile string
 }
 
 func (s *boundaryPresenceServer) UpdatePresence(ctx context.Context, _ *userv1.UpdatePresenceRequest) (*userv1.UpdatePresenceResponse, error) {
@@ -44,6 +45,9 @@ func (s *boundaryPresenceServer) GetPresence(ctx context.Context, request *userv
 	// User owns the Social-block result. Realtime must propagate this sparse
 	// response instead of synthesizing the raw event's online status.
 	presence := &userv1.PresenceStatus{ProfileId: request.GetProfileId()}
+	if s.responseProfile != "" {
+		presence.ProfileId = s.responseProfile
+	}
 	if accounts[0] != boundaryBlockedAccount {
 		presence.Status = "online"
 	}
@@ -137,6 +141,26 @@ func TestPresenceAdaptersRejectUnknownExplicitIdentity(t *testing.T) {
 	select {
 	case <-fixture.metadata:
 		t.Fatal("unknown explicit identity must fail before contacting User")
+	default:
+	}
+}
+
+func TestPresenceViewerRejectsResponseForAnotherTarget(t *testing.T) {
+	conn, fixture := boundaryPresenceClient(t)
+	fixture.responseProfile = boundaryProfile
+	reg := &connReg{accountID: boundaryAccount, profileID: boundaryProfile, accountType: "regular"}
+	_, err := presenceFanoutPayload(context.Background(), newGRPCPresenceViewer(conn), boundaryTarget, "online", reg, "")
+	require.Error(t, err)
+}
+
+func TestPresenceViewerRejectsUnknownAccountType(t *testing.T) {
+	conn, fixture := boundaryPresenceClient(t)
+	reg := &connReg{accountID: boundaryAccount, profileID: boundaryProfile, accountType: "unknown"}
+	_, err := presenceFanoutPayload(context.Background(), newGRPCPresenceViewer(conn), boundaryTarget, "online", reg, "")
+	require.Error(t, err)
+	select {
+	case <-fixture.metadata:
+		t.Fatal("unknown account type must fail before contacting User")
 	default:
 	}
 }

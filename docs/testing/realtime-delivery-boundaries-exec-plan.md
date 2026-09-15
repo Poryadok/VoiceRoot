@@ -31,8 +31,8 @@ complete Chat membership with current per-recipient Chat/Social authorization.
 
 ## Steps and validation
 
-- [ ] Author regression tests before production changes and review them.
-- [ ] Push RED tests and obtain hosted Realtime CI failure evidence.
+- [x] Author regression tests before production changes and review them.
+- [x] Push RED tests and obtain hosted Realtime CI failure evidence.
 - [ ] Implement the three boundaries and preserve valid routing/presence cases.
 - [ ] Review security, metadata handling, pagination and concurrency.
 - [ ] Obtain hosted short/full Realtime tests, lint and `ci-gate` on PR head.
@@ -49,3 +49,12 @@ This PR does not prove membership-wide notification delivery, replace User or
 Social policy, establish Space voice watchers, or claim the A1 vertical DoD.
 Chat pagination is not a versioned snapshot: concurrent membership changes may
 cause an error and ephemeral notification loss, reconciled via durable REST.
+
+## Evidence
+
+Tests-only commit `d98f4f4a`, PR #397, hosted CI run `34935487815`:
+Realtime short job `104273022050` and full job `104273022096` failed. The short
+job log confirms the voice override chat leak, every malformed-page regression,
+missing lookup deadline, ambient account/profile precedence and missing explicit
+identity rejection. An independent read-only security review accepted these
+tests before implementation. Production fixes follow this recorded RED state.
