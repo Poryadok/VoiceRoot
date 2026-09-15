@@ -35,3 +35,19 @@ matchmaking (docs/features/matchmaking.md): game catalog, player profile, solo s
 ## Database
 
 Migrations: `src/backend/migrations/matchmaking_db/`.
+
+## Protected search principal (source disabled)
+
+`internal/searchprincipal` implements the request-bound subject verifier required
+by the [A3 party contract](../../../docs/todo/backend.md). It accepts one signed
+Gateway delegated-user credential, validates its exact StartSearch protobuf hash,
+RPC, audience, request ID, lifetime and current positive session epoch, and
+requires a replay guard. Raw identity metadata and duplicate credentials deny
+before handler execution. Only this verifier can create the private search
+subject context; changing the request invalidates the subject accessor.
+
+The package is **not wired into `main.go` or Gateway**. It does not secure the
+legacy metadata-based user surface by itself. Runtime cutover still requires
+Gateway issuance, TLS and rotation configuration, durable replay/epoch checks,
+and the authoritative Voice snapshot and membership-event source described in
+the A3 contract. The existing Redis-only voice roster is not a snapshot fallback.
