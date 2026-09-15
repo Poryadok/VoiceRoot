@@ -160,7 +160,7 @@ func (s *SpaceStore) RecordLifecycleDeletionProofReceipt(ctx context.Context, ac
 	if err != nil {
 		return nil, err
 	}
-	if operation.actorProfileID != actorProfileID {
+	if operation.method != "DELETE" || operation.actorProfileID != actorProfileID {
 		return nil, ErrLifecycleConflict
 	}
 	if err := lockLifecycleSpace(ctx, tx, operation.spaceID); err != nil {
@@ -381,12 +381,18 @@ type lifecycleOperation struct {
 	state                                           string
 	outcomeBytes, outcomeHash                       []byte
 	completedAt                                     *time.Time
+	deletionOperationID                             *uuid.UUID
+	generation                                      *int64
 }
 
 func (o lifecycleOperation) validate() error {
+	if o.method == "RESTORE" {
+		return validateLifecycleRestoreOperation(o)
+	}
 	if o.operationID == uuid.Nil || o.accountID == uuid.Nil || o.actorProfileID == uuid.Nil || o.spaceID == uuid.Nil ||
 		o.sessionEpoch <= 0 || o.method != "DELETE" || len(o.requestHash) != sha256.Size ||
-		len(o.confirmationHash) != sha256.Size || len(o.proofDigest) != sha256.Size || len(o.bindingHash) != sha256.Size {
+		len(o.confirmationHash) != sha256.Size || len(o.proofDigest) != sha256.Size || len(o.bindingHash) != sha256.Size ||
+		o.deletionOperationID != nil || o.generation != nil {
 		return ErrLifecycleEvidenceInvalid
 	}
 	expected := lifecycleOperationBindingHash(o.accountID, o.actorProfileID, o.spaceID, o.operationID, o.sessionEpoch,
@@ -410,12 +416,12 @@ func loadLifecycleOperation(ctx context.Context, db spaceStoreDB, operationID uu
 	var operation lifecycleOperation
 	err := db.QueryRow(ctx, `SELECT operation_id,account_id,actor_profile_id,space_id,session_epoch,method,
 		request_sha256,confirmation_name_sha256,proof_digest_sha256,binding_sha256,auth_receipt_bytes,auth_receipt_sha256,
-		state,outcome_bytes,outcome_sha256,completed_at
+		state,outcome_bytes,outcome_sha256,completed_at,deletion_operation_id,generation
 		FROM space_lifecycle_operations WHERE operation_id=$1`, operationID).Scan(
 		&operation.operationID, &operation.accountID, &operation.actorProfileID, &operation.spaceID,
 		&operation.sessionEpoch, &operation.method, &operation.requestHash, &operation.confirmationHash,
 		&operation.proofDigest, &operation.bindingHash, &operation.authReceiptBytes, &operation.authReceiptHash,
-		&operation.state, &operation.outcomeBytes, &operation.outcomeHash, &operation.completedAt)
+		&operation.state, &operation.outcomeBytes, &operation.outcomeHash, &operation.completedAt, &operation.deletionOperationID, &operation.generation)
 	return operation, err
 }
 
@@ -427,7 +433,7 @@ func validateStoredLifecycleOperation(ctx context.Context, db spaceStoreDB, oper
 	if err := stored.validate(); err != nil {
 		return err
 	}
-	if stored.accountID != accountID || stored.actorProfileID != actorProfileID || stored.spaceID != spaceID ||
+	if stored.method != "DELETE" || stored.accountID != accountID || stored.actorProfileID != actorProfileID || stored.spaceID != spaceID ||
 		stored.sessionEpoch != sessionEpoch || !bytes.Equal(stored.requestHash, requestHash[:]) ||
 		!bytes.Equal(stored.confirmationHash, confirmationHash[:]) || !bytes.Equal(stored.proofDigest, proofDigest[:]) {
 		return ErrLifecycleConflict
@@ -600,6 +606,9 @@ func persistLifecycleSnapshot(ctx context.Context, db spaceStoreDB, snapshot spa
 		return ErrLifecycleEvidenceInvalid
 	}
 	if err := lockLifecycleSpace(ctx, db, spaceID); err != nil {
+		return err
+	}
+	if err := guardAdmittedLifecycleRestoreSnapshot(ctx, db, snapshot); err != nil {
 		return err
 	}
 

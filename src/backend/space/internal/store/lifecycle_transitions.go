@@ -106,7 +106,13 @@ func (s *SpaceStore) CompleteLifecycleRestore(ctx context.Context, spaceID uuid.
 		}
 		var err error
 		event, err = aggregate.CompleteRestore(databaseTime.UTC())
-		return err == nil && !completed, err
+		if err != nil {
+			return false, err
+		}
+		if err := persistLifecycleRestoreOutcome(ctx, tx, aggregate.Snapshot(), !completed); err != nil {
+			return false, err
+		}
+		return !completed, nil
 	})
 	if err != nil {
 		return nil, spacecore.LifecycleOutboxRecord{}, err
