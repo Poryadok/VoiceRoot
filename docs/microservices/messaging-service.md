@@ -73,7 +73,7 @@ service MessagingService {
 | RPC | Handler | Notes |
 |-----|---------|-------|
 | `GetThreadMessages` | ✓ | thread replies |
-| `ListThreads` | partial | legacy limit-only index is shipped; bounded per-viewer versioned read-model successor is required before pagination activation |
+| `ListThreads` | unavailable | authorizes membership, then fails closed until the bounded per-viewer read model is ready; the legacy aggregate is no longer a runtime fallback |
 | `PinMessage` / `UnpinMessage` / `GetPinnedMessages` | ✓ | limit **5**/chat (`MaxPinsPerChat`); 6th → `ResourceExhausted` |
 | `UnpinMessagesBySenderInChats` | ✓ | bot cleanup |
 | `UploadPreKeyBundle` / `GetPreKeyBundle` | ✓ | DM E2E pre-keys |
@@ -87,7 +87,7 @@ service MessagingService {
 
 ### ListThreads: versioned per-viewer read model (accepted successor)
 
-`ListThreads` currently has only a legacy limit-only index. Its bounded cursor successor is a **Messaging-owned** read model in `messaging_db`; it does not scan/aggregate `messages` while serving a page and does not use a candidate-limited SQL fallback. Chat remains the membership authority.
+`ListThreads` currently refuses authorized reads with `UNAVAILABLE "thread list unavailable"`: the legacy limit-only aggregate ignores per-viewer visibility and is disabled at the RPC boundary. The thread index is temporarily unavailable; sending replies and loading a known thread through `GetThreadMessages` remain separate operations. The bounded cursor successor is a **Messaging-owned** read model in `messaging_db`; it must not scan/aggregate `messages` while serving a page or use a candidate-limited SQL fallback. Chat remains the membership authority.
 
 Before parsing a cursor, every call performs authoritative `EnsureMember`. A missing or `BUILDING` viewer projection returns `UNAVAILABLE` with the fixed public text `thread list unavailable`; it never returns an empty page or legacy results. Chat supplies durable, idempotently consumed membership-outbox events: `event_id`, `chat_id`, `profile_id`, monotonic `membership_revision`, and `joined|removed|left`.
 
@@ -96,6 +96,17 @@ Messaging stores per-viewer lifecycle/root state, a per-chat mutation journal, i
 Every local root/reply/edit/delete/hide/ghost mutation appends a change and projects heads in the same transaction. `FOR_ME`, `FOR_EVERYONE`, ghost and hide revocations apply live to unexpired cursor states. Pending fan-out marks a state `UPDATING` and reads fail `UNAVAILABLE`; new visibility grants appear only in new snapshots. Public errors are `Unauthenticated`, `InvalidArgument`, `PermissionDenied`, `FailedPrecondition`, or the opaque unavailable error; implementation errors never expose `err.Error()`.
 
 A builder enumerates authoritative memberships, takes a repeatable-read baseline, bulk-builds both trees, replays post-baseline journal changes and CASes to READY only at zero lag. Cursor states expire after 15 minutes without renewal. GC preserves nodes reachable from READY heads/unexpired cursors and retains the journal through the oldest BUILDING baseline. Activation requires readiness, zero lag, root invariants and sampled dual reads. The full execution/RED contract is [listthreads-versioned-readmodel-exec-plan.md](../testing/listthreads-versioned-readmodel-exec-plan.md).
+
+The full durable membership contract is still incomplete. Space chats derive
+membership from Space and Role `TEXT_CHAT_VIEW`, not `chat_members`; a Chat-only
+table outbox cannot prove their effective viewer set. The successor needs durable
+Space/Role source revisions and reconciliation, Chat-owned effective membership
+revisions and a consistent enumeration watermark. DM delete/reopen and archived
+profile eligibility must also be specified. These are activation prerequisites,
+tracked in [backend.md](../todo/backend.md), not implemented by the unavailable
+guard. The current Messaging Chat adapter inspects only the first 100 members;
+its replacement must provide complete authoritative membership admission before
+the successor can be enabled.
 ### `SendMessageRequest` (spec)
 
 `send_silent` and `delivery_schedule` are in the current proto. `content_payload` remains a future typed-content extension:
