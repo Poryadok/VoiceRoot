@@ -6,6 +6,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -23,17 +24,33 @@ type QueryGRPC struct {
 	Store *store.CHStore
 }
 
-func rangeFromReq(from, to *timestamppb.Timestamp) (time.Time, time.Time) {
-	now := time.Now().UTC()
+func validatedRangeFromReq(from, to *timestamppb.Timestamp, now time.Time) (time.Time, time.Time, error) {
+	now = now.UTC()
 	end := now
 	start := now.Add(-30 * 24 * time.Hour)
 	if from != nil {
+		if err := from.CheckValid(); err != nil {
+			return time.Time{}, time.Time{}, fmt.Errorf("invalid from timestamp: %w", err)
+		}
 		start = from.AsTime().UTC()
 	}
 	if to != nil {
+		if err := to.CheckValid(); err != nil {
+			return time.Time{}, time.Time{}, fmt.Errorf("invalid to timestamp: %w", err)
+		}
 		end = to.AsTime().UTC()
 	}
-	return start, end
+	if !start.Before(end) {
+		return time.Time{}, time.Time{}, fmt.Errorf("from must be before to")
+	}
+	if end.After(now) {
+		return time.Time{}, time.Time{}, fmt.Errorf("to must not be in the future")
+	}
+	return start, end, nil
+}
+
+func rangeFromReq(from, to *timestamppb.Timestamp) (time.Time, time.Time, error) {
+	return validatedRangeFromReq(from, to, time.Now())
 }
 
 func filtersFromReq(filters map[string]string) store.QueryFilters {
@@ -51,13 +68,17 @@ func (s *QueryGRPC) GetDashboard(ctx context.Context, req *analyticsv1.GetDashbo
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.Unavailable, "analytics store unavailable")
 	}
-	from, to := rangeFromReq(req.GetFrom(), req.GetTo())
+	from, to, err := rangeFromReq(req.GetFrom(), req.GetTo())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
 	metrics, err := s.Store.DashboardMetrics(ctx, req.GetDashboardType(), from, to, store.QueryFilters{})
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	resp := &analyticsv1.GetDashboardResponse{DashboardType: req.GetDashboardType()}
-	for name, value := range metrics {
+	for _, name := range sortedMetricNames(metrics) {
+		value := metrics[name]
 		n := name
 		resp.Metrics = append(resp.Metrics, &analyticsv1.MetricPoint{Name: n, Value: value})
 	}
@@ -68,7 +89,10 @@ func (s *QueryGRPC) GetMetrics(ctx context.Context, req *analyticsv1.GetMetricsR
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.Unavailable, "analytics store unavailable")
 	}
-	from, to := rangeFromReq(req.GetFrom(), req.GetTo())
+	from, to, err := rangeFromReq(req.GetFrom(), req.GetTo())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
 	dt := strings.TrimSpace(req.GetMetric())
 	if dt == "" {
 		return nil, status.Error(codes.InvalidArgument, "metric required")
@@ -78,7 +102,8 @@ func (s *QueryGRPC) GetMetrics(ctx context.Context, req *analyticsv1.GetMetricsR
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	resp := &analyticsv1.GetMetricsResponse{}
-	for name, value := range m {
+	for _, name := range sortedMetricNames(m) {
+		value := m[name]
 		n := name
 		resp.Points = append(resp.Points, &analyticsv1.MetricPoint{Name: n, Value: value})
 	}
@@ -89,7 +114,10 @@ func (s *QueryGRPC) GetFunnel(ctx context.Context, req *analyticsv1.GetFunnelReq
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.Unavailable, "analytics store unavailable")
 	}
-	from, to := rangeFromReq(req.GetFrom(), req.GetTo())
+	from, to, err := rangeFromReq(req.GetFrom(), req.GetTo())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
 	steps, err := s.Store.FunnelSteps(ctx, req.GetFunnelName(), from, to)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -106,7 +134,10 @@ func (s *QueryGRPC) GetRetention(ctx context.Context, req *analyticsv1.GetRetent
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.Unavailable, "analytics store unavailable")
 	}
-	from, to := rangeFromReq(req.GetCohortFrom(), req.GetCohortTo())
+	from, to, err := rangeFromReq(req.GetCohortFrom(), req.GetCohortTo())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
 	rows, err := s.Store.RetentionCohorts(ctx, from, to)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -128,7 +159,10 @@ func (s *QueryGRPC) ExportData(ctx context.Context, req *analyticsv1.ExportDataR
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.Unavailable, "analytics store unavailable")
 	}
-	from, to := rangeFromReq(req.GetFrom(), req.GetTo())
+	from, to, err := rangeFromReq(req.GetFrom(), req.GetTo())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
 	rows, err := s.Store.ExportEvents(ctx, from, to, req.GetEventType(), 10000)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -173,4 +207,13 @@ func (s *QueryGRPC) ExportData(ctx context.Context, req *analyticsv1.ExportDataR
 	default:
 		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("unsupported format %q", format))
 	}
+}
+
+func sortedMetricNames(metrics map[string]float64) []string {
+	names := make([]string, 0, len(metrics))
+	for name := range metrics {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
