@@ -20,6 +20,15 @@ class AuthPrincipalConfigurationTest {
     verifyNoInteractions(epochs, redis);
   }
 
+  @Test void rejectsOrphanedMissingOrBlankPrivateCaBundle() {
+    for (String value : List.of("", "missing-private-ca.pem")) {
+      assertThrows(IllegalArgumentException.class, () -> AuthPrincipalConfiguration.fromEnvironment(
+          new MockEnvironment().withProperty("S2S_JWKS_CA_FILE", value), epochs, redis));
+      assertThrows(IllegalArgumentException.class, () -> AuthPrincipalConfiguration.fromEnvironment(
+          new MockEnvironment().withProperty(URLS, VALID).withProperty("S2S_JWKS_CA_FILE", value), epochs, redis));
+    }
+  }
+
   @Test void completeHttpsConfigurationUsesDefaultsAndDoesNotFetchUntilRequest() {
     // These deliberately unresolvable hosts make eager fetching observable as a failure.
     var environment = new MockEnvironment().withProperty(URLS, VALID);

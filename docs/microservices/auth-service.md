@@ -78,6 +78,28 @@ service AuthService {
 }
 ```
 
+### Internal Social and Moderation callers
+
+`ResolvePhoneHashes` is an internal Social service lookup; `SetAccountStatus`
+is an internal Moderation service mutation. Neither is a public Gateway route.
+Their protected caller matrix is:
+
+| RPC | Required principal |
+|---|---|
+| `ResolvePhoneHashes` | `principal_type=service`, `iss=social`, `sub=service:social` |
+| `SetAccountStatus` | `principal_type=service`, `iss=moderation`, `sub=service:moderation` |
+
+Both require the Phase-0 credential bound to audience `auth`, exact full RPC,
+request ID and deterministic protobuf request hash, verified before domain work.
+The private TLS listener shares Auth's HTTPS JWKS cache and atomic Redis replay
+guard. The ordinary listener rejects these methods, including signed requests;
+raw `x-voice-internal` never authorizes either operation. A verified wrong caller
+receives `PERMISSION_DENIED`; missing/invalid/replayed credentials receive
+`UNAUTHENTICATED`. Social and Moderation use dedicated signed TLS clients.
+
+The source and deployment cutover, tests and remaining activation evidence are
+tracked in [auth-internal-boundary-exec-plan.md](../testing/auth-internal-boundary-exec-plan.md).
+
 ### Ownership-transfer step-up proof
 
 Auth implements `IssueOwnershipTransferProof` and `ConsumeOwnershipTransferProof`.
@@ -386,7 +408,12 @@ pending targets. Provider outage сохраняет последнее verified 
 - TOTP секреты: AES-256-GCM шифрование at rest; `AUTH_TOTP_ENCRYPTION_KEY` обязателен при `auth.persistence=jdbc` без `auth.totp.test-bypass` (иначе Auth не стартует; `DEFAULT_DEV_KEY` только memory/dev bypass)
 - Refresh token: только хэш в БД, оригинал — только клиенту
 - Нет SMS 2FA (v1) — только TOTP
-- IP logging для аудита
+- HTTP audit logs include `peer_ip`, the connected servlet peer captured before
+  downstream processing. Only valid IP literals are recorded; missing/invalid
+  values become `unknown`. `Forwarded` / `X-Forwarded-For` are ignored. Behind a
+  proxy this records the proxy address, not an authenticated end-user IP; no
+  trusted-proxy reconstruction or new retention policy is implied. The field is
+  cleared from MDC after each access event, including failed requests.
 
 ### T056-P1: session epoch
 

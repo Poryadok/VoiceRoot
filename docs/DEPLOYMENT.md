@@ -406,6 +406,37 @@ go test -run TestStagingBotsWebhook_live -count=1 .
 
 
 
+### Auth internal caller cutover
+
+Social phone-hash lookup and Moderation account-status changes use Auth's private
+TLS listener on 9091. The ordinary Auth 9090 listener remains for existing
+Gateway session operations and denies both internal methods. Upgrade these three
+services and their credential mounts together; an old raw-marker caller receives
+an authentication failure and must not be treated as successful enforcement.
+
+| Service | Required settings |
+|---|---|
+| Auth | `AUTH_PRINCIPAL_GRPC_PORT=9091`, `AUTH_GRPC_TLS_CERT_FILE`, `AUTH_GRPC_TLS_KEY_FILE`, `S2S_JWKS_URLS_JSON`, optional private `S2S_JWKS_CA_FILE` |
+| Social / Moderation | `AUTH_PRINCIPAL_GRPC_ADDR`, `AUTH_PRINCIPAL_TLS_CA_FILE`, `AUTH_PRINCIPAL_TLS_SERVER_NAME`; remove their old `AUTH_GRPC_ADDR` |
+| Moderation | `MODERATION_PRINCIPAL_SIGNING_KEYS_DIR`, `MODERATION_PRINCIPAL_ACTIVE_KID`, `MODERATION_PRINCIPAL_JWKS_LISTEN`, `MODERATION_PRINCIPAL_TLS_CERT_FILE`, `MODERATION_PRINCIPAL_TLS_KEY_FILE` |
+
+Auth's issuer map preserves existing Gateway/Space endpoints and includes Social
+and Moderation's HTTPS `/.well-known/jwks.json` endpoints. Social reuses its own
+existing signing/JWKS runtime; Moderation owns distinct current/next keys. Auth
+uses its shared Redis replay guard; per-process memory replay is test/local only.
+The optional Auth JWKS CA file adds trusted private roots to system roots and
+never disables hostname or certificate verification. Partial config fails startup.
+
+Before namespace deployment, provision `voice-auth-principal-tls` (`tls.crt`,
+`tls.key`, SAN `voice-auth`), `voice-moderation-principal-tls` (same keys, SAN
+`voice-moderation`) and `voice-moderation-principal-signing` (`current.pem`,
+`next.pem`, `active-kid`) alongside the existing `voice-principal-ca` bundle and
+Social Secrets. Private keys are service-specific Secret mounts, never ConfigMap
+values. Disposable Compose generates its own isolated material. Config tests and
+hosted integration prove source wiring; actual staging activation requires these
+Secrets and a successful live Social lookup plus Moderation suspension/restore
+run. Health checks alone do not prove it.
+
 ### Ownership lifecycle principal transport
 
 This remains a disabled public foundation: production Space TransferOwnership
