@@ -8,10 +8,13 @@ import app.voice.auth.v1.GetE2EKeyBackupRequest;
 import app.voice.auth.v1.PutE2EKeyBackupRequest;
 import app.voice.auth.v1.RegisterRequest;
 import io.grpc.ManagedChannel;
+import io.grpc.Metadata;
 import io.grpc.Server;
+import io.grpc.ServerInterceptors;
 import io.grpc.StatusRuntimeException;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
+import io.grpc.stub.MetadataUtils;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -28,6 +31,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 import voice.backend.auth.grpc.AuthGrpcService;
+import voice.backend.auth.grpc.AuthorizationServerInterceptor;
 import voice.backend.auth.service.AuthService;
 import voice.backend.auth.support.JdbcUserContractTestConfiguration;
 
@@ -85,7 +89,7 @@ class E2EKeyBackupJdbcIntegrationTest {
     Server server =
         InProcessServerBuilder.forName(serverName)
             .directExecutor()
-            .addService(grpcService)
+            .addService(ServerInterceptors.intercept(grpcService, new AuthorizationServerInterceptor()))
             .build()
             .start();
     ManagedChannel channel =
@@ -101,11 +105,12 @@ class E2EKeyBackupJdbcIntegrationTest {
                       .build())
               .getSession();
       assertThat(registered.getAccountId()).isNotBlank();
+      var authenticated = withBearer(client, registered.getAccessToken());
 
       String oversized = "x".repeat(AuthService.E2E_KEY_BACKUP_MAX_BLOB_BYTES + 1);
       assertThatThrownBy(
               () ->
-                  client.putE2EKeyBackup(
+                  authenticated.putE2EKeyBackup(
                       PutE2EKeyBackupRequest.newBuilder()
                           .setEncryptedBlob(oversized)
                           .build()))
@@ -122,7 +127,7 @@ class E2EKeyBackupJdbcIntegrationTest {
     Server server =
         InProcessServerBuilder.forName(serverName)
             .directExecutor()
-            .addService(grpcService)
+            .addService(ServerInterceptors.intercept(grpcService, new AuthorizationServerInterceptor()))
             .build()
             .start();
     ManagedChannel channel =
@@ -139,16 +144,17 @@ class E2EKeyBackupJdbcIntegrationTest {
               .getSession();
       UUID accountId = UUID.fromString(registered.getAccountId());
       assertThat(accountId).isNotNull();
+      var authenticated = withBearer(client, registered.getAccessToken());
 
       String encryptedBlob = "phase15-jdbc-encrypted-key-backup-blob";
-      client.putE2EKeyBackup(
+      authenticated.putE2EKeyBackup(
           PutE2EKeyBackupRequest.newBuilder()
               .setEncryptedBlob(encryptedBlob)
               .setPasswordHint("hint-only")
               .build());
 
       var restored =
-          client.getE2EKeyBackup(GetE2EKeyBackupRequest.getDefaultInstance());
+          authenticated.getE2EKeyBackup(GetE2EKeyBackupRequest.getDefaultInstance());
       assertThat(restored.getEncryptedBlob()).isEqualTo(encryptedBlob);
 
       String storedBlob =
@@ -165,5 +171,12 @@ class E2EKeyBackupJdbcIntegrationTest {
       channel.shutdownNow();
       server.shutdownNow();
     }
+  }
+
+  private static AuthServiceGrpc.AuthServiceBlockingStub withBearer(
+      AuthServiceGrpc.AuthServiceBlockingStub client, String accessToken) {
+    Metadata headers = new Metadata();
+    headers.put(Metadata.Key.of("authorization", Metadata.ASCII_STRING_MARSHALLER), "Bearer " + accessToken);
+    return client.withInterceptors(MetadataUtils.newAttachHeadersInterceptor(headers));
   }
 }
