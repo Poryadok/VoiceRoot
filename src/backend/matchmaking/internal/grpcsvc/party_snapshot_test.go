@@ -1,6 +1,7 @@
 package grpcsvc
 
 import (
+	"bytes"
 	"context"
 	"testing"
 
@@ -45,12 +46,28 @@ func TestStartSearch_ExternalPartyIDRejectedBeforeState(t *testing.T) {
 func TestValidatePartySnapshot(t *testing.T) {
 	initiator := uuid.New()
 	member := uuid.New()
-	roomID := uuid.New()
+	roomID := uuid.New().String()
+	members := []uuid.UUID{initiator, member}
+	if bytes.Compare(members[0][:], members[1][:]) > 0 {
+		members[0], members[1] = members[1], members[0]
+	}
 
 	t.Run("solo is exactly the initiating profile", func(t *testing.T) {
 		err := validatePartySnapshot(PartySnapshot{
+			ProtocolVersion:  1,
 			Kind:             PartySnapshotKindSolo,
 			MemberProfileIDs: []uuid.UUID{initiator},
+		}, initiator)
+		require.NoError(t, err)
+	})
+
+	t.Run("voice roster has canonical members", func(t *testing.T) {
+		err := validatePartySnapshot(PartySnapshot{
+			ProtocolVersion:  1,
+			Kind:             PartySnapshotKindVoiceRoster,
+			RoomID:           roomID,
+			RosterVersion:    1,
+			MemberProfileIDs: members,
 		}, initiator)
 		require.NoError(t, err)
 	})
@@ -62,6 +79,7 @@ func TestValidatePartySnapshot(t *testing.T) {
 		{
 			name: "duplicate initiator",
 			snapshot: PartySnapshot{
+				ProtocolVersion:  1,
 				Kind:             PartySnapshotKindVoiceRoster,
 				RoomID:           roomID,
 				RosterVersion:    1,
@@ -69,8 +87,19 @@ func TestValidatePartySnapshot(t *testing.T) {
 			},
 		},
 		{
+			name: "duplicate non initiator",
+			snapshot: PartySnapshot{
+				ProtocolVersion:  1,
+				Kind:             PartySnapshotKindVoiceRoster,
+				RoomID:           roomID,
+				RosterVersion:    1,
+				MemberProfileIDs: []uuid.UUID{initiator, member, member},
+			},
+		},
+		{
 			name: "initiator absent",
 			snapshot: PartySnapshot{
+				ProtocolVersion:  1,
 				Kind:             PartySnapshotKindVoiceRoster,
 				RoomID:           roomID,
 				RosterVersion:    1,
@@ -80,6 +109,7 @@ func TestValidatePartySnapshot(t *testing.T) {
 		{
 			name: "non positive roster version",
 			snapshot: PartySnapshot{
+				ProtocolVersion:  1,
 				Kind:             PartySnapshotKindVoiceRoster,
 				RoomID:           roomID,
 				MemberProfileIDs: []uuid.UUID{initiator, member},
@@ -88,9 +118,94 @@ func TestValidatePartySnapshot(t *testing.T) {
 		{
 			name: "empty room id",
 			snapshot: PartySnapshot{
+				ProtocolVersion:  1,
 				Kind:             PartySnapshotKindVoiceRoster,
 				RosterVersion:    1,
 				MemberProfileIDs: []uuid.UUID{initiator, member},
+			},
+		},
+		{
+			name: "malformed room id",
+			snapshot: PartySnapshot{
+				ProtocolVersion:  1,
+				Kind:             PartySnapshotKindVoiceRoster,
+				RoomID:           "not-a-uuid",
+				RosterVersion:    1,
+				MemberProfileIDs: members,
+			},
+		},
+		{
+			name: "nil room id",
+			snapshot: PartySnapshot{
+				ProtocolVersion:  1,
+				Kind:             PartySnapshotKindVoiceRoster,
+				RoomID:           uuid.Nil.String(),
+				RosterVersion:    1,
+				MemberProfileIDs: members,
+			},
+		},
+		{
+			name: "unsorted members",
+			snapshot: PartySnapshot{
+				ProtocolVersion:  1,
+				Kind:             PartySnapshotKindVoiceRoster,
+				RoomID:           roomID,
+				RosterVersion:    1,
+				MemberProfileIDs: []uuid.UUID{members[1], members[0]},
+			},
+		},
+		{
+			name: "nil member",
+			snapshot: PartySnapshot{
+				ProtocolVersion:  1,
+				Kind:             PartySnapshotKindVoiceRoster,
+				RoomID:           roomID,
+				RosterVersion:    1,
+				MemberProfileIDs: []uuid.UUID{uuid.Nil, initiator},
+			},
+		},
+		{
+			name: "unsupported protocol version",
+			snapshot: PartySnapshot{
+				ProtocolVersion:  2,
+				Kind:             PartySnapshotKindVoiceRoster,
+				RoomID:           roomID,
+				RosterVersion:    1,
+				MemberProfileIDs: members,
+			},
+		},
+		{
+			name: "unknown kind",
+			snapshot: PartySnapshot{
+				ProtocolVersion:  1,
+				Kind:             "OTHER",
+				MemberProfileIDs: []uuid.UUID{initiator},
+			},
+		},
+		{
+			name: "solo has room",
+			snapshot: PartySnapshot{
+				ProtocolVersion:  1,
+				Kind:             PartySnapshotKindSolo,
+				RoomID:           roomID,
+				MemberProfileIDs: []uuid.UUID{initiator},
+			},
+		},
+		{
+			name: "solo has roster version",
+			snapshot: PartySnapshot{
+				ProtocolVersion:  1,
+				Kind:             PartySnapshotKindSolo,
+				RosterVersion:    1,
+				MemberProfileIDs: []uuid.UUID{initiator},
+			},
+		},
+		{
+			name: "solo has extra member",
+			snapshot: PartySnapshot{
+				ProtocolVersion:  1,
+				Kind:             PartySnapshotKindSolo,
+				MemberProfileIDs: members,
 			},
 		},
 	} {
@@ -100,6 +215,11 @@ func TestValidatePartySnapshot(t *testing.T) {
 		})
 	}
 }
+
+// Voice owns membership eligibility, room activity and atomic snapshot versus
+// mutation behaviour. Those cross-service cases require its protected RPC and
+// belong to the Voice integration suite; this MM seam validates only the
+// already returned contract shape before any persistence is attempted.
 
 func assertNoPartyStartState(t *testing.T, ctx context.Context, pool *pgxpool.Pool, srv *MatchmakingGRPC, profileID uuid.UUID, gameID string) {
 	t.Helper()
