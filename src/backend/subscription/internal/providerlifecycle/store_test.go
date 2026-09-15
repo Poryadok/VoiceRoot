@@ -44,11 +44,13 @@ func testDB(t *testing.T) *pgxpool.Pool {
 	_, file, _, ok := runtime.Caller(0)
 	require.True(t, ok)
 	root := filepath.Join(filepath.Dir(file), "../../../migrations/subscription_db")
-	pool := integrationtest.StartPostgres(t, context.Background(), "provider_lifecycle", filepath.Join(root, "000004_entitlement_outbox.up.sql"))
-	migration, err := os.ReadFile(filepath.Join(root, "000005_provider_lifecycle.up.sql"))
-	require.NoError(t, err)
-	_, err = pool.Exec(context.Background(), string(migration))
-	require.NoError(t, err)
+	pool := integrationtest.StartPostgres(t, context.Background(), "provider_lifecycle", filepath.Join(root, "000001_init.up.sql"))
+	for _, name := range []string{"000002_grace_reminders.up.sql", "000003_space_lifecycle_provider_dedup.up.sql", "000004_entitlement_outbox.up.sql", "000005_provider_lifecycle.up.sql"} {
+		migration, err := os.ReadFile(filepath.Join(root, name))
+		require.NoError(t, err)
+		_, err = pool.Exec(context.Background(), string(migration))
+		require.NoError(t, err)
+	}
 	return pool
 }
 
@@ -93,6 +95,41 @@ func TestProviderReplayOrderAndConflictingBody(t *testing.T) {
 	var count int
 	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM subscription_event_outbox").Scan(&count))
 	require.Equal(t, 2, count)
+	// A different delivery ID cannot disguise conflicting facts at one provider version.
+	renew.EventID = uuid.NewString()
+	_, err = store.Apply(ctx, renew)
+	require.ErrorIs(t, err, ErrContractMismatch)
+	var saved []byte
+	require.NoError(t, pool.QueryRow(ctx, "SELECT payload FROM subscription_entitlement_aggregates").Scan(&saved))
+	current := new(eventsv1.SubscriptionStreamEvent)
+	require.NoError(t, proto.Unmarshal(saved, current))
+	require.True(t, proto.Equal(renewed.Event, current))
+	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM subscription_provider_conflicts").Scan(&conflicts))
+	require.Equal(t, 3, conflicts)
+	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM subscription_event_outbox").Scan(&count))
+	require.Equal(t, 2, count)
+}
+
+func TestNewProviderBindingRequiresAnUnoccupiedStart(t *testing.T) {
+	pool := testDB(t)
+	ctx := context.Background()
+	store := Store{Pool: pool}
+	c := fakeCommand(1)
+	unknown := c
+	unknown.Reason = eventsv1.EntitlementReason_ENTITLEMENT_REASON_RENEWED
+	_, err := store.Apply(ctx, unknown)
+	require.ErrorIs(t, err, ErrNeedsReconciliation)
+	_, err = store.Apply(ctx, c)
+	require.NoError(t, err)
+	other := fakeCommand(1)
+	other.AggregateID = c.AggregateID
+	_, err = store.Apply(ctx, other)
+	require.ErrorIs(t, err, ErrNeedsReconciliation)
+	for _, table := range []string{"subscription_provider_bindings", "subscription_provider_outcomes", "subscription_event_outbox"} {
+		var count int
+		require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM "+table).Scan(&count))
+		require.Equal(t, 1, count)
+	}
 }
 
 func TestConcurrentProviderReplayCommitsOneEvent(t *testing.T) {

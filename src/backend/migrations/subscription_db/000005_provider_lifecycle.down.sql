@@ -1,0 +1,3 @@
+DROP TABLE subscription_provider_conflicts;
+DROP TABLE subscription_provider_outcomes;
+DROP TABLE subscription_provider_bindings;

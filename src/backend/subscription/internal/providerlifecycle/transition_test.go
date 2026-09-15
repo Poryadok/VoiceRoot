@@ -38,6 +38,10 @@ func TestPersonalAndSpaceGraceCycleDoesNotRestart(t *testing.T) {
 			require.NoError(t, err)
 			require.True(t, proto.Equal(grace, again), "same unresolved payment cannot restart or replace its grace snapshot")
 			expiry := nextCommand(repeated, eventsv1.EntitlementReason_ENTITLEMENT_REASON_GRACE_EXPIRED, grace.EntitledUntil.AsTime())
+			early := expiry
+			early.EffectiveAt = expiry.EffectiveAt.Add(-time.Microsecond)
+			_, err = reduce(grace, early)
+			require.ErrorIs(t, err, ErrNeedsReconciliation)
 			inactive, err := reduce(grace, expiry)
 			require.NoError(t, err)
 			require.Equal(t, eventsv1.EntitlementState_ENTITLEMENT_STATE_INACTIVE, inactive.State)
