@@ -12,6 +12,8 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
   public static final String ISSUE_RPC = "/voice.auth.v1.AuthService/IssueOwnershipTransferProof";
   public static final String CONSUME_RPC = "/voice.auth.v1.AuthService/ConsumeOwnershipTransferProof";
   public static final String LOOKUP_RPC = "/voice.auth.v1.AuthService/GetOwnershipTransferReceipt";
+  public static final String PHONE_RPC = "/voice.auth.v1.AuthService/ResolvePhoneHashes";
+  public static final String STATUS_RPC = "/voice.auth.v1.AuthService/SetAccountStatus";
   public static final String SPACE_DELETE_CONSUME_RPC =
       "/voice.auth.v1.AuthService/ConsumeSpaceDeletionProof";
   public static final String SPACE_DELETE_LOOKUP_RPC =
@@ -35,7 +37,8 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
     String rpc = "/" + call.getMethodDescriptor().getFullMethodName();
     if (!ISSUE_RPC.equals(rpc) && !CONSUME_RPC.equals(rpc) && !LOOKUP_RPC.equals(rpc)
         && !SPACE_DELETE_CONSUME_RPC.equals(rpc) && !SPACE_DELETE_LOOKUP_RPC.equals(rpc)
-        && !SPACE_DELETE_ACK_RPC.equals(rpc)) return next.startCall(call, headers);
+        && !SPACE_DELETE_ACK_RPC.equals(rpc) && !PHONE_RPC.equals(rpc)
+        && !STATUS_RPC.equals(rpc)) return next.startCall(call, headers);
     final String token, requestId;
     try {
       if (verifier == null) throw new IllegalArgumentException();

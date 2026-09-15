@@ -95,6 +95,19 @@ class HttpAccessLogFilterTest {
     assertThat(event.getMDCPropertyMap()).containsEntry("status", "400");
   }
 
+  @Test
+  void configuredConsoleEncoderIncludesPeerIpInJsonOutput() throws Exception {
+    MockHttpServletRequest request = requestWithRemoteAddr("192.0.2.99");
+    new HttpAccessLogFilter().doFilter(request, new MockHttpServletResponse(), (ignored, response) -> {});
+    var root = (Logger) LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME);
+    @SuppressWarnings("unchecked")
+    var console = (ch.qos.logback.core.OutputStreamAppender<ILoggingEvent>) root.getAppender("CONSOLE");
+    assertThat(console).isNotNull();
+    byte[] encoded = console.getEncoder().encode(accessEventForPath("/audit-peer"));
+    var json = new com.fasterxml.jackson.databind.ObjectMapper().readTree(encoded);
+    assertThat(json.path("peer_ip").asText()).isEqualTo("192.0.2.99");
+  }
+
   @ParameterizedTest
   @ValueSource(strings = {"198.51.100.17", "2001:db8:85a3::8a2e:370:7334"})
   void logsValidIpv4AndIpv6ServletPeerAddresses(String remoteAddr) throws Exception {

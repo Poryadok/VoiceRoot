@@ -21,7 +21,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public class HttpAccessLogFilter extends OncePerRequestFilter {
   private static final Logger log = LoggerFactory.getLogger(HttpAccessLogFilter.class);
   private static final String[] HTTP_MDC_KEYS = {
-    "event", "method", "path", "status", "duration_ms"
+    "event", "method", "path", "status", "duration_ms", "peer_ip"
   };
 
   @Override
@@ -29,6 +29,7 @@ public class HttpAccessLogFilter extends OncePerRequestFilter {
       HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
       throws ServletException, IOException {
     Instant start = Instant.now();
+    String peerIp = peerIp(request.getRemoteAddr());
     StatusCaptureResponse wrapped = new StatusCaptureResponse(response);
     try {
       filterChain.doFilter(request, wrapped);
@@ -39,6 +40,7 @@ public class HttpAccessLogFilter extends OncePerRequestFilter {
       MDC.put("path", request.getRequestURI());
       MDC.put("status", Integer.toString(wrapped.captureStatus()));
       MDC.put("duration_ms", Long.toString(durationMs));
+      MDC.put("peer_ip", peerIp);
       try {
         log.info("http request");
       } finally {
@@ -50,6 +52,19 @@ public class HttpAccessLogFilter extends OncePerRequestFilter {
   private static void clearHttpMdc() {
     for (String key : HTTP_MDC_KEYS) {
       MDC.remove(key);
+    }
+  }
+
+  private static String peerIp(String address) {
+    if (address == null || address.length() > 64 || !address.matches("[0-9A-Fa-f:.]+")) {
+      return "unknown";
+    }
+    try {
+      // Literal parsing never performs a DNS lookup or consults forwarded headers.
+      java.net.InetAddress.ofLiteral(address);
+      return address;
+    } catch (IllegalArgumentException invalid) {
+      return "unknown";
     }
   }
 

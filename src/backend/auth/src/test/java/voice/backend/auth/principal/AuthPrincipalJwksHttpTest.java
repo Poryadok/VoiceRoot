@@ -63,6 +63,46 @@ class AuthPrincipalJwksHttpTest {
     assertEquals(1, requests.get());
   }
 
+  @Test void configuredPrivateCaIsUsedByProductionVerifierAndWrongCaCannotReachHandler() throws Exception {
+    for (String certificate : new String[] {"server-cert.pem", "wrong-ca-cert.pem"}) {
+      String url = endpoint("/jwks").toString();
+      var environment = new org.springframework.mock.env.MockEnvironment()
+          .withProperty("S2S_JWKS_URLS_JSON", "{\"gateway\":\"" + url + "\",\"space\":\"" + url + "\",\"social\":\"" + url + "\",\"moderation\":\"" + url + "\"}")
+          .withProperty("S2S_JWKS_CA_FILE", AuthPrincipalServicesTest.resource(certificate).getAbsolutePath())
+          .withProperty("auth.persistence", "memory");
+      environment.setActiveProfiles("test");
+      var epochs = org.mockito.Mockito.mock(voice.backend.auth.sessionepoch.SessionEpochFloorStore.class);
+      try (var interceptor = AuthPrincipalConfiguration.fromEnvironment(environment, epochs, null)) {
+        var request = com.google.protobuf.Struct.getDefaultInstance();
+        String rpc = AuthInternalCallerBoundaryTest.PHONE;
+        var claims = AuthInternalCallerBoundaryTest.claims("social", rpc, request);
+        long now = java.time.Instant.now().getEpochSecond();
+        claims.put("iat", now); claims.put("nbf", now); claims.put("exp", now + 30);
+        var headers = new io.grpc.Metadata();
+        headers.put(AuthPrincipalServerInterceptorTest.AUTH, "Bearer " + AuthPrincipalVerifierTest.token(claims));
+        headers.put(AuthPrincipalServerInterceptorTest.REQUEST_ID, "request-1");
+        var call = new AuthPrincipalServerInterceptorTest.RecordingCall(rpc);
+        var handlers = new AtomicInteger();
+        var listener = interceptor.interceptCall(call, headers, (accepted, metadata) -> {
+          handlers.incrementAndGet();
+          assertEquals("social", VerifiedPrincipal.current().issuer());
+          return new io.grpc.ServerCall.Listener<com.google.protobuf.Struct>() {};
+        });
+        listener.onMessage(request); listener.onHalfClose();
+        if (certificate.equals("server-cert.pem")) {
+          assertNull(call.closed);
+          assertEquals(1, handlers.get());
+          assertEquals(1, requests.get());
+        } else {
+          assertNotNull(call.closed);
+          assertEquals(io.grpc.Status.Code.UNAUTHENTICATED, call.closed.getCode());
+          assertEquals(0, handlers.get());
+          assertEquals(1, requests.get(), "wrong CA must not reach the HTTPS handler");
+        }
+      }
+    }
+  }
+
   @Test void rejectsUntrustedCertificateAndWrongHostnameBeforeHttpHandler() {
     HttpClient untrusted = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
     try {

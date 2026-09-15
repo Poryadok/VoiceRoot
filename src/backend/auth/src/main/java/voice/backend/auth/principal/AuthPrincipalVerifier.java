@@ -52,7 +52,7 @@ public final class AuthPrincipalVerifier {
       if (!kid.matches("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")) throw invalid();
       JsonNode claims = JSON.readTree(decoder.decode(parts[1]));
       String issuer = string(claims, "iss");
-      if (!Set.of("gateway", "space").contains(issuer)) throw invalid();
+      if (!Set.of("gateway", "space", "social", "moderation").contains(issuer)) throw invalid();
       RSAPublicKey key = keys.resolve(issuer, kid);
       if (key == null || key.getModulus().bitLength() < 2048) throw invalid();
       var signature = Signature.getInstance("SHA256withRSA");
@@ -100,6 +100,9 @@ public final class AuthPrincipalVerifier {
         AuthPrincipalServerInterceptor.SPACE_DELETE_ACK_RPC).contains(rpc)
         && principal.kind().equals(VerifiedPrincipal.SERVICE)
         && principal.issuer().equals("space"));
+    allowed = allowed || (principal.kind().equals(VerifiedPrincipal.SERVICE)
+        && ((AuthPrincipalServerInterceptor.PHONE_RPC.equals(rpc) && principal.issuer().equals("social"))
+            || (AuthPrincipalServerInterceptor.STATUS_RPC.equals(rpc) && principal.issuer().equals("moderation"))));
     if (!allowed) throw Status.PERMISSION_DENIED.withDescription("principal caller not permitted").asRuntimeException();
     try {
       if (!expires.isAfter(clock.instant())) throw invalid();

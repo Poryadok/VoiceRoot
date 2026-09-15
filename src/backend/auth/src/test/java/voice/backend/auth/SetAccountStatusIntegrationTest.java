@@ -30,6 +30,8 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 import voice.backend.auth.grpc.AuthGrpcService;
+import voice.backend.auth.principal.AuthInternalTestPrincipal;
+import voice.backend.auth.principal.AuthPrincipalServerInterceptor;
 import voice.backend.auth.support.JdbcUserContractTestConfiguration;
 
 /**
@@ -76,16 +78,18 @@ class SetAccountStatusIntegrationTest {
 
     String serverName = InProcessServerBuilder.generateName();
     Server server =
-        InProcessServerBuilder.forName(serverName).directExecutor().addService(grpcService).build().start();
+        InProcessServerBuilder.forName(serverName).directExecutor()
+            .intercept(AuthInternalTestPrincipal.interceptor()).addService(grpcService).build().start();
     ManagedChannel channel = InProcessChannelBuilder.forName(serverName).directExecutor().build();
     var client = AuthServiceGrpc.newBlockingStub(channel);
     try {
-      client.setAccountStatus(
-          SetAccountStatusRequest.newBuilder()
+      var request = SetAccountStatusRequest.newBuilder()
               .setAccountId(accountId)
               .setStatus("suspended")
               .setReason("platform moderation phase14")
-              .build());
+              .build();
+      AuthInternalTestPrincipal.client(client, "moderation", AuthPrincipalServerInterceptor.STATUS_RPC, request)
+          .setAccountStatus(request);
     } finally {
       channel.shutdownNow();
       server.shutdownNow();

@@ -82,22 +82,24 @@ profile-related paths используют `ResolvePrimaryProfileIDs`, `SwitchPr
 
 Canonical product spec: [docs/microservices/auth-service.md](../../../docs/microservices/auth-service.md).
 
-## Ownership-proof principal listener
+## Protected principal listener
 
 The legacy gRPC listener on `auth.grpc.port` (9090) always rejects
 `IssueOwnershipTransferProof`, `ConsumeOwnershipTransferProof`, and
-`GetOwnershipTransferReceipt`. Existing Auth
-RPCs keep their current listener. The dedicated principal listener exposes only
-these three proof methods, and only when `S2S_JWKS_URLS_JSON` is configured:
+`GetOwnershipTransferReceipt`, `ResolvePhoneHashes` and `SetAccountStatus`.
+Internal Space deletion consume/lookup/acknowledge methods are absent there.
+The dedicated principal listener exposes only these eight methods, and only
+when `S2S_JWKS_URLS_JSON` is configured. Ordinary session RPCs retain 9090:
 
 | Setting | Contract |
 |---|---|
 | `AUTH_PRINCIPAL_GRPC_PORT` | Dedicated listener, default 9091; must differ from the legacy port. Port 0 is allowed only in explicit local/test profiles. |
 | `AUTH_GRPC_TLS_CERT_FILE`, `AUTH_GRPC_TLS_KEY_FILE` | Paired PEM certificate chain and private-key files for the dedicated listener. Mount from an Auth-owned secret, for example `/run/secrets/auth-grpc/tls.crt` and `tls.key`. |
-| `S2S_JWKS_URLS_JSON` | Nonempty issuer-to-HTTPS-URL object containing `gateway` and `space`. |
+| `S2S_JWKS_URLS_JSON` | Nonempty issuer-to-HTTPS-URL object containing `gateway`, `space`, `social` and `moderation`. |
+| `S2S_JWKS_CA_FILE` | Optional PEM CA bundle added to JVM system roots. Blank, missing or invalid bundles fail startup. |
 | `S2S_JWKS_REFRESH_AFTER`, `S2S_JWKS_HARD_EXPIRY`, `S2S_UNKNOWN_KID_COOLDOWN` | Defaults `30s`, `2m`, `5s`; positive duration values, hard expiry at least refresh interval. Explicit blank/invalid values fail startup. |
 
-Missing JWKS configuration leaves the private listener disabled and proof methods
+Missing JWKS configuration leaves the private listener disabled and protected methods
 denied on the legacy listener. Partial/invalid configuration is a startup error.
 Principal TLS is mandatory unless every active Spring profile is explicitly
 `local` or `test`; mixed production/test profiles cannot enable plaintext.
@@ -123,18 +125,21 @@ and explicit local/test profiles.
 
 JWKS fetches are lazy (no Gateway/Auth startup dependency cycle), HTTPS only,
 without redirects, bounded by two seconds and 64 KiB. Java's default certificate
-and hostname verification applies. A private CA must be installed in the JVM
-trust store (standard `javax.net.ssl.trustStore` configuration). Gateway and Space
-each publish a complete current+next RS256 signing set before switching active
+and hostname verification applies. Private roots can be provided with
+`S2S_JWKS_CA_FILE` or the JVM trust store. Each permitted issuer publishes a
+complete current+next RS256 signing set before switching active
 keys; retain old keys for at least 30 seconds after their last issuance. Incomplete
 refresh never replaces or extends the last-good set, and hard expiry fails closed.
 Auth consumes these service keys; its existing client-JWT signing configuration
 does not sign principal credentials. Legacy `S2S_SIGNING_KEY_PEM` and
 `S2S_SIGNING_KID` aliases are rejected.
 
-Deployment must route only these proof calls to port 9091, install the Auth
-certificate chain and CA trust for Gateway/Space clients, and verify the
-certificate's Auth service DNS name. Existing callers remain on 9090. Do not
+Social calls only `ResolvePhoneHashes` with `service:social`; Moderation calls
+only `SetAccountStatus` with `service:moderation`. Both use the same exact
+request-bound Phase-0 validation and fresh credentials on application retries.
+Deployment routes only protected calls to port 9091, installs the Auth
+certificate chain and CA trust for callers, and verifies the certificate's
+Auth service DNS name. Ordinary session callers remain on 9090. Do not
 publish port 9091 externally. Test fixture keys under `src/test/resources` are
 public test data and must never be deployed. Verification denials use the
 existing gRPC request logging with coarse status descriptions; credentials and

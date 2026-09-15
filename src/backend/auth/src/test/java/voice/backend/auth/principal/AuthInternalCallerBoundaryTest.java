@@ -61,6 +61,9 @@ class AuthInternalCallerBoundaryTest {
         Metadata raw = new Metadata();
         raw.put(Metadata.Key.of("x-voice-internal", Metadata.ASCII_STRING_MARSHALLER), "true");
         assertCode(Status.Code.UNAUTHENTICATED, () -> invoke(attach(endpoint.client, raw), rpc));
+        Metadata signedRaw = headers(issuer, rpc, request(rpc));
+        signedRaw.put(Metadata.Key.of("x-voice-internal", Metadata.ASCII_STRING_MARSHALLER), "true");
+        assertCode(Status.Code.UNAUTHENTICATED, () -> invoke(attach(endpoint.client, signedRaw), rpc));
         Metadata duplicate = headers(issuer, rpc, request(rpc));
         duplicate.put(AuthPrincipalServerInterceptorTest.AUTH, duplicate.get(AuthPrincipalServerInterceptorTest.AUTH));
         assertCode(Status.Code.UNAUTHENTICATED, () -> invoke(attach(endpoint.client, duplicate), rpc));
@@ -106,6 +109,47 @@ class AuthInternalCallerBoundaryTest {
             AuthPrincipalVerifierTest.token(claims), rpc, "request-1", hash(rpc)));
       }
     }
+  }
+
+  @Test void bareAdapterRequiresVerifiedPrincipalAndRejectsWrongCaller() {
+    var phone = new RecordingObserver<ResolvePhoneHashesResponse>();
+    service.resolvePhoneHashes(PHONE_REQUEST, phone);
+    assertNotNull(phone.error);
+    assertEquals(Status.Code.UNAUTHENTICATED, Status.fromThrowable(phone.error).getCode());
+    var status = new RecordingObserver<SetAccountStatusResponse>();
+    service.setAccountStatus(STATUS_REQUEST, status);
+    assertNotNull(status.error);
+    assertEquals(Status.Code.UNAUTHENTICATED, Status.fromThrowable(status.error).getCode());
+    var wrong = new RecordingObserver<SetAccountStatusResponse>();
+    Context.current().withValue(VerifiedPrincipal.CONTEXT,
+        new VerifiedPrincipal("service", "social", null, null, 0))
+        .run(() -> service.setAccountStatus(STATUS_REQUEST, wrong));
+    assertNotNull(wrong.error);
+    assertEquals(Status.Code.PERMISSION_DENIED, Status.fromThrowable(wrong.error).getCode());
+    var wrongPhone = new RecordingObserver<ResolvePhoneHashesResponse>();
+    Context.current().withValue(VerifiedPrincipal.CONTEXT,
+        new VerifiedPrincipal("service", "moderation", null, null, 0))
+        .run(() -> service.resolvePhoneHashes(PHONE_REQUEST, wrongPhone));
+    assertNotNull(wrongPhone.error);
+    assertEquals(Status.Code.PERMISSION_DENIED, Status.fromThrowable(wrongPhone.error).getCode());
+    verifyNoInteractions(auth);
+  }
+
+  @Test void productionPrivateSurfaceContainsOnlyProtectedMethods() {
+    var definition = AuthPrincipalServices.proofService(service.bindService(), new AuthPrincipalServerInterceptor(fixture.verifier));
+    var names = definition.getMethods().stream().map(method -> "/" + method.getMethodDescriptor().getFullMethodName())
+        .collect(java.util.stream.Collectors.toSet());
+    assertEquals(java.util.Set.of(PHONE, STATUS,
+        AuthPrincipalServerInterceptor.ISSUE_RPC, AuthPrincipalServerInterceptor.CONSUME_RPC,
+        AuthPrincipalServerInterceptor.LOOKUP_RPC, AuthPrincipalServerInterceptor.SPACE_DELETE_CONSUME_RPC,
+        AuthPrincipalServerInterceptor.SPACE_DELETE_LOOKUP_RPC, AuthPrincipalServerInterceptor.SPACE_DELETE_ACK_RPC), names);
+  }
+
+  static final class RecordingObserver<T> implements io.grpc.stub.StreamObserver<T> {
+    Throwable error;
+    public void onNext(T response) {}
+    public void onError(Throwable failure) { error = failure; }
+    public void onCompleted() {}
   }
 
   Endpoint endpoint(boolean legacy) throws Exception {

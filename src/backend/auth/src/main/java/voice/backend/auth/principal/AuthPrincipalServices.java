@@ -32,6 +32,9 @@ public final class AuthPrincipalServices {
         AuthPrincipalServerInterceptor.SPACE_DELETE_CONSUME_RPC.substring(1),
         AuthPrincipalServerInterceptor.SPACE_DELETE_LOOKUP_RPC.substring(1),
         AuthPrincipalServerInterceptor.SPACE_DELETE_ACK_RPC.substring(1));
+    Set<String> internal = Set.of(
+        AuthPrincipalServerInterceptor.PHONE_RPC.substring(1),
+        AuthPrincipalServerInterceptor.STATUS_RPC.substring(1));
     Set<String> present = all.getMethods().stream()
         .map(method -> method.getMethodDescriptor().getFullMethodName())
         .collect(java.util.stream.Collectors.toUnmodifiableSet());
@@ -43,16 +46,22 @@ public final class AuthPrincipalServices {
     if (hasDeletionSurface && !present.containsAll(deletion)) {
       throw new IllegalArgumentException("Auth deletion proof RPC implementation is incomplete");
     }
+    boolean hasInternalSurface = present.stream().anyMatch(internal::contains);
+    if (hasInternalSurface && !present.containsAll(internal)) {
+      throw new IllegalArgumentException("Auth internal RPC implementation is incomplete");
+    }
     var proof = ServerServiceDefinition.builder(all.getServiceDescriptor().getName());
     int methods = 0;
     for (var method : all.getMethods()) {
       String name = method.getMethodDescriptor().getFullMethodName();
-      if (ownership.contains(name) || (hasDeletionSurface && deletion.contains(name))) {
+      if (ownership.contains(name) || (hasDeletionSurface && deletion.contains(name))
+          || (hasInternalSurface && internal.contains(name))) {
         proof.addMethod(method);
         methods++;
       }
     }
-    int expected = ownership.size() + (hasDeletionSurface ? deletion.size() : 0);
+    int expected = ownership.size() + (hasDeletionSurface ? deletion.size() : 0)
+        + (hasInternalSurface ? internal.size() : 0);
     if (methods != expected) throw new IllegalArgumentException("Auth proof RPC implementation is incomplete");
     return ServerInterceptors.intercept(proof.build(), verifier);
   }

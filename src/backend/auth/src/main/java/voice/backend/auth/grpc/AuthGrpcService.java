@@ -193,7 +193,7 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
   @Override
   public void resolvePhoneHashes(
       ResolvePhoneHashesRequest request, StreamObserver<ResolvePhoneHashesResponse> responseObserver) {
-    run(responseObserver, () -> {
+    runInternal(responseObserver, "social", () -> {
       ResolvePhoneHashesResponse.Builder builder = ResolvePhoneHashesResponse.newBuilder();
       authService
           .resolvePhoneHashes(request.getPhoneHashesList())
@@ -245,7 +245,7 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
 
   @Override
   public void setAccountStatus(SetAccountStatusRequest request, StreamObserver<SetAccountStatusResponse> responseObserver) {
-    run(responseObserver, () -> {
+    runInternal(responseObserver, "moderation", () -> {
       authService.setAccountStatus(request.getAccountId(), request.getStatus());
       return SetAccountStatusResponse.getDefaultInstance();
     });
@@ -557,6 +557,20 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
       observer.onCompleted();
     } catch (AuthException ex) {
       observer.onError(toGrpcStatus(ex).asRuntimeException());
+    }
+  }
+
+  private <T> void runInternal(StreamObserver<T> observer, String issuer, GrpcCall<T> call) {
+    try {
+      requireProofPrincipal("service", issuer);
+      observer.onNext(call.execute());
+      observer.onCompleted();
+    } catch (io.grpc.StatusRuntimeException denied) {
+      observer.onError(denied);
+    } catch (AuthException failure) {
+      observer.onError(toGrpcStatus(failure).asRuntimeException());
+    } catch (RuntimeException unavailable) {
+      observer.onError(Status.UNAVAILABLE.withDescription("internal auth unavailable").asRuntimeException());
     }
   }
 

@@ -11,7 +11,7 @@ import voice.backend.auth.sessionepoch.SessionEpochFloorStore;
 
 class AuthPrincipalConfigurationTest {
   static final String URLS = "S2S_JWKS_URLS_JSON";
-  static final String VALID = "{\"gateway\":\"https://gateway.invalid/jwks\",\"space\":\"https://space.invalid/jwks\"}";
+  static final String VALID = "{\"gateway\":\"https://gateway.invalid/jwks\",\"space\":\"https://space.invalid/jwks\",\"social\":\"https://social.invalid/jwks\",\"moderation\":\"https://moderation.invalid/jwks\"}";
   final SessionEpochFloorStore epochs = mock(SessionEpochFloorStore.class);
   final StringRedisTemplate redis = mock(StringRedisTemplate.class);
 
@@ -26,6 +26,15 @@ class AuthPrincipalConfigurationTest {
           new MockEnvironment().withProperty("S2S_JWKS_CA_FILE", value), epochs, redis));
       assertThrows(IllegalArgumentException.class, () -> AuthPrincipalConfiguration.fromEnvironment(
           new MockEnvironment().withProperty(URLS, VALID).withProperty("S2S_JWKS_CA_FILE", value), epochs, redis));
+    }
+  }
+
+  @Test void everyProtectedCallerRequiresAnExplicitHttpsJwksEndpoint() throws Exception {
+    for (String issuer : List.of("gateway", "space", "social", "moderation")) {
+      var endpoints = (com.fasterxml.jackson.databind.node.ObjectNode) AuthPrincipalVerifier.JSON.readTree(VALID);
+      endpoints.remove(issuer);
+      assertThrows(IllegalArgumentException.class, () -> AuthPrincipalConfiguration.fromEnvironment(
+          new MockEnvironment().withProperty(URLS, endpoints.toString()), epochs, redis), issuer);
     }
   }
 
