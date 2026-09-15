@@ -752,6 +752,18 @@ jitter. Fifteen minutes without progress alerts but never skips a participant.
 The ledger uses `NOT_STARTED`, `IN_FLIGHT`, `COMPLETE`, `RETRYABLE_FAILURE`,
 `CONTRACT_MISMATCH`; only an accepted receipt may set `COMPLETE`.
 
+The store boundary applies each participant receipt under the shared Space lock:
+load the current aggregate, validate the receipt, and persist evidence in one
+transaction. Concurrent participant responses cannot replace each other's
+progress. Exact receipt replay remains valid after the aggregate advances; a
+changed receipt for an already completed participant conflicts. Restore completion
+uses fresh database time under that same lock and commits `LIVE` with its stable
+`space.restored` outbox row only after the ten-participant barrier. These durable
+transitions do not themselves authenticate network callers or activate the public
+coordinator. Schedule reservation replay validates the original immutable binding
+and loads saved progress without resetting generation or repeating current-owner
+and current-name preconditions.
+
 The common protected wire uses `protocol_version=1`. A lifecycle-fence request
 contains canonical `space_id`, `deletion_operation_id`, positive `generation`,
 desired `FROZEN`/`LIVE`/`PURGE_DECIDED` and `ManifestBinding(manifest_id,
