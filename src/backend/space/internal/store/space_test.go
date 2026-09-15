@@ -31,6 +31,12 @@ func startSpacePostgresForStoreTest(t *testing.T, ctx context.Context) *pgxpool.
 
 func applySpaceMigrationForStoreTest(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
+	applySpaceMigrationsThrough12ForStoreTest(t, ctx, pool)
+	applyLifecycleMigration(t, ctx, pool, "up")
+}
+
+func applySpaceMigrationsThrough12ForStoreTest(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
 	applySpaceMigrationsThrough7ForStoreTest(t, ctx, pool)
 	for _, name := range []string{
 		"000008_ownership_journal.up.sql", "000009_ownership_journal_decision.up.sql",

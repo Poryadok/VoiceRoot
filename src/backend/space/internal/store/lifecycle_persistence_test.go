@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -95,10 +94,6 @@ func lifecycleStoreFixture(t *testing.T) *SpaceStore {
 	ctx := context.Background()
 	pool := startSpacePostgresForStoreTest(t, ctx)
 	applySpaceMigrationForStoreTest(t, ctx, pool)
-	raw, err := os.ReadFile(lifecycleMigrationPath(t, "up"))
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(raw))
-	require.NoError(t, err)
 	return &SpaceStore{Pool: pool}
 }
 

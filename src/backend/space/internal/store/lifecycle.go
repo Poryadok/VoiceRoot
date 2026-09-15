@@ -105,6 +105,9 @@ func (s *SpaceStore) ReserveLifecycleSchedule(ctx context.Context, accountID, ac
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return nil, err
 	}
+	if err := checkOwnershipJournalAvailable(ctx, tx, []uuid.UUID{spaceID}); err != nil {
+		return nil, err
+	}
 	var ownerID uuid.UUID
 	var currentName string
 	if err := tx.QueryRow(ctx, `SELECT owner_profile_id,name FROM spaces WHERE id=$1 FOR UPDATE`, spaceID).Scan(&ownerID, &currentName); err != nil {
@@ -613,6 +616,9 @@ func persistLifecycleSnapshot(ctx context.Context, db spaceStoreDB, snapshot spa
 	if errors.Is(err, pgx.ErrNoRows) {
 		if snapshot.Phase != spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_SCHEDULE_PENDING && snapshot.Phase != spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_FREEZE_PENDING {
 			return ErrLifecycleStateTransition
+		}
+		if err := checkOwnershipJournalAvailable(ctx, db, []uuid.UUID{spaceID}); err != nil {
+			return err
 		}
 		_, err = db.Exec(ctx, `INSERT INTO space_lifecycle_aggregates(
 			space_id,deletion_operation_id,phase,generation,manifest_id,manifest_sha256,manifest_item_count,

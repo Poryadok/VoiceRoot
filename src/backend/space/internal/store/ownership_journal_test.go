@@ -103,6 +103,7 @@ func ownershipJournalStoreFixture(t *testing.T) *SpaceStore {
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, string(decisionMigration))
 	require.NoError(t, err)
+	applyLifecycleMigration(t, ctx, pool, "up")
 	return &SpaceStore{Pool: pool}
 }
 func seedOwnershipJournalBinding(t *testing.T, st *SpaceStore) OwnershipBinding {
