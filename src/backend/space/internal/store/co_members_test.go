@@ -22,6 +22,7 @@ func applySpaceMigrations(t *testing.T, ctx context.Context, pool *pgxpool.Pool)
 		"000008_ownership_journal.up.sql", "000009_ownership_journal_decision.up.sql",
 		"000010_ownership_journal_commit.up.sql", "000011_voice_access_epoch.up.sql",
 		"000012_ownership_journal_completion.up.sql",
+		"000013_space_lifecycle.up.sql",
 	} {
 		migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", name)
 		sqlBytes, err := os.ReadFile(migrationPath)

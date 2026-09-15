@@ -46,7 +46,7 @@ func TestLifecycleMigration_000013IsAdditiveAfterCurrent000012(t *testing.T) {
 	}
 	ctx := context.Background()
 	pool := startSpacePostgresForStoreTest(t, ctx)
-	applySpaceMigrationForStoreTest(t, ctx, pool)
+	applySpaceMigrationsThrough12ForStoreTest(t, ctx, pool)
 	applyLifecycleMigration(t, ctx, pool, "up")
 	requireLifecycleSchema(t, pool, true)
 
