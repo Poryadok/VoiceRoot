@@ -776,8 +776,26 @@ epoch and complete request binding before returning this result, independently
 of current owner, name or retained aggregate rows. Missing or pending outcomes
 never mean success; database time at or beyond `completed_at + 30 days` expires
 replay. Expiry does not remove coordinator evidence needed for convergence.
-The public coordinator, retention cleanup worker and separately admitted restore
-operation/result remain unimplemented.
+Restore admission uses a distinct `RESTORE` operation ID in the shared operation
+ledger; it never replaces the aggregate's original deletion operation ID. The
+immutable binding covers the authenticated account/profile/session epoch and
+the complete deterministic `RestoreSpaceRequest`. It needs no factor receipt.
+New admission checks the current recorded owner under the shared Space lock,
+then samples PostgreSQL time and commits the next recovery generation. At the
+deadline it commits `PURGE_DECIDED` and fails restore; a new ID cannot join or
+replace an already decided recovery operation. Exact pending retry resumes its
+saved deletion ID and generation without re-running current-owner preconditions.
+
+Only the locked ten-participant restore completion can mark that operation
+`COMPLETED`. It saves the deterministic `RestoreSpaceResponse` containing the
+Space projection read in the same transaction as `LIVE` and the ready restored
+event, with `completed_at` equal to that event's database timestamp. Retry returns
+these exact saved fields, not a later renamed or transferred Space. It validates
+the original principal and full request binding before any disclosure, even if
+the aggregate/Space has since been removed. Pending or missing records never
+mean success; replay expires at database time `completed_at + 30 days` without
+extending retention. Generic snapshot persistence cannot mint this outcome.
+The public coordinator and retention cleanup worker remain unimplemented.
 
 Ordinary store access uses the same Space lock and denies every persisted
 deletion phase except `LIVE`, including pending schedule and partial restore.
