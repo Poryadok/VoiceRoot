@@ -9,7 +9,6 @@ import (
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/types/dynamicpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	eventsv1 "voice.app/voice/events/v1"
 )
@@ -74,7 +73,7 @@ func TestSubscriptionSnapshotContract_RoundTrip(t *testing.T) {
 		t.Run(scenario.name, func(t *testing.T) {
 			envelope := (&eventsv1.SubscriptionStreamEvent{}).ProtoReflect()
 			arm := contractField(t, envelope.Descriptor(), "entitlement_changed", protoreflect.MessageKind)
-			snapshot := dynamicpb.NewMessage(arm.Message())
+			snapshot := envelope.NewField(arm).Message()
 			setContractString(t, envelope, "event_id", "10000000-0000-4000-8000-000000000001")
 			setContractString(t, envelope, "aggregate_id", "20000000-0000-4000-8000-000000000001")
 			envelope.Set(contractField(t, envelope.Descriptor(), "protocol_version", protoreflect.Uint32Kind), protoreflect.ValueOfUint32(1))

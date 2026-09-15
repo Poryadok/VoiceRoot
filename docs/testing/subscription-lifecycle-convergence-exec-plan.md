@@ -436,6 +436,30 @@ separate PR-owner.
 
 ## Progress
 
+### S1 producer durability slice
+
+The first implementation slice adds the additive snapshot envelope and an
+internal, source-disabled PostgreSQL producer seam. It does not enable a
+provider adapter, change entitlement authority, or activate consumers. Its
+acceptance is SUB-R01–R03 for stored event bytes and fenced dispatch, plus
+transaction rollback, revision compare-and-set and invalid snapshot rejection.
+S2 remains responsible for normalized provider replay/order and protected
+snapshot APIs; S3–S6 remain required before authoritative cutover.
+
+Implementation order: delegate contract/storage RED tests; review the tests;
+add protobuf/generated stubs and migration `000004_entitlement_outbox`; add
+`internal/entitlementoutbox` transactional append, lease claim and completion;
+add stable-byte JetStream dispatch; run focused and full Subscription tests,
+Go lint and protobuf/generated parity; obtain independent security review.
+All production changes follow failing tests. PostgreSQL owns lease time and
+aggregate serialization; callers provide an expected revision within their
+billing transaction. No fixture or live handler calls the seam by default.
+
+- [ ] Snapshot contract and validation RED/GREEN.
+- [ ] Atomic revision/snapshot/outbox storage RED/GREEN.
+- [ ] Stored-byte dispatch and stale-lease fencing RED/GREEN.
+- [ ] Security review, affected checks and CI on PR head.
+
 - [x] Canon and current producer/consumer gaps audited.
 - [x] Provider-independent lifecycle, event, outbox, inbox, reminder, User,
   File, Space, Voice, Notification, and Analytics decisions accepted in docs.
