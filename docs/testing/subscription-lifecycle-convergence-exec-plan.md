@@ -461,16 +461,19 @@ ambiguous publish/retry beyond the JetStream deduplication window; one stored
 sequence cannot prove erasure of an earlier unacknowledged copy.
 
 - [x] Snapshot contract and validation RED/GREEN (including delete/purchaser privacy fields).
-- [ ] Atomic revision/snapshot/outbox storage RED/GREEN.
-- [ ] Stored-byte dispatch and stale-lease fencing RED/GREEN.
-- [ ] Security review, affected checks and CI on PR head.
+- [x] Atomic revision/snapshot/outbox storage RED/GREEN.
+- [x] Stored-byte dispatch and stale-lease fencing RED/GREEN.
+- [x] Independent security review and affected local/hosted checks; final PR-head CI remains a merge prerequisite.
 
 Local evidence: Subscription `go test -short ./...` and `golangci-lint run
 ./...` pass; embedded JetStream proves stable-ID byte replay and corruption
 rejection. `buf lint`, format, breaking and Go/Dart generation pass; Auth
-`mvn -B generate-sources` succeeds. PostgreSQL tests require hosted CI because
-the local Docker Desktop engine pipe is absent. Storage tests remain open until
-that full, non-short run succeeds; short skips are not database evidence.
+`mvn -B generate-sources` succeeds. PostgreSQL evidence comes from CI run
+`34928031342`, Subscription integration job `104250391943`, head `3733d8ef`:
+the non-short `go test ./...` passed, including `internal/entitlementoutbox`
+(20.054s) and `internal/store` (59.666s). The local Docker Desktop engine pipe
+is absent; short skips were not counted as database evidence. Storage and
+generated contracts remain unchanged during the subsequent master refresh.
 
 - [x] Canon and current producer/consumer gaps audited.
 - [x] Provider-independent lifecycle, event, outbox, inbox, reminder, User,
