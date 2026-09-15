@@ -220,6 +220,15 @@ business idempotency independently of per-attempt JWT replay rejection.
 | Moderation DB | atomic `TARGET_DELETED` resolution, sanction snapshot/detached report relation and deletion of Space report evidence |
 | Analytics ClickHouse | existing 90-day raw HMAC events and de-identified aggregates; no raw deleted Space key |
 
+Space's shared `space_lifecycle_operations` ledger admits distinct `DELETE` and
+`RESTORE` operation IDs. Restore rows bind the original deletion ID and recovery
+generation separately from the public restore ID; authenticated account/profile/
+session epoch and request digest remain immutable. Restore has no proof or Auth
+receipt columns populated. Its completed result retains the exact serialized
+`RestoreSpaceResponse`, domain-separated SHA-256 and database completion time,
+without a foreign key to Space rows, for the same 30-day replay window. Migration
+rollback refuses to remove any admitted restore evidence.
+
 Unconsumed Auth proof expires at five minutes; unacknowledged consumed receipt
 does not time out; acknowledged receipt keeps through
 `max(consumed + 30 days, acknowledged + 24 hours)`. A completed Space operation

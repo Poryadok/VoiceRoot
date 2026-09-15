@@ -33,6 +33,8 @@ func applySpaceMigrationForStoreTest(t *testing.T, ctx context.Context, pool *pg
 	t.Helper()
 	applySpaceMigrationsThrough12ForStoreTest(t, ctx, pool)
 	applyLifecycleMigration(t, ctx, pool, "up")
+	_, err := pool.Exec(ctx, restoreMigrationSQL(t, "up"))
+	require.NoError(t, err)
 }
 
 func applySpaceMigrationsThrough12ForStoreTest(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
