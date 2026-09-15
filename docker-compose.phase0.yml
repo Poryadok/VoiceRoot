@@ -43,15 +43,35 @@ services:
       AUTH_PRINCIPAL_GRPC_PORT: "9091"
       AUTH_GRPC_TLS_CERT_FILE: /run/phase0/auth.crt
       AUTH_GRPC_TLS_KEY_FILE: /run/phase0/auth.key
-      S2S_JWKS_URLS_JSON: '{"gateway":"https://phase0-jwks:8443/gateway/jwks.json","space":"https://phase0-jwks:8443/space/jwks.json"}'
+      S2S_JWKS_URLS_JSON: '{"gateway":"https://phase0-jwks:8443/gateway/jwks.json","space":"https://phase0-jwks:8443/space/jwks.json","social":"https://social:8443/.well-known/jwks.json","moderation":"https://moderation:8443/.well-known/jwks.json"}'
+      S2S_JWKS_CA_FILE: /run/phase0/jwks-ca/ca.crt
       JAVA_TOOL_OPTIONS: -Djavax.net.ssl.trustStore=/run/phase0/truststore.p12 -Djavax.net.ssl.trustStorePassword=phase0-fixture -Djavax.net.ssl.trustStoreType=PKCS12
     depends_on:
+      phase0-auth-principal-ca-init:
+        condition: service_completed_successfully
       phase0-jwks:
         condition: service_started
     volumes:
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/auth.crt:/run/phase0/auth.crt:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/auth.key:/run/phase0/auth.key:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/truststore.p12:/run/phase0/truststore.p12:ro
+      - phase0_auth_principal_ca:/run/phase0/jwks-ca:ro
+  phase0-auth-principal-ca-init:
+    profiles: ["app"]
+    image: alpine:3.21
+    user: "0:0"
+    restart: "no"
+    command:
+      - sh
+      - -ec
+      - test -s /phase0-ca/ca.crt; test -s /compose-ca/ca.crt; cat /phase0-ca/ca.crt /compose-ca/ca.crt > /bundle/ca.crt; chmod 644 /bundle/ca.crt
+    depends_on:
+      social-principal-init:
+        condition: service_completed_successfully
+    volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/phase0-ca/ca.crt:ro
+      - social_principal_ca:/compose-ca:ro
+      - phase0_auth_principal_ca:/bundle
   phase0-jwks:
     profiles: ["app"]
     image: nginx:1.28-alpine
@@ -61,3 +81,5 @@ services:
       - ./docker/phase0/nginx.conf:/etc/nginx/nginx.conf:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/proxy.crt:/run/phase0/proxy.crt:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/proxy.key:/run/phase0/proxy.key:ro
+volumes:
+  phase0_auth_principal_ca:

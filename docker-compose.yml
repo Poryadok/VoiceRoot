@@ -222,7 +222,7 @@ services:
       AUTH_PRINCIPAL_GRPC_PORT: "9091"
       AUTH_GRPC_TLS_CERT_FILE: /etc/voice/principal/tls/tls.crt
       AUTH_GRPC_TLS_KEY_FILE: /etc/voice/principal/tls/tls.key
-      S2S_JWKS_URLS_JSON: '{"gateway":"https://gateway:8443/.well-known/voice-principal-jwks.json","space":"https://space:8443/.well-known/jwks.json","social":"https://social:8443/.well-known/jwks.json","moderation":"https://moderation:8443/.well-known/jwks.json"}'
+      S2S_JWKS_URLS_JSON: '{"social":"https://social:8443/.well-known/jwks.json","moderation":"https://moderation:8443/.well-known/jwks.json"}'
       S2S_JWKS_CA_FILE: /etc/voice/principal/ca/ca.crt
     volumes:
       - ./src/backend/auth/src/test/resources/jwt-test-private.pem:/run/jwt.pem:ro
