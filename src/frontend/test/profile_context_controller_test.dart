@@ -19,7 +19,6 @@ import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/matchmaking_providers.dart';
 import 'package:voice_frontend/state/matchmaking_search_controller.dart';
 import 'package:voice_frontend/state/profile_context_controller.dart';
-import 'package:voice_frontend/state/shell_providers.dart';
 import 'package:voice_frontend/state/social_providers.dart';
 import 'package:voice_frontend/state/space_providers.dart';
 
