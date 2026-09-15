@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -10,40 +11,50 @@ import (
 	analyticsv1 "voice.app/voice/analytics/v1"
 )
 
-func analyticsTimeRange(r *http.Request) (*timestamppb.Timestamp, *timestamppb.Timestamp) {
-	var from, to *timestamppb.Timestamp
-	if v := strings.TrimSpace(r.URL.Query().Get("from")); v != "" {
-		if t, err := time.Parse(time.RFC3339, v); err == nil {
-			from = timestamppb.New(t.UTC())
+func parseAnalyticsTimeRange(r *http.Request, now time.Time) (*timestamppb.Timestamp, *timestamppb.Timestamp, error) {
+	parse := func(name string) (*time.Time, error) {
+		value := strings.TrimSpace(r.URL.Query().Get(name))
+		if value == "" {
+			return nil, nil
 		}
-	}
-	if v := strings.TrimSpace(r.URL.Query().Get("to")); v != "" {
-		if t, err := time.Parse(time.RFC3339, v); err == nil {
-			to = timestamppb.New(t.UTC())
+		parsed, err := time.Parse(time.RFC3339, value)
+		if err != nil {
+			return nil, fmt.Errorf("invalid %s timestamp", name)
 		}
+		parsed = parsed.UTC()
+		return &parsed, nil
 	}
-	return from, to
+	from, err := parse("from")
+	if err != nil {
+		return nil, nil, err
+	}
+	to, err := parse("to")
+	if err != nil {
+		return nil, nil, err
+	}
+	now = now.UTC()
+	start := now.Add(-30 * 24 * time.Hour)
+	end := now
+	if from != nil {
+		start = *from
+	}
+	if to != nil {
+		end = *to
+	}
+	if !start.Before(end) {
+		return nil, nil, fmt.Errorf("from must be before to")
+	}
+	if end.After(now) {
+		return nil, nil, fmt.Errorf("to must not be in the future")
+	}
+	return timestamppb.New(start), timestamppb.New(end), nil
 }
 
 func analyticsFilters(r *http.Request) map[string]string {
-	filters := map[string]string{}
 	if v := strings.TrimSpace(r.URL.Query().Get("event_type")); v != "" {
-		filters["event_type"] = v
+		return map[string]string{"event_type": v}
 	}
-	for key, values := range r.URL.Query() {
-		if !strings.HasPrefix(key, "filter_") || len(values) == 0 {
-			continue
-		}
-		name := strings.TrimPrefix(key, "filter_")
-		if name == "" {
-			continue
-		}
-		filters[name] = values[0]
-	}
-	if len(filters) == 0 {
-		return nil
-	}
-	return filters
+	return nil
 }
 
 func (t *transcoder) serveAnalytics(w http.ResponseWriter, r *http.Request, rest string) bool {
@@ -51,7 +62,11 @@ func (t *transcoder) serveAnalytics(w http.ResponseWriter, r *http.Request, rest
 		return false
 	}
 	ctx := withGRPCMetadata(r.Context(), r)
-	from, to := analyticsTimeRange(r)
+	from, to, rangeErr := parseAnalyticsTimeRange(r, time.Now())
+	if rangeErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_argument"})
+		return true
+	}
 
 	switch {
 	case r.Method == http.MethodGet && strings.HasPrefix(rest, "dashboard/"):
