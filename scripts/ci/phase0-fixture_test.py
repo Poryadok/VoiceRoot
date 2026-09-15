@@ -24,6 +24,10 @@ OVERLAY = ROOT / "docker-compose.phase0.yml"
 PROXY = "phase0-jwks"
 URLS = {name: f"https://{PROXY}:8443/{name}/jwks.json"
         for name in ("gateway", "space")}
+AUTH_OVERLAY_URLS = URLS | {
+    "social": "https://social:8443/.well-known/jwks.json",
+    "moderation": "https://moderation:8443/.well-known/jwks.json",
+}
 
 
 def run(*args, env=None, input=None):
@@ -288,8 +292,8 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(self.source_at("role", role["S2S_JWKS_CA_FILE"]), "ca/ca.crt")
         auth = self.merged["auth"]["environment"]
         self.assertEqual(auth["AUTH_PRINCIPAL_GRPC_PORT"], "9091")
-        self.assertEqual(json.loads(auth["S2S_JWKS_URLS_JSON"]), URLS)
-        self.assertEqual(auth["S2S_JWKS_CA_FILE"], "/etc/voice/principal/ca/ca.crt")
+        self.assertEqual(json.loads(auth["S2S_JWKS_URLS_JSON"]), AUTH_OVERLAY_URLS)
+        self.assertEqual(auth["S2S_JWKS_CA_FILE"], "/run/phase0/jwks-ca/ca.crt")
         options = auth.get("JAVA_TOOL_OPTIONS", "")
         trust = re.search(r"-Djavax\.net\.ssl\.trustStore=([^\s]+)", options)
         self.assertIsNotNone(trust)
@@ -300,11 +304,42 @@ class ComposeTests(unittest.TestCase):
             for suffix, ext in (("CERT_FILE", "crt"), ("KEY_FILE", "key")):
                 self.assertEqual(self.source_at(service, env[prefix + suffix]), f"tls/{service}.{ext}")
 
+    def test_auth_overlay_combines_standard_and_phase0_jwks_cas(self):
+        init = self.merged["phase0-auth-principal-ca-init"]
+        self.assertIn("social-principal-init", init["depends_on"])
+        sources = {(volume.get("source"), volume.get("target"), volume.get("read_only", False))
+                   for volume in init["volumes"]}
+        self.assertIn(("social_principal_ca", "/compose-ca", True), sources)
+        self.assertIn(("phase0_auth_principal_ca", "/bundle", False), sources)
+        command = " ".join(init.get("command", []))
+        self.assertIn("/phase0-ca/ca.crt", command)
+        self.assertIn("/compose-ca/ca.crt", command)
+        self.assertIn("/bundle/ca.crt", command)
+        auth_mounts = {(volume.get("source"), volume.get("target"), volume.get("read_only", False))
+                       for volume in self.merged["auth"]["volumes"]}
+        self.assertIn(("phase0_auth_principal_ca", "/run/phase0/jwks-ca", True), auth_mounts)
+
+    def test_auth_overlay_clients_trust_the_phase0_auth_certificate(self):
+        for service in ("social", "moderation"):
+            with self.subTest(service=service):
+                env = self.merged[service]["environment"]
+                self.assertEqual(env["AUTH_PRINCIPAL_TLS_CA_FILE"], "/run/phase0/auth-principal-ca/ca.crt")
+                self.assertEqual(env["AUTH_PRINCIPAL_TLS_SERVER_NAME"], "auth")
+                mounts = {(volume.get("source"), volume.get("target"), volume.get("read_only", False))
+                          for volume in self.merged[service]["volumes"]}
+                self.assertIn(("phase0_auth_principal_ca", "/run/phase0/auth-principal-ca", True), mounts)
+                self.assertEqual(self.merged[service]["depends_on"]
+                                 ["phase0-auth-principal-ca-init"]["condition"],
+                                 "service_completed_successfully")
+
     def test_base_environments_and_legacy_endpoints_are_preserved(self):
         fixture_overrides = {
             ("auth", "AUTH_GRPC_TLS_CERT_FILE"),
             ("auth", "AUTH_GRPC_TLS_KEY_FILE"),
             ("auth", "S2S_JWKS_URLS_JSON"),
+            ("auth", "S2S_JWKS_CA_FILE"),
+            ("social", "AUTH_PRINCIPAL_TLS_CA_FILE"),
+            ("moderation", "AUTH_PRINCIPAL_TLS_CA_FILE"),
         }
         for service, base in self.base.items():
             for name, value in base.get("environment", {}).items():
@@ -320,6 +355,7 @@ class ComposeTests(unittest.TestCase):
         allowed = {"gateway": {"gateway"}, "space": {"space", "ca/ca.crt"},
                    "role": {"tls/role.crt", "tls/role.key", "ca/ca.crt"},
                    "auth": {"tls/auth.crt", "tls/auth.key", "truststore.p12", "ca/ca.crt"},
+                   "phase0-auth-principal-ca-init": {"ca/ca.crt"},
                    PROXY: {"tls/proxy.crt", "tls/proxy.key", "ca/ca.crt"}}
         for service in self.merged:
             for source, mount in self.fixture_mounts(service):
@@ -405,8 +441,6 @@ class AuthPrincipalCutoverDeploymentTests(unittest.TestCase):
         self.assertEqual(auth["AUTH_GRPC_TLS_CERT_FILE"], "/etc/voice/principal/tls/tls.crt")
         self.assertEqual(auth["AUTH_GRPC_TLS_KEY_FILE"], "/etc/voice/principal/tls/tls.key")
         self.assertEqual(json.loads(auth["S2S_JWKS_URLS_JSON"]), {
-            "gateway": "https://gateway:8443/.well-known/voice-principal-jwks.json",
-            "space": "https://space:8443/.well-known/jwks.json",
             "social": "https://social:8443/.well-known/jwks.json",
             "moderation": "https://moderation:8443/.well-known/jwks.json",
         })
@@ -450,7 +484,7 @@ class AuthPrincipalCutoverDeploymentTests(unittest.TestCase):
                 self.assertEqual(auth_env["AUTH_PRINCIPAL_GRPC_PORT"]["value"], "9091")
                 self.assertEqual(auth_env["S2S_JWKS_CA_FILE"]["value"], "/etc/voice/principal/ca/ca.crt")
                 issuers = json.loads(auth_env["S2S_JWKS_URLS_JSON"]["value"])
-                self.assertEqual(set(issuers), {"gateway", "space", "social", "moderation"})
+                self.assertEqual(set(issuers), {"social", "moderation"})
                 self.assertEqual(issuers["social"],
                                  "https://voice-social:8443/.well-known/jwks.json")
                 self.assertEqual(issuers["moderation"],

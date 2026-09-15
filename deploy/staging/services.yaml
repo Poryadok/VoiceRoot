@@ -51,7 +51,7 @@ spec:
             - {name: AUTH_PRINCIPAL_GRPC_PORT, value: "9091"}
             - {name: AUTH_GRPC_TLS_CERT_FILE, value: "/etc/voice/principal/tls/tls.crt"}
             - {name: AUTH_GRPC_TLS_KEY_FILE, value: "/etc/voice/principal/tls/tls.key"}
-            - {name: S2S_JWKS_URLS_JSON, value: '{"gateway":"https://voice-gateway:8443/.well-known/voice-principal-jwks.json","space":"https://voice-space:8443/.well-known/jwks.json","social":"https://voice-social:8443/.well-known/jwks.json","moderation":"https://voice-moderation:8443/.well-known/jwks.json"}'}
+            - {name: S2S_JWKS_URLS_JSON, value: '{"social":"https://voice-social:8443/.well-known/jwks.json","moderation":"https://voice-moderation:8443/.well-known/jwks.json"}'}
             - {name: S2S_JWKS_CA_FILE, value: "/etc/voice/principal/ca/ca.crt"}
           volumeMounts:
             - {name: jwt-key, mountPath: /run/jwt.pem, subPath: jwt.pem, readOnly: true}
