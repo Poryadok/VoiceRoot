@@ -269,6 +269,53 @@ func TestLifecycleRestoreOutcome_SavedResponseSurvivesRenameOwnerChangeRemovalAn
 	require.NoError(t, err)
 	restarted := &SpaceStore{Pool: r22SecondSpacePool(t, ctx, f.st.Pool, "restore_outcome_restart")}
 	require.True(t, proto.Equal(saved, f.replay(t, restarted)))
+	for _, identity := range []struct {
+		account, actor uuid.UUID
+		epoch          int64
+	}{
+		{uuid.New(), f.actor, 7}, {f.account, uuid.New(), 7}, {f.account, f.actor, 8},
+	} {
+		response, replayErr := requireLifecycleRestoreOutcome(t, restarted).ReplayLifecycleRestoreOutcome(ctx, identity.account, identity.actor, identity.epoch, f.restore)
+		require.Error(t, replayErr, "removed Space must not weaken the saved principal binding")
+		require.Nil(t, response)
+	}
+}
+
+func TestLifecycleRestoreOutcome_CorruptSavedResponseFailsClosed(t *testing.T) {
+	f := newLifecycleRestoreFixture(t)
+	f.admit(t, len(lifecycleTestParticipants))
+	ctx := context.Background()
+	_, _, err := requireLifecycleTransitions(t, f.st).CompleteLifecycleRestore(ctx, f.space)
+	require.NoError(t, err)
+	saved := f.replay(t, f.st)
+	require.NotNil(t, saved)
+	original := f.evidence(t)
+	for _, tc := range []struct {
+		name   string
+		mutate func(*spacev1.RestoreSpaceResponse)
+	}{
+		{"wrong space", func(r *spacev1.RestoreSpaceResponse) { r.Space.Id = uuid.NewString() }},
+		{"nil space", func(r *spacev1.RestoreSpaceResponse) { r.Space = nil }},
+		{"unknown response", func(r *spacev1.RestoreSpaceResponse) {
+			r.ProtoReflect().SetUnknown(protowire.AppendVarint(protowire.AppendTag(nil, 100, protowire.VarintType), 1))
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			corrupt := proto.Clone(saved).(*spacev1.RestoreSpaceResponse)
+			tc.mutate(corrupt)
+			raw, marshalErr := proto.MarshalOptions{Deterministic: true}.Marshal(corrupt)
+			require.NoError(t, marshalErr)
+			hash := lifecycleDomainHash("voice.space.v1.RestoreSpaceResponse", raw)
+			_, updateErr := f.st.Pool.Exec(ctx, `UPDATE space_lifecycle_operations SET outcome_bytes=$2,outcome_sha256=$3 WHERE operation_id=$1`, f.restore.OperationId, raw, hash[:])
+			require.NoError(t, updateErr)
+			response, replayErr := requireLifecycleRestoreOutcome(t, f.st).ReplayLifecycleRestoreOutcome(ctx, f.account, f.actor, 7, f.restore)
+			require.Error(t, replayErr, "matching SHA does not make an invalid saved response valid")
+			require.Nil(t, response)
+		})
+	}
+	_, err = f.st.Pool.Exec(ctx, `UPDATE space_lifecycle_operations SET outcome_bytes=$2,outcome_sha256=$3 WHERE operation_id=$1`, f.restore.OperationId, original.bytes, original.hash)
+	require.NoError(t, err)
+	require.True(t, proto.Equal(saved, f.replay(t, f.st)))
 }
 
 func TestLifecycleRestoreOutcome_FailureRollsBackLiveOutcomeAndReadyEvent(t *testing.T) {
@@ -365,7 +412,10 @@ func TestLifecycleRestoreOutcome_GenericSnapshotCannotManufactureSuccess(t *test
 	snapshot.RestoreEvent = nil
 	fabricated, err := spacecore.RestoreLifecycleAggregate(snapshot)
 	require.NoError(t, err)
-	_ = f.store.PersistLifecycle(ctx, fabricated)
+	require.ErrorIs(t, f.store.PersistLifecycle(ctx, fabricated), ErrLifecycleStateTransition)
+	after, err := f.store.LoadLifecycle(ctx, f.space)
+	require.NoError(t, err)
+	require.Equal(t, aggregate.Snapshot(), after.Snapshot(), "generic persistence cannot publish an unearned LIVE state")
 	require.Nil(t, f.replay(t, f.st))
 	_, _, err = requireLifecycleTransitions(t, f.st).CompleteLifecycleRestore(ctx, f.space)
 	require.Error(t, err, "generic LIVE must not replace the ten accepted LIVE receipts")
