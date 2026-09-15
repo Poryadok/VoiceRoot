@@ -163,3 +163,31 @@ func TestLifecycleRecoveryRead_WaitsForCommittedOwnershipBeforeDisclosure(t *tes
 	require.ErrorIs(t, response.err, pgx.ErrNoRows)
 	require.Nil(t, response.row, "must not disclose using pre-lock owner")
 }
+
+func TestLifecycleRecoveryRead_WaitsForPurgeBeforeDisclosure(t *testing.T) {
+	f := newLifecycleRestoreFixture(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	tx, err := f.st.Pool.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	require.NoError(t, lockLifecycleSpace(ctx, tx, f.space))
+	_, err = tx.Exec(ctx, `UPDATE space_lifecycle_aggregates SET phase='PURGED' WHERE space_id=$1`, f.space)
+	require.NoError(t, err)
+	worker := &SpaceStore{Pool: r22SecondSpacePool(t, ctx, f.st.Pool, "recovery_purge_lock")}
+	reader := recoveryReader(t, worker)
+	type result struct {
+		row *spacev1.Space
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		row, callErr := reader.GetLifecycleRecoverySpace(ctx, f.space, f.actor)
+		done <- result{row, callErr}
+	}()
+	r22WaitForSpaceLock(t, ctx, f.st.Pool, "recovery_purge_lock")
+	require.NoError(t, tx.Commit(ctx))
+	response := <-done
+	require.ErrorIs(t, response.err, pgx.ErrNoRows)
+	require.Nil(t, response.row, "queued read must not retain pre-purge name/timestamps")
+}
