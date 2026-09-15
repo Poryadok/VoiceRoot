@@ -462,8 +462,17 @@ reconciliation. Real adapters, atomic reminder scheduling, snapshot/privacy APIs
 and consumer cutover remain prerequisites for activation. The fixture's version
 is an explicit provider fact, never an arrival timestamp or NATS sequence.
 
-- [ ] SUB-R04/R05/R14 producer RED/GREEN and transactional rollback/concurrency.
-- [ ] Independent security/concurrency review and hosted PostgreSQL CI.
+- [x] SUB-R04/R05/R14 producer reducer and transactional replay/order tests
+  implemented, including rollback, duplicate/adjacent-version races, retained
+  historical version fingerprints and quarantine without entitlement mutation.
+- [x] Independent security/concurrency review accepted after adding explicit
+  predecessor, retired-version and future-effective guards.
+
+Local Subscription short tests, vet and pinned golangci pass. PostgreSQL tests
+apply migration chain `000001` through `000005`; their full hosted run is a
+required merge gate on the current PR head. The local Docker engine is absent,
+and skipped database tests are not counted as PostgreSQL evidence. Existing
+runtime lifecycle TODOs remain open because this engine has no live callsites.
 
 ### S1 producer durability slice
 

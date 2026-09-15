@@ -9,9 +9,10 @@ JetStream message IDs, PubAck evidence and fenced completion/retry. No live
 handler, provider adapter or startup worker calls this package. The legacy
 publisher and existing consumer authority are unchanged.
 
-This is not the provider lifecycle or consumer cutover. Normalized provider
-ordering, scheduled reminders, protected snapshots/reconciliation, service-owned
-consumer inbox/effects and privacy purge still follow
+This seam alone does not implement the full provider lifecycle or consumer
+cutover. The internal provider engine is described below; scheduled reminders,
+protected snapshots/reconciliation, service-owned consumer inbox/effects and
+privacy purge still follow
 [`subscription-lifecycle-convergence-exec-plan.md`](../../../docs/testing/subscription-lifecycle-convergence-exec-plan.md).
 An enabling change must complete those prerequisites rather than publish raw
 snapshots from current arrival-ordered handlers.
@@ -27,6 +28,9 @@ stale versions and retired subscription bindings cannot undo a newer purchase.
 Conflicting provider event bytes or same-version facts commit an idempotent
 quarantine record without changing entitlement state. The engine logs no raw
 provider data; conflict records require restricted operational access.
+Immutable version fingerprints remain authoritative after a binding is retired.
+Future-effective transitions wait for Subscription database time; recovery and
+renewal cannot revive a final inactive aggregate as if it were a new purchase.
 
 Personal and Space Pro share active/grace/inactive transitions, seven-day grace
 without restart for repeated failure, and cycle preservation through cancellation,
