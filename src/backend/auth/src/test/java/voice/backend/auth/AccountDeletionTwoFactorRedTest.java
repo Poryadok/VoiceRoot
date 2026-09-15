@@ -14,11 +14,14 @@ import app.voice.auth.v1.Enable2FARequest;
 import app.voice.auth.v1.RegisterRequest;
 import app.voice.auth.v1.Verify2FARequest;
 import io.grpc.ManagedChannel;
+import io.grpc.Metadata;
 import io.grpc.Server;
+import io.grpc.ServerInterceptors;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
+import io.grpc.stub.MetadataUtils;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -37,6 +40,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import voice.backend.auth.events.AuthEventPublisher;
+import voice.backend.auth.grpc.AuthorizationServerInterceptor;
 import voice.backend.auth.repository.Account;
 import voice.backend.auth.repository.AccountDeletionOperationRepository;
 import voice.backend.auth.repository.AccountRepository;
@@ -232,7 +236,7 @@ class AccountDeletionTwoFactorRedTest {
         .contains("authService.deleteAccount(authorization, request.password(), request.totpCode())");
     assertThat(grpc)
         .contains("request.getTotpCode()")
-        .contains("authService.deleteAccount(lastAccessToken(), request.getPassword(), request.getTotpCode())");
+        .contains("authService.deleteAccount(resolveAccessToken(), request.getPassword(), request.getTotpCode())");
   }
 
   private EnrolledAccount registerAndEnableTotp(String email) throws Exception {
@@ -266,25 +270,34 @@ class AccountDeletionTwoFactorRedTest {
 
   private GrpcFixture registerAndEnableTotpOverGrpc(String email) throws Exception {
     String serverName = InProcessServerBuilder.generateName();
-    Server server = InProcessServerBuilder.forName(serverName).directExecutor().addService(grpcService).build().start();
+    Server server = InProcessServerBuilder.forName(serverName).directExecutor()
+        .addService(ServerInterceptors.intercept(grpcService, new AuthorizationServerInterceptor())).build().start();
     ManagedChannel channel = InProcessChannelBuilder.forName(serverName).directExecutor().build();
     var client = AuthServiceGrpc.newBlockingStub(channel);
     var registered =
         client
             .register(RegisterRequest.newBuilder().setEmail(email).setPassword(PASSWORD).build())
             .getSession();
-    client.enable2FA(Enable2FARequest.newBuilder().setPassword(PASSWORD).build());
-    client.verify2FA(Verify2FARequest.newBuilder().setTotpCode("000000").build());
+    var authenticated = withBearer(client, registered.getAccessToken());
+    authenticated.enable2FA(Enable2FARequest.newBuilder().setPassword(PASSWORD).build());
+    authenticated.verify2FA(Verify2FARequest.newBuilder().setTotpCode("000000").build());
     Account account = accounts.findByEmail(email).orElseThrow();
     return new GrpcFixture(
         server,
         channel,
-        client,
+        authenticated,
         new EnrolledAccount(
             registered.getAccessToken(),
             null,
             account,
             refreshTokens.listActiveByAccount(account.id()).size()));
+  }
+
+  private static AuthServiceGrpc.AuthServiceBlockingStub withBearer(
+      AuthServiceGrpc.AuthServiceBlockingStub client, String accessToken) {
+    Metadata headers = new Metadata();
+    headers.put(Metadata.Key.of("authorization", Metadata.ASCII_STRING_MARSHALLER), "Bearer " + accessToken);
+    return client.withInterceptors(MetadataUtils.newAttachHeadersInterceptor(headers));
   }
 
   private JsonNode register(String email) throws Exception {

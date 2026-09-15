@@ -53,7 +53,6 @@ import com.google.protobuf.Timestamp;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import java.time.Instant;
-import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.stereotype.Component;
 import voice.backend.auth.service.AuthException;
 import voice.backend.auth.service.AuthService;
@@ -70,7 +69,6 @@ import voice.backend.auth.service.VerifyOtpCommand;
 public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
   private final AuthService authService;
   private final OtpService otpService;
-  private final AtomicReference<String> lastAccessToken = new AtomicReference<>("");
 
   public AuthGrpcService(AuthService authService, OtpService otpService) {
     this.authService = authService;
@@ -82,7 +80,6 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
     run(responseObserver, () -> {
       voice.backend.auth.service.AuthSession session = authService.register(
           new RegisterCommand(request.getEmail(), request.getPhone(), request.getPassword(), request.getGuest(), "{}"));
-      rememberAccess(session.accessToken());
       return RegisterResponse.newBuilder().setSession(toProto(session)).build();
     });
   }
@@ -92,7 +89,6 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
     run(responseObserver, () -> {
       voice.backend.auth.service.AuthSession session = authService.login(
           new LoginCommand(request.getEmail(), request.getPhone(), request.getPassword(), request.getTotpCode(), request.getDeviceInfoJson()));
-      rememberAccess(session.accessToken());
       return LoginResponse.newBuilder().setSession(toProto(session)).build();
     });
   }
@@ -102,7 +98,6 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
     run(responseObserver, () -> {
       voice.backend.auth.service.AuthSession session = authService.refresh(
           new RefreshCommand(request.getRefreshToken(), request.getDeviceInfoJson()));
-      rememberAccess(session.accessToken());
       return RefreshTokenResponse.newBuilder().setSession(toProto(session)).build();
     });
   }
@@ -111,7 +106,7 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
   public void enable2FA(Enable2FARequest request, StreamObserver<Enable2FAResponse> responseObserver) {
     run(responseObserver, () -> {
       voice.backend.auth.service.TotpEnrollment enrollment =
-          authService.enable2FA(lastAccessToken(), request.getPassword());
+          authService.enable2FA(resolveAccessToken(), request.getPassword());
       return Enable2FAResponse.newBuilder()
           .setTotpUri(enrollment.totpUri())
           .setSecretBackupHint(enrollment.secretBackupHint())
@@ -123,8 +118,7 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
   @Override
   public void verify2FA(Verify2FARequest request, StreamObserver<Verify2FAResponse> responseObserver) {
     run(responseObserver, () -> {
-      voice.backend.auth.service.AuthSession session = authService.verify2FA(lastAccessToken(), request.getTotpCode());
-      rememberAccess(session.accessToken());
+      voice.backend.auth.service.AuthSession session = authService.verify2FA(resolveAccessToken(), request.getTotpCode());
       return Verify2FAResponse.newBuilder().setSession(toProto(session)).build();
     });
   }
@@ -143,7 +137,6 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
       if (session == null) {
         return VerifyOTPResponse.getDefaultInstance();
       }
-      rememberAccess(session.accessToken());
       return VerifyOTPResponse.newBuilder().setSession(toProto(session)).build();
     });
   }
@@ -151,7 +144,7 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
   @Override
   public void deleteAccount(DeleteAccountRequest request, StreamObserver<DeleteAccountResponse> responseObserver) {
     run(responseObserver, () -> {
-      authService.deleteAccount(lastAccessToken(), request.getPassword(), request.getTotpCode());
+      authService.deleteAccount(resolveAccessToken(), request.getPassword(), request.getTotpCode());
       return DeleteAccountResponse.getDefaultInstance();
     });
   }
@@ -175,7 +168,6 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
                   request.hasEmail() ? request.getEmail() : null,
                   request.hasPhone() ? request.getPhone() : null,
                   request.getPassword()));
-      rememberAccess(session.accessToken());
       return ConvertGuestResponse.newBuilder().setSession(toProto(session)).build();
     });
   }
@@ -265,7 +257,7 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
     run(responseObserver, () -> {
       String token = request.getAccessToken();
       if (token == null || token.isBlank()) {
-        token = lastAccessToken.get();
+        token = resolveAccessToken();
       } else if (!token.regionMatches(true, 0, "Bearer ", 0, 7)) {
         token = "Bearer " + token.trim();
       }
@@ -275,7 +267,6 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
       }
       voice.backend.auth.service.AuthSession session =
           authService.switchActiveProfile(token, request.getProfileId(), deviceInfo);
-      rememberAccess(session.accessToken());
       return SwitchActiveProfileResponse.newBuilder().setSession(toProto(session)).build();
     });
   }
@@ -612,26 +603,12 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
     T execute();
   }
 
-  private void rememberAccess(String accessToken) {
-    if (accessToken != null && !accessToken.isBlank()) {
-      lastAccessToken.set("Bearer " + accessToken);
-    }
-  }
-
-  private String lastAccessToken() {
-    String token = lastAccessToken.get();
-    if (token == null || token.isBlank()) {
-      throw new AuthException("invalid_token");
-    }
-    return token;
-  }
-
   private String resolveAccessToken() {
     String authorization = AuthorizationServerInterceptor.AUTHORIZATION.get();
     if (authorization != null && !authorization.isBlank()) {
       return authorization;
     }
-    return lastAccessToken();
+    throw new AuthException("invalid_token");
   }
 
   private static String currentAuthorization() {
