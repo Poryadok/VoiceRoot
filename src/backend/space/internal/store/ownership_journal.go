@@ -128,6 +128,9 @@ func (s *SpaceStore) ReserveOwnership(ctx context.Context, b OwnershipBinding) (
 	if active {
 		return nil, ErrOwnershipActive
 	}
+	if err := checkLifecycleAvailable(ctx, tx, []uuid.UUID{b.SpaceID}); err != nil {
+		return nil, err
+	}
 	var owner uuid.UUID
 	if err := tx.QueryRow(ctx, `SELECT owner_profile_id FROM spaces WHERE id=$1 FOR UPDATE`, b.SpaceID).Scan(&owner); err != nil {
 		return nil, err

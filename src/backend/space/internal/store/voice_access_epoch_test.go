@@ -53,6 +53,11 @@ func applyR22SpaceEpochMigration(t *testing.T, ctx context.Context, st *SpaceSto
 	}
 	_, err := st.Pool.Exec(ctx, r22SpaceMigrationSQL(t, r22SpaceEpochMigration))
 	require.NoError(t, err)
+	var lifecyclePresent bool
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT to_regclass('space_lifecycle_aggregates') IS NOT NULL`).Scan(&lifecyclePresent))
+	if !lifecyclePresent {
+		applyLifecycleMigration(t, ctx, st.Pool, "up")
+	}
 }
 
 func runR22SpaceEpochDown(t *testing.T, ctx context.Context, st *SpaceStore) error {

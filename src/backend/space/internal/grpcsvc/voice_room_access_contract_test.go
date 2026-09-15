@@ -78,6 +78,7 @@ func applyVoiceAccessEpochMigration(t *testing.T, ctx context.Context, pool *pgx
 		"000009_ownership_journal_decision.up.sql",
 		"000010_ownership_journal_commit.up.sql",
 		"000011_voice_access_epoch.up.sql",
+		"000013_space_lifecycle.up.sql",
 	} {
 		raw, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", name))
 		require.NoError(t, err)

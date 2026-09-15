@@ -764,6 +764,17 @@ coordinator. Schedule reservation replay validates the original immutable bindin
 and loads saved progress without resetting generation or repeating current-owner
 and current-name preconditions.
 
+Ordinary store access uses the same Space lock and denies every persisted
+deletion phase except `LIVE`, including pending schedule and partial restore.
+`ListMySpacesPage` excludes these rows before pagination; implicit co-membership
+counts only shared live Spaces. An explicit decision scope containing a frozen
+Space fails closed. Missing lifecycle authority is unavailable, never an absent
+fence interpreted as permission. New ownership and deletion reservations exclude
+each other under the shared lock; exact saved operation replay remains available.
+This is a store foundation: the public recorded-owner recovery projection and
+its Gateway disclosure/status mapping remain a separate A2 vertical. It does not
+activate deletion or authorize participant cleanup.
+
 The common protected wire uses `protocol_version=1`. A lifecycle-fence request
 contains canonical `space_id`, `deletion_operation_id`, positive `generation`,
 desired `FROZEN`/`LIVE`/`PURGE_DECIDED` and `ManifestBinding(manifest_id,

@@ -519,6 +519,7 @@ SELECT `+spaceListSelectColumns+`, m.joined_at
 FROM space_members m
 JOIN spaces s ON s.id = m.space_id
 WHERE m.profile_id = $1
+  AND NOT EXISTS (SELECT 1 FROM space_lifecycle_aggregates a WHERE a.space_id=s.id AND a.phase <> 'LIVE')
 ORDER BY m.joined_at DESC, s.id DESC
 LIMIT $2
 `, profileID, fetch)
@@ -528,13 +529,14 @@ SELECT `+spaceListSelectColumns+`, m.joined_at
 FROM space_members m
 JOIN spaces s ON s.id = m.space_id
 WHERE m.profile_id = $1
+  AND NOT EXISTS (SELECT 1 FROM space_lifecycle_aggregates a WHERE a.space_id=s.id AND a.phase <> 'LIVE')
   AND (m.joined_at, s.id) < ($2, $3)
 ORDER BY m.joined_at DESC, s.id DESC
 LIMIT $4
 `, profileID, joinedAt, spaceID, fetch)
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrOwnershipScopeUnavailable, err)
 	}
 	defer rows.Close()
 

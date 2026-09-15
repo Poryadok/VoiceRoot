@@ -9,7 +9,7 @@ import (
 )
 
 func mapSpaceStoreError(err error) error {
-	if errors.Is(err, store.ErrOwnershipFrozen) || errors.Is(err, store.ErrOwnershipScopeUnavailable) {
+	if errors.Is(err, store.ErrOwnershipFrozen) || errors.Is(err, store.ErrLifecycleFrozen) || errors.Is(err, store.ErrOwnershipScopeUnavailable) {
 		return status.Error(codes.Unavailable, "space temporarily unavailable")
 	}
 	return status.Error(codes.Internal, "internal error")
