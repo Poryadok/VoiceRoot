@@ -129,6 +129,9 @@ func transition(current *eventsv1.EntitlementChanged, c Command, ids IDs) (*even
 			if c.Reason == started && current.State != inactive {
 				return nil, ErrNeedsReconciliation
 			}
+			if (c.Reason == renewed && current.State != active && current.State != grace) || (c.Reason == recovered && current.State != grace) {
+				return nil, ErrNeedsReconciliation
+			}
 			if c.PeriodEnd.Before(current.CurrentPeriodEnd.AsTime()) {
 				return nil, ErrNeedsReconciliation
 			}

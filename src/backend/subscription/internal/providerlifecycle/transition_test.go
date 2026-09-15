@@ -117,10 +117,31 @@ func TestAmbiguousCommandsAndDeletionNeverGainAccess(t *testing.T) {
 
 func TestTransitionIsDeterministic(t *testing.T) {
 	c := fakeCommand(1)
+	c.EventID = "evt_fake_01"
+	c.SubscriptionID = "sub_fake_01"
 	ids := IDs{Entitlement: uuid.NewString(), DeletionFence: uuid.NewString(), DowngradeCycle: uuid.NewString()}
 	a, err := transition(nil, c, ids)
 	require.NoError(t, err)
 	b, err := transition(nil, c, ids)
 	require.NoError(t, err)
 	require.True(t, proto.Equal(a, b))
+}
+
+func TestRecoveryAndRenewalCannotReviveFinalExpiry(t *testing.T) {
+	c := fakeCommand(1)
+	initial, err := reduce(nil, c)
+	require.NoError(t, err)
+	end := nextCommand(c, eventsv1.EntitlementReason_ENTITLEMENT_REASON_PERIOD_ENDED, c.PeriodEnd)
+	final, err := reduce(initial, end)
+	require.NoError(t, err)
+	for _, reason := range []eventsv1.EntitlementReason{eventsv1.EntitlementReason_ENTITLEMENT_REASON_RENEWED, eventsv1.EntitlementReason_ENTITLEMENT_REASON_PAYMENT_RECOVERED} {
+		cmd := nextCommand(end, reason, c.PeriodEnd.Add(time.Hour))
+		cmd.PeriodStart = c.PeriodEnd
+		cmd.PeriodEnd = c.PeriodEnd.AddDate(0, 1, 0)
+		_, err = reduce(final, cmd)
+		require.ErrorIs(t, err, ErrNeedsReconciliation)
+	}
+	recovery := nextCommand(c, eventsv1.EntitlementReason_ENTITLEMENT_REASON_PAYMENT_RECOVERED, c.EffectiveAt.Add(time.Hour))
+	_, err = reduce(initial, recovery)
+	require.ErrorIs(t, err, ErrNeedsReconciliation)
 }

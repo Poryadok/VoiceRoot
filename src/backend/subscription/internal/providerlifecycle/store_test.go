@@ -110,6 +110,32 @@ func TestProviderReplayOrderAndConflictingBody(t *testing.T) {
 	require.Equal(t, 2, count)
 }
 
+func TestUnchangedOutcomeReplayReturnsHistoricalSnapshot(t *testing.T) {
+	pool := testDB(t)
+	ctx := context.Background()
+	store := Store{Pool: pool}
+	c := fakeCommand(1)
+	_, err := store.Apply(ctx, c)
+	require.NoError(t, err)
+	failure := nextCommand(c, eventsv1.EntitlementReason_ENTITLEMENT_REASON_PAYMENT_FAILED, c.PeriodEnd)
+	_, err = store.Apply(ctx, failure)
+	require.NoError(t, err)
+	again := nextCommand(failure, failure.Reason, failure.EffectiveAt.Add(time.Hour))
+	old, err := store.Apply(ctx, again)
+	require.NoError(t, err)
+	require.Equal(t, "UNCHANGED", old.Disposition)
+	recover := nextCommand(again, eventsv1.EntitlementReason_ENTITLEMENT_REASON_PAYMENT_RECOVERED, again.EffectiveAt.Add(time.Hour))
+	recover.PeriodStart = c.PeriodEnd
+	recover.PeriodEnd = c.PeriodEnd.AddDate(0, 1, 0)
+	newer, err := store.Apply(ctx, recover)
+	require.NoError(t, err)
+	require.Greater(t, newer.Event.AggregateRevision, old.Event.AggregateRevision)
+	replay, err := store.Apply(ctx, again)
+	require.NoError(t, err)
+	require.Equal(t, "UNCHANGED", replay.Disposition)
+	require.True(t, proto.Equal(old.Event, replay.Event))
+}
+
 func TestNewProviderBindingRequiresAnUnoccupiedStart(t *testing.T) {
 	pool := testDB(t)
 	ctx := context.Background()
@@ -192,6 +218,12 @@ func TestRepurchaseKeepsRevisionAndRetiresOldProviderBinding(t *testing.T) {
 	expiry := nextCommand(cancel, eventsv1.EntitlementReason_ENTITLEMENT_REASON_PERIOD_ENDED, c.PeriodEnd)
 	_, err = store.Apply(ctx, expiry)
 	require.NoError(t, err)
+	// A reused provider identity does not prove a distinct new purchase.
+	reuse := nextCommand(expiry, eventsv1.EntitlementReason_ENTITLEMENT_REASON_STARTED, c.PeriodEnd)
+	reuse.PeriodStart = c.PeriodEnd
+	reuse.PeriodEnd = c.PeriodEnd.AddDate(0, 1, 0)
+	_, err = store.Apply(ctx, reuse)
+	require.ErrorIs(t, err, ErrNeedsReconciliation)
 	purchase := fakeCommand(1)
 	purchase.AggregateID = c.AggregateID
 	purchase.EffectiveAt = c.PeriodEnd
@@ -209,6 +241,11 @@ func TestRepurchaseKeepsRevisionAndRetiresOldProviderBinding(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "RETIRED", old.Disposition)
 	require.True(t, proto.Equal(bought.Event, old.Event))
+	conflict := expiry
+	conflict.EventID = uuid.NewString()
+	conflict.BillingPeriod = "yearly"
+	_, err = store.Apply(ctx, conflict)
+	require.ErrorIs(t, err, ErrContractMismatch, "retirement cannot hide same-version conflicting facts")
 	stolen := nextCommand(purchase, eventsv1.EntitlementReason_ENTITLEMENT_REASON_STARTED, purchase.EffectiveAt)
 	stolen.AggregateID = uuid.NewString()
 	_, err = store.Apply(ctx, stolen)

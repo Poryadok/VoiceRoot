@@ -122,6 +122,9 @@ func (s Store) Apply(ctx context.Context, c Command) (Result, error) {
 	if known && (b.kind != int16(c.Kind) || b.id != c.AggregateID) {
 		return reject()
 	}
+	if known && c.Version == b.version && !bytes.Equal(b.facts, factsHash[:]) {
+		return reject()
+	}
 	current, err := loadCurrent(ctx, tx, c)
 	if err != nil {
 		return Result{}, err
@@ -140,6 +143,11 @@ func (s Store) Apply(ctx context.Context, c Command) (Result, error) {
 		}
 		result.Disposition = "UNCHANGED"
 	default:
+		if known && c.Reason == started {
+			// Reusing a provider identity does not establish a new purchase;
+			// an adapter must reconcile this instead of reviving a final expiry.
+			return Result{}, ErrNeedsReconciliation
+		}
 		if !known && (c.Reason != started || (current != nil && current.GetEntitlementChanged().State != inactive)) {
 			return Result{}, ErrNeedsReconciliation
 		}

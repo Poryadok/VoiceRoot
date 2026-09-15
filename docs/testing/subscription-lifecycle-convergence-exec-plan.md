@@ -447,6 +447,9 @@ its original seven-day boundary for an unresolved period; cancel/grace/expiry
 share their downgrade cycle, while recovery/resume/renewal/repurchase clear it.
 Provider subscription identities remain bound to one target; repurchase keeps
 the permanent aggregate revision and retires the old provider binding.
+This internal slice accepts repurchase only with a new verified provider
+subscription identity. Reused identity semantics require adapter reconciliation;
+neither renewal nor payment recovery can turn final `INACTIVE` into a purchase.
 
 This slice remains source-disabled. It does not normalize unverified live
 Paddle/CloudPayments bytes, expose a listener, create scheduled reminder rows,
