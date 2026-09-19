@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -19,9 +20,8 @@ type chatMemberInboxLister interface {
 }
 
 // chatMemberDeliveryState is the per-recipient state Chat owns for event
-// delivery. Realtime must page through every member: Chat caps a ListMembers
-// response at 100, while notification and archive behaviour applies to all
-// members, not just the first page.
+// delivery. Realtime requests pages of 100 members; notification and archive
+// behaviour applies to all members, not just the first page.
 type chatMemberDeliveryState struct {
 	InboxBucket string
 	IsArchived  bool
@@ -46,10 +46,16 @@ func (g *grpcChatMemberInboxLister) RecipientDeliveryStates(ctx context.Context,
 	if chatID == "" {
 		return nil, fmt.Errorf("chat_id required")
 	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
 	ctx = metadata.AppendToOutgoingContext(ctx, grpcMDVoiceInternalCaller, "realtime")
 	out := make(map[string]chatMemberDeliveryState)
 	cursor := ""
+	seenCursors := make(map[string]struct{})
 	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		resp, err := g.client.ListMembers(ctx, &chatv1.ListMembersRequest{
 			ChatId: chatID,
 			Page:   &commonv1.CursorPageRequest{Cursor: cursor, PageSize: 100},
@@ -59,15 +65,18 @@ func (g *grpcChatMemberInboxLister) RecipientDeliveryStates(ctx context.Context,
 		}
 		list := resp.GetMemberList()
 		if list == nil {
-			return out, nil
+			return nil, fmt.Errorf("chat membership response is missing its member list")
 		}
 		for _, m := range list.GetMembers() {
 			if m == nil {
-				continue
+				return nil, fmt.Errorf("chat membership contains a missing member")
 			}
 			pid := strings.TrimSpace(m.GetProfileId())
 			if pid == "" {
-				continue
+				return nil, fmt.Errorf("chat membership contains a blank profile ID")
+			}
+			if _, exists := out[pid]; exists {
+				return nil, fmt.Errorf("chat membership contains a duplicate profile ID")
 			}
 			out[pid] = chatMemberDeliveryState{
 				InboxBucket: strings.TrimSpace(m.GetInboxBucket()),
@@ -75,9 +84,13 @@ func (g *grpcChatMemberInboxLister) RecipientDeliveryStates(ctx context.Context,
 			}
 		}
 		next := strings.TrimSpace(list.GetNextCursor())
-		if next == "" || next == cursor {
+		if next == "" {
 			return out, nil
 		}
+		if _, seen := seenCursors[next]; seen {
+			return nil, fmt.Errorf("chat membership pagination cursor repeated")
+		}
+		seenCursors[next] = struct{}{}
 		cursor = next
 	}
 }

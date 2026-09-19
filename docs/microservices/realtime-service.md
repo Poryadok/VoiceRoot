@@ -97,6 +97,21 @@ Two producers may emit WS `notification` for the same message; clients **dedupe*
 
 **Normative rule:** Notification Service owns **routing policy** (which channel, sound, grouping). Realtime fast path is **latency optimization** for subscribed in-app sessions — must not bypass mute/type suppress. When both paths fire, client keeps one row per dedupe key. Payload schema — § **`notification` op payload** below. Push — always Notification Service (FCM/APNs), never Realtime direct.
 
+**Implementation gap:** the policy path above is a target. Notification's public
+RPCs currently expose settings and send operations, but no recipient/event-bound
+routing decision for Realtime, and no accepted decision-event transport. Existing
+fast-path delivery does not establish that policy proof. Membership-wide delivery
+must remain disabled until this contract exists: Chat `ListMembers` alone is not
+sufficient authorization to send a notification, especially after DM block,
+archive or notification-setting changes. Chat member pagination must either
+complete within its shared deadline or return an error without a partial map.
+
+Presence adapter requests use the authenticated connection's explicit account,
+profile and account type. They replace ambient authorization/identity/privilege
+metadata rather than appending values that could select another identity. User
+owns the final profile ownership, Social-block and privacy decisions. Unknown
+identity and unavailable/empty User responses fail closed.
+
 ### Phase-0 Space-room roster fan-out (target; не реализовано)
 
 Voice publishes versioned room lifecycle events only after its authoritative

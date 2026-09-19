@@ -36,6 +36,20 @@ Voice is a Discord-like messenger with voice chat and built-in matchmaking. Prod
 - Delegate bounded, independent work when it improves quality or saves time,
   including review within one service. Read-only reviewers may inspect the
   working checkout; parallel code writers need separate worktrees.
+- Start a fleet run with 2–4 bounded PR lifecycle owners. Expand promptly when
+  each added assignment is ready now, has a distinct consumer and
+  non-overlapping write scope, has a recorded role/model/effort/context
+  rationale, and does not contend for a scarce resource or duplicate an active
+  investigation. Do not target a raw worker count: capacity may exceed four
+  when the dependency graph proves useful parallelism.
+- Require a checkpoint from the initial owners before expanding an unproven task
+  class or model configuration. Every fleet brief must name one accounting role
+  (`planner`, `developer`, `tester`, `auditor`, `ci/integration`), model,
+  effort, context source, and checkpoint. Use focused context rather than
+  inherited full history.
+- A task that produces only a plan, status report, duplicate test run, or a
+  disabled foundation without a named activation consumer is not implementation
+  WIP. Keep it queued or combine it with its consumer.
 - In Codex, use subagent tools for internal work. Create a user-visible task only
   when the user explicitly requests one. Keep inter-agent messages readable.
 

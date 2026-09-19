@@ -49,18 +49,13 @@ func roleEventToFanout(subject string, data []byte) (profileID, chatID string, e
 		return "", "", fanoutEnvelope{}, false
 	}
 	env = fanoutEnvelope{Op: "role_update", D: d}
-	switch {
-	case strings.HasSuffix(subject, "role.assigned"),
-		strings.HasSuffix(subject, "role.revoked"):
+	switch subject {
+	case "role.assigned", "role.revoked":
 		return payload.ProfileID, "", env, payload.ProfileID != ""
-	case strings.HasSuffix(subject, "role.chat_override_set"),
-		strings.HasSuffix(subject, "role.chat_override_removed"):
+	case "role.chat_override_set", "role.chat_override_removed":
 		return "", payload.ChatID, env, payload.ChatID != ""
-	case strings.HasSuffix(subject, "role.created"),
-		strings.HasSuffix(subject, "role.updated"),
-		strings.HasSuffix(subject, "role.deleted"),
-		strings.HasSuffix(subject, "role.voice_override_set"),
-		strings.HasSuffix(subject, "role.voice_override_removed"):
+	case "role.created", "role.updated", "role.deleted",
+		"role.voice_override_set", "role.voice_override_removed":
 		return "", "", env, payload.SpaceID != "" || payload.ChatID != ""
 	default:
 		return "", "", fanoutEnvelope{}, false
@@ -83,10 +78,8 @@ func subscribeRoleEvents(js nats.JetStreamContext, hub *wsHub, instanceID string
 		case chatID != "":
 			hub.broadcastToChat(chatID, fe, logger, reqID)
 		default:
-			// Space-wide role metadata: fan-out to subscribers of any chat in payload.
-			if chatID := strings.TrimSpace(extractRoleChatID(msg.Data)); chatID != "" {
-				hub.broadcastToChat(chatID, fe, logger, reqID)
-			}
+			// Other known Role events have no authoritative recipient index.
+			// A payload chat_id must never invent one.
 		}
 	}
 	sub, err := js.Subscribe("role.>", handler,
@@ -101,14 +94,6 @@ func subscribeRoleEvents(js nats.JetStreamContext, hub *wsHub, instanceID string
 		}
 	}
 	return sub, nil
-}
-
-func extractRoleChatID(data []byte) string {
-	var payload roleEventJSON
-	if err := json.Unmarshal(data, &payload); err != nil {
-		return ""
-	}
-	return strings.TrimSpace(payload.ChatID)
 }
 
 func runRoleEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instanceID string, logger *slog.Logger) error {

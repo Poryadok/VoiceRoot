@@ -8,8 +8,10 @@ work in this repository.
 
 - `.agent/AGENTS.md` for project sources of truth, language, workflow, and
   architectural boundaries.
-- `docs/PLAN.md` before judging whether a feature is shipped, partial, stub, or
-  deferred.
+- `docs/PLAN.md` before judging feature status, selecting a milestone, or
+  opening new product WIP. For a fully specified implementation slice, the
+  dispatcher supplies the exact milestone section and relevant feature/service
+  docs; workers do not load the whole PLAN or fleet chat history by default.
 - Relevant `docs/features/*`, `docs/microservices/*`, `docs/DATA_MODEL.md`,
   `docs/DATA_STORES.md`, and `docs/ARCHITECTURE_REQUIREMENTS.md` before coding
   behavior.
@@ -36,6 +38,16 @@ Get-Content -Raw -Encoding UTF8 .agent\AGENTS.md
 - Use repository documentation as the source of product behavior. Do not invent
   missing product or API behavior; ask the user or record a gap in the proper
   `docs/todo/*.md` file.
+- Start fleet work with 2–4 PR lifecycle owners. Expand promptly only for a
+  ready independent deliverable with a named consumer, non-overlapping write
+  scope, recorded role/model/effort/context rationale, and no scarce-resource
+  conflict. Do not target a raw worker count; proven useful parallelism may
+  exceed four.
+- Every fleet brief names one accounting role, model, effort, context source,
+  and checkpoint. Use focused briefs and `fork_turns="none"` by default;
+  full-history forks need a recorded reason. Astra is not a default fleet model:
+  reserve it for named architecture, security, concurrency, or cross-service
+  uncertainty and return ordinary implementation to Terra or Luna afterward.
 - For substantial, ambiguous, cross-service, or risky work, maintain an ExecPlan
   using `.agent/PLANS.md`.
 - If the user explicitly invokes `tdd-code-workflow`, follow the installed Codex
