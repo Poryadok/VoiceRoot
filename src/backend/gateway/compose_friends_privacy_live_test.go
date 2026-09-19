@@ -33,6 +33,9 @@ func TestComposeFriendsPrivacyDeny_live(t *testing.T) {
 
 	status := sendComposeFriendInvitationStatus(t, client, base, stranger.AccessToken, target.ProfileID)
 	require.Equal(t, http.StatusForbidden, status, "stranger invite must be denied by allow_friend_requests")
+
+	incoming := listComposeIncomingFriendRequests(t, client, base, target.AccessToken)
+	require.Empty(t, incoming, "denied invitation must not create an incoming request")
 }
 
 func sendComposeFriendInvitationStatus(t *testing.T, client *http.Client, base, accessToken, targetProfileID string) int {
@@ -48,4 +51,24 @@ func sendComposeFriendInvitationStatus(t *testing.T, client *http.Client, base, 
 	defer resp.Body.Close()
 	_, _ = io.ReadAll(resp.Body)
 	return resp.StatusCode
+}
+
+func listComposeIncomingFriendRequests(t *testing.T, client *http.Client, base, accessToken string) []struct{} {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, base+"/api/v1/friends/requests", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "GET friend requests body=%s", string(body))
+	var parsed struct {
+		FriendRequestList struct {
+			Incoming []struct{} `json:"incoming"`
+		} `json:"friend_request_list"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	return parsed.FriendRequestList.Incoming
 }
