@@ -140,8 +140,11 @@ void main() {
     expect(session?.accessToken, 'after');
   });
 
-  testWidgets('ProfileSwitcher dropdown switches active profile', (tester) async {
+  testWidgets('ProfileSwitcher dropdown switches active profile', (
+    tester,
+  ) async {
     final storage = _MemoryAuthStorage();
+    final realtime = _ImmediateProfileSwitchRealtimeBoundary();
     const session = AuthSession(
       accessToken: 'token',
       refreshToken: 'refresh',
@@ -207,6 +210,7 @@ void main() {
         ),
         httpClientProvider.overrideWithValue(mock),
         authSessionStorageProvider.overrideWithValue(storage),
+        profileSwitchRealtimeBoundaryProvider.overrideWithValue(realtime),
       ],
     );
     addTearDown(container.dispose);
@@ -236,90 +240,104 @@ void main() {
       container.read(authControllerProvider).activeProfileId,
       'profile-alt',
     );
+    expect(
+      realtime.handoffs.single.nextSession.activeProfileId,
+      'profile-alt',
+      reason:
+          'desktop profile switch must use the same Auth-to-Realtime handoff '
+          'as create/mobile switching; multi-profile.md forbids a reload-like '
+          'split state after a second profile is created',
+    );
     container.dispose();
   });
 
-  testWidgets('ProfileSwitcher shows guest nickname when profile list is empty',
-      (tester) async {
-    const guestProfileId = '7ff61e3a-27d9-44be-a636-a3e94f2a5265';
-    final mock = MockClient((req) async {
-      if (req.url.path == '/api/v1/users/profiles') {
-        return http.Response('unavailable', 503);
-      }
-      if (req.url.path == '/api/v1/users/profiles/$guestProfileId') {
-        return http.Response(
-          jsonEncode({
-            'profile': {
-              'id': guestProfileId,
-              'account_id': 'guest-acc',
-              'username': 'playerone',
-              'discriminator': '0042',
-              'display_name': 'PlayerOne',
-              'locale': 'en',
-              'theme': 'dark',
-              'is_primary': true,
-              'verification_type': 'none',
-            },
+  testWidgets(
+    'ProfileSwitcher shows guest nickname when profile list is empty',
+    (tester) async {
+      const guestProfileId = '7ff61e3a-27d9-44be-a636-a3e94f2a5265';
+      final mock = MockClient((req) async {
+        if (req.url.path == '/api/v1/users/profiles') {
+          return http.Response('unavailable', 503);
+        }
+        if (req.url.path == '/api/v1/users/profiles/$guestProfileId') {
+          return http.Response(
+            jsonEncode({
+              'profile': {
+                'id': guestProfileId,
+                'account_id': 'guest-acc',
+                'username': 'playerone',
+                'discriminator': '0042',
+                'display_name': 'PlayerOne',
+                'locale': 'en',
+                'theme': 'dark',
+                'is_primary': true,
+                'verification_type': 'none',
+              },
+            }),
+            200,
+          );
+        }
+        return http.Response('not found', 404);
+      });
+
+      late AuthController authController;
+      final container = ProviderContainer(
+        overrides: [
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          httpClientProvider.overrideWithValue(mock),
+          authSessionStorageProvider.overrideWithValue(_MemoryAuthStorage()),
+          guestCredentialsStorageProvider.overrideWithValue(
+            InMemoryGuestCredentialsStorage(),
+          ),
+          authControllerProvider.overrideWith((ref) {
+            authController = AuthController(
+              authClient: ref.watch(voiceAuthClientProvider),
+              storage: ref.watch(authSessionStorageProvider),
+              guestCredentialsStorage: ref.watch(
+                guestCredentialsStorageProvider,
+              ),
+            );
+            authController.state = const AuthState(
+              session: AuthSession(
+                accessToken: 'guest-access',
+                refreshToken: 'guest-refresh',
+                accountId: 'guest-acc',
+                activeProfileId: guestProfileId,
+                expiresInSeconds: 900,
+              ),
+              isGuest: true,
+            );
+            return authController;
           }),
-          200,
-        );
-      }
-      return http.Response('not found', 404);
-    });
+        ],
+      );
+      addTearDown(container.dispose);
 
-    late AuthController authController;
-    final container = ProviderContainer(
-      overrides: [
-        gatewayConfigProvider.overrideWithValue(
-          const GatewayConfig(baseUrl: 'http://api.test'),
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const Scaffold(body: ProfileSwitcher()),
+          ),
         ),
-        httpClientProvider.overrideWithValue(mock),
-        authSessionStorageProvider.overrideWithValue(_MemoryAuthStorage()),
-        guestCredentialsStorageProvider.overrideWithValue(
-          InMemoryGuestCredentialsStorage(),
-        ),
-        authControllerProvider.overrideWith((ref) {
-          authController = AuthController(
-            authClient: ref.watch(voiceAuthClientProvider),
-            storage: ref.watch(authSessionStorageProvider),
-            guestCredentialsStorage: ref.watch(guestCredentialsStorageProvider),
-          );
-          authController.state = const AuthState(
-            session: AuthSession(
-              accessToken: 'guest-access',
-              refreshToken: 'guest-refresh',
-              accountId: 'guest-acc',
-              activeProfileId: guestProfileId,
-              expiresInSeconds: 900,
-            ),
-            isGuest: true,
-          );
-          return authController;
-        }),
-      ],
-    );
-    addTearDown(container.dispose);
+      );
+      await tester.pumpAndSettle();
 
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp(
-          theme: voiceTestTheme(),
-          locale: const Locale('en'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: const Scaffold(body: ProfileSwitcher()),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      expect(find.text('PlayerOne'), findsOneWidget);
+      expect(find.textContaining('Profile:'), findsNothing);
+      container.dispose();
+    },
+  );
 
-    expect(find.text('PlayerOne'), findsOneWidget);
-    expect(find.textContaining('Profile:'), findsNothing);
-    container.dispose();
-  });
-
-  testWidgets('ProfileSwitcher disables frozen profiles in dropdown', (tester) async {
+  testWidgets('ProfileSwitcher disables frozen profiles in dropdown', (
+    tester,
+  ) async {
     final storage = _MemoryAuthStorage();
     const session = AuthSession(
       accessToken: 'token',
@@ -411,7 +429,9 @@ void main() {
     container.dispose();
   });
 
-  testWidgets('ProfileAvatarSwitcher swipe skips frozen profiles', (tester) async {
+  testWidgets('ProfileAvatarSwitcher swipe skips frozen profiles', (
+    tester,
+  ) async {
     final storage = _MemoryAuthStorage();
     final realtime = _ImmediateProfileSwitchRealtimeBoundary();
     await storage.write(
@@ -491,15 +511,17 @@ void main() {
       ],
     );
     addTearDown(container.dispose);
-    await container.read(authControllerProvider.notifier).applySession(
-      const AuthSession(
-        accessToken: 'before',
-        refreshToken: 'refresh',
-        expiresInSeconds: 900,
-        accountId: 'account-1',
-        activeProfileId: 'profile-primary',
-      ),
-    );
+    await container
+        .read(authControllerProvider.notifier)
+        .applySession(
+          const AuthSession(
+            accessToken: 'before',
+            refreshToken: 'refresh',
+            expiresInSeconds: 900,
+            accountId: 'account-1',
+            activeProfileId: 'profile-primary',
+          ),
+        );
 
     await tester.pumpWidget(
       UncontrolledProviderScope(
