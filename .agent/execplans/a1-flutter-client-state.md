@@ -31,9 +31,10 @@ does not replace already available user data.
 ## Milestones
 
 - [x] Record documentation-backed plan before production edits.
-- [ ] RED: add focused regression tests and demonstrate they fail on current
-  production code for the intended state-transition defect.
-- [ ] GREEN: make only the controller/view changes necessary for those tests.
+- [x] RED: focused regression test demonstrated that switching profiles left
+  the prior profile's `VoiceMessage` visible.
+- [x] GREEN: clear room state synchronously on a profile change so stale
+  history cannot render while the next profile establishes its own context.
 - [ ] Refactor/verify: inspect the final diff, run affected Flutter checks,
   obtain exact-head CI gate, and merge with a merge commit.
 
@@ -65,8 +66,12 @@ does not replace already available user data.
 
 - [x] Required documentation and prior profile-handoff plans read.
 - [x] Clean working branch created from `origin/master`.
-- [ ] Test-only author is preparing the initial RED contract in a separate
-  lease; production implementation has not started.
+- [x] RED evidence: `flutter test test/chat_offline_cache_test.dart
+  --plain-name "clears previously loaded history as soon as the active profile
+  changes"` failed before production work with `Expected: empty` and
+  `Actual: [Instance of 'VoiceMessage']`.
+- [x] GREEN evidence: the same focused test and the complete
+  `chat_offline_cache_test.dart` file pass after the minimal reset.
 
 ## Decisions
 

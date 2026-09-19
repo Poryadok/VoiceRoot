@@ -906,7 +906,10 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       _historyGeneration++;
       _loadedHistoryProfileId = null;
       if (mounted) {
-        state = state.copyWith(isDmPeerDeleted: false);
+        // A chat id can exist in more than one profile's inbox. Never keep
+        // the previous profile's loaded room visible while the new profile
+        // establishes its own selected-chat history.
+        state = const ChatRoomState();
       }
     });
     _realtimeSub = _ref.listen<RealtimeLinkStatus>(realtimeLinkStatusProvider, (
