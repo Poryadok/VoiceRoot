@@ -92,6 +92,39 @@ transition в `quarantined`; `completed` receipt остаётся неизмен
 получает выдуманный subject. Исправление/исчезновение Redis не закрывает
 incident. Resolution остаётся отдельным будущим protected operator flow.
 
+### A3 membership schema (source-disabled storage contract)
+
+Migration `000003_matchmaking_membership` expands room instances to `call`,
+`group_voice` and `voice_room`. Ordinary calls/groups bind a Chat UUID; Space
+rooms bind the existing Space/logical-room UUID pair. Immutable `purpose` is
+`ORDINARY` or `MATCH_SQUAD`. A match room uses `group_voice` and retains its match
+owner ID, creation operation, manifest hash, creation receipt ID and Chat creation
+receipt ID together with its Chat UUID. No ordinary resource can be relabelled
+as a match resource by updating these fields.
+
+Memberships record the verified `account_id`, positive `session_epoch` and
+`JOINING|JOINED|RECONNECTING|LEAVING|LEFT|EJECTED` state. `RECONNECTING` alone has
+`reconnect_started_at` and `reconnect_deadline`, with a positive interval no longer
+than 30 seconds. Repeating a reconnect update in the same media epoch cannot
+extend that interval. Identity cannot be cleared or account ownership changed;
+the session epoch cannot regress or change within the same media epoch.
+Space-specific access/Role epochs remain mandatory for Space memberships and
+are absent for ordinary call/group memberships.
+
+Legacy membership rows retain NULL identity/state, with no synthetic account or
+epoch backfill. Dedicated storage reads reject those unknown rows; they are not
+evidence of SOLO or an eligible roster. Existing R22 APIs keep their migration-1
+compatibility; the new read model requires migration 3 separately. Reads expose
+stored evidence only and do not establish current Auth session validity.
+
+This schema does not activate snapshot RPC, roster publication, protected
+writers or runtime registration. Activation must first replace legacy writers
+and implement one transaction boundary for membership, roster version and outbox,
+plus current-session validation and expired reconnect handling. DOWN takes
+exclusive locks and rejects expanded identity or room data; legacy-only rows can
+be rolled back without discarding evidence. Verification and remaining gates:
+[voice-mm-membership-exec-plan.md](../testing/voice-mm-membership-exec-plan.md).
+
 ```
 voice:session:{profile_id} → {
   room_id, room_type (call|voice_room|group_voice),
