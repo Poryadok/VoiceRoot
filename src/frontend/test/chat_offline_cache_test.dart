@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/message_cache/in_memory_message_cache_store.dart';
@@ -161,54 +160,6 @@ void main() {
         'mine',
       );
     });
-
-    test(
-      'clears previously loaded history as soon as the active profile changes',
-      () async {
-        final container = _container(
-          cache: cache,
-          messagesClient: _FakeMessagesClient(
-            pages: [
-              MessageListData(messages: [_message('profile-a-message')]),
-            ],
-          ),
-        );
-        addTearDown(container.dispose);
-
-        final sub = container.listen<ChatRoomState>(
-          chatRoomControllerProvider('chat-1'),
-          (_, _) {},
-          fireImmediately: true,
-        );
-        addTearDown(sub.close);
-        await pumpEventQueue();
-        expect(
-          container
-              .read(chatRoomControllerProvider('chat-1'))
-              .messages
-              .single
-              .id,
-          'profile-a-message',
-        );
-
-        await container
-            .read(authControllerProvider.notifier)
-            .applySession(
-              const AuthSession(
-                accessToken: 'profile-b-access',
-                refreshToken: 'profile-b-refresh',
-                accountId: 'acc-test',
-                activeProfileId: 'profile-b',
-                expiresInSeconds: 900,
-              ),
-            );
-
-        expect(
-          container.read(chatRoomControllerProvider('chat-1')).messages,
-          isEmpty,
-        );
-      },
-    );
 
     test('clears cache on logout via lifecycle provider', () async {
       await cache.replaceChatMessages(

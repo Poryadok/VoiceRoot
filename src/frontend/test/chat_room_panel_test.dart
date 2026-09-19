@@ -5,8 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
+import 'package:voice_frontend/backend/messages_client.dart';
 import 'package:voice_frontend/backend/realtime_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
@@ -14,12 +16,67 @@ import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/chat/chat_room_panel.dart';
+import 'package:voice_frontend/ui/core/voice_state_panel.dart';
 
 import 'support/auth_test_overrides.dart';
+import 'support/markdown_test_helpers.dart';
 import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
 void main() {
+  testWidgets(
+    'hides previous-profile history until active-profile history binds',
+    (tester) async {
+      late _ProfileBoundRoomController room;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...voiceThemeTestOverrides(),
+            profileAccentStorageProvider.overrideWithValue(
+              testProfileAccentStorage,
+            ),
+            authSessionStorageProvider.overrideWithValue(
+              InMemoryAuthSessionStorage(),
+            ),
+            authControllerProvider.overrideWith(_ProfileBAuthController.new),
+            gatewayConfigProvider.overrideWithValue(
+              const GatewayConfig(baseUrl: 'http://api.test'),
+            ),
+            httpClientProvider.overrideWithValue(
+              MockClient((_) async => http.Response('{}', 404)),
+            ),
+            realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
+            selectedChatIdProvider.overrideWith((ref) => 'other-chat'),
+            chatRoomControllerProvider('chat-abc').overrideWith((ref) {
+              room = _ProfileBoundRoomController(ref, 'chat-abc');
+              return room;
+            }),
+          ],
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const Scaffold(body: ChatRoomPanel(chatId: 'chat-abc')),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(room.state.messages.single.content, 'from profile A');
+      expect(room.state.nextCursor, 'profile-a-cursor');
+      expect(find.text('from profile A'), findsNothing);
+      expect(find.byType(VoiceStatePanel), findsNothing);
+
+      room.bindProfileB();
+      await tester.pump();
+
+      expectMessagePlainText(tester, 'from profile B');
+      expect(richPlainText(tester), isNot(contains('from profile A')));
+      expect(find.byType(VoiceStatePanel), findsNothing);
+    },
+  );
+
   testWidgets('ChatRoomPanel composer has no @ mention button', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -75,6 +132,54 @@ class _EmptyRoomController extends ChatRoomController {
     state = const ChatRoomState(messages: []);
   }
 }
+
+class _ProfileBoundRoomController extends ChatRoomController {
+  _ProfileBoundRoomController(super.ref, super.chatId) : super() {
+    state = ChatRoomState(
+      messages: [_message('profile-a-message', 'from profile A')],
+      isLoading: true,
+      nextCursor: 'profile-a-cursor',
+      hasMore: true,
+      historyProfileId: 'profile-a',
+    );
+  }
+
+  void bindProfileB() {
+    state = ChatRoomState(
+      messages: [_message('profile-b-message', 'from profile B')],
+      nextCursor: 'profile-b-cursor',
+      hasMore: true,
+      historyProfileId: 'profile-b',
+    );
+  }
+}
+
+class _ProfileBAuthController extends AuthController {
+  _ProfileBAuthController(Ref ref)
+    : super(
+        authClient: ref.watch(voiceAuthClientProvider),
+        storage: ref.watch(authSessionStorageProvider),
+        guestCredentialsStorage: ref.watch(guestCredentialsStorageProvider),
+      ) {
+    state = const AuthState(
+      session: AuthSession(
+        accessToken: 'profile-b-access',
+        refreshToken: 'profile-b-refresh',
+        accountId: 'account-1',
+        activeProfileId: 'profile-b',
+        expiresInSeconds: 900,
+      ),
+    );
+  }
+}
+
+VoiceMessage _message(String id, String content) => VoiceMessage(
+  id: id,
+  chatId: 'chat-abc',
+  senderProfileId: 'peer-1',
+  content: content,
+  createdAt: DateTime.parse('2026-09-20T00:00:00Z'),
+);
 
 class _NoopRealtimeHub extends RealtimeHub {
   _NoopRealtimeHub(super.ref);

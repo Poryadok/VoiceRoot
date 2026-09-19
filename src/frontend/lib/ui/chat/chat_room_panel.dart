@@ -205,9 +205,18 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final room = ref.watch(chatRoomControllerProvider(widget.chatId));
-    final isOffline = ref.watch(isDeviceOfflineProvider) || room.isOfflineCache;
     final activeId = ref.watch(authControllerProvider).activeProfileId;
+    final controllerRoom = ref.watch(chatRoomControllerProvider(widget.chatId));
+    final historyBelongsToActiveProfile =
+        controllerRoom.historyProfileId == activeId;
+    final room = historyBelongsToActiveProfile
+        ? controllerRoom
+        : ChatRoomState(
+            isLoading: controllerRoom.isLoading,
+            errorMessage: controllerRoom.errorMessage,
+            realtimeStatus: controllerRoom.realtimeStatus,
+          );
+    final isOffline = ref.watch(isDeviceOfflineProvider) || room.isOfflineCache;
     final canCall = ref.watch(gatewayConfigProvider).canPlaceVoiceCalls;
     final isGuest = ref.watch(authControllerProvider).isGuest;
     String? groupName;

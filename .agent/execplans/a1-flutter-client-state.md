@@ -31,21 +31,25 @@ does not replace already available user data.
 ## Milestones
 
 - [x] Record documentation-backed plan before production edits.
-- [x] RED: focused regression test demonstrated that switching profiles left
-  the prior profile's `VoiceMessage` visible.
-- [x] GREEN: clear room state synchronously on a profile change so stale
-  history cannot render while the next profile establishes its own context.
-- [ ] Refactor/verify: inspect the final diff, run affected Flutter checks,
-  obtain exact-head CI gate, and merge with a merge commit.
+- [x] RED: a `ChatRoomPanel` widget test must show neither A's messages nor a
+  generic empty/error panel after A→B, while B history is pending.
+- [x] GREEN: retain controller snapshot/cursor and gate message presentation on
+  the profile that owns the bound history; render B only after B binds.
+- [ ] Refactor/verify: retain the P4b controller tests unchanged, inspect the
+  final diff, run affected Flutter checks, obtain exact-head CI gate, and merge
+  with a merge commit.
 
 ## Detailed Steps
 
 1. Trace the current profile context, selected chat, room state, and
    empty/error/offline rendering seams; retain local drafts outside the change.
-2. Add widget tests first for each documented externally visible behavior and
-   run their focused command to capture RED evidence.
-3. Make the smallest profile-keyed invalidation/fencing and/or room rendering
-   update that turns each test GREEN. Do not weaken accepted tests.
+2. Replace the incorrect controller-clear regression with a widget test: the
+   controller retains A snapshot/cursor while B history is pending, but the
+   panel renders its existing loading transition, never A's content or a
+   generic empty/error state.
+3. Make the smallest profile/history ownership gate in `ChatRoomPanel` that
+   turns this test GREEN. Preserve existing generation/history-binding
+   invalidation in `ChatRoomController`; do not clear controller state.
 4. Run the same focused tests after each change; refactor only while they stay
    green. Add no behavior outside the declared scope.
 5. Run `flutter analyze`, affected Flutter tests and `make flutter-ci` as
@@ -66,20 +70,21 @@ does not replace already available user data.
 
 - [x] Required documentation and prior profile-handoff plans read.
 - [x] Clean working branch created from `origin/master`.
-- [x] RED evidence: `flutter test test/chat_offline_cache_test.dart
-  --plain-name "clears previously loaded history as soon as the active profile
-  changes"` failed before production work with `Expected: empty` and
-  `Actual: [Instance of 'VoiceMessage']`.
-- [x] GREEN evidence: the same focused test and the complete
-  `chat_offline_cache_test.dart` file pass after the minimal reset.
+- [x] Audit correction: direct controller clear violates unchanged P4b
+  snapshot/cursor retention tests and must be removed.
+- [x] RED evidence: focused `ChatRoomPanel` A→B widget regression initially
+  failed to compile because `ChatRoomState` had no history-owner binding.
+- [x] GREEN evidence: the focused widget regression plus unchanged P4b
+  controller lifecycle tests pass after the panel-only gate.
 
 ## Decisions
 
-- Use existing state ownership and widget test conventions rather than create a
-  new cross-feature abstraction: docs specify user-visible behavior, not a new
-  client architecture.
-- Treat the observed chat visual symptom as a regression test target; select
-  the implementation only after a focused test reliably demonstrates it.
+- Preserve `ChatRoomController` ownership of durable history and cursors. Its
+  profile/generation fences protect async state and the P4b tests intentionally
+  retain A until B binds.
+- Bind presentation to active-profile history ownership in the existing panel;
+  this prevents a cross-profile leak without a provider-family redesign or
+  masking an error/empty result as a state reset.
 
 ## Risks And Follow-Ups
 
