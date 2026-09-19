@@ -436,6 +436,44 @@ separate PR-owner.
 
 ## Progress
 
+### S2 versioned provider transition slice
+
+The next bounded slice owns the internal provider transition engine and its
+durable replay/order journal. Deterministic fake-provider commands exercise the
+same personal/Space state reducer and S1 outbox transaction: exact provider
+event replay returns its original saved outcome, stale versions cannot regress
+recovery, and conflicting bytes/facts have no entitlement effect. Grace keeps
+its original seven-day boundary for an unresolved period; cancel/grace/expiry
+share their downgrade cycle, while recovery/resume/renewal/repurchase clear it.
+Provider subscription identities remain bound to one target; repurchase keeps
+the permanent aggregate revision and retires the old provider binding.
+This internal slice accepts repurchase only with a new verified provider
+subscription identity. Reused identity semantics require adapter reconciliation;
+neither renewal nor payment recovery can turn final `INACTIVE` into a purchase.
+New transitions whose effective time is ahead of Subscription database time
+wait for adapter scheduling/reconciliation; a current snapshot must not grant
+or revoke benefits early. Event `occurred_at` uses that same database time.
+
+This slice remains source-disabled. It does not normalize unverified live
+Paddle/CloudPayments bytes, expose a listener, create scheduled reminder rows,
+bootstrap protected snapshots, erase account data, or switch any consumer's
+authority. Missing comparable provider versions and ambiguous transitions need
+reconciliation. Real adapters, atomic reminder scheduling, snapshot/privacy APIs
+and consumer cutover remain prerequisites for activation. The fixture's version
+is an explicit provider fact, never an arrival timestamp or NATS sequence.
+
+- [x] SUB-R04/R05/R14 producer reducer and transactional replay/order tests
+  implemented, including rollback, duplicate/adjacent-version races, retained
+  historical version fingerprints and quarantine without entitlement mutation.
+- [x] Independent security/concurrency review accepted after adding explicit
+  predecessor, retired-version and future-effective guards.
+
+Local Subscription short tests, vet and pinned golangci pass. PostgreSQL tests
+apply migration chain `000001` through `000005`; their full hosted run is a
+required merge gate on the current PR head. The local Docker engine is absent,
+and skipped database tests are not counted as PostgreSQL evidence. Existing
+runtime lifecycle TODOs remain open because this engine has no live callsites.
+
 ### S1 producer durability slice
 
 The first implementation slice adds the additive snapshot envelope and an
