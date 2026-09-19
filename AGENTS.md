@@ -27,6 +27,9 @@ Get-Content -Raw -Encoding UTF8 .agent\AGENTS.md
 - Apply the autonomy, skill precedence, delegation, and verification rules in
   `.agent/AGENTS.md`. Project model setup and official GPT-6 Astra guidance are
   linked from `.agent/codex/README.md`.
+- Use `rtk` for every shell command, for example `rtk git status` and
+  `rtk go test ./...`, so terminal output is token-optimized before it reaches
+  the agent. Use `rtk proxy <command>` only when unfiltered output is required.
 - Use repository documentation as the source of product behavior. Do not invent
   missing product or API behavior; ask the user or record a gap in the proper
   `docs/todo/*.md` file.
