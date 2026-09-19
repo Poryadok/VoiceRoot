@@ -27,6 +27,12 @@ Get-Content -Raw -Encoding UTF8 .agent\AGENTS.md
 - Apply the autonomy, skill precedence, delegation, and verification rules in
   `.agent/AGENTS.md`. Project model setup and official GPT-6 Astra guidance are
   linked from `.agent/codex/README.md`.
+- Use `rtk` for every shell command, for example `rtk git status` and
+  `rtk go test ./...`, so terminal output is token-optimized before it reaches
+  the agent. Use `rtk proxy <command>` only when unfiltered output is required.
+- When the `codegraph_explore` MCP tool is available, use it before raw search
+  for code structure, callers/callees, and change impact. Keep repository docs
+  as the source of product and architecture truth.
 - Use repository documentation as the source of product behavior. Do not invent
   missing product or API behavior; ask the user or record a gap in the proper
   `docs/todo/*.md` file.
@@ -67,3 +73,29 @@ mapped for Codex in `.agent/codex/`. Project-owned Codex skills live in
 `.agent/codex/skills/`, crew profiles in `.agent/codex/agents/`, and portable
 MCP notes/examples in `.agent/codex/mcp.md`. Treat `.agent/` as the cross-agent
 canon and `.cursor/` as the Cursor adapter layer.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+The local CLI is `C:\\Users\\Sergey\\AppData\\Roaming\\Python\\Python312\\Scripts\\graphify.exe`; use that path when `graphify` is not on `PATH`.
+
+When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
+
+Rules:
+- For every codebase question and before every code edit, call
+  `mcp__codegraph__codegraph_explore` first. It is a deferred Codex tool, so
+  call it directly even when it is absent from the initial tool manifest; do
+  not inspect `ALL_TOOLS`, run a CLI probe, or use raw search first. Pass the
+  concrete symbol, file path, or question and `projectPath = "D:\\Git\\Voice"`.
+- If that direct MCP call returns a tool-not-found error, use
+  `rtk codegraph explore "<question or symbols>" --path .` for the same
+  question. Do not make any other availability checks.
+- Use Graphify after CodeGraph only for broad cross-language or documentation
+  context: run `graphify query "<question>"`; use `graphify path "<A>" "<B>"`
+  for relationships and `graphify explain "<concept>"` for focused concepts.
+  These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or
+  raw grep output.
+- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
