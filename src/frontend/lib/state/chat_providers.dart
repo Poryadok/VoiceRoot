@@ -829,6 +829,7 @@ class ChatRoomState {
     this.pinnedMessages = const [],
     this.isOfflineCache = false,
     this.isDmPeerDeleted = false,
+    this.historyProfileId,
   });
 
   final List<VoiceMessage> messages;
@@ -845,6 +846,11 @@ class ChatRoomState {
   final List<VoiceMessage> pinnedMessages;
   final bool isOfflineCache;
   final bool isDmPeerDeleted;
+
+  /// The profile whose successful history result owns [messages] and cursor.
+  /// This remains intact across a profile switch so controller lifecycle code
+  /// can reject stale events without discarding a useful snapshot.
+  final String? historyProfileId;
 
   String? get lastMessageId => messages.isEmpty ? null : messages.last.id;
 
@@ -865,6 +871,7 @@ class ChatRoomState {
     List<VoiceMessage>? pinnedMessages,
     bool? isOfflineCache,
     bool? isDmPeerDeleted,
+    String? historyProfileId,
   }) {
     return ChatRoomState(
       messages: messages ?? this.messages,
@@ -881,6 +888,7 @@ class ChatRoomState {
       pinnedMessages: pinnedMessages ?? this.pinnedMessages,
       isOfflineCache: isOfflineCache ?? this.isOfflineCache,
       isDmPeerDeleted: isDmPeerDeleted ?? this.isDmPeerDeleted,
+      historyProfileId: historyProfileId ?? this.historyProfileId,
     );
   }
 }
@@ -906,7 +914,14 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       _historyGeneration++;
       _loadedHistoryProfileId = null;
       if (mounted) {
-        state = state.copyWith(isDmPeerDeleted: false);
+        // Keep the snapshot/cursor for lifecycle fencing while panel
+        // presentation waits for the new profile's bound history.
+        state = state.copyWith(
+          isLoading: true,
+          isOfflineCache: false,
+          clearError: true,
+          isDmPeerDeleted: false,
+        );
       }
     });
     _realtimeSub = _ref.listen<RealtimeLinkStatus>(realtimeLinkStatusProvider, (
@@ -1208,8 +1223,10 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           return;
         }
         if (data.messages.isNotEmpty) {
-          _loadedHistoryProfileId = profileId;
           _applyDmPeerState(data.dmPeerState);
+        }
+        if (data.messages.isNotEmpty) {
+          _loadedHistoryProfileId = profileId;
         }
         state = state.copyWith(
           messages: sorted,
@@ -1218,6 +1235,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           nextCursor: data.nextCursor,
           clearNextCursor: data.nextCursor == null,
           hasMore: data.hasMore && data.nextCursor != null,
+          historyProfileId: profileId,
           clearError: true,
         );
         unawaited(_writeCache(sorted, profileId: profileId));
@@ -1595,6 +1613,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       clearError: true,
       hasMore: false,
       clearNextCursor: true,
+      historyProfileId: profileId,
     );
     return true;
   }

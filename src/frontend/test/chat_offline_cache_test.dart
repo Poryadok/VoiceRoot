@@ -84,7 +84,9 @@ void main() {
       final container = _container(
         cache: cache,
         messagesClient: _FakeMessagesClient(
-          pages: [MessageListData(messages: [_message('live-1')])],
+          pages: [
+            MessageListData(messages: [_message('live-1')]),
+          ],
         ),
       );
       addTearDown(container.dispose);
