@@ -128,6 +128,12 @@ regress, and Redis orphans remain representable without an operation row.
 Redis is a rebuildable, non-authoritative mirror; Voice stores no cross-service
 foreign keys to profile/account owners.
 
+The source-disabled A3 schema extension adds immutable room kind/purpose and
+match creation bindings to `voice_room_instances`, plus verified account/session
+epoch, lifecycle state and bounded reconnect interval to `voice_room_memberships`.
+Legacy membership identity remains unknown; no backfill is inferred from Redis
+or profile IDs. This is storage evidence, not an activated party snapshot source.
+
 ## Клиенты и админка
 
 | Компонент           | Хранилище                                                  |
