@@ -88,7 +88,8 @@ Voice is a Discord-like messenger with voice chat and built-in matchmaking. Prod
 
 - Communicate with the user in Russian by default.
 - Use English for code identifiers, commands, API names, error messages, commit messages, and standard engineering terms when translation would reduce precision.
-- Keep internal planning notes and implementation terminology concise; prefer English technical wording where practical.
+- Write internal and cross-agent artifacts in concise English; user-facing communication follows the project/user language.
+- Keep terminal output narrow: filter or cap queries, and share no raw CI logs except the relevant failed excerpt.
 - Be brief in routine status updates and final answers. Skip filler, greetings, and generic preambles.
 - Lead with the result, why it matters, verification, and material limitations.
   Use plain language and active voice. Prefer clear paragraphs; use lists for
