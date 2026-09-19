@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 
 	userv1 "voice.app/voice/user/v1"
 	"voice/backend/pkg/guestguard"
@@ -17,7 +16,14 @@ import (
 // presenceViewer delegates viewer-aware presence privacy decisions to User.
 // Realtime deliberately does not reproduce privacy audience rules locally.
 type presenceViewer interface {
-	PresenceForViewer(ctx context.Context, targetProfileID, viewerProfileID, viewerAccountType string) (viewerPresence, error)
+	PresenceForViewer(ctx context.Context, request presenceViewerRequest) (viewerPresence, error)
+}
+
+type presenceViewerRequest struct {
+	TargetProfileID    string
+	ViewerAccountID    string
+	ViewerProfileID    string
+	ViewerAccountType  string
 }
 
 type viewerPresence struct {
@@ -37,22 +43,27 @@ func newGRPCPresenceViewer(cc *grpc.ClientConn) *grpcPresenceViewer {
 	return &grpcPresenceViewer{client: userv1.NewUserServiceClient(cc)}
 }
 
-func (g *grpcPresenceViewer) PresenceForViewer(ctx context.Context, targetProfileID, viewerProfileID, viewerAccountType string) (viewerPresence, error) {
+func (g *grpcPresenceViewer) PresenceForViewer(ctx context.Context, request presenceViewerRequest) (viewerPresence, error) {
 	if g == nil || g.client == nil {
 		return viewerPresence{}, fmt.Errorf("user presence viewer is not configured")
 	}
-	targetProfileID = strings.TrimSpace(targetProfileID)
-	viewerProfileID = strings.TrimSpace(viewerProfileID)
-	if targetProfileID == "" || viewerProfileID == "" {
-		return viewerPresence{}, fmt.Errorf("presence viewer requires target and viewer profile IDs")
+	targetProfileID, err := presenceIdentityUUID(request.TargetProfileID)
+	if err != nil {
+		return viewerPresence{}, err
 	}
-	if strings.TrimSpace(viewerAccountType) == "" {
-		viewerAccountType = guestguard.AccountTypeRegular
+	viewerAccountID, err := presenceIdentityUUID(request.ViewerAccountID)
+	if err != nil {
+		return viewerPresence{}, err
 	}
-	ctx = metadata.AppendToOutgoingContext(ctx,
-		grpcMDVoiceProfileID, viewerProfileID,
-		guestguard.HeaderAccountType, viewerAccountType,
-	)
+	viewerProfileID, err := presenceIdentityUUID(request.ViewerProfileID)
+	if err != nil {
+		return viewerPresence{}, err
+	}
+	accountType := request.ViewerAccountType
+	if accountType != guestguard.AccountTypeRegular && accountType != guestguard.AccountTypeGuest {
+		return viewerPresence{}, fmt.Errorf("presence viewer requires a known account type")
+	}
+	ctx = presenceIdentityContext(ctx, viewerAccountID, viewerProfileID, accountType)
 	resp, err := g.client.GetPresence(ctx, &userv1.GetPresenceRequest{ProfileId: targetProfileID})
 	if err != nil {
 		return viewerPresence{}, err
@@ -60,6 +71,10 @@ func (g *grpcPresenceViewer) PresenceForViewer(ctx context.Context, targetProfil
 	status := resp.GetPresenceStatus()
 	if status == nil {
 		return viewerPresence{}, fmt.Errorf("user presence viewer received empty response")
+	}
+	responseProfileID, err := presenceIdentityUUID(status.GetProfileId())
+	if err != nil || responseProfileID != targetProfileID {
+		return viewerPresence{}, fmt.Errorf("user presence response does not match target")
 	}
 	out := viewerPresence{Status: status.GetStatus(), CustomStatus: status.GetCustomStatus()}
 	if lastSeen := status.GetLastSeen(); lastSeen != nil && lastSeen.IsValid() {
@@ -75,7 +90,12 @@ func presenceFanoutPayload(ctx context.Context, viewer presenceViewer, targetPro
 	if viewer == nil || reg == nil {
 		return nil, fmt.Errorf("presence privacy viewer is not configured")
 	}
-	snapshot, err := viewer.PresenceForViewer(ctx, targetProfileID, reg.profileID, reg.accountType)
+	snapshot, err := viewer.PresenceForViewer(ctx, presenceViewerRequest{
+		TargetProfileID: targetProfileID,
+		ViewerAccountID: reg.accountID,
+		ViewerProfileID: reg.profileID,
+		ViewerAccountType: reg.accountType,
+	})
 	if err != nil {
 		return nil, err
 	}
