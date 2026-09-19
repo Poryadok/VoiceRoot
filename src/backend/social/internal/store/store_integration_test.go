@@ -103,8 +103,8 @@ func TestContactStoreUpsertAndFavourite(t *testing.T) {
 	contacts := &ContactStore{Pool: pool}
 	owner, contact := uuid.New(), uuid.New()
 
-	require.NoError(t, contacts.UpsertContact(ctx, owner, contact, "phone", false))
-	require.NoError(t, contacts.UpsertContact(ctx, owner, contact, "phone", true))
+	require.NoError(t, contacts.UpsertContact(ctx, owner, contact, "phone_sync", false))
+	require.NoError(t, contacts.UpsertContact(ctx, owner, contact, "phone_sync", true))
 	favourites, err := contacts.ListFavorites(ctx, owner)
 	require.NoError(t, err)
 	require.Len(t, favourites, 1)
