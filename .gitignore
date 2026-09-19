@@ -49,3 +49,6 @@ gen/
 /src/backend/voice/voice
 jobs.json
 staging-secret.yaml
+
+# Local Graphify knowledge graph and extraction cache
+/graphify-out/
