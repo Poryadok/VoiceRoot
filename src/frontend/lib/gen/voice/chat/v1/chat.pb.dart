@@ -2931,6 +2931,686 @@ class ArchiveChatRequest extends $pb.GeneratedMessage {
   void clearArchived() => $_clearField(2);
 }
 
+class Sticker extends $pb.GeneratedMessage {
+  factory Sticker({
+    $core.String? id,
+    $core.String? fileId,
+    $core.String? emoji,
+    $core.int? sortOrder,
+    $core.int? width,
+    $core.int? height,
+  }) {
+    final result = create();
+    if (id != null) result.id = id;
+    if (fileId != null) result.fileId = fileId;
+    if (emoji != null) result.emoji = emoji;
+    if (sortOrder != null) result.sortOrder = sortOrder;
+    if (width != null) result.width = width;
+    if (height != null) result.height = height;
+    return result;
+  }
+
+  Sticker._();
+
+  factory Sticker.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory Sticker.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'Sticker',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'id')
+    ..aOS(2, _omitFieldNames ? '' : 'fileId')
+    ..aOS(3, _omitFieldNames ? '' : 'emoji')
+    ..aI(4, _omitFieldNames ? '' : 'sortOrder')
+    ..aI(5, _omitFieldNames ? '' : 'width')
+    ..aI(6, _omitFieldNames ? '' : 'height')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  Sticker clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  Sticker copyWith(void Function(Sticker) updates) =>
+      super.copyWith((message) => updates(message as Sticker)) as Sticker;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static Sticker create() => Sticker._();
+  @$core.override
+  Sticker createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static Sticker getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<Sticker>(create);
+  static Sticker? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get id => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set id($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get fileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set fileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasFileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearFileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get emoji => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set emoji($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasEmoji() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearEmoji() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.int get sortOrder => $_getIZ(3);
+  @$pb.TagNumber(4)
+  set sortOrder($core.int value) => $_setSignedInt32(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasSortOrder() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearSortOrder() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.int get width => $_getIZ(4);
+  @$pb.TagNumber(5)
+  set width($core.int value) => $_setSignedInt32(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasWidth() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearWidth() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.int get height => $_getIZ(5);
+  @$pb.TagNumber(6)
+  set height($core.int value) => $_setSignedInt32(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasHeight() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearHeight() => $_clearField(6);
+}
+
+class StickerPack extends $pb.GeneratedMessage {
+  factory StickerPack({
+    $core.String? id,
+    $core.String? title,
+    $core.String? thumbFileId,
+    $core.bool? isSystem,
+    $core.bool? isPremium,
+    $core.String? creatorProfileId,
+    $core.int? stickerCount,
+    $core.Iterable<Sticker>? stickers,
+    $core.int? sortOrder,
+  }) {
+    final result = create();
+    if (id != null) result.id = id;
+    if (title != null) result.title = title;
+    if (thumbFileId != null) result.thumbFileId = thumbFileId;
+    if (isSystem != null) result.isSystem = isSystem;
+    if (isPremium != null) result.isPremium = isPremium;
+    if (creatorProfileId != null) result.creatorProfileId = creatorProfileId;
+    if (stickerCount != null) result.stickerCount = stickerCount;
+    if (stickers != null) result.stickers.addAll(stickers);
+    if (sortOrder != null) result.sortOrder = sortOrder;
+    return result;
+  }
+
+  StickerPack._();
+
+  factory StickerPack.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory StickerPack.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'StickerPack',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'id')
+    ..aOS(2, _omitFieldNames ? '' : 'title')
+    ..aOS(3, _omitFieldNames ? '' : 'thumbFileId')
+    ..aOB(4, _omitFieldNames ? '' : 'isSystem')
+    ..aOB(5, _omitFieldNames ? '' : 'isPremium')
+    ..aOS(6, _omitFieldNames ? '' : 'creatorProfileId')
+    ..aI(7, _omitFieldNames ? '' : 'stickerCount')
+    ..pPM<Sticker>(8, _omitFieldNames ? '' : 'stickers',
+        subBuilder: Sticker.create)
+    ..aI(9, _omitFieldNames ? '' : 'sortOrder')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  StickerPack clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  StickerPack copyWith(void Function(StickerPack) updates) =>
+      super.copyWith((message) => updates(message as StickerPack))
+          as StickerPack;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static StickerPack create() => StickerPack._();
+  @$core.override
+  StickerPack createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static StickerPack getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<StickerPack>(create);
+  static StickerPack? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get id => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set id($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get title => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set title($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasTitle() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearTitle() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get thumbFileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set thumbFileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasThumbFileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearThumbFileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.bool get isSystem => $_getBF(3);
+  @$pb.TagNumber(4)
+  set isSystem($core.bool value) => $_setBool(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasIsSystem() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearIsSystem() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.bool get isPremium => $_getBF(4);
+  @$pb.TagNumber(5)
+  set isPremium($core.bool value) => $_setBool(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasIsPremium() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearIsPremium() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get creatorProfileId => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set creatorProfileId($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasCreatorProfileId() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearCreatorProfileId() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.int get stickerCount => $_getIZ(6);
+  @$pb.TagNumber(7)
+  set stickerCount($core.int value) => $_setSignedInt32(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasStickerCount() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearStickerCount() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $pb.PbList<Sticker> get stickers => $_getList(7);
+
+  @$pb.TagNumber(9)
+  $core.int get sortOrder => $_getIZ(8);
+  @$pb.TagNumber(9)
+  set sortOrder($core.int value) => $_setSignedInt32(8, value);
+  @$pb.TagNumber(9)
+  $core.bool hasSortOrder() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearSortOrder() => $_clearField(9);
+}
+
+class ListInstalledStickerPacksRequest extends $pb.GeneratedMessage {
+  factory ListInstalledStickerPacksRequest() => create();
+
+  ListInstalledStickerPacksRequest._();
+
+  factory ListInstalledStickerPacksRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ListInstalledStickerPacksRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ListInstalledStickerPacksRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListInstalledStickerPacksRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListInstalledStickerPacksRequest copyWith(
+          void Function(ListInstalledStickerPacksRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as ListInstalledStickerPacksRequest))
+          as ListInstalledStickerPacksRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ListInstalledStickerPacksRequest create() =>
+      ListInstalledStickerPacksRequest._();
+  @$core.override
+  ListInstalledStickerPacksRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ListInstalledStickerPacksRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ListInstalledStickerPacksRequest>(
+          create);
+  static ListInstalledStickerPacksRequest? _defaultInstance;
+}
+
+class ListInstalledStickerPacksResponse extends $pb.GeneratedMessage {
+  factory ListInstalledStickerPacksResponse({
+    $core.Iterable<StickerPack>? packs,
+  }) {
+    final result = create();
+    if (packs != null) result.packs.addAll(packs);
+    return result;
+  }
+
+  ListInstalledStickerPacksResponse._();
+
+  factory ListInstalledStickerPacksResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ListInstalledStickerPacksResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ListInstalledStickerPacksResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..pPM<StickerPack>(1, _omitFieldNames ? '' : 'packs',
+        subBuilder: StickerPack.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListInstalledStickerPacksResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListInstalledStickerPacksResponse copyWith(
+          void Function(ListInstalledStickerPacksResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as ListInstalledStickerPacksResponse))
+          as ListInstalledStickerPacksResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ListInstalledStickerPacksResponse create() =>
+      ListInstalledStickerPacksResponse._();
+  @$core.override
+  ListInstalledStickerPacksResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ListInstalledStickerPacksResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ListInstalledStickerPacksResponse>(
+          create);
+  static ListInstalledStickerPacksResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $pb.PbList<StickerPack> get packs => $_getList(0);
+}
+
+class GetStickerPackRequest extends $pb.GeneratedMessage {
+  factory GetStickerPackRequest({
+    $core.String? packId,
+  }) {
+    final result = create();
+    if (packId != null) result.packId = packId;
+    return result;
+  }
+
+  GetStickerPackRequest._();
+
+  factory GetStickerPackRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetStickerPackRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetStickerPackRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'packId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetStickerPackRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetStickerPackRequest copyWith(
+          void Function(GetStickerPackRequest) updates) =>
+      super.copyWith((message) => updates(message as GetStickerPackRequest))
+          as GetStickerPackRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetStickerPackRequest create() => GetStickerPackRequest._();
+  @$core.override
+  GetStickerPackRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetStickerPackRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetStickerPackRequest>(create);
+  static GetStickerPackRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get packId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set packId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasPackId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearPackId() => $_clearField(1);
+}
+
+class GetStickerPackResponse extends $pb.GeneratedMessage {
+  factory GetStickerPackResponse({
+    StickerPack? pack,
+  }) {
+    final result = create();
+    if (pack != null) result.pack = pack;
+    return result;
+  }
+
+  GetStickerPackResponse._();
+
+  factory GetStickerPackResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetStickerPackResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetStickerPackResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOM<StickerPack>(1, _omitFieldNames ? '' : 'pack',
+        subBuilder: StickerPack.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetStickerPackResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetStickerPackResponse copyWith(
+          void Function(GetStickerPackResponse) updates) =>
+      super.copyWith((message) => updates(message as GetStickerPackResponse))
+          as GetStickerPackResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetStickerPackResponse create() => GetStickerPackResponse._();
+  @$core.override
+  GetStickerPackResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetStickerPackResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetStickerPackResponse>(create);
+  static GetStickerPackResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  StickerPack get pack => $_getN(0);
+  @$pb.TagNumber(1)
+  set pack(StickerPack value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasPack() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearPack() => $_clearField(1);
+  @$pb.TagNumber(1)
+  StickerPack ensurePack() => $_ensure(0);
+}
+
+class InstallStickerPackRequest extends $pb.GeneratedMessage {
+  factory InstallStickerPackRequest({
+    $core.String? packId,
+  }) {
+    final result = create();
+    if (packId != null) result.packId = packId;
+    return result;
+  }
+
+  InstallStickerPackRequest._();
+
+  factory InstallStickerPackRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory InstallStickerPackRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'InstallStickerPackRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'packId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  InstallStickerPackRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  InstallStickerPackRequest copyWith(
+          void Function(InstallStickerPackRequest) updates) =>
+      super.copyWith((message) => updates(message as InstallStickerPackRequest))
+          as InstallStickerPackRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static InstallStickerPackRequest create() => InstallStickerPackRequest._();
+  @$core.override
+  InstallStickerPackRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static InstallStickerPackRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<InstallStickerPackRequest>(create);
+  static InstallStickerPackRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get packId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set packId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasPackId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearPackId() => $_clearField(1);
+}
+
+class InstallStickerPackResponse extends $pb.GeneratedMessage {
+  factory InstallStickerPackResponse({
+    StickerPack? pack,
+  }) {
+    final result = create();
+    if (pack != null) result.pack = pack;
+    return result;
+  }
+
+  InstallStickerPackResponse._();
+
+  factory InstallStickerPackResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory InstallStickerPackResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'InstallStickerPackResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOM<StickerPack>(1, _omitFieldNames ? '' : 'pack',
+        subBuilder: StickerPack.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  InstallStickerPackResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  InstallStickerPackResponse copyWith(
+          void Function(InstallStickerPackResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as InstallStickerPackResponse))
+          as InstallStickerPackResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static InstallStickerPackResponse create() => InstallStickerPackResponse._();
+  @$core.override
+  InstallStickerPackResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static InstallStickerPackResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<InstallStickerPackResponse>(create);
+  static InstallStickerPackResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  StickerPack get pack => $_getN(0);
+  @$pb.TagNumber(1)
+  set pack(StickerPack value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasPack() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearPack() => $_clearField(1);
+  @$pb.TagNumber(1)
+  StickerPack ensurePack() => $_ensure(0);
+}
+
+class UninstallStickerPackRequest extends $pb.GeneratedMessage {
+  factory UninstallStickerPackRequest({
+    $core.String? packId,
+  }) {
+    final result = create();
+    if (packId != null) result.packId = packId;
+    return result;
+  }
+
+  UninstallStickerPackRequest._();
+
+  factory UninstallStickerPackRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory UninstallStickerPackRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'UninstallStickerPackRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'packId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UninstallStickerPackRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UninstallStickerPackRequest copyWith(
+          void Function(UninstallStickerPackRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as UninstallStickerPackRequest))
+          as UninstallStickerPackRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static UninstallStickerPackRequest create() =>
+      UninstallStickerPackRequest._();
+  @$core.override
+  UninstallStickerPackRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static UninstallStickerPackRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<UninstallStickerPackRequest>(create);
+  static UninstallStickerPackRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get packId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set packId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasPackId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearPackId() => $_clearField(1);
+}
+
+class UninstallStickerPackResponse extends $pb.GeneratedMessage {
+  factory UninstallStickerPackResponse() => create();
+
+  UninstallStickerPackResponse._();
+
+  factory UninstallStickerPackResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory UninstallStickerPackResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'UninstallStickerPackResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UninstallStickerPackResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UninstallStickerPackResponse copyWith(
+          void Function(UninstallStickerPackResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as UninstallStickerPackResponse))
+          as UninstallStickerPackResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static UninstallStickerPackResponse create() =>
+      UninstallStickerPackResponse._();
+  @$core.override
+  UninstallStickerPackResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static UninstallStickerPackResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<UninstallStickerPackResponse>(create);
+  static UninstallStickerPackResponse? _defaultInstance;
+}
+
 class EnableChatE2ERequest extends $pb.GeneratedMessage {
   factory EnableChatE2ERequest({
     $core.String? chatId,

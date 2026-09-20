@@ -110,6 +110,59 @@ func TestProviderReplayOrderAndConflictingBody(t *testing.T) {
 	require.Equal(t, 2, count)
 }
 
+// TestFakeProviderBenefitMatrixConvergesAfterGraceRecovery is the producer-side
+// contract consumed by the A7 benefit matrix: both personal Premium and Space
+// Pro retain paid state through grace, recovery produces the newer ACTIVE
+// snapshot, and a late failure cannot take that recovered benefit away.
+func TestFakeProviderBenefitMatrixConvergesAfterGraceRecovery(t *testing.T) {
+	pool := testDB(t)
+	ctx := context.Background()
+	store := Store{Pool: pool}
+
+	for _, kind := range []eventsv1.SubscriptionAggregateKind{
+		eventsv1.SubscriptionAggregateKind_SUBSCRIPTION_AGGREGATE_KIND_PERSONAL,
+		eventsv1.SubscriptionAggregateKind_SUBSCRIPTION_AGGREGATE_KIND_SPACE,
+	} {
+		t.Run(kind.String(), func(t *testing.T) {
+			started := fakeCommand(kind)
+			started.EffectiveAt = time.Now().UTC().Add(-2 * time.Hour)
+			started.PeriodStart = started.EffectiveAt
+			started.PeriodEnd = started.EffectiveAt.AddDate(0, 1, 0)
+			_, err := store.Apply(ctx, started)
+			require.NoError(t, err)
+
+			failed := nextCommand(started, eventsv1.EntitlementReason_ENTITLEMENT_REASON_PAYMENT_FAILED, started.EffectiveAt.Add(time.Hour))
+			failed.Version = 3
+			grace, err := store.Apply(ctx, failed)
+			require.NoError(t, err)
+			require.Equal(t, "APPLIED", grace.Disposition)
+			require.Equal(t, eventsv1.EntitlementState_ENTITLEMENT_STATE_GRACE_PERIOD, grace.Event.GetEntitlementChanged().State)
+
+			recovered := nextCommand(failed, eventsv1.EntitlementReason_ENTITLEMENT_REASON_PAYMENT_RECOVERED, started.EffectiveAt.Add(90*time.Minute))
+			recovered.Version = 5
+			recovered.PeriodStart = started.PeriodEnd
+			recovered.PeriodEnd = started.PeriodEnd.AddDate(0, 1, 0)
+			active, err := store.Apply(ctx, recovered)
+			require.NoError(t, err)
+			require.Equal(t, "APPLIED", active.Disposition)
+			require.Equal(t, eventsv1.EntitlementState_ENTITLEMENT_STATE_ACTIVE, active.Event.GetEntitlementChanged().State)
+			require.Nil(t, active.Event.GetEntitlementChanged().DowngradeCycleId)
+
+			lateFailure := nextCommand(failed, eventsv1.EntitlementReason_ENTITLEMENT_REASON_PAYMENT_FAILED, started.EffectiveAt.Add(105*time.Minute))
+			lateFailure.Version = 4
+			stale, err := store.Apply(ctx, lateFailure)
+			require.NoError(t, err)
+			require.Equal(t, "STALE", stale.Disposition)
+			require.True(t, proto.Equal(active.Event, stale.Event), "late provider failure must not revoke the recovered paid benefit")
+
+			replay, err := store.Apply(ctx, failed)
+			require.NoError(t, err)
+			require.Equal(t, "APPLIED", replay.Disposition)
+			require.True(t, proto.Equal(grace.Event, replay.Event), "duplicate event returns its original stored outcome, not current state")
+		})
+	}
+}
+
 func TestUnchangedOutcomeReplayReturnsHistoricalSnapshot(t *testing.T) {
 	pool := testDB(t)
 	ctx := context.Background()

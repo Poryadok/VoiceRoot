@@ -47,6 +47,16 @@ func (f voiceRoomMoveFixture) moderatorRequest(operationID string) *callsv1.Move
 
 func TestMoveVoiceRoomParticipant_SeparatesModeratorPermissionFromTargetJoin(t *testing.T) {
 	f := newVoiceRoomMoveFixture(t)
+	// The source room's creation and target join have already committed. Only
+	// existing participants are notified; the joining target is never added as
+	// a recipient merely because it joined.
+	require.Len(t, f.events.startedCall, 1)
+	require.Len(t, f.events.memberJoined, 2)
+	joined := f.events.memberJoined[1]
+	require.Equal(t, f.source, joined.GetVoiceRoomId())
+	require.Equal(t, f.target, joined.GetJoinedProfileId())
+	require.Equal(t, []string{f.actor}, joined.GetNotifyProfileIds())
+
 	response, err := f.svc.MoveVoiceRoomParticipant(voiceTestCtx(f.actor), f.moderatorRequest(uuid.NewString()))
 	require.NoError(t, err)
 	require.Equal(t, callsv1.VoiceRoomLifecycleMethod_VOICE_ROOM_LIFECYCLE_METHOD_MODERATOR_MOVE, response.GetReceipt().GetMethod())
@@ -62,6 +72,12 @@ func TestMoveVoiceRoomParticipant_SeparatesModeratorPermissionFromTargetJoin(t *
 	require.True(t, destination.IsParticipant(f.target))
 	require.False(t, destination.IsParticipant(f.actor), "actor need not join destination to move another participant")
 	require.Len(t, f.events.memberJoined, 3, "only the successful destination move publishes one join")
+	moved := f.events.memberJoined[2]
+	require.Equal(t, destination.RoomID, moved.GetRoomId())
+	require.Equal(t, f.dest, moved.GetVoiceRoomId())
+	require.Equal(t, f.spaceID, moved.GetSpaceId())
+	require.Equal(t, f.target, moved.GetJoinedProfileId())
+	require.Empty(t, moved.GetNotifyProfileIds(), "an empty destination must not invent an audience")
 }
 
 func TestMoveVoiceRoomParticipant_ReplayAndConflictingReplayDoNotMutateRoster(t *testing.T) {
@@ -74,6 +90,7 @@ func TestMoveVoiceRoomParticipant_ReplayAndConflictingReplayDoNotMutateRoster(t 
 	require.NoError(t, err)
 	require.Equal(t, first.GetReceipt().GetRoomId(), replay.GetReceipt().GetRoomId())
 	require.Len(t, f.events.memberJoined, 3, "identical replay must not publish or move twice")
+	require.Equal(t, []string{f.actor}, f.events.memberJoined[1].GetNotifyProfileIds(), "pre-move join routing remains immutable")
 
 	conflict := f.moderatorRequest(op)
 	conflict.ParticipantProfileId = f.actor
