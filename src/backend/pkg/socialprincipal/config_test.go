@@ -7,7 +7,7 @@ import (
 )
 
 func TestConfigPartialAndDefaults(t *testing.T) {
-	for _, target := range []string{"user", "space"} {
+	for _, target := range []string{"user", "space", "file"} {
 		t.Run(target, func(t *testing.T) {
 			_, enabled, err := LoadFromEnv(target)
 			require.NoError(t, err)
@@ -19,7 +19,7 @@ func TestConfigPartialAndDefaults(t *testing.T) {
 			require.True(t, enabled)
 			t.Setenv(prefix+"TLS_KEY_FILE", "key.pem")
 			t.Setenv(prefix+"REPLAY_REDIS_ADDR", "redis:6379")
-			t.Setenv("S2S_JWKS_URLS_JSON", `{"social":"https://social:8443/.well-known/jwks.json"}`)
+			t.Setenv("S2S_JWKS_URLS_JSON", `{"`+expectedIssuer(target)+`":"https://social:8443/.well-known/jwks.json"}`)
 			cfg, enabled, err := LoadFromEnv(target)
 			require.NoError(t, err)
 			require.True(t, enabled)

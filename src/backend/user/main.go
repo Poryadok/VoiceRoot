@@ -53,6 +53,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("user privacy principal config: %v", err)
 	}
+	filePrincipalConfig, filePrincipalEnabled, err := socialprincipal.LoadFromEnv("file")
+	if err != nil {
+		log.Fatalf("user file ownership principal config: %v", err)
+	}
 	var privacyRuntime *socialprincipal.Runtime
 	if principalEnabled {
 		if strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
@@ -63,6 +67,17 @@ func main() {
 			log.Fatalf("user privacy principal: %v", err)
 		}
 		defer func() { _ = privacyRuntime.Close() }()
+	}
+	var fileOwnershipRuntime *socialprincipal.Runtime
+	if filePrincipalEnabled {
+		if strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
+			log.Fatal("user file ownership principal requires DATABASE_URL")
+		}
+		fileOwnershipRuntime, err = socialprincipal.New(context.Background(), filePrincipalConfig)
+		if err != nil {
+			log.Fatalf("user file ownership principal: %v", err)
+		}
+		defer func() { _ = fileOwnershipRuntime.Close() }()
 	}
 	metricsReg := prometheus.NewRegistry()
 	httpAddr := ":8080"
@@ -249,6 +264,22 @@ func main() {
 			go func() {
 				if err := privacyServer.Serve(privacyListener); err != nil {
 					log.Fatalf("user privacy principal serve: %v", err)
+				}
+			}()
+		}
+		if fileOwnershipRuntime != nil {
+			fileOwnershipListener, err := net.Listen("tcp", filePrincipalConfig.ListenAddr)
+			if err != nil {
+				log.Fatalf("user file ownership principal listen: %v", err)
+			}
+			fileOwnershipOptions := append([]grpc.ServerOption{}, sharedOptions...)
+			fileOwnershipOptions = append(fileOwnershipOptions, fileOwnershipRuntime.ServerOptions()...)
+			fileOwnershipServer := grpc.NewServer(fileOwnershipOptions...)
+			grpcsvc.RegisterFileOwnershipServer(fileOwnershipServer, userSvc)
+			defer fileOwnershipServer.Stop()
+			go func() {
+				if err := fileOwnershipServer.Serve(fileOwnershipListener); err != nil {
+					log.Fatalf("user file ownership principal serve: %v", err)
 				}
 			}()
 		}
