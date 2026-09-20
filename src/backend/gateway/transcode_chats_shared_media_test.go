@@ -39,6 +39,32 @@ func TestTranscodeChatsListSharedMedia(t *testing.T) {
 	require.Equal(t, messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_MEDIA, grpcRec.lastListShared.GetKind())
 }
 
+func TestTranscodeChatsListSharedMedia_stickers(t *testing.T) {
+	t.Parallel()
+
+	grpcRec := &recordingSharedMedia{}
+	msgConn, msgCleanup := startBufconnMessagingConn(t, grpcRec)
+	t.Cleanup(msgCleanup)
+	chatConn, chatCleanup := startBufconnChatConn(t, &chatv1.UnimplementedChatServiceServer{})
+	t.Cleanup(chatCleanup)
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
+		transcoder: &transcoder{clients: grpcClients{
+			messaging: messagingv1.NewMessagingServiceClient(msgConn),
+			chat:      chatv1.NewChatServiceClient(chatConn),
+		}},
+	})
+
+	resp := performRequest(h, http.MethodGet, "/api/v1/chats/chat-9/shared-media?kind=stickers", "", map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
+	require.NotNil(t, grpcRec.lastListShared)
+	require.Equal(t, messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_STICKERS, grpcRec.lastListShared.GetKind())
+}
+
 func TestTranscodeChatsListSharedMedia_invalidKind(t *testing.T) {
 	t.Parallel()
 

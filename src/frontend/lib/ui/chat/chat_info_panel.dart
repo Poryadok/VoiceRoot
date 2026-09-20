@@ -39,6 +39,7 @@ class ChatInfoPanel extends ConsumerStatefulWidget {
   static const Key panelKey = Key('chat_info_panel');
   static const Key e2eToggleKey = Key('chat_info_e2e_toggle');
   static const Key mediaTabKey = Key('chat_info_tab_media');
+  static const Key stickersTabKey = Key('chat_info_tab_stickers');
   static const Key filesTabKey = Key('chat_info_tab_files');
   static const Key linksTabKey = Key('chat_info_tab_links');
   static const Key voiceTabKey = Key('chat_info_tab_voice');
@@ -59,7 +60,7 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 4, vsync: this);
+    _tabs = TabController(length: 5, vsync: this);
   }
 
   @override
@@ -108,6 +109,7 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
           isScrollable: true,
           tabs: [
             Tab(key: ChatInfoPanel.mediaTabKey, text: l10n.chatSharedMediaTabMedia),
+            Tab(key: ChatInfoPanel.stickersTabKey, text: l10n.chatSharedMediaTabStickers),
             Tab(key: ChatInfoPanel.filesTabKey, text: l10n.chatSharedMediaTabFiles),
             Tab(key: ChatInfoPanel.linksTabKey, text: l10n.chatSharedMediaTabLinks),
             Tab(key: ChatInfoPanel.voiceTabKey, text: l10n.chatSharedMediaTabVoice),
@@ -136,6 +138,7 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
             controller: _tabs,
             children: [
               _SharedMediaTab(chatId: widget.chatId, kind: SharedMediaTabKind.media),
+              _SharedMediaTab(chatId: widget.chatId, kind: SharedMediaTabKind.stickers),
               _SharedMediaTab(chatId: widget.chatId, kind: SharedMediaTabKind.files),
               _SharedMediaTab(chatId: widget.chatId, kind: SharedMediaTabKind.links),
               _SharedMediaTab(chatId: widget.chatId, kind: SharedMediaTabKind.voice),

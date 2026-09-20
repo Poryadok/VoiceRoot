@@ -2189,6 +2189,8 @@ func protoSharedMediaKind(k messagingv1.SharedMediaKind) (store.SharedMediaKind,
 		return store.SharedMediaKindLinks, nil
 	case messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_VOICE:
 		return store.SharedMediaKindVoice, nil
+	case messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_STICKERS:
+		return store.SharedMediaKindStickers, nil
 	default:
 		return 0, status.Error(codes.InvalidArgument, "kind is required")
 	}

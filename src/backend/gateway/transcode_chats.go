@@ -399,6 +399,8 @@ func parseSharedMediaKindQuery(raw string) (messagingv1.SharedMediaKind, error) 
 		return messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_LINKS, nil
 	case "voice":
 		return messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_VOICE, nil
+	case "stickers":
+		return messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_STICKERS, nil
 	case "":
 		return messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_UNSPECIFIED, status.Error(codes.InvalidArgument, "kind is required")
 	default:

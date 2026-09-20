@@ -708,6 +708,7 @@
   "chatInfoTitle": "Информация о чате",
   "chatInfoOpen": "Информация о чате",
   "chatSharedMediaTabMedia": "Медиа",
+  "chatSharedMediaTabStickers": "Стикеры",
   "chatSharedMediaTabFiles": "Файлы",
   "chatSharedMediaTabLinks": "Ссылки",
   "chatSharedMediaTabVoice": "Голосовые",

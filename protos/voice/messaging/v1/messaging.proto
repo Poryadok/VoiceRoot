@@ -83,6 +83,7 @@ enum SharedMediaKind {
   SHARED_MEDIA_KIND_FILES = 2; // document + other
   SHARED_MEDIA_KIND_LINKS = 3; // URLs from message content
   SHARED_MEDIA_KIND_VOICE = 4; // audio + voice_message attachments
+  SHARED_MEDIA_KIND_STICKERS = 5; // sticker attachments
 }
 
 message SendMessageRequest {
