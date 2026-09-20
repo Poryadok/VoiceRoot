@@ -184,6 +184,7 @@ run_file_principal_probe
 # above is the positive TLS/JWKS proof.
 expect_file_principal_probe_failure missing-config -e FILE_PRINCIPAL_SIGNING_KEYS_DIR=
 expect_file_principal_probe_failure tls-ca -e USER_FILE_PRINCIPAL_TLS_CA_FILE=/missing-ca.pem
+expect_file_principal_probe_failure wrong-issuer -e FILE_PRINCIPAL_PROBE=1 -e FILE_PRINCIPAL_PROBE_ISSUER=wrong
 
 export VOICE_FILE_ATTACHMENT_RESTART_PHASE=prepare
 (

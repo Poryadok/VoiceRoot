@@ -187,6 +187,7 @@ assert_eq "$probe_count" 3
   fail 'successful path must order prepare, User restart, File restart, verify'
 assert_contains "$case_dir/commands.log" 'compose.*<run>.*<FILE_PRINCIPAL_SIGNING_KEYS_DIR=>.*<file>'
 assert_contains "$case_dir/commands.log" 'compose.*<run>.*<USER_FILE_PRINCIPAL_TLS_CA_FILE=/missing-ca.pem>.*<file>'
+assert_contains "$case_dir/commands.log" 'compose.*<run>.*<FILE_PRINCIPAL_PROBE_ISSUER=wrong>.*<file>'
 assert_not_contains "$case_dir/commands.log" 'compose.*<restart> <messaging>'
 
 echo 'All compose-file-attachment-restart-proof tests passed.'

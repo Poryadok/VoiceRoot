@@ -29,10 +29,12 @@ import (
 // verifier: File's outbound authority has its own keys, HTTPS JWKS endpoint,
 // and User-only TLS connection.
 type filePrincipalRuntime struct {
-	Issuer    *principal.Issuer
-	UserOwner *grpcsvc.UserProfileOwnerClient
-	JWKS      *http.Server
-	conn      *grpc.ClientConn
+	Issuer     *principal.Issuer
+	keyID      string
+	privateKey *rsa.PrivateKey
+	UserOwner  *grpcsvc.UserProfileOwnerClient
+	JWKS       *http.Server
+	conn       *grpc.ClientConn
 }
 
 func (r *filePrincipalRuntime) Close() {
@@ -111,7 +113,7 @@ func loadFilePrincipalRuntime() (_ *filePrincipalRuntime, err error) {
 		w.Header().Set("Cache-Control", "max-age=30")
 		_, _ = w.Write(doc)
 	})
-	r := &filePrincipalRuntime{Issuer: issuer, JWKS: &http.Server{Addr: addr, Handler: mux, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}}}}
+	r := &filePrincipalRuntime{Issuer: issuer, keyID: kid, privateKey: active, JWKS: &http.Server{Addr: addr, Handler: mux, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}}}}
 	httpserver.ApplyHTTPServerTimeouts(r.JWKS)
 	defer func() {
 		if err != nil {

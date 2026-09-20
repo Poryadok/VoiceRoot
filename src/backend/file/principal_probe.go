@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
@@ -29,7 +30,14 @@ func runFilePrincipalProbe(ctx context.Context, runtime *filePrincipalRuntime) e
 		return err
 	}
 	requestID := uuid.NewString()
-	token, err := runtime.Issuer.IssueService(principal.ServiceInput{Audience: "file", RPC: userv1.UserService_ResolveAccountIDForProfile_FullMethodName, RequestID: requestID, RequestHash: hash})
+	issuer := runtime.Issuer
+	if override := os.Getenv("FILE_PRINCIPAL_PROBE_ISSUER"); override != "" {
+		issuer, err = principal.NewIssuer(principal.IssuerConfig{Issuer: override, KeyID: runtime.keyID, PrivateKey: runtime.privateKey})
+		if err != nil {
+			return err
+		}
+	}
+	token, err := issuer.IssueService(principal.ServiceInput{Audience: "file", RPC: userv1.UserService_ResolveAccountIDForProfile_FullMethodName, RequestID: requestID, RequestHash: hash})
 	if err != nil {
 		return err
 	}
