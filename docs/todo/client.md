@@ -88,7 +88,7 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 
 - [x] **VoiceListSkeleton + VoiceStatePanel widget tests** — `src/frontend/test/voice_state_components_test.dart`: `VoiceListSkeleton renders configured placeholder rows`; `VoiceStatePanel` empty-state semantics, keyboard retry action и suppression неполного action. Остаточные loader surfaces остаются отдельным пунктом выше.
 
-- [ ] **api_error_messages — расширить покрытие** — PR #128 helpers for chat/search/settings/subscription/space bots|members|invites/player profile; residual surfaces may still show raw API strings.
+- [ ] **api_error_messages — extend residual coverage** — chat-room history now maps unknown upstream text and `permission_denied` to localized safe states; PR #128 helpers still cover chat/search/settings/subscription/space bots|members|invites/player profile. Audit the remaining action and loader surfaces individually before claiming that raw API strings are absent globally.
 
 - [ ] **VoiceDisabledAction — расширить покрытие** — wave H: space tree / roles / slow mode; остальные permission-gated действия (chat moderation, voice room create, MM guest restrictions) без reason tooltip.
 

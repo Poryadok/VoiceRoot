@@ -699,6 +699,13 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get chatRoomLoadError => 'Could not load messages';
+
+  @override
+  String get chatRoomPermissionDenied =>
+      'You do not have permission to view this chat';
+
+  @override
   String get chatRealtimeConnected => 'Live';
 
   @override
