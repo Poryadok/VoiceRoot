@@ -107,6 +107,9 @@ func loadFilePrincipalRuntime() (_ *filePrincipalRuntime, err error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := assertFileJWKSActiveKey(doc, kid, active); err != nil {
+		return nil, err
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /.well-known/jwks.json", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -126,11 +129,11 @@ func loadFilePrincipalRuntime() (_ *filePrincipalRuntime, err error) {
 	}
 	pemData, err := os.ReadFile(ca)
 	if err != nil {
-		return nil, fmt.Errorf("User File principal TLS CA: %w", err)
+		return nil, fmt.Errorf("user File principal TLS CA: %w", err)
 	}
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM(pemData) {
-		return nil, errors.New("User File principal TLS CA has no certificates")
+		return nil, errors.New("user File principal TLS CA has no certificates")
 	}
 	r.conn, err = grpc.NewClient(grpcclient.DialTarget(target), grpc.WithDisableRetry(), grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: server})))
 	if err != nil {
@@ -155,7 +158,7 @@ func loadFilePrincipalKeys(dir string) (map[string]*rsa.PrivateKey, error) {
 			continue
 		}
 		if filepath.Ext(e.Name()) != ".pem" {
-			return nil, errors.New("File principal signing key must end in .pem")
+			return nil, errors.New("file principal signing key must end in .pem")
 		}
 		kid := strings.TrimSuffix(e.Name(), ".pem")
 		if !validPrincipalKeyID(kid) {
@@ -167,7 +170,7 @@ func loadFilePrincipalKeys(dir string) (map[string]*rsa.PrivateKey, error) {
 		}
 		rel, err := filepath.Rel(root, path)
 		if err != nil || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
-			return nil, errors.New("File principal signing key escapes directory")
+			return nil, errors.New("file principal signing key escapes directory")
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -175,7 +178,7 @@ func loadFilePrincipalKeys(dir string) (map[string]*rsa.PrivateKey, error) {
 		}
 		block, rest := pem.Decode(data)
 		if block == nil || block.Type != "PRIVATE KEY" || strings.TrimSpace(string(rest)) != "" {
-			return nil, errors.New("File principal key must be one PKCS#8 PEM block")
+			return nil, errors.New("file principal key must be one PKCS#8 PEM block")
 		}
 		parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 		if err != nil {
@@ -183,18 +186,18 @@ func loadFilePrincipalKeys(dir string) (map[string]*rsa.PrivateKey, error) {
 		}
 		key, ok := parsed.(*rsa.PrivateKey)
 		if !ok || key.Validate() != nil || key.N.BitLen() < 2048 {
-			return nil, errors.New("File principal key must be valid RSA >=2048")
+			return nil, errors.New("file principal key must be valid RSA >=2048")
 		}
 		keys[kid] = key
 	}
 	if len(keys) != 2 {
-		return nil, errors.New("File principal signing directory must contain exactly two keys")
+		return nil, errors.New("file principal signing directory must contain exactly two keys")
 	}
 	seen := map[string]bool{}
 	for _, k := range keys {
 		fp := k.N.Text(16)
 		if seen[fp] {
-			return nil, errors.New("File principal signing keys must be distinct")
+			return nil, errors.New("file principal signing keys must be distinct")
 		}
 		seen[fp] = true
 	}
@@ -212,6 +215,23 @@ func fileJWKSFromKeys(keys map[string]*rsa.PrivateKey) fileJWKS {
 		out.Keys = append(out.Keys, fileJWK{Kty: "RSA", Kid: kid, Use: "sig", Alg: "RS256", N: base64.RawURLEncoding.EncodeToString(k.N.Bytes()), E: base64.RawURLEncoding.EncodeToString(big.NewInt(int64(k.E)).Bytes())})
 	}
 	return out
+}
+
+// assertFileJWKSActiveKey prevents a deploy from signing with an active key
+// which is absent from, or differs from, the standing File JWKS document.
+func assertFileJWKSActiveKey(document []byte, kid string, active *rsa.PrivateKey) error {
+	if active == nil {
+		return errors.New("file principal active signing key is missing")
+	}
+	keys, err := principal.ParseJWKS(document)
+	if err != nil {
+		return fmt.Errorf("file principal JWKS: %w", err)
+	}
+	public := keys[kid]
+	if public == nil || public.N.Cmp(active.N) != 0 || public.E != active.E {
+		return errors.New("file principal active KID is not published by JWKS")
+	}
+	return nil
 }
 
 func validPrincipalKeyID(value string) bool {
