@@ -67,6 +67,28 @@ final fileAttachmentUrlProvider = FutureProvider.family<String?, String>((
   };
 });
 
+/// Resolves the File-authorized thumbnail URL for an image attachment.
+///
+/// Metadata and message payloads never provide a storage key or a thumbnail
+/// URL. The File URL surface performs the same ACL check for this variant.
+final fileAttachmentThumbnailUrlProvider =
+    FutureProvider.family<String?, String>((ref, fileId) async {
+      if (fileId.isEmpty) return null;
+      final auth = ref.watch(authorizationHeaderProvider);
+      if (auth == null) return null;
+      final result = await ref
+          .read(voiceFilesClientProvider)
+          .getFileUrl(
+            authorization: auth,
+            fileId: fileId,
+            variant: FileUrlVariant.thumbnail,
+          );
+      return switch (result) {
+        FilesApiOk(:final data) => data.isEmpty ? null : data,
+        FilesApiFailure() => null,
+      };
+    });
+
 /// Request to decrypt an E2E file attachment for display.
 class E2eAttachmentDecryptRequest {
   const E2eAttachmentDecryptRequest({
