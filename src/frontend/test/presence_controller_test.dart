@@ -115,6 +115,102 @@ void main() {
   });
 
   test(
+    'privacy-filtered update clears a previously visible presence snapshot',
+    () async {
+      final events = StreamController<RealtimeFrame>();
+      final container = ProviderContainer(
+        overrides: [
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          httpClientProvider.overrideWithValue(
+            MockClient((_) async => http.Response('{}', 404)),
+          ),
+          realtimeLinkStatusProvider.overrideWith(
+            (ref) => RealtimeLinkStatus.connected,
+          ),
+          realtimeEventProvider.overrideWith((ref) => events.stream),
+        ],
+      );
+      addTearDown(() async {
+        await events.close();
+        container.dispose();
+      });
+
+      container.read(presenceProvider('peer-1'));
+      events.add(
+        const RealtimeFrame(
+          op: 'presence_update',
+          data: {
+            'profile_id': 'peer-1',
+            'status': 'online',
+            'last_seen': '2026-06-02T18:30:00Z',
+          },
+        ),
+      );
+      await pumpEventQueue();
+      events.add(
+        const RealtimeFrame(
+          op: 'presence_update',
+          data: {'profile_id': 'peer-1'},
+        ),
+      );
+      await pumpEventQueue();
+
+      final presence = container.read(presenceProvider('peer-1'));
+      expect(presence?.status, 'offline');
+      expect(presence?.lastSeen, isNull);
+    },
+  );
+
+  test('invisible update never retains a last-seen timestamp', () async {
+    final events = StreamController<RealtimeFrame>();
+    final container = ProviderContainer(
+      overrides: [
+        authSessionStorageProvider.overrideWithValue(
+          InMemoryAuthSessionStorage(),
+        ),
+        authControllerProvider.overrideWith(authenticatedAuthController),
+        gatewayConfigProvider.overrideWithValue(
+          const GatewayConfig(baseUrl: 'http://api.test'),
+        ),
+        httpClientProvider.overrideWithValue(
+          MockClient((_) async => http.Response('{}', 404)),
+        ),
+        realtimeLinkStatusProvider.overrideWith(
+          (ref) => RealtimeLinkStatus.connected,
+        ),
+        realtimeEventProvider.overrideWith((ref) => events.stream),
+      ],
+    );
+    addTearDown(() async {
+      await events.close();
+      container.dispose();
+    });
+
+    container.read(presenceProvider('peer-1'));
+    events.add(
+      const RealtimeFrame(
+        op: 'presence_update',
+        data: {
+          'profile_id': 'peer-1',
+          'status': 'invisible',
+          'last_seen': '2026-06-02T18:30:00Z',
+        },
+      ),
+    );
+    await pumpEventQueue();
+
+    final presence = container.read(presenceProvider('peer-1'));
+    expect(presence?.appearsOffline, isTrue);
+    expect(presence?.lastSeen, isNull);
+  });
+
+  test(
     'refreshes watched profiles via bulk REST when WS is disconnected',
     () async {
       var bulkCalls = 0;

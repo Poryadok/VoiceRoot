@@ -39,6 +39,90 @@ final notificationSoundPlayerProvider = Provider<NotificationSoundPlayer>(
   (ref) => const NoOpNotificationSoundPlayer(),
 );
 
+/// Client-local notification-center row. Notifications exposes no list/read
+/// endpoint, so this state is derived only from delivered client events.
+class InAppNotificationEntry {
+  const InAppNotificationEntry({
+    required this.key,
+    required this.type,
+    required this.chatId,
+    required this.messageId,
+    required this.isRead,
+  });
+
+  final String key;
+  final String type;
+  final String chatId;
+  final String? messageId;
+  final bool isRead;
+
+  InAppNotificationEntry markRead() => InAppNotificationEntry(
+    key: key,
+    type: type,
+    chatId: chatId,
+    messageId: messageId,
+    isRead: true,
+  );
+}
+
+class InAppNotificationCenterState {
+  const InAppNotificationCenterState({this.items = const []});
+
+  final List<InAppNotificationEntry> items;
+
+  int get unreadCount => items.where((item) => !item.isRead).length;
+}
+
+class InAppNotificationCenterController
+    extends StateNotifier<InAppNotificationCenterState> {
+  InAppNotificationCenterController()
+    : super(const InAppNotificationCenterState());
+
+  /// Returns false when this event already has a local center row.
+  bool add({
+    required String type,
+    required String chatId,
+    required String? messageId,
+  }) {
+    final key = '$type:$chatId:${messageId ?? ''}';
+    if (state.items.any((item) => item.key == key)) return false;
+    state = InAppNotificationCenterState(
+      items: [
+        InAppNotificationEntry(
+          key: key,
+          type: type,
+          chatId: chatId,
+          messageId: messageId,
+          isRead: false,
+        ),
+        ...state.items,
+      ],
+    );
+    return true;
+  }
+
+  /// `mark_read` is chat-scoped, so local rows converge with its chat badge.
+  void markChatRead(String chatId) {
+    state = InAppNotificationCenterState(
+      items: state.items
+          .map((item) => item.chatId == chatId ? item.markRead() : item)
+          .toList(growable: false),
+    );
+  }
+
+  void clear() => state = const InAppNotificationCenterState();
+}
+
+final inAppNotificationCenterProvider =
+    StateNotifierProvider<
+      InAppNotificationCenterController,
+      InAppNotificationCenterState
+    >((ref) {
+      // Notification rows are account-local and must not survive a session change.
+      ref.watch(authControllerProvider);
+      return InAppNotificationCenterController();
+    });
+
 /// Listens to realtime events and updates unread badges + optional sounds.
 class InAppNotificationController {
   InAppNotificationController(this._ref) {
@@ -110,12 +194,24 @@ class InAppNotificationController {
 
     switch (type) {
       case 'new_message':
+        if (_isOwnActivity(data['sender_profile_id'] as String?)) return;
+        if (!_recordCenterRow(
+          type: 'new_message',
+          chatId: chatId,
+          data: data,
+        )) {
+          return;
+        }
         _handleIncomingActivity(
           chatId: chatId,
           actorProfileId: data['sender_profile_id'] as String?,
           playNewMessageSound: true,
         );
       case 'reaction':
+        if (_isOwnActivity(data['reactor_profile_id'] as String?)) return;
+        if (!_recordCenterRow(type: 'reaction', chatId: chatId, data: data)) {
+          return;
+        }
         _handleIncomingActivity(
           chatId: chatId,
           actorProfileId: data['reactor_profile_id'] as String?,
@@ -123,6 +219,10 @@ class InAppNotificationController {
           playReactionSound: true,
         );
       case 'mention':
+        if (_isOwnActivity(data['sender_profile_id'] as String?)) return;
+        if (!_recordCenterRow(type: 'mention', chatId: chatId, data: data)) {
+          return;
+        }
         _handleIncomingActivity(
           chatId: chatId,
           actorProfileId: data['sender_profile_id'] as String?,
@@ -137,8 +237,21 @@ class InAppNotificationController {
   void _onMarkRead(Map<String, dynamic>? data) {
     final chatId = data?['chat_id'] as String?;
     if (chatId == null || chatId.isEmpty) return;
+    _ref.read(inAppNotificationCenterProvider.notifier).markChatRead(chatId);
     unawaited(_ref.read(chatListControllerProvider.notifier).loadInitial());
   }
+
+  bool _recordCenterRow({
+    required String type,
+    required String chatId,
+    required Map<String, dynamic> data,
+  }) => _ref
+      .read(inAppNotificationCenterProvider.notifier)
+      .add(
+        type: type,
+        chatId: chatId,
+        messageId: data['message_id'] as String?,
+      );
 
   void _onArchiveActivity(Map<String, dynamic>? data) {
     final chatId = data?['chat_id'] as String?;
@@ -154,12 +267,7 @@ class InAppNotificationController {
     bool playReactionSound = false,
     bool playMentionSound = false,
   }) {
-    final activeProfile = _ref.read(authControllerProvider).activeProfileId;
-    if (actorProfileId != null &&
-        activeProfile != null &&
-        actorProfileId == activeProfile) {
-      return;
-    }
+    if (_isOwnActivity(actorProfileId)) return;
 
     final selectedChatId = _ref.read(selectedChatIdProvider);
     if (selectedChatId == chatId) return;
@@ -176,6 +284,13 @@ class InAppNotificationController {
     } else if (playMentionSound) {
       player.playMention();
     }
+  }
+
+  bool _isOwnActivity(String? actorProfileId) {
+    final activeProfile = _ref.read(authControllerProvider).activeProfileId;
+    return actorProfileId != null &&
+        activeProfile != null &&
+        actorProfileId == activeProfile;
   }
 }
 
