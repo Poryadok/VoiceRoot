@@ -19,9 +19,18 @@ import (
 
 const streamName = "voice_events"
 
+// jetStreamClient is the small JetStream surface used by the compatibility
+// publisher. Keeping it narrow lets the wire contract be tested without a
+// local NATS runtime.
+type jetStreamClient interface {
+	StreamInfo(string, ...nats.JSOpt) (*nats.StreamInfo, error)
+	AddStream(*nats.StreamConfig, ...nats.JSOpt) (*nats.StreamInfo, error)
+	PublishMsg(*nats.Msg, ...nats.PubOpt) (*nats.PubAck, error)
+}
+
 type JetStreamPublisher struct {
 	nc *nats.Conn
-	js nats.JetStreamContext
+	js jetStreamClient
 	// Logger emits structured nats_publish lines; optional.
 	Logger *slog.Logger
 
