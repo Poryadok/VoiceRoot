@@ -40,7 +40,7 @@ void main() {
     expect(windowsVkCodeForLogicalKey(LogicalKeyboardKey.keyV), 0x56);
   });
 
-  test('method channel registers PTT hotkey and hide-to-tray', () async {
+  test('method channel carries tray state and lifecycle commands', () async {
     TestWidgetsFlutterBinding.ensureInitialized();
     debugDefaultTargetPlatformOverride = TargetPlatform.windows;
 
@@ -57,16 +57,37 @@ void main() {
     });
 
     final host = MethodChannelWindowsDesktopHost();
+    await host.setTrayState(
+      voiceActive: true,
+      muted: true,
+      deafened: false,
+      muteLabel: 'Mute',
+      unmuteLabel: 'Unmute',
+      deafenLabel: 'Deafen',
+      undeafenLabel: 'Undeafen',
+      quitLabel: 'Quit',
+    );
     await host.hideToTray();
     await host.registerPttHotkey(vkCode: 0xC0, modifiers: 0);
     await host.quit();
 
     expect(calls.map((c) => c.method), [
+      'setTrayState',
       'hideToTray',
       'registerPttHotkey',
       'quit',
     ]);
-    expect(calls[1].arguments, {'vkCode': 0xC0, 'modifiers': 0});
+    expect(calls[0].arguments, {
+      'voiceActive': true,
+      'muted': true,
+      'deafened': false,
+      'muteLabel': 'Mute',
+      'unmuteLabel': 'Unmute',
+      'deafenLabel': 'Deafen',
+      'undeafenLabel': 'Undeafen',
+      'quitLabel': 'Quit',
+    });
+    expect(calls[2].arguments, {'vkCode': 0xC0, 'modifiers': 0});
   });
 
   test('tray mute/deafen toggle call state; hide does not hang up', () async {
@@ -101,6 +122,9 @@ void main() {
 
     final lifecycle = container.read(windowsDesktopLifecycleProvider);
     await Future<void>.delayed(Duration.zero);
+    expect(host.lastVoiceActive, isTrue);
+    expect(host.lastMuted, isFalse);
+    expect(host.lastDeafened, isFalse);
 
     host.emitPtt(held: true);
     await Future<void>.delayed(Duration.zero);
@@ -109,10 +133,14 @@ void main() {
     host.emitTrayMute();
     await Future<void>.delayed(Duration.zero);
     expect(container.read(callControllerProvider).isMuted, isTrue);
+    await Future<void>.delayed(Duration.zero);
+    expect(host.lastMuted, isTrue);
 
     host.emitTrayDeafen();
     await Future<void>.delayed(Duration.zero);
     expect(container.read(callControllerProvider).isSpeakerMuted, isTrue);
+    await Future<void>.delayed(Duration.zero);
+    expect(host.lastDeafened, isTrue);
 
     await lifecycle.hideToTray();
     expect(host.hideCalls, 1);
@@ -120,5 +148,30 @@ void main() {
     expect(host.quitCalls, 0);
 
     expect(host.registerHotkeyCalls, greaterThan(0));
+  });
+
+  test('tray voice commands do not change an idle call state', () async {
+    final host = RecordingWindowsDesktopHost();
+    final container = ProviderContainer(
+      overrides: [
+        ...voiceAppTestOverrides(
+          client: MockClient((_) async => http.Response('{}', 200)),
+        ),
+        windowsDesktopHostProvider.overrideWithValue(host),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    container.read(windowsDesktopLifecycleProvider);
+    await Future<void>.delayed(Duration.zero);
+    expect(host.lastVoiceActive, isFalse);
+
+    host.emitTrayMute();
+    host.emitTrayDeafen();
+    await Future<void>.delayed(Duration.zero);
+
+    final call = container.read(callControllerProvider);
+    expect(call.isMuted, isFalse);
+    expect(call.isSpeakerMuted, isFalse);
   });
 }
