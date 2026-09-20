@@ -191,7 +191,7 @@ func (r *Runtime) refreshLoop(ctx context.Context, interval time.Duration, issue
 
 func (r *Runtime) ServerOptions() []grpc.ServerOption {
 	return []grpc.ServerOption{grpc.Creds(r.credentials), grpc.ChainUnaryInterceptor(func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if info.FullMethod != Method(r.target) {
+		if !AllowsMethod(r.target, info.FullMethod) {
 			return nil, status.Error(codes.PermissionDenied, "method unavailable on privacy listener")
 		}
 		return handler(ctx, req)
