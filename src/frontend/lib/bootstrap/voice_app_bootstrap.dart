@@ -24,6 +24,7 @@ class VoiceAppBootstrap extends ConsumerStatefulWidget {
 
 class _VoiceAppBootstrapState extends ConsumerState<VoiceAppBootstrap> {
   var _restoreComplete = false;
+  Object? _restoreError;
 
   @override
   void initState() {
@@ -32,10 +33,22 @@ class _VoiceAppBootstrapState extends ConsumerState<VoiceAppBootstrap> {
   }
 
   Future<void> _restoreSession() async {
-    await ref.read(authControllerProvider.notifier).restore();
-    await _resolveGuestNicknameAfterRestore();
     if (mounted) {
-      setState(() => _restoreComplete = true);
+      setState(() {
+        _restoreComplete = false;
+        _restoreError = null;
+      });
+    }
+    try {
+      await ref.read(authControllerProvider.notifier).restore();
+      await _resolveGuestNicknameAfterRestore();
+      if (mounted) {
+        setState(() => _restoreComplete = true);
+      }
+    } on Object catch (error) {
+      if (mounted) {
+        setState(() => _restoreError = error);
+      }
     }
   }
 
@@ -51,9 +64,9 @@ class _VoiceAppBootstrapState extends ConsumerState<VoiceAppBootstrap> {
       return;
     }
 
-    final profileResult = await ref.read(voiceUsersClientProvider).getMe(
-      authorization: auth.session!.authorizationHeader,
-    );
+    final profileResult = await ref
+        .read(voiceUsersClientProvider)
+        .getMe(authorization: auth.session!.authorizationHeader);
     switch (profileResult) {
       case UsersApiOk(:final data):
         if (isPlaceholderGuestDisplayName(
@@ -93,6 +106,44 @@ class _VoiceAppBootstrapState extends ConsumerState<VoiceAppBootstrap> {
     final auth = ref.watch(authControllerProvider);
     final themeAsync = ref.watch(voiceMaterialThemeProvider);
     final bootstrapTheme = _bootstrapTheme(ref);
+    final restoreError = _restoreError;
+    if (restoreError != null) {
+      return themeAsync.when(
+        data: (theme) => MaterialApp(
+          locale: widget.locale,
+          theme: theme,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Builder(
+            builder: (ctx) {
+              final l10n = AppLocalizations.of(ctx)!;
+              return Scaffold(
+                body: VoiceStatePanel(
+                  title: l10n.backendUnavailable,
+                  icon: Icons.error_outline,
+                  actionLabel: l10n.commonRetry,
+                  onAction: _restoreSession,
+                ),
+              );
+            },
+          ),
+        ),
+        loading: () => MaterialApp(
+          locale: widget.locale,
+          theme: bootstrapTheme,
+          home: const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          ),
+        ),
+        error: (_, _) => MaterialApp(
+          locale: widget.locale,
+          theme: bootstrapTheme,
+          home: const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          ),
+        ),
+      );
+    }
     if (!_restoreComplete || auth.isRestoring) {
       return themeAsync.when(
         data: (theme) => MaterialApp(
