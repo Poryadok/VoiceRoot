@@ -58,6 +58,9 @@ if [[ "${1:-}" == compose ]]; then
     exit "${FAKE_LOGS_RC:-0}"
   fi
   if [[ "$line" == *' down '* ]]; then exit "${FAKE_DOWN_RC:-0}"; fi
+  if [[ "$line" == *' FILE_PRINCIPAL_SIGNING_KEYS_DIR='* || "$line" == *' USER_FILE_PRINCIPAL_TLS_CA_FILE=/missing-ca.pem'* || "$line" == *' FILE_PRINCIPAL_PROBE_ISSUER=wrong'* ]]; then
+    exit 1
+  fi
   exit 0
 fi
 exit 0
