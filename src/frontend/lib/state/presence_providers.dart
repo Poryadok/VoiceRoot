@@ -57,19 +57,26 @@ class PresenceController extends StateNotifier<Map<String, VoicePresence>> {
     if (data == null) return;
     final profileId = data['profile_id'] as String?;
     final status = data['status'] as String?;
-    if (profileId == null || profileId.isEmpty || status == null) return;
+    if (profileId == null || profileId.isEmpty) return;
     if (!_watched.contains(profileId)) return;
+    // Realtime sends a viewer-filtered sparse snapshot. Missing fields revoke
+    // previous visibility; retaining them would leak stale presence data.
+    final statusIsInvisible = status == 'invisible';
+    final visibleStatus = status == null || status.isEmpty || statusIsInvisible
+        ? 'offline'
+        : status;
     final customStatus = data['custom_status'] as String?;
     final lastSeenRaw = data['last_seen'] as String?;
     state = {
       ...state,
       profileId: VoicePresence(
         profileId: profileId,
-        status: status,
-        customStatus: customStatus == null || customStatus.isEmpty
+        status: visibleStatus,
+        customStatus:
+            statusIsInvisible || customStatus == null || customStatus.isEmpty
             ? null
             : customStatus,
-        lastSeen: lastSeenRaw == null
+        lastSeen: statusIsInvisible || lastSeenRaw == null
             ? null
             : DateTime.tryParse(lastSeenRaw)?.toUtc(),
       ),
