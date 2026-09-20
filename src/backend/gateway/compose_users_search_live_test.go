@@ -43,7 +43,7 @@ func clearLiveComposeAuthRateLimit(t *testing.T) {
 	}
 	root := repoRootFromTest(t)
 	for _, pattern := range liveComposeRateLimitPatterns {
-		cmd := exec.Command("docker", "compose", "exec", "-T", "redis", "redis-cli", "--scan", "--pattern", pattern)
+		cmd := exec.Command("docker", liveComposeRedisArgs("--scan", "--pattern", pattern)...)
 		cmd.Dir = root
 		out, err := cmd.Output()
 		if err != nil {
@@ -55,11 +55,23 @@ func clearLiveComposeAuthRateLimit(t *testing.T) {
 			if key == "" {
 				continue
 			}
-			del := exec.Command("docker", "compose", "exec", "-T", "redis", "redis-cli", "DEL", key)
+			del := exec.Command("docker", liveComposeRedisArgs("DEL", key)...)
 			del.Dir = root
 			_ = del.Run()
 		}
 	}
+}
+
+// liveComposeRedisArgs targets the generated project when an isolated proof
+// exports COMPOSE_PROJECT_NAME, while retaining ordinary `docker compose` for
+// developer-run live tests.
+func liveComposeRedisArgs(redisArgs ...string) []string {
+	args := []string{"compose"}
+	if project := strings.TrimSpace(os.Getenv("COMPOSE_PROJECT_NAME")); project != "" {
+		args = append(args, "--project-name", project)
+	}
+	args = append(args, "exec", "-T", "redis", "redis-cli")
+	return append(args, redisArgs...)
 }
 
 type authSessionResponse struct {
