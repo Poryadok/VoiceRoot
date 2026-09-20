@@ -22,6 +22,7 @@ func TestComposeMailStubBaseURL_UsesExplicitURLThenIsolatedPort(t *testing.T) {
 
 func TestLiveComposeRateLimitPatterns_ClearOTPBucket(t *testing.T) {
 	require.Contains(t, liveComposeRateLimitPatterns, "ratelimit:OTP:*")
+	require.Contains(t, liveComposeRateLimitPatterns, "auth:otp:*")
 }
 
 func TestLiveComposeRedisArgs_UsesIsolatedProjectWhenSet(t *testing.T) {

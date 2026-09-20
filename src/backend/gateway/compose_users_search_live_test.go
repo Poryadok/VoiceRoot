@@ -20,6 +20,9 @@ var liveComposeRateLimitPatterns = []string{
 	"ratelimit:Auth:*",
 	"ratelimit:OTP:*",
 	"ratelimit:FileUpload:*",
+	// Auth owns a separate per-account OTP throttle. This is cleared only from
+	// the generated local Compose fixture before each disposable test account.
+	"auth:otp:*",
 }
 
 func liveComposeEnabled() bool {
