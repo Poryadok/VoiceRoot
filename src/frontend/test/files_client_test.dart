@@ -154,4 +154,73 @@ void main() {
       'https://r2.example/get/file-1',
     );
   });
+
+  test('getFileUrl requests the thumbnail variant without exposing a key', () async {
+    final client = VoiceFilesClient(
+      gateway: gatewayHttpForTest(
+        MockClient((req) async {
+          expect(req.method, 'GET');
+          expect(req.url.path, '/api/v1/files/file-1/url');
+          expect(req.url.queryParameters, {'variant': 'thumbnail'});
+          return http.Response(
+            jsonEncode({
+              'presigned_get_url': 'https://r2.example/get/file-1-thumb',
+            }),
+            200,
+          );
+        }),
+        config: config,
+      ),
+    );
+
+    final result = await client.getFileUrl(
+      authorization: auth,
+      fileId: 'file-1',
+      variant: FileUrlVariant.thumbnail,
+    );
+
+    expect(result, isA<FilesApiOk<String>>());
+    expect(
+      (result as FilesApiOk<String>).data,
+      'https://r2.example/get/file-1-thumb',
+    );
+  });
+
+  test('fetchFileBytes refreshes an expired thumbnail URL using the same variant', () async {
+    var thumbnailURLRequests = 0;
+    final client = VoiceFilesClient(
+      gateway: gatewayHttpForTest(
+        MockClient((req) async {
+          if (req.url.path == '/api/v1/files/file-1/url') {
+            thumbnailURLRequests++;
+            expect(req.url.queryParameters, {'variant': 'thumbnail'});
+            return http.Response(
+              jsonEncode({
+                'presigned_get_url': thumbnailURLRequests == 1
+                    ? 'https://r2.example/get/stale-thumbnail'
+                    : 'https://r2.example/get/fresh-thumbnail',
+              }),
+              200,
+            );
+          }
+          if (req.url.toString() == 'https://r2.example/get/stale-thumbnail') {
+            return http.Response('expired', 410);
+          }
+          expect(req.url.toString(), 'https://r2.example/get/fresh-thumbnail');
+          return http.Response.bytes(<int>[1, 2, 3], 200);
+        }),
+        config: config,
+      ),
+    );
+
+    final result = await client.fetchFileBytes(
+      authorization: auth,
+      fileId: 'file-1',
+      variant: FileUrlVariant.thumbnail,
+    );
+
+    expect(result, isA<FilesApiOk<Uint8List>>());
+    expect((result as FilesApiOk<Uint8List>).data, Uint8List.fromList([1, 2, 3]));
+    expect(thumbnailURLRequests, 2);
+  });
 }

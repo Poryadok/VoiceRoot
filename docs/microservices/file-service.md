@@ -63,7 +63,7 @@ service FileService {
 }
 ```
 
-### Thumbnail URL variant (accepted, not implemented)
+### Thumbnail URL variant
 
 The next compatible extension of `GetFileURLRequest` is:
 

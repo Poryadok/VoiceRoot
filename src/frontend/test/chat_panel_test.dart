@@ -482,6 +482,7 @@ void main() {
 
   testWidgets('selecting chat shows room and loads messages', (tester) async {
     var markReadCalls = 0;
+    var thumbnailURLCalls = 0;
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -545,6 +546,16 @@ void main() {
                 expect(body['last_read_message_id'], 'msg-2');
                 return http.Response('{}', 200);
               }
+              if (req.url.path == '/api/v1/files/file-image/url') {
+                thumbnailURLCalls++;
+                expect(req.url.queryParameters, {'variant': 'thumbnail'});
+                return http.Response(
+                  jsonEncode({
+                    'presigned_get_url': 'https://cdn.example/thumb.webp',
+                  }),
+                  200,
+                );
+              }
               return http.Response('{}', 404);
             }),
           ),
@@ -572,6 +583,7 @@ void main() {
     expect(find.text('report.pdf'), findsOneWidget);
     expect(find.text('2.0 KB'), findsOneWidget);
     expect(markReadCalls, 1);
+    expect(thumbnailURLCalls, 1);
   });
 
   testWidgets('ChatRoomPanel refocuses composer after sending a message', (

@@ -92,14 +92,14 @@ SHA-256 от содержимого файла считается при заг�
 - **Зачем**: пользователь держит чат открытым часами — ссылки протухнут; lazy refresh решает это прозрачно без перезагрузки чата
 - Дополнительный эффект: если история чата утечёт из кэша — старые presigned URL всё равно не работают без обновления
 
-## Thumbnail URL variant (accepted, not implemented)
+## Thumbnail URL variant
 
 `thumbnail_r2_key` остаётся внутренним storage key и никогда не становится
 клиентским URL. Thumbnail получают только через существующую URL surface после
 того же access check, что и основной файл. Контракт и реализация находятся в
-[file-service.md](../microservices/file-service.md#thumbnail-url-variant-accepted-not-implemented);
-до их поставки Flutter сохраняет `previewUrl == null`, а не подставляет R2 key
-или вымышленный URL.
+[file-service.md](../microservices/file-service.md#thumbnail-url-variant).
+Flutter resolves image previews only from this presigned URL, never by
+substituting an R2 key or an invented URL.
 
 ## Не делаем
 

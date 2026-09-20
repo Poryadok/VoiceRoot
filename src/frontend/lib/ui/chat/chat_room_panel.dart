@@ -1745,12 +1745,6 @@ class _AttachmentPreview extends ConsumerWidget {
   final String chatId;
   final String senderProfileId;
 
-  static bool _isHttpUrl(String? value) {
-    if (value == null || value.isEmpty) return false;
-    final uri = Uri.tryParse(value);
-    return uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final voice = VoiceColors.of(context);
@@ -1785,13 +1779,11 @@ class _AttachmentPreview extends ConsumerWidget {
           ),
         );
       }
-      final direct =
-          _isHttpUrl(attachment.previewUrl) ? attachment.previewUrl : null;
-      final directUrl =
-          direct ?? (_isHttpUrl(attachment.url) ? attachment.url : null);
-      final resolved = directUrl != null
-          ? AsyncValue.data(directUrl)
-          : ref.watch(fileAttachmentUrlProvider(attachment.fileId));
+      // Image previews are always resolved through File's thumbnail variant.
+      // Never use attachment metadata as a direct storage URL or key.
+      final resolved = ref.watch(
+        fileAttachmentThumbnailUrlProvider(attachment.fileId),
+      );
       final src = resolved.valueOrNull;
       return Semantics(
         key: ChatRoomPanel.attachmentPreviewKey(attachment.fileId),
@@ -1806,8 +1798,15 @@ class _AttachmentPreview extends ConsumerWidget {
                 : Image.network(
                     src,
                     fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) =>
-                        const _AttachmentIcon(icon: Icons.image_outlined),
+                    errorBuilder: (context, error, stackTrace) {
+                      if (error is NetworkImageLoadException &&
+                          (error.statusCode == 403 || error.statusCode == 410)) {
+                        ref.invalidate(
+                          fileAttachmentThumbnailUrlProvider(attachment.fileId),
+                        );
+                      }
+                      return const _AttachmentIcon(icon: Icons.image_outlined);
+                    },
                   ),
           ),
         ),
