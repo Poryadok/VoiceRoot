@@ -35,25 +35,42 @@ class _RecordingUsersClient extends VoiceUsersClient {
   }
 }
 
+void _withIdlePresenceController(
+  void Function(
+    FakeAsync async,
+    _RecordingUsersClient users,
+    ProviderContainer container,
+  )
+  body,
+) {
+  fakeAsync((async) {
+    final users = _RecordingUsersClient();
+    final container = ProviderContainer(
+      overrides: [
+        authSessionStorageProvider.overrideWithValue(
+          InMemoryAuthSessionStorage(),
+        ),
+        authControllerProvider.overrideWith(authenticatedAuthController),
+        gatewayConfigProvider.overrideWithValue(
+          const GatewayConfig(baseUrl: 'http://api.test'),
+        ),
+        voiceUsersClientProvider.overrideWithValue(users),
+      ],
+    );
+    try {
+      body(async, users, container);
+    } finally {
+      // The controller owns a fake-clock timer. Dispose it before leaving
+      // fakeAsync so it cannot escape into the test runner's teardown zone.
+      container.dispose();
+    }
+  });
+}
+
 void main() {
   group('IdlePresenceController', () {
     test('sends UpdatePresence idle after 5 minutes without activity', () {
-      fakeAsync((async) {
-        final users = _RecordingUsersClient();
-        final container = ProviderContainer(
-          overrides: [
-            authSessionStorageProvider.overrideWithValue(
-              InMemoryAuthSessionStorage(),
-            ),
-            authControllerProvider.overrideWith(authenticatedAuthController),
-            gatewayConfigProvider.overrideWithValue(
-              const GatewayConfig(baseUrl: 'http://api.test'),
-            ),
-            voiceUsersClientProvider.overrideWithValue(users),
-          ],
-        );
-        addTearDown(container.dispose);
-
+      _withIdlePresenceController((async, users, container) {
         container.read(idlePresenceLifecycleProvider);
         expect(users.statuses, isEmpty);
 
@@ -68,22 +85,7 @@ void main() {
     });
 
     test('activity before timeout resets the idle timer', () {
-      fakeAsync((async) {
-        final users = _RecordingUsersClient();
-        final container = ProviderContainer(
-          overrides: [
-            authSessionStorageProvider.overrideWithValue(
-              InMemoryAuthSessionStorage(),
-            ),
-            authControllerProvider.overrideWith(authenticatedAuthController),
-            gatewayConfigProvider.overrideWithValue(
-              const GatewayConfig(baseUrl: 'http://api.test'),
-            ),
-            voiceUsersClientProvider.overrideWithValue(users),
-          ],
-        );
-        addTearDown(container.dispose);
-
+      _withIdlePresenceController((async, users, container) {
         final tracker = container.read(idlePresenceControllerProvider);
         container.read(idlePresenceLifecycleProvider);
 
@@ -99,22 +101,7 @@ void main() {
     });
 
     test('activity after auto-idle restores online', () {
-      fakeAsync((async) {
-        final users = _RecordingUsersClient();
-        final container = ProviderContainer(
-          overrides: [
-            authSessionStorageProvider.overrideWithValue(
-              InMemoryAuthSessionStorage(),
-            ),
-            authControllerProvider.overrideWith(authenticatedAuthController),
-            gatewayConfigProvider.overrideWithValue(
-              const GatewayConfig(baseUrl: 'http://api.test'),
-            ),
-            voiceUsersClientProvider.overrideWithValue(users),
-          ],
-        );
-        addTearDown(container.dispose);
-
+      _withIdlePresenceController((async, users, container) {
         final tracker = container.read(idlePresenceControllerProvider);
         container.read(idlePresenceLifecycleProvider);
 
@@ -130,22 +117,7 @@ void main() {
     });
 
     test('manual DND is not overridden by idle timeout', () {
-      fakeAsync((async) {
-        final users = _RecordingUsersClient();
-        final container = ProviderContainer(
-          overrides: [
-            authSessionStorageProvider.overrideWithValue(
-              InMemoryAuthSessionStorage(),
-            ),
-            authControllerProvider.overrideWith(authenticatedAuthController),
-            gatewayConfigProvider.overrideWithValue(
-              const GatewayConfig(baseUrl: 'http://api.test'),
-            ),
-            voiceUsersClientProvider.overrideWithValue(users),
-          ],
-        );
-        addTearDown(container.dispose);
-
+      _withIdlePresenceController((async, users, container) {
         final tracker = container.read(idlePresenceControllerProvider);
         container.read(idlePresenceLifecycleProvider);
         tracker.onManualStatus('dnd');
@@ -158,22 +130,7 @@ void main() {
     });
 
     test('stop cancels pending idle timer', () {
-      fakeAsync((async) {
-        final users = _RecordingUsersClient();
-        final container = ProviderContainer(
-          overrides: [
-            authSessionStorageProvider.overrideWithValue(
-              InMemoryAuthSessionStorage(),
-            ),
-            authControllerProvider.overrideWith(authenticatedAuthController),
-            gatewayConfigProvider.overrideWithValue(
-              const GatewayConfig(baseUrl: 'http://api.test'),
-            ),
-            voiceUsersClientProvider.overrideWithValue(users),
-          ],
-        );
-        addTearDown(container.dispose);
-
+      _withIdlePresenceController((async, users, container) {
         final tracker = container.read(idlePresenceControllerProvider);
         container.read(idlePresenceLifecycleProvider);
         expect(async.pendingTimers.length, 1);
