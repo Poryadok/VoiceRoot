@@ -147,10 +147,8 @@ grep -Fq "github.event_name == 'workflow_dispatch'" "$attachment_job_file" || fa
 grep -Fq "inputs.profile == 'full'" "$attachment_job_file" || fail "attachment job must require the manual full profile"
 grep -Fq "github.event_name == 'push'" "$attachment_job_file" || fail "attachment job must support master push"
 grep -Fq "github.ref == 'refs/heads/master'" "$attachment_job_file" || fail "attachment job push path must be gated to master"
-grep -Fq "needs.changes.outputs.a1_e2e == 'true'" "$attachment_job_file" || fail "attachment job push path must be gated by changes.outputs.a1_e2e"
-if grep -Fq "pull_request" "$attachment_job_file"; then
-  fail "attachment job must never run on pull_request"
-fi
+grep -Fq "github.event_name == 'pull_request'" "$attachment_job_file" || fail "attachment job must run on pull_request exact heads"
+grep -Fq "needs.changes.outputs.a1_e2e == 'true'" "$attachment_job_file" || fail "attachment job must remain gated by changes.outputs.a1_e2e"
 if grep -Fq "inputs.profile != 'auto'" "$attachment_job_file"; then
   fail "attachment job must not broaden manual dispatch beyond profile full"
 fi
