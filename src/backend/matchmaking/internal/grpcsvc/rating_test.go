@@ -30,6 +30,24 @@ type recordingMatchCompletedPublisher struct {
 	events []mmevents.MatchCompletedEvent
 }
 
+type recordingSquadCleanup struct {
+	mu       sync.Mutex
+	matchIDs []uuid.UUID
+}
+
+func (c *recordingSquadCleanup) Cleanup(_ context.Context, matchID uuid.UUID) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.matchIDs = append(c.matchIDs, matchID)
+	return nil
+}
+
+func (c *recordingSquadCleanup) MatchIDs() []uuid.UUID {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]uuid.UUID(nil), c.matchIDs...)
+}
+
 func (p *recordingMatchCompletedPublisher) PublishMatchCompleted(_ context.Context, event mmevents.MatchCompletedEvent) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -149,6 +167,8 @@ func TestCompleteMatch_ConcurrentFinalRetryPublishesOnce(t *testing.T) {
 	srv := ratingTestServer(t, pool)
 	publisher := &recordingMatchCompletedPublisher{}
 	srv.Events = publisher
+	cleanup := &recordingSquadCleanup{}
+	srv.SquadCleanup = cleanup
 	matchID, profileA, profileB := activateDuoMatchViaGRPC(t, ctx, srv)
 
 	_, err := srv.CompleteMatch(ctxWithProfile(profileA), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
@@ -198,6 +218,32 @@ func TestCompleteMatch_ConcurrentFinalRetryPublishesOnce(t *testing.T) {
 	require.NoError(t, <-errs)
 	require.NoError(t, <-errs)
 	require.Len(t, publisher.Events(), 1, "duplicate final CompleteMatch retries must emit mm.match_completed once")
+	require.Equal(t, []uuid.UUID{uuid.MustParse(matchID)}, cleanup.MatchIDs(), "racing final retries must clean the fixture squad once")
+}
+
+// TestCompleteMatch_FinalLeaveCleansFixtureSquadOnce freezes the pre-A2
+// provider contract: the durable active-to-completed transition owns a single
+// cleanup call. The fixture is intentionally transport- and roster-event-free;
+// a later A3 acceptance slice wires the real temporary chat and voice context.
+func TestCompleteMatch_FinalLeaveCleansFixtureSquadOnce(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startDB(t, ctx)
+	srv := ratingTestServer(t, pool)
+	cleanup := &recordingSquadCleanup{}
+	srv.SquadCleanup = cleanup
+	matchID, profileA, profileB := activateDuoMatchViaGRPC(t, ctx, srv)
+
+	_, err := srv.CompleteMatch(ctxWithProfile(profileA), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	require.NoError(t, err)
+	_, err = srv.CompleteMatch(ctxWithProfile(profileB), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	require.NoError(t, err)
+	_, err = srv.CompleteMatch(ctxWithProfile(profileB), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	require.NoError(t, err, "a duplicate final leave is an idempotent retry")
+
+	require.Equal(t, []uuid.UUID{uuid.MustParse(matchID)}, cleanup.MatchIDs(), "only the transition that completes the match cleans the fixture squad")
 }
 
 func TestRateMatch_PersistsStarsForTeammate(t *testing.T) {

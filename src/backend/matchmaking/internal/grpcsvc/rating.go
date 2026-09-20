@@ -66,6 +66,11 @@ func (s *MatchmakingGRPC) CompleteMatch(ctx context.Context, req *matchmakingv1.
 			ProfileIDs:      profileIDs,
 		})
 	}
+	if completedNow && s.SquadCleanup != nil {
+		if err := s.SquadCleanup.Cleanup(ctx, updated.ID); err != nil && s.Logger != nil {
+			s.Logger.Warn("match squad cleanup failed", "match_id", updated.ID, "error", err)
+		}
+	}
 
 	return &matchmakingv1.CompleteMatchResponse{Match: toProtoMatch(updated)}, nil
 }
