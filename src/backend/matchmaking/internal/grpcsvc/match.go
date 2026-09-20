@@ -22,6 +22,14 @@ type SquadProvisioner interface {
 	Provision(ctx context.Context, matchID uuid.UUID, profileIDs []uuid.UUID) (voiceRoomID, chatID string, err error)
 }
 
+// SquadCleanup releases temporary squad resources after a match's durable
+// active-to-completed transition. It is intentionally an internal provider
+// seam: A2 roster/session events and concrete Chat/Voice cleanup wiring remain
+// outside this fixture-only A3 contract slice.
+type SquadCleanup interface {
+	Cleanup(ctx context.Context, matchID uuid.UUID) error
+}
+
 func (s *MatchmakingGRPC) GetMatch(ctx context.Context, req *matchmakingv1.GetMatchRequest) (*matchmakingv1.GetMatchResponse, error) {
 	profileID, ok := authctx.ProfileID(ctx)
 	if !ok {
