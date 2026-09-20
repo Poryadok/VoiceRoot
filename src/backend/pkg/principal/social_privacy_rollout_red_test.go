@@ -174,5 +174,10 @@ func TestFileUserPrincipalComposeKeepsFileSigningKeysIssuerOwned(t *testing.T) {
 	for _, name := range []string{"USER_FILE_PRINCIPAL_GRPC_LISTEN", "USER_FILE_PRINCIPAL_TLS_CERT_FILE", "USER_FILE_PRINCIPAL_TLS_KEY_FILE", "USER_FILE_PRINCIPAL_REPLAY_REDIS_ADDR"} {
 		require.NotEmpty(t, user.Environment[name])
 	}
+	require.Equal(t, "/etc/voice/principal/tls/tls.crt", user.Environment["USER_FILE_PRINCIPAL_TLS_CERT_FILE"])
+	require.Equal(t, "/etc/voice/principal/tls/tls.key", user.Environment["USER_FILE_PRINCIPAL_TLS_KEY_FILE"])
+	for _, volume := range user.Volumes {
+		require.NotContains(t, volume, "file_principal_tls:", "User :9092 must not present File's DNS:file JWKS certificate")
+	}
 	require.Contains(t, user.Environment["S2S_JWKS_URLS_JSON"], "https://file:8443/")
 }

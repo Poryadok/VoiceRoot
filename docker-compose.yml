@@ -308,8 +308,10 @@ services:
       USER_PRINCIPAL_TLS_KEY_FILE: /etc/voice/principal/tls/tls.key
       USER_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
       USER_FILE_PRINCIPAL_GRPC_LISTEN: :9092
-      USER_FILE_PRINCIPAL_TLS_CERT_FILE: /etc/voice/file-principal/tls.crt
-      USER_FILE_PRINCIPAL_TLS_KEY_FILE: /etc/voice/file-principal/tls.key
+      # The protected User listener must present User's DNS:user leaf. File's
+      # separate DNS:file leaf is reserved for File's JWKS endpoint.
+      USER_FILE_PRINCIPAL_TLS_CERT_FILE: /etc/voice/principal/tls/tls.crt
+      USER_FILE_PRINCIPAL_TLS_KEY_FILE: /etc/voice/principal/tls/tls.key
       USER_FILE_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
       S2S_JWKS_URLS_JSON: '{"social":"https://social:8443/.well-known/jwks.json","file":"https://file:8443/.well-known/jwks.json"}'
       S2S_JWKS_CA_FILE: /etc/voice/principal/ca/ca.crt
@@ -326,7 +328,6 @@ services:
       USER_DNS_STUB_URL: http://verification-stub:4180/dns-txt
     volumes:
       - user_principal_tls:/etc/voice/principal/tls:ro
-      - file_principal_tls:/etc/voice/file-principal:ro
       - social_principal_ca:/etc/voice/principal/ca:ro
     depends_on:
       social-principal-init:
