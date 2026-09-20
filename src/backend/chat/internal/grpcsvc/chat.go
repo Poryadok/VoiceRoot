@@ -19,6 +19,7 @@ import (
 type ChatGRPC struct {
 	chatv1.UnimplementedChatServiceServer
 	DM                DMStore
+	StickerPacks      StickerPackStore
 	Profiles          UserProfileLookup
 	LifecycleOwners   LifecycleOwnerLookup
 	Blocks            AccountBlockChecker
@@ -37,6 +38,15 @@ type ChatGRPC struct {
 	SpaceMembers *store.SpaceMembersStore
 	// Logger emits structured nats_publish errors when JetStream publish fails after a successful RPC.
 	Logger *slog.Logger
+}
+
+// StickerPackStore is intentionally narrow so catalog authorization is unit-testable
+// without a database-backed chat fixture.
+type StickerPackStore interface {
+	ListInstalledStickerPacks(context.Context, uuid.UUID) ([]store.StickerPackRow, error)
+	GetStickerPack(context.Context, uuid.UUID, uuid.UUID) (*store.StickerPackRow, error)
+	InstallStickerPack(context.Context, uuid.UUID, uuid.UUID) (*store.StickerPackRow, error)
+	UninstallStickerPack(context.Context, uuid.UUID, uuid.UUID) error
 }
 
 // PrivacyChecker reads recipient privacy policy for DM and invite gates.
@@ -88,6 +98,10 @@ type DMStore interface {
 	ReorderFolderChats(ctx context.Context, profileID, folderID uuid.UUID, chatIDs []uuid.UUID) error
 	PinChatInFolder(ctx context.Context, profileID, folderID, chatID uuid.UUID, pinOrder *int32) error
 	UnpinChatInFolder(ctx context.Context, profileID, folderID, chatID uuid.UUID) error
+	ListInstalledStickerPacks(ctx context.Context, profileID uuid.UUID) ([]store.StickerPackRow, error)
+	GetStickerPack(ctx context.Context, profileID, packID uuid.UUID) (*store.StickerPackRow, error)
+	InstallStickerPack(ctx context.Context, profileID, packID uuid.UUID) (*store.StickerPackRow, error)
+	UninstallStickerPack(ctx context.Context, profileID, packID uuid.UUID) error
 	CreateGroupChat(ctx context.Context, creatorProfileID uuid.UUID, name string, topic *string) (*store.ChatRow, error)
 	CreateChannelChat(ctx context.Context, creatorProfileID uuid.UUID, name string, topic *string) (*store.ChatRow, error)
 	CreateSpaceGroupChat(ctx context.Context, creatorProfileID, spaceID uuid.UUID, name string, topic *string) (*store.ChatRow, error)
