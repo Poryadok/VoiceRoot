@@ -22,7 +22,7 @@ import (
 
 // TestComposeFileAttachmentRestartProof_live is deliberately split into two
 // externally orchestrated phases. The compose runner executes "prepare",
-// restarts File and Messaging, then executes "verify" using the state file
+// restarts File only, then executes "verify" using the state file
 // left by prepare. This test must remain an HTTP client and must never invoke
 // Docker itself.
 //
@@ -65,6 +65,7 @@ type composeFileAttachmentRestartState struct {
 	FileID               string `json:"file_id"`
 	MessageID            string `json:"message_id"`
 	RecipientAccessToken string `json:"recipient_access_token"`
+	UploaderAccessToken  string `json:"uploader_access_token"`
 	SHA256               string `json:"sha256"`
 	Content              string `json:"content"`
 	ProofID              string `json:"proof_id"`
@@ -101,6 +102,9 @@ func prepareComposeFileAttachmentRestartProof(t *testing.T, client *http.Client,
 	// File ACL remains fail-closed even before the restart proof resumes.
 	status, _ := composeGetFileURL(t, client, base, stranger.AccessToken, fileID)
 	require.Equal(t, http.StatusForbidden, status, "unrelated profile must not receive a file URL")
+	require.Equal(t, http.StatusForbidden,
+		composeDeleteFileStatus(t, client, base, stranger.AccessToken, fileID),
+		"unrelated profile must not delete an attachment")
 
 	pendingID, pendingType := composeRequestPendingTextFile(t, client, base, sessA.AccessToken, chatID)
 	pendingAttachments, err := json.Marshal([]map[string]string{{"file_id": pendingID, "type": pendingType}})
@@ -117,6 +121,7 @@ func prepareComposeFileAttachmentRestartProof(t *testing.T, client *http.Client,
 		FileID:               fileID,
 		MessageID:            messageID,
 		RecipientAccessToken: sessB.AccessToken,
+		UploaderAccessToken:  sessA.AccessToken,
 		SHA256:               hex.EncodeToString(sum[:]),
 		Content:              string(content),
 		ProofID:              proofID,
@@ -140,6 +145,7 @@ func verifyComposeFileAttachmentRestartProof(t *testing.T, client *http.Client, 
 	require.NotEmpty(t, state.FileID)
 	require.NotEmpty(t, state.MessageID)
 	require.NotEmpty(t, state.RecipientAccessToken)
+	require.NotEmpty(t, state.UploaderAccessToken)
 	require.Equal(t, proofID, state.ProofID, "state must belong to this runner invocation")
 	startedAt, err := strconv.ParseInt(runStarted, 10, 64)
 	require.NoError(t, err)
@@ -164,6 +170,16 @@ func verifyComposeFileAttachmentRestartProof(t *testing.T, client *http.Client, 
 	sum := sha256.Sum256(downloaded)
 	require.Equal(t, state.SHA256, hex.EncodeToString(sum[:]), "download must retain original SHA-256")
 	require.Equal(t, state.Content, string(downloaded), "download must retain exact deterministic bytes")
+
+	// Delete is terminal: the message retains its historical attachment ID, but
+	// no profile can mint fresh metadata or download access from it.
+	require.Equal(t, http.StatusNoContent,
+		composeDeleteFileStatus(t, client, base, state.UploaderAccessToken, state.FileID))
+	composeRequireAttachmentInCursorHistory(t, client, base, state.RecipientAccessToken, state.ChatID, state.MessageID, state.FileID)
+	require.Equal(t, http.StatusPreconditionFailed,
+		composeGetFileMetadataStatus(t, client, base, state.RecipientAccessToken, state.FileID))
+	status, _ = composeGetFileURL(t, client, base, state.RecipientAccessToken, state.FileID)
+	require.Equal(t, http.StatusPreconditionFailed, status, "deleted attachment must not receive a fresh URL")
 }
 
 func writeComposeFileAttachmentRestartState(t *testing.T, statePath string, encoded []byte) {
@@ -279,6 +295,32 @@ func composeGetFileURL(t *testing.T, client *http.Client, base, accessToken, fil
 	}
 	require.NoError(t, json.Unmarshal(body, &parsed))
 	return resp.StatusCode, parsed.PresignedGetURL
+}
+
+func composeGetFileMetadataStatus(t *testing.T, client *http.Client, base, accessToken, fileID string) int {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, base+"/api/v1/files/"+url.PathEscape(fileID), nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	_, err = io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	return resp.StatusCode
+}
+
+func composeDeleteFileStatus(t *testing.T, client *http.Client, base, accessToken, fileID string) int {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodDelete, base+"/api/v1/files/"+url.PathEscape(fileID), nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	_, err = io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	return resp.StatusCode
 }
 
 func composeRequestPendingTextFile(t *testing.T, client *http.Client, base, accessToken, chatID string) (fileID, fileType string) {
