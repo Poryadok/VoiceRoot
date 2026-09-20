@@ -53,7 +53,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("user privacy principal config: %v", err)
 	}
-	filePrincipalConfig, filePrincipalEnabled, err := socialprincipal.LoadFromEnv("file")
+	filePrincipalConfig, filePrincipalEnabled, err := socialprincipal.LoadFromEnvWithPrefix("file", "USER_FILE_PRINCIPAL_", ":9092")
 	if err != nil {
 		log.Fatalf("user file ownership principal config: %v", err)
 	}

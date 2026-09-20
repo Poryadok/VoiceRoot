@@ -25,11 +25,20 @@ var issuerPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 func prefixFor(target string) string { return strings.ToUpper(target) + "_PRINCIPAL_" }
 
 func LoadFromEnv(target string) (Config, bool, error) {
+	return LoadFromEnvWithPrefix(target, prefixFor(target), ":9091")
+}
+
+// LoadFromEnvWithPrefix loads one dedicated principal listener. Only settings
+// owned by prefix activate it; shared S2S verifier settings cannot accidentally
+// enable another listener in the same process.
+func LoadFromEnvWithPrefix(target, prefix, defaultListen string) (Config, bool, error) {
 	if Method(target) == "" {
 		return Config{}, false, errors.New("invalid principal target")
 	}
-	prefix := prefixFor(target)
-	names := []string{"S2S_JWKS_URLS_JSON", "S2S_JWKS_REFRESH_AFTER", "S2S_JWKS_HARD_EXPIRY", "S2S_UNKNOWN_KID_COOLDOWN", "S2S_JWKS_CA_FILE", prefix + "REPLAY_REDIS_ADDR", prefix + "REPLAY_REDIS_PASSWORD", prefix + "TLS_CERT_FILE", prefix + "TLS_KEY_FILE", prefix + "GRPC_LISTEN"}
+	if strings.TrimSpace(prefix) == "" || strings.TrimSpace(defaultListen) == "" {
+		return Config{}, false, errors.New("principal listener prefix and default address required")
+	}
+	names := []string{prefix + "REPLAY_REDIS_ADDR", prefix + "REPLAY_REDIS_PASSWORD", prefix + "TLS_CERT_FILE", prefix + "TLS_KEY_FILE", prefix + "GRPC_LISTEN"}
 	enabled := false
 	for _, name := range names {
 		if _, ok := os.LookupEnv(name); ok {
@@ -39,13 +48,16 @@ func LoadFromEnv(target string) (Config, bool, error) {
 	if !enabled {
 		return Config{}, false, nil
 	}
-	cfg := Config{Target: target, ReplayAddr: strings.TrimSpace(os.Getenv(prefix + "REPLAY_REDIS_ADDR")), ReplayPassword: os.Getenv(prefix + "REPLAY_REDIS_PASSWORD"), JWKSCAFile: strings.TrimSpace(os.Getenv("S2S_JWKS_CA_FILE")), TLSCertFile: strings.TrimSpace(os.Getenv(prefix + "TLS_CERT_FILE")), TLSKeyFile: strings.TrimSpace(os.Getenv(prefix + "TLS_KEY_FILE")), ListenAddr: ":9091"}
+	cfg := Config{Target: target, ReplayAddr: strings.TrimSpace(os.Getenv(prefix + "REPLAY_REDIS_ADDR")), ReplayPassword: os.Getenv(prefix + "REPLAY_REDIS_PASSWORD"), JWKSCAFile: strings.TrimSpace(os.Getenv("S2S_JWKS_CA_FILE")), TLSCertFile: strings.TrimSpace(os.Getenv(prefix + "TLS_CERT_FILE")), TLSKeyFile: strings.TrimSpace(os.Getenv(prefix + "TLS_KEY_FILE")), ListenAddr: defaultListen}
 	if value, ok := os.LookupEnv(prefix + "GRPC_LISTEN"); ok {
 		cfg.ListenAddr = strings.TrimSpace(value)
 	}
-	if err := json.Unmarshal([]byte(os.Getenv("S2S_JWKS_URLS_JSON")), &cfg.JWKSURLs); err != nil {
+	var allJWKSURLs map[string]string
+	if err := json.Unmarshal([]byte(os.Getenv("S2S_JWKS_URLS_JSON")), &allJWKSURLs); err != nil {
 		return Config{}, true, errors.New("invalid principal JWKS configuration")
 	}
+	issuer := expectedIssuer(target)
+	cfg.JWKSURLs = map[string]string{issuer: allJWKSURLs[issuer]}
 	var err error
 	cfg.RefreshAfter, err = envDuration("S2S_JWKS_REFRESH_AFTER", 30*time.Second)
 	if err != nil {
