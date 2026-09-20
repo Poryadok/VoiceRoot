@@ -48,6 +48,12 @@ service ChatService {
   rpc MuteChat(MuteChatRequest) returns (MuteChatResponse);
   rpc ArchiveChat(ArchiveChatRequest) returns (ArchiveChatResponse);
 
+  // Sticker catalog and the caller's per-profile composer rail.
+  rpc ListInstalledStickerPacks(ListInstalledStickerPacksRequest) returns (ListInstalledStickerPacksResponse);
+  rpc GetStickerPack(GetStickerPackRequest) returns (GetStickerPackResponse);
+  rpc InstallStickerPack(InstallStickerPackRequest) returns (InstallStickerPackResponse);
+  rpc UninstallStickerPack(UninstallStickerPackRequest) returns (UninstallStickerPackResponse);
+
   // DM-only opt-in E2E encryption — docs/features/encryption.md.
   rpc EnableChatE2E(EnableChatE2ERequest) returns (EnableChatE2EResponse);
   rpc DisableChatE2E(DisableChatE2ERequest) returns (DisableChatE2EResponse);
@@ -301,6 +307,48 @@ message ArchiveChatRequest {
   string chat_id = 1;
   bool archived = 2;
 }
+
+message Sticker {
+  string id = 1;
+  string file_id = 2;
+  optional string emoji = 3;
+  int32 sort_order = 4;
+  int32 width = 5;
+  int32 height = 6;
+}
+
+message StickerPack {
+  string id = 1;
+  string title = 2;
+  optional string thumb_file_id = 3;
+  bool is_system = 4;
+  bool is_premium = 5;
+  optional string creator_profile_id = 6;
+  int32 sticker_count = 7;
+  repeated Sticker stickers = 8;
+  int32 sort_order = 9; // caller's composer-rail order
+}
+
+message ListInstalledStickerPacksRequest {}
+message ListInstalledStickerPacksResponse {
+  repeated StickerPack packs = 1;
+}
+message GetStickerPackRequest {
+  string pack_id = 1;
+}
+message GetStickerPackResponse {
+  StickerPack pack = 1;
+}
+message InstallStickerPackRequest {
+  string pack_id = 1;
+}
+message InstallStickerPackResponse {
+  StickerPack pack = 1;
+}
+message UninstallStickerPackRequest {
+  string pack_id = 1;
+}
+message UninstallStickerPackResponse {}
 
 message EnableChatE2ERequest {
   string chat_id = 1;

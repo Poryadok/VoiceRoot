@@ -195,6 +195,116 @@ class FolderListData {
   final List<VoiceFolder> folders;
 }
 
+class StickerPack {
+  const StickerPack({
+    required this.id,
+    required this.title,
+    required this.isSystem,
+    this.thumbFileId,
+    this.creatorProfileId,
+    this.stickerCount = 0,
+  });
+
+  final String id;
+  final String title;
+  final bool isSystem;
+  final String? thumbFileId;
+  final String? creatorProfileId;
+  final int stickerCount;
+}
+
+class StickerPackListData {
+  const StickerPackListData({required this.packs});
+  final List<StickerPack> packs;
+}
+
+/// Client for the active profile's installed sticker packs.
+///
+/// The profile is selected solely by the authenticated Gateway session; it is
+/// intentionally never accepted as an URL or request-body parameter.
+class VoiceStickerPacksClient {
+  VoiceStickerPacksClient({required GatewayHttpClient gateway})
+    : _gateway = gateway;
+  final GatewayHttpClient _gateway;
+
+  Future<ChatsApiResult<StickerPackListData>> listInstalled({
+    required String authorization,
+  }) async {
+    final result = await _gateway.getProto(
+      _gateway.resolve('/api/v1/sticker-packs'),
+      authorization: authorization,
+      createEmpty: chat_pb.ListInstalledStickerPacksResponse.create,
+    );
+    return _mapResult(result, (data) {
+      final response = data as chat_pb.ListInstalledStickerPacksResponse;
+      return StickerPackListData(
+        packs: response.packs.map(stickerPackFromProto).toList(),
+      );
+    });
+  }
+
+  Future<ChatsApiResult<void>> install({
+    required String authorization,
+    required String packId,
+  }) => _postEmpty('/api/v1/sticker-packs/$packId/install', authorization);
+
+  Future<ChatsApiResult<void>> uninstall({
+    required String authorization,
+    required String packId,
+  }) => _deleteEmpty('/api/v1/sticker-packs/$packId', authorization);
+
+  Future<ChatsApiResult<void>> _postEmpty(
+    String path,
+    String authorization,
+  ) async => _mapEmpty(
+    await _gateway.postEmpty(
+      uri: _gateway.resolve(path),
+      authorization: authorization,
+    ),
+  );
+
+  Future<ChatsApiResult<void>> _deleteEmpty(
+    String path,
+    String authorization,
+  ) async => _mapEmpty(
+    await _gateway.deleteEmpty(
+      uri: _gateway.resolve(path),
+      authorization: authorization,
+    ),
+  );
+
+  ChatsApiResult<T> _mapResult<T>(
+    GatewayHttpResult<dynamic> result,
+    T Function(dynamic data) parse,
+  ) => switch (result) {
+    GatewayHttpOk(:final data) => ChatsApiOk(parse(data)),
+    GatewayHttpFailure(:final error) => ChatsApiFailure(
+      message: GatewayApiResultMapper.failureMessage(error),
+      errorCode: GatewayApiResultMapper.failureCode(error),
+      statusCode: GatewayApiResultMapper.failureStatus(error),
+    ),
+  };
+
+  ChatsApiResult<void> _mapEmpty(GatewayHttpResult<dynamic> result) =>
+      switch (result) {
+        GatewayHttpOk() => const ChatsApiOk(null),
+        GatewayHttpFailure(:final error) => ChatsApiFailure(
+          message: GatewayApiResultMapper.failureMessage(error),
+          errorCode: GatewayApiResultMapper.failureCode(error),
+          statusCode: GatewayApiResultMapper.failureStatus(error),
+        ),
+      };
+}
+
+StickerPack stickerPackFromProto(chat_pb.StickerPack pack) => StickerPack(
+  id: pack.id,
+  title: pack.title,
+  isSystem: pack.isSystem,
+  thumbFileId: pack.hasThumbFileId() ? pack.thumbFileId : null,
+  creatorProfileId: pack.hasCreatorProfileId() ? pack.creatorProfileId : null,
+  stickerCount: pack.stickerCount,
+);
+
 /// HTTP client for Chat routes (`/api/v1/chats/**`).
 class VoiceChatsClient {
   VoiceChatsClient({required GatewayHttpClient gateway}) : _gateway = gateway;
