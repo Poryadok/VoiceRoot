@@ -9,6 +9,7 @@ import 'package:voice_frontend/backend/voice_client.dart';
 import 'package:voice_frontend/backend/windows_virtual_key.dart';
 import 'package:voice_frontend/services/windows_desktop_host.dart';
 import 'package:voice_frontend/settings/voice_input_settings.dart';
+import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/call_providers.dart';
 import 'package:voice_frontend/state/windows_desktop_lifecycle.dart';
 
@@ -91,6 +92,7 @@ void main() {
   });
 
   test('tray mute/deafen toggle call state; hide does not hang up', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
     final host = RecordingWindowsDesktopHost();
     final container = ProviderContainer(
       overrides: [
@@ -148,6 +150,138 @@ void main() {
     expect(host.quitCalls, 0);
 
     expect(host.registerHotkeyCalls, greaterThan(0));
+  });
+
+  test(
+    'global PTT is registered only for an authenticated active call',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      final host = RecordingWindowsDesktopHost();
+      final container = ProviderContainer(
+        overrides: [
+          ...voiceAppTestOverrides(
+            client: MockClient((_) async => http.Response('{}', 200)),
+          ),
+          windowsDesktopHostProvider.overrideWithValue(host),
+          voiceInputSettingsProvider.overrideWith(
+            () => _FixedVoiceInputSettings(
+              const VoiceInputSettings(mode: VoiceInputMode.ptt),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final lifecycle = container.read(windowsDesktopLifecycleProvider);
+      await lifecycle.sync();
+      expect(host.registerHotkeyCalls, 0);
+
+      container.read(callControllerProvider.notifier).state = const CallState(
+        phase: CallPhase.active,
+        session: VoiceCallSession(
+          roomId: 'room-1',
+          livekitRoomName: 'lk-room',
+          chatId: 'chat-1',
+          initiatorProfileId: 'me',
+          calleeProfileId: 'peer',
+          mediaKind: VoiceCallMediaKind.audio,
+          status: VoiceCallStatus.active,
+        ),
+      );
+      await lifecycle.sync();
+      expect(host.registerHotkeyCalls, 1);
+    },
+  );
+
+  test(
+    'forbidden call state releases held PTT and unregisters the hotkey',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      final host = RecordingWindowsDesktopHost();
+      final container = ProviderContainer(
+        overrides: [
+          ...voiceAppTestOverrides(
+            client: MockClient((_) async => http.Response('{}', 200)),
+          ),
+          windowsDesktopHostProvider.overrideWithValue(host),
+          voiceInputSettingsProvider.overrideWith(
+            () => _FixedVoiceInputSettings(
+              const VoiceInputSettings(mode: VoiceInputMode.ptt),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final controller = container.read(callControllerProvider.notifier);
+      controller.state = const CallState(
+        phase: CallPhase.active,
+        isPttHeld: true,
+        session: VoiceCallSession(
+          roomId: 'room-1',
+          livekitRoomName: 'lk-room',
+          chatId: 'chat-1',
+          initiatorProfileId: 'me',
+          calleeProfileId: 'peer',
+          mediaKind: VoiceCallMediaKind.audio,
+          status: VoiceCallStatus.active,
+        ),
+      );
+      final lifecycle = container.read(windowsDesktopLifecycleProvider);
+      await lifecycle.sync();
+      expect(host.registerHotkeyCalls, 1);
+
+      controller.state = const CallState(
+        phase: CallPhase.failed,
+        errorMessage: 'forbidden',
+      );
+      await lifecycle.sync();
+      expect(host.unregisterHotkeyCalls, greaterThan(0));
+      expect(container.read(callControllerProvider).isPttHeld, isFalse);
+    },
+  );
+
+  test('logout releases held PTT and unregisters the hotkey', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    final host = RecordingWindowsDesktopHost();
+    final container = ProviderContainer(
+      overrides: [
+        ...voiceAppTestOverrides(
+          client: MockClient((_) async => http.Response('{}', 200)),
+        ),
+        windowsDesktopHostProvider.overrideWithValue(host),
+        voiceInputSettingsProvider.overrideWith(
+          () => _FixedVoiceInputSettings(
+            const VoiceInputSettings(mode: VoiceInputMode.ptt),
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    container.read(callControllerProvider.notifier).state = const CallState(
+      phase: CallPhase.active,
+      isPttHeld: true,
+      session: VoiceCallSession(
+        roomId: 'room-1',
+        livekitRoomName: 'lk-room',
+        chatId: 'chat-1',
+        initiatorProfileId: 'me',
+        calleeProfileId: 'peer',
+        mediaKind: VoiceCallMediaKind.audio,
+        status: VoiceCallStatus.active,
+      ),
+    );
+    final lifecycle = container.read(windowsDesktopLifecycleProvider);
+    await lifecycle.sync();
+    expect(host.registerHotkeyCalls, 1);
+
+    container.read(authControllerProvider.notifier).state = const AuthState();
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(host.unregisterHotkeyCalls, greaterThan(0));
+    expect(container.read(callControllerProvider).isPttHeld, isFalse);
   });
 
   test('tray voice commands do not change an idle call state', () async {

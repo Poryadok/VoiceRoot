@@ -237,6 +237,9 @@ void DesktopHost::QuitApp() {
 }
 
 void DesktopHost::RegisterPtt(int vk_code, int modifiers) {
+  if (ptt_vk_ != vk_code || ptt_modifiers_ != modifiers) {
+    UnregisterPtt();
+  }
   ptt_vk_ = vk_code;
   ptt_modifiers_ = modifiers;
   if (!hook_) {
@@ -245,6 +248,11 @@ void DesktopHost::RegisterPtt(int vk_code, int modifiers) {
 }
 
 void DesktopHost::UnregisterPtt() {
+  if (ptt_held_) {
+    Emit("ptt", flutter::EncodableValue(flutter::EncodableMap{
+                    {flutter::EncodableValue("held"),
+                     flutter::EncodableValue(false)}}));
+  }
   ptt_vk_ = 0;
   ptt_modifiers_ = 0;
   ptt_held_ = false;
