@@ -293,9 +293,13 @@ class ListProfileIDsForAccountResponse extends $pb.GeneratedMessage {
 class ResolveAccountIDForProfileRequest extends $pb.GeneratedMessage {
   factory ResolveAccountIDForProfileRequest({
     $core.String? profileId,
+    $core.String? actorProfileId,
+    $core.String? operationId,
   }) {
     final result = create();
     if (profileId != null) result.profileId = profileId;
+    if (actorProfileId != null) result.actorProfileId = actorProfileId;
+    if (operationId != null) result.operationId = operationId;
     return result;
   }
 
@@ -314,6 +318,8 @@ class ResolveAccountIDForProfileRequest extends $pb.GeneratedMessage {
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'profileId')
+    ..aOS(2, _omitFieldNames ? '' : 'actorProfileId')
+    ..aOS(3, _omitFieldNames ? '' : 'operationId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -347,6 +353,26 @@ class ResolveAccountIDForProfileRequest extends $pb.GeneratedMessage {
   $core.bool hasProfileId() => $_has(0);
   @$pb.TagNumber(1)
   void clearProfileId() => $_clearField(1);
+
+  /// The File retention-owner lookup must prove the domain actor it is binding;
+  /// it is deliberately part of the signed request hash.
+  @$pb.TagNumber(2)
+  $core.String get actorProfileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set actorProfileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasActorProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearActorProfileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get operationId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set operationId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasOperationId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearOperationId() => $_clearField(3);
 }
 
 class ResolveAccountIDForProfileResponse extends $pb.GeneratedMessage {

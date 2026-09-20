@@ -17,7 +17,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -81,6 +80,13 @@ type Clock interface {
 	Now() time.Time
 }
 
+// EntitlementResolver reads File's verified local entitlement projection. It
+// deliberately has no metadata fallback: transport headers are caller input
+// and cannot grant paid storage policy.
+type EntitlementResolver interface {
+	Premium(ctx context.Context, accountID uuid.UUID, now time.Time) (bool, error)
+}
+
 type realClock struct{}
 
 func (realClock) Now() time.Time {
@@ -97,6 +103,7 @@ type Deps struct {
 	Reader                   ObjectReader
 	Scanner                  Scanner
 	Events                   fileevents.Publisher
+	Entitlements             EntitlementResolver
 	ReferenceAuthorityActive bool
 }
 
@@ -111,6 +118,7 @@ type FileGRPC struct {
 	reader                   ObjectReader
 	scanner                  Scanner
 	events                   fileevents.Publisher
+	entitlements             EntitlementResolver
 	referenceAuthorityActive bool
 }
 
@@ -137,6 +145,7 @@ func New(deps Deps) *FileGRPC {
 		reader:                   deps.Reader,
 		scanner:                  deps.Scanner,
 		events:                   events,
+		entitlements:             deps.Entitlements,
 		referenceAuthorityActive: deps.ReferenceAuthorityActive,
 	}
 }
@@ -155,7 +164,8 @@ func (s *FileGRPC) RequestUpload(ctx context.Context, req *filev1.RequestUploadR
 	originalName := strings.TrimSpace(req.GetOriginalName())
 	mimeType := strings.TrimSpace(strings.ToLower(req.GetMimeType()))
 	sizeBytes := req.GetSizeBytes()
-	maxBytes := uploadMaxBytes(ctx)
+	accountID, _ := authctx.AccountID(ctx)
+	maxBytes, premium := s.uploadPolicy(ctx, accountID)
 	if err := r2file.ValidateUpload(originalName, mimeType, sizeBytes, maxBytes); err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -188,7 +198,7 @@ func (s *FileGRPC) RequestUpload(ctx context.Context, req *filev1.RequestUploadR
 
 	fileID := uuid.New()
 	r2Key := r2file.ObjectKey(fileID, originalName)
-	expiresAt := retentionExpiresAt(s.clock, ctx, isE2E)
+	expiresAt := retentionExpiresAt(s.clock, premium, isE2E)
 	putURL, err := s.presigner.PresignPut(ctx, r2file.PutPresignInput{
 		Key:           r2Key,
 		ContentType:   mimeType,
@@ -675,10 +685,12 @@ func (s *FileGRPC) CheckQuota(ctx context.Context, req *filev1.CheckQuotaRequest
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	accountID, _ := authctx.AccountID(ctx)
+	maxBytes, _ := s.uploadPolicy(ctx, accountID)
 	return &filev1.CheckQuotaResponse{
 		QuotaResponse: &filev1.QuotaResponse{
 			BytesUsed:  used,
-			BytesLimit: quotaMaxBytes(ctx),
+			BytesLimit: maxBytes,
 		},
 	}, nil
 }
@@ -852,31 +864,14 @@ func parseUUID(field, value string) (uuid.UUID, error) {
 	return id, nil
 }
 
-func uploadMaxBytes(ctx context.Context) int64 {
-	return quotaMaxBytes(ctx)
-}
-
-func quotaMaxBytes(ctx context.Context) int64 {
-	if tier, ok := subscriptionTier(ctx); ok && tier == "premium" {
-		return r2file.MaxPremiumFileBytes
+func (s *FileGRPC) uploadPolicy(ctx context.Context, accountID uuid.UUID) (int64, bool) {
+	if accountID != uuid.Nil && s.entitlements != nil {
+		premium, err := s.entitlements.Premium(ctx, accountID, s.clock.Now().UTC())
+		if err == nil && premium {
+			return r2file.MaxPremiumFileBytes, true
+		}
 	}
-	return r2file.MaxFreeFileBytes
-}
-
-func subscriptionTier(ctx context.Context) (string, bool) {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return "", false
-	}
-	vals := md.Get("x-voice-subscription-tier")
-	if len(vals) == 0 {
-		return "", false
-	}
-	tier := strings.TrimSpace(strings.ToLower(vals[0]))
-	if tier == "" {
-		return "", false
-	}
-	return tier, true
+	return r2file.MaxFreeFileBytes, false
 }
 
 func retentionDuration() time.Duration {
@@ -888,11 +883,9 @@ func retentionDuration() time.Duration {
 	return defaultRetentionDays * 24 * time.Hour
 }
 
-func retentionExpiresAt(clock Clock, ctx context.Context, isE2E bool) *time.Time {
-	if !isE2E {
-		if tier, ok := subscriptionTier(ctx); ok && tier == "premium" {
-			return nil
-		}
+func retentionExpiresAt(clock Clock, premium, isE2E bool) *time.Time {
+	if premium && !isE2E {
+		return nil
 	}
 	t := clock.Now().UTC().Add(retentionDuration())
 	return &t
