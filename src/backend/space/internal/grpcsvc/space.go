@@ -68,8 +68,19 @@ func (s *SpaceGRPC) UpdateSpace(ctx context.Context, req *spacev1.UpdateSpaceReq
 		return nil, err
 	}
 	defer release()
-	if err := s.requireSpacePermission(ctx, spaceID, permissions.SpaceManageSettings); err != nil {
-		return nil, err
+	// Matchmaking configuration has its own delegated Space capability. A
+	// request which also changes ordinary Space settings must satisfy both
+	// capabilities, so a matchmaking manager cannot use this general endpoint
+	// to modify unrelated fields.
+	if req.MmConfigJson != nil {
+		if err := s.requireSpacePermission(ctx, spaceID, permissions.SpaceManageMatchmaking); err != nil {
+			return nil, err
+		}
+	}
+	if req.MmConfigJson == nil || req.Name != nil || req.Description != nil || req.IconUrl != nil || req.BannerUrl != nil || req.Visibility != nil || req.EntryRequirement != nil || req.EntryQuestionsJson != nil || req.AllowGuests != nil {
+		if err := s.requireSpacePermission(ctx, spaceID, permissions.SpaceManageSettings); err != nil {
+			return nil, err
+		}
 	}
 
 	var in store.UpdateSpaceInput
@@ -137,7 +148,7 @@ func (s *SpaceGRPC) UpdateSpaceMmConfig(ctx context.Context, req *spacev1.Update
 		return nil, err
 	}
 	defer release()
-	if err := s.requireSpacePermission(ctx, spaceID, permissions.SpaceManageSettings); err != nil {
+	if err := s.requireSpacePermission(ctx, spaceID, permissions.SpaceManageMatchmaking); err != nil {
 		return nil, err
 	}
 	cfg := req.GetMmConfigJson()
