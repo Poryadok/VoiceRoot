@@ -90,11 +90,11 @@ func loadFilePrincipalRuntime() (_ *filePrincipalRuntime, err error) {
 	}
 	certFile, keyFile := strings.TrimSpace(os.Getenv("FILE_PRINCIPAL_JWKS_TLS_CERT_FILE")), strings.TrimSpace(os.Getenv("FILE_PRINCIPAL_JWKS_TLS_KEY_FILE"))
 	if certFile == "" || keyFile == "" {
-		return nil, errors.New("File principal JWKS TLS certificate and key are required")
+		return nil, errors.New("file principal JWKS TLS certificate and key are required")
 	}
 	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
-		return nil, fmt.Errorf("File principal JWKS TLS: %w", err)
+		return nil, fmt.Errorf("file principal JWKS TLS: %w", err)
 	}
 	addr := ":8443"
 	if v, ok := os.LookupEnv("FILE_PRINCIPAL_JWKS_LISTEN"); ok {
@@ -122,7 +122,7 @@ func loadFilePrincipalRuntime() (_ *filePrincipalRuntime, err error) {
 	}()
 	target, ca, server := strings.TrimSpace(os.Getenv("USER_FILE_PRINCIPAL_GRPC_ADDR")), strings.TrimSpace(os.Getenv("USER_FILE_PRINCIPAL_TLS_CA_FILE")), strings.TrimSpace(os.Getenv("USER_FILE_PRINCIPAL_TLS_SERVER_NAME"))
 	if target == "" || ca == "" || server == "" {
-		return nil, errors.New("User File principal address, TLS CA and server name are required")
+		return nil, errors.New("user File principal address, TLS CA and server name are required")
 	}
 	pemData, err := os.ReadFile(ca)
 	if err != nil {
