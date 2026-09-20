@@ -312,6 +312,8 @@
       }
     }
   },
+  "chatRoomLoadError": "Не удалось загрузить сообщения",
+  "chatRoomPermissionDenied": "У вас нет права просматривать этот чат",
   "chatRealtimeConnected": "Онлайн",
   "chatRealtimeConnecting": "Подключение…",
   "chatRealtimeReconnecting": "Переподключение…",

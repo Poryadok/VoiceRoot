@@ -80,14 +80,9 @@ func main() {
 		if principalRuntime.Space != nil {
 			spaceCoMembership = principalRuntime.Space
 		}
-		if userAddr := strings.TrimSpace(os.Getenv("USER_GRPC_ADDR")); userAddr != "" {
-			uconn, err := grpc.NewClient(grpcclient.DialTarget(userAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
-			if err != nil {
-				log.Fatalf("user grpc: %v", err)
-			}
-			defer func() { _ = uconn.Close() }()
-			accountProfiles = socials2s.NewGRPCAccountProfiles(uconn)
-			profileAccounts = socials2s.NewGRPCProfileAccounts(uconn)
+		if principalRuntime.User != nil {
+			accountProfiles = socials2s.NewGRPCAccountProfiles(principalRuntime.User.Client, principalRuntime.Issuer)
+			profileAccounts = socials2s.NewGRPCProfileAccounts(principalRuntime.User.Client, principalRuntime.Issuer)
 		}
 		if authAddr := strings.TrimSpace(os.Getenv("AUTH_GRPC_ADDR")); authAddr != "" {
 			aconn, err := grpc.NewClient(grpcclient.DialTarget(authAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))

@@ -6,6 +6,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	socialv1 "voice.app/voice/social/v1"
 	"voice/backend/pkg/privacy"
@@ -36,8 +38,9 @@ func (s phoneHashLookupStub) ProfileIDsByPhoneHashes(_ context.Context, hashes [
 	return out, nil
 }
 
-// TestSyncPhoneContacts_FriendsOnlyPrivacy_StrangerExcluded documents privacy.md: friends-only allow_phone_search excludes non-friend profiles from sync matches.
-func TestSyncPhoneContacts_FriendsOnlyPrivacy_StrangerExcluded(t *testing.T) {
+// TestSyncPhoneContacts_FriendsOnlyPrivacy_IsUnavailable keeps the old privacy
+// fixture from re-enabling phone sync before the post-alpha mobile protocol.
+func TestSyncPhoneContacts_FriendsOnlyPrivacy_IsUnavailable(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -55,9 +58,10 @@ func TestSyncPhoneContacts_FriendsOnlyPrivacy_StrangerExcluded(t *testing.T) {
 	)
 	t.Cleanup(cleanup)
 
-	resp, err := client.SyncPhoneContacts(withProfileCtx(ctx, syncer), &socialv1.SyncPhoneContactsRequest{
+	_, err := client.SyncPhoneContacts(withProfileCtx(ctx, syncer), &socialv1.SyncPhoneContactsRequest{
 		HashedPhoneNumbers: []string{hash},
 	})
-	require.NoError(t, err)
-	require.NotContains(t, resp.GetMatchedProfileIds(), target.String())
+	require.Error(t, err)
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	require.Equal(t, "phone_contact_sync_unavailable", status.Convert(err).Message())
 }

@@ -111,6 +111,17 @@ class AuthServiceClient extends $grpc.Client {
     return $createUnaryCall(_$verifyOTP, request, options: options);
   }
 
+  /// Restricted-session recovery state for email verification. The caller is
+  /// derived from authenticated transport metadata; no email identifier is accepted.
+  $grpc.ResponseFuture<$0.GetEmailVerificationStatusResponse>
+      getEmailVerificationStatus(
+    $0.GetEmailVerificationStatusRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getEmailVerificationStatus, request,
+        options: options);
+  }
+
   $grpc.ResponseFuture<$0.ConvertGuestResponse> convertGuest(
     $0.ConvertGuestRequest request, {
     $grpc.CallOptions? options,
@@ -323,6 +334,12 @@ class AuthServiceClient extends $grpc.Client {
           '/voice.auth.v1.AuthService/VerifyOTP',
           ($0.VerifyOTPRequest value) => value.writeToBuffer(),
           $0.VerifyOTPResponse.fromBuffer);
+  static final _$getEmailVerificationStatus = $grpc.ClientMethod<
+          $0.GetEmailVerificationStatusRequest,
+          $0.GetEmailVerificationStatusResponse>(
+      '/voice.auth.v1.AuthService/GetEmailVerificationStatus',
+      ($0.GetEmailVerificationStatusRequest value) => value.writeToBuffer(),
+      $0.GetEmailVerificationStatusResponse.fromBuffer);
   static final _$convertGuest =
       $grpc.ClientMethod<$0.ConvertGuestRequest, $0.ConvertGuestResponse>(
           '/voice.auth.v1.AuthService/ConvertGuest',
@@ -512,6 +529,16 @@ abstract class AuthServiceBase extends $grpc.Service {
         false,
         ($core.List<$core.int> value) => $0.VerifyOTPRequest.fromBuffer(value),
         ($0.VerifyOTPResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GetEmailVerificationStatusRequest,
+            $0.GetEmailVerificationStatusResponse>(
+        'GetEmailVerificationStatus',
+        getEmailVerificationStatus_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetEmailVerificationStatusRequest.fromBuffer(value),
+        ($0.GetEmailVerificationStatusResponse value) =>
+            value.writeToBuffer()));
     $addMethod(
         $grpc.ServiceMethod<$0.ConvertGuestRequest, $0.ConvertGuestResponse>(
             'ConvertGuest',
@@ -774,6 +801,16 @@ abstract class AuthServiceBase extends $grpc.Service {
 
   $async.Future<$0.VerifyOTPResponse> verifyOTP(
       $grpc.ServiceCall call, $0.VerifyOTPRequest request);
+
+  $async.Future<$0.GetEmailVerificationStatusResponse>
+      getEmailVerificationStatus_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.GetEmailVerificationStatusRequest> $request) async {
+    return getEmailVerificationStatus($call, await $request);
+  }
+
+  $async.Future<$0.GetEmailVerificationStatusResponse>
+      getEmailVerificationStatus(
+          $grpc.ServiceCall call, $0.GetEmailVerificationStatusRequest request);
 
   $async.Future<$0.ConvertGuestResponse> convertGuest_Pre(
       $grpc.ServiceCall $call,

@@ -349,6 +349,8 @@
       }
     }
   },
+  "chatRoomLoadError": "Could not load messages",
+  "chatRoomPermissionDenied": "You do not have permission to view this chat",
   "chatRealtimeConnected": "Live",
   "chatRealtimeConnecting": "Connecting…",
   "chatRealtimeReconnecting": "Reconnecting…",

@@ -1,4 +1,8 @@
-import '../backend/api_errors.dart' show BackendUnavailableException, ProfileUnavailableException, isBackendUnavailable;
+import '../backend/api_errors.dart'
+    show
+        BackendUnavailableException,
+        ProfileUnavailableException,
+        isBackendUnavailable;
 import '../l10n/app_localizations.dart';
 import 'privacy/privacy_action_errors.dart';
 
@@ -127,7 +131,14 @@ String chatRoomErrorMessage(
   if (isBackendUnavailable(statusCode)) {
     return l10n.backendUnavailable;
   }
-  return l10n.chatRoomError(privacyActionErrorMessage(l10n, raw));
+  final privacyMessage = privacyActionErrorMessage(l10n, raw);
+  if (privacyMessage != raw) {
+    return l10n.chatRoomError(privacyMessage);
+  }
+  if (raw == 'permission_denied') {
+    return l10n.chatRoomPermissionDenied;
+  }
+  return l10n.chatRoomLoadError;
 }
 
 String searchErrorMessage(

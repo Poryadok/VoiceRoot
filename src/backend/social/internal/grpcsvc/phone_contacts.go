@@ -8,12 +8,14 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"voice/backend/social/internal/authctx"
 	"voice/backend/pkg/guestguard"
 	"voice/backend/pkg/privacy"
+	"voice/backend/social/internal/authctx"
 
 	socialv1 "voice.app/voice/social/v1"
 )
+
+const phoneContactSyncEnabled = false
 
 // PhoneHashLookup resolves hashed phone numbers to profile IDs.
 type PhoneHashLookup interface {
@@ -32,6 +34,12 @@ func (s *SocialGRPC) SyncPhoneContacts(ctx context.Context, req *socialv1.SyncPh
 	caller, ok := authctx.ProfileID(ctx)
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	}
+	// Phone-book discovery is deliberately unavailable for the A1/G1 Web and
+	// Windows release. Do not inspect or resolve caller-provided values until
+	// the post-alpha mobile protocol is enabled.
+	if !phoneContactSyncEnabled {
+		return nil, status.Error(codes.FailedPrecondition, "phone_contact_sync_unavailable")
 	}
 	if s.PhoneHashes == nil {
 		return nil, status.Error(codes.FailedPrecondition, "phone hash lookup not configured")

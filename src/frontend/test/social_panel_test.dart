@@ -77,7 +77,9 @@ void main() {
     expect(find.byKey(SocialPanel.tabBlockedKey), findsOneWidget);
   });
 
-  testWidgets('search works inside non-scrollable bottom sheet', (tester) async {
+  testWidgets('search works inside non-scrollable bottom sheet', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       socialTestApp(
         home: Builder(
@@ -439,7 +441,9 @@ void main() {
         client: MockClient((req) async {
           if (req.url.path == '/api/v1/friends') {
             return http.Response(
-              jsonEncode({'friend_list': {'friends': []}}),
+              jsonEncode({
+                'friend_list': {'friends': []},
+              }),
               200,
             );
           }
@@ -453,7 +457,9 @@ void main() {
     expect(find.byKey(SocialPanel.friendsUnavailableKey), findsNothing);
   });
 
-  testWidgets('requests tab shows empty state when no requests', (tester) async {
+  testWidgets('requests tab shows empty state when no requests', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       socialTestApp(
         home: const SocialPanel(initialTabIndex: 4),
@@ -517,14 +523,18 @@ void main() {
     expect(find.textContaining(_backendUnavailableSnippet), findsOneWidget);
   });
 
-  testWidgets('contacts tab shows empty state when no contacts', (tester) async {
+  testWidgets('contacts tab shows empty state when no contacts', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       socialTestApp(
         home: const SocialPanel(initialTabIndex: 2),
         client: MockClient((req) async {
           if (req.url.path == '/api/v1/friends/contacts') {
             return http.Response(
-              jsonEncode({'contact_list': {'contacts': []}}),
+              jsonEncode({
+                'contact_list': {'contacts': []},
+              }),
               200,
             );
           }
@@ -538,38 +548,42 @@ void main() {
     expect(find.byKey(SocialPanel.contactsUnavailableKey), findsNothing);
   });
 
-  testWidgets('contacts tab sync phone book calls gateway', (tester) async {
-    var syncCalled = false;
-    await tester.pumpWidget(
-      socialTestApp(
-        home: const SocialPanel(initialTabIndex: 2),
-        client: MockClient((req) async {
-          if (req.url.path == '/api/v1/friends/contacts') {
-            return http.Response(
-              jsonEncode({'contact_list': {'contacts': []}}),
-              200,
-            );
-          }
-          if (req.url.path == '/api/v1/friends/contacts/sync' &&
-              req.method == 'POST') {
-            syncCalled = true;
-            return http.Response(
-              jsonEncode({'matched_profile_ids': ['p-1']}),
-              200,
-            );
-          }
-          return http.Response('{}', 200);
-        }),
-      ),
-    );
-    await tester.pumpAndSettle();
+  testWidgets(
+    'contacts tab hides post-alpha phone book sync and does not call gateway',
+    (tester) async {
+      var syncCalled = false;
+      await tester.pumpWidget(
+        socialTestApp(
+          home: const SocialPanel(initialTabIndex: 2),
+          client: MockClient((req) async {
+            if (req.url.path == '/api/v1/friends/contacts') {
+              return http.Response(
+                jsonEncode({
+                  'contact_list': {'contacts': []},
+                }),
+                200,
+              );
+            }
+            if (req.url.path == '/api/v1/friends/contacts/sync' &&
+                req.method == 'POST') {
+              syncCalled = true;
+              return http.Response(
+                jsonEncode({
+                  'matched_profile_ids': ['p-1'],
+                }),
+                200,
+              );
+            }
+            return http.Response('{}', 200);
+          }),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(SocialPanel.syncPhoneContactsKey));
-    await tester.pumpAndSettle();
-
-    expect(syncCalled, isTrue);
-    expect(find.text('Found 1 contact on Voice'), findsOneWidget);
-  });
+      expect(find.byKey(SocialPanel.syncPhoneContactsKey), findsNothing);
+      expect(syncCalled, isFalse);
+    },
+  );
 
   testWidgets('favorites tab shows empty state when no favorites', (
     tester,
@@ -580,7 +594,9 @@ void main() {
         client: MockClient((req) async {
           if (req.url.path == '/api/v1/friends/favorites') {
             return http.Response(
-              jsonEncode({'friend_list': {'friends': []}}),
+              jsonEncode({
+                'friend_list': {'friends': []},
+              }),
               200,
             );
           }
@@ -654,7 +670,9 @@ void main() {
         client: MockClient((req) async {
           if (req.url.path == '/api/v1/friends/blocks') {
             return http.Response(
-              jsonEncode({'blocked_list': {'blocked': []}}),
+              jsonEncode({
+                'blocked_list': {'blocked': []},
+              }),
               200,
             );
           }

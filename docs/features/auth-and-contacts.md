@@ -91,14 +91,23 @@ email действуют guest-level ограничения. После успе
 
 ## Контакты по телефону
 
-- Механика как в Telegram / WhatsApp: пользователь разрешает доступ к телефонной книге, приложение показывает кто из контактов уже в Voice
-- Работает в обе стороны: если пользователь ввёл номер и разрешил поиск — его можно найти
+Phone-book discovery is **post-alpha / G3 mobile scope**. It is unavailable in
+A1/G1 Web and Windows: the clients neither ask for address-book permission nor
+send an empty or populated phone-sync request, and the sync RPC returns stable
+`phone_contact_sync_unavailable` (`FAILED_PRECONDITION` / HTTP 409) if invoked.
+Manual, username, QR-paste, and ordinary friend-request flows remain available.
+
+The future mobile flow is consented and staged: numbers are normalized to
+E.164, converted to a versioned digest, and exchanged only as a server HMAC
+token. It never uploads raw phone-book values. The future privacy control is
+`PhoneDiscoveryMode` (`NOBODY`, `MUTUAL_CONTACTS`, `EVERYONE`); it needs strict
+quotas and redacted failures before enablement.
 
 ### Настройки приватности (раздельные)
 
 | Настройка                      | Опции                             |
 |--------------------------------|-----------------------------------|
-| Кто может найти меня по номеру | Все / Только мои контакты / Никто |
+| Кто может найти меня по номеру | Post-alpha `PhoneDiscoveryMode`: Все / Только мои контакты / Никто |
 | Кто может писать мне в DM      | Все / Только мои контакты / Никто |
 
 ## Двухфакторная аутентификация (2FA)
@@ -155,6 +164,16 @@ email действуют guest-level ограничения. После успе
 
 ## Email verification state
 
+- State is recovered only from the restricted session: `GUEST`,
+  `EMAIL_PENDING` (`NONE` / `ACTIVE` code), `PROMOTION_PENDING`, or `REGULAR`.
+  Email-verification send, verify, and status never accept a raw public email;
+  the initial authenticated send follows registration/convert exactly once.
+- A resend invalidates the previous code but preserves the three-attempt
+  ten-minute budget. Invalid and expired codes share one error; attempt four is
+  `429` with `Retry-After`. Redis failure closes this flow.
+- On success Auth returns and the client persists a replacement regular session
+  before routing. A deferred promotion is `202`; reload/status resumes only the
+  bounded retry path.
 - Новая email-регистрация и `convert-guest` получают restricted pending session:
   доступны verification/resend/logout и уже разрешённые guest flows.
 - Инициировать DM/звонок, добавлять друзей и самостоятельно вступать в Space до

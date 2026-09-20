@@ -405,7 +405,7 @@ class AuthUserGrpcContractTest {
           (acceptedAccountId, ignoredOtp, ignoredNow) -> acceptanceCalls.add(acceptedAccountId);
       OtpService otp = new OtpService(accounts, codes, refreshTokens, codec, new BCryptPasswordHasher(),
           new NoopMailSender(), new InMemoryOtpThrottle(), CLOCK, acceptance);
-      otp.verifyOtp(new VerifyOtpCommand(email, null, code, "email_verify", null), service);
+      otp.verifyOtp(new VerifyOtpCommand(email, null, code, "email_verify", null), null);
     }
   }
 

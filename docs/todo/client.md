@@ -22,6 +22,10 @@ _Пока пусто — критичные клиентские блокеры 
 
 ### Guest & onboarding live
 
+- [ ] **[A1] Session-bound email verification recovery proof** — on reload,
+  call `GET /api/v1/auth/verification-status`; resume `EMAIL_PENDING`, show
+  bounded `PROMOTION_PENDING` retry, and persist a replacement `REGULAR`
+  session before routing. Never resend email or submit it with verification.
 - [x] **Onboarding coach-marks E2E** — `onboarding_coach_e2e_live_test` (spaces/MM + invite deep link); guest: `guest_onboarding_e2e_live_test`; widget-якоря: `guest_onboarding_anchor_keys_test` / `onboarding_overlay_test`.
 
 ### Flutter delivery
@@ -84,7 +88,7 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 
 - [x] **VoiceListSkeleton + VoiceStatePanel widget tests** — `src/frontend/test/voice_state_components_test.dart`: `VoiceListSkeleton renders configured placeholder rows`; `VoiceStatePanel` empty-state semantics, keyboard retry action и suppression неполного action. Остаточные loader surfaces остаются отдельным пунктом выше.
 
-- [ ] **api_error_messages — расширить покрытие** — PR #128 helpers for chat/search/settings/subscription/space bots|members|invites/player profile; residual surfaces may still show raw API strings.
+- [ ] **api_error_messages — extend residual coverage** — chat-room history now maps unknown upstream text and `permission_denied` to localized safe states; PR #128 helpers still cover chat/search/settings/subscription/space bots|members|invites/player profile. Audit the remaining action and loader surfaces individually before claiming that raw API strings are absent globally.
 
 - [ ] **VoiceDisabledAction — расширить покрытие** — wave H: space tree / roles / slow mode; остальные permission-gated действия (chat moderation, voice room create, MM guest restrictions) без reason tooltip.
 
@@ -102,8 +106,7 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 - [x] **Message requests inbox UI** — virtual «Запросы» folder in rail/drawer (visible when pending > 0, unread badge); removed middle-column segmented toggle (§1.3 tombstone); accept/decline on list rows; `notificationTypeMessageRequest` settings toggle — **Batch 22b** (backend bucketing Batch 21a).
 - [x] **Кастомные папки чатов** — All/DMs/Groups + custom; REST folders + rail/drawer UI shipped (parallel/client); **pin/reorder UI** in list ctx + custom-folder drag reorder shipped (Batch 21b); edit-folders management UI shipped (**Batch 25b**).
 - [ ] **In-chat search: next/prev highlight** — [search.md](../features/search.md).
-- [x] **Favorites / contacts UI** — Social panel Contacts + Favorites tabs; `VoiceFriendsClient` list/add/set favorite; star toggle on friends/contacts (`social_panel.dart`, `friends_client.dart`) — **Batch 23b**. **QR add friend UI** — my-code + paste profile link (`qr_add_friend_sheet.dart`) — **Batch 26a**; phone-book API stub wired (**Batch 25a**).
-- [ ] **Phone contacts sync — real pipeline** — UI calls `syncPhoneContacts(const [])` → stub snackbar only (`social_panel.dart`); backend + Gateway + `TestComposePhoneSync_live` exist; needs platform contact permission + hash picker (replace empty stub).
+- [x] **Favorites / contacts UI** — Social panel Contacts + Favorites tabs; `VoiceFriendsClient` list/add/set favorite; star toggle on friends/contacts (`social_panel.dart`, `friends_client.dart`) — **Batch 23b**. **QR add friend UI** — my-code + paste profile link (`qr_add_friend_sheet.dart`) — **Batch 26a**. Phone-book sync is explicitly post-alpha/G3 mobile scope; A1/G1 clients hide it and the backend rejects direct calls (`phone_contact_sync_unavailable`).
 - [ ] **QR add-friend — live camera scanner** — Batch 26a ships paste field; l10n implies camera scan. Add `mobile_scanner` (or similar) or narrow copy to paste-only.
 - [x] **Blocked accounts UI** — Social panel Blocked tab; `VoiceFriendsClient` `listBlocked`/`unblockAccount`; gateway `GET/DELETE /api/v1/friends/blocks` — **Batch 24a**.
 - [x] **Outgoing friend request declined label** — `PendingFriendRequest.status` from API; Requests tab shows «Declined» vs «Request pending» for outgoing rows — **Batch 24b**.

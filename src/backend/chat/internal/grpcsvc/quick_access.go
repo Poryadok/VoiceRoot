@@ -29,20 +29,47 @@ func (s *ChatGRPC) ListQuickAccess(ctx context.Context, _ *chatv1.ListQuickAcces
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	items := make([]*chatv1.QuickAccessItem, 0, len(rows))
+	chatIDs := make([]uuid.UUID, 0, len(rows))
+	chatRows := make(map[uuid.UUID]*store.ChatRow, len(rows))
 	for _, row := range rows {
-		item := &chatv1.QuickAccessItem{
-			ChatId:    row.ChatID.String(),
-			SortOrder: row.SortOrder,
-		}
 		chatRow, err := s.DM.FindChatByID(ctx, row.ChatID)
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
-		if chatRow != nil {
-			item.Chat = chatRowToProto(chatRow)
+		if chatRow == nil {
+			// A stored shortcut cannot be safely disclosed when its target cannot
+			// be classified for the deleted-peer lifecycle gate.
+			return nil, status.Error(codes.Unavailable, "quick access availability unavailable")
 		}
-		items = append(items, item)
+		chatIDs = append(chatIDs, row.ChatID)
+		chatRows[row.ChatID] = chatRow
+	}
+	peers, err := s.DM.DMPeerProfileIDs(ctx, profileID, chatIDs)
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "quick access availability unavailable")
+	}
+	classified := make([]*store.ChatRow, 0, len(rows))
+	for _, row := range rows {
+		classified = append(classified, chatRows[row.ChatID])
+	}
+	visibleRows, err := s.filterQuickAccessDeletedPeerDMs(ctx, classified, peers)
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "quick access availability unavailable")
+	}
+	visible := make(map[uuid.UUID]struct{}, len(visibleRows))
+	for _, row := range visibleRows {
+		visible[row.ID] = struct{}{}
+	}
+	items := make([]*chatv1.QuickAccessItem, 0, len(visibleRows))
+	for _, row := range rows {
+		if _, ok := visible[row.ChatID]; !ok {
+			continue
+		}
+		items = append(items, &chatv1.QuickAccessItem{
+			ChatId:    row.ChatID.String(),
+			SortOrder: row.SortOrder,
+			Chat:      chatRowToProto(chatRows[row.ChatID]),
+		})
 	}
 	return &chatv1.ListQuickAccessResponse{Items: items}, nil
 }

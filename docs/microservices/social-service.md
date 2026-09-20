@@ -134,11 +134,14 @@ fresh request ID and JWT ID; incoming identity metadata is never forwarded.
 User/Space verify the signature, exact RPC/request hash/audience, expiry and
 shared Redis replay admission before accessing their stores.
 
-The narrow migration preserves Social's ordinary User `GetProfile` and
-`ListProfileIDsForAccount` lookups. A blanket network deny on User 9090 would break
-friend/contact/account flows, so ordinary privacy methods reject raw Social
-identity at the application boundary while unrelated methods migrate separately.
-This exception does not authorize raw metadata on the protected listeners.
+Social's `GetPrivacySettings`, `GetProfile` and `ListProfileIDsForAccount`
+lookups use the User protected TLS listener with a fresh request-bound RS256
+service credential. The protected listener exposes exactly these three User
+methods to `service:social`; Social has no ordinary User 9090 lookup path.
+Friends, phone contacts and account-level block cascades therefore fail closed
+when signing, TLS, verification, replay admission, or the lookup response is
+unavailable or malformed. This does not authorize raw metadata on either
+listener.
 Deployment and rotation: [DEPLOYMENT.md](../DEPLOYMENT.md#social-privacy-principals).
 
 - **User Service** — получение профилей для списков
