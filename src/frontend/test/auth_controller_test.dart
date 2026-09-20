@@ -191,6 +191,101 @@ void main() {
   });
 
   test(
+    'late email verification response cannot resurrect after logout',
+    () async {
+      final response = Completer<http.Response>();
+      final requested = Completer<void>();
+      final mock = MockClient((req) async {
+        if (req.url.path == '/api/v1/auth/otp/verify') {
+          requested.complete();
+          return response.future;
+        }
+        if (req.url.path == '/api/v1/auth/logout')
+          return http.Response('', 204);
+        return http.Response('not found', 404);
+      });
+      final container = buildContainer(mock: mock);
+      addTearDown(container.dispose);
+      final controller = container.read(authControllerProvider.notifier);
+      controller.state = const AuthState(
+        session: AuthSession(
+          accessToken: 'guest',
+          refreshToken: 'refresh',
+          accountId: 'acc',
+          activeProfileId: 'profile',
+          expiresInSeconds: 900,
+          accountType: 'guest',
+        ),
+        emailVerificationRecoveryState:
+            EmailVerificationRecoveryState.emailPending,
+      );
+      final verify = controller.verifyEmailVerification('123456');
+      await requested.future;
+      await controller.logout();
+      response.complete(
+        http.Response(
+          jsonEncode({
+            'session': {
+              ...(sessionJson()['session'] as Map<String, dynamic>),
+              'account_type': 'regular',
+            },
+          }),
+          200,
+        ),
+      );
+      expect(await verify, 'not_authenticated');
+      expect(container.read(authControllerProvider).session, isNull);
+    },
+  );
+
+  test('concurrent promotion retries share one refresh group', () async {
+    final response = Completer<http.Response>();
+    final requested = Completer<void>();
+    var refreshes = 0;
+    final mock = MockClient((req) async {
+      if (req.url.path == '/api/v1/auth/refresh') {
+        refreshes++;
+        requested.complete();
+        return response.future;
+      }
+      return http.Response('not found', 404);
+    });
+    final container = buildContainer(mock: mock);
+    addTearDown(container.dispose);
+    final controller = container.read(authControllerProvider.notifier);
+    controller.state = const AuthState(
+      session: AuthSession(
+        accessToken: 'guest',
+        refreshToken: 'refresh',
+        accountId: 'acc',
+        activeProfileId: 'profile',
+        expiresInSeconds: 900,
+        accountType: 'guest',
+      ),
+      emailVerificationRecoveryState:
+          EmailVerificationRecoveryState.promotionPending,
+    );
+    final first = controller.resumeEmailVerificationPromotion();
+    final second = controller.resumeEmailVerificationPromotion();
+    await requested.future;
+    expect(refreshes, 1);
+    response.complete(
+      http.Response(
+        jsonEncode({
+          'session': {
+            ...(sessionJson()['session'] as Map<String, dynamic>),
+            'account_type': 'regular',
+          },
+        }),
+        200,
+      ),
+    );
+    expect(await first, isNull);
+    expect(await second, isNull);
+    expect(refreshes, 1);
+  });
+
+  test(
     'restore resumes a session-bound email verification without resend or OTP replay',
     () async {
       final storage = InMemoryAuthSessionStorage();
