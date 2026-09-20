@@ -439,7 +439,7 @@ func TestGetFileURL_ThumbnailUsesThumbnailKeyWithoutDownloadEvent(t *testing.T) 
 	require.Empty(t, events.downloaded)
 }
 
-func TestCheckQuota_PremiumLimit(t *testing.T) {
+func TestCheckQuota_ForgedPremiumMetadataUsesFreeLimit(t *testing.T) {
 	ctx := context.Background()
 	pool := startFileGatePostgres(t, ctx)
 	svc := New(Deps{Files: store.NewFilesStore(pool)})
@@ -452,7 +452,7 @@ func TestCheckQuota_PremiumLimit(t *testing.T) {
 
 	resp, err := client.CheckQuota(authed, &filev1.CheckQuotaRequest{})
 	require.NoError(t, err)
-	require.Equal(t, int64(r2file.MaxPremiumFileBytes), resp.GetQuotaResponse().GetBytesLimit())
+	require.Equal(t, int64(r2file.MaxFreeFileBytes), resp.GetQuotaResponse().GetBytesLimit())
 }
 
 func TestListFiles_FilterByChat(t *testing.T) {

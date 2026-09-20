@@ -134,6 +134,8 @@ const ResolveAccountIDForProfileRequest$json = {
   '1': 'ResolveAccountIDForProfileRequest',
   '2': [
     {'1': 'profile_id', '3': 1, '4': 1, '5': 9, '10': 'profileId'},
+    {'1': 'actor_profile_id', '3': 2, '4': 1, '5': 9, '10': 'actorProfileId'},
+    {'1': 'operation_id', '3': 3, '4': 1, '5': 9, '10': 'operationId'},
   ],
 };
 
@@ -141,7 +143,8 @@ const ResolveAccountIDForProfileRequest$json = {
 final $typed_data.Uint8List resolveAccountIDForProfileRequestDescriptor =
     $convert.base64Decode(
         'CiFSZXNvbHZlQWNjb3VudElERm9yUHJvZmlsZVJlcXVlc3QSHQoKcHJvZmlsZV9pZBgBIAEoCV'
-        'IJcHJvZmlsZUlk');
+        'IJcHJvZmlsZUlkEigKEGFjdG9yX3Byb2ZpbGVfaWQYAiABKAlSDmFjdG9yUHJvZmlsZUlkEiEK'
+        'DG9wZXJhdGlvbl9pZBgDIAEoCVILb3BlcmF0aW9uSWQ=');
 
 @$core.Deprecated('Use resolveAccountIDForProfileResponseDescriptor instead')
 const ResolveAccountIDForProfileResponse$json = {

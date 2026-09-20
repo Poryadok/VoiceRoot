@@ -105,6 +105,10 @@ message ListProfileIDsForAccountResponse {
 
 message ResolveAccountIDForProfileRequest {
   string profile_id = 1;
+  // The File retention-owner lookup must prove the domain actor it is binding;
+  // it is deliberately part of the signed request hash.
+  string actor_profile_id = 2;
+  string operation_id = 3;
 }
 
 message ResolveAccountIDForProfileResponse {

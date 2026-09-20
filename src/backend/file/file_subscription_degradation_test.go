@@ -32,3 +32,22 @@ func TestRequestUpload_NoSubscriptionTierUsesFreeLimit(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
+
+// A client-controlled transport header is not an entitlement. Until File has
+// a verified local projection, a Premium-looking value must not buy a larger
+// upload or remove the free retention deadline.
+func TestRequestUpload_ForgedPremiumTierUsesFreeLimit(t *testing.T) {
+	ctx := context.Background()
+	pool := startFilePostgres(t, ctx)
+	client := startFileGRPC(t, pool, &recordingPresigner{})
+	profileID := uuid.New()
+	authed := withFileProfileAndTier(ctx, uuid.New(), profileID, "premium")
+
+	_, err := client.RequestUpload(authed, &filev1.RequestUploadRequest{
+		OriginalName: "forged-premium.bin",
+		MimeType:     "application/octet-stream",
+		SizeBytes:    upload51MiBNoTier,
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}
