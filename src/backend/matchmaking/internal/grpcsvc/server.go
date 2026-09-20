@@ -32,6 +32,7 @@ type MatchmakingGRPC struct {
 	Queue                 *queue.RedisQueue
 	Events                mmevents.Publisher
 	Squad                 SquadProvisioner
+	SquadCleanup          SquadCleanup
 	Logger                *slog.Logger
 	RatingPrivacy         MmRatingPrivacyChecker
 	RatingFriends         MmRatingProfileFriendChecker
