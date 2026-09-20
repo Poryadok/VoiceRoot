@@ -112,12 +112,14 @@ requires a later release after all writers send the field.
 
 ### Social privacy principal boundary
 
-The dedicated TLS listener (9091) registers only `GetPrivacySettings`; it
-requires a verified request-bound `service:social` credential and shared Redis
-replay admission before store access. The domain entrypoint verifies the Social
-identity and binding again. On ordinary 9090, a raw Social caller marker is
-rejected for this method. Existing `GetProfile` and `ListProfileIDsForAccount`
-callers retain their separate ordinary paths during the narrow migration.
+The dedicated TLS listener (9091) registers only `GetPrivacySettings`,
+`GetProfile` and `ListProfileIDsForAccount`; each requires a verified
+request-bound `service:social` credential and shared Redis replay admission
+before store access. The domain entrypoint verifies the Social identity and
+exact RPC/request binding again. On ordinary 9090, a raw Social caller marker
+is rejected and Social has no ordinary path for these lookups. The protected
+`GetProfile` retains its public/viewerless projection; the protected account
+lookup returns only profile IDs for Social's account-level block cascade.
 Configuration and rotation: [DEPLOYMENT.md](../DEPLOYMENT.md#social-privacy-principals).
 
 ```

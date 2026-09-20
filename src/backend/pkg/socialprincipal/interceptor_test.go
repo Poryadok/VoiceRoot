@@ -103,8 +103,13 @@ func TestOrdinaryRejectsSocialOnlyOnPrivacy(t *testing.T) {
 			require.Equal(t, codes.Unauthenticated, status.Code(err))
 			require.Zero(t, calls)
 			_, err = OrdinaryUnaryInterceptor(target)(ctx, nil, &grpc.UnaryServerInfo{FullMethod: "/voice.user.v1.UserService/GetProfile"}, handler)
-			require.NoError(t, err)
-			require.Equal(t, 1, calls)
+			if target == "user" {
+				require.Equal(t, codes.Unauthenticated, status.Code(err))
+				require.Zero(t, calls)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, 1, calls)
+			}
 		}
 	}
 }
@@ -119,10 +124,12 @@ func TestCredentialTemporalAndMethodScope(t *testing.T) {
 		name, method string
 		offset       time.Duration
 		want         codes.Code
+		called       bool
 	}{
-		{"expired", Method("user"), -time.Minute, codes.Unauthenticated},
-		{"future", Method("user"), time.Minute, codes.Unauthenticated},
-		{"valid forbidden method", "/voice.user.v1.UserService/GetProfile", 0, codes.PermissionDenied},
+		{"expired", Method("user"), -time.Minute, codes.Unauthenticated, false},
+		{"future", Method("user"), time.Minute, codes.Unauthenticated, false},
+		{"valid profile lookup", "/voice.user.v1.UserService/GetProfile", 0, codes.OK, true},
+		{"valid forbidden method", "/voice.user.v1.UserService/GetProfiles", 0, codes.PermissionDenied, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "social", KeyID: "current", PrivateKey: key, Clock: func() time.Time { return time.Now().Add(tc.offset) }})
@@ -134,7 +141,7 @@ func TestCredentialTemporalAndMethodScope(t *testing.T) {
 			called := false
 			_, err = StrictUnaryInterceptor(verifier)(ctx, req, &grpc.UnaryServerInfo{FullMethod: tc.method}, func(context.Context, any) (any, error) { called = true; return req, nil })
 			require.Equal(t, tc.want, status.Code(err))
-			require.False(t, called)
+			require.Equal(t, tc.called, called)
 		})
 	}
 }

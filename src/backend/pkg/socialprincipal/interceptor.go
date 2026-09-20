@@ -26,6 +26,24 @@ func Method(target string) string {
 	return ""
 }
 
+// AllowsMethod is the narrow Social contract on a protected listener.  New
+// methods must be listed here deliberately; the listener never exposes the
+// whole service merely because it has a verified Social principal.
+func AllowsMethod(target, method string) bool {
+	switch target {
+	case "user":
+		switch method {
+		case "/voice.user.v1.UserService/GetPrivacySettings",
+			"/voice.user.v1.UserService/GetProfile",
+			"/voice.user.v1.UserService/ListProfileIDsForAccount":
+			return true
+		}
+	case "space":
+		return method == "/voice.space.v1.SpaceService/AreCoMembers"
+	}
+	return false
+}
+
 type Verifier struct {
 	Target  string
 	Issuers map[string]bool
@@ -94,7 +112,7 @@ func StrictUnaryInterceptor(verifier PrincipalVerifier) grpc.UnaryServerIntercep
 			}
 			return nil, status.Error(codes.Unauthenticated, "invalid principal")
 		}
-		if Method(verified.Audience) == "" || info.FullMethod != Method(verified.Audience) || verified.Kind != "service" || verified.Issuer != "social" || verified.Subject != "service:social" {
+		if !AllowsMethod(verified.Audience, info.FullMethod) || verified.Kind != "service" || verified.Issuer != "social" || verified.Subject != "service:social" {
 			return nil, status.Error(codes.PermissionDenied, "Social principal required")
 		}
 		return handler(principal.WithVerified(ctx, verified), req)
@@ -104,6 +122,13 @@ func StrictUnaryInterceptor(verifier PrincipalVerifier) grpc.UnaryServerIntercep
 // RequireSocial is the domain defense for a protected listener. Its context
 // value is server-owned and its request binding is checked again before storage.
 func RequireSocial(ctx context.Context, target string, req proto.Message) error {
+	return RequireSocialForMethod(ctx, target, Method(target), req)
+}
+
+// RequireSocialForMethod repeats the exact method binding at the domain
+// boundary. It is intentionally explicit so protected User lookups cannot be
+// authorised by a credential issued for a different Social RPC.
+func RequireSocialForMethod(ctx context.Context, target, method string, req proto.Message) error {
 	verified, ok := principal.FromContext(ctx)
 	if !ok {
 		return status.Error(codes.Unauthenticated, "verified Social principal required")
@@ -112,7 +137,7 @@ func RequireSocial(ctx context.Context, target string, req proto.Message) error 
 		return status.Error(codes.PermissionDenied, "Social principal required")
 	}
 	hash, err := principal.RequestHash(req)
-	if err != nil || verified.Audience != target || verified.RPC != Method(target) || verified.RequestHash != hash || verified.AccountID != "" || verified.ProfileID != "" || verified.SessionEpoch != 0 {
+	if err != nil || !AllowsMethod(target, method) || verified.Audience != target || verified.RPC != method || verified.RequestHash != hash || verified.AccountID != "" || verified.ProfileID != "" || verified.SessionEpoch != 0 {
 		return status.Error(codes.Unauthenticated, "invalid principal binding")
 	}
 	return nil
@@ -142,7 +167,7 @@ func HasRawSocial(ctx context.Context) bool {
 
 func OrdinaryUnaryInterceptor(target string) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if info.FullMethod == Method(target) && HasRawSocial(ctx) {
+		if AllowsMethod(target, info.FullMethod) && HasRawSocial(ctx) {
 			return nil, status.Error(codes.Unauthenticated, "raw Social identity is forbidden")
 		}
 		return handler(ctx, req)
