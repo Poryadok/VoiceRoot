@@ -104,6 +104,10 @@ func (s *UserGRPC) ListProfileIDsForAccount(ctx context.Context, req *userv1.Lis
 	if !authctx.IsInternalService(ctx) {
 		return nil, status.Error(codes.PermissionDenied, "internal only")
 	}
+	return s.listProfileIDsForAccount(ctx, req)
+}
+
+func (s *UserGRPC) listProfileIDsForAccount(ctx context.Context, req *userv1.ListProfileIDsForAccountRequest) (*userv1.ListProfileIDsForAccountResponse, error) {
 	if s.Profiles == nil {
 		return nil, status.Error(codes.FailedPrecondition, "profile store not configured")
 	}
