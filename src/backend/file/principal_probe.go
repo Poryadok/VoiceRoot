@@ -45,7 +45,7 @@ func runFilePrincipalProbe(ctx context.Context, runtime *filePrincipalRuntime) e
 	client := userv1.NewUserServiceClient(runtime.conn)
 	_, err = client.ResolveAccountIDForProfile(callCtx, req, grpc.WaitForReady(false))
 	if status.Code(err) != codes.NotFound {
-		return fmt.Errorf("File principal first resolver call = %s, want NotFound", status.Code(err))
+		return fmt.Errorf("File principal first resolver call = %s (%v), want NotFound", status.Code(err), err)
 	}
 	_, err = client.ResolveAccountIDForProfile(callCtx, req, grpc.WaitForReady(false))
 	if status.Code(err) != codes.Unauthenticated {
