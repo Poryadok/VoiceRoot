@@ -18,6 +18,8 @@ import '../../state/auth_providers.dart';
 import '../../state/e2e_providers.dart';
 import '../../state/call_providers.dart';
 import '../../state/chat_providers.dart';
+import '../../state/chat_draft_providers.dart';
+import '../../backend/chat_draft_storage.dart';
 import '../../state/connectivity_providers.dart';
 import '../../state/gateway_providers.dart';
 import '../../state/presence_providers.dart';
@@ -133,6 +135,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   var _inChatSearchOpen = false;
   var _highlightedMessageId = null as String?;
   var _liveMessageAnnouncement = '';
+  ChatDraftKey? _draftKey;
   final _inChatSearchController = TextEditingController();
 
   @override
@@ -150,6 +153,15 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     _scrollController.dispose();
     _inChatSearchController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant ChatRoomPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.chatId != widget.chatId) {
+      _draftKey = null;
+      _composer.clear();
+    }
   }
 
   String _roomErrorText(AppLocalizations l10n, String raw) {
@@ -206,6 +218,25 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final activeId = ref.watch(authControllerProvider).activeProfileId;
+    final draftKey = activeId == null
+        ? null
+        : ChatDraftKey(profileId: activeId, chatId: widget.chatId);
+    if (_draftKey != draftKey) {
+      _draftKey = draftKey;
+      _composer.clear();
+    }
+    if (draftKey != null) {
+      ref.listen<AsyncValue<String>>(chatDraftProvider(draftKey), (_, next) {
+        final restored = next.valueOrNull;
+        if (restored != null && _composer.text != restored) {
+          _composer.value = TextEditingValue(
+            text: restored,
+            selection: TextSelection.collapsed(offset: restored.length),
+          );
+        }
+      });
+      ref.watch(chatDraftProvider(draftKey));
+    }
     final controllerRoom = ref.watch(chatRoomControllerProvider(widget.chatId));
     final historyBelongsToActiveProfile =
         controllerRoom.historyProfileId == activeId;
@@ -780,6 +811,10 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                       isDense: true,
                     ),
                     onChanged: (value) {
+                      final key = _draftKey;
+                      if (key != null) {
+                        ref.read(chatDraftProvider(key).notifier).update(value);
+                      }
                       final hub = ref.read(realtimeHubProvider);
                       if (value.trim().isEmpty) {
                         hub.typingStop(widget.chatId);
@@ -994,6 +1029,10 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       );
     } else if (err == null) {
       _composer.clear();
+      final key = _draftKey;
+      if (key != null) {
+        await ref.read(chatDraftProvider(key).notifier).clear();
+      }
       if (replyTarget != null) {
         ref.read(chatReplyTargetProvider(widget.chatId).notifier).state = null;
       }
@@ -1100,6 +1139,10 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       if (!mounted || _isDmPeerDeleted()) return;
       if (err == null) {
         _composer.clear();
+        final key = _draftKey;
+        if (key != null) {
+          await ref.read(chatDraftProvider(key).notifier).clear();
+        }
       }
       _refocusComposer();
     } finally {
