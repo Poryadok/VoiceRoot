@@ -9,6 +9,7 @@ abstract class WindowsDesktopHost {
   void setListener(WindowsDesktopHostListener? listener);
 
   Future<void> setTrayState({
+    required bool voiceActive,
     required bool muted,
     required bool deafened,
     required String muteLabel,
@@ -95,6 +96,7 @@ class MethodChannelWindowsDesktopHost implements WindowsDesktopHost {
 
   @override
   Future<void> setTrayState({
+    required bool voiceActive,
     required bool muted,
     required bool deafened,
     required String muteLabel,
@@ -105,6 +107,7 @@ class MethodChannelWindowsDesktopHost implements WindowsDesktopHost {
   }) async {
     await _channel.invokeMethod<void>('setTrayState', {
       'muted': muted,
+      'voiceActive': voiceActive,
       'deafened': deafened,
       'muteLabel': muteLabel,
       'unmuteLabel': unmuteLabel,
@@ -153,6 +156,9 @@ class RecordingWindowsDesktopHost implements WindowsDesktopHost {
   int registerHotkeyCalls = 0;
   int unregisterHotkeyCalls = 0;
   int? lastVkCode;
+  bool? lastVoiceActive;
+  bool? lastMuted;
+  bool? lastDeafened;
 
   @override
   void setListener(WindowsDesktopHostListener? next) {
@@ -179,6 +185,7 @@ class RecordingWindowsDesktopHost implements WindowsDesktopHost {
 
   @override
   Future<void> setTrayState({
+    required bool voiceActive,
     required bool muted,
     required bool deafened,
     required String muteLabel,
@@ -186,7 +193,11 @@ class RecordingWindowsDesktopHost implements WindowsDesktopHost {
     required String deafenLabel,
     required String undeafenLabel,
     required String quitLabel,
-  }) async {}
+  }) async {
+    lastVoiceActive = voiceActive;
+    lastMuted = muted;
+    lastDeafened = deafened;
+  }
 
   @override
   Future<void> registerPttHotkey({
@@ -224,6 +235,7 @@ class NoopWindowsDesktopHost implements WindowsDesktopHost {
 
   @override
   Future<void> setTrayState({
+    required bool voiceActive,
     required bool muted,
     required bool deafened,
     required String muteLabel,

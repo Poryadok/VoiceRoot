@@ -71,6 +71,7 @@ class WindowsDesktopLifecycle {
     final call = _ref.read(callControllerProvider);
     final input = _ref.read(voiceInputSettingsProvider);
     await host.setTrayState(
+      voiceActive: call.hasBoundVoiceSession,
       muted: call.isMuted,
       deafened: call.isSpeakerMuted,
       muteLabel: l10n?.callMute ?? 'Mute',
@@ -117,13 +118,17 @@ class WindowsDesktopLifecycle {
       case WindowsDesktopHostEventKind.ptt:
         unawaited(call.setPttHeld(event.pttHeld ?? false));
       case WindowsDesktopHostEventKind.trayMute:
-        unawaited(call.setMuted(!_ref.read(callControllerProvider).isMuted));
+        if (_ref.read(callControllerProvider).hasBoundVoiceSession) {
+          unawaited(call.setMuted(!_ref.read(callControllerProvider).isMuted));
+        }
       case WindowsDesktopHostEventKind.trayDeafen:
-        unawaited(
-          call.setSpeakerMuted(
-            !_ref.read(callControllerProvider).isSpeakerMuted,
-          ),
-        );
+        if (_ref.read(callControllerProvider).hasBoundVoiceSession) {
+          unawaited(
+            call.setSpeakerMuted(
+              !_ref.read(callControllerProvider).isSpeakerMuted,
+            ),
+          );
+        }
       case WindowsDesktopHostEventKind.trayQuit:
         unawaited(_ref.read(windowsDesktopHostProvider).quit());
       case WindowsDesktopHostEventKind.trayShow:

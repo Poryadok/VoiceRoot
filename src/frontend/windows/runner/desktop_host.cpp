@@ -142,6 +142,7 @@ void DesktopHost::HandleMethodCall(
 void DesktopHost::UpdateTrayLabels(const flutter::EncodableMap& args) {
   muted_ = BoolArg(args, "muted");
   deafened_ = BoolArg(args, "deafened");
+  voice_active_ = BoolArg(args, "voiceActive");
   const auto mute = StringArg(args, "muteLabel");
   const auto unmute = StringArg(args, "unmuteLabel");
   const auto deafen = StringArg(args, "deafenLabel");
@@ -196,9 +197,12 @@ void DesktopHost::ShowTrayMenu() {
   POINT cursor;
   GetCursorPos(&cursor);
   HMENU menu = CreatePopupMenu();
-  AppendMenu(menu, MF_STRING | (muted_ ? MF_CHECKED : MF_UNCHECKED), kTrayMuteId,
+  const UINT voice_menu_flags =
+      MF_STRING | (voice_active_ ? MF_ENABLED : MF_GRAYED);
+  AppendMenu(menu, voice_menu_flags | (muted_ ? MF_CHECKED : MF_UNCHECKED),
+             kTrayMuteId,
              muted_ ? unmute_label_.c_str() : mute_label_.c_str());
-  AppendMenu(menu, MF_STRING | (deafened_ ? MF_CHECKED : MF_UNCHECKED),
+  AppendMenu(menu, voice_menu_flags | (deafened_ ? MF_CHECKED : MF_UNCHECKED),
              kTrayDeafenId,
              deafened_ ? undeafen_label_.c_str() : deafen_label_.c_str());
   AppendMenu(menu, MF_SEPARATOR, 0, nullptr);
@@ -321,7 +325,9 @@ LRESULT DesktopHost::HandleMessage(HWND hwnd, UINT message, WPARAM wparam,
         Emit("trayDeafen", flutter::EncodableValue());
         return 0;
       case kTrayQuitId:
-        Emit("trayQuit", flutter::EncodableValue());
+        // Quit must remain available even when the Dart isolate cannot process
+        // a method-channel callback (for example, while it is shutting down).
+        QuitApp();
         return 0;
       default:
         break;
