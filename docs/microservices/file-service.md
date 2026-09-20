@@ -10,6 +10,24 @@
 
 **Scope:** все медиа проходят через этот сервис. Аватар профиля может использовать R2 presigned в контуре User до полного развёртывания File Service — см. [user-profile.md](../features/user-profile.md), [PLAN.md](../PLAN.md).
 
+## File → User retention-owner principal
+
+File signs short-lived request-bound `service:file` credentials only for
+`ResolveAccountIDForProfile`, with issuer/audience `file`, and calls User's
+dedicated TLS listener (normally `voice-user:9092`). Configure exactly two
+distinct RSA PKCS#8 keys (at least 2048 bits) in
+`FILE_PRINCIPAL_SIGNING_KEYS_DIR`, select one with
+`FILE_PRINCIPAL_ACTIVE_KID`, and expose both public keys over TLS with
+`FILE_PRINCIPAL_JWKS_LISTEN`, `FILE_PRINCIPAL_JWKS_TLS_CERT_FILE` and
+`FILE_PRINCIPAL_JWKS_TLS_KEY_FILE`. The User client requires all of
+`USER_FILE_PRINCIPAL_GRPC_ADDR`, `USER_FILE_PRINCIPAL_TLS_CA_FILE`, and
+`USER_FILE_PRINCIPAL_TLS_SERVER_NAME`; retries are disabled and TLS is at least
+1.2. No setting reuses the inbound Story verifier namespace.
+
+For rotation publish current and next public keys first, wait through the
+credential hard-expiry, then change the active key. Retain a retired public key
+for at least 35 seconds (30-second credential lifetime plus 5-second skew).
+
 ## Ответственность
 
 - Upload файлов (presigned URL → R2)

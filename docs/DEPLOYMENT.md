@@ -532,3 +532,25 @@ Rotation sequence (all Social replicas must publish the same key set):
    proof before any later activation. An unavailable or invalid refresh does
    not replace the last good complete set; after two minutes without a valid
    refresh requests fail closed.
+## File → User protected retention-owner contract
+
+Provision `voice-file-principal-signing` with `current.pem`, `next.pem` and
+`active-kid`; both private keys are distinct unencrypted RSA PKCS#8 keys of at
+least 2048 bits. Provision `voice-file-principal-tls` (SAN `voice-file`) and
+the User listener certificate (SAN `voice-user`) plus the shared CA. File mounts
+its signing/TLS/CA material read-only and publishes HTTPS JWKS on 8443; User
+serves the File-only resolver on 9092. Neither port is host-published.
+
+User's issuer map contains both the retained Social URL and
+`"file":"https://voice-file:8443/.well-known/jwks.json"`; File calls only
+`voice-user:9092` with the CA and exact `voice-user` server name. Replay Redis
+is shared but uses the target-specific User File setting. NetworkPolicy permits
+only File→User:9092 and User→File:8443, while retaining Social's existing
+routes. Before switching active key, publish current+next keys, wait the
+credential hard expiry, then retain the retired public key for at least 35 s.
+
+# Object storage
+
+See [Object storage operations](OBJECT_STORAGE.md) for the self-hosted MinIO
+default, pinned image/mirror policy, k3s prerequisites, backup/restore, and the
+optional S3-provider migration procedure.

@@ -49,10 +49,34 @@ func AllowsMethod(target, method string) bool {
 }
 
 type Verifier struct {
-	Target  string
-	Issuers map[string]bool
-	Resolve principal.KeyResolver
-	Replay  principal.ReplayGuard
+	Target     string
+	Issuers    map[string]bool
+	Resolve    principal.KeyResolver
+	Replay     principal.ReplayGuard
+	Diagnostic func(VerificationReason)
+}
+
+// VerificationReason is an internal-only rejection classification. It is
+// deliberately never put into a gRPC status, response header, or trailer.
+type VerificationReason string
+
+const (
+	ReasonMetadata     VerificationReason = "metadata"
+	ReasonIssuer       VerificationReason = "issuer"
+	ReasonJWKSTLS      VerificationReason = "jwks_tls"
+	ReasonJWKSDocument VerificationReason = "jwks_document"
+	ReasonUnknownKID   VerificationReason = "unknown_kid"
+	ReasonSignature    VerificationReason = "signature"
+	ReasonBinding      VerificationReason = "binding"
+	ReasonTemporal     VerificationReason = "temporal"
+	ReasonReplay       VerificationReason = "replay"
+	ReasonUnknown      VerificationReason = "unknown"
+)
+
+func (v *Verifier) diagnose(reason VerificationReason) {
+	if v != nil && v.Diagnostic != nil {
+		v.Diagnostic(reason)
+	}
 }
 
 func (v *Verifier) Verify(ctx context.Context, token, method, requestID, hash string) (principal.Principal, error) {
@@ -66,6 +90,7 @@ func (v *Verifier) Verify(ctx context.Context, token, method, requestID, hash st
 	}
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
+		v.diagnose(classifyVerificationError(err))
 		return principal.Principal{}, err
 	}
 	var claim struct {
@@ -87,6 +112,33 @@ func (v *Verifier) Verify(ctx context.Context, token, method, requestID, hash st
 	return verified, nil
 }
 
+func classifyVerificationError(err error) VerificationReason {
+	if err == nil {
+		return ReasonUnknown
+	}
+	message := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(message, "untrusted issuer") || strings.Contains(message, "issuer mismatch"):
+		return ReasonIssuer
+	case strings.Contains(message, "jwks kid is unknown") || strings.Contains(message, "no key for credential kid") || strings.Contains(message, "kid refresh"):
+		return ReasonUnknownKID
+	case strings.Contains(message, "certificate") || strings.Contains(message, "x509") || strings.Contains(message, "tls:") || strings.Contains(message, "record header"):
+		return ReasonJWKSTLS
+	case strings.Contains(message, "jwks"):
+		return ReasonJWKSDocument
+	case strings.Contains(message, "verification") || strings.Contains(message, "signature"):
+		return ReasonSignature
+	case strings.Contains(message, "binding") || strings.Contains(message, "service subject") || strings.Contains(message, "user authority"):
+		return ReasonBinding
+	case strings.Contains(message, "temporal"):
+		return ReasonTemporal
+	case strings.Contains(message, "replay"):
+		return ReasonReplay
+	default:
+		return ReasonUnknown
+	}
+}
+
 type PrincipalVerifier interface {
 	Verify(context.Context, string, string, string, string) (principal.Principal, error)
 }
@@ -95,6 +147,9 @@ func StrictUnaryInterceptor(verifier PrincipalVerifier) grpc.UnaryServerIntercep
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		transport, err := principal.IncomingMetadata(ctx)
 		if err != nil {
+			if typed, ok := verifier.(*Verifier); ok {
+				typed.diagnose(ReasonMetadata)
+			}
 			return nil, status.Error(codes.Unauthenticated, "invalid principal")
 		}
 		message, ok := req.(proto.Message)
@@ -116,7 +171,7 @@ func StrictUnaryInterceptor(verifier PrincipalVerifier) grpc.UnaryServerIntercep
 			}
 			return nil, status.Error(codes.Unauthenticated, "invalid principal")
 		}
-	if !AllowsMethod(verified.Audience, info.FullMethod) || verified.Kind != "service" || verified.Issuer != expectedIssuer(verified.Audience) || verified.Subject != "service:"+expectedIssuer(verified.Audience) {
+		if !AllowsMethod(verified.Audience, info.FullMethod) || verified.Kind != "service" || verified.Issuer != expectedIssuer(verified.Audience) || verified.Subject != "service:"+expectedIssuer(verified.Audience) {
 			return nil, status.Error(codes.PermissionDenied, "Social principal required")
 		}
 		return handler(principal.WithVerified(ctx, verified), req)

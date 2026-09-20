@@ -57,6 +57,28 @@ func waitForGRPCReady(ctx context.Context, conn *grpc.ClientConn) error {
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	filePrincipal, err := loadFilePrincipalRuntime()
+	if err != nil {
+		log.Fatalf("file-to-user principal runtime: %v", err)
+	}
+	if filePrincipal != nil {
+		defer filePrincipal.Close()
+		jwksListener, listenErr := net.Listen("tcp", filePrincipal.JWKS.Addr)
+		if listenErr != nil {
+			log.Fatalf("file principal JWKS listen: %v", listenErr)
+		}
+		go func() {
+			if serveErr := filePrincipal.JWKS.ServeTLS(jwksListener, "", ""); serveErr != nil && serveErr != http.ErrServerClosed {
+				log.Fatalf("file principal JWKS serve: %v", serveErr)
+			}
+		}()
+		if os.Getenv("FILE_PRINCIPAL_PROBE") == "1" {
+			if probeErr := runFilePrincipalProbe(context.Background(), filePrincipal); probeErr != nil {
+				log.Fatalf("file principal probe: %v", probeErr)
+			}
+			return
+		}
+	}
 	principalConfig, principalEnabled, err := principalruntime.LoadFromEnv()
 	if err != nil {
 		log.Fatalf("file principal config: %v", err)

@@ -53,7 +53,12 @@ scale_auth_down_if_needed() {
 
 scale_auth_down_if_needed
 
+bash "${ROOT}/scripts/staging/check-social-principal-secrets.sh"
 render "${MANIFEST_DIR}/services.yaml" | kubectl apply -f -
+sed "s|__K_NAMESPACE__|${NS}|g" \
+  "${ROOT}/deploy/templates/network-policy-social-privacy-principal.yaml" | kubectl apply -f -
+sed "s|__K_NAMESPACE__|${NS}|g" \
+  "${ROOT}/deploy/templates/network-policy-file-user-principal.yaml" | kubectl apply -f -
 render "${MANIFEST_DIR}/gateway-deployment.yaml" | kubectl apply -f -
 
 if auth_pre_scale_needed; then

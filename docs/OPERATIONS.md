@@ -218,3 +218,10 @@ past legacy lifecycle events. A missing method, row, participant or receipt is
 never empty success. Physical R2 completion is monitored independently after
 durable File GC handoff. Rollback migrations refuse while permanent/unexpired
 evidence exists.
+# Object storage
+
+Operate the MinIO StatefulSet and its PVC as durable infrastructure. Snapshot
+the PVC and retain the associated external secret before upgrades or provider
+migrations; validate restore and attachment download/delete access in an
+isolated environment. The non-destructive migration and registry bootstrap
+procedure is in [Object storage operations](OBJECT_STORAGE.md).

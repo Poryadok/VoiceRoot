@@ -838,6 +838,9 @@ func (s *FileGRPC) fileAccessibleByLegacyTx(ctx context.Context, tx pgx.Tx, file
 }
 
 func (s *FileGRPC) ensureFileAccess(ctx context.Context, row store.FileRow, profileID uuid.UUID) error {
+	if row.Status == "deleted" {
+		return status.Error(codes.FailedPrecondition, "file is deleted")
+	}
 	if row.UploaderProfileID == profileID {
 		return nil
 	}

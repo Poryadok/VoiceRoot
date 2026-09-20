@@ -404,9 +404,17 @@ func TestConfirmUploadMetadataListQuotaAndDelete(t *testing.T) {
 	require.Equal(t, int64(1024), quota.GetQuotaResponse().GetBytesUsed())
 	require.Equal(t, int64(freeFileLimitBytes), quota.GetQuotaResponse().GetBytesLimit())
 
+	unauthorized := withFileProfile(ctx, uuid.New(), uuid.New())
+	_, err = client.DeleteFile(unauthorized, &filev1.DeleteFileRequest{FileId: fileID})
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+
 	_, err = client.DeleteFile(authed, &filev1.DeleteFileRequest{FileId: fileID})
 	require.NoError(t, err)
 	_, err = client.GetFileURL(authed, &filev1.GetFileURLRequest{FileId: fileID})
+	require.Error(t, err)
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	_, err = client.GetFileMetadata(authed, &filev1.GetFileMetadataRequest{FileId: fileID})
 	require.Error(t, err)
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))
 }

@@ -122,6 +122,17 @@ is rejected and Social has no ordinary path for these lookups. The protected
 lookup returns only profile IDs for Social's account-level block cascade.
 Configuration and rotation: [DEPLOYMENT.md](../DEPLOYMENT.md#social-privacy-principals).
 
+### File retention-owner principal boundary
+
+File reaches `ResolveAccountIDForProfile` only through the separate TLS listener
+on `USER_FILE_PRINCIPAL_GRPC_LISTEN` (default `:9092`). It admits only issuer
+`file`, audience `file`, and the exact request-bound resolver RPC; no ordinary
+9090 caller and no Social principal receives this authority. Activation needs
+the complete `USER_FILE_PRINCIPAL_TLS_CERT_FILE`,
+`USER_FILE_PRINCIPAL_TLS_KEY_FILE`, and
+`USER_FILE_PRINCIPAL_REPLAY_REDIS_ADDR` set plus the `file` HTTPS entry in
+`S2S_JWKS_URLS_JSON`; any explicit partial File configuration fails startup.
+
 ```
 profiles
 ├── id (UUID)

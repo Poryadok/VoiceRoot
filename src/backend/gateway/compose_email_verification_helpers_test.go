@@ -22,6 +22,21 @@ func TestComposeMailStubBaseURL_UsesExplicitURLThenIsolatedPort(t *testing.T) {
 
 func TestLiveComposeRateLimitPatterns_ClearOTPBucket(t *testing.T) {
 	require.Contains(t, liveComposeRateLimitPatterns, "ratelimit:OTP:*")
+	require.Contains(t, liveComposeRateLimitPatterns, "auth:otp:*")
+}
+
+func TestLiveComposeRedisArgs_UsesIsolatedProjectWhenSet(t *testing.T) {
+	t.Setenv("COMPOSE_PROJECT_NAME", "voice-a1-file-restart-proof")
+	require.Equal(t,
+		[]string{"compose", "--project-name", "voice-a1-file-restart-proof", "exec", "-T", "redis", "redis-cli", "DEL", "key"},
+		liveComposeRedisArgs("DEL", "key"))
+}
+
+func TestLiveComposeRedisArgs_UsesDefaultProjectWhenUnset(t *testing.T) {
+	t.Setenv("COMPOSE_PROJECT_NAME", "")
+	require.Equal(t,
+		[]string{"compose", "exec", "-T", "redis", "redis-cli", "DEL", "key"},
+		liveComposeRedisArgs("DEL", "key"))
 }
 
 func TestWaitComposeVerificationCode_PollsRecipientScopedMail(t *testing.T) {

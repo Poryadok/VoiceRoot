@@ -123,3 +123,61 @@ func TestSocialPrivacyComposeKeepsSigningKeysIssuerOwned(t *testing.T) {
 		}
 	}
 }
+
+func TestFileUserPrincipalRollout_DeclaresOnlyDedicatedPortsAndTrust(t *testing.T) {
+	root := filepath.Clean(filepath.Join("..", "..", "..", ".."))
+	for _, environment := range []string{"staging", "prod"} {
+		data, err := os.ReadFile(filepath.Join(root, "deploy", environment, "services.yaml"))
+		require.NoError(t, err)
+		manifest := string(data)
+		for _, required := range []string{
+			"USER_FILE_PRINCIPAL_GRPC_LISTEN", "USER_FILE_PRINCIPAL_REPLAY_REDIS_ADDR",
+			"FILE_PRINCIPAL_SIGNING_KEYS_DIR", "FILE_PRINCIPAL_ACTIVE_KID",
+			"FILE_PRINCIPAL_JWKS_LISTEN", "USER_FILE_PRINCIPAL_GRPC_ADDR",
+			"containerPort: 9092", "containerPort: 8443", "file-principal-grpc", "principal-jwks",
+			"voice-file-principal-signing", "voice-file-principal-tls", "voice-user-file-principal-tls",
+			"https://voice-file:8443/.well-known/jwks.json", "readOnly: true",
+		} {
+			require.Contains(t, manifest, required, "%s must declare %s", environment, required)
+		}
+	}
+	policy, err := os.ReadFile(filepath.Join(root, "deploy", "templates", "network-policy-file-user-principal.yaml"))
+	require.NoError(t, err)
+	for _, required := range []string{"voice-file", "voice-user", "9092", "8443", "voice-social", "9091", "9090"} {
+		require.Contains(t, string(policy), required)
+	}
+}
+
+func TestFileUserPrincipalComposeKeepsFileSigningKeysIssuerOwned(t *testing.T) {
+	root := filepath.Clean(filepath.Join("..", "..", "..", ".."))
+	data, err := os.ReadFile(filepath.Join(root, "docker-compose.yml"))
+	require.NoError(t, err)
+	var compose struct {
+		Services map[string]struct {
+			Environment map[string]string `yaml:"environment"`
+			Volumes     []string          `yaml:"volumes"`
+		} `yaml:"services"`
+	}
+	require.NoError(t, yaml.Unmarshal(data, &compose))
+	for name, service := range compose.Services {
+		for _, volume := range service.Volumes {
+			if strings.HasPrefix(volume, "file_principal_keys:") {
+				require.Contains(t, []string{"social-principal-init", "file"}, name, "File private keys leaked to %s", name)
+			}
+		}
+	}
+	file := compose.Services["file"]
+	for _, name := range []string{"FILE_PRINCIPAL_SIGNING_KEYS_DIR", "FILE_PRINCIPAL_ACTIVE_KID", "FILE_PRINCIPAL_JWKS_LISTEN", "USER_FILE_PRINCIPAL_GRPC_ADDR", "USER_FILE_PRINCIPAL_TLS_CA_FILE", "USER_FILE_PRINCIPAL_TLS_SERVER_NAME"} {
+		require.NotEmpty(t, file.Environment[name])
+	}
+	user := compose.Services["user"]
+	for _, name := range []string{"USER_FILE_PRINCIPAL_GRPC_LISTEN", "USER_FILE_PRINCIPAL_TLS_CERT_FILE", "USER_FILE_PRINCIPAL_TLS_KEY_FILE", "USER_FILE_PRINCIPAL_REPLAY_REDIS_ADDR"} {
+		require.NotEmpty(t, user.Environment[name])
+	}
+	require.Equal(t, "/etc/voice/principal/tls/tls.crt", user.Environment["USER_FILE_PRINCIPAL_TLS_CERT_FILE"])
+	require.Equal(t, "/etc/voice/principal/tls/tls.key", user.Environment["USER_FILE_PRINCIPAL_TLS_KEY_FILE"])
+	for _, volume := range user.Volumes {
+		require.NotContains(t, volume, "file_principal_tls:", "User :9092 must not present File's DNS:file JWKS certificate")
+	}
+	require.Contains(t, user.Environment["S2S_JWKS_URLS_JSON"], "https://file:8443/")
+}

@@ -117,10 +117,12 @@ services:
     ports:
       - "${CLAMAV_PORT:-3310}:3310"
 
-  # Local S3-compatible object storage (MinIO). Not used on staging/prod — Cloudflare R2 there.
+  # Default S3-compatible object storage for local development and the A1 proof.
+  # Set VOICE_MINIO_IMAGE/VOICE_MINIO_MC_IMAGE to an internally mirrored immutable
+  # reference when a registry policy requires it. Cloudflare R2 remains optional.
   minio:
     profiles: ["app"]
-    image: minio/minio:latest
+    image: ${VOICE_MINIO_IMAGE:-quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z@sha256:1dce27c494a16bae114774f1cec295493f3613142713130c2d22dd5696be6ad3}
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-voice-minio}
@@ -140,7 +142,7 @@ services:
 
   minio-init:
     profiles: ["app"]
-    image: minio/mc:latest
+    image: ${VOICE_MINIO_MC_IMAGE:-quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727}
     restart: "no"
     environment:
       MINIO_HOST: minio
@@ -243,9 +245,11 @@ services:
     restart: "no"
     volumes:
       - social_principal_keys:/signing
+      - file_principal_keys:/file-signing
       - social_principal_tls:/social
       - user_principal_tls:/user
       - space_principal_tls:/space
+      - file_principal_tls:/file
       - social_principal_ca:/ca
 
   social:
@@ -303,17 +307,23 @@ services:
       USER_PRINCIPAL_TLS_CERT_FILE: /etc/voice/principal/tls/tls.crt
       USER_PRINCIPAL_TLS_KEY_FILE: /etc/voice/principal/tls/tls.key
       USER_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
-      S2S_JWKS_URLS_JSON: '{"social":"https://social:8443/.well-known/jwks.json"}'
+      USER_FILE_PRINCIPAL_GRPC_LISTEN: :9092
+      # The protected User listener must present User's DNS:user leaf. File's
+      # separate DNS:file leaf is reserved for File's JWKS endpoint.
+      USER_FILE_PRINCIPAL_TLS_CERT_FILE: /etc/voice/principal/tls/tls.crt
+      USER_FILE_PRINCIPAL_TLS_KEY_FILE: /etc/voice/principal/tls/tls.key
+      USER_FILE_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
+      S2S_JWKS_URLS_JSON: '{"social":"https://social:8443/.well-known/jwks.json","file":"https://file:8443/.well-known/jwks.json"}'
       S2S_JWKS_CA_FILE: /etc/voice/principal/ca/ca.crt
       SOCIAL_GRPC_ADDR: social:9090
       AUTH_GRPC_ADDR: auth:9090
       USER_REDIS_ADDR: redis:6379
       NATS_URL: nats://nats:4222
-      USER_R2_ENDPOINT: ${USER_R2_ENDPOINT:-}
-      USER_R2_REGION: ${USER_R2_REGION:-auto}
-      USER_R2_ACCESS_KEY_ID: ${USER_R2_ACCESS_KEY_ID:-}
-      USER_R2_SECRET_ACCESS_KEY: ${USER_R2_SECRET_ACCESS_KEY:-}
-      USER_R2_BUCKET: ${USER_R2_BUCKET:-}
+      USER_R2_ENDPOINT: ${USER_R2_ENDPOINT:-http://minio:9000}
+      USER_R2_REGION: ${USER_R2_REGION:-us-east-1}
+      USER_R2_ACCESS_KEY_ID: ${USER_R2_ACCESS_KEY_ID:-voice-minio}
+      USER_R2_SECRET_ACCESS_KEY: ${USER_R2_SECRET_ACCESS_KEY:-voice-minio-dev}
+      USER_R2_BUCKET: ${USER_R2_BUCKET:-voice-dev-avatars}
       USER_R2_PUBLIC_BASE_URL: ${USER_R2_PUBLIC_BASE_URL:-}
       USER_DNS_STUB_URL: http://verification-stub:4180/dns-txt
     volumes:
@@ -460,13 +470,25 @@ services:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/file_db?sslmode=disable
       FILE_GRPC_LISTEN: :9090
+      FILE_PRINCIPAL_SIGNING_KEYS_DIR: /etc/voice/file-principal/keys
+      FILE_PRINCIPAL_ACTIVE_KID: current
+      FILE_PRINCIPAL_JWKS_LISTEN: :8443
+      FILE_PRINCIPAL_JWKS_TLS_CERT_FILE: /etc/voice/file-principal/tls/tls.crt
+      FILE_PRINCIPAL_JWKS_TLS_KEY_FILE: /etc/voice/file-principal/tls/tls.key
+      USER_FILE_PRINCIPAL_GRPC_ADDR: user:9092
+      USER_FILE_PRINCIPAL_TLS_CA_FILE: /etc/voice/file-principal/ca/ca.crt
+      USER_FILE_PRINCIPAL_TLS_SERVER_NAME: user
       CHAT_GRPC_ADDR: chat:9090
       CLAMAV_ADDR: clamav:3310
-      FILE_R2_ENDPOINT: ${FILE_R2_ENDPOINT:-}
-      FILE_R2_REGION: ${FILE_R2_REGION:-auto}
-      FILE_R2_ACCESS_KEY_ID: ${FILE_R2_ACCESS_KEY_ID:-}
-      FILE_R2_SECRET_ACCESS_KEY: ${FILE_R2_SECRET_ACCESS_KEY:-}
-      FILE_R2_BUCKET: ${FILE_R2_BUCKET:-}
+      FILE_R2_ENDPOINT: ${FILE_R2_ENDPOINT:-http://minio:9000}
+      FILE_R2_REGION: ${FILE_R2_REGION:-us-east-1}
+      FILE_R2_ACCESS_KEY_ID: ${FILE_R2_ACCESS_KEY_ID:-voice-minio}
+      FILE_R2_SECRET_ACCESS_KEY: ${FILE_R2_SECRET_ACCESS_KEY:-voice-minio-dev}
+      FILE_R2_BUCKET: ${FILE_R2_BUCKET:-voice-dev-files}
+    volumes:
+      - file_principal_keys:/etc/voice/file-principal/keys:ro
+      - file_principal_tls:/etc/voice/file-principal/tls:ro
+      - social_principal_ca:/etc/voice/file-principal/ca:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -478,6 +500,10 @@ services:
         condition: service_started
       minio-init:
         condition: service_completed_successfully
+      social-principal-init:
+        condition: service_completed_successfully
+      user:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       interval: 5s
@@ -1154,9 +1180,11 @@ services:
 
 volumes:
   social_principal_keys:
+  file_principal_keys:
   social_principal_tls:
   user_principal_tls:
   space_principal_tls:
+  file_principal_tls:
   social_principal_ca:
   voice_pgdata:
   voice_redis:

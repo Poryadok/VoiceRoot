@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -107,7 +108,9 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 	}
 	replay := redis.NewClient(&redis.Options{Addr: cfg.ReplayAddr, Password: cfg.ReplayPassword, DialTimeout: dependencyTimeout, ReadTimeout: dependencyTimeout, WriteTimeout: dependencyTimeout, MaxRetries: -1, ContextTimeoutEnabled: true})
 	r := &Runtime{target: cfg.Target, resolver: resolver, replay: replay, transport: transport, credentials: credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}})}
-	r.verifier = &Verifier{Target: cfg.Target, Issuers: issuers, Resolve: resolver.Resolve, Replay: r.recordReplay}
+	r.verifier = &Verifier{Target: cfg.Target, Issuers: issuers, Resolve: resolver.Resolve, Replay: r.recordReplay, Diagnostic: func(reason VerificationReason) {
+		log.Printf("principal verification rejected target=%s reason=%s", cfg.Target, reason)
+	}}
 	startup, cancel := context.WithTimeout(ctx, dependencyTimeout)
 	defer cancel()
 	if err := replay.Ping(startup).Err(); err != nil {
@@ -188,7 +191,7 @@ func (r *Runtime) refreshLoop(ctx context.Context, interval time.Duration, issue
 
 func (r *Runtime) ServerOptions() []grpc.ServerOption {
 	return []grpc.ServerOption{grpc.Creds(r.credentials), grpc.ChainUnaryInterceptor(func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if info.FullMethod != Method(r.target) {
+		if !AllowsMethod(r.target, info.FullMethod) {
 			return nil, status.Error(codes.PermissionDenied, "method unavailable on privacy listener")
 		}
 		return handler(ctx, req)

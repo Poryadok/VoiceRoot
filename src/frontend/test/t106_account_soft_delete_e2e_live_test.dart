@@ -13,6 +13,7 @@ import 'package:voice_frontend/backend/gateway_http.dart';
 import 'package:voice_frontend/backend/guest_credentials_storage.dart';
 import 'package:voice_frontend/backend/message_cache/in_memory_message_cache_store.dart';
 import 'package:voice_frontend/backend/messages_client.dart';
+import 'package:voice_frontend/backend/realtime_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
@@ -62,6 +63,10 @@ void main() {
       late VoiceMessagesClient messages;
       late _RecordingHttpClient recorder;
       late ChatRoomController room;
+      late VoiceRealtimeConnection realtime;
+      late StreamSubscription<RealtimeFrame> deletionEventsSubscription;
+      final deletionEvents = <RealtimeFrame>[];
+      final firstDeletionEvent = Completer<void>();
 
       await tester.runAsync(() async {
         final probe = await probeLiveGateway();
@@ -113,6 +118,20 @@ void main() {
           );
         }
 
+        realtime = await ctx.connectSubscribed(b, dm.id);
+        deletionEventsSubscription = realtime.events
+            .where(
+              (frame) =>
+                  frame.op == 'dm_peer_deleted' &&
+                  frame.data?['chat_id'] == dm.id,
+            )
+            .listen((frame) {
+              deletionEvents.add(frame);
+              if (!firstDeletionEvent.isCompleted) {
+                firstDeletionEvent.complete();
+              }
+            });
+
         recorder = _RecordingHttpClient(ctx.httpClient);
         final storage = InMemoryAuthSessionStorage();
         cache = InMemoryMessageCacheStore();
@@ -162,6 +181,8 @@ void main() {
       });
       addTearDown(container.dispose);
       addTearDown(closeRoomSubscription);
+      addTearDown(deletionEventsSubscription.cancel);
+      addTearDown(realtime.dispose);
       await tester.pump();
 
       final beforeDelete = container.read(chatRoomControllerProvider(dm.id));
@@ -187,6 +208,15 @@ void main() {
           password: qaPassword,
         );
         expect(deleted, isA<AuthApiOk<void>>(), reason: '$deleted');
+
+        await firstDeletionEvent.future.timeout(const Duration(seconds: 20));
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        expect(deletionEvents, hasLength(1));
+        final deletionEvent = deletionEvents.single;
+        expect(deletionEvent.data, {
+          'chat_id': dm.id,
+          'recipient_profile_id': b.activeProfileId,
+        });
 
         final oldSessionInbox = await chatsClient.listChats(
           authorization: secondA.authorizationHeader,
