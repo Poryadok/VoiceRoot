@@ -246,6 +246,37 @@ class ChatServiceClient extends $grpc.Client {
     return $createUnaryCall(_$archiveChat, request, options: options);
   }
 
+  /// Sticker catalog and the caller's per-profile composer rail.
+  $grpc.ResponseFuture<$0.ListInstalledStickerPacksResponse>
+      listInstalledStickerPacks(
+    $0.ListInstalledStickerPacksRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$listInstalledStickerPacks, request,
+        options: options);
+  }
+
+  $grpc.ResponseFuture<$0.GetStickerPackResponse> getStickerPack(
+    $0.GetStickerPackRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getStickerPack, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.InstallStickerPackResponse> installStickerPack(
+    $0.InstallStickerPackRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$installStickerPack, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.UninstallStickerPackResponse> uninstallStickerPack(
+    $0.UninstallStickerPackRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$uninstallStickerPack, request, options: options);
+  }
+
   /// DM-only opt-in E2E encryption — docs/features/encryption.md.
   $grpc.ResponseFuture<$0.EnableChatE2EResponse> enableChatE2E(
     $0.EnableChatE2ERequest request, {
@@ -462,6 +493,27 @@ class ChatServiceClient extends $grpc.Client {
           '/voice.chat.v1.ChatService/ArchiveChat',
           ($0.ArchiveChatRequest value) => value.writeToBuffer(),
           $0.ArchiveChatResponse.fromBuffer);
+  static final _$listInstalledStickerPacks = $grpc.ClientMethod<
+          $0.ListInstalledStickerPacksRequest,
+          $0.ListInstalledStickerPacksResponse>(
+      '/voice.chat.v1.ChatService/ListInstalledStickerPacks',
+      ($0.ListInstalledStickerPacksRequest value) => value.writeToBuffer(),
+      $0.ListInstalledStickerPacksResponse.fromBuffer);
+  static final _$getStickerPack =
+      $grpc.ClientMethod<$0.GetStickerPackRequest, $0.GetStickerPackResponse>(
+          '/voice.chat.v1.ChatService/GetStickerPack',
+          ($0.GetStickerPackRequest value) => value.writeToBuffer(),
+          $0.GetStickerPackResponse.fromBuffer);
+  static final _$installStickerPack = $grpc.ClientMethod<
+          $0.InstallStickerPackRequest, $0.InstallStickerPackResponse>(
+      '/voice.chat.v1.ChatService/InstallStickerPack',
+      ($0.InstallStickerPackRequest value) => value.writeToBuffer(),
+      $0.InstallStickerPackResponse.fromBuffer);
+  static final _$uninstallStickerPack = $grpc.ClientMethod<
+          $0.UninstallStickerPackRequest, $0.UninstallStickerPackResponse>(
+      '/voice.chat.v1.ChatService/UninstallStickerPack',
+      ($0.UninstallStickerPackRequest value) => value.writeToBuffer(),
+      $0.UninstallStickerPackResponse.fromBuffer);
   static final _$enableChatE2E =
       $grpc.ClientMethod<$0.EnableChatE2ERequest, $0.EnableChatE2EResponse>(
           '/voice.chat.v1.ChatService/EnableChatE2E',
@@ -758,6 +810,42 @@ abstract class ChatServiceBase extends $grpc.Service {
             ($core.List<$core.int> value) =>
                 $0.ArchiveChatRequest.fromBuffer(value),
             ($0.ArchiveChatResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ListInstalledStickerPacksRequest,
+            $0.ListInstalledStickerPacksResponse>(
+        'ListInstalledStickerPacks',
+        listInstalledStickerPacks_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ListInstalledStickerPacksRequest.fromBuffer(value),
+        ($0.ListInstalledStickerPacksResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GetStickerPackRequest,
+            $0.GetStickerPackResponse>(
+        'GetStickerPack',
+        getStickerPack_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetStickerPackRequest.fromBuffer(value),
+        ($0.GetStickerPackResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.InstallStickerPackRequest,
+            $0.InstallStickerPackResponse>(
+        'InstallStickerPack',
+        installStickerPack_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.InstallStickerPackRequest.fromBuffer(value),
+        ($0.InstallStickerPackResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.UninstallStickerPackRequest,
+            $0.UninstallStickerPackResponse>(
+        'UninstallStickerPack',
+        uninstallStickerPack_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.UninstallStickerPackRequest.fromBuffer(value),
+        ($0.UninstallStickerPackResponse value) => value.writeToBuffer()));
     $addMethod(
         $grpc.ServiceMethod<$0.EnableChatE2ERequest, $0.EnableChatE2EResponse>(
             'EnableChatE2E',
@@ -1079,6 +1167,42 @@ abstract class ChatServiceBase extends $grpc.Service {
 
   $async.Future<$0.ArchiveChatResponse> archiveChat(
       $grpc.ServiceCall call, $0.ArchiveChatRequest request);
+
+  $async.Future<$0.ListInstalledStickerPacksResponse>
+      listInstalledStickerPacks_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.ListInstalledStickerPacksRequest> $request) async {
+    return listInstalledStickerPacks($call, await $request);
+  }
+
+  $async.Future<$0.ListInstalledStickerPacksResponse> listInstalledStickerPacks(
+      $grpc.ServiceCall call, $0.ListInstalledStickerPacksRequest request);
+
+  $async.Future<$0.GetStickerPackResponse> getStickerPack_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.GetStickerPackRequest> $request) async {
+    return getStickerPack($call, await $request);
+  }
+
+  $async.Future<$0.GetStickerPackResponse> getStickerPack(
+      $grpc.ServiceCall call, $0.GetStickerPackRequest request);
+
+  $async.Future<$0.InstallStickerPackResponse> installStickerPack_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.InstallStickerPackRequest> $request) async {
+    return installStickerPack($call, await $request);
+  }
+
+  $async.Future<$0.InstallStickerPackResponse> installStickerPack(
+      $grpc.ServiceCall call, $0.InstallStickerPackRequest request);
+
+  $async.Future<$0.UninstallStickerPackResponse> uninstallStickerPack_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.UninstallStickerPackRequest> $request) async {
+    return uninstallStickerPack($call, await $request);
+  }
+
+  $async.Future<$0.UninstallStickerPackResponse> uninstallStickerPack(
+      $grpc.ServiceCall call, $0.UninstallStickerPackRequest request);
 
   $async.Future<$0.EnableChatE2EResponse> enableChatE2E_Pre(
       $grpc.ServiceCall $call,
