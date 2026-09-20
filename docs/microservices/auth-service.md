@@ -217,6 +217,18 @@ REST: `POST /api/v1/auth/convert-guest` (Gateway transcoding). Спека UX: [a
   публикует NATS `user.guest_converted`; resend идемпотентен и не создаёт новый аккаунт.
 - Негативные кейсы (duplicate email, password &lt; 8, non-guest token): `ConvertGuestIntegrationTest` (Auth Maven).
 
+### Session-bound email-verification recovery
+
+`GetEmailVerificationStatus` and REST `GET /api/v1/auth/verification-status`
+derive the caller only from the restricted session and return typed
+`GUEST`, `EMAIL_PENDING` (`NONE`/`ACTIVE`), `PROMOTION_PENDING`, or `REGULAR`.
+Email verification OTP send/verify have no public email identifier. Registration
+and convert issue the restricted session, then send once through that principal.
+OTP is six digits for ten minutes; resend invalidates an old code without
+resetting its attempt budget. A delayed durable promotion returns `202` and is
+recovered through status; a replacement regular session is issued only after
+promotion completes.
+
 ### E2E key backup ([encryption.md](../features/encryption.md), REST via Gateway)
 
 Клиент хранит парольно-зашифрованный бэкап ключей Signal на сервере; сервер видит только opaque blob ([encryption.md](../features/encryption.md)).

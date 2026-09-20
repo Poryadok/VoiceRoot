@@ -1288,6 +1288,122 @@ class VerifyOTPResponse extends $pb.GeneratedMessage {
   AuthSession ensureSession() => $_ensure(0);
 }
 
+class GetEmailVerificationStatusRequest extends $pb.GeneratedMessage {
+  factory GetEmailVerificationStatusRequest() => create();
+
+  GetEmailVerificationStatusRequest._();
+
+  factory GetEmailVerificationStatusRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetEmailVerificationStatusRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetEmailVerificationStatusRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetEmailVerificationStatusRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetEmailVerificationStatusRequest copyWith(
+          void Function(GetEmailVerificationStatusRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as GetEmailVerificationStatusRequest))
+          as GetEmailVerificationStatusRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetEmailVerificationStatusRequest create() =>
+      GetEmailVerificationStatusRequest._();
+  @$core.override
+  GetEmailVerificationStatusRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetEmailVerificationStatusRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetEmailVerificationStatusRequest>(
+          create);
+  static GetEmailVerificationStatusRequest? _defaultInstance;
+}
+
+class GetEmailVerificationStatusResponse extends $pb.GeneratedMessage {
+  factory GetEmailVerificationStatusResponse({
+    EmailVerificationState? state,
+    EmailVerificationCodeState? codeState,
+  }) {
+    final result = create();
+    if (state != null) result.state = state;
+    if (codeState != null) result.codeState = codeState;
+    return result;
+  }
+
+  GetEmailVerificationStatusResponse._();
+
+  factory GetEmailVerificationStatusResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetEmailVerificationStatusResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetEmailVerificationStatusResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aE<EmailVerificationState>(1, _omitFieldNames ? '' : 'state',
+        enumValues: EmailVerificationState.values)
+    ..aE<EmailVerificationCodeState>(2, _omitFieldNames ? '' : 'codeState',
+        enumValues: EmailVerificationCodeState.values)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetEmailVerificationStatusResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetEmailVerificationStatusResponse copyWith(
+          void Function(GetEmailVerificationStatusResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as GetEmailVerificationStatusResponse))
+          as GetEmailVerificationStatusResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetEmailVerificationStatusResponse create() =>
+      GetEmailVerificationStatusResponse._();
+  @$core.override
+  GetEmailVerificationStatusResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetEmailVerificationStatusResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetEmailVerificationStatusResponse>(
+          create);
+  static GetEmailVerificationStatusResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  EmailVerificationState get state => $_getN(0);
+  @$pb.TagNumber(1)
+  set state(EmailVerificationState value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasState() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearState() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  EmailVerificationCodeState get codeState => $_getN(1);
+  @$pb.TagNumber(2)
+  set codeState(EmailVerificationCodeState value) => $_setField(2, value);
+  @$pb.TagNumber(2)
+  $core.bool hasCodeState() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearCodeState() => $_clearField(2);
+}
+
 class ConvertGuestResponse extends $pb.GeneratedMessage {
   factory ConvertGuestResponse({
     AuthSession? session,

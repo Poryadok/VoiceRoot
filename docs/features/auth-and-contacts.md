@@ -164,6 +164,16 @@ quotas and redacted failures before enablement.
 
 ## Email verification state
 
+- State is recovered only from the restricted session: `GUEST`,
+  `EMAIL_PENDING` (`NONE` / `ACTIVE` code), `PROMOTION_PENDING`, or `REGULAR`.
+  Email-verification send, verify, and status never accept a raw public email;
+  the initial authenticated send follows registration/convert exactly once.
+- A resend invalidates the previous code but preserves the three-attempt
+  ten-minute budget. Invalid and expired codes share one error; attempt four is
+  `429` with `Retry-After`. Redis failure closes this flow.
+- On success Auth returns and the client persists a replacement regular session
+  before routing. A deferred promotion is `202`; reload/status resumes only the
+  bounded retry path.
 - Новая email-регистрация и `convert-guest` получают restricted pending session:
   доступны verification/resend/logout и уже разрешённые guest flows.
 - Инициировать DM/звонок, добавлять друзей и самостоятельно вступать в Space до

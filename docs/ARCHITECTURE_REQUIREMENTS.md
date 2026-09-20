@@ -67,6 +67,11 @@ fan-out.
 | Регистрация ботов     | 5 ботов / день на аккаунт                   | —                            |
 | Bot API (slash / webhook через Gateway) | 5000 запросов / 1 мин на ключ лимита (см. [microservices/api-gateway.md](microservices/api-gateway.md)) | —                            |
 
+For email verification Auth derives the OTP account only from the restricted
+session. A resend replaces the valid code but never clears the three-attempt
+window; invalid and expired codes intentionally share one public error and the
+fourth attempt returns `429 Retry-After`. Redis read/write failure is fail-closed.
+
 ### Redis: API Gateway и Auth Service
 
 Один Redis (или кластер) на окружение; **разделение префиксами ключей**, отдельной PostgreSQL у Gateway нет.

@@ -9,6 +9,8 @@ import 'gateway_http.dart';
 /// Detail when [GatewayConfig.hasBaseUrl] is false; aligned with gateway client i18n key pattern.
 const String kAuthMissingBaseUrlDetail = 'missing base URL';
 
+enum EmailVerificationRecoveryState { guest, emailPending, promotionPending, regular }
+
 sealed class AuthSessionResult {
   const AuthSessionResult();
 }
@@ -417,6 +419,28 @@ class VoiceAuthClient {
     };
   }
 
+  Future<AuthApiResult<EmailVerificationRecoveryState>> getEmailVerificationStatus({
+    required AuthSession session,
+  }) async {
+    final result = await _gateway.getJson(
+      _gateway.resolve('/api/v1/auth/verification-status'),
+      authorization: session.authorizationHeader,
+    );
+    return switch (result) {
+      GatewayHttpOk(:final data) => AuthApiOk(switch (data['state']) {
+        'EMAIL_PENDING' => EmailVerificationRecoveryState.emailPending,
+        'PROMOTION_PENDING' => EmailVerificationRecoveryState.promotionPending,
+        'REGULAR' => EmailVerificationRecoveryState.regular,
+        _ => EmailVerificationRecoveryState.guest,
+      }),
+      GatewayHttpFailure(:final error) => AuthApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+
   Future<void> markGuestReminderShown({required String authorization}) async {
     await _gateway.postJson(
       uri: _gateway.resolve('/api/v1/auth/guest-reminder/mark'),
@@ -520,26 +544,24 @@ class VoiceAuthClient {
     };
   }
 
-  /// Sends the email verification OTP for a pending guest conversion.
+  /// Resends the email verification OTP for the session's pending identity.
   Future<AuthApiResult<void>> sendGuestConversionEmailOtp({
     required AuthSession session,
-    required String email,
-  }) => _sendOtp(session: session, email: email, otpType: 'email_verify');
+  }) => _sendOtp(session: session, otpType: 'email_verify');
 
   /// Verifies the email OTP for a pending guest conversion.
   Future<GuestConversionOtpResult> verifyGuestConversionEmailOtp({
     required AuthSession session,
-    required String email,
     required String code,
   }) async {
     final result = await _gateway.postJson(
       uri: _gateway.resolve('/api/v1/auth/otp/verify'),
       authorization: session.authorizationHeader,
-      body: {'email': email, 'code': code, 'otp_type': 'email_verify'},
+      body: {'code': code, 'otp_type': 'email_verify'},
       allowNoContent: true,
     );
     return switch (result) {
-      GatewayHttpOk(statusCode: 204) => const GuestConversionOtpAccepted(),
+      GatewayHttpOk(statusCode: 204 || 202) => const GuestConversionOtpAccepted(),
       GatewayHttpOk(:final data) when data.isNotEmpty =>
         GuestConversionOtpSession(AuthSession.fromAuthResponse(data)),
       GatewayHttpOk(:final statusCode) => GuestConversionOtpFailure(
@@ -557,13 +579,12 @@ class VoiceAuthClient {
 
   Future<AuthApiResult<void>> _sendOtp({
     required AuthSession session,
-    required String email,
     required String otpType,
   }) async {
     final result = await _gateway.postEmpty(
       uri: _gateway.resolve('/api/v1/auth/otp/send'),
       authorization: session.authorizationHeader,
-      jsonBody: {'email': email, 'otp_type': otpType},
+      jsonBody: {'otp_type': otpType},
     );
     return switch (result) {
       GatewayHttpOk<void>() => const AuthApiOk(null),
