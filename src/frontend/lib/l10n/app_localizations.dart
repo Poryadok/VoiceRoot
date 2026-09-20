@@ -2804,6 +2804,12 @@ abstract class AppLocalizations {
   /// **'Media'**
   String get chatSharedMediaTabMedia;
 
+  /// No description provided for @chatSharedMediaTabStickers.
+  ///
+  /// In en, this message translates to:
+  /// **'Stickers'**
+  String get chatSharedMediaTabStickers;
+
   /// No description provided for @chatSharedMediaTabFiles.
   ///
   /// In en, this message translates to:

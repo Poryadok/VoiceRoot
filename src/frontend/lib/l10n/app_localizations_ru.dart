@@ -1540,6 +1540,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatSharedMediaTabMedia => 'Медиа';
 
   @override
+  String get chatSharedMediaTabStickers => 'Стикеры';
+
+  @override
   String get chatSharedMediaTabFiles => 'Файлы';
 
   @override

@@ -56,6 +56,7 @@ const SharedMediaKind$json = {
     {'1': 'SHARED_MEDIA_KIND_FILES', '2': 2},
     {'1': 'SHARED_MEDIA_KIND_LINKS', '2': 3},
     {'1': 'SHARED_MEDIA_KIND_VOICE', '2': 4},
+    {'1': 'SHARED_MEDIA_KIND_STICKERS', '2': 5},
   ],
 };
 
@@ -64,7 +65,7 @@ final $typed_data.Uint8List sharedMediaKindDescriptor = $convert.base64Decode(
     'Cg9TaGFyZWRNZWRpYUtpbmQSIQodU0hBUkVEX01FRElBX0tJTkRfVU5TUEVDSUZJRUQQABIbCh'
     'dTSEFSRURfTUVESUFfS0lORF9NRURJQRABEhsKF1NIQVJFRF9NRURJQV9LSU5EX0ZJTEVTEAIS'
     'GwoXU0hBUkVEX01FRElBX0tJTkRfTElOS1MQAxIbChdTSEFSRURfTUVESUFfS0lORF9WT0lDRR'
-    'AE');
+    'AEEh4KGlNIQVJFRF9NRURJQV9LSU5EX1NUSUNLRVJTEAU=');
 
 @$core.Deprecated('Use scheduledMessageStatusDescriptor instead')
 const ScheduledMessageStatus$json = {

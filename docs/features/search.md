@@ -57,7 +57,7 @@
 | **Ссылки** | `SHARED_MEDIA_KIND_LINKS` | link, article | URL в тексте + article payloads |
 | **Голосовые** | `SHARED_MEDIA_KIND_VOICE` | voice | Voice messages |
 
-Wire: `ListSharedMediaRequest.kind` = `SharedMediaKind` ([messaging-service.md](../microservices/messaging-service.md) § `ListSharedMedia` filters). **Shipped proto** has four values only (`MEDIA`, `FILES`, `LINKS`, `VOICE`); `STICKERS` kind and `gif`/`video_note` in `MEDIA` predicate are spec extensions — not yet in proto/code.
+Wire: `ListSharedMediaRequest.kind` = `SharedMediaKind` ([messaging-service.md](../microservices/messaging-service.md) § `ListSharedMedia` filters). The shipped proto supports `MEDIA`, `STICKERS`, `FILES`, `LINKS`, and `VOICE`; `gif` and `video_note` in the `MEDIA` predicate remain spec extensions not yet in code.
 
 ### Content-type mapping (wire → UI → Shared Media)
 

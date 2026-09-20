@@ -36,6 +36,7 @@ void main() {
 
   test('SharedMediaTabKind wire values', () {
     expect(SharedMediaTabKind.media.wireValue, 'media');
+    expect(SharedMediaTabKind.stickers.wireValue, 'stickers');
     expect(SharedMediaTabKind.links.wireValue, 'links');
   });
 }
