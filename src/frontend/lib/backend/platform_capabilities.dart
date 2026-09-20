@@ -3,8 +3,10 @@ import 'package:flutter/foundation.dart'
 
 export 'screen_share_capabilities.dart';
 
-/// Global PTT hotkeys require focus outside the browser tab (docs/features/platforms.md).
-bool get canUseGlobalPushToTalkHotkey => !kIsWeb;
+/// Windows supplies the OS-level PTT hotkey; Web keeps focused in-app PTT only
+/// (docs/features/platforms.md П.17).
+bool get canUseGlobalPushToTalkHotkey =>
+    !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
 
 /// Close-to-tray is Windows-only (docs/features/platforms.md П.17).
 bool get canHideToSystemTray =>

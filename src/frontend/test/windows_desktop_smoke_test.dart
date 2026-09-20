@@ -19,12 +19,13 @@ void main() {
   });
 
   group('Windows desktop capability gates', () {
-    test(
-      'global PTT hotkey capability is enabled off-web (desktop/mobile)',
-      () {
-        expect(canUseGlobalPushToTalkHotkey, isTrue);
-      },
-    );
+    test('global PTT hotkey capability is enabled only on Windows', () {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      expect(canUseGlobalPushToTalkHotkey, isTrue);
+
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      expect(canUseGlobalPushToTalkHotkey, isFalse);
+    });
 
     test('close-to-tray capability is enabled on Windows', () {
       debugDefaultTargetPlatformOverride = TargetPlatform.windows;

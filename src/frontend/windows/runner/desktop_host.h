@@ -39,6 +39,7 @@ class DesktopHost {
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
   NOTIFYICONDATA nid_{};
   bool tray_added_ = false;
+  bool voice_active_ = false;
   bool muted_ = false;
   bool deafened_ = false;
   std::wstring mute_label_ = L"Mute";
