@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:voice_frontend/backend/auth_client.dart';
 import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
@@ -158,6 +159,35 @@ void main() {
     expect(state.isRestoring, isFalse);
     expect(state.session?.accessToken, 'access-new');
     expect(state.session?.activeProfileId, 'prof-1');
+  });
+
+  test('logout clears recovered email verification state', () async {
+    final mock = MockClient((req) async {
+      if (req.url.path == '/api/v1/auth/logout') return http.Response('', 204);
+      return http.Response('not found', 404);
+    });
+    final container = buildContainer(mock: mock);
+    addTearDown(container.dispose);
+    final controller = container.read(authControllerProvider.notifier);
+    controller.state = const AuthState(
+      session: AuthSession(
+        accessToken: 'restricted-access',
+        refreshToken: 'restricted-refresh',
+        accountId: 'acc-1',
+        activeProfileId: 'prof-1',
+        expiresInSeconds: 900,
+        accountType: 'guest',
+      ),
+      emailVerificationRecoveryState:
+          EmailVerificationRecoveryState.emailPending,
+    );
+
+    await controller.logout();
+
+    expect(
+      container.read(authControllerProvider).isEmailVerificationPending,
+      isFalse,
+    );
   });
 
   test(
