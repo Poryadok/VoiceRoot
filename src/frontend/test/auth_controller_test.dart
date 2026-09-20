@@ -329,6 +329,49 @@ void main() {
     },
   );
 
+  test('intermediate guest persistence cannot survive logout', () async {
+    final storage = _DeferredAuthSessionStorage();
+    storage.pauseWriteFor('guest-next');
+    final mock = MockClient((req) async {
+      if (req.url.path == '/api/v1/auth/refresh')
+        return http.Response(
+          jsonEncode({
+            'session': {
+              ...(sessionJson()['session'] as Map<String, dynamic>),
+              'access_token': 'guest-next',
+              'refresh_token': 'refresh-next',
+              'account_type': 'guest',
+            },
+          }),
+          200,
+        );
+      if (req.url.path == '/api/v1/auth/logout') return http.Response('', 204);
+      return http.Response('not found', 404);
+    });
+    final container = buildContainer(mock: mock, storage: storage);
+    addTearDown(container.dispose);
+    final controller = container.read(authControllerProvider.notifier);
+    controller.state = const AuthState(
+      session: AuthSession(
+        accessToken: 'guest',
+        refreshToken: 'refresh',
+        accountId: 'acc',
+        activeProfileId: 'profile',
+        expiresInSeconds: 900,
+        accountType: 'guest',
+      ),
+      emailVerificationRecoveryState:
+          EmailVerificationRecoveryState.promotionPending,
+    );
+    final retry = controller.resumeEmailVerificationPromotion();
+    await storage.waitForWrite('guest-next');
+    await controller.logout();
+    storage.completeWriteFor('guest-next');
+    expect(await retry, 'not_authenticated');
+    expect(container.read(authControllerProvider).session, isNull);
+    expect(await storage.read(), isNull);
+  });
+
   test(
     'restore resumes a session-bound email verification without resend or OTP replay',
     () async {
