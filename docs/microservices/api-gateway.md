@@ -67,7 +67,7 @@ POST /api/v1/realtime/ws-ticket → Gateway (short-lived WS ticket; JWT в за�
 
 **[user-profile.md](../features/user-profile.md) — presigned аватар (R2, User Service, без File Service):** `POST /api/v1/users/me/avatar/presigned-upload` (JWT). Тело JSON: `content_type`, `content_length`; `profile_id` опционален (по умолчанию активный профиль из JWT → `X-Voice-Profile-Id`). Ответ — поля `upload_url`, `http_method`, `required_headers`, `expires_at`, `public_url` / `object_key` для последующего `PUT` в R2 и сохранения URL через `PATCH /api/v1/users/me` (`UpdateProfile.avatar_url`). Обход REST: тот же контракт по **gRPC** `UserService.CreateAvatarPresignedUpload` на User Service (внутренний ingress, непубличные клиенты), если edge Gateway недоступен.
 
-**File thumbnail URL (accepted, not implemented):** Gateway transcodes the
+**File thumbnail URL:** Gateway transcodes the
 existing URL route to `FileService.GetFileURL`. `GET
 /api/v1/files/{id}/url?variant=thumbnail` maps `thumbnail` to
 `FILE_URL_VARIANT_THUMBNAIL`; an omitted `variant` maps to

@@ -12,6 +12,12 @@ sealed class FilesApiResult<T> {
   const FilesApiResult();
 }
 
+/// The representation selected through File's presigned-URL surface.
+///
+/// This deliberately models API variants rather than storage keys: callers
+/// never receive or construct a direct R2 object URL.
+enum FileUrlVariant { original, thumbnail }
+
 final class FilesApiOk<T> extends FilesApiResult<T> {
   const FilesApiOk(this.data);
   final T data;
@@ -133,13 +139,15 @@ class VoiceFilesClient {
   Future<FilesApiResult<Uint8List>> fetchFileBytes({
     required String authorization,
     required String fileId,
+    FileUrlVariant variant = FileUrlVariant.original,
   }) async {
     final urlResult = await getFileUrl(
       authorization: authorization,
       fileId: fileId,
+      variant: variant,
     );
-    return switch (urlResult) {
-      FilesApiOk(:final data) => _downloadPresigned(Uri.parse(data)),
+    final downloaded = switch (urlResult) {
+      FilesApiOk(:final data) => await _downloadPresigned(Uri.parse(data)),
       FilesApiFailure(:final message, :final errorCode, :final statusCode) =>
         FilesApiFailure(
           message: message,
@@ -147,6 +155,25 @@ class VoiceFilesClient {
           statusCode: statusCode,
         ),
     };
+    if (downloaded case FilesApiFailure(
+      :final statusCode,
+    ) when statusCode == 403 || statusCode == 410) {
+      final refreshedURL = await getFileUrl(
+        authorization: authorization,
+        fileId: fileId,
+        variant: variant,
+      );
+      return switch (refreshedURL) {
+        FilesApiOk(:final data) => _downloadPresigned(Uri.parse(data)),
+        FilesApiFailure(:final message, :final errorCode, :final statusCode) =>
+          FilesApiFailure(
+            message: message,
+            errorCode: errorCode,
+            statusCode: statusCode,
+          ),
+      };
+    }
+    return downloaded;
   }
 
   Future<FilesApiResult<Uint8List>> _downloadPresigned(Uri uri) async {
@@ -164,9 +191,14 @@ class VoiceFilesClient {
   Future<FilesApiResult<String>> getFileUrl({
     required String authorization,
     required String fileId,
+    FileUrlVariant variant = FileUrlVariant.original,
   }) async {
+    final path = switch (variant) {
+      FileUrlVariant.original => '/api/v1/files/$fileId/url',
+      FileUrlVariant.thumbnail => '/api/v1/files/$fileId/url?variant=thumbnail',
+    };
     final result = await _gateway.getProto(
-      _gateway.resolve('/api/v1/files/$fileId/url'),
+      _gateway.resolve(path),
       authorization: authorization,
       createEmpty: file_pb.GetFileURLResponse.create,
     );
