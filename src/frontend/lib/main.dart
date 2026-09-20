@@ -6,11 +6,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'backend/auth_session_storage.dart';
 import 'backend/client_version.dart';
+import 'backend/chat_draft_storage.dart';
 import 'backend/discover_hint_storage.dart';
 import 'backend/guest_credentials_storage.dart';
 import 'bootstrap/voice_app_bootstrap.dart';
 import 'state/auth_providers.dart';
 import 'state/call_providers.dart';
+import 'state/chat_draft_providers.dart';
 import 'state/message_cache_providers.dart';
 import 'state/space_providers.dart';
 import 'state/voice_room_providers.dart';
@@ -31,6 +33,9 @@ Future<void> main() async {
     ProviderScope(
       overrides: [
         messageCacheStoreProvider.overrideWithValue(messageCacheStore),
+        chatDraftStorageProvider.overrideWithValue(
+          SharedPreferencesChatDraftStorage(prefs),
+        ),
         authSessionStorageProvider.overrideWithValue(
           SharedPreferencesAuthSessionStorage(prefs),
         ),
@@ -50,11 +55,13 @@ Future<void> main() async {
           (ref) => ref.watch(authControllerProvider).activeProfileId,
         ),
         joinVoiceRoomActionProvider.overrideWith((ref) {
-          return ({required String voiceRoomId, required String spaceId}) async {
-            await ref.read(callControllerProvider.notifier).joinVoiceRoom(
-              voiceRoomId: voiceRoomId,
-              spaceId: spaceId,
-            );
+          return ({
+            required String voiceRoomId,
+            required String spaceId,
+          }) async {
+            await ref
+                .read(callControllerProvider.notifier)
+                .joinVoiceRoom(voiceRoomId: voiceRoomId, spaceId: spaceId);
           };
         }),
       ],
