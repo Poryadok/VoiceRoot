@@ -7,6 +7,7 @@ import '../backend/windows_virtual_key.dart';
 import '../l10n/app_localizations.dart';
 import '../services/windows_desktop_host.dart';
 import '../settings/voice_input_settings.dart';
+import 'auth_providers.dart';
 import 'call_providers.dart';
 
 /// Wires Windows tray + global PTT to [CallController] (platforms.md П.17).
@@ -15,6 +16,10 @@ class WindowsDesktopLifecycle {
 
   final Ref _ref;
   var _attached = false;
+  var _pttRegistered = false;
+  int? _registeredVk;
+  Future<void>? _syncInFlight;
+  var _syncQueued = false;
 
   Future<void> attach() async {
     if (_attached) return;
@@ -26,6 +31,12 @@ class WindowsDesktopLifecycle {
     _ref.listen<VoiceInputSettings>(voiceInputSettingsProvider, (_, _) {
       unawaited(sync());
     });
+    _ref.listen<String?>(authorizationHeaderProvider, (previous, next) {
+      if (previous != null && next == null) {
+        unawaited(_releasePtt());
+      }
+      unawaited(sync());
+    });
     await sync();
   }
 
@@ -33,7 +44,29 @@ class WindowsDesktopLifecycle {
     await _ref.read(windowsDesktopHostProvider).hideToTray();
   }
 
-  Future<void> sync({AppLocalizations? l10n}) async {
+  Future<void> sync({AppLocalizations? l10n}) {
+    final current = _syncInFlight;
+    if (current != null) {
+      _syncQueued = true;
+      return current;
+    }
+    final next = _syncUntilCurrent(l10n: l10n);
+    _syncInFlight = next;
+    return next.whenComplete(() {
+      if (identical(_syncInFlight, next)) {
+        _syncInFlight = null;
+      }
+    });
+  }
+
+  Future<void> _syncUntilCurrent({AppLocalizations? l10n}) async {
+    do {
+      _syncQueued = false;
+      await _syncImpl(l10n: l10n);
+    } while (_syncQueued);
+  }
+
+  Future<void> _syncImpl({AppLocalizations? l10n}) async {
     final host = _ref.read(windowsDesktopHostProvider);
     final call = _ref.read(callControllerProvider);
     final input = _ref.read(voiceInputSettingsProvider);
@@ -48,14 +81,35 @@ class WindowsDesktopLifecycle {
       quitLabel: l10n?.trayQuit ?? 'Quit',
     );
 
-    if (canUseGlobalPushToTalkHotkey && input.mode == VoiceInputMode.ptt) {
+    final hasAuthenticatedVoiceSession =
+        _ref.read(authorizationHeaderProvider) != null &&
+        call.hasBoundVoiceSession;
+    if (canUseGlobalPushToTalkHotkey &&
+        hasAuthenticatedVoiceSession &&
+        input.mode == VoiceInputMode.ptt) {
       final vk = windowsVkCodeForLogicalKey(input.pttKey);
       if (vk != null) {
-        await host.registerPttHotkey(vkCode: vk, modifiers: 0);
+        if (!_pttRegistered || _registeredVk != vk) {
+          await host.registerPttHotkey(vkCode: vk, modifiers: 0);
+          _pttRegistered = true;
+          _registeredVk = vk;
+        }
         return;
       }
     }
-    await host.unregisterPttHotkey();
+    await _releasePtt();
+  }
+
+  Future<void> _releasePtt() async {
+    final call = _ref.read(callControllerProvider);
+    if (call.isPttHeld) {
+      await _ref.read(callControllerProvider.notifier).setPttHeld(false);
+    }
+    if (_pttRegistered) {
+      await _ref.read(windowsDesktopHostProvider).unregisterPttHotkey();
+      _pttRegistered = false;
+      _registeredVk = null;
+    }
   }
 
   void _onEvent(WindowsDesktopHostEvent event) {

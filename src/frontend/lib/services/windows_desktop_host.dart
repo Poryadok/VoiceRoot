@@ -154,6 +154,7 @@ class RecordingWindowsDesktopHost implements WindowsDesktopHost {
   int hideCalls = 0;
   int quitCalls = 0;
   int registerHotkeyCalls = 0;
+  int unregisterHotkeyCalls = 0;
   int? lastVkCode;
   bool? lastVoiceActive;
   bool? lastMuted;
@@ -208,7 +209,9 @@ class RecordingWindowsDesktopHost implements WindowsDesktopHost {
   }
 
   @override
-  Future<void> unregisterPttHotkey() async {}
+  Future<void> unregisterPttHotkey() async {
+    unregisterHotkeyCalls++;
+  }
 
   @override
   Future<void> showWindow() async {}
