@@ -121,10 +121,12 @@ FAKE_UP_RC=37 run_runner "$case_dir"
 assert_eq "$(cat "$case_dir/rc")" 37
 assert_contains "$case_dir/commands.log" 'compose.*<--profile> <app> <up> <-d> <--build>'
 assert_contains "$case_dir/commands.log" 'compose.*<ps> <--all>'
+assert_contains "$case_dir/commands.log" 'compose.*<logs> <--no-color> <--timestamps> <user>'
 assert_contains "$case_dir/commands.log" 'compose.*<logs> <--no-color> <--timestamps> <compose-db-init>'
 ps_line="$(grep -n 'compose.*<ps> <--all>' "$case_dir/commands.log" | cut -d: -f1)"
+user_logs_line="$(grep -n 'compose.*<logs>.*<user>' "$case_dir/commands.log" | cut -d: -f1)"
 logs_line="$(grep -n 'compose.*<logs>.*<compose-db-init>' "$case_dir/commands.log" | cut -d: -f1)"
-(( ps_line < logs_line )) || fail 'ps --all must precede compose-db-init logs'
+(( ps_line < user_logs_line && user_logs_line < logs_line )) || fail 'ps --all must precede user and compose-db-init logs'
 
 echo '== diagnostic failures and cleanup failure cannot replace original status =='
 case_dir="$(new_case diagnostic-failure)"
@@ -132,15 +134,17 @@ FAKE_UP_RC=37 FAKE_PS_RC=71 FAKE_LOGS_RC=72 FAKE_DOWN_RC=73 SECRET_SENTINEL='do-
   VOICE_FILE_ATTACHMENT_RESTART_CLEANUP=true run_runner "$case_dir"
 assert_eq "$(cat "$case_dir/rc")" 37
 assert_contains "$case_dir/commands.log" 'compose.*<ps> <--all>'
+assert_contains "$case_dir/commands.log" 'compose.*<logs> <--no-color> <--timestamps> <user>'
 assert_contains "$case_dir/commands.log" 'compose.*<logs> <--no-color> <--timestamps> <compose-db-init>'
 assert_contains "$case_dir/commands.log" 'compose.*<--profile> <app> <down> <--remove-orphans>'
 assert_not_contains "$case_dir/commands.log" '--volumes|<-v>|volume prune|system prune'
 assert_not_contains "$case_dir/stdout" 'do-not-leak-attachment-secret'
 assert_not_contains "$case_dir/stderr" 'do-not-leak-attachment-secret'
 ps_line="$(grep -n 'compose.*<ps> <--all>' "$case_dir/commands.log" | cut -d: -f1)"
+user_logs_line="$(grep -n 'compose.*<logs>.*<user>' "$case_dir/commands.log" | cut -d: -f1)"
 logs_line="$(grep -n 'compose.*<logs>.*<compose-db-init>' "$case_dir/commands.log" | cut -d: -f1)"
 down_line="$(grep -n 'compose.*<down> <--remove-orphans>' "$case_dir/commands.log" | cut -d: -f1)"
-(( ps_line < logs_line && logs_line < down_line )) || fail 'diagnostics must run ps, then logs, before cleanup'
+(( ps_line < user_logs_line && user_logs_line < logs_line && logs_line < down_line )) || fail 'diagnostics must run ps, then user and compose-db-init logs, before cleanup'
 
 identity_fields() {
   local line="$1"

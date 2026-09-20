@@ -150,6 +150,9 @@ initial_up_status=$?
 set -e
 if (( initial_up_status != 0 )); then
   compose ps --all >&2 || true
+  # A failed dependency otherwise leaves GitHub with only "user exited (1)".
+  # Keep its startup output with the proof failure; this is an isolated project.
+  compose logs --no-color --timestamps user >&2 || true
   compose logs --no-color --timestamps compose-db-init >&2 || true
   exit "$initial_up_status"
 fi
