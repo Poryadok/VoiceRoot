@@ -41,6 +41,7 @@ a1_e2e:
   - docker-compose*.yml
   - scripts/ci/compose-a1*
   - scripts/ci/compose-file-attachment-restart-proof.sh
+  - scripts/ci/a1-attachment-restart-ci-reachability_test.sh
   - scripts/ci/e2e-manifest*
 
 staging_infra:

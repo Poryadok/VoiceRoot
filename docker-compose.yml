@@ -117,10 +117,12 @@ services:
     ports:
       - "${CLAMAV_PORT:-3310}:3310"
 
-  # Local S3-compatible object storage (MinIO). Not used on staging/prod — Cloudflare R2 there.
+  # Default S3-compatible object storage for local development and the A1 proof.
+  # Set VOICE_MINIO_IMAGE/VOICE_MINIO_MC_IMAGE to an internally mirrored immutable
+  # reference when a registry policy requires it. Cloudflare R2 remains optional.
   minio:
     profiles: ["app"]
-    image: minio/minio:latest
+    image: ${VOICE_MINIO_IMAGE:-quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z@sha256:1dce27c494a16bae114774f1cec295493f3613142713130c2d22dd5696be6ad3}
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-voice-minio}
@@ -140,7 +142,7 @@ services:
 
   minio-init:
     profiles: ["app"]
-    image: minio/mc:latest
+    image: ${VOICE_MINIO_MC_IMAGE:-quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727}
     restart: "no"
     environment:
       MINIO_HOST: minio
@@ -309,11 +311,11 @@ services:
       AUTH_GRPC_ADDR: auth:9090
       USER_REDIS_ADDR: redis:6379
       NATS_URL: nats://nats:4222
-      USER_R2_ENDPOINT: ${USER_R2_ENDPOINT:-}
-      USER_R2_REGION: ${USER_R2_REGION:-auto}
-      USER_R2_ACCESS_KEY_ID: ${USER_R2_ACCESS_KEY_ID:-}
-      USER_R2_SECRET_ACCESS_KEY: ${USER_R2_SECRET_ACCESS_KEY:-}
-      USER_R2_BUCKET: ${USER_R2_BUCKET:-}
+      USER_R2_ENDPOINT: ${USER_R2_ENDPOINT:-http://minio:9000}
+      USER_R2_REGION: ${USER_R2_REGION:-us-east-1}
+      USER_R2_ACCESS_KEY_ID: ${USER_R2_ACCESS_KEY_ID:-voice-minio}
+      USER_R2_SECRET_ACCESS_KEY: ${USER_R2_SECRET_ACCESS_KEY:-voice-minio-dev}
+      USER_R2_BUCKET: ${USER_R2_BUCKET:-voice-dev-avatars}
       USER_R2_PUBLIC_BASE_URL: ${USER_R2_PUBLIC_BASE_URL:-}
       USER_DNS_STUB_URL: http://verification-stub:4180/dns-txt
     volumes:
@@ -462,11 +464,11 @@ services:
       FILE_GRPC_LISTEN: :9090
       CHAT_GRPC_ADDR: chat:9090
       CLAMAV_ADDR: clamav:3310
-      FILE_R2_ENDPOINT: ${FILE_R2_ENDPOINT:-}
-      FILE_R2_REGION: ${FILE_R2_REGION:-auto}
-      FILE_R2_ACCESS_KEY_ID: ${FILE_R2_ACCESS_KEY_ID:-}
-      FILE_R2_SECRET_ACCESS_KEY: ${FILE_R2_SECRET_ACCESS_KEY:-}
-      FILE_R2_BUCKET: ${FILE_R2_BUCKET:-}
+      FILE_R2_ENDPOINT: ${FILE_R2_ENDPOINT:-http://minio:9000}
+      FILE_R2_REGION: ${FILE_R2_REGION:-us-east-1}
+      FILE_R2_ACCESS_KEY_ID: ${FILE_R2_ACCESS_KEY_ID:-voice-minio}
+      FILE_R2_SECRET_ACCESS_KEY: ${FILE_R2_SECRET_ACCESS_KEY:-voice-minio-dev}
+      FILE_R2_BUCKET: ${FILE_R2_BUCKET:-voice-dev-files}
     depends_on:
       postgres:
         condition: service_healthy

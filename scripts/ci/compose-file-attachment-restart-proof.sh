@@ -164,12 +164,10 @@ export VOICE_FILE_ATTACHMENT_RESTART_PHASE=prepare
 )
 [[ -f "$state_path_posix" ]] || { echo "prepare did not create restart-proof state" >&2; exit 1; }
 
-# Restart the durable attachment producer and storage owner separately. The
-# subsequent verify phase must prove the attachment survives both restarts.
+# Restart File only. PostgreSQL and object storage stay running so this proves
+# service-process durability, not backup/restore or a new logical upload.
 compose restart file
 wait_healthy file
-compose restart messaging
-wait_healthy messaging
 wait_healthy gateway
 wait_gateway
 

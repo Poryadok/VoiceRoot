@@ -11,6 +11,10 @@ source "${ROOT}/scripts/prod/map-prod-env.sh"
 REGISTRY="${VOICE_IMAGE_REGISTRY:-ghcr.io/voiceroot/voiceroot}"
 TAG="${VOICE_IMAGE_TAG:?VOICE_IMAGE_TAG required for production}"
 NS="${VOICE_K8S_NAMESPACE:-voice-prod}"
+MINIO_IMAGE="${VOICE_MINIO_IMAGE:-quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z@sha256:1dce27c494a16bae114774f1cec295493f3613142713130c2d22dd5696be6ad3}"
+MINIO_MC_IMAGE="${VOICE_MINIO_MC_IMAGE:-quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727}"
+MINIO_STORAGE_CLASS="${VOICE_MINIO_STORAGE_CLASS:-local-path}"
+MINIO_STORAGE_SIZE="${VOICE_MINIO_STORAGE_SIZE:-100Gi}"
 LIVEKIT_NODE_IP="${VOICE_LIVEKIT_NODE_IP:?VOICE_LIVEKIT_NODE_IP required for production}"
 
 render() {
@@ -42,6 +46,11 @@ if ! kubectl get secret voice-app-secrets -n "${NS}" >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! kubectl get secret voice-minio-credentials -n "${NS}" >/dev/null 2>&1; then
+  echo "ERROR: secret voice-minio-credentials missing in ${NS}" >&2
+  exit 1
+fi
+
 bash "${ROOT}/scripts/staging/patch-app-secrets-database-urls.sh"
 if [ -n "${STAGING_STAFF_TOKEN:-}" ]; then
   bash "${ROOT}/scripts/staging/patch-gateway-staff-token.sh"
@@ -65,6 +74,12 @@ kubectl create secret generic voice-livekit-config -n "${NS}" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 render "${MANIFEST_DIR}/infra.yaml" | kubectl apply -f -
+
+sed -e "s|__VOICE_MINIO_IMAGE__|${MINIO_IMAGE}|g" \
+    -e "s|__VOICE_MINIO_MC_IMAGE__|${MINIO_MC_IMAGE}|g" \
+    -e "s|__VOICE_MINIO_STORAGE_CLASS__|${MINIO_STORAGE_CLASS}|g" \
+    -e "s|__VOICE_MINIO_STORAGE_SIZE__|${MINIO_STORAGE_SIZE}|g" \
+  "${MANIFEST_DIR}/minio.yaml" | kubectl apply -f -
 
 kubectl wait --for=condition=ready pod/voice-postgres-0 -n "${NS}" --timeout=120s
 for attempt in $(seq 1 30); do

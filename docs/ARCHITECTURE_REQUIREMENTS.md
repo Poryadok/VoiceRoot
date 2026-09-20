@@ -425,3 +425,9 @@ maximum restorable-backup age `P30D`, fails closed and audits rotation/
 destruction. A version is destroyed only after no retained row and no restorable
 backup needs it; permanent Subscription fences keep old versions until reviewed
 re-HMAC migration. Raw UUID is never a fallback.
+# Object storage deployment boundary
+
+The File and User services use an S3-compatible endpoint configured by secret
+references. Self-hosted MinIO is the default deployment; external S3 providers
+are configuration-only options. Object storage credentials and PVC backup
+material stay outside the repository. See [Object storage operations](OBJECT_STORAGE.md).
