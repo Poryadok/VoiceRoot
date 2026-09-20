@@ -398,7 +398,7 @@ Unarchive semantics: [GLOSSARY.md](../GLOSSARY.md) § «Архив чата», [
 
 ## Sticker packs
 
-Catalog + per-profile install state. Binary assets — **File Service** ([file-service.md](file-service.md) § Stickers and GIF assets); send wire — **Messaging** ([messaging-service.md](messaging-service.md) § Stickers and GIF). **Not yet in proto/code.**
+Catalog + per-profile install state. Binary assets — **File Service** ([file-service.md](file-service.md) § Stickers and GIF assets); send wire — **Messaging** ([messaging-service.md](messaging-service.md) § Stickers and GIF). The initial catalog slice implements installed-pack list, pack details, install, and uninstall; pack creation, asset ingest, GIF search, and message delivery remain separate work.
 
 ### Data model (spec — canonical; Messaging validates against this DDL only)
 
@@ -435,7 +435,7 @@ profile_installed_packs
 
 **Do not duplicate this schema in other service docs** — [messaging-service.md](messaging-service.md) § Stickers and GIF cross-refs here for validation/send only.
 
-### gRPC (sketch — not yet in proto)
+### gRPC
 
 ```protobuf
 // Sticker catalog
@@ -443,8 +443,7 @@ rpc ListInstalledStickerPacks(ListInstalledStickerPacksRequest) returns (ListIns
 rpc GetStickerPack(GetStickerPackRequest) returns (GetStickerPackResponse);
 rpc InstallStickerPack(InstallStickerPackRequest) returns (InstallStickerPackResponse);
 rpc UninstallStickerPack(UninstallStickerPackRequest) returns (InstallStickerPackResponse);
-rpc CreateUserStickerPack(CreateUserStickerPackRequest) returns (CreateUserStickerPackResponse);
-rpc AddStickersToUserPack(AddStickersToUserPackRequest) returns (...); // after File ConfirmUpload per sticker
+// CreateUserStickerPack/AddStickersToUserPack follow the File ingest slice and are not part of this catalog contract.
 
 // GIF provider search — owner: ChatService (HTTP adapter to Giphy or Tenor)
 rpc SearchGifs(SearchGifsRequest) returns (SearchGifsResponse);
@@ -476,7 +475,7 @@ Gateway REST (sketch): `GET /api/v1/sticker-packs`, `POST /api/v1/sticker-packs/
 
 **Send wire:** Messaging `SendMessage` + `content_type=STICKER|GIF` — full validation — [messaging-service.md](messaging-service.md) § Stickers and GIF.
 
-**Rules:** system packs pre-seeded (`is_system=true`); user `CreateUserStickerPack` uploads stickers via File `intent=sticker` (**static PNG/WebP only** — §37 #5); Premium ★ packs require Subscription check on `InstallStickerPack`; **`UninstallStickerPack` rejects `is_system` packs** (user packs only); uninstall does not delete sent messages; GIF **recents** — client-local ([GLOSSARY.md](../GLOSSARY.md) § «GIF / emoji recents»); server `GetTrendingGifs` for default GIF tab; search results cached server-side with rate limit per profile.
+**Rules:** system packs are deployment-owned rows (`is_system=true`) and are never seeded with fake product data by the service; a user pack is visible/installable only to its creator; installed state is keyed by the authenticated active profile. **`UninstallStickerPack` rejects `is_system` packs** and non-creator user packs; uninstall does not delete sent messages. Premium ★ checks, user-pack ingest, GIF search/recents, and provider caching remain outside this catalog slice.
 
 ## Публикуемые события (→ NATS)
 

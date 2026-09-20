@@ -49,6 +49,10 @@ const (
 	ChatService_DeclineDMRequest_FullMethodName               = "/voice.chat.v1.ChatService/DeclineDMRequest"
 	ChatService_MuteChat_FullMethodName                       = "/voice.chat.v1.ChatService/MuteChat"
 	ChatService_ArchiveChat_FullMethodName                    = "/voice.chat.v1.ChatService/ArchiveChat"
+	ChatService_ListInstalledStickerPacks_FullMethodName      = "/voice.chat.v1.ChatService/ListInstalledStickerPacks"
+	ChatService_GetStickerPack_FullMethodName                 = "/voice.chat.v1.ChatService/GetStickerPack"
+	ChatService_InstallStickerPack_FullMethodName             = "/voice.chat.v1.ChatService/InstallStickerPack"
+	ChatService_UninstallStickerPack_FullMethodName           = "/voice.chat.v1.ChatService/UninstallStickerPack"
 	ChatService_EnableChatE2E_FullMethodName                  = "/voice.chat.v1.ChatService/EnableChatE2E"
 	ChatService_DisableChatE2E_FullMethodName                 = "/voice.chat.v1.ChatService/DisableChatE2E"
 	ChatService_ListDMReceiptVisibilityTargets_FullMethodName = "/voice.chat.v1.ChatService/ListDMReceiptVisibilityTargets"
@@ -95,6 +99,11 @@ type ChatServiceClient interface {
 	DeclineDMRequest(ctx context.Context, in *DeclineDMRequestRequest, opts ...grpc.CallOption) (*DeclineDMRequestResponse, error)
 	MuteChat(ctx context.Context, in *MuteChatRequest, opts ...grpc.CallOption) (*MuteChatResponse, error)
 	ArchiveChat(ctx context.Context, in *ArchiveChatRequest, opts ...grpc.CallOption) (*ArchiveChatResponse, error)
+	// Sticker catalog and the caller's per-profile composer rail.
+	ListInstalledStickerPacks(ctx context.Context, in *ListInstalledStickerPacksRequest, opts ...grpc.CallOption) (*ListInstalledStickerPacksResponse, error)
+	GetStickerPack(ctx context.Context, in *GetStickerPackRequest, opts ...grpc.CallOption) (*GetStickerPackResponse, error)
+	InstallStickerPack(ctx context.Context, in *InstallStickerPackRequest, opts ...grpc.CallOption) (*InstallStickerPackResponse, error)
+	UninstallStickerPack(ctx context.Context, in *UninstallStickerPackRequest, opts ...grpc.CallOption) (*UninstallStickerPackResponse, error)
 	// DM-only opt-in E2E encryption — docs/features/encryption.md.
 	EnableChatE2E(ctx context.Context, in *EnableChatE2ERequest, opts ...grpc.CallOption) (*EnableChatE2EResponse, error)
 	DisableChatE2E(ctx context.Context, in *DisableChatE2ERequest, opts ...grpc.CallOption) (*DisableChatE2EResponse, error)
@@ -420,6 +429,46 @@ func (c *chatServiceClient) ArchiveChat(ctx context.Context, in *ArchiveChatRequ
 	return out, nil
 }
 
+func (c *chatServiceClient) ListInstalledStickerPacks(ctx context.Context, in *ListInstalledStickerPacksRequest, opts ...grpc.CallOption) (*ListInstalledStickerPacksResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListInstalledStickerPacksResponse)
+	err := c.cc.Invoke(ctx, ChatService_ListInstalledStickerPacks_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) GetStickerPack(ctx context.Context, in *GetStickerPackRequest, opts ...grpc.CallOption) (*GetStickerPackResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetStickerPackResponse)
+	err := c.cc.Invoke(ctx, ChatService_GetStickerPack_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) InstallStickerPack(ctx context.Context, in *InstallStickerPackRequest, opts ...grpc.CallOption) (*InstallStickerPackResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(InstallStickerPackResponse)
+	err := c.cc.Invoke(ctx, ChatService_InstallStickerPack_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) UninstallStickerPack(ctx context.Context, in *UninstallStickerPackRequest, opts ...grpc.CallOption) (*UninstallStickerPackResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UninstallStickerPackResponse)
+	err := c.cc.Invoke(ctx, ChatService_UninstallStickerPack_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *chatServiceClient) EnableChatE2E(ctx context.Context, in *EnableChatE2ERequest, opts ...grpc.CallOption) (*EnableChatE2EResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(EnableChatE2EResponse)
@@ -527,6 +576,11 @@ type ChatServiceServer interface {
 	DeclineDMRequest(context.Context, *DeclineDMRequestRequest) (*DeclineDMRequestResponse, error)
 	MuteChat(context.Context, *MuteChatRequest) (*MuteChatResponse, error)
 	ArchiveChat(context.Context, *ArchiveChatRequest) (*ArchiveChatResponse, error)
+	// Sticker catalog and the caller's per-profile composer rail.
+	ListInstalledStickerPacks(context.Context, *ListInstalledStickerPacksRequest) (*ListInstalledStickerPacksResponse, error)
+	GetStickerPack(context.Context, *GetStickerPackRequest) (*GetStickerPackResponse, error)
+	InstallStickerPack(context.Context, *InstallStickerPackRequest) (*InstallStickerPackResponse, error)
+	UninstallStickerPack(context.Context, *UninstallStickerPackRequest) (*UninstallStickerPackResponse, error)
 	// DM-only opt-in E2E encryption — docs/features/encryption.md.
 	EnableChatE2E(context.Context, *EnableChatE2ERequest) (*EnableChatE2EResponse, error)
 	DisableChatE2E(context.Context, *DisableChatE2ERequest) (*DisableChatE2EResponse, error)
@@ -641,6 +695,18 @@ func (UnimplementedChatServiceServer) MuteChat(context.Context, *MuteChatRequest
 }
 func (UnimplementedChatServiceServer) ArchiveChat(context.Context, *ArchiveChatRequest) (*ArchiveChatResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ArchiveChat not implemented")
+}
+func (UnimplementedChatServiceServer) ListInstalledStickerPacks(context.Context, *ListInstalledStickerPacksRequest) (*ListInstalledStickerPacksResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListInstalledStickerPacks not implemented")
+}
+func (UnimplementedChatServiceServer) GetStickerPack(context.Context, *GetStickerPackRequest) (*GetStickerPackResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetStickerPack not implemented")
+}
+func (UnimplementedChatServiceServer) InstallStickerPack(context.Context, *InstallStickerPackRequest) (*InstallStickerPackResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method InstallStickerPack not implemented")
+}
+func (UnimplementedChatServiceServer) UninstallStickerPack(context.Context, *UninstallStickerPackRequest) (*UninstallStickerPackResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UninstallStickerPack not implemented")
 }
 func (UnimplementedChatServiceServer) EnableChatE2E(context.Context, *EnableChatE2ERequest) (*EnableChatE2EResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method EnableChatE2E not implemented")
@@ -1224,6 +1290,78 @@ func _ChatService_ArchiveChat_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChatService_ListInstalledStickerPacks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListInstalledStickerPacksRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).ListInstalledStickerPacks(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_ListInstalledStickerPacks_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).ListInstalledStickerPacks(ctx, req.(*ListInstalledStickerPacksRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_GetStickerPack_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetStickerPackRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).GetStickerPack(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_GetStickerPack_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).GetStickerPack(ctx, req.(*GetStickerPackRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_InstallStickerPack_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InstallStickerPackRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).InstallStickerPack(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_InstallStickerPack_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).InstallStickerPack(ctx, req.(*InstallStickerPackRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_UninstallStickerPack_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UninstallStickerPackRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).UninstallStickerPack(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_UninstallStickerPack_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).UninstallStickerPack(ctx, req.(*UninstallStickerPackRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ChatService_EnableChatE2E_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(EnableChatE2ERequest)
 	if err := dec(in); err != nil {
@@ -1476,6 +1614,22 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ArchiveChat",
 			Handler:    _ChatService_ArchiveChat_Handler,
+		},
+		{
+			MethodName: "ListInstalledStickerPacks",
+			Handler:    _ChatService_ListInstalledStickerPacks_Handler,
+		},
+		{
+			MethodName: "GetStickerPack",
+			Handler:    _ChatService_GetStickerPack_Handler,
+		},
+		{
+			MethodName: "InstallStickerPack",
+			Handler:    _ChatService_InstallStickerPack_Handler,
+		},
+		{
+			MethodName: "UninstallStickerPack",
+			Handler:    _ChatService_UninstallStickerPack_Handler,
 		},
 		{
 			MethodName: "EnableChatE2E",
