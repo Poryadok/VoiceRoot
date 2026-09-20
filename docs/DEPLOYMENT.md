@@ -532,3 +532,8 @@ Rotation sequence (all Social replicas must publish the same key set):
    proof before any later activation. An unavailable or invalid refresh does
    not replace the last good complete set; after two minutes without a valid
    refresh requests fail closed.
+# Object storage
+
+See [Object storage operations](OBJECT_STORAGE.md) for the self-hosted MinIO
+default, pinned image/mirror policy, k3s prerequisites, backup/restore, and the
+optional S3-provider migration procedure.

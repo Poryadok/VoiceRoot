@@ -1,0 +1,130 @@
+# Self-hosted default S3 storage for staging. Rendered by apply-infra.sh.
+# Credentials are supplied only by the separately managed voice-minio-credentials Secret.
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-minio
+  namespace: voice-staging
+spec:
+  selector:
+    app: voice-minio
+  ports:
+    - name: s3
+      port: 9000
+      targetPort: s3
+    - name: console
+      port: 9001
+      targetPort: console
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: voice-minio
+  namespace: voice-staging
+spec:
+  serviceName: voice-minio
+  replicas: 1
+  selector:
+    matchLabels:
+      app: voice-minio
+  template:
+    metadata:
+      labels:
+        app: voice-minio
+    spec:
+      containers:
+        - name: minio
+          image: __VOICE_MINIO_IMAGE__
+          args: ["server", "/data", "--console-address", ":9001"]
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: voice-minio-credentials
+                  key: MINIO_ROOT_USER
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: voice-minio-credentials
+                  key: MINIO_ROOT_PASSWORD
+          ports:
+            - name: s3
+              containerPort: 9000
+            - name: console
+              containerPort: 9001
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: s3
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: s3
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: __VOICE_MINIO_STORAGE_CLASS__
+        resources:
+          requests:
+            storage: __VOICE_MINIO_STORAGE_SIZE__
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: voice-minio-create-avatars-bucket
+  namespace: voice-staging
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mc
+          image: __VOICE_MINIO_MC_IMAGE__
+          args: ["mb", "--ignore-existing", "local/voice-staging-avatars"]
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: voice-minio-credentials
+                  key: MINIO_ROOT_USER
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: voice-minio-credentials
+                  key: MINIO_ROOT_PASSWORD
+            - name: MC_HOST_local
+              value: "http://$(MINIO_ROOT_USER):$(MINIO_ROOT_PASSWORD)@voice-minio:9000"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: voice-minio-create-files-bucket
+  namespace: voice-staging
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mc
+          image: __VOICE_MINIO_MC_IMAGE__
+          args: ["mb", "--ignore-existing", "local/voice-staging-files"]
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: voice-minio-credentials
+                  key: MINIO_ROOT_USER
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: voice-minio-credentials
+                  key: MINIO_ROOT_PASSWORD
+            - name: MC_HOST_local
+              value: "http://$(MINIO_ROOT_USER):$(MINIO_ROOT_PASSWORD)@voice-minio:9000"
