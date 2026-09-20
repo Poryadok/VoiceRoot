@@ -736,16 +736,13 @@ class AuthController extends StateNotifier<AuthState> {
           _convertingGuest = false;
           return null;
         case AuthSessionOk(:final session):
+          final previous = current;
+          if (!_isEmailVerificationCurrent(previous, generation)) {
+            _convertingGuest = false;
+            return 'not_authenticated';
+          }
           current = session;
-          if (!_isEmailVerificationCurrent(current, generation)) {
-            _convertingGuest = false;
-            return 'not_authenticated';
-          }
           await _persist(session);
-          if (!_isEmailVerificationCurrent(current, generation)) {
-            _convertingGuest = false;
-            return 'not_authenticated';
-          }
           state = state.copyWith(
             session: session,
             isGuest: true,
@@ -753,6 +750,10 @@ class AuthController extends StateNotifier<AuthState> {
                 EmailVerificationRecoveryState.promotionPending,
             clearError: true,
           );
+          if (!_isEmailVerificationCurrent(current, generation)) {
+            _convertingGuest = false;
+            return 'not_authenticated';
+          }
           if (attempt < 3) {
             await Future<void>.delayed(
               Duration(milliseconds: 150 * (attempt + 1)),
@@ -783,7 +784,15 @@ class AuthController extends StateNotifier<AuthState> {
   }) async {
     if (!_isEmailVerificationCurrent(expected, generation)) return false;
     await _persist(session);
-    if (generation != _profileSwitchGeneration) return false;
+    if (generation != _profileSwitchGeneration) {
+      final repair = state.session;
+      if (repair == null) {
+        await _storage.clear();
+      } else {
+        await _storage.write(repair);
+      }
+      return false;
+    }
     state = state.copyWith(
       session: session,
       clearGuest: true,

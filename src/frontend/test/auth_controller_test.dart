@@ -286,6 +286,50 @@ void main() {
   });
 
   test(
+    'promotion retry accepts a rotated guest refresh token before regular',
+    () async {
+      var refreshes = 0;
+      final mock = MockClient((req) async {
+        if (req.url.path != '/api/v1/auth/refresh')
+          return http.Response('not found', 404);
+        refreshes++;
+        return http.Response(
+          jsonEncode({
+            'session': {
+              ...(sessionJson()['session'] as Map<String, dynamic>),
+              'access_token': refreshes == 1 ? 'guest-next' : 'regular-access',
+              'refresh_token': refreshes == 1
+                  ? 'refresh-next'
+                  : 'regular-refresh',
+              'account_type': refreshes == 1 ? 'guest' : 'regular',
+            },
+          }),
+          200,
+        );
+      });
+      final storage = InMemoryAuthSessionStorage();
+      final container = buildContainer(mock: mock, storage: storage);
+      addTearDown(container.dispose);
+      final controller = container.read(authControllerProvider.notifier);
+      controller.state = const AuthState(
+        session: AuthSession(
+          accessToken: 'guest',
+          refreshToken: 'refresh',
+          accountId: 'acc',
+          activeProfileId: 'profile',
+          expiresInSeconds: 900,
+          accountType: 'guest',
+        ),
+        emailVerificationRecoveryState:
+            EmailVerificationRecoveryState.promotionPending,
+      );
+      expect(await controller.resumeEmailVerificationPromotion(), isNull);
+      expect(refreshes, 2);
+      expect((await storage.read())?.accountType, 'regular');
+    },
+  );
+
+  test(
     'restore resumes a session-bound email verification without resend or OTP replay',
     () async {
       final storage = InMemoryAuthSessionStorage();
