@@ -182,7 +182,7 @@ user_restart="$(grep -n 'compose.*<restart> <user>' "$case_dir/commands.log" | c
 prepare_line="$(grep -n 'go .*phase=prepare' "$case_dir/commands.log" | cut -d: -f1)"
 verify_line="$(grep -n 'go .*phase=verify' "$case_dir/commands.log" | cut -d: -f1)"
 probe_count="$(grep -c 'compose.*<run>.*<-e> <FILE_PRINCIPAL_PROBE=1> <file>' "$case_dir/commands.log" || true)"
-assert_eq "$probe_count" 3
+assert_eq "$probe_count" 4
 [[ -n "$restart_lines" && "$prepare_line" -lt "$user_restart" && "$user_restart" -lt "$file_restart" && "$file_restart" -lt "$verify_line" ]] || \
   fail 'successful path must order prepare, User restart, File restart, verify'
 assert_contains "$case_dir/commands.log" 'compose.*<run>.*<FILE_PRINCIPAL_SIGNING_KEYS_DIR=>.*<file>'
