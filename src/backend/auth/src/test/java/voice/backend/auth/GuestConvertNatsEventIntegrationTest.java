@@ -64,23 +64,16 @@ class GuestConvertNatsEventIntegrationTest {
         .as("convert-guest submit must not publish before email verification")
         .doesNotContain("user.guest_converted");
 
-    mailSender.clear();
-    mockMvc
-        .perform(
-            post("/api/v1/auth/otp/send")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(
-                    "{\"email\":\"nats-guest@example.com\",\"otp_type\":\"email_verify\"}"))
-        .andExpect(status().isNoContent());
     String code = mailSender.lastCode();
     assertThat(code).matches("\\d{6}");
 
     mockMvc
         .perform(
             post("/api/v1/auth/otp/verify")
+                .header("Authorization", "Bearer " + session(postJson("/api/v1/auth/login", "{\"email\":\"nats-guest@example.com\",\"password\":\"New account password 1\",\"device_info_json\":\"{}\"}")).get("access_token").asText())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
-                    "{\"email\":\"nats-guest@example.com\",\"code\":\""
+                    "{\"code\":\""
                         + code
                         + "\",\"otp_type\":\"email_verify\"}"))
         .andExpect(status().isNoContent());

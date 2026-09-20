@@ -190,6 +190,11 @@ class AuthController extends StateNotifier<AuthState> {
       case AuthSessionOk(:final session):
         await _persist(session);
         final isGuest = await _resolveIsGuest(session);
+        final verification = isGuest
+            ? await _authClient.getEmailVerificationStatus(session: session)
+            : null;
+        final promotionPending = verification is AuthApiOk<EmailVerificationRecoveryState> &&
+            verification.data == EmailVerificationRecoveryState.promotionPending;
         final needsGuestNickname =
             isGuest &&
             !await _guestCredentialsStorage.isNicknameCompleted(
@@ -207,8 +212,9 @@ class AuthController extends StateNotifier<AuthState> {
               : null,
           isGuestConversionPromotionPending:
               isGuest &&
-              await _guestCredentialsStorage
-                  .isGuestConversionPromotionPending(),
+              (promotionPending ||
+                  await _guestCredentialsStorage
+                      .isGuestConversionPromotionPending()),
         );
         if (!needsGuestNickname) {
           await _notifyAuthenticated();
@@ -320,21 +326,11 @@ class AuthController extends StateNotifier<AuthState> {
           clearError: true,
         );
         await _persist(session);
-        final sent = await _authClient.sendGuestConversionEmailOtp(
-          session: session,
-          email: email,
-        );
         _convertingGuest = false;
-        return switch (sent) {
-          AuthApiOk<void>() => null,
-          AuthApiFailure(:final message, :final errorCode, :final statusCode) =>
-            resolveAuthErrorKey(
-                  errorCode: errorCode,
-                  statusCode: statusCode,
-                  message: message,
-                ) ??
-                message,
-        };
+        // Auth sends the initial verification code under this restricted
+        // session atomically with conversion; a second client send would be a
+        // rate-limited resend.
+        return null;
       case AuthSessionFailure(
         :final message,
         :final errorCode,
@@ -352,13 +348,11 @@ class AuthController extends StateNotifier<AuthState> {
 
   Future<String?> resendGuestConversionEmailOtp() async {
     final current = state.session;
-    final email = state.pendingGuestConversionEmail;
-    if (current == null || email == null || email.isEmpty) {
+    if (current == null || state.pendingGuestConversionEmail == null) {
       return 'not_authenticated';
     }
     final result = await _authClient.sendGuestConversionEmailOtp(
       session: current,
-      email: email,
     );
     return switch (result) {
       AuthApiOk<void>() => null,
@@ -374,15 +368,13 @@ class AuthController extends StateNotifier<AuthState> {
 
   Future<String?> verifyGuestConversionEmail(String code) async {
     final current = state.session;
-    final email = state.pendingGuestConversionEmail;
-    if (current == null || email == null || email.isEmpty) {
+    if (current == null || state.pendingGuestConversionEmail == null) {
       return 'not_authenticated';
     }
     _convertingGuest = true;
     final credentials = await _guestCredentialsStorage.snapshot();
     final verified = await _authClient.verifyGuestConversionEmailOtp(
       session: current,
-      email: email,
       code: code,
     );
     if (verified case GuestConversionOtpFailure(

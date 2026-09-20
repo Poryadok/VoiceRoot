@@ -22,6 +22,10 @@ _Пока пусто — критичные клиентские блокеры 
 
 ### Guest & onboarding live
 
+- [ ] **[A1] Session-bound email verification recovery proof** — on reload,
+  call `GET /api/v1/auth/verification-status`; resume `EMAIL_PENDING`, show
+  bounded `PROMOTION_PENDING` retry, and persist a replacement `REGULAR`
+  session before routing. Never resend email or submit it with verification.
 - [x] **Onboarding coach-marks E2E** — `onboarding_coach_e2e_live_test` (spaces/MM + invite deep link); guest: `guest_onboarding_e2e_live_test`; widget-якоря: `guest_onboarding_anchor_keys_test` / `onboarding_overlay_test`.
 
 ### Flutter delivery

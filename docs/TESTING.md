@@ -282,6 +282,10 @@ Self-hosted runner на staging: версия runner **≥ 2.327.1** для node
 - **A1 isolated Flutter proof:** `make compose-a1-flutter-profile-handoff` runs ordered T-055 profile handoff, T-106 soft-delete, and T-107 folders/Quick Access persistence against its own Compose project and ports.
 - Манифест фич: [`.github/ci/e2e-features.yml`](../.github/ci/e2e-features.yml).
 - Flutter live helper `registerUser` завершает публичный email verification flow через compose-only Resend fixture: `otp/send` → `GET /emails/latest?to=<unique-email>` → `otp/verify`. Compose публикует fixture только на loopback; изолированный runner передаёт его URL через `VOICE_AUTH_MAIL_STUB_URL`. Staging/production сохраняют стандартный endpoint `https://api.resend.com/emails`.
+- A1 session-bound verification proof must register/convert once, obtain the
+  initial code from the mail fixture, use the restricted bearer for resend/
+  verify/status (without an email body field), and assert replacement-session
+  persistence before regular routing or bounded `PROMOTION_PENDING` recovery.
 - R22.3 D1 tests являются source-disabled storage tests, не public Voice/media
   E2E и не активируют handlers, coordinator или Redis bridge.
 

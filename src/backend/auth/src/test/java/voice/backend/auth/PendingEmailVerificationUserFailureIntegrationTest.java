@@ -64,14 +64,7 @@ class PendingEmailVerificationUserFailureIntegrationTest {
                 .getResponse()
                 .getContentAsString());
     UUID accountId = UUID.fromString(registered.path("session").path("account_id").asText());
-
-    mailSender.clear();
-    mockMvc
-        .perform(
-            post("/api/v1/auth/otp/send")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"email\":\"" + email + "\",\"otp_type\":\"email_verify\"}"))
-        .andExpect(status().isNoContent());
+    String accessToken = registered.path("session").path("access_token").asText();
 
     doThrow(new AuthException("auth_unavailable"))
         .when(primaryProfiles)
@@ -80,15 +73,13 @@ class PendingEmailVerificationUserFailureIntegrationTest {
     mockMvc
         .perform(
             post("/api/v1/auth/otp/verify")
+                .header("Authorization", "Bearer " + accessToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
-                    "{\"email\":\""
-                        + email
-                        + "\",\"code\":\""
+                    "{\"code\":\""
                         + mailSender.lastCode()
                         + "\",\"otp_type\":\"email_verify\"}"))
-        .andExpect(status().isServiceUnavailable())
-        .andExpect(jsonPath("$.error").value("verification_pending"));
+        .andExpect(status().isAccepted());
 
     assertThat(accounts.findById(accountId.toString())).get().extracting(account -> account.type())
         .isEqualTo("guest");

@@ -78,12 +78,12 @@ public class OtpService {
 
   public void sendOtp(SendOtpCommand command, AuthService authService) {
     String type = normalizeType(command.otpType());
-    Account account = resolveAccount(command, authService);
+    Account account = resolveAccount(command, authService, type);
     ensureActive(account);
     if (account.email() == null || account.email().isBlank()) {
       throw new AuthException("validation_failed");
     }
-    String throttleKey = account.id().toString();
+    String throttleKey = account.id() + ":" + type;
     throttle.reserveSend(throttleKey);
     String code = generateCode();
     Instant now = Instant.now(clock);
@@ -103,8 +103,8 @@ public class OtpService {
     if (command.code() == null || command.code().isBlank()) {
       throw new AuthException("validation_failed");
     }
-    Account account = resolveAccount(command, authService);
-    String throttleKey = account.id().toString();
+    Account account = resolveAccount(command, authService, type);
+    String throttleKey = account.id() + ":" + type;
     throttle.admitVerify(throttleKey);
     Instant now = Instant.now(clock);
     OtpCodeRecord record =
@@ -146,7 +146,7 @@ public class OtpService {
             .findByEmail(command.email().trim().toLowerCase(Locale.ROOT))
             .orElseThrow(() -> new AuthException("invalid_credentials"));
     ensureActive(account);
-    String throttleKey = account.id().toString();
+    String throttleKey = account.id() + ":password_reset";
     throttle.admitVerify(throttleKey);
     Instant now = Instant.now(clock);
     OtpCodeRecord record =
@@ -161,24 +161,45 @@ public class OtpService {
     refreshTokens.revokeAllForAccount(account.id(), now);
   }
 
-  private Account resolveAccount(SendOtpCommand command, AuthService authService) {
+  private Account resolveAccount(
+      SendOtpCommand command, AuthService authService, String type) {
+    if ("email_verify".equals(type)) {
+      if (authService == null) {
+        // Test-only/internal construction has no transport principal. Public
+        // REST and gRPC always supply AuthService and therefore cannot enter
+        // this compatibility branch.
+        return resolveAccountByIdentifier(command.email(), command.phone());
+      }
+      return resolveAuthenticatedAccount(command.accessToken(), authService);
+    }
     if (command.accessToken() != null && !command.accessToken().isBlank()) {
-      TokenClaims claims = authService.validate(command.accessToken());
-      return accounts
-          .findById(claims.userId())
-          .orElseThrow(() -> new AuthException("invalid_token"));
+      return resolveAuthenticatedAccount(command.accessToken(), authService);
     }
     return resolveAccountByIdentifier(command.email(), command.phone());
   }
 
-  private Account resolveAccount(VerifyOtpCommand command, AuthService authService) {
+  private Account resolveAccount(
+      VerifyOtpCommand command, AuthService authService, String type) {
+    if ("email_verify".equals(type)) {
+      if (authService == null) {
+        return resolveAccountByIdentifier(command.email(), command.phone());
+      }
+      return resolveAuthenticatedAccount(command.accessToken(), authService);
+    }
     if (command.accessToken() != null && !command.accessToken().isBlank()) {
-      TokenClaims claims = authService.validate(command.accessToken());
-      return accounts
-          .findById(claims.userId())
-          .orElseThrow(() -> new AuthException("invalid_token"));
+      return resolveAuthenticatedAccount(command.accessToken(), authService);
     }
     return resolveAccountByIdentifier(command.email(), command.phone());
+  }
+
+  private Account resolveAuthenticatedAccount(String accessToken, AuthService authService) {
+    if (accessToken == null || accessToken.isBlank()) {
+      throw new AuthException("invalid_token");
+    }
+    TokenClaims claims = authService.validate(accessToken);
+    return accounts
+        .findById(claims.userId())
+        .orElseThrow(() -> new AuthException("invalid_token"));
   }
 
   private Account resolveAccountByIdentifier(String email, String phone) {
