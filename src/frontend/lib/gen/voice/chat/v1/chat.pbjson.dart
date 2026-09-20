@@ -996,6 +996,201 @@ final $typed_data.Uint8List archiveChatRequestDescriptor = $convert.base64Decode
     'ChJBcmNoaXZlQ2hhdFJlcXVlc3QSFwoHY2hhdF9pZBgBIAEoCVIGY2hhdElkEhoKCGFyY2hpdm'
     'VkGAIgASgIUghhcmNoaXZlZA==');
 
+@$core.Deprecated('Use stickerDescriptor instead')
+const Sticker$json = {
+  '1': 'Sticker',
+  '2': [
+    {'1': 'id', '3': 1, '4': 1, '5': 9, '10': 'id'},
+    {'1': 'file_id', '3': 2, '4': 1, '5': 9, '10': 'fileId'},
+    {'1': 'emoji', '3': 3, '4': 1, '5': 9, '9': 0, '10': 'emoji', '17': true},
+    {'1': 'sort_order', '3': 4, '4': 1, '5': 5, '10': 'sortOrder'},
+    {'1': 'width', '3': 5, '4': 1, '5': 5, '10': 'width'},
+    {'1': 'height', '3': 6, '4': 1, '5': 5, '10': 'height'},
+  ],
+  '8': [
+    {'1': '_emoji'},
+  ],
+};
+
+/// Descriptor for `Sticker`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List stickerDescriptor = $convert.base64Decode(
+    'CgdTdGlja2VyEg4KAmlkGAEgASgJUgJpZBIXCgdmaWxlX2lkGAIgASgJUgZmaWxlSWQSGQoFZW'
+    '1vamkYAyABKAlIAFIFZW1vammIAQESHQoKc29ydF9vcmRlchgEIAEoBVIJc29ydE9yZGVyEhQK'
+    'BXdpZHRoGAUgASgFUgV3aWR0aBIWCgZoZWlnaHQYBiABKAVSBmhlaWdodEIICgZfZW1vamk=');
+
+@$core.Deprecated('Use stickerPackDescriptor instead')
+const StickerPack$json = {
+  '1': 'StickerPack',
+  '2': [
+    {'1': 'id', '3': 1, '4': 1, '5': 9, '10': 'id'},
+    {'1': 'title', '3': 2, '4': 1, '5': 9, '10': 'title'},
+    {
+      '1': 'thumb_file_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'thumbFileId',
+      '17': true
+    },
+    {'1': 'is_system', '3': 4, '4': 1, '5': 8, '10': 'isSystem'},
+    {'1': 'is_premium', '3': 5, '4': 1, '5': 8, '10': 'isPremium'},
+    {
+      '1': 'creator_profile_id',
+      '3': 6,
+      '4': 1,
+      '5': 9,
+      '9': 1,
+      '10': 'creatorProfileId',
+      '17': true
+    },
+    {'1': 'sticker_count', '3': 7, '4': 1, '5': 5, '10': 'stickerCount'},
+    {
+      '1': 'stickers',
+      '3': 8,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.chat.v1.Sticker',
+      '10': 'stickers'
+    },
+    {'1': 'sort_order', '3': 9, '4': 1, '5': 5, '10': 'sortOrder'},
+  ],
+  '8': [
+    {'1': '_thumb_file_id'},
+    {'1': '_creator_profile_id'},
+  ],
+};
+
+/// Descriptor for `StickerPack`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List stickerPackDescriptor = $convert.base64Decode(
+    'CgtTdGlja2VyUGFjaxIOCgJpZBgBIAEoCVICaWQSFAoFdGl0bGUYAiABKAlSBXRpdGxlEicKDX'
+    'RodW1iX2ZpbGVfaWQYAyABKAlIAFILdGh1bWJGaWxlSWSIAQESGwoJaXNfc3lzdGVtGAQgASgI'
+    'Ughpc1N5c3RlbRIdCgppc19wcmVtaXVtGAUgASgIUglpc1ByZW1pdW0SMQoSY3JlYXRvcl9wcm'
+    '9maWxlX2lkGAYgASgJSAFSEGNyZWF0b3JQcm9maWxlSWSIAQESIwoNc3RpY2tlcl9jb3VudBgH'
+    'IAEoBVIMc3RpY2tlckNvdW50EjIKCHN0aWNrZXJzGAggAygLMhYudm9pY2UuY2hhdC52MS5TdG'
+    'lja2VyUghzdGlja2VycxIdCgpzb3J0X29yZGVyGAkgASgFUglzb3J0T3JkZXJCEAoOX3RodW1i'
+    'X2ZpbGVfaWRCFQoTX2NyZWF0b3JfcHJvZmlsZV9pZA==');
+
+@$core.Deprecated('Use listInstalledStickerPacksRequestDescriptor instead')
+const ListInstalledStickerPacksRequest$json = {
+  '1': 'ListInstalledStickerPacksRequest',
+};
+
+/// Descriptor for `ListInstalledStickerPacksRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List listInstalledStickerPacksRequestDescriptor =
+    $convert.base64Decode('CiBMaXN0SW5zdGFsbGVkU3RpY2tlclBhY2tzUmVxdWVzdA==');
+
+@$core.Deprecated('Use listInstalledStickerPacksResponseDescriptor instead')
+const ListInstalledStickerPacksResponse$json = {
+  '1': 'ListInstalledStickerPacksResponse',
+  '2': [
+    {
+      '1': 'packs',
+      '3': 1,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.chat.v1.StickerPack',
+      '10': 'packs'
+    },
+  ],
+};
+
+/// Descriptor for `ListInstalledStickerPacksResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List listInstalledStickerPacksResponseDescriptor =
+    $convert.base64Decode(
+        'CiFMaXN0SW5zdGFsbGVkU3RpY2tlclBhY2tzUmVzcG9uc2USMAoFcGFja3MYASADKAsyGi52b2'
+        'ljZS5jaGF0LnYxLlN0aWNrZXJQYWNrUgVwYWNrcw==');
+
+@$core.Deprecated('Use getStickerPackRequestDescriptor instead')
+const GetStickerPackRequest$json = {
+  '1': 'GetStickerPackRequest',
+  '2': [
+    {'1': 'pack_id', '3': 1, '4': 1, '5': 9, '10': 'packId'},
+  ],
+};
+
+/// Descriptor for `GetStickerPackRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getStickerPackRequestDescriptor =
+    $convert.base64Decode(
+        'ChVHZXRTdGlja2VyUGFja1JlcXVlc3QSFwoHcGFja19pZBgBIAEoCVIGcGFja0lk');
+
+@$core.Deprecated('Use getStickerPackResponseDescriptor instead')
+const GetStickerPackResponse$json = {
+  '1': 'GetStickerPackResponse',
+  '2': [
+    {
+      '1': 'pack',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.chat.v1.StickerPack',
+      '10': 'pack'
+    },
+  ],
+};
+
+/// Descriptor for `GetStickerPackResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getStickerPackResponseDescriptor =
+    $convert.base64Decode(
+        'ChZHZXRTdGlja2VyUGFja1Jlc3BvbnNlEi4KBHBhY2sYASABKAsyGi52b2ljZS5jaGF0LnYxLl'
+        'N0aWNrZXJQYWNrUgRwYWNr');
+
+@$core.Deprecated('Use installStickerPackRequestDescriptor instead')
+const InstallStickerPackRequest$json = {
+  '1': 'InstallStickerPackRequest',
+  '2': [
+    {'1': 'pack_id', '3': 1, '4': 1, '5': 9, '10': 'packId'},
+  ],
+};
+
+/// Descriptor for `InstallStickerPackRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List installStickerPackRequestDescriptor =
+    $convert.base64Decode(
+        'ChlJbnN0YWxsU3RpY2tlclBhY2tSZXF1ZXN0EhcKB3BhY2tfaWQYASABKAlSBnBhY2tJZA==');
+
+@$core.Deprecated('Use installStickerPackResponseDescriptor instead')
+const InstallStickerPackResponse$json = {
+  '1': 'InstallStickerPackResponse',
+  '2': [
+    {
+      '1': 'pack',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.chat.v1.StickerPack',
+      '10': 'pack'
+    },
+  ],
+};
+
+/// Descriptor for `InstallStickerPackResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List installStickerPackResponseDescriptor =
+    $convert.base64Decode(
+        'ChpJbnN0YWxsU3RpY2tlclBhY2tSZXNwb25zZRIuCgRwYWNrGAEgASgLMhoudm9pY2UuY2hhdC'
+        '52MS5TdGlja2VyUGFja1IEcGFjaw==');
+
+@$core.Deprecated('Use uninstallStickerPackRequestDescriptor instead')
+const UninstallStickerPackRequest$json = {
+  '1': 'UninstallStickerPackRequest',
+  '2': [
+    {'1': 'pack_id', '3': 1, '4': 1, '5': 9, '10': 'packId'},
+  ],
+};
+
+/// Descriptor for `UninstallStickerPackRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List uninstallStickerPackRequestDescriptor =
+    $convert.base64Decode(
+        'ChtVbmluc3RhbGxTdGlja2VyUGFja1JlcXVlc3QSFwoHcGFja19pZBgBIAEoCVIGcGFja0lk');
+
+@$core.Deprecated('Use uninstallStickerPackResponseDescriptor instead')
+const UninstallStickerPackResponse$json = {
+  '1': 'UninstallStickerPackResponse',
+};
+
+/// Descriptor for `UninstallStickerPackResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List uninstallStickerPackResponseDescriptor =
+    $convert.base64Decode('ChxVbmluc3RhbGxTdGlja2VyUGFja1Jlc3BvbnNl');
+
 @$core.Deprecated('Use enableChatE2ERequestDescriptor instead')
 const EnableChatE2ERequest$json = {
   '1': 'EnableChatE2ERequest',

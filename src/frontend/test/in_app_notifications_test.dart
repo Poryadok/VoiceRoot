@@ -191,6 +191,75 @@ void main() {
       expect(sound.newMessagePlays, 1);
     });
 
+    test(
+      'notification creates an unread center row and mark_read converges it',
+      () async {
+        final sound = _RecordingSoundPlayer();
+        final hub = _FakeRealtimeHub();
+        final container = _container(sound: sound, hub: hub);
+        addTearDown(container.dispose);
+
+        container.read(chatListControllerProvider);
+        await pumpEventQueue();
+        container.read(inAppNotificationControllerProvider);
+
+        hub.emit(
+          const RealtimeFrame(
+            op: 'notification',
+            data: {
+              'type': 'mention',
+              'chat_id': 'chat-other',
+              'message_id': 'msg-mention',
+              'sender_profile_id': 'peer-1',
+            },
+          ),
+        );
+        await pumpEventQueue();
+
+        expect(container.read(inAppNotificationCenterProvider).unreadCount, 1);
+        expect(
+          container
+              .read(inAppNotificationCenterProvider)
+              .items
+              .single
+              .messageId,
+          'msg-mention',
+        );
+
+        hub.emit(
+          const RealtimeFrame(
+            op: 'mark_read',
+            data: {'chat_id': 'chat-other', 'message_id': 'msg-mention'},
+          ),
+        );
+        await pumpEventQueue();
+
+        expect(container.read(inAppNotificationCenterProvider).unreadCount, 0);
+        expect(
+          container.read(inAppNotificationCenterProvider).items.single.isRead,
+          isTrue,
+        );
+      },
+    );
+
+    test('archive activity never creates a notification-center row', () async {
+      final sound = _RecordingSoundPlayer();
+      final hub = _FakeRealtimeHub();
+      final container = _container(sound: sound, hub: hub);
+      addTearDown(container.dispose);
+
+      container.read(inAppNotificationControllerProvider);
+      hub.emit(
+        const RealtimeFrame(
+          op: 'archive_activity',
+          data: {'chat_id': 'chat-archived'},
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(container.read(inAppNotificationCenterProvider).items, isEmpty);
+    });
+
     test('own messages do not bump unread or play sound', () async {
       final sound = _RecordingSoundPlayer();
       final hub = _FakeRealtimeHub();
@@ -372,6 +441,7 @@ void main() {
           .firstWhere((row) => row.chatId == 'chat-other');
       expect(item.unreadCount, 0);
       expect(sound.reactionPlays, 0);
+      expect(container.read(inAppNotificationCenterProvider).items, isEmpty);
     });
 
     test('multiple rapid messages increment unread count', () async {

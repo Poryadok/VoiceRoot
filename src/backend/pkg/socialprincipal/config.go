@@ -88,8 +88,8 @@ func (c Config) validate() error {
 	if _, _, err := net.SplitHostPort(c.ListenAddr); err != nil {
 		return errors.New("invalid principal listener address")
 	}
-	if c.JWKSURLs["social"] == "" {
-		return errors.New("trusted Social JWKS endpoint required")
+	if c.JWKSURLs[expectedIssuer(c.Target)] == "" {
+		return errors.New("trusted principal JWKS endpoint required")
 	}
 	for issuer, endpoint := range c.JWKSURLs {
 		parsed, err := url.Parse(endpoint)

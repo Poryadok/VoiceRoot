@@ -22,6 +22,8 @@ func Method(target string) string {
 		return "/voice.user.v1.UserService/GetPrivacySettings"
 	case "space":
 		return "/voice.space.v1.SpaceService/AreCoMembers"
+	case "file":
+		return "/voice.user.v1.UserService/ResolveAccountIDForProfile"
 	}
 	return ""
 }
@@ -40,6 +42,8 @@ func AllowsMethod(target, method string) bool {
 		}
 	case "space":
 		return method == "/voice.space.v1.SpaceService/AreCoMembers"
+	case "file":
+		return method == "/voice.user.v1.UserService/ResolveAccountIDForProfile"
 	}
 	return false
 }
@@ -112,7 +116,7 @@ func StrictUnaryInterceptor(verifier PrincipalVerifier) grpc.UnaryServerIntercep
 			}
 			return nil, status.Error(codes.Unauthenticated, "invalid principal")
 		}
-		if !AllowsMethod(verified.Audience, info.FullMethod) || verified.Kind != "service" || verified.Issuer != "social" || verified.Subject != "service:social" {
+	if !AllowsMethod(verified.Audience, info.FullMethod) || verified.Kind != "service" || verified.Issuer != expectedIssuer(verified.Audience) || verified.Subject != "service:"+expectedIssuer(verified.Audience) {
 			return nil, status.Error(codes.PermissionDenied, "Social principal required")
 		}
 		return handler(principal.WithVerified(ctx, verified), req)
@@ -133,7 +137,7 @@ func RequireSocialForMethod(ctx context.Context, target, method string, req prot
 	if !ok {
 		return status.Error(codes.Unauthenticated, "verified Social principal required")
 	}
-	if verified.Kind != "service" || verified.Issuer != "social" || verified.Subject != "service:social" {
+	if verified.Kind != "service" || verified.Issuer != expectedIssuer(target) || verified.Subject != "service:"+expectedIssuer(target) {
 		return status.Error(codes.PermissionDenied, "Social principal required")
 	}
 	hash, err := principal.RequestHash(req)
@@ -141,6 +145,13 @@ func RequireSocialForMethod(ctx context.Context, target, method string, req prot
 		return status.Error(codes.Unauthenticated, "invalid principal binding")
 	}
 	return nil
+}
+
+func expectedIssuer(target string) string {
+	if target == "file" {
+		return "file"
+	}
+	return "social"
 }
 
 // CheckDomain preserves separately migrated ordinary callers while enforcing

@@ -12,6 +12,8 @@ replace voice.app/voice/events => ../messaging/pb/voice/events
 
 replace voice.app/voice/common => ../user/pb/voice/common
 
+replace voice.app/voice/user => ../user/pb/voice/user
+
 replace voice/backend/pkg => ../pkg
 
 require (
@@ -35,6 +37,7 @@ require (
 	voice.app/voice/events v0.0.0
 	voice.app/voice/file v0.0.0
 	voice.app/voice/story v0.0.0
+	voice.app/voice/user v0.0.0
 	voice/backend/pkg v0.0.0
 )
 

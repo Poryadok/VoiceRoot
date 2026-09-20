@@ -10,6 +10,8 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	"voice/backend/file/internal/grpcsvc"
+
 	filev1 "voice.app/voice/file/v1"
 )
 
@@ -22,7 +24,10 @@ const (
 func TestRequestUpload_Premium100MBAccepted(t *testing.T) {
 	ctx := context.Background()
 	pool := startFilePostgres(t, ctx)
-	client := startFileGRPC(t, pool, &recordingPresigner{})
+	client := startFileGRPCFull(t, pool, grpcsvc.Deps{
+		Presigner:    &recordingPresigner{},
+		Entitlements: fixedEntitlements(true),
+	})
 	profileID := uuid.New()
 	authed := withFileProfileAndTier(ctx, uuid.New(), profileID, "premium")
 
@@ -37,7 +42,10 @@ func TestRequestUpload_Premium100MBAccepted(t *testing.T) {
 func TestRequestUpload_Premium250MBRejected(t *testing.T) {
 	ctx := context.Background()
 	pool := startFilePostgres(t, ctx)
-	client := startFileGRPC(t, pool, &recordingPresigner{})
+	client := startFileGRPCFull(t, pool, grpcsvc.Deps{
+		Presigner:    &recordingPresigner{},
+		Entitlements: fixedEntitlements(true),
+	})
 	profileID := uuid.New()
 	authed := withFileProfileAndTier(ctx, uuid.New(), profileID, "premium")
 

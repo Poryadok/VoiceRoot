@@ -148,7 +148,7 @@ must not forward current client `space.id` assertions as authority.
 
 **Rate limits (BOT-C):** `BotRoleOps` — 100/min per bot token on `roles/assign`, `roles/revoke`, `POST /me/roles`.
 
-**[text-chat.md](../features/text-chat.md) — Stickers and GIF (Chat catalog + provider search):** namespace under **`/api/v1/chats/**`** sticker/GIF routes transcoded to **Chat Service** ([chat-service.md](chat-service.md) § Sticker packs). **Not yet in Gateway code.**
+**[text-chat.md](../features/text-chat.md) — Stickers and GIF (Chat catalog + provider search):** installed-pack catalog routes are transcoded to **Chat Service** ([chat-service.md](chat-service.md) § Sticker packs). The catalog uses the authenticated active profile only; it accepts no profile identifier. GIF search and user-pack upload remain unimplemented.
 
 | Method | Route | gRPC | Query / body |
 |--------|-------|------|--------------|
@@ -156,8 +156,8 @@ must not forward current client `space.id` assertions as authority.
 | `GET` | `/api/v1/sticker-packs/{pack_id}` | `GetStickerPack` | — |
 | `POST` | `/api/v1/sticker-packs/{pack_id}/install` | `InstallStickerPack` | — |
 | `DELETE` | `/api/v1/sticker-packs/{pack_id}` | `UninstallStickerPack` | user packs only (`is_system` → 403) |
-| `POST` | `/api/v1/sticker-packs/user` | `CreateUserStickerPack` | `title` |
-| `POST` | `/api/v1/sticker-packs/{pack_id}/stickers` | `AddStickersToUserPack` | per-sticker after File `ConfirmUpload` |
+| `POST` | `/api/v1/sticker-packs/user` | `CreateUserStickerPack` | deferred: File-ingest slice |
+| `POST` | `/api/v1/sticker-packs/{pack_id}/stickers` | `AddStickersToUserPack` | deferred: File-ingest slice |
 | `GET` | `/api/v1/gifs/search` | `SearchGifs` | `q`, `limit`, **`cursor`** (opaque; Chat-owned `next_cursor`) |
 | `GET` | `/api/v1/gifs/trending` | `GetTrendingGifs` | optional `cursor` |
 

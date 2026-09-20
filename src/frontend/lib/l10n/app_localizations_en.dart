@@ -1532,6 +1532,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatSharedMediaTabMedia => 'Media';
 
   @override
+  String get chatSharedMediaTabStickers => 'Stickers';
+
+  @override
   String get chatSharedMediaTabFiles => 'Files';
 
   @override

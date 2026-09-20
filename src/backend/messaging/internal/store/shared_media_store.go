@@ -24,6 +24,7 @@ const (
 	SharedMediaKindFiles
 	SharedMediaKindLinks
 	SharedMediaKindVoice
+	SharedMediaKindStickers
 )
 
 // SharedMediaRow is a raw attachment or link item before file enrichment.
@@ -52,6 +53,8 @@ func attachmentTypesForKind(kind SharedMediaKind) []string {
 		return []string{"document", "other"}
 	case SharedMediaKindVoice:
 		return []string{"audio", "voice_message"}
+	case SharedMediaKindStickers:
+		return []string{"sticker"}
 	default:
 		return nil
 	}
