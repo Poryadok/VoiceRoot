@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	socialv1 "voice.app/voice/social/v1"
 )
@@ -135,14 +137,12 @@ func TestTranscodeFriendsContactsPrecedenceOverRESTProxy(t *testing.T) {
 	require.NotNil(t, grpcRec.lastListContacts)
 }
 
-func TestTranscodeFriendsContactsSyncStillWorks(t *testing.T) {
+func TestTranscodeFriendsContactsSyncIsUnavailable(t *testing.T) {
 	t.Parallel()
 
-	var syncCalled bool
 	grpcRec := &recordingSocialContacts{}
 	conn, cleanup := startBufconnSocialConn(t, &syncPhoneContactsServer{
 		inner: grpcRec,
-		onSync: func() { syncCalled = true },
 	})
 	t.Cleanup(cleanup)
 
@@ -156,14 +156,13 @@ func TestTranscodeFriendsContactsSyncStillWorks(t *testing.T) {
 	rec := performRequest(h, http.MethodPost, "/api/v1/friends/contacts/sync", `{"hashed_phone_numbers":["hash-1"]}`, map[string]string{
 		"Authorization": "Bearer valid-user-token",
 	})
-	require.Equal(t, http.StatusOK, rec.Code, "body=%s", rec.Body.String())
-	require.True(t, syncCalled)
+	require.Equal(t, http.StatusConflict, rec.Code, "body=%s", rec.Body.String())
+	require.Contains(t, rec.Body.String(), `"error_code":"phone_contact_sync_unavailable"`)
 }
 
 type syncPhoneContactsServer struct {
 	socialv1.UnimplementedSocialServiceServer
-	inner  *recordingSocialContacts
-	onSync func()
+	inner *recordingSocialContacts
 }
 
 func (s *syncPhoneContactsServer) ListContacts(ctx context.Context, req *socialv1.ListContactsRequest) (*socialv1.ListContactsResponse, error) {
@@ -171,9 +170,7 @@ func (s *syncPhoneContactsServer) ListContacts(ctx context.Context, req *socialv
 }
 
 func (s *syncPhoneContactsServer) SyncPhoneContacts(ctx context.Context, req *socialv1.SyncPhoneContactsRequest) (*socialv1.SyncPhoneContactsResponse, error) {
-	if s.onSync != nil {
-		s.onSync()
-	}
+	_ = ctx
 	_ = req
-	return &socialv1.SyncPhoneContactsResponse{}, nil
+	return nil, status.Error(codes.FailedPrecondition, "phone_contact_sync_unavailable")
 }

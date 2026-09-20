@@ -85,7 +85,7 @@ func (allowAllPhonePrivacy) AllowPhoneSearchAudience(context.Context, uuid.UUID)
 	return privacy.EveryoneWithGuests(), nil
 }
 
-func TestSyncPhoneContacts_WritesContacts(t *testing.T) {
+func TestSyncPhoneContacts_IsUnavailable(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -94,27 +94,19 @@ func TestSyncPhoneContacts_WritesContacts(t *testing.T) {
 	applySocialMigration(t, ctx, pool)
 
 	owner := uuid.New()
-	matched := uuid.New()
-	hash := "sha256-deadbeef"
 
 	client, cleanup := startSocialGRPCTestServer(t, pool,
-		withPhoneHashLookup(stubPhoneHashLookup{hash: matched}),
+		withPhoneHashLookup(stubPhoneHashLookup{"sha256-deadbeef": uuid.New()}),
 		withPhoneSearchPrivacy(allowAllPhonePrivacy{}),
 	)
 	t.Cleanup(cleanup)
 
-	resp, err := client.SyncPhoneContacts(withProfileCtx(ctx, owner), &socialv1.SyncPhoneContactsRequest{
-		HashedPhoneNumbers: []string{hash},
+	_, err := client.SyncPhoneContacts(withProfileCtx(ctx, owner), &socialv1.SyncPhoneContactsRequest{
+		HashedPhoneNumbers: []string{"sha256-deadbeef"},
 	})
-	require.NoError(t, err)
-	require.Equal(t, []string{matched.String()}, resp.GetMatchedProfileIds())
-
-	listed, err := client.ListContacts(withProfileCtx(ctx, owner), &socialv1.ListContactsRequest{
-		Page: &commonv1.CursorPageRequest{PageSize: 10},
-	})
-	require.NoError(t, err)
-	require.Len(t, listed.GetContactList().GetContacts(), 1)
-	require.Equal(t, "phone_sync", listed.GetContactList().GetContacts()[0].GetSource())
+	require.Error(t, err)
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	require.Equal(t, "phone_contact_sync_unavailable", status.Convert(err).Message())
 }
 
 func TestSyncPhoneContacts_FailClosedWithoutPrivacy(t *testing.T) {
