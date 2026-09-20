@@ -260,110 +260,115 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                                 ),
                               ),
                             ],
-                            const SizedBox(height: 12),
-                            Semantics(
-                              label: 'Password',
-                              textField: true,
-                              child: TextFormField(
-                                key: AuthScreen.passwordFieldKey,
-                                controller: _passwordController,
-                                obscureText: true,
-                                autofillHints: const [AutofillHints.password],
-                                enabled: !_awaitingTotp,
-                                decoration: InputDecoration(
-                                  labelText: l10n.authPasswordLabel,
-                                  helperText: l10n.authPasswordHelper,
-                                ),
-                                validator: (v) => _passwordValidator(v, l10n),
-                                onFieldSubmitted: (_) => _submit(false),
-                              ),
-                            ),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: TextButton(
-                                key: AuthScreen.forgotPasswordButtonKey,
-                                onPressed: guestBusy
-                                    ? null
-                                    : _openPasswordReset,
-                                child: Text(l10n.authForgotPassword),
-                              ),
-                            ),
-                            if (_awaitingTotp) ...[
+                            if (!auth.isEmailVerificationPending &&
+                                !auth.isEmailVerificationPromotionPending) ...[
                               const SizedBox(height: 12),
-                              Text(
-                                l10n.authTotpStepTitle,
-                                style: Theme.of(context).textTheme.titleSmall,
+                              Semantics(
+                                label: 'Password',
+                                textField: true,
+                                child: TextFormField(
+                                  key: AuthScreen.passwordFieldKey,
+                                  controller: _passwordController,
+                                  obscureText: true,
+                                  autofillHints: const [AutofillHints.password],
+                                  enabled: !_awaitingTotp,
+                                  decoration: InputDecoration(
+                                    labelText: l10n.authPasswordLabel,
+                                    helperText: l10n.authPasswordHelper,
+                                  ),
+                                  validator: (v) => _passwordValidator(v, l10n),
+                                  onFieldSubmitted: (_) => _submit(false),
+                                ),
+                              ),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton(
+                                  key: AuthScreen.forgotPasswordButtonKey,
+                                  onPressed: guestBusy
+                                      ? null
+                                      : _openPasswordReset,
+                                  child: Text(l10n.authForgotPassword),
+                                ),
+                              ),
+                              if (_awaitingTotp) ...[
+                                const SizedBox(height: 12),
+                                Text(
+                                  l10n.authTotpStepTitle,
+                                  style: Theme.of(context).textTheme.titleSmall,
+                                ),
+                                const SizedBox(height: 8),
+                                TextFormField(
+                                  key: const Key('auth_totp'),
+                                  controller: _totpController,
+                                  keyboardType: TextInputType.number,
+                                  autofillHints: const [
+                                    AutofillHints.oneTimeCode,
+                                  ],
+                                  decoration: InputDecoration(
+                                    labelText: l10n.authTotpLabel,
+                                    helperText: l10n.authTotpHelper,
+                                  ),
+                                  onFieldSubmitted: (_) => _submit(false),
+                                ),
+                              ],
+                              if (auth.errorKey != null &&
+                                  auth.errorKey !=
+                                      AuthErrorKeys.totpRequired) ...[
+                                const SizedBox(height: 12),
+                                Text(
+                                  authErrorMessage(l10n, auth.errorKey!),
+                                  key: const Key('auth_error'),
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.error,
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 24),
+                              Semantics(
+                                button: true,
+                                label: 'Log in',
+                                child: VoicePrimaryButton(
+                                  key: AuthScreen.loginButtonKey,
+                                  onPressed: auth.isSubmitting
+                                      ? null
+                                      : () => _submit(false),
+                                  isLoading: auth.isSubmitting,
+                                  child: Text(l10n.authLogin),
+                                ),
                               ),
                               const SizedBox(height: 8),
-                              TextFormField(
-                                key: const Key('auth_totp'),
-                                controller: _totpController,
-                                keyboardType: TextInputType.number,
-                                autofillHints: const [
-                                  AutofillHints.oneTimeCode,
-                                ],
-                                decoration: InputDecoration(
-                                  labelText: l10n.authTotpLabel,
-                                  helperText: l10n.authTotpHelper,
-                                ),
-                                onFieldSubmitted: (_) => _submit(false),
-                              ),
-                            ],
-                            if (auth.errorKey != null &&
-                                auth.errorKey !=
-                                    AuthErrorKeys.totpRequired) ...[
-                              const SizedBox(height: 12),
-                              Text(
-                                authErrorMessage(l10n, auth.errorKey!),
-                                key: const Key('auth_error'),
-                                style: TextStyle(
-                                  color: Theme.of(context).colorScheme.error,
+                              Semantics(
+                                button: true,
+                                label: 'Create account',
+                                child: VoiceSecondaryButton(
+                                  key: AuthScreen.registerButtonKey,
+                                  onPressed: guestBusy
+                                      ? null
+                                      : () => _submit(true),
+                                  child: Text(l10n.authRegister),
                                 ),
                               ),
+                              const SizedBox(height: 8),
+                              Semantics(
+                                button: true,
+                                label: 'Continue as guest',
+                                child: TextButton(
+                                  key: AuthScreen.continueGuestButtonKey,
+                                  onPressed: guestBusy
+                                      ? null
+                                      : _continueAsGuest,
+                                  child: guestBusy
+                                      ? const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : Text(l10n.authContinueGuest),
+                                ),
+                              ),
                             ],
-                            const SizedBox(height: 24),
-                            Semantics(
-                              button: true,
-                              label: 'Log in',
-                              child: VoicePrimaryButton(
-                                key: AuthScreen.loginButtonKey,
-                                onPressed: auth.isSubmitting
-                                    ? null
-                                    : () => _submit(false),
-                                isLoading: auth.isSubmitting,
-                                child: Text(l10n.authLogin),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Semantics(
-                              button: true,
-                              label: 'Create account',
-                              child: VoiceSecondaryButton(
-                                key: AuthScreen.registerButtonKey,
-                                onPressed: guestBusy
-                                    ? null
-                                    : () => _submit(true),
-                                child: Text(l10n.authRegister),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Semantics(
-                              button: true,
-                              label: 'Continue as guest',
-                              child: TextButton(
-                                key: AuthScreen.continueGuestButtonKey,
-                                onPressed: guestBusy ? null : _continueAsGuest,
-                                child: guestBusy
-                                    ? const SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : Text(l10n.authContinueGuest),
-                              ),
-                            ),
                           ],
                         ),
                       ),
