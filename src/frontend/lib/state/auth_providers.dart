@@ -743,6 +743,16 @@ class AuthController extends StateNotifier<AuthState> {
           }
           current = session;
           await _persist(session);
+          if (generation != _profileSwitchGeneration) {
+            final repair = state.session;
+            if (repair == null) {
+              await _storage.clear();
+            } else {
+              await _storage.write(repair);
+            }
+            _convertingGuest = false;
+            return 'not_authenticated';
+          }
           state = state.copyWith(
             session: session,
             isGuest: true,
