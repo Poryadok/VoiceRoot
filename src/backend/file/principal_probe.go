@@ -21,7 +21,7 @@ import (
 // bearer proves User's replay admission persists for that request.
 func runFilePrincipalProbe(ctx context.Context, runtime *filePrincipalRuntime) error {
 	if runtime == nil || runtime.Issuer == nil || runtime.conn == nil {
-		return fmt.Errorf("File principal probe runtime unavailable")
+		return fmt.Errorf("file principal probe runtime unavailable")
 	}
 	profileID, operationID := uuid.New(), uuid.New()
 	req := &userv1.ResolveAccountIDForProfileRequest{ProfileId: profileID.String(), ActorProfileId: profileID.String(), OperationId: operationID.String()}
@@ -45,11 +45,11 @@ func runFilePrincipalProbe(ctx context.Context, runtime *filePrincipalRuntime) e
 	client := userv1.NewUserServiceClient(runtime.conn)
 	_, err = client.ResolveAccountIDForProfile(callCtx, req, grpc.WaitForReady(false))
 	if status.Code(err) != codes.NotFound {
-		return fmt.Errorf("File principal first resolver call = %s (%v), want NotFound", status.Code(err), err)
+		return fmt.Errorf("file principal first resolver call = %s (%v), want NotFound", status.Code(err), err)
 	}
 	_, err = client.ResolveAccountIDForProfile(callCtx, req, grpc.WaitForReady(false))
 	if status.Code(err) != codes.Unauthenticated {
-		return fmt.Errorf("File principal replay call = %s, want Unauthenticated", status.Code(err))
+		return fmt.Errorf("file principal replay call = %s, want Unauthenticated", status.Code(err))
 	}
 	return nil
 }
