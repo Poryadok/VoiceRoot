@@ -330,12 +330,24 @@ message StickerPack {
 }
 
 message ListInstalledStickerPacksRequest {}
-message ListInstalledStickerPacksResponse { repeated StickerPack packs = 1; }
-message GetStickerPackRequest { string pack_id = 1; }
-message GetStickerPackResponse { StickerPack pack = 1; }
-message InstallStickerPackRequest { string pack_id = 1; }
-message InstallStickerPackResponse { StickerPack pack = 1; }
-message UninstallStickerPackRequest { string pack_id = 1; }
+message ListInstalledStickerPacksResponse {
+  repeated StickerPack packs = 1;
+}
+message GetStickerPackRequest {
+  string pack_id = 1;
+}
+message GetStickerPackResponse {
+  StickerPack pack = 1;
+}
+message InstallStickerPackRequest {
+  string pack_id = 1;
+}
+message InstallStickerPackResponse {
+  StickerPack pack = 1;
+}
+message UninstallStickerPackRequest {
+  string pack_id = 1;
+}
 message UninstallStickerPackResponse {}
 
 message EnableChatE2ERequest {
