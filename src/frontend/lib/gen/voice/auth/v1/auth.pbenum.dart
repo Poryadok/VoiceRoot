@@ -37,6 +37,66 @@ class OtpType extends $pb.ProtobufEnum {
   const OtpType._(super.value, super.name);
 }
 
+class EmailVerificationState extends $pb.ProtobufEnum {
+  static const EmailVerificationState EMAIL_VERIFICATION_STATE_UNSPECIFIED =
+      EmailVerificationState._(
+          0, _omitEnumNames ? '' : 'EMAIL_VERIFICATION_STATE_UNSPECIFIED');
+  static const EmailVerificationState EMAIL_VERIFICATION_STATE_GUEST =
+      EmailVerificationState._(
+          1, _omitEnumNames ? '' : 'EMAIL_VERIFICATION_STATE_GUEST');
+  static const EmailVerificationState EMAIL_VERIFICATION_STATE_EMAIL_PENDING =
+      EmailVerificationState._(
+          2, _omitEnumNames ? '' : 'EMAIL_VERIFICATION_STATE_EMAIL_PENDING');
+  static const EmailVerificationState
+      EMAIL_VERIFICATION_STATE_PROMOTION_PENDING = EmailVerificationState._(3,
+          _omitEnumNames ? '' : 'EMAIL_VERIFICATION_STATE_PROMOTION_PENDING');
+  static const EmailVerificationState EMAIL_VERIFICATION_STATE_REGULAR =
+      EmailVerificationState._(
+          4, _omitEnumNames ? '' : 'EMAIL_VERIFICATION_STATE_REGULAR');
+
+  static const $core.List<EmailVerificationState> values =
+      <EmailVerificationState>[
+    EMAIL_VERIFICATION_STATE_UNSPECIFIED,
+    EMAIL_VERIFICATION_STATE_GUEST,
+    EMAIL_VERIFICATION_STATE_EMAIL_PENDING,
+    EMAIL_VERIFICATION_STATE_PROMOTION_PENDING,
+    EMAIL_VERIFICATION_STATE_REGULAR,
+  ];
+
+  static final $core.List<EmailVerificationState?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 4);
+  static EmailVerificationState? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const EmailVerificationState._(super.value, super.name);
+}
+
+class EmailVerificationCodeState extends $pb.ProtobufEnum {
+  static const EmailVerificationCodeState
+      EMAIL_VERIFICATION_CODE_STATE_UNSPECIFIED = EmailVerificationCodeState._(
+          0, _omitEnumNames ? '' : 'EMAIL_VERIFICATION_CODE_STATE_UNSPECIFIED');
+  static const EmailVerificationCodeState EMAIL_VERIFICATION_CODE_STATE_NONE =
+      EmailVerificationCodeState._(
+          1, _omitEnumNames ? '' : 'EMAIL_VERIFICATION_CODE_STATE_NONE');
+  static const EmailVerificationCodeState EMAIL_VERIFICATION_CODE_STATE_ACTIVE =
+      EmailVerificationCodeState._(
+          2, _omitEnumNames ? '' : 'EMAIL_VERIFICATION_CODE_STATE_ACTIVE');
+
+  static const $core.List<EmailVerificationCodeState> values =
+      <EmailVerificationCodeState>[
+    EMAIL_VERIFICATION_CODE_STATE_UNSPECIFIED,
+    EMAIL_VERIFICATION_CODE_STATE_NONE,
+    EMAIL_VERIFICATION_CODE_STATE_ACTIVE,
+  ];
+
+  static final $core.List<EmailVerificationCodeState?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 2);
+  static EmailVerificationCodeState? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const EmailVerificationCodeState._(super.value, super.name);
+}
+
 class VerifiedFactor extends $pb.ProtobufEnum {
   static const VerifiedFactor VERIFIED_FACTOR_UNSPECIFIED =
       VerifiedFactor._(0, _omitEnumNames ? '' : 'VERIFIED_FACTOR_UNSPECIFIED');

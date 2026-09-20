@@ -12,6 +12,10 @@ import app.voice.auth.v1.GetE2EKeyBackupRequest;
 import app.voice.auth.v1.GetE2EKeyBackupResponse;
 import app.voice.auth.v1.GetGuestReminderRequest;
 import app.voice.auth.v1.GetGuestReminderResponse;
+import app.voice.auth.v1.GetEmailVerificationStatusRequest;
+import app.voice.auth.v1.GetEmailVerificationStatusResponse;
+import app.voice.auth.v1.EmailVerificationState;
+import app.voice.auth.v1.EmailVerificationCodeState;
 import app.voice.auth.v1.ListSessionsRequest;
 import app.voice.auth.v1.ListSessionsResponse;
 import app.voice.auth.v1.MarkGuestReminderShownRequest;
@@ -54,9 +58,11 @@ import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import java.time.Instant;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 import voice.backend.auth.service.AuthException;
 import voice.backend.auth.service.AuthService;
 import voice.backend.auth.service.ConvertGuestCommand;
+import voice.backend.auth.service.EmailVerificationStatusService;
 import voice.backend.auth.service.GuestReminderState;
 import voice.backend.auth.service.LoginCommand;
 import voice.backend.auth.service.LogoutCommand;
@@ -69,10 +75,20 @@ import voice.backend.auth.service.VerifyOtpCommand;
 public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
   private final AuthService authService;
   private final OtpService otpService;
+  private final EmailVerificationStatusService emailVerificationStatus;
 
   public AuthGrpcService(AuthService authService, OtpService otpService) {
+    this(authService, otpService, null);
+  }
+
+  @Autowired
+  public AuthGrpcService(
+      AuthService authService,
+      OtpService otpService,
+      EmailVerificationStatusService emailVerificationStatus) {
     this.authService = authService;
     this.otpService = otpService;
+    this.emailVerificationStatus = emailVerificationStatus;
   }
 
   @Override
@@ -138,6 +154,24 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
         return VerifyOTPResponse.getDefaultInstance();
       }
       return VerifyOTPResponse.newBuilder().setSession(toProto(session)).build();
+    });
+  }
+
+  @Override
+  public void getEmailVerificationStatus(
+      GetEmailVerificationStatusRequest request,
+      StreamObserver<GetEmailVerificationStatusResponse> responseObserver) {
+    run(responseObserver, () -> {
+      if (emailVerificationStatus == null) {
+        throw new AuthException("auth_unavailable");
+      }
+      var status = emailVerificationStatus.status(authService.validate(resolveAccessToken()));
+      return GetEmailVerificationStatusResponse.newBuilder()
+          .setState(EmailVerificationState.valueOf("EMAIL_VERIFICATION_STATE_" + status.state()))
+          .setCodeState(
+              EmailVerificationCodeState.valueOf(
+                  "EMAIL_VERIFICATION_CODE_STATE_" + status.codeState()))
+          .build();
     });
   }
 

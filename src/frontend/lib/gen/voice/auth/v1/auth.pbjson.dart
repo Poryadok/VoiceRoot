@@ -30,6 +30,43 @@ final $typed_data.Uint8List otpTypeDescriptor = $convert.base64Decode(
     'CgdPdHBUeXBlEhgKFE9UUF9UWVBFX1VOU1BFQ0lGSUVEEAASGQoVT1RQX1RZUEVfRU1BSUxfVk'
     'VSSUZZEAESGwoXT1RQX1RZUEVfUEFTU1dPUkRfUkVTRVQQAg==');
 
+@$core.Deprecated('Use emailVerificationStateDescriptor instead')
+const EmailVerificationState$json = {
+  '1': 'EmailVerificationState',
+  '2': [
+    {'1': 'EMAIL_VERIFICATION_STATE_UNSPECIFIED', '2': 0},
+    {'1': 'EMAIL_VERIFICATION_STATE_GUEST', '2': 1},
+    {'1': 'EMAIL_VERIFICATION_STATE_EMAIL_PENDING', '2': 2},
+    {'1': 'EMAIL_VERIFICATION_STATE_PROMOTION_PENDING', '2': 3},
+    {'1': 'EMAIL_VERIFICATION_STATE_REGULAR', '2': 4},
+  ],
+};
+
+/// Descriptor for `EmailVerificationState`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List emailVerificationStateDescriptor = $convert.base64Decode(
+    'ChZFbWFpbFZlcmlmaWNhdGlvblN0YXRlEigKJEVNQUlMX1ZFUklGSUNBVElPTl9TVEFURV9VTl'
+    'NQRUNJRklFRBAAEiIKHkVNQUlMX1ZFUklGSUNBVElPTl9TVEFURV9HVUVTVBABEioKJkVNQUlM'
+    'X1ZFUklGSUNBVElPTl9TVEFURV9FTUFJTF9QRU5ESU5HEAISLgoqRU1BSUxfVkVSSUZJQ0FUSU'
+    '9OX1NUQVRFX1BST01PVElPTl9QRU5ESU5HEAMSJAogRU1BSUxfVkVSSUZJQ0FUSU9OX1NUQVRF'
+    'X1JFR1VMQVIQBA==');
+
+@$core.Deprecated('Use emailVerificationCodeStateDescriptor instead')
+const EmailVerificationCodeState$json = {
+  '1': 'EmailVerificationCodeState',
+  '2': [
+    {'1': 'EMAIL_VERIFICATION_CODE_STATE_UNSPECIFIED', '2': 0},
+    {'1': 'EMAIL_VERIFICATION_CODE_STATE_NONE', '2': 1},
+    {'1': 'EMAIL_VERIFICATION_CODE_STATE_ACTIVE', '2': 2},
+  ],
+};
+
+/// Descriptor for `EmailVerificationCodeState`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List emailVerificationCodeStateDescriptor =
+    $convert.base64Decode(
+        'ChpFbWFpbFZlcmlmaWNhdGlvbkNvZGVTdGF0ZRItCilFTUFJTF9WRVJJRklDQVRJT05fQ09ERV'
+        '9TVEFURV9VTlNQRUNJRklFRBAAEiYKIkVNQUlMX1ZFUklGSUNBVElPTl9DT0RFX1NUQVRFX05P'
+        'TkUQARIoCiRFTUFJTF9WRVJJRklDQVRJT05fQ09ERV9TVEFURV9BQ1RJVkUQAg==');
+
 @$core.Deprecated('Use verifiedFactorDescriptor instead')
 const VerifiedFactor$json = {
   '1': 'VerifiedFactor',
@@ -420,6 +457,46 @@ const VerifyOTPResponse$json = {
 final $typed_data.Uint8List verifyOTPResponseDescriptor = $convert.base64Decode(
     'ChFWZXJpZnlPVFBSZXNwb25zZRI0CgdzZXNzaW9uGAEgASgLMhoudm9pY2UuYXV0aC52MS5BdX'
     'RoU2Vzc2lvblIHc2Vzc2lvbg==');
+
+@$core.Deprecated('Use getEmailVerificationStatusRequestDescriptor instead')
+const GetEmailVerificationStatusRequest$json = {
+  '1': 'GetEmailVerificationStatusRequest',
+};
+
+/// Descriptor for `GetEmailVerificationStatusRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getEmailVerificationStatusRequestDescriptor =
+    $convert.base64Decode('CiFHZXRFbWFpbFZlcmlmaWNhdGlvblN0YXR1c1JlcXVlc3Q=');
+
+@$core.Deprecated('Use getEmailVerificationStatusResponseDescriptor instead')
+const GetEmailVerificationStatusResponse$json = {
+  '1': 'GetEmailVerificationStatusResponse',
+  '2': [
+    {
+      '1': 'state',
+      '3': 1,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.auth.v1.EmailVerificationState',
+      '10': 'state'
+    },
+    {
+      '1': 'code_state',
+      '3': 2,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.auth.v1.EmailVerificationCodeState',
+      '10': 'codeState'
+    },
+  ],
+};
+
+/// Descriptor for `GetEmailVerificationStatusResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getEmailVerificationStatusResponseDescriptor =
+    $convert.base64Decode(
+        'CiJHZXRFbWFpbFZlcmlmaWNhdGlvblN0YXR1c1Jlc3BvbnNlEjsKBXN0YXRlGAEgASgOMiUudm'
+        '9pY2UuYXV0aC52MS5FbWFpbFZlcmlmaWNhdGlvblN0YXRlUgVzdGF0ZRJICgpjb2RlX3N0YXRl'
+        'GAIgASgOMikudm9pY2UuYXV0aC52MS5FbWFpbFZlcmlmaWNhdGlvbkNvZGVTdGF0ZVIJY29kZV'
+        'N0YXRl');
 
 @$core.Deprecated('Use convertGuestResponseDescriptor instead')
 const ConvertGuestResponse$json = {

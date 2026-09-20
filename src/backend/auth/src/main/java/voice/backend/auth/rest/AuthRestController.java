@@ -6,6 +6,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 import java.util.Map;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -20,6 +21,7 @@ import voice.backend.auth.service.ActiveSession;
 import voice.backend.auth.service.AuthException;
 import voice.backend.auth.service.AuthService;
 import voice.backend.auth.service.AuthSession;
+import voice.backend.auth.service.EmailVerificationStatusService;
 import voice.backend.auth.service.ConvertGuestCommand;
 import voice.backend.auth.service.GuestReminderState;
 import voice.backend.auth.service.LinkedAccountsService;
@@ -41,18 +43,41 @@ public class AuthRestController {
   private final AuthService authService;
   private final LinkedAccountsService linkedAccountsService;
   private final OtpService otpService;
+  private final EmailVerificationStatusService emailVerificationStatus;
 
   public AuthRestController(
       AuthService authService, LinkedAccountsService linkedAccountsService, OtpService otpService) {
+    this(authService, linkedAccountsService, otpService, null);
+  }
+
+  @Autowired
+  public AuthRestController(
+      AuthService authService,
+      LinkedAccountsService linkedAccountsService,
+      OtpService otpService,
+      EmailVerificationStatusService emailVerificationStatus) {
     this.authService = authService;
     this.linkedAccountsService = linkedAccountsService;
     this.otpService = otpService;
+    this.emailVerificationStatus = emailVerificationStatus;
+  }
+
+  @GetMapping("/verification-status")
+  public EmailVerificationStatusResponse emailVerificationStatus(
+      @RequestHeader(name = "Authorization", required = false) String authorization) {
+    if (emailVerificationStatus == null) {
+      throw new AuthException("auth_unavailable");
+    }
+    var status = emailVerificationStatus.status(authService.validate(authorization));
+    return new EmailVerificationStatusResponse(status.state(), status.codeState());
   }
 
   @PostMapping("/register")
   public SessionEnvelope register(@Valid @RequestBody RegisterRequest request) {
-    return SessionEnvelope.from(authService.register(new RegisterCommand(
-        request.email(), request.phone(), request.password(), request.guest(), request.deviceInfoJson())));
+    AuthSession session = authService.register(new RegisterCommand(
+        request.email(), request.phone(), request.password(), request.guest(), request.deviceInfoJson()));
+    sendInitialEmailVerificationIfPending(session, request.email());
+    return SessionEnvelope.from(session);
   }
 
   @PostMapping("/login")
@@ -117,10 +142,18 @@ public class AuthRestController {
   public ResponseEntity<?> verifyOtp(
       @RequestHeader(name = "Authorization", required = false) String authorization,
       @Valid @RequestBody VerifyOtpRequest request) {
-    AuthSession verifiedSession = otpService.verifyOtp(
-        new VerifyOtpCommand(
-            request.email(), request.phone(), request.code(), request.otpType(), authorization),
-        authService);
+    AuthSession verifiedSession;
+    try {
+      verifiedSession = otpService.verifyOtp(
+          new VerifyOtpCommand(
+              request.email(), request.phone(), request.code(), request.otpType(), authorization),
+          authService);
+    } catch (AuthException pending) {
+      if ("verification_pending".equals(pending.getMessage())) {
+        return ResponseEntity.accepted().build();
+      }
+      throw pending;
+    }
     return verifiedSession == null
         ? ResponseEntity.noContent().build()
         : ResponseEntity.ok(SessionEnvelope.from(verifiedSession));
@@ -150,9 +183,18 @@ public class AuthRestController {
   public SessionEnvelope convertGuest(
       @RequestHeader(name = "Authorization", required = false) String authorization,
       @Valid @RequestBody ConvertGuestRequest request) {
-    return SessionEnvelope.from(
-        authService.convertGuest(
-            authorization, new ConvertGuestCommand(request.email(), request.phone(), request.password())));
+    AuthSession session = authService.convertGuest(
+        authorization, new ConvertGuestCommand(request.email(), request.phone(), request.password()));
+    sendInitialEmailVerificationIfPending(session, request.email());
+    return SessionEnvelope.from(session);
+  }
+
+  private void sendInitialEmailVerificationIfPending(AuthSession session, String email) {
+    if (!"guest".equals(session.accountType()) || email == null || email.isBlank()) {
+      return;
+    }
+    otpService.sendOtp(
+        new SendOtpCommand(null, null, "email_verify", "Bearer " + session.accessToken()), authService);
   }
 
   @GetMapping("/guest-reminder")
@@ -296,7 +338,11 @@ public class AuthRestController {
       case "oauth_failed" -> HttpStatus.BAD_REQUEST;
       default -> HttpStatus.UNAUTHORIZED;
     };
-    return ResponseEntity.status(status).body(Map.of("error", ex.getMessage()));
+    ResponseEntity.BodyBuilder response = ResponseEntity.status(status);
+    if ("otp_rate_limited".equals(ex.getMessage())) {
+      response.header("Retry-After", "600");
+    }
+    return response.body(Map.of("error", ex.getMessage()));
   }
 
   @ExceptionHandler(DuplicateKeyException.class)
@@ -423,6 +469,9 @@ public class AuthRestController {
           state.lastShownAt() == null ? null : state.lastShownAt().toString(), state.shouldShow());
     }
   }
+
+  public record EmailVerificationStatusResponse(
+      String state, @JsonProperty("code_state") String codeState) {}
 
   public record ActiveSessionResponse(
       String id,

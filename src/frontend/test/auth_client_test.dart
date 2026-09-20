@@ -392,7 +392,7 @@ void main() {
         final mock = MockClient((req) async {
           expect(req.headers['authorization'], 'Bearer guest-access');
           final body = jsonDecode(req.body) as Map<String, dynamic>;
-          expect(body['email'], 'guest@example.com');
+          expect(body.containsKey('email'), isFalse);
           expect(body['otp_type'], 'email_verify');
           if (req.url.path == '/api/v1/auth/otp/send') {
             sent = true;
@@ -418,13 +418,11 @@ void main() {
         expect(
           await client.sendGuestConversionEmailOtp(
             session: guest,
-            email: 'guest@example.com',
           ),
           isA<AuthApiOk<void>>(),
         );
         final verificationResult = await client.verifyGuestConversionEmailOtp(
           session: guest,
-          email: 'guest@example.com',
           code: '123456',
         );
         expect(verificationResult, isA<GuestConversionOtpAccepted>());
@@ -456,7 +454,6 @@ void main() {
 
         final result = await client.verifyGuestConversionEmailOtp(
           session: guest,
-          email: 'guest@example.com',
           code: '123456',
         );
         expect(result, isA<GuestConversionOtpSession>());
