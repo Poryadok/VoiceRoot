@@ -166,6 +166,10 @@ func completeComposeEmailVerification(
 	pending authSessionResponse,
 ) authSessionResponse {
 	t.Helper()
+	// Registration may reserve the per-account resend marker. The explicit OTP
+	// send below is part of the local Compose fixture, so clear its fixture-only
+	// Redis throttle immediately before sending.
+	clearLiveComposeAuthRateLimit(t)
 	payload, err := json.Marshal(map[string]string{"email": email, "otp_type": "email_verify"})
 	require.NoError(t, err)
 	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/auth/otp/send", bytes.NewReader(payload))
