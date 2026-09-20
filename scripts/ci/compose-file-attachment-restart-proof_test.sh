@@ -167,7 +167,7 @@ FAKE_UP_RC=37 run_runner "$case_dir"
 assert_eq "$(cat "$case_dir/rc")" 37
 assert_not_contains "$case_dir/commands.log" 'compose.*<down>'
 
-echo '== successful prepare/verify path uses one selected test and restarts File only =='
+echo '== successful path probes File→User then restarts User and File =='
 case_dir="$(new_case success)"
 run_runner "$case_dir"
 assert_eq "$(cat "$case_dir/rc")" 0
@@ -178,10 +178,15 @@ assert_contains "$case_dir/commands.log" 'go.*<test>.*<-count=1>.*<-parallel> <1
 assert_not_contains "$case_dir/commands.log" 'go .*<-tags> <live>'
 restart_lines="$(grep -n 'compose.*<restart>' "$case_dir/commands.log" | cut -d: -f1)"
 file_restart="$(grep -n 'compose.*<restart> <file>' "$case_dir/commands.log" | cut -d: -f1)"
+user_restart="$(grep -n 'compose.*<restart> <user>' "$case_dir/commands.log" | cut -d: -f1)"
 prepare_line="$(grep -n 'go .*phase=prepare' "$case_dir/commands.log" | cut -d: -f1)"
 verify_line="$(grep -n 'go .*phase=verify' "$case_dir/commands.log" | cut -d: -f1)"
-[[ -n "$restart_lines" && "$prepare_line" -lt "$file_restart" && "$file_restart" -lt "$verify_line" ]] || \
-  fail 'successful path must order prepare, File restart, verify'
+probe_count="$(grep -c 'compose.*<run>.*<-e> <FILE_PRINCIPAL_PROBE=1> <file>' "$case_dir/commands.log" || true)"
+assert_eq "$probe_count" 3
+[[ -n "$restart_lines" && "$prepare_line" -lt "$user_restart" && "$user_restart" -lt "$file_restart" && "$file_restart" -lt "$verify_line" ]] || \
+  fail 'successful path must order prepare, User restart, File restart, verify'
+assert_contains "$case_dir/commands.log" 'compose.*<run>.*<FILE_PRINCIPAL_SIGNING_KEYS_DIR=>.*<file>'
+assert_contains "$case_dir/commands.log" 'compose.*<run>.*<USER_FILE_PRINCIPAL_TLS_CA_FILE=/missing-ca.pem>.*<file>'
 assert_not_contains "$case_dir/commands.log" 'compose.*<restart> <messaging>'
 
 echo 'All compose-file-attachment-restart-proof tests passed.'

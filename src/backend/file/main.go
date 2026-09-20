@@ -72,6 +72,12 @@ func main() {
 				log.Fatalf("file principal JWKS serve: %v", serveErr)
 			}
 		}()
+		if os.Getenv("FILE_PRINCIPAL_PROBE") == "1" {
+			if probeErr := runFilePrincipalProbe(context.Background(), filePrincipal); probeErr != nil {
+				log.Fatalf("file principal probe: %v", probeErr)
+			}
+			return
+		}
 	}
 	principalConfig, principalEnabled, err := principalruntime.LoadFromEnv()
 	if err != nil {

@@ -160,6 +160,31 @@ wait_healthy file
 wait_healthy gateway
 wait_gateway
 
+# This runs the real File binary in the already-created project network and
+# mounts its normal read-only current+next key volume. It proves a File-signed,
+# request-bound call reaches only User :9092 and that the same bearer is
+# rejected by Redis replay admission. No host port or test-only User API is
+# involved.
+run_file_principal_probe() {
+  compose run --rm --no-deps -e FILE_PRINCIPAL_PROBE=1 file
+}
+
+expect_file_principal_probe_failure() {
+  local label="$1"
+  shift
+  if compose run --rm --no-deps "$@" file; then
+    echo "File principal negative probe unexpectedly succeeded: ${label}" >&2
+    exit 1
+  fi
+}
+
+run_file_principal_probe
+# Explicit partial/malformed dependency settings must never silently disable
+# the principal. These are hosted-only startup negatives; successful probe
+# above is the positive TLS/JWKS proof.
+expect_file_principal_probe_failure missing-config -e FILE_PRINCIPAL_SIGNING_KEYS_DIR=
+expect_file_principal_probe_failure tls-ca -e USER_FILE_PRINCIPAL_TLS_CA_FILE=/missing-ca.pem
+
 export VOICE_FILE_ATTACHMENT_RESTART_PHASE=prepare
 (
   cd "$ROOT/src/backend/gateway"
@@ -167,12 +192,20 @@ export VOICE_FILE_ATTACHMENT_RESTART_PHASE=prepare
 )
 [[ -f "$state_path_posix" ]] || { echo "prepare did not create restart-proof state" >&2; exit 1; }
 
+# User restart must not erase the shared replay guard. The probe generates a
+# fresh credential and replays it after User comes back; then File restart
+# exercises a fresh signer process before attachment durability is checked.
+compose restart user
+wait_healthy user
+run_file_principal_probe
+
 # Restart File only. PostgreSQL and object storage stay running so this proves
 # service-process durability, not backup/restore or a new logical upload.
 compose restart file
 wait_healthy file
 wait_healthy gateway
 wait_gateway
+run_file_principal_probe
 
 export VOICE_FILE_ATTACHMENT_RESTART_PHASE=verify
 (
