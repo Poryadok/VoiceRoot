@@ -264,6 +264,11 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 			return false
 		}
 		return t.serveChats(w, r, rest)
+	case "sticker-packs":
+		if t.clients.chat == nil {
+			return false
+		}
+		return t.serveStickerPackRoutes(w, r, withGRPCMetadata(r.Context(), r), rest)
 	case "messages":
 		if t.clients.messaging == nil {
 			return false
