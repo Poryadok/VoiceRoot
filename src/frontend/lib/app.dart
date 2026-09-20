@@ -92,7 +92,8 @@ class VoiceApp extends ConsumerWidget {
 
     return themeAsync.when(
       data: (theme) {
-        if (!auth.isAuthenticated) {
+        if (!auth.isAuthenticated || auth.isEmailVerificationPending ||
+            auth.isEmailVerificationPromotionPending) {
           return MaterialApp(
             locale: effectiveLocale,
             theme: theme,

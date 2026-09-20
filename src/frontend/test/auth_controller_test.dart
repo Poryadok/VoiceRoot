@@ -160,6 +160,122 @@ void main() {
     expect(state.session?.activeProfileId, 'prof-1');
   });
 
+  test(
+    'restore resumes a session-bound email verification without resend or OTP replay',
+    () async {
+      final storage = InMemoryAuthSessionStorage();
+      await storage.write(
+        const AuthSession(
+          accessToken: 'restricted-access',
+          refreshToken: 'restricted-refresh',
+          accountId: 'acc-1',
+          activeProfileId: 'prof-1',
+          expiresInSeconds: 900,
+          accountType: 'guest',
+        ),
+      );
+      var refreshes = 0;
+      var statuses = 0;
+      var sends = 0;
+      var verifies = 0;
+      final mock = MockClient((req) async {
+        switch (req.url.path) {
+          case '/api/v1/auth/refresh':
+            refreshes++;
+            return http.Response(
+              jsonEncode({
+                'session': {
+                  ...(sessionJson()['session'] as Map<String, dynamic>),
+                  'access_token': 'restricted-access-new',
+                  'refresh_token': 'restricted-refresh-new',
+                  'account_type': 'guest',
+                },
+              }),
+              200,
+            );
+          case '/api/v1/auth/verification-status':
+            statuses++;
+            return http.Response(jsonEncode({'state': 'EMAIL_PENDING'}), 200);
+          case '/api/v1/auth/otp/send':
+            sends++;
+            return http.Response('', 204);
+          case '/api/v1/auth/otp/verify':
+            verifies++;
+            return http.Response('', 204);
+        }
+        return http.Response('not found', 404);
+      });
+      final container = buildContainer(mock: mock, storage: storage);
+      addTearDown(container.dispose);
+
+      await container.read(authControllerProvider.notifier).restore();
+
+      final state = container.read(authControllerProvider);
+      expect(state.isEmailVerificationPending, isTrue);
+      expect(state.isGuestConversionPromotionPending, isFalse);
+      expect(refreshes, 1);
+      expect(statuses, 1);
+      expect(sends, 0);
+      expect(verifies, 0);
+    },
+  );
+
+  test(
+    'promotion recovery persists the replacement regular session before completion',
+    () async {
+      final storage = _DeferredAuthSessionStorage();
+      await storage.write(
+        const AuthSession(
+          accessToken: 'restricted-access',
+          refreshToken: 'restricted-refresh',
+          accountId: 'acc-1',
+          activeProfileId: 'prof-1',
+          expiresInSeconds: 900,
+          accountType: 'guest',
+        ),
+      );
+      final mock = MockClient((req) async {
+        if (req.url.path == '/api/v1/auth/refresh') {
+          final isInitialRestore =
+              (await storage.read())?.accessToken == 'restricted-access';
+          return http.Response(
+            jsonEncode({
+              'session': {
+                ...(sessionJson()['session'] as Map<String, dynamic>),
+                'access_token': isInitialRestore
+                    ? 'restricted-access-new'
+                    : 'regular-access',
+                'refresh_token': isInitialRestore
+                    ? 'restricted-refresh-new'
+                    : 'regular-refresh',
+                'account_type': isInitialRestore ? 'guest' : 'regular',
+              },
+            }),
+            200,
+          );
+        }
+        if (req.url.path == '/api/v1/auth/verification-status') {
+          return http.Response(jsonEncode({'state': 'PROMOTION_PENDING'}), 200);
+        }
+        return http.Response('not found', 404);
+      });
+      final container = buildContainer(mock: mock, storage: storage);
+      addTearDown(container.dispose);
+      final controller = container.read(authControllerProvider.notifier);
+
+      await controller.restore();
+      expect(
+        container
+            .read(authControllerProvider)
+            .isEmailVerificationPromotionPending,
+        isTrue,
+      );
+      expect(await controller.resumeEmailVerificationPromotion(), isNull);
+      expect((await storage.read())?.accountType, 'regular');
+      expect((await storage.read())?.accessToken, 'regular-access');
+    },
+  );
+
   test('login stores errorKey for invalid_credentials', () async {
     final mock = MockClient((req) async {
       if (req.url.path == '/api/v1/auth/login') {
@@ -224,7 +340,9 @@ void main() {
       overrides: [
         gatewayConfigProvider.overrideWithValue(config),
         httpClientProvider.overrideWithValue(mock),
-        authSessionStorageProvider.overrideWithValue(InMemoryAuthSessionStorage()),
+        authSessionStorageProvider.overrideWithValue(
+          InMemoryAuthSessionStorage(),
+        ),
         guestCredentialsStorageProvider.overrideWithValue(guestStorage),
       ],
     );
@@ -252,292 +370,388 @@ void main() {
     expect(convertBody, isNot(contains(guestPassword)));
   });
 
-  test('guest conversion persists the verified regular SessionEnvelope and clears guest state', () async {
-    final guestStorage = InMemoryGuestCredentialsStorage();
-    await guestStorage.writePassword('guest-auto-password-1');
-    final storage = InMemoryAuthSessionStorage();
-    final mock = MockClient((req) async {
-      if (req.url.path == '/api/v1/auth/convert-guest') {
+  test(
+    'guest conversion persists the verified regular SessionEnvelope and clears guest state',
+    () async {
+      final guestStorage = InMemoryGuestCredentialsStorage();
+      await guestStorage.writePassword('guest-auto-password-1');
+      final storage = InMemoryAuthSessionStorage();
+      final mock = MockClient((req) async {
+        if (req.url.path == '/api/v1/auth/convert-guest') {
+          return http.Response(
+            jsonEncode({
+              'session': {
+                ...(sessionJson()['session'] as Map<String, dynamic>),
+                'access_token': 'guest-converted-access',
+                'refresh_token': 'guest-converted-refresh',
+                'account_type': 'guest',
+              },
+            }),
+            200,
+          );
+        }
+        if (req.url.path == '/api/v1/auth/otp/send') {
+          return http.Response('', 204);
+        }
+        if (req.url.path == '/api/v1/auth/otp/verify') {
+          return http.Response(
+            jsonEncode({
+              'session': {
+                ...(sessionJson()['session'] as Map<String, dynamic>),
+                'access_token': 'regular-access',
+                'refresh_token': 'regular-refresh',
+                'account_type': 'regular',
+              },
+            }),
+            200,
+          );
+        }
+        return http.Response('not found', 404);
+      });
+      final container = ProviderContainer(
+        overrides: [
+          gatewayConfigProvider.overrideWithValue(config),
+          httpClientProvider.overrideWithValue(mock),
+          authSessionStorageProvider.overrideWithValue(storage),
+          guestCredentialsStorageProvider.overrideWithValue(guestStorage),
+        ],
+      );
+      addTearDown(container.dispose);
+      final controller = container.read(authControllerProvider.notifier);
+      controller.state = const AuthState(
+        session: AuthSession(
+          accessToken: 'guest-access',
+          refreshToken: 'guest-refresh',
+          accountId: 'acc-1',
+          activeProfileId: 'prof-1',
+          expiresInSeconds: 900,
+          accountType: 'guest',
+        ),
+        isGuest: true,
+      );
+
+      expect(
+        await controller.convertGuest(
+          email: 'guest@example.com',
+          password: 'user-password1',
+        ),
+        isNull,
+      );
+      expect(container.read(authControllerProvider).isGuest, isTrue);
+      expect(
+        container.read(authControllerProvider).pendingGuestConversionEmail,
+        'guest@example.com',
+      );
+      expect(await guestStorage.readPassword(), 'guest-auto-password-1');
+
+      expect(await controller.verifyGuestConversionEmail('123456'), isNull);
+      final state = container.read(authControllerProvider);
+      expect(state.isGuest, isFalse);
+      expect(state.pendingGuestConversionEmail, isNull);
+      expect(state.isGuestConversionPromotionPending, isFalse);
+      expect(await guestStorage.readPassword(), isNull);
+      expect(await guestStorage.readPendingConversionEmail(), isNull);
+      expect(await guestStorage.isGuestConversionPromotionPending(), isFalse);
+      expect((await storage.read())?.accessToken, 'regular-access');
+      expect((await storage.read())?.refreshToken, 'regular-refresh');
+      expect((await storage.read())?.accountType, 'regular');
+    },
+  );
+
+  test(
+    'guest conversion polls guest refreshes without replaying accepted OTP',
+    () async {
+      final guestStorage = InMemoryGuestCredentialsStorage();
+      await guestStorage.writePassword('guest-auto-password-1');
+      var refreshes = 0;
+      var verifies = 0;
+      final mock = MockClient((req) async {
+        if (req.url.path == '/api/v1/auth/convert-guest') {
+          return http.Response(
+            jsonEncode({
+              'session': {
+                ...(sessionJson()['session'] as Map<String, dynamic>),
+                'account_type': 'guest',
+              },
+            }),
+            200,
+          );
+        }
+        if (req.url.path == '/api/v1/auth/otp/send') {
+          return http.Response('', 204);
+        }
+        if (req.url.path == '/api/v1/auth/otp/verify') {
+          verifies++;
+          return http.Response('', 204);
+        }
+        if (req.url.path == '/api/v1/auth/refresh') {
+          refreshes++;
+          final type = refreshes < 4 ? 'guest' : 'regular';
+          return http.Response(
+            jsonEncode({
+              'session': {
+                ...(sessionJson()['session'] as Map<String, dynamic>),
+                'account_type': type,
+              },
+            }),
+            200,
+          );
+        }
+        return http.Response('not found', 404);
+      });
+      final container = ProviderContainer(
+        overrides: [
+          gatewayConfigProvider.overrideWithValue(config),
+          httpClientProvider.overrideWithValue(mock),
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          guestCredentialsStorageProvider.overrideWithValue(guestStorage),
+        ],
+      );
+      addTearDown(container.dispose);
+      final controller = container.read(authControllerProvider.notifier);
+      controller.state = const AuthState(
+        session: AuthSession(
+          accessToken: 'guest-access',
+          refreshToken: 'guest-refresh',
+          accountId: 'acc-1',
+          activeProfileId: 'prof-1',
+          expiresInSeconds: 900,
+          accountType: 'guest',
+        ),
+        isGuest: true,
+      );
+
+      await controller.convertGuest(
+        email: 'guest@example.com',
+        password: 'user-password1',
+      );
+      expect(await controller.verifyGuestConversionEmail('123456'), isNull);
+      expect(refreshes, 4);
+      expect(verifies, 1);
+      expect(container.read(authControllerProvider).isGuest, isFalse);
+    },
+  );
+
+  test(
+    'recreated controller resumes a 204 promotion with refresh status only',
+    () async {
+      final firstRefreshRequested = Completer<void>();
+      final neverCompletes = Completer<http.Response>();
+      final guestStorage = InMemoryGuestCredentialsStorage();
+      await guestStorage.writePassword('guest-auto-password-1');
+      await guestStorage.writePendingConversionEmail('guest@example.com');
+      final storage = InMemoryAuthSessionStorage();
+      const guest = AuthSession(
+        accessToken: 'guest-access',
+        refreshToken: 'guest-refresh',
+        accountId: 'acc-1',
+        activeProfileId: 'prof-1',
+        expiresInSeconds: 900,
+        accountType: 'guest',
+      );
+      await storage.write(guest);
+      var verifies = 0;
+      var refreshes = 0;
+      final mock = MockClient((req) async {
+        if (req.url.path == '/api/v1/auth/otp/verify') {
+          verifies++;
+          return http.Response('', 204);
+        }
+        if (req.url.path == '/api/v1/auth/refresh') {
+          refreshes++;
+          if (refreshes == 1) {
+            firstRefreshRequested.complete();
+            return neverCompletes.future;
+          }
+          if (refreshes == 2) {
+            return http.Response(jsonEncode({'session': guest.toJson()}), 200);
+          }
+          return http.Response(
+            jsonEncode({
+              'session': {
+                ...guest.toJson(),
+                'access_token': 'regular-access',
+                'refresh_token': 'regular-refresh',
+                'account_type': 'regular',
+              },
+            }),
+            200,
+          );
+        }
+        return http.Response('not found', 404);
+      });
+      final first = buildContainer(
+        mock: mock,
+        storage: storage,
+        guestStorage: guestStorage,
+      );
+      addTearDown(first.dispose);
+      final firstController = first.read(authControllerProvider.notifier);
+      firstController.state = const AuthState(
+        session: guest,
+        isGuest: true,
+        pendingGuestConversionEmail: 'guest@example.com',
+      );
+
+      unawaited(firstController.verifyGuestConversionEmail('123456'));
+      await firstRefreshRequested.future;
+      expect(await guestStorage.isGuestConversionPromotionPending(), isTrue);
+
+      final recreated = buildContainer(
+        mock: mock,
+        storage: storage,
+        guestStorage: guestStorage,
+      );
+      addTearDown(recreated.dispose);
+      final recreatedController = recreated.read(
+        authControllerProvider.notifier,
+      );
+      await recreatedController.restore();
+      expect(
+        recreated
+            .read(authControllerProvider)
+            .isGuestConversionPromotionPending,
+        isTrue,
+      );
+      expect(
+        await recreatedController.resumeGuestConversionPromotion(),
+        isNull,
+      );
+
+      expect(verifies, 1);
+      expect(refreshes, 3);
+      expect(recreated.read(authControllerProvider).isGuest, isFalse);
+    },
+  );
+
+  test(
+    'restore preserves promotion-pending guest conversion without replaying OTP',
+    () async {
+      final guestStorage = InMemoryGuestCredentialsStorage();
+      await guestStorage.writePassword('guest-auto-password-1');
+      await guestStorage.writePendingConversionEmail('guest@example.com');
+      await guestStorage.setGuestConversionPromotionPending(true);
+      final storage = InMemoryAuthSessionStorage();
+      await storage.write(
+        const AuthSession(
+          accessToken: 'guest-access',
+          refreshToken: 'guest-refresh',
+          accountId: 'acc-1',
+          activeProfileId: 'prof-1',
+          expiresInSeconds: 900,
+          accountType: 'guest',
+        ),
+      );
+      var refreshes = 0;
+      final mock = MockClient((req) async {
+        if (req.url.path != '/api/v1/auth/refresh') {
+          return http.Response('not found', 404);
+        }
+        refreshes++;
         return http.Response(
           jsonEncode({
             'session': {
               ...(sessionJson()['session'] as Map<String, dynamic>),
-              'access_token': 'guest-converted-access',
-              'refresh_token': 'guest-converted-refresh',
-              'account_type': 'guest',
+              'account_type': refreshes < 2 ? 'guest' : 'regular',
             },
           }),
           200,
         );
-      }
-      if (req.url.path == '/api/v1/auth/otp/send') {
-        return http.Response('', 204);
-      }
-      if (req.url.path == '/api/v1/auth/otp/verify') {
-        return http.Response(
+      });
+      final container = ProviderContainer(
+        overrides: [
+          gatewayConfigProvider.overrideWithValue(config),
+          httpClientProvider.overrideWithValue(mock),
+          authSessionStorageProvider.overrideWithValue(storage),
+          guestCredentialsStorageProvider.overrideWithValue(guestStorage),
+        ],
+      );
+      addTearDown(container.dispose);
+      final controller = container.read(authControllerProvider.notifier);
+
+      await controller.restore();
+      expect(
+        container
+            .read(authControllerProvider)
+            .isGuestConversionPromotionPending,
+        isTrue,
+      );
+      expect(
+        container.read(authControllerProvider).pendingGuestConversionEmail,
+        'guest@example.com',
+      );
+      expect(await controller.resumeGuestConversionPromotion(), isNull);
+      expect(refreshes, 2);
+      expect(container.read(authControllerProvider).isGuest, isFalse);
+      expect(await guestStorage.readPendingConversionEmail(), isNull);
+    },
+  );
+
+  test(
+    'delayed promotion refresh cannot restore a session after logout',
+    () async {
+      final refreshRequested = Completer<void>();
+      final refreshResponse = Completer<http.Response>();
+      final storage = InMemoryAuthSessionStorage();
+      final mock = MockClient((req) async {
+        if (req.url.path == '/api/v1/auth/refresh') {
+          refreshRequested.complete();
+          return refreshResponse.future;
+        }
+        if (req.url.path == '/api/v1/auth/logout') {
+          return http.Response('', 204);
+        }
+        return http.Response('not found', 404);
+      });
+      final container = buildContainer(mock: mock, storage: storage);
+      addTearDown(container.dispose);
+      final controller = container.read(authControllerProvider.notifier);
+      controller.state = const AuthState(
+        session: AuthSession(
+          accessToken: 'guest-access',
+          refreshToken: 'guest-refresh',
+          accountId: 'acc-1',
+          activeProfileId: 'prof-1',
+          expiresInSeconds: 900,
+          accountType: 'guest',
+        ),
+        isGuest: true,
+        pendingGuestConversionEmail: 'guest@example.com',
+        isGuestConversionPromotionPending: true,
+      );
+      final resume = controller.resumeGuestConversionPromotion();
+      await refreshRequested.future;
+      await controller.logout();
+      refreshResponse.complete(
+        http.Response(
           jsonEncode({
             'session': {
               ...(sessionJson()['session'] as Map<String, dynamic>),
-              'access_token': 'regular-access',
-              'refresh_token': 'regular-refresh',
               'account_type': 'regular',
             },
           }),
           200,
-        );
-      }
-      return http.Response('not found', 404);
-    });
-    final container = ProviderContainer(
-      overrides: [
-        gatewayConfigProvider.overrideWithValue(config),
-        httpClientProvider.overrideWithValue(mock),
-        authSessionStorageProvider.overrideWithValue(storage),
-        guestCredentialsStorageProvider.overrideWithValue(guestStorage),
-      ],
-    );
-    addTearDown(container.dispose);
-    final controller = container.read(authControllerProvider.notifier);
-    controller.state = const AuthState(
-      session: AuthSession(
-        accessToken: 'guest-access',
-        refreshToken: 'guest-refresh',
-        accountId: 'acc-1',
-        activeProfileId: 'prof-1',
-        expiresInSeconds: 900,
-        accountType: 'guest',
-      ),
-      isGuest: true,
-    );
-
-    expect(
-      await controller.convertGuest(
-        email: 'guest@example.com',
-        password: 'user-password1',
-      ),
-      isNull,
-    );
-    expect(container.read(authControllerProvider).isGuest, isTrue);
-    expect(
-      container.read(authControllerProvider).pendingGuestConversionEmail,
-      'guest@example.com',
-    );
-    expect(await guestStorage.readPassword(), 'guest-auto-password-1');
-
-    expect(await controller.verifyGuestConversionEmail('123456'), isNull);
-    final state = container.read(authControllerProvider);
-    expect(state.isGuest, isFalse);
-    expect(state.pendingGuestConversionEmail, isNull);
-    expect(state.isGuestConversionPromotionPending, isFalse);
-    expect(await guestStorage.readPassword(), isNull);
-    expect(await guestStorage.readPendingConversionEmail(), isNull);
-    expect(await guestStorage.isGuestConversionPromotionPending(), isFalse);
-    expect((await storage.read())?.accessToken, 'regular-access');
-    expect((await storage.read())?.refreshToken, 'regular-refresh');
-    expect((await storage.read())?.accountType, 'regular');
-  });
-
-  test('guest conversion polls guest refreshes without replaying accepted OTP', () async {
-    final guestStorage = InMemoryGuestCredentialsStorage();
-    await guestStorage.writePassword('guest-auto-password-1');
-    var refreshes = 0;
-    var verifies = 0;
-    final mock = MockClient((req) async {
-      if (req.url.path == '/api/v1/auth/convert-guest') {
-        return http.Response(jsonEncode({'session': {...(sessionJson()['session'] as Map<String, dynamic>), 'account_type': 'guest'}}), 200);
-      }
-      if (req.url.path == '/api/v1/auth/otp/send') {
-        return http.Response('', 204);
-      }
-      if (req.url.path == '/api/v1/auth/otp/verify') {
-        verifies++;
-        return http.Response('', 204);
-      }
-      if (req.url.path == '/api/v1/auth/refresh') {
-        refreshes++;
-        final type = refreshes < 4 ? 'guest' : 'regular';
-        return http.Response(jsonEncode({'session': {...(sessionJson()['session'] as Map<String, dynamic>), 'account_type': type}}), 200);
-      }
-      return http.Response('not found', 404);
-    });
-    final container = ProviderContainer(overrides: [
-      gatewayConfigProvider.overrideWithValue(config),
-      httpClientProvider.overrideWithValue(mock),
-      authSessionStorageProvider.overrideWithValue(InMemoryAuthSessionStorage()),
-      guestCredentialsStorageProvider.overrideWithValue(guestStorage),
-    ]);
-    addTearDown(container.dispose);
-    final controller = container.read(authControllerProvider.notifier);
-    controller.state = const AuthState(
-      session: AuthSession(
-        accessToken: 'guest-access',
-        refreshToken: 'guest-refresh',
-        accountId: 'acc-1',
-        activeProfileId: 'prof-1',
-        expiresInSeconds: 900,
-        accountType: 'guest',
-      ),
-      isGuest: true,
-    );
-
-    await controller.convertGuest(email: 'guest@example.com', password: 'user-password1');
-    expect(await controller.verifyGuestConversionEmail('123456'), isNull);
-    expect(refreshes, 4);
-    expect(verifies, 1);
-    expect(container.read(authControllerProvider).isGuest, isFalse);
-  });
-
-  test('recreated controller resumes a 204 promotion with refresh status only', () async {
-    final firstRefreshRequested = Completer<void>();
-    final neverCompletes = Completer<http.Response>();
-    final guestStorage = InMemoryGuestCredentialsStorage();
-    await guestStorage.writePassword('guest-auto-password-1');
-    await guestStorage.writePendingConversionEmail('guest@example.com');
-    final storage = InMemoryAuthSessionStorage();
-    const guest = AuthSession(
-      accessToken: 'guest-access',
-      refreshToken: 'guest-refresh',
-      accountId: 'acc-1',
-      activeProfileId: 'prof-1',
-      expiresInSeconds: 900,
-      accountType: 'guest',
-    );
-    await storage.write(guest);
-    var verifies = 0;
-    var refreshes = 0;
-    final mock = MockClient((req) async {
-      if (req.url.path == '/api/v1/auth/otp/verify') {
-        verifies++;
-        return http.Response('', 204);
-      }
-      if (req.url.path == '/api/v1/auth/refresh') {
-        refreshes++;
-        if (refreshes == 1) {
-          firstRefreshRequested.complete();
-          return neverCompletes.future;
-        }
-        if (refreshes == 2) {
-          return http.Response(jsonEncode({'session': guest.toJson()}), 200);
-        }
-        return http.Response(jsonEncode({'session': {...guest.toJson(), 'access_token': 'regular-access', 'refresh_token': 'regular-refresh', 'account_type': 'regular'}}), 200);
-      }
-      return http.Response('not found', 404);
-    });
-    final first = buildContainer(
-      mock: mock,
-      storage: storage,
-      guestStorage: guestStorage,
-    );
-    addTearDown(first.dispose);
-    final firstController = first.read(authControllerProvider.notifier);
-    firstController.state = const AuthState(
-      session: guest,
-      isGuest: true,
-      pendingGuestConversionEmail: 'guest@example.com',
-    );
-
-    unawaited(firstController.verifyGuestConversionEmail('123456'));
-    await firstRefreshRequested.future;
-    expect(await guestStorage.isGuestConversionPromotionPending(), isTrue);
-
-    final recreated = buildContainer(
-      mock: mock,
-      storage: storage,
-      guestStorage: guestStorage,
-    );
-    addTearDown(recreated.dispose);
-    final recreatedController = recreated.read(authControllerProvider.notifier);
-    await recreatedController.restore();
-    expect(recreated.read(authControllerProvider).isGuestConversionPromotionPending, isTrue);
-    expect(
-      await recreatedController.resumeGuestConversionPromotion(),
-      isNull,
-    );
-
-    expect(verifies, 1);
-    expect(refreshes, 3);
-    expect(recreated.read(authControllerProvider).isGuest, isFalse);
-  });
-
-  test('restore preserves promotion-pending guest conversion without replaying OTP', () async {
-    final guestStorage = InMemoryGuestCredentialsStorage();
-    await guestStorage.writePassword('guest-auto-password-1');
-    await guestStorage.writePendingConversionEmail('guest@example.com');
-    await guestStorage.setGuestConversionPromotionPending(true);
-    final storage = InMemoryAuthSessionStorage();
-    await storage.write(const AuthSession(
-      accessToken: 'guest-access',
-      refreshToken: 'guest-refresh',
-      accountId: 'acc-1',
-      activeProfileId: 'prof-1',
-      expiresInSeconds: 900,
-      accountType: 'guest',
-    ));
-    var refreshes = 0;
-    final mock = MockClient((req) async {
-      if (req.url.path != '/api/v1/auth/refresh') {
-        return http.Response('not found', 404);
-      }
-      refreshes++;
-      return http.Response(jsonEncode({'session': {
-        ...(sessionJson()['session'] as Map<String, dynamic>),
-        'account_type': refreshes < 2 ? 'guest' : 'regular',
-      }}), 200);
-    });
-    final container = ProviderContainer(overrides: [
-      gatewayConfigProvider.overrideWithValue(config),
-      httpClientProvider.overrideWithValue(mock),
-      authSessionStorageProvider.overrideWithValue(storage),
-      guestCredentialsStorageProvider.overrideWithValue(guestStorage),
-    ]);
-    addTearDown(container.dispose);
-    final controller = container.read(authControllerProvider.notifier);
-
-    await controller.restore();
-    expect(container.read(authControllerProvider).isGuestConversionPromotionPending, isTrue);
-    expect(container.read(authControllerProvider).pendingGuestConversionEmail, 'guest@example.com');
-    expect(await controller.resumeGuestConversionPromotion(), isNull);
-    expect(refreshes, 2);
-    expect(container.read(authControllerProvider).isGuest, isFalse);
-    expect(await guestStorage.readPendingConversionEmail(), isNull);
-  });
-
-  test('delayed promotion refresh cannot restore a session after logout', () async {
-    final refreshRequested = Completer<void>();
-    final refreshResponse = Completer<http.Response>();
-    final storage = InMemoryAuthSessionStorage();
-    final mock = MockClient((req) async {
-      if (req.url.path == '/api/v1/auth/refresh') {
-        refreshRequested.complete();
-        return refreshResponse.future;
-      }
-      if (req.url.path == '/api/v1/auth/logout') {
-        return http.Response('', 204);
-      }
-      return http.Response('not found', 404);
-    });
-    final container = buildContainer(mock: mock, storage: storage);
-    addTearDown(container.dispose);
-    final controller = container.read(authControllerProvider.notifier);
-    controller.state = const AuthState(
-      session: AuthSession(accessToken: 'guest-access', refreshToken: 'guest-refresh', accountId: 'acc-1', activeProfileId: 'prof-1', expiresInSeconds: 900, accountType: 'guest'),
-      isGuest: true,
-      pendingGuestConversionEmail: 'guest@example.com',
-      isGuestConversionPromotionPending: true,
-    );
-    final resume = controller.resumeGuestConversionPromotion();
-    await refreshRequested.future;
-    await controller.logout();
-    refreshResponse.complete(http.Response(jsonEncode({'session': {...(sessionJson()['session'] as Map<String, dynamic>), 'account_type': 'regular'}}), 200));
-    expect(await resume, 'not_authenticated');
-    expect(container.read(authControllerProvider).session, isNull);
-    expect(await storage.read(), isNull);
-  });
+        ),
+      );
+      expect(await resume, 'not_authenticated');
+      expect(container.read(authControllerProvider).session, isNull);
+      expect(await storage.read(), isNull);
+    },
+  );
 
   test('delayed promotion refresh cannot overwrite a profile switch', () async {
     final refreshRequested = Completer<void>();
     final refreshResponse = Completer<http.Response>();
-    const switched = AuthSession(accessToken: 'profile-b-access', refreshToken: 'profile-b-refresh', accountId: 'acc-1', activeProfileId: 'profile-b', expiresInSeconds: 900, accountType: 'guest');
+    const switched = AuthSession(
+      accessToken: 'profile-b-access',
+      refreshToken: 'profile-b-refresh',
+      accountId: 'acc-1',
+      activeProfileId: 'profile-b',
+      expiresInSeconds: 900,
+      accountType: 'guest',
+    );
     final mock = MockClient((req) async {
       if (req.url.path == '/api/v1/auth/refresh') {
         refreshRequested.complete();
@@ -552,7 +766,14 @@ void main() {
     addTearDown(container.dispose);
     final controller = container.read(authControllerProvider.notifier);
     controller.state = const AuthState(
-      session: AuthSession(accessToken: 'guest-access', refreshToken: 'guest-refresh', accountId: 'acc-1', activeProfileId: 'prof-1', expiresInSeconds: 900, accountType: 'guest'),
+      session: AuthSession(
+        accessToken: 'guest-access',
+        refreshToken: 'guest-refresh',
+        accountId: 'acc-1',
+        activeProfileId: 'prof-1',
+        expiresInSeconds: 900,
+        accountType: 'guest',
+      ),
       isGuest: true,
       pendingGuestConversionEmail: 'guest@example.com',
       isGuestConversionPromotionPending: true,
@@ -560,75 +781,144 @@ void main() {
     final resume = controller.resumeGuestConversionPromotion();
     await refreshRequested.future;
     expect(await controller.switchActiveProfile('profile-b'), isNull);
-    refreshResponse.complete(http.Response(jsonEncode({'session': {...(sessionJson()['session'] as Map<String, dynamic>), 'account_type': 'regular'}}), 200));
+    refreshResponse.complete(
+      http.Response(
+        jsonEncode({
+          'session': {
+            ...(sessionJson()['session'] as Map<String, dynamic>),
+            'account_type': 'regular',
+          },
+        }),
+        200,
+      ),
+    );
     expect(await resume, 'not_authenticated');
     expect(container.read(authControllerProvider).session, switched);
   });
 
-  test('logout during guest storage clear cannot restore regular promotion', () async {
-    final guestStorage = _DeferredGuestCredentialsStorage();
-    await guestStorage.writePassword('old-guest-password');
-    await guestStorage.writePendingConversionEmail('old@example.com');
-    await guestStorage.setGuestConversionPromotionPending(true);
-    final mock = MockClient((req) async {
-      if (req.url.path == '/api/v1/auth/refresh') {
-        return http.Response(jsonEncode({'session': {...(sessionJson()['session'] as Map<String, dynamic>), 'account_type': 'regular'}}), 200);
-      }
-      if (req.url.path == '/api/v1/auth/logout') {
-        return http.Response('', 204);
-      }
-      return http.Response('not found', 404);
-    });
-    final container = buildContainer(mock: mock, guestStorage: guestStorage);
-    addTearDown(container.dispose);
-    final controller = container.read(authControllerProvider.notifier);
-    controller.state = const AuthState(session: AuthSession(accessToken: 'guest-access', refreshToken: 'guest-refresh', accountId: 'acc-1', activeProfileId: 'prof-1', expiresInSeconds: 900, accountType: 'guest'), isGuest: true, pendingGuestConversionEmail: 'guest@example.com', isGuestConversionPromotionPending: true);
-    final resume = controller.resumeGuestConversionPromotion();
-    await guestStorage.clearStarted.future;
-    await controller.logout();
-    await guestStorage.writePassword('new-guest-password');
-    await guestStorage.writePendingConversionEmail('new@example.com');
-    await guestStorage.setGuestConversionPromotionPending(true);
-    guestStorage.clearGate.complete();
-    expect(await resume, 'not_authenticated');
-    expect(container.read(authControllerProvider).session, isNull);
-    expect(await guestStorage.readPassword(), 'new-guest-password');
-    expect(await guestStorage.readPendingConversionEmail(), 'new@example.com');
-    expect(await guestStorage.isGuestConversionPromotionPending(), isTrue);
-  });
+  test(
+    'logout during guest storage clear cannot restore regular promotion',
+    () async {
+      final guestStorage = _DeferredGuestCredentialsStorage();
+      await guestStorage.writePassword('old-guest-password');
+      await guestStorage.writePendingConversionEmail('old@example.com');
+      await guestStorage.setGuestConversionPromotionPending(true);
+      final mock = MockClient((req) async {
+        if (req.url.path == '/api/v1/auth/refresh') {
+          return http.Response(
+            jsonEncode({
+              'session': {
+                ...(sessionJson()['session'] as Map<String, dynamic>),
+                'account_type': 'regular',
+              },
+            }),
+            200,
+          );
+        }
+        if (req.url.path == '/api/v1/auth/logout') {
+          return http.Response('', 204);
+        }
+        return http.Response('not found', 404);
+      });
+      final container = buildContainer(mock: mock, guestStorage: guestStorage);
+      addTearDown(container.dispose);
+      final controller = container.read(authControllerProvider.notifier);
+      controller.state = const AuthState(
+        session: AuthSession(
+          accessToken: 'guest-access',
+          refreshToken: 'guest-refresh',
+          accountId: 'acc-1',
+          activeProfileId: 'prof-1',
+          expiresInSeconds: 900,
+          accountType: 'guest',
+        ),
+        isGuest: true,
+        pendingGuestConversionEmail: 'guest@example.com',
+        isGuestConversionPromotionPending: true,
+      );
+      final resume = controller.resumeGuestConversionPromotion();
+      await guestStorage.clearStarted.future;
+      await controller.logout();
+      await guestStorage.writePassword('new-guest-password');
+      await guestStorage.writePendingConversionEmail('new@example.com');
+      await guestStorage.setGuestConversionPromotionPending(true);
+      guestStorage.clearGate.complete();
+      expect(await resume, 'not_authenticated');
+      expect(container.read(authControllerProvider).session, isNull);
+      expect(await guestStorage.readPassword(), 'new-guest-password');
+      expect(
+        await guestStorage.readPendingConversionEmail(),
+        'new@example.com',
+      );
+      expect(await guestStorage.isGuestConversionPromotionPending(), isTrue);
+    },
+  );
 
-  test('profile switch during guest storage clear cannot be overwritten', () async {
-    final guestStorage = _DeferredGuestCredentialsStorage();
-    await guestStorage.writePassword('old-guest-password');
-    await guestStorage.writePendingConversionEmail('old@example.com');
-    await guestStorage.setGuestConversionPromotionPending(true);
-    const switched = AuthSession(accessToken: 'profile-b-access', refreshToken: 'profile-b-refresh', accountId: 'acc-1', activeProfileId: 'profile-b', expiresInSeconds: 900, accountType: 'guest');
-    final mock = MockClient((req) async {
-      if (req.url.path == '/api/v1/auth/refresh') {
-        return http.Response(jsonEncode({'session': {...(sessionJson()['session'] as Map<String, dynamic>), 'account_type': 'regular'}}), 200);
-      }
-      if (req.url.path == '/api/v1/auth/switch-profile') {
-        return http.Response(jsonEncode(switched.toJson()), 200);
-      }
-      return http.Response('not found', 404);
-    });
-    final container = buildContainer(mock: mock, guestStorage: guestStorage);
-    addTearDown(container.dispose);
-    final controller = container.read(authControllerProvider.notifier);
-    controller.state = const AuthState(session: AuthSession(accessToken: 'guest-access', refreshToken: 'guest-refresh', accountId: 'acc-1', activeProfileId: 'prof-1', expiresInSeconds: 900, accountType: 'guest'), isGuest: true, pendingGuestConversionEmail: 'guest@example.com', isGuestConversionPromotionPending: true);
-    final resume = controller.resumeGuestConversionPromotion();
-    await guestStorage.clearStarted.future;
-    expect(await controller.switchActiveProfile('profile-b'), isNull);
-    await guestStorage.writePassword('profile-b-guest-password');
-    await guestStorage.writePendingConversionEmail('profile-b@example.com');
-    await guestStorage.setGuestConversionPromotionPending(true);
-    guestStorage.clearGate.complete();
-    expect(await resume, 'not_authenticated');
-    expect(container.read(authControllerProvider).session, switched);
-    expect(await guestStorage.readPassword(), 'profile-b-guest-password');
-    expect(await guestStorage.readPendingConversionEmail(), 'profile-b@example.com');
-    expect(await guestStorage.isGuestConversionPromotionPending(), isTrue);
-  });
+  test(
+    'profile switch during guest storage clear cannot be overwritten',
+    () async {
+      final guestStorage = _DeferredGuestCredentialsStorage();
+      await guestStorage.writePassword('old-guest-password');
+      await guestStorage.writePendingConversionEmail('old@example.com');
+      await guestStorage.setGuestConversionPromotionPending(true);
+      const switched = AuthSession(
+        accessToken: 'profile-b-access',
+        refreshToken: 'profile-b-refresh',
+        accountId: 'acc-1',
+        activeProfileId: 'profile-b',
+        expiresInSeconds: 900,
+        accountType: 'guest',
+      );
+      final mock = MockClient((req) async {
+        if (req.url.path == '/api/v1/auth/refresh') {
+          return http.Response(
+            jsonEncode({
+              'session': {
+                ...(sessionJson()['session'] as Map<String, dynamic>),
+                'account_type': 'regular',
+              },
+            }),
+            200,
+          );
+        }
+        if (req.url.path == '/api/v1/auth/switch-profile') {
+          return http.Response(jsonEncode(switched.toJson()), 200);
+        }
+        return http.Response('not found', 404);
+      });
+      final container = buildContainer(mock: mock, guestStorage: guestStorage);
+      addTearDown(container.dispose);
+      final controller = container.read(authControllerProvider.notifier);
+      controller.state = const AuthState(
+        session: AuthSession(
+          accessToken: 'guest-access',
+          refreshToken: 'guest-refresh',
+          accountId: 'acc-1',
+          activeProfileId: 'prof-1',
+          expiresInSeconds: 900,
+          accountType: 'guest',
+        ),
+        isGuest: true,
+        pendingGuestConversionEmail: 'guest@example.com',
+        isGuestConversionPromotionPending: true,
+      );
+      final resume = controller.resumeGuestConversionPromotion();
+      await guestStorage.clearStarted.future;
+      expect(await controller.switchActiveProfile('profile-b'), isNull);
+      await guestStorage.writePassword('profile-b-guest-password');
+      await guestStorage.writePendingConversionEmail('profile-b@example.com');
+      await guestStorage.setGuestConversionPromotionPending(true);
+      guestStorage.clearGate.complete();
+      expect(await resume, 'not_authenticated');
+      expect(container.read(authControllerProvider).session, switched);
+      expect(await guestStorage.readPassword(), 'profile-b-guest-password');
+      expect(
+        await guestStorage.readPendingConversionEmail(),
+        'profile-b@example.com',
+      );
+      expect(await guestStorage.isGuestConversionPromotionPending(), isTrue);
+    },
+  );
 
   test('restore keeps session on network_error refresh failure', () async {
     final mock = MockClient((req) async {
@@ -681,69 +971,72 @@ void main() {
     expect(await storage.read(), isNull);
   });
 
-  test('convertGuest updates session before parallel refresh failure clears it', () async {
-    var refreshCalls = 0;
-    final guestStorage = InMemoryGuestCredentialsStorage();
-    final storage = InMemoryAuthSessionStorage();
-    final mock = MockClient((req) async {
-      if (req.url.path == '/api/v1/auth/convert-guest') {
-        return http.Response(
-          jsonEncode({
-            'session': {
-              ...(sessionJson()['session'] as Map<String, dynamic>),
-              'access_token': 'access-converted',
-              'refresh_token': 'refresh-converted',
-            },
-          }),
-          200,
-        );
-      }
-      if (req.url.path == '/api/v1/auth/otp/send') {
-        return http.Response('', 204);
-      }
-      if (req.url.path == '/api/v1/auth/refresh') {
-        refreshCalls++;
-        return http.Response(jsonEncode({'error': 'invalid_token'}), 401);
-      }
-      return http.Response('not found', 404);
-    });
-    final container = ProviderContainer(
-      overrides: [
-        gatewayConfigProvider.overrideWithValue(config),
-        httpClientProvider.overrideWithValue(mock),
-        authSessionStorageProvider.overrideWithValue(storage),
-        guestCredentialsStorageProvider.overrideWithValue(guestStorage),
-      ],
-    );
-    addTearDown(container.dispose);
+  test(
+    'convertGuest updates session before parallel refresh failure clears it',
+    () async {
+      var refreshCalls = 0;
+      final guestStorage = InMemoryGuestCredentialsStorage();
+      final storage = InMemoryAuthSessionStorage();
+      final mock = MockClient((req) async {
+        if (req.url.path == '/api/v1/auth/convert-guest') {
+          return http.Response(
+            jsonEncode({
+              'session': {
+                ...(sessionJson()['session'] as Map<String, dynamic>),
+                'access_token': 'access-converted',
+                'refresh_token': 'refresh-converted',
+              },
+            }),
+            200,
+          );
+        }
+        if (req.url.path == '/api/v1/auth/otp/send') {
+          return http.Response('', 204);
+        }
+        if (req.url.path == '/api/v1/auth/refresh') {
+          refreshCalls++;
+          return http.Response(jsonEncode({'error': 'invalid_token'}), 401);
+        }
+        return http.Response('not found', 404);
+      });
+      final container = ProviderContainer(
+        overrides: [
+          gatewayConfigProvider.overrideWithValue(config),
+          httpClientProvider.overrideWithValue(mock),
+          authSessionStorageProvider.overrideWithValue(storage),
+          guestCredentialsStorageProvider.overrideWithValue(guestStorage),
+        ],
+      );
+      addTearDown(container.dispose);
 
-    final controller = container.read(authControllerProvider.notifier);
-    controller.state = const AuthState(
-      session: AuthSession(
-        accessToken: 'access',
-        refreshToken: 'refresh',
-        accountId: 'acc-1',
-        activeProfileId: 'prof-1',
-        expiresInSeconds: 900,
-      ),
-      isGuest: true,
-    );
+      final controller = container.read(authControllerProvider.notifier);
+      controller.state = const AuthState(
+        session: AuthSession(
+          accessToken: 'access',
+          refreshToken: 'refresh',
+          accountId: 'acc-1',
+          activeProfileId: 'prof-1',
+          expiresInSeconds: 900,
+        ),
+        isGuest: true,
+      );
 
-    final convertFuture = controller.convertGuest(
-      email: 'guest@example.com',
-      password: 'user-password1',
-    );
-    await controller.refreshOn401();
-    final err = await convertFuture;
+      final convertFuture = controller.convertGuest(
+        email: 'guest@example.com',
+        password: 'user-password1',
+      );
+      await controller.refreshOn401();
+      final err = await convertFuture;
 
-    expect(err, isNull);
-    expect(refreshCalls, greaterThan(0));
-    expect(
-      container.read(authControllerProvider).session?.accessToken,
-      'access-converted',
-    );
-    expect((await storage.read())?.accessToken, 'access-converted');
-  });
+      expect(err, isNull);
+      expect(refreshCalls, greaterThan(0));
+      expect(
+        container.read(authControllerProvider).session?.accessToken,
+        'access-converted',
+      );
+      expect((await storage.read())?.accessToken, 'access-converted');
+    },
+  );
 
   test('late A refresh cannot overwrite completed profile B switch', () async {
     const sessionA = AuthSession(
@@ -865,149 +1158,158 @@ void main() {
     expect(persisted?.accessToken, sessionC.accessToken);
   });
 
-  test('late A definitive refresh failure cannot clear completed B switch', () async {
-    const sessionA = AuthSession(
-      accessToken: 'access-a',
-      refreshToken: 'refresh-a',
-      accountId: 'acc-1',
-      activeProfileId: 'profile-a',
-      expiresInSeconds: 900,
-    );
-    const sessionB = AuthSession(
-      accessToken: 'access-b',
-      refreshToken: 'refresh-b',
-      accountId: 'acc-1',
-      activeProfileId: 'profile-b',
-      expiresInSeconds: 900,
-    );
-    final refreshRequested = Completer<void>();
-    final refreshResponse = Completer<http.Response>();
-    final storage = _DeferredAuthSessionStorage(persisted: sessionA);
-    final mock = MockClient((req) async {
-      if (req.url.path == '/api/v1/auth/refresh') {
-        if (!refreshRequested.isCompleted) refreshRequested.complete();
-        return refreshResponse.future;
-      }
-      if (req.url.path == '/api/v1/auth/switch-profile') {
-        return http.Response(jsonEncode(sessionB.toJson()), 200);
-      }
-      return http.Response('not found', 404);
-    });
-    final container = buildContainer(mock: mock, storage: storage);
-    addTearDown(container.dispose);
-    final controller = container.read(authControllerProvider.notifier)
-      ..state = const AuthState(session: sessionA);
+  test(
+    'late A definitive refresh failure cannot clear completed B switch',
+    () async {
+      const sessionA = AuthSession(
+        accessToken: 'access-a',
+        refreshToken: 'refresh-a',
+        accountId: 'acc-1',
+        activeProfileId: 'profile-a',
+        expiresInSeconds: 900,
+      );
+      const sessionB = AuthSession(
+        accessToken: 'access-b',
+        refreshToken: 'refresh-b',
+        accountId: 'acc-1',
+        activeProfileId: 'profile-b',
+        expiresInSeconds: 900,
+      );
+      final refreshRequested = Completer<void>();
+      final refreshResponse = Completer<http.Response>();
+      final storage = _DeferredAuthSessionStorage(persisted: sessionA);
+      final mock = MockClient((req) async {
+        if (req.url.path == '/api/v1/auth/refresh') {
+          if (!refreshRequested.isCompleted) refreshRequested.complete();
+          return refreshResponse.future;
+        }
+        if (req.url.path == '/api/v1/auth/switch-profile') {
+          return http.Response(jsonEncode(sessionB.toJson()), 200);
+        }
+        return http.Response('not found', 404);
+      });
+      final container = buildContainer(mock: mock, storage: storage);
+      addTearDown(container.dispose);
+      final controller = container.read(authControllerProvider.notifier)
+        ..state = const AuthState(session: sessionA);
 
-    final refresh = controller.refreshOn401();
-    await refreshRequested.future;
-    expect(await controller.switchActiveProfile('profile-b'), isNull);
+      final refresh = controller.refreshOn401();
+      await refreshRequested.future;
+      expect(await controller.switchActiveProfile('profile-b'), isNull);
 
-    refreshResponse.complete(
-      http.Response(jsonEncode({'error': 'invalid_token'}), 401),
-    );
-    expect(await refresh, isFalse);
+      refreshResponse.complete(
+        http.Response(jsonEncode({'error': 'invalid_token'}), 401),
+      );
+      expect(await refresh, isFalse);
 
-    final current = container.read(authControllerProvider).session;
-    expect(current?.activeProfileId, sessionB.activeProfileId);
-    expect(current?.accessToken, sessionB.accessToken);
-    expect(
-      container.read(authorizationHeaderProvider),
-      sessionB.authorizationHeader,
-    );
-    final persisted = await storage.read();
-    expect(persisted?.activeProfileId, sessionB.activeProfileId);
-    expect(persisted?.accessToken, sessionB.accessToken);
-  });
+      final current = container.read(authControllerProvider).session;
+      expect(current?.activeProfileId, sessionB.activeProfileId);
+      expect(current?.accessToken, sessionB.accessToken);
+      expect(
+        container.read(authorizationHeaderProvider),
+        sessionB.authorizationHeader,
+      );
+      final persisted = await storage.read();
+      expect(persisted?.activeProfileId, sessionB.activeProfileId);
+      expect(persisted?.accessToken, sessionB.accessToken);
+    },
+  );
 
-  test('logout prevents a delayed profile switch from restoring its session', () async {
-    const sessionA = AuthSession(
-      accessToken: 'access-a',
-      refreshToken: 'refresh-a',
-      accountId: 'acc-1',
-      activeProfileId: 'profile-a',
-      expiresInSeconds: 900,
-    );
-    const sessionB = AuthSession(
-      accessToken: 'access-b',
-      refreshToken: 'refresh-b',
-      accountId: 'acc-1',
-      activeProfileId: 'profile-b',
-      expiresInSeconds: 900,
-    );
-    final storage = _DeferredAuthSessionStorage(persisted: sessionA)
-      ..pauseWriteFor(sessionB.accessToken);
-    final mock = MockClient((req) async {
-      if (req.url.path == '/api/v1/auth/switch-profile') {
-        return http.Response(jsonEncode(sessionB.toJson()), 200);
-      }
-      if (req.url.path == '/api/v1/auth/logout') {
-        return http.Response('', 204);
-      }
-      return http.Response('not found', 404);
-    });
-    final container = buildContainer(mock: mock, storage: storage);
-    addTearDown(container.dispose);
-    final controller = container.read(authControllerProvider.notifier)
-      ..state = const AuthState(session: sessionA);
+  test(
+    'logout prevents a delayed profile switch from restoring its session',
+    () async {
+      const sessionA = AuthSession(
+        accessToken: 'access-a',
+        refreshToken: 'refresh-a',
+        accountId: 'acc-1',
+        activeProfileId: 'profile-a',
+        expiresInSeconds: 900,
+      );
+      const sessionB = AuthSession(
+        accessToken: 'access-b',
+        refreshToken: 'refresh-b',
+        accountId: 'acc-1',
+        activeProfileId: 'profile-b',
+        expiresInSeconds: 900,
+      );
+      final storage = _DeferredAuthSessionStorage(persisted: sessionA)
+        ..pauseWriteFor(sessionB.accessToken);
+      final mock = MockClient((req) async {
+        if (req.url.path == '/api/v1/auth/switch-profile') {
+          return http.Response(jsonEncode(sessionB.toJson()), 200);
+        }
+        if (req.url.path == '/api/v1/auth/logout') {
+          return http.Response('', 204);
+        }
+        return http.Response('not found', 404);
+      });
+      final container = buildContainer(mock: mock, storage: storage);
+      addTearDown(container.dispose);
+      final controller = container.read(authControllerProvider.notifier)
+        ..state = const AuthState(session: sessionA);
 
-    final switchB = controller.switchActiveProfile('profile-b');
-    await storage.waitForWrite(sessionB.accessToken);
-    await controller.logout();
+      final switchB = controller.switchActiveProfile('profile-b');
+      await storage.waitForWrite(sessionB.accessToken);
+      await controller.logout();
 
-    storage.completeWriteFor(sessionB.accessToken);
-    expect(await switchB, isNull);
+      storage.completeWriteFor(sessionB.accessToken);
+      expect(await switchB, isNull);
 
-    expect(container.read(authControllerProvider).session, isNull);
-    expect(container.read(authorizationHeaderProvider), isNull);
-    expect(await storage.read(), isNull);
-  });
+      expect(container.read(authControllerProvider).session, isNull);
+      expect(container.read(authorizationHeaderProvider), isNull);
+      expect(await storage.read(), isNull);
+    },
+  );
 
-  test('logout prevents a delayed refresh from restoring its session', () async {
-    const sessionA = AuthSession(
-      accessToken: 'access-a',
-      refreshToken: 'refresh-a',
-      accountId: 'acc-1',
-      activeProfileId: 'profile-a',
-      expiresInSeconds: 900,
-    );
-    const refreshedA = AuthSession(
-      accessToken: 'access-a-refreshed',
-      refreshToken: 'refresh-a-refreshed',
-      accountId: 'acc-1',
-      activeProfileId: 'profile-a',
-      expiresInSeconds: 900,
-    );
-    final refreshRequested = Completer<void>();
-    final refreshResponse = Completer<http.Response>();
-    final storage = _DeferredAuthSessionStorage(persisted: sessionA);
-    final mock = MockClient((req) async {
-      if (req.url.path == '/api/v1/auth/refresh') {
-        if (!refreshRequested.isCompleted) refreshRequested.complete();
-        return refreshResponse.future;
-      }
-      if (req.url.path == '/api/v1/auth/logout') {
-        return http.Response('', 204);
-      }
-      return http.Response('not found', 404);
-    });
-    final container = buildContainer(mock: mock, storage: storage);
-    addTearDown(container.dispose);
-    final controller = container.read(authControllerProvider.notifier)
-      ..state = const AuthState(session: sessionA);
+  test(
+    'logout prevents a delayed refresh from restoring its session',
+    () async {
+      const sessionA = AuthSession(
+        accessToken: 'access-a',
+        refreshToken: 'refresh-a',
+        accountId: 'acc-1',
+        activeProfileId: 'profile-a',
+        expiresInSeconds: 900,
+      );
+      const refreshedA = AuthSession(
+        accessToken: 'access-a-refreshed',
+        refreshToken: 'refresh-a-refreshed',
+        accountId: 'acc-1',
+        activeProfileId: 'profile-a',
+        expiresInSeconds: 900,
+      );
+      final refreshRequested = Completer<void>();
+      final refreshResponse = Completer<http.Response>();
+      final storage = _DeferredAuthSessionStorage(persisted: sessionA);
+      final mock = MockClient((req) async {
+        if (req.url.path == '/api/v1/auth/refresh') {
+          if (!refreshRequested.isCompleted) refreshRequested.complete();
+          return refreshResponse.future;
+        }
+        if (req.url.path == '/api/v1/auth/logout') {
+          return http.Response('', 204);
+        }
+        return http.Response('not found', 404);
+      });
+      final container = buildContainer(mock: mock, storage: storage);
+      addTearDown(container.dispose);
+      final controller = container.read(authControllerProvider.notifier)
+        ..state = const AuthState(session: sessionA);
 
-    final refresh = controller.refreshOn401();
-    await refreshRequested.future;
-    await controller.logout();
+      final refresh = controller.refreshOn401();
+      await refreshRequested.future;
+      await controller.logout();
 
-    refreshResponse.complete(
-      http.Response(jsonEncode(refreshedA.toJson()), 200),
-    );
-    expect(await refresh, isTrue);
+      refreshResponse.complete(
+        http.Response(jsonEncode(refreshedA.toJson()), 200),
+      );
+      expect(await refresh, isTrue);
 
-    expect(container.read(authControllerProvider).session, isNull);
-    expect(container.read(authorizationHeaderProvider), isNull);
-    expect(await storage.read(), isNull);
-  });
+      expect(container.read(authControllerProvider).session, isNull);
+      expect(container.read(authorizationHeaderProvider), isNull);
+      expect(await storage.read(), isNull);
+    },
+  );
 
   test('switch started during logout cannot restore a session', () async {
     const sessionA = AuthSession(

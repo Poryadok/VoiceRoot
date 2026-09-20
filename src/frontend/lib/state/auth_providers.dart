@@ -31,6 +31,7 @@ class AuthState {
     this.needsGuestNickname = false,
     this.pendingGuestConversionEmail,
     this.isGuestConversionPromotionPending = false,
+    this.emailVerificationRecoveryState,
   });
 
   final AuthSession? session;
@@ -54,6 +55,18 @@ class AuthState {
 
   final bool isGuestConversionPromotionPending;
 
+  /// Authoritative state recovered from the restricted session. This stays
+  /// separate from a guest conversion, whose local email is only a UI label.
+  final EmailVerificationRecoveryState? emailVerificationRecoveryState;
+
+  bool get isEmailVerificationPending =>
+      emailVerificationRecoveryState ==
+      EmailVerificationRecoveryState.emailPending;
+
+  bool get isEmailVerificationPromotionPending =>
+      emailVerificationRecoveryState ==
+      EmailVerificationRecoveryState.promotionPending;
+
   bool get isAuthenticated => session != null;
 
   String? get activeProfileId => session?.activeProfileId;
@@ -74,6 +87,8 @@ class AuthState {
     String? pendingGuestConversionEmail,
     bool clearPendingGuestConversionEmail = false,
     bool? isGuestConversionPromotionPending,
+    EmailVerificationRecoveryState? emailVerificationRecoveryState,
+    bool clearEmailVerificationRecoveryState = false,
   }) {
     return AuthState(
       session: clearSession ? null : (session ?? this.session),
@@ -93,6 +108,10 @@ class AuthState {
       isGuestConversionPromotionPending:
           isGuestConversionPromotionPending ??
           this.isGuestConversionPromotionPending,
+      emailVerificationRecoveryState: clearEmailVerificationRecoveryState
+          ? null
+          : (emailVerificationRecoveryState ??
+                this.emailVerificationRecoveryState),
     );
   }
 }
@@ -193,10 +212,42 @@ class AuthController extends StateNotifier<AuthState> {
         final verification = isGuest
             ? await _authClient.getEmailVerificationStatus(session: session)
             : null;
-        final promotionPending = verification is AuthApiOk<EmailVerificationRecoveryState> &&
-            verification.data == EmailVerificationRecoveryState.promotionPending;
+        var recoveryState =
+            verification is AuthApiOk<EmailVerificationRecoveryState>
+            ? verification.data
+            : null;
+        var promotionPending =
+            verification is AuthApiOk<EmailVerificationRecoveryState> &&
+            verification.data ==
+                EmailVerificationRecoveryState.promotionPending;
+        if (recoveryState == EmailVerificationRecoveryState.regular) {
+          final replacement = await _authClient.refresh(
+            refreshToken: session.refreshToken,
+          );
+          if (replacement case AuthSessionOk(
+            :final session,
+          ) when _isRegularSession(session)) {
+            await _persist(session);
+            state = state.copyWith(
+              session: session,
+              isRestoring: false,
+              clearError: true,
+              clearDiscoverHint: true,
+              clearGuest: true,
+              clearGuestNickname: true,
+              clearPendingGuestConversionEmail: true,
+              isGuestConversionPromotionPending: false,
+              clearEmailVerificationRecoveryState: true,
+            );
+            await _notifyAuthenticated();
+            return;
+          }
+          recoveryState = EmailVerificationRecoveryState.promotionPending;
+          promotionPending = true;
+        }
         final needsGuestNickname =
             isGuest &&
+            recoveryState == null &&
             !await _guestCredentialsStorage.isNicknameCompleted(
               session.accountId,
             );
@@ -215,8 +266,11 @@ class AuthController extends StateNotifier<AuthState> {
               (promotionPending ||
                   await _guestCredentialsStorage
                       .isGuestConversionPromotionPending()),
+          emailVerificationRecoveryState: recoveryState,
         );
-        if (!needsGuestNickname) {
+        if (!needsGuestNickname &&
+            recoveryState != EmailVerificationRecoveryState.emailPending &&
+            recoveryState != EmailVerificationRecoveryState.promotionPending) {
           await _notifyAuthenticated();
         }
       case AuthSessionFailure(
@@ -247,6 +301,7 @@ class AuthController extends StateNotifier<AuthState> {
   Future<void> register({required String email, required String password}) =>
       _authenticate(
         () => _authClient.register(email: email, password: password),
+        recoverEmailVerification: true,
       );
 
   Future<void> registerGuest() async {
@@ -561,6 +616,133 @@ class AuthController extends StateNotifier<AuthState> {
     return true;
   }
 
+  Future<String?> verifyEmailVerification(String code) async {
+    final current = state.session;
+    if (current == null || !state.isEmailVerificationPending) {
+      return 'not_authenticated';
+    }
+    _convertingGuest = true;
+    final verified = await _authClient.verifyGuestConversionEmailOtp(
+      session: current,
+      code: code,
+    );
+    if (verified case GuestConversionOtpFailure(
+      :final message,
+      :final errorCode,
+      :final statusCode,
+    )) {
+      _convertingGuest = false;
+      return resolveAuthErrorKey(
+            errorCode: errorCode,
+            statusCode: statusCode,
+            message: message,
+          ) ??
+          message;
+    }
+    if (verified case GuestConversionOtpSession(
+      :final session,
+    ) when _isRegularSession(session)) {
+      await _finishEmailVerification(session);
+      _convertingGuest = false;
+      return null;
+    }
+    state = state.copyWith(
+      emailVerificationRecoveryState:
+          EmailVerificationRecoveryState.promotionPending,
+      clearError: true,
+    );
+    _convertingGuest = false;
+    return 'email_verification_promotion_pending';
+  }
+
+  Future<String?> resendEmailVerificationOtp() async {
+    final current = state.session;
+    if (current == null || !state.isEmailVerificationPending) {
+      return 'not_authenticated';
+    }
+    final result = await _authClient.sendGuestConversionEmailOtp(
+      session: current,
+    );
+    return switch (result) {
+      AuthApiOk<void>() => null,
+      AuthApiFailure(:final message, :final errorCode, :final statusCode) =>
+        resolveAuthErrorKey(
+              errorCode: errorCode,
+              statusCode: statusCode,
+              message: message,
+            ) ??
+            message,
+    };
+  }
+
+  /// Retries only the documented refresh-based recovery; it never replays OTP.
+  Future<String?> resumeEmailVerificationPromotion() async {
+    final initial = state.session;
+    if (initial == null || !state.isEmailVerificationPromotionPending) {
+      return 'not_authenticated';
+    }
+    _convertingGuest = true;
+    var current = initial;
+    for (var attempt = 0; attempt < 4; attempt++) {
+      final refreshed = await _authClient.refresh(
+        refreshToken: current.refreshToken,
+      );
+      if (state.session?.refreshToken != current.refreshToken) {
+        _convertingGuest = false;
+        return 'not_authenticated';
+      }
+      switch (refreshed) {
+        case AuthSessionOk(:final session) when _isRegularSession(session):
+          await _finishEmailVerification(session);
+          _convertingGuest = false;
+          return null;
+        case AuthSessionOk(:final session):
+          current = session;
+          await _persist(session);
+          state = state.copyWith(
+            session: session,
+            isGuest: true,
+            emailVerificationRecoveryState:
+                EmailVerificationRecoveryState.promotionPending,
+            clearError: true,
+          );
+          if (attempt < 3) {
+            await Future<void>.delayed(
+              Duration(milliseconds: 150 * (attempt + 1)),
+            );
+          }
+        case AuthSessionFailure(
+          :final message,
+          :final errorCode,
+          :final statusCode,
+        ):
+          _convertingGuest = false;
+          return resolveAuthErrorKey(
+                errorCode: errorCode,
+                statusCode: statusCode,
+                message: message,
+              ) ??
+              message;
+      }
+    }
+    _convertingGuest = false;
+    return 'email_verification_promotion_pending';
+  }
+
+  Future<void> _finishEmailVerification(AuthSession session) async {
+    await _persist(session);
+    state = state.copyWith(
+      session: session,
+      clearGuest: true,
+      clearGuestNickname: true,
+      clearPendingGuestConversionEmail: true,
+      isGuestConversionPromotionPending: false,
+      clearEmailVerificationRecoveryState: true,
+      clearError: true,
+    );
+    await _notifyAuthenticated();
+  }
+
   Future<void> login({
     required String email,
     required String password,
@@ -625,20 +807,35 @@ class AuthController extends StateNotifier<AuthState> {
     );
   }
 
-  Future<void> _authenticate(Future<AuthSessionResult> Function() call) async {
+  Future<void> _authenticate(
+    Future<AuthSessionResult> Function() call, {
+    bool recoverEmailVerification = false,
+  }) async {
     state = state.copyWith(isSubmitting: true, clearError: true);
     final result = await call();
     switch (result) {
       case AuthSessionOk(:final session):
         await _persist(session);
+        final isGuest = await _resolveIsGuest(session);
+        final verification = recoverEmailVerification && isGuest
+            ? await _authClient.getEmailVerificationStatus(session: session)
+            : null;
+        final recoveryState =
+            verification is AuthApiOk<EmailVerificationRecoveryState>
+            ? verification.data
+            : null;
         state = state.copyWith(
           session: session,
           isSubmitting: false,
           clearError: true,
           pendingDiscoverHint: true,
-          isGuest: await _resolveIsGuest(session),
+          isGuest: isGuest,
+          emailVerificationRecoveryState: recoveryState,
         );
-        await _notifyAuthenticated();
+        if (recoveryState != EmailVerificationRecoveryState.emailPending &&
+            recoveryState != EmailVerificationRecoveryState.promotionPending) {
+          await _notifyAuthenticated();
+        }
       case AuthSessionFailure(
         :final message,
         :final errorCode,
