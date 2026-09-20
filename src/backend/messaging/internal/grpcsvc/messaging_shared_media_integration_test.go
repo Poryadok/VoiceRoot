@@ -196,6 +196,38 @@ func TestMessagingListSharedMedia_voiceTab(t *testing.T) {
 	require.Equal(t, "audio", resp.GetSharedMediaList().GetItems()[0].GetAttachmentType())
 }
 
+func TestMessagingListSharedMedia_stickersTabFiltersStickerAttachments(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000012_messages_content_type.up.sql"))
+
+	chatID := uuid.New()
+	profA := uuid.New()
+	profB := uuid.New()
+	acctA := uuid.New()
+	stickerID := uuid.New()
+	imageID := uuid.New()
+	stickerMessageID := uuid.New()
+	imageMessageID := uuid.New()
+	seedDMChat(t, ctx, pool, chatID, profA, profB)
+	require.NoError(t, store.InsertMessageAttachments(ctx, pool, stickerMessageID, chatID, profA, []map[string]string{{"file_id": stickerID.String(), "type": "sticker"}}, " "))
+	require.NoError(t, store.InsertMessageAttachments(ctx, pool, imageMessageID, chatID, profA, []map[string]string{{"file_id": imageID.String(), "type": "image"}}, " "))
+
+	client, _ := startMessagingServerWired(t, pool, messagingWire{Files: fileMetadataMap{
+		stickerID.String(): {Id: stickerID.String(), Status: "ready", FileType: "image", ScanResult: "clean", Chat: chatDMRef(chatID)},
+		imageID.String():   {Id: imageID.String(), Status: "ready", FileType: "image", ScanResult: "clean", Chat: chatDMRef(chatID)},
+	}})
+	resp, err := client.ListSharedMedia(withProfileCtx(ctx, acctA, profB), &messagingv1.ListSharedMediaRequest{Chat: chatDMRef(chatID), Kind: messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_STICKERS})
+	require.NoError(t, err)
+	require.Len(t, resp.GetSharedMediaList().GetItems(), 1)
+	require.Equal(t, stickerMessageID.String(), resp.GetSharedMediaList().GetItems()[0].GetMessageId())
+	require.Equal(t, "sticker", resp.GetSharedMediaList().GetItems()[0].GetAttachmentType())
+}
+
 func TestMessagingListSharedMedia_invalidKind(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForTest(t, ctx)

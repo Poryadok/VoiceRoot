@@ -356,11 +356,12 @@ class MessageListData {
 }
 
 /// Shared media tab kind (roles/threads (docs/features/roles.md) — docs/features/search.md).
-enum SharedMediaTabKind { media, files, links, voice }
+enum SharedMediaTabKind { media, stickers, files, links, voice }
 
 extension SharedMediaTabKindWire on SharedMediaTabKind {
   String get wireValue => switch (this) {
     SharedMediaTabKind.media => 'media',
+    SharedMediaTabKind.stickers => 'stickers',
     SharedMediaTabKind.files => 'files',
     SharedMediaTabKind.links => 'links',
     SharedMediaTabKind.voice => 'voice',
@@ -370,6 +371,8 @@ extension SharedMediaTabKindWire on SharedMediaTabKind {
     return switch (kind) {
       messaging_pb.SharedMediaKind.SHARED_MEDIA_KIND_MEDIA =>
         SharedMediaTabKind.media,
+      messaging_pb.SharedMediaKind.SHARED_MEDIA_KIND_STICKERS =>
+        SharedMediaTabKind.stickers,
       messaging_pb.SharedMediaKind.SHARED_MEDIA_KIND_FILES =>
         SharedMediaTabKind.files,
       messaging_pb.SharedMediaKind.SHARED_MEDIA_KIND_LINKS =>

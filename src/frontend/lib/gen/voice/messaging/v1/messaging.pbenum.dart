@@ -75,6 +75,8 @@ class SharedMediaKind extends $pb.ProtobufEnum {
       SharedMediaKind._(3, _omitEnumNames ? '' : 'SHARED_MEDIA_KIND_LINKS');
   static const SharedMediaKind SHARED_MEDIA_KIND_VOICE =
       SharedMediaKind._(4, _omitEnumNames ? '' : 'SHARED_MEDIA_KIND_VOICE');
+  static const SharedMediaKind SHARED_MEDIA_KIND_STICKERS =
+      SharedMediaKind._(5, _omitEnumNames ? '' : 'SHARED_MEDIA_KIND_STICKERS');
 
   static const $core.List<SharedMediaKind> values = <SharedMediaKind>[
     SHARED_MEDIA_KIND_UNSPECIFIED,
@@ -82,10 +84,11 @@ class SharedMediaKind extends $pb.ProtobufEnum {
     SHARED_MEDIA_KIND_FILES,
     SHARED_MEDIA_KIND_LINKS,
     SHARED_MEDIA_KIND_VOICE,
+    SHARED_MEDIA_KIND_STICKERS,
   ];
 
   static final $core.List<SharedMediaKind?> _byValue =
-      $pb.ProtobufEnum.$_initByValueList(values, 4);
+      $pb.ProtobufEnum.$_initByValueList(values, 5);
   static SharedMediaKind? valueOf($core.int value) =>
       value < 0 || value >= _byValue.length ? null : _byValue[value];
 
