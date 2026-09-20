@@ -240,6 +240,7 @@ func main() {
 		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))...)
 		chatv1.RegisterChatServiceServer(grpcSrv, &grpcsvc.ChatGRPC{
 			DM:                dmStore,
+			StickerPacks:      dmStore,
 			Profiles:          profiles,
 			LifecycleOwners:   lifecycleOwners,
 			Blocks:            blocks,
