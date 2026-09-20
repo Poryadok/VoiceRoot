@@ -73,6 +73,10 @@ func (s *UserGRPC) ResolveAccountIDForProfile(ctx context.Context, req *userv1.R
 	if !isLifecycleOwnerInternalCaller(ctx) {
 		return nil, status.Error(codes.PermissionDenied, "internal lifecycle caller only")
 	}
+	return s.resolveAccountIDForProfile(ctx, req)
+}
+
+func (s *UserGRPC) resolveAccountIDForProfile(ctx context.Context, req *userv1.ResolveAccountIDForProfileRequest) (*userv1.ResolveAccountIDForProfileResponse, error) {
 	if s.Profiles == nil {
 		return nil, status.Error(codes.FailedPrecondition, "profile store not configured")
 	}

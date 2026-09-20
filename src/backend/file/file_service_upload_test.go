@@ -37,6 +37,12 @@ const freeFileLimitBytes = 50 << 20
 
 var defaultUploadBytes = []byte("voice-file-upload")
 
+type fixedEntitlements bool
+
+func (e fixedEntitlements) Premium(context.Context, uuid.UUID, time.Time) (bool, error) {
+	return bool(e), nil
+}
+
 func sha256Hex(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
@@ -650,7 +656,10 @@ func TestRequestUploadSetsExpiresAtFreeTier(t *testing.T) {
 func TestRequestUploadPremiumSkipsExpiresAt(t *testing.T) {
 	ctx := context.Background()
 	pool := startFilePostgres(t, ctx)
-	client := startFileGRPC(t, pool, &recordingPresigner{})
+	client := startFileGRPCFull(t, pool, grpcsvc.Deps{
+		Presigner:    &recordingPresigner{},
+		Entitlements: fixedEntitlements(true),
+	})
 	profileID := uuid.New()
 	authed := withFileProfileAndTier(ctx, uuid.New(), profileID, "premium")
 
@@ -796,6 +805,7 @@ func startFileGRPCFull(t *testing.T, pool *pgxpool.Pool, deps grpcsvc.Deps) file
 		Processor: deps.Processor,
 		Reader:    deps.Reader,
 		Scanner:   deps.Scanner,
+		Entitlements: deps.Entitlements,
 	}))
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(func() {
