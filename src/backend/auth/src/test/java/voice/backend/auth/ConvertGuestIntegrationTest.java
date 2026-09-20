@@ -172,23 +172,16 @@ class ConvertGuestIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.session.account_type", is("guest")));
 
-    mailSender.clear();
-    mockMvc
-        .perform(
-            post("/api/v1/auth/otp/send")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(
-                    "{\"email\":\"guest-convert@example.com\",\"otp_type\":\"email_verify\"}"))
-        .andExpect(status().isNoContent());
     String code = mailSender.lastCode();
     assertThat(code).matches("\\d{6}");
 
     mockMvc
         .perform(
             post("/api/v1/auth/otp/verify")
+                .header("Authorization", "Bearer " + converted.get("access_token").asText())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
-                    "{\"email\":\"guest-convert@example.com\",\"code\":\""
+                    "{\"code\":\""
                         + code
                         + "\",\"otp_type\":\"email_verify\"}"))
         .andExpect(status().isNoContent());

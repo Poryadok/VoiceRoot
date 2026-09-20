@@ -88,8 +88,12 @@ func writeGRPCError(w http.ResponseWriter, err error) {
 	if domain := grpcStatusDomainErrorCode(st); domain != "" {
 		errorCode = domain
 	}
+	httpStatus := grpcCodeToHTTP(st.Code())
+	if st.Code() == codes.FailedPrecondition && errorCode == "phone_contact_sync_unavailable" {
+		httpStatus = http.StatusConflict
+	}
 	w.Header().Set("X-Voice-GRPC-Code", st.Code().String())
-	writeJSON(w, grpcCodeToHTTP(st.Code()), map[string]string{
+	writeJSON(w, httpStatus, map[string]string{
 		"error_code": errorCode,
 		"message":    st.Message(),
 	})

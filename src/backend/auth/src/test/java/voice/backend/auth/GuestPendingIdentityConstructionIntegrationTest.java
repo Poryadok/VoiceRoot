@@ -98,13 +98,6 @@ class GuestPendingIdentityConstructionIntegrationTest {
                     "{\"email\":\"converted-pending@example.com\",\"password\":\"New account password 1\"}"))
         .andExpect(status().isOk());
 
-    mailSender.clear();
-    mockMvc
-        .perform(
-            post("/api/v1/auth/otp/send")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"email\":\"converted-pending@example.com\",\"otp_type\":\"email_verify\"}"))
-        .andExpect(status().isNoContent());
     assertThat(mailSender.lastCode()).matches("\\d{6}");
   }
 

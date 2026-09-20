@@ -98,6 +98,19 @@ func (s *ChatGRPC) filterListChatsDeletedPeerDMs(
 	return filterDeletedPeerDMRows(ctx, rows, peers, s.LifecycleOwners, s.DeletedAccounts)
 }
 
+// filterQuickAccessDeletedPeerDMs applies the same Auth/User lifecycle gate to
+// persisted Quick Access shortcuts as ListChats applies to every inbox scope.
+func (s *ChatGRPC) filterQuickAccessDeletedPeerDMs(
+	ctx context.Context,
+	rows []*store.ChatRow,
+	peers map[uuid.UUID]uuid.UUID,
+) ([]*store.ChatRow, error) {
+	if s == nil {
+		return nil, errDeletedAccountGateUnavailable
+	}
+	return filterDeletedPeerDMRows(ctx, rows, peers, s.LifecycleOwners, s.DeletedAccounts)
+}
+
 func (s *ChatGRPC) requireActiveDMPeer(ctx context.Context, profileID uuid.UUID) (uuid.UUID, error) {
 	if s == nil || s.Profiles == nil || s.DeletedAccounts == nil {
 		return uuid.Nil, status.Error(codes.Unavailable, "dm availability unavailable")

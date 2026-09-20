@@ -29,6 +29,7 @@ const (
 	AuthService_Enable2FA_FullMethodName                            = "/voice.auth.v1.AuthService/Enable2FA"
 	AuthService_Verify2FA_FullMethodName                            = "/voice.auth.v1.AuthService/Verify2FA"
 	AuthService_VerifyOTP_FullMethodName                            = "/voice.auth.v1.AuthService/VerifyOTP"
+	AuthService_GetEmailVerificationStatus_FullMethodName           = "/voice.auth.v1.AuthService/GetEmailVerificationStatus"
 	AuthService_ConvertGuest_FullMethodName                         = "/voice.auth.v1.AuthService/ConvertGuest"
 	AuthService_DeleteAccount_FullMethodName                        = "/voice.auth.v1.AuthService/DeleteAccount"
 	AuthService_RestoreAccount_FullMethodName                       = "/voice.auth.v1.AuthService/RestoreAccount"
@@ -68,6 +69,9 @@ type AuthServiceClient interface {
 	Enable2FA(ctx context.Context, in *Enable2FARequest, opts ...grpc.CallOption) (*Enable2FAResponse, error)
 	Verify2FA(ctx context.Context, in *Verify2FARequest, opts ...grpc.CallOption) (*Verify2FAResponse, error)
 	VerifyOTP(ctx context.Context, in *VerifyOTPRequest, opts ...grpc.CallOption) (*VerifyOTPResponse, error)
+	// Restricted-session recovery state for email verification. The caller is
+	// derived from authenticated transport metadata; no email identifier is accepted.
+	GetEmailVerificationStatus(ctx context.Context, in *GetEmailVerificationStatusRequest, opts ...grpc.CallOption) (*GetEmailVerificationStatusResponse, error)
 	ConvertGuest(ctx context.Context, in *ConvertGuestRequest, opts ...grpc.CallOption) (*ConvertGuestResponse, error)
 	DeleteAccount(ctx context.Context, in *DeleteAccountRequest, opts ...grpc.CallOption) (*DeleteAccountResponse, error)
 	RestoreAccount(ctx context.Context, in *RestoreAccountRequest, opts ...grpc.CallOption) (*RestoreAccountResponse, error)
@@ -204,6 +208,16 @@ func (c *authServiceClient) VerifyOTP(ctx context.Context, in *VerifyOTPRequest,
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(VerifyOTPResponse)
 	err := c.cc.Invoke(ctx, AuthService_VerifyOTP_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) GetEmailVerificationStatus(ctx context.Context, in *GetEmailVerificationStatusRequest, opts ...grpc.CallOption) (*GetEmailVerificationStatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetEmailVerificationStatusResponse)
+	err := c.cc.Invoke(ctx, AuthService_GetEmailVerificationStatus_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -418,6 +432,9 @@ type AuthServiceServer interface {
 	Enable2FA(context.Context, *Enable2FARequest) (*Enable2FAResponse, error)
 	Verify2FA(context.Context, *Verify2FARequest) (*Verify2FAResponse, error)
 	VerifyOTP(context.Context, *VerifyOTPRequest) (*VerifyOTPResponse, error)
+	// Restricted-session recovery state for email verification. The caller is
+	// derived from authenticated transport metadata; no email identifier is accepted.
+	GetEmailVerificationStatus(context.Context, *GetEmailVerificationStatusRequest) (*GetEmailVerificationStatusResponse, error)
 	ConvertGuest(context.Context, *ConvertGuestRequest) (*ConvertGuestResponse, error)
 	DeleteAccount(context.Context, *DeleteAccountRequest) (*DeleteAccountResponse, error)
 	RestoreAccount(context.Context, *RestoreAccountRequest) (*RestoreAccountResponse, error)
@@ -489,6 +506,9 @@ func (UnimplementedAuthServiceServer) Verify2FA(context.Context, *Verify2FAReque
 }
 func (UnimplementedAuthServiceServer) VerifyOTP(context.Context, *VerifyOTPRequest) (*VerifyOTPResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method VerifyOTP not implemented")
+}
+func (UnimplementedAuthServiceServer) GetEmailVerificationStatus(context.Context, *GetEmailVerificationStatusRequest) (*GetEmailVerificationStatusResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetEmailVerificationStatus not implemented")
 }
 func (UnimplementedAuthServiceServer) ConvertGuest(context.Context, *ConvertGuestRequest) (*ConvertGuestResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ConvertGuest not implemented")
@@ -744,6 +764,24 @@ func _AuthService_VerifyOTP_Handler(srv interface{}, ctx context.Context, dec fu
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AuthServiceServer).VerifyOTP(ctx, req.(*VerifyOTPRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_GetEmailVerificationStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetEmailVerificationStatusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).GetEmailVerificationStatus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_GetEmailVerificationStatus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).GetEmailVerificationStatus(ctx, req.(*GetEmailVerificationStatusRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1136,6 +1174,10 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "VerifyOTP",
 			Handler:    _AuthService_VerifyOTP_Handler,
+		},
+		{
+			MethodName: "GetEmailVerificationStatus",
+			Handler:    _AuthService_GetEmailVerificationStatus_Handler,
 		},
 		{
 			MethodName: "ConvertGuest",

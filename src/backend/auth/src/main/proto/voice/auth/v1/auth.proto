@@ -22,6 +22,9 @@ service AuthService {
   rpc Enable2FA(Enable2FARequest) returns (Enable2FAResponse);
   rpc Verify2FA(Verify2FARequest) returns (Verify2FAResponse);
   rpc VerifyOTP(VerifyOTPRequest) returns (VerifyOTPResponse);
+  // Restricted-session recovery state for email verification. The caller is
+  // derived from authenticated transport metadata; no email identifier is accepted.
+  rpc GetEmailVerificationStatus(GetEmailVerificationStatusRequest) returns (GetEmailVerificationStatusResponse);
   rpc ConvertGuest(ConvertGuestRequest) returns (ConvertGuestResponse);
   rpc DeleteAccount(DeleteAccountRequest) returns (DeleteAccountResponse);
   rpc RestoreAccount(RestoreAccountRequest) returns (RestoreAccountResponse);
@@ -163,6 +166,27 @@ message Verify2FAResponse {
 message VerifyOTPResponse {
   // Set only when email verification synchronously completes a pending registration.
   AuthSession session = 1;
+}
+
+message GetEmailVerificationStatusRequest {}
+
+enum EmailVerificationState {
+  EMAIL_VERIFICATION_STATE_UNSPECIFIED = 0;
+  EMAIL_VERIFICATION_STATE_GUEST = 1;
+  EMAIL_VERIFICATION_STATE_EMAIL_PENDING = 2;
+  EMAIL_VERIFICATION_STATE_PROMOTION_PENDING = 3;
+  EMAIL_VERIFICATION_STATE_REGULAR = 4;
+}
+
+enum EmailVerificationCodeState {
+  EMAIL_VERIFICATION_CODE_STATE_UNSPECIFIED = 0;
+  EMAIL_VERIFICATION_CODE_STATE_NONE = 1;
+  EMAIL_VERIFICATION_CODE_STATE_ACTIVE = 2;
+}
+
+message GetEmailVerificationStatusResponse {
+  EmailVerificationState state = 1;
+  EmailVerificationCodeState code_state = 2;
 }
 
 message ConvertGuestResponse {

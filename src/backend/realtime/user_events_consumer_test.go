@@ -45,18 +45,18 @@ type presenceViewerCall struct {
 	viewerAccountType string
 }
 
-func (s *stubPresenceViewer) PresenceForViewer(_ context.Context, targetProfileID, viewerProfileID, viewerAccountType string) (viewerPresence, error) {
+func (s *stubPresenceViewer) PresenceForViewer(_ context.Context, request presenceViewerRequest) (viewerPresence, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.calls = append(s.calls, presenceViewerCall{
-		targetProfileID:   targetProfileID,
-		viewerProfileID:   viewerProfileID,
-		viewerAccountType: viewerAccountType,
+		targetProfileID:   request.TargetProfileID,
+		viewerProfileID:   request.ViewerProfileID,
+		viewerAccountType: request.ViewerAccountType,
 	})
-	if err := s.errs[viewerProfileID]; err != nil {
+	if err := s.errs[request.ViewerProfileID]; err != nil {
 		return viewerPresence{}, err
 	}
-	return s.byViewer[viewerProfileID], nil
+	return s.byViewer[request.ViewerProfileID], nil
 }
 
 func (s *stubPresenceViewer) Calls() []presenceViewerCall {

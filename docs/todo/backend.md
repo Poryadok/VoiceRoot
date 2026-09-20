@@ -1,13 +1,5 @@
 # TODO — Backend
 
-- [ ] **[Social Phase-0] Migrate remaining User profile/account lookups** —
-  `GetProfile` and `ListProfileIDsForAccount` still require ordinary User 9090 access.
-  The privacy-principal cutover protects only `GetPrivacySettings` and Space
-  `AreCoMembers`; do not apply a blanket Social→User 9090 deny until these
-  separate calls have an explicit signed-principal contract and regression
-  coverage for friends, contacts and account-level blocks. Source:
-  [social-service.md](../microservices/social-service.md#privacy-service-principals).
-
 [← Индекс](../TODO.md)
 
 Микросервисы, Gateway (backend), protos, NATS, compose live verification.
@@ -32,7 +24,7 @@
 ### Space
 
 
-- [ ] **[Space / BE-245] Owner lifecycle/product surfaces partial** — BE-116 now blocks the obsolete hard `DeleteSpace` at the database boundary so it cannot cascade away Space audit/outbox evidence. BE-245 must replace it with the password/2FA-confirmed 7-day hidden/frozen schedule, owner-only `RestoreSpace`, terminal same-transaction P3 aggregate purge and idempotent cross-service purge/attachment GC; the disabled legacy RPC's public gRPC status mapping remains undefined and must be frozen with that vertical. Emit scheduled/restored/deleted-at-purge events only from the documented lifecycle. Compensated `TransferOwnership` (T-011) and gRPC `GetAuditLog` shipped; Gateway/Flutter leave-as-owner/delete/restore/audit flows remain open. — `protos/voice/space/v1/space.proto`; `src/backend/space/internal/grpcsvc/`; `src/backend/gateway/`; `src/frontend/`; [spaces.md](../features/spaces.md).
+- [ ] **[Space / BE-245] Owner lifecycle/product surfaces partial** — BE-116 now blocks the obsolete hard `DeleteSpace` at the database boundary so it cannot cascade away Space audit/outbox evidence. BE-245 must replace it with the password/2FA-confirmed 7-day hidden/frozen schedule, owner-only `RestoreSpace`, terminal same-transaction P3 aggregate purge and idempotent cross-service purge/attachment GC; the disabled legacy RPC's public gRPC status mapping remains undefined and must be frozen with that vertical. Emit scheduled/restored/deleted-at-purge events only from the documented lifecycle. Compensated `TransferOwnership` (T-011) and gRPC `GetAuditLog` shipped; Gateway/Flutter leave-as-owner/delete/restore/audit flows remain open. The source-disabled `space/internal/recoveryread` adapter and locked recorded-owner minimal read are implemented; protected production transport and Gateway/Flutter disclosure activation remain part of this vertical. — `protos/voice/space/v1/space.proto`; `src/backend/space/internal/grpcsvc/`; `src/backend/gateway/`; `src/frontend/`; [spaces.md](../features/spaces.md).
 - [ ] **[R23 Chat/Proto] Bind terminal purge prerequisite receipts before destructive Chat cleanup** — current `voice.chat.v1.PurgeSpaceRequest` carries only generic purge authority and cannot prove Messaging participant-3 completion or File acceptance of the exact `CHAT` producer release. Decide the deterministic/request-bound transport, Messaging/File issuance authority, caller and retry owner for the Chat-owned File release, exact cross-receipt binding, and restart/response-loss resume acceptance. Until that decision lands, Chat purge remains fail-closed and cannot delete rows or issue completion. — [chat-service.md](../microservices/chat-service.md#p3-terminal-purge-prerequisite-proof-seam-decision-required); `protos/voice/chat/v1/chat.proto`; `protos/voice/messaging/v1/messaging.proto`; `protos/voice/file/v1/file.proto`.
 - [ ] **[A2 Gateway/Space] Implement frozen public lifecycle, invite, tree and audit contract** — [API Gateway A2 target](../microservices/api-gateway.md#a2-space-rest-contract-target) now defines routes, JSON, ACL/disclosure, replay and paging. Remaining: lifecycle Space proto/service operation fields and durable journal/outcomes, wiring the shipped Auth proof consume/receipt path into Space transfer, separate deletion-proof lifecycle, signed caller cutover, accepted audit writers and protected producer outboxes, gRPC filter mapping and complete filter/viewer/key-bound cursor envelope, Gateway transcoders and Flutter vertical with negative transport tests. Existing selected routes remain characterization only; expose target behavior only after the complete corresponding vertical is verified.
 - [x] **[Space] Space Pro cache never synced — `space_db.space_subscriptions` comment says “synced from Subscription”; only test seed `UpsertSpaceSubscription` writes; Subscription writes `subscription_db` only** — **done:** NATS consumer `space/internal/subscriptionconsume` + S2S `SyncSpaceProSubscription` write entitlement cache; `SeedSpaceProActive` remains test helper only.
@@ -508,7 +500,7 @@ and Voice IDs denied while history remains.
 
 
 - [ ] **[Realtime] Subscription bootstrap lacks Space voice/tree scopes** — Chat `ListChats` bootstrap now pages all visible DM/group/channel chats and friend presence has its own `user.presence_changed` stream. Realtime still has no authoritative Space voice-room/tree watcher bootstrap; client chat `subscribe` must not be reused to infer that audience. — [realtime-service.md](../microservices/realtime-service.md#подписки), `src/backend/realtime/dm_chat_lister_grpc.go`, `src/backend/realtime/user_events_consumer.go`.
-- [ ] **[Realtime] In-app `notification` targets WS-subscribed profiles, not chat membership** — `in_app_notification_fanout.go` uses `hub.profileIDsSubscribedToChat(chatID)` as the recipient set. Connected group members who have not subscribed to that chat miss `notification` (and may miss `message_create` too).
+- [ ] **[Realtime] In-app `notification` targets WS-subscribed profiles, not chat membership** — `in_app_notification_fanout.go` uses `hub.profileIDsSubscribedToChat(chatID)` as the recipient set. Connected group members who have not subscribed to that chat miss `notification` (and may miss `message_create` too). Activation requires an authoritative Notification-owned recipient/event-bound routing decision and transport: existing send RPCs return no decision, so replacing the set with Chat `ListMembers` would not prove mute/type suppression or current per-recipient Chat/Social authorization. See [realtime-service.md](../microservices/realtime-service.md#in-app-notification-fan-out).
 - [ ] **[Realtime] Redis connection registry is write-only** — `redis_registry.go` `Register`/`Unregister` are called from `ws.go` but never read for routing. Doc describes `{profile_id → [instance_id, conn_id]}` registry for multi-instance fanout (`realtime-service.md`); actual cross-instance path is Redis Pub/Sub + per-instance NATS durables only.
 
 ### Multi-Profile
@@ -581,12 +573,9 @@ and Voice IDs denied while history remains.
 ### Social
 
 
-- [ ] **[Social] No store-layer unit tests** — `src/backend/social/internal/store/friendships.go`, `blocks.go` only exercised via grpc integration tests; coverage artifact shows 0 hits on store paths (`src/backend/social/coverage`, `$prof`).
 - [ ] **[Social] No `s2s` privacy tests** — `src/backend/social/internal/s2s/privacy.go` (`GRPCUserPrivacy`, `GRPCSpaceCoMembership`) untested; only `auth_phone_hash_test.go` in `s2s/`.
 - [ ] **[Social] Test helper ≠ production wiring** — `src/backend/social/testsocial/bufconn_server.go` omits `Privacy`, `PhoneHashes`, `SpaceCoMembership` wired in `main.go`.
 - [ ] **[Social] Flutter client surface incomplete** — `friends_client.dart` now has contacts/favorites (**Batch 23b**), `listBlocked`/`unblockAccount` + Blocked tab (**Batch 24a**), `syncPhoneContacts` stub + Contacts tab action (**Batch 25a**), QR add friend UI (**Batch 26a**). Gateway exposes phone sync (`transcode_friends.go`). **Deferred:** live camera QR scanner (paste link works).
-- [ ] **[Social] No live/E2E for friend-request privacy denial** — `privacy_actions_e2e_live_test` / `compose_privacy_actions_live_test.go` exercise DM/calls/files, not `POST /api/v1/friends/invitations`.
-- [ ] **[Social] Stale service README** — `src/backend/social/README.md` still claims health-only scaffold; contradicts implemented gRPC + migrations.
 
 ### User
 
@@ -731,7 +720,7 @@ and Voice IDs denied while history remains.
 - [ ] **[Realtime] Phantom membership operations in service doc** — documented server ops `member_add` / `member_remove` are not emitted; `chat_events_consumer.go` canonically maps membership changes to `chat_update` with `change`. Remove the phantom ops or introduce them only with a documented client migration; the remaining implemented message/Voice operations are now listed.
 - [ ] **[Client/Role] `role_update` is delivered but Flutter does not consume it — define the authoritative refetch target and implement client invalidation/refetch for `role.chat_override_set` / `role.chat_override_removed`; until then WS delivery does not change a rendered permission state.** — `src/backend/realtime/role_events_consumer.go`, `src/frontend/lib/`, `docs/microservices/realtime-service.md`
 - [ ] **[Realtime] Six separate NATS connections per instance** — `main.go` opens one connection per consumer + lag poller (no shared `*nats.Conn`), increasing reconnect churn and FD usage at scale.
-- [ ] **[Realtime] Test gaps for newer paths** — No subscription/fan-out integration test for `role_events_consumer.go`; mapping-only coverage exists for `role.chat_override_removed`. No integration tests for `matchmaking_events_consumer.go` or `user_presence_updater_grpc.go`. Cross-instance `message_delivered` is covered by `TestRedisDeliveryAckFanoutCrossInstance`; friend WS presence is covered by `TestComposePresenceDNDInvisible_live`.
+- [ ] **[Realtime] Matchmaking consumer integration coverage** — `matchmaking_events_consumer.go` still needs subscription/fan-out integration coverage. Role subscription routing is covered by `TestSubscribeRoleEvents_DoesNotRouteVoiceOrUnknownThroughChatID`; presence adapter gRPC identity/privacy-response handling is covered by `presence_identity_boundary_test.go` (adapter contract fixtures, not live User/Social E2E). Cross-instance `message_delivered` is covered by `TestRedisDeliveryAckFanoutCrossInstance`; friend WS presence is covered by `TestComposePresenceDNDInvisible_live`.
 
 ### Multi-Profile
 

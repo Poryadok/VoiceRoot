@@ -36,7 +36,9 @@ class SocialPanel extends ConsumerStatefulWidget {
   static const Key favoritesListKey = Key('social_favorites_list');
   static const Key friendsUnavailableKey = Key('social_friends_unavailable');
   static const Key contactsUnavailableKey = Key('social_contacts_unavailable');
-  static const Key favoritesUnavailableKey = Key('social_favorites_unavailable');
+  static const Key favoritesUnavailableKey = Key(
+    'social_favorites_unavailable',
+  );
   static const Key requestsUnavailableKey = Key('social_requests_unavailable');
   static const Key blockedListKey = Key('social_blocked_list');
   static const Key blockedUnavailableKey = Key('social_blocked_unavailable');
@@ -150,7 +152,10 @@ class _SocialPanelState extends ConsumerState<SocialPanel>
               isScrollable: true,
               tabs: [
                 Tab(key: SocialPanel.tabSearchKey, text: l10n.socialTabSearch),
-                Tab(key: SocialPanel.tabFriendsKey, text: l10n.socialTabFriends),
+                Tab(
+                  key: SocialPanel.tabFriendsKey,
+                  text: l10n.socialTabFriends,
+                ),
                 Tab(
                   key: SocialPanel.tabContactsKey,
                   text: l10n.socialTabContacts,
@@ -390,35 +395,6 @@ class _ContactsTab extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-          child: OutlinedButton.icon(
-            key: SocialPanel.syncPhoneContactsKey,
-            onPressed: () async {
-              final result = await actions.syncPhoneContacts(const []);
-              if (!context.mounted) return;
-              final messenger = ScaffoldMessenger.of(context);
-              if (result.error != null) {
-                messenger.showSnackBar(
-                  SnackBar(content: Text(result.error!)),
-                );
-                return;
-              }
-              messenger.showSnackBar(
-                SnackBar(
-                  content: Text(
-                    result.matchedCount > 0
-                        ? l10n.socialPhoneSyncMatched(result.matchedCount)
-                        : l10n.socialPhoneSyncStub,
-                  ),
-                ),
-              );
-              ref.invalidate(contactsListProvider);
-            },
-            icon: const Icon(Icons.contact_phone_outlined),
-            label: Text(l10n.socialPhoneSyncAction),
-          ),
-        ),
         Expanded(
           child: contactsAsync.when(
             loading: () => const VoiceListSkeleton(),
@@ -548,9 +524,7 @@ class _FavoriteToggleButtonState extends ConsumerState<_FavoriteToggleButton> {
     final l10n = AppLocalizations.of(context)!;
     return IconButton(
       key: SocialPanel.favoriteToggleKey(widget.profileId),
-      tooltip: _isFavorite
-          ? l10n.socialRemoveFavorite
-          : l10n.socialAddFavorite,
+      tooltip: _isFavorite ? l10n.socialRemoveFavorite : l10n.socialAddFavorite,
       icon: Icon(_isFavorite ? Icons.star : Icons.star_border),
       onPressed: () async {
         final next = !_isFavorite;
@@ -559,9 +533,9 @@ class _FavoriteToggleButtonState extends ConsumerState<_FavoriteToggleButton> {
         if (!mounted) return;
         if (err != null) {
           setState(() => _overrideFavorite = !next);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(err)),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(err)));
         } else {
           ref.invalidate(favoritesListProvider);
           ref.invalidate(contactsListProvider);
@@ -689,9 +663,9 @@ class _BlockedTab extends ConsumerWidget {
                   );
                   if (!context.mounted) return;
                   if (err != null) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(err)),
-                    );
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text(err)));
                   } else {
                     ref.invalidate(blockedListProvider);
                   }

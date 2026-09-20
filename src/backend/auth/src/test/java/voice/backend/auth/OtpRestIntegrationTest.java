@@ -45,22 +45,16 @@ class OtpRestIntegrationTest {
                 .getResponse()
                 .getContentAsString());
     String accountId = pending.path("session").path("account_id").asText();
+    String accessToken = pending.path("session").path("access_token").asText();
     org.assertj.core.api.Assertions.assertThat(profiles.isGuestAccount(java.util.UUID.fromString(accountId))).isTrue();
-
-    mailSender.clear();
-    mockMvc
-        .perform(
-            post("/api/v1/auth/otp/send")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"email\":\"pending-email@example.com\",\"otp_type\":\"email_verify\"}"))
-        .andExpect(status().isNoContent());
 
     mockMvc
         .perform(
             post("/api/v1/auth/otp/verify")
+                .header("Authorization", "Bearer " + accessToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
-                    "{\"email\":\"pending-email@example.com\",\"code\":\""
+                    "{\"code\":\""
                         + mailSender.lastCode()
                         + "\",\"otp_type\":\"email_verify\"}"))
         .andExpect(status().isOk())

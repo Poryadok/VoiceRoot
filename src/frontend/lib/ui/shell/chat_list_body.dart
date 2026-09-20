@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../backend/api_errors.dart';
 import '../../backend/chats_client.dart';
+import '../../backend/chat_draft_storage.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
+import '../../state/chat_draft_providers.dart';
 import '../../state/in_app_notifications.dart';
 import '../../state/inbox_reconciler.dart';
 import '../../state/presence_providers.dart';
@@ -268,7 +270,21 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
                   final showPremium =
                       peerId != null &&
                       ref.watch(profilePremiumBadgeProvider(peerId));
-                  final subtitle = item.lastMessagePreview ?? '';
+                  final draft = activeProfileId == null
+                      ? null
+                      : ref
+                            .watch(
+                              chatDraftProvider(
+                                ChatDraftKey(
+                                  profileId: activeProfileId,
+                                  chatId: item.chatId,
+                                ),
+                              ),
+                            )
+                            .valueOrNull;
+                  final subtitle = draft == null || draft.isEmpty
+                      ? item.lastMessagePreview ?? ''
+                      : 'Черновик: $draft';
                   final selected = item.chatId == selectedId;
                   final presence = peerId != null
                       ? ref.watch(presenceProvider(peerId))

@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 
 	userv1 "voice.app/voice/user/v1"
@@ -26,11 +25,19 @@ func (g *grpcPresenceUpdater) UpdatePresence(ctx context.Context, accountID, pro
 	if g == nil || g.client == nil {
 		return fmt.Errorf("user client not configured")
 	}
-	ctx = metadata.AppendToOutgoingContext(ctx, grpcMDVoiceUserID, accountID, grpcMDVoiceProfileID, profileID)
+	accountID, err := presenceIdentityUUID(accountID)
+	if err != nil {
+		return err
+	}
+	profileID, err = presenceIdentityUUID(profileID)
+	if err != nil {
+		return err
+	}
+	ctx = presenceIdentityContext(ctx, accountID, profileID, "")
 	req := &userv1.UpdatePresenceRequest{Status: status}
 	if customStatus != "" {
 		req.CustomStatus = proto.String(customStatus)
 	}
-	_, err := g.client.UpdatePresence(ctx, req)
+	_, err = g.client.UpdatePresence(ctx, req)
 	return err
 }

@@ -1316,6 +1316,18 @@ abstract class AppLocalizations {
   /// **'Error: {message}'**
   String chatRoomError(String message);
 
+  /// No description provided for @chatRoomLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load messages'**
+  String get chatRoomLoadError;
+
+  /// No description provided for @chatRoomPermissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'You do not have permission to view this chat'**
+  String get chatRoomPermissionDenied;
+
   /// No description provided for @chatRealtimeConnected.
   ///
   /// In en, this message translates to:
