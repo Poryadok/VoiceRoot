@@ -10,3 +10,4 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 FILTER="$ROOT/scripts/ci/compose-nats-jetstream.jq"
 docker compose config --format json | jq -e -f "$FILTER" >/dev/null
+bash "$ROOT/scripts/ci/account-delete-nats-invariants-test.sh"
