@@ -215,6 +215,27 @@ func TestGenerationRoute_PromotesAndRollsBackWithoutLegacyFallback(t *testing.T)
 	require.Error(t, err)
 }
 
+func TestGenerationMigration_Preserves428LegacyConflictTargets(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "search_projection_generation_compat", filepath.Join(searchProjectionRepoRoot(t), "src", "backend", "migrations", "search_db", "000001_init.up.sql"))
+	for _, migration := range []string{"000003_space_lifecycle.up.sql", "000002_verification_type.up.sql", "000004_user_profile_projection.up.sql", "000005_user_profile_projection_snapshot.up.sql", "000006_user_profile_projection_quarantine.up.sql", "000007_user_profile_projection_fence.up.sql"} {
+		integrationtest.ApplySQLFile(t, ctx, pool, searchProjectionRepoRoot(t), filepath.Join("src", "backend", "migrations", "search_db", migration))
+	}
+	profileID, eventID := uuid.New(), uuid.New()
+	_, err := pool.Exec(ctx, `INSERT INTO search_user_profile_inbox(event_id,profile_id,source_revision,payload_sha256) VALUES($1,$2,1,decode(repeat('00',32),'hex'))`, eventID, profileID)
+	require.NoError(t, err)
+	integrationtest.ApplySQLFile(t, ctx, pool, searchProjectionRepoRoot(t), filepath.Join("src", "backend", "migrations", "search_db", "000008_user_profile_projection_generations.up.sql"))
+	// A #428 binary retains its original table and ON CONFLICT(event_id) target.
+	_, err = pool.Exec(ctx, `INSERT INTO search_user_profile_inbox(event_id,profile_id,source_revision,payload_sha256) VALUES($1,$2,1,decode(repeat('00',32),'hex')) ON CONFLICT(event_id) DO NOTHING`, eventID, profileID)
+	require.NoError(t, err)
+	var copied int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM search_user_profile_generation_inbox WHERE generation=1 AND event_id=$1`, eventID).Scan(&copied))
+	require.Equal(t, 1, copied)
+}
+
 func searchProjectionRepoRoot(t *testing.T) string {
 	t.Helper()
 	_, file, _, ok := runtime.Caller(0)
