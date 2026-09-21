@@ -159,6 +159,9 @@ func TestFence_InverseDeliveryOrderRetainsNewerRevision(t *testing.T) {
 	require.NoError(t, pool.QueryRow(ctx, `SELECT source_revision,display_name FROM search_user_profile_generation_documents WHERE generation=1 AND profile_id=$1`, profileID).Scan(&revision, &name))
 	require.Equal(t, int64(2), revision)
 	require.Equal(t, "N+1", name)
+	var fenceRevision int64
+	require.NoError(t, pool.QueryRow(ctx, `SELECT source_revision FROM search_user_profile_generation_fence WHERE generation=1 AND profile_id=$1`, profileID).Scan(&fenceRevision))
+	require.Equal(t, int64(2), fenceRevision)
 }
 
 // TestSnapshotState_PersistsRestartCursor proves a crashed bootstrap resumes
