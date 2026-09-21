@@ -96,7 +96,7 @@ func envDuration(name string, fallback time.Duration) (time.Duration, error) {
 	return value, nil
 }
 func (c Config) validate() error {
-	if Method(c.Capability) == "" || strings.TrimSpace(c.Target) == "" {
+	if strings.TrimSpace(c.Target) == "" || (strings.TrimSpace(c.Capability) != "" && Method(c.Capability) == "") {
 		return errors.New("invalid principal target")
 	}
 	if c.RefreshAfter <= 0 || c.HardExpiry < c.RefreshAfter || c.UnknownKIDCooldown <= 0 {
