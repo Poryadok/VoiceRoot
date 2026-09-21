@@ -74,9 +74,8 @@ func TestApplyAndCheckpoint_CommitsProjectionAndOffsetTogether(t *testing.T) {
 	conflict.JournalOffset = 8
 	conflict.GetUpsert().DisplayName = "Conflicting same revision"
 	conflict.GetUpsert().DisplayNameSearchKey = searchnormalization.V1.Normalize(conflict.GetUpsert().GetDisplayName())
-	result, err = adapter.ApplyAndCheckpoint(ctx, conflict, conflict.GetJournalOffset())
-	require.NoError(t, err)
-	require.Equal(t, NoopDuplicate, result)
+	_, err = adapter.ApplyAndCheckpoint(ctx, conflict, conflict.GetJournalOffset())
+	require.Error(t, err)
 	var quarantinedAt *time.Time
 	require.NoError(t, pool.QueryRow(ctx, `SELECT quarantined_at FROM search_user_profile_generation_inbox WHERE generation=1 AND event_id=$1`, conflict.GetEventId()).Scan(&quarantinedAt))
 	require.NotNil(t, quarantinedAt)
@@ -87,8 +86,9 @@ func TestApplyAndCheckpoint_CommitsProjectionAndOffsetTogether(t *testing.T) {
 	// moving the durable authority fence away from the accepted payload.
 	_, err = adapter.ApplyAndCheckpoint(ctx, event, 7)
 	require.NoError(t, err)
-	_, err = adapter.ApplyAndCheckpoint(ctx, conflict, conflict.GetJournalOffset())
-	require.Error(t, err)
+	result, err = adapter.ApplyAndCheckpoint(ctx, conflict, conflict.GetJournalOffset())
+	require.NoError(t, err)
+	require.Equal(t, NoopDuplicate, result)
 	require.NoError(t, pool.QueryRow(ctx, `SELECT source_revision FROM search_user_profile_generation_fence WHERE generation=1 AND profile_id=$1`, profileID).Scan(&fenceRevision))
 	require.Equal(t, int64(1), fenceRevision)
 	malformed := proto.Clone(event).(*userv1.SearchProfileProjectionEvent)
