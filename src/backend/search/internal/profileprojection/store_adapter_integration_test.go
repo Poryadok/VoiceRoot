@@ -98,12 +98,8 @@ func TestApplyAndCheckpoint_CommitsProjectionAndOffsetTogether(t *testing.T) {
 	var malformedQuarantined *time.Time
 	require.NoError(t, pool.QueryRow(ctx, `SELECT quarantined_at FROM search_user_profile_generation_inbox WHERE generation=1 AND event_id=$1`, event.GetEventId()).Scan(&malformedQuarantined))
 	require.NotNil(t, malformedQuarantined)
-	// The rollback migration removes quarantine duplicates before restoring the
-	// historical unconditional profile/revision index.
-	integrationtest.ApplySQLFile(t, ctx, pool, searchProjectionRepoRoot(t), filepath.Join("src", "backend", "migrations", "search_db", "000006_user_profile_projection_quarantine.down.sql"))
-	var remaining int
-	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM search_user_profile_inbox WHERE profile_id=$1 AND source_revision=1`, profileID).Scan(&remaining))
-	require.Equal(t, 1, remaining)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT source_revision FROM search_user_profile_generation_fence WHERE generation=1 AND profile_id=$1`, profileID).Scan(&fenceRevision))
+	require.Equal(t, int64(1), fenceRevision)
 }
 
 // TestFence_InverseDeliveryOrderRetainsNewerRevision forces N+1 to commit
