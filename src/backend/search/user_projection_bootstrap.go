@@ -11,16 +11,12 @@ import (
 	"voice/backend/search/internal/profileprojection"
 )
 
-type projectionSource interface {
-	BeginSearchProfileSnapshot(context.Context, *userv1.BeginSearchProfileSnapshotRequest, ...any) (*userv1.BeginSearchProfileSnapshotResponse, error)
-}
-
 // runUserProjectionBootstrap applies a point-in-time snapshot first, then the
 // journal after its high watermark. Replays are safe because StoreAdapter
 // enforces source revisions and exact payload hashes.
 func runUserProjectionBootstrap(ctx context.Context, client userv1.UserServiceClient, adapter *profileprojection.StoreAdapter) error {
 	if client == nil || adapter == nil {
-		return fmt.Errorf("User projection client and store are required")
+		return fmt.Errorf("user projection client and store are required")
 	}
 	checkpoint, err := adapter.Checkpoint(ctx)
 	if err != nil {

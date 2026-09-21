@@ -18,7 +18,7 @@ const (
 
 // RunJetStreamConsumer applies a delivered User authority record and its
 // replay checkpoint in the StoreAdapter's single transaction before Ack.
-func RunJetStreamConsumer(ctx context.Context, natsURL string, adapter *StoreAdapter) error {
+func RunJetStreamConsumer(ctx context.Context, natsURL string, adapter *StoreAdapter) (err error) {
 	if natsURL == "" || adapter == nil {
 		return fmt.Errorf("projection consumer requires NATS URL and store")
 	}
@@ -26,7 +26,11 @@ func RunJetStreamConsumer(ctx context.Context, natsURL string, adapter *StoreAda
 	if err != nil {
 		return err
 	}
-	defer nc.Drain()
+	defer func() {
+		if drainErr := nc.Drain(); err == nil && drainErr != nil {
+			err = drainErr
+		}
+	}()
 	js, err := nc.JetStream()
 	if err != nil {
 		return err

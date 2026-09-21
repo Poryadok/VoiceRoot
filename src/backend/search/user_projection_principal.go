@@ -41,7 +41,7 @@ func loadSearchProjectionJWKS() (*http.Server, error) {
 	keyFile := strings.TrimSpace(os.Getenv("SEARCH_PRINCIPAL_JWKS_TLS_KEY_FILE"))
 	dir := strings.TrimSpace(os.Getenv("SEARCH_PRINCIPAL_SIGNING_KEYS_DIR"))
 	if listen == "" || certFile == "" || keyFile == "" || dir == "" {
-		return nil, errors.New("Search projection JWKS listen, TLS and signing keys are required")
+		return nil, errors.New("search projection JWKS listen, TLS and signing keys are required")
 	}
 	keys, err := loadSearchSigningKeys(dir)
 	if err != nil {
@@ -53,7 +53,7 @@ func loadSearchProjectionJWKS() (*http.Server, error) {
 	}
 	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
-		return nil, fmt.Errorf("Search projection JWKS TLS: %w", err)
+		return nil, fmt.Errorf("search projection JWKS TLS: %w", err)
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /.well-known/jwks.json", func(w http.ResponseWriter, _ *http.Request) {
@@ -122,7 +122,7 @@ func loadSignedUserProjectionClientFromEnv() (userv1.UserServiceClient, *grpc.Cl
 	addr, dir, kid := strings.TrimSpace(os.Getenv(names[0])), strings.TrimSpace(os.Getenv("SEARCH_PRINCIPAL_SIGNING_KEYS_DIR")), strings.TrimSpace(os.Getenv("SEARCH_PRINCIPAL_ACTIVE_KID"))
 	serverName, jwksListen := strings.TrimSpace(os.Getenv("SEARCH_USER_PROJECTION_TLS_SERVER_NAME")), strings.TrimSpace(os.Getenv("SEARCH_PRINCIPAL_JWKS_LISTEN"))
 	if addr == "" || dir == "" || kid == "" || serverName == "" || jwksListen == "" {
-		return nil, nil, errors.New("complete Search User projection TLS, signing, and JWKS configuration is required")
+		return nil, nil, errors.New("complete search user projection TLS, signing, and JWKS configuration is required")
 	}
 	keys, err := loadSearchSigningKeys(dir)
 	if err != nil {
@@ -130,7 +130,7 @@ func loadSignedUserProjectionClientFromEnv() (userv1.UserServiceClient, *grpc.Cl
 	}
 	key := keys[kid]
 	if key == nil {
-		return nil, nil, errors.New("active Search principal kid is missing")
+		return nil, nil, errors.New("active search principal kid is missing")
 	}
 	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "search", KeyID: kid, PrivateKey: key})
 	if err != nil {
