@@ -13,6 +13,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	userv1 "voice.app/voice/user/v1"
 )
 
 const (
@@ -23,7 +26,7 @@ const (
 
 const profileSelectCols = `id, account_id, username, discriminator, display_name, avatar_url, banner_url, bio, custom_status,
 		locale, theme, is_primary, verification_type, verification_badge, frozen_at, accent_color, is_guest_account,
-		username_search_key, display_name_search_key, search_normalization_version, deleted_at, created_at, updated_at`
+		username_search_key, display_name_search_key, search_normalization_version, search_projection_revision, deleted_at, created_at, updated_at`
 
 // MaxDisplayNameRunes is the maximum length of profile display_name (aligned with Discord).
 const MaxDisplayNameRunes = 32
@@ -49,6 +52,7 @@ type ProfileRow struct {
 	UsernameSearchKey          *string
 	DisplayNameSearchKey       *string
 	SearchNormalizationVersion *int
+	SearchProjectionRevision   uint64
 	FrozenAt                   *time.Time
 	DeletedAt                  *time.Time
 	CreatedAt                  time.Time
@@ -96,7 +100,7 @@ func scanProfile(row pgx.Row) (*ProfileRow, error) {
 		&p.ID, &p.AccountID, &p.Username, &p.Discriminator, &p.DisplayName,
 		&p.AvatarURL, &p.BannerURL, &p.Bio, &p.CustomStatus, &p.Locale, &p.Theme, &p.IsPrimary,
 		&p.VerificationType, &p.VerificationBadge, &p.FrozenAt, &p.AccentColor, &p.IsGuestAccount,
-		&p.UsernameSearchKey, &p.DisplayNameSearchKey, &p.SearchNormalizationVersion,
+		&p.UsernameSearchKey, &p.DisplayNameSearchKey, &p.SearchNormalizationVersion, &p.SearchProjectionRevision,
 		&p.DeletedAt, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
@@ -211,6 +215,30 @@ type UpdateProfileInput struct {
 }
 
 func (s *ProfileStore) UpdateOwnedProfile(ctx context.Context, accountID, profileID uuid.UUID, in UpdateProfileInput) (*ProfileRow, error) {
+	if !hasProfileUpdate(in) {
+		return s.scanOne(ctx, `SELECT `+profileSelectCols+` FROM profiles WHERE id = $1 AND account_id = $2`, profileID, accountID)
+	}
+	var updated *ProfileRow
+	err := s.withSearchProjectionTx(ctx, func(tx pgx.Tx) error {
+		var err error
+		updated, err = s.updateOwnedProfileTx(ctx, tx, accountID, profileID, in)
+		if err != nil || updated == nil {
+			return err
+		}
+		return AppendSearchProjection(ctx, tx, searchProjectionUpsert(updated))
+	})
+	if err != nil || updated == nil {
+		return nil, err
+	}
+	return updated, nil
+}
+
+func hasProfileUpdate(in UpdateProfileInput) bool {
+	return in.DisplayName != nil || in.AvatarURL != nil || in.BannerURL != nil || in.Bio != nil ||
+		in.CustomStatus != nil || in.Locale != nil || in.Theme != nil || in.AccentColor != nil
+}
+
+func (s *ProfileStore) updateOwnedProfileTx(ctx context.Context, tx pgx.Tx, accountID, profileID uuid.UUID, in UpdateProfileInput) (*ProfileRow, error) {
 	set := make([]string, 0, 8)
 	args := make([]any, 0, 12)
 	n := 1
@@ -262,16 +290,16 @@ func (s *ProfileStore) UpdateOwnedProfile(ctx context.Context, accountID, profil
 		n++
 	}
 	if len(set) == 0 {
-		return s.scanOne(ctx, `SELECT `+profileSelectCols+` FROM profiles WHERE id = $1 AND account_id = $2`, profileID, accountID)
+		return scanProfile(tx.QueryRow(ctx, `SELECT `+profileSelectCols+` FROM profiles WHERE id = $1 AND account_id = $2`, profileID, accountID))
 	}
-	set = append(set, "updated_at = now()")
+	set = append(set, "updated_at = now()", "search_projection_revision = search_projection_revision + 1")
 
 	w1, w2 := n, n+1
 	args = append(args, profileID, accountID)
 	sql := fmt.Sprintf(`UPDATE profiles SET %s WHERE id = $%d AND account_id = $%d RETURNING %s`,
 		strings.Join(set, ", "), w1, w2, profileSelectCols)
 
-	row := s.pool.QueryRow(ctx, sql, args...)
+	row := tx.QueryRow(ctx, sql, args...)
 	p, err := scanProfile(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -284,6 +312,19 @@ func (s *ProfileStore) UpdateOwnedProfile(ctx context.Context, accountID, profil
 
 // CreateSecondaryProfile inserts a non-primary profile for the account (multi-profile row).
 func (s *ProfileStore) CreateSecondaryProfile(ctx context.Context, accountID uuid.UUID, displayName string, usernameHint *string, accentColor *string) (*ProfileRow, error) {
+	var created *ProfileRow
+	err := s.withSearchProjectionTx(ctx, func(tx pgx.Tx) error {
+		var err error
+		created, err = s.createSecondaryProfileTx(ctx, tx, accountID, displayName, usernameHint, accentColor)
+		if err != nil {
+			return err
+		}
+		return AppendSearchProjection(ctx, tx, searchProjectionUpsert(created))
+	})
+	return created, err
+}
+
+func (s *ProfileStore) createSecondaryProfileTx(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, displayName string, usernameHint *string, accentColor *string) (*ProfileRow, error) {
 	dn := truncate(strings.TrimSpace(displayName), MaxDisplayNameRunes)
 	if dn == "" {
 		return nil, fmt.Errorf("display_name required")
@@ -298,9 +339,9 @@ func (s *ProfileStore) CreateSecondaryProfile(ctx context.Context, accountID uui
 	for attempt := 0; attempt < maxDiscriminatorAttempts; attempt++ {
 		disc := randomDiscriminator()
 		id := uuid.New()
-		row := s.pool.QueryRow(ctx, `
-			INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary, locale, theme, verification_type, accent_color, username_search_key, display_name_search_key, search_normalization_version)
-			VALUES ($1, $2, $3, $4, $5, false, 'ru', 'dark', 'none', $6, $7, $8, $9)
+		row := tx.QueryRow(ctx, `
+			INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary, locale, theme, verification_type, accent_color, username_search_key, display_name_search_key, search_normalization_version, search_projection_revision)
+			VALUES ($1, $2, $3, $4, $5, false, 'ru', 'dark', 'none', $6, $7, $8, $9, 1)
 			RETURNING `+profileSelectCols,
 			id, accountID, base, disc, dn, accentColor, NormalizeUsernameKey(base), NormalizeUsernameKey(dn), searchNormalizationVersion,
 		)
@@ -402,12 +443,28 @@ func (s *ProfileStore) GetOwnedProfile(ctx context.Context, accountID, profileID
 
 // EnsurePrimaryProfile creates or returns the primary profile for account_id (Auth bootstrap).
 func (s *ProfileStore) EnsurePrimaryProfile(ctx context.Context, accountID uuid.UUID, profileID *uuid.UUID, displayHint string, guestAccount bool) (*ProfileRow, error) {
-	existing, err := s.GetPrimaryProfileIDForAccount(ctx, accountID)
+	var primary *ProfileRow
+	err := s.withSearchProjectionTx(ctx, func(tx pgx.Tx) error {
+		var created bool
+		var err error
+		primary, created, err = s.ensurePrimaryProfileTx(ctx, tx, accountID, profileID, displayHint, guestAccount)
+		if err != nil || !created {
+			return err
+		}
+		return AppendSearchProjection(ctx, tx, searchProjectionUpsert(primary))
+	})
+	return primary, err
+}
+
+func (s *ProfileStore) ensurePrimaryProfileTx(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, profileID *uuid.UUID, displayHint string, guestAccount bool) (*ProfileRow, bool, error) {
+	var existing uuid.UUID
+	err := tx.QueryRow(ctx, `SELECT id FROM profiles WHERE account_id = $1 AND is_primary = true`, accountID).Scan(&existing)
 	if err == nil && existing != uuid.Nil {
-		return s.GetByID(ctx, existing)
+		p, getErr := scanProfile(tx.QueryRow(ctx, `SELECT `+profileSelectCols+` FROM profiles WHERE id = $1`, existing))
+		return p, false, getErr
 	}
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return nil, err
+		return nil, false, err
 	}
 	id := uuid.New()
 	if profileID != nil {
@@ -424,31 +481,74 @@ func (s *ProfileStore) EnsurePrimaryProfile(ctx context.Context, accountID uuid.
 	var lastErr error
 	for attempt := 0; attempt < maxDiscriminatorAttempts; attempt++ {
 		disc := randomDiscriminator()
-		row := s.pool.QueryRow(ctx, `
-			INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary, locale, theme, verification_type, is_guest_account, username_search_key, display_name_search_key, search_normalization_version)
-			VALUES ($1, $2, $3, $4, $5, true, 'ru', 'dark', 'none', $6, $7, $8, $9)
+		row := tx.QueryRow(ctx, `
+			INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary, locale, theme, verification_type, is_guest_account, username_search_key, display_name_search_key, search_normalization_version, search_projection_revision)
+			VALUES ($1, $2, $3, $4, $5, true, 'ru', 'dark', 'none', $6, $7, $8, $9, 1)
+			ON CONFLICT DO NOTHING
 			RETURNING `+profileSelectCols,
 			id, accountID, base, disc, dn, guestAccount, NormalizeUsernameKey(base), NormalizeUsernameKey(dn), searchNormalizationVersion,
 		)
 		p, err := scanProfile(row)
 		if err == nil {
-			_, _ = s.pool.Exec(ctx, `INSERT INTO onboarding_state (profile_id, completed_steps, completed) VALUES ($1, '[]'::jsonb, false) ON CONFLICT DO NOTHING`, p.ID)
-			return p, nil
+			if _, err = tx.Exec(ctx, `INSERT INTO onboarding_state (profile_id, completed_steps, completed) VALUES ($1, '[]'::jsonb, false) ON CONFLICT DO NOTHING`, p.ID); err != nil {
+				return nil, false, err
+			}
+			return p, true, nil
 		}
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			lastErr = err
-			if retry, rerr := s.GetPrimaryProfileIDForAccount(ctx, accountID); rerr == nil && retry != uuid.Nil {
-				return s.GetByID(ctx, retry)
+		if errors.Is(err, pgx.ErrNoRows) || (errors.As(err, &pgErr) && pgErr.Code == "23505") {
+			var retry uuid.UUID
+			if retryErr := tx.QueryRow(ctx, `SELECT id FROM profiles WHERE account_id = $1 AND is_primary = true`, accountID).Scan(&retry); retryErr == nil {
+				p, getErr := scanProfile(tx.QueryRow(ctx, `SELECT `+profileSelectCols+` FROM profiles WHERE id = $1`, retry))
+				return p, false, getErr
 			}
+			lastErr = err
 			continue
 		}
-		return nil, err
+		return nil, false, err
 	}
 	if lastErr != nil {
-		return nil, fmt.Errorf("username/discriminator exhausted: %w", lastErr)
+		return nil, false, fmt.Errorf("username/discriminator exhausted: %w", lastErr)
 	}
-	return nil, fmt.Errorf("username/discriminator exhausted")
+	return nil, false, fmt.Errorf("username/discriminator exhausted")
+}
+
+func (s *ProfileStore) withSearchProjectionTx(ctx context.Context, fn func(pgx.Tx) error) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := fn(tx); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func searchProjectionUpsert(p *ProfileRow) *userv1.SearchProfileProjectionEvent {
+	return &userv1.SearchProfileProjectionEvent{
+		ProtocolVersion: 1, EventId: uuid.NewString(), OccurredAt: timestamppb.Now(),
+		ProfileId: p.ID.String(), SourceRevision: p.SearchProjectionRevision,
+		Payload: &userv1.SearchProfileProjectionEvent_Upsert{Upsert: &userv1.SearchProfileUpsert{
+			AccountId: p.AccountID.String(), Username: p.Username, Discriminator: p.Discriminator,
+			DisplayName: p.DisplayName, VerificationType: p.VerificationType,
+			UsernameSearchKey: derefString(p.UsernameSearchKey), DisplayNameSearchKey: derefString(p.DisplayNameSearchKey),
+			NormalizationVersion: uint32(derefInt(p.SearchNormalizationVersion)),
+		}},
+	}
+}
+
+func derefString(v *string) string {
+	if v == nil {
+		return ""
+	}
+	return *v
+}
+func derefInt(v *int) int {
+	if v == nil {
+		return 0
+	}
+	return *v
 }
 
 // GetNotificationPrefsJSON reads notification_prefs_json for profile (defaults to {}).

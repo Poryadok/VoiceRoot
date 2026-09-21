@@ -27,6 +27,7 @@ func TestSearchUsers_VerifiedProfilesRankedHigher_postgres(t *testing.T) {
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, string(verificationSQL))
 	require.NoError(t, err)
+	integrationtest.ApplySQLFile(t, ctx, pool, searchModuleRepoRoot(t), filepath.Join("src", "backend", "migrations", "search_db", "000004_user_profile_projection.up.sql"))
 
 	viewer := uuid.New()
 	unverifiedID := uuid.New()

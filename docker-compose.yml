@@ -246,10 +246,12 @@ services:
     volumes:
       - social_principal_keys:/signing
       - file_principal_keys:/file-signing
+      - search_principal_keys:/search-signing
       - social_principal_tls:/social
       - user_principal_tls:/user
       - space_principal_tls:/space
       - file_principal_tls:/file
+      - search_principal_tls:/search
       - social_principal_ca:/ca
 
   social:
@@ -313,7 +315,12 @@ services:
       USER_FILE_PRINCIPAL_TLS_CERT_FILE: /etc/voice/principal/tls/tls.crt
       USER_FILE_PRINCIPAL_TLS_KEY_FILE: /etc/voice/principal/tls/tls.key
       USER_FILE_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
-      S2S_JWKS_URLS_JSON: '{"social":"https://social:8443/.well-known/jwks.json","file":"https://file:8443/.well-known/jwks.json"}'
+      USER_SEARCH_PRINCIPAL_GRPC_LISTEN: :9093
+      USER_SEARCH_PRINCIPAL_TLS_CERT_FILE: /etc/voice/principal/tls/tls.crt
+      USER_SEARCH_PRINCIPAL_TLS_KEY_FILE: /etc/voice/principal/tls/tls.key
+      USER_SEARCH_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
+      USER_SEARCH_PROJECTION_CURSOR_HMAC_KEY: ${USER_SEARCH_PROJECTION_CURSOR_HMAC_KEY:-compose-search-projection-cursor-key-change-me}
+      S2S_JWKS_URLS_JSON: '{"social":"https://social:8443/.well-known/jwks.json","file":"https://file:8443/.well-known/jwks.json","search":"https://search:8443/.well-known/jwks.json"}'
       S2S_JWKS_CA_FILE: /etc/voice/principal/ca/ca.crt
       SOCIAL_GRPC_ADDR: social:9090
       AUTH_GRPC_ADDR: auth:9090
@@ -570,8 +577,18 @@ services:
       ROLE_GRPC_ADDR: role:9090
       SOCIAL_GRPC_ADDR: social:9090
       USER_GRPC_ADDR: user:9090
+      SEARCH_USER_PROJECTION_GRPC_ADDR: user:9093
+      SEARCH_USER_PROJECTION_TLS_CA_FILE: /etc/voice/search-projection/ca/ca.crt
+      SEARCH_USER_PROJECTION_TLS_SERVER_NAME: user
+      SEARCH_PRINCIPAL_SIGNING_KEYS_DIR: /etc/voice/search-projection/keys
+      SEARCH_PRINCIPAL_ACTIVE_KID: current
+      SEARCH_PRINCIPAL_JWKS_LISTEN: :8443
+      SEARCH_PRINCIPAL_JWKS_TLS_CERT_FILE: /etc/voice/search-projection/tls/tls.crt
+      SEARCH_PRINCIPAL_JWKS_TLS_KEY_FILE: /etc/voice/search-projection/tls/tls.key
       SPACE_GRPC_ADDR: space:9090
     depends_on:
+      social-principal-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       compose-db-init:
@@ -588,6 +605,10 @@ services:
         condition: service_healthy
       space:
         condition: service_healthy
+    volumes:
+      - search_principal_keys:/etc/voice/search-projection/keys:ro
+      - social_principal_ca:/etc/voice/search-projection/ca:ro
+      - search_principal_tls:/etc/voice/search-projection/tls:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       interval: 5s
@@ -1181,10 +1202,12 @@ services:
 volumes:
   social_principal_keys:
   file_principal_keys:
+  search_principal_keys:
   social_principal_tls:
   user_principal_tls:
   space_principal_tls:
   file_principal_tls:
+  search_principal_tls:
   social_principal_ca:
   voice_pgdata:
   voice_redis:

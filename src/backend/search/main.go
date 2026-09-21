@@ -27,6 +27,7 @@ import (
 	grpcsvc "voice/backend/search/internal/grpcsvc"
 	"voice/backend/search/internal/indexer"
 	"voice/backend/search/internal/principalruntime"
+	"voice/backend/search/internal/profileprojection"
 	"voice/backend/search/internal/store"
 
 	chatv1 "voice.app/voice/chat/v1"
@@ -69,6 +70,28 @@ func main() {
 	if manifestConn != nil {
 		defer func() { _ = manifestConn.Close() }()
 	}
+	userProjectionClient, userProjectionConn, err := loadSignedUserProjectionClientFromEnv()
+	if err != nil {
+		log.Fatalf("User projection principal: %v", err)
+	}
+	if userProjectionClient != nil && dbURL == "" {
+		log.Fatal("User projection principal requires DATABASE_URL")
+	}
+	if userProjectionConn != nil {
+		defer func() { _ = userProjectionConn.Close() }()
+	}
+	projectionJWKS, err := loadSearchProjectionJWKS()
+	if err != nil {
+		log.Fatalf("User projection JWKS: %v", err)
+	}
+	if projectionJWKS != nil {
+		defer func() { _ = projectionJWKS.Close() }()
+		go func() {
+			if err := projectionJWKS.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+				log.Fatalf("User projection JWKS serve: %v", err)
+			}
+		}()
+	}
 	var grpcSrv, principalSrv *grpc.Server
 	rootCtx, rootCancel := context.WithCancel(context.Background())
 	defer rootCancel()
@@ -98,6 +121,13 @@ func main() {
 
 		msgStore := store.NewMessageSearchStore(pool)
 		profileSpaceStore := store.NewProfileSpaceSearchStore(pool)
+		var projectionStore *profileprojection.StoreAdapter
+		if userProjectionClient != nil {
+			projectionStore = &profileprojection.StoreAdapter{Pool: pool}
+			go runProjectionWithRetry(rootCtx, logger, "User profile projection bootstrap", func() error {
+				return runUserProjectionBootstrap(rootCtx, userProjectionClient, projectionStore)
+			})
+		}
 
 		svc := &grpcsvc.SearchGRPC{
 			Messages:     &grpcsvc.MessageStoreAdapter{MessageSearchStore: msgStore},
@@ -116,6 +146,11 @@ func main() {
 		}
 
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
+			if projectionStore != nil {
+				go runProjectionWithRetry(rootCtx, logger, "user projection JetStream consumer", func() error {
+					return profileprojection.RunJetStreamConsumer(rootCtx, natsURL, projectionStore)
+				})
+			}
 			if pub, err := analyticsevents.NewJetStreamPublisher(natsURL); err == nil {
 				_ = pub.EnsureStream()
 				svc.Analytics = pub
@@ -136,17 +171,21 @@ func main() {
 				}
 			}()
 
-			var profileHydrator indexer.ProfileHydrator
-			if conn, err := dialOptional(os.Getenv("USER_GRPC_ADDR")); err == nil && conn != nil {
-				defer func() { _ = conn.Close() }()
-				profileHydrator = &deps.ProfileHydrator{Client: userv1.NewUserServiceClient(conn)}
-			}
-			profileIdx := &indexer.ProfileIndexer{Store: profileSpaceStore, Profiles: profileHydrator}
-			go func() {
-				if err := indexer.RunUserEventsConsumer(rootCtx, natsURL, instanceID, profileIdx, logger, consumerMetrics); err != nil && rootCtx.Err() == nil {
-					logger.Warn("user events consumer stopped", slog.Any("error", err))
+			// The legacy user.events hydrator is retained only when the revisioned
+			// authority path is unavailable; running both would race a stale source.
+			if projectionStore == nil {
+				var profileHydrator indexer.ProfileHydrator
+				if conn, err := dialOptional(os.Getenv("USER_GRPC_ADDR")); err == nil && conn != nil {
+					defer func() { _ = conn.Close() }()
+					profileHydrator = &deps.ProfileHydrator{Client: userv1.NewUserServiceClient(conn)}
 				}
-			}()
+				profileIdx := &indexer.ProfileIndexer{Store: profileSpaceStore, Profiles: profileHydrator}
+				go func() {
+					if err := indexer.RunUserEventsConsumer(rootCtx, natsURL, instanceID, profileIdx, logger, consumerMetrics); err != nil && rootCtx.Err() == nil {
+						logger.Warn("user events consumer stopped", slog.Any("error", err))
+					}
+				}()
+			}
 
 			var chatHydrator indexer.ChatHydrator
 			var spaceHydrator indexer.SpaceHydrator

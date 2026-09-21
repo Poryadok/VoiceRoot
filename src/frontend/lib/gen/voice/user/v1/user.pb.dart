@@ -5039,6 +5039,856 @@ class MarkAccountRegularResponse extends $pb.GeneratedMessage {
   static MarkAccountRegularResponse? _defaultInstance;
 }
 
+enum SearchProfileProjectionEvent_Payload { upsert, delete, notSet }
+
+class SearchProfileProjectionEvent extends $pb.GeneratedMessage {
+  factory SearchProfileProjectionEvent({
+    $core.int? protocolVersion,
+    $core.String? eventId,
+    $1.Timestamp? occurredAt,
+    $fixnum.Int64? journalOffset,
+    $core.String? profileId,
+    $fixnum.Int64? sourceRevision,
+    SearchProfileUpsert? upsert,
+    SearchProfileDelete? delete,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (eventId != null) result.eventId = eventId;
+    if (occurredAt != null) result.occurredAt = occurredAt;
+    if (journalOffset != null) result.journalOffset = journalOffset;
+    if (profileId != null) result.profileId = profileId;
+    if (sourceRevision != null) result.sourceRevision = sourceRevision;
+    if (upsert != null) result.upsert = upsert;
+    if (delete != null) result.delete = delete;
+    return result;
+  }
+
+  SearchProfileProjectionEvent._();
+
+  factory SearchProfileProjectionEvent.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SearchProfileProjectionEvent.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static const $core.Map<$core.int, SearchProfileProjectionEvent_Payload>
+      _SearchProfileProjectionEvent_PayloadByTag = {
+    10: SearchProfileProjectionEvent_Payload.upsert,
+    11: SearchProfileProjectionEvent_Payload.delete,
+    0: SearchProfileProjectionEvent_Payload.notSet
+  };
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SearchProfileProjectionEvent',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..oo(0, [10, 11])
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'eventId')
+    ..aOM<$1.Timestamp>(3, _omitFieldNames ? '' : 'occurredAt',
+        subBuilder: $1.Timestamp.create)
+    ..a<$fixnum.Int64>(
+        4, _omitFieldNames ? '' : 'journalOffset', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOS(5, _omitFieldNames ? '' : 'profileId')
+    ..a<$fixnum.Int64>(
+        6, _omitFieldNames ? '' : 'sourceRevision', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOM<SearchProfileUpsert>(10, _omitFieldNames ? '' : 'upsert',
+        subBuilder: SearchProfileUpsert.create)
+    ..aOM<SearchProfileDelete>(11, _omitFieldNames ? '' : 'delete',
+        subBuilder: SearchProfileDelete.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SearchProfileProjectionEvent clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SearchProfileProjectionEvent copyWith(
+          void Function(SearchProfileProjectionEvent) updates) =>
+      super.copyWith(
+              (message) => updates(message as SearchProfileProjectionEvent))
+          as SearchProfileProjectionEvent;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SearchProfileProjectionEvent create() =>
+      SearchProfileProjectionEvent._();
+  @$core.override
+  SearchProfileProjectionEvent createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SearchProfileProjectionEvent getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SearchProfileProjectionEvent>(create);
+  static SearchProfileProjectionEvent? _defaultInstance;
+
+  @$pb.TagNumber(10)
+  @$pb.TagNumber(11)
+  SearchProfileProjectionEvent_Payload whichPayload() =>
+      _SearchProfileProjectionEvent_PayloadByTag[$_whichOneof(0)]!;
+  @$pb.TagNumber(10)
+  @$pb.TagNumber(11)
+  void clearPayload() => $_clearField($_whichOneof(0));
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get eventId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set eventId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasEventId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearEventId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $1.Timestamp get occurredAt => $_getN(2);
+  @$pb.TagNumber(3)
+  set occurredAt($1.Timestamp value) => $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasOccurredAt() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearOccurredAt() => $_clearField(3);
+  @$pb.TagNumber(3)
+  $1.Timestamp ensureOccurredAt() => $_ensure(2);
+
+  @$pb.TagNumber(4)
+  $fixnum.Int64 get journalOffset => $_getI64(3);
+  @$pb.TagNumber(4)
+  set journalOffset($fixnum.Int64 value) => $_setInt64(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasJournalOffset() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearJournalOffset() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get profileId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set profileId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasProfileId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearProfileId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $fixnum.Int64 get sourceRevision => $_getI64(5);
+  @$pb.TagNumber(6)
+  set sourceRevision($fixnum.Int64 value) => $_setInt64(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasSourceRevision() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearSourceRevision() => $_clearField(6);
+
+  @$pb.TagNumber(10)
+  SearchProfileUpsert get upsert => $_getN(6);
+  @$pb.TagNumber(10)
+  set upsert(SearchProfileUpsert value) => $_setField(10, value);
+  @$pb.TagNumber(10)
+  $core.bool hasUpsert() => $_has(6);
+  @$pb.TagNumber(10)
+  void clearUpsert() => $_clearField(10);
+  @$pb.TagNumber(10)
+  SearchProfileUpsert ensureUpsert() => $_ensure(6);
+
+  @$pb.TagNumber(11)
+  SearchProfileDelete get delete => $_getN(7);
+  @$pb.TagNumber(11)
+  set delete(SearchProfileDelete value) => $_setField(11, value);
+  @$pb.TagNumber(11)
+  $core.bool hasDelete() => $_has(7);
+  @$pb.TagNumber(11)
+  void clearDelete() => $_clearField(11);
+  @$pb.TagNumber(11)
+  SearchProfileDelete ensureDelete() => $_ensure(7);
+}
+
+class SearchProfileUpsert extends $pb.GeneratedMessage {
+  factory SearchProfileUpsert({
+    $core.String? accountId,
+    $core.String? username,
+    $core.String? discriminator,
+    $core.String? displayName,
+    $core.String? verificationType,
+    $core.String? usernameSearchKey,
+    $core.String? displayNameSearchKey,
+    $core.int? normalizationVersion,
+  }) {
+    final result = create();
+    if (accountId != null) result.accountId = accountId;
+    if (username != null) result.username = username;
+    if (discriminator != null) result.discriminator = discriminator;
+    if (displayName != null) result.displayName = displayName;
+    if (verificationType != null) result.verificationType = verificationType;
+    if (usernameSearchKey != null) result.usernameSearchKey = usernameSearchKey;
+    if (displayNameSearchKey != null)
+      result.displayNameSearchKey = displayNameSearchKey;
+    if (normalizationVersion != null)
+      result.normalizationVersion = normalizationVersion;
+    return result;
+  }
+
+  SearchProfileUpsert._();
+
+  factory SearchProfileUpsert.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SearchProfileUpsert.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SearchProfileUpsert',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'accountId')
+    ..aOS(2, _omitFieldNames ? '' : 'username')
+    ..aOS(3, _omitFieldNames ? '' : 'discriminator')
+    ..aOS(4, _omitFieldNames ? '' : 'displayName')
+    ..aOS(5, _omitFieldNames ? '' : 'verificationType')
+    ..aOS(6, _omitFieldNames ? '' : 'usernameSearchKey')
+    ..aOS(7, _omitFieldNames ? '' : 'displayNameSearchKey')
+    ..aI(8, _omitFieldNames ? '' : 'normalizationVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SearchProfileUpsert clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SearchProfileUpsert copyWith(void Function(SearchProfileUpsert) updates) =>
+      super.copyWith((message) => updates(message as SearchProfileUpsert))
+          as SearchProfileUpsert;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SearchProfileUpsert create() => SearchProfileUpsert._();
+  @$core.override
+  SearchProfileUpsert createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SearchProfileUpsert getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SearchProfileUpsert>(create);
+  static SearchProfileUpsert? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get accountId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set accountId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAccountId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAccountId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get username => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set username($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasUsername() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearUsername() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get discriminator => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set discriminator($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasDiscriminator() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearDiscriminator() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get displayName => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set displayName($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasDisplayName() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearDisplayName() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get verificationType => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set verificationType($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasVerificationType() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearVerificationType() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get usernameSearchKey => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set usernameSearchKey($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasUsernameSearchKey() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearUsernameSearchKey() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.String get displayNameSearchKey => $_getSZ(6);
+  @$pb.TagNumber(7)
+  set displayNameSearchKey($core.String value) => $_setString(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasDisplayNameSearchKey() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearDisplayNameSearchKey() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $core.int get normalizationVersion => $_getIZ(7);
+  @$pb.TagNumber(8)
+  set normalizationVersion($core.int value) => $_setUnsignedInt32(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasNormalizationVersion() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearNormalizationVersion() => $_clearField(8);
+}
+
+class SearchProfileDelete extends $pb.GeneratedMessage {
+  factory SearchProfileDelete() => create();
+
+  SearchProfileDelete._();
+
+  factory SearchProfileDelete.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SearchProfileDelete.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SearchProfileDelete',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SearchProfileDelete clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SearchProfileDelete copyWith(void Function(SearchProfileDelete) updates) =>
+      super.copyWith((message) => updates(message as SearchProfileDelete))
+          as SearchProfileDelete;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SearchProfileDelete create() => SearchProfileDelete._();
+  @$core.override
+  SearchProfileDelete createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SearchProfileDelete getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SearchProfileDelete>(create);
+  static SearchProfileDelete? _defaultInstance;
+}
+
+class BeginSearchProfileSnapshotRequest extends $pb.GeneratedMessage {
+  factory BeginSearchProfileSnapshotRequest() => create();
+
+  BeginSearchProfileSnapshotRequest._();
+
+  factory BeginSearchProfileSnapshotRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory BeginSearchProfileSnapshotRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'BeginSearchProfileSnapshotRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  BeginSearchProfileSnapshotRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  BeginSearchProfileSnapshotRequest copyWith(
+          void Function(BeginSearchProfileSnapshotRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as BeginSearchProfileSnapshotRequest))
+          as BeginSearchProfileSnapshotRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static BeginSearchProfileSnapshotRequest create() =>
+      BeginSearchProfileSnapshotRequest._();
+  @$core.override
+  BeginSearchProfileSnapshotRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static BeginSearchProfileSnapshotRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<BeginSearchProfileSnapshotRequest>(
+          create);
+  static BeginSearchProfileSnapshotRequest? _defaultInstance;
+}
+
+class BeginSearchProfileSnapshotResponse extends $pb.GeneratedMessage {
+  factory BeginSearchProfileSnapshotResponse({
+    $fixnum.Int64? highWatermark,
+  }) {
+    final result = create();
+    if (highWatermark != null) result.highWatermark = highWatermark;
+    return result;
+  }
+
+  BeginSearchProfileSnapshotResponse._();
+
+  factory BeginSearchProfileSnapshotResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory BeginSearchProfileSnapshotResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'BeginSearchProfileSnapshotResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..a<$fixnum.Int64>(
+        1, _omitFieldNames ? '' : 'highWatermark', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  BeginSearchProfileSnapshotResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  BeginSearchProfileSnapshotResponse copyWith(
+          void Function(BeginSearchProfileSnapshotResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as BeginSearchProfileSnapshotResponse))
+          as BeginSearchProfileSnapshotResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static BeginSearchProfileSnapshotResponse create() =>
+      BeginSearchProfileSnapshotResponse._();
+  @$core.override
+  BeginSearchProfileSnapshotResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static BeginSearchProfileSnapshotResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<BeginSearchProfileSnapshotResponse>(
+          create);
+  static BeginSearchProfileSnapshotResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $fixnum.Int64 get highWatermark => $_getI64(0);
+  @$pb.TagNumber(1)
+  set highWatermark($fixnum.Int64 value) => $_setInt64(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasHighWatermark() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearHighWatermark() => $_clearField(1);
+}
+
+class ListSearchProfileSnapshotRequest extends $pb.GeneratedMessage {
+  factory ListSearchProfileSnapshotRequest({
+    $fixnum.Int64? highWatermark,
+    $core.int? pageSize,
+    $core.String? cursor,
+  }) {
+    final result = create();
+    if (highWatermark != null) result.highWatermark = highWatermark;
+    if (pageSize != null) result.pageSize = pageSize;
+    if (cursor != null) result.cursor = cursor;
+    return result;
+  }
+
+  ListSearchProfileSnapshotRequest._();
+
+  factory ListSearchProfileSnapshotRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ListSearchProfileSnapshotRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ListSearchProfileSnapshotRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..a<$fixnum.Int64>(
+        1, _omitFieldNames ? '' : 'highWatermark', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aI(2, _omitFieldNames ? '' : 'pageSize', fieldType: $pb.PbFieldType.OU3)
+    ..aOS(3, _omitFieldNames ? '' : 'cursor')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListSearchProfileSnapshotRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListSearchProfileSnapshotRequest copyWith(
+          void Function(ListSearchProfileSnapshotRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as ListSearchProfileSnapshotRequest))
+          as ListSearchProfileSnapshotRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ListSearchProfileSnapshotRequest create() =>
+      ListSearchProfileSnapshotRequest._();
+  @$core.override
+  ListSearchProfileSnapshotRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ListSearchProfileSnapshotRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ListSearchProfileSnapshotRequest>(
+          create);
+  static ListSearchProfileSnapshotRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $fixnum.Int64 get highWatermark => $_getI64(0);
+  @$pb.TagNumber(1)
+  set highWatermark($fixnum.Int64 value) => $_setInt64(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasHighWatermark() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearHighWatermark() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.int get pageSize => $_getIZ(1);
+  @$pb.TagNumber(2)
+  set pageSize($core.int value) => $_setUnsignedInt32(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasPageSize() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearPageSize() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get cursor => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set cursor($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasCursor() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearCursor() => $_clearField(3);
+}
+
+class ListSearchProfileSnapshotResponse extends $pb.GeneratedMessage {
+  factory ListSearchProfileSnapshotResponse({
+    $core.Iterable<SearchProfileProjectionEvent>? events,
+    $core.String? nextCursor,
+  }) {
+    final result = create();
+    if (events != null) result.events.addAll(events);
+    if (nextCursor != null) result.nextCursor = nextCursor;
+    return result;
+  }
+
+  ListSearchProfileSnapshotResponse._();
+
+  factory ListSearchProfileSnapshotResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ListSearchProfileSnapshotResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ListSearchProfileSnapshotResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..pPM<SearchProfileProjectionEvent>(1, _omitFieldNames ? '' : 'events',
+        subBuilder: SearchProfileProjectionEvent.create)
+    ..aOS(2, _omitFieldNames ? '' : 'nextCursor')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListSearchProfileSnapshotResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListSearchProfileSnapshotResponse copyWith(
+          void Function(ListSearchProfileSnapshotResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as ListSearchProfileSnapshotResponse))
+          as ListSearchProfileSnapshotResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ListSearchProfileSnapshotResponse create() =>
+      ListSearchProfileSnapshotResponse._();
+  @$core.override
+  ListSearchProfileSnapshotResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ListSearchProfileSnapshotResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ListSearchProfileSnapshotResponse>(
+          create);
+  static ListSearchProfileSnapshotResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $pb.PbList<SearchProfileProjectionEvent> get events => $_getList(0);
+
+  @$pb.TagNumber(2)
+  $core.String get nextCursor => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set nextCursor($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasNextCursor() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearNextCursor() => $_clearField(2);
+}
+
+class ListSearchProfileJournalRequest extends $pb.GeneratedMessage {
+  factory ListSearchProfileJournalRequest({
+    $fixnum.Int64? afterOffset,
+    $core.int? pageSize,
+  }) {
+    final result = create();
+    if (afterOffset != null) result.afterOffset = afterOffset;
+    if (pageSize != null) result.pageSize = pageSize;
+    return result;
+  }
+
+  ListSearchProfileJournalRequest._();
+
+  factory ListSearchProfileJournalRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ListSearchProfileJournalRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ListSearchProfileJournalRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..a<$fixnum.Int64>(
+        1, _omitFieldNames ? '' : 'afterOffset', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aI(2, _omitFieldNames ? '' : 'pageSize', fieldType: $pb.PbFieldType.OU3)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListSearchProfileJournalRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListSearchProfileJournalRequest copyWith(
+          void Function(ListSearchProfileJournalRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as ListSearchProfileJournalRequest))
+          as ListSearchProfileJournalRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ListSearchProfileJournalRequest create() =>
+      ListSearchProfileJournalRequest._();
+  @$core.override
+  ListSearchProfileJournalRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ListSearchProfileJournalRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ListSearchProfileJournalRequest>(
+          create);
+  static ListSearchProfileJournalRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $fixnum.Int64 get afterOffset => $_getI64(0);
+  @$pb.TagNumber(1)
+  set afterOffset($fixnum.Int64 value) => $_setInt64(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAfterOffset() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAfterOffset() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.int get pageSize => $_getIZ(1);
+  @$pb.TagNumber(2)
+  set pageSize($core.int value) => $_setUnsignedInt32(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasPageSize() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearPageSize() => $_clearField(2);
+}
+
+class ListSearchProfileJournalResponse extends $pb.GeneratedMessage {
+  factory ListSearchProfileJournalResponse({
+    $core.Iterable<SearchProfileProjectionEvent>? events,
+    $fixnum.Int64? highWatermark,
+  }) {
+    final result = create();
+    if (events != null) result.events.addAll(events);
+    if (highWatermark != null) result.highWatermark = highWatermark;
+    return result;
+  }
+
+  ListSearchProfileJournalResponse._();
+
+  factory ListSearchProfileJournalResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ListSearchProfileJournalResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ListSearchProfileJournalResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..pPM<SearchProfileProjectionEvent>(1, _omitFieldNames ? '' : 'events',
+        subBuilder: SearchProfileProjectionEvent.create)
+    ..a<$fixnum.Int64>(
+        2, _omitFieldNames ? '' : 'highWatermark', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListSearchProfileJournalResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListSearchProfileJournalResponse copyWith(
+          void Function(ListSearchProfileJournalResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as ListSearchProfileJournalResponse))
+          as ListSearchProfileJournalResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ListSearchProfileJournalResponse create() =>
+      ListSearchProfileJournalResponse._();
+  @$core.override
+  ListSearchProfileJournalResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ListSearchProfileJournalResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ListSearchProfileJournalResponse>(
+          create);
+  static ListSearchProfileJournalResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $pb.PbList<SearchProfileProjectionEvent> get events => $_getList(0);
+
+  @$pb.TagNumber(2)
+  $fixnum.Int64 get highWatermark => $_getI64(1);
+  @$pb.TagNumber(2)
+  set highWatermark($fixnum.Int64 value) => $_setInt64(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasHighWatermark() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearHighWatermark() => $_clearField(2);
+}
+
+class GetSearchProfileCheckpointRequest extends $pb.GeneratedMessage {
+  factory GetSearchProfileCheckpointRequest() => create();
+
+  GetSearchProfileCheckpointRequest._();
+
+  factory GetSearchProfileCheckpointRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetSearchProfileCheckpointRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetSearchProfileCheckpointRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSearchProfileCheckpointRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSearchProfileCheckpointRequest copyWith(
+          void Function(GetSearchProfileCheckpointRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as GetSearchProfileCheckpointRequest))
+          as GetSearchProfileCheckpointRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetSearchProfileCheckpointRequest create() =>
+      GetSearchProfileCheckpointRequest._();
+  @$core.override
+  GetSearchProfileCheckpointRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetSearchProfileCheckpointRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetSearchProfileCheckpointRequest>(
+          create);
+  static GetSearchProfileCheckpointRequest? _defaultInstance;
+}
+
+class GetSearchProfileCheckpointResponse extends $pb.GeneratedMessage {
+  factory GetSearchProfileCheckpointResponse({
+    $fixnum.Int64? highWatermark,
+  }) {
+    final result = create();
+    if (highWatermark != null) result.highWatermark = highWatermark;
+    return result;
+  }
+
+  GetSearchProfileCheckpointResponse._();
+
+  factory GetSearchProfileCheckpointResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetSearchProfileCheckpointResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetSearchProfileCheckpointResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..a<$fixnum.Int64>(
+        1, _omitFieldNames ? '' : 'highWatermark', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSearchProfileCheckpointResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSearchProfileCheckpointResponse copyWith(
+          void Function(GetSearchProfileCheckpointResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as GetSearchProfileCheckpointResponse))
+          as GetSearchProfileCheckpointResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetSearchProfileCheckpointResponse create() =>
+      GetSearchProfileCheckpointResponse._();
+  @$core.override
+  GetSearchProfileCheckpointResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetSearchProfileCheckpointResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetSearchProfileCheckpointResponse>(
+          create);
+  static GetSearchProfileCheckpointResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $fixnum.Int64 get highWatermark => $_getI64(0);
+  @$pb.TagNumber(1)
+  set highWatermark($fixnum.Int64 value) => $_setInt64(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasHighWatermark() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearHighWatermark() => $_clearField(1);
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =

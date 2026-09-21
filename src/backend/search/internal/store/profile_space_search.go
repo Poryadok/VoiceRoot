@@ -73,7 +73,8 @@ func (s *ProfileSpaceSearchStore) SearchProfiles(ctx context.Context, _ uuid.UUI
 	sql := fmt.Sprintf(`
 		SELECT profile_id, account_id
 		FROM profile_search_documents
-		WHERE (username ILIKE $1 ESCAPE '\' OR display_name ILIKE $1 ESCAPE '\')
+		WHERE tombstoned_at IS NULL
+		AND (username ILIKE $1 ESCAPE '\' OR display_name ILIKE $1 ESCAPE '\')
 		%s
 		ORDER BY (CASE WHEN verification_type <> 'none' AND verification_type <> '' THEN 0 ELSE 1 END),
 		         username_lower ASC, discriminator ASC, profile_id ASC

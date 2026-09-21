@@ -1787,3 +1787,237 @@ const MarkAccountRegularResponse$json = {
 /// Descriptor for `MarkAccountRegularResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List markAccountRegularResponseDescriptor =
     $convert.base64Decode('ChpNYXJrQWNjb3VudFJlZ3VsYXJSZXNwb25zZQ==');
+
+@$core.Deprecated('Use searchProfileProjectionEventDescriptor instead')
+const SearchProfileProjectionEvent$json = {
+  '1': 'SearchProfileProjectionEvent',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'event_id', '3': 2, '4': 1, '5': 9, '10': 'eventId'},
+    {
+      '1': 'occurred_at',
+      '3': 3,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'occurredAt'
+    },
+    {'1': 'journal_offset', '3': 4, '4': 1, '5': 4, '10': 'journalOffset'},
+    {'1': 'profile_id', '3': 5, '4': 1, '5': 9, '10': 'profileId'},
+    {'1': 'source_revision', '3': 6, '4': 1, '5': 4, '10': 'sourceRevision'},
+    {
+      '1': 'upsert',
+      '3': 10,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.user.v1.SearchProfileUpsert',
+      '9': 0,
+      '10': 'upsert'
+    },
+    {
+      '1': 'delete',
+      '3': 11,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.user.v1.SearchProfileDelete',
+      '9': 0,
+      '10': 'delete'
+    },
+  ],
+  '8': [
+    {'1': 'payload'},
+  ],
+};
+
+/// Descriptor for `SearchProfileProjectionEvent`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List searchProfileProjectionEventDescriptor = $convert.base64Decode(
+    'ChxTZWFyY2hQcm9maWxlUHJvamVjdGlvbkV2ZW50EikKEHByb3RvY29sX3ZlcnNpb24YASABKA'
+    '1SD3Byb3RvY29sVmVyc2lvbhIZCghldmVudF9pZBgCIAEoCVIHZXZlbnRJZBI7CgtvY2N1cnJl'
+    'ZF9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBSCm9jY3VycmVkQXQSJQoOam'
+    '91cm5hbF9vZmZzZXQYBCABKARSDWpvdXJuYWxPZmZzZXQSHQoKcHJvZmlsZV9pZBgFIAEoCVIJ'
+    'cHJvZmlsZUlkEicKD3NvdXJjZV9yZXZpc2lvbhgGIAEoBFIOc291cmNlUmV2aXNpb24SPAoGdX'
+    'BzZXJ0GAogASgLMiIudm9pY2UudXNlci52MS5TZWFyY2hQcm9maWxlVXBzZXJ0SABSBnVwc2Vy'
+    'dBI8CgZkZWxldGUYCyABKAsyIi52b2ljZS51c2VyLnYxLlNlYXJjaFByb2ZpbGVEZWxldGVIAF'
+    'IGZGVsZXRlQgkKB3BheWxvYWQ=');
+
+@$core.Deprecated('Use searchProfileUpsertDescriptor instead')
+const SearchProfileUpsert$json = {
+  '1': 'SearchProfileUpsert',
+  '2': [
+    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+    {'1': 'username', '3': 2, '4': 1, '5': 9, '10': 'username'},
+    {'1': 'discriminator', '3': 3, '4': 1, '5': 9, '10': 'discriminator'},
+    {'1': 'display_name', '3': 4, '4': 1, '5': 9, '10': 'displayName'},
+    {
+      '1': 'verification_type',
+      '3': 5,
+      '4': 1,
+      '5': 9,
+      '10': 'verificationType'
+    },
+    {
+      '1': 'username_search_key',
+      '3': 6,
+      '4': 1,
+      '5': 9,
+      '10': 'usernameSearchKey'
+    },
+    {
+      '1': 'display_name_search_key',
+      '3': 7,
+      '4': 1,
+      '5': 9,
+      '10': 'displayNameSearchKey'
+    },
+    {
+      '1': 'normalization_version',
+      '3': 8,
+      '4': 1,
+      '5': 13,
+      '10': 'normalizationVersion'
+    },
+  ],
+};
+
+/// Descriptor for `SearchProfileUpsert`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List searchProfileUpsertDescriptor = $convert.base64Decode(
+    'ChNTZWFyY2hQcm9maWxlVXBzZXJ0Eh0KCmFjY291bnRfaWQYASABKAlSCWFjY291bnRJZBIaCg'
+    'h1c2VybmFtZRgCIAEoCVIIdXNlcm5hbWUSJAoNZGlzY3JpbWluYXRvchgDIAEoCVINZGlzY3Jp'
+    'bWluYXRvchIhCgxkaXNwbGF5X25hbWUYBCABKAlSC2Rpc3BsYXlOYW1lEisKEXZlcmlmaWNhdG'
+    'lvbl90eXBlGAUgASgJUhB2ZXJpZmljYXRpb25UeXBlEi4KE3VzZXJuYW1lX3NlYXJjaF9rZXkY'
+    'BiABKAlSEXVzZXJuYW1lU2VhcmNoS2V5EjUKF2Rpc3BsYXlfbmFtZV9zZWFyY2hfa2V5GAcgAS'
+    'gJUhRkaXNwbGF5TmFtZVNlYXJjaEtleRIzChVub3JtYWxpemF0aW9uX3ZlcnNpb24YCCABKA1S'
+    'FG5vcm1hbGl6YXRpb25WZXJzaW9u');
+
+@$core.Deprecated('Use searchProfileDeleteDescriptor instead')
+const SearchProfileDelete$json = {
+  '1': 'SearchProfileDelete',
+};
+
+/// Descriptor for `SearchProfileDelete`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List searchProfileDeleteDescriptor =
+    $convert.base64Decode('ChNTZWFyY2hQcm9maWxlRGVsZXRl');
+
+@$core.Deprecated('Use beginSearchProfileSnapshotRequestDescriptor instead')
+const BeginSearchProfileSnapshotRequest$json = {
+  '1': 'BeginSearchProfileSnapshotRequest',
+};
+
+/// Descriptor for `BeginSearchProfileSnapshotRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List beginSearchProfileSnapshotRequestDescriptor =
+    $convert.base64Decode('CiFCZWdpblNlYXJjaFByb2ZpbGVTbmFwc2hvdFJlcXVlc3Q=');
+
+@$core.Deprecated('Use beginSearchProfileSnapshotResponseDescriptor instead')
+const BeginSearchProfileSnapshotResponse$json = {
+  '1': 'BeginSearchProfileSnapshotResponse',
+  '2': [
+    {'1': 'high_watermark', '3': 1, '4': 1, '5': 4, '10': 'highWatermark'},
+  ],
+};
+
+/// Descriptor for `BeginSearchProfileSnapshotResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List beginSearchProfileSnapshotResponseDescriptor =
+    $convert.base64Decode(
+        'CiJCZWdpblNlYXJjaFByb2ZpbGVTbmFwc2hvdFJlc3BvbnNlEiUKDmhpZ2hfd2F0ZXJtYXJrGA'
+        'EgASgEUg1oaWdoV2F0ZXJtYXJr');
+
+@$core.Deprecated('Use listSearchProfileSnapshotRequestDescriptor instead')
+const ListSearchProfileSnapshotRequest$json = {
+  '1': 'ListSearchProfileSnapshotRequest',
+  '2': [
+    {'1': 'high_watermark', '3': 1, '4': 1, '5': 4, '10': 'highWatermark'},
+    {'1': 'page_size', '3': 2, '4': 1, '5': 13, '10': 'pageSize'},
+    {'1': 'cursor', '3': 3, '4': 1, '5': 9, '10': 'cursor'},
+  ],
+};
+
+/// Descriptor for `ListSearchProfileSnapshotRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List listSearchProfileSnapshotRequestDescriptor =
+    $convert.base64Decode(
+        'CiBMaXN0U2VhcmNoUHJvZmlsZVNuYXBzaG90UmVxdWVzdBIlCg5oaWdoX3dhdGVybWFyaxgBIA'
+        'EoBFINaGlnaFdhdGVybWFyaxIbCglwYWdlX3NpemUYAiABKA1SCHBhZ2VTaXplEhYKBmN1cnNv'
+        'chgDIAEoCVIGY3Vyc29y');
+
+@$core.Deprecated('Use listSearchProfileSnapshotResponseDescriptor instead')
+const ListSearchProfileSnapshotResponse$json = {
+  '1': 'ListSearchProfileSnapshotResponse',
+  '2': [
+    {
+      '1': 'events',
+      '3': 1,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.user.v1.SearchProfileProjectionEvent',
+      '10': 'events'
+    },
+    {'1': 'next_cursor', '3': 2, '4': 1, '5': 9, '10': 'nextCursor'},
+  ],
+};
+
+/// Descriptor for `ListSearchProfileSnapshotResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List listSearchProfileSnapshotResponseDescriptor =
+    $convert.base64Decode(
+        'CiFMaXN0U2VhcmNoUHJvZmlsZVNuYXBzaG90UmVzcG9uc2USQwoGZXZlbnRzGAEgAygLMisudm'
+        '9pY2UudXNlci52MS5TZWFyY2hQcm9maWxlUHJvamVjdGlvbkV2ZW50UgZldmVudHMSHwoLbmV4'
+        'dF9jdXJzb3IYAiABKAlSCm5leHRDdXJzb3I=');
+
+@$core.Deprecated('Use listSearchProfileJournalRequestDescriptor instead')
+const ListSearchProfileJournalRequest$json = {
+  '1': 'ListSearchProfileJournalRequest',
+  '2': [
+    {'1': 'after_offset', '3': 1, '4': 1, '5': 4, '10': 'afterOffset'},
+    {'1': 'page_size', '3': 2, '4': 1, '5': 13, '10': 'pageSize'},
+  ],
+};
+
+/// Descriptor for `ListSearchProfileJournalRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List listSearchProfileJournalRequestDescriptor =
+    $convert.base64Decode(
+        'Ch9MaXN0U2VhcmNoUHJvZmlsZUpvdXJuYWxSZXF1ZXN0EiEKDGFmdGVyX29mZnNldBgBIAEoBF'
+        'ILYWZ0ZXJPZmZzZXQSGwoJcGFnZV9zaXplGAIgASgNUghwYWdlU2l6ZQ==');
+
+@$core.Deprecated('Use listSearchProfileJournalResponseDescriptor instead')
+const ListSearchProfileJournalResponse$json = {
+  '1': 'ListSearchProfileJournalResponse',
+  '2': [
+    {
+      '1': 'events',
+      '3': 1,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.user.v1.SearchProfileProjectionEvent',
+      '10': 'events'
+    },
+    {'1': 'high_watermark', '3': 2, '4': 1, '5': 4, '10': 'highWatermark'},
+  ],
+};
+
+/// Descriptor for `ListSearchProfileJournalResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List listSearchProfileJournalResponseDescriptor =
+    $convert.base64Decode(
+        'CiBMaXN0U2VhcmNoUHJvZmlsZUpvdXJuYWxSZXNwb25zZRJDCgZldmVudHMYASADKAsyKy52b2'
+        'ljZS51c2VyLnYxLlNlYXJjaFByb2ZpbGVQcm9qZWN0aW9uRXZlbnRSBmV2ZW50cxIlCg5oaWdo'
+        'X3dhdGVybWFyaxgCIAEoBFINaGlnaFdhdGVybWFyaw==');
+
+@$core.Deprecated('Use getSearchProfileCheckpointRequestDescriptor instead')
+const GetSearchProfileCheckpointRequest$json = {
+  '1': 'GetSearchProfileCheckpointRequest',
+};
+
+/// Descriptor for `GetSearchProfileCheckpointRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getSearchProfileCheckpointRequestDescriptor =
+    $convert.base64Decode('CiFHZXRTZWFyY2hQcm9maWxlQ2hlY2twb2ludFJlcXVlc3Q=');
+
+@$core.Deprecated('Use getSearchProfileCheckpointResponseDescriptor instead')
+const GetSearchProfileCheckpointResponse$json = {
+  '1': 'GetSearchProfileCheckpointResponse',
+  '2': [
+    {'1': 'high_watermark', '3': 1, '4': 1, '5': 4, '10': 'highWatermark'},
+  ],
+};
+
+/// Descriptor for `GetSearchProfileCheckpointResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getSearchProfileCheckpointResponseDescriptor =
+    $convert.base64Decode(
+        'CiJHZXRTZWFyY2hQcm9maWxlQ2hlY2twb2ludFJlc3BvbnNlEiUKDmhpZ2hfd2F0ZXJtYXJrGA'
+        'EgASgEUg1oaWdoV2F0ZXJtYXJr');

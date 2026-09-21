@@ -149,7 +149,7 @@ spec:
       containers:
         - name: user
           image: __IMAGE_REGISTRY__/user:__IMAGE_TAG__
-          ports: [{containerPort: 8080}, {containerPort: 9090}, {containerPort: 9091}, {containerPort: 9092}]
+          ports: [{containerPort: 8080}, {containerPort: 9090}, {containerPort: 9091}, {containerPort: 9092}, {containerPort: 9093}]
           env:
             - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_DATABASE_URL}}}
             - {name: USER_GRPC_ADDR, value: ":9090"}
@@ -161,7 +161,12 @@ spec:
             - {name: USER_FILE_PRINCIPAL_TLS_CERT_FILE, value: "/etc/voice/file-principal/tls/tls.crt"}
             - {name: USER_FILE_PRINCIPAL_TLS_KEY_FILE, value: "/etc/voice/file-principal/tls/tls.key"}
             - {name: USER_FILE_PRINCIPAL_REPLAY_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
-            - {name: S2S_JWKS_URLS_JSON, value: '{"social":"https://voice-social:8443/.well-known/jwks.json","file":"https://voice-file:8443/.well-known/jwks.json"}'}
+            - {name: USER_SEARCH_PRINCIPAL_GRPC_LISTEN, value: ":9093"}
+            - {name: USER_SEARCH_PRINCIPAL_TLS_CERT_FILE, value: "/etc/voice/principal/tls/tls.crt"}
+            - {name: USER_SEARCH_PRINCIPAL_TLS_KEY_FILE, value: "/etc/voice/principal/tls/tls.key"}
+            - {name: USER_SEARCH_PRINCIPAL_REPLAY_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
+            - {name: USER_SEARCH_PROJECTION_CURSOR_HMAC_KEY, valueFrom: {secretKeyRef: {name: voice-user-search-projection, key: cursor-hmac-key}}}
+            - {name: S2S_JWKS_URLS_JSON, value: '{"social":"https://voice-social:8443/.well-known/jwks.json","file":"https://voice-file:8443/.well-known/jwks.json","search":"https://voice-search:8443/.well-known/jwks.json"}'}
             - {name: S2S_JWKS_CA_FILE, value: "/etc/voice/principal/ca/ca.crt"}
             - {name: S2S_JWKS_REFRESH_AFTER, value: "30s"}
             - {name: S2S_JWKS_HARD_EXPIRY, value: "2m"}
@@ -194,7 +199,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-user}
-  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}, {name: principal-grpc, port: 9091}, {name: file-principal-grpc, port: 9092}]
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}, {name: principal-grpc, port: 9091}, {name: file-principal-grpc, port: 9092}, {name: search-projection-grpc, port: 9093}]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -308,7 +313,7 @@ spec:
       containers:
         - name: chat
           image: __IMAGE_REGISTRY__/chat:__IMAGE_TAG__
-          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          ports: [{containerPort: 8080}, {containerPort: 9090}, {containerPort: 8443}]
           env:
             - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: CHAT_DATABASE_URL}}}
             - {name: SPACE_DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: SPACE_DATABASE_URL}}}
@@ -535,12 +540,31 @@ spec:
       containers:
         - name: search
           image: __IMAGE_REGISTRY__/search:__IMAGE_TAG__
-          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          ports: [{containerPort: 8080}, {containerPort: 9090}, {containerPort: 8443}]
           env:
             - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: SEARCH_DATABASE_URL}}}
             - {name: SEARCH_GRPC_LISTEN, value: ":9090"}
+            - {name: SEARCH_USER_PROJECTION_GRPC_ADDR, value: "voice-user:9093"}
+            - {name: SEARCH_USER_PROJECTION_TLS_CA_FILE, value: "/etc/voice/search-projection/ca/ca.crt"}
+            - {name: SEARCH_USER_PROJECTION_TLS_SERVER_NAME, value: "voice-user"}
+            - {name: SEARCH_PRINCIPAL_SIGNING_KEYS_DIR, value: "/etc/voice/search-projection/keys"}
+            - {name: SEARCH_PRINCIPAL_ACTIVE_KID, valueFrom: {secretKeyRef: {name: voice-search-principal-signing, key: active-kid}}}
+            - {name: SEARCH_PRINCIPAL_JWKS_LISTEN, value: ":8443"}
+            - {name: SEARCH_PRINCIPAL_JWKS_TLS_CERT_FILE, value: "/etc/voice/search-projection/tls/tls.crt"}
+            - {name: SEARCH_PRINCIPAL_JWKS_TLS_KEY_FILE, value: "/etc/voice/search-projection/tls/tls.key"}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+          volumeMounts:
+            - {name: search-principal-signing, mountPath: /etc/voice/search-projection/keys, readOnly: true}
+            - {name: search-principal-tls, mountPath: /etc/voice/search-projection/tls, readOnly: true}
+            - {name: principal-ca, mountPath: /etc/voice/search-projection/ca, readOnly: true}
+      volumes:
+        - name: search-principal-signing
+          secret: {secretName: voice-search-principal-signing, items: [{key: current.pem, path: current.pem}, {key: next.pem, path: next.pem}]}
+        - name: search-principal-tls
+          secret: {secretName: voice-search-principal-tls}
+        - name: principal-ca
+          secret: {secretName: voice-principal-ca}
 ---
 apiVersion: v1
 kind: Service
@@ -549,7 +573,7 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-search}
-  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}, {name: principal-jwks, port: 8443}]
 ---
 apiVersion: apps/v1
 kind: Deployment

@@ -10,6 +10,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	userv1 "voice.app/voice/user/v1"
 )
 
 const verificationSourceResolutionSQL = `
@@ -103,8 +106,9 @@ func applyVerificationSourceStateTx(
 		applied = err == nil
 		resolveSummary = err == nil
 	case revision == currentRevision && currentVerified == verified && currentType == verificationType && currentBadge == badge:
-		// Exact retry; the effective summary is still repaired below.
-		resolveSummary = true
+		// Exact retries are already represented by the original journal/outbox
+		// transaction. Do not manufacture a new projection revision for a retry.
+		resolveSummary = false
 	default:
 		// Stale or conflicting equal revision must not mutate even compatibility timestamps.
 	}
@@ -131,7 +135,8 @@ func applyVerificationSourceStateTx(
 	}
 	row := tx.QueryRow(ctx, `
 		UPDATE profiles
-		SET verification_type = $2, verification_badge = $3, updated_at = now()
+		SET verification_type = $2, verification_badge = $3, updated_at = now(),
+			search_projection_revision = search_projection_revision + 1
 		WHERE id = $1 AND deleted_at IS NULL
 		RETURNING `+profileSelectCols, profileID, effectiveType, effectiveBadge)
 	profile, err := scanProfile(row)
@@ -141,22 +146,30 @@ func applyVerificationSourceStateTx(
 		}
 		return nil, false, err
 	}
+	if applied {
+		if err := AppendSearchProjection(ctx, tx, searchProjectionUpsert(profile)); err != nil {
+			return nil, false, err
+		}
+	}
 	return profile, applied, nil
 }
 
 // SetProfileVerification updates verification_type and badge on a profile.
 func (s *ProfileStore) SetProfileVerification(ctx context.Context, profileID uuid.UUID, verificationType, badge string) (*ProfileRow, error) {
-	row := s.pool.QueryRow(ctx, `
-		UPDATE profiles SET verification_type = $2, verification_badge = $3, updated_at = now()
-		WHERE id = $1 AND deleted_at IS NULL
-		RETURNING `+profileSelectCols,
-		profileID, verificationType, badge,
-	)
-	p, err := scanProfile(row)
-	if err != nil {
-		if err == pgx.ErrNoRows {
-			return nil, nil
+	var p *ProfileRow
+	err := s.withSearchProjectionTx(ctx, func(tx pgx.Tx) error {
+		var err error
+		p, err = scanProfile(tx.QueryRow(ctx, `UPDATE profiles SET verification_type=$2, verification_badge=$3, updated_at=now(), search_projection_revision=search_projection_revision+1 WHERE id=$1 AND deleted_at IS NULL RETURNING `+profileSelectCols, profileID, verificationType, badge))
+		if errors.Is(err, pgx.ErrNoRows) {
+			p = nil
+			return nil
 		}
+		if err != nil {
+			return err
+		}
+		return AppendSearchProjection(ctx, tx, searchProjectionUpsert(p))
+	})
+	if err != nil {
 		return nil, err
 	}
 	return p, nil
@@ -164,18 +177,7 @@ func (s *ProfileStore) SetProfileVerification(ctx context.Context, profileID uui
 
 // ClearProfileVerification resets verification fields.
 func (s *ProfileStore) ClearProfileVerification(ctx context.Context, profileID uuid.UUID) (*ProfileRow, error) {
-	row := s.pool.QueryRow(ctx, `
-		UPDATE profiles SET verification_type = 'none', verification_badge = NULL, updated_at = now()
-		WHERE id = $1 AND deleted_at IS NULL
-		RETURNING `+profileSelectCols, profileID)
-	p, err := scanProfile(row)
-	if err != nil {
-		if err == pgx.ErrNoRows {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return p, nil
+	return s.SetProfileVerification(ctx, profileID, "none", "")
 }
 
 // HasVerifiedUsernameConflict returns true if normalized username matches a verified profile.
@@ -205,17 +207,24 @@ func (s *ProfileStore) HasVerifiedUsernameConflict(ctx context.Context, normaliz
 
 // SoftDeleteProfile archives a non-primary owned profile.
 func (s *ProfileStore) SoftDeleteProfile(ctx context.Context, accountID, profileID uuid.UUID) error {
-	tag, err := s.pool.Exec(ctx, `
-		UPDATE profiles SET deleted_at = now(), updated_at = now()
-		WHERE id = $1 AND account_id = $2 AND is_primary = false AND deleted_at IS NULL`,
-		profileID, accountID)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		return pgx.ErrNoRows
-	}
-	return nil
+	return s.withSearchProjectionTx(ctx, func(tx pgx.Tx) error {
+		row := tx.QueryRow(ctx, `UPDATE profiles
+			SET deleted_at = now(), updated_at = now(), search_projection_revision = search_projection_revision + 1
+			WHERE id = $1 AND account_id = $2 AND is_primary = false AND deleted_at IS NULL
+			RETURNING `+profileSelectCols, profileID, accountID)
+		p, err := scanProfile(row)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return pgx.ErrNoRows
+		}
+		if err != nil {
+			return err
+		}
+		return AppendSearchProjection(ctx, tx, &userv1.SearchProfileProjectionEvent{
+			ProtocolVersion: 1, EventId: uuid.NewString(), OccurredAt: timestamppb.Now(),
+			ProfileId: p.ID.String(), SourceRevision: p.SearchProjectionRevision,
+			Payload: &userv1.SearchProfileProjectionEvent_Delete{Delete: &userv1.SearchProfileDelete{}},
+		})
+	})
 }
 
 // ApplyDowngradeProfileSelection unfreezes kept profiles and freezes others for free tier.

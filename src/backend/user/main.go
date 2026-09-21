@@ -28,6 +28,7 @@ import (
 	"voice/backend/pkg/socialprincipal"
 	grpcsvc "voice/backend/user/internal/grpcsvc"
 	"voice/backend/user/internal/r2avatar"
+	"voice/backend/user/internal/searchprojection"
 	"voice/backend/user/internal/store"
 	"voice/backend/user/internal/userevents"
 
@@ -57,6 +58,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("user file ownership principal config: %v", err)
 	}
+	searchPrincipalConfig, searchPrincipalEnabled, err := socialprincipal.LoadFromEnvWithAudience("user", "search", "USER_SEARCH_PRINCIPAL_", ":9093")
+	if err != nil {
+		log.Fatalf("user search projection principal config: %v", err)
+	}
+	searchProjectionCursorKey, err := searchprojection.CursorKeyFromEnv(searchPrincipalEnabled, os.Getenv)
+	if err != nil {
+		log.Fatalf("user search projection cursor config: %v", err)
+	}
 	var privacyRuntime *socialprincipal.Runtime
 	if principalEnabled {
 		if strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
@@ -78,6 +87,17 @@ func main() {
 			log.Fatalf("user file ownership principal: %v", err)
 		}
 		defer func() { _ = fileOwnershipRuntime.Close() }()
+	}
+	var searchProjectionRuntime *socialprincipal.Runtime
+	if searchPrincipalEnabled {
+		if strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
+			log.Fatal("user search projection principal requires DATABASE_URL")
+		}
+		searchProjectionRuntime, err = socialprincipal.New(context.Background(), searchPrincipalConfig)
+		if err != nil {
+			log.Fatalf("user search projection principal: %v", err)
+		}
+		defer func() { _ = searchProjectionRuntime.Close() }()
 	}
 	metricsReg := prometheus.NewRegistry()
 	httpAddr := ":8080"
@@ -249,6 +269,20 @@ func main() {
 			DeletedAccounts:     deletedAccounts,
 			DNSResolver:         dnsResolver,
 		}
+		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
+			owner, hostErr := os.Hostname()
+			if hostErr != nil || strings.TrimSpace(owner) == "" {
+				log.Fatalf("search projection outbox owner: %v", hostErr)
+			}
+			dispatcher, projectionNATS, dispatchErr := searchprojection.NewOutboxDispatcher(store.NewProfileStore(pool), natsURL, owner)
+			if dispatchErr != nil {
+				log.Fatalf("search projection outbox dispatcher: %v", dispatchErr)
+			}
+			defer func() { _ = projectionNATS.Drain() }()
+			dispatchCtx, stopDispatcher := context.WithCancel(context.Background())
+			defer stopDispatcher()
+			go dispatcher.Run(dispatchCtx)
+		}
 		userv1.RegisterUserServiceServer(srv, userSvc)
 		defer srv.Stop()
 		if privacyRuntime != nil {
@@ -280,6 +314,22 @@ func main() {
 			go func() {
 				if err := fileOwnershipServer.Serve(fileOwnershipListener); err != nil {
 					log.Fatalf("user file ownership principal serve: %v", err)
+				}
+			}()
+		}
+		if searchProjectionRuntime != nil {
+			searchProjectionListener, err := net.Listen("tcp", searchPrincipalConfig.ListenAddr)
+			if err != nil {
+				log.Fatalf("user search projection principal listen: %v", err)
+			}
+			searchProjectionOptions := append([]grpc.ServerOption{}, sharedOptions...)
+			searchProjectionOptions = append(searchProjectionOptions, searchProjectionRuntime.ServerOptions()...)
+			searchProjectionServer := grpc.NewServer(searchProjectionOptions...)
+			grpcsvc.RegisterSearchProjectionServer(searchProjectionServer, userSvc, searchProjectionCursorKey)
+			defer searchProjectionServer.Stop()
+			go func() {
+				if err := searchProjectionServer.Serve(searchProjectionListener); err != nil {
+					log.Fatalf("user search projection principal serve: %v", err)
 				}
 			}()
 		}

@@ -24,6 +24,8 @@ func Method(target string) string {
 		return "/voice.space.v1.SpaceService/AreCoMembers"
 	case "file":
 		return "/voice.user.v1.UserService/ResolveAccountIDForProfile"
+	case "search":
+		return "/voice.user.v1.UserService/BeginSearchProfileSnapshot"
 	}
 	return ""
 }
@@ -44,12 +46,21 @@ func AllowsMethod(target, method string) bool {
 		return method == "/voice.space.v1.SpaceService/AreCoMembers"
 	case "file":
 		return method == "/voice.user.v1.UserService/ResolveAccountIDForProfile"
+	case "search":
+		switch method {
+		case "/voice.user.v1.UserService/BeginSearchProfileSnapshot",
+			"/voice.user.v1.UserService/ListSearchProfileSnapshot",
+			"/voice.user.v1.UserService/ListSearchProfileJournal",
+			"/voice.user.v1.UserService/GetSearchProfileCheckpoint":
+			return true
+		}
 	}
 	return false
 }
 
 type Verifier struct {
 	Target     string
+	Capability string
 	Issuers    map[string]bool
 	Resolve    principal.KeyResolver
 	Replay     principal.ReplayGuard
@@ -171,11 +182,32 @@ func StrictUnaryInterceptor(verifier PrincipalVerifier) grpc.UnaryServerIntercep
 			}
 			return nil, status.Error(codes.Unauthenticated, "invalid principal")
 		}
-		if !AllowsMethod(verified.Audience, info.FullMethod) || verified.Kind != "service" || verified.Issuer != expectedIssuer(verified.Audience) || verified.Subject != "service:"+expectedIssuer(verified.Audience) {
+		if !AllowsMethod(typedCapability(verifier, verified.Audience), info.FullMethod) || verified.Kind != "service" || verified.Issuer != expectedIssuer(typedCapability(verifier, verified.Audience)) || verified.Subject != "service:"+expectedIssuer(typedCapability(verifier, verified.Audience)) {
 			return nil, status.Error(codes.PermissionDenied, "Social principal required")
 		}
 		return handler(principal.WithVerified(ctx, verified), req)
 	}
+}
+
+func typedCapability(verifier PrincipalVerifier, fallback string) string {
+	if typed, ok := verifier.(*Verifier); ok && typed.Capability != "" {
+		return typed.Capability
+	}
+	return fallback
+}
+
+// RequireSearchProjection verifies Search's explicitly limited capability while
+// retaining the User audience required by the transport listener.
+func RequireSearchProjection(ctx context.Context, method string, req proto.Message) error {
+	verified, ok := principal.FromContext(ctx)
+	if !ok || verified.Kind != "service" || verified.Issuer != "search" || verified.Subject != "service:search" {
+		return status.Error(codes.PermissionDenied, "Search principal required")
+	}
+	hash, err := principal.RequestHash(req)
+	if err != nil || !AllowsMethod("search", method) || verified.Audience != "user" || verified.RPC != method || verified.RequestHash != hash || verified.AccountID != "" || verified.ProfileID != "" || verified.SessionEpoch != 0 {
+		return status.Error(codes.Unauthenticated, "invalid principal binding")
+	}
+	return nil
 }
 
 // RequireSocial is the domain defense for a protected listener. Its context
@@ -205,6 +237,9 @@ func RequireSocialForMethod(ctx context.Context, target, method string, req prot
 func expectedIssuer(target string) string {
 	if target == "file" {
 		return "file"
+	}
+	if target == "search" {
+		return "search"
 	}
 	return "social"
 }
