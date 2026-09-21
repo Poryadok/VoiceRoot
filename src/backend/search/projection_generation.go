@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"google.golang.org/protobuf/proto"
 
 	userv1 "voice.app/voice/user/v1"
 	"voice/backend/search/internal/profileprojection"
@@ -49,6 +50,13 @@ func runDesiredProjectionGeneration(ctx context.Context, logger *slog.Logger, cl
 			target := &profileprojection.StoreAdapter{Pool: pool, Generation: generation}
 			err = runUserProjectionBootstrap(ctx, client, target)
 			if err == nil {
+				var evidence profileprojection.ReadinessEvidence
+				evidence, err = replayProjectionEvidence(ctx, client, generation)
+				if err == nil {
+					err = profileprojection.VerifyGenerationEvidence(ctx, pool, generation, evidence)
+				}
+			}
+			if err == nil {
 				err = profileprojection.MarkGenerationReady(ctx, pool, generation)
 			}
 			if err == nil {
@@ -79,6 +87,58 @@ func runDesiredProjectionGeneration(ctx context.Context, logger *slog.Logger, cl
 		case <-ctx.Done():
 			return
 		case <-time.After(time.Second):
+		}
+	}
+}
+
+// replayProjectionEvidence independently reads the protected authority without
+// mutating Search. Promotion compares this proof to the candidate's atomically
+// persisted stream evidence.
+func replayProjectionEvidence(ctx context.Context, client userv1.UserServiceClient, generation uint64) (profileprojection.ReadinessEvidence, error) {
+	begin, err := client.BeginSearchProfileSnapshot(ctx, &userv1.BeginSearchProfileSnapshotRequest{})
+	if err != nil {
+		return profileprojection.ReadinessEvidence{}, err
+	}
+	collector, err := profileprojection.NewReplayEvidenceCollector(generation, begin.GetHighWatermark())
+	if err != nil {
+		return profileprojection.ReadinessEvidence{}, err
+	}
+	for cursor := ""; ; {
+		page, err := client.ListSearchProfileSnapshot(ctx, &userv1.ListSearchProfileSnapshotRequest{HighWatermark: begin.GetHighWatermark(), PageSize: 100, Cursor: cursor})
+		if err != nil {
+			return profileprojection.ReadinessEvidence{}, err
+		}
+		for _, event := range page.GetEvents() {
+			bytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(event)
+			if err != nil {
+				return profileprojection.ReadinessEvidence{}, err
+			}
+			if err := collector.AddSnapshot(event.GetJournalOffset(), bytes); err != nil {
+				return profileprojection.ReadinessEvidence{}, err
+			}
+		}
+		if page.GetNextCursor() == "" {
+			break
+		}
+		cursor = page.GetNextCursor()
+	}
+	for after := begin.GetHighWatermark(); ; {
+		page, err := client.ListSearchProfileJournal(ctx, &userv1.ListSearchProfileJournalRequest{AfterOffset: after, PageSize: 100})
+		if err != nil {
+			return profileprojection.ReadinessEvidence{}, err
+		}
+		for _, event := range page.GetEvents() {
+			bytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(event)
+			if err != nil {
+				return profileprojection.ReadinessEvidence{}, err
+			}
+			if err := collector.AddJournal(event.GetJournalOffset(), bytes); err != nil {
+				return profileprojection.ReadinessEvidence{}, err
+			}
+			after = event.GetJournalOffset()
+		}
+		if len(page.GetEvents()) < 100 {
+			return collector.Evidence, nil
 		}
 	}
 }

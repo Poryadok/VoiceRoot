@@ -16,6 +16,33 @@ type ReadinessEvidence struct {
 	Digest                                                [32]byte
 }
 
+// ReplayEvidenceCollector accepts only the exact H-bounded snapshot followed
+// by the contiguous journal suffix. It is reusable across pages/restarts: the
+// persisted evidence is its resume state, not a best-effort in-memory digest.
+type ReplayEvidenceCollector struct{ Evidence ReadinessEvidence }
+
+func NewReplayEvidenceCollector(generation, highWatermark uint64) (*ReplayEvidenceCollector, error) {
+	evidence, err := NewReadinessEvidence(generation, highWatermark)
+	if err != nil {
+		return nil, err
+	}
+	return &ReplayEvidenceCollector{Evidence: evidence}, nil
+}
+
+func (c *ReplayEvidenceCollector) AddSnapshot(offset uint64, deterministicEvent []byte) error {
+	if c == nil || offset == 0 || offset > c.Evidence.HighWatermark {
+		return fmt.Errorf("snapshot event exceeds high watermark")
+	}
+	return c.Evidence.Add(offset, deterministicEvent)
+}
+
+func (c *ReplayEvidenceCollector) AddJournal(offset uint64, deterministicEvent []byte) error {
+	if c == nil || offset <= c.Evidence.HighWatermark {
+		return fmt.Errorf("journal event is outside (H,C]")
+	}
+	return c.Evidence.Add(offset, deterministicEvent)
+}
+
 func NewReadinessEvidence(generation, highWatermark uint64) (ReadinessEvidence, error) {
 	if generation == 0 {
 		return ReadinessEvidence{}, fmt.Errorf("generation is required")

@@ -103,6 +103,20 @@ func MarkGenerationReady(ctx context.Context, pool *pgxpool.Pool, generation uin
 	return nil
 }
 
+// VerifyGenerationEvidence compares an independently replayed protected stream
+// with the candidate's transactional local evidence before readiness/promotion.
+func VerifyGenerationEvidence(ctx context.Context, pool *pgxpool.Pool, generation uint64, expected ReadinessEvidence) error {
+	var count, first, last, cutoff uint64
+	var digest []byte
+	if err := pool.QueryRow(ctx, `SELECT evidence_count,evidence_first_offset,evidence_last_offset,journal_offset,evidence_digest FROM search_user_profile_generation_checkpoint WHERE generation=$1`, generation).Scan(&count, &first, &last, &cutoff, &digest); err != nil {
+		return err
+	}
+	if expected.Generation != generation || count != expected.Count || first != expected.First || last != expected.Last || cutoff != expected.Cutoff || len(digest) != len(expected.Digest) || string(digest) != string(expected.Digest[:]) {
+		return fmt.Errorf("generation %d protected replay evidence mismatch", generation)
+	}
+	return nil
+}
+
 func PromoteGeneration(ctx context.Context, pool *pgxpool.Pool, target uint64) (GenerationRoute, error) {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
