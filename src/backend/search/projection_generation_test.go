@@ -36,11 +36,39 @@ func (cutoffReplayClient) ListSearchProfileJournal(context.Context, *userv1.List
 	return &userv1.ListSearchProfileJournalResponse{Events: []*userv1.SearchProfileProjectionEvent{{JournalOffset: 2}, {JournalOffset: 3}}}, nil
 }
 
+type requestAwareRecoveryClient struct {
+	userv1.UserServiceClient
+	calls int
+}
+
+func (c *requestAwareRecoveryClient) ListSearchProfileSnapshot(context.Context, *userv1.ListSearchProfileSnapshotRequest, ...grpc.CallOption) (*userv1.ListSearchProfileSnapshotResponse, error) {
+	return &userv1.ListSearchProfileSnapshotResponse{Events: []*userv1.SearchProfileProjectionEvent{{JournalOffset: 1}}}, nil
+}
+func (c *requestAwareRecoveryClient) ListSearchProfileJournal(_ context.Context, request *userv1.ListSearchProfileJournalRequest, _ ...grpc.CallOption) (*userv1.ListSearchProfileJournalResponse, error) {
+	c.calls++
+	if request.GetAfterOffset() == 2 && c.calls == 1 {
+		return &userv1.ListSearchProfileJournalResponse{Events: []*userv1.SearchProfileProjectionEvent{{JournalOffset: 3}}}, nil
+	}
+	if request.GetAfterOffset() == 2 {
+		return &userv1.ListSearchProfileJournalResponse{Events: []*userv1.SearchProfileProjectionEvent{{JournalOffset: 3}}}, nil
+	}
+	return &userv1.ListSearchProfileJournalResponse{}, nil
+}
+
 func TestReplayProjectionEvidenceStopsAtPersistedCutoffWhenPageAdvanced(t *testing.T) {
 	evidence, err := replayProjectionEvidenceAt(context.Background(), cutoffReplayClient{}, 1, 1, 2)
 	require.NoError(t, err)
 	require.Equal(t, uint64(2), evidence.Cutoff)
 	require.Error(t, requireAuthoritativeCutoff(context.Background(), cutoffReplayClient{}, 2))
+}
+
+func TestRequestAwareProtectedClientExposesCatchUpOffsetAfterStaleCutoff(t *testing.T) {
+	client := &requestAwareRecoveryClient{}
+	require.Error(t, requireAuthoritativeCutoff(context.Background(), client, 2))
+	page, err := client.ListSearchProfileJournal(context.Background(), &userv1.ListSearchProfileJournalRequest{AfterOffset: 2})
+	require.NoError(t, err)
+	require.Len(t, page.GetEvents(), 1)
+	require.Equal(t, uint64(3), page.GetEvents()[0].GetJournalOffset())
 }
 
 func TestActivatedGenerationNeverDowngradesToLegacyAuthority(t *testing.T) {
