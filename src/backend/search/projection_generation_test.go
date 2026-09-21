@@ -130,12 +130,14 @@ func TestRunDesiredProjectionGeneration_RecoversReadyCutoff(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	// Keep setup and container cleanup independent of the bounded controller
+	// attempt. integrationtest registers cleanup against this non-expiring
+	// context, so cancelling the controller cannot strand its advisory lease.
+	setupCtx := context.Background()
 	root := searchMainRoot(t)
-	pool := integrationtest.StartPostgres(t, ctx, "search_controller_recovery", filepath.Join(root, "src", "backend", "migrations", "search_db", "000001_init.up.sql"))
+	pool := integrationtest.StartPostgres(t, setupCtx, "search_controller_recovery", filepath.Join(root, "src", "backend", "migrations", "search_db", "000001_init.up.sql"))
 	for _, m := range []string{"000003_space_lifecycle.up.sql", "000002_verification_type.up.sql", "000004_user_profile_projection.up.sql", "000005_user_profile_projection_snapshot.up.sql", "000006_user_profile_projection_quarantine.up.sql", "000007_user_profile_projection_fence.up.sql", "000008_user_profile_projection_generations.up.sql"} {
-		integrationtest.ApplySQLFile(t, ctx, pool, root, filepath.Join("src", "backend", "migrations", "search_db", m))
+		integrationtest.ApplySQLFile(t, setupCtx, pool, root, filepath.Join("src", "backend", "migrations", "search_db", m))
 	}
 	pid, aid := uuid.NewString(), uuid.NewString()
 	makeEvent := func(offset, rev uint64) *userv1.SearchProfileProjectionEvent {
@@ -143,33 +145,41 @@ func TestRunDesiredProjectionGeneration_RecoversReadyCutoff(t *testing.T) {
 	}
 	e1, e2, e3 := makeEvent(1, 1), makeEvent(2, 2), makeEvent(3, 3)
 	client := &controllerRecoveryClient{events: []*userv1.SearchProfileProjectionEvent{e1, e2, e3}}
-	lease, ok, err := profileprojection.TryStartGeneration(ctx, pool, 2)
+	lease, ok, err := profileprojection.TryStartGeneration(setupCtx, pool, 2)
 	require.NoError(t, err)
 	require.True(t, ok)
 	a := &profileprojection.StoreAdapter{Pool: pool, Generation: 2}
-	require.NoError(t, a.StartSnapshot(ctx, 1))
-	_, err = a.ApplyAndCheckpoint(ctx, e1, 1)
+	require.NoError(t, a.StartSnapshot(setupCtx, 1))
+	_, err = a.ApplyAndCheckpoint(setupCtx, e1, 1)
 	require.NoError(t, err)
-	require.NoError(t, a.FinishSnapshot(ctx))
-	_, err = a.ApplyAndCheckpoint(ctx, e2, 2)
+	require.NoError(t, a.FinishSnapshot(setupCtx))
+	_, err = a.ApplyAndCheckpoint(setupCtx, e2, 2)
 	require.NoError(t, err)
-	require.NoError(t, profileprojection.MarkGenerationReady(ctx, pool, 2))
-	profileprojection.FinishGenerationRebuild(ctx, lease)
+	require.NoError(t, profileprojection.MarkGenerationReady(setupCtx, pool, 2))
+	profileprojection.FinishGenerationRebuild(setupCtx, lease)
+	controllerCtx, controllerCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer controllerCancel()
 	done := make(chan struct{})
-	go func() { runDesiredProjectionGeneration(ctx, nil, client, pool, 2); close(done) }()
+	go func() { runDesiredProjectionGeneration(controllerCtx, nil, client, pool, 2); close(done) }()
 	select {
 	case <-done:
-	case <-ctx.Done():
+	case <-controllerCtx.Done():
+		controllerCancel()
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			t.Fatal("controller recovery did not release after cancellation")
+		}
 		t.Fatal("controller recovery timed out")
 	}
-	route, err := profileprojection.LoadGenerationRoute(ctx, pool)
+	route, err := profileprojection.LoadGenerationRoute(setupCtx, pool)
 	require.NoError(t, err)
 	require.Equal(t, uint64(2), route.Active)
 	require.Equal(t, uint64(1), route.Rollback)
 
 	var state string
 	var highWatermark, cutoff uint64
-	require.NoError(t, pool.QueryRow(ctx, `
+	require.NoError(t, pool.QueryRow(setupCtx, `
 		SELECT state, high_watermark, journal_cutoff
 		FROM search_user_profile_generations WHERE generation = 2
 	`).Scan(&state, &highWatermark, &cutoff))
@@ -186,7 +196,7 @@ func TestRunDesiredProjectionGeneration_RecoversReadyCutoff(t *testing.T) {
 	}
 	var checkpoint, evidenceCount, first, last uint64
 	var digest []byte
-	require.NoError(t, pool.QueryRow(ctx, `
+	require.NoError(t, pool.QueryRow(setupCtx, `
 		SELECT journal_offset, evidence_count, evidence_first_offset, evidence_last_offset, evidence_digest
 		FROM search_user_profile_generation_checkpoint WHERE generation = 2
 	`).Scan(&checkpoint, &evidenceCount, &first, &last, &digest))
@@ -197,13 +207,13 @@ func TestRunDesiredProjectionGeneration_RecoversReadyCutoff(t *testing.T) {
 	require.Equal(t, expected.Digest[:], digest)
 
 	var revision uint64
-	require.NoError(t, pool.QueryRow(ctx, `
+	require.NoError(t, pool.QueryRow(setupCtx, `
 		SELECT source_revision FROM search_user_profile_generation_documents
 		WHERE generation = 2 AND profile_id = $1
 	`, pid).Scan(&revision))
 	require.Equal(t, uint64(3), revision)
 	var quarantined int
-	require.NoError(t, pool.QueryRow(ctx, `
+	require.NoError(t, pool.QueryRow(setupCtx, `
 		SELECT count(*) FROM search_user_profile_generation_inbox
 		WHERE generation = 2 AND quarantined_at IS NOT NULL
 	`).Scan(&quarantined))
