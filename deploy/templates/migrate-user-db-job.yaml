@@ -1,0 +1,35 @@
+# One-shot golang-migrate Job for user_db.  The apply script substitutes namespace.
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: voice-migrate-user-db
+  namespace: __K_NAMESPACE__
+  labels:
+    app.kubernetes.io/name: voice-migrate-user-db
+    app.kubernetes.io/component: migration
+spec:
+  ttlSecondsAfterFinished: 86400
+  backoffLimit: 2
+  activeDeadlineSeconds: 180
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: voice-migrate-user-db
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: migrate/migrate:__MIGRATE_IMAGE_TAG__
+          # The already URI-encoded service DSN remains in its Secret; it is
+          # never rendered into this Job or migration diagnostics.
+          args: ["-path=/migrations", "-database=$(DATABASE_URL)", "up"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: {name: voice-app-secrets, key: USER_DATABASE_URL}
+          volumeMounts:
+            - {name: migrations, mountPath: /migrations, readOnly: true}
+      volumes:
+        - name: migrations
+          configMap: {name: voice-user-db-migrations, optional: false}

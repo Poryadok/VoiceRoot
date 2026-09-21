@@ -22,16 +22,20 @@ public class NatsAuthEventPublisher
 
   private final Connection connection;
 
-  public NatsAuthEventPublisher(String natsUrl) {
+  public NatsAuthEventPublisher(String natsUrl, String credentialsFile) {
     try {
-      this.connection =
-          Nats.connect(
-              new Options.Builder()
-                  .server(natsUrl)
-                  .connectionName("voice-auth-events")
-                  .maxReconnects(-1)
-                  .reconnectWait(Duration.ofSeconds(1))
-                  .build());
+      if (natsUrl == null || natsUrl.isBlank()) {
+        throw new IllegalArgumentException("AUTH_NATS_URL is required");
+      }
+      Options.Builder options = new Options.Builder().server(natsUrl)
+          .connectionName("voice-auth-events").maxReconnects(-1)
+          .reconnectWait(Duration.ofSeconds(1));
+      // Anonymous brokers remain the current compatibility mode. A future
+      // JWT identity foundation can opt in without changing this publisher.
+      if (credentialsFile != null && !credentialsFile.isBlank()) {
+        options.credentialPath(credentialsFile);
+      }
+      this.connection = Nats.connect(options.build());
     } catch (Exception ex) {
       throw new IllegalStateException("connect nats", ex);
     }
