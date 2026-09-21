@@ -63,8 +63,12 @@ func verifyOwnershipCredential(t *testing.T, ctx context.Context, req proto.Mess
 	payload, err := (proto.MarshalOptions{Deterministic: true}).Marshal(req)
 	require.NoError(t, err)
 	digest := sha256.Sum256(payload)
+	expectedAudience := "role"
+	if strings.Contains(rpc, ".auth.") {
+		expectedAudience = "auth"
+	}
 	claims, err := principal.VerifyService(ctx, strings.TrimPrefix(auth, "Bearer "), principal.VerifyConfig{
-		ExpectedIssuer: "space", ExpectedAudience: "role", ExpectedRPC: rpc,
+		ExpectedIssuer: "space", ExpectedAudience: expectedAudience, ExpectedRPC: rpc,
 		ExpectedRequestID: md.Get("x-request-id")[0], ExpectedRequestHash: "sha256:" + hex.EncodeToString(digest[:]),
 		KeyResolver: func(_ context.Context, issuer, kid string) (*rsa.PublicKey, error) {
 			require.Equal(t, "space", issuer)

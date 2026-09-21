@@ -31,6 +31,7 @@ import (
 	"voice/backend/space/internal/store"
 	"voice/backend/space/internal/subscriptionconsume"
 
+	authv1 "voice.app/voice/auth/v1"
 	rolev1 "voice.app/voice/role/v1"
 	spacev1 "voice.app/voice/space/v1"
 	userv1 "voice.app/voice/user/v1"
@@ -151,6 +152,25 @@ func main() {
 			log.Fatal("ROLE_PRINCIPAL_GRPC_ADDR is required with Role ownership TLS settings")
 		}
 
+		var ownershipAuthClient authv1.AuthServiceClient
+		if addr := strings.TrimSpace(os.Getenv("AUTH_PRINCIPAL_GRPC_ADDR")); addr != "" {
+			if principalIssuer == nil {
+				log.Fatal("Space principal issuer is required for Auth ownership transport")
+			}
+			tlsConfig, err := ownershipAuthTLSFromEnv()
+			if err != nil {
+				log.Fatalf("auth ownership TLS: %v", err)
+			}
+			conn, err := grpc.NewClient(grpcclient.DialTarget(addr), grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
+			if err != nil {
+				log.Fatalf("auth ownership grpc: %v", err)
+			}
+			defer func() { _ = conn.Close() }()
+			ownershipAuthClient = authv1.NewAuthServiceClient(conn)
+		} else if strings.TrimSpace(os.Getenv("AUTH_PRINCIPAL_TLS_CA_FILE")) != "" || strings.TrimSpace(os.Getenv("AUTH_PRINCIPAL_TLS_SERVER_NAME")) != "" {
+			log.Fatal("AUTH_PRINCIPAL_GRPC_ADDR is required with Auth ownership TLS settings")
+		}
+
 		sharedOptions := grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))
 		grpcOptions := append([]grpc.ServerOption{}, sharedOptions...)
 		grpcOptions = append(grpcOptions, grpc.ChainUnaryInterceptor(
@@ -163,6 +183,7 @@ func main() {
 			SpaceEvents:       spaceEvents,
 			Roles:             roleClient,
 			OwnershipRoles:    ownershipRoleClient,
+			OwnershipAuth:     ownershipAuthClient,
 			PrincipalIssuer:   principalIssuer,
 			MutationLocker:    store.NewSpaceMutationLocker(mutationLockPool),
 			SpaceCoMembership: &grpcsvc.StoreCoMembership{Store: spaceStore},

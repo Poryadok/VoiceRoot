@@ -32,6 +32,18 @@ func TestOwnershipRoleTLSConfigFailsClosed(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestOwnershipAuthTLSConfigFailsClosed(t *testing.T) {
+	t.Setenv("AUTH_PRINCIPAL_TLS_CA_FILE", "")
+	t.Setenv("AUTH_PRINCIPAL_TLS_SERVER_NAME", "auth.internal")
+	config, err := ownershipAuthTLSFromEnv()
+	require.NoError(t, err)
+	require.False(t, config.InsecureSkipVerify)
+	require.Equal(t, "auth.internal", config.ServerName)
+	t.Setenv("AUTH_PRINCIPAL_TLS_CA_FILE", t.TempDir()+"/absent.pem")
+	_, err = ownershipAuthTLSFromEnv()
+	require.Error(t, err)
+}
+
 func TestSpacePrincipalJWKSRouteIsPublicReadOnlyAndAbsentWhenDisabled(t *testing.T) {
 	disabled := httptest.NewRecorder()
 	spaceHTTPHandler("space", principalJWKS{}).ServeHTTP(disabled, httptest.NewRequest(http.MethodGet, "/.well-known/jwks.json", nil))
