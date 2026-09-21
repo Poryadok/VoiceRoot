@@ -276,6 +276,44 @@ class UserServiceClient extends $grpc.Client {
         options: options);
   }
 
+  /// Search-only protected listener. These are intentionally unimplemented on
+  /// ordinary User gRPC and require the request-bound service:search principal.
+  $grpc.ResponseFuture<$0.BeginSearchProfileSnapshotResponse>
+      beginSearchProfileSnapshot(
+    $0.BeginSearchProfileSnapshotRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$beginSearchProfileSnapshot, request,
+        options: options);
+  }
+
+  $grpc.ResponseFuture<$0.ListSearchProfileSnapshotResponse>
+      listSearchProfileSnapshot(
+    $0.ListSearchProfileSnapshotRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$listSearchProfileSnapshot, request,
+        options: options);
+  }
+
+  $grpc.ResponseFuture<$0.ListSearchProfileJournalResponse>
+      listSearchProfileJournal(
+    $0.ListSearchProfileJournalRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$listSearchProfileJournal, request,
+        options: options);
+  }
+
+  $grpc.ResponseFuture<$0.GetSearchProfileCheckpointResponse>
+      getSearchProfileCheckpoint(
+    $0.GetSearchProfileCheckpointRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getSearchProfileCheckpoint, request,
+        options: options);
+  }
+
   // method descriptors
 
   static final _$ensurePrimaryProfile = $grpc.ClientMethod<
@@ -435,6 +473,30 @@ class UserServiceClient extends $grpc.Client {
       '/voice.user.v1.UserService/CreateAvatarPresignedUpload',
       ($0.CreateAvatarPresignedUploadRequest value) => value.writeToBuffer(),
       $0.CreateAvatarPresignedUploadResponse.fromBuffer);
+  static final _$beginSearchProfileSnapshot = $grpc.ClientMethod<
+          $0.BeginSearchProfileSnapshotRequest,
+          $0.BeginSearchProfileSnapshotResponse>(
+      '/voice.user.v1.UserService/BeginSearchProfileSnapshot',
+      ($0.BeginSearchProfileSnapshotRequest value) => value.writeToBuffer(),
+      $0.BeginSearchProfileSnapshotResponse.fromBuffer);
+  static final _$listSearchProfileSnapshot = $grpc.ClientMethod<
+          $0.ListSearchProfileSnapshotRequest,
+          $0.ListSearchProfileSnapshotResponse>(
+      '/voice.user.v1.UserService/ListSearchProfileSnapshot',
+      ($0.ListSearchProfileSnapshotRequest value) => value.writeToBuffer(),
+      $0.ListSearchProfileSnapshotResponse.fromBuffer);
+  static final _$listSearchProfileJournal = $grpc.ClientMethod<
+          $0.ListSearchProfileJournalRequest,
+          $0.ListSearchProfileJournalResponse>(
+      '/voice.user.v1.UserService/ListSearchProfileJournal',
+      ($0.ListSearchProfileJournalRequest value) => value.writeToBuffer(),
+      $0.ListSearchProfileJournalResponse.fromBuffer);
+  static final _$getSearchProfileCheckpoint = $grpc.ClientMethod<
+          $0.GetSearchProfileCheckpointRequest,
+          $0.GetSearchProfileCheckpointResponse>(
+      '/voice.user.v1.UserService/GetSearchProfileCheckpoint',
+      ($0.GetSearchProfileCheckpointRequest value) => value.writeToBuffer(),
+      $0.GetSearchProfileCheckpointResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.user.v1.UserService')
@@ -715,6 +777,44 @@ abstract class UserServiceBase extends $grpc.Service {
             $0.CreateAvatarPresignedUploadRequest.fromBuffer(value),
         ($0.CreateAvatarPresignedUploadResponse value) =>
             value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.BeginSearchProfileSnapshotRequest,
+            $0.BeginSearchProfileSnapshotResponse>(
+        'BeginSearchProfileSnapshot',
+        beginSearchProfileSnapshot_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.BeginSearchProfileSnapshotRequest.fromBuffer(value),
+        ($0.BeginSearchProfileSnapshotResponse value) =>
+            value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ListSearchProfileSnapshotRequest,
+            $0.ListSearchProfileSnapshotResponse>(
+        'ListSearchProfileSnapshot',
+        listSearchProfileSnapshot_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ListSearchProfileSnapshotRequest.fromBuffer(value),
+        ($0.ListSearchProfileSnapshotResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ListSearchProfileJournalRequest,
+            $0.ListSearchProfileJournalResponse>(
+        'ListSearchProfileJournal',
+        listSearchProfileJournal_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ListSearchProfileJournalRequest.fromBuffer(value),
+        ($0.ListSearchProfileJournalResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GetSearchProfileCheckpointRequest,
+            $0.GetSearchProfileCheckpointResponse>(
+        'GetSearchProfileCheckpoint',
+        getSearchProfileCheckpoint_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetSearchProfileCheckpointRequest.fromBuffer(value),
+        ($0.GetSearchProfileCheckpointResponse value) =>
+            value.writeToBuffer()));
   }
 
   $async.Future<$0.EnsurePrimaryProfileResponse> ensurePrimaryProfile_Pre(
@@ -993,4 +1093,42 @@ abstract class UserServiceBase extends $grpc.Service {
   $async.Future<$0.CreateAvatarPresignedUploadResponse>
       createAvatarPresignedUpload($grpc.ServiceCall call,
           $0.CreateAvatarPresignedUploadRequest request);
+
+  $async.Future<$0.BeginSearchProfileSnapshotResponse>
+      beginSearchProfileSnapshot_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.BeginSearchProfileSnapshotRequest> $request) async {
+    return beginSearchProfileSnapshot($call, await $request);
+  }
+
+  $async.Future<$0.BeginSearchProfileSnapshotResponse>
+      beginSearchProfileSnapshot(
+          $grpc.ServiceCall call, $0.BeginSearchProfileSnapshotRequest request);
+
+  $async.Future<$0.ListSearchProfileSnapshotResponse>
+      listSearchProfileSnapshot_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.ListSearchProfileSnapshotRequest> $request) async {
+    return listSearchProfileSnapshot($call, await $request);
+  }
+
+  $async.Future<$0.ListSearchProfileSnapshotResponse> listSearchProfileSnapshot(
+      $grpc.ServiceCall call, $0.ListSearchProfileSnapshotRequest request);
+
+  $async.Future<$0.ListSearchProfileJournalResponse>
+      listSearchProfileJournal_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.ListSearchProfileJournalRequest> $request) async {
+    return listSearchProfileJournal($call, await $request);
+  }
+
+  $async.Future<$0.ListSearchProfileJournalResponse> listSearchProfileJournal(
+      $grpc.ServiceCall call, $0.ListSearchProfileJournalRequest request);
+
+  $async.Future<$0.GetSearchProfileCheckpointResponse>
+      getSearchProfileCheckpoint_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.GetSearchProfileCheckpointRequest> $request) async {
+    return getSearchProfileCheckpoint($call, await $request);
+  }
+
+  $async.Future<$0.GetSearchProfileCheckpointResponse>
+      getSearchProfileCheckpoint(
+          $grpc.ServiceCall call, $0.GetSearchProfileCheckpointRequest request);
 }

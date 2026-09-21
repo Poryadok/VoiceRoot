@@ -472,10 +472,27 @@ message SearchProfileUpsert {
 }
 message SearchProfileDelete {}
 message BeginSearchProfileSnapshotRequest {}
-message BeginSearchProfileSnapshotResponse { uint64 high_watermark = 1; }
-message ListSearchProfileSnapshotRequest { uint64 high_watermark = 1; uint32 page_size = 2; string cursor = 3; }
-message ListSearchProfileSnapshotResponse { repeated SearchProfileProjectionEvent events = 1; string next_cursor = 2; }
-message ListSearchProfileJournalRequest { uint64 after_offset = 1; uint32 page_size = 2; }
-message ListSearchProfileJournalResponse { repeated SearchProfileProjectionEvent events = 1; uint64 high_watermark = 2; }
+message BeginSearchProfileSnapshotResponse {
+  uint64 high_watermark = 1;
+}
+message ListSearchProfileSnapshotRequest {
+  uint64 high_watermark = 1;
+  uint32 page_size = 2;
+  string cursor = 3;
+}
+message ListSearchProfileSnapshotResponse {
+  repeated SearchProfileProjectionEvent events = 1;
+  string next_cursor = 2;
+}
+message ListSearchProfileJournalRequest {
+  uint64 after_offset = 1;
+  uint32 page_size = 2;
+}
+message ListSearchProfileJournalResponse {
+  repeated SearchProfileProjectionEvent events = 1;
+  uint64 high_watermark = 2;
+}
 message GetSearchProfileCheckpointRequest {}
-message GetSearchProfileCheckpointResponse { uint64 high_watermark = 1; }
+message GetSearchProfileCheckpointResponse {
+  uint64 high_watermark = 1;
+}
