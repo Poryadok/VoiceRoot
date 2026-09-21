@@ -92,3 +92,12 @@ func TestApplyRevisionGuardsDuplicateConflictAndStaleResurrection(t *testing.T) 
 	require.Equal(t, NoopStale, result)
 	require.True(t, state.Tombstoned)
 }
+
+func TestFirstEvidenceOffsetMayStartAtAnyPositiveJournalOffset(t *testing.T) {
+	t.Parallel()
+	evidence, err := NewReadinessEvidence(1, 0)
+	require.NoError(t, err)
+	require.NoError(t, evidence.Add(42, []byte("first")))
+	require.Error(t, evidence.Add(44, []byte("gap")))
+	require.NoError(t, evidence.Add(43, []byte("next")))
+}
