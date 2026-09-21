@@ -27,20 +27,40 @@ func ownershipMigrationSQL(t *testing.T, name, direction string) string {
 	return string(raw)
 }
 
-func rollbackOwnershipCommitSuccessors(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+func ownershipJournalCommitMigrationFixture(t *testing.T) *SpaceStore {
 	t.Helper()
-	for _, name := range []string{"000018_ownership_consume_started", "000012_ownership_journal_completion", "000011_voice_access_epoch"} {
-		_, err := pool.Exec(ctx, ownershipMigrationSQL(t, name, "down"))
-		require.NoError(t, err)
+	if testing.Short() {
+		t.Skip("requires PostgreSQL ownership journal commit migration")
 	}
-}
-
-func restoreOwnershipCommitSuccessors(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
-	t.Helper()
-	for _, name := range []string{"000011_voice_access_epoch", "000012_ownership_journal_completion", "000018_ownership_consume_started"} {
+	ctx := context.Background()
+	pool := startSpacePostgresForStoreTest(t, ctx)
+	applySpaceMigrationsThrough7ForStoreTest(t, ctx, pool)
+	for _, name := range []string{"000008_ownership_journal", "000009_ownership_journal_decision", "000010_ownership_journal_commit"} {
 		_, err := pool.Exec(ctx, ownershipMigrationSQL(t, name, "up"))
 		require.NoError(t, err)
 	}
+	applyLifecycleMigration(t, ctx, pool, "up")
+	return &SpaceStore{Pool: pool}
+}
+
+// seedOwnershipProofConfirmedBeforeCompletion supplies only evidence available
+// before 000012/000018, so the 000010 migration is exercised at its actual
+// catalog boundary rather than by rolling newer durable contracts backward.
+func seedOwnershipProofConfirmedBeforeCompletion(t *testing.T, st *SpaceStore) OwnershipBinding {
+	t.Helper()
+	binding := seedOwnershipJournalBinding(t, st)
+	_, err := st.ReserveOwnership(context.Background(), binding)
+	require.NoError(t, err)
+	receipt := ownershipAuthReceiptFixture(binding)
+	_, err = st.Pool.Exec(context.Background(), `UPDATE ownership_journal SET
+		state='proof_confirmed',auth_receipt_id=$2,auth_account_id=$3,auth_profile_id=$4,
+		auth_space_id=$5,auth_new_owner_profile_id=$6,auth_operation_id=$7,
+		auth_session_epoch=$8,auth_consumed_at=$9,auth_verified_factors=$10,updated_at=now()
+		WHERE operation_id=$1`, binding.OperationID, receipt.ReceiptID, receipt.AccountID, receipt.ProfileID,
+		receipt.SpaceID, receipt.NewOwnerProfileID, receipt.OperationID, receipt.SessionEpoch,
+		receipt.ConsumedAt.UTC(), receipt.VerifiedFactors)
+	require.NoError(t, err)
+	return binding
 }
 
 func requireOwnershipCommitSchema(t *testing.T, pool *pgxpool.Pool, present bool) {
@@ -60,7 +80,6 @@ func requireOwnershipCommitSchema(t *testing.T, pool *pgxpool.Pool, present bool
 
 func execOwnershipCommitDown(t *testing.T, ctx context.Context, pool *pgxpool.Pool) error {
 	t.Helper()
-	rollbackOwnershipCommitSuccessors(t, ctx, pool)
 	conn, err := pool.Acquire(ctx)
 	require.NoError(t, err)
 	defer conn.Release()
@@ -71,7 +90,6 @@ func execOwnershipCommitDown(t *testing.T, ctx context.Context, pool *pgxpool.Po
 		if _, rollbackErr := conn.Exec(rollbackCtx, "ROLLBACK"); rollbackErr != nil {
 			_ = conn.Conn().Close(rollbackCtx)
 		}
-		restoreOwnershipCommitSuccessors(t, ctx, pool)
 	}
 	return err
 }
@@ -80,12 +98,11 @@ func execOwnershipCommitUp(t *testing.T, ctx context.Context, pool *pgxpool.Pool
 	t.Helper()
 	_, err := pool.Exec(ctx, ownershipJournalCommitMigrationSQL(t, "up"))
 	require.NoError(t, err)
-	restoreOwnershipCommitSuccessors(t, ctx, pool)
 }
 
 func TestOwnershipJournalCommitMigration_EmptyDownUpPreservesPriorReceipt(t *testing.T) {
-	st := ownershipJournalCommitStoreFixture(t)
-	binding := seedOwnershipProofConfirmed(t, st)
+	st := ownershipJournalCommitMigrationFixture(t)
+	binding := seedOwnershipProofConfirmedBeforeCompletion(t, st)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	before, err := st.LoadOwnership(ctx, binding.OperationID)
@@ -110,8 +127,8 @@ func TestOwnershipJournalCommitMigration_EmptyDownUpPreservesPriorReceipt(t *tes
 func TestOwnershipJournalCommitMigration_DownRefusesPreparedDecisionAndTerminalEvidence(t *testing.T) {
 	for _, state := range []string{"prepared", "abort_decided", "aborted", "commit_decided", "completed"} {
 		t.Run(state, func(t *testing.T) {
-			st := ownershipJournalCommitStoreFixture(t)
-			binding := seedOwnershipProofConfirmed(t, st)
+			st := ownershipJournalCommitMigrationFixture(t)
+			binding := seedOwnershipProofConfirmedBeforeCompletion(t, st)
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			_, err := st.MarkOwnershipPrepared(ctx, binding, ownershipRolePreparedReceiptFixture(binding))
@@ -164,7 +181,7 @@ func TestOwnershipJournalCommitMigration_DownRefusesPreparedDecisionAndTerminalE
 }
 
 func TestOwnershipJournalCommitMigration_OutboxEventAndOperationKeysAreDatabaseUnique(t *testing.T) {
-	st := ownershipJournalCommitStoreFixture(t)
+	st := ownershipJournalCommitMigrationFixture(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	eventID, operationID := uuid.New(), uuid.New()
@@ -215,13 +232,9 @@ func waitOwnershipCommitDownLockOrder(t *testing.T, ctx context.Context, pool *p
 }
 
 func TestOwnershipJournalCommitMigration_DownLocksJournalThenOutboxAndPreservesConcurrentDeliveredEvidence(t *testing.T) {
-	st := ownershipJournalCommitStoreFixture(t)
+	st := ownershipJournalCommitMigrationFixture(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	rollbackOwnershipCommitSuccessors(t, ctx, st.Pool)
-	t.Cleanup(func() {
-		restoreOwnershipCommitSuccessors(t, context.Background(), st.Pool)
-	})
 	downSQL := ownershipJournalCommitMigrationSQL(t, "down")
 	insertTx, err := st.Pool.Begin(ctx)
 	require.NoError(t, err)
