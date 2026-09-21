@@ -8,7 +8,6 @@ FIXTURES="${ROOT}/scripts/ci/testdata/compose-nats-jetstream"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
-command -v jq >/dev/null 2>&1 || fail "jq is required to run the Compose JetStream regression test"
 [[ -x "$CHECK" ]] || fail "missing executable Compose JetStream check"
 
 temp_dir="$(mktemp -d)"
@@ -18,8 +17,16 @@ mkdir -p "$temp_dir/bin"
 cat >"$temp_dir/bin/docker" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-[[ "$1" == compose && "$2" == config && "$3" == --format && "$4" == json ]] || exit 64
-cat "$COMPOSE_CONFIG_FIXTURE"
+if [[ "$1" == compose && "$2" == config && "$3" == --format && "$4" == json ]]; then
+  cat "$COMPOSE_CONFIG_FIXTURE"
+  exit 0
+fi
+if [[ "$1" == run ]]; then
+  [[ "$*" == *'/w/scripts/ci/compose-nats-jetstream.jq'* ]] || exit 64
+  grep -Fq '"-js"'
+  exit $?
+fi
+exit 64
 EOF
 chmod +x "$temp_dir/bin/docker"
 
