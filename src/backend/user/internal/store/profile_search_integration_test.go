@@ -44,7 +44,6 @@ func TestProfileStore_SearchProfilesAfter_postgres(t *testing.T) {
 	t.Run("literal percent and underscore in display_name", func(t *testing.T) {
 		rows, err := st.SearchProfilesAfter(ctx, viewerAcc, "50%_off", nil, 20)
 		require.NoError(t, err)
-		backfillSearchFixtures(t, ctx, st)
 		require.Len(t, rows, 1)
 		require.Equal(t, pidOther, rows[0].ID)
 	})
@@ -62,6 +61,7 @@ func TestProfileStore_SearchProfilesAfter_postgres(t *testing.T) {
 			VALUES ($1, $2, 'csr_b', '0003', 'Cursor B', true)`,
 			p2, acc2)
 		require.NoError(t, err)
+		backfillSearchFixtures(t, ctx, st)
 
 		first, err := st.SearchProfilesAfter(ctx, viewerAcc, "Cursor", nil, 1)
 		require.NoError(t, err)
