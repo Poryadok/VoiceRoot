@@ -22,33 +22,37 @@ const (
 )
 
 const profileSelectCols = `id, account_id, username, discriminator, display_name, avatar_url, banner_url, bio, custom_status,
-		locale, theme, is_primary, verification_type, verification_badge, frozen_at, accent_color, is_guest_account, deleted_at, created_at, updated_at`
+		locale, theme, is_primary, verification_type, verification_badge, frozen_at, accent_color, is_guest_account,
+		username_search_key, display_name_search_key, search_normalization_version, deleted_at, created_at, updated_at`
 
 // MaxDisplayNameRunes is the maximum length of profile display_name (aligned with Discord).
 const MaxDisplayNameRunes = 32
 
 // ProfileRow mirrors user_db.profiles v1 (docs/microservices/user-service.md).
 type ProfileRow struct {
-	ID                uuid.UUID
-	AccountID         uuid.UUID
-	Username          string
-	Discriminator     string
-	DisplayName       string
-	AvatarURL         *string
-	BannerURL         *string
-	Bio               *string
-	CustomStatus      *string
-	Locale            string
-	Theme             string
-	IsPrimary         bool
-	VerificationType  string
-	VerificationBadge *string
-	AccentColor       *string
-	IsGuestAccount    bool
-	FrozenAt          *time.Time
-	DeletedAt         *time.Time
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	ID                         uuid.UUID
+	AccountID                  uuid.UUID
+	Username                   string
+	Discriminator              string
+	DisplayName                string
+	AvatarURL                  *string
+	BannerURL                  *string
+	Bio                        *string
+	CustomStatus               *string
+	Locale                     string
+	Theme                      string
+	IsPrimary                  bool
+	VerificationType           string
+	VerificationBadge          *string
+	AccentColor                *string
+	IsGuestAccount             bool
+	UsernameSearchKey          *string
+	DisplayNameSearchKey       *string
+	SearchNormalizationVersion *int
+	FrozenAt                   *time.Time
+	DeletedAt                  *time.Time
+	CreatedAt                  time.Time
+	UpdatedAt                  time.Time
 }
 
 type ProfileStore struct {
@@ -92,6 +96,7 @@ func scanProfile(row pgx.Row) (*ProfileRow, error) {
 		&p.ID, &p.AccountID, &p.Username, &p.Discriminator, &p.DisplayName,
 		&p.AvatarURL, &p.BannerURL, &p.Bio, &p.CustomStatus, &p.Locale, &p.Theme, &p.IsPrimary,
 		&p.VerificationType, &p.VerificationBadge, &p.FrozenAt, &p.AccentColor, &p.IsGuestAccount,
+		&p.UsernameSearchKey, &p.DisplayNameSearchKey, &p.SearchNormalizationVersion,
 		&p.DeletedAt, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
@@ -214,6 +219,12 @@ func (s *ProfileStore) UpdateOwnedProfile(ctx context.Context, accountID, profil
 		set = append(set, fmt.Sprintf("display_name = $%d", n))
 		args = append(args, *in.DisplayName)
 		n++
+		set = append(set, fmt.Sprintf("display_name_search_key = $%d", n))
+		args = append(args, NormalizeUsernameKey(*in.DisplayName))
+		n++
+		set = append(set, fmt.Sprintf("search_normalization_version = $%d", n))
+		args = append(args, searchNormalizationVersion)
+		n++
 	}
 	if in.AvatarURL != nil {
 		set = append(set, fmt.Sprintf("avatar_url = $%d", n))
@@ -288,10 +299,10 @@ func (s *ProfileStore) CreateSecondaryProfile(ctx context.Context, accountID uui
 		disc := randomDiscriminator()
 		id := uuid.New()
 		row := s.pool.QueryRow(ctx, `
-			INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary, locale, theme, verification_type, accent_color)
-			VALUES ($1, $2, $3, $4, $5, false, 'ru', 'dark', 'none', $6)
+			INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary, locale, theme, verification_type, accent_color, username_search_key, display_name_search_key, search_normalization_version)
+			VALUES ($1, $2, $3, $4, $5, false, 'ru', 'dark', 'none', $6, $7, $8, $9)
 			RETURNING `+profileSelectCols,
-			id, accountID, base, disc, dn, accentColor,
+			id, accountID, base, disc, dn, accentColor, NormalizeUsernameKey(base), NormalizeUsernameKey(dn), searchNormalizationVersion,
 		)
 		p, err := scanProfile(row)
 		if err == nil {
@@ -414,10 +425,10 @@ func (s *ProfileStore) EnsurePrimaryProfile(ctx context.Context, accountID uuid.
 	for attempt := 0; attempt < maxDiscriminatorAttempts; attempt++ {
 		disc := randomDiscriminator()
 		row := s.pool.QueryRow(ctx, `
-			INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary, locale, theme, verification_type, is_guest_account)
-			VALUES ($1, $2, $3, $4, $5, true, 'ru', 'dark', 'none', $6)
+			INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary, locale, theme, verification_type, is_guest_account, username_search_key, display_name_search_key, search_normalization_version)
+			VALUES ($1, $2, $3, $4, $5, true, 'ru', 'dark', 'none', $6, $7, $8, $9)
 			RETURNING `+profileSelectCols,
-			id, accountID, base, disc, dn, guestAccount,
+			id, accountID, base, disc, dn, guestAccount, NormalizeUsernameKey(base), NormalizeUsernameKey(dn), searchNormalizationVersion,
 		)
 		p, err := scanProfile(row)
 		if err == nil {

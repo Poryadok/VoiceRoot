@@ -64,17 +64,17 @@ func (s *ProfileStore) SearchProfilesAfter(ctx context.Context, excludeAccount u
 	if limit <= 0 {
 		return nil, nil
 	}
-	pat := "%" + escapeLikePattern(query) + "%"
-	args := []any{excludeAccount, pat}
+	pat := "%" + escapeLikePattern(NormalizeUsernameKey(query)) + "%"
+	args := []any{excludeAccount, pat, searchNormalizationVersion}
 	extra := ""
 	if after != nil {
 		if after.VerificationRank == nil {
 			// Cursors issued before verification ranking was encoded retain their
 			// former keyset behavior rather than being reinterpreted as rank zero.
-			extra = ` AND (lower(username), discriminator, id) > (lower($3::text), $4::text, $5::uuid)`
+			extra = ` AND (lower(username), discriminator, id) > (lower($4::text), $5::text, $6::uuid)`
 			args = append(args, after.UsernameLower, after.Discriminator, after.ID)
 		} else {
-			extra = ` AND ((CASE WHEN verification_type <> 'none' THEN 0 ELSE 1 END), lower(username), discriminator, id) > ($3::int, lower($4::text), $5::text, $6::uuid)`
+			extra = ` AND ((CASE WHEN verification_type <> 'none' THEN 0 ELSE 1 END), lower(username), discriminator, id) > ($4::int, lower($5::text), $6::text, $7::uuid)`
 			args = append(args, *after.VerificationRank, after.UsernameLower, after.Discriminator, after.ID)
 		}
 	}
@@ -83,7 +83,8 @@ func (s *ProfileStore) SearchProfilesAfter(ctx context.Context, excludeAccount u
 		FROM profiles
 		WHERE account_id <> $1
 		AND deleted_at IS NULL
-		AND (username ILIKE $2 ESCAPE '\' OR display_name ILIKE $2 ESCAPE '\')
+		AND search_normalization_version = $3
+		AND (username_search_key LIKE $2 ESCAPE '\' OR display_name_search_key LIKE $2 ESCAPE '\')
 		%s
 		ORDER BY (CASE WHEN verification_type <> 'none' THEN 0 ELSE 1 END),
 		         lower(username) ASC, discriminator ASC, id ASC
