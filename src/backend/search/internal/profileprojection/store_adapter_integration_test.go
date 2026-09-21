@@ -272,6 +272,28 @@ func TestGenerationRoute_PromotionWaitsForRouteLock(t *testing.T) {
 	require.Equal(t, uint64(2), route.Active)
 }
 
+func TestGenerationRecovery_ReopensCatchesUpAndPromotes(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "search_projection_generation_recovery", filepath.Join(searchProjectionRepoRoot(t), "src", "backend", "migrations", "search_db", "000001_init.up.sql"))
+	for _, migration := range []string{"000003_space_lifecycle.up.sql", "000002_verification_type.up.sql", "000004_user_profile_projection.up.sql", "000005_user_profile_projection_snapshot.up.sql", "000006_user_profile_projection_quarantine.up.sql", "000007_user_profile_projection_fence.up.sql", "000008_user_profile_projection_generations.up.sql"} {
+		integrationtest.ApplySQLFile(t, ctx, pool, searchProjectionRepoRoot(t), filepath.Join("src", "backend", "migrations", "search_db", migration))
+	}
+	_, err := pool.Exec(ctx, `INSERT INTO search_user_profile_generations(generation,state,ready_at,evidence_sha256) VALUES(2,'ready',now(),decode(repeat('00',32),'hex')); INSERT INTO search_user_profile_generation_checkpoint(generation,journal_offset,snapshot_phase,snapshot_high_watermark,evidence_count,evidence_first_offset,evidence_last_offset,evidence_digest) VALUES(2,2,'replay',0,1,2,2,decode(repeat('00',32),'hex'))`)
+	require.NoError(t, err)
+	require.NoError(t, ReopenGeneration(ctx, pool, 2))
+	profileID, accountID := uuid.NewString(), uuid.NewString()
+	event := &userv1.SearchProfileProjectionEvent{ProtocolVersion: 1, EventId: uuid.NewString(), ProfileId: profileID, SourceRevision: 1, JournalOffset: 3, Payload: &userv1.SearchProfileProjectionEvent_Upsert{Upsert: &userv1.SearchProfileUpsert{AccountId: accountID, Username: "recovery", Discriminator: "0001", DisplayName: "Recovery", UsernameSearchKey: "recovery", DisplayNameSearchKey: "recovery", NormalizationVersion: 1}}}
+	_, err = (&StoreAdapter{Pool: pool, Generation: 2}).ApplyAndCheckpoint(ctx, event, 3)
+	require.NoError(t, err)
+	require.NoError(t, MarkGenerationReady(ctx, pool, 2))
+	route, err := PromoteGeneration(ctx, pool, 2)
+	require.NoError(t, err)
+	require.Equal(t, uint64(2), route.Active)
+}
+
 func searchProjectionRepoRoot(t *testing.T) string {
 	t.Helper()
 	_, file, _, ok := runtime.Caller(0)
