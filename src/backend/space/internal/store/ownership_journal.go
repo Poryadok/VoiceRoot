@@ -221,7 +221,7 @@ func (s *SpaceStore) MarkOwnershipConsumeStarted(ctx context.Context, binding Ow
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(context.WithoutCancel(ctx))
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
 	if err := lockOwnershipTransaction(ctx, tx, binding.OperationID, binding.SpaceID); err != nil {
 		return nil, err
 	}

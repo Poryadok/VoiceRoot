@@ -141,7 +141,7 @@ func (c *Coordinator) resume(ctx context.Context, binding store.OwnershipBinding
 func (c *Coordinator) abort(ctx context.Context, binding store.OwnershipBinding, journal *store.OwnershipJournal, cause error) (*store.OwnershipJournal, error) {
 	var err error
 	if journal.State != "abort_decided" {
-		journal, err = c.dependencies.Store.DecideOwnershipAbort(ctx, binding)
+		_, err = c.dependencies.Store.DecideOwnershipAbort(ctx, binding)
 		if err != nil {
 			return nil, errors.Join(cause, err)
 		}
