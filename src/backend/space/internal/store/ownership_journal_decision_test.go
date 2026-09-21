@@ -36,9 +36,9 @@ func assertOwnershipAuthReceipt(t *testing.T, got *OwnershipJournal, want Owners
 func assertOwnershipJournalHasNoSuccessEffects(t *testing.T, st *SpaceStore, binding OwnershipBinding) {
 	t.Helper()
 	assertReservationHasNoPublicEffects(t, st, binding)
-	var outboxExists bool
-	require.NoError(t, st.Pool.QueryRow(context.Background(), `SELECT to_regclass('ownership_outbox') IS NOT NULL`).Scan(&outboxExists))
-	require.False(t, outboxExists, "cycle2 must not introduce or write the ownership outbox")
+	var outboxRows int
+	require.NoError(t, st.Pool.QueryRow(context.Background(), `SELECT count(*) FROM ownership_outbox WHERE operation_id=$1`, binding.OperationID).Scan(&outboxRows))
+	require.Zero(t, outboxRows, "proof confirmation must not write an ownership outbox row")
 }
 
 func TestOwnershipJournalDecision_ConfirmPersistsExactAuthReceiptAcrossNewPool(t *testing.T) {
