@@ -40,6 +40,7 @@ func TestReplayProjectionEvidenceStopsAtPersistedCutoffWhenPageAdvanced(t *testi
 	evidence, err := replayProjectionEvidenceAt(context.Background(), cutoffReplayClient{}, 1, 1, 2)
 	require.NoError(t, err)
 	require.Equal(t, uint64(2), evidence.Cutoff)
+	require.Error(t, requireAuthoritativeCutoff(context.Background(), cutoffReplayClient{}, 2))
 }
 
 func TestActivatedGenerationNeverDowngradesToLegacyAuthority(t *testing.T) {

@@ -65,8 +65,14 @@ func runDesiredProjectionGeneration(ctx context.Context, logger *slog.Logger, cl
 					if replayErr != nil {
 						return replayErr
 					}
-					return profileprojection.VerifyGenerationEvidence(ctx, pool, generation, evidence)
+					if err := profileprojection.VerifyGenerationEvidence(ctx, pool, generation, evidence); err != nil {
+						return err
+					}
+					return requireAuthoritativeCutoff(ctx, client, evidence.Cutoff)
 				})
+				if err != nil {
+					_ = profileprojection.ReopenGeneration(ctx, pool, generation)
+				}
 				if err != nil {
 					_ = profileprojection.ReopenGeneration(ctx, pool, generation)
 				}
@@ -86,7 +92,10 @@ func runDesiredProjectionGeneration(ctx context.Context, logger *slog.Logger, cl
 					if replayErr != nil {
 						return replayErr
 					}
-					return profileprojection.VerifyGenerationEvidence(ctx, pool, generation, evidence)
+					if err := profileprojection.VerifyGenerationEvidence(ctx, pool, generation, evidence); err != nil {
+						return err
+					}
+					return requireAuthoritativeCutoff(ctx, client, evidence.Cutoff)
 				})
 				if err == nil {
 					return
@@ -104,6 +113,17 @@ func runDesiredProjectionGeneration(ctx context.Context, logger *slog.Logger, cl
 		case <-time.After(time.Second):
 		}
 	}
+}
+
+func requireAuthoritativeCutoff(ctx context.Context, client userv1.UserServiceClient, cutoff uint64) error {
+	page, err := client.ListSearchProfileJournal(ctx, &userv1.ListSearchProfileJournalRequest{AfterOffset: cutoff, PageSize: 1})
+	if err != nil {
+		return err
+	}
+	if len(page.GetEvents()) != 0 {
+		return fmt.Errorf("authoritative journal advanced beyond candidate cutoff")
+	}
+	return nil
 }
 
 // replayProjectionEvidence independently reads the protected authority without
