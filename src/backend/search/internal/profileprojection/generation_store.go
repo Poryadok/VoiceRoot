@@ -117,6 +117,12 @@ func VerifyGenerationEvidence(ctx context.Context, pool *pgxpool.Pool, generatio
 	return nil
 }
 
+func GenerationReplayBounds(ctx context.Context, pool *pgxpool.Pool, generation uint64) (uint64, uint64, error) {
+	var high, cutoff uint64
+	err := pool.QueryRow(ctx, `SELECT snapshot_high_watermark,journal_offset FROM search_user_profile_generation_checkpoint WHERE generation=$1`, generation).Scan(&high, &cutoff)
+	return high, cutoff, err
+}
+
 func PromoteGeneration(ctx context.Context, pool *pgxpool.Pool, target uint64) (GenerationRoute, error) {
 	return PromoteGenerationWithVerification(ctx, pool, target, nil)
 }

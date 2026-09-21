@@ -51,7 +51,7 @@ func runDesiredProjectionGeneration(ctx context.Context, logger *slog.Logger, cl
 			err = runUserProjectionBootstrap(ctx, client, target)
 			if err == nil {
 				var evidence profileprojection.ReadinessEvidence
-				evidence, err = replayProjectionEvidence(ctx, client, generation)
+				evidence, err = replayProjectionEvidence(ctx, client, pool, generation)
 				if err == nil {
 					err = profileprojection.VerifyGenerationEvidence(ctx, pool, generation, evidence)
 				}
@@ -61,7 +61,7 @@ func runDesiredProjectionGeneration(ctx context.Context, logger *slog.Logger, cl
 			}
 			if err == nil {
 				_, err = profileprojection.PromoteGenerationWithVerification(ctx, pool, generation, func() error {
-					evidence, replayErr := replayProjectionEvidence(ctx, client, generation)
+					evidence, replayErr := replayProjectionEvidence(ctx, client, pool, generation)
 					if replayErr != nil {
 						return replayErr
 					}
@@ -78,7 +78,13 @@ func runDesiredProjectionGeneration(ctx context.Context, logger *slog.Logger, cl
 				return
 			}
 			if routeErr == nil {
-				_, err = profileprojection.PromoteGeneration(ctx, pool, generation)
+				_, err = profileprojection.PromoteGenerationWithVerification(ctx, pool, generation, func() error {
+					evidence, replayErr := replayProjectionEvidence(ctx, client, pool, generation)
+					if replayErr != nil {
+						return replayErr
+					}
+					return profileprojection.VerifyGenerationEvidence(ctx, pool, generation, evidence)
+				})
 				if err == nil {
 					return
 				}
@@ -100,17 +106,21 @@ func runDesiredProjectionGeneration(ctx context.Context, logger *slog.Logger, cl
 // replayProjectionEvidence independently reads the protected authority without
 // mutating Search. Promotion compares this proof to the candidate's atomically
 // persisted stream evidence.
-func replayProjectionEvidence(ctx context.Context, client userv1.UserServiceClient, generation uint64) (profileprojection.ReadinessEvidence, error) {
-	begin, err := client.BeginSearchProfileSnapshot(ctx, &userv1.BeginSearchProfileSnapshotRequest{})
+func replayProjectionEvidence(ctx context.Context, client userv1.UserServiceClient, pool *pgxpool.Pool, generation uint64) (profileprojection.ReadinessEvidence, error) {
+	high, cutoff, err := profileprojection.GenerationReplayBounds(ctx, pool, generation)
 	if err != nil {
 		return profileprojection.ReadinessEvidence{}, err
 	}
-	collector, err := profileprojection.NewReplayEvidenceCollector(generation, begin.GetHighWatermark())
+	return replayProjectionEvidenceAt(ctx, client, generation, high, cutoff)
+}
+
+func replayProjectionEvidenceAt(ctx context.Context, client userv1.UserServiceClient, generation, highWatermark, cutoff uint64) (profileprojection.ReadinessEvidence, error) {
+	collector, err := profileprojection.NewReplayEvidenceCollector(generation, highWatermark)
 	if err != nil {
 		return profileprojection.ReadinessEvidence{}, err
 	}
 	for cursor := ""; ; {
-		page, err := client.ListSearchProfileSnapshot(ctx, &userv1.ListSearchProfileSnapshotRequest{HighWatermark: begin.GetHighWatermark(), PageSize: 100, Cursor: cursor})
+		page, err := client.ListSearchProfileSnapshot(ctx, &userv1.ListSearchProfileSnapshotRequest{HighWatermark: highWatermark, PageSize: 100, Cursor: cursor})
 		if err != nil {
 			return profileprojection.ReadinessEvidence{}, err
 		}
@@ -128,12 +138,15 @@ func replayProjectionEvidence(ctx context.Context, client userv1.UserServiceClie
 		}
 		cursor = page.GetNextCursor()
 	}
-	for after := begin.GetHighWatermark(); ; {
+	for after := highWatermark; ; {
 		page, err := client.ListSearchProfileJournal(ctx, &userv1.ListSearchProfileJournalRequest{AfterOffset: after, PageSize: 100})
 		if err != nil {
 			return profileprojection.ReadinessEvidence{}, err
 		}
 		for _, event := range page.GetEvents() {
+			if event.GetJournalOffset() > cutoff {
+				return profileprojection.ReadinessEvidence{}, fmt.Errorf("journal replay exceeded candidate cutoff")
+			}
 			bytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(event)
 			if err != nil {
 				return profileprojection.ReadinessEvidence{}, err
@@ -144,6 +157,9 @@ func replayProjectionEvidence(ctx context.Context, client userv1.UserServiceClie
 			after = event.GetJournalOffset()
 		}
 		if len(page.GetEvents()) < 100 {
+			if collector.Evidence.Cutoff != cutoff {
+				return profileprojection.ReadinessEvidence{}, fmt.Errorf("journal replay did not reach candidate cutoff")
+			}
 			return collector.Evidence, nil
 		}
 	}

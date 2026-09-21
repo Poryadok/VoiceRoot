@@ -47,7 +47,8 @@ func TestReadinessEvidenceDetectsMutationOmissionAndReordering(t *testing.T) {
 	require.Error(t, omitted.Add(3, []byte("three")))
 
 	reordered, _ := NewReadinessEvidence(1, 0)
-	require.Error(t, reordered.Add(2, []byte("two")))
+	require.NoError(t, reordered.Add(2, []byte("two")))
+	require.Error(t, reordered.Add(1, []byte("one")))
 }
 
 func TestReplayEvidenceResumeMatchesUninterruptedPagination(t *testing.T) {
