@@ -14,6 +14,7 @@ import (
 
 	userv1 "voice.app/voice/user/v1"
 	"voice/backend/pkg/integrationtest"
+	"voice/backend/pkg/searchnormalization"
 )
 
 // TestApplyAndCheckpoint_CommitsProjectionAndOffsetTogether is the restart
@@ -70,6 +71,7 @@ func TestApplyAndCheckpoint_CommitsProjectionAndOffsetTogether(t *testing.T) {
 	conflict := proto.Clone(event).(*userv1.SearchProfileProjectionEvent)
 	conflict.EventId = uuid.NewString()
 	conflict.GetUpsert().DisplayName = "Conflicting same revision"
+	conflict.GetUpsert().DisplayNameSearchKey = searchnormalization.V1.Normalize(conflict.GetUpsert().GetDisplayName())
 	_, err = adapter.ApplyAndCheckpoint(ctx, conflict, 7)
 	require.Error(t, err)
 	var quarantinedAt *time.Time
@@ -107,7 +109,7 @@ func TestFence_InverseDeliveryOrderRetainsNewerRevision(t *testing.T) {
 	}
 	profileID, accountID := uuid.NewString(), uuid.NewString()
 	makeEvent := func(revision, offset uint64, name string) *userv1.SearchProfileProjectionEvent {
-		return &userv1.SearchProfileProjectionEvent{ProtocolVersion: 1, EventId: uuid.NewString(), ProfileId: profileID, SourceRevision: revision, JournalOffset: offset, OccurredAt: timestamppb.Now(), Payload: &userv1.SearchProfileProjectionEvent_Upsert{Upsert: &userv1.SearchProfileUpsert{AccountId: accountID, Username: "fence", Discriminator: "0001", DisplayName: name, UsernameSearchKey: "fence", DisplayNameSearchKey: name, NormalizationVersion: 1}}}
+		return &userv1.SearchProfileProjectionEvent{ProtocolVersion: 1, EventId: uuid.NewString(), ProfileId: profileID, SourceRevision: revision, JournalOffset: offset, OccurredAt: timestamppb.Now(), Payload: &userv1.SearchProfileProjectionEvent_Upsert{Upsert: &userv1.SearchProfileUpsert{AccountId: accountID, Username: "fence", Discriminator: "0001", DisplayName: name, UsernameSearchKey: "fence", DisplayNameSearchKey: searchnormalization.V1.Normalize(name), NormalizationVersion: 1}}}
 	}
 	newer, older := makeEvent(2, 2, "N+1"), makeEvent(1, 1, "N")
 	newerLocked, releaseNewer := make(chan struct{}), make(chan struct{})
