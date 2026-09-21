@@ -2,7 +2,6 @@ package profileprojection
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -85,13 +84,16 @@ func FinishGenerationRebuild(ctx context.Context, conn *pgxpool.Conn) {
 }
 
 func MarkGenerationReady(ctx context.Context, pool *pgxpool.Pool, generation uint64) error {
-	var highWatermark, cutoff uint64
-	if err := pool.QueryRow(ctx, `SELECT snapshot_high_watermark,journal_offset FROM search_user_profile_generation_checkpoint WHERE generation=$1 AND snapshot_phase='replay'`, generation).Scan(&highWatermark, &cutoff); err != nil {
+	var highWatermark, cutoff, count uint64
+	var digest []byte
+	if err := pool.QueryRow(ctx, `SELECT snapshot_high_watermark,journal_offset,evidence_count,evidence_digest FROM search_user_profile_generation_checkpoint WHERE generation=$1 AND snapshot_phase='replay'`, generation).Scan(&highWatermark, &cutoff, &count, &digest); err != nil {
 		return fmt.Errorf("generation %d has incomplete snapshot evidence: %w", generation, err)
 	}
-	evidence := sha256.Sum256([]byte(fmt.Sprintf("v1:%d:%d:%d", generation, highWatermark, cutoff)))
+	if count == 0 || len(digest) != 32 {
+		return fmt.Errorf("generation %d has incomplete event evidence", generation)
+	}
 	result, err := pool.Exec(ctx, `UPDATE search_user_profile_generations SET state='ready',journal_cutoff=$2,high_watermark=$3,evidence_sha256=$4,ready_at=now()
-		WHERE generation=$1 AND state='building'`, generation, cutoff, highWatermark, evidence[:])
+		WHERE generation=$1 AND state='building'`, generation, cutoff, highWatermark, digest)
 	if err != nil {
 		return err
 	}

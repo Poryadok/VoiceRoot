@@ -30,9 +30,10 @@ CREATE TABLE search_user_profile_generation_fence (
 CREATE TABLE search_user_profile_generation_checkpoint (
     generation BIGINT PRIMARY KEY REFERENCES search_user_profile_generations(generation), journal_offset BIGINT NOT NULL DEFAULT 0 CHECK(journal_offset>=0),
     snapshot_phase TEXT NOT NULL DEFAULT 'idle' CHECK(snapshot_phase IN ('idle','snapshot','replay')), snapshot_high_watermark BIGINT NOT NULL DEFAULT 0 CHECK(snapshot_high_watermark>=0),
-    snapshot_cursor TEXT NOT NULL DEFAULT '', updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    snapshot_cursor TEXT NOT NULL DEFAULT '', evidence_count BIGINT NOT NULL DEFAULT 0 CHECK(evidence_count>=0), evidence_first_offset BIGINT NOT NULL DEFAULT 0,
+    evidence_last_offset BIGINT NOT NULL DEFAULT 0, evidence_digest BYTEA NULL CHECK(evidence_digest IS NULL OR octet_length(evidence_digest)=32), updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 INSERT INTO search_user_profile_generation_documents SELECT 1,profile_id,account_id,username,discriminator,display_name,username_lower,verification_type,username_search_key,display_name_search_key,normalization_version,source_revision,tombstoned_at,updated_at FROM profile_search_documents;
 INSERT INTO search_user_profile_generation_inbox SELECT 1,event_id,profile_id,source_revision,payload_sha256,received_at,quarantined_at,quarantine_reason FROM search_user_profile_inbox;
 INSERT INTO search_user_profile_generation_fence SELECT 1,profile_id,source_revision,payload_sha256,tombstoned_at,updated_at FROM search_user_profile_fence;
-INSERT INTO search_user_profile_generation_checkpoint SELECT 1,journal_offset,snapshot_phase,snapshot_high_watermark,snapshot_cursor,updated_at FROM search_user_profile_checkpoint;
+INSERT INTO search_user_profile_generation_checkpoint SELECT 1,journal_offset,snapshot_phase,snapshot_high_watermark,snapshot_cursor,0,0,0,NULL,updated_at FROM search_user_profile_checkpoint;

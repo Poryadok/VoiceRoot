@@ -141,6 +141,29 @@ func (s *StoreAdapter) applyInTransaction(ctx context.Context, tx pgx.Tx, envelo
 	if err != nil {
 		return Quarantined, err
 	}
+	var highWatermark, evidenceCount, evidenceFirst, evidenceLast uint64
+	var evidenceDigest []byte
+	if err = tx.QueryRow(ctx, `SELECT snapshot_high_watermark,evidence_count,evidence_first_offset,evidence_last_offset,evidence_digest FROM search_user_profile_generation_checkpoint WHERE generation=$1 FOR UPDATE`, s.generation()).Scan(&highWatermark, &evidenceCount, &evidenceFirst, &evidenceLast, &evidenceDigest); err != nil {
+		return Quarantined, err
+	}
+	evidence, err := NewReadinessEvidence(s.generation(), highWatermark)
+	if err != nil {
+		return Quarantined, err
+	}
+	if evidenceCount != 0 {
+		if len(evidenceDigest) != 32 {
+			return Quarantined, fmt.Errorf("invalid readiness evidence")
+		}
+		evidence.Count, evidence.First, evidence.Last = evidenceCount, evidenceFirst, evidenceLast
+		copy(evidence.Digest[:], evidenceDigest)
+	}
+	deterministicPayload, err := (proto.MarshalOptions{Deterministic: true}).Marshal(envelope)
+	if err != nil {
+		return Quarantined, err
+	}
+	if err := evidence.Add(envelope.GetJournalOffset(), deterministicPayload); err != nil {
+		return Quarantined, err
+	}
 	state := State{ProfileID: event.ProfileID}
 	if s.BeforeFenceLock != nil {
 		s.BeforeFenceLock(envelope)
@@ -194,7 +217,7 @@ func (s *StoreAdapter) applyInTransaction(ctx context.Context, tx pgx.Tx, envelo
 		}
 	}
 	if checkpoint != 0 {
-		if _, err = tx.Exec(ctx, `UPDATE search_user_profile_generation_checkpoint SET journal_offset=GREATEST(journal_offset,$1),updated_at=now() WHERE generation=$2`, checkpoint, generation); err != nil {
+		if _, err = tx.Exec(ctx, `UPDATE search_user_profile_generation_checkpoint SET journal_offset=GREATEST(journal_offset,$1),evidence_count=$3,evidence_first_offset=$4,evidence_last_offset=$5,evidence_digest=$6,updated_at=now() WHERE generation=$2`, checkpoint, generation, evidence.Count, evidence.First, evidence.Last, evidence.Digest[:]); err != nil {
 			return Quarantined, err
 		}
 	}
