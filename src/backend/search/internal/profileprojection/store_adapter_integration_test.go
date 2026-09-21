@@ -122,11 +122,7 @@ func TestFence_InverseDeliveryOrderRetainsNewerRevision(t *testing.T) {
 	newer, older := makeEvent(2, 2, "N+1"), makeEvent(1, 1, "N")
 	newerLocked, releaseNewer := make(chan struct{}), make(chan struct{})
 	olderAttempted := make(chan struct{})
-	adapter := &StoreAdapter{Pool: pool, BeforeFenceLock: func(event *userv1.SearchProfileProjectionEvent) {
-		if event.GetEventId() == older.GetEventId() {
-			close(olderAttempted)
-		}
-	}, AfterFenceLock: func(event *userv1.SearchProfileProjectionEvent) {
+	adapter := &StoreAdapter{Pool: pool, AfterFenceLock: func(event *userv1.SearchProfileProjectionEvent) {
 		if event.GetEventId() == newer.GetEventId() {
 			close(newerLocked)
 			<-releaseNewer
@@ -136,7 +132,13 @@ func TestFence_InverseDeliveryOrderRetainsNewerRevision(t *testing.T) {
 	olderResult := make(chan error, 1)
 	go func() { _, err := adapter.ApplyAndCheckpoint(ctx, newer, 2); newerResult <- err }()
 	<-newerLocked // N+1 owns the durable fence; N is now forced to wait behind it.
-	go func() { _, err := adapter.ApplyAndCheckpoint(ctx, older, 1); olderResult <- err }()
+	go func() {
+		// Generation-scoped checkpoint evidence is locked before the profile
+		// fence, so a late hook cannot prove this delivery has started.
+		close(olderAttempted)
+		_, err := adapter.ApplyAndCheckpoint(ctx, older, 1)
+		olderResult <- err
+	}()
 	<-olderAttempted
 	select {
 	case err := <-olderResult:

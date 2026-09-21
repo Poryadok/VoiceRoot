@@ -53,7 +53,10 @@ func TestSearchUsers_VerifiedProfilesRankedHigher_postgres(t *testing.T) {
 		DisplayName:   "Faker Official",
 	}))
 	_, err = pool.Exec(ctx, `
-		UPDATE profile_search_documents SET verification_type = 'personal' WHERE profile_id = $1`, verifiedID)
+		UPDATE search_user_profile_generation_documents
+		SET verification_type = 'personal'
+		WHERE generation = (SELECT active_generation FROM search_user_profile_generation_route WHERE singleton=true)
+		AND profile_id = $1`, verifiedID)
 	require.NoError(t, err)
 
 	hits, err := st.SearchProfiles(ctx, viewer, "faker", nil, 20)
