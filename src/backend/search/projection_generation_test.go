@@ -22,3 +22,10 @@ func TestDesiredProjectionGenerationIsOptionalAndFailClosed(t *testing.T) {
 	_, _, err = desiredProjectionGeneration()
 	require.Error(t, err)
 }
+
+func TestActivatedGenerationNeverDowngradesToLegacyAuthority(t *testing.T) {
+	require.Error(t, requireProtectedProjectionAuthority(true, false, false))
+	require.Error(t, requireProtectedProjectionAuthority(false, true, false))
+	require.NoError(t, requireProtectedProjectionAuthority(false, false, false))
+	require.NoError(t, requireProtectedProjectionAuthority(true, true, true))
+}

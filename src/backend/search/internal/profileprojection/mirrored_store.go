@@ -19,19 +19,39 @@ func (m *MirroredStoreAdapter) ApplyAndCheckpoint(ctx context.Context, event *us
 	if m == nil || m.Pool == nil {
 		return Quarantined, fmt.Errorf("profile projection store unavailable")
 	}
-	route, err := LoadGenerationRoute(ctx, m.Pool)
+	tx, err := m.Pool.Begin(ctx)
 	if err != nil {
 		return Quarantined, err
 	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var route GenerationRoute
+	var rollback *int64
+	if err := tx.QueryRow(ctx, `SELECT active_generation,rollback_generation FROM search_user_profile_generation_route WHERE singleton=true FOR UPDATE`).Scan(&route.Active, &rollback); err != nil {
+		return Quarantined, err
+	}
+	if rollback != nil {
+		route.Rollback = uint64(*rollback)
+	}
+	if route.Active == 0 {
+		return Quarantined, fmt.Errorf("invalid active generation route")
+	}
 	active := (&StoreAdapter{Pool: m.Pool, Generation: route.Active})
-	result, err := active.ApplyAndCheckpoint(ctx, event, checkpoint)
-	if err != nil {
+	result, err := active.applyInTransaction(ctx, tx, event, checkpoint)
+	if err != nil && result != Quarantined {
 		return result, err
 	}
+	applyErr := err
 	if route.Rollback != 0 && route.Rollback != route.Active {
-		if _, err := (&StoreAdapter{Pool: m.Pool, Generation: route.Rollback}).ApplyAndCheckpoint(ctx, event, checkpoint); err != nil {
-			return result, err
+		rollbackResult, rollbackErr := (&StoreAdapter{Pool: m.Pool, Generation: route.Rollback}).applyInTransaction(ctx, tx, event, checkpoint)
+		if rollbackErr != nil && rollbackResult != Quarantined {
+			return result, rollbackErr
+		}
+		if applyErr == nil {
+			applyErr = rollbackErr
 		}
 	}
-	return result, nil
+	if err := tx.Commit(ctx); err != nil {
+		return Quarantined, err
+	}
+	return result, applyErr
 }

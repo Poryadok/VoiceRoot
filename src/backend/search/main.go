@@ -126,6 +126,11 @@ func main() {
 		msgStore := store.NewMessageSearchStore(pool)
 		profileSpaceStore := store.NewProfileSpaceSearchStore(pool)
 		var projectionStore profileprojection.CheckpointApplier
+		_, routeErr := profileprojection.LoadGenerationRoute(rootCtx, pool)
+		routePresent := routeErr == nil
+		if err := requireProtectedProjectionAuthority(hasDesiredGeneration, routePresent, userProjectionClient != nil); err != nil {
+			log.Fatal(err)
+		}
 		if userProjectionClient != nil {
 			route, routeErr := profileprojection.LoadGenerationRoute(rootCtx, pool)
 			if routeErr != nil {
@@ -185,7 +190,7 @@ func main() {
 
 			// The legacy user.events hydrator is retained only when the revisioned
 			// authority path is unavailable; running both would race a stale source.
-			if projectionStore == nil {
+			if projectionStore == nil && !hasDesiredGeneration {
 				var profileHydrator indexer.ProfileHydrator
 				if conn, err := dialOptional(os.Getenv("USER_GRPC_ADDR")); err == nil && conn != nil {
 					defer func() { _ = conn.Close() }()

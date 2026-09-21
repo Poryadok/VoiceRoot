@@ -66,8 +66,8 @@ func TryStartGeneration(ctx context.Context, pool *pgxpool.Pool, generation uint
 			return nil, false, nil
 		}
 	}
-	if _, err = conn.Exec(ctx, `INSERT INTO search_user_profile_checkpoint(generation,singleton)
-		VALUES($1,true) ON CONFLICT(generation) DO NOTHING`, generation); err != nil {
+	if _, err = conn.Exec(ctx, `INSERT INTO search_user_profile_generation_checkpoint(generation)
+		VALUES($1) ON CONFLICT(generation) DO NOTHING`, generation); err != nil {
 		_, _ = conn.Exec(ctx, `SELECT pg_advisory_unlock($1)`, generationRebuildLock)
 		conn.Release()
 		return nil, false, err
@@ -84,7 +84,9 @@ func FinishGenerationRebuild(ctx context.Context, conn *pgxpool.Conn) {
 }
 
 func MarkGenerationReady(ctx context.Context, pool *pgxpool.Pool, generation uint64) error {
-	result, err := pool.Exec(ctx, `UPDATE search_user_profile_generations SET state='ready',ready_at=now() WHERE generation=$1 AND state='building'`, generation)
+	result, err := pool.Exec(ctx, `UPDATE search_user_profile_generations SET state='ready',journal_cutoff=c.journal_offset,high_watermark=c.snapshot_high_watermark,evidence_sha256=decode(repeat('00',32),'hex'),ready_at=now()
+		FROM search_user_profile_generation_checkpoint c
+		WHERE search_user_profile_generations.generation=$1 AND state='building' AND c.generation=$1 AND c.snapshot_phase='replay'`, generation)
 	if err != nil {
 		return err
 	}
@@ -115,6 +117,20 @@ func PromoteGeneration(ctx context.Context, pool *pgxpool.Pool, target uint64) (
 	if err := route.Promote(target, map[uint64]GenerationState{target: state}); err != nil {
 		return GenerationRoute{}, err
 	}
+	var activeOffset, targetOffset int64
+	var quarantined bool
+	if err := tx.QueryRow(ctx, `SELECT journal_offset FROM search_user_profile_generation_checkpoint WHERE generation=$1`, route.Rollback).Scan(&activeOffset); err != nil {
+		return GenerationRoute{}, err
+	}
+	if err := tx.QueryRow(ctx, `SELECT journal_offset FROM search_user_profile_generation_checkpoint WHERE generation=$1`, route.Active).Scan(&targetOffset); err != nil {
+		return GenerationRoute{}, err
+	}
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM search_user_profile_generation_inbox WHERE generation=$1 AND quarantined_at IS NOT NULL)`, route.Active).Scan(&quarantined); err != nil {
+		return GenerationRoute{}, err
+	}
+	if quarantined || targetOffset < activeOffset {
+		return GenerationRoute{}, fmt.Errorf("generation %d has not converged to the active checkpoint", route.Active)
+	}
 	if _, err := tx.Exec(ctx, `UPDATE search_user_profile_generation_route SET active_generation=$1,rollback_generation=$2,updated_at=now() WHERE singleton=true`, route.Active, route.Rollback); err != nil {
 		return GenerationRoute{}, err
 	}
@@ -140,6 +156,20 @@ func RollbackGeneration(ctx context.Context, pool *pgxpool.Pool) (GenerationRout
 	}
 	if err := route.RollbackToPrevious(); err != nil {
 		return GenerationRoute{}, err
+	}
+	var activeOffset, rollbackOffset int64
+	var quarantined bool
+	if err := tx.QueryRow(ctx, `SELECT journal_offset FROM search_user_profile_generation_checkpoint WHERE generation=$1`, route.Active).Scan(&activeOffset); err != nil {
+		return GenerationRoute{}, err
+	}
+	if err := tx.QueryRow(ctx, `SELECT journal_offset FROM search_user_profile_generation_checkpoint WHERE generation=$1`, route.Rollback).Scan(&rollbackOffset); err != nil {
+		return GenerationRoute{}, err
+	}
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM search_user_profile_generation_inbox WHERE generation IN ($1,$2) AND quarantined_at IS NOT NULL)`, route.Active, route.Rollback).Scan(&quarantined); err != nil {
+		return GenerationRoute{}, err
+	}
+	if quarantined || activeOffset != rollbackOffset {
+		return GenerationRoute{}, fmt.Errorf("rollback generations are not equally healthy")
 	}
 	if _, err := tx.Exec(ctx, `UPDATE search_user_profile_generation_route SET active_generation=$1,rollback_generation=$2,updated_at=now() WHERE singleton=true`, route.Active, route.Rollback); err != nil {
 		return GenerationRoute{}, err

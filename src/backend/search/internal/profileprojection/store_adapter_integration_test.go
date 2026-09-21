@@ -54,8 +54,8 @@ func TestApplyAndCheckpoint_CommitsProjectionAndOffsetTogether(t *testing.T) {
 
 	var checkpoint uint64
 	var revision int64
-	require.NoError(t, pool.QueryRow(ctx, `SELECT journal_offset FROM search_user_profile_checkpoint WHERE singleton=true`).Scan(&checkpoint))
-	require.NoError(t, pool.QueryRow(ctx, `SELECT source_revision FROM profile_search_documents WHERE profile_id=$1`, profileID).Scan(&revision))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT journal_offset FROM search_user_profile_generation_checkpoint WHERE generation=1`).Scan(&checkpoint))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT source_revision FROM search_user_profile_generation_documents WHERE generation=1 AND profile_id=$1`, profileID).Scan(&revision))
 	require.Equal(t, uint64(7), checkpoint)
 	require.Equal(t, int64(1), revision)
 
@@ -64,9 +64,9 @@ func TestApplyAndCheckpoint_CommitsProjectionAndOffsetTogether(t *testing.T) {
 	_, err = adapter.ApplyAndCheckpoint(ctx, event, event.GetJournalOffset())
 	require.NoError(t, err)
 	var inboxCount int
-	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM search_user_profile_inbox WHERE event_id=$1`, event.GetEventId()).Scan(&inboxCount))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM search_user_profile_generation_inbox WHERE generation=1 AND event_id=$1`, event.GetEventId()).Scan(&inboxCount))
 	require.Equal(t, 1, inboxCount)
-	require.NoError(t, pool.QueryRow(ctx, `SELECT journal_offset FROM search_user_profile_checkpoint WHERE singleton=true`).Scan(&checkpoint))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT journal_offset FROM search_user_profile_generation_checkpoint WHERE generation=1`).Scan(&checkpoint))
 	require.Equal(t, uint64(7), checkpoint)
 
 	conflict := proto.Clone(event).(*userv1.SearchProfileProjectionEvent)
@@ -76,10 +76,10 @@ func TestApplyAndCheckpoint_CommitsProjectionAndOffsetTogether(t *testing.T) {
 	_, err = adapter.ApplyAndCheckpoint(ctx, conflict, 7)
 	require.Error(t, err)
 	var quarantinedAt *time.Time
-	require.NoError(t, pool.QueryRow(ctx, `SELECT quarantined_at FROM search_user_profile_inbox WHERE event_id=$1`, conflict.GetEventId()).Scan(&quarantinedAt))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT quarantined_at FROM search_user_profile_generation_inbox WHERE generation=1 AND event_id=$1`, conflict.GetEventId()).Scan(&quarantinedAt))
 	require.NotNil(t, quarantinedAt)
 	var fenceRevision int64
-	require.NoError(t, pool.QueryRow(ctx, `SELECT source_revision FROM search_user_profile_fence WHERE profile_id=$1`, profileID).Scan(&fenceRevision))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT source_revision FROM search_user_profile_generation_fence WHERE generation=1 AND profile_id=$1`, profileID).Scan(&fenceRevision))
 	require.Equal(t, int64(1), fenceRevision)
 	// Both the accepted event and the conflicting one can be redelivered without
 	// moving the durable authority fence away from the accepted payload.
@@ -87,7 +87,7 @@ func TestApplyAndCheckpoint_CommitsProjectionAndOffsetTogether(t *testing.T) {
 	require.NoError(t, err)
 	_, err = adapter.ApplyAndCheckpoint(ctx, conflict, 7)
 	require.Error(t, err)
-	require.NoError(t, pool.QueryRow(ctx, `SELECT source_revision FROM search_user_profile_fence WHERE profile_id=$1`, profileID).Scan(&fenceRevision))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT source_revision FROM search_user_profile_generation_fence WHERE generation=1 AND profile_id=$1`, profileID).Scan(&fenceRevision))
 	require.Equal(t, int64(1), fenceRevision)
 	// The rollback migration removes quarantine duplicates before restoring the
 	// historical unconditional profile/revision index.
@@ -141,7 +141,7 @@ func TestFence_InverseDeliveryOrderRetainsNewerRevision(t *testing.T) {
 	require.NoError(t, <-olderResult)
 	var revision int64
 	var name string
-	require.NoError(t, pool.QueryRow(ctx, `SELECT source_revision,display_name FROM profile_search_documents WHERE profile_id=$1`, profileID).Scan(&revision, &name))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT source_revision,display_name FROM search_user_profile_generation_documents WHERE generation=1 AND profile_id=$1`, profileID).Scan(&revision, &name))
 	require.Equal(t, int64(2), revision)
 	require.Equal(t, "N+1", name)
 }

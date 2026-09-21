@@ -32,7 +32,7 @@ func (s *ProfileSpaceSearchStore) UpsertProfile(ctx context.Context, doc Profile
 		return fmt.Errorf("profile search store unavailable")
 	}
 	_, err := s.Pool.Exec(ctx, `
-		INSERT INTO profile_search_documents (generation, profile_id, account_id, username, discriminator, display_name, username_lower, verification_type, updated_at)
+		INSERT INTO search_user_profile_generation_documents (generation, profile_id, account_id, username, discriminator, display_name, username_lower, verification_type, updated_at)
 		SELECT active_generation, $1, $2, $3, $4, $5, lower($3), $6, now()
 		FROM search_user_profile_generation_route WHERE singleton=true
 		ON CONFLICT (generation, profile_id) DO UPDATE SET
@@ -52,7 +52,7 @@ func (s *ProfileSpaceSearchStore) DeleteProfile(ctx context.Context, profileID u
 	if s == nil || s.Pool == nil {
 		return fmt.Errorf("profile search store unavailable")
 	}
-	_, err := s.Pool.Exec(ctx, `DELETE FROM profile_search_documents WHERE profile_id = $1
+	_, err := s.Pool.Exec(ctx, `DELETE FROM search_user_profile_generation_documents WHERE profile_id = $1
 		AND generation=(SELECT active_generation FROM search_user_profile_generation_route WHERE singleton=true)`, profileID)
 	return err
 }
@@ -78,7 +78,7 @@ func (s *ProfileSpaceSearchStore) SearchProfiles(ctx context.Context, _ uuid.UUI
 	args = append(args, limit)
 	sql := fmt.Sprintf(`
 		SELECT profile_id, account_id
-		FROM profile_search_documents
+		FROM search_user_profile_generation_documents
 		WHERE generation=(SELECT active_generation FROM search_user_profile_generation_route WHERE singleton=true)
 		AND tombstoned_at IS NULL
 		AND (username ILIKE $1 ESCAPE '\' OR display_name ILIKE $1 ESCAPE '\')

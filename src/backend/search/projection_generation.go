@@ -30,6 +30,15 @@ func desiredProjectionGeneration() (uint64, bool, error) {
 	return generation, true, nil
 }
 
+// requireProtectedProjectionAuthority prevents an activated durable route from
+// silently falling back to the raw legacy hydrator during configuration drift.
+func requireProtectedProjectionAuthority(desired, routePresent, protectedClient bool) error {
+	if (desired || routePresent) && !protectedClient {
+		return fmt.Errorf("activated User projection generation requires protected User authority")
+	}
+	return nil
+}
+
 // runDesiredProjectionGeneration never changes serving state until a complete
 // snapshot/replay marks the target ready. A PostgreSQL session advisory lock
 // allows one rebuilder; other replicas retry after a failed owner disappears.
