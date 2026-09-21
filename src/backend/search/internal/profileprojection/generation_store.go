@@ -118,6 +118,12 @@ func VerifyGenerationEvidence(ctx context.Context, pool *pgxpool.Pool, generatio
 }
 
 func PromoteGeneration(ctx context.Context, pool *pgxpool.Pool, target uint64) (GenerationRoute, error) {
+	return PromoteGenerationWithVerification(ctx, pool, target, nil)
+}
+
+// PromoteGenerationWithVerification holds the route lock while a caller
+// replays protected authority and rechecks the candidate's live cutoff.
+func PromoteGenerationWithVerification(ctx context.Context, pool *pgxpool.Pool, target uint64, verify func() error) (GenerationRoute, error) {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return GenerationRoute{}, err
@@ -130,6 +136,11 @@ func PromoteGeneration(ctx context.Context, pool *pgxpool.Pool, target uint64) (
 	}
 	if rollback != nil {
 		route.Rollback = uint64(*rollback)
+	}
+	if verify != nil {
+		if err := verify(); err != nil {
+			return GenerationRoute{}, err
+		}
 	}
 	var state GenerationState
 	if err := tx.QueryRow(ctx, `SELECT state FROM search_user_profile_generations WHERE generation=$1`, target).Scan(&state); err != nil {

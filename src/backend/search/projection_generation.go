@@ -60,7 +60,13 @@ func runDesiredProjectionGeneration(ctx context.Context, logger *slog.Logger, cl
 				err = profileprojection.MarkGenerationReady(ctx, pool, generation)
 			}
 			if err == nil {
-				_, err = profileprojection.PromoteGeneration(ctx, pool, generation)
+				_, err = profileprojection.PromoteGenerationWithVerification(ctx, pool, generation, func() error {
+					evidence, replayErr := replayProjectionEvidence(ctx, client, generation)
+					if replayErr != nil {
+						return replayErr
+					}
+					return profileprojection.VerifyGenerationEvidence(ctx, pool, generation, evidence)
+				})
 			}
 			profileprojection.FinishGenerationRebuild(ctx, lease)
 			if err == nil {
