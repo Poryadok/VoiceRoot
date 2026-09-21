@@ -20,13 +20,6 @@ func ownershipJournalCommitMigrationSQL(t *testing.T, direction string) string {
 	return string(raw)
 }
 
-func ownershipConsumeStartedMigrationSQL(t *testing.T, direction string) string {
-	t.Helper()
-	raw, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", "000018_ownership_consume_started."+direction+".sql"))
-	require.NoError(t, err)
-	return string(raw)
-}
-
 func ownershipMigrationSQL(t *testing.T, name, direction string) string {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", name+"."+direction+".sql"))
