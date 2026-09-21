@@ -112,6 +112,10 @@ func (c *Coordinator) resume(ctx context.Context, binding store.OwnershipBinding
 			return c.abort(ctx, binding, journal, err)
 		}
 		journal, err = c.dependencies.Store.ConfirmOwnershipProof(ctx, binding, receipt)
+		if err != nil {
+			return nil, err
+		}
+		return c.resume(ctx, binding, proof, journal)
 	case "proof_confirmed":
 		var receipt *rolev1.OwnershipTransferReceipt
 		receipt, err = c.dependencies.Role.Prepare(ctx, binding)
