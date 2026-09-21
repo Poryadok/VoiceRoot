@@ -3,9 +3,11 @@ package profileprojection
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/protobuf/proto"
 
@@ -139,6 +141,25 @@ func (s *StoreAdapter) applyInTransaction(ctx context.Context, tx pgx.Tx, envelo
 	}
 	profileID, err := uuid.Parse(envelope.GetProfileId())
 	if err != nil {
+		return Quarantined, err
+	}
+	// Event identity is recognized before readiness evidence. A redelivery after
+	// a crash is therefore a true no-op; reusing an ID with different authority
+	// bytes is durable quarantine rather than a second digest frame.
+	var storedOffset uint64
+	var storedHash []byte
+	err = tx.QueryRow(ctx, `SELECT source_revision,payload_sha256 FROM search_user_profile_generation_inbox WHERE generation=$1 AND event_id=$2`, s.generation(), eventID).Scan(&storedOffset, &storedHash)
+	if err == nil {
+		if storedOffset == event.SourceRevision && string(storedHash) == string(digest[:]) {
+			return NoopDuplicate, nil
+		}
+		_, quarantineErr := tx.Exec(ctx, `INSERT INTO search_user_profile_generation_inbox(generation,event_id,profile_id,source_revision,payload_sha256,quarantined_at,quarantine_reason) VALUES($1,$2,$3,$4,$5,now(),'event id payload mismatch') ON CONFLICT(generation,event_id) DO UPDATE SET quarantined_at=now(),quarantine_reason='event id payload mismatch'`, s.generation(), eventID, profileID, event.SourceRevision, digest[:])
+		if quarantineErr != nil {
+			return Quarantined, quarantineErr
+		}
+		return Quarantined, fmt.Errorf("event id payload mismatch")
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
 		return Quarantined, err
 	}
 	var highWatermark, evidenceCount, evidenceFirst, evidenceLast uint64
