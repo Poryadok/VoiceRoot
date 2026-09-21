@@ -516,6 +516,112 @@ class Verify2FARequest extends $pb.GeneratedMessage {
   void clearTotpCode() => $_clearField(1);
 }
 
+/// Password plus a currently valid TOTP code are required to remove an enrollment.
+/// The successful operation revokes every session and invalidates all backup codes.
+class Disable2FARequest extends $pb.GeneratedMessage {
+  factory Disable2FARequest({
+    $core.String? password,
+    $core.String? totpCode,
+  }) {
+    final result = create();
+    if (password != null) result.password = password;
+    if (totpCode != null) result.totpCode = totpCode;
+    return result;
+  }
+
+  Disable2FARequest._();
+
+  factory Disable2FARequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory Disable2FARequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'Disable2FARequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'password')
+    ..aOS(2, _omitFieldNames ? '' : 'totpCode')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  Disable2FARequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  Disable2FARequest copyWith(void Function(Disable2FARequest) updates) =>
+      super.copyWith((message) => updates(message as Disable2FARequest))
+          as Disable2FARequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static Disable2FARequest create() => Disable2FARequest._();
+  @$core.override
+  Disable2FARequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static Disable2FARequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<Disable2FARequest>(create);
+  static Disable2FARequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get password => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set password($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasPassword() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearPassword() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get totpCode => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set totpCode($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasTotpCode() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearTotpCode() => $_clearField(2);
+}
+
+class Disable2FAResponse extends $pb.GeneratedMessage {
+  factory Disable2FAResponse() => create();
+
+  Disable2FAResponse._();
+
+  factory Disable2FAResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory Disable2FAResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'Disable2FAResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  Disable2FAResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  Disable2FAResponse copyWith(void Function(Disable2FAResponse) updates) =>
+      super.copyWith((message) => updates(message as Disable2FAResponse))
+          as Disable2FAResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static Disable2FAResponse create() => Disable2FAResponse._();
+  @$core.override
+  Disable2FAResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static Disable2FAResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<Disable2FAResponse>(create);
+  static Disable2FAResponse? _defaultInstance;
+}
+
 class VerifyOTPRequest extends $pb.GeneratedMessage {
   factory VerifyOTPRequest({
     $core.String? code,

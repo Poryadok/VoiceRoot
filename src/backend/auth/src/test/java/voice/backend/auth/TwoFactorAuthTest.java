@@ -119,6 +119,114 @@ class TwoFactorAuthTest {
         .andExpect(jsonPath("$.session.access_token").isNotEmpty());
   }
 
+  @Test
+  void disable2FARequiresPasswordAndSecondFactorThenRevokesTheCallingSession() throws Exception {
+    String email = "2fa-disable@voice-qa.test";
+    String password = "Correct horse battery staple";
+    JsonNode registered = register(email, password);
+    String initialAccess = registered.get("access_token").asText();
+
+    MvcResult enrollment = mockMvc.perform(post("/api/v1/auth/2fa/enable")
+            .header("Authorization", "Bearer " + initialAccess)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"password\":\"" + password + "\"}"))
+        .andExpect(status().isOk())
+        .andReturn();
+    String oldBackupCode = objectMapper.readTree(enrollment.getResponse().getContentAsString())
+        .get("backup_codes").get(0).asText();
+    MvcResult verified = mockMvc.perform(post("/api/v1/auth/2fa/verify")
+            .header("Authorization", "Bearer " + initialAccess)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"totp_code\":\"000000\"}"))
+        .andExpect(status().isOk())
+        .andReturn();
+    String enabledAccess = objectMapper.readTree(verified.getResponse().getContentAsString())
+        .get("session").get("access_token").asText();
+
+    mockMvc.perform(post("/api/v1/auth/2fa/disable")
+            .header("Authorization", "Bearer " + enabledAccess)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"password\":\"" + password + "\",\"totp_code\":\"000000\"}"))
+        .andExpect(status().isNoContent());
+
+    mockMvc.perform(post("/api/v1/auth/validate")
+            .header("Authorization", "Bearer " + enabledAccess))
+        .andExpect(status().isUnauthorized());
+    mockMvc.perform(post("/api/v1/auth/2fa/disable")
+            .header("Authorization", "Bearer " + enabledAccess)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"password\":\"" + password + "\",\"totp_code\":\"000000\"}"))
+        .andExpect(status().isUnauthorized());
+    MvcResult login = mockMvc.perform(post("/api/v1/auth/login")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"email\":\"" + email + "\",\"password\":\"" + password + "\",\"device_info_json\":\"{}\"}"))
+        .andExpect(status().isOk())
+        .andReturn();
+    String newAccess = objectMapper.readTree(login.getResponse().getContentAsString())
+        .get("session").get("access_token").asText();
+    mockMvc.perform(post("/api/v1/auth/2fa/enable")
+            .header("Authorization", "Bearer " + newAccess)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"password\":\"" + password + "\"}"))
+        .andExpect(status().isOk());
+    mockMvc.perform(post("/api/v1/auth/2fa/verify")
+            .header("Authorization", "Bearer " + newAccess)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"totp_code\":\"000000\"}"))
+        .andExpect(status().isOk());
+    mockMvc.perform(post("/api/v1/auth/login")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"email\":\"" + email + "\",\"password\":\"" + password
+                + "\",\"totp_code\":\"" + oldBackupCode + "\",\"device_info_json\":\"{}\"}"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.error").value("invalid_totp"));
+  }
+
+  @Test
+  void disable2FARejectsInvalidConfirmationWithoutChangingEnabledState() throws Exception {
+    String email = "2fa-disable-invalid@voice-qa.test";
+    String password = "Correct horse battery staple";
+    String access = register(email, password).get("access_token").asText();
+    mockMvc.perform(post("/api/v1/auth/2fa/enable")
+            .header("Authorization", "Bearer " + access)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"password\":\"" + password + "\"}"))
+        .andExpect(status().isOk());
+    mockMvc.perform(post("/api/v1/auth/2fa/verify")
+            .header("Authorization", "Bearer " + access)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"totp_code\":\"000000\"}"))
+        .andExpect(status().isOk());
+
+    mockMvc.perform(post("/api/v1/auth/2fa/disable")
+            .header("Authorization", "Bearer " + access)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"password\":\"wrong password\",\"totp_code\":\"000000\"}"))
+        .andExpect(status().isUnauthorized());
+    mockMvc.perform(post("/api/v1/auth/login")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"email\":\"" + email + "\",\"password\":\"" + password + "\",\"device_info_json\":\"{}\"}"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.error").value("totp_required"));
+  }
+
+  @Test
+  void disable2FARejectsGuestAccounts() throws Exception {
+    MvcResult registration = mockMvc.perform(post("/api/v1/auth/register")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"password\":\"Correct horse battery staple\",\"guest\":true}"))
+        .andExpect(status().isOk())
+        .andReturn();
+    String access = objectMapper.readTree(registration.getResponse().getContentAsString())
+        .get("session").get("access_token").asText();
+
+    mockMvc.perform(post("/api/v1/auth/2fa/disable")
+            .header("Authorization", "Bearer " + access)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"password\":\"Correct horse battery staple\",\"totp_code\":\"000000\"}"))
+        .andExpect(status().isBadRequest());
+  }
+
   private JsonNode register(String email, String password) throws Exception {
     MvcResult result = mockMvc.perform(post("/api/v1/auth/register")
             .contentType(MediaType.APPLICATION_JSON)

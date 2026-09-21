@@ -39,6 +39,10 @@ public class BackupCodeService {
     return repository.consumeCode(accountId, sha256(plainCode.trim()));
   }
 
+  public void invalidate(UUID accountId) {
+    repository.deleteCodes(accountId);
+  }
+
   private String randomCode() {
     final String alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     StringBuilder out = new StringBuilder(CODE_LEN);

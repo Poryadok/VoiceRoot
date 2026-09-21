@@ -3482,6 +3482,24 @@ abstract class AppLocalizations {
   /// **'Two-factor authentication is enabled.'**
   String get security2faEnabled;
 
+  /// No description provided for @security2faDisableTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Disable two-factor authentication'**
+  String get security2faDisableTitle;
+
+  /// No description provided for @security2faDisableHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm your password and authenticator code. This signs out all devices and invalidates backup codes.'**
+  String get security2faDisableHint;
+
+  /// No description provided for @security2faDisable.
+  ///
+  /// In en, this message translates to:
+  /// **'Disable 2FA'**
+  String get security2faDisable;
+
   /// No description provided for @securityDeleteAccountTitle.
   ///
   /// In en, this message translates to:

@@ -19,6 +19,11 @@ public class InMemoryBackupCodeRepository implements BackupCodeRepository {
   }
 
   @Override
+  public synchronized void deleteCodes(UUID accountId) {
+    storage.remove(accountId);
+  }
+
+  @Override
   public synchronized boolean consumeCode(UUID accountId, String codeHash) {
     Map<String, Boolean> byHash = storage.get(accountId);
     if (byHash == null) {

@@ -9,7 +9,12 @@ import 'gateway_http.dart';
 /// Detail when [GatewayConfig.hasBaseUrl] is false; aligned with gateway client i18n key pattern.
 const String kAuthMissingBaseUrlDetail = 'missing base URL';
 
-enum EmailVerificationRecoveryState { guest, emailPending, promotionPending, regular }
+enum EmailVerificationRecoveryState {
+  guest,
+  emailPending,
+  promotionPending,
+  regular,
+}
 
 sealed class AuthSessionResult {
   const AuthSessionResult();
@@ -314,6 +319,37 @@ class VoiceAuthClient {
     };
   }
 
+  Future<bool?> is2FAEnabled({required AuthSession session}) async {
+    final result = await _gateway.getJson(
+      _gateway.resolve('/api/v1/auth/2fa/status'),
+      authorization: session.authorizationHeader,
+    );
+    return switch (result) {
+      GatewayHttpOk(:final data) => data['enabled'] as bool?,
+      GatewayHttpFailure() => null,
+    };
+  }
+
+  Future<AuthApiResult<void>> disable2FA({
+    required AuthSession session,
+    required String password,
+    required String totpCode,
+  }) async {
+    final result = await _gateway.postEmpty(
+      uri: _gateway.resolve('/api/v1/auth/2fa/disable'),
+      authorization: session.authorizationHeader,
+      jsonBody: {'password': password, 'totp_code': totpCode.trim()},
+    );
+    return switch (result) {
+      GatewayHttpOk<void>() => const AuthApiOk(null),
+      GatewayHttpFailure(:final error) => AuthApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+
   Future<AuthSessionResult> switchActiveProfile({
     required AuthSession session,
     required String profileId,
@@ -419,9 +455,8 @@ class VoiceAuthClient {
     };
   }
 
-  Future<AuthApiResult<EmailVerificationRecoveryState>> getEmailVerificationStatus({
-    required AuthSession session,
-  }) async {
+  Future<AuthApiResult<EmailVerificationRecoveryState>>
+  getEmailVerificationStatus({required AuthSession session}) async {
     final result = await _gateway.getJson(
       _gateway.resolve('/api/v1/auth/verification-status'),
       authorization: session.authorizationHeader,
@@ -561,7 +596,8 @@ class VoiceAuthClient {
       allowNoContent: true,
     );
     return switch (result) {
-      GatewayHttpOk(statusCode: 204 || 202) => const GuestConversionOtpAccepted(),
+      GatewayHttpOk(statusCode: 204 || 202) =>
+        const GuestConversionOtpAccepted(),
       GatewayHttpOk(:final data) when data.isNotEmpty =>
         GuestConversionOtpSession(AuthSession.fromAuthResponse(data)),
       GatewayHttpOk(:final statusCode) => GuestConversionOtpFailure(

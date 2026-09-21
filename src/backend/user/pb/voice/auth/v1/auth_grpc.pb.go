@@ -28,6 +28,7 @@ const (
 	AuthService_RefreshToken_FullMethodName                         = "/voice.auth.v1.AuthService/RefreshToken"
 	AuthService_Enable2FA_FullMethodName                            = "/voice.auth.v1.AuthService/Enable2FA"
 	AuthService_Verify2FA_FullMethodName                            = "/voice.auth.v1.AuthService/Verify2FA"
+	AuthService_Disable2FA_FullMethodName                           = "/voice.auth.v1.AuthService/Disable2FA"
 	AuthService_VerifyOTP_FullMethodName                            = "/voice.auth.v1.AuthService/VerifyOTP"
 	AuthService_GetEmailVerificationStatus_FullMethodName           = "/voice.auth.v1.AuthService/GetEmailVerificationStatus"
 	AuthService_ConvertGuest_FullMethodName                         = "/voice.auth.v1.AuthService/ConvertGuest"
@@ -68,6 +69,7 @@ type AuthServiceClient interface {
 	RefreshToken(ctx context.Context, in *RefreshTokenRequest, opts ...grpc.CallOption) (*RefreshTokenResponse, error)
 	Enable2FA(ctx context.Context, in *Enable2FARequest, opts ...grpc.CallOption) (*Enable2FAResponse, error)
 	Verify2FA(ctx context.Context, in *Verify2FARequest, opts ...grpc.CallOption) (*Verify2FAResponse, error)
+	Disable2FA(ctx context.Context, in *Disable2FARequest, opts ...grpc.CallOption) (*Disable2FAResponse, error)
 	VerifyOTP(ctx context.Context, in *VerifyOTPRequest, opts ...grpc.CallOption) (*VerifyOTPResponse, error)
 	// Restricted-session recovery state for email verification. The caller is
 	// derived from authenticated transport metadata; no email identifier is accepted.
@@ -198,6 +200,16 @@ func (c *authServiceClient) Verify2FA(ctx context.Context, in *Verify2FARequest,
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Verify2FAResponse)
 	err := c.cc.Invoke(ctx, AuthService_Verify2FA_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) Disable2FA(ctx context.Context, in *Disable2FARequest, opts ...grpc.CallOption) (*Disable2FAResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Disable2FAResponse)
+	err := c.cc.Invoke(ctx, AuthService_Disable2FA_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -431,6 +443,7 @@ type AuthServiceServer interface {
 	RefreshToken(context.Context, *RefreshTokenRequest) (*RefreshTokenResponse, error)
 	Enable2FA(context.Context, *Enable2FARequest) (*Enable2FAResponse, error)
 	Verify2FA(context.Context, *Verify2FARequest) (*Verify2FAResponse, error)
+	Disable2FA(context.Context, *Disable2FARequest) (*Disable2FAResponse, error)
 	VerifyOTP(context.Context, *VerifyOTPRequest) (*VerifyOTPResponse, error)
 	// Restricted-session recovery state for email verification. The caller is
 	// derived from authenticated transport metadata; no email identifier is accepted.
@@ -503,6 +516,9 @@ func (UnimplementedAuthServiceServer) Enable2FA(context.Context, *Enable2FAReque
 }
 func (UnimplementedAuthServiceServer) Verify2FA(context.Context, *Verify2FARequest) (*Verify2FAResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Verify2FA not implemented")
+}
+func (UnimplementedAuthServiceServer) Disable2FA(context.Context, *Disable2FARequest) (*Disable2FAResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Disable2FA not implemented")
 }
 func (UnimplementedAuthServiceServer) VerifyOTP(context.Context, *VerifyOTPRequest) (*VerifyOTPResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method VerifyOTP not implemented")
@@ -746,6 +762,24 @@ func _AuthService_Verify2FA_Handler(srv interface{}, ctx context.Context, dec fu
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AuthServiceServer).Verify2FA(ctx, req.(*Verify2FARequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_Disable2FA_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Disable2FARequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).Disable2FA(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_Disable2FA_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).Disable2FA(ctx, req.(*Disable2FARequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1170,6 +1204,10 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Verify2FA",
 			Handler:    _AuthService_Verify2FA_Handler,
+		},
+		{
+			MethodName: "Disable2FA",
+			Handler:    _AuthService_Disable2FA_Handler,
 		},
 		{
 			MethodName: "VerifyOTP",

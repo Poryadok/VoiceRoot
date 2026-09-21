@@ -140,6 +140,16 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
   }
 
   @Override
+  public void disable2FA(
+      app.voice.auth.v1.Disable2FARequest request,
+      StreamObserver<app.voice.auth.v1.Disable2FAResponse> responseObserver) {
+    run(responseObserver, () -> {
+      authService.disable2FA(resolveAccessToken(), request.getPassword(), request.getTotpCode());
+      return app.voice.auth.v1.Disable2FAResponse.getDefaultInstance();
+    });
+  }
+
+  @Override
   public void verifyOTP(VerifyOTPRequest request, StreamObserver<VerifyOTPResponse> responseObserver) {
     run(responseObserver, () -> {
       voice.backend.auth.service.AuthSession session = otpService.verifyOtp(
