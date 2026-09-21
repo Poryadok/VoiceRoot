@@ -2,6 +2,7 @@ package profileprojection
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -84,9 +85,13 @@ func FinishGenerationRebuild(ctx context.Context, conn *pgxpool.Conn) {
 }
 
 func MarkGenerationReady(ctx context.Context, pool *pgxpool.Pool, generation uint64) error {
-	result, err := pool.Exec(ctx, `UPDATE search_user_profile_generations SET state='ready',journal_cutoff=c.journal_offset,high_watermark=c.snapshot_high_watermark,evidence_sha256=decode(repeat('00',32),'hex'),ready_at=now()
-		FROM search_user_profile_generation_checkpoint c
-		WHERE search_user_profile_generations.generation=$1 AND state='building' AND c.generation=$1 AND c.snapshot_phase='replay'`, generation)
+	var highWatermark, cutoff uint64
+	if err := pool.QueryRow(ctx, `SELECT snapshot_high_watermark,journal_offset FROM search_user_profile_generation_checkpoint WHERE generation=$1 AND snapshot_phase='replay'`, generation).Scan(&highWatermark, &cutoff); err != nil {
+		return fmt.Errorf("generation %d has incomplete snapshot evidence: %w", generation, err)
+	}
+	evidence := sha256.Sum256([]byte(fmt.Sprintf("v1:%d:%d:%d", generation, highWatermark, cutoff)))
+	result, err := pool.Exec(ctx, `UPDATE search_user_profile_generations SET state='ready',journal_cutoff=$2,high_watermark=$3,evidence_sha256=$4,ready_at=now()
+		WHERE generation=$1 AND state='building'`, generation, cutoff, highWatermark, evidence[:])
 	if err != nil {
 		return err
 	}
@@ -119,6 +124,7 @@ func PromoteGeneration(ctx context.Context, pool *pgxpool.Pool, target uint64) (
 	}
 	var activeOffset, targetOffset int64
 	var quarantined bool
+	var evidence []byte
 	if err := tx.QueryRow(ctx, `SELECT journal_offset FROM search_user_profile_generation_checkpoint WHERE generation=$1`, route.Rollback).Scan(&activeOffset); err != nil {
 		return GenerationRoute{}, err
 	}
@@ -128,7 +134,10 @@ func PromoteGeneration(ctx context.Context, pool *pgxpool.Pool, target uint64) (
 	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM search_user_profile_generation_inbox WHERE generation=$1 AND quarantined_at IS NOT NULL)`, route.Active).Scan(&quarantined); err != nil {
 		return GenerationRoute{}, err
 	}
-	if quarantined || targetOffset < activeOffset {
+	if err := tx.QueryRow(ctx, `SELECT evidence_sha256 FROM search_user_profile_generations WHERE generation=$1`, route.Active).Scan(&evidence); err != nil {
+		return GenerationRoute{}, err
+	}
+	if quarantined || len(evidence) != 32 || targetOffset < activeOffset {
 		return GenerationRoute{}, fmt.Errorf("generation %d has not converged to the active checkpoint", route.Active)
 	}
 	if _, err := tx.Exec(ctx, `UPDATE search_user_profile_generation_route SET active_generation=$1,rollback_generation=$2,updated_at=now() WHERE singleton=true`, route.Active, route.Rollback); err != nil {
