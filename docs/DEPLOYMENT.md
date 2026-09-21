@@ -429,11 +429,22 @@ the retired-space fence. Current deployment settings do not bypass that hold.
 | Space | `ROLE_PRINCIPAL_GRPC_ADDR` | Dedicated Role TLS endpoint, normally `voice-role:9091` |
 | Space | `ROLE_PRINCIPAL_TLS_CA_FILE` | Optional additional trusted CA PEM; system roots remain available |
 | Space | `ROLE_PRINCIPAL_TLS_SERVER_NAME` | Optional expected Role certificate DNS name override; otherwise use endpoint authority |
+| Space | `AUTH_PRINCIPAL_GRPC_ADDR` | Dedicated Auth TLS proof endpoint; enabling it requires the Space principal signer |
+| Space | `AUTH_PRINCIPAL_TLS_CA_FILE` | Optional additional trusted Auth CA PEM; system roots remain available |
+| Space | `AUTH_PRINCIPAL_TLS_SERVER_NAME` | Optional expected Auth certificate DNS name override; otherwise use endpoint authority |
 | Role | `ROLE_PRINCIPAL_GRPC_LISTEN` | Dedicated listener address; default `:9091` when enabled |
 | Role | `ROLE_PRINCIPAL_TLS_CERT_FILE`, `ROLE_PRINCIPAL_TLS_KEY_FILE` | Server TLS certificate chain and matching private key secret mounts |
 | Role | `S2S_JWKS_URLS_JSON` | Trusted issuer-to-HTTPS endpoint map, including `space` |
 | Role | `S2S_JWKS_CA_FILE` | Optional private CA for the HTTPS issuer endpoint |
 | Role | `ROLE_PRINCIPAL_REPLAY_REDIS_ADDR` | Shared Redis for atomic credential replay rejection |
+
+Space signs both Role and Auth ownership calls with a fresh `service:space`
+principal bound to the exact full RPC, deterministic protobuf request hash and
+one `x-request-id`. The Auth client calls only consume and receipt lookup; it
+replaces, rather than forwards, incoming authority metadata. A configured Auth
+TLS setting without `AUTH_PRINCIPAL_GRPC_ADDR` is a startup error, and TLS has no
+plaintext fallback. This client is a disabled coordinator seam and does not
+activate the public transfer RPC.
 
 Space publishes only the public keys at `GET /.well-known/jwks.json` on its HTTP
 listener. A trusted HTTPS reverse proxy must expose that endpoint to Role; no

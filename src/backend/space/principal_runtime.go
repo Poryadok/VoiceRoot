@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -12,20 +11,28 @@ import (
 )
 
 func ownershipRoleTLSFromEnv() (*tls.Config, error) {
+	return ownershipTLSFromEnv("ROLE_PRINCIPAL_TLS_CA_FILE", "ROLE_PRINCIPAL_TLS_SERVER_NAME", "Role")
+}
+
+func ownershipAuthTLSFromEnv() (*tls.Config, error) {
+	return ownershipTLSFromEnv("AUTH_PRINCIPAL_TLS_CA_FILE", "AUTH_PRINCIPAL_TLS_SERVER_NAME", "Auth")
+}
+
+func ownershipTLSFromEnv(caEnv, serverNameEnv, peer string) (*tls.Config, error) {
 	roots, err := x509.SystemCertPool()
 	if err != nil {
 		return nil, fmt.Errorf("load system certificate roots: %w", err)
 	}
-	if path := strings.TrimSpace(os.Getenv("ROLE_PRINCIPAL_TLS_CA_FILE")); path != "" {
+	if path := strings.TrimSpace(os.Getenv(caEnv)); path != "" {
 		encoded, err := os.ReadFile(path)
 		if err != nil {
-			return nil, fmt.Errorf("read Role principal CA: %w", err)
+			return nil, fmt.Errorf("read %s principal CA: %w", peer, err)
 		}
 		if !roots.AppendCertsFromPEM(encoded) {
-			return nil, errors.New("role principal CA contains no certificates")
+			return nil, fmt.Errorf("%s principal CA contains no certificates", strings.ToLower(peer))
 		}
 	}
-	return &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: strings.TrimSpace(os.Getenv("ROLE_PRINCIPAL_TLS_SERVER_NAME"))}, nil
+	return &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: strings.TrimSpace(os.Getenv(serverNameEnv))}, nil
 }
 
 func spaceHTTPHandler(service string, jwks principalJWKS) http.Handler {
