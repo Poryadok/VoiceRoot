@@ -11,6 +11,7 @@ import (
 	"voice/backend/space/internal/spaceevents"
 	"voice/backend/space/internal/store"
 
+	authv1 "voice.app/voice/auth/v1"
 	rolev1 "voice.app/voice/role/v1"
 	spacev1 "voice.app/voice/space/v1"
 )
@@ -23,6 +24,7 @@ type SpaceGRPC struct {
 	SpaceEvents             spaceevents.Publisher   // optional; CreateSpace publishes space.created
 	Roles                   rolev1.RoleServiceClient
 	OwnershipRoles          rolev1.RoleServiceClient // dedicated authenticated Role lifecycle transport
+	OwnershipAuth           authv1.AuthServiceClient // dedicated authenticated Auth proof transport
 	PrincipalIssuer         *principal.Issuer
 	ProfileAccounts         ProfileAccountLookup // optional; resolves profile_id → account_id for bans
 	Chats                   ChatLookup           // optional; enriches text_chat nodes in ListSpaceTree
