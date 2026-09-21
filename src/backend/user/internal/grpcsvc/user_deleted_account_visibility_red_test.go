@@ -129,6 +129,7 @@ func insertVisibleProfile(t *testing.T, ctx context.Context, profiles *store.Pro
 INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary)
 VALUES ($1, $2, $3, $4, $5, $6)`, profileID, accountID, username, discriminator, username, primary)
 	require.NoError(t, err)
+	backfillProfileSearchFixtures(t, ctx, profiles)
 }
 
 func requireCheckerAccountBatch(t *testing.T, checker *deletedAccountCheckerStub, call int, want []uuid.UUID) {

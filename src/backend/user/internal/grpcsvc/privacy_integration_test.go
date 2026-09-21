@@ -32,8 +32,22 @@ func applyUserPrivacyMigrations(t *testing.T, ctx context.Context, pool *pgxpool
 	integrationtest.ApplyUserDBMigrations(t, ctx, pool, repoRoot(t))
 }
 
+func backfillProfileSearchFixtures(t *testing.T, ctx context.Context, profiles *store.ProfileStore) {
+	t.Helper()
+	// SQL fixtures represent rows written before this rollout. Keep strict search
+	// reads honest by running the production User-owned backfill explicitly.
+	for {
+		result, err := profiles.BackfillSearchKeys(ctx, 128)
+		require.NoError(t, err)
+		if result.Done {
+			return
+		}
+	}
+}
+
 func startUserPrivacyTestServer(t *testing.T, pool *store.ProfileStore, privacy *store.PrivacyStore, rdb *redis.Client, opts ...func(*UserGRPC)) userv1.UserServiceClient {
 	t.Helper()
+	backfillProfileSearchFixtures(t, context.Background(), pool)
 	lis := bufconn.Listen(1024 * 1024)
 	t.Cleanup(func() { _ = lis.Close() })
 	svc := &UserGRPC{

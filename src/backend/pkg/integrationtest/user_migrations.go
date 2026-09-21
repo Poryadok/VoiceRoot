@@ -26,6 +26,7 @@ var UserDBMigrationFiles = []string{
 	"000012_profile_verification_sources.up.sql",
 	"000013_privacy_show_last_seen.up.sql",
 	"000014_profile_custom_status.up.sql",
+	"000015_profile_search_normalization.up.sql",
 }
 
 // ApplyUserDBMigrations runs all user_db *.up.sql migrations in order.
