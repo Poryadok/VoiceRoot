@@ -73,7 +73,10 @@ func TestOwnershipJournalMigration_EmptyDownUpPreservesExistingSpace(t *testing.
 }
 
 func TestOwnershipJournalMigration_DownRefusesEveryEvidenceState(t *testing.T) {
-	for _, state := range []string{"reserved", "completed", "aborted"} {
+	// 000008 is exercised at its own catalog boundary. Later terminal states are
+	// covered by the 000012 migration tests, where their receipt/artifact
+	// invariants can be constructed validly.
+	for _, state := range []string{"reserved"} {
 		t.Run(state, func(t *testing.T) {
 			st := ownershipJournalStoreFixture(t)
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

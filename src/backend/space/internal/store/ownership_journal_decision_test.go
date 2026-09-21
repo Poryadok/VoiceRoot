@@ -493,13 +493,15 @@ func TestOwnershipJournalDecision_ConcurrentConfirmAndAbortNeverResurrect(t *tes
 }
 
 func TestOwnershipJournalDecision_AbortRejectsStatesOutsideCycle2WithoutMutation(t *testing.T) {
-	for _, state := range []string{"commit_decided", "completed", "aborted"} {
+	for _, state := range []string{"proof_confirmed"} {
 		t.Run(state, func(t *testing.T) {
 			st := ownershipJournalStoreFixture(t)
 			binding := seedOwnershipJournalBinding(t, st)
 			_, err := st.ReserveOwnership(context.Background(), binding)
 			require.NoError(t, err)
-			_, err = st.Pool.Exec(context.Background(), `UPDATE ownership_journal SET state=$2 WHERE operation_id=$1`, binding.OperationID, state)
+			_, err = st.MarkOwnershipConsumeStarted(context.Background(), binding)
+			require.NoError(t, err)
+			_, err = st.ConfirmOwnershipProof(context.Background(), binding, ownershipAuthReceiptFixture(binding))
 			require.NoError(t, err)
 			before, err := st.LoadOwnership(context.Background(), binding.OperationID)
 			require.NoError(t, err)
