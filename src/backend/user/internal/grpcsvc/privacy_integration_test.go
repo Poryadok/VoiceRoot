@@ -34,6 +34,15 @@ func applyUserPrivacyMigrations(t *testing.T, ctx context.Context, pool *pgxpool
 
 func startUserPrivacyTestServer(t *testing.T, pool *store.ProfileStore, privacy *store.PrivacyStore, rdb *redis.Client, opts ...func(*UserGRPC)) userv1.UserServiceClient {
 	t.Helper()
+	// Raw SQL fixtures intentionally model pre-rollout rows. Exercise the User-owned
+	// Go backfill before exposing them to the strict current-version search reader.
+	for {
+		result, err := pool.BackfillSearchKeys(context.Background(), 128)
+		require.NoError(t, err)
+		if result.Done {
+			break
+		}
+	}
 	lis := bufconn.Listen(1024 * 1024)
 	t.Cleanup(func() { _ = lis.Close() })
 	svc := &UserGRPC{
