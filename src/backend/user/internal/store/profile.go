@@ -228,7 +228,7 @@ func (s *ProfileStore) UpdateOwnedProfile(ctx context.Context, accountID, profil
 		return AppendSearchProjection(ctx, tx, searchProjectionUpsert(updated))
 	})
 	if err != nil || updated == nil {
-		return updated, err
+		return nil, err
 	}
 	return updated, nil
 }

@@ -4,7 +4,34 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	userv1 "voice.app/voice/user/v1"
 )
+
+func TestEventFromProtoUsesNestedUpsertFields(t *testing.T) {
+	t.Parallel()
+
+	event, err := eventFromProto(&userv1.SearchProfileProjectionEvent{
+		ProtocolVersion: 1,
+		EventId:         "event-1",
+		ProfileId:       "profile-1",
+		SourceRevision:  1,
+		Payload: &userv1.SearchProfileProjectionEvent_Upsert{Upsert: &userv1.SearchProfileUpsert{
+			AccountId:            "account-1",
+			Username:             "Alice",
+			Discriminator:        "0001",
+			DisplayName:          "Alice Example",
+			UsernameSearchKey:    "alice",
+			DisplayNameSearchKey: "aliceexample",
+			NormalizationVersion: 1,
+		}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "Alice Example", event.DisplayName)
+	require.Equal(t, "alice", event.UsernameSearchKey)
+	require.Equal(t, "aliceexample", event.DisplayNameSearchKey)
+	require.Equal(t, 1, event.NormalizationVersion)
+}
 
 func TestValidateEventRejectsMissingUnsupportedOrMismatchedNormalizerKeys(t *testing.T) {
 	t.Parallel()

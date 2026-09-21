@@ -169,7 +169,10 @@ func (s *ProfileStore) SetProfileVerification(ctx context.Context, profileID uui
 		}
 		return AppendSearchProjection(ctx, tx, searchProjectionUpsert(p))
 	})
-	return p, err
+	if err != nil {
+		return nil, err
+	}
+	return p, nil
 }
 
 // ClearProfileVerification resets verification fields.
