@@ -73,9 +73,6 @@ func runDesiredProjectionGeneration(ctx context.Context, logger *slog.Logger, cl
 				if err != nil {
 					_ = profileprojection.ReopenGeneration(ctx, pool, generation)
 				}
-				if err != nil {
-					_ = profileprojection.ReopenGeneration(ctx, pool, generation)
-				}
 			}
 			profileprojection.FinishGenerationRebuild(ctx, lease)
 			if err == nil {
@@ -100,6 +97,7 @@ func runDesiredProjectionGeneration(ctx context.Context, logger *slog.Logger, cl
 				if err == nil {
 					return
 				}
+				_ = profileprojection.ReopenGeneration(ctx, pool, generation)
 			} else {
 				err = routeErr
 			}
