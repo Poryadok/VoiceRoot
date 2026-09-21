@@ -455,6 +455,7 @@ func TestSearchProfiles_OrdersVerifiedBeforeAlphabetical(t *testing.T) {
 		VALUES ($1, $2, 'zzzfaker', '0002', 'Faker Official', true, 'personal')`,
 		verifiedID, verifiedAcc)
 	require.NoError(t, err)
+	backfillProfileSearchFixtures(t, ctx, profiles)
 
 	authed := withAccountTier(ctx, viewer, "free")
 	resp, err := cli.SearchProfiles(authed, &userv1.SearchProfilesRequest{Query: "Faker"})

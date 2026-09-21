@@ -93,9 +93,10 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 	t.Cleanup(func() { _ = lis.Close() })
 	blocker := &testBlockChecker{}
 	privacyStore := store.NewPrivacyStore(pool)
+	profiles := store.NewProfileStore(pool)
 	srv := grpc.NewServer()
 	userv1.RegisterUserServiceServer(srv, &UserGRPC{
-		Profiles:            store.NewProfileStore(pool),
+		Profiles:            profiles,
 		Privacy:             privacyStore,
 		Presence:            store.NewPresenceStore(rdb),
 		DeletedAccounts:     &deletedAccountCheckerStub{},
@@ -689,6 +690,7 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 			VALUES ($1, $2, 'uniqusr999', '0088', 'RareDisplayTokenQ7', true)`,
 			pidDN, accDN)
 		require.NoError(t, err)
+		backfillProfileSearchFixtures(t, ctx, profiles)
 		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
 		resp, err := cli.SearchProfiles(mdCtx, &userv1.SearchProfilesRequest{Query: "RareDisplay"})
 		require.NoError(t, err)
@@ -724,6 +726,7 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 			VALUES ($1, $2, 'blockedfind', '0099', 'BlockedFindMe', true)`,
 			pidD, accD)
 		require.NoError(t, err)
+		backfillProfileSearchFixtures(t, ctx, profiles)
 		blocker.fn = func(viewer, other uuid.UUID) bool {
 			return viewer == accountA && other == accD
 		}
@@ -751,6 +754,7 @@ func TestProfileGRPC_v1DDL(t *testing.T) {
 			VALUES ($1, $2, 'zzzpag', '0011', 'PagUnique Zed', true)`,
 			pidP2, accP2)
 		require.NoError(t, err)
+		backfillProfileSearchFixtures(t, ctx, profiles)
 		mdCtx := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountA.String())
 		r1, err := cli.SearchProfiles(mdCtx, &userv1.SearchProfilesRequest{
 			Query: "PagUnique",

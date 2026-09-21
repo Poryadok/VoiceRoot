@@ -149,6 +149,7 @@ func TestSearchProfiles_UserSocialIntegration(t *testing.T) {
 		VALUES ($1, $2, 'ph1find', '0707', $3, true)`,
 		targetPID, accountTarget, "Display "+queryToken+" ZZ")
 	require.NoError(t, err)
+	backfillSearchFixtures(t, ctx, store.NewProfileStore(userPool))
 
 	mdViewer := metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountViewer.String())
 
@@ -201,4 +202,15 @@ func TestSearchProfiles_UserSocialIntegration(t *testing.T) {
 		})
 		require.NoError(t, err)
 	})
+}
+
+func backfillSearchFixtures(t *testing.T, ctx context.Context, profiles *store.ProfileStore) {
+	t.Helper()
+	for {
+		result, err := profiles.BackfillSearchKeys(ctx, 128)
+		require.NoError(t, err)
+		if result.Done {
+			return
+		}
+	}
 }
