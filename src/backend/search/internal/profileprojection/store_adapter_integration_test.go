@@ -236,6 +236,35 @@ func TestGenerationMigration_Preserves428LegacyConflictTargets(t *testing.T) {
 	require.Equal(t, 1, copied)
 }
 
+func TestGenerationRoute_PromotionWaitsForRouteLock(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "search_projection_generation_route_lock", filepath.Join(searchProjectionRepoRoot(t), "src", "backend", "migrations", "search_db", "000001_init.up.sql"))
+	for _, migration := range []string{"000003_space_lifecycle.up.sql", "000002_verification_type.up.sql", "000004_user_profile_projection.up.sql", "000005_user_profile_projection_snapshot.up.sql", "000006_user_profile_projection_quarantine.up.sql", "000007_user_profile_projection_fence.up.sql", "000008_user_profile_projection_generations.up.sql"} {
+		integrationtest.ApplySQLFile(t, ctx, pool, searchProjectionRepoRoot(t), filepath.Join("src", "backend", "migrations", "search_db", migration))
+	}
+	_, err := pool.Exec(ctx, `INSERT INTO search_user_profile_generations(generation,state,ready_at,evidence_sha256) VALUES(2,'ready',now(),decode(repeat('00',32),'hex')); INSERT INTO search_user_profile_generation_checkpoint(generation,journal_offset,snapshot_phase,evidence_count,evidence_first_offset,evidence_last_offset,evidence_digest) VALUES(2,0,'replay',1,1,1,decode(repeat('00',32),'hex'))`)
+	require.NoError(t, err)
+	tx, err := pool.Begin(ctx)
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx, `SELECT active_generation FROM search_user_profile_generation_route WHERE singleton=true FOR UPDATE`)
+	require.NoError(t, err)
+	done := make(chan error, 1)
+	go func() { _, err := PromoteGeneration(ctx, pool, 2); done <- err }()
+	select {
+	case err := <-done:
+		t.Fatalf("promotion escaped route lock: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	require.NoError(t, tx.Commit(ctx))
+	require.NoError(t, <-done)
+	route, err := LoadGenerationRoute(ctx, pool)
+	require.NoError(t, err)
+	require.Equal(t, uint64(2), route.Active)
+}
+
 func searchProjectionRepoRoot(t *testing.T) string {
 	t.Helper()
 	_, file, _, ok := runtime.Caller(0)
