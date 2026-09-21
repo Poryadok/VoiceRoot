@@ -119,7 +119,7 @@ func TestFence_InverseDeliveryOrderRetainsNewerRevision(t *testing.T) {
 	makeEvent := func(revision, offset uint64, name string) *userv1.SearchProfileProjectionEvent {
 		return &userv1.SearchProfileProjectionEvent{ProtocolVersion: 1, EventId: uuid.NewString(), ProfileId: profileID, SourceRevision: revision, JournalOffset: offset, OccurredAt: timestamppb.Now(), Payload: &userv1.SearchProfileProjectionEvent_Upsert{Upsert: &userv1.SearchProfileUpsert{AccountId: accountID, Username: "fence", Discriminator: "0001", DisplayName: name, UsernameSearchKey: "fence", DisplayNameSearchKey: searchnormalization.V1.Normalize(name), NormalizationVersion: 1}}}
 	}
-	newer, older := makeEvent(2, 2, "N+1"), makeEvent(1, 1, "N")
+	newer, older := makeEvent(2, 1, "N+1"), makeEvent(1, 2, "N")
 	newerLocked, releaseNewer := make(chan struct{}), make(chan struct{})
 	olderAttempted := make(chan struct{})
 	adapter := &StoreAdapter{Pool: pool, AfterFenceLock: func(event *userv1.SearchProfileProjectionEvent) {
@@ -129,25 +129,31 @@ func TestFence_InverseDeliveryOrderRetainsNewerRevision(t *testing.T) {
 		}
 	}}
 	newerResult := make(chan error, 1)
-	olderResult := make(chan error, 1)
-	go func() { _, err := adapter.ApplyAndCheckpoint(ctx, newer, 2); newerResult <- err }()
+	type applyOutcome struct {
+		result ApplyResult
+		err    error
+	}
+	olderResult := make(chan applyOutcome, 1)
+	go func() { _, err := adapter.ApplyAndCheckpoint(ctx, newer, 1); newerResult <- err }()
 	<-newerLocked // N+1 owns the durable fence; N is now forced to wait behind it.
 	go func() {
 		// Generation-scoped checkpoint evidence is locked before the profile
 		// fence, so a late hook cannot prove this delivery has started.
 		close(olderAttempted)
-		_, err := adapter.ApplyAndCheckpoint(ctx, older, 1)
-		olderResult <- err
+		result, err := adapter.ApplyAndCheckpoint(ctx, older, 2)
+		olderResult <- applyOutcome{result: result, err: err}
 	}()
 	<-olderAttempted
 	select {
-	case err := <-olderResult:
-		t.Fatalf("older N completed before N+1 released its fence: %v", err)
+	case outcome := <-olderResult:
+		t.Fatalf("older N completed before N+1 released its fence: %+v", outcome)
 	case <-time.After(50 * time.Millisecond):
 	}
 	close(releaseNewer)
 	require.NoError(t, <-newerResult)
-	require.NoError(t, <-olderResult)
+	olderOutcome := <-olderResult
+	require.NoError(t, olderOutcome.err)
+	require.Equal(t, NoopStale, olderOutcome.result)
 	var revision int64
 	var name string
 	require.NoError(t, pool.QueryRow(ctx, `SELECT source_revision,display_name FROM search_user_profile_generation_documents WHERE generation=1 AND profile_id=$1`, profileID).Scan(&revision, &name))
