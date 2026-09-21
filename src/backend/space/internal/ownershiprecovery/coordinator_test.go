@@ -57,6 +57,15 @@ func TestCoordinator_RecoverConsumeStartedLooksUpReceiptWithoutConsumingProof(t 
 	require.Equal(t, []string{"lookup", "confirm", "prepare", "prepared", "commit", "finalize", "complete"}, deps.calls)
 }
 
+func TestCoordinator_RecoverUnconfiguredFailsClosedWithoutPanic(t *testing.T) {
+	binding := store.OwnershipBinding{ProtocolVersion: 2, SpaceID: uuid.New(), AccountID: uuid.New(), ActorProfileID: uuid.New(), NewOwnerProfileID: uuid.New(), OperationID: uuid.New(), SessionEpoch: 1, ProofDigest: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}
+	for _, coordinator := range []*Coordinator{nil, NewCoordinator(Dependencies{})} {
+		result, err := coordinator.Recover(context.Background(), &store.OwnershipJournal{Binding: binding, State: "consume_started"})
+		require.Nil(t, result)
+		require.ErrorIs(t, err, ErrCoordinatorNotConfigured)
+	}
+}
+
 type happyPathDependencies struct {
 	binding    store.OwnershipBinding
 	calls      []string

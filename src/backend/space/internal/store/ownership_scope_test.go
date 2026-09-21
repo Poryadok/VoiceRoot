@@ -72,6 +72,8 @@ func newR20ScopeFixture(t *testing.T, st *SpaceStore, state string) r20ScopeFixt
 	if state == "reserved" {
 		return f
 	}
+	_, err = st.MarkOwnershipConsumeStarted(context.Background(), f.binding)
+	require.NoError(t, err)
 	_, err = st.ConfirmOwnershipProof(context.Background(), f.binding, ownershipAuthReceiptFixture(f.binding))
 	require.NoError(t, err)
 	if state == "proof_confirmed" {

@@ -76,6 +76,9 @@ func (c *Coordinator) Execute(ctx context.Context, binding store.OwnershipBindin
 // receipt has no plaintext proof by design, so it selects the durable abort
 // branch rather than attempting a new consume.
 func (c *Coordinator) Recover(ctx context.Context, journal *store.OwnershipJournal) (*store.OwnershipJournal, error) {
+	if c == nil || c.dependencies.Store == nil || c.dependencies.Auth == nil || c.dependencies.Role == nil {
+		return nil, ErrCoordinatorNotConfigured
+	}
 	if journal == nil {
 		return nil, errors.New("ownership recovery received nil journal")
 	}

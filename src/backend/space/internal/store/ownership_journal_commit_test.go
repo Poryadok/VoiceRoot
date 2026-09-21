@@ -30,6 +30,8 @@ func seedOwnershipProofConfirmed(t *testing.T, st *SpaceStore) OwnershipBinding 
 	binding := seedOwnershipJournalBinding(t, st)
 	_, err := st.ReserveOwnership(context.Background(), binding)
 	require.NoError(t, err)
+	_, err = st.MarkOwnershipConsumeStarted(context.Background(), binding)
+	require.NoError(t, err)
 	_, err = st.ConfirmOwnershipProof(context.Background(), binding, ownershipAuthReceiptFixture(binding))
 	require.NoError(t, err)
 	return binding

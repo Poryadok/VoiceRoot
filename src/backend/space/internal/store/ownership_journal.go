@@ -188,7 +188,7 @@ func (s *SpaceStore) ListPendingOwnership(ctx context.Context, limit int) ([]*Ow
 	if limit < 1 {
 		return nil, errors.New("ownership recovery limit must be positive")
 	}
-	rows, err := s.Pool.Query(ctx, `SELECT operation_id FROM ownership_journal WHERE state NOT IN ('reserved','completed','aborted') AND (state <> 'consume_started' OR updated_at < now() - interval '30 seconds') ORDER BY updated_at, operation_id LIMIT $1`, limit)
+	rows, err := s.Pool.Query(ctx, `SELECT operation_id FROM ownership_journal WHERE state NOT IN ('completed','aborted') AND (state NOT IN ('reserved','consume_started') OR updated_at < now() - interval '30 seconds') ORDER BY updated_at, operation_id LIMIT $1`, limit)
 	if err != nil {
 		return nil, err
 	}

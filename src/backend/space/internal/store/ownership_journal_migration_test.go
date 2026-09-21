@@ -224,6 +224,8 @@ func TestOwnershipJournalDecisionMigration_EmptyDownUpPreservesReservationSchema
 	requireJournalDecisionSchema(t, st.Pool, true)
 	_, err = st.ReserveOwnership(ctx, binding)
 	require.NoError(t, err)
+	_, err = st.MarkOwnershipConsumeStarted(ctx, binding)
+	require.NoError(t, err)
 	confirmed, err := st.ConfirmOwnershipProof(ctx, binding, ownershipAuthReceiptFixture(binding))
 	require.NoError(t, err)
 	require.Equal(t, "proof_confirmed", confirmed.State)
@@ -239,6 +241,8 @@ func TestOwnershipJournalDecisionMigration_DownRefusesDecisionEvidenceWithoutLos
 			_, err := st.ReserveOwnership(ctx, binding)
 			require.NoError(t, err)
 			if state == "proof_confirmed" {
+				_, err = st.MarkOwnershipConsumeStarted(ctx, binding)
+				require.NoError(t, err)
 				_, err = st.ConfirmOwnershipProof(ctx, binding, ownershipAuthReceiptFixture(binding))
 			} else {
 				_, err = st.DecideOwnershipAbort(ctx, binding)
