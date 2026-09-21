@@ -21,6 +21,7 @@ service AuthService {
   rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
   rpc Enable2FA(Enable2FARequest) returns (Enable2FAResponse);
   rpc Verify2FA(Verify2FARequest) returns (Verify2FAResponse);
+  rpc Disable2FA(Disable2FARequest) returns (Disable2FAResponse);
   rpc VerifyOTP(VerifyOTPRequest) returns (VerifyOTPResponse);
   // Restricted-session recovery state for email verification. The caller is
   // derived from authenticated transport metadata; no email identifier is accepted.
@@ -101,6 +102,15 @@ message Enable2FAResponse {
 message Verify2FARequest {
   string totp_code = 1;
 }
+
+// Password plus a currently valid TOTP code are required to remove an enrollment.
+// The successful operation revokes every session and invalidates all backup codes.
+message Disable2FARequest {
+  string password = 1;
+  string totp_code = 2;
+}
+
+message Disable2FAResponse {}
 
 message VerifyOTPRequest {
   string code = 1;

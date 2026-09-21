@@ -1915,6 +1915,17 @@ class AppLocalizationsRu extends AppLocalizations {
   String get security2faEnabled => 'Двухфакторная аутентификация включена.';
 
   @override
+  String get security2faDisableTitle =>
+      'Отключить двухфакторную аутентификацию';
+
+  @override
+  String get security2faDisableHint =>
+      'Подтвердите пароль и код аутентификатора. Все устройства будут разлогинены, а резервные коды станут недействительны.';
+
+  @override
+  String get security2faDisable => 'Отключить 2FA';
+
+  @override
   String get securityDeleteAccountTitle => 'Удаление аккаунта';
 
   @override

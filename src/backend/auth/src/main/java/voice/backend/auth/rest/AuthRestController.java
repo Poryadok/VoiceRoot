@@ -94,11 +94,25 @@ public class AuthRestController {
     return Enable2FAResponse.from(enrollment);
   }
 
+  @GetMapping("/2fa/status")
+  public TwoFactorStatusResponse twoFactorStatus(
+      @RequestHeader(name = "Authorization", required = false) String authorization) {
+    return new TwoFactorStatusResponse(authService.is2FAEnabled(authorization));
+  }
+
   @PostMapping("/2fa/verify")
   public SessionEnvelope verify2FA(
       @RequestHeader(name = "Authorization", required = false) String authorization,
       @Valid @RequestBody Verify2FARequest request) {
     return SessionEnvelope.from(authService.verify2FA(authorization, request.totpCode()));
+  }
+
+  @PostMapping("/2fa/disable")
+  public ResponseEntity<Void> disable2FA(
+      @RequestHeader(name = "Authorization", required = false) String authorization,
+      @Valid @RequestBody Disable2FARequest request) {
+    authService.disable2FA(authorization, request.password(), request.totpCode());
+    return ResponseEntity.noContent().build();
   }
 
   @PostMapping("/refresh")
@@ -369,6 +383,9 @@ public class AuthRestController {
 
   public record Verify2FARequest(@JsonProperty("totp_code") @NotBlank String totpCode) {}
 
+  public record Disable2FARequest(
+      @NotBlank String password, @JsonProperty("totp_code") @NotBlank String totpCode) {}
+
   public record RefreshRequest(
       @JsonProperty("refresh_token") @NotBlank String refreshToken,
       @JsonProperty("device_info_json") String deviceInfoJson) {}
@@ -460,6 +477,8 @@ public class AuthRestController {
       return new Enable2FAResponse(enrollment.totpUri(), enrollment.secretBackupHint(), enrollment.backupCodes());
     }
   }
+
+  public record TwoFactorStatusResponse(boolean enabled) {}
 
   public record GuestReminderResponse(
       @JsonProperty("last_shown_at") String lastShownAt,

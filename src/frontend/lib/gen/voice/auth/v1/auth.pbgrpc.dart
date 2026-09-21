@@ -104,6 +104,13 @@ class AuthServiceClient extends $grpc.Client {
     return $createUnaryCall(_$verify2FA, request, options: options);
   }
 
+  $grpc.ResponseFuture<$0.Disable2FAResponse> disable2FA(
+    $0.Disable2FARequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$disable2FA, request, options: options);
+  }
+
   $grpc.ResponseFuture<$0.VerifyOTPResponse> verifyOTP(
     $0.VerifyOTPRequest request, {
     $grpc.CallOptions? options,
@@ -329,6 +336,11 @@ class AuthServiceClient extends $grpc.Client {
           '/voice.auth.v1.AuthService/Verify2FA',
           ($0.Verify2FARequest value) => value.writeToBuffer(),
           $0.Verify2FAResponse.fromBuffer);
+  static final _$disable2FA =
+      $grpc.ClientMethod<$0.Disable2FARequest, $0.Disable2FAResponse>(
+          '/voice.auth.v1.AuthService/Disable2FA',
+          ($0.Disable2FARequest value) => value.writeToBuffer(),
+          $0.Disable2FAResponse.fromBuffer);
   static final _$verifyOTP =
       $grpc.ClientMethod<$0.VerifyOTPRequest, $0.VerifyOTPResponse>(
           '/voice.auth.v1.AuthService/VerifyOTP',
@@ -522,6 +534,13 @@ abstract class AuthServiceBase extends $grpc.Service {
         false,
         ($core.List<$core.int> value) => $0.Verify2FARequest.fromBuffer(value),
         ($0.Verify2FAResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.Disable2FARequest, $0.Disable2FAResponse>(
+        'Disable2FA',
+        disable2FA_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) => $0.Disable2FARequest.fromBuffer(value),
+        ($0.Disable2FAResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.VerifyOTPRequest, $0.VerifyOTPResponse>(
         'VerifyOTP',
         verifyOTP_Pre,
@@ -793,6 +812,14 @@ abstract class AuthServiceBase extends $grpc.Service {
 
   $async.Future<$0.Verify2FAResponse> verify2FA(
       $grpc.ServiceCall call, $0.Verify2FARequest request);
+
+  $async.Future<$0.Disable2FAResponse> disable2FA_Pre($grpc.ServiceCall $call,
+      $async.Future<$0.Disable2FARequest> $request) async {
+    return disable2FA($call, await $request);
+  }
+
+  $async.Future<$0.Disable2FAResponse> disable2FA(
+      $grpc.ServiceCall call, $0.Disable2FARequest request);
 
   $async.Future<$0.VerifyOTPResponse> verifyOTP_Pre($grpc.ServiceCall $call,
       $async.Future<$0.VerifyOTPRequest> $request) async {

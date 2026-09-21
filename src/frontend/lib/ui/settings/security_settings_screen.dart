@@ -25,8 +25,12 @@ class SecuritySettingsScreen extends ConsumerStatefulWidget {
   static const Key verifyButtonKey = Key('security_verify');
 
   static const Key deleteAccountButtonKey = Key('security_delete_account');
-  static const Key deleteAccountDialogKey = Key('security_delete_account_dialog');
-  static const Key deleteAccountPasswordKey = Key('security_delete_account_password');
+  static const Key deleteAccountDialogKey = Key(
+    'security_delete_account_dialog',
+  );
+  static const Key deleteAccountPasswordKey = Key(
+    'security_delete_account_password',
+  );
   static const Key deleteAccountTotpKey = Key('security_delete_account_totp');
   static const Key activeSessionsButtonKey = Key('security_active_sessions');
 
@@ -35,15 +39,32 @@ class SecuritySettingsScreen extends ConsumerStatefulWidget {
       _SecuritySettingsScreenState();
 }
 
-class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen> {
+class _SecuritySettingsScreenState
+    extends ConsumerState<SecuritySettingsScreen> {
   _SecurityStep _step = _SecurityStep.password;
   final _passwordController = TextEditingController();
   final _totpController = TextEditingController();
   TotpEnrollmentData? _enrollment;
+  bool? _twoFactorEnabled;
   var _busy = false;
   String? _error;
   final _deletePasswordController = TextEditingController();
   final _deleteTotpController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTwoFactorStatus();
+  }
+
+  Future<void> _loadTwoFactorStatus() async {
+    final session = ref.read(authControllerProvider).session;
+    if (session == null) return;
+    final enabled = await ref
+        .read(voiceAuthClientProvider)
+        .is2FAEnabled(session: session);
+    if (mounted && enabled != null) setState(() => _twoFactorEnabled = enabled);
+  }
 
   @override
   void dispose() {
@@ -111,7 +132,42 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
           ),
         );
         Navigator.of(context).pop();
-      case AuthSessionFailure(:final message, :final errorCode, :final statusCode):
+      case AuthSessionFailure(
+        :final message,
+        :final errorCode,
+        :final statusCode,
+      ):
+        setState(() {
+          _busy = false;
+          _error =
+              resolveAuthErrorKey(
+                errorCode: errorCode,
+                statusCode: statusCode,
+                message: message,
+              ) ??
+              message;
+        });
+    }
+  }
+
+  Future<void> _disable2FA() async {
+    final password = _passwordController.text;
+    final code = _totpController.text.trim();
+    final session = ref.read(authControllerProvider).session;
+    if (password.isEmpty || code.isEmpty || session == null) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final result = await ref
+        .read(voiceAuthClientProvider)
+        .disable2FA(session: session, password: password, totpCode: code);
+    if (!mounted) return;
+    switch (result) {
+      case AuthApiOk<void>():
+        await ref.read(authControllerProvider.notifier).logout();
+        if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
+      case AuthApiFailure(:final message, :final errorCode, :final statusCode):
         setState(() {
           _busy = false;
           _error =
@@ -309,15 +365,26 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                switch (_step) {
-                  _SecurityStep.password => _buildPasswordStep(
-                    context,
-                    l10n,
-                    voice,
-                  ),
-                  _SecurityStep.enroll => _buildEnrollStep(context, l10n, voice),
-                  _SecurityStep.verify => _buildVerifyStep(context, l10n, voice),
-                },
+                if (_twoFactorEnabled == true)
+                  _buildDisableStep(context, l10n, voice)
+                else
+                  switch (_step) {
+                    _SecurityStep.password => _buildPasswordStep(
+                      context,
+                      l10n,
+                      voice,
+                    ),
+                    _SecurityStep.enroll => _buildEnrollStep(
+                      context,
+                      l10n,
+                      voice,
+                    ),
+                    _SecurityStep.verify => _buildVerifyStep(
+                      context,
+                      l10n,
+                      voice,
+                    ),
+                  },
                 const SizedBox(height: 32),
                 Divider(color: voice.borderDefault),
                 const SizedBox(height: 16),
@@ -362,7 +429,9 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
                   onPressed: _busy ? null : _confirmDeleteAccount,
                   child: Text(
                     l10n.securityDeleteAccountButton,
-                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
                   ),
                 ),
               ],
@@ -415,6 +484,56 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
     );
   }
 
+  Widget _buildDisableStep(
+    BuildContext context,
+    AppLocalizations l10n,
+    VoiceColors voice,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          l10n.security2faDisableTitle,
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          l10n.security2faDisableHint,
+          style: TextStyle(color: voice.textSecondary),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          key: SecuritySettingsScreen.passwordFieldKey,
+          controller: _passwordController,
+          obscureText: true,
+          decoration: InputDecoration(labelText: l10n.authPasswordLabel),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          key: SecuritySettingsScreen.totpFieldKey,
+          controller: _totpController,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(labelText: l10n.authTotpLabel),
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: 12),
+          Text(
+            authErrorMessage(l10n, _error!),
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+        ],
+        const SizedBox(height: 24),
+        VoiceSecondaryButton(
+          onPressed: _busy ? null : _disable2FA,
+          child: Text(
+            l10n.security2faDisable,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildEnrollStep(
     BuildContext context,
     AppLocalizations l10n,
@@ -460,9 +579,9 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
             padding: const EdgeInsets.symmetric(vertical: 2),
             child: SelectableText(
               code,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                fontFamily: 'monospace',
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(fontFamily: 'monospace'),
             ),
           ),
         ),

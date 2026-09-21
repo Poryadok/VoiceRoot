@@ -1904,6 +1904,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get security2faEnabled => 'Two-factor authentication is enabled.';
 
   @override
+  String get security2faDisableTitle => 'Disable two-factor authentication';
+
+  @override
+  String get security2faDisableHint =>
+      'Confirm your password and authenticator code. This signs out all devices and invalidates backup codes.';
+
+  @override
+  String get security2faDisable => 'Disable 2FA';
+
+  @override
   String get securityDeleteAccountTitle => 'Delete account';
 
   @override
