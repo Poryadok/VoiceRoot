@@ -8,6 +8,7 @@ import (
 type accountDeletionConsumerConfig struct {
 	Enabled         bool
 	CredentialsFile string
+	NATSURL         string
 }
 
 // accountDeletionConsumerConfigFromEnv makes activation opt-in. The dedicated
@@ -22,5 +23,9 @@ func accountDeletionConsumerConfigFromEnv(getenv func(string) string) (accountDe
 	if credentialsFile == "" {
 		return accountDeletionConsumerConfig{}, fmt.Errorf("USER_ACCOUNT_DELETE_NATS_CREDS_FILE is required when USER_ACCOUNT_DELETE_CONSUMER_ENABLED=true")
 	}
-	return accountDeletionConsumerConfig{Enabled: true, CredentialsFile: credentialsFile}, nil
+	natsURL := strings.TrimSpace(getenv("NATS_URL"))
+	if natsURL == "" {
+		return accountDeletionConsumerConfig{}, fmt.Errorf("NATS_URL is required when USER_ACCOUNT_DELETE_CONSUMER_ENABLED=true")
+	}
+	return accountDeletionConsumerConfig{Enabled: true, CredentialsFile: credentialsFile, NATSURL: natsURL}, nil
 }

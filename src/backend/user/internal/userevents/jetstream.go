@@ -49,6 +49,8 @@ type AccountDeletionConsumer struct {
 	js         nats.JetStreamContext
 	profiles   *store.ProfileStore
 	connection *JetStreamPublisher
+	sub        *nats.Subscription
+	bind       func() (*nats.Subscription, error)
 }
 
 func NewAccountDeletionConsumer(natsURL, credentialsFile string, profiles *store.ProfileStore) (*AccountDeletionConsumer, error) {
@@ -69,15 +71,41 @@ func (c *AccountDeletionConsumer) Close() error {
 	return c.connection.Close()
 }
 
+// Start establishes the durable, broker-authorized subscription before the
+// process serves traffic. Missing streams or denied consumer permissions are a
+// startup failure, never a background warning.
+func (c *AccountDeletionConsumer) Start() error {
+	if c == nil || c.profiles == nil {
+		return fmt.Errorf("account deletion consumer not initialized")
+	}
+	if c.sub != nil {
+		return nil
+	}
+	bind := c.bind
+	if bind == nil {
+		if c.js == nil {
+			return fmt.Errorf("account deletion consumer not initialized")
+		}
+		bind = func() (*nats.Subscription, error) {
+			return c.js.PullSubscribe(subjectAccountDeleted, "user-account-deletion-v1", nats.BindStream(streamName))
+		}
+	}
+	sub, err := bind()
+	if err != nil {
+		return fmt.Errorf("bind account deletion consumer: %w", err)
+	}
+	c.sub = sub
+	return nil
+}
+
 func (c *AccountDeletionConsumer) Run(ctx context.Context) error {
 	if c == nil || c.js == nil || c.profiles == nil {
 		return fmt.Errorf("account deletion consumer not initialized")
 	}
-	sub, err := c.js.PullSubscribe(subjectAccountDeleted, "user-account-deletion-v1", nats.BindStream(streamName))
-	if err != nil {
+	if err := c.Start(); err != nil {
 		return err
 	}
-	defer sub.Unsubscribe()
+	sub := c.sub
 	for ctx.Err() == nil {
 		messages, err := sub.Fetch(1, nats.MaxWait(time.Second))
 		if err != nil {

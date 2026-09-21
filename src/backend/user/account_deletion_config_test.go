@@ -23,8 +23,8 @@ func TestAccountDeletionConsumerConfig_EnabledWithoutDedicatedCredentialFailsClo
 	require.Error(t, err)
 }
 
-func TestAccountDeletionConsumerConfig_EnabledUsesOnlyDedicatedCredential(t *testing.T) {
-	config, err := accountDeletionConsumerConfigFromEnv(func(key string) string {
+func TestAccountDeletionConsumerConfig_EnabledWithoutNATSURLFailsClosed(t *testing.T) {
+	_, err := accountDeletionConsumerConfigFromEnv(func(key string) string {
 		switch key {
 		case "USER_ACCOUNT_DELETE_CONSUMER_ENABLED":
 			return "true"
@@ -34,7 +34,24 @@ func TestAccountDeletionConsumerConfig_EnabledUsesOnlyDedicatedCredential(t *tes
 			return ""
 		}
 	})
+	require.Error(t, err)
+}
+
+func TestAccountDeletionConsumerConfig_EnabledUsesOnlyDedicatedCredential(t *testing.T) {
+	config, err := accountDeletionConsumerConfigFromEnv(func(key string) string {
+		switch key {
+		case "USER_ACCOUNT_DELETE_CONSUMER_ENABLED":
+			return "true"
+		case "USER_ACCOUNT_DELETE_NATS_CREDS_FILE":
+			return "C:/run/secrets/user-account-delete.creds"
+		case "NATS_URL":
+			return "nats://broker:4222"
+		default:
+			return ""
+		}
+	})
 	require.NoError(t, err)
 	require.True(t, config.Enabled)
 	require.Equal(t, "C:/run/secrets/user-account-delete.creds", config.CredentialsFile)
+	require.Equal(t, "nats://broker:4222", config.NATSURL)
 }
