@@ -262,6 +262,32 @@ func TestGenerationMigration_Preserves428LegacyConflictTargets(t *testing.T) {
 	require.Equal(t, 1, copied)
 }
 
+func TestLegacyQuarantineDownMigration_RemovesOnlyQuarantinedConflict(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "search_projection_quarantine_down", filepath.Join(searchProjectionRepoRoot(t), "src", "backend", "migrations", "search_db", "000001_init.up.sql"))
+	for _, migration := range []string{"000003_space_lifecycle.up.sql", "000002_verification_type.up.sql", "000004_user_profile_projection.up.sql", "000005_user_profile_projection_snapshot.up.sql", "000006_user_profile_projection_quarantine.up.sql", "000007_user_profile_projection_fence.up.sql"} {
+		integrationtest.ApplySQLFile(t, ctx, pool, searchProjectionRepoRoot(t), filepath.Join("src", "backend", "migrations", "search_db", migration))
+	}
+	profileID, acceptedEventID, quarantinedEventID := uuid.New(), uuid.New(), uuid.New()
+	_, err := pool.Exec(ctx, `
+INSERT INTO search_user_profile_inbox(event_id,profile_id,source_revision,payload_sha256,quarantined_at,quarantine_reason)
+VALUES
+  ($1,$3,1,decode(repeat('00',32),'hex'),NULL,NULL),
+  ($2,$3,1,decode(repeat('11',32),'hex'),now(),'conflicting same revision')`, acceptedEventID, quarantinedEventID, profileID)
+	require.NoError(t, err)
+
+	integrationtest.ApplySQLFile(t, ctx, pool, searchProjectionRepoRoot(t), filepath.Join("src", "backend", "migrations", "search_db", "000006_user_profile_projection_quarantine.down.sql"))
+	var retainedEventID uuid.UUID
+	require.NoError(t, pool.QueryRow(ctx, `SELECT event_id FROM search_user_profile_inbox WHERE profile_id=$1 AND source_revision=1`, profileID).Scan(&retainedEventID))
+	require.Equal(t, acceptedEventID, retainedEventID)
+	var remaining int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM search_user_profile_inbox WHERE profile_id=$1 AND source_revision=1`, profileID).Scan(&remaining))
+	require.Equal(t, 1, remaining)
+}
+
 func TestGenerationRoute_PromotionWaitsForRouteLock(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
