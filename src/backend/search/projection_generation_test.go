@@ -130,10 +130,11 @@ func TestRunDesiredProjectionGeneration_RecoversReadyCutoff(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
-	// Keep setup and container cleanup independent of the bounded controller
-	// attempt. integrationtest registers cleanup against this non-expiring
-	// context, so cancelling the controller cannot strand its advisory lease.
-	setupCtx := context.Background()
+	// Keep setup separate from the bounded controller attempt. StartPostgres
+	// detaches its own bounded cleanup, so this start deadline cannot strand a
+	// checked-out advisory connection during test unwinding.
+	setupCtx, setupCancel := context.WithTimeout(context.Background(), time.Minute)
+	defer setupCancel()
 	root := searchMainRoot(t)
 	pool := integrationtest.StartPostgres(t, setupCtx, "search_controller_recovery", filepath.Join(root, "src", "backend", "migrations", "search_db", "000001_init.up.sql"))
 	for _, m := range []string{"000003_space_lifecycle.up.sql", "000002_verification_type.up.sql", "000004_user_profile_projection.up.sql", "000005_user_profile_projection_snapshot.up.sql", "000006_user_profile_projection_quarantine.up.sql", "000007_user_profile_projection_fence.up.sql", "000008_user_profile_projection_generations.up.sql"} {

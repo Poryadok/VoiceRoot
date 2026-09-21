@@ -14,9 +14,10 @@ import (
 
 const (
 	// PostgresImage is the default Postgres image for integration tests.
-	PostgresImage = "postgres:16-bookworm"
-	postgresUser  = "u"
-	postgresPass  = "p"
+	PostgresImage          = "postgres:16-bookworm"
+	postgresUser           = "u"
+	postgresPass           = "p"
+	postgresCleanupTimeout = 30 * time.Second
 )
 
 var postgresRun = postgres.Run
@@ -52,14 +53,34 @@ func StartPostgres(t *testing.T, ctx context.Context, dbName, migrationSQLPath s
 
 	pgC, err := startPostgresContainer(ctx, dbName)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = postgresTerminate(ctx, pgC) })
+	var pool *pgxpool.Pool
+	// Test cleanup must not inherit a cancelled operation context. Terminating
+	// the container first releases any checked-out pool connections; both cleanup
+	// paths are deliberately bounded so a failed test cannot consume go test's
+	// package-level timeout while unwinding.
+	t.Cleanup(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), postgresCleanupTimeout)
+		defer cancel()
+		_ = postgresTerminate(cleanupCtx, pgC)
+		if pool == nil {
+			return
+		}
+		closed := make(chan struct{})
+		go func() {
+			pool.Close()
+			close(closed)
+		}()
+		select {
+		case <-closed:
+		case <-time.After(postgresCleanupTimeout):
+		}
+	})
 
 	connStr, err := pgC.ConnectionString(ctx, "sslmode=disable")
 	require.NoError(t, err)
 	connStr = strings.Replace(connStr, "localhost", "127.0.0.1", 1)
 	connStr = strings.Replace(connStr, "[::1]", "127.0.0.1", 1)
 
-	var pool *pgxpool.Pool
 	for i := 0; i < 60; i++ {
 		p, err := pgxpool.New(ctx, connStr)
 		if err == nil {
@@ -72,8 +93,6 @@ func StartPostgres(t *testing.T, ctx context.Context, dbName, migrationSQLPath s
 		time.Sleep(500 * time.Millisecond)
 	}
 	require.NotNil(t, pool, "postgres did not become ready in time")
-	t.Cleanup(pool.Close)
-
 	if migrationSQLPath != "" {
 		sqlBytes, err := os.ReadFile(migrationSQLPath)
 		require.NoError(t, err)
