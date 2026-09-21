@@ -12,6 +12,9 @@ import (
 // to the durable Space journal. It is deliberately not connected to the public
 // TransferOwnership RPC; activation belongs to the later Gateway vertical.
 func NewOwnershipRecoveryCoordinator(service *SpaceGRPC) *ownershiprecovery.Coordinator {
+	if service == nil || service.Store == nil || service.OwnershipAuth == nil || service.OwnershipRoles == nil || service.PrincipalIssuer == nil {
+		return ownershiprecovery.NewCoordinator(ownershiprecovery.Dependencies{})
+	}
 	return ownershiprecovery.NewCoordinator(ownershiprecovery.Dependencies{
 		Store: service.Store,
 		Auth:  ownershipRecoveryAuth{service: service},

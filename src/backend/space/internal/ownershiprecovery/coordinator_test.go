@@ -24,7 +24,7 @@ func TestCoordinator_ExecutePersistsProtocolTwoHappyPath(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, "completed", result.State)
-	require.Equal(t, []string{"reserve", "consume", "confirm", "prepare", "prepared", "commit", "finalize", "complete"}, deps.calls)
+	require.Equal(t, []string{"reserve", "consume_started", "consume", "confirm", "prepare", "prepared", "commit", "finalize", "complete"}, deps.calls)
 }
 
 func TestCoordinator_AmbiguousConsumeUsesReceiptLookupWithoutAnotherConsume(t *testing.T) {
@@ -36,7 +36,7 @@ func TestCoordinator_AmbiguousConsumeUsesReceiptLookupWithoutAnotherConsume(t *t
 
 	require.NoError(t, err)
 	require.Equal(t, "completed", result.State)
-	require.Equal(t, []string{"reserve", "consume", "lookup", "confirm", "prepare", "prepared", "commit", "finalize", "complete"}, deps.calls)
+	require.Equal(t, []string{"reserve", "consume_started", "consume", "lookup", "confirm", "prepare", "prepared", "commit", "finalize", "complete"}, deps.calls)
 }
 
 func TestCoordinator_RecoverReservedSelectsAbortWithoutProofConsume(t *testing.T) {
@@ -61,6 +61,10 @@ func newHappyPathDependencies(t *testing.T, binding store.OwnershipBinding) *hap
 func (d *happyPathDependencies) ReserveOwnership(context.Context, store.OwnershipBinding) (*store.OwnershipJournal, error) {
 	d.calls = append(d.calls, "reserve")
 	return &store.OwnershipJournal{Binding: d.binding, State: "reserved"}, nil
+}
+func (d *happyPathDependencies) MarkOwnershipConsumeStarted(context.Context, store.OwnershipBinding) (*store.OwnershipJournal, error) {
+	d.calls = append(d.calls, "consume_started")
+	return &store.OwnershipJournal{Binding: d.binding, State: "consume_started"}, nil
 }
 func (d *happyPathDependencies) LoadOwnership(context.Context, uuid.UUID) (*store.OwnershipJournal, error) {
 	panic("not reached")

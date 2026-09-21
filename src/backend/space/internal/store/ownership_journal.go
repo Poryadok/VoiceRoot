@@ -188,7 +188,7 @@ func (s *SpaceStore) ListPendingOwnership(ctx context.Context, limit int) ([]*Ow
 	if limit < 1 {
 		return nil, errors.New("ownership recovery limit must be positive")
 	}
-	rows, err := s.Pool.Query(ctx, `SELECT operation_id FROM ownership_journal WHERE state NOT IN ('completed','aborted') ORDER BY updated_at, operation_id LIMIT $1`, limit)
+	rows, err := s.Pool.Query(ctx, `SELECT operation_id FROM ownership_journal WHERE state NOT IN ('reserved','completed','aborted') AND (state <> 'consume_started' OR updated_at < now() - interval '30 seconds') ORDER BY updated_at, operation_id LIMIT $1`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -209,6 +209,40 @@ func (s *SpaceStore) ListPendingOwnership(ctx context.Context, limit int) ([]*Ow
 		return nil, err
 	}
 	return journals, nil
+}
+
+// MarkOwnershipConsumeStarted fences recovery before Auth sees the opaque proof.
+func (s *SpaceStore) MarkOwnershipConsumeStarted(ctx context.Context, binding OwnershipBinding) (*OwnershipJournal, error) {
+	encoded, _, err := EncodeOwnershipBinding(binding)
+	if err != nil {
+		return nil, err
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(context.WithoutCancel(ctx))
+	if err := lockOwnershipTransaction(ctx, tx, binding.OperationID, binding.SpaceID); err != nil {
+		return nil, err
+	}
+	existing, err := loadOwnershipJournal(ctx, tx, binding.OperationID)
+	if err != nil {
+		return nil, err
+	}
+	if !bytes.Equal(existing.BindingBytes, encoded) {
+		return nil, ErrOwnershipConflict
+	}
+	if existing.State != "reserved" {
+		return existing, nil
+	}
+	started, err := scanOwnershipJournalTerminal(tx.QueryRow(ctx, `UPDATE ownership_journal SET state='consume_started',updated_at=now() WHERE operation_id=$1 AND state='reserved' RETURNING `+ownershipJournalTerminalColumns, binding.OperationID))
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return started, nil
 }
 
 const ownershipJournalColumns = `operation_id,protocol_version,space_id,account_id,actor_profile_id,

@@ -21,6 +21,7 @@ var ErrAmbiguousConsume = errors.New("ownership proof consume outcome is ambiguo
 
 type Store interface {
 	ReserveOwnership(context.Context, store.OwnershipBinding) (*store.OwnershipJournal, error)
+	MarkOwnershipConsumeStarted(context.Context, store.OwnershipBinding) (*store.OwnershipJournal, error)
 	LoadOwnership(context.Context, uuid.UUID) (*store.OwnershipJournal, error)
 	ConfirmOwnershipProof(context.Context, store.OwnershipBinding, store.OwnershipAuthReceipt) (*store.OwnershipJournal, error)
 	MarkOwnershipPrepared(context.Context, store.OwnershipBinding, *rolev1.OwnershipTransferReceipt) (*store.OwnershipJournal, error)
@@ -62,6 +63,12 @@ func (c *Coordinator) Execute(ctx context.Context, binding store.OwnershipBindin
 	if err != nil {
 		return nil, err
 	}
+	if journal.State == "reserved" {
+		journal, err = c.dependencies.Store.MarkOwnershipConsumeStarted(ctx, binding)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return c.resume(ctx, binding, proof, journal)
 }
 
@@ -84,8 +91,15 @@ func (c *Coordinator) resume(ctx context.Context, binding store.OwnershipBinding
 	case "completed", "aborted":
 		return journal, nil
 	case "reserved":
+		return c.abort(ctx, binding, journal, nil)
+	case "consume_started":
 		if proof == "" {
-			return c.abort(ctx, binding, journal, nil)
+			receipt, lookupErr := c.dependencies.Auth.Lookup(ctx, binding)
+			if lookupErr != nil {
+				return c.abort(ctx, binding, journal, lookupErr)
+			}
+			journal, err = c.dependencies.Store.ConfirmOwnershipProof(ctx, binding, receipt)
+			break
 		}
 		receipt, err := c.dependencies.Auth.Consume(ctx, binding, proof)
 		if errors.Is(err, ErrAmbiguousConsume) {
