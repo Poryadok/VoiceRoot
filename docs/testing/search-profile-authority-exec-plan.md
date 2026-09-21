@@ -63,6 +63,7 @@ Make Search's profile projection converge from User's durable, revisioned author
 - This is a single atomic PR because User history, protected transport and Search conditional projection only form a safe consumer together.
 - Profile mutations use a transaction-aware store API for every projected create/update/delete path; invoking the journal helper after an existing store call remains prohibited because it would create orphanable state.
 - `ProfileStore` now owns the mutation transaction and appends a v1 upsert/delete before commit. `search_projection_transaction_integration_test.go` uses a forced outbox-trigger failure to prove an update rolls back with zero journal/outbox rows. The focused integration test requires hosted Linux CI because Windows rootless Docker panics before it can start PostgreSQL; local `go test ./... -short` passed (139 tests, 25 packages).
+- PR A adds the expand-only User `ACCOUNT_INACTIVE` inbox/overlay and keeps its Auth deletion consumer default-off. PR B may enable it only after dedicated broker credentials/ACLs (Auth exact-subject publish; User subscribe only), a staging/prod migration-job proof for `000017_account_lifecycle_search_tombstone`, and a canary; no current manifest activates it.
 
 ## Risks And Follow-Ups
 

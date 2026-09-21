@@ -245,6 +245,26 @@ func main() {
 			pub.Logger = logger
 			defer func() { _ = pub.Close() }()
 			events = pub
+			// Expand-first guard: activation waits for the additive User migration
+			// and for deploy-time Auth publish ACL enforcement.
+			accountDeletionConfig, configErr := accountDeletionConsumerConfigFromEnv(os.Getenv)
+			if configErr != nil {
+				log.Fatalf("account deletion consumer config: %v", configErr)
+			}
+			if accountDeletionConfig.Enabled {
+				accountDeletionConsumer, err := userevents.NewAccountDeletionConsumer(natsURL, accountDeletionConfig.CredentialsFile, store.NewProfileStore(pool))
+				if err != nil {
+					log.Fatalf("account deletion consumer: %v", err)
+				}
+				defer func() { _ = accountDeletionConsumer.Close() }()
+				accountDeletionContext, stopAccountDeletionConsumer := context.WithCancel(context.Background())
+				defer stopAccountDeletionConsumer()
+				go func() {
+					if err := accountDeletionConsumer.Run(accountDeletionContext); err != nil && accountDeletionContext.Err() == nil {
+						log.Printf("account deletion consumer stopped: %v", err)
+					}
+				}()
+			}
 		}
 
 		dnsResolver := grpcsvc.DNSResolverFromEnv()

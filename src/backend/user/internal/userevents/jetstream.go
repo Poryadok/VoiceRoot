@@ -2,8 +2,10 @@ package userevents
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,6 +17,7 @@ import (
 	eventsv1 "voice.app/voice/events/v1"
 	"voice/backend/pkg/correlation"
 	"voice/backend/pkg/natslog"
+	"voice/backend/user/internal/store"
 )
 
 const (
@@ -39,18 +42,115 @@ type JetStreamPublisher struct {
 	ensureErr  error
 }
 
+// AccountDeletionConsumer is the only User consumer of Auth's account-state
+// event. It ACKs only after the User transaction has committed its inbox,
+// lifecycle overlay and Search delete journal/outbox records.
+type AccountDeletionConsumer struct {
+	js         nats.JetStreamContext
+	profiles   *store.ProfileStore
+	connection *JetStreamPublisher
+}
+
+func NewAccountDeletionConsumer(natsURL, credentialsFile string, profiles *store.ProfileStore) (*AccountDeletionConsumer, error) {
+	if profiles == nil {
+		return nil, fmt.Errorf("account deletion consumer not initialized")
+	}
+	connection, err := NewJetStreamConsumerConnection(natsURL, credentialsFile)
+	if err != nil {
+		return nil, err
+	}
+	return &AccountDeletionConsumer{js: connection.js, profiles: profiles, connection: connection}, nil
+}
+
+func (c *AccountDeletionConsumer) Close() error {
+	if c == nil || c.connection == nil {
+		return nil
+	}
+	return c.connection.Close()
+}
+
+func (c *AccountDeletionConsumer) Run(ctx context.Context) error {
+	if c == nil || c.js == nil || c.profiles == nil {
+		return fmt.Errorf("account deletion consumer not initialized")
+	}
+	sub, err := c.js.PullSubscribe(subjectAccountDeleted, "user-account-deletion-v1", nats.BindStream(streamName))
+	if err != nil {
+		return err
+	}
+	defer sub.Unsubscribe()
+	for ctx.Err() == nil {
+		messages, err := sub.Fetch(1, nats.MaxWait(time.Second))
+		if err != nil {
+			if errors.Is(err, nats.ErrTimeout) {
+				continue
+			}
+			return err
+		}
+		for _, message := range messages {
+			if err := c.handle(ctx, message); err != nil {
+				continue
+			}
+		}
+	}
+	return ctx.Err()
+}
+
+func (c *AccountDeletionConsumer) handle(ctx context.Context, message *nats.Msg) error {
+	if message == nil {
+		return fmt.Errorf("empty account deletion message")
+	}
+	var envelope eventsv1.UserStreamEvent
+	if err := proto.Unmarshal(message.Data, &envelope); err != nil {
+		return fmt.Errorf("malformed account deletion envelope: %w", err)
+	}
+	eventID, err := uuid.Parse(envelope.GetEventId())
+	if err != nil || eventID == uuid.Nil {
+		return fmt.Errorf("invalid account deletion event_id")
+	}
+	deleted := envelope.GetUserAccountDeleted()
+	accountID, err := uuid.Parse(deleted.GetAccountId())
+	if deleted == nil || err != nil || accountID == uuid.Nil {
+		return fmt.Errorf("invalid account deletion account_id")
+	}
+	occurredAt := envelope.GetOccurredAt()
+	if occurredAt == nil || !occurredAt.IsValid() {
+		return fmt.Errorf("invalid account deletion occurred_at")
+	}
+	when := occurredAt.AsTime()
+	if err := c.profiles.ApplyAccountDeleted(ctx, eventID, accountID, when); err != nil {
+		return err
+	}
+	return message.Ack()
+}
+
 // NewJetStreamPublisher connects to NATS_URL and prepares JetStream for user.events.
 func NewJetStreamPublisher(natsURL string) (*JetStreamPublisher, error) {
+	return newJetStreamPublisher(natsURL)
+}
+
+// NewJetStreamConsumerConnection uses the dedicated credentials mounted for a
+// least-privilege account-deletion consumer. It deliberately does not call
+// ensureStream: stream administration is not a consumer permission.
+func NewJetStreamConsumerConnection(natsURL, credentialsFile string) (*JetStreamPublisher, error) {
+	credentialsFile = strings.TrimSpace(credentialsFile)
+	if credentialsFile == "" {
+		return nil, fmt.Errorf("account deletion NATS credentials file is required")
+	}
+	return newJetStreamPublisher(natsURL, nats.UserCredentials(credentialsFile))
+}
+
+func newJetStreamPublisher(natsURL string, options ...nats.Option) (*JetStreamPublisher, error) {
 	if natsURL == "" {
 		return nil, fmt.Errorf("empty NATS URL")
 	}
-	nc, err := nats.Connect(natsURL,
+	options = append(options,
 		nats.Name("voice-user-user-events"),
 		nats.Timeout(10*time.Second),
 		nats.RetryOnFailedConnect(true),
 		nats.MaxReconnects(-1),
 		nats.ReconnectWait(time.Second),
 	)
+	nc, err := nats.Connect(natsURL, options...)
 	if err != nil {
 		return nil, fmt.Errorf("nats connect: %w", err)
 	}

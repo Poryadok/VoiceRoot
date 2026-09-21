@@ -322,3 +322,22 @@ TLS listener on `:9093`. It requires Search's request-bound principal, replay
 admission, the Search JWKS issuer entry and a dedicated
 `USER_SEARCH_PROJECTION_CURSOR_HMAC_KEY`; missing or partial configuration
 fails startup. The ordinary User listener never exposes these RPCs.
+
+### Account deletion projection rollout
+
+Auth remains the sole account-state authority. User records a durable
+`ACCOUNT_INACTIVE` overlay from `user.account_deleted` and emits only
+revisioned Search Delete records for every owned profile, including an already
+soft-deleted profile. Account restore does not clear this overlay.
+
+This PR ships the additive migration and a default-off consumer only:
+`USER_ACCOUNT_DELETE_CONSUMER_ENABLED=false`. Setting it to `true` requires
+`USER_ACCOUNT_DELETE_NATS_CREDS_FILE`; User creates a separate consumer
+connection from that mounted credential and never grants it stream-management
+rights.
+
+PR B activation prerequisites are mandatory: broker credentials/ACLs grant
+Auth publish access to the exact `user.account_deleted` subject and User only
+subscribe/consumer access; the staging and production User migration job has
+applied `000017_account_lifecycle_search_tombstone`; then deploy a canary before
+enabling the consumer. No Compose manifest enables this consumer in PR A.
