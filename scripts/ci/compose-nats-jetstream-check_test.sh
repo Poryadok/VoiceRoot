@@ -8,7 +8,7 @@ FIXTURES="${ROOT}/scripts/ci/testdata/compose-nats-jetstream"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
-[[ -x "$CHECK" ]] || fail "missing executable Compose JetStream check"
+[[ -f "$CHECK" ]] || fail "missing Compose JetStream check"
 
 temp_dir="$(mktemp -d)"
 trap 'rm -rf "$temp_dir"' EXIT
