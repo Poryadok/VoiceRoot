@@ -43,7 +43,7 @@ func applySpaceMigrationsThrough12ForStoreTest(t *testing.T, ctx context.Context
 	for _, name := range []string{
 		"000008_ownership_journal.up.sql", "000009_ownership_journal_decision.up.sql",
 		"000010_ownership_journal_commit.up.sql", "000011_voice_access_epoch.up.sql",
-		"000012_ownership_journal_completion.up.sql",
+		"000012_ownership_journal_completion.up.sql", "000018_ownership_consume_started.up.sql",
 	} {
 		migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", name)
 		sqlBytes, err := os.ReadFile(migrationPath)

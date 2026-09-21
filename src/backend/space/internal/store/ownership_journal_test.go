@@ -103,6 +103,10 @@ func ownershipJournalStoreFixture(t *testing.T) *SpaceStore {
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, string(decisionMigration))
 	require.NoError(t, err)
+	consumeStartedMigration, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", "000018_ownership_consume_started.up.sql"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(consumeStartedMigration))
+	require.NoError(t, err)
 	applyLifecycleMigration(t, ctx, pool, "up")
 	return &SpaceStore{Pool: pool}
 }
