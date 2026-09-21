@@ -58,6 +58,8 @@ sed "s|__K_NAMESPACE__|${NS}|g" \
   "${ROOT}/deploy/templates/network-policy-social-privacy-principal.yaml" | kubectl apply -f -
 sed "s|__K_NAMESPACE__|${NS}|g" \
   "${ROOT}/deploy/templates/network-policy-file-user-principal.yaml" | kubectl apply -f -
+sed "s|__K_NAMESPACE__|${NS}|g" \
+  "${ROOT}/deploy/templates/network-policy-search-user-projection.yaml" | kubectl apply -f -
 render "${ROOT}/deploy/staging/gateway-deployment.yaml" | kubectl apply -f -
 
 if auth_pre_scale_needed; then

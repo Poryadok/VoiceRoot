@@ -49,6 +49,10 @@ const (
 	UserService_CheckOrganizationVerification_FullMethodName = "/voice.user.v1.UserService/CheckOrganizationVerification"
 	UserService_ApplyDowngradeProfiles_FullMethodName        = "/voice.user.v1.UserService/ApplyDowngradeProfiles"
 	UserService_CreateAvatarPresignedUpload_FullMethodName   = "/voice.user.v1.UserService/CreateAvatarPresignedUpload"
+	UserService_BeginSearchProfileSnapshot_FullMethodName    = "/voice.user.v1.UserService/BeginSearchProfileSnapshot"
+	UserService_ListSearchProfileSnapshot_FullMethodName     = "/voice.user.v1.UserService/ListSearchProfileSnapshot"
+	UserService_ListSearchProfileJournal_FullMethodName      = "/voice.user.v1.UserService/ListSearchProfileJournal"
+	UserService_GetSearchProfileCheckpoint_FullMethodName    = "/voice.user.v1.UserService/GetSearchProfileCheckpoint"
 )
 
 // UserServiceClient is the client API for UserService service.
@@ -102,6 +106,12 @@ type UserServiceClient interface {
 	ApplyDowngradeProfiles(ctx context.Context, in *ApplyDowngradeProfilesRequest, opts ...grpc.CallOption) (*ApplyDowngradeProfilesResponse, error)
 	// Presigned PUT to Cloudflare R2 for static profile avatar (docs/features/user-profile.md).
 	CreateAvatarPresignedUpload(ctx context.Context, in *CreateAvatarPresignedUploadRequest, opts ...grpc.CallOption) (*CreateAvatarPresignedUploadResponse, error)
+	// Search-only protected listener. These are intentionally unimplemented on
+	// ordinary User gRPC and require the request-bound service:search principal.
+	BeginSearchProfileSnapshot(ctx context.Context, in *BeginSearchProfileSnapshotRequest, opts ...grpc.CallOption) (*BeginSearchProfileSnapshotResponse, error)
+	ListSearchProfileSnapshot(ctx context.Context, in *ListSearchProfileSnapshotRequest, opts ...grpc.CallOption) (*ListSearchProfileSnapshotResponse, error)
+	ListSearchProfileJournal(ctx context.Context, in *ListSearchProfileJournalRequest, opts ...grpc.CallOption) (*ListSearchProfileJournalResponse, error)
+	GetSearchProfileCheckpoint(ctx context.Context, in *GetSearchProfileCheckpointRequest, opts ...grpc.CallOption) (*GetSearchProfileCheckpointResponse, error)
 }
 
 type userServiceClient struct {
@@ -412,6 +422,46 @@ func (c *userServiceClient) CreateAvatarPresignedUpload(ctx context.Context, in 
 	return out, nil
 }
 
+func (c *userServiceClient) BeginSearchProfileSnapshot(ctx context.Context, in *BeginSearchProfileSnapshotRequest, opts ...grpc.CallOption) (*BeginSearchProfileSnapshotResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BeginSearchProfileSnapshotResponse)
+	err := c.cc.Invoke(ctx, UserService_BeginSearchProfileSnapshot_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *userServiceClient) ListSearchProfileSnapshot(ctx context.Context, in *ListSearchProfileSnapshotRequest, opts ...grpc.CallOption) (*ListSearchProfileSnapshotResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSearchProfileSnapshotResponse)
+	err := c.cc.Invoke(ctx, UserService_ListSearchProfileSnapshot_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *userServiceClient) ListSearchProfileJournal(ctx context.Context, in *ListSearchProfileJournalRequest, opts ...grpc.CallOption) (*ListSearchProfileJournalResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSearchProfileJournalResponse)
+	err := c.cc.Invoke(ctx, UserService_ListSearchProfileJournal_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *userServiceClient) GetSearchProfileCheckpoint(ctx context.Context, in *GetSearchProfileCheckpointRequest, opts ...grpc.CallOption) (*GetSearchProfileCheckpointResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSearchProfileCheckpointResponse)
+	err := c.cc.Invoke(ctx, UserService_GetSearchProfileCheckpoint_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // UserServiceServer is the server API for UserService service.
 // All implementations must embed UnimplementedUserServiceServer
 // for forward compatibility.
@@ -463,6 +513,12 @@ type UserServiceServer interface {
 	ApplyDowngradeProfiles(context.Context, *ApplyDowngradeProfilesRequest) (*ApplyDowngradeProfilesResponse, error)
 	// Presigned PUT to Cloudflare R2 for static profile avatar (docs/features/user-profile.md).
 	CreateAvatarPresignedUpload(context.Context, *CreateAvatarPresignedUploadRequest) (*CreateAvatarPresignedUploadResponse, error)
+	// Search-only protected listener. These are intentionally unimplemented on
+	// ordinary User gRPC and require the request-bound service:search principal.
+	BeginSearchProfileSnapshot(context.Context, *BeginSearchProfileSnapshotRequest) (*BeginSearchProfileSnapshotResponse, error)
+	ListSearchProfileSnapshot(context.Context, *ListSearchProfileSnapshotRequest) (*ListSearchProfileSnapshotResponse, error)
+	ListSearchProfileJournal(context.Context, *ListSearchProfileJournalRequest) (*ListSearchProfileJournalResponse, error)
+	GetSearchProfileCheckpoint(context.Context, *GetSearchProfileCheckpointRequest) (*GetSearchProfileCheckpointResponse, error)
 	mustEmbedUnimplementedUserServiceServer()
 }
 
@@ -562,6 +618,18 @@ func (UnimplementedUserServiceServer) ApplyDowngradeProfiles(context.Context, *A
 }
 func (UnimplementedUserServiceServer) CreateAvatarPresignedUpload(context.Context, *CreateAvatarPresignedUploadRequest) (*CreateAvatarPresignedUploadResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateAvatarPresignedUpload not implemented")
+}
+func (UnimplementedUserServiceServer) BeginSearchProfileSnapshot(context.Context, *BeginSearchProfileSnapshotRequest) (*BeginSearchProfileSnapshotResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method BeginSearchProfileSnapshot not implemented")
+}
+func (UnimplementedUserServiceServer) ListSearchProfileSnapshot(context.Context, *ListSearchProfileSnapshotRequest) (*ListSearchProfileSnapshotResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListSearchProfileSnapshot not implemented")
+}
+func (UnimplementedUserServiceServer) ListSearchProfileJournal(context.Context, *ListSearchProfileJournalRequest) (*ListSearchProfileJournalResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListSearchProfileJournal not implemented")
+}
+func (UnimplementedUserServiceServer) GetSearchProfileCheckpoint(context.Context, *GetSearchProfileCheckpointRequest) (*GetSearchProfileCheckpointResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSearchProfileCheckpoint not implemented")
 }
 func (UnimplementedUserServiceServer) mustEmbedUnimplementedUserServiceServer() {}
 func (UnimplementedUserServiceServer) testEmbeddedByValue()                     {}
@@ -1124,6 +1192,78 @@ func _UserService_CreateAvatarPresignedUpload_Handler(srv interface{}, ctx conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _UserService_BeginSearchProfileSnapshot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BeginSearchProfileSnapshotRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).BeginSearchProfileSnapshot(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_BeginSearchProfileSnapshot_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).BeginSearchProfileSnapshot(ctx, req.(*BeginSearchProfileSnapshotRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _UserService_ListSearchProfileSnapshot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSearchProfileSnapshotRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).ListSearchProfileSnapshot(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_ListSearchProfileSnapshot_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).ListSearchProfileSnapshot(ctx, req.(*ListSearchProfileSnapshotRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _UserService_ListSearchProfileJournal_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSearchProfileJournalRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).ListSearchProfileJournal(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_ListSearchProfileJournal_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).ListSearchProfileJournal(ctx, req.(*ListSearchProfileJournalRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _UserService_GetSearchProfileCheckpoint_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSearchProfileCheckpointRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).GetSearchProfileCheckpoint(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_GetSearchProfileCheckpoint_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).GetSearchProfileCheckpoint(ctx, req.(*GetSearchProfileCheckpointRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // UserService_ServiceDesc is the grpc.ServiceDesc for UserService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1250,6 +1390,22 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CreateAvatarPresignedUpload",
 			Handler:    _UserService_CreateAvatarPresignedUpload_Handler,
+		},
+		{
+			MethodName: "BeginSearchProfileSnapshot",
+			Handler:    _UserService_BeginSearchProfileSnapshot_Handler,
+		},
+		{
+			MethodName: "ListSearchProfileSnapshot",
+			Handler:    _UserService_ListSearchProfileSnapshot_Handler,
+		},
+		{
+			MethodName: "ListSearchProfileJournal",
+			Handler:    _UserService_ListSearchProfileJournal_Handler,
+		},
+		{
+			MethodName: "GetSearchProfileCheckpoint",
+			Handler:    _UserService_GetSearchProfileCheckpoint_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

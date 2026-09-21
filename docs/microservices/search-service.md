@@ -99,3 +99,11 @@ message document from every active index and persists a permanent compact
 `PURGED` fence before completion. A generation gap reconciles through Space;
 uncertain fence state fails closed. Full request/receipt bytes retain 30 days
 from this participant's completion.
+
+## User-authoritative profile projection
+
+Search signs the protected User bootstrap calls with its rotating principal
+keys and publishes their public JWKS over TLS on `:8443`. Deployment requires
+`SEARCH_USER_PROJECTION_GRPC_ADDR`, CA and server name, signing-key directory,
+active KID and JWKS TLS files. Each journal event and its durable checkpoint
+commit together; restarts replay safely through the revisioned inbox.

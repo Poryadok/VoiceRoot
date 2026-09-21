@@ -24,6 +24,8 @@ func Method(target string) string {
 		return "/voice.space.v1.SpaceService/AreCoMembers"
 	case "file":
 		return "/voice.user.v1.UserService/ResolveAccountIDForProfile"
+	case "search":
+		return "/voice.user.v1.UserService/BeginSearchProfileSnapshot"
 	}
 	return ""
 }
@@ -44,6 +46,14 @@ func AllowsMethod(target, method string) bool {
 		return method == "/voice.space.v1.SpaceService/AreCoMembers"
 	case "file":
 		return method == "/voice.user.v1.UserService/ResolveAccountIDForProfile"
+	case "search":
+		switch method {
+		case "/voice.user.v1.UserService/BeginSearchProfileSnapshot",
+			"/voice.user.v1.UserService/ListSearchProfileSnapshot",
+			"/voice.user.v1.UserService/ListSearchProfileJournal",
+			"/voice.user.v1.UserService/GetSearchProfileCheckpoint":
+			return true
+		}
 	}
 	return false
 }

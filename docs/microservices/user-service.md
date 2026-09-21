@@ -314,3 +314,11 @@ clears the old cycle/pending selection; it never
 revives deleted or otherwise disabled data. Full replay/order and RED evidence is
 in
 [subscription-lifecycle-convergence-exec-plan.md](../testing/subscription-lifecycle-convergence-exec-plan.md).
+
+## Search profile projection authority
+
+Search obtains profile bootstrap snapshots and journal replay only through the
+TLS listener on `:9093`. It requires Search's request-bound principal, replay
+admission, the Search JWKS issuer entry and a dedicated
+`USER_SEARCH_PROJECTION_CURSOR_HMAC_KEY`; missing or partial configuration
+fails startup. The ordinary User listener never exposes these RPCs.

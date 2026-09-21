@@ -80,6 +80,13 @@ service UserService {
 
   // Presigned PUT to Cloudflare R2 for static profile avatar (docs/features/user-profile.md).
   rpc CreateAvatarPresignedUpload(CreateAvatarPresignedUploadRequest) returns (CreateAvatarPresignedUploadResponse);
+
+  // Search-only protected listener. These are intentionally unimplemented on
+  // ordinary User gRPC and require the request-bound service:search principal.
+  rpc BeginSearchProfileSnapshot(BeginSearchProfileSnapshotRequest) returns (BeginSearchProfileSnapshotResponse);
+  rpc ListSearchProfileSnapshot(ListSearchProfileSnapshotRequest) returns (ListSearchProfileSnapshotResponse);
+  rpc ListSearchProfileJournal(ListSearchProfileJournalRequest) returns (ListSearchProfileJournalResponse);
+  rpc GetSearchProfileCheckpoint(GetSearchProfileCheckpointRequest) returns (GetSearchProfileCheckpointResponse);
 }
 
 message EnsurePrimaryProfileRequest {
@@ -440,3 +447,35 @@ message MarkAccountRegularRequest {
 }
 
 message MarkAccountRegularResponse {}
+
+message SearchProfileProjectionEvent {
+  uint32 protocol_version = 1;
+  string event_id = 2;
+  google.protobuf.Timestamp occurred_at = 3;
+  uint64 journal_offset = 4;
+  string profile_id = 5;
+  uint64 source_revision = 6;
+  oneof payload {
+    SearchProfileUpsert upsert = 10;
+    SearchProfileDelete delete = 11;
+  }
+}
+message SearchProfileUpsert {
+  string account_id = 1;
+  string username = 2;
+  string discriminator = 3;
+  string display_name = 4;
+  string verification_type = 5;
+  string username_search_key = 6;
+  string display_name_search_key = 7;
+  uint32 normalization_version = 8;
+}
+message SearchProfileDelete {}
+message BeginSearchProfileSnapshotRequest {}
+message BeginSearchProfileSnapshotResponse { uint64 high_watermark = 1; }
+message ListSearchProfileSnapshotRequest { uint64 high_watermark = 1; uint32 page_size = 2; string cursor = 3; }
+message ListSearchProfileSnapshotResponse { repeated SearchProfileProjectionEvent events = 1; string next_cursor = 2; }
+message ListSearchProfileJournalRequest { uint64 after_offset = 1; uint32 page_size = 2; }
+message ListSearchProfileJournalResponse { repeated SearchProfileProjectionEvent events = 1; uint64 high_watermark = 2; }
+message GetSearchProfileCheckpointRequest {}
+message GetSearchProfileCheckpointResponse { uint64 high_watermark = 1; }

@@ -27,6 +27,7 @@ import (
 	grpcsvc "voice/backend/search/internal/grpcsvc"
 	"voice/backend/search/internal/indexer"
 	"voice/backend/search/internal/principalruntime"
+	"voice/backend/search/internal/profileprojection"
 	"voice/backend/search/internal/store"
 
 	chatv1 "voice.app/voice/chat/v1"
@@ -69,6 +70,28 @@ func main() {
 	if manifestConn != nil {
 		defer func() { _ = manifestConn.Close() }()
 	}
+	userProjectionClient, userProjectionConn, err := loadSignedUserProjectionClientFromEnv()
+	if err != nil {
+		log.Fatalf("User projection principal: %v", err)
+	}
+	if userProjectionClient != nil && dbURL == "" {
+		log.Fatal("User projection principal requires DATABASE_URL")
+	}
+	if userProjectionConn != nil {
+		defer func() { _ = userProjectionConn.Close() }()
+	}
+	projectionJWKS, err := loadSearchProjectionJWKS()
+	if err != nil {
+		log.Fatalf("User projection JWKS: %v", err)
+	}
+	if projectionJWKS != nil {
+		defer func() { _ = projectionJWKS.Close() }()
+		go func() {
+			if err := projectionJWKS.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+				log.Fatalf("User projection JWKS serve: %v", err)
+			}
+		}()
+	}
 	var grpcSrv, principalSrv *grpc.Server
 	rootCtx, rootCancel := context.WithCancel(context.Background())
 	defer rootCancel()
@@ -98,6 +121,14 @@ func main() {
 
 		msgStore := store.NewMessageSearchStore(pool)
 		profileSpaceStore := store.NewProfileSpaceSearchStore(pool)
+		if userProjectionClient != nil {
+			projectionStore := &profileprojection.StoreAdapter{Pool: pool}
+			go func() {
+				if err := runUserProjectionBootstrap(rootCtx, userProjectionClient, projectionStore); err != nil && rootCtx.Err() == nil {
+					logger.Error("User profile projection bootstrap failed", slog.Any("error", err))
+				}
+			}()
+		}
 
 		svc := &grpcsvc.SearchGRPC{
 			Messages:     &grpcsvc.MessageStoreAdapter{MessageSearchStore: msgStore},

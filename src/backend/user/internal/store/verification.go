@@ -10,6 +10,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	userv1 "voice.app/voice/user/v1"
 )
 
 const verificationSourceResolutionSQL = `
@@ -205,17 +208,24 @@ func (s *ProfileStore) HasVerifiedUsernameConflict(ctx context.Context, normaliz
 
 // SoftDeleteProfile archives a non-primary owned profile.
 func (s *ProfileStore) SoftDeleteProfile(ctx context.Context, accountID, profileID uuid.UUID) error {
-	tag, err := s.pool.Exec(ctx, `
-		UPDATE profiles SET deleted_at = now(), updated_at = now()
-		WHERE id = $1 AND account_id = $2 AND is_primary = false AND deleted_at IS NULL`,
-		profileID, accountID)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		return pgx.ErrNoRows
-	}
-	return nil
+	return s.withSearchProjectionTx(ctx, func(tx pgx.Tx) error {
+		row := tx.QueryRow(ctx, `UPDATE profiles
+			SET deleted_at = now(), updated_at = now(), search_projection_revision = search_projection_revision + 1
+			WHERE id = $1 AND account_id = $2 AND is_primary = false AND deleted_at IS NULL
+			RETURNING `+profileSelectCols, profileID, accountID)
+		p, err := scanProfile(row)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return pgx.ErrNoRows
+		}
+		if err != nil {
+			return err
+		}
+		return AppendSearchProjection(ctx, tx, &userv1.SearchProfileProjectionEvent{
+			ProtocolVersion: 1, EventId: uuid.NewString(), OccurredAt: timestamppb.Now(),
+			ProfileId: p.ID.String(), SourceRevision: p.SearchProjectionRevision,
+			Payload: &userv1.SearchProfileProjectionEvent_Delete{Delete: &userv1.SearchProfileDelete{}},
+		})
+	})
 }
 
 // ApplyDowngradeProfileSelection unfreezes kept profiles and freezes others for free tier.
