@@ -71,9 +71,10 @@ func TestApplyAndCheckpoint_CommitsProjectionAndOffsetTogether(t *testing.T) {
 
 	conflict := proto.Clone(event).(*userv1.SearchProfileProjectionEvent)
 	conflict.EventId = uuid.NewString()
+	conflict.JournalOffset = 8
 	conflict.GetUpsert().DisplayName = "Conflicting same revision"
 	conflict.GetUpsert().DisplayNameSearchKey = searchnormalization.V1.Normalize(conflict.GetUpsert().GetDisplayName())
-	_, err = adapter.ApplyAndCheckpoint(ctx, conflict, 7)
+	_, err = adapter.ApplyAndCheckpoint(ctx, conflict, conflict.GetJournalOffset())
 	require.Error(t, err)
 	var quarantinedAt *time.Time
 	require.NoError(t, pool.QueryRow(ctx, `SELECT quarantined_at FROM search_user_profile_generation_inbox WHERE generation=1 AND event_id=$1`, conflict.GetEventId()).Scan(&quarantinedAt))
@@ -85,7 +86,7 @@ func TestApplyAndCheckpoint_CommitsProjectionAndOffsetTogether(t *testing.T) {
 	// moving the durable authority fence away from the accepted payload.
 	_, err = adapter.ApplyAndCheckpoint(ctx, event, 7)
 	require.NoError(t, err)
-	_, err = adapter.ApplyAndCheckpoint(ctx, conflict, 7)
+	_, err = adapter.ApplyAndCheckpoint(ctx, conflict, conflict.GetJournalOffset())
 	require.Error(t, err)
 	require.NoError(t, pool.QueryRow(ctx, `SELECT source_revision FROM search_user_profile_generation_fence WHERE generation=1 AND profile_id=$1`, profileID).Scan(&fenceRevision))
 	require.Equal(t, int64(1), fenceRevision)
@@ -215,6 +216,13 @@ func TestGenerationRoute_PromotesAndRollsBackWithoutLegacyFallback(t *testing.T)
 	require.NoError(t, err)
 	require.True(t, acquired)
 	defer FinishGenerationRebuild(ctx, lease)
+	profileID, accountID := uuid.NewString(), uuid.NewString()
+	event := &userv1.SearchProfileProjectionEvent{ProtocolVersion: 1, EventId: uuid.NewString(), ProfileId: profileID, SourceRevision: 1, JournalOffset: 1, Payload: &userv1.SearchProfileProjectionEvent_Upsert{Upsert: &userv1.SearchProfileUpsert{AccountId: accountID, Username: "route", Discriminator: "0001", DisplayName: "Route", UsernameSearchKey: "route", DisplayNameSearchKey: "route", NormalizationVersion: 1}}}
+	adapter := &StoreAdapter{Pool: pool, Generation: 2}
+	require.NoError(t, adapter.StartSnapshot(ctx, 1))
+	_, err = adapter.ApplyAndCheckpoint(ctx, event, event.GetJournalOffset())
+	require.NoError(t, err)
+	require.NoError(t, adapter.FinishSnapshot(ctx))
 	require.NoError(t, MarkGenerationReady(ctx, pool, 2))
 	route, err := PromoteGeneration(ctx, pool, 2)
 	require.NoError(t, err)
