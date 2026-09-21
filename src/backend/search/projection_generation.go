@@ -67,6 +67,9 @@ func runDesiredProjectionGeneration(ctx context.Context, logger *slog.Logger, cl
 					}
 					return profileprojection.VerifyGenerationEvidence(ctx, pool, generation, evidence)
 				})
+				if err != nil {
+					_ = profileprojection.ReopenGeneration(ctx, pool, generation)
+				}
 			}
 			profileprojection.FinishGenerationRebuild(ctx, lease)
 			if err == nil {
@@ -144,8 +147,11 @@ func replayProjectionEvidenceAt(ctx context.Context, client userv1.UserServiceCl
 			return profileprojection.ReadinessEvidence{}, err
 		}
 		for _, event := range page.GetEvents() {
+			// The authority page may have advanced beyond persisted C. C+1 is not
+			// an invalid candidate; route-lock promotion detects the fresh cutoff
+			// and sends this target through catch-up/reverification.
 			if event.GetJournalOffset() > cutoff {
-				return profileprojection.ReadinessEvidence{}, fmt.Errorf("journal replay exceeded candidate cutoff")
+				break
 			}
 			bytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(event)
 			if err != nil {

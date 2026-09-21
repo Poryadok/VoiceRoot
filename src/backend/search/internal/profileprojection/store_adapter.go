@@ -126,10 +126,6 @@ func (s *StoreAdapter) applyInTransaction(ctx context.Context, tx pgx.Tx, envelo
 	if s == nil || s.Pool == nil {
 		return Quarantined, fmt.Errorf("profile projection store unavailable")
 	}
-	event, err := eventFromProto(envelope)
-	if err != nil {
-		return Quarantined, err
-	}
 	payload, err := proto.Marshal(envelope)
 	if err != nil {
 		return Quarantined, err
@@ -150,16 +146,24 @@ func (s *StoreAdapter) applyInTransaction(ctx context.Context, tx pgx.Tx, envelo
 	var storedHash []byte
 	err = tx.QueryRow(ctx, `SELECT source_revision,payload_sha256 FROM search_user_profile_generation_inbox WHERE generation=$1 AND event_id=$2`, s.generation(), eventID).Scan(&storedOffset, &storedHash)
 	if err == nil {
-		if storedOffset == event.SourceRevision && string(storedHash) == string(digest[:]) {
+		if storedOffset == envelope.GetSourceRevision() && string(storedHash) == string(digest[:]) {
 			return NoopDuplicate, nil
 		}
-		_, quarantineErr := tx.Exec(ctx, `INSERT INTO search_user_profile_generation_inbox(generation,event_id,profile_id,source_revision,payload_sha256,quarantined_at,quarantine_reason) VALUES($1,$2,$3,$4,$5,now(),'event id payload mismatch') ON CONFLICT(generation,event_id) DO UPDATE SET quarantined_at=now(),quarantine_reason='event id payload mismatch'`, s.generation(), eventID, profileID, event.SourceRevision, digest[:])
+		_, quarantineErr := tx.Exec(ctx, `INSERT INTO search_user_profile_generation_inbox(generation,event_id,profile_id,source_revision,payload_sha256,quarantined_at,quarantine_reason) VALUES($1,$2,$3,$4,$5,now(),'event id payload mismatch') ON CONFLICT(generation,event_id) DO UPDATE SET quarantined_at=now(),quarantine_reason='event id payload mismatch'`, s.generation(), eventID, profileID, envelope.GetSourceRevision(), digest[:])
 		if quarantineErr != nil {
 			return Quarantined, quarantineErr
 		}
 		return Quarantined, fmt.Errorf("event id payload mismatch")
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
+		return Quarantined, err
+	}
+	event, err := eventFromProto(envelope)
+	if err != nil {
+		_, quarantineErr := tx.Exec(ctx, `INSERT INTO search_user_profile_generation_inbox(generation,event_id,profile_id,source_revision,payload_sha256,quarantined_at,quarantine_reason) VALUES($1,$2,$3,$4,$5,now(),'invalid profile projection event')`, s.generation(), eventID, profileID, envelope.GetSourceRevision(), digest[:])
+		if quarantineErr != nil {
+			return Quarantined, quarantineErr
+		}
 		return Quarantined, err
 	}
 	var highWatermark, evidenceCount, evidenceFirst, evidenceLast uint64

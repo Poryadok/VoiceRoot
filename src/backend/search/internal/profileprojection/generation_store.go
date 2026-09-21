@@ -123,6 +123,11 @@ func GenerationReplayBounds(ctx context.Context, pool *pgxpool.Pool, generation 
 	return high, cutoff, err
 }
 
+func ReopenGeneration(ctx context.Context, pool *pgxpool.Pool, generation uint64) error {
+	_, err := pool.Exec(ctx, `UPDATE search_user_profile_generations SET state='building',ready_at=NULL,evidence_sha256=NULL WHERE generation=$1 AND state='ready'`, generation)
+	return err
+}
+
 func PromoteGeneration(ctx context.Context, pool *pgxpool.Pool, target uint64) (GenerationRoute, error) {
 	return PromoteGenerationWithVerification(ctx, pool, target, nil)
 }
