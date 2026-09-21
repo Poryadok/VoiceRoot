@@ -32,6 +32,7 @@ func TestApplyAndCheckpoint_CommitsProjectionAndOffsetTogether(t *testing.T) {
 		"000005_user_profile_projection_snapshot.up.sql",
 		"000006_user_profile_projection_quarantine.up.sql",
 		"000007_user_profile_projection_fence.up.sql",
+		"000008_user_profile_projection_generations.up.sql",
 	} {
 		integrationtest.ApplySQLFile(t, ctx, pool, searchProjectionRepoRoot(t), filepath.Join("src", "backend", "migrations", "search_db", migration))
 	}
@@ -104,7 +105,7 @@ func TestFence_InverseDeliveryOrderRetainsNewerRevision(t *testing.T) {
 	}
 	ctx := context.Background()
 	pool := integrationtest.StartPostgres(t, ctx, "search_projection_fence", filepath.Join(searchProjectionRepoRoot(t), "src", "backend", "migrations", "search_db", "000001_init.up.sql"))
-	for _, migration := range []string{"000003_space_lifecycle.up.sql", "000002_verification_type.up.sql", "000004_user_profile_projection.up.sql", "000005_user_profile_projection_snapshot.up.sql", "000006_user_profile_projection_quarantine.up.sql", "000007_user_profile_projection_fence.up.sql"} {
+	for _, migration := range []string{"000003_space_lifecycle.up.sql", "000002_verification_type.up.sql", "000004_user_profile_projection.up.sql", "000005_user_profile_projection_snapshot.up.sql", "000006_user_profile_projection_quarantine.up.sql", "000007_user_profile_projection_fence.up.sql", "000008_user_profile_projection_generations.up.sql"} {
 		integrationtest.ApplySQLFile(t, ctx, pool, searchProjectionRepoRoot(t), filepath.Join("src", "backend", "migrations", "search_db", migration))
 	}
 	profileID, accountID := uuid.NewString(), uuid.NewString()
@@ -153,7 +154,7 @@ func TestSnapshotState_PersistsRestartCursor(t *testing.T) {
 	}
 	ctx := context.Background()
 	pool := integrationtest.StartPostgres(t, ctx, "search_projection_snapshot", filepath.Join(searchProjectionRepoRoot(t), "src", "backend", "migrations", "search_db", "000001_init.up.sql"))
-	for _, migration := range []string{"000003_space_lifecycle.up.sql", "000002_verification_type.up.sql", "000004_user_profile_projection.up.sql", "000005_user_profile_projection_snapshot.up.sql", "000006_user_profile_projection_quarantine.up.sql", "000007_user_profile_projection_fence.up.sql"} {
+	for _, migration := range []string{"000003_space_lifecycle.up.sql", "000002_verification_type.up.sql", "000004_user_profile_projection.up.sql", "000005_user_profile_projection_snapshot.up.sql", "000006_user_profile_projection_quarantine.up.sql", "000007_user_profile_projection_fence.up.sql", "000008_user_profile_projection_generations.up.sql"} {
 		integrationtest.ApplySQLFile(t, ctx, pool, searchProjectionRepoRoot(t), filepath.Join("src", "backend", "migrations", "search_db", migration))
 	}
 	adapter := &StoreAdapter{Pool: pool}
@@ -180,6 +181,38 @@ func TestSnapshotState_PersistsRestartCursor(t *testing.T) {
 	require.Equal(t, "idle", state.Phase)
 	require.Zero(t, state.HighWatermark)
 	require.Empty(t, state.Cursor)
+}
+
+func TestGenerationRoute_PromotesAndRollsBackWithoutLegacyFallback(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := integrationtest.StartPostgres(t, ctx, "search_projection_generation", filepath.Join(searchProjectionRepoRoot(t), "src", "backend", "migrations", "search_db", "000001_init.up.sql"))
+	for _, migration := range []string{"000003_space_lifecycle.up.sql", "000002_verification_type.up.sql", "000004_user_profile_projection.up.sql", "000005_user_profile_projection_snapshot.up.sql", "000006_user_profile_projection_quarantine.up.sql", "000007_user_profile_projection_fence.up.sql", "000008_user_profile_projection_generations.up.sql"} {
+		integrationtest.ApplySQLFile(t, ctx, pool, searchProjectionRepoRoot(t), filepath.Join("src", "backend", "migrations", "search_db", migration))
+	}
+
+	lease, acquired, err := TryStartGeneration(ctx, pool, 2)
+	require.NoError(t, err)
+	require.True(t, acquired)
+	defer FinishGenerationRebuild(ctx, lease)
+	require.NoError(t, MarkGenerationReady(ctx, pool, 2))
+	route, err := PromoteGeneration(ctx, pool, 2)
+	require.NoError(t, err)
+	require.Equal(t, uint64(2), route.Active)
+	require.Equal(t, uint64(1), route.Rollback)
+
+	route, err = RollbackGeneration(ctx, pool)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), route.Active)
+	require.Equal(t, uint64(2), route.Rollback)
+
+	// A broken route is an availability failure, never a read from unscoped data.
+	_, err = pool.Exec(ctx, `DELETE FROM search_user_profile_generation_route WHERE singleton=true`)
+	require.NoError(t, err)
+	_, err = LoadGenerationRoute(ctx, pool)
+	require.Error(t, err)
 }
 
 func searchProjectionRepoRoot(t *testing.T) string {
