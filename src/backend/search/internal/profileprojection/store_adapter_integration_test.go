@@ -74,8 +74,9 @@ func TestApplyAndCheckpoint_CommitsProjectionAndOffsetTogether(t *testing.T) {
 	conflict.JournalOffset = 8
 	conflict.GetUpsert().DisplayName = "Conflicting same revision"
 	conflict.GetUpsert().DisplayNameSearchKey = searchnormalization.V1.Normalize(conflict.GetUpsert().GetDisplayName())
-	_, err = adapter.ApplyAndCheckpoint(ctx, conflict, conflict.GetJournalOffset())
-	require.Error(t, err)
+	result, err = adapter.ApplyAndCheckpoint(ctx, conflict, conflict.GetJournalOffset())
+	require.NoError(t, err)
+	require.Equal(t, NoopDuplicate, result)
 	var quarantinedAt *time.Time
 	require.NoError(t, pool.QueryRow(ctx, `SELECT quarantined_at FROM search_user_profile_generation_inbox WHERE generation=1 AND event_id=$1`, conflict.GetEventId()).Scan(&quarantinedAt))
 	require.NotNil(t, quarantinedAt)
@@ -223,6 +224,9 @@ func TestGenerationRoute_PromotesAndRollsBackWithoutLegacyFallback(t *testing.T)
 	_, err = adapter.ApplyAndCheckpoint(ctx, event, event.GetJournalOffset())
 	require.NoError(t, err)
 	require.NoError(t, adapter.FinishSnapshot(ctx))
+	activeAdapter := &StoreAdapter{Pool: pool, Generation: 1}
+	_, err = activeAdapter.ApplyAndCheckpoint(ctx, event, event.GetJournalOffset())
+	require.NoError(t, err)
 	require.NoError(t, MarkGenerationReady(ctx, pool, 2))
 	route, err := PromoteGeneration(ctx, pool, 2)
 	require.NoError(t, err)
