@@ -16,8 +16,8 @@ const (
 	userProjectionDurable = "search-user-profile-projection-v1"
 )
 
-// RunJetStreamConsumer applies a delivered User authority record and its
-// replay checkpoint in the StoreAdapter's single transaction before Ack.
+// CheckpointApplier applies a delivered User authority record and its replay
+// checkpoint in the StoreAdapter's single transaction before Ack.
 type CheckpointApplier interface {
 	ApplyAndCheckpoint(context.Context, *userv1.SearchProfileProjectionEvent, uint64) (ApplyResult, error)
 }
