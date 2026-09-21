@@ -223,6 +223,29 @@ const Verify2FARequest$json = {
 final $typed_data.Uint8List verify2FARequestDescriptor = $convert.base64Decode(
     'ChBWZXJpZnkyRkFSZXF1ZXN0EhsKCXRvdHBfY29kZRgBIAEoCVIIdG90cENvZGU=');
 
+@$core.Deprecated('Use disable2FARequestDescriptor instead')
+const Disable2FARequest$json = {
+  '1': 'Disable2FARequest',
+  '2': [
+    {'1': 'password', '3': 1, '4': 1, '5': 9, '10': 'password'},
+    {'1': 'totp_code', '3': 2, '4': 1, '5': 9, '10': 'totpCode'},
+  ],
+};
+
+/// Descriptor for `Disable2FARequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List disable2FARequestDescriptor = $convert.base64Decode(
+    'ChFEaXNhYmxlMkZBUmVxdWVzdBIaCghwYXNzd29yZBgBIAEoCVIIcGFzc3dvcmQSGwoJdG90cF'
+    '9jb2RlGAIgASgJUgh0b3RwQ29kZQ==');
+
+@$core.Deprecated('Use disable2FAResponseDescriptor instead')
+const Disable2FAResponse$json = {
+  '1': 'Disable2FAResponse',
+};
+
+/// Descriptor for `Disable2FAResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List disable2FAResponseDescriptor =
+    $convert.base64Decode('ChJEaXNhYmxlMkZBUmVzcG9uc2U=');
+
 @$core.Deprecated('Use verifyOTPRequestDescriptor instead')
 const VerifyOTPRequest$json = {
   '1': 'VerifyOTPRequest',

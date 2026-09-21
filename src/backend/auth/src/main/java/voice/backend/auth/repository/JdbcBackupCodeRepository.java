@@ -33,6 +33,14 @@ public class JdbcBackupCodeRepository implements BackupCodeRepository {
   }
 
   @Override
+  public void deleteCodes(UUID accountId) {
+    transactions.executeWithoutResult(status -> {
+      lockAccount(accountId);
+      jdbc.update("DELETE FROM backup_codes WHERE account_id = :accountId", Map.of("accountId", accountId));
+    });
+  }
+
+  @Override
   public boolean consumeCode(UUID accountId, String codeHash) {
     return Boolean.TRUE.equals(transactions.execute(status -> {
       lockAccount(accountId);

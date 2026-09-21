@@ -273,6 +273,9 @@ public class AuthService {
     }
     Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
     ensureActive(account);
+    if (claims.sessionEpoch() < account.sessionEpoch()) {
+      throw new AuthException("token_revoked");
+    }
     return claims;
   }
 
@@ -436,6 +439,45 @@ public class AuthService {
     accounts.setTotpEnabled(account.id(), true);
     Account fresh = accounts.findById(account.id().toString()).orElse(account);
     return issueSession(fresh, prepared, "{}");
+  }
+
+  public boolean is2FAEnabled(String accessToken) {
+    TokenClaims claims = validate(accessToken);
+    return accounts.findById(claims.userId()).map(Account::totpEnabled).orElseThrow(
+        () -> new AuthException("invalid_token"));
+  }
+
+  /**
+   * Removes a confirmed TOTP enrollment. The current access credential and every refresh
+   * credential are revoked, so disabling a factor always requires a fresh sign-in.
+   */
+  public synchronized void disable2FA(String accessToken, String password, String secondFactor) {
+    TokenClaims claims = validate(accessToken);
+    Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
+    ensureActive(account);
+    if (account.email() == null && account.phone() == null) {
+      throw new AuthException("validation_failed");
+    }
+    if (!account.totpEnabled() || account.totpSecret() == null || account.totpSecret().length == 0) {
+      throw new AuthException("totp_not_enrolled");
+    }
+    if (!passwordHasher.matches(password, account.passwordHash())) {
+      throw new AuthException("invalid_credentials");
+    }
+    if (secondFactor == null || secondFactor.isBlank()
+        || !totpService.verifyEncrypted(account.totpSecret(), secondFactor.trim())) {
+      throw new AuthException("invalid_totp");
+    }
+    // Seal the session fence before changing factor state. If a dependency fails, the
+    // account remains protected by TOTP; after the fence succeeds, a partial retry can
+    // only leave the account more restricted, never with live pre-change credentials.
+    long epoch = accounts.incrementSessionEpoch(account.id());
+    sessionEpochIssuanceGate.prepare(account.id(), epoch);
+    Instant now = Instant.now(clock);
+    refreshTokens.revokeAllForAccount(account.id(), now);
+    tokenBlacklist.revoke(claims.jti(), jwtService.ttl(claims));
+    accounts.saveTotpSecret(account.id(), null, false);
+    backupCodeService.invalidate(account.id());
   }
 
   public AuthSession switchActiveProfile(String accessToken, String profileId, String deviceInfoJson) {
