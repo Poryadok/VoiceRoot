@@ -48,6 +48,15 @@ func TestCoordinator_RecoverReservedSelectsAbortWithoutProofConsume(t *testing.T
 	require.Equal(t, []string{"abort_decided", "abort", "abort_complete"}, deps.calls)
 }
 
+func TestCoordinator_RecoverConsumeStartedLooksUpReceiptWithoutConsumingProof(t *testing.T) {
+	binding := store.OwnershipBinding{ProtocolVersion: 2, SpaceID: uuid.New(), AccountID: uuid.New(), ActorProfileID: uuid.New(), NewOwnerProfileID: uuid.New(), OperationID: uuid.New(), SessionEpoch: 1, ProofDigest: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}
+	deps := newHappyPathDependencies(t, binding)
+	result, err := NewCoordinator(Dependencies{Store: deps, Auth: deps, Role: deps}).Recover(context.Background(), &store.OwnershipJournal{Binding: binding, State: "consume_started"})
+	require.NoError(t, err)
+	require.Equal(t, "completed", result.State)
+	require.Equal(t, []string{"lookup", "confirm", "prepare", "prepared", "commit", "finalize", "complete"}, deps.calls)
+}
+
 type happyPathDependencies struct {
 	binding    store.OwnershipBinding
 	calls      []string
