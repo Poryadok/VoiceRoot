@@ -89,6 +89,13 @@ func TestApplyAndCheckpoint_CommitsProjectionAndOffsetTogether(t *testing.T) {
 	require.Error(t, err)
 	require.NoError(t, pool.QueryRow(ctx, `SELECT source_revision FROM search_user_profile_generation_fence WHERE generation=1 AND profile_id=$1`, profileID).Scan(&fenceRevision))
 	require.Equal(t, int64(1), fenceRevision)
+	malformed := proto.Clone(event).(*userv1.SearchProfileProjectionEvent)
+	malformed.GetUpsert().UsernameSearchKey = ""
+	_, err = adapter.ApplyAndCheckpoint(ctx, malformed, malformed.GetJournalOffset())
+	require.Error(t, err)
+	var malformedQuarantined *time.Time
+	require.NoError(t, pool.QueryRow(ctx, `SELECT quarantined_at FROM search_user_profile_generation_inbox WHERE generation=1 AND event_id=$1`, event.GetEventId()).Scan(&malformedQuarantined))
+	require.NotNil(t, malformedQuarantined)
 	// The rollback migration removes quarantine duplicates before restoring the
 	// historical unconditional profile/revision index.
 	integrationtest.ApplySQLFile(t, ctx, pool, searchProjectionRepoRoot(t), filepath.Join("src", "backend", "migrations", "search_db", "000006_user_profile_projection_quarantine.down.sql"))
