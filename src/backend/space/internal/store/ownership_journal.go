@@ -180,6 +180,37 @@ func (s *SpaceStore) LoadOwnership(ctx context.Context, operationID uuid.UUID) (
 	return loadOwnershipJournal(ctx, s.Pool, operationID)
 }
 
+// ListPendingOwnership returns a bounded deterministic recovery snapshot.
+func (s *SpaceStore) ListPendingOwnership(ctx context.Context, limit int) ([]*OwnershipJournal, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("space store: pool not configured")
+	}
+	if limit < 1 {
+		return nil, errors.New("ownership recovery limit must be positive")
+	}
+	rows, err := s.Pool.Query(ctx, `SELECT operation_id FROM ownership_journal WHERE state NOT IN ('completed','aborted') ORDER BY updated_at, operation_id LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var journals []*OwnershipJournal
+	for rows.Next() {
+		var operationID uuid.UUID
+		if err := rows.Scan(&operationID); err != nil {
+			return nil, err
+		}
+		journal, err := s.LoadOwnership(ctx, operationID)
+		if err != nil {
+			return nil, err
+		}
+		journals = append(journals, journal)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return journals, nil
+}
+
 const ownershipJournalColumns = `operation_id,protocol_version,space_id,account_id,actor_profile_id,
 	new_owner_profile_id,session_epoch,proof_digest,binding_bytes,binding_hash,state,audit_id,event_id,
 	auth_receipt_id,auth_account_id,auth_profile_id,auth_space_id,auth_new_owner_profile_id,

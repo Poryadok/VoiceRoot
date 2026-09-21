@@ -55,6 +55,13 @@ func (s *SpaceGRPC) consumeOwnershipAuthProof(ctx context.Context, binding store
 	if !ambiguousOwnershipAuthError(err) {
 		return store.OwnershipAuthReceipt{}, err
 	}
+	return s.lookupOwnershipAuthReceipt(ctx, binding)
+}
+
+func (s *SpaceGRPC) lookupOwnershipAuthReceipt(ctx context.Context, binding store.OwnershipBinding) (store.OwnershipAuthReceipt, error) {
+	if s == nil || s.OwnershipAuth == nil {
+		return store.OwnershipAuthReceipt{}, status.Error(codes.Unavailable, "ownership auth transport unavailable")
+	}
 	lookup := &authv1.GetOwnershipTransferReceiptRequest{AccountId: binding.AccountID.String(), ProfileId: binding.ActorProfileID.String(), SpaceId: binding.SpaceID.String(), NewOwnerProfileId: binding.NewOwnerProfileID.String(), OperationId: binding.OperationID.String(), SessionEpoch: binding.SessionEpoch, ProofDigest: binding.ProofDigest}
 	signed, signErr := s.ownershipAuthContext(ctx, lookup, authv1.AuthService_GetOwnershipTransferReceipt_FullMethodName, binding.OperationID)
 	if signErr != nil {
