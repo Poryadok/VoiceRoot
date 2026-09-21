@@ -30,3 +30,34 @@ func TestReplayEvidenceCollectorRejectsWrongPhaseAndPreservesPagedOrder(t *testi
 	require.Error(t, collector.AddJournal(2, []byte("duplicate snapshot")))
 	require.Error(t, collector.AddSnapshot(4, []byte("past H")))
 }
+
+func TestReadinessEvidenceDetectsMutationOmissionAndReordering(t *testing.T) {
+	baseline, err := NewReadinessEvidence(1, 0)
+	require.NoError(t, err)
+	require.NoError(t, baseline.Add(1, []byte("one")))
+	require.NoError(t, baseline.Add(2, []byte("two")))
+
+	mutated, _ := NewReadinessEvidence(1, 0)
+	require.NoError(t, mutated.Add(1, []byte("one")))
+	require.NoError(t, mutated.Add(2, []byte("TWO")))
+	require.NotEqual(t, baseline.Digest, mutated.Digest)
+
+	omitted, _ := NewReadinessEvidence(1, 0)
+	require.NoError(t, omitted.Add(1, []byte("one")))
+	require.Error(t, omitted.Add(3, []byte("three")))
+
+	reordered, _ := NewReadinessEvidence(1, 0)
+	require.Error(t, reordered.Add(2, []byte("two")))
+}
+
+func TestReplayEvidenceResumeMatchesUninterruptedPagination(t *testing.T) {
+	full, _ := NewReplayEvidenceCollector(1, 0)
+	require.NoError(t, full.AddJournal(1, []byte("one")))
+	require.NoError(t, full.AddJournal(2, []byte("two")))
+	partial, _ := NewReplayEvidenceCollector(1, 0)
+	require.NoError(t, partial.AddJournal(1, []byte("one")))
+	resumed, err := ResumeReplayEvidenceCollector(partial.Evidence)
+	require.NoError(t, err)
+	require.NoError(t, resumed.AddJournal(2, []byte("two")))
+	require.Equal(t, full.Evidence, resumed.Evidence)
+}

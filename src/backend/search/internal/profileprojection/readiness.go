@@ -29,6 +29,13 @@ func NewReplayEvidenceCollector(generation, highWatermark uint64) (*ReplayEviden
 	return &ReplayEvidenceCollector{Evidence: evidence}, nil
 }
 
+func ResumeReplayEvidenceCollector(evidence ReadinessEvidence) (*ReplayEvidenceCollector, error) {
+	if evidence.Generation == 0 || (evidence.Count != 0 && (evidence.First == 0 || evidence.Last == 0)) {
+		return nil, fmt.Errorf("invalid persisted readiness evidence")
+	}
+	return &ReplayEvidenceCollector{Evidence: evidence}, nil
+}
+
 func (c *ReplayEvidenceCollector) AddSnapshot(offset uint64, deterministicEvent []byte) error {
 	if c == nil || offset == 0 || offset > c.Evidence.HighWatermark {
 		return fmt.Errorf("snapshot event exceeds high watermark")
