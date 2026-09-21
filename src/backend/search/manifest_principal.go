@@ -58,7 +58,11 @@ type searchPrincipalJWKS struct {
 }
 
 func loadSignedChatManifestClientFromEnv() (chatv1.ChatServiceClient, *grpc.ClientConn, []byte, error) {
-	names := []string{"SEARCH_CHAT_MANIFEST_GRPC_ADDR", "SEARCH_CHAT_MANIFEST_TLS_CA_FILE", "SEARCH_CHAT_MANIFEST_TLS_SERVER_NAME", "SEARCH_PRINCIPAL_SIGNING_KEYS_DIR", "SEARCH_PRINCIPAL_ACTIVE_KID"}
+	// The projection client and the optional Chat manifest client share Search's
+	// rotation keys.  Those shared variables must not activate manifest delivery:
+	// a deployment that only enables the protected User projection listener has
+	// no Chat manifest endpoint to dial.
+	names := []string{"SEARCH_CHAT_MANIFEST_GRPC_ADDR", "SEARCH_CHAT_MANIFEST_TLS_CA_FILE", "SEARCH_CHAT_MANIFEST_TLS_SERVER_NAME"}
 	enabled := false
 	for _, name := range names {
 		if _, ok := os.LookupEnv(name); ok {
