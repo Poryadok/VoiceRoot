@@ -8,7 +8,7 @@ UPDATE profiles
     WHERE search_projection_revision = 0;
 
 CREATE TABLE user_profile_search_journal (
-    journal_offset BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    journal_offset BIGINT PRIMARY KEY CHECK (journal_offset > 0),
     event_id UUID NOT NULL UNIQUE,
     profile_id UUID NOT NULL,
     source_revision BIGINT NOT NULL CHECK (source_revision > 0),
@@ -18,6 +18,11 @@ CREATE TABLE user_profile_search_journal (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (profile_id, source_revision)
 );
+CREATE TABLE user_profile_search_offset (
+    singleton BOOLEAN PRIMARY KEY DEFAULT true CHECK (singleton),
+    next_offset BIGINT NOT NULL DEFAULT 1 CHECK (next_offset > 0)
+);
+INSERT INTO user_profile_search_offset(singleton) VALUES (true);
 
 CREATE TABLE user_profile_search_outbox (
     event_id UUID PRIMARY KEY REFERENCES user_profile_search_journal(event_id),

@@ -14,6 +14,7 @@ import (
 
 type Config struct {
 	Target                                       string
+	Capability                                   string
 	JWKSURLs                                     map[string]string
 	RefreshAfter, HardExpiry, UnknownKIDCooldown time.Duration
 	ReplayAddr, ReplayPassword, JWKSCAFile       string
@@ -32,7 +33,14 @@ func LoadFromEnv(target string) (Config, bool, error) {
 // owned by prefix activate it; shared S2S verifier settings cannot accidentally
 // enable another listener in the same process.
 func LoadFromEnvWithPrefix(target, prefix, defaultListen string) (Config, bool, error) {
-	if Method(target) == "" {
+	return LoadFromEnvWithAudience(target, target, prefix, defaultListen)
+}
+
+// LoadFromEnvWithAudience separates the credential audience from the narrow
+// capability group exposed on this listener (Search calls are addressed to
+// User but are authorised only for the Search projection RPC set).
+func LoadFromEnvWithAudience(target, capability, prefix, defaultListen string) (Config, bool, error) {
+	if Method(capability) == "" || strings.TrimSpace(target) == "" {
 		return Config{}, false, errors.New("invalid principal target")
 	}
 	if strings.TrimSpace(prefix) == "" || strings.TrimSpace(defaultListen) == "" {
@@ -48,7 +56,7 @@ func LoadFromEnvWithPrefix(target, prefix, defaultListen string) (Config, bool, 
 	if !enabled {
 		return Config{}, false, nil
 	}
-	cfg := Config{Target: target, ReplayAddr: strings.TrimSpace(os.Getenv(prefix + "REPLAY_REDIS_ADDR")), ReplayPassword: os.Getenv(prefix + "REPLAY_REDIS_PASSWORD"), JWKSCAFile: strings.TrimSpace(os.Getenv("S2S_JWKS_CA_FILE")), TLSCertFile: strings.TrimSpace(os.Getenv(prefix + "TLS_CERT_FILE")), TLSKeyFile: strings.TrimSpace(os.Getenv(prefix + "TLS_KEY_FILE")), ListenAddr: defaultListen}
+	cfg := Config{Target: target, Capability: capability, ReplayAddr: strings.TrimSpace(os.Getenv(prefix + "REPLAY_REDIS_ADDR")), ReplayPassword: os.Getenv(prefix + "REPLAY_REDIS_PASSWORD"), JWKSCAFile: strings.TrimSpace(os.Getenv("S2S_JWKS_CA_FILE")), TLSCertFile: strings.TrimSpace(os.Getenv(prefix + "TLS_CERT_FILE")), TLSKeyFile: strings.TrimSpace(os.Getenv(prefix + "TLS_KEY_FILE")), ListenAddr: defaultListen}
 	if value, ok := os.LookupEnv(prefix + "GRPC_LISTEN"); ok {
 		cfg.ListenAddr = strings.TrimSpace(value)
 	}
@@ -56,7 +64,7 @@ func LoadFromEnvWithPrefix(target, prefix, defaultListen string) (Config, bool, 
 	if err := json.Unmarshal([]byte(os.Getenv("S2S_JWKS_URLS_JSON")), &allJWKSURLs); err != nil {
 		return Config{}, true, errors.New("invalid principal JWKS configuration")
 	}
-	issuer := expectedIssuer(target)
+	issuer := expectedIssuer(capability)
 	cfg.JWKSURLs = map[string]string{issuer: allJWKSURLs[issuer]}
 	var err error
 	cfg.RefreshAfter, err = envDuration("S2S_JWKS_REFRESH_AFTER", 30*time.Second)
@@ -88,7 +96,7 @@ func envDuration(name string, fallback time.Duration) (time.Duration, error) {
 	return value, nil
 }
 func (c Config) validate() error {
-	if Method(c.Target) == "" {
+	if Method(c.Capability) == "" || strings.TrimSpace(c.Target) == "" {
 		return errors.New("invalid principal target")
 	}
 	if c.RefreshAfter <= 0 || c.HardExpiry < c.RefreshAfter || c.UnknownKIDCooldown <= 0 {
@@ -100,7 +108,7 @@ func (c Config) validate() error {
 	if _, _, err := net.SplitHostPort(c.ListenAddr); err != nil {
 		return errors.New("invalid principal listener address")
 	}
-	if c.JWKSURLs[expectedIssuer(c.Target)] == "" {
+	if c.JWKSURLs[expectedIssuer(c.Capability)] == "" {
 		return errors.New("trusted principal JWKS endpoint required")
 	}
 	for issuer, endpoint := range c.JWKSURLs {

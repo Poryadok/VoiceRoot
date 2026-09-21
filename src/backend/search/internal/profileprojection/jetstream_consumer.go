@@ -1,0 +1,51 @@
+package profileprojection
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/nats-io/nats.go"
+	"google.golang.org/protobuf/proto"
+
+	userv1 "voice.app/voice/user/v1"
+)
+
+const (
+	userProjectionStream  = "user_profile_projection"
+	userProjectionSubject = "user.search_profile_projection"
+	userProjectionDurable = "search-user-profile-projection-v1"
+)
+
+// RunJetStreamConsumer applies a delivered User authority record and its
+// replay checkpoint in the StoreAdapter's single transaction before Ack.
+func RunJetStreamConsumer(ctx context.Context, natsURL string, adapter *StoreAdapter) error {
+	if natsURL == "" || adapter == nil {
+		return fmt.Errorf("projection consumer requires NATS URL and store")
+	}
+	nc, err := nats.Connect(natsURL, nats.Name("voice-search-user-projection"), nats.RetryOnFailedConnect(true), nats.MaxReconnects(-1))
+	if err != nil {
+		return err
+	}
+	defer nc.Drain()
+	js, err := nc.JetStream()
+	if err != nil {
+		return err
+	}
+	_, err = js.Subscribe(userProjectionSubject, func(msg *nats.Msg) {
+		event := &userv1.SearchProfileProjectionEvent{}
+		if err := proto.Unmarshal(msg.Data, event); err != nil {
+			_ = msg.Term()
+			return
+		}
+		if _, err := adapter.ApplyAndCheckpoint(ctx, event, event.GetJournalOffset()); err != nil {
+			_ = msg.Nak()
+			return
+		}
+		_ = msg.Ack()
+	}, nats.BindStream(userProjectionStream), nats.Durable(userProjectionDurable), nats.ManualAck(), nats.AckExplicit())
+	if err != nil {
+		return err
+	}
+	<-ctx.Done()
+	return nil
+}

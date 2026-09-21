@@ -58,7 +58,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("user file ownership principal config: %v", err)
 	}
-	searchPrincipalConfig, searchPrincipalEnabled, err := socialprincipal.LoadFromEnvWithPrefix("search", "USER_SEARCH_PRINCIPAL_", ":9093")
+	searchPrincipalConfig, searchPrincipalEnabled, err := socialprincipal.LoadFromEnvWithAudience("user", "search", "USER_SEARCH_PRINCIPAL_", ":9093")
 	if err != nil {
 		log.Fatalf("user search projection principal config: %v", err)
 	}
@@ -268,6 +268,20 @@ func main() {
 			Events:              events,
 			DeletedAccounts:     deletedAccounts,
 			DNSResolver:         dnsResolver,
+		}
+		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
+			owner, hostErr := os.Hostname()
+			if hostErr != nil || strings.TrimSpace(owner) == "" {
+				log.Fatalf("search projection outbox owner: %v", hostErr)
+			}
+			dispatcher, projectionNATS, dispatchErr := searchprojection.NewOutboxDispatcher(store.NewProfileStore(pool), natsURL, owner)
+			if dispatchErr != nil {
+				log.Fatalf("search projection outbox dispatcher: %v", dispatchErr)
+			}
+			defer func() { _ = projectionNATS.Drain() }()
+			dispatchCtx, stopDispatcher := context.WithCancel(context.Background())
+			defer stopDispatcher()
+			go dispatcher.Run(dispatchCtx)
 		}
 		userv1.RegisterUserServiceServer(srv, userSvc)
 		defer srv.Stop()

@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	userv1 "voice.app/voice/user/v1"
 	"voice/backend/search/internal/profileprojection"
 )
@@ -23,24 +26,50 @@ func runUserProjectionBootstrap(ctx context.Context, client userv1.UserServiceCl
 	if err != nil {
 		return err
 	}
-	if checkpoint == 0 {
-		begin, err := client.BeginSearchProfileSnapshot(ctx, &userv1.BeginSearchProfileSnapshotRequest{})
-		if err != nil {
-			return err
+	snapshot, err := adapter.SnapshotState(ctx)
+	if err != nil {
+		return err
+	}
+	if checkpoint == 0 || snapshot.Phase == "snapshot" {
+		if snapshot.Phase != "snapshot" {
+			begin, beginErr := client.BeginSearchProfileSnapshot(ctx, &userv1.BeginSearchProfileSnapshotRequest{})
+			if beginErr != nil {
+				return beginErr
+			}
+			if err := adapter.StartSnapshot(ctx, begin.GetHighWatermark()); err != nil {
+				return err
+			}
+			snapshot = profileprojection.SnapshotState{Phase: "snapshot", HighWatermark: begin.GetHighWatermark()}
 		}
-		for cursor := ""; ; {
-			page, err := client.ListSearchProfileSnapshot(ctx, &userv1.ListSearchProfileSnapshotRequest{HighWatermark: begin.GetHighWatermark(), PageSize: 100, Cursor: cursor})
+		for cursor := snapshot.Cursor; ; {
+			page, err := client.ListSearchProfileSnapshot(ctx, &userv1.ListSearchProfileSnapshotRequest{HighWatermark: snapshot.HighWatermark, PageSize: 100, Cursor: cursor})
 			if err != nil {
+				if cursor != "" && status.Code(err) == codes.InvalidArgument {
+					if resetErr := adapter.ResetSnapshot(ctx); resetErr != nil {
+						return resetErr
+					}
+					return runUserProjectionBootstrap(ctx, client, adapter)
+				}
 				return err
 			}
 			for _, event := range page.GetEvents() {
-				if _, err := adapter.Apply(ctx, event); err != nil {
+				// Snapshot pages contain durable journal events. Their projection,
+				// inbox fence, and progress cursor must commit as one fact too.
+				if _, err := adapter.ApplyAndCheckpoint(ctx, event, event.GetJournalOffset()); err != nil {
 					return err
+				}
+				if event.GetJournalOffset() > checkpoint {
+					checkpoint = event.GetJournalOffset()
 				}
 			}
 			if page.GetNextCursor() == "" {
-				checkpoint = begin.GetHighWatermark()
+				if err := adapter.FinishSnapshot(ctx); err != nil {
+					return err
+				}
 				break
+			}
+			if err := adapter.AdvanceSnapshotCursor(ctx, page.GetNextCursor()); err != nil {
+				return err
 			}
 			cursor = page.GetNextCursor()
 		}
@@ -58,14 +87,6 @@ func runUserProjectionBootstrap(ctx context.Context, client userv1.UserServiceCl
 			}
 			if event.GetJournalOffset() > checkpoint {
 				checkpoint = event.GetJournalOffset()
-			}
-		}
-		// The initial empty snapshot and an empty journal page have no event to
-		// atomically apply. Persisting their high watermark is safe because no
-		// projection mutation is being acknowledged here.
-		if len(page.GetEvents()) == 0 {
-			if err := adapter.StoreCheckpoint(ctx, checkpoint); err != nil {
-				return err
 			}
 		}
 		if len(page.GetEvents()) < 100 {

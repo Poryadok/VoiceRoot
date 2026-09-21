@@ -109,7 +109,7 @@ func (c *signedUserProjectionClient) signedContext(ctx context.Context, rpc stri
 }
 
 func loadSignedUserProjectionClientFromEnv() (userv1.UserServiceClient, *grpc.ClientConn, error) {
-	names := []string{"SEARCH_USER_PROJECTION_GRPC_ADDR", "SEARCH_USER_PROJECTION_TLS_CA_FILE", "SEARCH_USER_PROJECTION_TLS_SERVER_NAME", "SEARCH_PRINCIPAL_SIGNING_KEYS_DIR", "SEARCH_PRINCIPAL_ACTIVE_KID"}
+	names := []string{"SEARCH_USER_PROJECTION_GRPC_ADDR", "SEARCH_USER_PROJECTION_TLS_CA_FILE", "SEARCH_USER_PROJECTION_TLS_SERVER_NAME", "SEARCH_PRINCIPAL_SIGNING_KEYS_DIR", "SEARCH_PRINCIPAL_ACTIVE_KID", "SEARCH_PRINCIPAL_JWKS_LISTEN"}
 	enabled := false
 	for _, n := range names {
 		if _, ok := os.LookupEnv(n); ok {
@@ -120,8 +120,9 @@ func loadSignedUserProjectionClientFromEnv() (userv1.UserServiceClient, *grpc.Cl
 		return nil, nil, nil
 	}
 	addr, dir, kid := strings.TrimSpace(os.Getenv(names[0])), strings.TrimSpace(os.Getenv("SEARCH_PRINCIPAL_SIGNING_KEYS_DIR")), strings.TrimSpace(os.Getenv("SEARCH_PRINCIPAL_ACTIVE_KID"))
-	if addr == "" || dir == "" || kid == "" {
-		return nil, nil, errors.New("Search User projection address and principal signing keys are required")
+	serverName, jwksListen := strings.TrimSpace(os.Getenv("SEARCH_USER_PROJECTION_TLS_SERVER_NAME")), strings.TrimSpace(os.Getenv("SEARCH_PRINCIPAL_JWKS_LISTEN"))
+	if addr == "" || dir == "" || kid == "" || serverName == "" || jwksListen == "" {
+		return nil, nil, errors.New("complete Search User projection TLS, signing, and JWKS configuration is required")
 	}
 	keys, err := loadSearchSigningKeys(dir)
 	if err != nil {
@@ -143,7 +144,7 @@ func loadSignedUserProjectionClientFromEnv() (userv1.UserServiceClient, *grpc.Cl
 	if err != nil || !roots.AppendCertsFromPEM(ca) {
 		return nil, nil, errors.New("invalid User projection TLS CA")
 	}
-	conn, err := grpc.NewClient(grpcclient.DialTarget(addr), grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: strings.TrimSpace(os.Getenv("SEARCH_USER_PROJECTION_TLS_SERVER_NAME"))})))
+	conn, err := grpc.NewClient(grpcclient.DialTarget(addr), grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: serverName})))
 	if err != nil {
 		return nil, nil, err
 	}

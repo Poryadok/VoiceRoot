@@ -12,45 +12,101 @@ import (
 	userv1 "voice.app/voice/user/v1"
 )
 
-// ListSearchProjectionSnapshot returns the complete current authority state in
-// stable UUID order. Deleted profiles are represented as tombstones so a
-// retained Search projection cannot resurrect them after bootstrap.
-func (s *ProfileStore) ListSearchProjectionSnapshot(ctx context.Context, after *uuid.UUID, limit int) ([]*userv1.SearchProfileProjectionEvent, *uuid.UUID, error) {
+// MaterializeSearchProjectionBaseline durably turns legacy profile rows into
+// normal journal/outbox records before a snapshot begins. Holding the same
+// allocator row used by AppendSearchProjection serializes this with every live
+// mutation, so the returned H is a real immutable boundary.
+func (s *ProfileStore) MaterializeSearchProjectionBaseline(ctx context.Context) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `SELECT singleton FROM user_profile_search_offset WHERE singleton = true FOR UPDATE`); err != nil {
+		return err
+	}
+	rows, err := tx.Query(ctx, `SELECT `+profileSelectCols+` FROM profiles p
+		WHERE NOT EXISTS (SELECT 1 FROM user_profile_search_journal j WHERE j.profile_id = p.id)
+		ORDER BY p.id FOR UPDATE`)
+	if err != nil {
+		return err
+	}
+	var profiles []*ProfileRow
+	for rows.Next() {
+		p, scanErr := scanProfile(rows)
+		if scanErr != nil {
+			rows.Close()
+			return scanErr
+		}
+		profiles = append(profiles, p)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	for _, p := range profiles {
+		if p.SearchProjectionRevision == 0 {
+			row := tx.QueryRow(ctx, `UPDATE profiles SET search_projection_revision = 1 WHERE id = $1 RETURNING `+profileSelectCols, p.ID)
+			var scanErr error
+			p, scanErr = scanProfile(row)
+			if scanErr != nil {
+				return scanErr
+			}
+		}
+		event := searchProjectionUpsert(p)
+		if p.DeletedAt != nil {
+			event.Payload = &userv1.SearchProfileProjectionEvent_Delete{Delete: &userv1.SearchProfileDelete{}}
+		}
+		if err := AppendSearchProjection(ctx, tx, event); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+// ListSearchProjectionSnapshot returns one stable page of the immutable latest
+// journal state at H. It deliberately reuses durable payload bytes (including
+// event IDs), never reconstructing events from live profile rows.
+func (s *ProfileStore) ListSearchProjectionSnapshot(ctx context.Context, high, after uint64, limit int) ([]*userv1.SearchProfileProjectionEvent, uint64, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	args := []any{limit + 1}
-	where := ""
-	if after != nil {
-		where = "WHERE id > $2"
-		args = append(args, *after)
-	}
-	rows, err := s.pool.Query(ctx, `SELECT `+profileSelectCols+` FROM profiles `+where+` ORDER BY id LIMIT $1`, args...)
+	rows, err := s.pool.Query(ctx, `WITH latest AS (
+		SELECT DISTINCT ON (profile_id) journal_offset, payload
+		FROM user_profile_search_journal
+		WHERE journal_offset <= $1
+		ORDER BY profile_id, journal_offset DESC
+	)
+	SELECT journal_offset, payload FROM latest
+	WHERE journal_offset > $2
+	ORDER BY journal_offset
+	LIMIT $3`, high, after, limit+1)
 	if err != nil {
-		return nil, nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 	result := make([]*userv1.SearchProfileProjectionEvent, 0, limit)
-	var next *uuid.UUID
+	var next uint64
 	for rows.Next() {
-		p, err := scanProfile(rows)
+		var offset uint64
+		var payload []byte
+		err := rows.Scan(&offset, &payload)
 		if err != nil {
-			return nil, nil, err
+			return nil, 0, err
 		}
 		if len(result) == limit {
-			id := result[len(result)-1].GetProfileId()
-			parsed, _ := uuid.Parse(id)
-			next = &parsed
+			next = result[len(result)-1].GetJournalOffset()
 			break
 		}
-		if p.DeletedAt != nil {
-			result = append(result, &userv1.SearchProfileProjectionEvent{ProtocolVersion: 1, EventId: uuid.NewString(), ProfileId: p.ID.String(), SourceRevision: p.SearchProjectionRevision, Payload: &userv1.SearchProfileProjectionEvent_Delete{Delete: &userv1.SearchProfileDelete{}}})
-		} else {
-			result = append(result, searchProjectionUpsert(p))
+		event := &userv1.SearchProfileProjectionEvent{}
+		if err := proto.Unmarshal(payload, event); err != nil {
+			return nil, 0, err
 		}
+		result = append(result, event)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, nil, err
+		return nil, 0, err
 	}
 	return result, next, nil
 }
@@ -111,10 +167,16 @@ func AppendSearchProjection(ctx context.Context, tx pgx.Tx, event *userv1.Search
 	}
 	digest := sha256.Sum256(payload)
 	var offset uint64
-	err = tx.QueryRow(ctx, `INSERT INTO user_profile_search_journal
-        (event_id, profile_id, source_revision, protocol_version, payload, payload_sha256)
-        VALUES ($1,$2,$3,1,$4,$5) RETURNING journal_offset`,
-		eventID, profileID, event.GetSourceRevision(), payload, digest[:]).Scan(&offset)
+	err = tx.QueryRow(ctx, `UPDATE user_profile_search_offset
+        SET next_offset = next_offset + 1 WHERE singleton = true
+        RETURNING next_offset - 1`).Scan(&offset)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO user_profile_search_journal
+		(journal_offset,event_id, profile_id, source_revision, protocol_version, payload, payload_sha256)
+	        VALUES ($1,$2,$3,$4,1,$5,$6)`,
+		offset, eventID, profileID, event.GetSourceRevision(), payload, digest[:])
 	if err != nil {
 		return err
 	}

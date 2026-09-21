@@ -121,13 +121,12 @@ func main() {
 
 		msgStore := store.NewMessageSearchStore(pool)
 		profileSpaceStore := store.NewProfileSpaceSearchStore(pool)
+		var projectionStore *profileprojection.StoreAdapter
 		if userProjectionClient != nil {
-			projectionStore := &profileprojection.StoreAdapter{Pool: pool}
-			go func() {
-				if err := runUserProjectionBootstrap(rootCtx, userProjectionClient, projectionStore); err != nil && rootCtx.Err() == nil {
-					logger.Error("User profile projection bootstrap failed", slog.Any("error", err))
-				}
-			}()
+			projectionStore = &profileprojection.StoreAdapter{Pool: pool}
+			go runProjectionWithRetry(rootCtx, logger, "User profile projection bootstrap", func() error {
+				return runUserProjectionBootstrap(rootCtx, userProjectionClient, projectionStore)
+			})
 		}
 
 		svc := &grpcsvc.SearchGRPC{
@@ -147,6 +146,11 @@ func main() {
 		}
 
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
+			if projectionStore != nil {
+				go runProjectionWithRetry(rootCtx, logger, "user projection JetStream consumer", func() error {
+					return profileprojection.RunJetStreamConsumer(rootCtx, natsURL, projectionStore)
+				})
+			}
 			if pub, err := analyticsevents.NewJetStreamPublisher(natsURL); err == nil {
 				_ = pub.EnsureStream()
 				svc.Analytics = pub
@@ -167,17 +171,21 @@ func main() {
 				}
 			}()
 
-			var profileHydrator indexer.ProfileHydrator
-			if conn, err := dialOptional(os.Getenv("USER_GRPC_ADDR")); err == nil && conn != nil {
-				defer func() { _ = conn.Close() }()
-				profileHydrator = &deps.ProfileHydrator{Client: userv1.NewUserServiceClient(conn)}
-			}
-			profileIdx := &indexer.ProfileIndexer{Store: profileSpaceStore, Profiles: profileHydrator}
-			go func() {
-				if err := indexer.RunUserEventsConsumer(rootCtx, natsURL, instanceID, profileIdx, logger, consumerMetrics); err != nil && rootCtx.Err() == nil {
-					logger.Warn("user events consumer stopped", slog.Any("error", err))
+			// The legacy user.events hydrator is retained only when the revisioned
+			// authority path is unavailable; running both would race a stale source.
+			if projectionStore == nil {
+				var profileHydrator indexer.ProfileHydrator
+				if conn, err := dialOptional(os.Getenv("USER_GRPC_ADDR")); err == nil && conn != nil {
+					defer func() { _ = conn.Close() }()
+					profileHydrator = &deps.ProfileHydrator{Client: userv1.NewUserServiceClient(conn)}
 				}
-			}()
+				profileIdx := &indexer.ProfileIndexer{Store: profileSpaceStore, Profiles: profileHydrator}
+				go func() {
+					if err := indexer.RunUserEventsConsumer(rootCtx, natsURL, instanceID, profileIdx, logger, consumerMetrics); err != nil && rootCtx.Err() == nil {
+						logger.Warn("user events consumer stopped", slog.Any("error", err))
+					}
+				}()
+			}
 
 			var chatHydrator indexer.ChatHydrator
 			var spaceHydrator indexer.SpaceHydrator

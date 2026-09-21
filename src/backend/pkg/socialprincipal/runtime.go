@@ -28,6 +28,7 @@ const dependencyTimeout = 2 * time.Second
 
 type Runtime struct {
 	target      string
+	capability  string
 	verifier    *Verifier
 	resolver    *principal.JWKSResolver
 	replay      *redis.Client
@@ -107,8 +108,8 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 		return nil, err
 	}
 	replay := redis.NewClient(&redis.Options{Addr: cfg.ReplayAddr, Password: cfg.ReplayPassword, DialTimeout: dependencyTimeout, ReadTimeout: dependencyTimeout, WriteTimeout: dependencyTimeout, MaxRetries: -1, ContextTimeoutEnabled: true})
-	r := &Runtime{target: cfg.Target, resolver: resolver, replay: replay, transport: transport, credentials: credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}})}
-	r.verifier = &Verifier{Target: cfg.Target, Issuers: issuers, Resolve: resolver.Resolve, Replay: r.recordReplay, Diagnostic: func(reason VerificationReason) {
+	r := &Runtime{target: cfg.Target, capability: cfg.Capability, resolver: resolver, replay: replay, transport: transport, credentials: credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}})}
+	r.verifier = &Verifier{Target: cfg.Target, Capability: cfg.Capability, Issuers: issuers, Resolve: resolver.Resolve, Replay: r.recordReplay, Diagnostic: func(reason VerificationReason) {
 		log.Printf("principal verification rejected target=%s reason=%s", cfg.Target, reason)
 	}}
 	startup, cancel := context.WithTimeout(ctx, dependencyTimeout)
@@ -191,7 +192,11 @@ func (r *Runtime) refreshLoop(ctx context.Context, interval time.Duration, issue
 
 func (r *Runtime) ServerOptions() []grpc.ServerOption {
 	return []grpc.ServerOption{grpc.Creds(r.credentials), grpc.ChainUnaryInterceptor(func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if !AllowsMethod(r.target, info.FullMethod) {
+		capability := r.capability
+		if capability == "" {
+			capability = r.target
+		}
+		if !AllowsMethod(capability, info.FullMethod) {
 			return nil, status.Error(codes.PermissionDenied, "method unavailable on privacy listener")
 		}
 		return handler(ctx, req)

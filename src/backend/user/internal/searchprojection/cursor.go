@@ -5,11 +5,25 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 )
 
 const cursorKeyEnv = "USER_SEARCH_PROJECTION_CURSOR_HMAC_KEY"
+
+const snapshotCursorTTL = 15 * time.Minute
+
+// SnapshotCursor binds pagination to an immutable journal high watermark.
+// Versioning and expiry prevent a cursor from being repurposed for a different
+// snapshot protocol or retained indefinitely.
+type SnapshotCursor struct {
+	Version    int    `json:"v"`
+	High       uint64 `json:"h"`
+	LastOffset uint64 `json:"o"`
+	ExpiresAt  int64  `json:"e"`
+}
 
 // CursorKeyFromEnv requires a dedicated signing key whenever the protected
 // listener is enabled. It deliberately never reuses TLS or JWT material.
@@ -53,4 +67,27 @@ func DecodeCursor(key []byte, cursor string) (string, error) {
 		return "", errors.New("invalid signed cursor")
 	}
 	return string(value), nil
+}
+
+func EncodeSnapshotCursor(key []byte, high, lastOffset uint64, now time.Time) (string, error) {
+	if high == 0 || lastOffset == 0 {
+		return "", errors.New("invalid snapshot cursor input")
+	}
+	payload, err := json.Marshal(SnapshotCursor{Version: 1, High: high, LastOffset: lastOffset, ExpiresAt: now.Add(snapshotCursorTTL).Unix()})
+	if err != nil {
+		return "", err
+	}
+	return EncodeCursor(key, string(payload))
+}
+
+func DecodeSnapshotCursor(key []byte, cursor string, now time.Time) (SnapshotCursor, error) {
+	raw, err := DecodeCursor(key, cursor)
+	if err != nil {
+		return SnapshotCursor{}, err
+	}
+	var value SnapshotCursor
+	if err := json.Unmarshal([]byte(raw), &value); err != nil || value.Version != 1 || value.High == 0 || value.LastOffset == 0 || value.ExpiresAt <= now.Unix() {
+		return SnapshotCursor{}, errors.New("invalid snapshot cursor")
+	}
+	return value, nil
 }

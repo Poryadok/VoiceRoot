@@ -2,9 +2,8 @@ package grpcsvc
 
 import (
 	"context"
-	"strings"
+	"time"
 
-	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -24,8 +23,11 @@ type SearchProjectionGRPC struct {
 }
 
 func (s *SearchProjectionGRPC) BeginSearchProfileSnapshot(ctx context.Context, req *userv1.BeginSearchProfileSnapshotRequest) (*userv1.BeginSearchProfileSnapshotResponse, error) {
-	if err := socialprincipal.RequireSocialForMethod(ctx, "search", userv1.UserService_BeginSearchProfileSnapshot_FullMethodName, req); err != nil {
+	if err := socialprincipal.RequireSearchProjection(ctx, userv1.UserService_BeginSearchProfileSnapshot_FullMethodName, req); err != nil {
 		return nil, err
+	}
+	if err := s.User.Profiles.MaterializeSearchProjectionBaseline(ctx); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	high, err := s.User.Profiles.SearchProjectionCheckpoint(ctx)
 	if err != nil {
@@ -34,28 +36,28 @@ func (s *SearchProjectionGRPC) BeginSearchProfileSnapshot(ctx context.Context, r
 	return &userv1.BeginSearchProfileSnapshotResponse{HighWatermark: high}, nil
 }
 func (s *SearchProjectionGRPC) ListSearchProfileSnapshot(ctx context.Context, req *userv1.ListSearchProfileSnapshotRequest) (*userv1.ListSearchProfileSnapshotResponse, error) {
-	if err := socialprincipal.RequireSocialForMethod(ctx, "search", userv1.UserService_ListSearchProfileSnapshot_FullMethodName, req); err != nil {
+	if err := socialprincipal.RequireSearchProjection(ctx, userv1.UserService_ListSearchProfileSnapshot_FullMethodName, req); err != nil {
 		return nil, err
 	}
-	var after *uuid.UUID
-	if raw := strings.TrimSpace(req.GetCursor()); raw != "" {
-		value, err := searchprojection.DecodeCursor(s.CursorKey, raw)
+	high := req.GetHighWatermark()
+	var after uint64
+	if raw := req.GetCursor(); raw != "" {
+		value, err := searchprojection.DecodeSnapshotCursor(s.CursorKey, raw, time.Now())
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, "invalid snapshot cursor")
 		}
-		id, err := uuid.Parse(value)
-		if err != nil {
+		if high != value.High {
 			return nil, status.Error(codes.InvalidArgument, "invalid snapshot cursor")
 		}
-		after = &id
+		after = value.LastOffset
 	}
-	events, next, err := s.User.Profiles.ListSearchProjectionSnapshot(ctx, after, int(req.GetPageSize()))
+	events, next, err := s.User.Profiles.ListSearchProjectionSnapshot(ctx, high, after, int(req.GetPageSize()))
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	response := &userv1.ListSearchProfileSnapshotResponse{Events: events}
-	if next != nil {
-		cursor, err := searchprojection.EncodeCursor(s.CursorKey, next.String())
+	if next != 0 {
+		cursor, err := searchprojection.EncodeSnapshotCursor(s.CursorKey, high, next, time.Now())
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
@@ -64,7 +66,7 @@ func (s *SearchProjectionGRPC) ListSearchProfileSnapshot(ctx context.Context, re
 	return response, nil
 }
 func (s *SearchProjectionGRPC) ListSearchProfileJournal(ctx context.Context, req *userv1.ListSearchProfileJournalRequest) (*userv1.ListSearchProfileJournalResponse, error) {
-	if err := socialprincipal.RequireSocialForMethod(ctx, "search", userv1.UserService_ListSearchProfileJournal_FullMethodName, req); err != nil {
+	if err := socialprincipal.RequireSearchProjection(ctx, userv1.UserService_ListSearchProfileJournal_FullMethodName, req); err != nil {
 		return nil, err
 	}
 	events, high, err := s.User.Profiles.ListSearchProjectionJournal(ctx, req.GetAfterOffset(), int(req.GetPageSize()))
@@ -74,7 +76,7 @@ func (s *SearchProjectionGRPC) ListSearchProfileJournal(ctx context.Context, req
 	return &userv1.ListSearchProfileJournalResponse{Events: events, HighWatermark: high}, nil
 }
 func (s *SearchProjectionGRPC) GetSearchProfileCheckpoint(ctx context.Context, req *userv1.GetSearchProfileCheckpointRequest) (*userv1.GetSearchProfileCheckpointResponse, error) {
-	if err := socialprincipal.RequireSocialForMethod(ctx, "search", userv1.UserService_GetSearchProfileCheckpoint_FullMethodName, req); err != nil {
+	if err := socialprincipal.RequireSearchProjection(ctx, userv1.UserService_GetSearchProfileCheckpoint_FullMethodName, req); err != nil {
 		return nil, err
 	}
 	high, err := s.User.Profiles.SearchProjectionCheckpoint(ctx)
