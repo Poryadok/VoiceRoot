@@ -66,6 +66,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("user search projection cursor config: %v", err)
 	}
+	accountDeletionConfig, err := accountDeletionConsumerConfigFromEnv(os.Getenv)
+	if err != nil {
+		log.Fatalf("account deletion consumer config: %v", err)
+	}
 	var privacyRuntime *socialprincipal.Runtime
 	if principalEnabled {
 		if strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
@@ -237,7 +241,8 @@ func main() {
 			log.Fatalf("grpc listen: %v", err)
 		}
 		var events grpcsvc.UserEventsPublisher
-		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
+		natsURL := strings.TrimSpace(os.Getenv("NATS_URL"))
+		if natsURL != "" {
 			pub, err := userevents.NewJetStreamPublisher(natsURL)
 			if err != nil {
 				log.Fatalf("nats jetstream publisher: %v", err)
@@ -245,6 +250,24 @@ func main() {
 			pub.Logger = logger
 			defer func() { _ = pub.Close() }()
 			events = pub
+		}
+		if accountDeletionConfig.Enabled {
+			accountDeletionConsumer, err := userevents.NewAccountDeletionConsumer(accountDeletionConfig.NATSURL, accountDeletionConfig.CredentialsFile, store.NewProfileStore(pool))
+			if err != nil {
+				log.Fatalf("account deletion consumer: %v", err)
+			}
+			if err := accountDeletionConsumer.Start(); err != nil {
+				_ = accountDeletionConsumer.Close()
+				log.Fatalf("account deletion consumer startup: %v", err)
+			}
+			defer func() { _ = accountDeletionConsumer.Close() }()
+			accountDeletionContext, stopAccountDeletionConsumer := context.WithCancel(context.Background())
+			defer stopAccountDeletionConsumer()
+			go func() {
+				if err := accountDeletionConsumer.Run(accountDeletionContext); err != nil && accountDeletionContext.Err() == nil {
+					log.Printf("account deletion consumer stopped: %v", err)
+				}
+			}()
 		}
 
 		dnsResolver := grpcsvc.DNSResolverFromEnv()
@@ -269,7 +292,7 @@ func main() {
 			DeletedAccounts:     deletedAccounts,
 			DNSResolver:         dnsResolver,
 		}
-		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
+		if natsURL != "" {
 			owner, hostErr := os.Hostname()
 			if hostErr != nil || strings.TrimSpace(owner) == "" {
 				log.Fatalf("search projection outbox owner: %v", hostErr)

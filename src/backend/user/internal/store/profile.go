@@ -225,7 +225,11 @@ func (s *ProfileStore) UpdateOwnedProfile(ctx context.Context, accountID, profil
 		if err != nil || updated == nil {
 			return err
 		}
-		return AppendSearchProjection(ctx, tx, searchProjectionUpsert(updated))
+		event, err := searchProjectionForProfile(ctx, tx, updated)
+		if err != nil {
+			return err
+		}
+		return AppendSearchProjection(ctx, tx, event)
 	})
 	if err != nil || updated == nil {
 		return nil, err
@@ -319,7 +323,11 @@ func (s *ProfileStore) CreateSecondaryProfile(ctx context.Context, accountID uui
 		if err != nil {
 			return err
 		}
-		return AppendSearchProjection(ctx, tx, searchProjectionUpsert(created))
+		event, err := searchProjectionForProfile(ctx, tx, created)
+		if err != nil {
+			return err
+		}
+		return AppendSearchProjection(ctx, tx, event)
 	})
 	return created, err
 }
@@ -451,7 +459,11 @@ func (s *ProfileStore) EnsurePrimaryProfile(ctx context.Context, accountID uuid.
 		if err != nil || !created {
 			return err
 		}
-		return AppendSearchProjection(ctx, tx, searchProjectionUpsert(primary))
+		event, err := searchProjectionForProfile(ctx, tx, primary)
+		if err != nil {
+			return err
+		}
+		return AppendSearchProjection(ctx, tx, event)
 	})
 	return primary, err
 }

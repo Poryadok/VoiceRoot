@@ -13,4 +13,6 @@ func TestUserDBMigrationFiles_IncludesPrivacyShowLastSeenMigration(t *testing.T)
 		"integration fixtures must apply the same durable profile schema used by UpdateProfile")
 	require.Contains(t, UserDBMigrationFiles, "000016_search_profile_journal.up.sql",
 		"integration fixtures must apply the User-authoritative search projection schema")
+	require.Contains(t, UserDBMigrationFiles, "000017_account_lifecycle_search_tombstone.up.sql",
+		"integration fixtures must apply the account-delete overlay before consumer activation")
 }

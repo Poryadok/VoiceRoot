@@ -147,7 +147,11 @@ func applyVerificationSourceStateTx(
 		return nil, false, err
 	}
 	if applied {
-		if err := AppendSearchProjection(ctx, tx, searchProjectionUpsert(profile)); err != nil {
+		event, err := searchProjectionForProfile(ctx, tx, profile)
+		if err != nil {
+			return nil, false, err
+		}
+		if err := AppendSearchProjection(ctx, tx, event); err != nil {
 			return nil, false, err
 		}
 	}
@@ -167,7 +171,11 @@ func (s *ProfileStore) SetProfileVerification(ctx context.Context, profileID uui
 		if err != nil {
 			return err
 		}
-		return AppendSearchProjection(ctx, tx, searchProjectionUpsert(p))
+		event, err := searchProjectionForProfile(ctx, tx, p)
+		if err != nil {
+			return err
+		}
+		return AppendSearchProjection(ctx, tx, event)
 	})
 	if err != nil {
 		return nil, err
