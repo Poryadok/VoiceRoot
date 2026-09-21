@@ -1,0 +1,6 @@
+DROP TABLE search_user_profile_generation_checkpoint;
+DROP TABLE search_user_profile_generation_fence;
+DROP TABLE search_user_profile_generation_inbox;
+DROP TABLE search_user_profile_generation_documents;
+DROP TABLE search_user_profile_generation_route;
+DROP TABLE search_user_profile_generations;

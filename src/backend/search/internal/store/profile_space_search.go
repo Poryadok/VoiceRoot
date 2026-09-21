@@ -32,9 +32,10 @@ func (s *ProfileSpaceSearchStore) UpsertProfile(ctx context.Context, doc Profile
 		return fmt.Errorf("profile search store unavailable")
 	}
 	_, err := s.Pool.Exec(ctx, `
-		INSERT INTO profile_search_documents (profile_id, account_id, username, discriminator, display_name, username_lower, verification_type, updated_at)
-		VALUES ($1, $2, $3, $4, $5, lower($3), $6, now())
-		ON CONFLICT (profile_id) DO UPDATE SET
+		INSERT INTO search_user_profile_generation_documents (generation, profile_id, account_id, username, discriminator, display_name, username_lower, verification_type, updated_at)
+		SELECT active_generation, $1, $2, $3, $4, $5, lower($3), $6, now()
+		FROM search_user_profile_generation_route WHERE singleton=true
+		ON CONFLICT (generation, profile_id) DO UPDATE SET
 			account_id = EXCLUDED.account_id,
 			username = EXCLUDED.username,
 			discriminator = EXCLUDED.discriminator,
@@ -51,13 +52,18 @@ func (s *ProfileSpaceSearchStore) DeleteProfile(ctx context.Context, profileID u
 	if s == nil || s.Pool == nil {
 		return fmt.Errorf("profile search store unavailable")
 	}
-	_, err := s.Pool.Exec(ctx, `DELETE FROM profile_search_documents WHERE profile_id = $1`, profileID)
+	_, err := s.Pool.Exec(ctx, `DELETE FROM search_user_profile_generation_documents WHERE profile_id = $1
+		AND generation=(SELECT active_generation FROM search_user_profile_generation_route WHERE singleton=true)`, profileID)
 	return err
 }
 
 func (s *ProfileSpaceSearchStore) SearchProfiles(ctx context.Context, _ uuid.UUID, query string, excludeAccounts []uuid.UUID, limit int) ([]ProfileHit, error) {
 	if s == nil || s.Pool == nil {
 		return nil, fmt.Errorf("profile search store unavailable")
+	}
+	var generation int64
+	if err := s.Pool.QueryRow(ctx, `SELECT active_generation FROM search_user_profile_generation_route WHERE singleton=true`).Scan(&generation); err != nil || generation <= 0 {
+		return nil, fmt.Errorf("active profile generation route unavailable")
 	}
 	if limit <= 0 {
 		limit = defaultPageSize
@@ -72,8 +78,9 @@ func (s *ProfileSpaceSearchStore) SearchProfiles(ctx context.Context, _ uuid.UUI
 	args = append(args, limit)
 	sql := fmt.Sprintf(`
 		SELECT profile_id, account_id
-		FROM profile_search_documents
-		WHERE tombstoned_at IS NULL
+		FROM search_user_profile_generation_documents
+		WHERE generation=(SELECT active_generation FROM search_user_profile_generation_route WHERE singleton=true)
+		AND tombstoned_at IS NULL
 		AND (username ILIKE $1 ESCAPE '\' OR display_name ILIKE $1 ESCAPE '\')
 		%s
 		ORDER BY (CASE WHEN verification_type <> 'none' AND verification_type <> '' THEN 0 ELSE 1 END),

@@ -20,7 +20,7 @@ import (
 )
 
 func searchStoreError(err error) error {
-	if err != nil && (strings.Contains(err.Error(), "projection frozen") || strings.Contains(err.Error(), "lifecycle schema unavailable")) {
+	if err != nil && (strings.Contains(err.Error(), "projection frozen") || strings.Contains(err.Error(), "lifecycle schema unavailable") || strings.Contains(err.Error(), "active profile generation route unavailable")) {
 		return status.Error(codes.Unavailable, "space lifecycle frozen")
 	}
 	return status.Error(codes.Internal, err.Error())

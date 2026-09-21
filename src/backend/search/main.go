@@ -80,6 +80,10 @@ func main() {
 	if userProjectionConn != nil {
 		defer func() { _ = userProjectionConn.Close() }()
 	}
+	desiredGeneration, hasDesiredGeneration, err := desiredProjectionGeneration()
+	if err != nil {
+		log.Fatalf("User projection generation: %v", err)
+	}
 	projectionJWKS, err := loadSearchProjectionJWKS()
 	if err != nil {
 		log.Fatalf("User projection JWKS: %v", err)
@@ -121,12 +125,25 @@ func main() {
 
 		msgStore := store.NewMessageSearchStore(pool)
 		profileSpaceStore := store.NewProfileSpaceSearchStore(pool)
-		var projectionStore *profileprojection.StoreAdapter
+		var projectionStore profileprojection.CheckpointApplier
+		_, routeErr := profileprojection.LoadGenerationRoute(rootCtx, pool)
+		routePresent := routeErr == nil
+		if err := requireProtectedProjectionAuthority(hasDesiredGeneration, routePresent, userProjectionClient != nil); err != nil {
+			log.Fatal(err)
+		}
 		if userProjectionClient != nil {
-			projectionStore = &profileprojection.StoreAdapter{Pool: pool}
+			route, routeErr := profileprojection.LoadGenerationRoute(rootCtx, pool)
+			if routeErr != nil {
+				log.Fatalf("User projection generation route: %v", routeErr)
+			}
+			activeStore := &profileprojection.StoreAdapter{Pool: pool, Generation: route.Active}
 			go runProjectionWithRetry(rootCtx, logger, "User profile projection bootstrap", func() error {
-				return runUserProjectionBootstrap(rootCtx, userProjectionClient, projectionStore)
+				return runUserProjectionBootstrap(rootCtx, userProjectionClient, activeStore)
 			})
+			if hasDesiredGeneration && desiredGeneration != route.Active {
+				go runDesiredProjectionGeneration(rootCtx, logger, userProjectionClient, pool, desiredGeneration)
+			}
+			projectionStore = &profileprojection.MirroredStoreAdapter{Pool: pool}
 		}
 
 		svc := &grpcsvc.SearchGRPC{
@@ -173,7 +190,7 @@ func main() {
 
 			// The legacy user.events hydrator is retained only when the revisioned
 			// authority path is unavailable; running both would race a stale source.
-			if projectionStore == nil {
+			if projectionStore == nil && !hasDesiredGeneration {
 				var profileHydrator indexer.ProfileHydrator
 				if conn, err := dialOptional(os.Getenv("USER_GRPC_ADDR")); err == nil && conn != nil {
 					defer func() { _ = conn.Close() }()

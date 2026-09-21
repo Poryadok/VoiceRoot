@@ -16,9 +16,13 @@ const (
 	userProjectionDurable = "search-user-profile-projection-v1"
 )
 
-// RunJetStreamConsumer applies a delivered User authority record and its
-// replay checkpoint in the StoreAdapter's single transaction before Ack.
-func RunJetStreamConsumer(ctx context.Context, natsURL string, adapter *StoreAdapter) (err error) {
+// CheckpointApplier applies a delivered User authority record and its replay
+// checkpoint in the StoreAdapter's single transaction before Ack.
+type CheckpointApplier interface {
+	ApplyAndCheckpoint(context.Context, *userv1.SearchProfileProjectionEvent, uint64) (ApplyResult, error)
+}
+
+func RunJetStreamConsumer(ctx context.Context, natsURL string, adapter CheckpointApplier) (err error) {
 	if natsURL == "" || adapter == nil {
 		return fmt.Errorf("projection consumer requires NATS URL and store")
 	}

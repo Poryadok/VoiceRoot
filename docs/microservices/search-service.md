@@ -107,3 +107,12 @@ keys and publishes their public JWKS over TLS on `:8443`. Deployment requires
 `SEARCH_USER_PROJECTION_GRPC_ADDR`, CA and server name, signing-key directory,
 active KID and JWKS TLS files. Each journal event and its durable checkpoint
 commit together; restarts replay safely through the revisioned inbox.
+
+Search owns a generation registry and one durable active/rollback route for
+that projection. Existing data seeds generation 1. An optional positive
+`SEARCH_USER_PROJECTION_DESIRED_GENERATION` requests a single PostgreSQL-lock
+protected snapshot rebuild; after it is ready Search promotes it atomically and
+continues applying User journal events to both active and rollback generations.
+With the setting unset, Search serves the durable active route. There is no
+public activation or legacy/raw-profile fallback: an absent or invalid route is
+unavailable.

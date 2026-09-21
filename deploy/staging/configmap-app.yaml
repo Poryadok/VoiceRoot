@@ -66,4 +66,6 @@ data:
   CLAMAV_ADDR: "voice-clamav:3310"
   MATCHMAKING_SEARCH_NUDGE_AFTER: "15m"
   MATCHMAKING_SEARCH_TIMEOUT: "30m"
+  # Empty means serve the durable Search active projection generation.
+  SEARCH_USER_PROJECTION_DESIRED_GENERATION: ""
   NOTIFICATION_RECORD_PUSHES: "true"
