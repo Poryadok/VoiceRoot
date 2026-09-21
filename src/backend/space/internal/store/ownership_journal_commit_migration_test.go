@@ -27,6 +27,29 @@ func ownershipConsumeStartedMigrationSQL(t *testing.T, direction string) string 
 	return string(raw)
 }
 
+func ownershipMigrationSQL(t *testing.T, name, direction string) string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", name+"."+direction+".sql"))
+	require.NoError(t, err)
+	return string(raw)
+}
+
+func rollbackOwnershipCommitSuccessors(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	for _, name := range []string{"000018_ownership_consume_started", "000012_ownership_journal_completion", "000011_voice_access_epoch"} {
+		_, err := pool.Exec(ctx, ownershipMigrationSQL(t, name, "down"))
+		require.NoError(t, err)
+	}
+}
+
+func restoreOwnershipCommitSuccessors(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	for _, name := range []string{"000011_voice_access_epoch", "000012_ownership_journal_completion", "000018_ownership_consume_started"} {
+		_, err := pool.Exec(ctx, ownershipMigrationSQL(t, name, "up"))
+		require.NoError(t, err)
+	}
+}
+
 func requireOwnershipCommitSchema(t *testing.T, pool *pgxpool.Pool, present bool) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -44,8 +67,7 @@ func requireOwnershipCommitSchema(t *testing.T, pool *pgxpool.Pool, present bool
 
 func execOwnershipCommitDown(t *testing.T, ctx context.Context, pool *pgxpool.Pool) error {
 	t.Helper()
-	_, err := pool.Exec(ctx, ownershipConsumeStartedMigrationSQL(t, "down"))
-	require.NoError(t, err)
+	rollbackOwnershipCommitSuccessors(t, ctx, pool)
 	conn, err := pool.Acquire(ctx)
 	require.NoError(t, err)
 	defer conn.Release()
@@ -56,8 +78,7 @@ func execOwnershipCommitDown(t *testing.T, ctx context.Context, pool *pgxpool.Po
 		if _, rollbackErr := conn.Exec(rollbackCtx, "ROLLBACK"); rollbackErr != nil {
 			_ = conn.Conn().Close(rollbackCtx)
 		}
-		_, restoreErr := pool.Exec(ctx, ownershipConsumeStartedMigrationSQL(t, "up"))
-		require.NoError(t, restoreErr)
+		restoreOwnershipCommitSuccessors(t, ctx, pool)
 	}
 	return err
 }
@@ -66,8 +87,7 @@ func execOwnershipCommitUp(t *testing.T, ctx context.Context, pool *pgxpool.Pool
 	t.Helper()
 	_, err := pool.Exec(ctx, ownershipJournalCommitMigrationSQL(t, "up"))
 	require.NoError(t, err)
-	_, err = pool.Exec(ctx, ownershipConsumeStartedMigrationSQL(t, "up"))
-	require.NoError(t, err)
+	restoreOwnershipCommitSuccessors(t, ctx, pool)
 }
 
 func TestOwnershipJournalCommitMigration_EmptyDownUpPreservesPriorReceipt(t *testing.T) {
@@ -205,11 +225,9 @@ func TestOwnershipJournalCommitMigration_DownLocksJournalThenOutboxAndPreservesC
 	st := ownershipJournalCommitStoreFixture(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	_, err := st.Pool.Exec(ctx, ownershipConsumeStartedMigrationSQL(t, "down"))
-	require.NoError(t, err)
+	rollbackOwnershipCommitSuccessors(t, ctx, st.Pool)
 	t.Cleanup(func() {
-		_, restoreErr := st.Pool.Exec(context.Background(), ownershipConsumeStartedMigrationSQL(t, "up"))
-		require.NoError(t, restoreErr)
+		restoreOwnershipCommitSuccessors(t, context.Background(), st.Pool)
 	})
 	downSQL := ownershipJournalCommitMigrationSQL(t, "down")
 	insertTx, err := st.Pool.Begin(ctx)
