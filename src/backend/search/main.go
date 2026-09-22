@@ -182,11 +182,20 @@ func main() {
 				messaging = &deps.MessagingFetcher{Client: messagingv1.NewMessagingServiceClient(conn)}
 			}
 			msgIdx := &indexer.MessageIndexer{Store: msgStore, Messaging: messaging}
+			messageConsumerReady := make(chan error, 1)
 			go func() {
-				if err := indexer.RunMessageEventsConsumer(rootCtx, natsURL, instanceID, msgIdx, logger, consumerMetrics); err != nil && rootCtx.Err() == nil {
+				if err := indexer.RunMessageEventsConsumer(rootCtx, natsURL, instanceID, msgIdx, logger, consumerMetrics, messageConsumerReady); err != nil && rootCtx.Err() == nil {
 					logger.Warn("message events consumer stopped", slog.Any("error", err))
 				}
 			}()
+			select {
+			case err := <-messageConsumerReady:
+				if err != nil {
+					log.Fatalf("message events consumer startup: %v", err)
+				}
+			case <-time.After(15 * time.Second):
+				log.Fatal("message events consumer startup timed out")
+			}
 
 			// The legacy user.events hydrator is retained only when the revisioned
 			// authority path is unavailable; running both would race a stale source.

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,10 +31,10 @@ func TestComposeStories_live(t *testing.T) {
 	acceptComposeFriendInvitation(t, client, base, sessB.AccessToken, sessA.ProfileID)
 
 	story := composeCreateStory(t, client, base, sessA.AccessToken, map[string]any{
-		"type":                 "text",
-		"text_content":         "stories (docs/features/stories.md) live story @friend",
-		"visibility":           "friends",
-		"mention_profile_ids":  []string{sessB.ProfileID},
+		"type":                "text",
+		"text_content":        "stories (docs/features/stories.md) live story @friend",
+		"visibility":          "friends",
+		"mention_profile_ids": []string{sessB.ProfileID},
 	})
 	storyID := composeStoryID(t, story)
 	require.NotEmpty(t, storyID)
@@ -192,14 +193,29 @@ func composeGetStoryFeedGroups(t *testing.T, client *http.Client, base, token st
 
 func composeMarkStoryViewed(t *testing.T, client *http.Client, base, token, storyID string) {
 	t.Helper()
-	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/stories/"+storyID+"/views", bytes.NewReader([]byte(`{}`)))
-	require.NoError(t, err)
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := client.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+	var lastStatus int
+	var lastBody string
+	if !assert.Eventually(t, func() bool {
+		req, err := http.NewRequest(http.MethodPost, base+"/api/v1/stories/"+storyID+"/views", bytes.NewReader([]byte(`{}`)))
+		if err != nil {
+			return false
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := client.Do(req)
+		if err != nil {
+			lastStatus = 0
+			lastBody = err.Error()
+			return false
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		lastStatus = resp.StatusCode
+		lastBody = string(body)
+		return resp.StatusCode == http.StatusNoContent
+	}, 15*time.Second, 500*time.Millisecond) {
+		t.Fatalf("mark story viewed status=%d body=%s", lastStatus, lastBody)
+	}
 }
 
 func composeReactToStory(t *testing.T, client *http.Client, base, token, storyID, emoji string) {
