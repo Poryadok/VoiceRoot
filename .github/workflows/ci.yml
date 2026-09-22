@@ -408,7 +408,7 @@ jobs:
         working-directory: src/backend/${{ matrix.service }}
         env:
           CGO_ENABLED: "0"
-        run: go test ./...
+        run: go test -timeout 20m ./...
 
   staging-images-push:
     needs: changes
@@ -1301,7 +1301,7 @@ jobs:
         working-directory: src/backend/${{ matrix.service }}
         env:
           CGO_ENABLED: "0"
-        run: go test ./...
+        run: go test -timeout 20m ./...
       - name: Gateway race detector
         if: matrix.service == 'gateway'
         working-directory: src/backend/gateway

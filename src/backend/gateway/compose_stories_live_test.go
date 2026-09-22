@@ -66,7 +66,7 @@ func TestComposeStories_live(t *testing.T) {
 
 	highlightID := composeCreateHighlight(t, client, base, sessA.AccessToken, "Live wins", "friends")
 	require.NotEmpty(t, highlightID)
-	composeAddToHighlight(t, client, base, sessA.AccessToken, highlightID, storyID)
+	composeRejectActiveStoryInHighlight(t, client, base, sessA.AccessToken, highlightID, storyID)
 
 	friendHighlights := composeGetHighlights(t, client, base, sessB.AccessToken, sessA.ProfileID)
 	require.Contains(t, friendHighlights, highlightID, "friend must see friends-only highlight")
@@ -287,7 +287,7 @@ func composeCreateHighlight(t *testing.T, client *http.Client, base, token, name
 	return id
 }
 
-func composeAddToHighlight(t *testing.T, client *http.Client, base, token, highlightID, storyID string) {
+func composeRejectActiveStoryInHighlight(t *testing.T, client *http.Client, base, token, highlightID, storyID string) {
 	t.Helper()
 	payload, _ := json.Marshal(map[string]string{"story_id": storyID})
 	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/stories/highlights/"+highlightID+"/stories", bytes.NewReader(payload))
@@ -297,7 +297,7 @@ func composeAddToHighlight(t *testing.T, client *http.Client, base, token, highl
 	resp, err := client.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
-	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+	require.Equal(t, http.StatusForbidden, resp.StatusCode, "active stories cannot be added to an archive highlight")
 }
 
 func composeGetHighlights(t *testing.T, client *http.Client, base, token, profileID string) []string {

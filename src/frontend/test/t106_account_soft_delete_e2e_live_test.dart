@@ -64,8 +64,10 @@ void main() {
       late _RecordingHttpClient recorder;
       late ChatRoomController room;
       late VoiceRealtimeConnection realtime;
+      late LiveGatewayContext ctx;
       late StreamSubscription<RealtimeFrame> deletionEventsSubscription;
       final deletionEvents = <RealtimeFrame>[];
+      final realtimeTrace = <String>[];
       final firstDeletionEvent = Completer<void>();
 
       await tester.runAsync(() async {
@@ -75,7 +77,7 @@ void main() {
           isA<LiveGatewayReady>(),
           reason: probe is LiveGatewayUnavailable ? probe.reason : null,
         );
-        final ctx = (probe as LiveGatewayReady).context;
+        ctx = (probe as LiveGatewayReady).context;
         authClient = ctx.authClient();
         chatsClient = ctx.chatsClient();
 
@@ -117,20 +119,6 @@ void main() {
             reason: '$baselineSent',
           );
         }
-
-        realtime = await ctx.connectSubscribed(b, dm.id);
-        deletionEventsSubscription = realtime.events
-            .where(
-              (frame) =>
-                  frame.op == 'dm_peer_deleted' &&
-                  frame.data?['chat_id'] == dm.id,
-            )
-            .listen((frame) {
-              deletionEvents.add(frame);
-              if (!firstDeletionEvent.isCompleted) {
-                firstDeletionEvent.complete();
-              }
-            });
 
         recorder = _RecordingHttpClient(ctx.httpClient);
         final storage = InMemoryAuthSessionStorage();
@@ -181,8 +169,6 @@ void main() {
       });
       addTearDown(container.dispose);
       addTearDown(closeRoomSubscription);
-      addTearDown(deletionEventsSubscription.cancel);
-      addTearDown(realtime.dispose);
       await tester.pump();
 
       final beforeDelete = container.read(chatRoomControllerProvider(dm.id));
@@ -203,13 +189,33 @@ void main() {
       expect(recorder.messageGetCountFor(dm.id), 1);
 
       await tester.runAsync(() async {
+        // Keep the live socket and its listener in the same real-async scope
+        // as deletion, so the non-replayed event is observed before teardown.
+        realtime = await ctx.connectSubscribed(b, dm.id);
+        addTearDown(realtime.dispose);
+        deletionEventsSubscription = realtime.events.listen((frame) {
+          realtimeTrace.add('${frame.op}:${frame.data?['chat_id']}');
+          if (frame.op == 'dm_peer_deleted' &&
+              frame.data?['chat_id'] == dm.id) {
+            deletionEvents.add(frame);
+            if (!firstDeletionEvent.isCompleted) {
+              firstDeletionEvent.complete();
+            }
+          }
+        }, onError: (Object error) => realtimeTrace.add('error:$error'));
+        addTearDown(deletionEventsSubscription.cancel);
         final deleted = await authClient.deleteAccount(
           session: firstA,
           password: qaPassword,
         );
         expect(deleted, isA<AuthApiOk<void>>(), reason: '$deleted');
 
-        await firstDeletionEvent.future.timeout(const Duration(seconds: 20));
+        await firstDeletionEvent.future.timeout(
+          const Duration(seconds: 20),
+          onTimeout: () => throw TestFailure(
+            'missing dm_peer_deleted for ${dm.id}; frames=$realtimeTrace',
+          ),
+        );
         await Future<void>.delayed(const Duration(milliseconds: 500));
         expect(deletionEvents, hasLength(1));
         final deletionEvent = deletionEvents.single;
