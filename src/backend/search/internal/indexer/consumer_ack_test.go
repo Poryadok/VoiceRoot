@@ -141,16 +141,17 @@ func TestJetStreamConsumeAck_PermanentSemanticPoisonTerminatesAndObservesIt(t *t
 
 func TestSearchConsumerConfigBoundsTransientRedelivery(t *testing.T) {
 	t.Parallel()
-	config := searchConsumerConfig("search_msg_v2_test", "message.>")
+	config := searchConsumerConfig("search_msg_v3_test", "message.>")
 
 	require.Equal(t, nats.AckExplicitPolicy, config.AckPolicy)
+	require.Equal(t, nats.DeliverAllPolicy, config.DeliverPolicy)
 	require.Equal(t, -1, config.MaxDeliver)
 	require.Equal(t, searchConsumerRetryBackoff, config.BackOff)
 }
 
 func TestReconcileSearchConsumerConfig_UpdatesDifferentBackoffBeforeBinding(t *testing.T) {
 	t.Parallel()
-	config := searchConsumerConfig("search_msg_v2_test", "message.>")
+	config := searchConsumerConfig("search_msg_v3_test", "message.>")
 	config.BackOff = []time.Duration{time.Second}
 
 	reconciled, update, err := reconcileSearchConsumerConfig(config, "message.>")
@@ -163,7 +164,7 @@ func TestReconcileSearchConsumerConfig_UpdatesDifferentBackoffBeforeBinding(t *t
 
 func TestReconcileSearchConsumerConfig_RejectsIncompatibleConfigBeforeBinding(t *testing.T) {
 	t.Parallel()
-	config := searchConsumerConfig("search_msg_v2_test", "message.>")
+	config := searchConsumerConfig("search_msg_v3_test", "message.>")
 	config.AckPolicy = nats.AckNonePolicy
 
 	_, update, err := reconcileSearchConsumerConfig(config, "message.>")
@@ -191,7 +192,7 @@ func TestPrepareThenBindSearchConsumer_IncompatibleConfigPreventsEarlyBinding(t 
 func TestMessageEventsJetStreamSubjectPrefix(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, "message.>", jsSubjectMessageEvents)
-	require.Equal(t, "search_msg_v2_", jsDurableMessagePrefix)
+	require.Equal(t, "search_msg_v3_", jsDurableMessagePrefix)
 }
 
 func TestJetStreamTermAck_Terminates(t *testing.T) {
@@ -210,7 +211,7 @@ func (e *consumeTestError) Error() string { return "consume failed" }
 func jetStreamDeliveryFixture(deliveries int) *stubJetStreamMsg {
 	return &stubJetStreamMsg{Msg: &nats.Msg{
 		Sub:   &nats.Subscription{},
-		Reply: fmt.Sprintf("$JS.ACK.message_events.search_msg_v2_test.%d.7.3.42.1", deliveries),
+		Reply: fmt.Sprintf("$JS.ACK.message_events.search_msg_v3_test.%d.7.3.42.1", deliveries),
 	}}
 }
 

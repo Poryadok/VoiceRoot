@@ -35,6 +35,7 @@ import (
 
 	chatv1 "voice.app/voice/chat/v1"
 	filev1 "voice.app/voice/file/v1"
+	subscriptionv1 "voice.app/voice/subscription/v1"
 )
 
 const serviceName = "file"
@@ -138,6 +139,22 @@ func main() {
 			scanner = clamav.Scanner{Addr: clamAddr}
 		}
 		var reader grpcsvc.ObjectReader
+		var entitlements grpcsvc.EntitlementResolver
+		if subscriptionAddr := strings.TrimSpace(os.Getenv("SUBSCRIPTION_GRPC_ADDR")); subscriptionAddr != "" {
+			conn, err := grpc.NewClient(grpcclient.DialTarget(subscriptionAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				log.Fatalf("subscription grpc: %v", err)
+			}
+			defer func() { _ = conn.Close() }()
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
+			if err := waitForGRPCReady(waitCtx, conn); err != nil {
+				waitCancel()
+				log.Fatalf("subscription grpc dial: %v", err)
+			}
+			waitCancel()
+			entitlements = s2s.NewSubscriptionEntitlements(subscriptionv1.NewSubscriptionServiceClient(conn))
+			logger.Info("subscription entitlement resolver enabled", slog.String("addr", subscriptionAddr))
+		}
 		var processor grpcsvc.ImageProcessor
 		var deleter r2file.ObjectDeleter
 		if presigner != nil {
@@ -164,14 +181,15 @@ func main() {
 		options := append(ordinaryObservation, grpc.ChainUnaryInterceptor(principalgrpc.OrdinaryUnaryInterceptor()))
 		grpcSrv = grpc.NewServer(options...)
 		service := grpcsvc.New(grpcsvc.Deps{
-			Files:     filesStore,
-			Presigner: presigner,
-			Deleter:   deleter,
-			ChatGuard: chatGuard,
-			Reader:    reader,
-			Processor: processor,
-			Scanner:   scanner,
-			Events:    eventPub,
+			Files:        filesStore,
+			Presigner:    presigner,
+			Deleter:      deleter,
+			ChatGuard:    chatGuard,
+			Reader:       reader,
+			Processor:    processor,
+			Scanner:      scanner,
+			Entitlements: entitlements,
+			Events:       eventPub,
 		})
 		filev1.RegisterFileServiceServer(grpcSrv, service)
 		if protectedRuntime != nil {

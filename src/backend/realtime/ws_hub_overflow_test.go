@@ -23,6 +23,7 @@ func TestProfileFanoutDisconnectsOnOverflow_AllLifecycleOps(t *testing.T) {
 	for _, op := range []string{
 		"call_incoming", "call_accepted", "call_declined", "call_missed",
 		"call_ended", "call_started", "screen_share_started", "screen_share_stopped",
+		"dm_peer_deleted",
 	} {
 		if !profileFanoutDisconnectsOnOverflow(op) {
 			t.Fatalf("%s must close an overflowing lifecycle recipient", op)
