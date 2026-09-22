@@ -68,7 +68,7 @@ void main() {
       late StreamSubscription<RealtimeFrame> deletionEventsSubscription;
       final deletionEvents = <RealtimeFrame>[];
       final realtimeTrace = <String>[];
-      final firstDeletionEvent = Completer<void>();
+      late final Completer<void> firstDeletionEvent;
 
       await tester.runAsync(() async {
         final probe = await probeLiveGateway();
@@ -189,8 +189,9 @@ void main() {
       expect(recorder.messageGetCountFor(dm.id), 1);
 
       await tester.runAsync(() async {
-        // Keep the live socket and its listener in the same real-async scope
-        // as deletion, so the non-replayed event is observed before teardown.
+        // Keep the socket, listener, and awaited future in the same real-async
+        // scope; a future created in the widget test's fake zone cannot settle here.
+        firstDeletionEvent = Completer<void>();
         realtime = await ctx.connectSubscribed(b, dm.id);
         addTearDown(realtime.dispose);
         deletionEventsSubscription = realtime.events.listen((frame) {

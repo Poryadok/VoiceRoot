@@ -31,7 +31,9 @@ void main() {
       final story = (created as StoriesApiOk<StoryData>).data;
       expect(story.id, isNotEmpty);
 
-      final feed = await stories.getFeed(authorization: viewer.authorizationHeader);
+      final feed = await stories.getFeed(
+        authorization: viewer.authorizationHeader,
+      );
       expect(feed, isA<StoriesApiOk<StoryFeedPage>>());
       final items = (feed as StoriesApiOk<StoryFeedPage>).data.stories;
       expect(
@@ -62,7 +64,8 @@ void main() {
         chatId: replyData.chatId,
       );
       expect(dmHistory, isA<MessagesApiOk<MessageListData>>());
-      final dmMsgs = (dmHistory as MessagesApiOk<MessageListData>).data.messages;
+      final dmMsgs =
+          (dmHistory as MessagesApiOk<MessageListData>).data.messages;
       expect(
         dmMsgs.any(
           (m) =>
@@ -87,20 +90,27 @@ void main() {
         highlightId: highlightId,
         storyId: story.id,
       );
-      expect(added, isA<StoriesApiOk<void>>());
+      expect(added, isA<StoriesApiFailure>());
+      expect(
+        (added as StoriesApiFailure).statusCode,
+        403,
+        reason: 'active stories cannot be added to an archive highlight',
+      );
 
       final friendHighlights = await stories.getHighlights(
         authorization: viewer.authorizationHeader,
         profileId: author.activeProfileId,
       );
       expect(friendHighlights, isA<StoriesApiOk<List<HighlightData>>>());
-      final friendIds =
-          (friendHighlights as StoriesApiOk<List<HighlightData>>)
-              .data
-              .map((h) => h.id)
-              .toList();
-      expect(friendIds, contains(highlightId),
-          reason: 'friend must see friends-only highlight');
+      final friendIds = (friendHighlights as StoriesApiOk<List<HighlightData>>)
+          .data
+          .map((h) => h.id)
+          .toList();
+      expect(
+        friendIds,
+        contains(highlightId),
+        reason: 'friend must see friends-only highlight',
+      );
 
       final strangerHighlights = await stories.getHighlights(
         authorization: stranger.authorizationHeader,
@@ -108,8 +118,7 @@ void main() {
       );
       expect(strangerHighlights, isA<StoriesApiOk<List<HighlightData>>>());
       final strangerIds =
-          (strangerHighlights as StoriesApiOk<List<HighlightData>>)
-              .data
+          (strangerHighlights as StoriesApiOk<List<HighlightData>>).data
               .map((h) => h.id)
               .toList();
       expect(
