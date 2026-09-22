@@ -490,6 +490,7 @@ services:
       USER_FILE_PRINCIPAL_TLS_CA_FILE: /etc/voice/file-principal/ca/ca.crt
       USER_FILE_PRINCIPAL_TLS_SERVER_NAME: user
       CHAT_GRPC_ADDR: chat:9090
+      SUBSCRIPTION_GRPC_ADDR: subscription:9090
       CLAMAV_ADDR: clamav:3310
       FILE_R2_ENDPOINT: ${FILE_R2_ENDPOINT:-http://minio:9000}
       FILE_R2_REGION: ${FILE_R2_REGION:-us-east-1}
@@ -506,6 +507,8 @@ services:
       compose-db-init:
         condition: service_completed_successfully
       chat:
+        condition: service_healthy
+      subscription:
         condition: service_healthy
       clamav:
         condition: service_started

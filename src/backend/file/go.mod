@@ -8,6 +8,10 @@ replace voice.app/voice/chat => ../chat/pb/voice/chat
 
 replace voice.app/voice/story => ../voice/pb/voice/story
 
+replace voice.app/voice/subscription => ../voice/pb/voice/subscription
+
+replace voice.app/voice/space => ../voice/pb/voice/space
+
 replace voice.app/voice/events => ../messaging/pb/voice/events
 
 replace voice.app/voice/common => ../user/pb/voice/common
@@ -37,6 +41,7 @@ require (
 	voice.app/voice/events v0.0.0
 	voice.app/voice/file v0.0.0
 	voice.app/voice/story v0.0.0
+	voice.app/voice/subscription v0.0.0
 	voice.app/voice/user v0.0.0
 	voice/backend/pkg v0.0.0
 )
@@ -119,4 +124,5 @@ require (
 	golang.org/x/time v0.8.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260226221140-a57be14db171 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	voice.app/voice/space v0.0.0 // indirect
 )

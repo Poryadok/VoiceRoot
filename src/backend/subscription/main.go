@@ -74,6 +74,7 @@ func main() {
 		}
 		st := &store.SubscriptionStore{Pool: pool}
 		svc := grpcsvc.NewSubscriptionGRPC(st)
+		svc.ProviderEventKeys = grpcsvc.NewStaticProviderEventHMACKeys("paddle-webhook-secret-v1", []byte(billing.WebhookSecret()))
 		var domainPub *subscriptionevents.JetStreamPublisher
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			if pub, err := analyticsevents.NewJetStreamPublisher(natsURL); err == nil {

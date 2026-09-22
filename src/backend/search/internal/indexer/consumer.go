@@ -18,9 +18,10 @@ import (
 const (
 	jsStreamMessageEvents = "message_events"
 	// Messaging publishes message.sent / message.edited / … (not msg.*).
-	// v2 durable: JetStream rejects filter-subject changes on an existing consumer.
+	// v3 durable: JetStream does not allow changing the initial delivery policy
+	// on an existing consumer.
 	jsSubjectMessageEvents   = "message.>"
-	jsDurableMessagePrefix   = "search_msg_v2_"
+	jsDurableMessagePrefix   = "search_msg_v3_"
 	jsStreamUserEvents       = "user_events"
 	jsStreamChatEvents       = "chat_events"
 	searchConsumerMaxDeliver = -1
@@ -33,7 +34,9 @@ func searchConsumerConfig(durable, subject string) nats.ConsumerConfig {
 		Durable:        durable,
 		DeliverSubject: "_INBOX.voice.search." + durable,
 		FilterSubject:  subject,
-		DeliverPolicy:  nats.DeliverNewPolicy,
+		// A fresh durable must replay retained events: Compose and a real producer
+		// can publish before Search completes its first bind.
+		DeliverPolicy:  nats.DeliverAllPolicy,
 		AckPolicy:      nats.AckExplicitPolicy,
 		MaxDeliver:     searchConsumerMaxDeliver,
 		BackOff:        append([]time.Duration(nil), searchConsumerRetryBackoff...),

@@ -12,7 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestComposePhoneSync_live documents privacy/trust (docs/features/privacy.md) SyncPhoneContacts with Auth phone-hash lookup and allow_phone_search filter.
+// TestComposePhoneSync_live documents that phone-book discovery is post-alpha and
+// therefore rejected consistently by the public gateway contract.
 func TestComposePhoneSync_live(t *testing.T) {
 	if !liveComposeEnabled() {
 		t.Skip("set VOICE_RUN_LIVE_COMPOSE=true to run against local compose")
@@ -23,36 +24,9 @@ func TestComposePhoneSync_live(t *testing.T) {
 	base := liveGatewayBaseURL()
 	n := time.Now().UnixNano()
 
-	everyone := map[string]any{
-		"friends": true, "friends_of_friends": true, "space_members": true, "include_guests": true,
-	}
-	friendsOnly := map[string]any{"friends": true}
-
 	phoneHash := formatComposePhoneHash("p11-phone", n)
-	target := registerComposeUserWithPhone(t, client, base, formatComposeEmail("p11-phone-target", n), phoneHash, "VoiceQaTest1!")
-	stranger := registerComposeUser(t, client, base, formatComposeEmail("p11-phone-stranger", n), "VoiceQaTest1!")
-	friend := registerComposeUser(t, client, base, formatComposeEmail("p11-phone-friend", n), "VoiceQaTest1!")
-
-	patchComposePrivacy(t, client, base, target.AccessToken, map[string]any{
-		"preset":                   "personal",
-		"allow_phone_search":       friendsOnly,
-		"allow_friend_requests":    everyone,
-		"allow_chat_space_invites": everyone,
-	})
-	patchComposePrivacy(t, client, base, friend.AccessToken, map[string]any{
-		"preset":                   "personal",
-		"allow_friend_requests":    everyone,
-		"allow_chat_space_invites": everyone,
-	})
-
-	sendComposeFriendInvitation(t, client, base, friend.AccessToken, target.ProfileID)
-	acceptComposeFriendInvitation(t, client, base, target.AccessToken, friend.ProfileID)
-
-	strangerMatches := syncComposePhoneContacts(t, client, base, stranger.AccessToken, phoneHash)
-	require.NotContains(t, strangerMatches, target.ProfileID, "stranger must not match friends-only phone search")
-
-	friendMatches := syncComposePhoneContacts(t, client, base, friend.AccessToken, phoneHash)
-	require.Contains(t, friendMatches, target.ProfileID, "friend must match when allow_phone_search permits")
+	caller := registerComposeUserWithPhone(t, client, base, formatComposeEmail("p11-phone", n), phoneHash, "VoiceQaTest1!")
+	syncComposePhoneContactsUnavailable(t, client, base, caller.AccessToken, phoneHash)
 }
 
 func formatComposePhoneHash(prefix string, n int64) string {
@@ -90,7 +64,7 @@ func registerComposeUserWithPhone(t *testing.T, client *http.Client, base, email
 	return sess
 }
 
-func syncComposePhoneContacts(t *testing.T, client *http.Client, base, accessToken, phoneHash string) []string {
+func syncComposePhoneContactsUnavailable(t *testing.T, client *http.Client, base, accessToken, phoneHash string) {
 	t.Helper()
 	payload, err := json.Marshal(map[string]any{
 		"hashed_phone_numbers": []string{phoneHash},
@@ -104,11 +78,6 @@ func syncComposePhoneContacts(t *testing.T, client *http.Client, base, accessTok
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(resp.Body)
-	require.Equal(t, http.StatusOK, resp.StatusCode, "sync phone contacts body=%s", string(raw))
-
-	var out struct {
-		MatchedProfileIds []string `json:"matched_profile_ids"`
-	}
-	require.NoError(t, json.Unmarshal(raw, &out))
-	return out.MatchedProfileIds
+	require.Equal(t, http.StatusConflict, resp.StatusCode, "sync phone contacts body=%s", string(raw))
+	require.JSONEq(t, `{"error_code":"phone_contact_sync_unavailable","message":"phone_contact_sync_unavailable"}`, string(raw))
 }

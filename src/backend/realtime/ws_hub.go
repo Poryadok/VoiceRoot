@@ -755,7 +755,7 @@ func (h *wsHub) broadcastToChat(chatID string, env fanoutEnvelope, logger *slog.
 func profileFanoutDisconnectsOnOverflow(op string) bool {
 	switch op {
 	case "call_incoming", "call_accepted", "call_declined", "call_missed", "call_ended",
-		"call_started", "screen_share_started", "screen_share_stopped":
+		"call_started", "screen_share_started", "screen_share_stopped", "dm_peer_deleted":
 		return true
 	default:
 		return false
