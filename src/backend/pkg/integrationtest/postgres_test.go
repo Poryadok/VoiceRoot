@@ -25,8 +25,8 @@ func TestStartPostgresContainerUsesIndependentBoundedStartupContext(t *testing.T
 		deadline, ok := ctx.Deadline()
 		require.True(t, ok)
 		remaining := time.Until(deadline)
-		require.GreaterOrEqual(t, remaining, 55*time.Second)
-		require.LessOrEqual(t, remaining, 65*time.Second)
+		require.GreaterOrEqual(t, remaining, expectedPostgresStartupTimeout-5*time.Second)
+		require.LessOrEqual(t, remaining, expectedPostgresStartupTimeout+5*time.Second)
 		return container, nil
 	}
 
