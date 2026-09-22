@@ -18,10 +18,10 @@ import (
 const (
 	jsStreamMessageEvents = "message_events"
 	// Messaging publishes message.sent / message.edited / … (not msg.*).
-	// v3 durable: JetStream does not allow changing the initial delivery policy
+	// v4 durable: JetStream does not allow changing the initial delivery policy
 	// on an existing consumer.
 	jsSubjectMessageEvents   = "message.>"
-	jsDurableMessagePrefix   = "search_msg_v3_"
+	jsDurableMessagePrefix   = "search_msg_v4_"
 	jsStreamUserEvents       = "user_events"
 	jsStreamChatEvents       = "chat_events"
 	searchConsumerMaxDeliver = -1
@@ -34,17 +34,25 @@ func searchConsumerConfig(durable, subject string) nats.ConsumerConfig {
 		Durable:        durable,
 		DeliverSubject: "_INBOX.voice.search." + durable,
 		FilterSubject:  subject,
-		// A fresh durable must replay retained events: Compose and a real producer
-		// can publish before Search completes its first bind.
-		DeliverPolicy:  nats.DeliverAllPolicy,
-		AckPolicy:      nats.AckExplicitPolicy,
-		MaxDeliver:     searchConsumerMaxDeliver,
-		BackOff:        append([]time.Duration(nil), searchConsumerRetryBackoff...),
+		// The durable is created during Search startup, before Gateway accepts
+		// traffic. Starting at the tail prevents a fresh instance from spending
+		// its readiness window replaying unrelated retained history.
+		DeliverPolicy: nats.DeliverNewPolicy,
+		AckPolicy:     nats.AckExplicitPolicy,
+		MaxDeliver:    searchConsumerMaxDeliver,
+		BackOff:       append([]time.Duration(nil), searchConsumerRetryBackoff...),
 	}
 }
 
 // RunMessageEventsConsumer subscribes to message.events and updates the search index.
-func RunMessageEventsConsumer(ctx context.Context, natsURL, instanceID string, idx *MessageIndexer, logger *slog.Logger, metrics *ConsumerMetrics) error {
+// It sends its setup result to ready once the push subscription is bound.
+func RunMessageEventsConsumer(ctx context.Context, natsURL, instanceID string, idx *MessageIndexer, logger *slog.Logger, metrics *ConsumerMetrics, ready chan<- error) (runErr error) {
+	defer func() {
+		if ready != nil {
+			ready <- runErr
+			close(ready)
+		}
+	}()
 	if idx == nil || strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("message events consumer: missing deps")
 	}
@@ -89,6 +97,10 @@ func RunMessageEventsConsumer(ctx context.Context, natsURL, instanceID string, i
 	sub, err := subscribeSearchConsumer(js, jsStreamMessageEvents, durable, jsSubjectMessageEvents, handler)
 	if err != nil {
 		return fmt.Errorf("jetstream subscribe message.events: %w", err)
+	}
+	if ready != nil {
+		ready <- nil
+		ready = nil
 	}
 	defer func() {
 		if err := sub.Unsubscribe(); err != nil && logger != nil {

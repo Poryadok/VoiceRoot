@@ -61,7 +61,8 @@ and make delivery/startup failures observable through regression tests.
 - [x] Started full master run; cancelled it after early failures.
 - [x] Correct Phone Sync contract, File entitlement wiring, Subscription event-key
   wiring, Search replay startup, and Realtime overflow behavior.
-- [ ] Submit the repair and use CI to resolve any remaining Story-specific failure.
+- [x] Submit the first repair and merge it after receiving CI (#437).
+- [ ] Submit the follow-up for Search backlog readiness and Story privacy-projection convergence.
 
 ## Decisions
 
@@ -69,6 +70,12 @@ and make delivery/startup failures observable through regression tests.
   and `docs/todo/client.md` explicitly define it.
 - Treat `dm_peer_deleted` as a delivery reliability issue rather than deleting
   the raw WebSocket assertion, because the product flow requires the event.
+- Use a new Search durable when changing its immutable JetStream delivery
+  policy. New instances start at the tail: Compose starts Search before Gateway
+  accepts traffic, so replaying the entire shared smoke backlog is harmful.
+- Keep the Story view assertion at HTTP 204, while polling through the bounded
+  privacy/friend projection convergence window after the feed has established
+  that the viewer is eligible.
 
 ## Risks And Follow-Ups
 
