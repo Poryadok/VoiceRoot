@@ -1,0 +1,18 @@
+# Broker isolation for the account-delete lifecycle. Replace namespace before apply.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: voice-nats-account-delete
+  namespace: __K_NAMESPACE__
+spec:
+  podSelector:
+    matchLabels: {app: voice-nats}
+  policyTypes: [Ingress]
+  ingress:
+    - ports: [{protocol: TCP, port: 4222}]
+      from:
+        - podSelector: {}
+    - ports: [{protocol: TCP, port: 8222}]
+      from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: voice-observability}

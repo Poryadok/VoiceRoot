@@ -25,7 +25,8 @@ public class AuthEventsConfiguration {
   @Profile("!test")
   @ConditionalOnExpression("!'${auth.nats.url:}'.isBlank()")
   NatsAuthEventPublisher natsAuthEventPublisher(AuthProperties properties) {
-    return new NatsAuthEventPublisher(properties.getNats().getUrl());
+    return new NatsAuthEventPublisher(
+        properties.getNats().getUrl(), properties.getNats().getCredsFile());
   }
 
   @Bean

@@ -1,0 +1,7 @@
+{
+  "services": {
+    "nats": {
+      "command": ["-js", "-sd", "/data", "-m", "8222"]
+    }
+  }
+}
