@@ -9,6 +9,8 @@ COPY file/go.mod file/go.sum ./file/
 COPY file/pb/voice/file/go.mod ./file/pb/voice/file/
 COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
 COPY voice/pb/voice/story/go.mod ./voice/pb/voice/story/
+COPY voice/pb/voice/space/go.mod ./voice/pb/voice/space/
+COPY voice/pb/voice/subscription/go.mod ./voice/pb/voice/subscription/
 COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
 COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
 COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
@@ -18,6 +20,8 @@ COPY messaging/pb/voice/events ./messaging/pb/voice/events
 COPY file ./file
 COPY chat/pb ./chat/pb
 COPY voice/pb/voice/story ./voice/pb/voice/story
+COPY voice/pb/voice/space ./voice/pb/voice/space
+COPY voice/pb/voice/subscription ./voice/pb/voice/subscription
 COPY user/pb ./user/pb
 WORKDIR /src/file
 RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked --mount=type=cache,target=/root/.cache/go-build,id=voice-gobuild,sharing=locked CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/service .
