@@ -193,6 +193,10 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-voice}
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: "6379"
+      # Compose-only E2E creates an account and immediately requests its
+      # verification OTP. Keep production's one-minute cooldown in
+      # application.yml; the isolated disposable fixture needs no delay.
+      AUTH_OTP_SEND_COOLDOWN: ${AUTH_OTP_SEND_COOLDOWN:-PT0.001S}
       AUTH_JWT_PRIVATE_KEY_LOCATION: file:/run/jwt.pem
       # Compose dev only: accept TOTP code 000000 for live E2E (see AuthProperties.totp.testBypass).
       AUTH_TOTP_TEST_BYPASS: "true"

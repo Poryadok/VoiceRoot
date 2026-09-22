@@ -140,6 +140,7 @@ public class AuthProperties {
 
   public static class Nats {
     private String url = "";
+    private String credsFile = "";
 
     public String getUrl() {
       return url;
@@ -147,6 +148,14 @@ public class AuthProperties {
 
     public void setUrl(String url) {
       this.url = url;
+    }
+
+    public String getCredsFile() {
+      return credsFile;
+    }
+
+    public void setCredsFile(String credsFile) {
+      this.credsFile = credsFile;
     }
   }
 

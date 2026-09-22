@@ -18,6 +18,7 @@ const (
 	PostgresImage          = "postgres:16-bookworm"
 	postgresUser           = "u"
 	postgresPass           = "p"
+	postgresStartupTimeout = time.Minute
 	postgresCleanupTimeout = 30 * time.Second
 )
 
@@ -30,19 +31,34 @@ var postgresTerminate = func(ctx context.Context, container *postgres.PostgresCo
 	return container.Terminate(ctx)
 }
 
-func startPostgresContainer(ctx context.Context, dbName string) (*postgres.PostgresContainer, error) {
-	container, err := postgresRun(ctx, PostgresImage,
-		postgres.BasicWaitStrategies(),
-		postgres.WithDatabase(dbName),
-		postgres.WithUsername(postgresUser),
-		postgres.WithPassword(postgresPass),
-	)
-	if err != nil && container != nil {
-		if cleanupErr := terminatePostgresContainer(container); cleanupErr != nil {
-			err = fmt.Errorf("start postgres container: %w; terminate partial container: %v", err, cleanupErr)
+func startPostgresContainer(_ context.Context, dbName string) (*postgres.PostgresContainer, error) {
+	for attempt := 0; attempt < 2; attempt++ {
+		// A test operation context can be cancelled while a previous test is
+		// unwinding. Container startup is isolated from that context and bounded
+		// independently so a lost Docker readiness log cannot consume the package
+		// timeout. A single retry handles transient runner-side Docker startup
+		// failures without turning persistent failures into an unbounded loop.
+		startupCtx, cancel := context.WithTimeout(context.Background(), postgresStartupTimeout)
+		container, err := postgresRun(startupCtx, PostgresImage,
+			postgres.BasicWaitStrategies(),
+			postgres.WithDatabase(dbName),
+			postgres.WithUsername(postgresUser),
+			postgres.WithPassword(postgresPass),
+		)
+		cancel()
+		if err == nil {
+			return container, nil
+		}
+		if container != nil {
+			if cleanupErr := terminatePostgresContainer(container); cleanupErr != nil {
+				return container, fmt.Errorf("start postgres container: %w; terminate partial container: %v", err, cleanupErr)
+			}
+		}
+		if attempt == 1 {
+			return container, err
 		}
 	}
-	return container, err
+	panic("unreachable")
 }
 
 // terminatePostgresContainer does not inherit a test operation context: setup

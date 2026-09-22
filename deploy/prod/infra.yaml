@@ -115,6 +115,7 @@ metadata:
   name: voice-nats
   namespace: voice-prod
 spec:
+  type: ClusterIP
   selector:
     app: voice-nats
   ports:

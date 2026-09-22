@@ -137,6 +137,15 @@ apply_migrate subscription_db \
   voice-migrate-subscription-db \
   voice-subscription-db-migrations
 
+# User owns lifecycle/search tombstone migration 000017.  It must finish before
+# any rollout enables USER_ACCOUNT_DELETE_CONSUMER_ENABLED; rollback disables
+# that flag and never down-migrates this schema.
+apply_migrate user_db \
+  "${ROOT}/src/backend/migrations/user_db" \
+  "${ROOT}/deploy/templates/migrate-user-db-job.yaml" \
+  voice-migrate-user-db \
+  voice-user-db-migrations
+
 apply_migrate voice_db \
   "${ROOT}/src/backend/migrations/voice_db" \
   "${ROOT}/deploy/templates/migrate-voice-db-job.yaml" \
