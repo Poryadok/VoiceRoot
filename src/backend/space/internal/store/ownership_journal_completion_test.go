@@ -28,11 +28,9 @@ func ownershipJournalCompletionMigrationSQL(t *testing.T, direction string) stri
 
 func ownershipJournalCompletionStoreFixture(t *testing.T) *SpaceStore {
 	t.Helper()
-	st := ownershipJournalCommitStoreFixture(t)
-	applyR22SpaceEpochMigration(t, context.Background(), st)
-	_, err := st.Pool.Exec(context.Background(), ownershipJournalCompletionMigrationSQL(t, "up"))
-	require.NoError(t, err)
-	return st
+	// ownershipJournalCommitStoreFixture uses the current common schema, which
+	// already includes 000011, 000012, and 000018 in catalog order.
+	return ownershipJournalCommitStoreFixture(t)
 }
 
 type ownershipCommitCompleter interface {

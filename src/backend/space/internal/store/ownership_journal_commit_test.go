@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -30,6 +28,8 @@ func seedOwnershipProofConfirmed(t *testing.T, st *SpaceStore) OwnershipBinding 
 	binding := seedOwnershipJournalBinding(t, st)
 	_, err := st.ReserveOwnership(context.Background(), binding)
 	require.NoError(t, err)
+	_, err = st.MarkOwnershipConsumeStarted(context.Background(), binding)
+	require.NoError(t, err)
 	_, err = st.ConfirmOwnershipProof(context.Background(), binding, ownershipAuthReceiptFixture(binding))
 	require.NoError(t, err)
 	return binding
@@ -37,12 +37,7 @@ func seedOwnershipProofConfirmed(t *testing.T, st *SpaceStore) OwnershipBinding 
 
 func ownershipJournalCommitStoreFixture(t *testing.T) *SpaceStore {
 	t.Helper()
-	st := ownershipJournalStoreFixture(t)
-	migration, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", "000010_ownership_journal_commit.up.sql"))
-	require.NoError(t, err)
-	_, err = st.Pool.Exec(context.Background(), string(migration))
-	require.NoError(t, err)
-	return st
+	return ownershipJournalStoreFixture(t)
 }
 
 func ownershipRolePreparedReceiptFixture(binding OwnershipBinding) *rolev1.OwnershipTransferReceipt {

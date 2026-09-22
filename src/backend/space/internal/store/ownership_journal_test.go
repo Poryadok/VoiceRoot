@@ -6,8 +6,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -94,15 +92,7 @@ func ownershipJournalStoreFixture(t *testing.T) *SpaceStore {
 	}
 	ctx := context.Background()
 	pool := startSpacePostgresForStoreTest(t, ctx)
-	applySpaceMigrationsThrough7ForStoreTest(t, ctx, pool)
-	migration, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", "000008_ownership_journal.up.sql"))
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(migration))
-	require.NoError(t, err)
-	decisionMigration, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", "000009_ownership_journal_decision.up.sql"))
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(decisionMigration))
-	require.NoError(t, err)
+	applySpaceMigrationsThrough12ForStoreTest(t, ctx, pool)
 	applyLifecycleMigration(t, ctx, pool, "up")
 	return &SpaceStore{Pool: pool}
 }

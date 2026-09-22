@@ -79,6 +79,7 @@ func main() {
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	var grpcSrv *grpc.Server
 	var outboxRuntime *ownershipOutboxRuntime
+	var recoveryRuntime *ownershipRecoveryRuntime
 	if dbURL != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
 		pool, err := pgxpool.New(ctx, dbURL)
@@ -250,6 +251,10 @@ func main() {
 		if outboxRuntime != nil {
 			defer outboxRuntime.Stop()
 		}
+		recoveryRuntime = startOwnershipRecoveryRuntime(runCtx, spaceStore, spaceSvc, logger)
+		if recoveryRuntime != nil {
+			defer recoveryRuntime.Stop()
+		}
 		spacev1.RegisterSpaceServiceServer(grpcSrv, spaceSvc)
 		if privacyRuntime != nil {
 			privacyListener, err := net.Listen("tcp", principalConfig.ListenAddr)
@@ -294,12 +299,14 @@ func main() {
 	case err := <-errCh:
 		runCancel()
 		outboxRuntime.Stop()
+		recoveryRuntime.Stop()
 		if err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
 		}
 	case <-stop:
 		runCancel()
 		outboxRuntime.Stop()
+		recoveryRuntime.Stop()
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.ShutdownTimeoutFromEnv())
 		defer cancel()
 		if grpcSrv != nil {
