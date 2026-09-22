@@ -10,6 +10,8 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
+const maxJetStreamSubscribeRetryDelay = 5 * time.Second
+
 func isJetStreamNotFound(err error) bool {
 	if err == nil {
 		return false
@@ -18,6 +20,17 @@ func isJetStreamNotFound(err error) bool {
 		return true
 	}
 	return strings.Contains(strings.ToLower(err.Error()), "stream not found")
+}
+
+func nextJetStreamSubscribeRetryDelay(delay time.Duration) time.Duration {
+	if delay >= maxJetStreamSubscribeRetryDelay {
+		return maxJetStreamSubscribeRetryDelay
+	}
+	delay *= 2
+	if delay > maxJetStreamSubscribeRetryDelay {
+		return maxJetStreamSubscribeRetryDelay
+	}
+	return delay
 }
 
 func subscribeJetStreamWithRetry(
@@ -44,8 +57,6 @@ func subscribeJetStreamWithRetry(
 			return nil, ctx.Err()
 		case <-time.After(delay):
 		}
-		if delay < 30*time.Second {
-			delay *= 2
-		}
+		delay = nextJetStreamSubscribeRetryDelay(delay)
 	}
 }

@@ -26,6 +26,19 @@ func TestIsJetStreamNotFound(t *testing.T) {
 	}
 }
 
+func TestNextJetStreamSubscribeRetryDelayCapsStartupGap(t *testing.T) {
+	delay := time.Second
+	for range 8 {
+		delay = nextJetStreamSubscribeRetryDelay(delay)
+		if delay > 5*time.Second {
+			t.Fatalf("retry delay = %s, want at most 5s", delay)
+		}
+	}
+	if delay != 5*time.Second {
+		t.Fatalf("capped retry delay = %s, want 5s", delay)
+	}
+}
+
 func TestSubscribeJetStreamWithRetry_WaitsForStream(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
