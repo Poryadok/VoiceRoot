@@ -27,6 +27,10 @@ auth_redis_line="$(grep -F 'SPRING_DATA_REDIS_HOST: redis' "$COMPOSE_FILE" || tr
 [[ -n "$auth_redis_line" ]] || \
   fail 'compose fixture must retain Auth Redis wiring for the per-account OTP throttle'
 
+auth_otp_cooldown_line="$(grep -F 'AUTH_OTP_SEND_COOLDOWN:' "$COMPOSE_FILE" || true)"
+[[ "$auth_otp_cooldown_line" == *'${AUTH_OTP_SEND_COOLDOWN:-PT0S}'* ]] || \
+  fail 'compose fixture must disable Auth OTP send cooldown for immediate verification E2E'
+
 otp_pattern_line="$(grep -n -F '"ratelimit:OTP:*"' "$SCRIPT" || true)"
 [[ -n "$otp_pattern_line" ]] || fail 'compose smoke must clear stale OTP rate-limit keys before Flutter smoke'
 
