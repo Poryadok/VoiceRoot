@@ -16,7 +16,18 @@ set_output() {
 }
 
 manifest_exists() {
-  docker manifest inspect "$1" >/dev/null 2>&1
+  local ref="$1"
+  local attempt
+  for attempt in 1 2 3; do
+    if docker manifest inspect "${ref}" >/dev/null 2>&1; then
+      return 0
+    fi
+    if [ "${attempt}" -lt 3 ]; then
+      echo "Retrying manifest lookup for ${ref} (${attempt}/3)" >&2
+      sleep 5
+    fi
+  done
+  return 1
 }
 
 check_image() {
@@ -26,7 +37,7 @@ check_image() {
     echo "ok: ${ref}"
     return 0
   fi
-  echo "missing: ${ref}" >&2
+  echo "missing or unavailable after 3 attempts: ${ref}" >&2
   MISSING+=("${name}")
   return 1
 }
