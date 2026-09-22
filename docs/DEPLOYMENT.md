@@ -409,9 +409,10 @@ go test -run TestStagingBotsWebhook_live -count=1 .
 ### Ownership lifecycle principal transport
 
 This remains a disabled public foundation: production Space TransferOwnership
-denies before lock/database access until its durable v2 coordinator lands. No
-signing, TLS or environment setting activates the v1 saga. Public ownership
-activation remains a later gate.
+denies before lock/database access. The private durable v2 recovery coordinator
+uses the protected clients below only to converge already-persisted journal rows;
+no signing, TLS or environment setting activates the public request or v1 saga.
+Public ownership activation remains a later gate.
 
 Role keeps ordinary callers on `ROLE_GRPC_LISTEN` (default `:9090`) and rejects
 the capability RPC plus every v1/v2 ownership lifecycle RPC there. The additional
@@ -432,6 +433,7 @@ the retired-space fence. Current deployment settings do not bypass that hold.
 | Space | `AUTH_PRINCIPAL_GRPC_ADDR` | Dedicated Auth TLS proof endpoint; enabling it requires the Space principal signer |
 | Space | `AUTH_PRINCIPAL_TLS_CA_FILE` | Optional additional trusted Auth CA PEM; system roots remain available |
 | Space | `AUTH_PRINCIPAL_TLS_SERVER_NAME` | Optional expected Auth certificate DNS name override; otherwise use endpoint authority |
+| Space | `SPACE_OWNERSHIP_RECOVERY_INTERVAL` | Positive interval for bounded private journal convergence; defaults to `1s` and starts only when both protected Auth and Role clients are configured |
 | Role | `ROLE_PRINCIPAL_GRPC_LISTEN` | Dedicated listener address; default `:9091` when enabled |
 | Role | `ROLE_PRINCIPAL_TLS_CERT_FILE`, `ROLE_PRINCIPAL_TLS_KEY_FILE` | Server TLS certificate chain and matching private key secret mounts |
 | Role | `S2S_JWKS_URLS_JSON` | Trusted issuer-to-HTTPS endpoint map, including `space` |

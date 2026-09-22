@@ -98,12 +98,12 @@ func (s *SpaceStore) ConfirmOwnershipProof(ctx context.Context, binding Ownershi
 			return nil, ErrOwnershipConflict
 		}
 		return existing, nil
-	case "reserved":
+	case "consume_started":
 		confirmed, err := scanOwnershipJournal(tx.QueryRow(ctx, `UPDATE ownership_journal SET
 			state='proof_confirmed',auth_receipt_id=$2,auth_account_id=$3,auth_profile_id=$4,
 			auth_space_id=$5,auth_new_owner_profile_id=$6,auth_operation_id=$7,
 			auth_session_epoch=$8,auth_consumed_at=$9,auth_verified_factors=$10,updated_at=now()
-			WHERE operation_id=$1 AND state='reserved' RETURNING `+ownershipJournalColumns,
+				WHERE operation_id=$1 AND state='consume_started' RETURNING `+ownershipJournalColumns,
 			binding.OperationID, receipt.ReceiptID, receipt.AccountID, receipt.ProfileID,
 			receipt.SpaceID, receipt.NewOwnerProfileID, receipt.OperationID, receipt.SessionEpoch,
 			receipt.ConsumedAt.UTC(), receipt.VerifiedFactors))
@@ -152,10 +152,10 @@ func (s *SpaceStore) DecideOwnershipAbort(ctx context.Context, binding Ownership
 	switch existing.State {
 	case "abort_decided":
 		return existing, nil
-	case "reserved", "proof_confirmed", "prepared":
+	case "reserved", "consume_started", "proof_confirmed", "prepared":
 		command, err := tx.Exec(ctx, `UPDATE ownership_journal
 			SET state='abort_decided',updated_at=now()
-			WHERE operation_id=$1 AND state IN ('reserved','proof_confirmed','prepared')`, binding.OperationID)
+				WHERE operation_id=$1 AND state IN ('reserved','consume_started','proof_confirmed','prepared')`, binding.OperationID)
 		if err != nil {
 			return nil, err
 		}

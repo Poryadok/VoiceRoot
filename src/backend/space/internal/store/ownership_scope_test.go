@@ -27,9 +27,10 @@ type r20ScopeFixture struct {
 
 func ownershipScopeStoreFixture(t *testing.T) *SpaceStore {
 	t.Helper()
-	st := ownershipJournalCommitStoreFixture(t)
-	applyR22SpaceEpochMigration(t, context.Background(), st)
-	return st
+	// The common ownership fixture already applies the epoch migration. Keeping
+	// this fixture idempotent prevents scope tests from accidentally applying
+	// 000011 twice when the shared schema advances.
+	return ownershipJournalCommitStoreFixture(t)
 }
 
 func newR20ScopeFixture(t *testing.T, st *SpaceStore, state string) r20ScopeFixture {
@@ -72,6 +73,8 @@ func newR20ScopeFixture(t *testing.T, st *SpaceStore, state string) r20ScopeFixt
 	if state == "reserved" {
 		return f
 	}
+	_, err = st.MarkOwnershipConsumeStarted(context.Background(), f.binding)
+	require.NoError(t, err)
 	_, err = st.ConfirmOwnershipProof(context.Background(), f.binding, ownershipAuthReceiptFixture(f.binding))
 	require.NoError(t, err)
 	if state == "proof_confirmed" {

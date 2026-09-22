@@ -18,7 +18,14 @@ import (
 func ownershipCompletionMigrationBase(t *testing.T) *SpaceStore {
 	t.Helper()
 	st := ownershipJournalCommitStoreFixture(t)
-	applyR22SpaceEpochMigration(t, context.Background(), st)
+	ctx := context.Background()
+	// Migration tests must begin at the actual pre-000012 schema. The shared
+	// fixture is intentionally current for production-shaped tests, so peel only
+	// its empty successors in reverse catalog order before creating evidence.
+	_, err := st.Pool.Exec(ctx, ownershipMigrationSQL(t, "000018_ownership_consume_started", "down"))
+	require.NoError(t, err)
+	_, err = st.Pool.Exec(ctx, ownershipJournalCompletionMigrationSQL(t, "down"))
+	require.NoError(t, err)
 	return st
 }
 
@@ -69,16 +76,20 @@ func TestOwnershipJournalCompletionMigration_PreterminalDownUpPreservesAllPriorE
 	st := ownershipCompletionMigrationBase(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	_, err := st.Pool.Exec(ctx, ownershipJournalCompletionMigrationSQL(t, "up"))
+	require.NoError(t, err)
+	_, err = st.Pool.Exec(ctx, ownershipMigrationSQL(t, "000018_ownership_consume_started", "up"))
+	require.NoError(t, err)
 	binding := seedOwnershipProofConfirmed(t, st)
 	prepared := ownershipRolePreparedReceiptFixture(binding)
-	_, err := st.MarkOwnershipPrepared(ctx, binding, prepared)
+	_, err = st.MarkOwnershipPrepared(ctx, binding, prepared)
 	require.NoError(t, err)
 	before, err := st.DecideOwnershipCommit(ctx, binding)
 	require.NoError(t, err)
 	var epoch int64
 	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT access_epoch FROM space_voice_access_epochs WHERE space_id=$1`, binding.SpaceID).Scan(&epoch))
 
-	_, err = st.Pool.Exec(ctx, ownershipJournalCompletionMigrationSQL(t, "up"))
+	_, err = st.Pool.Exec(ctx, ownershipMigrationSQL(t, "000018_ownership_consume_started", "down"))
 	require.NoError(t, err)
 	require.NoError(t, execOwnershipCompletionDown(t, ctx, st.Pool))
 	requireOwnershipCompletionSchema(t, st.Pool, false)
@@ -93,6 +104,8 @@ func TestOwnershipJournalCompletionMigration_PreterminalDownUpPreservesAllPriorE
 	require.Equal(t, epoch, afterEpoch)
 
 	_, err = st.Pool.Exec(ctx, ownershipJournalCompletionMigrationSQL(t, "up"))
+	require.NoError(t, err)
+	_, err = st.Pool.Exec(ctx, ownershipMigrationSQL(t, "000018_ownership_consume_started", "up"))
 	require.NoError(t, err)
 	requireOwnershipCompletionSchema(t, st.Pool, true)
 	var terminalBytes []byte

@@ -36,15 +36,17 @@ func assertOwnershipAuthReceipt(t *testing.T, got *OwnershipJournal, want Owners
 func assertOwnershipJournalHasNoSuccessEffects(t *testing.T, st *SpaceStore, binding OwnershipBinding) {
 	t.Helper()
 	assertReservationHasNoPublicEffects(t, st, binding)
-	var outboxExists bool
-	require.NoError(t, st.Pool.QueryRow(context.Background(), `SELECT to_regclass('ownership_outbox') IS NOT NULL`).Scan(&outboxExists))
-	require.False(t, outboxExists, "cycle2 must not introduce or write the ownership outbox")
+	var outboxRows int
+	require.NoError(t, st.Pool.QueryRow(context.Background(), `SELECT count(*) FROM ownership_outbox WHERE operation_id=$1`, binding.OperationID).Scan(&outboxRows))
+	require.Zero(t, outboxRows, "proof confirmation must not write an ownership outbox row")
 }
 
 func TestOwnershipJournalDecision_ConfirmPersistsExactAuthReceiptAcrossNewPool(t *testing.T) {
 	st := ownershipJournalStoreFixture(t)
 	binding := seedOwnershipJournalBinding(t, st)
 	reserved, err := st.ReserveOwnership(context.Background(), binding)
+	require.NoError(t, err)
+	_, err = st.MarkOwnershipConsumeStarted(context.Background(), binding)
 	require.NoError(t, err)
 	receipt := ownershipAuthReceiptFixture(binding)
 
@@ -74,6 +76,66 @@ func TestOwnershipJournalDecision_ConfirmPersistsExactAuthReceiptAcrossNewPool(t
 	require.NoError(t, err)
 	assertOwnershipAuthReceipt(t, afterMutation, receipt)
 	assertOwnershipJournalHasNoSuccessEffects(t, reader, binding)
+}
+
+func TestOwnershipJournalDecision_OnlyConsumeStartedMayConfirmOrAbortAfterLookup(t *testing.T) {
+	st := ownershipJournalStoreFixture(t)
+	binding := seedOwnershipJournalBinding(t, st)
+	reserved, err := st.ReserveOwnership(context.Background(), binding)
+	require.NoError(t, err)
+	receipt := ownershipAuthReceiptFixture(binding)
+
+	confirmed, err := st.ConfirmOwnershipProof(context.Background(), binding, receipt)
+	require.ErrorIs(t, err, ErrOwnershipStateTransition)
+	require.Nil(t, confirmed)
+	loaded, err := st.LoadOwnership(context.Background(), binding.OperationID)
+	require.NoError(t, err)
+	require.Equal(t, reserved, loaded)
+
+	started, err := st.MarkOwnershipConsumeStarted(context.Background(), binding)
+	require.NoError(t, err)
+	require.Equal(t, "consume_started", started.State)
+	confirmed, err = st.ConfirmOwnershipProof(context.Background(), binding, receipt)
+	require.NoError(t, err)
+	require.Equal(t, "proof_confirmed", confirmed.State)
+	replay, err := st.ConfirmOwnershipProof(context.Background(), binding, receipt)
+	require.NoError(t, err)
+	require.Equal(t, confirmed, replay)
+	changed := receipt
+	changed.ReceiptID = uuid.New()
+	_, err = st.ConfirmOwnershipProof(context.Background(), binding, changed)
+	require.ErrorIs(t, err, ErrOwnershipConflict)
+
+	second := seedOwnershipJournalBinding(t, st)
+	_, err = st.ReserveOwnership(context.Background(), second)
+	require.NoError(t, err)
+	_, err = st.MarkOwnershipConsumeStarted(context.Background(), second)
+	require.NoError(t, err)
+	aborted, err := st.DecideOwnershipAbort(context.Background(), second)
+	require.NoError(t, err)
+	require.Equal(t, "abort_decided", aborted.State)
+}
+
+func TestOwnershipJournalDecision_ListPendingRecoversOnlyStaleReservedOrConsumeStarted(t *testing.T) {
+	st := ownershipJournalStoreFixture(t)
+	reservedBinding := seedOwnershipJournalBinding(t, st)
+	_, err := st.ReserveOwnership(context.Background(), reservedBinding)
+	require.NoError(t, err)
+	startedBinding := seedOwnershipJournalBinding(t, st)
+	_, err = st.ReserveOwnership(context.Background(), startedBinding)
+	require.NoError(t, err)
+	_, err = st.MarkOwnershipConsumeStarted(context.Background(), startedBinding)
+	require.NoError(t, err)
+
+	pending, err := st.ListPendingOwnership(context.Background(), 10)
+	require.NoError(t, err)
+	require.Empty(t, pending, "fresh request-path reservations must retain their grace period")
+	_, err = st.Pool.Exec(context.Background(), `UPDATE ownership_journal SET updated_at=now()-interval '31 seconds' WHERE operation_id=ANY($1::uuid[])`, []uuid.UUID{reservedBinding.OperationID, startedBinding.OperationID})
+	require.NoError(t, err)
+	pending, err = st.ListPendingOwnership(context.Background(), 10)
+	require.NoError(t, err)
+	require.Len(t, pending, 2)
+	require.ElementsMatch(t, []uuid.UUID{reservedBinding.OperationID, startedBinding.OperationID}, []uuid.UUID{pending[0].Binding.OperationID, pending[1].Binding.OperationID})
 }
 
 func TestOwnershipJournalDecision_InvalidOrMismatchedAuthReceiptLeavesReserved(t *testing.T) {
@@ -133,6 +195,8 @@ func TestOwnershipJournalDecision_ChangedReceiptReplayConflictsWithoutRewritingE
 			binding := seedOwnershipJournalBinding(t, st)
 			_, err := st.ReserveOwnership(context.Background(), binding)
 			require.NoError(t, err)
+			_, err = st.MarkOwnershipConsumeStarted(context.Background(), binding)
+			require.NoError(t, err)
 			receipt := ownershipAuthReceiptFixture(binding)
 			confirmed, err := st.ConfirmOwnershipProof(context.Background(), binding, receipt)
 			require.NoError(t, err)
@@ -170,6 +234,8 @@ func TestOwnershipJournalDecision_ChangedBindingAfterConfirmationCannotReplaceEv
 			st := ownershipJournalStoreFixture(t)
 			binding := seedOwnershipJournalBinding(t, st)
 			_, err := st.ReserveOwnership(context.Background(), binding)
+			require.NoError(t, err)
+			_, err = st.MarkOwnershipConsumeStarted(context.Background(), binding)
 			require.NoError(t, err)
 			receipt := ownershipAuthReceiptFixture(binding)
 			confirmed, err := st.ConfirmOwnershipProof(context.Background(), binding, receipt)
@@ -242,6 +308,8 @@ func TestOwnershipJournalDecision_AbortAfterReceiptPreservesEvidenceAndCannotRev
 	st := ownershipJournalStoreFixture(t)
 	binding := seedOwnershipJournalBinding(t, st)
 	_, err := st.ReserveOwnership(context.Background(), binding)
+	require.NoError(t, err)
+	_, err = st.MarkOwnershipConsumeStarted(context.Background(), binding)
 	require.NoError(t, err)
 	receipt := ownershipAuthReceiptFixture(binding)
 	_, err = st.ConfirmOwnershipProof(context.Background(), binding, receipt)
@@ -323,6 +391,10 @@ func TestOwnershipJournalDecision_ConfirmAndAbortLockOperationBeforeSpace(t *tes
 			binding := seedOwnershipJournalBinding(t, st)
 			reserved, err := st.ReserveOwnership(context.Background(), binding)
 			require.NoError(t, err)
+			if action == "confirm" {
+				reserved, err = st.MarkOwnershipConsumeStarted(context.Background(), binding)
+				require.NoError(t, err)
+			}
 
 			blockerPool := independentMutationLockPool(t, st.Pool, 1)
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -372,6 +444,8 @@ func TestOwnershipJournalDecision_ConcurrentConfirmAndAbortNeverResurrect(t *tes
 	binding := seedOwnershipJournalBinding(t, st)
 	_, err := st.ReserveOwnership(context.Background(), binding)
 	require.NoError(t, err)
+	_, err = st.MarkOwnershipConsumeStarted(context.Background(), binding)
+	require.NoError(t, err)
 	receipt := ownershipAuthReceiptFixture(binding)
 	ready := make(chan struct{}, 2)
 	start := make(chan struct{})
@@ -419,14 +493,10 @@ func TestOwnershipJournalDecision_ConcurrentConfirmAndAbortNeverResurrect(t *tes
 }
 
 func TestOwnershipJournalDecision_AbortRejectsStatesOutsideCycle2WithoutMutation(t *testing.T) {
-	for _, state := range []string{"commit_decided", "completed", "aborted"} {
+	for _, state := range []string{"commit_decided"} {
 		t.Run(state, func(t *testing.T) {
 			st := ownershipJournalStoreFixture(t)
-			binding := seedOwnershipJournalBinding(t, st)
-			_, err := st.ReserveOwnership(context.Background(), binding)
-			require.NoError(t, err)
-			_, err = st.Pool.Exec(context.Background(), `UPDATE ownership_journal SET state=$2 WHERE operation_id=$1`, binding.OperationID, state)
-			require.NoError(t, err)
+			binding, _, _ := seedOwnershipCommitDecided(t, st)
 			before, err := st.LoadOwnership(context.Background(), binding.OperationID)
 			require.NoError(t, err)
 

@@ -73,7 +73,10 @@ func TestOwnershipJournalMigration_EmptyDownUpPreservesExistingSpace(t *testing.
 }
 
 func TestOwnershipJournalMigration_DownRefusesEveryEvidenceState(t *testing.T) {
-	for _, state := range []string{"reserved", "completed", "aborted"} {
+	// 000008 is exercised at its own catalog boundary. Later terminal states are
+	// covered by the 000012 migration tests, where their receipt/artifact
+	// invariants can be constructed validly.
+	for _, state := range []string{"reserved"} {
 		t.Run(state, func(t *testing.T) {
 			st := ownershipJournalStoreFixture(t)
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -224,6 +227,8 @@ func TestOwnershipJournalDecisionMigration_EmptyDownUpPreservesReservationSchema
 	requireJournalDecisionSchema(t, st.Pool, true)
 	_, err = st.ReserveOwnership(ctx, binding)
 	require.NoError(t, err)
+	_, err = st.MarkOwnershipConsumeStarted(ctx, binding)
+	require.NoError(t, err)
 	confirmed, err := st.ConfirmOwnershipProof(ctx, binding, ownershipAuthReceiptFixture(binding))
 	require.NoError(t, err)
 	require.Equal(t, "proof_confirmed", confirmed.State)
@@ -239,6 +244,8 @@ func TestOwnershipJournalDecisionMigration_DownRefusesDecisionEvidenceWithoutLos
 			_, err := st.ReserveOwnership(ctx, binding)
 			require.NoError(t, err)
 			if state == "proof_confirmed" {
+				_, err = st.MarkOwnershipConsumeStarted(ctx, binding)
+				require.NoError(t, err)
 				_, err = st.ConfirmOwnershipProof(ctx, binding, ownershipAuthReceiptFixture(binding))
 			} else {
 				_, err = st.DecideOwnershipAbort(ctx, binding)

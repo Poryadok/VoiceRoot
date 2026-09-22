@@ -180,6 +180,71 @@ func (s *SpaceStore) LoadOwnership(ctx context.Context, operationID uuid.UUID) (
 	return loadOwnershipJournal(ctx, s.Pool, operationID)
 }
 
+// ListPendingOwnership returns a bounded deterministic recovery snapshot.
+func (s *SpaceStore) ListPendingOwnership(ctx context.Context, limit int) ([]*OwnershipJournal, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("space store: pool not configured")
+	}
+	if limit < 1 {
+		return nil, errors.New("ownership recovery limit must be positive")
+	}
+	rows, err := s.Pool.Query(ctx, `SELECT operation_id FROM ownership_journal WHERE state NOT IN ('completed','aborted') AND (state NOT IN ('reserved','consume_started') OR updated_at < now() - interval '30 seconds') ORDER BY updated_at, operation_id LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var journals []*OwnershipJournal
+	for rows.Next() {
+		var operationID uuid.UUID
+		if err := rows.Scan(&operationID); err != nil {
+			return nil, err
+		}
+		journal, err := s.LoadOwnership(ctx, operationID)
+		if err != nil {
+			return nil, err
+		}
+		journals = append(journals, journal)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return journals, nil
+}
+
+// MarkOwnershipConsumeStarted fences recovery before Auth sees the opaque proof.
+func (s *SpaceStore) MarkOwnershipConsumeStarted(ctx context.Context, binding OwnershipBinding) (*OwnershipJournal, error) {
+	encoded, _, err := EncodeOwnershipBinding(binding)
+	if err != nil {
+		return nil, err
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	if err := lockOwnershipTransaction(ctx, tx, binding.OperationID, binding.SpaceID); err != nil {
+		return nil, err
+	}
+	existing, err := loadOwnershipJournal(ctx, tx, binding.OperationID)
+	if err != nil {
+		return nil, err
+	}
+	if !bytes.Equal(existing.BindingBytes, encoded) {
+		return nil, ErrOwnershipConflict
+	}
+	if existing.State != "reserved" {
+		return existing, nil
+	}
+	started, err := scanOwnershipJournalTerminal(tx.QueryRow(ctx, `UPDATE ownership_journal SET state='consume_started',updated_at=now() WHERE operation_id=$1 AND state='reserved' RETURNING `+ownershipJournalTerminalColumns, binding.OperationID))
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return started, nil
+}
+
 const ownershipJournalColumns = `operation_id,protocol_version,space_id,account_id,actor_profile_id,
 	new_owner_profile_id,session_epoch,proof_digest,binding_bytes,binding_hash,state,audit_id,event_id,
 	auth_receipt_id,auth_account_id,auth_profile_id,auth_space_id,auth_new_owner_profile_id,
