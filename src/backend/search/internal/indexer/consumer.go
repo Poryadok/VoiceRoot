@@ -197,7 +197,7 @@ func subscribeSearchConsumer(js nats.JetStreamContext, stream, durable, subject 
 	return prepareThenBindSearchConsumer(
 		func() error { return ensureSearchConsumerConfig(js, stream, durable, subject) },
 		func() (*nats.Subscription, error) {
-			return js.Subscribe("", handler, nats.Bind(stream, durable), nats.ManualAck())
+			return js.Subscribe(subject, handler, nats.Bind(stream, durable), nats.ManualAck())
 		},
 	)
 }
