@@ -288,7 +288,7 @@ verify-required-jobs-test:
 image-catalog-drift-check:
 	$(BASH) "$(ROOT)/scripts/ci/check-image-catalog-drift.sh"
 
-ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test buf-generate-ci-local-template-check image-catalog-drift-check e2e-manifest-helper-test rollout-app-tier-order-test staging-kubectl-configmap-test staging-app-secrets-test voice-db-runtime-provisioning-contract-test a4-disposable-recovery-harness-test phase0-fixture-test staging-observability-test
+ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test buf-generate-ci-local-template-check image-catalog-drift-check e2e-manifest-helper-test rollout-app-tier-order-test staging-kubectl-configmap-test staging-app-secrets-test voice-db-runtime-provisioning-contract-test a4-disposable-recovery-harness-test phase0-fixture-test staging-observability-test nats-leaf-topology-invariants-test
 	$(BASH) "$(ROOT)/scripts/ci/ci-script-tests-reachability_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/e2e-manifest_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/compose-e2e-smoke_test.sh"
@@ -304,6 +304,9 @@ ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test bu
 
 e2e-manifest-helper-test:
 	$(BASH) "$(ROOT)/scripts/ci/e2e-manifest_helper_test.sh"
+
+nats-leaf-topology-invariants-test:
+	$(BASH) "$(ROOT)/scripts/ci/nats-leaf-topology-invariants-test_test.sh"
 
 rollout-app-tier-order-test:
 	$(BASH) "$(ROOT)/scripts/ci/rollout-app-tier-order_test.sh"

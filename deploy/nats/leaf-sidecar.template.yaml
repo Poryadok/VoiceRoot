@@ -22,7 +22,9 @@ data:
     leafnodes {
       remotes = [{
         urls: ["nats-leaf://__VOICE_NATS_HUB_HOST__:7422"]
-        account: "__VOICE_NATS_ACCOUNT_PUBLIC_KEY__"
+        # The leaf's local listener stays in its isolated global account. The
+        # remote authenticated account is selected by this leaf's credentials.
+        account: "$G"
         credentials: /var/run/nats/creds/__VOICE_SERVICE__.creds
         tls {
           ca_file: /etc/nats/tls/ca.crt
