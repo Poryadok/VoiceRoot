@@ -127,18 +127,19 @@ docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0
   nats --server nats://127.0.0.1:4222 pub chat.created proof >/dev/null
 
 # Core NATS publish permission failures are asynchronous, so `nats pub` can
-# exit successfully after the server has rejected the message. Require the
-# leaf's explicit permission violation rather than trusting that CLI status.
+# exit successfully after the server has rejected the message. A fresh
+# neighbor subject makes the matching leaf error specific to this invocation.
+denied_subject="user.account_deleted.proof-$RANDOM"
 docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0 \
-  nats --server nats://127.0.0.1:4222 pub user.account_deleted denied >/dev/null 2>&1 || true
+  nats --server nats://127.0.0.1:4222 pub "$denied_subject" denied >/dev/null 2>&1 || true
 for attempt in {1..5}; do
   leaf_logs="$(docker logs voice-nats-proof-chat 2>&1 || true)"
-  if grep -Eqi 'permission.*(violation|denied)' <<<"$leaf_logs" && grep -Fq 'user.account_deleted' <<<"$leaf_logs"; then
+  if grep -Eqi 'permission.*(violation|denied)' <<<"$leaf_logs" && grep -Fq "$denied_subject" <<<"$leaf_logs"; then
     break
   fi
   sleep 1
 done
-if ! grep -Eqi 'permission.*(violation|denied)' <<<"$leaf_logs" || ! grep -Fq 'user.account_deleted' <<<"$leaf_logs"; then
+if ! grep -Eqi 'permission.*(violation|denied)' <<<"$leaf_logs" || ! grep -Fq "$denied_subject" <<<"$leaf_logs"; then
   echo 'FAIL: chat leaf did not log denial for neighbouring subject' >&2
   printf '%s\n' "$leaf_logs" >&2
   exit 1
