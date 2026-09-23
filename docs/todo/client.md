@@ -39,7 +39,7 @@ _Пока пусто — критичные клиентские блокеры 
 
 - [x] **[Multi-Profile] No delete-profile UI** — `ManageProfilesSheet` in settings (`settings_manage_profiles`); `DELETE /api/v1/users/profiles/{id}` via `VoiceUsersClient.deleteProfile`; blocks primary/active delete (Batch 13).
 - [x] **[Multi-Profile] Frozen profiles invisible in switcher UI** — `VoiceProfile.frozenAt` + `proto_mappers.dart`; `ProfileSwitcher` disabled items + `(Frozen)` label; `ProfileAvatarSwitcher` skips frozen on swipe (Batch 11).
-- [ ] **[Multi-Profile] Local regression: second profile creation causes screen flicker and profile switch appears to fail** — reproduce on local app stack after creating a second profile; expected contract: switch is мгновенный, без перезагрузки ([multi-profile.md](../features/multi-profile.md)). Check `ProfileSwitcher` / `ProfileAvatarSwitcher`, auth `switch-profile` refresh, `profile_context_controller`, and route/state invalidation after create.
+- [x] **[Multi-Profile] Second profile creation flickered and appeared to lose the switch** — `profile_switch_entry_wiring_red_test.dart` reproduces the mounted desktop rail → create → switch transition with the real theme provider: the routed shell disappeared while the profile theme reloaded. `VoiceApp` now retains the last theme during reload; the regression test verifies that the shell and sheet remain mounted through handoff and that the rail displays the new active profile after completion.
 - [x] **[Multi-Profile] `ProfileDowngradePickerScreen` unreachable** — **done (Batch 12):** routed when free tier + >2 profiles (`profileDowngradeRequiredProvider` in `app.dart`); screen + `submitDowngradeProfiles` existed.
 
 

@@ -91,6 +91,7 @@ class VoiceApp extends ConsumerWidget {
     final effectiveLocale = locale ?? localePref;
 
     return themeAsync.when(
+      skipLoadingOnReload: true,
       data: (theme) {
         if (!auth.isAuthenticated || auth.isEmailVerificationPending ||
             auth.isEmailVerificationPromotionPending) {
