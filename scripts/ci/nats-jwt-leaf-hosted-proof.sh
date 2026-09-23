@@ -104,7 +104,8 @@ EOF
 # Compile the receiver once before any readiness barrier. Recompiling it in
 # each disposable container makes a subscription-ready assertion depend on
 # module-download timing rather than the authenticated leaf path.
-(cd "$root/src/backend/pkg" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o "$work/leaf-receive" "$work/leaf_receive.go")
+mkdir -p "$work/receiver"
+(cd "$root/src/backend/pkg" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o "$work/receiver/leaf-receive" "$work/leaf_receive.go")
 account="$(tr -d '\r\n' <"$work/fixture/account.public")"
 account_jwt="$(tr -d '\r\n' <"$work/fixture/account.jwt")"
 system_account="$(tr -d '\r\n' <"$work/fixture/system-account.public")"
@@ -315,8 +316,8 @@ fi
 # receive the same fixed durable delivery again and acknowledge it. The client
 # has no credentials and can reach NATS only through the chat leaf namespace.
 docker run -d --name voice-nats-proof-receive-one --network container:voice-nats-proof-chat \
-  -v "$work:$work:ro" alpine:3.22 "$work/leaf-receive" receive "$work/receive-one.ready" >/dev/null
-if ! wait_for_file "$work/receive-one.ready" 'first chat leaf receiver'; then
+  -v "$work/receiver:/receiver" alpine:3.22 /receiver/leaf-receive receive /receiver/receive-one.ready >/dev/null
+if ! wait_for_file "$work/receiver/receive-one.ready" 'first chat leaf receiver'; then
   docker logs voice-nats-proof-receive-one >&2 || true
   exit 1
 fi
@@ -332,8 +333,8 @@ if ! grep -Fqx 'stream=chat_events sequence=1 delivered=1 ack=false' <<<"$receiv
   exit 1
 fi
 docker run -d --name voice-nats-proof-receive-two --network container:voice-nats-proof-chat \
-  -v "$work:$work:ro" alpine:3.22 "$work/leaf-receive" ack "$work/receive-two.ready" >/dev/null
-if ! wait_for_file "$work/receive-two.ready" 'second chat leaf receiver'; then
+  -v "$work/receiver:/receiver" alpine:3.22 /receiver/leaf-receive ack /receiver/receive-two.ready >/dev/null
+if ! wait_for_file "$work/receiver/receive-two.ready" 'second chat leaf receiver'; then
   docker logs voice-nats-proof-receive-two >&2 || true
   exit 1
 fi
@@ -358,9 +359,9 @@ if docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18
   echo 'FAIL: drifted fixed durable was accepted as the canonical binding' >&2
   exit 1
 fi
-docker run -d --name voice-nats-proof-drift-receive --network container:voice-nats-proof-chat -v "$work:$work:ro" alpine:3.22 \
-  "$work/leaf-receive" ack "$work/drift-receive.ready" >/dev/null
-if ! wait_for_file "$work/drift-receive.ready" 'canonical drift receiver'; then
+docker run -d --name voice-nats-proof-drift-receive --network container:voice-nats-proof-chat -v "$work/receiver:/receiver" alpine:3.22 \
+  /receiver/leaf-receive ack /receiver/drift-receive.ready >/dev/null
+if ! wait_for_file "$work/receiver/drift-receive.ready" 'canonical drift receiver'; then
   docker logs voice-nats-proof-drift-receive >&2 || true
   exit 1
 fi
@@ -459,8 +460,8 @@ fi
 noack_leaf_log_before="$(docker logs voice-nats-proof-chat-noack 2>&1 || true)"
 hub_log_before="$(docker logs voice-nats-proof-hub 2>&1 || true)"
 docker run -d --name voice-nats-proof-noack-receive-one --network container:voice-nats-proof-chat-noack \
-  -v "$work:$work:ro" alpine:3.22 "$work/leaf-receive" deny-ack "$work/noack-receive-one.ready" >/dev/null
-if ! wait_for_file "$work/noack-receive-one.ready" 'no-ACK chat leaf receiver'; then
+  -v "$work/receiver:/receiver" alpine:3.22 /receiver/leaf-receive deny-ack /receiver/noack-receive-one.ready >/dev/null
+if ! wait_for_file "$work/receiver/noack-receive-one.ready" 'no-ACK chat leaf receiver'; then
   docker logs voice-nats-proof-noack-receive-one >&2 || true
   exit 1
 fi
@@ -496,8 +497,8 @@ if ! grep -Fq "$noack_ack_subject" <<<"${noack_denial_log_delta:-}" || ! grep -E
   exit 1
 fi
 docker run -d --name voice-nats-proof-noack-receive-two --network container:voice-nats-proof-chat-noack \
-  -v "$work:$work:ro" alpine:3.22 "$work/leaf-receive" receive "$work/noack-receive-two.ready" >/dev/null
-if ! wait_for_file "$work/noack-receive-two.ready" 'no-ACK redelivery receiver'; then
+  -v "$work/receiver:/receiver" alpine:3.22 /receiver/leaf-receive receive /receiver/noack-receive-two.ready >/dev/null
+if ! wait_for_file "$work/receiver/noack-receive-two.ready" 'no-ACK redelivery receiver'; then
   docker logs voice-nats-proof-noack-receive-two >&2 || true
   exit 1
 fi

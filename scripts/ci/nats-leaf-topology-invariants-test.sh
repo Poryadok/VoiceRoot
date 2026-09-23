@@ -67,6 +67,9 @@ proof_require 'AckSync' 'synchronous no-ACK denial attempt'
 proof_require 'ack_subject=' 'exact ACK subject evidence'
 proof_require '$JS.API.CONSUMER.CREATE.chat_events.proof_chat' 'exact proof consumer create subject'
 proof_require '"ack_wait":1000000000' 'one-second proof consumer ack wait'
+proof_require 'mkdir -p "$work/receiver"' 'credential-free writable receiver directory'
+proof_require '-v "$work/receiver:/receiver" alpine:3.22' 'receiver-only writable volume'
+proof_reject '-v "$work:$work:ro" alpine:3.22' 'fixture credential mount in unauthenticated receiver'
 
 for target in docker-compose.yml deploy/staging deploy/prod; do
   ! grep -R -Fq -- 'leaf-sidecar.template.yaml' "${root}/${target}" 2>/dev/null || fail "selected by ${target}"
