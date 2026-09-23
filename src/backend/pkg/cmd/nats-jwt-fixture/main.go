@@ -182,13 +182,16 @@ func generate(dest string, acl aclDocument) error {
 	}
 	accountPub, _ := account.PublicKey()
 	accountClaim := jwt.NewAccountClaims(accountPub)
-	accountClaim.Limits = jwt.OperatorLimits{JetStreamLimits: jwt.JetStreamLimits{
-		MemoryStorage: 64 << 20,
-		DiskStorage:   512 << 20,
-		Streams:       64,
-		Consumer:      512,
-		MaxAckPending: 4096,
-	}}
+	accountClaim.Limits = jwt.OperatorLimits{
+		AccountLimits: jwt.AccountLimits{Conn: 64, LeafNodeConn: 64},
+		JetStreamLimits: jwt.JetStreamLimits{
+			MemoryStorage: 64 << 20,
+			DiskStorage:   512 << 20,
+			Streams:       64,
+			Consumer:      512,
+			MaxAckPending: 4096,
+		},
+	}
 	accountJWT, err := accountClaim.Encode(op)
 	if err != nil {
 		return err

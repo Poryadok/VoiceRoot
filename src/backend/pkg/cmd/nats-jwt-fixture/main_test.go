@@ -58,6 +58,9 @@ func TestGenerateCreatesDistinctServiceCredentialsWithoutBroadJetStreamAPI(t *te
 	if accountClaims.Issuer != operatorClaims.Subject {
 		t.Fatal("fixture application account must be operator-signed")
 	}
+	if accountClaims.Limits.Conn < 2 || accountClaims.Limits.LeafNodeConn < 1 {
+		t.Fatal("fixture application account must permit app and leaf connections")
+	}
 	systemPublic, err := os.ReadFile(filepath.Join(dest, "system-account.public"))
 	if err != nil || !strings.HasPrefix(strings.TrimSpace(string(systemPublic)), "A") {
 		t.Fatalf("fixture system account public key missing or invalid: %v", err)
