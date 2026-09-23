@@ -2,6 +2,7 @@ package grpcsvc
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
@@ -27,7 +28,7 @@ func NewSocialGRPCBlocks(cc grpc.ClientConnInterface) *SocialGRPCBlocks {
 
 func (s *SocialGRPCBlocks) AccountPairBlocked(ctx context.Context, viewerAccountID, otherAccountID uuid.UUID) (bool, error) {
 	if s == nil || s.Client == nil {
-		return false, nil
+		return false, errors.New("social block checker unavailable")
 	}
 	if viewerAccountID == otherAccountID {
 		return false, nil

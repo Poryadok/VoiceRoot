@@ -101,6 +101,7 @@ func startDeletedAccountVisibilityServer(t *testing.T, checker *deletedAccountCh
 		Profiles: profiles,
 		Privacy:  privacyStore,
 		Presence: store.NewPresenceStore(rdb),
+		Blocks:   &testBlockChecker{},
 	}
 	for _, configureService := range configure {
 		configureService(svc)
