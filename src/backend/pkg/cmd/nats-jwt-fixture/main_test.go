@@ -36,6 +36,14 @@ func TestGenerateCreatesDistinctServiceCredentialsWithoutBroadJetStreamAPI(t *te
 	if _, err := os.Stat(filepath.Join(dest, "creds", "bootstrap.creds")); err != nil {
 		t.Fatalf("bootstrap credential missing: %v", err)
 	}
+	operatorJWT, err := os.ReadFile(filepath.Join(dest, "operator.jwt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	operatorClaims, err := jwt.DecodeOperatorClaims(string(operatorJWT))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if accountPublic, err := os.ReadFile(filepath.Join(dest, "account.public")); err != nil || !strings.HasPrefix(strings.TrimSpace(string(accountPublic)), "A") {
 		t.Fatalf("fixture account public key missing or invalid: %v", err)
 	}
@@ -46,6 +54,9 @@ func TestGenerateCreatesDistinctServiceCredentialsWithoutBroadJetStreamAPI(t *te
 	accountClaims, err := jwt.DecodeAccountClaims(string(accountJWT))
 	if err != nil || !accountClaims.Limits.IsJSEnabled() {
 		t.Fatalf("fixture account must explicitly enable JetStream: %v", err)
+	}
+	if accountClaims.Issuer != operatorClaims.Subject {
+		t.Fatal("fixture application account must be operator-signed")
 	}
 	systemPublic, err := os.ReadFile(filepath.Join(dest, "system-account.public"))
 	if err != nil || !strings.HasPrefix(strings.TrimSpace(string(systemPublic)), "A") {
@@ -61,6 +72,9 @@ func TestGenerateCreatesDistinctServiceCredentialsWithoutBroadJetStreamAPI(t *te
 	systemClaims, err := jwt.DecodeAccountClaims(string(systemJWT))
 	if err != nil || systemClaims.Limits.IsJSEnabled() {
 		t.Fatalf("fixture system account must not enable JetStream: %v", err)
+	}
+	if systemClaims.Issuer != operatorClaims.Subject {
+		t.Fatal("fixture system account must be operator-signed")
 	}
 	if _, err := os.Stat(filepath.Join(dest, "creds", "system.creds")); !os.IsNotExist(err) {
 		t.Fatalf("system account must not have service credentials: %v", err)
