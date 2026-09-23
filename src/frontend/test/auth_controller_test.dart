@@ -433,6 +433,173 @@ void main() {
   );
 
   test(
+    'login recovers EMAIL_PENDING from its restricted session without resend or OTP replay',
+    () async {
+      final storage = InMemoryAuthSessionStorage();
+      var statuses = 0;
+      var sends = 0;
+      var verifies = 0;
+      final mock = MockClient((req) async {
+        switch (req.url.path) {
+          case '/api/v1/auth/login':
+            return http.Response(
+              jsonEncode({
+                'session': {
+                  ...(sessionJson()['session'] as Map<String, dynamic>),
+                  'access_token': 'restricted-access',
+                  'refresh_token': 'restricted-refresh',
+                  'account_type': 'guest',
+                },
+              }),
+              200,
+            );
+          case '/api/v1/auth/verification-status':
+            statuses++;
+            expect(req.headers['authorization'], 'Bearer restricted-access');
+            return http.Response(jsonEncode({'state': 'EMAIL_PENDING'}), 200);
+          case '/api/v1/auth/otp/send':
+            sends++;
+            return http.Response('', 204);
+          case '/api/v1/auth/otp/verify':
+            verifies++;
+            return http.Response('', 204);
+        }
+        return http.Response('not found', 404);
+      });
+      final container = buildContainer(mock: mock, storage: storage);
+      addTearDown(container.dispose);
+
+      await container
+          .read(authControllerProvider.notifier)
+          .login(
+            email: 'pending@example.test',
+            password: 'Correct horse battery staple',
+          );
+
+      final state = container.read(authControllerProvider);
+      expect(state.isEmailVerificationPending, isTrue);
+      expect(state.isEmailVerificationPromotionPending, isFalse);
+      expect(state.session?.accessToken, 'restricted-access');
+      expect((await storage.read())?.accessToken, 'restricted-access');
+      expect(statuses, 1);
+      expect(sends, 0);
+      expect(verifies, 0);
+    },
+  );
+
+  test(
+    'restore clears a restricted session when verification status is unavailable',
+    () async {
+      final storage = InMemoryAuthSessionStorage();
+      await storage.write(
+        const AuthSession(
+          accessToken: 'restricted-access',
+          refreshToken: 'restricted-refresh',
+          accountId: 'acc-1',
+          activeProfileId: 'prof-1',
+          expiresInSeconds: 900,
+          accountType: 'guest',
+        ),
+      );
+      var statuses = 0;
+      final mock = MockClient((req) async {
+        switch (req.url.path) {
+          case '/api/v1/auth/refresh':
+            return http.Response(
+              jsonEncode({
+                'session': {
+                  ...(sessionJson()['session'] as Map<String, dynamic>),
+                  'access_token': 'restricted-access-new',
+                  'refresh_token': 'restricted-refresh-new',
+                  'account_type': 'guest',
+                },
+              }),
+              200,
+            );
+          case '/api/v1/auth/verification-status':
+            statuses++;
+            expect(
+              req.headers['authorization'],
+              'Bearer restricted-access-new',
+            );
+            return http.Response(
+              jsonEncode({'error': 'auth_unavailable'}),
+              503,
+            );
+        }
+        return http.Response('not found', 404);
+      });
+      final container = buildContainer(mock: mock, storage: storage);
+      addTearDown(container.dispose);
+
+      await container.read(authControllerProvider.notifier).restore();
+
+      final state = container.read(authControllerProvider);
+      expect(state.session, isNull);
+      expect(state.isEmailVerificationPending, isFalse);
+      expect(state.isEmailVerificationPromotionPending, isFalse);
+      expect(await storage.read(), isNull);
+      expect(statuses, 1);
+    },
+  );
+
+  test(
+    'login persists replacement regular session before authenticated routing',
+    () async {
+      final storage = InMemoryAuthSessionStorage();
+      var refreshes = 0;
+      final mock = MockClient((req) async {
+        switch (req.url.path) {
+          case '/api/v1/auth/login':
+            return http.Response(
+              jsonEncode({
+                'session': {
+                  ...(sessionJson()['session'] as Map<String, dynamic>),
+                  'access_token': 'restricted-access',
+                  'refresh_token': 'restricted-refresh',
+                  'account_type': 'guest',
+                },
+              }),
+              200,
+            );
+          case '/api/v1/auth/verification-status':
+            return http.Response(jsonEncode({'state': 'REGULAR'}), 200);
+          case '/api/v1/auth/refresh':
+            refreshes++;
+            return http.Response(
+              jsonEncode({
+                'session': {
+                  ...(sessionJson()['session'] as Map<String, dynamic>),
+                  'access_token': 'regular-access',
+                  'refresh_token': 'regular-refresh',
+                  'account_type': 'regular',
+                },
+              }),
+              200,
+            );
+        }
+        return http.Response('not found', 404);
+      });
+      final container = buildContainer(mock: mock, storage: storage);
+      addTearDown(container.dispose);
+
+      await container
+          .read(authControllerProvider.notifier)
+          .login(
+            email: 'regular@example.test',
+            password: 'Correct horse battery staple',
+          );
+
+      final state = container.read(authControllerProvider);
+      expect(refreshes, 1);
+      expect(state.session?.accountType, 'regular');
+      expect(state.isEmailVerificationPending, isFalse);
+      expect(state.isEmailVerificationPromotionPending, isFalse);
+      expect((await storage.read())?.accessToken, 'regular-access');
+    },
+  );
+
+  test(
     'promotion recovery persists the replacement regular session before completion',
     () async {
       final storage = _DeferredAuthSessionStorage();

@@ -6,9 +6,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/app.dart';
+import 'package:voice_frontend/backend/auth_client.dart';
+import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/discover_hint_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
+import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/onboarding_controller.dart';
@@ -345,6 +348,118 @@ void main() {
 
     expect(find.text('At least 8 characters'), findsOneWidget);
   });
+
+  for (final recovery in [
+    EmailVerificationRecoveryState.emailPending,
+    EmailVerificationRecoveryState.promotionPending,
+  ]) {
+    testWidgets('${recovery.name} exposes localized pending logout', (
+      tester,
+    ) async {
+      final storage = InMemoryAuthSessionStorage();
+      final session = const AuthSession(
+        accessToken: 'restricted-access',
+        refreshToken: 'restricted-refresh',
+        accountId: 'acc',
+        activeProfileId: 'prof',
+        expiresInSeconds: 900,
+        accountType: 'guest',
+      );
+      await storage.write(session);
+      String? logoutAuthorization;
+      final container = ProviderContainer(
+        overrides: [
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
+          authSessionStorageProvider.overrideWithValue(storage),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          realtimeAutoConnectProvider.overrideWithValue(false),
+          httpClientProvider.overrideWithValue(
+            MockClient((request) async {
+              if (request.url.path == '/api/v1/auth/logout') {
+                logoutAuthorization = request.headers['authorization'];
+                return http.Response('', 204);
+              }
+              if (request.url.path == '/api/v1/auth/refresh') {
+                return http.Response(
+                  jsonEncode({
+                    'session': {
+                      'access_token': 'restricted-access',
+                      'refresh_token': 'restricted-refresh',
+                      'expires_in_seconds': 900,
+                      'account_id': 'acc',
+                      'profile_id': 'prof',
+                      'account_type': 'guest',
+                    },
+                  }),
+                  200,
+                );
+              }
+              if (request.url.path == '/api/v1/auth/verification-status') {
+                return http.Response(
+                  jsonEncode({
+                    'state':
+                        recovery == EmailVerificationRecoveryState.emailPending
+                        ? 'EMAIL_PENDING'
+                        : 'PROMOTION_PENDING',
+                  }),
+                  200,
+                );
+              }
+              if (request.url.path == '/health')
+                return http.Response('ok', 200);
+              return http.Response('not found', 404);
+            }),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            locale: const Locale('en'),
+            theme: voiceTestTheme(),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const AuthScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      container.read(authControllerProvider.notifier).state = AuthState(
+        session: session,
+        isGuest: true,
+        emailVerificationRecoveryState: recovery,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(AuthScreen.pendingLogoutButtonKey), findsOneWidget);
+      expect(find.text('Log out'), findsOneWidget);
+      expect(find.byKey(AuthScreen.loginButtonKey), findsNothing);
+      expect(
+        find.byKey(AuthScreen.verificationButtonKey),
+        recovery == EmailVerificationRecoveryState.emailPending
+            ? findsOneWidget
+            : findsNothing,
+      );
+      expect(
+        find.byKey(AuthScreen.promotionRetryButtonKey),
+        recovery == EmailVerificationRecoveryState.promotionPending
+            ? findsOneWidget
+            : findsNothing,
+      );
+
+      await tester.tap(find.byKey(AuthScreen.pendingLogoutButtonKey));
+      await tester.pumpAndSettle();
+      expect(logoutAuthorization, 'Bearer restricted-access');
+      expect(await storage.read(), isNull);
+      expect(find.byKey(AuthScreen.loginButtonKey), findsOneWidget);
+    });
+  }
 }
 
 class _CompletedOnboardingController extends OnboardingController {

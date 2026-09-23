@@ -213,6 +213,23 @@ class AuthController extends StateNotifier<AuthState> {
         final verification = isGuest
             ? await _authClient.getEmailVerificationStatus(session: session)
             : null;
+        if (isGuest && verification is AuthApiFailure) {
+          await _storage.clear();
+          state = state.copyWith(
+            clearSession: true,
+            isRestoring: false,
+            clearGuest: true,
+            clearEmailVerificationRecoveryState: true,
+            errorKey:
+                resolveAuthErrorKey(
+                  errorCode: verification.errorCode,
+                  statusCode: verification.statusCode,
+                  message: verification.message,
+                ) ??
+                verification.message,
+          );
+          return;
+        }
         var recoveryState =
             verification is AuthApiOk<EmailVerificationRecoveryState>
             ? verification.data
@@ -824,6 +841,7 @@ class AuthController extends StateNotifier<AuthState> {
   }) => _authenticate(
     () =>
         _authClient.login(email: email, password: password, totpCode: totpCode),
+    recoverEmailVerification: true,
   );
 
   Future<void> applySession(AuthSession session) async {
@@ -899,10 +917,51 @@ class AuthController extends StateNotifier<AuthState> {
         final verification = recoverEmailVerification && isGuest
             ? await _authClient.getEmailVerificationStatus(session: session)
             : null;
-        final recoveryState =
+        if (recoverEmailVerification &&
+            isGuest &&
+            verification is AuthApiFailure) {
+          await _storage.clear();
+          state = state.copyWith(
+            clearSession: true,
+            isSubmitting: false,
+            clearGuest: true,
+            clearEmailVerificationRecoveryState: true,
+            errorKey:
+                resolveAuthErrorKey(
+                  errorCode: verification.errorCode,
+                  statusCode: verification.statusCode,
+                  message: verification.message,
+                ) ??
+                verification.message,
+          );
+          return;
+        }
+        var recoveryState =
             verification is AuthApiOk<EmailVerificationRecoveryState>
             ? verification.data
             : null;
+        if (recoveryState == EmailVerificationRecoveryState.regular) {
+          final replacement = await _authClient.refresh(
+            refreshToken: session.refreshToken,
+          );
+          if (replacement case AuthSessionOk(
+            :final session,
+          ) when _isRegularSession(session)) {
+            await _persist(session);
+            state = state.copyWith(
+              session: session,
+              isSubmitting: false,
+              clearError: true,
+              pendingDiscoverHint: true,
+              clearGuest: true,
+              clearGuestNickname: true,
+              clearEmailVerificationRecoveryState: true,
+            );
+            await _notifyAuthenticated();
+            return;
+          }
+          recoveryState = EmailVerificationRecoveryState.promotionPending;
+        }
         state = state.copyWith(
           session: session,
           isSubmitting: false,
