@@ -93,10 +93,6 @@ func TestNewJetStreamPublisher_EmptyURL(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestStreamHasSubject_RoleEvents(t *testing.T) {
-	t.Skip("stream validation belongs to central deployment bootstrap")
-}
-
 // TestJetStreamPublisher_RoleCreatedRoundTrip documents role-service.md role.created on role.events.
 func TestJetStreamPublisher_RoleCreatedRoundTrip(t *testing.T) {
 	ctx := context.Background()
