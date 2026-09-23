@@ -796,6 +796,8 @@ services:
         condition: service_completed_successfully
       nats:
         condition: service_healthy
+      nats-realtime-bootstrap:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       interval: 5s
