@@ -50,6 +50,7 @@ func main() {
   }
   if mode == "nak" {
     if err := msg.Nak(); err != nil { panic(err) }
+    if err := nc.Flush(); err != nil { panic(err) }
   }
   fmt.Printf("stream=%s sequence=%d delivered=%d ack=%t\n", meta.Stream, meta.Sequence.Stream, meta.NumDelivered, mode == "ack")
   if mode == "deny-ack" {
