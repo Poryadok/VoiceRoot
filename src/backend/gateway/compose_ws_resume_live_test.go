@@ -24,14 +24,21 @@ func TestComposeWSResume_live(t *testing.T) {
 	chatID := createComposeDM(t, client, base, sessA.AccessToken, sessB.ProfileID)
 
 	wsB := connectComposeWSSubscribed(t, base, sessB.AccessToken, chatID)
-	msg1Ch := make(chan composeWSFrame, 1)
+	type wsResult struct {
+		frame composeWSFrame
+		err   error
+	}
+	msg1Ch := make(chan wsResult, 1)
 	go func() {
-		msg1Ch <- waitComposeWSOp(t, wsB, "message_create", 20*time.Second, func(d map[string]any) bool {
+		frame, err := waitComposeWSOpResult(wsB, "message_create", 20*time.Second, func(d map[string]any) bool {
 			return d["chat_id"] == chatID
 		})
+		msg1Ch <- wsResult{frame: frame, err: err}
 	}()
 	sendComposeMessage(t, client, base, sessA.AccessToken, chatID, "resume-baseline")
-	<-msg1Ch
+	msg1 := <-msg1Ch
+	require.NoError(t, msg1.err)
+	require.Equal(t, "message_create", msg1.frame.Op)
 	require.NoError(t, wsB.Close())
 
 	missedID := sendComposeMessage(t, client, base, sessA.AccessToken, chatID, "resume-missed")

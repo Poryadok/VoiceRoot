@@ -390,6 +390,49 @@ func waitComposeWSOp(
 	return composeWSFrame{}
 }
 
+// waitComposeWSOpResult is safe to call from a goroutine because it returns
+// failures to the test goroutine instead of calling testing.T methods.
+func waitComposeWSOpResult(
+	conn *websocket.Conn,
+	wantOp string,
+	timeout time.Duration,
+	match func(map[string]any) bool,
+) (composeWSFrame, error) {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			break
+		}
+		_ = conn.SetReadDeadline(time.Now().Add(remaining))
+		var frame composeWSFrame
+		err := conn.ReadJSON(&frame)
+		if err != nil {
+			var netErr net.Error
+			if errors.As(err, &netErr) && netErr.Timeout() {
+				continue
+			}
+			return composeWSFrame{}, fmt.Errorf("read WS while waiting for op=%s: %w", wantOp, err)
+		}
+		if frame.Op != wantOp {
+			continue
+		}
+		if match == nil {
+			return frame, nil
+		}
+		var data map[string]any
+		if len(frame.D) > 0 {
+			if err := json.Unmarshal(frame.D, &data); err != nil {
+				return composeWSFrame{}, fmt.Errorf("decode WS op=%s payload: %w", wantOp, err)
+			}
+		}
+		if match(data) {
+			return frame, nil
+		}
+	}
+	return composeWSFrame{}, fmt.Errorf("timeout waiting for WS op=%s", wantOp)
+}
+
 type composeSpaceItem struct {
 	ID          string
 	Name        string

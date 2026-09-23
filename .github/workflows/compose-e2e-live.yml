@@ -24,9 +24,7 @@ jobs:
           channel: stable
           cache: true
           cache-key: flutter-${{ runner.os }}-${{ hashFiles('src/frontend/pubspec.lock') }}
-          cache-path: |
-            ~/.pub-cache
-            src/frontend/.dart_tool
+          cache-path: ~/.pub-cache
 
       - name: Compose app up
         run: make compose-app-up
