@@ -26,6 +26,16 @@ class AuthGrpcIntegrationTest {
   @Autowired AuthGrpcService grpcService;
 
   @org.junit.jupiter.api.Test
+  void legacySessionWithoutMarkerRetainsUnknownPresence() throws Exception {
+    var legacy = app.voice.auth.v1.AuthSession.newBuilder().setAccountType("guest").build();
+    var parsed = app.voice.auth.v1.AuthSession.parseFrom(legacy.toByteArray());
+    assertThat(parsed.hasEmailVerificationRequired()).isFalse();
+    var anonymous = parsed.toBuilder().setEmailVerificationRequired(false).build();
+    assertThat(anonymous.hasEmailVerificationRequired()).isTrue();
+    assertThat(anonymous.getEmailVerificationRequired()).isFalse();
+  }
+
+  @org.junit.jupiter.api.Test
   void registerLoginRefreshValidateLogoutAndJwksWorkOverGrpc() throws Exception {
     String serverName = InProcessServerBuilder.generateName();
     Server server = InProcessServerBuilder.forName(serverName).directExecutor().addService(grpcService).build().start();
@@ -41,6 +51,8 @@ class AuthGrpcIntegrationTest {
       assertThat(registered.getExpiresInSeconds()).isEqualTo(900);
       assertThat(registered.getProfileId())
           .matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+      assertThat(registered.hasEmailVerificationRequired()).isTrue();
+      assertThat(registered.getEmailVerificationRequired()).isTrue();
       var registeredJwt = SignedJWT.parse(registered.getAccessToken()).getJWTClaimsSet();
       assertThat(registeredJwt.getStringClaim("user_id")).isEqualTo(registered.getAccountId());
       assertThat(registeredJwt.getStringClaim("profile_id")).isEqualTo(registered.getProfileId());
@@ -57,6 +69,8 @@ class AuthGrpcIntegrationTest {
           .build()).getSession();
       assertThat(login.getRefreshToken()).isNotEqualTo(registered.getRefreshToken());
       assertThat(login.getProfileId()).isEqualTo(registered.getProfileId());
+      assertThat(login.hasEmailVerificationRequired()).isTrue();
+      assertThat(login.getEmailVerificationRequired()).isTrue();
       assertThat(SignedJWT.parse(login.getAccessToken()).getJWTClaimsSet().getStringClaim("profile_id"))
           .isEqualTo(registered.getProfileId());
 
@@ -65,6 +79,8 @@ class AuthGrpcIntegrationTest {
           .build()).getSession();
       assertThat(refreshed.getRefreshToken()).isNotEqualTo(registered.getRefreshToken());
       assertThat(refreshed.getProfileId()).isEqualTo(registered.getProfileId());
+      assertThat(refreshed.hasEmailVerificationRequired()).isTrue();
+      assertThat(refreshed.getEmailVerificationRequired()).isTrue();
       assertThat(SignedJWT.parse(refreshed.getAccessToken()).getJWTClaimsSet().getStringClaim("profile_id"))
           .isEqualTo(registered.getProfileId());
 
@@ -95,6 +111,8 @@ class AuthGrpcIntegrationTest {
           .setGuest(true)
           .build()).getSession();
       var guestJwt = SignedJWT.parse(registered.getAccessToken()).getJWTClaimsSet();
+      assertThat(registered.hasEmailVerificationRequired()).isTrue();
+      assertThat(registered.getEmailVerificationRequired()).isFalse();
       assertThat(guestJwt.getStringClaim("account_type")).isEqualTo("guest");
 
       var guestClaims = client.validateToken(ValidateTokenRequest.newBuilder()
@@ -109,6 +127,8 @@ class AuthGrpcIntegrationTest {
           .setPassword("Correct horse battery staple")
           .build()).getSession();
       var pendingEmailJwt = SignedJWT.parse(pendingEmail.getAccessToken()).getJWTClaimsSet();
+      assertThat(pendingEmail.hasEmailVerificationRequired()).isTrue();
+      assertThat(pendingEmail.getEmailVerificationRequired()).isTrue();
       assertThat(pendingEmailJwt.getStringClaim("account_type")).isEqualTo("guest");
 
       var pendingEmailClaims = client.validateToken(ValidateTokenRequest.newBuilder()
