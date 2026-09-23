@@ -597,7 +597,7 @@ Rotation runbook:
 
 1. Generate a replacement service user in the external secret manager with the
    least-privilege ACL reviewed for that one service; never grant `$JS.API.>`.
-2. Add its JWT to the account, write the replacement `.creds` key, and perform
+2. Issue a replacement user JWT signed by the account, write the replacement `.creds` key, and perform
    a controlled rollout of only that service. Prove its permitted publish,
    subscribe, ACK, and consumer operations and a denied neighboring subject.
 3. Revoke the old user JWT only after every replica uses the replacement; retain
