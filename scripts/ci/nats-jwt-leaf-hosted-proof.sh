@@ -295,9 +295,18 @@ if ! grep -Eqi 'permission.*(violation|denied)' <<<"$denial_log_delta" || ! grep
 fi
 
 # Service-side mutation is also rejected by the chat identity.
-if docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0 nats --server nats://127.0.0.1:4222 req --raw '$JS.API.STREAM.CREATE.denied' '{"name":"denied"}' >/dev/null 2>&1; then
-  echo 'FAIL: chat leaf mutated JetStream' >&2; exit 1
-fi
+for denied_js_subject in '$JS.API.CONSUMER.INFO.chat_events.neighbour' '$JS.ACK.chat_events.neighbour.1.1.1.1.1' '$JS.API.STREAM.CREATE.denied' '$JS.API.STREAM.UPDATE.chat_events' '$JS.API.STREAM.DELETE.chat_events'; do
+  leaf_log_before="$(docker logs voice-nats-proof-chat 2>&1 || true)"
+  hub_log_before="$(docker logs voice-nats-proof-hub 2>&1 || true)"
+  docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0 nats --server nats://127.0.0.1:4222 pub "$denied_js_subject" denied >/dev/null 2>&1 || true
+  sleep 1
+  leaf_logs="$(docker logs voice-nats-proof-chat 2>&1 || true)"
+  hub_logs="$(docker logs voice-nats-proof-hub 2>&1 || true)"
+  denial_log_delta="${leaf_logs#"$leaf_log_before"}"$'\n'"${hub_logs#"$hub_log_before"}"
+  if ! grep -Fq "$denied_js_subject" <<<"$denial_log_delta" || ! grep -Eqi 'permission.*(violation|denied)' <<<"$denial_log_delta"; then
+    echo "FAIL: chat leaf did not freshly deny $denied_js_subject" >&2; exit 1
+  fi
+done
 # The hub has no anonymous client path; direct unauthenticated access fails.
 if docker run --rm --network "$network" natsio/nats-box:0.18.0 nats --server nats://hub:4222 pub chat.created denied >/dev/null 2>&1; then
   echo 'FAIL: direct hub accepted an unauthenticated client' >&2; exit 1
