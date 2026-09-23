@@ -54,7 +54,6 @@ func startUserPrivacyTestServer(t *testing.T, pool *store.ProfileStore, privacy 
 		Profiles:        pool,
 		Privacy:         privacy,
 		Presence:        store.NewPresenceStore(rdb),
-		Blocks:          &testBlockChecker{},
 		DeletedAccounts: &deletedAccountCheckerStub{},
 	}
 	for _, opt := range opts {
