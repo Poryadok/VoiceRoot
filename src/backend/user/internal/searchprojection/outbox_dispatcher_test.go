@@ -57,3 +57,49 @@ func TestOutboxDispatcher_BadPubAckLeavesRecordRetryable(t *testing.T) {
 	require.Equal(t, eventID, outbox.released)
 	require.Equal(t, uuid.Nil, outbox.marked)
 }
+
+func TestValidateProjectionStreamRequiresDeploymentContract(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		config  nats.StreamConfig
+		wantErr bool
+	}{
+		{
+			name: "exact deployment stream",
+			config: nats.StreamConfig{
+				Name:      projectionStream,
+				Subjects:  []string{projectionSubject},
+				Retention: nats.LimitsPolicy,
+				Storage:   nats.FileStorage,
+			},
+		},
+		{
+			name: "wrong subject",
+			config: nats.StreamConfig{
+				Name:      projectionStream,
+				Subjects:  []string{"user.>"},
+				Retention: nats.LimitsPolicy,
+				Storage:   nats.FileStorage,
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateProjectionStream(&nats.StreamInfo{Config: tt.config})
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestValidateProjectionStreamRejectsMissingStream(t *testing.T) {
+	t.Parallel()
+	require.Error(t, validateProjectionStream(nil))
+}
