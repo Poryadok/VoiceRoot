@@ -72,7 +72,7 @@ services:
   user: {publish: [proof.user], subscribe: [proof.user.delivery]}
   voice: {publish: [proof.voice], subscribe: [proof.voice.delivery]}
 bootstrap:
-  publish: ['$JS.API.STREAM.CREATE.chat_events', '$JS.API.STREAM.INFO.chat_events', '$JS.API.CONSUMER.CREATE.chat_events.proof_chat', '$JS.API.CONSUMER.INFO.chat_events.proof_chat']
+  publish: ['$JS.API.STREAM.CREATE.chat_events', '$JS.API.STREAM.INFO.chat_events', '$JS.API.CONSUMER.CREATE.chat_events.proof_chat', '$JS.API.CONSUMER.DELETE.chat_events.proof_chat', '$JS.API.CONSUMER.INFO.chat_events.proof_chat']
   subscribe: [_INBOX.voice.bootstrap.reply]
 EOF
 
@@ -255,6 +255,20 @@ receive_two="$(docker logs voice-nats-proof-receive-two 2>&1)"
 if ! grep -Fqx 'stream=chat_events sequence=1 delivered=2 ack=true' <<<"$receive_two"; then
   echo 'FAIL: fixed durable did not redeliver then acknowledge the leaf publish' >&2
   printf '%s\n' "$receive_two" >&2
+  exit 1
+fi
+
+# A bootstrap contract must reject a fixed durable whose delivery target drifts.
+# The service has no mutation grant and cannot repair this state itself.
+docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
+  nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" consumer rm chat_events proof_chat --force >/dev/null
+docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
+  nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" consumer add chat_events proof_chat \
+  --filter chat.created --target _INBOX.voice.chat.drift --ack explicit --deliver new --defaults >/dev/null
+if docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
+  nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" consumer info chat_events proof_chat --json | \
+  jq -e '.config.deliver_subject == "_INBOX.voice.chat.proof"' >/dev/null; then
+  echo 'FAIL: drifted fixed durable was accepted as the canonical binding' >&2
   exit 1
 fi
 
