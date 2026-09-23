@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: voice-nats-search-bootstrap
+  namespace: __NAMESPACE__
+data:
+  bootstrap.sh: |
+    #!/bin/sh
+    set -eu
+
+    nats_url="${NATS_URL:?NATS_URL is required}"
+
+    stream() {
+      name="$1"; shift
+      subjects="$(IFS=,; echo "$*")"
+      expected="$(printf '%s\n' "$@" | jq -R . | jq -sc 'sort')"
+      if info="$(nats --server "$nats_url" req --raw "\$JS.API.STREAM.INFO.$name" "" 2>&1)"; then
+        if printf '%s' "$info" | jq -e '.error' >/dev/null; then
+          printf '%s' "$info" | jq -r '.error.description' | grep -qi 'stream not found' || { echo "$info" >&2; exit 1; }
+        else
+          actual="$(printf '%s' "$info" | jq -c '.config.subjects | sort')"
+          [ "$actual" = "$expected" ] || { echo "incompatible subjects for stream $name" >&2; exit 1; }
+          return
+        fi
+      else
+        echo "$info" >&2; exit 1
+      fi
+      nats --server "$nats_url" stream add "$name" --subjects "$subjects" --storage file --retention limits --max-age 7d --defaults
+    }
+
+    # chat_events is a shared Chat+Space stream. Its canonical full subject shape
+    # belongs to the central bootstrap; Search only requires its Chat inputs.
+    require_stream_subjects() {
+      name="$1"; shift
+      info="$(nats --server "$nats_url" req --raw "\$JS.API.STREAM.INFO.$name" "" 2>&1)" || { echo "$info" >&2; exit 1; }
+      if printf '%s' "$info" | jq -e '.error' >/dev/null; then
+        echo "$info" >&2; exit 1
+      fi
+      actual="$(printf '%s' "$info" | jq -c '.config.subjects | sort')"
+      for subject in "$@"; do
+        printf '%s' "$actual" | jq -e --arg subject "$subject" 'index($subject) != null' >/dev/null \
+          || { echo "missing required subject $subject in stream $name" >&2; exit 1; }
+      done
+    }
+
+    consumer() {
+      stream_name="$1"; durable="$2"; filter="$3"; target="$4"
+      if info="$(nats --server "$nats_url" req --raw "\$JS.API.CONSUMER.INFO.$stream_name.$durable" "" 2>&1)"; then
+        if printf '%s' "$info" | jq -e '.error' >/dev/null; then
+          printf '%s' "$info" | jq -r '.error.description' | grep -qi 'consumer not found' || { echo "$info" >&2; exit 1; }
+        else
+          actual="$(printf '%s' "$info" | jq -c '[.config.filter_subject, .config.deliver_subject, .config.ack_policy, .config.deliver_policy]')"
+          expected="$(jq -cn --arg filter "$filter" --arg target "$target" '[ $filter, $target, "explicit", "new" ]')"
+          [ "$actual" = "$expected" ] || { echo "incompatible consumer $stream_name/$durable" >&2; exit 1; }
+          return
+        fi
+      else
+        echo "$info" >&2; exit 1
+      fi
+      nats --server "$nats_url" consumer add "$stream_name" "$durable" --filter "$filter" --target "$target" --ack explicit --deliver new --defaults
+    }
+
+    stream message_events message.sent message.edited message.deleted message.read message.read_receipt_revoked message.reaction_added message.reaction_removed message.mention_added message.pinned message.unpinned message.forwarded message.delivery_ack
+    stream user_events user.account_deleted user.profile_created user.profile_updated user.profile_switched user.verified user.presence_changed user.game_detected user.settings_changed
+    require_stream_subjects chat_events chat.created chat.member_changed chat.dm_peer_deleted
+    stream user_profile_projection user.search_profile_projection
+
+    consumer message_events search-indexer-message-v1 'message.>' _INBOX.voice.search.indexer.message
+    consumer user_events search-indexer-user-v1 'user.>' _INBOX.voice.search.indexer.user
+    consumer chat_events search-indexer-chat-v1 '>' _INBOX.voice.search.indexer.chat
+    consumer user_profile_projection search-user-profile-projection-v1 user.search_profile_projection _INBOX.voice.search.user-projection
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: voice-nats-search-bootstrap
+  namespace: __NAMESPACE__
+spec:
+  backoffLimit: 12
+  template:
+    metadata:
+      labels: {app: voice-nats-search-bootstrap}
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: bootstrap
+          image: natsio/nats-box:0.18.0
+          command: ["/bin/sh", "/config/bootstrap.sh"]
+          env:
+            - {name: NATS_URL, value: "nats://voice-nats:4222"}
+          volumeMounts:
+            - {name: config, mountPath: /config, readOnly: true}
+      volumes:
+        - name: config
+          configMap: {name: voice-nats-search-bootstrap, defaultMode: 0555}
