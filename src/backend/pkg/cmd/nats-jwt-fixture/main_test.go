@@ -36,6 +36,9 @@ func TestGenerateCreatesDistinctServiceCredentialsWithoutBroadJetStreamAPI(t *te
 	if _, err := os.Stat(filepath.Join(dest, "creds", "bootstrap.creds")); err != nil {
 		t.Fatalf("bootstrap credential missing: %v", err)
 	}
+	if accountPublic, err := os.ReadFile(filepath.Join(dest, "account.public")); err != nil || !strings.HasPrefix(strings.TrimSpace(string(accountPublic)), "A") {
+		t.Fatalf("fixture account public key missing or invalid: %v", err)
+	}
 	accountJWT, err := os.ReadFile(filepath.Join(dest, "account.jwt"))
 	if err != nil {
 		t.Fatal(err)

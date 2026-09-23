@@ -185,6 +185,11 @@ func generate(dest string, acl aclDocument) error {
 	if err := writeFile(filepath.Join(dest, "account.jwt"), accountJWT); err != nil {
 		return err
 	}
+	// Public account identity is required by a MEMORY resolver's preload map.
+	// It is intentionally separate from the JWT/creds secret material.
+	if err := writeFile(filepath.Join(dest, "account.public"), accountPub); err != nil {
+		return err
+	}
 
 	for _, name := range serviceNames {
 		grant := acl.Services[name]
