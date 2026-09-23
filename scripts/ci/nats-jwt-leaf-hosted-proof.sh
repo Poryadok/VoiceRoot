@@ -283,13 +283,13 @@ create_proof_consumer() {
   docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
     nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" --inbox-prefix _INBOX.voice.bootstrap.reply \
     req --raw '$JS.API.CONSUMER.CREATE.chat_events.proof_chat' \
-    '{"stream_name":"chat_events","config":{"name":"proof_chat","durable_name":"proof_chat","deliver_subject":"_INBOX.voice.chat.proof","deliver_policy":"new","ack_policy":"explicit","ack_wait":1000000000,"filter_subject":"chat.created"}}' | \
-    jq -e '(.error | not) and .config.name == "proof_chat" and .config.ack_wait == 1000000000' >/dev/null
+    '{"stream_name":"chat_events","config":{"name":"proof_chat","durable_name":"proof_chat","deliver_subject":"_INBOX.voice.chat.proof","deliver_policy":"new","ack_policy":"explicit","ack_wait":1000000000,"max_deliver":-1,"filter_subject":"chat.created"}}' | \
+    jq -e '(.error | not) and .config.name == "proof_chat" and .config.ack_wait == 1000000000 and .config.max_deliver == -1' >/dev/null
 }
 create_proof_consumer
 proof_consumer="$(docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
   nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" --inbox-prefix _INBOX.voice.bootstrap.reply consumer info chat_events proof_chat --json)"
-if [[ "$(jq -r '.config.filter_subject' <<<"$proof_consumer")" != chat.created || "$(jq -r '.config.deliver_subject' <<<"$proof_consumer")" != _INBOX.voice.chat.proof || "$(jq -r '.config.ack_policy' <<<"$proof_consumer")" != explicit ]]; then
+if [[ "$(jq -r '.config.filter_subject' <<<"$proof_consumer")" != chat.created || "$(jq -r '.config.deliver_subject' <<<"$proof_consumer")" != _INBOX.voice.chat.proof || "$(jq -r '.config.ack_policy' <<<"$proof_consumer")" != explicit || "$(jq -r '.config.max_deliver' <<<"$proof_consumer")" != -1 ]]; then
   echo 'FAIL: bootstrap did not provision the fixed proof durable exactly' >&2
   exit 1
 fi
