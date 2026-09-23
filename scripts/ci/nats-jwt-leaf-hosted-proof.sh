@@ -13,7 +13,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 work="$(mktemp -d)"
 network="voice-nats-proof-$RANDOM"
 cleanup() {
-  docker rm -f voice-nats-proof-hub voice-nats-proof-chat voice-nats-proof-bootstrap-reply voice-nats-proof-receive-one voice-nats-proof-receive-two >/dev/null 2>&1 || true
+  docker rm -f voice-nats-proof-hub voice-nats-proof-chat voice-nats-proof-wrong-ca voice-nats-proof-bootstrap-reply voice-nats-proof-receive-one voice-nats-proof-receive-two >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
   rm -rf "$work"
 }
@@ -83,6 +83,8 @@ system_account="$(tr -d '\r\n' <"$work/fixture/system-account.public")"
 system_account_jwt="$(tr -d '\r\n' <"$work/fixture/system-account.jwt")"
 openssl req -x509 -newkey rsa:2048 -nodes -days 1 -keyout "$work/key.pem" -out "$work/cert.pem" \
   -subj '/CN=hub' -addext 'subjectAltName=DNS:hub' >/dev/null 2>&1
+openssl req -x509 -newkey rsa:2048 -nodes -days 1 -keyout "$work/wrong-ca-key.pem" -out "$work/wrong-ca.pem" \
+  -subj '/CN=wrong-ca' >/dev/null 2>&1
 
 cat >"$work/hub.conf" <<EOF
 operator: $work/fixture/operator.jwt
@@ -114,6 +116,10 @@ leafnodes {
   }]
 }
 EOF
+cat >"$work/wrong-ca-leaf.conf" <<EOF
+listen: 127.0.0.1:4222
+leafnodes { remotes = [{ urls: ["nats-leaf://hub:7422"] account: "\$G" credentials: "$work/fixture/creds/chat.creds" tls { ca_file: "$work/wrong-ca.pem"; handshake_first: true } }] }
+EOF
 
 docker network create "$network" >/dev/null
 docker run -d --name voice-nats-proof-hub --network "$network" --network-alias hub -v "$work:$work" nats:2.12-alpine -c "$work/hub.conf" >/dev/null
@@ -123,6 +129,22 @@ if ! docker logs voice-nats-proof-hub 2>&1 | grep -q 'Server is ready'; then
   docker logs voice-nats-proof-hub >&2
   exit 1
 fi
+
+# A valid service credential with an unrelated CA must never join the hub.
+docker run -d --name voice-nats-proof-wrong-ca --network "$network" -v "$work:$work:ro" nats:2.12-alpine -c "$work/wrong-ca-leaf.conf" >/dev/null
+wrong_ca_before="$(docker logs voice-nats-proof-wrong-ca 2>&1 || true)"
+for _ in $(seq 1 8); do
+  wrong_ca_logs="$(docker logs voice-nats-proof-wrong-ca 2>&1 || true)"
+  wrong_ca_delta="${wrong_ca_logs#"$wrong_ca_before"}"
+  grep -Eqi '(certificate|tls|x509).*(unknown|verify|failed|error)|tls.*(unknown|verify|failed|error)' <<<"$wrong_ca_delta" && break
+  sleep 1
+done
+if ! grep -Eqi '(certificate|tls|x509).*(unknown|verify|failed|error)|tls.*(unknown|verify|failed|error)' <<<"${wrong_ca_delta:-}"; then
+  echo 'FAIL: wrong-CA leaf did not report a fresh TLS join rejection' >&2
+  printf '%s\n' "${wrong_ca_delta:-}" >&2
+  exit 1
+fi
+docker rm -f voice-nats-proof-wrong-ca >/dev/null
 
 # Only the Job credential may create the stream. Its reply subscription is an
 # exact credential-owned subject, never a broad _INBOX wildcard.
