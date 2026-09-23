@@ -48,6 +48,9 @@ func main() {
   if mode == "ack" {
     if err := msg.AckSync(); err != nil { panic(err) }
   }
+  if mode == "nak" {
+    if err := msg.Nak(); err != nil { panic(err) }
+  }
   fmt.Printf("stream=%s sequence=%d delivered=%d ack=%t\n", meta.Stream, meta.Sequence.Stream, meta.NumDelivered, mode == "ack")
   if mode == "deny-ack" {
     fmt.Printf("ack_subject=%s\n", msg.Reply)
@@ -312,11 +315,13 @@ if ! docker logs voice-nats-proof-chat 2>&1 | grep -Fq 'Server is ready'; then
   exit 1
 fi
 
-# Subscribe before the service publish, deliberately omit the first ACK, then
-# receive the same fixed durable delivery again and acknowledge it. The client
-# has no credentials and can reach NATS only through the chat leaf namespace.
+# Subscribe before the service publish, deliberately send a negative ACK for
+# the first delivery, then receive the same fixed durable delivery again and
+# acknowledge it. NAK makes the redelivery deterministic while still proving
+# the service cannot treat the first delivery as successfully acknowledged.
+# The client has no credentials and can reach NATS only through the chat leaf.
 docker run -d --name voice-nats-proof-receive-one --network container:voice-nats-proof-chat \
-  -v "$work/receiver:/receiver" alpine:3.22 /receiver/leaf-receive receive /receiver/receive-one.ready >/dev/null
+  -v "$work/receiver:/receiver" alpine:3.22 /receiver/leaf-receive nak /receiver/receive-one.ready >/dev/null
 if ! wait_for_file "$work/receiver/receive-one.ready" 'first chat leaf receiver'; then
   docker logs voice-nats-proof-receive-one >&2 || true
   exit 1
@@ -328,7 +333,7 @@ docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0
 docker wait voice-nats-proof-receive-one >/dev/null
 receive_one="$(docker logs voice-nats-proof-receive-one 2>&1)"
 if ! grep -Fqx 'stream=chat_events sequence=1 delivered=1 ack=false' <<<"$receive_one"; then
-  echo 'FAIL: fixed durable did not receive the first leaf publish unacknowledged' >&2
+  echo 'FAIL: fixed durable did not receive the first leaf publish before a negative ACK' >&2
   printf '%s\n' "$receive_one" >&2
   exit 1
 fi
