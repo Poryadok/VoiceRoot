@@ -56,16 +56,9 @@ func subscribeSocialEvents(js nats.JetStreamContext, hub *wsHub, instanceID stri
 			slog.String("account_id_b", accountB),
 		)
 	}
-	sub, err := js.Subscribe("social.user_blocked", handler,
-		nats.Durable(durable),
-		nats.BindStream(jsStreamSocialEvents),
-		nats.DeliverNew(),
-	)
+	sub, err := js.Subscribe("social.user_blocked", handler, nats.Bind(jsStreamSocialEvents, durable))
 	if err != nil {
-		sub, err = js.Subscribe("", handler, nats.Bind(jsStreamSocialEvents, durable))
-		if err != nil {
-			return nil, fmt.Errorf("jetstream subscribe social.events: %w", err)
-		}
+		return nil, fmt.Errorf("bind pre-provisioned social.events consumer %q: %w", durable, err)
 	}
 	return sub, nil
 }
@@ -89,6 +82,7 @@ func runSocialEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instanceI
 	if err != nil {
 		return err
 	}
+	markRealtimeConsumerBound(ctx)
 	defer func() {
 		if err := sub.Unsubscribe(); err != nil && logger != nil {
 			logger.Warn("social.events unsubscribe failed", slog.String("error", err.Error()))

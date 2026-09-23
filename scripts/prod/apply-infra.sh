@@ -75,6 +75,10 @@ kubectl create secret generic voice-livekit-config -n "${NS}" \
 
 render "${MANIFEST_DIR}/infra.yaml" | kubectl apply -f -
 
+kubectl delete job voice-nats-realtime-bootstrap -n "${NS}" --ignore-not-found
+sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/nats-realtime-bootstrap.yaml" | kubectl apply -f -
+kubectl wait --for=condition=complete job/voice-nats-realtime-bootstrap -n "${NS}" --timeout=120s
+
 sed -e "s|__VOICE_MINIO_IMAGE__|${MINIO_IMAGE}|g" \
     -e "s|__VOICE_MINIO_MC_IMAGE__|${MINIO_MC_IMAGE}|g" \
     -e "s|__VOICE_MINIO_STORAGE_CLASS__|${MINIO_STORAGE_CLASS}|g" \

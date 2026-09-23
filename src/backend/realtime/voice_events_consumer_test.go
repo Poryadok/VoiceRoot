@@ -298,6 +298,7 @@ func TestRunVoiceEventsConsumer_JetStreamToProfileHub(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errCh := make(chan error, 1)
+	preprovisionRealtimeConsumer(t, js, jsStreamVoiceEvents, voiceConsumerDurableName("voice-consumer-inst"), "voice.>")
 	go func() { errCh <- runVoiceEventsConsumer(ctx, hub, natsURL, "voice-consumer-inst", nil) }()
 	time.Sleep(200 * time.Millisecond)
 
