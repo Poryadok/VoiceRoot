@@ -103,6 +103,9 @@ func chatEventLogAttrs(data []byte) []slog.Attr {
 
 func subscribeChatEvents(js nats.JetStreamContext, hub *wsHub, instanceID string, logger *slog.Logger) (*nats.Subscription, error) {
 	durable := chatConsumerDurableName(instanceID)
+	if err := validateRealtimeConsumerConfig(js, jsStreamChatEvents, durable, "chat.>", realtimeConsumerDeliverSubject(instanceID, "chat")); err != nil {
+		return nil, err
+	}
 	handler := func(msg *nats.Msg) {
 		attrs := chatEventLogAttrs(msg.Data)
 		profileID, fe, ok := chatEventBytesToFanout(msg.Data)

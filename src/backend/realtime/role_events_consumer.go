@@ -64,6 +64,9 @@ func roleEventToFanout(subject string, data []byte) (profileID, chatID string, e
 
 func subscribeRoleEvents(js nats.JetStreamContext, hub *wsHub, instanceID string, logger *slog.Logger) (*nats.Subscription, error) {
 	durable := roleConsumerDurableName(instanceID)
+	if err := validateRealtimeConsumerConfig(js, jsStreamRoleEvents, durable, "role.>", realtimeConsumerDeliverSubject(instanceID, "role")); err != nil {
+		return nil, err
+	}
 	handler := func(msg *nats.Msg) {
 		profileID, chatID, fe, ok := roleEventToFanout(msg.Subject, msg.Data)
 		if !ok {
