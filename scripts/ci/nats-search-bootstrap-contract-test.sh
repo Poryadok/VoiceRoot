@@ -5,6 +5,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 BOOTSTRAP="${ROOT}/docker/nats/search-bootstrap.sh"
 K8S_BOOTSTRAP="${ROOT}/deploy/templates/nats-search-bootstrap.yaml"
 SMOKE="${ROOT}/scripts/ci/nats-search-bootstrap-smoke.sh"
+COMPOSE="${ROOT}/docker-compose.yml"
+STAGING_APPLY="${ROOT}/scripts/staging/apply-infra.sh"
+PROD_APPLY="${ROOT}/scripts/prod/apply-infra.sh"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 require() { grep -Fqx -- "$1" "$2" || fail "missing exact contract line in ${2#"${ROOT}/"}: $1"; }
@@ -12,6 +15,17 @@ require() { grep -Fqx -- "$1" "$2" || fail "missing exact contract line in ${2#"
 [[ -x "$BOOTSTRAP" ]] || fail "Search Compose bootstrap script must be executable"
 cmp <(sed -n '/^    #!\/bin\/sh$/,$p' "$K8S_BOOTSTRAP" | sed '/^---$/,$d' | sed 's/^    //') "$BOOTSTRAP" \
   || fail "Search Kubernetes bootstrap script must exactly match the Compose bootstrap script"
+
+grep -Fq '  nats-search-bootstrap:' "$COMPOSE" \
+  || fail "Compose must define the Search bootstrap service"
+grep -Fq './docker/nats/search-bootstrap.sh:/bootstrap/search-bootstrap.sh:ro' "$COMPOSE" \
+  || fail "Compose must mount the Search bootstrap script"
+grep -Fq '      nats-search-bootstrap:' "$COMPOSE" \
+  || fail "Search must wait for its bootstrap service"
+for apply in "$STAGING_APPLY" "$PROD_APPLY"; do
+  grep -Fq 'voice-nats-search-bootstrap' "$apply" \
+    || fail "${apply#"${ROOT}/"} must apply the Search bootstrap Job"
+done
 
 for stream in \
   'stream message_events message.sent message.edited message.deleted message.read message.read_receipt_revoked message.reaction_added message.reaction_removed message.mention_added message.pinned message.unpinned message.forwarded message.delivery_ack' \
