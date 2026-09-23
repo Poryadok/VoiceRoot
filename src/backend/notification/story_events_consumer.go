@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/proto"
@@ -31,13 +30,7 @@ func runStoryEventsConsumer(
 	if tokens == nil || pusher == nil || strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("story notification consumer: missing deps")
 	}
-	nc, err := nats.Connect(natsURL,
-		nats.Name("voice-notification-story"),
-		nats.Timeout(10*time.Second),
-		nats.RetryOnFailedConnect(true),
-		nats.MaxReconnects(-1),
-		nats.ReconnectWait(time.Second),
-	)
+	nc, lost, err := connectNotificationConsumer(natsURL, "story")
 	if err != nil {
 		return fmt.Errorf("nats connect: %w", err)
 	}
@@ -67,18 +60,18 @@ func runStoryEventsConsumer(
 		consumer.JetStreamConsumeAck(msg, err)
 	}
 
-	sub, err := bindPreprovisionedConsumer(js, jsStreamStoryEvents, durable, msgHandler, nats.ManualAck())
+	sub, err := bindPreprovisionedConsumer(js, jsStreamStoryEvents, durable, "story.>", msgHandler, nats.ManualAck())
 	if err != nil {
 		return fmt.Errorf("bind pre-provisioned story.events consumer %q: %w", durable, err)
 	}
+	markNotificationConsumerBound(ctx)
 	defer func() {
 		if err := sub.Unsubscribe(); err != nil && logger != nil {
 			logger.Warn("story.events unsubscribe failed", slog.String("error", err.Error()))
 		}
 	}()
 
-	<-ctx.Done()
-	return ctx.Err()
+	return waitForNotificationConsumer(ctx, lost, js, jsStreamStoryEvents, durable, "story.>")
 }
 
 func routeStoryNotification(

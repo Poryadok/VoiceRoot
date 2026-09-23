@@ -35,13 +35,7 @@ func runVoiceEventsConsumer(
 	if tokens == nil || pusher == nil || strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("voice notification consumer: missing deps")
 	}
-	nc, err := nats.Connect(natsURL,
-		nats.Name("voice-notification-voice"),
-		nats.Timeout(10*time.Second),
-		nats.RetryOnFailedConnect(true),
-		nats.MaxReconnects(-1),
-		nats.ReconnectWait(time.Second),
-	)
+	nc, lost, err := connectNotificationConsumer(natsURL, "voice")
 	if err != nil {
 		return fmt.Errorf("nats connect: %w", err)
 	}
@@ -98,18 +92,18 @@ func runVoiceEventsConsumer(
 		}
 	}
 
-	sub, err := bindPreprovisionedConsumer(js, jsStreamVoiceEvents, durable, msgHandler, nats.ManualAck())
+	sub, err := bindPreprovisionedConsumer(js, jsStreamVoiceEvents, durable, "voice.>", msgHandler, nats.ManualAck())
 	if err != nil {
 		return fmt.Errorf("bind pre-provisioned voice.events consumer %q: %w", durable, err)
 	}
+	markNotificationConsumerBound(ctx)
 	defer func() {
 		if err := sub.Unsubscribe(); err != nil && logger != nil {
 			logger.Warn("voice.events unsubscribe failed", slog.String("error", err.Error()))
 		}
 	}()
 
-	<-ctx.Done()
-	return ctx.Err()
+	return waitForNotificationConsumer(ctx, lost, js, jsStreamVoiceEvents, durable, "voice.>")
 }
 
 type voiceRouteKind int

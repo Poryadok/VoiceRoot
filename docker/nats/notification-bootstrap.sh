@@ -7,24 +7,34 @@ stream() {
   name="$1"; shift
   subjects="$(IFS=,; echo "$*")"
   expected="$(printf '%s\n' "$@" | jq -R . | jq -sc 'sort')"
-  if info="$(nats --server "$nats_url" stream info "$name" --json 2>&1)"; then
-    actual="$(printf '%s' "$info" | jq -c '.config.subjects | sort')"
-    [ "$actual" = "$expected" ] || { echo "incompatible subjects for stream $name" >&2; exit 1; }
-    return
+  if info="$(nats --server "$nats_url" req --raw "\$JS.API.STREAM.INFO.$name" "" 2>&1)"; then
+    if printf '%s' "$info" | jq -e '.error' >/dev/null; then
+      printf '%s' "$info" | jq -r '.error.description' | grep -qi 'stream not found' || { echo "$info" >&2; exit 1; }
+    else
+      actual="$(printf '%s' "$info" | jq -c '.config.subjects | sort')"
+      [ "$actual" = "$expected" ] || { echo "incompatible subjects for stream $name" >&2; exit 1; }
+      return
+    fi
+  else
+    echo "$info" >&2; exit 1
   fi
-  printf '%s' "$info" | grep -qi 'stream not found' || { echo "$info" >&2; exit 1; }
   nats --server "$nats_url" stream add "$name" --subjects "$subjects" --storage file --retention limits --max-age 7d --defaults
 }
 
 consumer() {
   stream_name="$1"; durable="$2"; filter="$3"; target="$4"
-  if info="$(nats --server "$nats_url" consumer info "$stream_name" "$durable" --json 2>&1)"; then
-    actual="$(printf '%s' "$info" | jq -c '[.config.filter_subject, .config.deliver_subject, .config.ack_policy, .config.deliver_policy]')"
-    expected="$(jq -cn --arg filter "$filter" --arg target "$target" '[ $filter, $target, "explicit", "new" ]')"
-    [ "$actual" = "$expected" ] || { echo "incompatible consumer $stream_name/$durable" >&2; exit 1; }
-    return
+  if info="$(nats --server "$nats_url" req --raw "\$JS.API.CONSUMER.INFO.$stream_name.$durable" "" 2>&1)"; then
+    if printf '%s' "$info" | jq -e '.error' >/dev/null; then
+      printf '%s' "$info" | jq -r '.error.description' | grep -qi 'consumer not found' || { echo "$info" >&2; exit 1; }
+    else
+      actual="$(printf '%s' "$info" | jq -c '[.config.filter_subject, .config.deliver_subject, .config.ack_policy, .config.deliver_policy]')"
+      expected="$(jq -cn --arg filter "$filter" --arg target "$target" '[ $filter, $target, "explicit", "new" ]')"
+      [ "$actual" = "$expected" ] || { echo "incompatible consumer $stream_name/$durable" >&2; exit 1; }
+      return
+    fi
+  else
+    echo "$info" >&2; exit 1
   fi
-  printf '%s' "$info" | grep -qi 'consumer not found' || { echo "$info" >&2; exit 1; }
   nats --server "$nats_url" consumer add "$stream_name" "$durable" --filter "$filter" --target "$target" --ack explicit --deliver new --defaults
 }
 

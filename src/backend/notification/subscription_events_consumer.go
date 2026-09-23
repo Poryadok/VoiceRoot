@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/proto"
@@ -25,13 +24,7 @@ func runSubscriptionEventsConsumer(
 	if strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("subscription notification consumer: missing NATS_URL")
 	}
-	nc, err := nats.Connect(natsURL,
-		nats.Name("voice-notification-subscription"),
-		nats.Timeout(10*time.Second),
-		nats.RetryOnFailedConnect(true),
-		nats.MaxReconnects(-1),
-		nats.ReconnectWait(time.Second),
-	)
+	nc, lost, err := connectNotificationConsumer(natsURL, "subscription")
 	if err != nil {
 		return fmt.Errorf("nats connect: %w", err)
 	}
@@ -58,18 +51,18 @@ func runSubscriptionEventsConsumer(
 		_ = msg.Ack()
 	}
 
-	sub, err := bindPreprovisionedConsumer(js, jsStreamSubscriptionEvents, durable, msgHandler, nats.ManualAck())
+	sub, err := bindPreprovisionedConsumer(js, jsStreamSubscriptionEvents, durable, "subscription.>", msgHandler, nats.ManualAck())
 	if err != nil {
 		return fmt.Errorf("bind pre-provisioned subscription.events consumer %q: %w", durable, err)
 	}
+	markNotificationConsumerBound(ctx)
 	defer func() {
 		if err := sub.Unsubscribe(); err != nil && logger != nil {
 			logger.Warn("subscription.events unsubscribe failed", slog.String("error", err.Error()))
 		}
 	}()
 
-	<-ctx.Done()
-	return ctx.Err()
+	return waitForNotificationConsumer(ctx, lost, js, jsStreamSubscriptionEvents, durable, "subscription.>")
 }
 
 func routeSubscriptionNotification(handler *consumer.SubscriptionEventHandler, env *eventsv1.SubscriptionStreamEvent) bool {
