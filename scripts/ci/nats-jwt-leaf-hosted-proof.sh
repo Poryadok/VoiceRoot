@@ -50,13 +50,14 @@ EOF
 
 (cd "$root/src/backend/pkg" && go run ./cmd/nats-jwt-fixture "$work/acl.yaml" "$work/fixture")
 account="$(tr -d '\r\n' <"$work/fixture/account.public")"
+account_jwt="$(tr -d '\r\n' <"$work/fixture/account.jwt")"
 openssl req -x509 -newkey rsa:2048 -nodes -days 1 -keyout "$work/key.pem" -out "$work/cert.pem" \
   -subj '/CN=hub' -addext 'subjectAltName=DNS:hub' >/dev/null 2>&1
 
 cat >"$work/hub.conf" <<EOF
 operator: $work/fixture/operator.jwt
 resolver: MEMORY
-resolver_preload: { $account: $work/fixture/account.jwt }
+resolver_preload: { $account: "$account_jwt" }
 jetstream { store_dir: "$work/js" }
 leafnodes {
   listen: 0.0.0.0:7422
