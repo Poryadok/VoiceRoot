@@ -138,6 +138,23 @@ func startMessagingJSTestServer(t *testing.T) *server.Server {
 	if !s.ReadyForConnections(5 * time.Second) {
 		t.Fatal("nats server not ready")
 	}
+	nc, err := nats.Connect(s.ClientURL())
+	require.NoError(t, err)
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+	_, err = js.AddStream(&nats.StreamConfig{
+		Name: "message_events",
+		Subjects: []string{
+			"message.sent", "message.edited", "message.deleted", "message.read", "message.read_receipt_revoked",
+			"message.reaction_added", "message.reaction_removed", "message.mention_added", "message.pinned", "message.unpinned",
+			"message.forwarded", "message.delivery_ack",
+		},
+		Retention: nats.LimitsPolicy,
+		MaxAge:    7 * 24 * time.Hour,
+		Storage:   nats.FileStorage,
+	})
+	require.NoError(t, err)
+	nc.Close()
 	t.Cleanup(func() { s.Shutdown() })
 	return s
 }
