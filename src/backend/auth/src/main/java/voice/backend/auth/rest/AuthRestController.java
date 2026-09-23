@@ -1,6 +1,7 @@
 package voice.backend.auth.rest;
 
 import jakarta.validation.Valid;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.validation.constraints.NotBlank;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
@@ -435,7 +436,9 @@ public class AuthRestController {
       @JsonProperty("expires_in_seconds") long expiresInSeconds,
       @JsonProperty("account_id") String accountId,
       @JsonProperty("profile_id") String profileId,
-      @JsonProperty("account_type") String accountType) {
+      @JsonProperty("account_type") String accountType,
+      @JsonInclude(JsonInclude.Include.NON_NULL)
+      @JsonProperty("email_verification_required") Boolean emailVerificationRequired) {
     public static SessionBody from(AuthSession session) {
       String accountType = session.accountType();
       if (accountType == null || accountType.isBlank()) {
@@ -447,7 +450,8 @@ public class AuthRestController {
           session.expiresInSeconds(),
           session.accountId(),
           session.profileId(),
-          accountType);
+          accountType,
+          session.emailVerificationRequired());
     }
   }
 

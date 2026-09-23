@@ -796,7 +796,19 @@ public class AuthService {
         jwtService.accessTtl().toSeconds(),
         account.id().toString(),
         profileId,
-        account.type());
+        account.type(),
+        emailVerificationRequired(account));
+  }
+
+  private Boolean emailVerificationRequired(Account account) {
+    if (!"guest".equals(account.type())) {
+      return null;
+    }
+    if (accounts.isRegularEmailVerificationPending(account.id())
+        || (account.email() != null && !account.email().isBlank())) {
+      return true;
+    }
+    return account.phone() == null || account.phone().isBlank() ? false : null;
   }
 
   private static String requireProfileId(String profileId) {

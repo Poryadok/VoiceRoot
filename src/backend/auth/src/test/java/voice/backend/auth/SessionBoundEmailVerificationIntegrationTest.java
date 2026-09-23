@@ -17,6 +17,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import voice.backend.auth.support.CapturingMailSender;
+import voice.backend.auth.rest.AuthRestController;
+import voice.backend.auth.service.AuthSession;
 
 /** Contract proof for the A1 restricted-session email-verification recovery flow. */
 @SpringBootTest
@@ -28,6 +30,14 @@ class SessionBoundEmailVerificationIntegrationTest {
   @Autowired CapturingMailSender mailSender;
 
   @Test
+  void legacySessionOmitsUnknownMarkerInRestJson() throws Exception {
+    var legacy = new AuthSession("access", "refresh", 900, "account", "profile", "guest");
+    JsonNode json = objectMapper.readTree(
+        objectMapper.writeValueAsString(AuthRestController.SessionBody.from(legacy)));
+    assertThat(json.has("email_verification_required")).isFalse();
+  }
+
+  @Test
   void registerCreatesRestrictedSessionAndSendsExactlyOneVerificationEmail() throws Exception {
     mailSender.clear();
 
@@ -37,11 +47,51 @@ class SessionBoundEmailVerificationIntegrationTest {
             "{\"email\":\"session-bound-register@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}");
 
     assertThat(envelope.path("session").path("account_type").asText()).isEqualTo("guest");
+    assertThat(envelope.path("session").path("email_verification_required").asBoolean()).isTrue();
+    JsonNode login = postJson("/api/v1/auth/login",
+        "{\"email\":\"session-bound-register@example.com\",\"password\":\"Correct horse battery staple\"}")
+        .path("session");
+    assertThat(login.path("email_verification_required").asBoolean()).isTrue();
+    String switchedBody = mockMvc.perform(post("/api/v1/auth/switch-profile")
+            .header("Authorization", "Bearer " + login.path("access_token").asText())
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"profile_id\":\"" + login.path("profile_id").asText() + "\"}"))
+        .andExpect(status().isOk())
+        .andReturn().getResponse().getContentAsString();
+    assertThat(objectMapper.readTree(switchedBody).path("email_verification_required").asBoolean()).isTrue();
     assertThat(mailSender.lastCode()).matches("\\d{6}");
     mockMvc
         .perform(
             get("/api/v1/auth/verification-status")
                 .header("Authorization", "Bearer " + envelope.path("session").path("access_token").asText()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.state").value("EMAIL_PENDING"))
+        .andExpect(jsonPath("$.code_state").value("ACTIVE"));
+  }
+
+  @Test
+  void convertedGuestRemainsEmailPendingAcrossStatusAndRefresh() throws Exception {
+    JsonNode guest = postJson(
+        "/api/v1/auth/register",
+        "{\"password\":\"Correct horse battery staple\",\"guest\":true,\"device_info_json\":\"{}\"}");
+    String guestToken = guest.path("session").path("access_token").asText();
+    assertThat(guest.path("session").path("email_verification_required").asBoolean()).isFalse();
+    String convertedBody = mockMvc.perform(post("/api/v1/auth/convert-guest")
+            .header("Authorization", "Bearer " + guestToken)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"email\":\"converted-status@example.com\",\"password\":\"New account password 1\"}"))
+        .andExpect(status().isOk())
+        .andReturn().getResponse().getContentAsString();
+    JsonNode converted = objectMapper.readTree(convertedBody).path("session");
+    assertThat(converted.path("email_verification_required").asBoolean()).isTrue();
+
+    JsonNode refreshed = postJson("/api/v1/auth/refresh",
+        "{\"refresh_token\":\"" + converted.path("refresh_token").asText() + "\",\"device_info_json\":\"{}\"}")
+        .path("session");
+    assertThat(refreshed.path("email_verification_required").asBoolean()).isTrue();
+
+    mockMvc.perform(get("/api/v1/auth/verification-status")
+            .header("Authorization", "Bearer " + refreshed.path("access_token").asText()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.state").value("EMAIL_PENDING"))
         .andExpect(jsonPath("$.code_state").value("ACTIVE"));
