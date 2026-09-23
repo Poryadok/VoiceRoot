@@ -13,7 +13,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 work="$(mktemp -d)"
 network="voice-nats-proof-$RANDOM"
 cleanup() {
-  docker rm -f voice-nats-proof-hub voice-nats-proof-chat voice-nats-proof-wrong-ca voice-nats-proof-bootstrap-reply voice-nats-proof-receive-one voice-nats-proof-receive-two >/dev/null 2>&1 || true
+  docker rm -f voice-nats-proof-hub voice-nats-proof-chat voice-nats-proof-wrong-ca voice-nats-proof-wrong-sni voice-nats-proof-bootstrap-reply voice-nats-proof-receive-one voice-nats-proof-receive-two >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
   rm -rf "$work"
 }
@@ -120,9 +120,13 @@ cat >"$work/wrong-ca-leaf.conf" <<EOF
 listen: 127.0.0.1:4222
 leafnodes { remotes = [{ urls: ["nats-leaf://hub:7422"] account: "\$G" credentials: "$work/fixture/creds/chat.creds" tls { ca_file: "$work/wrong-ca.pem"; handshake_first: true } }] }
 EOF
+cat >"$work/wrong-sni-leaf.conf" <<EOF
+listen: 127.0.0.1:4222
+leafnodes { remotes = [{ urls: ["nats-leaf://wrong-sni:7422"] account: "\$G" credentials: "$work/fixture/creds/chat.creds" tls { ca_file: "$work/cert.pem"; handshake_first: true } }] }
+EOF
 
 docker network create "$network" >/dev/null
-docker run -d --name voice-nats-proof-hub --network "$network" --network-alias hub -v "$work:$work" nats:2.12-alpine -c "$work/hub.conf" >/dev/null
+docker run -d --name voice-nats-proof-hub --network "$network" --network-alias hub --network-alias wrong-sni -v "$work:$work" nats:2.12-alpine -c "$work/hub.conf" >/dev/null
 for _ in $(seq 1 30); do docker logs voice-nats-proof-hub 2>&1 | grep -q 'Server is ready' && break; sleep 1; done
 if ! docker logs voice-nats-proof-hub 2>&1 | grep -q 'Server is ready'; then
   echo 'FAIL: JWT resolver hub did not become ready' >&2
@@ -145,6 +149,23 @@ if ! grep -Eqi '(certificate|tls|x509).*(unknown|verify|failed|error)|tls.*(unkn
   exit 1
 fi
 docker rm -f voice-nats-proof-wrong-ca >/dev/null
+
+# This leaf trusts the issuing CA and has valid service credentials, but its
+# URL hostname is deliberately absent from the hub certificate SAN.
+docker run -d --name voice-nats-proof-wrong-sni --network "$network" -v "$work:$work:ro" nats:2.12-alpine -c "$work/wrong-sni-leaf.conf" >/dev/null
+wrong_sni_before="$(docker logs voice-nats-proof-wrong-sni 2>&1 || true)"
+for _ in $(seq 1 8); do
+  wrong_sni_logs="$(docker logs voice-nats-proof-wrong-sni 2>&1 || true)"
+  wrong_sni_delta="${wrong_sni_logs#"$wrong_sni_before"}"
+  grep -Eqi '(certificate|tls|x509).*(name|hostname|verify|failed|error)|tls.*(name|hostname|verify|failed|error)' <<<"$wrong_sni_delta" && break
+  sleep 1
+done
+if ! grep -Eqi '(certificate|tls|x509).*(name|hostname|verify|failed|error)|tls.*(name|hostname|verify|failed|error)' <<<"${wrong_sni_delta:-}"; then
+  echo 'FAIL: wrong-SNI leaf did not report a fresh TLS name rejection' >&2
+  printf '%s\n' "${wrong_sni_delta:-}" >&2
+  exit 1
+fi
+docker rm -f voice-nats-proof-wrong-sni >/dev/null
 
 # Only the Job credential may create the stream. Its reply subscription is an
 # exact credential-owned subject, never a broad _INBOX wildcard.
