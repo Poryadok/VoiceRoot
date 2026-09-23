@@ -59,11 +59,18 @@ func TestRenderPreloadsOnlyDistinctSignedAccounts(t *testing.T) {
 
 func TestRenderRejectsModifiedAccountSignature(t *testing.T) {
 	in := validInput(t)
-	replacement := "x"
-	if strings.HasSuffix(in.AppJWT, replacement) {
-		replacement = "y"
+	parts := strings.Split(in.AppJWT, ".")
+	if len(parts) != 3 || len(parts[2]) == 0 {
+		t.Fatal("fixture account JWT must have a signature")
 	}
-	in.AppJWT = in.AppJWT[:len(in.AppJWT)-1] + replacement
+	// Do not mutate the final base64url character: unused low bits can leave
+	// the decoded signature unchanged. Alter the first character instead.
+	replacement := byte('A')
+	if parts[2][0] == replacement {
+		replacement = 'B'
+	}
+	parts[2] = string(replacement) + parts[2][1:]
+	in.AppJWT = strings.Join(parts, ".")
 	if _, err := render(in); err == nil {
 		t.Fatal("modified account JWT signature must fail closed")
 	}
