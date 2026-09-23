@@ -61,7 +61,7 @@ sed -i 's|credentials: /var/run/nats/creds/__VOICE_SERVICE__\.creds|credentials:
 if "$CHECK" >"$temp_dir/wrong-credentials.out" 2>&1; then
   fail "wrong service credential mapping must fail"
 fi
-grep -Fq 'exact service credential mapping' "$temp_dir/wrong-credentials.out" || fail "credential rejection must explain its invariant"
+grep -Fq 'single service credential path' "$temp_dir/wrong-credentials.out" || fail "credential rejection must explain its invariant"
 cp "$temp_dir/template" "$TEMPLATE"
 
 sed -i 's|ca_file: /etc/nats/tls/ca\.crt|ca_file: /etc/nats/tls/wrong-ca.crt|' "$TEMPLATE"

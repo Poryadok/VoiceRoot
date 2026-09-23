@@ -26,7 +26,7 @@ func TestGenerateCreatesDistinctServiceCredentialsWithoutBroadJetStreamAPI(t *te
 		if err != nil {
 			t.Fatalf("decode %s claims: %v", name, err)
 		}
-		if got, want := claims.Permissions.Pub.Allow, fixtureACL().Services[name].Publish; strings.Join(got, ",") != strings.Join(want, ",") {
+		if got, want := claims.Pub.Allow, fixtureACL().Services[name].Publish; strings.Join(got, ",") != strings.Join(want, ",") {
 			t.Fatalf("%s publish grants = %v, want %v", name, got, want)
 		}
 	}
