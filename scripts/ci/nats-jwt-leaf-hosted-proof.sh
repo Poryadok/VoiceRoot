@@ -178,8 +178,8 @@ if ! docker logs voice-nats-proof-hub 2>&1 | grep -q 'Server is ready'; then
 fi
 
 # A valid service credential with an unrelated CA must never join the hub.
+wrong_ca_before=""
 docker run -d --name voice-nats-proof-wrong-ca --network "$network" -v "$work:$work:ro" nats:2.12-alpine -c "$work/wrong-ca-leaf.conf" >/dev/null
-wrong_ca_before="$(docker logs voice-nats-proof-wrong-ca 2>&1 || true)"
 for _ in $(seq 1 8); do
   wrong_ca_logs="$(docker logs voice-nats-proof-wrong-ca 2>&1 || true)"
   wrong_ca_delta="${wrong_ca_logs#"$wrong_ca_before"}"
@@ -195,8 +195,8 @@ docker rm -f voice-nats-proof-wrong-ca >/dev/null
 
 # This leaf trusts the issuing CA and has valid service credentials, but its
 # URL hostname is deliberately absent from the hub certificate SAN.
+wrong_sni_before=""
 docker run -d --name voice-nats-proof-wrong-sni --network "$network" -v "$work:$work:ro" nats:2.12-alpine -c "$work/wrong-sni-leaf.conf" >/dev/null
-wrong_sni_before="$(docker logs voice-nats-proof-wrong-sni 2>&1 || true)"
 for _ in $(seq 1 8); do
   wrong_sni_logs="$(docker logs voice-nats-proof-wrong-sni 2>&1 || true)"
   wrong_sni_delta="${wrong_sni_logs#"$wrong_sni_before"}"
@@ -212,8 +212,8 @@ docker rm -f voice-nats-proof-wrong-sni >/dev/null
 
 # Only the service JWT is corrupt here: CA and SNI are valid, so the fresh
 # failure must be authentication rather than a transport fallback.
+invalid_jwt_before=""
 docker run -d --name voice-nats-proof-invalid-jwt --network "$network" -v "$work:$work:ro" nats:2.12-alpine -c "$work/invalid-jwt-leaf.conf" >/dev/null
-invalid_jwt_before="$(docker logs voice-nats-proof-invalid-jwt 2>&1 || true)"
 for _ in $(seq 1 8); do
   invalid_jwt_logs="$(docker logs voice-nats-proof-invalid-jwt 2>&1 || true)"
   invalid_jwt_delta="${invalid_jwt_logs#"$invalid_jwt_before"}"
@@ -309,6 +309,8 @@ if docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18
   echo 'FAIL: drifted fixed durable was accepted as the canonical binding' >&2
   exit 1
 fi
+docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0 \
+  nats --server nats://127.0.0.1:4222 pub chat.created drift-proof >/dev/null
 if docker run --rm --network container:voice-nats-proof-chat -v "$root/src/backend/pkg:/repo:ro" -v "$work:$work:ro" golang:1.24-alpine \
   sh -ec "cd /repo && go run $work/leaf_receive.go ack" >/dev/null 2>&1; then
   echo 'FAIL: leaf consumed a drifted durable through the canonical target' >&2
@@ -361,10 +363,13 @@ for denied_js_subject in '$JS.API.CONSUMER.CREATE.chat_events.denied' '$JS.API.C
   leaf_log_before="$(docker logs voice-nats-proof-chat 2>&1 || true)"
   hub_log_before="$(docker logs voice-nats-proof-hub 2>&1 || true)"
   docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0 nats --server nats://127.0.0.1:4222 pub "$denied_js_subject" denied >/dev/null 2>&1 || true
-  sleep 1
-  leaf_logs="$(docker logs voice-nats-proof-chat 2>&1 || true)"
-  hub_logs="$(docker logs voice-nats-proof-hub 2>&1 || true)"
-  denial_log_delta="${leaf_logs#"$leaf_log_before"}"$'\n'"${hub_logs#"$hub_log_before"}"
+  for _ in $(seq 1 8); do
+    leaf_logs="$(docker logs voice-nats-proof-chat 2>&1 || true)"
+    hub_logs="$(docker logs voice-nats-proof-hub 2>&1 || true)"
+    denial_log_delta="${leaf_logs#"$leaf_log_before"}"$'\n'"${hub_logs#"$hub_log_before"}"
+    grep -Fq "$denied_js_subject" <<<"$denial_log_delta" && grep -Eqi 'permission.*(violation|denied)' <<<"$denial_log_delta" && break
+    sleep 1
+  done
   if ! grep -Fq "$denied_js_subject" <<<"$denial_log_delta" || ! grep -Eqi 'permission.*(violation|denied)' <<<"$denial_log_delta"; then
     echo "FAIL: chat leaf did not freshly deny $denied_js_subject" >&2; exit 1
   fi
