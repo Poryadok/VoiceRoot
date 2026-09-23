@@ -58,7 +58,8 @@ cat >"$work/hub.conf" <<EOF
 operator: $work/fixture/operator.jwt
 resolver: MEMORY
 resolver_preload: { $account: "$account_jwt" }
-jetstream { store_dir: "$work/js" }
+system_account: $account
+jetstream { store_dir: "/tmp/nats-js" }
 leafnodes {
   listen: 0.0.0.0:7422
   tls {
