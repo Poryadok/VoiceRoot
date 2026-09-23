@@ -39,6 +39,8 @@ for env in staging prod; do
   require 'tls.crt tls.key ca.crt' "$infra_apply" 'hub TLS preflight missing'
   require 'bootstrap.creds' "$infra_apply" 'bootstrap credential preflight missing'
   require 'voice-nats-service-credentials missing required' "$infra_apply" 'per-service credential preflight missing'
+  require 'openssl verify -CAfile' "$infra_apply" 'hub TLS chain preflight missing'
+  require '-checkhost voice-nats' "$infra_apply" 'hub TLS DNS SAN preflight missing'
   policy_line="$(grep -n 'network-policy-nats-hub.yaml' "$infra_apply" | head -1 | cut -d: -f1 || true)"
   hub_line="$(grep -n 'infra.yaml' "$infra_apply" | head -1 | cut -d: -f1 || true)"
   [ -n "$policy_line" ] && [ -n "$hub_line" ] && [ "$policy_line" -lt "$hub_line" ] || fail "direct-hub policy must precede hub apply in $env"

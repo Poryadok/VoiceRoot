@@ -83,6 +83,21 @@ for service in auth analytics bot chat file matchmaking messaging moderation not
   fi
 done
 
+verify_nats_hub_tls() (
+  umask 077
+  cert_file="$(mktemp)"
+  ca_file="$(mktemp)"
+  trap 'rm -f "${cert_file}" "${ca_file}"' EXIT
+  kubectl get secret voice-nats-hub-tls -n "${NS}" -o jsonpath='{.data.tls\.crt}' | base64 -d >"${cert_file}" 2>/dev/null
+  kubectl get secret voice-nats-hub-tls -n "${NS}" -o jsonpath='{.data.ca\.crt}' | base64 -d >"${ca_file}" 2>/dev/null
+  openssl verify -CAfile "${ca_file}" "${cert_file}" >/dev/null 2>&1 && \
+    openssl x509 -in "${cert_file}" -noout -checkhost voice-nats >/dev/null 2>&1 || {
+      echo "ERROR: voice-nats-hub-tls must form a trusted chain and include DNS SAN voice-nats" >&2
+      exit 1
+    }
+)
+verify_nats_hub_tls
+
 bash "${ROOT}/scripts/staging/patch-app-secrets-database-urls.sh"
 if [ -n "${STAGING_STAFF_TOKEN:-}" ]; then
   bash "${ROOT}/scripts/staging/patch-gateway-staff-token.sh"
