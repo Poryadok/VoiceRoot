@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -42,12 +41,9 @@ type JetStreamPublisher struct {
 	js nats.JetStreamContext
 	// Logger emits structured nats_publish lines; optional.
 	Logger *slog.Logger
-
-	ensureOnce sync.Once
-	ensureErr  error
 }
 
-// NewJetStreamPublisher connects to NATS and prepares JetStream for role.events.
+// NewJetStreamPublisher connects to the centrally provisioned JetStream service.
 func NewJetStreamPublisher(natsURL string) (*JetStreamPublisher, error) {
 	if natsURL == "" {
 		return nil, fmt.Errorf("empty NATS URL")
@@ -70,45 +66,6 @@ func NewJetStreamPublisher(natsURL string) (*JetStreamPublisher, error) {
 	return &JetStreamPublisher{nc: nc, js: js}, nil
 }
 
-func (p *JetStreamPublisher) ensureStream() error {
-	if p == nil || p.js == nil {
-		return fmt.Errorf("jetstream publisher not initialized")
-	}
-	p.ensureOnce.Do(func() {
-		subjects := []string{
-			subjectRoleCreated, subjectRoleUpdated, subjectRoleDeleted,
-			subjectRoleAssigned, subjectRoleRevoked,
-			subjectChatOverride, subjectChatOverrideRemoved,
-			subjectVoiceOverride, subjectVoiceOverrideRemoved,
-		}
-		if info, err := p.js.StreamInfo(streamName); err == nil {
-			for _, subj := range subjects {
-				if !streamHasSubject(info, subj) {
-					cfg := info.Config
-					cfg.Subjects = append(cfg.Subjects, subj)
-					_, p.ensureErr = p.js.UpdateStream(&cfg)
-					if p.ensureErr != nil {
-						return
-					}
-					info, p.ensureErr = p.js.StreamInfo(streamName)
-					if p.ensureErr != nil {
-						return
-					}
-				}
-			}
-			return
-		}
-		_, p.ensureErr = p.js.AddStream(&nats.StreamConfig{
-			Name:      streamName,
-			Subjects:  subjects,
-			Retention: nats.LimitsPolicy,
-			MaxAge:    7 * 24 * time.Hour,
-			Storage:   nats.FileStorage,
-		})
-	})
-	return p.ensureErr
-}
-
 // Close drains the NATS connection.
 func (p *JetStreamPublisher) Close() error {
 	if p == nil || p.nc == nil {
@@ -118,8 +75,8 @@ func (p *JetStreamPublisher) Close() error {
 }
 
 func (p *JetStreamPublisher) publish(ctx context.Context, subject string, payload roleEventPayload) error {
-	if err := p.ensureStream(); err != nil {
-		return err
+	if p == nil || p.js == nil {
+		return fmt.Errorf("jetstream publisher not initialized")
 	}
 	b, err := json.Marshal(payload)
 	if err != nil {
@@ -173,16 +130,4 @@ func (p *JetStreamPublisher) PublishVoiceOverrideSet(ctx context.Context, spaceI
 
 func (p *JetStreamPublisher) PublishVoiceOverrideRemoved(ctx context.Context, spaceID, voiceRoomID, roleID string) error {
 	return p.publish(ctx, subjectVoiceOverrideRemoved, roleEventPayload{SpaceID: spaceID, VoiceRoomID: voiceRoomID, RoleID: roleID})
-}
-
-func streamHasSubject(info *nats.StreamInfo, subject string) bool {
-	if info == nil {
-		return false
-	}
-	for _, s := range info.Config.Subjects {
-		if s == subject {
-			return true
-		}
-	}
-	return false
 }

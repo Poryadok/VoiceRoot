@@ -5,18 +5,17 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/proto"
 
+	eventsv1 "voice.app/voice/events/v1"
 	"voice/backend/notification/internal/consumer"
 	"voice/backend/notification/internal/delivery"
 	"voice/backend/notification/internal/dispatch"
 	"voice/backend/notification/internal/push"
 	"voice/backend/notification/internal/store"
 	"voice/backend/pkg/natslog"
-	eventsv1 "voice.app/voice/events/v1"
 )
 
 const jsStreamStoryEvents = "story_events"
@@ -31,13 +30,7 @@ func runStoryEventsConsumer(
 	if tokens == nil || pusher == nil || strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("story notification consumer: missing deps")
 	}
-	nc, err := nats.Connect(natsURL,
-		nats.Name("voice-notification-story"),
-		nats.Timeout(10*time.Second),
-		nats.RetryOnFailedConnect(true),
-		nats.MaxReconnects(-1),
-		nats.ReconnectWait(time.Second),
-	)
+	nc, lost, err := connectNotificationConsumer(natsURL, "story")
 	if err != nil {
 		return fmt.Errorf("nats connect: %w", err)
 	}
@@ -67,25 +60,18 @@ func runStoryEventsConsumer(
 		consumer.JetStreamConsumeAck(msg, err)
 	}
 
-	sub, err := js.Subscribe("story.>", msgHandler,
-		nats.Durable(durable),
-		nats.BindStream(jsStreamStoryEvents),
-		nats.ManualAck(),
-	)
+	sub, err := bindPreprovisionedConsumer(js, jsStreamStoryEvents, durable, "story.>", "_INBOX.voice.notification.story", msgHandler, nats.ManualAck())
 	if err != nil {
-		sub, err = js.Subscribe("", msgHandler, nats.Bind(jsStreamStoryEvents, durable), nats.ManualAck())
-		if err != nil {
-			return fmt.Errorf("jetstream subscribe story.events: %w", err)
-		}
+		return fmt.Errorf("bind pre-provisioned story.events consumer %q: %w", durable, err)
 	}
+	markNotificationConsumerBound(ctx)
 	defer func() {
 		if err := sub.Unsubscribe(); err != nil && logger != nil {
 			logger.Warn("story.events unsubscribe failed", slog.String("error", err.Error()))
 		}
 	}()
 
-	<-ctx.Done()
-	return ctx.Err()
+	return waitForNotificationConsumer(ctx, lost, js, jsStreamStoryEvents, durable, "story.>", "_INBOX.voice.notification.story")
 }
 
 func routeStoryNotification(

@@ -4,7 +4,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 BOOTSTRAP="${ROOT}/docker/nats/realtime-bootstrap.sh"
 K8S_BOOTSTRAP="${ROOT}/deploy/templates/nats-realtime-bootstrap.yaml"
+NOTIFICATION_BOOTSTRAP="${ROOT}/docker/nats/notification-bootstrap.sh"
+K8S_NOTIFICATION_BOOTSTRAP="${ROOT}/deploy/templates/nats-notification-bootstrap.yaml"
 COMPOSE="${ROOT}/docker-compose.yml"
+MANIFEST="${ROOT}/deploy/nats/jetstream-publisher-streams.yaml"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 require() { grep -Fqx -- "$1" "$2" || fail "missing exact contract line in ${2#"${ROOT}/"}: $1"; }
@@ -15,11 +18,16 @@ cmp <(sed -n '/^    #!\/bin\/sh$/,$p' "$K8S_BOOTSTRAP" | sed '/^---$/,$d' | sed 
 
 for stream in \
   'stream message_events message.sent message.edited message.deleted message.read message.read_receipt_revoked message.reaction_added message.reaction_removed message.mention_added message.pinned message.unpinned message.forwarded message.delivery_ack' \
-  'stream chat_events chat.created chat.member_changed chat.dm_peer_deleted' \
+  'stream chat_events chat.created chat.member_changed chat.dm_peer_deleted space.tree_changed space.created voice.room_created voice.room_deleted space.invite_created space.member_joined space.member_left space.updated space.deleted' \
+  'stream file_events file.uploaded file.processed file.scan_infected file.expired file.downloaded' \
+  'stream moderation_events moderation.report_created moderation.sanction_applied moderation.appeal_submitted' \
+  'stream bot_events bot.registered bot.command_executed bot.webhook_delivered bot.webhook_failed' \
+  'stream subscription_events subscription.plan_started subscription.plan_cancelled subscription.plan_expired subscription.downgrade subscription.payment_success subscription.payment_failed subscription.space_pro_started subscription.space_pro_expired subscription.grace_reminder' \
+  'stream story_events story.created story.viewed story.reacted story.expired story.highlight_created story.lfp_created story.lfp_response' \
   'stream user_events user.account_deleted user.profile_created user.profile_updated user.profile_switched user.verified user.presence_changed user.game_detected user.settings_changed' \
   'stream social_events social.friend_request social.friend_accepted social.friend_removed social.user_blocked social.contacts_synced' \
   'stream role_events role.created role.updated role.deleted role.assigned role.revoked role.chat_override_set role.chat_override_removed role.voice_override_set role.voice_override_removed' \
-  "stream voice_events 'voice.>'" \
+  'stream voice_events voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined' \
   'stream matchmaking_events mm.search_started mm.search_cancelled mm.search_nudge mm.search_timeout mm.match_found mm.match_completed mm.rating_submitted mm.player_banned'; do
   require "$stream" "$BOOTSTRAP"
 done
@@ -37,6 +45,29 @@ done
 
 require '  nats-realtime-bootstrap:' "$COMPOSE"
 require '        condition: service_completed_successfully' "$COMPOSE"
+require '  - name: voice_events' "$MANIFEST"
+require '    subjects: [voice.call_incoming, voice.call_accepted, voice.call_declined, voice.call_missed, voice.call_ended, voice.state_changed, voice.screen_share_started, voice.screen_share_stopped, voice.call_started, voice.member_joined]' "$MANIFEST"
+require 'stream voice_events voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined' "$NOTIFICATION_BOOTSTRAP"
+cmp <(sed -n '/^    #!\/bin\/sh$/,$p' "$K8S_NOTIFICATION_BOOTSTRAP" | sed '/^---$/,$d' | sed 's/^    //') "$NOTIFICATION_BOOTSTRAP" \
+  || fail "Kubernetes notification bootstrap script must exactly match the Compose notification bootstrap script"
+grep -Fq '[(.config.subjects | sort), .config.storage, .config.retention, .config.max_age]' "$BOOTSTRAP" || fail "bootstrap must validate storage, retention and max age"
+if ! awk '
+  $1 == "stream" {
+    for (i = 3; i <= NF; i++) {
+      if ($i ~ /[*>]/ || ($i in owners && owners[$i] != $2)) {
+        exit 1
+      }
+      owners[$i] = $2
+    }
+  }
+' "$BOOTSTRAP"; then
+  fail "publisher streams must have disjoint, exact subjects"
+fi
+for service in social user matchmaking role voice; do
+  section="$(sed -n "/^  ${service}:$/,/^  [^ ]/p" "$COMPOSE")"
+  printf '%s\n' "$section" | grep -Fqx '      nats-realtime-bootstrap:' || fail "${service} must wait for central NATS bootstrap"
+  printf '%s\n' "$section" | grep -Fqx '        condition: service_completed_successfully' || fail "${service} bootstrap dependency must require success"
+done
 for manifest in "${ROOT}/deploy/staging/services.yaml" "${ROOT}/deploy/prod/services.yaml"; do
   require '              value: realtime-1' "$manifest"
 done

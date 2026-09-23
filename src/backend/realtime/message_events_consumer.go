@@ -215,6 +215,9 @@ func messageEventLogAttrs(data []byte) []slog.Attr {
 
 func subscribeMessageEvents(js nats.JetStreamContext, hub *wsHub, instanceID string, logger *slog.Logger) (*nats.Subscription, error) {
 	durable := consumerDurableName(instanceID)
+	if err := validateRealtimeConsumerConfig(js, jsStreamMessageEvents, durable, "message.>", realtimeConsumerDeliverSubject(instanceID, "message")); err != nil {
+		return nil, err
+	}
 	handler := func(msg *nats.Msg) {
 		consumeMessageEventMessage(msg, hub, logger, func(message *nats.Msg) error {
 			return message.Ack()

@@ -27,12 +27,16 @@ const (
 // JetStreamPublisher publishes ChatStreamEvent payloads to NATS JetStream.
 type JetStreamPublisher struct {
 	nc *nats.Conn
-	js nats.JetStreamContext
+	js jetStreamClient
 	// Logger emits structured nats_publish lines; optional.
 	Logger *slog.Logger
 
 	ensureOnce sync.Once
 	ensureErr  error
+}
+type jetStreamClient interface {
+	StreamInfo(string, ...nats.JSOpt) (*nats.StreamInfo, error)
+	PublishMsg(*nats.Msg, ...nats.PubOpt) (*nats.PubAck, error)
 }
 
 // NewJetStreamPublisher connects to NATS_URL, prepares JetStream handle, and lazily ensures stream chat_events
@@ -65,30 +69,36 @@ func (p *JetStreamPublisher) ensureStream() error {
 	}
 	p.ensureOnce.Do(func() {
 		info, err := p.js.StreamInfo(streamName)
-		if err == nil {
-			for _, subject := range info.Config.Subjects {
-				if subject == subjectDMPeerDeleted {
-					return
-				}
-			}
-			config := info.Config
-			config.Subjects = append(config.Subjects, subjectDMPeerDeleted)
-			_, p.ensureErr = p.js.UpdateStream(&config)
+		if err != nil {
+			p.ensureErr = fmt.Errorf("required JetStream stream %q is unavailable: %w", streamName, err)
 			return
 		}
-		_, p.ensureErr = p.js.AddStream(&nats.StreamConfig{
-			Name: streamName,
-			Subjects: []string{
-				subjectChatCreated,
-				subjectChatMemberChanged,
-				subjectDMPeerDeleted,
-			},
-			Retention: nats.LimitsPolicy,
-			MaxAge:    7 * 24 * time.Hour,
-			Storage:   nats.FileStorage,
-		})
+		p.ensureErr = validateBootstrappedStream(info)
 	})
 	return p.ensureErr
+}
+
+func chatEventStreamSubjects() []string {
+	return []string{
+		subjectChatCreated, subjectChatMemberChanged, subjectDMPeerDeleted,
+		"space.tree_changed", "space.created", "voice.room_created", "voice.room_deleted",
+		"space.invite_created", "space.member_joined", "space.member_left", "space.updated", "space.deleted",
+	}
+}
+func validateBootstrappedStream(info *nats.StreamInfo) error {
+	if info == nil || info.Config.Name != streamName || info.Config.Retention != nats.LimitsPolicy || info.Config.MaxAge != 7*24*time.Hour || info.Config.Storage != nats.FileStorage || len(info.Config.Subjects) != len(chatEventStreamSubjects()) {
+		return fmt.Errorf("required JetStream stream %q does not match bootstrap definition", streamName)
+	}
+	seen := map[string]struct{}{}
+	for _, s := range info.Config.Subjects {
+		seen[s] = struct{}{}
+	}
+	for _, s := range chatEventStreamSubjects() {
+		if _, ok := seen[s]; !ok {
+			return fmt.Errorf("required JetStream stream %q does not match bootstrap definition", streamName)
+		}
+	}
+	return nil
 }
 
 func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, env *eventsv1.ChatStreamEvent) error {

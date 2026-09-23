@@ -273,6 +273,14 @@ becoming a second in-app reminder and supplies the collapse key where supported.
 - **NATS** — получение событий для отправки уведомлений
 - **Realtime Service** — (через NATS) in-app delivery
 
+When `NATS_URL` is configured, `/health` returns ready only after all seven
+pre-provisioned Notification JetStream durables are bound with their exact
+filters, delivery targets, explicit acknowledgement, and deliver-new policies.
+A missing or drifted durable, connection loss, or a failed
+periodic consumer check clears readiness; the service retries the bind and
+recovers automatically after the central bootstrap restores the durable.
+Notification never creates or changes JetStream consumers at runtime.
+
 ## P3 Space lifecycle participant (target)
 
 Notification stores a durable lifecycle fence, exact imported Chat manifest
