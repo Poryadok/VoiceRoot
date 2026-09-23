@@ -1,0 +1,39 @@
+#!/bin/sh
+set -eu
+
+nats_url="${NATS_URL:?NATS_URL is required}"
+
+stream() {
+  name="$1"; shift
+  subjects="$(IFS=,; echo "$*")"
+  expected="$(printf '%s\n' "$@" | jq -R . | jq -sc 'sort')"
+  if info="$(nats --server "$nats_url" stream info "$name" --json 2>&1)"; then
+    actual="$(printf '%s' "$info" | jq -c '.config.subjects | sort')"
+    [ "$actual" = "$expected" ] || { echo "incompatible subjects for stream $name" >&2; exit 1; }
+    return
+  fi
+  printf '%s' "$info" | grep -qi 'stream not found' || { echo "$info" >&2; exit 1; }
+  nats --server "$nats_url" stream add "$name" --subjects "$subjects" --storage file --retention limits --max-age 7d --defaults
+}
+
+consumer() {
+  stream_name="$1"; durable="$2"; filter="$3"; target="$4"
+  if info="$(nats --server "$nats_url" consumer info "$stream_name" "$durable" --json 2>&1)"; then
+    actual="$(printf '%s' "$info" | jq -c '[.config.filter_subject, .config.deliver_subject, .config.ack_policy, .config.deliver_policy]')"
+    expected="$(jq -cn --arg filter "$filter" --arg target "$target" '[ $filter, $target, "explicit", "new" ]')"
+    [ "$actual" = "$expected" ] || { echo "incompatible consumer $stream_name/$durable" >&2; exit 1; }
+    return
+  fi
+  printf '%s' "$info" | grep -qi 'consumer not found' || { echo "$info" >&2; exit 1; }
+  nats --server "$nats_url" consumer add "$stream_name" "$durable" --filter "$filter" --target "$target" --ack explicit --deliver new --defaults
+}
+
+stream message_events message.sent message.edited message.deleted message.read message.read_receipt_revoked message.reaction_added message.reaction_removed message.mention_added message.pinned message.unpinned message.forwarded message.delivery_ack
+stream user_events user.account_deleted user.profile_created user.profile_updated user.profile_switched user.verified user.presence_changed user.game_detected user.settings_changed
+stream chat_events chat.created chat.member_changed chat.dm_peer_deleted
+stream user_profile_projection user.search_profile_projection
+
+consumer message_events search-indexer-message-v1 'message.>' _INBOX.voice.search.indexer.message
+consumer user_events search-indexer-user-v1 'user.>' _INBOX.voice.search.indexer.user
+consumer chat_events search-indexer-chat-v1 '>' _INBOX.voice.search.indexer.chat
+consumer user_profile_projection search-user-profile-projection-v1 user.search_profile_projection _INBOX.voice.search.user-projection

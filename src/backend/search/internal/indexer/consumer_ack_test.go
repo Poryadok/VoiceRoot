@@ -139,60 +139,19 @@ func TestJetStreamConsumeAck_PermanentSemanticPoisonTerminatesAndObservesIt(t *t
 	require.Contains(t, logs.String(), "outcome="+consumerOutcomeTerminalSemanticPoison)
 }
 
-func TestSearchConsumerConfigBoundsTransientRedelivery(t *testing.T) {
+func TestSearchConsumerDefinitionsAreFixed(t *testing.T) {
 	t.Parallel()
-	config := searchConsumerConfig("search_msg_v4_test", "message.>")
 
-	require.Equal(t, nats.AckExplicitPolicy, config.AckPolicy)
-	require.Equal(t, nats.DeliverNewPolicy, config.DeliverPolicy)
-	require.Equal(t, -1, config.MaxDeliver)
-	require.Equal(t, searchConsumerRetryBackoff, config.BackOff)
-}
-
-func TestReconcileSearchConsumerConfig_UpdatesDifferentBackoffBeforeBinding(t *testing.T) {
-	t.Parallel()
-	config := searchConsumerConfig("search_msg_v4_test", "message.>")
-	config.BackOff = []time.Duration{time.Second}
-
-	reconciled, update, err := reconcileSearchConsumerConfig(config, "message.>")
-
-	require.NoError(t, err)
-	require.True(t, update)
-	require.Equal(t, searchConsumerRetryBackoff, reconciled.BackOff)
-	require.Equal(t, searchConsumerMaxDeliver, reconciled.MaxDeliver)
-}
-
-func TestReconcileSearchConsumerConfig_RejectsIncompatibleConfigBeforeBinding(t *testing.T) {
-	t.Parallel()
-	config := searchConsumerConfig("search_msg_v4_test", "message.>")
-	config.AckPolicy = nats.AckNonePolicy
-
-	_, update, err := reconcileSearchConsumerConfig(config, "message.>")
-
-	require.Error(t, err)
-	require.False(t, update)
-}
-
-func TestPrepareThenBindSearchConsumer_IncompatibleConfigPreventsEarlyBinding(t *testing.T) {
-	t.Parallel()
-	bound := false
-
-	_, err := prepareThenBindSearchConsumer(
-		func() error { return errTestConsume },
-		func() (*nats.Subscription, error) {
-			bound = true
-			return nil, nil
-		},
-	)
-
-	require.Error(t, err)
-	require.False(t, bound)
+	require.Equal(t, "search-indexer-message-v1", jsDurableMessageEvents)
+	require.Equal(t, "search-indexer-user-v1", jsDurableUserEvents)
+	require.Equal(t, "search-indexer-chat-v1", jsDurableChatEvents)
 }
 
 func TestMessageEventsJetStreamSubjectPrefix(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, "message.>", jsSubjectMessageEvents)
-	require.Equal(t, "search_msg_v4_", jsDurableMessagePrefix)
+	require.Equal(t, "user.>", jsSubjectUserEvents)
+	require.Equal(t, ">", jsSubjectChatEvents)
 }
 
 func TestJetStreamTermAck_Terminates(t *testing.T) {

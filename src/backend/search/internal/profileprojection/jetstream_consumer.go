@@ -22,7 +22,13 @@ type CheckpointApplier interface {
 	ApplyAndCheckpoint(context.Context, *userv1.SearchProfileProjectionEvent, uint64) (ApplyResult, error)
 }
 
-func RunJetStreamConsumer(ctx context.Context, natsURL string, adapter CheckpointApplier) (err error) {
+func RunJetStreamConsumer(ctx context.Context, natsURL string, adapter CheckpointApplier, ready chan<- error) (err error) {
+	defer func() {
+		if ready != nil {
+			ready <- err
+			close(ready)
+		}
+	}()
 	if natsURL == "" || adapter == nil {
 		return fmt.Errorf("projection consumer requires NATS URL and store")
 	}
@@ -50,9 +56,15 @@ func RunJetStreamConsumer(ctx context.Context, natsURL string, adapter Checkpoin
 			return
 		}
 		_ = msg.Ack()
-	}, nats.BindStream(userProjectionStream), nats.Durable(userProjectionDurable), nats.ManualAck(), nats.AckExplicit())
+		// The projection durable is provisioned before Search starts. Bind-only
+		// prevents an application credential from creating or mutating consumers.
+	}, nats.Bind(userProjectionStream, userProjectionDurable), nats.ManualAck())
 	if err != nil {
 		return err
+	}
+	if ready != nil {
+		ready <- nil
+		ready = nil
 	}
 	<-ctx.Done()
 	return nil
