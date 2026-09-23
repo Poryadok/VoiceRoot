@@ -21,3 +21,18 @@ streams:
     retention: limits
     max_age: 168h
     storage: file
+  - name: bot_events
+    subjects: [bot.registered, bot.command_executed, bot.webhook_delivered, bot.webhook_failed]
+    retention: limits
+    max_age: 168h
+    storage: file
+  - name: subscription_events
+    subjects: [subscription.plan_started, subscription.plan_cancelled, subscription.plan_expired, subscription.downgrade, subscription.payment_success, subscription.payment_failed, subscription.space_pro_started, subscription.space_pro_expired, subscription.grace_reminder]
+    retention: limits
+    max_age: 168h
+    storage: file
+  - name: story_events
+    subjects: [story.created, story.viewed, story.reacted, story.expired, story.highlight_created, story.lfp_created, story.lfp_response]
+    retention: limits
+    max_age: 168h
+    storage: file
