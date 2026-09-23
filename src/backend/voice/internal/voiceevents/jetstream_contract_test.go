@@ -16,14 +16,6 @@ type recordingJetStream struct {
 	messages []*nats.Msg
 }
 
-func (r *recordingJetStream) StreamInfo(string, ...nats.JSOpt) (*nats.StreamInfo, error) {
-	return &nats.StreamInfo{Config: nats.StreamConfig{Name: streamName, Subjects: []string{"voice.>"}}}, nil
-}
-
-func (r *recordingJetStream) AddStream(*nats.StreamConfig, ...nats.JSOpt) (*nats.StreamInfo, error) {
-	return nil, nil
-}
-
 func (r *recordingJetStream) PublishMsg(message *nats.Msg, _ ...nats.PubOpt) (*nats.PubAck, error) {
 	r.messages = append(r.messages, message)
 	return &nats.PubAck{Stream: streamName, Sequence: uint64(len(r.messages))}, nil
@@ -103,14 +95,6 @@ func TestJetStreamPublisher_CompatibilityPublishFailureIsReturnedAfterLifecycleC
 }
 
 type failingJetStream struct{}
-
-func (failingJetStream) StreamInfo(string, ...nats.JSOpt) (*nats.StreamInfo, error) {
-	return &nats.StreamInfo{Config: nats.StreamConfig{Name: streamName, Subjects: []string{"voice.>"}}}, nil
-}
-
-func (failingJetStream) AddStream(*nats.StreamConfig, ...nats.JSOpt) (*nats.StreamInfo, error) {
-	return nil, nil
-}
 
 func (failingJetStream) PublishMsg(*nats.Msg, ...nats.PubOpt) (*nats.PubAck, error) {
 	return nil, nats.ErrDisconnected

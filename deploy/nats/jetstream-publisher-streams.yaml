@@ -1,0 +1,63 @@
+# Central, operator-applied bootstrap contract. Publisher workloads receive only
+# read/publish access and validate these exact stream definitions at runtime.
+streams:
+  - name: message_events
+    subjects: [message.sent, message.edited, message.deleted, message.read, message.read_receipt_revoked, message.reaction_added, message.reaction_removed, message.mention_added, message.pinned, message.unpinned, message.forwarded, message.delivery_ack]
+    retention: limits
+    max_age: 168h
+    storage: file
+  - name: chat_events
+    subjects: [chat.created, chat.member_changed, chat.dm_peer_deleted, space.tree_changed, space.created, voice.room_created, voice.room_deleted, space.invite_created, space.member_joined, space.member_left, space.updated, space.deleted]
+    retention: limits
+    max_age: 168h
+    storage: file
+  - name: file_events
+    subjects: [file.uploaded, file.processed, file.scan_infected, file.expired, file.downloaded]
+    retention: limits
+    max_age: 168h
+    storage: file
+  - name: moderation_events
+    subjects: [moderation.report_created, moderation.sanction_applied, moderation.appeal_submitted]
+    retention: limits
+    max_age: 168h
+    storage: file
+  - name: bot_events
+    subjects: [bot.registered, bot.command_executed, bot.webhook_delivered, bot.webhook_failed]
+    retention: limits
+    max_age: 168h
+    storage: file
+  - name: subscription_events
+    subjects: [subscription.plan_started, subscription.plan_cancelled, subscription.plan_expired, subscription.downgrade, subscription.payment_success, subscription.payment_failed, subscription.space_pro_started, subscription.space_pro_expired, subscription.grace_reminder]
+    retention: limits
+    max_age: 168h
+    storage: file
+  - name: story_events
+    subjects: [story.created, story.viewed, story.reacted, story.expired, story.highlight_created, story.lfp_created, story.lfp_response]
+    retention: limits
+    max_age: 168h
+    storage: file
+  - name: user_events
+    subjects: [user.account_deleted, user.profile_created, user.profile_updated, user.profile_switched, user.verified, user.presence_changed, user.game_detected, user.settings_changed]
+    retention: limits
+    max_age: 168h
+    storage: file
+  - name: social_events
+    subjects: [social.friend_request, social.friend_accepted, social.friend_removed, social.user_blocked, social.contacts_synced]
+    retention: limits
+    max_age: 168h
+    storage: file
+  - name: role_events
+    subjects: [role.created, role.updated, role.deleted, role.assigned, role.revoked, role.chat_override_set, role.chat_override_removed, role.voice_override_set, role.voice_override_removed]
+    retention: limits
+    max_age: 168h
+    storage: file
+  - name: voice_events
+    subjects: [voice.call_incoming, voice.call_accepted, voice.call_declined, voice.call_missed, voice.call_ended, voice.state_changed, voice.screen_share_started, voice.screen_share_stopped, voice.call_started, voice.member_joined]
+    retention: limits
+    max_age: 168h
+    storage: file
+  - name: matchmaking_events
+    subjects: [mm.search_started, mm.search_cancelled, mm.search_nudge, mm.search_timeout, mm.match_found, mm.match_completed, mm.rating_submitted, mm.player_banned]
+    retention: limits
+    max_age: 168h
+    storage: file

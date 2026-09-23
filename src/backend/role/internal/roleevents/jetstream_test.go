@@ -31,9 +31,24 @@ func startRoleJSTestServer(t *testing.T) *server.Server {
 	return s
 }
 
+func provisionRoleEventStream(t *testing.T, url string) {
+	t.Helper()
+	nc, err := nats.Connect(url)
+	require.NoError(t, err)
+	t.Cleanup(nc.Close)
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+	_, err = js.AddStream(&nats.StreamConfig{Name: streamName, Subjects: []string{
+		subjectRoleCreated, subjectRoleUpdated, subjectRoleDeleted, subjectRoleAssigned, subjectRoleRevoked,
+		subjectChatOverride, subjectChatOverrideRemoved, subjectVoiceOverride, subjectVoiceOverrideRemoved,
+	}})
+	require.NoError(t, err)
+}
+
 func TestJetStreamPublisher_OverrideRemovalRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	s := startRoleJSTestServer(t)
+	provisionRoleEventStream(t, s.ClientURL())
 	nc, err := nats.Connect(s.ClientURL())
 	require.NoError(t, err)
 	t.Cleanup(nc.Close)
@@ -78,20 +93,12 @@ func TestNewJetStreamPublisher_EmptyURL(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestStreamHasSubject_RoleEvents(t *testing.T) {
-	t.Parallel()
-	require.False(t, streamHasSubject(nil, subjectRoleCreated))
-	info := &nats.StreamInfo{Config: nats.StreamConfig{Subjects: []string{"other.event"}}}
-	require.False(t, streamHasSubject(info, subjectRoleAssigned))
-	info.Config.Subjects = append(info.Config.Subjects, subjectRoleAssigned)
-	require.True(t, streamHasSubject(info, subjectRoleAssigned))
-}
-
 // TestJetStreamPublisher_RoleCreatedRoundTrip documents role-service.md role.created on role.events.
 func TestJetStreamPublisher_RoleCreatedRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	s := startRoleJSTestServer(t)
 	url := s.ClientURL()
+	provisionRoleEventStream(t, url)
 
 	nc, err := nats.Connect(url)
 	require.NoError(t, err)
@@ -117,6 +124,7 @@ func TestJetStreamPublisher_RoleAssignedRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	s := startRoleJSTestServer(t)
 	url := s.ClientURL()
+	provisionRoleEventStream(t, url)
 
 	nc, err := nats.Connect(url)
 	require.NoError(t, err)
@@ -144,6 +152,7 @@ func TestJetStreamPublisher_ChatOverrideSetRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	s := startRoleJSTestServer(t)
 	url := s.ClientURL()
+	provisionRoleEventStream(t, url)
 
 	nc, err := nats.Connect(url)
 	require.NoError(t, err)
