@@ -29,7 +29,7 @@ func TestGenerateCreatesDistinctServiceCredentialsWithoutBroadJetStreamAPI(t *te
 		if got, want := claims.Pub.Allow, fixtureACL().Services[name].Publish; strings.Join(got, ",") != strings.Join(want, ",") {
 			t.Fatalf("%s publish grants = %v, want %v", name, got, want)
 		}
-		if claims.Permissions.Resp == nil || claims.Permissions.Resp.MaxMsgs != 16 {
+		if claims.Resp == nil || claims.Resp.MaxMsgs != 16 {
 			t.Fatalf("%s must have bounded request/reply permission", name)
 		}
 	}

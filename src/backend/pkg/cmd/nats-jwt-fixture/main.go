@@ -263,7 +263,7 @@ func applyGrant(claim *jwt.UserClaims, grant serviceACL) {
 	// JetStream INFO, bind and publish operations use an ephemeral reply inbox.
 	// Response permissions permit only replies to a request made by this user,
 	// avoiding a broad `_INBOX.>` subscription grant.
-	claim.Permissions.Resp = &jwt.ResponsePermission{MaxMsgs: 16, Expires: time.Second}
+	claim.Resp = &jwt.ResponsePermission{MaxMsgs: 16, Expires: time.Second}
 	if len(claim.Pub.Allow) == 0 {
 		claim.Pub.Deny = []string{">"}
 	}
