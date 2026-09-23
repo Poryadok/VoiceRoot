@@ -1,6 +1,13 @@
 FROM golang:1.26-alpine AS build
 WORKDIR /src/backend/pkg
 COPY src/backend/pkg/go.mod src/backend/pkg/go.sum ./
+# The shared pkg module has local replacements.  Preserve their declared
+# relative paths while resolving dependencies so this layer behaves like the
+# repository module rather than a partial Docker context.
+COPY src/backend/user/pb/voice/user/go.mod /src/backend/user/pb/voice/user/go.mod
+COPY src/backend/user/pb/voice/common/go.mod /src/backend/user/pb/voice/common/go.mod
+COPY src/backend/analytics/pb/voice/analytics/go.mod /src/backend/analytics/pb/voice/analytics/go.mod
+COPY src/backend/messaging/pb/voice/events/go.mod /src/backend/messaging/pb/voice/events/go.mod
 RUN go mod download
 COPY src/backend/pkg/ ./
 RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/nats-hub-config-renderer ./cmd/nats-hub-config-renderer
