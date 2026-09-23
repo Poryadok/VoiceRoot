@@ -60,7 +60,12 @@ resolver_preload: { $account: $work/fixture/account.jwt }
 jetstream { store_dir: "$work/js" }
 leafnodes {
   listen: 0.0.0.0:7422
-  tls { cert_file: "$work/cert.pem" key_file: "$work/key.pem" ca_file: "$work/cert.pem" handshake_first: true }
+  tls {
+    cert_file: "$work/cert.pem"
+    key_file: "$work/key.pem"
+    ca_file: "$work/cert.pem"
+    handshake_first: true
+  }
 }
 EOF
 cat >"$work/leaf.conf" <<EOF
@@ -70,7 +75,11 @@ leafnodes {
     urls: ["nats-leaf://hub:7422"]
     account: "\$G"
     credentials: "$work/fixture/creds/chat.creds"
-    tls { ca_file: "$work/cert.pem" server_name: "hub" handshake_first: true }
+    tls {
+      ca_file: "$work/cert.pem"
+      server_name: "hub"
+      handshake_first: true
+    }
   }]
 }
 EOF
