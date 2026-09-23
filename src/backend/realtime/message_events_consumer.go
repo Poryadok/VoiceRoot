@@ -220,7 +220,7 @@ func subscribeMessageEvents(js nats.JetStreamContext, hub *wsHub, instanceID str
 			return message.Ack()
 		})
 	}
-	sub, err := js.Subscribe("", handler, nats.Bind(jsStreamMessageEvents, durable), nats.ManualAck())
+	sub, err := js.Subscribe("message.>", handler, nats.Bind(jsStreamMessageEvents, durable), nats.ManualAck())
 	if err != nil {
 		return nil, fmt.Errorf("bind pre-provisioned message.events consumer %q: %w", durable, err)
 	}

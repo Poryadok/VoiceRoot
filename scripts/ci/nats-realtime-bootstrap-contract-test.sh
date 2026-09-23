@@ -19,19 +19,19 @@ for stream in \
   'stream user_events user.account_deleted user.profile_created user.profile_updated user.profile_switched user.verified user.presence_changed user.game_detected user.settings_changed' \
   'stream social_events social.friend_request social.friend_accepted social.friend_removed social.user_blocked social.contacts_synced' \
   'stream role_events role.created role.updated role.deleted role.assigned role.revoked role.chat_override_set role.chat_override_removed role.voice_override_set role.voice_override_removed' \
-  'stream voice_events voice.>' \
+  "stream voice_events 'voice.>'" \
   'stream matchmaking_events mm.search_started mm.search_cancelled mm.search_nudge mm.search_timeout mm.match_found mm.match_completed mm.rating_submitted mm.player_banned'; do
   require "$stream" "$BOOTSTRAP"
 done
 
 for consumer in \
-  'consumer message_events rt_realtime1_msg message.> _INBOX.voice.realtime1.message' \
-  'consumer chat_events rt_realtime1_chat chat.> _INBOX.voice.realtime1.chat' \
+  "consumer message_events rt_realtime1_msg 'message.>' _INBOX.voice.realtime1.message" \
+  "consumer chat_events rt_realtime1_chat 'chat.>' _INBOX.voice.realtime1.chat" \
   'consumer user_events rt_realtime1_user user.presence_changed _INBOX.voice.realtime1.user' \
   'consumer social_events rt_realtime1_social social.user_blocked _INBOX.voice.realtime1.social' \
-  'consumer role_events rt_realtime1_role role.> _INBOX.voice.realtime1.role' \
-  'consumer voice_events rt_realtime1_voice voice.> _INBOX.voice.realtime1.voice' \
-  'consumer matchmaking_events rt_realtime1_matchmaking mm.> _INBOX.voice.realtime1.matchmaking'; do
+  "consumer role_events rt_realtime1_role 'role.>' _INBOX.voice.realtime1.role" \
+  "consumer voice_events rt_realtime1_voice 'voice.>' _INBOX.voice.realtime1.voice" \
+  "consumer matchmaking_events rt_realtime1_matchmaking 'mm.>' _INBOX.voice.realtime1.matchmaking"; do
   require "$consumer" "$BOOTSTRAP"
 done
 

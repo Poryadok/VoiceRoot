@@ -35,7 +35,7 @@ func subscribeMatchmakingEvents(js nats.JetStreamContext, hub *wsHub, instanceID
 			natslog.LogConsume(logger, msg, slog.LevelWarn, "unknown matchmaking event payload")
 		}
 	}
-	sub, err := js.Subscribe("", handler, nats.Bind(jsStreamMatchmakingEvents, durable))
+	sub, err := js.Subscribe("mm.>", handler, nats.Bind(jsStreamMatchmakingEvents, durable))
 	if err != nil {
 		return nil, fmt.Errorf("bind pre-provisioned matchmaking.events consumer %q: %w", durable, err)
 	}

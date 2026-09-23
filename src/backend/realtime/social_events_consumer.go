@@ -56,7 +56,7 @@ func subscribeSocialEvents(js nats.JetStreamContext, hub *wsHub, instanceID stri
 			slog.String("account_id_b", accountB),
 		)
 	}
-	sub, err := js.Subscribe("", handler, nats.Bind(jsStreamSocialEvents, durable))
+	sub, err := js.Subscribe("social.user_blocked", handler, nats.Bind(jsStreamSocialEvents, durable))
 	if err != nil {
 		return nil, fmt.Errorf("bind pre-provisioned social.events consumer %q: %w", durable, err)
 	}

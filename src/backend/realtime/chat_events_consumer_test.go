@@ -184,6 +184,7 @@ func TestRunChatEventsConsumer_JetStreamToProfile(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errCh := make(chan error, 1)
+	preprovisionRealtimeConsumer(t, js, jsStreamChatEvents, chatConsumerDurableName("chat-test-inst"), "chat.>")
 	go func() { errCh <- runChatEventsConsumer(ctx, hub, natsURL, "chat-test-inst", nil) }()
 	time.Sleep(300 * time.Millisecond)
 

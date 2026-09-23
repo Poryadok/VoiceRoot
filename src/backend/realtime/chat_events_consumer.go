@@ -130,7 +130,7 @@ func subscribeChatEvents(js nats.JetStreamContext, hub *wsHub, instanceID string
 			}
 		}
 	}
-	sub, err := js.Subscribe("", handler, nats.Bind(jsStreamChatEvents, durable))
+	sub, err := js.Subscribe("chat.>", handler, nats.Bind(jsStreamChatEvents, durable))
 	if err != nil {
 		return nil, fmt.Errorf("bind pre-provisioned chat.events consumer %q: %w", durable, err)
 	}

@@ -95,7 +95,7 @@ func subscribeUserEvents(js nats.JetStreamContext, hub *wsHub, friends friendLis
 		natslog.LogConsume(logger, msg, slog.LevelInfo, "user presence event consumed", attrs...)
 		dispatchPresenceChangeToFriends(hub, friends, viewer, profileID, status, logger, natslog.RequestIDFromMsg(msg))
 	}
-	sub, err := js.Subscribe("", handler, nats.Bind(jsStreamUserEvents, durable))
+	sub, err := js.Subscribe("user.presence_changed", handler, nats.Bind(jsStreamUserEvents, durable))
 	if err != nil {
 		return nil, fmt.Errorf("bind pre-provisioned user.events consumer %q: %w", durable, err)
 	}

@@ -327,7 +327,7 @@ func subscribeVoiceEvents(js nats.JetStreamContext, hub *wsHub, instanceID strin
 			return message.Ack()
 		})
 	}
-	sub, err := js.Subscribe("", handler, nats.Bind(jsStreamVoiceEvents, durable), nats.ManualAck())
+	sub, err := js.Subscribe("voice.>", handler, nats.Bind(jsStreamVoiceEvents, durable), nats.ManualAck())
 	if err != nil {
 		return nil, fmt.Errorf("bind pre-provisioned voice.events consumer %q: %w", durable, err)
 	}
