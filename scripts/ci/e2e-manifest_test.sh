@@ -81,11 +81,12 @@ for i in "${!a1_expected[@]}"; do
     fail "a1_multi_account_gateway order drift at index ${i}: expected ${a1_expected[$i]}, got ${a1_actual[$i]}"
 done
 
-echo "== T055/T106/T107 Flutter A1 section is exact =="
+echo "== Flutter A1 profile handoff and pending-email section is exact =="
 profile_handoff_expected=(
   'test/t055_profile_switch_reconnect_inbox_e2e_live_test.dart'
   'test/t106_account_soft_delete_e2e_live_test.dart'
   'test/t107_folders_quick_access_e2e_live_test.dart'
+  'test/a1_pending_email_reentry_e2e_live_test.dart'
 )
 t055_output_file="$(mktemp)"
 t055_error_file="$(mktemp)"
@@ -101,7 +102,7 @@ fi
 mapfile -t profile_handoff_actual < "${t055_output_file}"
 rm -f "${t055_output_file}" "${t055_error_file}"
 [[ "${#profile_handoff_actual[@]}" -eq "${#profile_handoff_expected[@]}" ]] || \
-  fail "a1_flutter_profile_handoff must contain exactly three tests, got ${#profile_handoff_actual[@]}"
+  fail "a1_flutter_profile_handoff must contain exactly four tests, got ${#profile_handoff_actual[@]}"
 for i in "${!profile_handoff_expected[@]}"; do
   [[ "${profile_handoff_actual[$i]}" == "${profile_handoff_expected[$i]}" ]] || \
     fail "a1_flutter_profile_handoff order drift at index ${i}: expected ${profile_handoff_expected[$i]}, got ${profile_handoff_actual[$i]:-<empty>}"

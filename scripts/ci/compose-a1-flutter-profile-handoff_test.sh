@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Offline shim tests for the isolated T-055/T-106/T-107 Flutter A1 runner.
+# Offline shim tests for the isolated Flutter A1 runner.
 # No command here reaches Docker, Flutter, curl, or the network.
 set -euo pipefail
 
@@ -8,7 +8,8 @@ SCRIPT="$ROOT/scripts/ci/compose-a1-flutter-profile-handoff.sh"
 T055_TEST='test/t055_profile_switch_reconnect_inbox_e2e_live_test.dart'
 T106_TEST='test/t106_account_soft_delete_e2e_live_test.dart'
 T107_TEST='test/t107_folders_quick_access_e2e_live_test.dart'
-DEFAULT_MANIFEST_RESULT="$(printf '%s\n%s\n%s' "$T055_TEST" "$T106_TEST" "$T107_TEST")"
+PENDING_EMAIL_TEST='test/a1_pending_email_reentry_e2e_live_test.dart'
+DEFAULT_MANIFEST_RESULT="$(printf '%s\n%s\n%s\n%s' "$T055_TEST" "$T106_TEST" "$T107_TEST" "$PENDING_EMAIL_TEST")"
 REAL_BASH="${BASH:-$(command -v bash)}"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Isolated T-055/T-106/T-107 Flutter A1 proof. This runner owns one generated
+# Isolated Flutter A1 proof. This runner owns one generated
 # Compose project and never touches a caller's shared `voice` stack.
 set -euo pipefail
 
@@ -30,12 +30,14 @@ expected_flutter_tests=(
   'test/t055_profile_switch_reconnect_inbox_e2e_live_test.dart'
   'test/t106_account_soft_delete_e2e_live_test.dart'
   'test/t107_folders_quick_access_e2e_live_test.dart'
+  'test/a1_pending_email_reentry_e2e_live_test.dart'
 )
 if [[ "${#flutter_tests[@]}" -ne "${#expected_flutter_tests[@]}" ]] ||
   [[ "${flutter_tests[0]:-}" != "${expected_flutter_tests[0]}" ]] ||
   [[ "${flutter_tests[1]:-}" != "${expected_flutter_tests[1]}" ]] ||
-  [[ "${flutter_tests[2]:-}" != "${expected_flutter_tests[2]}" ]]; then
-  echo "a1_flutter_profile_handoff must contain exactly the ordered T055, T106, and T107 relative Dart test paths" >&2
+  [[ "${flutter_tests[2]:-}" != "${expected_flutter_tests[2]}" ]] ||
+  [[ "${flutter_tests[3]:-}" != "${expected_flutter_tests[3]}" ]]; then
+  echo "a1_flutter_profile_handoff must contain exactly the ordered T055, T106, T107, and pending-email relative Dart test paths" >&2
   exit 2
 fi
 
