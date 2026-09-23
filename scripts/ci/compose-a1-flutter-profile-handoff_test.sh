@@ -298,11 +298,9 @@ test/another_profile_test.dart' ;;
 done
 unset FAKE_MANIFEST_RESULT
 
-echo '== config/up/health and exactly three constrained Flutter tests =='
+echo '== config/up/health and exactly four constrained Flutter tests =='
 case_dir="$(new_case happy)"
-FAKE_REAL_SLEEP=true FAKE_HEALTH_MODE=delayed FAKE_MANIFEST_RESULT="$T055_TEST
-$T106_TEST
-$T107_TEST" run_runner "$case_dir"
+FAKE_REAL_SLEEP=true FAKE_HEALTH_MODE=delayed run_runner "$case_dir"
 assert_eq "$(cat "${case_dir}/rc")" 0
 assert_contains "${case_dir}/commands.log" 'compose.*<--profile> <app> <config> <--quiet>'
 assert_contains "${case_dir}/commands.log" "^make <-C> <${ROOT}> <flutter-windows-prefetch-sqlite3> <flutter-linux-prefetch-sqlite3>$"
@@ -321,11 +319,12 @@ flutter_count="$(grep -c '^flutter ' "${case_dir}/commands.log" || true)"
 assert_eq "$flutter_count" 1
 flutter_line="$(grep '^flutter ' "${case_dir}/commands.log")"
 mapfile -t flutter_dart_args < <(grep -oE '<test/[^>]+\.dart>' <<<"$flutter_line")
-assert_eq "${#flutter_dart_args[@]}" 3
+assert_eq "${#flutter_dart_args[@]}" 4
 assert_eq "${flutter_dart_args[0]}" "<${T055_TEST}>"
 assert_eq "${flutter_dart_args[1]}" "<${T106_TEST}>"
 assert_eq "${flutter_dart_args[2]}" "<${T107_TEST}>"
-assert_contains "${case_dir}/commands.log" "flutter cwd=.*/src/frontend.*<test>.*<${T055_TEST}>.*<${T106_TEST}>.*<${T107_TEST}>"
+assert_eq "${flutter_dart_args[3]}" "<${PENDING_EMAIL_TEST}>"
+assert_contains "${case_dir}/commands.log" "flutter cwd=.*/src/frontend.*<test>.*<${T055_TEST}>.*<${T106_TEST}>.*<${T107_TEST}>.*<${PENDING_EMAIL_TEST}>"
 assert_contains "${case_dir}/commands.log" 'flutter.*<--concurrency=1>'
 assert_contains "${case_dir}/commands.log" 'flutter.*<--dart-define=VOICE_RUN_LIVE_INTEGRATION=true>'
 assert_contains "${case_dir}/commands.log" 'flutter.*<--dart-define=VOICE_API_BASE_URL=http://127.0.0.1:25012>'
