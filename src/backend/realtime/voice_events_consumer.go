@@ -322,6 +322,9 @@ func voiceEventLogAttrs(data []byte) []slog.Attr {
 
 func subscribeVoiceEvents(js nats.JetStreamContext, hub *wsHub, instanceID string, logger *slog.Logger) (*nats.Subscription, error) {
 	durable := voiceConsumerDurableName(instanceID)
+	if err := validateRealtimeConsumerConfig(js, jsStreamVoiceEvents, durable, "voice.>", realtimeConsumerDeliverSubject(instanceID, "voice")); err != nil {
+		return nil, err
+	}
 	handler := func(msg *nats.Msg) {
 		consumeVoiceEventMessage(msg, hub, logger, func(message *nats.Msg) error {
 			return message.Ack()
