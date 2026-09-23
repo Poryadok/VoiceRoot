@@ -13,11 +13,39 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 work="$(mktemp -d)"
 network="voice-nats-proof-$RANDOM"
 cleanup() {
-  docker rm -f voice-nats-proof-hub voice-nats-proof-chat voice-nats-proof-bootstrap-reply >/dev/null 2>&1 || true
+  docker rm -f voice-nats-proof-hub voice-nats-proof-chat voice-nats-proof-bootstrap-reply voice-nats-proof-receive-one voice-nats-proof-receive-two >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
   rm -rf "$work"
 }
 trap cleanup EXIT
+
+cat >"$work/leaf_receive.go" <<'EOF'
+package main
+
+import (
+  "fmt"
+  "os"
+  "time"
+  "github.com/nats-io/nats.go"
+)
+
+func main() {
+  nc, err := nats.Connect("nats://127.0.0.1:4222")
+  if err != nil { panic(err) }
+  defer nc.Close()
+  sub, err := nc.SubscribeSync("_INBOX.voice.chat.proof")
+  if err != nil { panic(err) }
+  if err := nc.Flush(); err != nil { panic(err) }
+  msg, err := sub.NextMsg(10 * time.Second)
+  if err != nil { panic(err) }
+  meta, err := msg.Metadata()
+  if err != nil { panic(err) }
+  if len(os.Args) == 2 && os.Args[1] == "ack" {
+    if err := msg.AckSync(); err != nil { panic(err) }
+  }
+  fmt.Printf("stream=%s sequence=%d delivered=%d ack=%t\n", meta.Stream, meta.Sequence.Stream, meta.NumDelivered, len(os.Args) == 2 && os.Args[1] == "ack")
+}
+EOF
 
 cat >"$work/acl.yaml" <<'EOF'
 version: 1
@@ -135,9 +163,35 @@ if ! docker logs voice-nats-proof-chat 2>&1 | grep -Fq 'Server is ready'; then
   exit 1
 fi
 
+# Subscribe before the service publish, deliberately omit the first ACK, then
+# receive the same fixed durable delivery again and acknowledge it. The client
+# has no credentials and can reach NATS only through the chat leaf namespace.
+docker run -d --name voice-nats-proof-receive-one --network container:voice-nats-proof-chat \
+  -v "$root/src/backend/pkg:/repo:ro" -v "$work:$work:ro" golang:1.24-alpine \
+  sh -ec "cd /repo && go run $work/leaf_receive.go" >/dev/null
+sleep 2
+
 # This client has no credentials: its only path is the local leaf namespace.
 docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0 \
   nats --server nats://127.0.0.1:4222 pub chat.created proof >/dev/null
+docker wait voice-nats-proof-receive-one >/dev/null
+receive_one="$(docker logs voice-nats-proof-receive-one 2>&1)"
+if ! grep -Fqx 'stream=chat_events sequence=1 delivered=1 ack=false' <<<"$receive_one"; then
+  echo 'FAIL: fixed durable did not receive the first leaf publish unacknowledged' >&2
+  printf '%s\n' "$receive_one" >&2
+  exit 1
+fi
+sleep 2
+docker run -d --name voice-nats-proof-receive-two --network container:voice-nats-proof-chat \
+  -v "$root/src/backend/pkg:/repo:ro" -v "$work:$work:ro" golang:1.24-alpine \
+  sh -ec "cd /repo && go run $work/leaf_receive.go ack" >/dev/null
+docker wait voice-nats-proof-receive-two >/dev/null
+receive_two="$(docker logs voice-nats-proof-receive-two 2>&1)"
+if ! grep -Fqx 'stream=chat_events sequence=1 delivered=2 ack=true' <<<"$receive_two"; then
+  echo 'FAIL: fixed durable did not redeliver then acknowledge the leaf publish' >&2
+  printf '%s\n' "$receive_two" >&2
+  exit 1
+fi
 
 # Core publish success alone is not an authorization or persistence proof. The
 # bootstrap-only identity observes the exact JetStream stream state and proves
