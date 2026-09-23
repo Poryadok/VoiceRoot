@@ -22,15 +22,17 @@ pkg Go module:
 
 ```powershell
 cd src/backend/pkg
-go run ./cmd/nats-jwt-fixture C:\temp\voice-nats-fixture
+go run ./cmd/nats-jwt-fixture C:\temp\voice-nats-acl.yaml C:\temp\voice-nats-fixture
 ```
 
-The generator emits a disposable operator JWT, account JWT, distinct service
-`.creds` files, and `acl-intent.yaml`; it never prints private material. Its
-default ACL intent is deliberately narrow and non-activatable: every service
-has only its own `voice.<service>.>` namespace and no `$JS.API.>` permission.
-The activation PR must replace this placeholder intent with documented exact
-publish, subscribe, JetStream consumer, ACK, and stream-ownership grants.
+The ACL manifest is mandatory: it must enumerate every service plus the
+Job-only bootstrap identity and use exact Core and JetStream subjects. The
+generator rejects wildcards, `$JS.API.>`, duplicate subjects, and incomplete
+service sets. It emits a disposable operator JWT, account JWT, distinct
+service and bootstrap `.creds` files, and seed-free `acl-intent.yaml`; it never
+prints private material. The final activation supplies the reviewed manifest
+from the canonical publisher/consumer topology rather than granting a default
+per-service namespace.
 
 ## Disabled per-service leaf topology template
 

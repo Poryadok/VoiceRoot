@@ -11,23 +11,91 @@ import (
 
 	"github.com/nats-io/jwt/v2"
 	"github.com/nats-io/nkeys"
+	"gopkg.in/yaml.v3"
 )
 
 var serviceNames = []string{"analytics", "auth", "bot", "chat", "file", "gateway", "matchmaking", "messaging", "moderation", "notification", "realtime", "role", "search", "social", "space", "story", "subscription", "user", "voice"}
 
 func main() {
-	if len(os.Args) != 2 {
-		fmt.Fprintln(os.Stderr, "usage: nats-jwt-fixture DESTINATION")
+	if len(os.Args) != 3 {
+		fmt.Fprintln(os.Stderr, "usage: nats-jwt-fixture ACL_MANIFEST DESTINATION")
 		os.Exit(2)
 	}
-	if err := generate(os.Args[1]); err != nil {
+	acl, err := loadACL(os.Args[1])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "nats JWT fixture ACL is invalid")
+		os.Exit(1)
+	}
+	if err := generate(os.Args[2], acl); err != nil {
 		fmt.Fprintln(os.Stderr, "nats JWT fixture generation failed")
 		os.Exit(1)
 	}
 	fmt.Println("NATS JWT fixture generated")
 }
 
-func generate(dest string) error {
+type serviceACL struct {
+	Publish   []string `yaml:"publish"`
+	Subscribe []string `yaml:"subscribe"`
+}
+
+type aclDocument struct {
+	Version   int                   `yaml:"version"`
+	Services  map[string]serviceACL `yaml:"services"`
+	Bootstrap serviceACL            `yaml:"bootstrap"`
+}
+
+func loadACL(path string) (aclDocument, error) {
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		return aclDocument{}, err
+	}
+	var acl aclDocument
+	if err := yaml.Unmarshal(contents, &acl); err != nil {
+		return aclDocument{}, err
+	}
+	return acl, validateACL(acl)
+}
+
+func validateACL(acl aclDocument) error {
+	if acl.Version != 1 || len(acl.Services) != len(serviceNames) {
+		return errors.New("ACL must specify version one and every service exactly once")
+	}
+	for _, name := range serviceNames {
+		grant, ok := acl.Services[name]
+		if !ok {
+			return fmt.Errorf("ACL missing service %s", name)
+		}
+		if err := validateGrant(grant); err != nil {
+			return fmt.Errorf("ACL service %s: %w", name, err)
+		}
+	}
+	if err := validateGrant(acl.Bootstrap); err != nil {
+		return fmt.Errorf("ACL bootstrap: %w", err)
+	}
+	return nil
+}
+
+func validateGrant(grant serviceACL) error {
+	if len(grant.Publish) == 0 && len(grant.Subscribe) == 0 {
+		return errors.New("at least one permission is required")
+	}
+	seen := make(map[string]struct{}, len(grant.Publish)+len(grant.Subscribe))
+	for _, subject := range append(append([]string{}, grant.Publish...), grant.Subscribe...) {
+		if subject == "" || strings.ContainsAny(subject, " \t\r\n>*") || subject == "$JS.API.>" {
+			return fmt.Errorf("unsafe subject %q", subject)
+		}
+		if _, duplicate := seen[subject]; duplicate {
+			return fmt.Errorf("duplicate subject %q", subject)
+		}
+		seen[subject] = struct{}{}
+	}
+	return nil
+}
+
+func generate(dest string, acl aclDocument) error {
+	if err := validateACL(acl); err != nil {
+		return err
+	}
 	if _, err := os.Stat(dest); err == nil || !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("destination must not exist: %s", dest)
 	}
@@ -70,8 +138,9 @@ func generate(dest string) error {
 	}
 
 	var intent strings.Builder
-	intent.WriteString("# Generated fixture ACL intent. Activation must replace this with subject-specific grants.\nservices:\n")
+	intent.WriteString("# Generated from a reviewed exact ACL manifest; contains no seeds.\nservices:\n")
 	for _, name := range serviceNames {
+		grant := acl.Services[name]
 		user, err := nkeys.CreateUser()
 		if err != nil {
 			return err
@@ -79,9 +148,8 @@ func generate(dest string) error {
 		pub, _ := user.PublicKey()
 		claim := jwt.NewUserClaims(pub)
 		claim.Name = "voice-" + name
-		// Deliberately narrow placeholders: no general JetStream management grant.
-		claim.Pub.Allow = []string{"voice." + name + ".>"}
-		claim.Sub.Allow = []string{"voice." + name + ".>"}
+		claim.Pub.Allow = append([]string(nil), grant.Publish...)
+		claim.Sub.Allow = append([]string(nil), grant.Subscribe...)
 		userJWT, err := claim.Encode(account)
 		if err != nil {
 			return err
@@ -98,13 +166,48 @@ func generate(dest string) error {
 		if err := writeFile(filepath.Join(dest, "creds", name+".creds"), creds); err != nil {
 			return err
 		}
-		fmt.Fprintf(&intent, "  %s:\n    publish: [\"voice.%s.>\"]\n    subscribe: [\"voice.%s.>\"]\n", name, name, name)
+		writeIntent(&intent, name, grant)
 	}
+	if err := writeCredential(filepath.Join(dest, "creds", "bootstrap.creds"), "voice-nats-bootstrap", acl.Bootstrap, account); err != nil {
+		return err
+	}
+	intent.WriteString("bootstrap:\n")
+	writeIntent(&intent, "bootstrap", acl.Bootstrap)
 	if err := writeFile(filepath.Join(dest, "acl-intent.yaml"), intent.String()); err != nil {
 		return err
 	}
 	cleanup = false
 	return nil
+}
+
+func writeCredential(path, name string, grant serviceACL, account nkeys.KeyPair) error {
+	user, err := nkeys.CreateUser()
+	if err != nil {
+		return err
+	}
+	pub, _ := user.PublicKey()
+	claim := jwt.NewUserClaims(pub)
+	claim.Name = name
+	claim.Pub.Allow = append([]string(nil), grant.Publish...)
+	claim.Sub.Allow = append([]string(nil), grant.Subscribe...)
+	userJWT, err := claim.Encode(account)
+	if err != nil {
+		return err
+	}
+	seed, err := user.Seed()
+	if err != nil {
+		return err
+	}
+	creds := "-----BEGIN NATS USER JWT-----\n" + userJWT + "\n------END NATS USER JWT------\n\n" +
+		"************************* IMPORTANT *************************\n" +
+		"NKEY Seed printed below can be used to sign and prove identity.\n" +
+		"NKEYs are sensitive and should be treated as secrets.\n" +
+		"-----BEGIN USER NKEY SEED-----\n" + string(seed) + "\n------END USER NKEY SEED------\n"
+	return writeFile(path, creds)
+}
+
+func writeIntent(intent *strings.Builder, name string, grant serviceACL) {
+	fmt.Fprintf(intent, "  %s:\n    publish: %q\n    subscribe: %q\n", name, grant.Publish, grant.Subscribe)
 }
 
 func writeFile(path, contents string) error { return os.WriteFile(path, []byte(contents+"\n"), 0600) }
