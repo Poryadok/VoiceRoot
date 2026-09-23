@@ -73,6 +73,8 @@ services:
     depends_on:
       nats:
         condition: service_healthy
+      nats-realtime-bootstrap:
+        condition: service_completed_successfully
 
   clickhouse:
     profiles: ["app", "observability"]
