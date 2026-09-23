@@ -13,7 +13,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 work="$(mktemp -d)"
 network="voice-nats-proof-$RANDOM"
 cleanup() {
-  docker rm -f voice-nats-proof-hub voice-nats-proof-chat >/dev/null 2>&1 || true
+  docker rm -f voice-nats-proof-hub voice-nats-proof-chat voice-nats-proof-bootstrap-reply >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
   rm -rf "$work"
 }
@@ -45,7 +45,7 @@ services:
   voice: {publish: [proof.voice], subscribe: [proof.voice.delivery]}
 bootstrap:
   publish: ['$JS.API.STREAM.CREATE.chat_events', '$JS.API.STREAM.INFO.chat_events']
-  subscribe: [proof.bootstrap.delivery]
+  subscribe: [_INBOX.voice.bootstrap.reply]
 EOF
 
 (cd "$root/src/backend/pkg" && go run ./cmd/nats-jwt-fixture "$work/acl.yaml" "$work/fixture")
@@ -97,9 +97,13 @@ if ! docker logs voice-nats-proof-hub 2>&1 | grep -q 'Server is ready'; then
   exit 1
 fi
 
-# Only the Job credential may create the stream; this is a real resolver-authenticated request.
+# Only the Job credential may create the stream. Its reply subscription is an
+# exact credential-owned subject, never a broad _INBOX wildcard.
+docker run -d --name voice-nats-proof-bootstrap-reply --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
+  nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" sub --count 1 _INBOX.voice.bootstrap.reply >/dev/null
 docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
-  nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" req --raw '$JS.API.STREAM.CREATE.chat_events' '{"name":"chat_events","subjects":["chat.created"],"storage":"file","retention":"limits"}' >/dev/null
+  nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" pub --reply _INBOX.voice.bootstrap.reply '$JS.API.STREAM.CREATE.chat_events' '{"name":"chat_events","subjects":["chat.created"],"storage":"file","retention":"limits"}' >/dev/null
+docker wait voice-nats-proof-bootstrap-reply >/dev/null
 
 docker run -d --name voice-nats-proof-chat --network "$network" -v "$work:$work:ro" nats:2.12-alpine -c "$work/leaf.conf" >/dev/null
 sleep 3
