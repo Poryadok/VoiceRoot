@@ -133,11 +133,7 @@ func (c *accountDeletedDMConsumer) handleUserAccountDeleted(ctx context.Context,
 }
 
 func accountDeletedDurableName(instanceID string) string {
-	id := strings.TrimSpace(instanceID)
-	if id == "" {
-		id = "unknown"
-	}
-	return "chat_" + strings.ReplaceAll(id, "-", "") + "_account_deleted"
+	return "chat_account_deleted"
 }
 
 func accountDeletedDeliverySubject(durable string) string {
@@ -154,30 +150,22 @@ func accountDeletedConsumerConfig(durable string) *nats.ConsumerConfig {
 	}
 }
 
-// ensureAccountDeletedDurable creates the durable outside of Subscribe so
-// nats.go does not own its lifecycle. Existing legacy durables retain their
-// delivery subject and acknowledgement cursor; rebinding them is safe once
-// their contract is validated.
-func ensureAccountDeletedDurable(js nats.JetStreamContext, durable string) error {
+// validateAccountDeletedDurable verifies the centrally provisioned durable
+// before binding. Chat never has permission to create or mutate it.
+func validateAccountDeletedDurable(js nats.JetStreamContext, durable string) error {
 	info, err := js.ConsumerInfo(userEventsStreamName, durable)
-	if errors.Is(err, nats.ErrConsumerNotFound) {
-		if _, err := js.AddConsumer(userEventsStreamName, accountDeletedConsumerConfig(durable)); err != nil {
-			return fmt.Errorf("create user.account_deleted durable: %w", err)
-		}
-		return nil
-	}
 	if err != nil {
 		return fmt.Errorf("inspect user.account_deleted durable: %w", err)
 	}
-	if info.Config.Durable != durable ||
+	if info == nil || info.Stream != userEventsStreamName || info.Name != durable ||
+		info.Config.Durable != durable ||
 		info.Config.DeliverPolicy != nats.DeliverAllPolicy ||
 		info.Config.AckPolicy != nats.AckExplicitPolicy ||
 		info.Config.FilterSubject != userAccountDeletedSubject ||
-		info.Config.DeliverSubject == "" {
+		len(info.Config.FilterSubjects) != 0 ||
+		info.Config.DeliverGroup != "" ||
+		info.Config.DeliverSubject != accountDeletedDeliverySubject(durable) {
 		return fmt.Errorf("user.account_deleted durable %q has incompatible configuration", durable)
-	}
-	if _, err := js.UpdateConsumer(userEventsStreamName, &info.Config); err != nil {
-		return fmt.Errorf("update user.account_deleted durable: %w", err)
 	}
 	return nil
 }
@@ -324,7 +312,7 @@ func subscribeAccountDeletedConsumerWithContext(
 		return nil, fmt.Errorf("user.account_deleted consumer JetStream not configured")
 	}
 	durable := accountDeletedDurableName(instanceID)
-	if err := ensureAccountDeletedDurable(js, durable); err != nil {
+	if err := validateAccountDeletedDurable(js, durable); err != nil {
 		return nil, err
 	}
 	consumer := newAccountDeletedDMConsumer(profiles, targets, publisher, logger)

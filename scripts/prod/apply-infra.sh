@@ -81,6 +81,9 @@ kubectl wait --for=condition=complete job/voice-nats-realtime-bootstrap -n "${NS
 kubectl delete job voice-nats-notification-bootstrap -n "${NS}" --ignore-not-found
 sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/nats-notification-bootstrap.yaml" | kubectl apply -f -
 kubectl wait --for=condition=complete job/voice-nats-notification-bootstrap -n "${NS}" --timeout=120s
+kubectl delete job voice-nats-search-bootstrap -n "${NS}" --ignore-not-found
+sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/nats-search-bootstrap.yaml" | kubectl apply -f -
+kubectl wait --for=condition=complete job/voice-nats-search-bootstrap -n "${NS}" --timeout=120s
 
 sed -e "s|__VOICE_MINIO_IMAGE__|${MINIO_IMAGE}|g" \
     -e "s|__VOICE_MINIO_MC_IMAGE__|${MINIO_MC_IMAGE}|g" \

@@ -32,6 +32,13 @@ func startJSTestServer(t *testing.T) *server.Server {
 	if !s.ReadyForConnections(5 * time.Second) {
 		t.Fatal("nats server not ready")
 	}
+	nc, err := nats.Connect(s.ClientURL())
+	require.NoError(t, err)
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+	_, err = js.AddStream(&nats.StreamConfig{Name: streamName, Subjects: messageEventStreamSubjects(), Retention: nats.LimitsPolicy, MaxAge: 7 * 24 * time.Hour, Storage: nats.FileStorage})
+	require.NoError(t, err)
+	nc.Close()
 	t.Cleanup(func() { s.Shutdown() })
 	return s
 }

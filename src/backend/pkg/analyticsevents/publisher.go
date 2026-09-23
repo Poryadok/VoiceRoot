@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,6 +19,14 @@ import (
 )
 
 const streamName = "analytics_events"
+
+var analyticsStreamConfig = nats.StreamConfig{
+	Name:      streamName,
+	Subjects:  []string{"analytics.>"},
+	Retention: nats.LimitsPolicy,
+	MaxAge:    7 * 24 * time.Hour,
+	Storage:   nats.FileStorage,
+}
 
 // Publisher publishes analytics telemetry to analytics.* subjects.
 type Publisher interface {
@@ -38,9 +45,6 @@ type JetStreamPublisher struct {
 	js      nats.JetStreamContext
 	Logger  *slog.Logger
 	HashKey string
-
-	ensureOnce sync.Once
-	ensureErr  error
 }
 
 // NoopPublisher drops events.
@@ -73,6 +77,15 @@ func NewJetStreamPublisher(natsURL string) (*JetStreamPublisher, error) {
 		_ = nc.Drain()
 		return nil, fmt.Errorf("jetstream: %w", err)
 	}
+	info, err := js.StreamInfo(streamName)
+	if err != nil {
+		_ = nc.Drain()
+		return nil, fmt.Errorf("read deployment-owned analytics stream: %w", err)
+	}
+	if err := validateAnalyticsStream(info); err != nil {
+		_ = nc.Drain()
+		return nil, err
+	}
 	return &JetStreamPublisher{nc: nc, js: js}, nil
 }
 
@@ -82,22 +95,27 @@ func (p *JetStreamPublisher) Close() {
 	}
 }
 
-func (p *JetStreamPublisher) EnsureStream() error {
-	if p == nil || p.js == nil {
-		return fmt.Errorf("analytics publisher not initialized")
+func validateAnalyticsStream(info *nats.StreamInfo) error {
+	if info == nil || info.Config.Name != analyticsStreamConfig.Name ||
+		!sameAnalyticsSubjects(info.Config.Subjects, analyticsStreamConfig.Subjects) ||
+		info.Config.Retention != analyticsStreamConfig.Retention ||
+		info.Config.MaxAge != analyticsStreamConfig.MaxAge ||
+		info.Config.Storage != analyticsStreamConfig.Storage {
+		return fmt.Errorf("deployment-owned analytics stream does not match required contract")
 	}
-	p.ensureOnce.Do(func() {
-		if _, err := p.js.StreamInfo(streamName); err == nil {
-			return
+	return nil
+}
+
+func sameAnalyticsSubjects(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i, subject := range want {
+		if got[i] != subject {
+			return false
 		}
-		_, p.ensureErr = p.js.AddStream(&nats.StreamConfig{
-			Name:      streamName,
-			Subjects:  []string{"analytics.>"},
-			Retention: nats.LimitsPolicy,
-			MaxAge:    7 * 24 * time.Hour,
-		})
-	})
-	return p.ensureErr
+	}
+	return true
 }
 
 func (p *JetStreamPublisher) Publish(ctx context.Context, subject, sourceService, eventType string, props map[string]any) error {
@@ -111,9 +129,6 @@ func (p *JetStreamPublisher) PublishWithAccount(ctx context.Context, subject, so
 func (p *JetStreamPublisher) publishEvent(ctx context.Context, subject, sourceService, eventType, accountID, profileID string, props map[string]any) error {
 	if p == nil || p.js == nil {
 		return nil
-	}
-	if err := p.EnsureStream(); err != nil {
-		return err
 	}
 	propsJSON := "{}"
 	if len(props) > 0 {

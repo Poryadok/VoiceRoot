@@ -7,6 +7,7 @@ compose() { docker compose -p "$PROJECT" "$@"; }
 cleanup() { compose down -v --remove-orphans; }
 trap cleanup EXIT
 compose up -d --wait nats
+compose run --rm nats-realtime-bootstrap
 compose run --rm nats-notification-bootstrap
 compose run --rm nats-notification-bootstrap
 for spec in \

@@ -22,6 +22,7 @@ import (
 	"voice/backend/story/internal/jobs"
 	"voice/backend/story/internal/privacy"
 	"voice/backend/story/internal/store"
+	"voice/backend/story/internal/storyevents"
 
 	storyv1 "voice.app/voice/story/v1"
 )
@@ -65,6 +66,18 @@ func main() {
 		}
 		st := &store.StoryStore{Pool: pool}
 		svc := grpcsvc.NewStoryGRPC(st)
+		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
+			pub, err := storyevents.NewJetStreamPublisher(natsURL)
+			if err != nil {
+				log.Fatalf("story.events publisher: %v", err)
+			}
+			if err := pub.Validate(); err != nil {
+				log.Fatalf("story.events bootstrap: %v", err)
+			}
+			pub.Logger = logger
+			svc.Events = pub
+			defer func() { _ = pub.Close() }()
+		}
 		if mediaClient != nil {
 			svc.Files = mediaClient
 		}

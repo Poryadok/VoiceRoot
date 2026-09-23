@@ -29,7 +29,7 @@ type UserGRPC struct {
 	Presence *store.PresenceStore
 	// DNSResolver optional; nil uses system resolver.
 	DNSResolver DNSResolver
-	// Blocks optional Social S2S checker; nil skips block filtering (dev / tests).
+	// Blocks is the Social S2S checker; SearchProfiles fails closed when unavailable.
 	Blocks AccountBlockChecker
 	// SocialGraph optional Social S2S checker for privacy presence enforcement.
 	SocialGraph SocialGraphChecker

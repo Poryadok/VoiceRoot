@@ -17,6 +17,14 @@ const (
 	projectionSubject = "user.search_profile_projection"
 )
 
+var projectionStreamConfig = nats.StreamConfig{
+	Name:      projectionStream,
+	Subjects:  []string{projectionSubject},
+	Retention: nats.LimitsPolicy,
+	Storage:   nats.FileStorage,
+	MaxAge:    0,
+}
+
 // OutboxDispatcher publishes the exact bytes committed with User's authority
 // event. A durable PubAck is required before the row may be marked delivered.
 type OutboxDispatcher struct {
@@ -48,13 +56,39 @@ func NewOutboxDispatcher(profiles *store.ProfileStore, natsURL, owner string) (*
 		_ = nc.Drain()
 		return nil, nil, err
 	}
-	if _, err := js.StreamInfo(projectionStream); err != nil {
-		if _, err := js.AddStream(&nats.StreamConfig{Name: projectionStream, Subjects: []string{projectionSubject}, Retention: nats.LimitsPolicy, Storage: nats.FileStorage}); err != nil {
-			_ = nc.Drain()
-			return nil, nil, err
-		}
+	info, err := js.StreamInfo(projectionStream)
+	if err != nil {
+		_ = nc.Drain()
+		return nil, nil, fmt.Errorf("read deployment-owned projection stream: %w", err)
+	}
+	if err := validateProjectionStream(info); err != nil {
+		_ = nc.Drain()
+		return nil, nil, err
 	}
 	return &OutboxDispatcher{store: profiles, js: js, owner: owner}, nc, nil
+}
+
+func validateProjectionStream(info *nats.StreamInfo) error {
+	if info == nil || info.Config.Name != projectionStreamConfig.Name ||
+		!sameSubjects(info.Config.Subjects, projectionStreamConfig.Subjects) ||
+		info.Config.Retention != projectionStreamConfig.Retention ||
+		info.Config.Storage != projectionStreamConfig.Storage ||
+		info.Config.MaxAge != projectionStreamConfig.MaxAge {
+		return errors.New("deployment-owned projection stream does not match required contract")
+	}
+	return nil
+}
+
+func sameSubjects(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i, subject := range want {
+		if got[i] != subject {
+			return false
+		}
+	}
+	return true
 }
 
 // DispatchOnce preserves ordering by claiming one offset at a time. On any
