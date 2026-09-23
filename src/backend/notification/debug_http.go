@@ -11,8 +11,18 @@ import (
 )
 
 func notificationHTTPHandler(serviceName string) http.Handler {
+	return notificationHTTPHandlerWithReadiness(serviceName, nil)
+}
+
+func notificationHTTPHandlerWithReadiness(serviceName string, readiness *notificationConsumerReadiness) http.Handler {
 	mux := http.NewServeMux()
-	mux.Handle("/health", healthHandler(serviceName))
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		if !readiness.ready() {
+			http.Error(w, "notification JetStream consumers are not ready", http.StatusServiceUnavailable)
+			return
+		}
+		healthHandler(serviceName).ServeHTTP(w, r)
+	})
 	mux.HandleFunc("/debug/recorded-pushes", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			w.WriteHeader(http.StatusMethodNotAllowed)

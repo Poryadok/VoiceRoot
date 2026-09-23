@@ -29,7 +29,6 @@ func TestJetStreamPublisher_SearchCancelledPublishesProtoEnvelope(t *testing.T) 
 
 	capture := &captureJetStream{}
 	publisher := &JetStreamPublisher{js: capture}
-	publisher.ensureOnce.Do(func() {})
 
 	require.NoError(t, publisher.PublishSearchCancelled(context.Background(), sessionID, profileID))
 	require.NotNil(t, capture.msg)
@@ -58,7 +57,6 @@ func TestJetStreamPublisher_PlayerBannedPublishesDocumentedProtoEnvelope(t *test
 
 	capture := &captureJetStream{}
 	publisher := &JetStreamPublisher{js: capture}
-	publisher.ensureOnce.Do(func() {})
 
 	require.NoError(t, publisher.PublishPlayerBanned(context.Background(), PlayerBannedEvent{
 		ProfileID: profileID,

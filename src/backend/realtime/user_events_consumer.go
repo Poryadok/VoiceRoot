@@ -82,6 +82,9 @@ func userEventLogAttrs(data []byte) []slog.Attr {
 
 func subscribeUserEvents(js nats.JetStreamContext, hub *wsHub, friends friendLister, viewer presenceViewer, instanceID string, logger *slog.Logger) (*nats.Subscription, error) {
 	durable := userConsumerDurableName(instanceID)
+	if err := validateRealtimeConsumerConfig(js, jsStreamUserEvents, durable, "user.presence_changed", realtimeConsumerDeliverSubject(instanceID, "user")); err != nil {
+		return nil, err
+	}
 	handler := func(msg *nats.Msg) {
 		attrs := userEventLogAttrs(msg.Data)
 		if !strings.HasSuffix(msg.Subject, "user.presence_changed") && msg.Subject != "user.presence_changed" {

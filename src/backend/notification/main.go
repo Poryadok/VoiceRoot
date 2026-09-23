@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
@@ -52,6 +53,9 @@ func main() {
 	}
 
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
+	consumerCtx, stopConsumers := context.WithCancel(context.Background())
+	defer stopConsumers()
+	var consumerReadiness *notificationConsumerReadiness
 	var grpcSrv *grpc.Server
 	if dbURL != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
@@ -166,55 +170,29 @@ func main() {
 		_ = emailSender
 
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
-			go func() {
-				ctx, cancel := context.WithCancel(context.Background())
-				defer cancel()
-				if err := runStoryEventsConsumer(ctx, natsURL, tokenStore, storyPusher, logger); err != nil && logger != nil {
-					logger.Error("story.events consumer exited", slog.Any("error", err))
-				}
-			}()
-			go func() {
-				ctx, cancel := context.WithCancel(context.Background())
-				defer cancel()
-				if err := runMessageEventsConsumer(ctx, natsURL, tokenStore, chatLister, msgPusher, pushEnrich, logger); err != nil && logger != nil {
-					logger.Error("message.events consumer exited", slog.Any("error", err))
-				}
-			}()
-			go func() {
-				ctx, cancel := context.WithCancel(context.Background())
-				defer cancel()
-				if err := runMatchmakingEventsConsumer(ctx, natsURL, tokenStore, pusher, presenceChecker, policyLoader, logger); err != nil && logger != nil {
-					logger.Error("matchmaking.events consumer exited", slog.Any("error", err))
-				}
-			}()
-			go func() {
-				ctx, cancel := context.WithCancel(context.Background())
-				defer cancel()
-				if err := runVoiceEventsConsumer(ctx, natsURL, tokenStore, pusher, presenceChecker, policyLoader, logger); err != nil && logger != nil {
-					logger.Error("voice.events consumer exited", slog.Any("error", err))
-				}
-			}()
-			go func() {
-				ctx, cancel := context.WithCancel(context.Background())
-				defer cancel()
-				if err := runSocialEventsConsumer(ctx, natsURL, tokenStore, pusher, presenceChecker, policyLoader, logger); err != nil && logger != nil {
-					logger.Error("social.events consumer exited", slog.Any("error", err))
-				}
-			}()
-			go func() {
-				ctx, cancel := context.WithCancel(context.Background())
-				defer cancel()
-				if err := runModerationEventsConsumer(ctx, natsURL, tokenStore, pusher, presenceChecker, policyLoader, accountProfiles, logger); err != nil && logger != nil {
-					logger.Error("moderation.events consumer exited", slog.Any("error", err))
-				}
-			}()
-			go func() {
-				ctx, cancel := context.WithCancel(context.Background())
-				defer cancel()
-				if err := runSubscriptionEventsConsumer(ctx, natsURL, logger); err != nil && logger != nil {
-					logger.Error("subscription.events consumer exited", slog.Any("error", err))
-				}
-			}()
+			consumerReadiness = newNotificationConsumerReadiness("story", "message", "matchmaking", "voice", "social", "moderation", "subscription")
+			start := func(name string, run func(context.Context) error) {
+				go runNotificationConsumerLoop(consumerCtx, consumerReadiness, name, time.Second, run, logger)
+			}
+			start("story", func(ctx context.Context) error {
+				return runStoryEventsConsumer(ctx, natsURL, tokenStore, storyPusher, logger)
+			})
+			start("message", func(ctx context.Context) error {
+				return runMessageEventsConsumer(ctx, natsURL, tokenStore, chatLister, msgPusher, pushEnrich, logger)
+			})
+			start("matchmaking", func(ctx context.Context) error {
+				return runMatchmakingEventsConsumer(ctx, natsURL, tokenStore, pusher, presenceChecker, policyLoader, logger)
+			})
+			start("voice", func(ctx context.Context) error {
+				return runVoiceEventsConsumer(ctx, natsURL, tokenStore, pusher, presenceChecker, policyLoader, logger)
+			})
+			start("social", func(ctx context.Context) error {
+				return runSocialEventsConsumer(ctx, natsURL, tokenStore, pusher, presenceChecker, policyLoader, logger)
+			})
+			start("moderation", func(ctx context.Context) error {
+				return runModerationEventsConsumer(ctx, natsURL, tokenStore, pusher, presenceChecker, policyLoader, accountProfiles, logger)
+			})
+			start("subscription", func(ctx context.Context) error { return runSubscriptionEventsConsumer(ctx, natsURL, logger) })
 		}
 
 		lis, err := net.Listen("tcp", grpcListen)
@@ -248,7 +226,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:    httpAddr,
-		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(notificationHTTPHandler(serviceName), metricsReg), logger),
+		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(notificationHTTPHandlerWithReadiness(serviceName, consumerReadiness), metricsReg), logger),
 	}
 	httpserver.ApplyHTTPServerTimeouts(server)
 	errCh := make(chan error, 1)
@@ -265,6 +243,7 @@ func main() {
 			log.Fatal(err)
 		}
 	case <-stop:
+		stopConsumers()
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.ShutdownTimeoutFromEnv())
 		defer cancel()
 		if grpcSrv != nil {

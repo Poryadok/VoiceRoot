@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,10 +17,10 @@ import (
 )
 
 const (
-	streamName            = "matchmaking_events"
-	subjectSearchStarted  = "mm.search_started"
-	subjectSearchCancel   = "mm.search_cancelled"
-	subjectMatchFound     = "mm.match_found"
+	streamName             = "matchmaking_events"
+	subjectSearchStarted   = "mm.search_started"
+	subjectSearchCancel    = "mm.search_cancelled"
+	subjectMatchFound      = "mm.match_found"
 	subjectMatchCompleted  = "mm.match_completed"
 	subjectRatingSubmitted = "mm.rating_submitted"
 	subjectPlayerBanned    = "mm.player_banned"
@@ -79,11 +78,11 @@ type NoopPublisher struct{}
 func (NoopPublisher) PublishSearchStarted(context.Context, string, string, string, string, string) error {
 	return nil
 }
-func (NoopPublisher) PublishSearchCancelled(context.Context, string, string) error { return nil }
-func (NoopPublisher) PublishMatchFound(context.Context, MatchFoundEvent) error      { return nil }
-func (NoopPublisher) PublishMatchCompleted(context.Context, MatchCompletedEvent) error { return nil }
+func (NoopPublisher) PublishSearchCancelled(context.Context, string, string) error       { return nil }
+func (NoopPublisher) PublishMatchFound(context.Context, MatchFoundEvent) error           { return nil }
+func (NoopPublisher) PublishMatchCompleted(context.Context, MatchCompletedEvent) error   { return nil }
 func (NoopPublisher) PublishRatingSubmitted(context.Context, RatingSubmittedEvent) error { return nil }
-func (NoopPublisher) PublishPlayerBanned(context.Context, PlayerBannedEvent) error     { return nil }
+func (NoopPublisher) PublishPlayerBanned(context.Context, PlayerBannedEvent) error       { return nil }
 func (NoopPublisher) PublishSearchNudge(context.Context, string, string, string, string) error {
 	return nil
 }
@@ -97,12 +96,9 @@ type JetStreamPublisher struct {
 	nc     *nats.Conn
 	js     nats.JetStreamContext
 	Logger *slog.Logger
-
-	ensureOnce sync.Once
-	ensureErr  error
 }
 
-// NewJetStreamPublisher connects to NATS and prepares JetStream.
+// NewJetStreamPublisher connects to the centrally provisioned JetStream service.
 func NewJetStreamPublisher(natsURL string) (*JetStreamPublisher, error) {
 	if natsURL == "" {
 		return nil, fmt.Errorf("empty NATS URL")
@@ -125,37 +121,9 @@ func NewJetStreamPublisher(natsURL string) (*JetStreamPublisher, error) {
 	return &JetStreamPublisher{nc: nc, js: js}, nil
 }
 
-func (p *JetStreamPublisher) ensureStream() error {
+func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, env *eventsv1.MatchmakingStreamEvent) error {
 	if p == nil || p.js == nil {
 		return fmt.Errorf("jetstream publisher not initialized")
-	}
-	p.ensureOnce.Do(func() {
-		if _, err := p.js.StreamInfo(streamName); err == nil {
-			return
-		}
-		_, p.ensureErr = p.js.AddStream(&nats.StreamConfig{
-			Name: streamName,
-			Subjects: []string{
-				subjectSearchStarted,
-				subjectSearchCancel,
-				subjectSearchNudge,
-				subjectSearchTimeout,
-				"mm.match_found",
-				"mm.match_completed",
-				"mm.rating_submitted",
-				subjectPlayerBanned,
-			},
-			Retention: nats.LimitsPolicy,
-			MaxAge:    7 * 24 * time.Hour,
-			Storage:   nats.FileStorage,
-		})
-	})
-	return p.ensureErr
-}
-
-func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, env *eventsv1.MatchmakingStreamEvent) error {
-	if err := p.ensureStream(); err != nil {
-		return err
 	}
 	b, err := proto.Marshal(env)
 	if err != nil {
@@ -233,10 +201,10 @@ func (p *JetStreamPublisher) PublishRatingSubmitted(ctx context.Context, ev Rati
 		OccurredAt: timestamppb.New(time.Now().UTC()),
 		Payload: &eventsv1.MatchmakingStreamEvent_RatingSubmitted{
 			RatingSubmitted: &eventsv1.RatingSubmitted{
-				MatchId:         ev.MatchID,
-				RaterProfileId:  ev.RaterProfileID,
-				RatedProfileId:  ev.RatedProfileID,
-				Stars:           ev.Stars,
+				MatchId:        ev.MatchID,
+				RaterProfileId: ev.RaterProfileID,
+				RatedProfileId: ev.RatedProfileID,
+				Stars:          ev.Stars,
 			},
 		},
 	}

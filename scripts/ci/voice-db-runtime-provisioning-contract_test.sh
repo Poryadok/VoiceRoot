@@ -543,6 +543,41 @@ r23_contract_path_allowed() {
     "${TMP_DIR}/r23-fixed-delta"
 }
 
+# This R22.2 contract normally rejects Role and Voice runtime changes. These
+# exact publisher files are the bounded exception for central JetStream
+# bootstrap: they remove publisher-side stream administration and cannot grow
+# into a directory-level runtime allowance.
+identity_publisher_path_allowed() {
+  case "$1" in
+    src/backend/role/internal/roleevents/jetstream.go|\
+    src/backend/role/internal/roleevents/jetstream_test.go|\
+    src/backend/voice/internal/voiceevents/jetstream.go)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+for identity_publisher_path in \
+  src/backend/role/internal/roleevents/jetstream.go \
+  src/backend/role/internal/roleevents/jetstream_test.go \
+  src/backend/voice/internal/voiceevents/jetstream.go; do
+  identity_publisher_path_allowed "${identity_publisher_path}" || {
+    printf 'F13 oracle bug: exact identity publisher path was rejected: %s\n' "${identity_publisher_path}" >&2
+    exit 2
+  }
+done
+for identity_publisher_path in \
+  src/backend/role/internal/roleevents/jetstream.go.near-match \
+  src/backend/role/internal/roleevents/publisher.go \
+  src/backend/voice/internal/voiceevents/jetstream_test.go \
+  src/backend/voice/internal/voiceevents/other.go; do
+  if identity_publisher_path_allowed "${identity_publisher_path}"; then
+    printf 'F13 oracle bug: non-publisher identity path was accepted: %s\n' "${identity_publisher_path}" >&2
+    exit 2
+  fi
+done
+
 r23_contract_path_authorized_in_delta \
   'protos/voice/auth/v1/auth.proto' \
   "${TMP_DIR}/r23-fixed-delta" || {
@@ -732,12 +767,13 @@ while IFS= read -r file; do
       fi
       ;;
     src/backend/space/*|src/backend/role/*)
-      if [[ "${r22_runtime_delta}" == true ]]; then
+      if [[ "${r22_runtime_delta}" == true ]] && ! identity_publisher_path_allowed "${file}"; then
         fail "F13: Space/Role change is outside R22.2: ${file}"
       fi
       ;;
     src/backend/voice/internal/grpcsvc/*.go|src/backend/voice/internal/store/*.go|src/backend/voice/internal/livekit/*.go|src/backend/voice/internal/s2s/*.go|src/backend/voice/internal/voiceevents/*.go)
-      [[ "${file}" == *_test.go ]] || fail "F13: handler/Redis/external adapter change activates forbidden scope: ${file}"
+      [[ "${file}" == *_test.go ]] || identity_publisher_path_allowed "${file}" || \
+        fail "F13: handler/Redis/external adapter change activates forbidden scope: ${file}"
       ;;
     src/backend/voice/internal/roomlifecycle/*.go)
       if [[ "${file}" != *_test.go ]]; then

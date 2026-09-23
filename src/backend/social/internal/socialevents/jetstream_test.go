@@ -41,6 +41,10 @@ func TestJetStreamPublisher_FriendRequestRoundTrip(t *testing.T) {
 	nc, err := nats.Connect(url)
 	require.NoError(t, err)
 	t.Cleanup(nc.Close)
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+	_, err = js.AddStream(&nats.StreamConfig{Name: streamName, Subjects: []string{subjectFriendRequest}})
+	require.NoError(t, err)
 
 	sub, err := nc.SubscribeSync(subjectFriendRequest)
 	require.NoError(t, err)
@@ -51,9 +55,9 @@ func TestJetStreamPublisher_FriendRequestRoundTrip(t *testing.T) {
 	t.Cleanup(func() { _ = pub.Close() })
 
 	const (
-		requestID  = "req-1"
-		requester  = "11111111-1111-4111-8111-111111111111"
-		target     = "22222222-2222-4222-8222-222222222222"
+		requestID = "req-1"
+		requester = "11111111-1111-4111-8111-111111111111"
+		target    = "22222222-2222-4222-8222-222222222222"
 	)
 	require.NoError(t, pub.PublishFriendRequest(ctx, requestID, requester, target))
 
