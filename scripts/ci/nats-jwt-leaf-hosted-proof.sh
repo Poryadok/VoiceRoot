@@ -126,10 +126,25 @@ fi
 docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0 \
   nats --server nats://127.0.0.1:4222 pub chat.created proof >/dev/null
 
-# Neighbouring subjects and all service-side mutation are rejected by the chat identity.
-if docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0 nats --server nats://127.0.0.1:4222 pub user.account_deleted denied >/dev/null 2>&1; then
-  echo 'FAIL: chat leaf published a neighbouring subject' >&2; exit 1
+# Core NATS publish permission failures are asynchronous, so `nats pub` can
+# exit successfully after the server has rejected the message. Require the
+# leaf's explicit permission violation rather than trusting that CLI status.
+docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0 \
+  nats --server nats://127.0.0.1:4222 pub user.account_deleted denied >/dev/null 2>&1 || true
+for attempt in {1..5}; do
+  leaf_logs="$(docker logs voice-nats-proof-chat 2>&1 || true)"
+  if grep -Eqi 'permission.*(violation|denied)' <<<"$leaf_logs" && grep -Fq 'user.account_deleted' <<<"$leaf_logs"; then
+    break
+  fi
+  sleep 1
+done
+if ! grep -Eqi 'permission.*(violation|denied)' <<<"$leaf_logs" || ! grep -Fq 'user.account_deleted' <<<"$leaf_logs"; then
+  echo 'FAIL: chat leaf did not log denial for neighbouring subject' >&2
+  printf '%s\n' "$leaf_logs" >&2
+  exit 1
 fi
+
+# Service-side mutation is also rejected by the chat identity.
 if docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0 nats --server nats://127.0.0.1:4222 req --raw '$JS.API.STREAM.CREATE.denied' '{"name":"denied"}' >/dev/null 2>&1; then
   echo 'FAIL: chat leaf mutated JetStream' >&2; exit 1
 fi
