@@ -54,8 +54,9 @@ func main() {
     if err != nil { panic(err) }
     redeliveryMeta, err := redelivery.Metadata()
     if err != nil { panic(err) }
-    if err := redelivery.AckSync(); err != nil { panic(err) }
     fmt.Printf("stream=%s sequence=%d delivered=%d ack=true\n", redeliveryMeta.Stream, redeliveryMeta.Sequence.Stream, redeliveryMeta.NumDelivered)
+    if err := redelivery.Ack(); err != nil { panic(err) }
+    if err := nc.Flush(); err != nil { panic(err) }
     return
   }
   if mode == "ack" {
@@ -354,6 +355,11 @@ if ! grep -Fqx 'stream=chat_events sequence=1 delivered=1 ack=false' <<<"$receiv
   docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" --inbox-prefix _INBOX.voice.bootstrap.reply consumer info chat_events proof_chat --json >&2 || true
   leaf_logs="$(docker logs voice-nats-proof-chat 2>&1 || true)"; hub_logs="$(docker logs voice-nats-proof-hub 2>&1 || true)"
   printf '%s\n%s\n' "${leaf_logs#"$redelivery_leaf_before"}" "${hub_logs#"$redelivery_hub_before"}" >&2
+  exit 1
+fi
+proof_after_ack="$(docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" --inbox-prefix _INBOX.voice.bootstrap.reply consumer info chat_events proof_chat --json)"
+if ! jq -e '.delivered.consumer_seq == 2 and .delivered.stream_seq == 1 and .ack_floor.consumer_seq == 2 and .ack_floor.stream_seq == 1 and .num_ack_pending == 0' <<<"$proof_after_ack" >/dev/null; then
+  echo 'FAIL: hub did not confirm the redelivered proof message acknowledged' >&2
   exit 1
 fi
 
