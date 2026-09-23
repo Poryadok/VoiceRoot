@@ -73,6 +73,8 @@ services:
     depends_on:
       nats:
         condition: service_healthy
+      nats-realtime-bootstrap:
+        condition: service_completed_successfully
 
   clickhouse:
     profiles: ["app", "observability"]
@@ -437,6 +439,8 @@ services:
         condition: service_completed_successfully
       nats:
         condition: service_healthy
+      nats-realtime-bootstrap:
+        condition: service_completed_successfully
       social:
         condition: service_healthy
       user:
@@ -476,6 +480,8 @@ services:
         condition: service_healthy
       nats:
         condition: service_healthy
+      nats-realtime-bootstrap:
+        condition: service_completed_successfully
       chat:
         condition: service_healthy
       social:
@@ -545,6 +551,8 @@ services:
         condition: service_completed_successfully
       user:
         condition: service_healthy
+      nats-realtime-bootstrap:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       interval: 5s
@@ -747,6 +755,8 @@ services:
         condition: service_healthy
       nats:
         condition: service_healthy
+      nats-realtime-bootstrap:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       interval: 5s
