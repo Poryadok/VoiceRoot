@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,8 +22,6 @@ const streamName = "voice_events"
 // publisher. Keeping it narrow lets the wire contract be tested without a
 // local NATS runtime.
 type jetStreamClient interface {
-	StreamInfo(string, ...nats.JSOpt) (*nats.StreamInfo, error)
-	AddStream(*nats.StreamConfig, ...nats.JSOpt) (*nats.StreamInfo, error)
 	PublishMsg(*nats.Msg, ...nats.PubOpt) (*nats.PubAck, error)
 }
 
@@ -33,9 +30,6 @@ type JetStreamPublisher struct {
 	js jetStreamClient
 	// Logger emits structured nats_publish lines; optional.
 	Logger *slog.Logger
-
-	ensureOnce sync.Once
-	ensureErr  error
 }
 
 func NewJetStreamPublisher(natsURL string) (*JetStreamPublisher, error) {
@@ -140,15 +134,9 @@ func (p *JetStreamPublisher) PublishVoiceMemberJoined(ctx context.Context, ev *e
 	})
 }
 
-// EnsureStream creates the voice_events JetStream stream if it does not exist yet.
-// Call at service startup so Realtime voice consumers can subscribe before the first call.
-func (p *JetStreamPublisher) EnsureStream() error {
-	return p.ensureStream()
-}
-
 func (p *JetStreamPublisher) publish(ctx context.Context, subject string, env *eventsv1.VoiceStreamEvent) error {
-	if err := p.ensureStream(); err != nil {
-		return err
+	if p == nil || p.js == nil {
+		return fmt.Errorf("jetstream publisher not initialized")
 	}
 	b, err := proto.Marshal(env)
 	if err != nil {
@@ -164,25 +152,6 @@ func (p *JetStreamPublisher) publish(ctx context.Context, subject string, env *e
 		slog.String("event_id", env.GetEventId()),
 	)
 	return nil
-}
-
-func (p *JetStreamPublisher) ensureStream() error {
-	if p == nil || p.js == nil {
-		return fmt.Errorf("jetstream publisher not initialized")
-	}
-	p.ensureOnce.Do(func() {
-		if _, err := p.js.StreamInfo(streamName); err == nil {
-			return
-		}
-		_, p.ensureErr = p.js.AddStream(&nats.StreamConfig{
-			Name:      streamName,
-			Subjects:  []string{"voice.>"},
-			Retention: nats.LimitsPolicy,
-			MaxAge:    7 * 24 * time.Hour,
-			Storage:   nats.FileStorage,
-		})
-	})
-	return p.ensureErr
 }
 
 func (p *JetStreamPublisher) Close() error {
