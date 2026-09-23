@@ -7,9 +7,12 @@ data:
   bootstrap.sh: |
     #!/bin/sh
     set -eu
+
     nats_url="${NATS_URL:?NATS_URL is required}"
+
     stream() {
-      name="$1"; shift; subjects="$(IFS=,; echo "$*")"
+      name="$1"; shift
+      subjects="$(IFS=,; echo "$*")"
       expected="$(printf '%s\n' "$@" | jq -R . | jq -sc 'sort')"
       if info="$(nats --server "$nats_url" req --raw "\$JS.API.STREAM.INFO.$name" "" 2>&1)"; then
         if printf '%s' "$info" | jq -e '.error' >/dev/null; then
@@ -24,6 +27,7 @@ data:
       fi
       nats --server "$nats_url" stream add "$name" --subjects "$subjects" --storage file --retention limits --max-age 7d --defaults
     }
+
     consumer() {
       stream_name="$1"; durable="$2"; filter="$3"; target="$4"
       if info="$(nats --server "$nats_url" req --raw "\$JS.API.CONSUMER.INFO.$stream_name.$durable" "" 2>&1)"; then
@@ -40,6 +44,7 @@ data:
       fi
       nats --server "$nats_url" consumer add "$stream_name" "$durable" --filter "$filter" --target "$target" --ack explicit --deliver new --defaults
     }
+
     stream message_events message.sent message.edited message.deleted message.read message.read_receipt_revoked message.reaction_added message.reaction_removed message.mention_added message.pinned message.unpinned message.forwarded message.delivery_ack
     stream matchmaking_events mm.search_started mm.search_cancelled mm.search_nudge mm.search_timeout mm.match_found mm.match_completed mm.rating_submitted mm.player_banned
     stream voice_events 'voice.>'
@@ -47,6 +52,7 @@ data:
     stream social_events social.friend_request social.friend_accepted social.friend_removed social.user_blocked social.contacts_synced
     stream subscription_events subscription.entitlement_changed
     stream moderation_events moderation.report_created moderation.sanction_applied moderation.appeal_submitted
+
     consumer message_events notif_msg_v2 'message.>' _INBOX.voice.notification.message
     consumer matchmaking_events notif_mm 'mm.>' _INBOX.voice.notification.matchmaking
     consumer voice_events notif_voice 'voice.>' _INBOX.voice.notification.voice
