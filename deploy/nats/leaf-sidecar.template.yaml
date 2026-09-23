@@ -44,6 +44,13 @@ spec:
   template:
     spec:
       containers:
+        # This is the only application-side NATS endpoint in the activation
+        # patch. It replaces the direct hub URL when this unselected template is
+        # deliberately bound to the matching service deployment.
+        - name: __VOICE_SERVICE__
+          env:
+            - name: NATS_URL
+              value: "nats://127.0.0.1:4222"
         - name: nats-leaf
           image: nats:2.12-alpine
           args: ["-c", "/etc/nats/leaf.conf"]

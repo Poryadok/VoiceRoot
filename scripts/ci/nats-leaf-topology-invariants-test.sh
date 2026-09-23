@@ -13,6 +13,8 @@ reject() { ! grep -Fq -- "$1" "$template" || fail "forbidden $2"; }
 
 require '__VOICE_SERVICE__' 'service identity placeholder'
 require 'nats://127.0.0.1:4222' 'loopback-only application URL'
+grep -A4 -F -- '- name: __VOICE_SERVICE__' "$template" | grep -Fq -- 'name: NATS_URL' || fail 'application NATS environment patch'
+grep -A5 -F -- '- name: __VOICE_SERVICE__' "$template" | grep -Fq -- 'value: "nats://127.0.0.1:4222"' || fail 'application loopback endpoint patch'
 require 'listen: 127.0.0.1:4222' 'loopback-only NATS client listener'
 require 'nats-leaf://__VOICE_NATS_HUB_HOST__:7422' 'TLS leaf hub endpoint'
 require 'ca_file: /etc/nats/tls/ca.crt' 'hub CA verification'
@@ -27,7 +29,7 @@ tr '\n' ' ' <"$template" | grep -Fiq 'fixed, centrally pre-provisioned consumers
 grep -Eq 'restart only (the )?nats-leaf sidecar' "$template" || fail 'missing credential rotation seam'
 reject '$JS.API.>' 'broad JetStream administration grant'
 reject 'insecure: true' 'insecure TLS verification'
-reject 'NATS_URL' 'live application NATS URL mutation'
+reject 'nats://voice-nats:4222' 'direct hub application endpoint'
 
 for target in docker-compose.yml deploy/staging deploy/prod; do
   ! grep -R -Fq -- 'leaf-sidecar.template.yaml' "${root}/${target}" 2>/dev/null || fail "selected by ${target}"
