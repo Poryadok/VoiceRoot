@@ -356,9 +356,38 @@ func waitComposeWSOp(
 	match func(map[string]any) bool,
 ) composeWSFrame {
 	t.Helper()
-	frame, err := waitComposeWSOpResult(conn, wantOp, timeout, match)
-	require.NoError(t, err)
-	return frame
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			break
+		}
+		_ = conn.SetReadDeadline(time.Now().Add(remaining))
+		var frame composeWSFrame
+		err := conn.ReadJSON(&frame)
+		if err != nil {
+			var netErr net.Error
+			if errors.As(err, &netErr) && netErr.Timeout() {
+				continue
+			}
+			t.Fatalf("read WS while waiting for op=%s: %v", wantOp, err)
+		}
+		if frame.Op != wantOp {
+			continue
+		}
+		if match == nil {
+			return frame
+		}
+		var data map[string]any
+		if len(frame.D) > 0 {
+			require.NoError(t, json.Unmarshal(frame.D, &data))
+		}
+		if match(data) {
+			return frame
+		}
+	}
+	t.Fatalf("timeout waiting for WS op=%s", wantOp)
+	return composeWSFrame{}
 }
 
 // waitComposeWSOpResult is safe to call from a goroutine because it returns
