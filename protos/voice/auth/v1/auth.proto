@@ -153,6 +153,9 @@ message AuthSession {
   string profile_id = 5;
   // regular | guest — mirrors JWT account_type claim.
   string account_type = 6;
+  // Present true: restricted pending email identity; present false: proven anonymous guest.
+  // Absent: legacy or unknown state. Consumers must preserve the distinction.
+  optional bool email_verification_required = 7;
 }
 
 message RegisterResponse {

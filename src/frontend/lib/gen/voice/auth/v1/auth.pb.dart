@@ -963,6 +963,7 @@ class AuthSession extends $pb.GeneratedMessage {
     $core.String? accountId,
     $core.String? profileId,
     $core.String? accountType,
+    $core.bool? emailVerificationRequired,
   }) {
     final result = create();
     if (accessToken != null) result.accessToken = accessToken;
@@ -971,6 +972,8 @@ class AuthSession extends $pb.GeneratedMessage {
     if (accountId != null) result.accountId = accountId;
     if (profileId != null) result.profileId = profileId;
     if (accountType != null) result.accountType = accountType;
+    if (emailVerificationRequired != null)
+      result.emailVerificationRequired = emailVerificationRequired;
     return result;
   }
 
@@ -993,6 +996,7 @@ class AuthSession extends $pb.GeneratedMessage {
     ..aOS(4, _omitFieldNames ? '' : 'accountId')
     ..aOS(5, _omitFieldNames ? '' : 'profileId')
     ..aOS(6, _omitFieldNames ? '' : 'accountType')
+    ..aOB(7, _omitFieldNames ? '' : 'emailVerificationRequired')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1068,6 +1072,17 @@ class AuthSession extends $pb.GeneratedMessage {
   $core.bool hasAccountType() => $_has(5);
   @$pb.TagNumber(6)
   void clearAccountType() => $_clearField(6);
+
+  /// Present true: restricted pending email identity; present false: proven anonymous guest.
+  /// Absent: legacy or unknown state. Consumers must preserve the distinction.
+  @$pb.TagNumber(7)
+  $core.bool get emailVerificationRequired => $_getBF(6);
+  @$pb.TagNumber(7)
+  set emailVerificationRequired($core.bool value) => $_setBool(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasEmailVerificationRequired() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearEmailVerificationRequired() => $_clearField(7);
 }
 
 class RegisterResponse extends $pb.GeneratedMessage {

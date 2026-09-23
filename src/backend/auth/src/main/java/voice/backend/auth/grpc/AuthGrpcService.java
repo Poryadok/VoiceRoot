@@ -615,14 +615,17 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
   }
 
   private AuthSession toProto(voice.backend.auth.service.AuthSession session) {
-    return AuthSession.newBuilder()
+    AuthSession.Builder builder = AuthSession.newBuilder()
         .setAccessToken(session.accessToken())
         .setRefreshToken(session.refreshToken())
         .setExpiresInSeconds(session.expiresInSeconds())
         .setAccountId(session.accountId())
         .setProfileId(session.profileId())
-        .setAccountType(session.accountType() == null ? "regular" : session.accountType())
-        .build();
+        .setAccountType(session.accountType() == null ? "regular" : session.accountType());
+    if (session.emailVerificationRequired() != null) {
+      builder.setEmailVerificationRequired(session.emailVerificationRequired());
+    }
+    return builder.build();
   }
 
   private TokenClaims toProto(voice.backend.auth.service.TokenClaims claims) {
