@@ -11,6 +11,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/proto"
 
+	eventsv1 "voice.app/voice/events/v1"
 	"voice/backend/notification/internal/consumer"
 	"voice/backend/notification/internal/delivery"
 	"voice/backend/notification/internal/dispatch"
@@ -18,7 +19,6 @@ import (
 	"voice/backend/notification/internal/push"
 	"voice/backend/notification/internal/store"
 	"voice/backend/pkg/natslog"
-	eventsv1 "voice.app/voice/events/v1"
 )
 
 const jsStreamVoiceEvents = "voice_events"
@@ -98,16 +98,9 @@ func runVoiceEventsConsumer(
 		}
 	}
 
-	sub, err := js.Subscribe("voice.>", msgHandler,
-		nats.Durable(durable),
-		nats.BindStream(jsStreamVoiceEvents),
-		nats.ManualAck(),
-	)
+	sub, err := bindPreprovisionedConsumer(js, jsStreamVoiceEvents, durable, msgHandler, nats.ManualAck())
 	if err != nil {
-		sub, err = js.Subscribe("", msgHandler, nats.Bind(jsStreamVoiceEvents, durable), nats.ManualAck())
-		if err != nil {
-			return fmt.Errorf("jetstream subscribe voice.events: %w", err)
-		}
+		return fmt.Errorf("bind pre-provisioned voice.events consumer %q: %w", durable, err)
 	}
 	defer func() {
 		if err := sub.Unsubscribe(); err != nil && logger != nil {
@@ -213,12 +206,12 @@ func routeVoiceNotification(
 				Title: "Voice room",
 				Body:  "Someone joined the voice room",
 				Data: map[string]string{
-					"type":               string(delivery.TypeVoiceMemberJoined),
-					"room_id":            ev.GetRoomId(),
-					"voice_room_id":      ev.GetVoiceRoomId(),
-					"space_id":           ev.GetSpaceId(),
-					"joined_profile_id":  ev.GetJoinedProfileId(),
-					"sender_profile_id":  ev.GetJoinedProfileId(),
+					"type":              string(delivery.TypeVoiceMemberJoined),
+					"room_id":           ev.GetRoomId(),
+					"voice_room_id":     ev.GetVoiceRoomId(),
+					"space_id":          ev.GetSpaceId(),
+					"joined_profile_id": ev.GetJoinedProfileId(),
+					"sender_profile_id": ev.GetJoinedProfileId(),
 				},
 			},
 		}, nil

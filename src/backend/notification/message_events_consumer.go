@@ -74,16 +74,9 @@ func runMessageEventsConsumer(
 		consumer.JetStreamConsumeAck(msg, err)
 	}
 
-	sub, err := js.Subscribe(jsSubjectMessageEvents, msgHandler,
-		nats.Durable(durable),
-		nats.BindStream(jsStreamMessageEvents),
-		nats.ManualAck(),
-	)
+	sub, err := bindPreprovisionedConsumer(js, jsStreamMessageEvents, durable, msgHandler, nats.ManualAck())
 	if err != nil {
-		sub, err = js.Subscribe("", msgHandler, nats.Bind(jsStreamMessageEvents, durable), nats.ManualAck())
-		if err != nil {
-			return fmt.Errorf("jetstream subscribe message.events: %w", err)
-		}
+		return fmt.Errorf("bind pre-provisioned message.events consumer %q: %w", durable, err)
 	}
 	defer func() {
 		if err := sub.Unsubscribe(); err != nil && logger != nil {

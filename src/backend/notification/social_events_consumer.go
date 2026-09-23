@@ -11,6 +11,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/proto"
 
+	eventsv1 "voice.app/voice/events/v1"
 	"voice/backend/notification/internal/consumer"
 	"voice/backend/notification/internal/delivery"
 	"voice/backend/notification/internal/dispatch"
@@ -18,7 +19,6 @@ import (
 	"voice/backend/notification/internal/push"
 	"voice/backend/notification/internal/store"
 	"voice/backend/pkg/natslog"
-	eventsv1 "voice.app/voice/events/v1"
 )
 
 const jsStreamSocialEvents = "social_events"
@@ -83,16 +83,9 @@ func runSocialEventsConsumer(
 		}
 	}
 
-	sub, err := js.Subscribe("social.>", msgHandler,
-		nats.Durable(durable),
-		nats.BindStream(jsStreamSocialEvents),
-		nats.ManualAck(),
-	)
+	sub, err := bindPreprovisionedConsumer(js, jsStreamSocialEvents, durable, msgHandler, nats.ManualAck())
 	if err != nil {
-		sub, err = js.Subscribe("", msgHandler, nats.Bind(jsStreamSocialEvents, durable), nats.ManualAck())
-		if err != nil {
-			return fmt.Errorf("jetstream subscribe social.events: %w", err)
-		}
+		return fmt.Errorf("bind pre-provisioned social.events consumer %q: %w", durable, err)
 	}
 	defer func() {
 		if err := sub.Unsubscribe(); err != nil && logger != nil {

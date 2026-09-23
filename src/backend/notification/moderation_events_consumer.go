@@ -11,6 +11,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/proto"
 
+	eventsv1 "voice.app/voice/events/v1"
 	"voice/backend/notification/internal/consumer"
 	"voice/backend/notification/internal/delivery"
 	"voice/backend/notification/internal/dispatch"
@@ -19,7 +20,6 @@ import (
 	"voice/backend/notification/internal/s2s"
 	"voice/backend/notification/internal/store"
 	"voice/backend/pkg/natslog"
-	eventsv1 "voice.app/voice/events/v1"
 )
 
 const jsStreamModerationEvents = "moderation_events"
@@ -92,16 +92,9 @@ func runModerationEventsConsumer(
 		}
 	}
 
-	sub, err := js.Subscribe("moderation.>", msgHandler,
-		nats.Durable(durable),
-		nats.BindStream(jsStreamModerationEvents),
-		nats.ManualAck(),
-	)
+	sub, err := bindPreprovisionedConsumer(js, jsStreamModerationEvents, durable, msgHandler, nats.ManualAck())
 	if err != nil {
-		sub, err = js.Subscribe("", msgHandler, nats.Bind(jsStreamModerationEvents, durable), nats.ManualAck())
-		if err != nil {
-			return fmt.Errorf("jetstream subscribe moderation.events: %w", err)
-		}
+		return fmt.Errorf("bind pre-provisioned moderation.events consumer %q: %w", durable, err)
 	}
 	defer func() {
 		if err := sub.Unsubscribe(); err != nil && logger != nil {
