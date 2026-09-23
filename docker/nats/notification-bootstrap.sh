@@ -40,7 +40,7 @@ consumer() {
 
 stream message_events message.sent message.edited message.deleted message.read message.read_receipt_revoked message.reaction_added message.reaction_removed message.mention_added message.pinned message.unpinned message.forwarded message.delivery_ack
 stream matchmaking_events mm.search_started mm.search_cancelled mm.search_nudge mm.search_timeout mm.match_found mm.match_completed mm.rating_submitted mm.player_banned
-stream voice_events 'voice.>'
+stream voice_events voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined
 stream story_events story.created story.viewed story.reacted story.expired story.highlight_created story.lfp_created story.lfp_response
 stream social_events social.friend_request social.friend_accepted social.friend_removed social.user_blocked social.contacts_synced
 stream subscription_events subscription.entitlement_changed

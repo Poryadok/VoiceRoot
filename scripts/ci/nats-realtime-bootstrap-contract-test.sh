@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 BOOTSTRAP="${ROOT}/docker/nats/realtime-bootstrap.sh"
 K8S_BOOTSTRAP="${ROOT}/deploy/templates/nats-realtime-bootstrap.yaml"
+NOTIFICATION_BOOTSTRAP="${ROOT}/docker/nats/notification-bootstrap.sh"
+K8S_NOTIFICATION_BOOTSTRAP="${ROOT}/deploy/templates/nats-notification-bootstrap.yaml"
 COMPOSE="${ROOT}/docker-compose.yml"
 MANIFEST="${ROOT}/deploy/nats/jetstream-publisher-streams.yaml"
 
@@ -45,6 +47,9 @@ require '  nats-realtime-bootstrap:' "$COMPOSE"
 require '        condition: service_completed_successfully' "$COMPOSE"
 require '  - name: voice_events' "$MANIFEST"
 require '    subjects: [voice.call_incoming, voice.call_accepted, voice.call_declined, voice.call_missed, voice.call_ended, voice.state_changed, voice.screen_share_started, voice.screen_share_stopped, voice.call_started, voice.member_joined]' "$MANIFEST"
+require 'stream voice_events voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined' "$NOTIFICATION_BOOTSTRAP"
+cmp <(sed -n '/^    #!\/bin\/sh$/,$p' "$K8S_NOTIFICATION_BOOTSTRAP" | sed '/^---$/,$d' | sed 's/^    //') "$NOTIFICATION_BOOTSTRAP" \
+  || fail "Kubernetes notification bootstrap script must exactly match the Compose notification bootstrap script"
 grep -Fq '[(.config.subjects | sort), .config.storage, .config.retention, .config.max_age]' "$BOOTSTRAP" || fail "bootstrap must validate storage, retention and max age"
 if ! awk '
   $1 == "stream" {
