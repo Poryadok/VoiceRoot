@@ -605,7 +605,6 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             ),
           ),
         ),
-        if (room.isLoading) const LinearProgressIndicator(minHeight: 2),
         if (ref.watch(reconnectBannerVisibleProvider))
           VoiceCompactBanner(
             key: ChatRoomPanel.reconnectBannerKey,
@@ -683,7 +682,11 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         Expanded(
           child: Stack(
             children: [
-              room.messages.isEmpty &&
+              room.isLoading &&
+                      room.messages.isEmpty &&
+                      ephemeralMessages.isEmpty
+                  ? const VoiceListSkeleton(rowCount: 4)
+                  : room.messages.isEmpty &&
                       ephemeralMessages.isEmpty &&
                       !room.isLoading
                   ? room.errorMessage != null
