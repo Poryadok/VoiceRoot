@@ -13,7 +13,7 @@ import (
 	"github.com/nats-io/nkeys"
 )
 
-var serviceNames = []string{"analytics", "auth", "chat", "file", "gateway", "matchmaking", "messaging", "moderation", "notification", "realtime", "role", "search", "space", "subscription", "user", "voice"}
+var serviceNames = []string{"analytics", "auth", "bot", "chat", "file", "gateway", "matchmaking", "messaging", "moderation", "notification", "realtime", "role", "search", "social", "space", "story", "subscription", "user", "voice"}
 
 func main() {
 	if len(os.Args) != 2 {
