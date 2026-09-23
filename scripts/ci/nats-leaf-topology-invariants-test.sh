@@ -38,7 +38,7 @@ active_credentials_lines="$(grep -Ec '^[[:space:]]*credentials[[:space:]]*:' "$t
 grep -Eq '^[[:space:]]*credentials[[:space:]]*:[[:space:]]*/var/run/nats/creds/__VOICE_SERVICE__\.creds[[:space:]]*$' "$template" || fail 'exact service credential mapping'
 active_ca_lines="$(grep -Ec '^[[:space:]]*ca_file[[:space:]]*:' "$template" || true)"
 [[ "$active_ca_lines" == "1" ]] || fail 'exactly one active hub CA mapping'
-active_sni_lines="$(grep -Ec '^[[:space:]]*server_name[[:space:]]*:' "$template" || true)"
+active_sni_lines="$(grep -Ec '^[[:space:]]*server_name[[:space:]]*:[[:space:]]*"__VOICE_NATS_HUB_SERVER_NAME__"[[:space:]]*$' "$template" || true)"
 [[ "$active_sni_lines" == "1" ]] || fail 'exactly one active hub SNI mapping'
 active_tls_first_lines="$(grep -Ec '^[[:space:]]*handshake_first[[:space:]]*:' "$template" || true)"
 [[ "$active_tls_first_lines" == "1" ]] || fail 'exactly one TLS-first leaf handshake'
