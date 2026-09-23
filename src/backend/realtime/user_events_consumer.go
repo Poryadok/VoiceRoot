@@ -123,6 +123,7 @@ func runUserEventsConsumer(ctx context.Context, hub *wsHub, friends friendLister
 	if err != nil {
 		return err
 	}
+	markRealtimeConsumerBound(ctx)
 	defer func() {
 		if err := sub.Unsubscribe(); err != nil && logger != nil {
 			logger.Warn("user.events unsubscribe failed", slog.String("error", err.Error()))

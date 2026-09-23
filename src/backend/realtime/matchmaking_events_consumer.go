@@ -63,6 +63,7 @@ func runMatchmakingEventsConsumer(ctx context.Context, hub *wsHub, natsURL, inst
 	if err != nil {
 		return err
 	}
+	markRealtimeConsumerBound(ctx)
 	defer func() {
 		if err := sub.Unsubscribe(); err != nil && logger != nil {
 			logger.Warn("matchmaking.events unsubscribe failed", slog.String("error", err.Error()))

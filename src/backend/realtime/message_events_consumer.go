@@ -270,6 +270,7 @@ func runMessageEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instance
 	if err != nil {
 		return err
 	}
+	markRealtimeConsumerBound(ctx)
 	defer func() {
 		if err := sub.Unsubscribe(); err != nil && logger != nil {
 			logger.Warn("message.events unsubscribe failed", slog.String("error", err.Error()))

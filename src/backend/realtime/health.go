@@ -18,8 +18,9 @@ type healthResponse struct {
 }
 
 type readinessDeps struct {
-	Redis   *redis.Client
-	NatsURL string
+	Redis     *redis.Client
+	NatsURL   string
+	Consumers *realtimeConsumerReadiness
 }
 
 func healthOnly(service string) http.Handler {
@@ -49,6 +50,9 @@ func readinessHandler(service string, deps readinessDeps) http.Handler {
 }
 
 func checkReadiness(ctx context.Context, deps readinessDeps) (status, reason string) {
+	if !deps.Consumers.ready() {
+		return "degraded", "jetstream_consumers_unready"
+	}
 	if deps.Redis != nil {
 		pctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 		err := deps.Redis.Ping(pctx).Err()

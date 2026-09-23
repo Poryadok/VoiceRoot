@@ -4,13 +4,20 @@ set -eu
 nats_url="${NATS_URL:?NATS_URL is required}"
 stream() {
   name="$1"; shift
+  subjects="$(IFS=,; echo "$*")"
   nats --server "$nats_url" stream info "$name" >/dev/null 2>&1 || \
-    nats --server "$nats_url" stream add "$name" --subjects "$@" --storage file --retention limits --max-age 7d --defaults
+    nats --server "$nats_url" stream add "$name" --subjects "$subjects" --storage file --retention limits --max-age 7d --defaults
 }
 consumer() {
   stream_name="$1"; durable="$2"; filter="$3"; target="$4"
-  nats --server "$nats_url" consumer info "$stream_name" "$durable" >/dev/null 2>&1 || \
-    nats --server "$nats_url" consumer add "$stream_name" "$durable" --filter "$filter" --target "$target" --ack explicit --deliver new --defaults
+  if info="$(nats --server "$nats_url" consumer info "$stream_name" "$durable" --json 2>/dev/null)"; then
+    printf '%s' "$info" | grep -Fq "\"filter_subject\": \"$filter\"" || { echo "incompatible filter for $stream_name/$durable" >&2; exit 1; }
+    printf '%s' "$info" | grep -Fq "\"deliver_subject\": \"$target\"" || { echo "incompatible delivery subject for $stream_name/$durable" >&2; exit 1; }
+    printf '%s' "$info" | grep -Fq '"ack_policy": "explicit"' || { echo "incompatible ack policy for $stream_name/$durable" >&2; exit 1; }
+    printf '%s' "$info" | grep -Fq '"deliver_policy": "new"' || { echo "incompatible deliver policy for $stream_name/$durable" >&2; exit 1; }
+    return
+  fi
+  nats --server "$nats_url" consumer add "$stream_name" "$durable" --filter "$filter" --target "$target" --ack explicit --deliver new --defaults
 }
 stream message_events message.sent message.edited message.deleted message.read message.read_receipt_revoked message.reaction_added message.reaction_removed message.mention_added message.pinned message.unpinned message.forwarded message.delivery_ack
 stream chat_events chat.created chat.member_changed chat.dm_peer_deleted

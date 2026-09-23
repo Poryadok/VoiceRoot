@@ -82,6 +82,7 @@ func runSocialEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instanceI
 	if err != nil {
 		return err
 	}
+	markRealtimeConsumerBound(ctx)
 	defer func() {
 		if err := sub.Unsubscribe(); err != nil && logger != nil {
 			logger.Warn("social.events unsubscribe failed", slog.String("error", err.Error()))

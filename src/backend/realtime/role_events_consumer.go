@@ -108,6 +108,7 @@ func runRoleEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instanceID 
 	if err != nil {
 		return err
 	}
+	markRealtimeConsumerBound(ctx)
 	defer func() { _ = sub.Unsubscribe() }()
 	<-ctx.Done()
 	return ctx.Err()
