@@ -1,0 +1,23 @@
+# Central, operator-applied bootstrap contract. Publisher workloads receive only
+# read/publish access and validate these exact stream definitions at runtime.
+streams:
+  - name: message_events
+    subjects: [message.sent, message.edited, message.deleted, message.read, message.read_receipt_revoked, message.reaction_added, message.reaction_removed, message.mention_added, message.pinned, message.unpinned, message.forwarded, message.delivery_ack]
+    retention: limits
+    max_age: 168h
+    storage: file
+  - name: chat_events
+    subjects: [chat.created, chat.member_changed, chat.dm_peer_deleted, space.tree_changed, space.created, voice.room_created, voice.room_deleted, space.invite_created, space.member_joined, space.member_left, space.updated, space.deleted]
+    retention: limits
+    max_age: 168h
+    storage: file
+  - name: file_events
+    subjects: [file.uploaded, file.processed, file.scan_infected, file.expired, file.downloaded]
+    retention: limits
+    max_age: 168h
+    storage: file
+  - name: moderation_events
+    subjects: [moderation.report_created, moderation.sanction_applied, moderation.appeal_submitted]
+    retention: limits
+    max_age: 168h
+    storage: file
