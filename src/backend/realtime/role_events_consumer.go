@@ -82,16 +82,9 @@ func subscribeRoleEvents(js nats.JetStreamContext, hub *wsHub, instanceID string
 			// A payload chat_id must never invent one.
 		}
 	}
-	sub, err := js.Subscribe("role.>", handler,
-		nats.Durable(durable),
-		nats.BindStream(jsStreamRoleEvents),
-		nats.DeliverNew(),
-	)
+	sub, err := js.Subscribe("", handler, nats.Bind(jsStreamRoleEvents, durable))
 	if err != nil {
-		sub, err = js.Subscribe("", handler, nats.Bind(jsStreamRoleEvents, durable))
-		if err != nil {
-			return nil, fmt.Errorf("jetstream subscribe role.events: %w", err)
-		}
+		return nil, fmt.Errorf("bind pre-provisioned role.events consumer %q: %w", durable, err)
 	}
 	return sub, nil
 }

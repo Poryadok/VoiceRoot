@@ -238,6 +238,7 @@ func TestSubscribeChatEvents_DmPeerDeletedTargetsRecipientProfile(t *testing.T) 
 	}); err != nil {
 		t.Fatal(err)
 	}
+	preprovisionRealtimeConsumer(t, js, jsStreamChatEvents, chatConsumerDurableName("dm-peer-deleted-test"), "chat.>")
 
 	hub := newWSHub()
 	chatID := uuid.NewString()
