@@ -154,6 +154,54 @@ void main() {
     );
 
     testWidgets(
+      'creating a second profile keeps the routed shell mounted while switching',
+      (tester) async {
+        final harness = _EntryHarness(
+          profiles: const [_primaryProfile],
+          useRealTheme: true,
+        );
+        _disposeHarnessAfterWidget(tester, harness);
+        await _pumpVoiceApp(tester, harness, const Size(1280, 800));
+
+        expect(find.byKey(DesktopShellRail.railKey), findsOneWidget);
+        await tester.tap(find.byKey(ProfileAvatarMenuButton.railKey));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Create profile').last);
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(CreateProfileSheet.displayNameFieldKey),
+          'Created profile',
+        );
+        await tester.tap(find.byKey(CreateProfileSheet.submitKey));
+        await _expectOnePausedCoordinatorTransition(
+          tester,
+          harness,
+          expectedProfileId: 'profile-created',
+        );
+
+        expect(find.byKey(DesktopShellRail.railKey), findsOneWidget);
+        expect(find.byKey(CreateProfileSheet.sheetKey), findsOneWidget);
+        await _completeCoordinatorTransition(tester, harness);
+        expect(find.byKey(DesktopShellRail.railKey), findsOneWidget);
+        expect(find.byKey(CreateProfileSheet.sheetKey), findsNothing);
+        expect(
+          tester
+              .widget<ProfileAvatarMenuButton>(
+                find.byKey(ProfileAvatarMenuButton.railKey),
+              )
+              .profile
+              ?.id,
+          'profile-created',
+        );
+        expect(
+          harness.container.read(authControllerProvider).activeProfileId,
+          'profile-created',
+        );
+        await _disposeMountedHarness(tester, harness);
+      },
+    );
+
+    testWidgets(
       'failed CreateProfileSheet keeps its picked avatar and never switches',
       (tester) async {
         final harness = _EntryHarness(
@@ -244,10 +292,7 @@ Future<void> _pumpVoiceApp(
   await tester.pumpAndSettle();
 }
 
-void _disposeHarnessAfterWidget(
-  WidgetTester tester,
-  _EntryHarness harness,
-) {
+void _disposeHarnessAfterWidget(WidgetTester tester, _EntryHarness harness) {
   addTearDown(harness.dispose);
 }
 
@@ -322,14 +367,22 @@ class _EntryHarness {
   _EntryHarness({
     this.profiles = const [_primaryProfile, _altProfile],
     this.rejectCreate = false,
+    this.useRealTheme = false,
   }) {
     final client = MockClient(_respond);
     storage = _MemoryAuthStorage(_primarySession);
     realtime = _PausedProfileSwitchRealtimeBoundary();
     container = ProviderContainer(
       overrides: [
-        ...voiceThemeTestOverrides(),
-        profileAccentStorageProvider.overrideWithValue(testProfileAccentStorage),
+        if (useRealTheme)
+          voiceTokenCatalogProvider.overrideWith(
+            (ref) async => testVoiceTokenCatalog,
+          )
+        else
+          ...voiceThemeTestOverrides(),
+        profileAccentStorageProvider.overrideWithValue(
+          testProfileAccentStorage,
+        ),
         authSessionStorageProvider.overrideWithValue(storage),
         guestCredentialsStorageProvider.overrideWithValue(
           InMemoryGuestCredentialsStorage(),
@@ -358,12 +411,14 @@ class _EntryHarness {
 
   final List<VoiceProfile> profiles;
   final bool rejectCreate;
+  final bool useRealTheme;
   late final ProviderContainer container;
   late final _MemoryAuthStorage storage;
   late final _PausedProfileSwitchRealtimeBoundary realtime;
   var authSwitchRequests = 0;
   var createRequests = 0;
   var avatarRequests = 0;
+  var profileCreated = false;
   var _disposed = false;
 
   Future<http.Response> _respond(http.Request request) async {
@@ -390,6 +445,7 @@ class _EntryHarness {
           403,
         );
       }
+      profileCreated = true;
       return http.Response(
         jsonEncode({'profile': _profileJson(_createdProfile)}),
         200,
@@ -398,7 +454,12 @@ class _EntryHarness {
     if (request.url.path == '/api/v1/users/profiles') {
       return http.Response(
         jsonEncode({
-          'profile_list': {'profiles': profiles.map(_profileJson).toList()},
+          'profile_list': {
+            'profiles': [
+              ...profiles,
+              if (profileCreated) _createdProfile,
+            ].map(_profileJson).toList(),
+          },
         }),
         200,
       );
