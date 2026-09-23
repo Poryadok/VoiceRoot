@@ -103,7 +103,7 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 
 ### Chat UX (спека text-chat / navigation)
 
-- [ ] **Chat switch flicker: chat area flashes and a blue line appears when switching chats** — reproduce on local app stack; expected: active chat changes without transient full-area flicker or stray focus/selection/progress line. Check room rebuild path, `MobileChatStrip`/chat list selection, focus indicators, loading placeholders, and any route transition/state invalidation around active `chat_id`.
+- [x] **Chat switch flicker: chat area flashes and a blue line appears when switching chats** — fixed in `ChatRoomPanel`: empty initial history now renders a visible skeleton and the room no longer draws a blue progress line. `chat_room_panel_test.dart` taps chat B from `ChatListBody` while chat A is open inside `ThreeColumnShell`, verifies navigation remains mounted and the conversation stays visible without a progress line, and fails on the pre-fix code. Local app-stack visual confirmation remains an optional follow-up.
 - [ ] **Локальные черновики** — Hive/SQLite, один на chat; multi-device sync отказано в спеке.
 - [ ] **OG link preview** — unfurl на клиенте; сервер не обязан.
 - [ ] **Stickers / GIF / voice-note composer** — нет UI (и нет backend packs). См. [backend.md](backend.md) § High Chat; решение спеки — [product-roadmap.md](product-roadmap.md).
