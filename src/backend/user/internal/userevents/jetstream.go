@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -37,9 +36,6 @@ type JetStreamPublisher struct {
 	nc     *nats.Conn
 	js     nats.JetStreamContext
 	Logger *slog.Logger
-
-	ensureOnce sync.Once
-	ensureErr  error
 }
 
 // AccountDeletionConsumer is the only User consumer of Auth's account-state
@@ -151,14 +147,13 @@ func (c *AccountDeletionConsumer) handle(ctx context.Context, message *nats.Msg)
 	return message.Ack()
 }
 
-// NewJetStreamPublisher connects to NATS_URL and prepares JetStream for user.events.
+// NewJetStreamPublisher connects to the centrally provisioned JetStream service.
 func NewJetStreamPublisher(natsURL string) (*JetStreamPublisher, error) {
 	return newJetStreamPublisher(natsURL)
 }
 
 // NewJetStreamConsumerConnection uses the dedicated credentials mounted for a
-// least-privilege account-deletion consumer. It deliberately does not call
-// ensureStream: stream administration is not a consumer permission.
+// least-privilege account-deletion consumer.
 func NewJetStreamConsumerConnection(natsURL, credentialsFile string) (*JetStreamPublisher, error) {
 	credentialsFile = strings.TrimSpace(credentialsFile)
 	if credentialsFile == "" {
@@ -190,64 +185,9 @@ func newJetStreamPublisher(natsURL string, options ...nats.Option) (*JetStreamPu
 	return &JetStreamPublisher{nc: nc, js: js}, nil
 }
 
-func (p *JetStreamPublisher) ensureStream() error {
+func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, env *eventsv1.UserStreamEvent) error {
 	if p == nil || p.js == nil {
 		return fmt.Errorf("jetstream publisher not initialized")
-	}
-	p.ensureOnce.Do(func() {
-		subjects := []string{
-			subjectAccountDeleted,
-			subjectProfileCreated,
-			subjectProfileUpdated,
-			subjectProfileSwitched,
-			subjectProfileVerified,
-			subjectPresenceChanged,
-			subjectGameDetected,
-			subjectSettingsChanged,
-		}
-		if info, err := p.js.StreamInfo(streamName); err == nil {
-			for _, subj := range subjects {
-				if !streamHasSubject(info, subj) {
-					cfg := info.Config
-					cfg.Subjects = append(cfg.Subjects, subj)
-					_, p.ensureErr = p.js.UpdateStream(&cfg)
-					if p.ensureErr != nil {
-						return
-					}
-					info, p.ensureErr = p.js.StreamInfo(streamName)
-					if p.ensureErr != nil {
-						return
-					}
-				}
-			}
-			return
-		}
-		_, p.ensureErr = p.js.AddStream(&nats.StreamConfig{
-			Name:      streamName,
-			Subjects:  subjects,
-			Retention: nats.LimitsPolicy,
-			MaxAge:    7 * 24 * time.Hour,
-			Storage:   nats.FileStorage,
-		})
-	})
-	return p.ensureErr
-}
-
-func streamHasSubject(info *nats.StreamInfo, subject string) bool {
-	if info == nil {
-		return false
-	}
-	for _, s := range info.Config.Subjects {
-		if s == subject {
-			return true
-		}
-	}
-	return false
-}
-
-func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, env *eventsv1.UserStreamEvent) error {
-	if err := p.ensureStream(); err != nil {
-		return err
 	}
 	b, err := proto.Marshal(env)
 	if err != nil {

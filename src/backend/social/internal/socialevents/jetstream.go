@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -38,15 +37,12 @@ type Publisher interface {
 
 // JetStreamPublisher publishes SocialStreamEvent payloads to NATS JetStream.
 type JetStreamPublisher struct {
-	nc *nats.Conn
-	js nats.JetStreamContext
+	nc     *nats.Conn
+	js     nats.JetStreamContext
 	Logger *slog.Logger
-
-	ensureOnce sync.Once
-	ensureErr  error
 }
 
-// NewJetStreamPublisher connects to NATS and prepares JetStream for social.events.
+// NewJetStreamPublisher connects to the centrally provisioned JetStream service.
 func NewJetStreamPublisher(natsURL string) (*JetStreamPublisher, error) {
 	if natsURL == "" {
 		return nil, fmt.Errorf("empty NATS URL")
@@ -69,57 +65,9 @@ func NewJetStreamPublisher(natsURL string) (*JetStreamPublisher, error) {
 	return &JetStreamPublisher{nc: nc, js: js}, nil
 }
 
-func socialStreamSubjects() []string {
-	return []string{
-		subjectFriendRequest,
-		subjectFriendAccepted,
-		subjectFriendRemoved,
-		subjectUserBlocked,
-		subjectContactsSynced,
-	}
-}
-
-func (p *JetStreamPublisher) ensureStream() error {
+func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, env *eventsv1.SocialStreamEvent) error {
 	if p == nil || p.js == nil {
 		return fmt.Errorf("jetstream publisher not initialized")
-	}
-	p.ensureOnce.Do(func() {
-		desired := socialStreamSubjects()
-		info, err := p.js.StreamInfo(streamName)
-		if err != nil {
-			_, p.ensureErr = p.js.AddStream(&nats.StreamConfig{
-				Name:      streamName,
-				Subjects:  desired,
-				Retention: nats.LimitsPolicy,
-				MaxAge:    7 * 24 * time.Hour,
-				Storage:   nats.FileStorage,
-			})
-			return
-		}
-		existing := make(map[string]struct{}, len(info.Config.Subjects))
-		for _, subject := range info.Config.Subjects {
-			existing[subject] = struct{}{}
-		}
-		merged := append([]string(nil), info.Config.Subjects...)
-		for _, subject := range desired {
-			if _, ok := existing[subject]; ok {
-				continue
-			}
-			merged = append(merged, subject)
-		}
-		if len(merged) == len(info.Config.Subjects) {
-			return
-		}
-		cfg := info.Config
-		cfg.Subjects = merged
-		_, p.ensureErr = p.js.UpdateStream(&cfg)
-	})
-	return p.ensureErr
-}
-
-func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, env *eventsv1.SocialStreamEvent) error {
-	if err := p.ensureStream(); err != nil {
-		return err
 	}
 	b, err := proto.Marshal(env)
 	if err != nil {
@@ -151,7 +99,7 @@ func (p *JetStreamPublisher) PublishFriendRequest(ctx context.Context, requestID
 	env := newSocialEvent()
 	env.Payload = &eventsv1.SocialStreamEvent_FriendRequest{
 		FriendRequest: &eventsv1.FriendRequest{
-			RequestId:           requestID,
+			RequestId:          requestID,
 			RequesterProfileId: requesterProfileID,
 			TargetProfileId:    targetProfileID,
 		},
