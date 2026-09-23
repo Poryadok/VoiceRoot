@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 BOOTSTRAP="${ROOT}/docker/nats/search-bootstrap.sh"
 K8S_BOOTSTRAP="${ROOT}/deploy/templates/nats-search-bootstrap.yaml"
+SMOKE="${ROOT}/scripts/ci/nats-search-bootstrap-smoke.sh"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 require() { grep -Fqx -- "$1" "$2" || fail "missing exact contract line in ${2#"${ROOT}/"}: $1"; }
@@ -35,5 +36,8 @@ for source in \
   ! grep -Fq 'AddConsumer(' "$source" || fail "${source#"${ROOT}/"} must not create a consumer"
   ! grep -Fq 'UpdateConsumer(' "$source" || fail "${source#"${ROOT}/"} must not mutate a consumer"
 done
+
+grep -Fq "consumer add user_events search-indexer-user-v1 --filter '>'" "$SMOKE" \
+  || fail "Search smoke must prove broad user-filter drift is rejected"
 
 echo 'NATS Search bootstrap contract OK'
