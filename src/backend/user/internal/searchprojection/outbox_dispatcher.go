@@ -22,6 +22,7 @@ var projectionStreamConfig = nats.StreamConfig{
 	Subjects:  []string{projectionSubject},
 	Retention: nats.LimitsPolicy,
 	Storage:   nats.FileStorage,
+	MaxAge:    0,
 }
 
 // OutboxDispatcher publishes the exact bytes committed with User's authority
@@ -71,7 +72,8 @@ func validateProjectionStream(info *nats.StreamInfo) error {
 	if info == nil || info.Config.Name != projectionStreamConfig.Name ||
 		!sameSubjects(info.Config.Subjects, projectionStreamConfig.Subjects) ||
 		info.Config.Retention != projectionStreamConfig.Retention ||
-		info.Config.Storage != projectionStreamConfig.Storage {
+		info.Config.Storage != projectionStreamConfig.Storage ||
+		info.Config.MaxAge != projectionStreamConfig.MaxAge {
 		return errors.New("deployment-owned projection stream does not match required contract")
 	}
 	return nil

@@ -85,6 +85,17 @@ func TestValidateProjectionStreamRequiresDeploymentContract(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "finite retention",
+			config: nats.StreamConfig{
+				Name:      projectionStream,
+				Subjects:  []string{projectionSubject},
+				Retention: nats.LimitsPolicy,
+				Storage:   nats.FileStorage,
+				MaxAge:    time.Hour,
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
