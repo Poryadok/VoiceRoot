@@ -164,9 +164,17 @@ func main() {
 
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			if projectionStore != nil {
+				projectionConsumerReady := make(chan error, 1)
+				firstProjectionConsumerStart := true
 				go runProjectionWithRetry(rootCtx, logger, "user projection JetStream consumer", func() error {
-					return profileprojection.RunJetStreamConsumer(rootCtx, natsURL, projectionStore)
+					var ready chan<- error
+					if firstProjectionConsumerStart {
+						ready = projectionConsumerReady
+						firstProjectionConsumerStart = false
+					}
+					return profileprojection.RunJetStreamConsumer(rootCtx, natsURL, projectionStore, ready)
 				})
+				requireSearchConsumerReady("user projection JetStream consumer", projectionConsumerReady)
 			}
 			if pub, err := analyticsevents.NewJetStreamPublisher(natsURL); err == nil {
 				_ = pub.EnsureStream()
@@ -185,17 +193,10 @@ func main() {
 			messageConsumerReady := make(chan error, 1)
 			go func() {
 				if err := indexer.RunMessageEventsConsumer(rootCtx, natsURL, instanceID, msgIdx, logger, consumerMetrics, messageConsumerReady); err != nil && rootCtx.Err() == nil {
-					logger.Warn("message events consumer stopped", slog.Any("error", err))
+					log.Fatalf("message events consumer stopped: %v", err)
 				}
 			}()
-			select {
-			case err := <-messageConsumerReady:
-				if err != nil {
-					log.Fatalf("message events consumer startup: %v", err)
-				}
-			case <-time.After(15 * time.Second):
-				log.Fatal("message events consumer startup timed out")
-			}
+			requireSearchConsumerReady("message events consumer", messageConsumerReady)
 
 			// The legacy user.events hydrator is retained only when the revisioned
 			// authority path is unavailable; running both would race a stale source.
@@ -206,11 +207,13 @@ func main() {
 					profileHydrator = &deps.ProfileHydrator{Client: userv1.NewUserServiceClient(conn)}
 				}
 				profileIdx := &indexer.ProfileIndexer{Store: profileSpaceStore, Profiles: profileHydrator}
+				userConsumerReady := make(chan error, 1)
 				go func() {
-					if err := indexer.RunUserEventsConsumer(rootCtx, natsURL, instanceID, profileIdx, logger, consumerMetrics); err != nil && rootCtx.Err() == nil {
-						logger.Warn("user events consumer stopped", slog.Any("error", err))
+					if err := indexer.RunUserEventsConsumer(rootCtx, natsURL, instanceID, profileIdx, logger, consumerMetrics, userConsumerReady); err != nil && rootCtx.Err() == nil {
+						log.Fatalf("user events consumer stopped: %v", err)
 					}
 				}()
+				requireSearchConsumerReady("user events consumer", userConsumerReady)
 			}
 
 			var chatHydrator indexer.ChatHydrator
@@ -229,11 +232,13 @@ func main() {
 				ChatAPI:  chatHydrator,
 				SpaceAPI: spaceHydrator,
 			}
+			chatConsumerReady := make(chan error, 1)
 			go func() {
-				if err := indexer.RunChatEventsConsumer(rootCtx, natsURL, instanceID, chatSpaceIdx, logger, consumerMetrics); err != nil && rootCtx.Err() == nil {
-					logger.Warn("chat events consumer stopped", slog.Any("error", err))
+				if err := indexer.RunChatEventsConsumer(rootCtx, natsURL, instanceID, chatSpaceIdx, logger, consumerMetrics, chatConsumerReady); err != nil && rootCtx.Err() == nil {
+					log.Fatalf("chat events consumer stopped: %v", err)
 				}
 			}()
+			requireSearchConsumerReady("chat events consumer", chatConsumerReady)
 		}
 
 		var chatClient chatv1.ChatServiceClient
@@ -321,6 +326,17 @@ func main() {
 		if err := server.Shutdown(ctx); err != nil {
 			log.Fatal(err)
 		}
+	}
+}
+
+func requireSearchConsumerReady(name string, ready <-chan error) {
+	select {
+	case err := <-ready:
+		if err != nil {
+			log.Fatalf("%s startup: %v", name, err)
+		}
+	case <-time.After(15 * time.Second):
+		log.Fatalf("%s startup timed out", name)
 	}
 }
 
