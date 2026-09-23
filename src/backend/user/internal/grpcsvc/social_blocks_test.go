@@ -69,3 +69,14 @@ func TestSocialGRPCBlocksAccountPairBlockedPropagatesBackendFailure(t *testing.T
 	require.Error(t, err)
 	require.False(t, blocked)
 }
+
+func TestSocialGRPCBlocksAccountPairBlockedFailsClosedWithoutClient(t *testing.T) {
+	t.Parallel()
+
+	for _, blocks := range []*SocialGRPCBlocks{nil, {}} {
+		blocked, err := blocks.AccountPairBlocked(context.Background(), uuid.New(), uuid.New())
+
+		require.Error(t, err)
+		require.False(t, blocked)
+	}
+}
