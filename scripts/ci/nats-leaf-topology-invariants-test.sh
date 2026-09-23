@@ -73,7 +73,7 @@ proof_require '"ack_wait":1000000000' 'one-second proof consumer ack wait'
 proof_require '"max_deliver":-1' 'unbounded proof consumer redelivery budget'
 proof_require 'mkdir -p "$work/receiver"' 'credential-free writable receiver directory'
 proof_require '-v "$work/receiver:/receiver" alpine:3.22' 'receiver-only writable volume'
-proof_reject '-v "$work:$work:ro" alpine:3.22' 'fixture credential mount in unauthenticated receiver'
+proof_require 'direct-noack /receiver/noack-receive-one.ready nats://hub:4222' 'credentialed direct-hub no-ACK probe'
 
 for target in docker-compose.yml deploy/staging deploy/prod; do
   ! grep -R -Fq -- 'leaf-sidecar.template.yaml' "${root}/${target}" 2>/dev/null || fail "selected by ${target}"
