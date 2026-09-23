@@ -36,6 +36,10 @@ func TestGenerateCreatesDistinctServiceCredentialsWithoutBroadJetStreamAPI(t *te
 	if _, err := os.Stat(filepath.Join(dest, "creds", "bootstrap.creds")); err != nil {
 		t.Fatalf("bootstrap credential missing: %v", err)
 	}
+	noAck, err := jwt.DecodeUserClaims(credsJWT(t, mustRead(t, filepath.Join(dest, "creds", "chat-noack.creds"))))
+	if err != nil || strings.Contains(strings.Join(noAck.Pub.Allow, ","), "$JS.ACK.") {
+		t.Fatal("chat-noack credential must omit every ACK permission")
+	}
 	operatorJWT, err := os.ReadFile(filepath.Join(dest, "operator.jwt"))
 	if err != nil {
 		t.Fatal(err)
@@ -166,6 +170,28 @@ func TestGeneratePermitsOnlyExactDurableJetStreamAckWildcard(t *testing.T) {
 			t.Fatalf("unsafe wildcard %q must be rejected", subject)
 		}
 	}
+}
+
+func TestGenerateCanOmitResponsePermissionForExplicitAckProof(t *testing.T) {
+	acl := fixtureACL()
+	acl.Services["chat"] = serviceACL{Publish: []string{"$JS.ACK.chat_events.proof_chat.>"}, Subscribe: []string{"_INBOX.voice.chat.proof"}, NoResponse: true}
+	dest := filepath.Join(t.TempDir(), "fixture")
+	if err := generate(dest, acl); err != nil {
+		t.Fatal(err)
+	}
+	claims, err := jwt.DecodeUserClaims(credsJWT(t, mustRead(t, filepath.Join(dest, "creds", "chat.creds"))))
+	if err != nil || claims.Resp != nil || strings.Join(claims.Pub.Allow, ",") != "$JS.ACK.chat_events.proof_chat.>" {
+		t.Fatal("proof chat must rely on its exact ACK grant without response permission")
+	}
+}
+
+func mustRead(t *testing.T, path string) string {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
 }
 
 func fixtureACL() aclDocument {

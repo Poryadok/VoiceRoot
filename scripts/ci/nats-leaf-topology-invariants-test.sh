@@ -4,6 +4,7 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 template="${root}/deploy/nats/leaf-sidecar.template.yaml"
+proof="${root}/scripts/ci/nats-jwt-leaf-hosted-proof.sh"
 fail() { echo "FAIL: nats leaf topology invariant: $*" >&2; exit 1; }
 
 [[ -f "$template" ]] || fail "missing disabled leaf-sidecar template"
@@ -51,6 +52,18 @@ reject '$JS.API.>' 'broad JetStream administration grant'
 reject 'insecure: true' 'insecure TLS verification'
 reject 'insecure_skip_verify: true' 'insecure TLS verification'
 reject 'nats://voice-nats:4222' 'direct hub application endpoint'
+
+# The hosted proof must exercise concrete JetStream API subjects. A wildcard
+# API permission would make that proof meaningless, and broad inbox grants
+# would permit arbitrary request/reply traffic.
+[[ -f "$proof" ]] || fail 'missing hosted JWT leaf proof'
+proof_reject() { ! grep -Fq -- "$1" "$proof" || fail "hosted proof contains forbidden $2"; }
+proof_require() { grep -Fq -- "$1" "$proof" || fail "hosted proof missing $2"; }
+proof_reject '$JS.API.>' 'broad JetStream API wildcard'
+proof_reject '_INBOX.>' 'broad inbox wildcard'
+proof_require 'chat-noack.creds' 'no-ACK credential proof'
+proof_require 'AckSync' 'synchronous no-ACK denial attempt'
+proof_require 'ack_subject=' 'exact ACK subject evidence'
 
 for target in docker-compose.yml deploy/staging deploy/prod; do
   ! grep -R -Fq -- 'leaf-sidecar.template.yaml' "${root}/${target}" 2>/dev/null || fail "selected by ${target}"

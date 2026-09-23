@@ -36,8 +36,9 @@ func main() {
 }
 
 type serviceACL struct {
-	Publish   []string `yaml:"publish"`
-	Subscribe []string `yaml:"subscribe"`
+	Publish    []string `yaml:"publish"`
+	Subscribe  []string `yaml:"subscribe"`
+	NoResponse bool     `yaml:"no_response"`
 }
 
 type aclDocument struct {
@@ -131,6 +132,9 @@ func safePublishSubject(subject string) bool {
 }
 
 func safeSubscribeSubject(subject string) bool {
+	if strings.HasPrefix(subject, "_INBOX.voice.bootstrap.reply.") && strings.HasSuffix(subject, ".>") && strings.Count(subject, ">") == 1 {
+		return true
+	}
 	return subject != "" && !strings.ContainsAny(subject, " \t\r\n>*") && subject != "$JS.API.>"
 }
 
@@ -243,6 +247,11 @@ func generate(dest string, acl aclDocument) error {
 			return err
 		}
 	}
+	proofNoAck := acl.Services["chat"]
+	proofNoAck.Publish = withoutExactAck(proofNoAck.Publish, "$JS.ACK.chat_events.proof_chat.>")
+	if err := writeCredential(filepath.Join(dest, "creds", "chat-noack.creds"), "voice-chat-noack", proofNoAck, account); err != nil {
+		return err
+	}
 	if err := writeCredential(filepath.Join(dest, "creds", "bootstrap.creds"), "voice-nats-bootstrap", acl.Bootstrap, account); err != nil {
 		return err
 	}
@@ -255,6 +264,16 @@ func generate(dest string, acl aclDocument) error {
 	}
 	cleanup = false
 	return nil
+}
+
+func withoutExactAck(subjects []string, ack string) []string {
+	result := make([]string, 0, len(subjects))
+	for _, subject := range subjects {
+		if subject != ack {
+			result = append(result, subject)
+		}
+	}
+	return result
 }
 
 func writeCredential(path, name string, grant serviceACL, account nkeys.KeyPair) error {
@@ -288,7 +307,9 @@ func applyGrant(claim *jwt.UserClaims, grant serviceACL) {
 	// JetStream INFO, bind and publish operations use an ephemeral reply inbox.
 	// Response permissions permit only replies to a request made by this user,
 	// avoiding a broad `_INBOX.>` subscription grant.
-	claim.Resp = &jwt.ResponsePermission{MaxMsgs: 16, Expires: time.Second}
+	if !grant.NoResponse {
+		claim.Resp = &jwt.ResponsePermission{MaxMsgs: 16, Expires: time.Second}
+	}
 	if len(claim.Pub.Allow) == 0 {
 		claim.Pub.Deny = []string{">"}
 	}
