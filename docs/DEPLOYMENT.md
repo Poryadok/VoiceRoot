@@ -484,13 +484,26 @@ other methods access to the protected listener.
 Before applying the staging/prod application manifests, provision these
 namespace-local Secrets through the environment's secret manager:
 
+For staging, GitHub repository **Settings → Environments → staging → Environment
+secrets** stores `STAGING_PRINCIPAL_SECRETS_B64` (base64-encoded gzip of a
+Kubernetes Secret List) and `STAGING_PRINCIPAL_CA_KEY_PEM` (the CA private key
+for certificate renewal). The deploy restores the bundle when none of its
+Secrets exist; a partial set requires manual recovery to avoid rotating keys.
+Staging also stores `STAGING_USER_SEARCH_CURSOR_HMAC_KEY` there. The deploy
+creates `voice-user-search-projection/cursor-hmac-key` from it when absent.
+
 | Secret | Required data |
 |---|---|
 | `voice-social-principal-signing` | `current.pem`, `next.pem`: distinct unencrypted RSA PKCS#8 private keys, at least 2048 bits; `active-kid`: `current` or `next` |
+| `voice-file-principal-signing` | `current.pem`, `next.pem`, `active-kid` as above |
+| `voice-search-principal-signing` | `current.pem`, `next.pem`, `active-kid` as above |
 | `voice-social-principal-tls` | `tls.crt`, `tls.key`; certificate SAN includes `voice-social` |
 | `voice-user-principal-tls` | `tls.crt`, `tls.key`; certificate SAN includes `voice-user` |
 | `voice-space-principal-tls` | `tls.crt`, `tls.key`; certificate SAN includes `voice-space` |
-| `voice-principal-ca` | `ca.crt`: trusted CA bundle for the three TLS endpoints |
+| `voice-file-principal-tls` | `tls.crt`, `tls.key`; certificate SAN includes `voice-file` |
+| `voice-user-file-principal-tls` | `tls.crt`, `tls.key`; certificate SAN includes `voice-user` |
+| `voice-search-principal-tls` | `tls.crt`, `tls.key`; certificate SAN includes `voice-search` |
+| `voice-principal-ca` | `ca.crt`: trusted CA bundle for all six TLS endpoints |
 
 The manifests project only the two `.pem` entries into Social's signing
 directory and mount all key/certificate material read-only. Never put private

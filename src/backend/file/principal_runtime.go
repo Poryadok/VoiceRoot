@@ -169,7 +169,7 @@ func loadFilePrincipalKeys(dir string) (map[string]*rsa.PrivateKey, error) {
 			return nil, err
 		}
 		rel, err := filepath.Rel(root, path)
-		if err != nil || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
 			return nil, errors.New("file principal signing key escapes directory")
 		}
 		data, err := os.ReadFile(path)

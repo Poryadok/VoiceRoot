@@ -94,6 +94,25 @@ jobs:
           fi
           bash scripts/staging/verify-staging-images.sh
 
+      - name: Ensure MinIO credentials
+        env:
+          VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
+          STAGING_MINIO_ROOT_USER: ${{ secrets.STAGING_MINIO_ROOT_USER }}
+          STAGING_MINIO_ROOT_PASSWORD: ${{ secrets.STAGING_MINIO_ROOT_PASSWORD }}
+        run: bash scripts/staging/ensure-minio-credentials.sh
+
+      - name: Restore principal secrets
+        env:
+          VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
+          STAGING_PRINCIPAL_SECRETS_B64: ${{ secrets.STAGING_PRINCIPAL_SECRETS_B64 }}
+        run: bash scripts/staging/restore-principal-secrets.sh
+
+      - name: Ensure User search cursor key
+        env:
+          VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
+          STAGING_USER_SEARCH_CURSOR_HMAC_KEY: ${{ secrets.STAGING_USER_SEARCH_CURSOR_HMAC_KEY }}
+        run: bash scripts/staging/ensure-user-search-projection-secret.sh
+
       - name: Apply staging manifests
         env:
           STAGING_APP_SECRETS_YAML_B64: ${{ secrets.STAGING_APP_SECRETS_YAML }}
