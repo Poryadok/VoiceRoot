@@ -107,7 +107,9 @@ VALUES ($1, $2, 'projectionowner', '7002', 'Owner', true, 'durable-secret'),
 	t.Cleanup(mr.Close)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
-	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb)
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), store.NewPrivacyStore(pool), rdb,
+		func(s *UserGRPC) { s.Blocks = &testBlockChecker{} },
+	)
 
 	owner, err := cli.GetProfile(withUserAuthCtx(ctx, ownerAccount, ownerProfile), &userv1.GetProfileRequest{By: &userv1.GetProfileRequest_ProfileId{ProfileId: ownerProfile.String()}})
 	require.NoError(t, err)
