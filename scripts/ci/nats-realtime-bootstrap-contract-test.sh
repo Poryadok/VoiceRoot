@@ -74,10 +74,12 @@ sh -n "$BOOTSTRAP" || fail "Compose bootstrap must be valid POSIX shell"
 if ! awk '
   $1 == "stream" {
     for (i = 3; i <= NF; i++) {
-      if (($i ~ /[*>]/ && !($2 == "analytics_events" && $i == "analytics.>")) || ($i in owners && owners[$i] != $2)) {
+      subject = $i
+      gsub(/^'|'$/, "", subject)
+      if ((subject ~ /[*>]/ && !($2 == "analytics_events" && subject == "analytics.>")) || (subject in owners && owners[subject] != $2)) {
         exit 1
       }
-      owners[$i] = $2
+      owners[subject] = $2
     }
   }
 ' "$BOOTSTRAP"; then
