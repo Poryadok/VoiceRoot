@@ -85,7 +85,7 @@ func runModerationEventsConsumer(
 		}
 	}
 
-	sub, err := bindPreprovisionedConsumer(js, jsStreamModerationEvents, durable, "moderation.>", msgHandler, nats.ManualAck())
+	sub, err := bindPreprovisionedConsumer(js, jsStreamModerationEvents, durable, "moderation.>", "_INBOX.voice.notification.moderation", msgHandler, nats.ManualAck())
 	if err != nil {
 		return fmt.Errorf("bind pre-provisioned moderation.events consumer %q: %w", durable, err)
 	}
@@ -96,7 +96,7 @@ func runModerationEventsConsumer(
 		}
 	}()
 
-	return waitForNotificationConsumer(ctx, lost, js, jsStreamModerationEvents, durable, "moderation.>")
+	return waitForNotificationConsumer(ctx, lost, js, jsStreamModerationEvents, durable, "moderation.>", "_INBOX.voice.notification.moderation")
 }
 
 // enrichSanctionDecisions applies mute/quiet-hours policy without presence.

@@ -76,7 +76,7 @@ func runSocialEventsConsumer(
 		}
 	}
 
-	sub, err := bindPreprovisionedConsumer(js, jsStreamSocialEvents, durable, "social.>", msgHandler, nats.ManualAck())
+	sub, err := bindPreprovisionedConsumer(js, jsStreamSocialEvents, durable, "social.>", "_INBOX.voice.notification.social", msgHandler, nats.ManualAck())
 	if err != nil {
 		return fmt.Errorf("bind pre-provisioned social.events consumer %q: %w", durable, err)
 	}
@@ -87,7 +87,7 @@ func runSocialEventsConsumer(
 		}
 	}()
 
-	return waitForNotificationConsumer(ctx, lost, js, jsStreamSocialEvents, durable, "social.>")
+	return waitForNotificationConsumer(ctx, lost, js, jsStreamSocialEvents, durable, "social.>", "_INBOX.voice.notification.social")
 }
 
 func routeSocialNotification(h *consumer.SocialEventHandler, env *eventsv1.SocialStreamEvent) (map[string]delivery.DeliveryDecision, push.Payload, bool) {

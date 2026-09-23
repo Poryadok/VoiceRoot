@@ -20,6 +20,15 @@ for spec in \
   [[ "$(printf '%s' "$info" | jq -r '.config.ack_policy')" == explicit ]]
 done
 compose run --rm --no-deps --entrypoint nats nats-notification-bootstrap --server nats://nats:4222 consumer rm social_events notif_social --force
+compose run --rm --no-deps --entrypoint nats nats-notification-bootstrap --server nats://nats:4222 pub social.friend_request '{"prior":"notification"}'
+compose run --rm --no-deps --entrypoint nats nats-notification-bootstrap --server nats://nats:4222 consumer add social_events notif_social --filter 'social.>' --target _INBOX.voice.notification.social --ack explicit --deliver all --defaults
+if compose run --rm nats-notification-bootstrap; then
+  echo 'expected bootstrap to reject historical DeliverAll consumer drift' >&2
+  exit 1
+fi
+compose run --rm --no-deps --entrypoint nats nats-notification-bootstrap --server nats://nats:4222 consumer rm social_events notif_social --force
+compose run --rm nats-notification-bootstrap
+compose run --rm --no-deps --entrypoint nats nats-notification-bootstrap --server nats://nats:4222 consumer rm social_events notif_social --force
 compose run --rm --no-deps --entrypoint nats nats-notification-bootstrap --server nats://nats:4222 consumer add social_events notif_social --filter '>' --target _INBOX.voice.notification.social --ack explicit --deliver new --defaults
 if compose run --rm nats-notification-bootstrap; then
   echo 'expected bootstrap to reject broadened consumer drift' >&2

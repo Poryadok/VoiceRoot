@@ -95,13 +95,13 @@ func connectNotificationConsumer(url, name string) (*nats.Conn, <-chan struct{},
 	return nc, lost, err
 }
 
-func waitForNotificationConsumer(ctx context.Context, lost <-chan struct{}, js nats.JetStreamContext, stream, durable, subject string) error {
+func waitForNotificationConsumer(ctx context.Context, lost <-chan struct{}, js nats.JetStreamContext, stream, durable, subject, target string) error {
 	return watchNotificationConsumer(ctx, lost, 5*time.Second, func() error {
 		info, err := js.ConsumerInfo(stream, durable)
 		if err != nil {
 			return err
 		}
-		return validateNotificationConsumerFilter(info, stream, durable, subject)
+		return validateNotificationConsumerFilter(info, stream, durable, subject, target)
 	})
 }
 

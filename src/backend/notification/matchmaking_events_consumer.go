@@ -74,7 +74,7 @@ func runMatchmakingEventsConsumer(
 		}
 	}
 
-	sub, err := bindPreprovisionedConsumer(js, jsStreamMatchmakingEvents, durable, "mm.>", msgHandler, nats.ManualAck())
+	sub, err := bindPreprovisionedConsumer(js, jsStreamMatchmakingEvents, durable, "mm.>", "_INBOX.voice.notification.matchmaking", msgHandler, nats.ManualAck())
 	if err != nil {
 		return fmt.Errorf("bind pre-provisioned matchmaking.events consumer %q: %w", durable, err)
 	}
@@ -85,7 +85,7 @@ func runMatchmakingEventsConsumer(
 		}
 	}()
 
-	return waitForNotificationConsumer(ctx, lost, js, jsStreamMatchmakingEvents, durable, "mm.>")
+	return waitForNotificationConsumer(ctx, lost, js, jsStreamMatchmakingEvents, durable, "mm.>", "_INBOX.voice.notification.matchmaking")
 }
 
 func routeMatchmakingNotification(h *consumer.MatchmakingEventHandler, env *eventsv1.MatchmakingStreamEvent) (map[string]delivery.DeliveryDecision, push.Payload, delivery.NotificationType, bool) {

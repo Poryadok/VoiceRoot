@@ -30,22 +30,28 @@ func TestBindPreprovisionedConsumerUsesOnlyExistingDurable(t *testing.T) {
 
 func TestNotificationConsumerRequiresExactPreprovisionedFilter(t *testing.T) {
 	for _, tc := range []struct {
-		name   string
-		filter string
-		multi  []string
-		wantOK bool
+		name     string
+		filter   string
+		multi    []string
+		target   string
+		ack      nats.AckPolicy
+		delivery nats.DeliverPolicy
+		wantOK   bool
 	}{
-		{name: "exact", filter: jsSubjectMessageEvents, wantOK: true},
+		{name: "exact", filter: jsSubjectMessageEvents, target: "_INBOX.voice.notification.message", ack: nats.AckExplicitPolicy, delivery: nats.DeliverNewPolicy, wantOK: true},
 		{name: "unfiltered durable"},
 		{name: "broader wildcard", filter: ">"},
 		{name: "other stream subject", filter: "social.>"},
 		{name: "multiple filters", multi: []string{jsSubjectMessageEvents, "social.>"}},
+		{name: "wrong delivery target", filter: jsSubjectMessageEvents, target: "_INBOX.other", ack: nats.AckExplicitPolicy, delivery: nats.DeliverNewPolicy},
+		{name: "implicit ack", filter: jsSubjectMessageEvents, target: "_INBOX.voice.notification.message", ack: nats.AckNonePolicy, delivery: nats.DeliverNewPolicy},
+		{name: "historical replay", filter: jsSubjectMessageEvents, target: "_INBOX.voice.notification.message", ack: nats.AckExplicitPolicy, delivery: nats.DeliverAllPolicy},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			info := &nats.ConsumerInfo{Stream: jsStreamMessageEvents, Name: consumer.SharedDurable("message"), Config: nats.ConsumerConfig{
-				FilterSubject: tc.filter, FilterSubjects: tc.multi,
+				FilterSubject: tc.filter, FilterSubjects: tc.multi, DeliverSubject: tc.target, AckPolicy: tc.ack, DeliverPolicy: tc.delivery,
 			}}
-			err := validateNotificationConsumerFilter(info, jsStreamMessageEvents, consumer.SharedDurable("message"), jsSubjectMessageEvents)
+			err := validateNotificationConsumerFilter(info, jsStreamMessageEvents, consumer.SharedDurable("message"), jsSubjectMessageEvents, "_INBOX.voice.notification.message")
 			if tc.wantOK {
 				require.NoError(t, err)
 			} else {

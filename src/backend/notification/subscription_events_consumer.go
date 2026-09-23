@@ -51,7 +51,7 @@ func runSubscriptionEventsConsumer(
 		_ = msg.Ack()
 	}
 
-	sub, err := bindPreprovisionedConsumer(js, jsStreamSubscriptionEvents, durable, "subscription.>", msgHandler, nats.ManualAck())
+	sub, err := bindPreprovisionedConsumer(js, jsStreamSubscriptionEvents, durable, "subscription.>", "_INBOX.voice.notification.subscription", msgHandler, nats.ManualAck())
 	if err != nil {
 		return fmt.Errorf("bind pre-provisioned subscription.events consumer %q: %w", durable, err)
 	}
@@ -62,7 +62,7 @@ func runSubscriptionEventsConsumer(
 		}
 	}()
 
-	return waitForNotificationConsumer(ctx, lost, js, jsStreamSubscriptionEvents, durable, "subscription.>")
+	return waitForNotificationConsumer(ctx, lost, js, jsStreamSubscriptionEvents, durable, "subscription.>", "_INBOX.voice.notification.subscription")
 }
 
 func routeSubscriptionNotification(handler *consumer.SubscriptionEventHandler, env *eventsv1.SubscriptionStreamEvent) bool {

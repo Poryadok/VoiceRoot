@@ -92,7 +92,7 @@ func runVoiceEventsConsumer(
 		}
 	}
 
-	sub, err := bindPreprovisionedConsumer(js, jsStreamVoiceEvents, durable, "voice.>", msgHandler, nats.ManualAck())
+	sub, err := bindPreprovisionedConsumer(js, jsStreamVoiceEvents, durable, "voice.>", "_INBOX.voice.notification.voice", msgHandler, nats.ManualAck())
 	if err != nil {
 		return fmt.Errorf("bind pre-provisioned voice.events consumer %q: %w", durable, err)
 	}
@@ -103,7 +103,7 @@ func runVoiceEventsConsumer(
 		}
 	}()
 
-	return waitForNotificationConsumer(ctx, lost, js, jsStreamVoiceEvents, durable, "voice.>")
+	return waitForNotificationConsumer(ctx, lost, js, jsStreamVoiceEvents, durable, "voice.>", "_INBOX.voice.notification.voice")
 }
 
 type voiceRouteKind int

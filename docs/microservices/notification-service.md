@@ -275,7 +275,8 @@ becoming a second in-app reminder and supplies the collapse key where supported.
 
 When `NATS_URL` is configured, `/health` returns ready only after all seven
 pre-provisioned Notification JetStream durables are bound with their exact
-filters. A missing or widened durable filter, connection loss, or a failed
+filters, delivery targets, explicit acknowledgement, and deliver-new policies.
+A missing or drifted durable, connection loss, or a failed
 periodic consumer check clears readiness; the service retries the bind and
 recovers automatically after the central bootstrap restores the durable.
 Notification never creates or changes JetStream consumers at runtime.

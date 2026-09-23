@@ -67,7 +67,7 @@ func runMessageEventsConsumer(
 		consumer.JetStreamConsumeAck(msg, err)
 	}
 
-	sub, err := bindPreprovisionedConsumer(js, jsStreamMessageEvents, durable, jsSubjectMessageEvents, msgHandler, nats.ManualAck())
+	sub, err := bindPreprovisionedConsumer(js, jsStreamMessageEvents, durable, jsSubjectMessageEvents, "_INBOX.voice.notification.message", msgHandler, nats.ManualAck())
 	if err != nil {
 		return fmt.Errorf("bind pre-provisioned message.events consumer %q: %w", durable, err)
 	}
@@ -78,7 +78,7 @@ func runMessageEventsConsumer(
 		}
 	}()
 
-	return waitForNotificationConsumer(ctx, lost, js, jsStreamMessageEvents, durable, jsSubjectMessageEvents)
+	return waitForNotificationConsumer(ctx, lost, js, jsStreamMessageEvents, durable, jsSubjectMessageEvents, "_INBOX.voice.notification.message")
 }
 
 func routeMessageNotification(
