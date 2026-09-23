@@ -295,7 +295,7 @@ if ! grep -Eqi 'permission.*(violation|denied)' <<<"$denial_log_delta" || ! grep
 fi
 
 # Service-side mutation is also rejected by the chat identity.
-for denied_js_subject in '$JS.API.CONSUMER.INFO.chat_events.neighbour' '$JS.ACK.chat_events.neighbour.1.1.1.1.1' '$JS.API.STREAM.CREATE.denied' '$JS.API.STREAM.UPDATE.chat_events' '$JS.API.STREAM.DELETE.chat_events'; do
+for denied_js_subject in '$JS.API.>' '$JS.API.CONSUMER.INFO.chat_events.neighbour' '$JS.ACK.chat_events.neighbour.1.1.1.1.1' '$JS.API.STREAM.CREATE.denied' '$JS.API.STREAM.UPDATE.chat_events' '$JS.API.STREAM.DELETE.chat_events' '$SYS.REQ.SERVER.PING'; do
   leaf_log_before="$(docker logs voice-nats-proof-chat 2>&1 || true)"
   hub_log_before="$(docker logs voice-nats-proof-hub 2>&1 || true)"
   docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0 nats --server nats://127.0.0.1:4222 pub "$denied_js_subject" denied >/dev/null 2>&1 || true
