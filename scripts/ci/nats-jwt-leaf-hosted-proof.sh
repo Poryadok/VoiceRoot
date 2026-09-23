@@ -126,6 +126,16 @@ fi
 docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0 \
   nats --server nats://127.0.0.1:4222 pub chat.created proof >/dev/null
 
+# Core publish success alone is not an authorization or persistence proof. The
+# bootstrap-only identity observes the exact JetStream stream state and proves
+# that the leaf-authenticated publish was captured as sequence one.
+stream_info="$(docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
+  nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" stream info chat_events --json)"
+if [[ "$(jq -r '.state.messages' <<<"$stream_info")" != 1 || "$(jq -r '.state.first_seq' <<<"$stream_info")" != 1 || "$(jq -r '.state.last_seq' <<<"$stream_info")" != 1 ]]; then
+  echo 'FAIL: leaf-authenticated chat.created was not captured as stream sequence one' >&2
+  exit 1
+fi
+
 # Core NATS publish permission failures are asynchronous, so `nats pub` can
 # exit successfully after the server has rejected the message. Snapshot the
 # leaf log before sending the real neighboring subject, then require its
