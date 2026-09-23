@@ -13,7 +13,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 work="$(mktemp -d)"
 network="voice-nats-proof-$RANDOM"
 cleanup() {
-  docker rm -f voice-nats-proof-hub voice-nats-proof-chat voice-nats-proof-chat-noack voice-nats-proof-invalid-jwt voice-nats-proof-wrong-ca voice-nats-proof-wrong-sni voice-nats-proof-bootstrap-reply voice-nats-proof-receive-one voice-nats-proof-receive-two voice-nats-proof-noack-receive-one voice-nats-proof-noack-receive-two >/dev/null 2>&1 || true
+  docker rm -f voice-nats-proof-hub voice-nats-proof-chat voice-nats-proof-chat-noack voice-nats-proof-invalid-jwt voice-nats-proof-wrong-ca voice-nats-proof-wrong-sni voice-nats-proof-bootstrap-reply voice-nats-proof-receive-one voice-nats-proof-receive-two voice-nats-proof-drift-receive voice-nats-proof-noack-receive-one voice-nats-proof-noack-receive-two >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
   rm -rf "$work"
 }
@@ -101,6 +101,10 @@ bootstrap:
 EOF
 
 (cd "$root/src/backend/pkg" && go run ./cmd/nats-jwt-fixture "$work/acl.yaml" "$work/fixture")
+# Compile the receiver once before any readiness barrier. Recompiling it in
+# each disposable container makes a subscription-ready assertion depend on
+# module-download timing rather than the authenticated leaf path.
+(cd "$root/src/backend/pkg" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o "$work/leaf-receive" "$work/leaf_receive.go")
 account="$(tr -d '\r\n' <"$work/fixture/account.public")"
 account_jwt="$(tr -d '\r\n' <"$work/fixture/account.jwt")"
 system_account="$(tr -d '\r\n' <"$work/fixture/system-account.public")"
@@ -311,9 +315,11 @@ fi
 # receive the same fixed durable delivery again and acknowledge it. The client
 # has no credentials and can reach NATS only through the chat leaf namespace.
 docker run -d --name voice-nats-proof-receive-one --network container:voice-nats-proof-chat \
-  -v "$root/src/backend/pkg:/repo:ro" -v "$work:$work:ro" golang:1.24-alpine \
-  sh -ec "cd /repo && go run $work/leaf_receive.go receive $work/receive-one.ready" >/dev/null
-wait_for_file "$work/receive-one.ready" 'first chat leaf receiver'
+  -v "$work:$work:ro" alpine:3.22 "$work/leaf-receive" receive "$work/receive-one.ready" >/dev/null
+if ! wait_for_file "$work/receive-one.ready" 'first chat leaf receiver'; then
+  docker logs voice-nats-proof-receive-one >&2 || true
+  exit 1
+fi
 
 # This client has no credentials: its only path is the local leaf namespace.
 docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0 \
@@ -326,9 +332,11 @@ if ! grep -Fqx 'stream=chat_events sequence=1 delivered=1 ack=false' <<<"$receiv
   exit 1
 fi
 docker run -d --name voice-nats-proof-receive-two --network container:voice-nats-proof-chat \
-  -v "$root/src/backend/pkg:/repo:ro" -v "$work:$work:ro" golang:1.24-alpine \
-  sh -ec "cd /repo && go run $work/leaf_receive.go ack $work/receive-two.ready" >/dev/null
-wait_for_file "$work/receive-two.ready" 'second chat leaf receiver'
+  -v "$work:$work:ro" alpine:3.22 "$work/leaf-receive" ack "$work/receive-two.ready" >/dev/null
+if ! wait_for_file "$work/receive-two.ready" 'second chat leaf receiver'; then
+  docker logs voice-nats-proof-receive-two >&2 || true
+  exit 1
+fi
 docker wait voice-nats-proof-receive-two >/dev/null
 receive_two="$(docker logs voice-nats-proof-receive-two 2>&1)"
 if ! grep -Fqx 'stream=chat_events sequence=1 delivered=2 ack=true' <<<"$receive_two"; then
@@ -350,9 +358,12 @@ if docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18
   echo 'FAIL: drifted fixed durable was accepted as the canonical binding' >&2
   exit 1
 fi
-docker run -d --name voice-nats-proof-drift-receive --network container:voice-nats-proof-chat -v "$root/src/backend/pkg:/repo:ro" -v "$work:$work:ro" golang:1.24-alpine \
-  sh -ec "cd /repo && go run $work/leaf_receive.go ack $work/drift-receive.ready" >/dev/null
-wait_for_file "$work/drift-receive.ready" 'canonical drift receiver'
+docker run -d --name voice-nats-proof-drift-receive --network container:voice-nats-proof-chat -v "$work:$work:ro" alpine:3.22 \
+  "$work/leaf-receive" ack "$work/drift-receive.ready" >/dev/null
+if ! wait_for_file "$work/drift-receive.ready" 'canonical drift receiver'; then
+  docker logs voice-nats-proof-drift-receive >&2 || true
+  exit 1
+fi
 docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0 \
   nats --server nats://127.0.0.1:4222 pub chat.created drift-proof >/dev/null
 drift_receiver_exit="$(docker wait voice-nats-proof-drift-receive)"
@@ -448,9 +459,11 @@ fi
 noack_leaf_log_before="$(docker logs voice-nats-proof-chat-noack 2>&1 || true)"
 hub_log_before="$(docker logs voice-nats-proof-hub 2>&1 || true)"
 docker run -d --name voice-nats-proof-noack-receive-one --network container:voice-nats-proof-chat-noack \
-  -v "$root/src/backend/pkg:/repo:ro" -v "$work:$work:ro" golang:1.24-alpine \
-  sh -ec "cd /repo && go run $work/leaf_receive.go deny-ack $work/noack-receive-one.ready" >/dev/null
-wait_for_file "$work/noack-receive-one.ready" 'no-ACK chat leaf receiver'
+  -v "$work:$work:ro" alpine:3.22 "$work/leaf-receive" deny-ack "$work/noack-receive-one.ready" >/dev/null
+if ! wait_for_file "$work/noack-receive-one.ready" 'no-ACK chat leaf receiver'; then
+  docker logs voice-nats-proof-noack-receive-one >&2 || true
+  exit 1
+fi
 docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0 \
   nats --server nats://127.0.0.1:4222 pub chat.created noack-proof >/dev/null
 docker wait voice-nats-proof-noack-receive-one >/dev/null
@@ -483,9 +496,11 @@ if ! grep -Fq "$noack_ack_subject" <<<"${noack_denial_log_delta:-}" || ! grep -E
   exit 1
 fi
 docker run -d --name voice-nats-proof-noack-receive-two --network container:voice-nats-proof-chat-noack \
-  -v "$root/src/backend/pkg:/repo:ro" -v "$work:$work:ro" golang:1.24-alpine \
-  sh -ec "cd /repo && go run $work/leaf_receive.go receive $work/noack-receive-two.ready" >/dev/null
-wait_for_file "$work/noack-receive-two.ready" 'no-ACK redelivery receiver'
+  -v "$work:$work:ro" alpine:3.22 "$work/leaf-receive" receive "$work/noack-receive-two.ready" >/dev/null
+if ! wait_for_file "$work/noack-receive-two.ready" 'no-ACK redelivery receiver'; then
+  docker logs voice-nats-proof-noack-receive-two >&2 || true
+  exit 1
+fi
 docker wait voice-nats-proof-noack-receive-two >/dev/null
 noack_receive_two="$(docker logs voice-nats-proof-noack-receive-two 2>&1)"
 if ! grep -Fqx 'stream=chat_events sequence=3 delivered=2 ack=false' <<<"$noack_receive_two"; then
