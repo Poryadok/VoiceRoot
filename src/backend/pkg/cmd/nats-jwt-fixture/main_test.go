@@ -47,6 +47,24 @@ func TestGenerateCreatesDistinctServiceCredentialsWithoutBroadJetStreamAPI(t *te
 	if err != nil || !accountClaims.Limits.IsJSEnabled() {
 		t.Fatalf("fixture account must explicitly enable JetStream: %v", err)
 	}
+	systemPublic, err := os.ReadFile(filepath.Join(dest, "system-account.public"))
+	if err != nil || !strings.HasPrefix(strings.TrimSpace(string(systemPublic)), "A") {
+		t.Fatalf("fixture system account public key missing or invalid: %v", err)
+	}
+	if strings.TrimSpace(string(systemPublic)) == accountClaims.Subject {
+		t.Fatal("fixture system and application accounts must be distinct")
+	}
+	systemJWT, err := os.ReadFile(filepath.Join(dest, "system-account.jwt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	systemClaims, err := jwt.DecodeAccountClaims(string(systemJWT))
+	if err != nil || systemClaims.Limits.IsJSEnabled() {
+		t.Fatalf("fixture system account must not enable JetStream: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dest, "creds", "system.creds")); !os.IsNotExist(err) {
+		t.Fatalf("system account must not have service credentials: %v", err)
+	}
 	contract, err := os.ReadFile(filepath.Join(dest, "acl-intent.yaml"))
 	if err != nil {
 		t.Fatal(err)

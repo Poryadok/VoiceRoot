@@ -162,6 +162,20 @@ func generate(dest string, acl aclDocument) error {
 		return err
 	}
 
+	// The NATS system account is deliberately independent from the application
+	// account. JetStream application streams must never run in SYS, and SYS has
+	// no service or bootstrap credentials.
+	systemAccount, err := nkeys.CreateAccount()
+	if err != nil {
+		return err
+	}
+	systemAccountPub, _ := systemAccount.PublicKey()
+	systemAccountClaim := jwt.NewAccountClaims(systemAccountPub)
+	systemAccountJWT, err := systemAccountClaim.Encode(op)
+	if err != nil {
+		return err
+	}
+
 	account, err := nkeys.CreateAccount()
 	if err != nil {
 		return err
@@ -180,6 +194,12 @@ func generate(dest string, acl aclDocument) error {
 		return err
 	}
 	if err := writeFile(filepath.Join(dest, "operator.jwt"), opJWT); err != nil {
+		return err
+	}
+	if err := writeFile(filepath.Join(dest, "system-account.jwt"), systemAccountJWT); err != nil {
+		return err
+	}
+	if err := writeFile(filepath.Join(dest, "system-account.public"), systemAccountPub); err != nil {
 		return err
 	}
 	if err := writeFile(filepath.Join(dest, "account.jwt"), accountJWT); err != nil {
