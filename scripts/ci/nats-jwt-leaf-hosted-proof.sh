@@ -51,7 +51,7 @@ func main() {
   fmt.Printf("stream=%s sequence=%d delivered=%d ack=%t\n", meta.Stream, meta.Sequence.Stream, meta.NumDelivered, mode == "ack")
   if mode == "deny-ack" {
     fmt.Printf("ack_subject=%s\n", msg.Reply)
-    if err := msg.AckSync(); err == nil {
+    if err := msg.AckSync(nats.AckWait(500 * time.Millisecond)); err == nil {
       panic("AckSync unexpectedly succeeded")
     } else {
       fmt.Printf("ack_error=%v\n", err)
@@ -319,7 +319,8 @@ docker run -d --name voice-nats-proof-drift-receive --network container:voice-na
 wait_for_file "$work/drift-receive.ready" 'canonical drift receiver'
 docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0 \
   nats --server nats://127.0.0.1:4222 pub chat.created drift-proof >/dev/null
-if docker wait voice-nats-proof-drift-receive >/dev/null 2>&1; then
+drift_receiver_exit="$(docker wait voice-nats-proof-drift-receive)"
+if [[ "$drift_receiver_exit" == 0 ]]; then
   echo 'FAIL: leaf consumed a drifted durable through the canonical target' >&2
   exit 1
 fi
