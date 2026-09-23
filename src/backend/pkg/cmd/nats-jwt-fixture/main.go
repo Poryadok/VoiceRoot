@@ -184,6 +184,7 @@ func generate(dest string, acl aclDocument) error {
 	accountClaim := jwt.NewAccountClaims(accountPub)
 	accountClaim.Limits = jwt.OperatorLimits{
 		AccountLimits: jwt.AccountLimits{Conn: 64, LeafNodeConn: 64},
+		NatsLimits:    jwt.NatsLimits{Subs: 1024, Data: 64 << 20, Payload: 1 << 20},
 		JetStreamLimits: jwt.JetStreamLimits{
 			MemoryStorage: 64 << 20,
 			DiskStorage:   512 << 20,
