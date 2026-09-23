@@ -17,7 +17,7 @@ data:
         if printf '%s' "$info" | jq -e '.error' >/dev/null; then
           printf '%s' "$info" | jq -r '.error.description' | grep -qi 'stream not found' || { echo "$info" >&2; exit 1; }
         else
-          actual="$(printf '%s' "$info" | jq -c '[.config.subjects | sort, .config.storage, .config.retention, .config.max_age]')"
+          actual="$(printf '%s' "$info" | jq -c '[(.config.subjects | sort), .config.storage, .config.retention, .config.max_age]')"
           expected_config="$(jq -cn --argjson subjects "$expected" '[ $subjects, "file", "limits", 604800000000000 ]')"
           [ "$actual" = "$expected_config" ] || { echo "incompatible configuration for stream $name" >&2; exit 1; }
           return

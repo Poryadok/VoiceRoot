@@ -42,7 +42,7 @@ done
 
 require '  nats-realtime-bootstrap:' "$COMPOSE"
 require '        condition: service_completed_successfully' "$COMPOSE"
-grep -Fq '.config.storage, .config.retention, .config.max_age' "$BOOTSTRAP" || fail "bootstrap must validate storage, retention and max age"
+grep -Fq '[(.config.subjects | sort), .config.storage, .config.retention, .config.max_age]' "$BOOTSTRAP" || fail "bootstrap must validate storage, retention and max age"
 for manifest in "${ROOT}/deploy/staging/services.yaml" "${ROOT}/deploy/prod/services.yaml"; do
   require '              value: realtime-1' "$manifest"
 done
