@@ -14,7 +14,7 @@ for spec in \
   'role_events rt_realtime1_role role.>' 'voice_events rt_realtime1_voice voice.>' \
   'matchmaking_events rt_realtime1_matchmaking mm.>'; do
   set -- $spec
-  info="$(compose run --rm --no-deps --entrypoint nats nats-realtime-bootstrap --server nats://nats:4222 consumer info "$1" "$2" --json)"
+  info="$(compose run --rm --no-deps --entrypoint nats nats-realtime-bootstrap --server nats://nats:4222 --json consumer info "$1" "$2")"
   [[ "$(printf '%s' "$info" | jq -r '.config.filter_subject')" == "$3" ]]
   [[ "$(printf '%s' "$info" | jq -r '.config.ack_policy')" == explicit ]]
 done
