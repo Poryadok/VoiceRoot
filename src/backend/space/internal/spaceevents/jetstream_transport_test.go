@@ -74,6 +74,7 @@ func TestJetStreamPublisher_PublishPreparedPassesExactMessageAndContext(t *testi
 
 func TestJetStreamPublisher_PublishPreparedReturnsChatEventsServerAck(t *testing.T) {
 	server := startJSTestServer(t)
+	bootstrapStream(t, server.ClientURL())
 	observer, err := nats.Connect(server.ClientURL())
 	require.NoError(t, err)
 	t.Cleanup(observer.Close)
