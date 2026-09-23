@@ -106,7 +106,22 @@ docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 
 docker wait voice-nats-proof-bootstrap-reply >/dev/null
 
 docker run -d --name voice-nats-proof-chat --network "$network" -v "$work:$work:ro" nats:2.12-alpine -c "$work/leaf.conf" >/dev/null
-sleep 3
+for attempt in {1..15}; do
+  if docker logs voice-nats-proof-chat 2>&1 | grep -Fq 'Server is ready'; then
+    break
+  fi
+  if ! docker inspect --format '{{.State.Running}}' voice-nats-proof-chat 2>/dev/null | grep -qx true; then
+    echo 'FAIL: chat leaf exited before becoming ready' >&2
+    docker logs voice-nats-proof-chat >&2 || true
+    exit 1
+  fi
+  sleep 1
+done
+if ! docker logs voice-nats-proof-chat 2>&1 | grep -Fq 'Server is ready'; then
+  echo 'FAIL: chat leaf did not become ready within 15 seconds' >&2
+  docker logs voice-nats-proof-chat >&2 || true
+  exit 1
+fi
 
 # This client has no credentials: its only path is the local leaf namespace.
 docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0 \
