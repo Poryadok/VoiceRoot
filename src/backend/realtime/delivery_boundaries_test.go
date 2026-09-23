@@ -23,6 +23,7 @@ func TestSubscribeRoleEvents_DoesNotRouteVoiceOrUnknownThroughChatID(t *testing.
 	require.NoError(t, err)
 	_, err = js.AddStream(&nats.StreamConfig{Name: jsStreamRoleEvents, Subjects: []string{"role.>"}, Retention: nats.LimitsPolicy})
 	require.NoError(t, err)
+	preprovisionRealtimeConsumer(t, js, jsStreamRoleEvents, roleConsumerDurableName("role-routing-boundary"), "role.>")
 	hub := newWSHub()
 	allowedChat, smuggledChat := "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"
 	allowed := hub.attachConn("inst", "allowed", "profile-a", 8)
@@ -62,7 +63,7 @@ type boundaryMemberClient struct {
 	chatv1.ChatServiceClient
 	pages map[string]*chatv1.ListMembersResponse
 	calls []string
-	wait bool
+	wait  bool
 }
 
 func (s *boundaryMemberClient) ListMembers(ctx context.Context, r *chatv1.ListMembersRequest, _ ...grpc.CallOption) (*chatv1.ListMembersResponse, error) {
@@ -91,13 +92,13 @@ func boundaryMemberPage(next string, ids ...string) *chatv1.ListMembersResponse 
 
 func TestRecipientDeliveryStatesRejectsMalformedPartialSnapshot(t *testing.T) {
 	for name, pages := range map[string]map[string]*chatv1.ListMembersResponse{
-		"missing response": {"": boundaryMemberPage("next", "member-a"), "next": nil},
+		"missing response":    {"": boundaryMemberPage("next", "member-a"), "next": nil},
 		"missing member list": {"": boundaryMemberPage("next", "member-a"), "next": {}},
-		"same cursor": {"": boundaryMemberPage("next", "member-a"), "next": boundaryMemberPage("next", "member-b")},
-		"cursor cycle": {"": boundaryMemberPage("a", "member-a"), "a": boundaryMemberPage("b", "member-b"), "b": boundaryMemberPage("a", "member-c")},
-		"duplicate member": {"": boundaryMemberPage("next", "member-a"), "next": boundaryMemberPage("", "member-a")},
-		"blank member": {"": boundaryMemberPage("", "member-a", " ")},
-		"nil member": {"": {MemberList: &chatv1.MemberList{Members: []*chatv1.ChatMember{nil}}}},
+		"same cursor":         {"": boundaryMemberPage("next", "member-a"), "next": boundaryMemberPage("next", "member-b")},
+		"cursor cycle":        {"": boundaryMemberPage("a", "member-a"), "a": boundaryMemberPage("b", "member-b"), "b": boundaryMemberPage("a", "member-c")},
+		"duplicate member":    {"": boundaryMemberPage("next", "member-a"), "next": boundaryMemberPage("", "member-a")},
+		"blank member":        {"": boundaryMemberPage("", "member-a", " ")},
+		"nil member":          {"": {MemberList: &chatv1.MemberList{Members: []*chatv1.ChatMember{nil}}}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			client := &boundaryMemberClient{pages: pages}

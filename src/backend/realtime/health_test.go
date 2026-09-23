@@ -38,3 +38,15 @@ func TestHealthHandlerRejectsNonGET(t *testing.T) {
 		t.Fatalf("expected status %d, got %d", http.StatusMethodNotAllowed, rec.Code)
 	}
 }
+
+func TestReadinessRequiresAllJetStreamConsumersToBind(t *testing.T) {
+	consumers := newRealtimeConsumerReadiness("message", "chat")
+	if status, reason := checkReadiness(t.Context(), readinessDeps{Consumers: consumers}); status != "degraded" || reason != "jetstream_consumers_unready" {
+		t.Fatalf("readiness = %q, %q; want jetstream consumer failure", status, reason)
+	}
+	consumers.set("message", true)
+	consumers.set("chat", true)
+	if status, reason := checkReadiness(t.Context(), readinessDeps{Consumers: consumers}); status != "ok" || reason != "" {
+		t.Fatalf("readiness = %q, %q; want ok", status, reason)
+	}
+}

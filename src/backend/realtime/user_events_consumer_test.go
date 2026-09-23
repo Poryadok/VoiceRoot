@@ -269,6 +269,7 @@ func TestRunUserEventsConsumer_JetStreamToFriendHub(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errCh := make(chan error, 1)
+	preprovisionRealtimeConsumer(t, js, jsStreamUserEvents, userConsumerDurableName("test-user-evt"), "user.presence_changed")
 	go func() {
 		errCh <- runUserEventsConsumer(ctx, hub, friends, viewer, ns.ClientURL(), "test-user-evt", nil)
 	}()
