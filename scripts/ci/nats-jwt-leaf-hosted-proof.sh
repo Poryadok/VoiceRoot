@@ -45,6 +45,18 @@ func main() {
   if err != nil { panic(err) }
   meta, err := msg.Metadata()
   if err != nil { panic(err) }
+  if mode == "nak-then-ack" {
+    if err := msg.Nak(); err != nil { panic(err) }
+    if err := nc.Flush(); err != nil { panic(err) }
+    fmt.Printf("stream=%s sequence=%d delivered=%d ack=false\n", meta.Stream, meta.Sequence.Stream, meta.NumDelivered)
+    redelivery, err := sub.NextMsg(10 * time.Second)
+    if err != nil { panic(err) }
+    redeliveryMeta, err := redelivery.Metadata()
+    if err != nil { panic(err) }
+    if err := redelivery.AckSync(); err != nil { panic(err) }
+    fmt.Printf("stream=%s sequence=%d delivered=%d ack=true\n", redeliveryMeta.Stream, redeliveryMeta.Sequence.Stream, redeliveryMeta.NumDelivered)
+    return
+  }
   if mode == "ack" {
     if err := msg.AckSync(); err != nil { panic(err) }
   }
@@ -316,13 +328,13 @@ if ! docker logs voice-nats-proof-chat 2>&1 | grep -Fq 'Server is ready'; then
   exit 1
 fi
 
-# Subscribe before the service publish, deliberately send a negative ACK for
-# the first delivery, then receive the same fixed durable delivery again and
-# acknowledge it. NAK makes the redelivery deterministic while still proving
-# the service cannot treat the first delivery as successfully acknowledged.
-# The client has no credentials and can reach NATS only through the chat leaf.
+# Subscribe before the service publish, keep the authenticated leaf client
+# subscribed across a negative ACK, then receive the same fixed durable
+# delivery again and acknowledge it. Keeping one subscription avoids an
+# interest-handoff race while proving deterministic redelivery. The client has
+# no credentials and can reach NATS only through the chat leaf.
 docker run -d --name voice-nats-proof-receive-one --network container:voice-nats-proof-chat \
-  -v "$work/receiver:/receiver" alpine:3.22 /receiver/leaf-receive nak /receiver/receive-one.ready >/dev/null
+  -v "$work/receiver:/receiver" alpine:3.22 /receiver/leaf-receive nak-then-ack /receiver/receive-one.ready >/dev/null
 if ! wait_for_file "$work/receiver/receive-one.ready" 'first chat leaf receiver'; then
   docker logs voice-nats-proof-receive-one >&2 || true
   exit 1
@@ -333,22 +345,9 @@ docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0
   nats --server nats://127.0.0.1:4222 pub chat.created proof >/dev/null
 docker wait voice-nats-proof-receive-one >/dev/null
 receive_one="$(docker logs voice-nats-proof-receive-one 2>&1)"
-if ! grep -Fqx 'stream=chat_events sequence=1 delivered=1 ack=false' <<<"$receive_one"; then
-  echo 'FAIL: fixed durable did not receive the first leaf publish before a negative ACK' >&2
+if ! grep -Fqx 'stream=chat_events sequence=1 delivered=1 ack=false' <<<"$receive_one" || ! grep -Fqx 'stream=chat_events sequence=1 delivered=2 ack=true' <<<"$receive_one"; then
+  echo 'FAIL: fixed durable did not NAK, redeliver, then acknowledge the leaf publish' >&2
   printf '%s\n' "$receive_one" >&2
-  exit 1
-fi
-docker run -d --name voice-nats-proof-receive-two --network container:voice-nats-proof-chat \
-  -v "$work/receiver:/receiver" alpine:3.22 /receiver/leaf-receive ack /receiver/receive-two.ready >/dev/null
-if ! wait_for_file "$work/receiver/receive-two.ready" 'second chat leaf receiver'; then
-  docker logs voice-nats-proof-receive-two >&2 || true
-  exit 1
-fi
-docker wait voice-nats-proof-receive-two >/dev/null
-receive_two="$(docker logs voice-nats-proof-receive-two 2>&1)"
-if ! grep -Fqx 'stream=chat_events sequence=1 delivered=2 ack=true' <<<"$receive_two"; then
-  echo 'FAIL: fixed durable did not redeliver then acknowledge the leaf publish' >&2
-  printf '%s\n' "$receive_two" >&2
   exit 1
 fi
 
