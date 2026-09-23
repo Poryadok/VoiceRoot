@@ -26,8 +26,8 @@ services:
   auth: {publish: [proof.auth], subscribe: [proof.auth.delivery]}
   bot: {publish: [proof.bot], subscribe: [proof.bot.delivery]}
   chat:
-    publish: [chat.created, '$JS.API.STREAM.INFO.chat_events']
-    subscribe: [proof.chat.delivery]
+    publish: [chat.created, '$JS.API.STREAM.INFO.chat_events', '$JS.API.CONSUMER.INFO.chat_events.proof_chat', '$JS.ACK.chat_events.proof_chat.>']
+    subscribe: [proof.chat.delivery, _INBOX.voice.chat.proof]
   file: {publish: [proof.file], subscribe: [proof.file.delivery]}
   gateway: {publish: [proof.gateway], subscribe: [proof.gateway.delivery]}
   matchmaking: {publish: [proof.matchmaking], subscribe: [proof.matchmaking.delivery]}
@@ -44,7 +44,7 @@ services:
   user: {publish: [proof.user], subscribe: [proof.user.delivery]}
   voice: {publish: [proof.voice], subscribe: [proof.voice.delivery]}
 bootstrap:
-  publish: ['$JS.API.STREAM.CREATE.chat_events', '$JS.API.STREAM.INFO.chat_events']
+  publish: ['$JS.API.STREAM.CREATE.chat_events', '$JS.API.STREAM.INFO.chat_events', '$JS.API.CONSUMER.CREATE.chat_events.proof_chat', '$JS.API.CONSUMER.INFO.chat_events.proof_chat']
   subscribe: [_INBOX.voice.bootstrap.reply]
 EOF
 
@@ -103,6 +103,19 @@ docker run -d --name voice-nats-proof-bootstrap-reply --network "$network" -v "$
 docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
   nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" pub --reply _INBOX.voice.bootstrap.reply '$JS.API.STREAM.CREATE.chat_events' '{"name":"chat_events","subjects":["chat.created"],"storage":"file","retention":"limits"}' >/dev/null
 docker wait voice-nats-proof-bootstrap-reply >/dev/null
+
+# Bootstrap creates the one fixed proof durable before the application leaf
+# joins. The service identity has only INFO and its own ACK namespace; it
+# cannot create, update, or delete this durable.
+docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
+  nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" consumer add chat_events proof_chat \
+  --filter chat.created --target _INBOX.voice.chat.proof --ack explicit --ack-wait 1s --deliver new --defaults >/dev/null
+proof_consumer="$(docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
+  nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" consumer info chat_events proof_chat --json)"
+if [[ "$(jq -r '.config.filter_subject' <<<"$proof_consumer")" != chat.created || "$(jq -r '.config.deliver_subject' <<<"$proof_consumer")" != _INBOX.voice.chat.proof || "$(jq -r '.config.ack_policy' <<<"$proof_consumer")" != explicit ]]; then
+  echo 'FAIL: bootstrap did not provision the fixed proof durable exactly' >&2
+  exit 1
+fi
 
 docker run -d --name voice-nats-proof-chat --network "$network" -v "$work:$work:ro" nats:2.12-alpine -c "$work/leaf.conf" >/dev/null
 for attempt in {1..15}; do
