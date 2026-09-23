@@ -419,6 +419,7 @@ func subscribeAccountDeletedManualAckForTest(
 	instanceID string,
 ) *nats.Subscription {
 	t.Helper()
+	provisionAccountDeletedDurable(t, js)
 	// The RED seam requires an explicit ManualAck adapter.  Its callback must
 	// Ack only after handleUserAccountDeleted returns nil and Nak every error.
 	sub, err := subscribeAccountDeletedConsumer(js, profiles, targets, publisher, instanceID, slog.Default())
@@ -564,6 +565,7 @@ func TestAccountDeletedConsumer_CleanShutdownKeepsDurableOffsetAcrossRestart(t *
 	require.NoError(t, err)
 	_, err = js.AddStream(&nats.StreamConfig{Name: userEventsStreamName, Subjects: []string{userAccountDeletedSubject}, Storage: nats.MemoryStorage})
 	require.NoError(t, err)
+	provisionAccountDeletedDurable(t, js)
 
 	const instanceID = "durable-offset"
 	profiles := &deletedAccountProfileListerForTest{profileIDs: []uuid.UUID{uuid.New()}}
@@ -614,6 +616,7 @@ func TestAccountDeletedConsumer_GracefulShutdownWaitsForInFlightAck(t *testing.T
 	require.NoError(t, err)
 	_, err = js.AddStream(&nats.StreamConfig{Name: userEventsStreamName, Subjects: []string{userAccountDeletedSubject}, Storage: nats.MemoryStorage})
 	require.NoError(t, err)
+	provisionAccountDeletedDurable(t, js)
 
 	release := make(chan struct{})
 	t.Cleanup(func() {
@@ -662,6 +665,7 @@ func TestAccountDeletedConsumer_ShutdownWaitsForAckFlush(t *testing.T) {
 	require.NoError(t, err)
 	_, err = js.AddStream(&nats.StreamConfig{Name: userEventsStreamName, Subjects: []string{userAccountDeletedSubject}, Storage: nats.MemoryStorage})
 	require.NoError(t, err)
+	provisionAccountDeletedDurable(t, js)
 
 	ackGate := startAccountDeletedAckGateForTest(t, server.Addr().String())
 	publisher := &dmPeerDeletedPublisherForTest{callSignal: make(chan struct{}, 1)}
@@ -699,7 +703,7 @@ func TestAccountDeletedConsumer_ShutdownWaitsForAckFlush(t *testing.T) {
 	waitForAccountDeletedAckFloorForTest(t, js, instanceID)
 }
 
-func TestAccountDeletedConsumer_LegacyDurableRetainsDeliverySubjectAndCursor(t *testing.T) {
+func TestAccountDeletedConsumer_RejectsLegacyDeliverySubjectDrift(t *testing.T) {
 	server := startAccountDeletedJSTestServer(t)
 	nc, err := nats.Connect(server.ClientURL())
 	require.NoError(t, err)
@@ -720,23 +724,6 @@ func TestAccountDeletedConsumer_LegacyDurableRetainsDeliverySubjectAndCursor(t *
 		FilterSubject:  userAccountDeletedSubject,
 	})
 	require.NoError(t, err)
-	legacyAcked := make(chan struct{}, 1)
-	legacySub, err := js.Subscribe(userAccountDeletedSubject, func(msg *nats.Msg) {
-		_ = msg.Ack()
-		legacyAcked <- struct{}{}
-	}, nats.Bind(userEventsStreamName, durable), nats.ManualAck())
-	require.NoError(t, err)
-	_, err = js.Publish(userAccountDeletedSubject, accountDeletedMessageForTest(t, uuid.NewString(), uuid.NewString()).Data)
-	require.NoError(t, err)
-	select {
-	case <-legacyAcked:
-	case <-time.After(3 * time.Second):
-		t.Fatal("legacy durable did not acknowledge the source event")
-	}
-	waitForAccountDeletedAckFloorForTest(t, js, instanceID)
-	require.NoError(t, legacySub.Unsubscribe())
-	before := waitForAccountDeletedDurableForTest(t, js, instanceID)
-
 	publisher := &dmPeerDeletedPublisherForTest{callSignal: make(chan struct{}, 1)}
 	sub, err := subscribeAccountDeletedConsumer(
 		js,
@@ -746,16 +733,8 @@ func TestAccountDeletedConsumer_LegacyDurableRetainsDeliverySubjectAndCursor(t *
 		instanceID,
 		slog.Default(),
 	)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = sub.Unsubscribe() })
-	select {
-	case <-publisher.callSignal:
-		t.Fatal("legacy durable replayed its acknowledged source event")
-	case <-time.After(150 * time.Millisecond):
-	}
-	after := waitForAccountDeletedDurableForTest(t, js, instanceID)
-	require.Equal(t, legacyDelivery, after.Config.DeliverSubject)
-	require.Equal(t, before.AckFloor, after.AckFloor)
+	require.Error(t, err)
+	require.Nil(t, sub)
 }
 
 func TestAccountDeletedConsumer_ShutdownAckFlushTimeoutIsBounded(t *testing.T) {
@@ -768,6 +747,7 @@ func TestAccountDeletedConsumer_ShutdownAckFlushTimeoutIsBounded(t *testing.T) {
 	require.NoError(t, err)
 	_, err = js.AddStream(&nats.StreamConfig{Name: userEventsStreamName, Subjects: []string{userAccountDeletedSubject}, Storage: nats.MemoryStorage})
 	require.NoError(t, err)
+	provisionAccountDeletedDurable(t, js)
 
 	ackGate := startAccountDeletedAckGateForTest(t, server.Addr().String())
 	publisher := &dmPeerDeletedPublisherForTest{callSignal: make(chan struct{}, 1)}

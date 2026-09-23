@@ -31,7 +31,7 @@ func TestExplicitAnalyticsDurableSurvivesPodRestartWithPendingMessage(t *testing
 	require.NoError(t, err)
 
 	const durable, queue = "analytics_v2_test", "analytics_v2_test"
-	require.NoError(t, ensureAnalyticsDurable(js, "events", "events", durable, queue))
+	provisionAnalyticsDurable(t, js, "events", "events", durable, queue)
 	info, err := js.ConsumerInfo("events", durable)
 	require.NoError(t, err)
 	info.Config.AckWait = 50 * time.Millisecond

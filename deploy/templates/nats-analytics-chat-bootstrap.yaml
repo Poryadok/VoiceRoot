@@ -1,0 +1,97 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: voice-nats-analytics-chat-bootstrap
+  namespace: __NAMESPACE__
+data:
+  bootstrap.sh: |
+    #!/bin/sh
+    set -eu
+
+    nats_url="${NATS_URL:?NATS_URL is required}"
+
+    stream() {
+      name="$1"; shift
+      expected="$(printf '%s\n' "$@" | jq -R . | jq -sc 'sort')"
+      info="$(nats --server "$nats_url" req --raw "\$JS.API.STREAM.INFO.$name" "")"
+      if printf '%s' "$info" | jq -e '.error' >/dev/null; then
+        printf '%s' "$info" | jq -r '.error.description' | grep -qi 'stream not found' && { echo "required central stream not found: $name" >&2; exit 1; }
+        echo "$info" >&2; exit 1
+      fi
+      actual="$(printf '%s' "$info" | jq -c '.config.subjects | sort')"
+      [ "$actual" = "$expected" ] || { echo "incompatible subjects for stream $name" >&2; exit 1; }
+    }
+
+    consumer() {
+      stream_name="$1"; durable="$2"; filter="$3"; target="$4"; deliver="$5"; group="$6"
+      if info="$(nats --server "$nats_url" req --raw "\$JS.API.CONSUMER.INFO.$stream_name.$durable" "" 2>&1)"; then
+        if printf '%s' "$info" | jq -e '.error' >/dev/null; then
+          printf '%s' "$info" | jq -r '.error.description' | grep -qi 'consumer not found' || { echo "$info" >&2; exit 1; }
+        else
+          actual="$(printf '%s' "$info" | jq -c '[.config.filter_subject, .config.deliver_subject, .config.deliver_group, .config.ack_policy, .config.deliver_policy]')"
+          expected="$(jq -cn --arg filter "$filter" --arg target "$target" --arg group "$group" --arg deliver "$deliver" '[ $filter, $target, $group, "explicit", $deliver ]')"
+          [ "$actual" = "$expected" ] || { echo "incompatible consumer $stream_name/$durable" >&2; exit 1; }
+          return
+        fi
+      else
+        echo "$info" >&2; exit 1
+      fi
+      if [ -n "$group" ]; then
+        nats --server "$nats_url" consumer add "$stream_name" "$durable" --filter "$filter" --target "$target" --deliver-group "$group" --ack explicit --deliver "$deliver" --defaults
+      else
+        nats --server "$nats_url" consumer add "$stream_name" "$durable" --filter "$filter" --target "$target" --ack explicit --deliver "$deliver" --defaults
+      fi
+    }
+
+    stream message_events message.sent message.edited message.deleted message.read message.read_receipt_revoked message.reaction_added message.reaction_removed message.mention_added message.pinned message.unpinned message.forwarded message.delivery_ack
+    stream user_events user.account_deleted user.profile_created user.profile_updated user.profile_switched user.verified user.presence_changed user.game_detected user.settings_changed
+    stream chat_events chat.created chat.member_changed chat.dm_peer_deleted space.tree_changed space.created voice.room_created voice.room_deleted space.invite_created space.member_joined space.member_left space.updated space.deleted
+    stream matchmaking_events mm.search_started mm.search_cancelled mm.search_nudge mm.search_timeout mm.match_found mm.match_completed mm.rating_submitted mm.player_banned
+    stream voice_events voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined
+    stream story_events story.created story.viewed story.reacted story.expired story.highlight_created story.lfp_created story.lfp_response
+    stream bot_events bot.registered bot.command_executed bot.webhook_delivered bot.webhook_failed
+    stream social_events social.friend_request social.friend_accepted social.friend_removed social.user_blocked social.contacts_synced
+    stream role_events role.created role.updated role.deleted role.assigned role.revoked role.chat_override_set role.chat_override_removed role.voice_override_set role.voice_override_removed
+    stream file_events file.uploaded file.processed file.scan_infected file.expired file.downloaded
+    stream subscription_events subscription.plan_started subscription.plan_cancelled subscription.plan_expired subscription.downgrade subscription.payment_success subscription.payment_failed subscription.space_pro_started subscription.space_pro_expired subscription.grace_reminder
+    stream moderation_events moderation.report_created moderation.sanction_applied moderation.appeal_submitted
+    stream analytics_events 'analytics.>'
+
+    consumer message_events analytics_v2_msg 'message.>' _INBOX.voice.analytics.analytics_v2_msg new analytics_v2_msg
+    consumer user_events analytics_v2_user 'user.>' _INBOX.voice.analytics.analytics_v2_user new analytics_v2_user
+    consumer chat_events analytics_v2_chat '>' _INBOX.voice.analytics.analytics_v2_chat new analytics_v2_chat
+    consumer matchmaking_events analytics_v2_mm 'mm.>' _INBOX.voice.analytics.analytics_v2_mm new analytics_v2_mm
+    consumer voice_events analytics_v2_voice 'voice.>' _INBOX.voice.analytics.analytics_v2_voice new analytics_v2_voice
+    consumer story_events analytics_v2_story 'story.>' _INBOX.voice.analytics.analytics_v2_story new analytics_v2_story
+    consumer bot_events analytics_v2_bot 'bot.>' _INBOX.voice.analytics.analytics_v2_bot new analytics_v2_bot
+    consumer social_events analytics_v2_social 'social.>' _INBOX.voice.analytics.analytics_v2_social new analytics_v2_social
+    consumer role_events analytics_v2_role 'role.>' _INBOX.voice.analytics.analytics_v2_role new analytics_v2_role
+    consumer file_events analytics_v2_file 'file.>' _INBOX.voice.analytics.analytics_v2_file new analytics_v2_file
+    consumer subscription_events analytics_v2_subscription 'subscription.>' _INBOX.voice.analytics.analytics_v2_subscription new analytics_v2_subscription
+    consumer moderation_events analytics_v2_moderation 'moderation.>' _INBOX.voice.analytics.analytics_v2_moderation new analytics_v2_moderation
+    consumer analytics_events analytics_v2_telemetry 'analytics.>' _INBOX.voice.analytics.analytics_v2_telemetry new analytics_v2_telemetry
+    consumer user_events chat_account_deleted user.account_deleted _INBOX.voice.chat.chat_account_deleted all ''
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: voice-nats-analytics-chat-bootstrap
+  namespace: __NAMESPACE__
+spec:
+  backoffLimit: 12
+  template:
+    metadata:
+      labels: {app: voice-nats-analytics-chat-bootstrap}
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: bootstrap
+          image: natsio/nats-box:0.18.0
+          command: ["/bin/sh", "/config/bootstrap.sh"]
+          env:
+            - {name: NATS_URL, value: "nats://voice-nats:4222"}
+          volumeMounts:
+            - {name: config, mountPath: /config, readOnly: true}
+      volumes:
+        - name: config
+          configMap: {name: voice-nats-analytics-chat-bootstrap, defaultMode: 0555}
