@@ -61,3 +61,14 @@ streams:
     retention: limits
     max_age: 168h
     storage: file
+  - name: analytics_events
+    # Stream capture only: publisher JWT ACLs enumerate each emitted analytics.* subject.
+    subjects: [analytics.>]
+    retention: limits
+    max_age: 168h
+    storage: file
+  - name: user_profile_projection
+    subjects: [user.search_profile_projection]
+    retention: limits
+    max_age: 0s
+    storage: file
