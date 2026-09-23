@@ -78,7 +78,11 @@ EOF
 docker network create "$network" >/dev/null
 docker run -d --name voice-nats-proof-hub --network "$network" --network-alias hub -v "$work:$work" nats:2.12-alpine -c "$work/hub.conf" >/dev/null
 for _ in $(seq 1 30); do docker logs voice-nats-proof-hub 2>&1 | grep -q 'Server is ready' && break; sleep 1; done
-docker logs voice-nats-proof-hub 2>&1 | grep -q 'Server is ready'
+if ! docker logs voice-nats-proof-hub 2>&1 | grep -q 'Server is ready'; then
+  echo 'FAIL: JWT resolver hub did not become ready' >&2
+  docker logs voice-nats-proof-hub >&2
+  exit 1
+fi
 
 # Only the Job credential may create the stream; this is a real resolver-authenticated request.
 docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
