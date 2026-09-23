@@ -65,7 +65,18 @@ func TestRenderRejectsModifiedAccountSignature(t *testing.T) {
 	}
 }
 
+func TestRenderRejectsOperatorSystemAccountBindingMismatch(t *testing.T) {
+	in := inputWithOperatorSystemBinding(t, false)
+	if _, err := render(in); err == nil {
+		t.Fatal("operator JWT with a mismatched system account must fail closed")
+	}
+}
+
 func validInput(t *testing.T) configInput {
+	return inputWithOperatorSystemBinding(t, true)
+}
+
+func inputWithOperatorSystemBinding(t *testing.T, bindSystem bool) configInput {
 	t.Helper()
 	op, err := nkeys.CreateOperator()
 	if err != nil {
@@ -77,8 +88,19 @@ func validInput(t *testing.T) configInput {
 		t.Fatal(err)
 	}
 	systemPublic, _ := systemKey.PublicKey()
+	operatorSystemPublic := systemPublic
+	if !bindSystem {
+		otherSystem, err := nkeys.CreateAccount()
+		if err != nil {
+			t.Fatal(err)
+		}
+		operatorSystemPublic, err = otherSystem.PublicKey()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 	opClaim := jwt.NewOperatorClaims(opPublic)
-	opClaim.SystemAccount = systemPublic
+	opClaim.SystemAccount = operatorSystemPublic
 	opJWT, err := opClaim.Encode(op)
 	if err != nil {
 		t.Fatal(err)
