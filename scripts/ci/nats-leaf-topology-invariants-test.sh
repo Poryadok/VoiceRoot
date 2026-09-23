@@ -61,9 +61,12 @@ proof_reject() { ! grep -Fq -- "$1" "$proof" || fail "hosted proof contains forb
 proof_require() { grep -Fq -- "$1" "$proof" || fail "hosted proof missing $2"; }
 proof_reject '$JS.API.>' 'broad JetStream API wildcard'
 proof_reject '_INBOX.>' 'broad inbox wildcard'
+proof_reject '--ack-wait' 'nats-box-version-dependent consumer flag'
 proof_require 'chat-noack.creds' 'no-ACK credential proof'
 proof_require 'AckSync' 'synchronous no-ACK denial attempt'
 proof_require 'ack_subject=' 'exact ACK subject evidence'
+proof_require '$JS.API.CONSUMER.CREATE.chat_events.proof_chat' 'exact proof consumer create subject'
+proof_require '"ack_wait":1000000000' 'one-second proof consumer ack wait'
 
 for target in docker-compose.yml deploy/staging deploy/prod; do
   ! grep -R -Fq -- 'leaf-sidecar.template.yaml' "${root}/${target}" 2>/dev/null || fail "selected by ${target}"

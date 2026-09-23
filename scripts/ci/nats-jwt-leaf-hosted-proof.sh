@@ -272,10 +272,16 @@ fi
 
 # Bootstrap creates the one fixed proof durable before the application leaf
 # joins. The service identity has only INFO and its own ACK namespace; it
-# cannot create, update, or delete this durable.
-docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
-  nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" --inbox-prefix _INBOX.voice.bootstrap.reply consumer add chat_events proof_chat \
-  --filter chat.created --target _INBOX.voice.chat.proof --ack explicit --ack-wait 1s --deliver new --defaults >/dev/null
+# cannot create, update, or delete this durable. Use the stable JetStream API
+# payload rather than a nats-box CLI flag whose availability varies by image.
+create_proof_consumer() {
+  docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
+    nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" --inbox-prefix _INBOX.voice.bootstrap.reply \
+    req --raw '$JS.API.CONSUMER.CREATE.chat_events.proof_chat' \
+    '{"stream_name":"chat_events","config":{"name":"proof_chat","durable_name":"proof_chat","deliver_subject":"_INBOX.voice.chat.proof","deliver_policy":"new","ack_policy":"explicit","ack_wait":1000000000,"filter_subject":"chat.created"}}' | \
+    jq -e '(.error | not) and .config.name == "proof_chat" and .config.ack_wait == 1000000000' >/dev/null
+}
+create_proof_consumer
 proof_consumer="$(docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
   nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" --inbox-prefix _INBOX.voice.bootstrap.reply consumer info chat_events proof_chat --json)"
 if [[ "$(jq -r '.config.filter_subject' <<<"$proof_consumer")" != chat.created || "$(jq -r '.config.deliver_subject' <<<"$proof_consumer")" != _INBOX.voice.chat.proof || "$(jq -r '.config.ack_policy' <<<"$proof_consumer")" != explicit ]]; then
@@ -362,9 +368,7 @@ if [[ "$(jq -r '.config.deliver_subject' <<<"$drift_info")" != _INBOX.voice.chat
 fi
 docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
   nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" --inbox-prefix _INBOX.voice.bootstrap.reply consumer rm chat_events proof_chat --force >/dev/null
-docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
-  nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" --inbox-prefix _INBOX.voice.bootstrap.reply consumer add chat_events proof_chat \
-  --filter chat.created --target _INBOX.voice.chat.proof --ack explicit --ack-wait 1s --deliver new --defaults >/dev/null
+create_proof_consumer
 
 # Core publish success alone is not an authorization or persistence proof. The
 # bootstrap-only identity observes the exact JetStream stream state and proves
