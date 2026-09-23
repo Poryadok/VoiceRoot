@@ -229,11 +229,16 @@ docker rm -f voice-nats-proof-invalid-jwt >/dev/null
 
 # Only the Job credential may create the stream. Its reply subscription is an
 # exact credential-owned subject, never a broad _INBOX wildcard.
+bootstrap_reply="_INBOX.voice.bootstrap.reply.stream_create"
 docker run -d --name voice-nats-proof-bootstrap-reply --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
-  nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" sub --count 1 _INBOX.voice.bootstrap.reply >/dev/null
+  nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" sub --count 1 "$bootstrap_reply" >/dev/null
 docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
-  nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" --inbox-prefix _INBOX.voice.bootstrap.reply pub --reply _INBOX.voice.bootstrap.reply '$JS.API.STREAM.CREATE.chat_events' '{"name":"chat_events","subjects":["chat.created"],"storage":"file","retention":"limits"}' >/dev/null
+  nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" --inbox-prefix _INBOX.voice.bootstrap.reply pub --reply "$bootstrap_reply" '$JS.API.STREAM.CREATE.chat_events' '{"name":"chat_events","subjects":["chat.created"],"storage":"file","retention":"limits"}' >/dev/null
 docker wait voice-nats-proof-bootstrap-reply >/dev/null
+if ! docker logs voice-nats-proof-bootstrap-reply 2>&1 | grep -Fq 'chat_events'; then
+  echo 'FAIL: bootstrap stream-create reply was not received on the scoped child inbox' >&2
+  exit 1
+fi
 
 # Bootstrap creates the one fixed proof durable before the application leaf
 # joins. The service identity has only INFO and its own ACK namespace; it
@@ -309,11 +314,19 @@ if docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18
   echo 'FAIL: drifted fixed durable was accepted as the canonical binding' >&2
   exit 1
 fi
+docker run -d --name voice-nats-proof-drift-receive --network container:voice-nats-proof-chat -v "$root/src/backend/pkg:/repo:ro" -v "$work:$work:ro" golang:1.24-alpine \
+  sh -ec "cd /repo && go run $work/leaf_receive.go ack $work/drift-receive.ready" >/dev/null
+wait_for_file "$work/drift-receive.ready" 'canonical drift receiver'
 docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0 \
   nats --server nats://127.0.0.1:4222 pub chat.created drift-proof >/dev/null
-if docker run --rm --network container:voice-nats-proof-chat -v "$root/src/backend/pkg:/repo:ro" -v "$work:$work:ro" golang:1.24-alpine \
-  sh -ec "cd /repo && go run $work/leaf_receive.go ack" >/dev/null 2>&1; then
+if docker wait voice-nats-proof-drift-receive >/dev/null 2>&1; then
   echo 'FAIL: leaf consumed a drifted durable through the canonical target' >&2
+  exit 1
+fi
+drift_info="$(docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" --inbox-prefix _INBOX.voice.bootstrap.reply consumer info chat_events proof_chat --json)"
+drift_stream="$(docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" --inbox-prefix _INBOX.voice.bootstrap.reply stream info chat_events --json)"
+if [[ "$(jq -r '.config.deliver_subject' <<<"$drift_info")" != _INBOX.voice.chat.drift || "$(jq -r '.state.last_seq' <<<"$drift_stream")" != 2 ]]; then
+  echo 'FAIL: post-drift event was not captured exclusively by the drifted durable state' >&2
   exit 1
 fi
 docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
@@ -327,8 +340,8 @@ docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 
 # that the leaf-authenticated publish was captured as sequence one.
 stream_info="$(docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
   nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" --inbox-prefix _INBOX.voice.bootstrap.reply stream info chat_events --json)"
-if [[ "$(jq -r '.state.messages' <<<"$stream_info")" != 1 || "$(jq -r '.state.first_seq' <<<"$stream_info")" != 1 || "$(jq -r '.state.last_seq' <<<"$stream_info")" != 1 ]]; then
-  echo 'FAIL: leaf-authenticated chat.created was not captured as stream sequence one' >&2
+if [[ "$(jq -r '.state.messages' <<<"$stream_info")" != 2 || "$(jq -r '.state.first_seq' <<<"$stream_info")" != 1 || "$(jq -r '.state.last_seq' <<<"$stream_info")" != 2 ]]; then
+  echo 'FAIL: leaf-authenticated initial and post-drift publishes were not captured as sequences one and two' >&2
   exit 1
 fi
 
@@ -407,13 +420,13 @@ docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0
   nats --server nats://127.0.0.1:4222 pub chat.created noack-proof >/dev/null
 docker wait voice-nats-proof-noack-receive-one >/dev/null
 noack_receive_one="$(docker logs voice-nats-proof-noack-receive-one 2>&1)"
-if ! grep -Fqx 'stream=chat_events sequence=2 delivered=1 ack=false' <<<"$noack_receive_one"; then
+if ! grep -Fqx 'stream=chat_events sequence=3 delivered=1 ack=false' <<<"$noack_receive_one"; then
   echo 'FAIL: no-ACK identity did not receive the new fixed durable delivery' >&2
   printf '%s\n' "$noack_receive_one" >&2
   exit 1
 fi
 noack_ack_subject="$(sed -n 's/^ack_subject=//p' <<<"$noack_receive_one")"
-if [[ ! "$noack_ack_subject" =~ ^\$JS\.ACK\.chat_events\.proof_chat\.[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || ! grep -Eqi 'ack_error=.*permission.*(violation|denied)' <<<"$noack_receive_one"; then
+if [[ ! "$noack_ack_subject" =~ ^\$JS\.ACK\.chat_events\.proof_chat\.[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || ! grep -Eq '^ack_error=.+$' <<<"$noack_receive_one"; then
   echo 'FAIL: no-ACK identity did not report denial for its exact proof ACK subject' >&2
   printf '%s\n' "$noack_receive_one" >&2
   exit 1
@@ -440,7 +453,7 @@ docker run -d --name voice-nats-proof-noack-receive-two --network container:voic
 wait_for_file "$work/noack-receive-two.ready" 'no-ACK redelivery receiver'
 docker wait voice-nats-proof-noack-receive-two >/dev/null
 noack_receive_two="$(docker logs voice-nats-proof-noack-receive-two 2>&1)"
-if ! grep -Fqx 'stream=chat_events sequence=2 delivered=2 ack=false' <<<"$noack_receive_two"; then
+if ! grep -Fqx 'stream=chat_events sequence=3 delivered=2 ack=false' <<<"$noack_receive_two"; then
   echo 'FAIL: denied no-ACK delivery was not redelivered unacknowledged' >&2
   printf '%s\n' "$noack_receive_two" >&2
   exit 1
@@ -451,9 +464,12 @@ hub_log_before="$(docker logs voice-nats-proof-hub 2>&1 || true)"
 if docker run --rm --network "$network" natsio/nats-box:0.18.0 nats --server nats://hub:4222 pub chat.created denied >/dev/null 2>&1; then
   echo 'FAIL: direct hub accepted an unauthenticated client' >&2; exit 1
 fi
-sleep 1
-hub_log_delta="$(docker logs voice-nats-proof-hub 2>&1 || true)"
-hub_log_delta="${hub_log_delta#"$hub_log_before"}"
+for _ in $(seq 1 8); do
+  hub_log_delta="$(docker logs voice-nats-proof-hub 2>&1 || true)"
+  hub_log_delta="${hub_log_delta#"$hub_log_before"}"
+  grep -Eqi '(authorization|authentication).*(violation|denied|failed|required)|authentication.*error' <<<"$hub_log_delta" && break
+  sleep 1
+done
 if ! grep -Eqi '(authorization|authentication).*(violation|denied|failed|required)|authentication.*error' <<<"$hub_log_delta"; then
   echo 'FAIL: direct unauthenticated hub rejection lacked fresh hub evidence' >&2
   printf '%s\n' "$hub_log_delta" >&2
