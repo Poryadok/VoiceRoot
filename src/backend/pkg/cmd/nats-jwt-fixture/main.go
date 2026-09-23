@@ -80,8 +80,8 @@ func generate(dest string) error {
 		claim := jwt.NewUserClaims(pub)
 		claim.Name = "voice-" + name
 		// Deliberately narrow placeholders: no general JetStream management grant.
-		claim.Permissions.Pub.Allow = []string{"voice." + name + ".>"}
-		claim.Permissions.Sub.Allow = []string{"voice." + name + ".>"}
+		claim.Pub.Allow = []string{"voice." + name + ".>"}
+		claim.Sub.Allow = []string{"voice." + name + ".>"}
 		userJWT, err := claim.Encode(account)
 		if err != nil {
 			return err
