@@ -161,6 +161,7 @@ jobs:
       - name: Staging smoke (optional)
         if: vars.STAGING_SMOKE_ENABLED == 'true'
         env:
+          VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
           VOICE_GATEWAY_INGRESS_HOST: ${{ vars.VOICE_GATEWAY_INGRESS_HOST }}
           VOICE_WEB_INGRESS_HOST: ${{ vars.VOICE_WEB_INGRESS_HOST }}
           VOICE_DEVELOPER_PORTAL_INGRESS_HOST: ${{ vars.VOICE_DEVELOPER_PORTAL_INGRESS_HOST }}

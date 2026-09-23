@@ -124,18 +124,28 @@ if [ -n "${VOICE_DEVELOPER_PORTAL_INGRESS_HOST:-}" ]; then
     expected_api_base="${expected_api_base%/}"
     portal_js_path="$(echo "${portal_root_body}" | grep -oE '/assets/[^"]+\.js' | head -1 || true)"
     if [ -n "${portal_js_path}" ]; then
-      echo "Smoke: GET ${PORTAL_URL}${portal_js_path} (developer portal bundle VITE_VOICE_API_BASE)"
-      portal_js_tmp="$(mktemp)"
-      portal_js_code="$(curl -sS -o "${portal_js_tmp}" -w "%{http_code}" "${PORTAL_URL}${portal_js_path}" || echo "000")"
-      portal_js_body="$(tr -d '\r' < "${portal_js_tmp}")"
-      rm -f "${portal_js_tmp}"
-      if [ "${portal_js_code}" != "200" ]; then
-        echo "developer portal asset fetch failed: HTTP ${portal_js_code} for ${portal_js_path}"
-        exit 1
-      fi
-      if ! echo "${portal_js_body}" | grep -qF "${expected_api_base}"; then
-        echo "developer portal bundle missing baked VITE_VOICE_API_BASE=${expected_api_base}"
-        exit 1
+      if command -v kubectl >/dev/null 2>&1; then
+        echo "Smoke: check deployed developer portal bundle VITE_VOICE_API_BASE"
+        if ! MSYS_NO_PATHCONV=1 kubectl exec -n "${VOICE_K8S_NAMESPACE:-voice-staging}" deploy/voice-developer-portal -- \
+          grep -Fq "${expected_api_base}" "/usr/share/nginx/html${portal_js_path}"; then
+          echo "developer portal bundle missing baked VITE_VOICE_API_BASE=${expected_api_base}"
+          exit 1
+        fi
+      else
+        echo "Smoke: GET ${PORTAL_URL}${portal_js_path} (developer portal bundle VITE_VOICE_API_BASE)"
+        portal_js_tmp="$(mktemp)"
+        portal_js_code="$(curl -sS --connect-timeout 5 --max-time 30 --retry 2 --retry-all-errors \
+          -o "${portal_js_tmp}" -w "%{http_code}" "${PORTAL_URL}${portal_js_path}" || echo "000")"
+        portal_js_body="$(tr -d '\r' < "${portal_js_tmp}")"
+        rm -f "${portal_js_tmp}"
+        if [ "${portal_js_code}" != "200" ]; then
+          echo "developer portal asset fetch failed: HTTP ${portal_js_code} for ${portal_js_path}"
+          exit 1
+        fi
+        if ! echo "${portal_js_body}" | grep -qF "${expected_api_base}"; then
+          echo "developer portal bundle missing baked VITE_VOICE_API_BASE=${expected_api_base}"
+          exit 1
+        fi
       fi
     else
       echo "Smoke: warning — could not find portal JS asset in index.html (skip VITE_VOICE_API_BASE check)"
