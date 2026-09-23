@@ -19,6 +19,12 @@ func (unavailableJetStream) PublishMsg(*nats.Msg, ...nats.PubOpt) (*nats.PubAck,
 }
 
 func TestValidateBootstrappedStream(t *testing.T) {
+	require.Equal(t, []string{
+		"chat.created", "chat.member_changed", "chat.dm_peer_deleted",
+		"space.tree_changed", "space.created", "voice.room_created", "voice.room_deleted",
+		"space.invite_created", "space.member_joined", "space.member_left", "space.updated", "space.deleted",
+	}, spaceEventStreamSubjects())
+
 	valid := &nats.StreamInfo{Config: nats.StreamConfig{Name: streamName, Subjects: spaceEventStreamSubjects(), Retention: nats.LimitsPolicy, MaxAge: 7 * 24 * time.Hour, Storage: nats.FileStorage}}
 	require.NoError(t, validateBootstrappedStream(valid))
 	require.Error(t, validateBootstrappedStream(nil))
