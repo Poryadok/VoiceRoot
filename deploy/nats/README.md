@@ -34,6 +34,10 @@ prints private material. The final activation supplies the reviewed manifest
 from the canonical publisher/consumer topology rather than granting a default
 per-service namespace.
 
+`bootstrap.creds` is a separate, short-lived provisioning-Job credential. It
+must be stored and mounted separately from `voice-nats-service-credentials`;
+no application pod or leaf sidecar may receive it.
+
 ## Disabled per-service leaf topology template
 
 [`leaf-sidecar.template.yaml`](leaf-sidecar.template.yaml) is an unselected

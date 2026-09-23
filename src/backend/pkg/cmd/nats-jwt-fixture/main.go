@@ -5,6 +5,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -50,7 +51,16 @@ func loadACL(path string) (aclDocument, error) {
 		return aclDocument{}, err
 	}
 	var acl aclDocument
-	if err := yaml.Unmarshal(contents, &acl); err != nil {
+	decoder := yaml.NewDecoder(strings.NewReader(string(contents)))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&acl); err != nil {
+		return aclDocument{}, err
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return aclDocument{}, errors.New("ACL must contain exactly one document")
+		}
 		return aclDocument{}, err
 	}
 	return acl, validateACL(acl)
@@ -126,6 +136,13 @@ func generate(dest string, acl aclDocument) error {
 	}
 	accountPub, _ := account.PublicKey()
 	accountClaim := jwt.NewAccountClaims(accountPub)
+	accountClaim.Limits = jwt.OperatorLimits{JetStreamLimits: jwt.JetStreamLimits{
+		MemoryStorage: 64 << 20,
+		DiskStorage:   512 << 20,
+		Streams:       64,
+		Consumer:      512,
+		MaxAckPending: 4096,
+	}}
 	accountJWT, err := accountClaim.Encode(op)
 	if err != nil {
 		return err
@@ -137,8 +154,6 @@ func generate(dest string, acl aclDocument) error {
 		return err
 	}
 
-	var intent strings.Builder
-	intent.WriteString("# Generated from a reviewed exact ACL manifest; contains no seeds.\nservices:\n")
 	for _, name := range serviceNames {
 		grant := acl.Services[name]
 		user, err := nkeys.CreateUser()
@@ -148,8 +163,7 @@ func generate(dest string, acl aclDocument) error {
 		pub, _ := user.PublicKey()
 		claim := jwt.NewUserClaims(pub)
 		claim.Name = "voice-" + name
-		claim.Pub.Allow = append([]string(nil), grant.Publish...)
-		claim.Sub.Allow = append([]string(nil), grant.Subscribe...)
+		applyGrant(claim, grant)
 		userJWT, err := claim.Encode(account)
 		if err != nil {
 			return err
@@ -166,14 +180,15 @@ func generate(dest string, acl aclDocument) error {
 		if err := writeFile(filepath.Join(dest, "creds", name+".creds"), creds); err != nil {
 			return err
 		}
-		writeIntent(&intent, name, grant)
 	}
 	if err := writeCredential(filepath.Join(dest, "creds", "bootstrap.creds"), "voice-nats-bootstrap", acl.Bootstrap, account); err != nil {
 		return err
 	}
-	intent.WriteString("bootstrap:\n")
-	writeIntent(&intent, "bootstrap", acl.Bootstrap)
-	if err := writeFile(filepath.Join(dest, "acl-intent.yaml"), intent.String()); err != nil {
+	intent, err := yaml.Marshal(acl)
+	if err != nil {
+		return err
+	}
+	if err := writeFile(filepath.Join(dest, "acl-intent.yaml"), string(intent)); err != nil {
 		return err
 	}
 	cleanup = false
@@ -188,8 +203,7 @@ func writeCredential(path, name string, grant serviceACL, account nkeys.KeyPair)
 	pub, _ := user.PublicKey()
 	claim := jwt.NewUserClaims(pub)
 	claim.Name = name
-	claim.Pub.Allow = append([]string(nil), grant.Publish...)
-	claim.Sub.Allow = append([]string(nil), grant.Subscribe...)
+	applyGrant(claim, grant)
 	userJWT, err := claim.Encode(account)
 	if err != nil {
 		return err
@@ -206,8 +220,15 @@ func writeCredential(path, name string, grant serviceACL, account nkeys.KeyPair)
 	return writeFile(path, creds)
 }
 
-func writeIntent(intent *strings.Builder, name string, grant serviceACL) {
-	fmt.Fprintf(intent, "  %s:\n    publish: %q\n    subscribe: %q\n", name, grant.Publish, grant.Subscribe)
+func applyGrant(claim *jwt.UserClaims, grant serviceACL) {
+	claim.Pub.Allow = append([]string(nil), grant.Publish...)
+	claim.Sub.Allow = append([]string(nil), grant.Subscribe...)
+	if len(claim.Pub.Allow) == 0 {
+		claim.Pub.Deny = []string{">"}
+	}
+	if len(claim.Sub.Allow) == 0 {
+		claim.Sub.Deny = []string{">"}
+	}
 }
 
 func writeFile(path, contents string) error { return os.WriteFile(path, []byte(contents+"\n"), 0600) }
