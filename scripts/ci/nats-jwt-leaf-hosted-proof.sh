@@ -81,7 +81,6 @@ leafnodes {
     credentials: "$work/fixture/creds/chat.creds"
     tls {
       ca_file: "$work/cert.pem"
-      server_name: "hub"
       handshake_first: true
     }
   }]
