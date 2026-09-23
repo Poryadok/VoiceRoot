@@ -3,6 +3,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd -P)"
+grep -Fq 'apply_migrate search_db' "${ROOT}/scripts/staging/apply-migrate-jobs.sh"
+grep -Fq 'name: voice-search-db-migrations' "${ROOT}/deploy/templates/migrate-search-db-job.yaml"
 TEST_TMP="$(mktemp -d)"
 trap 'rm -rf "${TEST_TMP}"' EXIT
 

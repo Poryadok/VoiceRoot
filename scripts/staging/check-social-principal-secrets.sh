@@ -12,7 +12,8 @@ check_secret() {
 }
 check_secret voice-social-principal-signing '["current.pem","next.pem","active-kid"]'
 check_secret voice-file-principal-signing '["current.pem","next.pem","active-kid"]'
+check_secret voice-search-principal-signing '["current.pem","next.pem","active-kid"]'
 check_secret voice-principal-ca '["ca.crt"]'
-for service in social user space file user-file; do
+for service in social user space file user-file search; do
   check_secret "voice-$service-principal-tls" '["tls.crt","tls.key"]'
 done

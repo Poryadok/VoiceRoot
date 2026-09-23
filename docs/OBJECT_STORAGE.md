@@ -37,12 +37,19 @@ ReadWriteOnce PVC. Configure `VOICE_MINIO_STORAGE_CLASS` and
 `local-path`/`100Gi`) for the cluster. The two bucket Jobs use `mc mb
 --ignore-existing`, so retries are idempotent.
 
-Create `voice-minio-credentials` from the external secret manager before the
-infra apply. Copy the stage/prod `secret.example.yaml` shape but never commit
-credentials. `voice-app-secrets` receives the existing `USER_R2_*` and
-`FILE_R2_*` names because those are service configuration names; they accept
+For staging, store `STAGING_MINIO_ROOT_USER` and `STAGING_MINIO_ROOT_PASSWORD`
+in GitHub repository **Settings → Environments → staging → Environment secrets**.
+The staging deploy creates `voice-minio-credentials` from them when absent and
+never rotates an existing Secret. For production, create the Secret from the
+external secret manager before infra apply. Copy the stage/prod
+`secret.example.yaml` shape but never commit credentials. `voice-app-secrets`
+receives the existing `USER_R2_*` and `FILE_R2_*` names because those are
+service configuration names; they accept
 any S3-compatible endpoint. For MinIO use `http://voice-minio:9000`, region
 `us-east-1`, and the environment-specific avatar/file buckets.
+The staging `STAGING_APP_SECRETS_YAML` environment secret is a base64-encoded
+`voice-app-secrets` manifest; its `USER_R2_*` and `FILE_R2_*` credentials must
+match the MinIO Secret when those services use MinIO.
 
 ## Backup, restore, and optional provider migration
 

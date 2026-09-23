@@ -146,6 +146,12 @@ apply_migrate user_db \
   voice-migrate-user-db \
   voice-user-db-migrations
 
+apply_migrate search_db \
+  "${ROOT}/src/backend/migrations/search_db" \
+  "${ROOT}/deploy/templates/migrate-search-db-job.yaml" \
+  voice-migrate-search-db \
+  voice-search-db-migrations
+
 apply_migrate voice_db \
   "${ROOT}/src/backend/migrations/voice_db" \
   "${ROOT}/deploy/templates/migrate-voice-db-job.yaml" \
