@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
@@ -48,13 +47,7 @@ func (p *jetstreamDeliveryAckPublisher) ensureStream() error {
 	p.ensureOnce.Do(func() {
 		info, err := p.js.StreamInfo(messageEventsStreamName)
 		if err != nil {
-			_, p.ensureErr = p.js.AddStream(&nats.StreamConfig{
-				Name:      messageEventsStreamName,
-				Subjects:  []string{"message.>"},
-				Retention: nats.LimitsPolicy,
-				MaxAge:    7 * 24 * time.Hour,
-				Storage:   nats.FileStorage,
-			})
+			p.ensureErr = fmt.Errorf("delivery ack stream is not centrally provisioned: %w", err)
 			return
 		}
 		for _, subject := range info.Config.Subjects {
@@ -62,9 +55,7 @@ func (p *jetstreamDeliveryAckPublisher) ensureStream() error {
 				return
 			}
 		}
-		cfg := info.Config
-		cfg.Subjects = append(append([]string(nil), info.Config.Subjects...), subjectMessageDeliveryAck)
-		_, p.ensureErr = p.js.UpdateStream(&cfg)
+		p.ensureErr = fmt.Errorf("delivery ack stream is missing subject %q", subjectMessageDeliveryAck)
 	})
 	return p.ensureErr
 }
