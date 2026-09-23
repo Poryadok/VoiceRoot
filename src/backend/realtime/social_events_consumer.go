@@ -44,6 +44,9 @@ func subscribeSocialEvents(js nats.JetStreamContext, hub *wsHub, instanceID stri
 		return nil, fmt.Errorf("social events subscriber requires hub")
 	}
 	durable := socialConsumerDurableName(instanceID)
+	if err := validateRealtimeConsumerConfig(js, jsStreamSocialEvents, durable, "social.user_blocked", realtimeConsumerDeliverSubject(instanceID, "social")); err != nil {
+		return nil, err
+	}
 	handler := func(msg *nats.Msg) {
 		accountA, accountB, ok := socialBlockEventAccounts(msg.Data)
 		if !ok {
