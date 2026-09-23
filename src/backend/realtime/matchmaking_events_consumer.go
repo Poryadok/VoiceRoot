@@ -23,6 +23,9 @@ func matchmakingConsumerDurableName(instanceID string) string {
 
 func subscribeMatchmakingEvents(js nats.JetStreamContext, hub *wsHub, instanceID string, logger *slog.Logger) (*nats.Subscription, error) {
 	durable := matchmakingConsumerDurableName(instanceID)
+	if err := validateRealtimeConsumerConfig(js, jsStreamMatchmakingEvents, durable, "mm.>", realtimeConsumerDeliverSubject(instanceID, "matchmaking")); err != nil {
+		return nil, err
+	}
 	handler := func(msg *nats.Msg) {
 		switch {
 		case strings.HasSuffix(msg.Subject, "mm.match_found"),
