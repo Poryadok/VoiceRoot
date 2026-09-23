@@ -35,17 +35,17 @@ func writeAtomic(path, contents string) error {
 		return errors.New("renderer output unavailable")
 	}
 	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
+	defer func() { _ = os.Remove(tmpName) }()
 	if err := tmp.Chmod(0400); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return errors.New("renderer output mode unavailable")
 	}
 	if _, err := tmp.WriteString(contents); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return errors.New("renderer output unavailable")
 	}
 	if err := tmp.Sync(); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return errors.New("renderer output unavailable")
 	}
 	if err := tmp.Close(); err != nil {

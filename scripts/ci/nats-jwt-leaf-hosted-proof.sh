@@ -156,16 +156,46 @@ leafnodes {
 EOF
 cat >"$work/wrong-ca-leaf.conf" <<EOF
 listen: 127.0.0.1:4222
-leafnodes { remotes = [{ urls: ["nats-leaf://hub:7422"] account: "\$G" credentials: "$work/fixture/creds/chat.creds" tls { ca_file: "$work/wrong-ca.pem"; handshake_first: true } }] }
+leafnodes {
+  remotes = [{
+    urls: ["nats-leaf://hub:7422"]
+    account: "\$G"
+    credentials: "$work/fixture/creds/chat.creds"
+    tls {
+      ca_file: "$work/wrong-ca.pem"
+      handshake_first: true
+    }
+  }]
+}
 EOF
 cat >"$work/wrong-sni-leaf.conf" <<EOF
 listen: 127.0.0.1:4222
-leafnodes { remotes = [{ urls: ["nats-leaf://wrong-sni:7422"] account: "\$G" credentials: "$work/fixture/creds/chat.creds" tls { ca_file: "$work/cert.pem"; handshake_first: true } }] }
+leafnodes {
+  remotes = [{
+    urls: ["nats-leaf://wrong-sni:7422"]
+    account: "\$G"
+    credentials: "$work/fixture/creds/chat.creds"
+    tls {
+      ca_file: "$work/cert.pem"
+      handshake_first: true
+    }
+  }]
+}
 EOF
 sed '0,/eyJ/s/eyJ/eyK/' "$work/fixture/creds/chat.creds" >"$work/invalid-chat.creds"
 cat >"$work/invalid-jwt-leaf.conf" <<EOF
 listen: 127.0.0.1:4222
-leafnodes { remotes = [{ urls: ["nats-leaf://hub:7422"] account: "\$G" credentials: "$work/invalid-chat.creds" tls { ca_file: "$work/cert.pem"; handshake_first: true } }] }
+leafnodes {
+  remotes = [{
+    urls: ["nats-leaf://hub:7422"]
+    account: "\$G"
+    credentials: "$work/invalid-chat.creds"
+    tls {
+      ca_file: "$work/cert.pem"
+      handshake_first: true
+    }
+  }]
+}
 EOF
 
 docker network create "$network" >/dev/null

@@ -59,7 +59,11 @@ func TestRenderPreloadsOnlyDistinctSignedAccounts(t *testing.T) {
 
 func TestRenderRejectsModifiedAccountSignature(t *testing.T) {
 	in := validInput(t)
-	in.AppJWT = in.AppJWT[:len(in.AppJWT)-1] + "x"
+	replacement := "x"
+	if strings.HasSuffix(in.AppJWT, replacement) {
+		replacement = "y"
+	}
+	in.AppJWT = in.AppJWT[:len(in.AppJWT)-1] + replacement
 	if _, err := render(in); err == nil {
 		t.Fatal("modified account JWT signature must fail closed")
 	}
