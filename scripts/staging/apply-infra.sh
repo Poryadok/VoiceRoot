@@ -49,9 +49,28 @@ for secret in voice-nats-operator voice-nats-hub-tls voice-nats-bootstrap-creden
     exit 1
   fi
 done
-for key in operator.jwt account.jwt system-account.jwt; do
+for key in operator.jwt account.jwt system-account.jwt account.public system-account.public; do
   if ! kubectl get secret voice-nats-operator -n "${NS}" -o "jsonpath={.data.${key//./\\.}}" | grep -q .; then
     echo "ERROR: voice-nats-operator missing required ${key} in ${NS}" >&2
+    exit 1
+  fi
+done
+for key in tls.crt tls.key ca.crt; do
+  if ! kubectl get secret voice-nats-hub-tls -n "${NS}" -o "jsonpath={.data.${key//./\\.}}" | grep -q .; then
+    echo "ERROR: voice-nats-hub-tls missing required ${key} in ${NS}" >&2
+    exit 1
+  fi
+done
+for key in bootstrap.creds; do
+  if ! kubectl get secret voice-nats-bootstrap-credentials -n "${NS}" -o "jsonpath={.data.${key//./\\.}}" | grep -q .; then
+    echo "ERROR: voice-nats-bootstrap-credentials missing required ${key} in ${NS}" >&2
+    exit 1
+  fi
+done
+for service in auth analytics bot chat file matchmaking messaging moderation notification realtime role search social space story subscription user voice; do
+  key="${service}.creds"
+  if ! kubectl get secret voice-nats-service-credentials -n "${NS}" -o "jsonpath={.data.${key//./\\.}}" | grep -q .; then
+    echo "ERROR: voice-nats-service-credentials missing required ${key} in ${NS}" >&2
     exit 1
   fi
 done

@@ -51,9 +51,19 @@ scale_auth_down_if_needed() {
   kubectl wait --for=delete pod -l app=voice-auth -n "${NS}" --timeout=180s 2>/dev/null || true
 }
 
+require_nats_bootstrap() {
+  for job in voice-nats-realtime-bootstrap voice-nats-notification-bootstrap voice-nats-search-bootstrap voice-nats-analytics-chat-bootstrap; do
+    if ! kubectl wait --for=condition=complete "job/${job}" -n "${NS}" --timeout=5s; then
+      echo "ERROR: required NATS bootstrap ${job} is incomplete; run apply-infra before app rollout" >&2
+      exit 1
+    fi
+  done
+}
+
 scale_auth_down_if_needed
 
 bash "${ROOT}/scripts/staging/check-social-principal-secrets.sh"
+require_nats_bootstrap
 render "${MANIFEST_DIR}/services.yaml" | kubectl apply -f -
 sed "s|__K_NAMESPACE__|${NS}|g" \
   "${ROOT}/deploy/templates/network-policy-social-privacy-principal.yaml" | kubectl apply -f -

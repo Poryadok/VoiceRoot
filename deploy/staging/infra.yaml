@@ -132,13 +132,32 @@ spec:
       labels:
         app: voice-nats
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 10000
+        fsGroupChangePolicy: OnRootMismatch
+      initContainers:
+        - name: nats-config-renderer
+          image: __IMAGE_REGISTRY__/nats-hub-config-renderer:__IMAGE_TAG__
+          args: [/run/nats/input/operator.jwt, /run/nats/input/account.jwt, /run/nats/input/system-account.jwt, /run/nats/input/account.public, /run/nats/input/system-account.public, /run/nats/template/nats.conf, /run/nats-rendered/config/nats.conf]
+          volumeMounts:
+            - {name: nats-resolver-input, mountPath: /run/nats/input, readOnly: true}
+            - {name: nats-config-template, mountPath: /run/nats/template, readOnly: true}
+            - {name: nats-rendered-config, mountPath: /run/nats-rendered}
+            - {name: nats-operator-jwt, mountPath: /etc/nats/jwt, readOnly: true}
+            - {name: nats-hub-tls, mountPath: /etc/nats/tls, readOnly: true}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10000
+            runAsGroup: 10000
+            capabilities: {drop: ["ALL"]}
+            seccompProfile: {type: RuntimeDefault}
       containers:
         - name: nats
           image: nats:2.12-alpine
           args: ["-c", "/etc/nats/nats.conf"]
-          env:
-            - {name: APP_ACCOUNT_PUBLIC_KEY, valueFrom: {secretKeyRef: {name: voice-nats-operator, key: account.public}}}
-            - {name: SYSTEM_ACCOUNT_PUBLIC_KEY, valueFrom: {secretKeyRef: {name: voice-nats-operator, key: system-account.public}}}
           ports:
             - containerPort: 4222
             - name: leaf-tls
@@ -147,9 +166,9 @@ spec:
           volumeMounts:
             - name: jsdata
               mountPath: /data
-            - name: nats-config
+            - name: nats-rendered-config
               mountPath: /etc/nats/nats.conf
-              subPath: nats.conf
+              subPath: config/nats.conf
               readOnly: true
             - name: nats-operator-jwt
               mountPath: /etc/nats/jwt
@@ -157,24 +176,42 @@ spec:
             - name: nats-hub-tls
               mountPath: /etc/nats/tls
               readOnly: true
+          startupProbe:
+            httpGet: {path: /healthz, port: 8222}
+            periodSeconds: 3
+            timeoutSeconds: 3
+            failureThreshold: 40
+          readinessProbe:
+            httpGet: {path: "/healthz?js-enabled-only=true", port: 8222}
+            periodSeconds: 5
+            timeoutSeconds: 3
       volumes:
         - name: jsdata
           emptyDir: {}
-        - name: nats-config
-          configMap:
-            name: voice-nats-hub-config
-        - name: nats-operator-jwt
+        - name: nats-rendered-config
+          emptyDir: {medium: Memory, sizeLimit: 1Mi}
+        - name: nats-config-template
+          configMap: {name: voice-nats-hub-config}
+        - name: nats-resolver-input
           secret:
             secretName: voice-nats-operator
-            defaultMode: 0400
+            defaultMode: 0440
             items:
               - {key: operator.jwt, path: operator.jwt}
               - {key: account.jwt, path: account.jwt}
               - {key: system-account.jwt, path: system-account.jwt}
+              - {key: account.public, path: account.public}
+              - {key: system-account.public, path: system-account.public}
+        - name: nats-operator-jwt
+          secret:
+            secretName: voice-nats-operator
+            defaultMode: 0440
+            items:
+              - {key: operator.jwt, path: operator.jwt}
         - name: nats-hub-tls
           secret:
             secretName: voice-nats-hub-tls
-            defaultMode: 0400
+            defaultMode: 0440
             items:
               - {key: tls.crt, path: tls.crt}
               - {key: tls.key, path: tls.key}
@@ -210,10 +247,10 @@ data:
     operator: /etc/nats/jwt/operator.jwt
     resolver: MEMORY
     resolver_preload: {
-      $APP_ACCOUNT_PUBLIC_KEY: /etc/nats/jwt/account.jwt
-      $SYSTEM_ACCOUNT_PUBLIC_KEY: /etc/nats/jwt/system-account.jwt
+      __NATS_APP_RESOLVER_PRELOAD__
+      __NATS_SYS_RESOLVER_PRELOAD__
     }
-    system_account: $SYSTEM_ACCOUNT_PUBLIC_KEY
+    system_account: __NATS_SYSTEM_ACCOUNT__
     leafnodes {
       listen: 0.0.0.0:7422
       tls {

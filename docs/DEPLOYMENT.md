@@ -575,23 +575,27 @@ only File→User:9092 and User→File:8443, while retaining Social's existing
 routes. Before switching active key, publish current+next keys, wait the
 credential hard expiry, then retain the retired public key for at least 35 s.
 
-## NATS JWT credential foundation (not activated)
+## NATS JWT and leaf activation
 
-NATS currently remains anonymous in Compose, staging, and production manifests.
-The credential contract at [`deploy/nats/`](../deploy/nats/README.md) is an
-asset-preparation boundary, not permission to add `--auth`, `operator`,
-`resolver`, client credential environment variables, or Secret mounts. The
-activation PR must be bind-only after all publisher/consumer identities and
-JetStream ownership have been reviewed together.
+Staging and production use an operator-signed APP account for JetStream and a
+distinct SYS account with no JetStream entitlement. The hub resolves both JWTs
+in MEMORY and accepts workload traffic only through TLS leaf port 7422. Each
+actual NATS workload receives one service credential and reaches only its local
+`127.0.0.1:4222` leaf; the bootstrap Jobs alone receive `bootstrap.creds`.
+Compose is not production evidence for this topology.
 
 For each target namespace (`voice-staging` or `voice-prod`), the secret manager
-must create `voice-nats-operator` with UTF-8 `operator.jwt` and `account.jwt`,
-and `voice-nats-service-credentials` with exactly one `<service>.creds` key for
-every deployed NATS client. Kubernetes `stringData` is used only as input and
-is base64-encoded into `data` by the API server. Operator/account/user NKey
-seeds are never committed, logged, put into ConfigMaps, or mounted into app
-pods. Production values must be supplied by the operator, not copied from
-fixtures or placeholders.
+must create `voice-nats-operator` with UTF-8 `operator.jwt`, `account.jwt`,
+`system-account.jwt`, `account.public`, and `system-account.public`; the hub
+TLS Secret is `voice-nats-hub-tls`; and
+`voice-nats-service-credentials` has exactly one `<service>.creds` key for
+every deployed NATS client. The hub init container validates signatures and
+claims, renders the APP/SYS resolver preload into a memory-only file, and runs
+`nats-server -t` without emitting configuration output. The hub container sees
+only `operator.jwt`, rendered config, and TLS files. Kubernetes `stringData` is
+input only. Operator/account/user NKey seeds are never committed, logged, put
+into ConfigMaps, or mounted into app pods. Production values are operator
+supplied, never copied from fixtures or placeholders.
 
 Rotation runbook:
 
@@ -602,8 +606,11 @@ Rotation runbook:
    subscribe, ACK, and consumer operations and a denied neighboring subject.
 3. Revoke the old user JWT only after every replica uses the replacement; retain
    audit evidence without copying credential contents into logs or tickets.
-4. Rotate account/operator signing material only as a separately rehearsed
-   broker rollout with overlapping trusted JWTs and a tested rollback path.
+4. Rotate account/operator material only in a maintenance window: create new
+   immutable, versioned Secret objects, validate the APP/SYS pair and TLS SAN,
+   restart the single-replica hub deliberately, re-run every bootstrap Job, then
+   restart leaf workloads. Keep the prior version until the hosted leaf and
+   redelivery checks pass; do not claim zero downtime for this RWO hub.
 
 # Object storage
 

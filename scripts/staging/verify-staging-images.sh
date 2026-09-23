@@ -63,6 +63,7 @@ elif [ -n "${TAG}" ]; then
     [ -z "${name}" ] && continue
     check_image "${name}" "${REGISTRY}/${name}:${TAG}" || true
   done < <(jq -r '.images[].name' "${ROOT}/scripts/ci/staging-image-catalog.json")
+  check_image "nats-hub-config-renderer" "${REGISTRY}/nats-hub-config-renderer:${TAG}" || true
 else
   echo "ERROR: set STACK_LOCK_FILE or VOICE_IMAGE_TAG" >&2
   exit 1

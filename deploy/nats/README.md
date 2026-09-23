@@ -8,11 +8,13 @@ both `voice-staging` and `voice-prod`: render `__VOICE_NAMESPACE__` to the
 target namespace in the secret manager, never in source control. Values use
 `stringData` and are UTF-8 text; Kubernetes encodes them to `data` on write.
 
-The hub must mount `voice-nats-operator/operator.jwt`, `account.jwt`, and
-`system-account.jwt` into the NATS pod at `/etc/nats/jwt/` read-only. Its MEMORY
-resolver preloads distinct `APP` and `SYS` accounts and declares `SYS` as the
-system account. The hub TLS Secret is `voice-nats-hub-tls` with `tls.crt`,
-`tls.key`, and `ca.crt`; its leaf listener is Service port 7422. It must mount one
+The non-root renderer init container receives `voice-nats-operator/operator.jwt`,
+`account.jwt`, `system-account.jwt`, `account.public`, and
+`system-account.public`; after signature/claim validation it writes the distinct
+`APP` and `SYS` MEMORY resolver preload to a memory-only config file. The main
+hub mounts only `operator.jwt` at `/etc/nats/jwt/`, the rendered config, and the
+TLS Secret `voice-nats-hub-tls` (`tls.crt`, `tls.key`, `ca.crt`). Its leaf
+listener is Service port 7422. It must mount one
 `voice-nats-service-credentials/<service>.creds` entry into each matching pod
 at `/var/run/nats/creds/<service>.creds`, read-only with `defaultMode: 0400`.
 No pod receives the shared Secret wholesale and no app pod receives an operator
@@ -41,11 +43,11 @@ per-service namespace.
 must be stored and mounted separately from `voice-nats-service-credentials`;
 no application pod or leaf sidecar may receive it.
 
-## Disabled per-service leaf topology template
+## Per-service leaf topology
 
-[`leaf-sidecar.template.yaml`](leaf-sidecar.template.yaml) is an unselected
-rendering contract for the final bind-only activation PR. It does not change
-Compose, staging, production, or any application URL. Each rendered workload
+[`leaf-sidecar.template.yaml`](leaf-sidecar.template.yaml) documents the
+selected rendering contract used by staging and production. Compose remains
+outside this rollout. Each rendered workload
 adds one `nats-leaf` sidecar with an app listener restricted to `127.0.0.1:4222`;
 the matching application is configured only for that loopback endpoint and has
 no route or credential that can reach the hub directly.
