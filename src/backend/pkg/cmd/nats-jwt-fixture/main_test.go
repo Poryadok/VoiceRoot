@@ -58,11 +58,12 @@ func TestGenerateCreatesDistinctServiceCredentialsWithoutBroadJetStreamAPI(t *te
 	if accountClaims.Issuer != operatorClaims.Subject {
 		t.Fatal("fixture application account must be operator-signed")
 	}
-	if accountClaims.Limits.Conn < 2 || accountClaims.Limits.LeafNodeConn < 1 {
-		t.Fatal("fixture application account must permit app and leaf connections")
+	limits := accountClaims.Limits
+	if limits.Conn < 2 || limits.LeafNodeConn < 1 || limits.Subs < 2 || limits.Data < 1024 || limits.Payload < 1024 {
+		t.Fatal("fixture application account must permit bounded app, leaf, and request/reply transport")
 	}
-	if accountClaims.Limits.Subs < 2 || accountClaims.Limits.Payload < 1024 {
-		t.Fatal("fixture application account must permit bounded request/reply transport")
+	if limits.MemoryStorage <= 0 || limits.DiskStorage <= 0 || limits.Streams <= 0 || limits.Consumer <= 0 || limits.MaxAckPending <= 0 {
+		t.Fatal("fixture application account must explicitly bound every required JetStream limit")
 	}
 	systemPublic, err := os.ReadFile(filepath.Join(dest, "system-account.public"))
 	if err != nil || !strings.HasPrefix(strings.TrimSpace(string(systemPublic)), "A") {
