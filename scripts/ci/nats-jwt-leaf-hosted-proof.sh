@@ -46,6 +46,7 @@ func main() {
   meta, err := msg.Metadata()
   if err != nil { panic(err) }
   if mode == "nak-then-ack" {
+    fmt.Printf("ack_subject=%s\n", msg.Reply)
     if err := msg.Nak(); err != nil { panic(err) }
     if err := nc.Flush(); err != nil { panic(err) }
     fmt.Printf("stream=%s sequence=%d delivered=%d ack=false\n", meta.Stream, meta.Sequence.Stream, meta.NumDelivered)
@@ -339,6 +340,8 @@ if ! wait_for_file "$work/receiver/receive-one.ready" 'first chat leaf receiver'
   docker logs voice-nats-proof-receive-one >&2 || true
   exit 1
 fi
+redelivery_leaf_before="$(docker logs voice-nats-proof-chat 2>&1 || true)"
+redelivery_hub_before="$(docker logs voice-nats-proof-hub 2>&1 || true)"
 
 # This client has no credentials: its only path is the local leaf namespace.
 docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0 \
@@ -348,6 +351,9 @@ receive_one="$(docker logs voice-nats-proof-receive-one 2>&1)"
 if ! grep -Fqx 'stream=chat_events sequence=1 delivered=1 ack=false' <<<"$receive_one" || ! grep -Fqx 'stream=chat_events sequence=1 delivered=2 ack=true' <<<"$receive_one"; then
   echo 'FAIL: fixed durable did not NAK, redeliver, then acknowledge the leaf publish' >&2
   printf '%s\n' "$receive_one" >&2
+  docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" --inbox-prefix _INBOX.voice.bootstrap.reply consumer info chat_events proof_chat --json >&2 || true
+  leaf_logs="$(docker logs voice-nats-proof-chat 2>&1 || true)"; hub_logs="$(docker logs voice-nats-proof-hub 2>&1 || true)"
+  printf '%s\n%s\n' "${leaf_logs#"$redelivery_leaf_before"}" "${hub_logs#"$redelivery_hub_before"}" >&2
   exit 1
 fi
 
