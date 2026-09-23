@@ -1,0 +1,123 @@
+# Disabled activation template. This file is deliberately not selected by
+# docker-compose.yml, deploy/staging, or deploy/prod. The final JWT activation
+# PR renders __VOICE_*__ placeholders into one reviewed workload patch per
+# service only after every publisher, fixed consumer, and exact ACL is merged.
+#
+# The app container receives no NATS secret. It reaches only the sidecar at the
+# loopback endpoint below; it cannot bypass the leaf to the hub. The sidecar
+# receives one credential key and never an operator/account seed.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: voice-nats-leaf-__VOICE_SERVICE__-config
+  namespace: __VOICE_NAMESPACE__
+  labels:
+    app.kubernetes.io/name: voice-nats-leaf
+    voice.service: __VOICE_SERVICE__
+data:
+  leaf.conf: |
+    server_name: voice-leaf-__VOICE_SERVICE__
+    listen: 127.0.0.1:4222
+    # No JetStream is enabled here. Fixed, centrally pre-provisioned consumers belong to the authenticated hub; this leaf creates none.
+    leafnodes {
+      remotes = [{
+        urls: ["nats-leaf://__VOICE_NATS_HUB_HOST__:7422"]
+        account: "__VOICE_NATS_ACCOUNT_PUBLIC_KEY__"
+        credentials: /var/run/nats/creds/__VOICE_SERVICE__.creds
+        tls {
+          ca_file: /etc/nats/tls/ca.crt
+          server_name: "__VOICE_NATS_HUB_SERVER_NAME__"
+          handshake_first: true
+        }
+      }]
+    }
+---
+# Render this strategic-merge fragment into only the matching service
+# Deployment. Keep the application endpoint fixed to nats://127.0.0.1:4222;
+# it is documentation for the final bind-only patch, not a current env change.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-__VOICE_SERVICE__
+  namespace: __VOICE_NAMESPACE__
+spec:
+  template:
+    spec:
+      containers:
+        # This is the only application-side NATS endpoint in the activation
+        # patch. It replaces the direct hub URL when this unselected template is
+        # deliberately bound to the matching service deployment.
+        - name: __VOICE_SERVICE__
+          env:
+            - name: NATS_URL
+              value: "nats://127.0.0.1:4222"
+        - name: nats-leaf
+          image: nats:2.12-alpine
+          args: ["-c", "/etc/nats/leaf.conf"]
+          volumeMounts:
+            - name: nats-leaf-config
+              mountPath: /etc/nats/leaf.conf
+              subPath: leaf.conf
+              readOnly: true
+            - name: nats-service-creds
+              mountPath: /var/run/nats/creds/__VOICE_SERVICE__.creds
+              subPath: __VOICE_SERVICE__.creds
+              readOnly: true
+            - name: nats-hub-tls
+              mountPath: /etc/nats/tls/ca.crt
+              subPath: ca.crt
+              readOnly: true
+      volumes:
+        - name: nats-leaf-config
+          configMap:
+            name: voice-nats-leaf-__VOICE_SERVICE__-config
+        - name: nats-service-creds
+          secret:
+            secretName: voice-nats-service-credentials
+            defaultMode: 0400
+            items:
+              - key: __VOICE_SERVICE__.creds
+                path: __VOICE_SERVICE__.creds
+        - name: nats-hub-tls
+          secret:
+            secretName: voice-nats-hub-tls
+            items:
+              - key: ca.crt
+                path: ca.crt
+---
+# Hub-only activation fragment: mount #443 operator/account JWTs into the
+# central NATS workload, never into an application or its nats-leaf sidecar.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: voice-nats
+  namespace: __VOICE_NAMESPACE__
+spec:
+  template:
+    spec:
+      containers:
+        - name: nats
+          volumeMounts:
+            - name: nats-operator-jwt
+              mountPath: /etc/nats/jwt/operator.jwt
+              subPath: operator.jwt
+              readOnly: true
+            - name: nats-operator-jwt
+              mountPath: /etc/nats/jwt/account.jwt
+              subPath: account.jwt
+              readOnly: true
+      volumes:
+        - name: nats-operator-jwt
+          secret:
+            secretName: voice-nats-operator
+            defaultMode: 0400
+            items:
+              - key: operator.jwt
+                path: operator.jwt
+              - key: account.jwt
+                path: account.jwt
+
+# Rotation: replace one external Secret key, then restart only the nats-leaf sidecar for that service. The hub's operator/account signing rotation is a
+# separate rehearsed broker rollout. The activation PR must prove allowed exact
+# Core + JetStream operations and denied neighbouring subjects; it must not add
+# dynamic consumer creation or a broad JetStream administration wildcard.

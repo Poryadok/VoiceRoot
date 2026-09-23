@@ -86,6 +86,7 @@ func TestChatMemberRemovalRevokesEveryLocalTabAndSubscriptionGatedActions(t *tes
 				if _, err := js.AddStream(&nats.StreamConfig{Name: jsStreamChatEvents, Subjects: []string{"chat.>"}}); err != nil {
 					t.Fatalf("add chat event stream: %v", err)
 				}
+				preprovisionRealtimeConsumer(t, js, jsStreamChatEvents, chatConsumerDurableName("acl-revoke-test"), "chat.>")
 				sub, err := subscribeChatEvents(js, hub, "acl-revoke-test", nil)
 				if err != nil {
 					t.Fatalf("subscribe chat events: %v", err)
@@ -234,8 +235,10 @@ func TestSocialBlockEventRevokesOpenDMEverywhereAndPreservesOtherChats(t *testin
 	if _, err := js.AddStream(&nats.StreamConfig{Name: jsStreamSocialEvents, Subjects: []string{"social.>"}}); err != nil {
 		t.Fatal(err)
 	}
-
 	hubs := []*wsHub{newWSHub(), newWSHub()}
+	for i := range hubs {
+		preprovisionRealtimeConsumer(t, js, jsStreamSocialEvents, socialConsumerDurableName("social-block-instance-"+strconv.Itoa(i)), "social.user_blocked")
+	}
 	for i, hub := range hubs {
 		profileID := uuid.NewString()
 		accountID := accountA
@@ -330,6 +333,7 @@ func TestSocialBlockRevocationGatesOpenWebSocketActions(t *testing.T) {
 	if _, err := js.AddStream(&nats.StreamConfig{Name: jsStreamSocialEvents, Subjects: []string{"social.>"}}); err != nil {
 		t.Fatal(err)
 	}
+	preprovisionRealtimeConsumer(t, js, jsStreamSocialEvents, socialConsumerDurableName("social-block-ws-test"), "social.user_blocked")
 	sub, err := subscribeSocialEvents(js, hub, "social-block-ws-test", nil)
 	if err != nil {
 		t.Fatal(err)

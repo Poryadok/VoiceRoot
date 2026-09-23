@@ -388,6 +388,7 @@ func TestRunMessageEventsConsumer_JetStreamToHub(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errCh := make(chan error, 1)
+	preprovisionRealtimeConsumer(t, js, jsStreamMessageEvents, consumerDurableName("test-consumer-inst"), "message.>")
 	go func() { errCh <- runMessageEventsConsumer(ctx, hub, natsURL, "test-consumer-inst", nil) }()
 	time.Sleep(200 * time.Millisecond)
 
@@ -478,6 +479,7 @@ func TestRunMessageEventsConsumer_InAppNotificationOnMessageSent(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errCh := make(chan error, 1)
+	preprovisionRealtimeConsumer(t, js, jsStreamMessageEvents, consumerDurableName("test-notify-inst"), "message.>")
 	go func() { errCh <- runMessageEventsConsumer(ctx, hub, natsURL, "test-notify-inst", nil) }()
 	time.Sleep(200 * time.Millisecond)
 
@@ -601,6 +603,7 @@ func TestRunMessageEventsConsumer_MessageReadNoInAppNotification(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errCh := make(chan error, 1)
+	preprovisionRealtimeConsumer(t, js, jsStreamMessageEvents, consumerDurableName("test-read-notify-inst"), "message.>")
 	go func() { errCh <- runMessageEventsConsumer(ctx, hub, natsURL, "test-read-notify-inst", nil) }()
 	time.Sleep(200 * time.Millisecond)
 
@@ -690,6 +693,7 @@ func TestRunMessageEventsConsumer_InAppNotificationOnReactionAdded(t *testing.T)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errCh := make(chan error, 1)
+	preprovisionRealtimeConsumer(t, js, jsStreamMessageEvents, consumerDurableName("test-reaction-notify-inst"), "message.>")
 	go func() { errCh <- runMessageEventsConsumer(ctx, hub, natsURL, "test-reaction-notify-inst", nil) }()
 	time.Sleep(200 * time.Millisecond)
 
@@ -788,6 +792,7 @@ func TestRunMessageEventsConsumer_MentionAdded(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errCh := make(chan error, 1)
+	preprovisionRealtimeConsumer(t, js, jsStreamMessageEvents, consumerDurableName("test-mention-inst"), "message.>")
 	go func() { errCh <- runMessageEventsConsumer(ctx, hub, natsURL, "test-mention-inst", nil) }()
 	time.Sleep(200 * time.Millisecond)
 

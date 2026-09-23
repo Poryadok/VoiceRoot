@@ -19,3 +19,7 @@ if ! docker run --rm -i -v "$ROOT:/w" ghcr.io/jqlang/jq:1.7 \
 fi
 
 bash "$ROOT/scripts/ci/account-delete-nats-invariants-test.sh"
+bash "$ROOT/scripts/ci/nats-realtime-bootstrap-contract-test.sh"
+if [[ "${VOICE_CI_COMPOSE_NATS_SMOKE:-1}" == "1" ]]; then
+  bash "$ROOT/scripts/ci/nats-realtime-bootstrap-smoke.sh"
+fi
