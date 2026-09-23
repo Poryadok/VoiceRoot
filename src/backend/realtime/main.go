@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
@@ -96,6 +97,26 @@ func main() {
 	initRealtimeMetrics(metricsReg)
 
 	if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
+		consumerReady := newRealtimeConsumerReadiness("message", "voice", "chat", "social", "matchmaking", "role", "user")
+		ready.Consumers = consumerReady
+		startConsumer := func(name string, run func(context.Context) error) {
+			go func() {
+				consumerCtx := withRealtimeConsumerReadiness(ctx, consumerReady, name)
+				for {
+					err := run(consumerCtx)
+					consumerReady.set(name, false)
+					if err == nil || err == context.Canceled || ctx.Err() != nil {
+						return
+					}
+					logger.Error("JetStream consumer exited", slog.String("consumer", name), slog.String("error", err.Error()))
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(5 * time.Second):
+					}
+				}
+			}()
+		}
 		go func() {
 			nc, err := nats.Connect(natsURL, natsConnectOptions("voice-realtime-nats-lag")...)
 			if err != nil {
@@ -110,48 +131,27 @@ func main() {
 			}
 			runNatsConsumeLagPoller(ctx, js, instanceID)
 		}()
-		go func() {
-			err := runMessageEventsConsumer(ctx, hub, natsURL, instanceID, logger)
-			if err != nil && err != context.Canceled {
-				logger.Error("message.events consumer exited", slog.String("error", err.Error()))
-			}
-		}()
-		go func() {
-			err := runVoiceEventsConsumer(ctx, hub, natsURL, instanceID, logger)
-			if err != nil && err != context.Canceled {
-				logger.Error("voice.events consumer exited", slog.String("error", err.Error()))
-			}
-		}()
-		go func() {
-			err := runChatEventsConsumer(ctx, hub, natsURL, instanceID, logger)
-			if err != nil && err != context.Canceled {
-				logger.Error("chat.events consumer exited", slog.String("error", err.Error()))
-			}
-		}()
-		go func() {
-			err := runSocialEventsConsumer(ctx, hub, natsURL, instanceID, logger)
-			if err != nil && err != context.Canceled {
-				logger.Error("social.events consumer exited", slog.String("error", err.Error()))
-			}
-		}()
-		go func() {
-			err := runMatchmakingEventsConsumer(ctx, hub, natsURL, instanceID, logger)
-			if err != nil && err != context.Canceled {
-				logger.Error("matchmaking.events consumer exited", slog.String("error", err.Error()))
-			}
-		}()
-		go func() {
-			err := runRoleEventsConsumer(ctx, hub, natsURL, instanceID, logger)
-			if err != nil && err != context.Canceled {
-				logger.Error("role.events consumer exited", slog.String("error", err.Error()))
-			}
-		}()
-		go func() {
-			err := runUserEventsConsumer(ctx, hub, friendLister, presenceViewer, natsURL, instanceID, logger)
-			if err != nil && err != context.Canceled {
-				logger.Error("user.events consumer exited", slog.String("error", err.Error()))
-			}
-		}()
+		startConsumer("message", func(runCtx context.Context) error {
+			return runMessageEventsConsumer(runCtx, hub, natsURL, instanceID, logger)
+		})
+		startConsumer("voice", func(runCtx context.Context) error {
+			return runVoiceEventsConsumer(runCtx, hub, natsURL, instanceID, logger)
+		})
+		startConsumer("chat", func(runCtx context.Context) error {
+			return runChatEventsConsumer(runCtx, hub, natsURL, instanceID, logger)
+		})
+		startConsumer("social", func(runCtx context.Context) error {
+			return runSocialEventsConsumer(runCtx, hub, natsURL, instanceID, logger)
+		})
+		startConsumer("matchmaking", func(runCtx context.Context) error {
+			return runMatchmakingEventsConsumer(runCtx, hub, natsURL, instanceID, logger)
+		})
+		startConsumer("role", func(runCtx context.Context) error {
+			return runRoleEventsConsumer(runCtx, hub, natsURL, instanceID, logger)
+		})
+		startConsumer("user", func(runCtx context.Context) error {
+			return runUserEventsConsumer(runCtx, hub, friendLister, presenceViewer, natsURL, instanceID, logger)
+		})
 	}
 
 	var dap deliveryAckPublisher

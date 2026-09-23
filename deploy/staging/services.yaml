@@ -636,6 +636,8 @@ metadata:
   labels: {app: voice-realtime}
 spec:
   replicas: 1
+  # The fixed Realtime durable names are singleton ownership slots.
+  strategy: {type: Recreate}
   selector:
     matchLabels: {app: voice-realtime}
   template:
@@ -653,9 +655,7 @@ spec:
           env:
             - {name: REALTIME_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
             - name: REALTIME_INSTANCE_ID
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
+              value: realtime-1
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 5}
 ---
