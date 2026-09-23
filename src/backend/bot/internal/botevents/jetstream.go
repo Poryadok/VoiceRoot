@@ -28,11 +28,16 @@ const (
 // JetStreamPublisher publishes BotStreamEvent payloads to NATS JetStream.
 type JetStreamPublisher struct {
 	nc     *nats.Conn
-	js     nats.JetStreamContext
+	js     jetStreamClient
 	Logger *slog.Logger
 
 	ensureOnce sync.Once
 	ensureErr  error
+}
+
+type jetStreamClient interface {
+	StreamInfo(string, ...nats.JSOpt) (*nats.StreamInfo, error)
+	PublishMsg(*nats.Msg, ...nats.PubOpt) (*nats.PubAck, error)
 }
 
 // NewJetStreamPublisher connects to NATS_URL and prepares JetStream.
@@ -69,44 +74,34 @@ func (p *JetStreamPublisher) ensureStream() error {
 		return fmt.Errorf("jetstream publisher not initialized")
 	}
 	p.ensureOnce.Do(func() {
-		subjects := []string{subjectBotRegistered, subjectCommandExec, subjectWebhookDeliv, subjectWebhookFailed}
-		if info, err := p.js.StreamInfo(streamName); err == nil {
-			for _, subj := range subjects {
-				if !streamHasSubject(info, subj) {
-					cfg := info.Config
-					cfg.Subjects = append(cfg.Subjects, subj)
-					_, p.ensureErr = p.js.UpdateStream(&cfg)
-					if p.ensureErr != nil {
-						return
-					}
-					info, p.ensureErr = p.js.StreamInfo(streamName)
-					if p.ensureErr != nil {
-						return
-					}
-				}
-			}
+		info, err := p.js.StreamInfo(streamName)
+		if err != nil {
+			p.ensureErr = fmt.Errorf("required JetStream stream %q is unavailable: %w", streamName, err)
 			return
 		}
-		_, p.ensureErr = p.js.AddStream(&nats.StreamConfig{
-			Name:      streamName,
-			Subjects:  subjects,
-			Retention: nats.LimitsPolicy,
-			MaxAge:    7 * 24 * time.Hour,
-		})
+		p.ensureErr = validateBootstrappedStream(info)
 	})
 	return p.ensureErr
 }
 
-func streamHasSubject(info *nats.StreamInfo, subject string) bool {
-	if info == nil {
-		return false
+func botEventStreamSubjects() []string {
+	return []string{subjectBotRegistered, subjectCommandExec, subjectWebhookDeliv, subjectWebhookFailed}
+}
+
+func validateBootstrappedStream(info *nats.StreamInfo) error {
+	if info == nil || info.Config.Name != streamName || info.Config.Retention != nats.LimitsPolicy || info.Config.MaxAge != 7*24*time.Hour || info.Config.Storage != nats.FileStorage || len(info.Config.Subjects) != len(botEventStreamSubjects()) {
+		return fmt.Errorf("required JetStream stream %q does not match bootstrap definition", streamName)
 	}
-	for _, s := range info.Config.Subjects {
-		if s == subject {
-			return true
+	seen := make(map[string]struct{}, len(info.Config.Subjects))
+	for _, subject := range info.Config.Subjects {
+		seen[subject] = struct{}{}
+	}
+	for _, subject := range botEventStreamSubjects() {
+		if _, ok := seen[subject]; !ok {
+			return fmt.Errorf("required JetStream stream %q does not match bootstrap definition", streamName)
 		}
 	}
-	return false
+	return nil
 }
 
 func (p *JetStreamPublisher) publish(ctx context.Context, subject string, evt *eventsv1.BotStreamEvent) error {

@@ -18,11 +18,11 @@ import (
 )
 
 const (
-	streamName              = "chat_events"
-	subjectSpaceCreated     = "space.created"
-	subjectSpaceTreeChanged = "space.tree_changed"
-	subjectVoiceRoomCreated = "space.voice_room_created"
-	subjectVoiceRoomDeleted = "space.voice_room_deleted"
+	streamName                = "chat_events"
+	subjectSpaceCreated       = "space.created"
+	subjectSpaceTreeChanged   = "space.tree_changed"
+	subjectVoiceRoomCreated   = "space.voice_room_created"
+	subjectVoiceRoomDeleted   = "space.voice_room_deleted"
 	subjectSpaceInviteCreated = "space.invite_created"
 	subjectSpaceMemberJoined  = "space.member_joined"
 	subjectSpaceMemberLeft    = "space.member_left"
@@ -32,12 +32,17 @@ const (
 
 // JetStreamPublisher publishes ChatStreamEvent payloads to NATS JetStream.
 type JetStreamPublisher struct {
-	nc *nats.Conn
-	js nats.JetStreamContext
+	nc     *nats.Conn
+	js     jetStreamClient
 	Logger *slog.Logger
 
 	ensureOnce sync.Once
 	ensureErr  error
+}
+
+type jetStreamClient interface {
+	StreamInfo(string, ...nats.JSOpt) (*nats.StreamInfo, error)
+	PublishMsg(*nats.Msg, ...nats.PubOpt) (*nats.PubAck, error)
 }
 
 // NewJetStreamPublisher connects to NATS_URL, prepares JetStream handle, and lazily ensures stream chat_events.
@@ -68,59 +73,46 @@ func (p *JetStreamPublisher) ensureStream() error {
 		return fmt.Errorf("jetstream publisher not initialized")
 	}
 	p.ensureOnce.Do(func() {
-		if info, err := p.js.StreamInfo(streamName); err == nil {
-			for _, subj := range []string{
-				subjectSpaceCreated, subjectSpaceTreeChanged, subjectVoiceRoomCreated, subjectVoiceRoomDeleted,
-				subjectSpaceInviteCreated, subjectSpaceMemberJoined, subjectSpaceMemberLeft, subjectSpaceUpdated, subjectSpaceDeleted,
-			} {
-				if !streamHasSubject(info, subj) {
-					cfg := info.Config
-					cfg.Subjects = append(cfg.Subjects, subj)
-					_, p.ensureErr = p.js.UpdateStream(&cfg)
-					if p.ensureErr != nil {
-						return
-					}
-					info, p.ensureErr = p.js.StreamInfo(streamName)
-					if p.ensureErr != nil {
-						return
-					}
-				}
-			}
+		info, err := p.js.StreamInfo(streamName)
+		if err != nil {
+			p.ensureErr = fmt.Errorf("required JetStream stream %q is unavailable: %w", streamName, err)
 			return
 		}
-		_, p.ensureErr = p.js.AddStream(&nats.StreamConfig{
-			Name: streamName,
-			Subjects: []string{
-				"chat.created",
-				"chat.member_changed",
-				subjectSpaceTreeChanged,
-				subjectSpaceCreated,
-				subjectVoiceRoomCreated,
-				subjectVoiceRoomDeleted,
-				subjectSpaceInviteCreated,
-				subjectSpaceMemberJoined,
-				subjectSpaceMemberLeft,
-				subjectSpaceUpdated,
-				subjectSpaceDeleted,
-			},
-			Retention: nats.LimitsPolicy,
-			MaxAge:    7 * 24 * time.Hour,
-			Storage:   nats.FileStorage,
-		})
+		p.ensureErr = validateBootstrappedStream(info)
 	})
 	return p.ensureErr
+}
+
+func spaceEventStreamSubjects() []string {
+	return []string{"chat.created", "chat.member_changed", "chat.dm_peer_deleted", subjectSpaceTreeChanged, subjectSpaceCreated, subjectVoiceRoomCreated, subjectVoiceRoomDeleted, subjectSpaceInviteCreated, subjectSpaceMemberJoined, subjectSpaceMemberLeft, subjectSpaceUpdated, subjectSpaceDeleted}
 }
 
 func streamHasSubject(info *nats.StreamInfo, subject string) bool {
 	if info == nil {
 		return false
 	}
-	for _, s := range info.Config.Subjects {
-		if s == subject {
+	for _, configured := range info.Config.Subjects {
+		if configured == subject {
 			return true
 		}
 	}
 	return false
+}
+
+func validateBootstrappedStream(info *nats.StreamInfo) error {
+	if info == nil || info.Config.Name != streamName || info.Config.Retention != nats.LimitsPolicy || info.Config.MaxAge != 7*24*time.Hour || info.Config.Storage != nats.FileStorage || len(info.Config.Subjects) != len(spaceEventStreamSubjects()) {
+		return fmt.Errorf("required JetStream stream %q does not match bootstrap definition", streamName)
+	}
+	seen := make(map[string]struct{}, len(info.Config.Subjects))
+	for _, subject := range info.Config.Subjects {
+		seen[subject] = struct{}{}
+	}
+	for _, subject := range spaceEventStreamSubjects() {
+		if _, ok := seen[subject]; !ok {
+			return fmt.Errorf("required JetStream stream %q does not match bootstrap definition", streamName)
+		}
+	}
+	return nil
 }
 
 // Publish sends a coordinator-prepared message without changing its subject,
@@ -251,7 +243,7 @@ func (p *JetStreamPublisher) PublishSpaceCreated(ctx context.Context, spaceID, o
 		OccurredAt: timestamppb.New(time.Now().UTC()),
 		Payload: &eventsv1.ChatStreamEvent_SpaceCreated{
 			SpaceCreated: &eventsv1.SpaceCreated{
-				SpaceId:         spaceID,
+				SpaceId:        spaceID,
 				OwnerProfileId: ownerProfileID,
 			},
 		},
