@@ -80,6 +80,7 @@ func TestJetStreamPublisher_ExistingChatStreamMissingDMPeerDeletedSubjectIsRejec
 	t.Cleanup(nc.Close)
 	js, err := nc.JetStream()
 	require.NoError(t, err)
+	require.NoError(t, js.DeleteStream(streamName))
 	_, err = js.AddStream(&nats.StreamConfig{
 		Name:     streamName,
 		Subjects: []string{subjectChatCreated, subjectChatMemberChanged},
