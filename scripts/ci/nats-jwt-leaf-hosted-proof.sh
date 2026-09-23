@@ -30,7 +30,13 @@ import (
 )
 
 func main() {
-  nc, err := nats.Connect("nats://127.0.0.1:4222")
+  options := []nats.Option{}
+  endpoint := "nats://127.0.0.1:4222"
+  if len(os.Args) >= 6 && os.Args[1] == "direct-noack" {
+    endpoint = os.Args[3]
+    options = append(options, nats.UserCredentials(os.Args[4]), nats.RootCAs(os.Args[5]))
+  }
+  nc, err := nats.Connect(endpoint, options...)
   if err != nil { panic(err) }
   defer nc.Close()
   sub, err := nc.SubscribeSync("_INBOX.voice.chat.proof")
@@ -74,6 +80,12 @@ func main() {
     } else {
       fmt.Printf("ack_error=%v\n", err)
     }
+  }
+  if mode == "direct-noack" {
+    fmt.Printf("ack_subject=%s\n", msg.Reply)
+    if err := msg.Ack(); err != nil { panic(err) }
+    if err := nc.Flush(); err != nil { panic(err) }
+    fmt.Printf("stream=%s sequence=%d delivered=%d ack=false\n", meta.Stream, meta.Sequence.Stream, meta.NumDelivered)
   }
 }
 EOF
@@ -452,32 +464,12 @@ for denied_js_subject in '$JS.API.CONSUMER.CREATE.chat_events.denied' '$JS.API.C
   fi
 done
 
-# The no-ACK chat identity has the same proof read rights but no permission to
-# publish an acknowledgement. It must receive a new fixed-durable delivery,
-# fail AckSync on the exact server-generated ACK subject, and leave that
-# message unacknowledged for redelivery.
-docker run -d --name voice-nats-proof-chat-noack --network "$network" -v "$work:$work:ro" nats:2.12-alpine -c "$work/noack-leaf.conf" >/dev/null
-for attempt in {1..15}; do
-  if docker logs voice-nats-proof-chat-noack 2>&1 | grep -Fq 'Server is ready'; then
-    break
-  fi
-  if ! docker inspect --format '{{.State.Running}}' voice-nats-proof-chat-noack 2>/dev/null | grep -qx true; then
-    echo 'FAIL: no-ACK chat leaf exited before becoming ready' >&2
-    docker logs voice-nats-proof-chat-noack >&2 || true
-    exit 1
-  fi
-  sleep 1
-done
-if ! docker logs voice-nats-proof-chat-noack 2>&1 | grep -Fq 'Server is ready'; then
-  echo 'FAIL: no-ACK chat leaf did not become ready within 15 seconds' >&2
-  docker logs voice-nats-proof-chat-noack >&2 || true
-  exit 1
-fi
-
-noack_leaf_log_before="$(docker logs voice-nats-proof-chat-noack 2>&1 || true)"
+# The no-ACK identity connects directly as an authenticated hub CLIENT. Leaf
+# ACK subjects are exempt from leaf publish checks, so this is the enforceable
+# JWT permission boundary for an exact ACK publish denial.
 hub_log_before="$(docker logs voice-nats-proof-hub 2>&1 || true)"
-docker run -d --name voice-nats-proof-noack-receive-one --network container:voice-nats-proof-chat-noack \
-  -v "$work/receiver:/receiver" alpine:3.22 /receiver/leaf-receive deny-ack /receiver/noack-receive-one.ready >/dev/null
+docker run -d --name voice-nats-proof-noack-receive-one --network "$network" \
+  -v "$work/receiver:/receiver" -v "$work:$work:ro" alpine:3.22 /receiver/leaf-receive direct-noack /receiver/noack-receive-one.ready nats://hub:4222 "$work/fixture/creds/chat-noack.creds" "$work/cert.pem" >/dev/null
 if ! wait_for_file "$work/receiver/noack-receive-one.ready" 'no-ACK chat leaf receiver'; then
   docker logs voice-nats-proof-noack-receive-one >&2 || true
   exit 1
@@ -493,16 +485,19 @@ if ! grep -Fqx 'stream=chat_events sequence=3 delivered=1 ack=false' <<<"$noack_
 fi
 noack_ack_subject="$(sed -n 's/^ack_subject=//p' <<<"$noack_receive_one")"
 if [[ ! "$noack_ack_subject" =~ ^\$JS\.ACK\.chat_events\.proof_chat\.[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || ! grep -Eq '^ack_error=.+$' <<<"$noack_receive_one"; then
-  echo 'FAIL: no-ACK identity did not report denial for its exact proof ACK subject' >&2
+  echo 'FAIL: direct no-ACK identity did not expose its exact proof ACK subject' >&2
   printf '%s\n' "$noack_receive_one" >&2
   exit 1
 fi
+noack_state="$(docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" --inbox-prefix _INBOX.voice.bootstrap.reply consumer info chat_events proof_chat --json)"
+if ! jq -e '.ack_floor.stream_seq == 2 and .num_ack_pending == 1' <<<"$noack_state" >/dev/null; then
+  echo 'FAIL: direct no-ACK publish advanced the consumer acknowledgement floor' >&2
+  exit 1
+fi
 for attempt in {1..5}; do
-  noack_leaf_logs="$(docker logs voice-nats-proof-chat-noack 2>&1 || true)"
-  noack_leaf_log_delta="${noack_leaf_logs#"$noack_leaf_log_before"}"
   hub_logs="$(docker logs voice-nats-proof-hub 2>&1 || true)"
   hub_log_delta="${hub_logs#"$hub_log_before"}"
-  noack_denial_log_delta="$noack_leaf_log_delta"$'\n'"$hub_log_delta"
+  noack_denial_log_delta="$hub_log_delta"
   if grep -Fq "$noack_ack_subject" <<<"$noack_denial_log_delta" && grep -Eqi 'permission.*(violation|denied)' <<<"$noack_denial_log_delta"; then
     break
   fi
