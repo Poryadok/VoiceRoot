@@ -47,7 +47,7 @@ for job in realtime notification search analytics-chat; do
   require 'voice-nats-bootstrap-credentials' "$template" 'Job-only bootstrap secret missing'
   require 'bootstrap.creds' "$template" 'bootstrap credential key missing'
   require 'NATS_CREDS' "$template" 'bootstrap credential use missing'
-  require 'nats() { command nats --creds "$NATS_CREDS" "$@"; }' "$template" 'bootstrap commands must pass quoted creds'
+  require 'command nats --creds "$NATS_CREDS" "$@"' "$template" 'bootstrap commands must pass quoted creds'
 done
 
 policy="$root/deploy/templates/network-policy-nats-hub.yaml"

@@ -2,6 +2,9 @@
 set -eu
 
 nats_url="${NATS_URL:?NATS_URL is required}"
+nats() {
+  if [ -n "${NATS_CREDS:-}" ]; then command nats --creds "$NATS_CREDS" "$@"; else command nats "$@"; fi
+}
 stream() {
   name="$1"; shift
   stream_with_max_age "$name" 604800000000000 "$@"
