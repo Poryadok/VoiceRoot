@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
@@ -13,6 +14,23 @@ import (
 
 func TestJetStreamPublisher_UserContractPayloads(t *testing.T) {
 	server := startEmbeddedUserJSTestServer(t)
+	nc, err := nats.Connect(server.ClientURL())
+	require.NoError(t, err)
+	t.Cleanup(nc.Close)
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+	_, err = js.AddStream(&nats.StreamConfig{
+		Name: streamName,
+		Subjects: []string{
+			subjectProfileUpdated,
+			subjectProfileVerified,
+			subjectProfileSwitched,
+			subjectGameDetected,
+			subjectSettingsChanged,
+		},
+	})
+	require.NoError(t, err)
+
 	pub, err := NewJetStreamPublisher(server.ClientURL())
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, pub.Close()) })

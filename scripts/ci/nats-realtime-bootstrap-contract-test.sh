@@ -58,6 +58,11 @@ if ! awk '
 ' "$BOOTSTRAP"; then
   fail "publisher streams must have disjoint, exact subjects"
 fi
+for service in social user matchmaking role voice; do
+  section="$(sed -n "/^  ${service}:$/,/^  [^ ]/p" "$COMPOSE")"
+  printf '%s\n' "$section" | grep -Fqx '      nats-realtime-bootstrap:' || fail "${service} must wait for central NATS bootstrap"
+  printf '%s\n' "$section" | grep -Fqx '        condition: service_completed_successfully' || fail "${service} bootstrap dependency must require success"
+done
 for manifest in "${ROOT}/deploy/staging/services.yaml" "${ROOT}/deploy/prod/services.yaml"; do
   require '              value: realtime-1' "$manifest"
 done

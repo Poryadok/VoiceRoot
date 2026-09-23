@@ -33,15 +33,21 @@ func startEmbeddedUserJSTestServer(t *testing.T) *server.Server {
 	return s
 }
 
-// TestJetStreamPublisher_AccountDeletedHasStreamPubAck is RED until the User
-// publisher owns the Auth-published deletion subject in user_events.
+// TestJetStreamPublisher_AccountDeletedHasStreamPubAck documents the
+// centrally provisioned User stream contract.
 func TestJetStreamPublisher_AccountDeletedHasStreamPubAck(t *testing.T) {
 	server := startEmbeddedUserJSTestServer(t)
+	nc, err := nats.Connect(server.ClientURL())
+	require.NoError(t, err)
+	t.Cleanup(nc.Close)
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+	_, err = js.AddStream(&nats.StreamConfig{Name: streamName, Subjects: []string{testSubjectAccountDeleted}})
+	require.NoError(t, err)
 
 	pub, err := NewJetStreamPublisher(server.ClientURL())
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, pub.Close()) })
-	require.NoError(t, pub.ensureStream())
 
 	envelope, err := proto.Marshal(&eventsv1.UserStreamEvent{
 		EventId:    "event-account-deleted-red",

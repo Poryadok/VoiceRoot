@@ -63,6 +63,17 @@ services:
       nats:
         condition: service_healthy
 
+  nats-notification-bootstrap:
+    image: natsio/nats-box:0.18.0
+    environment:
+      NATS_URL: nats://nats:4222
+    volumes:
+      - ./docker/nats/notification-bootstrap.sh:/bootstrap/notification-bootstrap.sh:ro
+    command: ["/bin/sh", "/bootstrap/notification-bootstrap.sh"]
+    depends_on:
+      nats:
+        condition: service_healthy
+
   clickhouse:
     profiles: ["app", "observability"]
     image: clickhouse/clickhouse-server:24.8-alpine
@@ -291,6 +302,7 @@ services:
       SPACE_PRINCIPAL_TLS_SERVER_NAME: space
       USER_GRPC_ADDR: user:9090
       AUTH_GRPC_ADDR: auth:9090
+      NATS_URL: nats://nats:4222
     volumes:
       - social_principal_keys:/etc/voice/principal/keys:ro
       - social_principal_tls:/etc/voice/principal/tls:ro
@@ -301,6 +313,8 @@ services:
       postgres:
         condition: service_healthy
       compose-db-init:
+        condition: service_completed_successfully
+      nats-realtime-bootstrap:
         condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
@@ -581,6 +595,8 @@ services:
         condition: service_healthy
       nats:
         condition: service_started
+      nats-realtime-bootstrap:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       interval: 5s
@@ -670,6 +686,8 @@ services:
         condition: service_healthy
       nats:
         condition: service_healthy
+      nats-notification-bootstrap:
+        condition: service_completed_successfully
       user:
         condition: service_healthy
       chat:
@@ -962,6 +980,8 @@ services:
         condition: service_completed_successfully
       nats:
         condition: service_healthy
+      nats-realtime-bootstrap:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       interval: 5s
@@ -998,6 +1018,8 @@ services:
         condition: service_healthy
       nats:
         condition: service_healthy
+      nats-realtime-bootstrap:
+        condition: service_completed_successfully
       livekit:
         condition: service_started
       user:
