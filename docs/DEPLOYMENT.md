@@ -575,6 +575,36 @@ only File→User:9092 and User→File:8443, while retaining Social's existing
 routes. Before switching active key, publish current+next keys, wait the
 credential hard expiry, then retain the retired public key for at least 35 s.
 
+## NATS JWT credential foundation (not activated)
+
+NATS currently remains anonymous in Compose, staging, and production manifests.
+The credential contract at [`deploy/nats/`](../deploy/nats/README.md) is an
+asset-preparation boundary, not permission to add `--auth`, `operator`,
+`resolver`, client credential environment variables, or Secret mounts. The
+activation PR must be bind-only after all publisher/consumer identities and
+JetStream ownership have been reviewed together.
+
+For each target namespace (`voice-staging` or `voice-prod`), the secret manager
+must create `voice-nats-operator` with UTF-8 `operator.jwt` and `account.jwt`,
+and `voice-nats-service-credentials` with exactly one `<service>.creds` key for
+every deployed NATS client. Kubernetes `stringData` is used only as input and
+is base64-encoded into `data` by the API server. Operator/account/user NKey
+seeds are never committed, logged, put into ConfigMaps, or mounted into app
+pods. Production values must be supplied by the operator, not copied from
+fixtures or placeholders.
+
+Rotation runbook:
+
+1. Generate a replacement service user in the external secret manager with the
+   least-privilege ACL reviewed for that one service; never grant `$JS.API.>`.
+2. Issue a replacement user JWT signed by the account, write the replacement `.creds` key, and perform
+   a controlled rollout of only that service. Prove its permitted publish,
+   subscribe, ACK, and consumer operations and a denied neighboring subject.
+3. Revoke the old user JWT only after every replica uses the replacement; retain
+   audit evidence without copying credential contents into logs or tickets.
+4. Rotate account/operator signing material only as a separately rehearsed
+   broker rollout with overlapping trusted JWTs and a tested rollback path.
+
 # Object storage
 
 See [Object storage operations](OBJECT_STORAGE.md) for the self-hosted MinIO

@@ -33,7 +33,7 @@ chmod +x "$temp_dir/bin/docker"
 run_check() {
   local fixture="$1"
   local output="$2"
-  COMPOSE_CONFIG_FIXTURE="$FIXTURES/$fixture" PATH="$temp_dir/bin:$PATH" "$CHECK" >"$output" 2>&1
+  COMPOSE_CONFIG_FIXTURE="$FIXTURES/$fixture" VOICE_CI_COMPOSE_NATS_SMOKE=0 PATH="$temp_dir/bin:$PATH" "$CHECK" >"$output" 2>&1
 }
 
 accepted_output="$temp_dir/accepted.out"
