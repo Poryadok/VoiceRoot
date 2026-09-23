@@ -462,12 +462,19 @@ class VoiceAuthClient {
       authorization: session.authorizationHeader,
     );
     return switch (result) {
-      GatewayHttpOk(:final data) => AuthApiOk(switch (data['state']) {
-        'EMAIL_PENDING' => EmailVerificationRecoveryState.emailPending,
-        'PROMOTION_PENDING' => EmailVerificationRecoveryState.promotionPending,
-        'REGULAR' => EmailVerificationRecoveryState.regular,
-        _ => EmailVerificationRecoveryState.guest,
-      }),
+      GatewayHttpOk(:final data) => switch (data['state']) {
+        'EMAIL_PENDING' => const AuthApiOk(
+          EmailVerificationRecoveryState.emailPending,
+        ),
+        'PROMOTION_PENDING' => const AuthApiOk(
+          EmailVerificationRecoveryState.promotionPending,
+        ),
+        'REGULAR' => const AuthApiOk(EmailVerificationRecoveryState.regular),
+        _ => const AuthApiFailure(
+          message: 'Invalid email verification status.',
+          errorCode: 'invalid_verification_state',
+        ),
+      },
       GatewayHttpFailure(:final error) => AuthApiFailure(
         message: GatewayApiResultMapper.failureMessage(error),
         errorCode: GatewayApiResultMapper.failureCode(error),

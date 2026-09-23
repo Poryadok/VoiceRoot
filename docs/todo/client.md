@@ -22,7 +22,7 @@ _Пока пусто — критичные клиентские блокеры 
 
 ### Guest & onboarding live
 
-- [ ] **[A1] Session-bound email verification recovery proof** — on reload,
+- [x] **[A1] Session-bound email verification recovery** — on reload,
   call `GET /api/v1/auth/verification-status`; resume `EMAIL_PENDING`, show
   bounded `PROMOTION_PENDING` retry, and persist a replacement `REGULAR`
   session before routing. Never resend email or submit it with verification.
@@ -41,7 +41,7 @@ _Пока пусто — критичные клиентские блокеры 
 
 ### Auth UI (REST есть, экранов нет)
 
-- [ ] **AuthScreen: email registration + OTP** — email is the alpha default in [auth-and-contacts.md](../features/auth-and-contacts.md), but `auth_screen.dart` currently only submits registration and has no pending-email verification UI. The product contract still needs an owner decision for the initial OTP send, dismissing and re-entering the pending state, reload recovery, and login recovery; do not infer those transitions from the backend API.
+- [x] **AuthScreen: email registration + OTP** — email is the alpha default in [auth-and-contacts.md](../features/auth-and-contacts.md); `auth_screen.dart` resumes authoritative pending-email status after registration, login, and reload, and supplies verify/resend, bounded promotion retry, and logout. The initial authenticated send remains owned by Auth and is never replayed by recovery.
 - [x] **Auth UI: password-reset** — `PasswordResetScreen` (email OTP → new password); forgot-password on `AuthScreen`; `VoiceAuthClient.sendPasswordResetOtp` / `resetPassword` (**Batch 30a**). **Sessions/revoke UI shipped** (`ActiveSessionsScreen`, Security settings, **Batch 29b**).
 - [x] **Auth UI: delete-account** — `SecuritySettingsScreen` confirm+password → `POST /api/v1/auth/delete-account`; guest blocked; logout on success (**Batch 28b**). Restore-account UI deferred.
 - [ ] **Verification OAuth callback and client resume contract** — Settings now filters linked sources by the selected active `profile_id` and offers Twitch/YouTube link plus unlink, but define the HTTPS callback owner; allowed redirect URI for Web/Windows/mobile; account/profile/provider-bound state; PKCE; one-time result lifetime; and the Settings → Verification return route. Specify success, cancel, denied, error, provider-unavailable and reload states. Authorization code and provider tokens must never reach a client through a custom-scheme URL; after callback the client rereads authoritative linked-account/verification state. DoD: wrong state/account/provider/redirect fail closed; callback replay is not applied; Web and Windows resume are tested. This records a contract gap, not a resolved OAuth design; see [verification.md](../features/verification.md).
