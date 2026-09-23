@@ -26,15 +26,15 @@ import (
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
 	"voice/backend/pkg/postgres"
-	"voice/backend/pkg/runtimeconfig"
 	voiceprom "voice/backend/pkg/promhttp"
+	"voice/backend/pkg/runtimeconfig"
 
 	botv1 "voice.app/voice/bot/v1"
 	chatv1 "voice.app/voice/chat/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
 	rolev1 "voice.app/voice/role/v1"
-	userv1 "voice.app/voice/user/v1"
 	spacev1 "voice.app/voice/space/v1"
+	userv1 "voice.app/voice/user/v1"
 )
 
 const serviceName = "bot"
@@ -76,6 +76,9 @@ func main() {
 			pub, err := botevents.NewJetStreamPublisher(natsURL)
 			if err != nil {
 				log.Fatalf("nats bot events: %v", err)
+			}
+			if err := pub.Validate(); err != nil {
+				log.Fatalf("nats bot events bootstrap: %v", err)
 			}
 			pub.Logger = logger
 			svc.Events = pub

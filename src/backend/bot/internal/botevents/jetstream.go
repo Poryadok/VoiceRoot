@@ -84,6 +84,9 @@ func (p *JetStreamPublisher) ensureStream() error {
 	return p.ensureErr
 }
 
+// Validate verifies the centrally bootstrapped stream before serving traffic.
+func (p *JetStreamPublisher) Validate() error { return p.ensureStream() }
+
 func botEventStreamSubjects() []string {
 	return []string{subjectBotRegistered, subjectCommandExec, subjectWebhookDeliv, subjectWebhookFailed}
 }

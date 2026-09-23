@@ -96,6 +96,9 @@ func (p *JetStreamPublisher) ensureStream() error {
 	return p.ensureErr
 }
 
+// Validate verifies the centrally bootstrapped stream before serving traffic.
+func (p *JetStreamPublisher) Validate() error { return p.ensureStream() }
+
 func validateBootstrappedStream(info *nats.StreamInfo) error {
 	if info == nil || info.Config.Name != streamName || info.Config.Retention != nats.LimitsPolicy || info.Config.MaxAge != 7*24*time.Hour || info.Config.Storage != nats.FileStorage || len(info.Config.Subjects) != len(storyEventStreamSubjects()) {
 		return fmt.Errorf("required JetStream stream %q does not match bootstrap definition", streamName)

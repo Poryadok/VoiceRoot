@@ -84,14 +84,17 @@ func main() {
 			} else {
 				logger.Warn("analytics publisher unavailable", slog.Any("error", err))
 			}
-			if pub, err := subscriptionevents.NewJetStreamPublisher(natsURL); err == nil {
-				domainPub = pub
-				svc.DomainEvents = pub
-				defer func() { _ = pub.Close() }()
-				logger.Info("subscription.events publisher enabled")
-			} else {
-				logger.Warn("subscription.events publisher unavailable", slog.Any("error", err))
+			pub, err := subscriptionevents.NewJetStreamPublisher(natsURL)
+			if err != nil {
+				log.Fatalf("subscription.events publisher: %v", err)
 			}
+			if err := pub.Validate(); err != nil {
+				log.Fatalf("subscription.events bootstrap: %v", err)
+			}
+			domainPub = pub
+			svc.DomainEvents = pub
+			defer func() { _ = pub.Close() }()
+			logger.Info("subscription.events publisher enabled")
 		}
 		go runGraceSweeper(runCtx, st, domainPub, logger)
 		if userAddr := grpcclient.DialTarget(strings.TrimSpace(os.Getenv("USER_GRPC_ADDR"))); userAddr != "" {

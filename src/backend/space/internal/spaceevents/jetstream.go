@@ -83,6 +83,9 @@ func (p *JetStreamPublisher) ensureStream() error {
 	return p.ensureErr
 }
 
+// Validate verifies the centrally bootstrapped stream before serving traffic.
+func (p *JetStreamPublisher) Validate() error { return p.ensureStream() }
+
 func spaceEventStreamSubjects() []string {
 	return []string{"chat.created", "chat.member_changed", "chat.dm_peer_deleted", subjectSpaceTreeChanged, subjectSpaceCreated, subjectVoiceRoomCreated, subjectVoiceRoomDeleted, subjectSpaceInviteCreated, subjectSpaceMemberJoined, subjectSpaceMemberLeft, subjectSpaceUpdated, subjectSpaceDeleted}
 }
@@ -149,6 +152,7 @@ func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, e
 	requestID := correlation.FromGRPC(ctx)
 	msg := &nats.Msg{Subject: subject, Data: b, Header: nats.Header{}}
 	natslog.SetRequestIDHeader(msg.Header, requestID)
+	msg.Header.Set(nats.MsgIdHdr, env.GetEventId())
 	if _, err := p.js.PublishMsg(msg); err != nil {
 		return fmt.Errorf("jetstream publish %s: %w", subject, err)
 	}
