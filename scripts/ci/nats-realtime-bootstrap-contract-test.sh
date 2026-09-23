@@ -75,7 +75,7 @@ if ! awk '
   $1 == "stream" {
     for (i = 3; i <= NF; i++) {
       subject = $i
-      gsub(/^'|'$/, "", subject)
+      gsub(/^\047|\047$/, "", subject)
       if ((subject ~ /[*>]/ && !($2 == "analytics_events" && subject == "analytics.>")) || (subject in owners && owners[subject] != $2)) {
         exit 1
       }
