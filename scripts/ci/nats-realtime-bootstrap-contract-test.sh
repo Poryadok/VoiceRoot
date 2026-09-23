@@ -63,13 +63,14 @@ require '  - name: voice_events' "$MANIFEST"
 require '    subjects: [voice.call_incoming, voice.call_accepted, voice.call_declined, voice.call_missed, voice.call_ended, voice.state_changed, voice.screen_share_started, voice.screen_share_stopped, voice.call_started, voice.member_joined]' "$MANIFEST"
 require_stream_contract analytics_events '[analytics.>]' 168h
 require_stream_contract user_profile_projection '[user.search_profile_projection]' 0s
-require 'stream analytics_events analytics.>' "$BOOTSTRAP"
+require "stream analytics_events 'analytics.>'" "$BOOTSTRAP"
 require 'stream_with_max_age user_profile_projection 0 user.search_profile_projection' "$BOOTSTRAP"
 require 'stream voice_events voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined' "$NOTIFICATION_BOOTSTRAP"
 cmp <(sed -n '/^    #!\/bin\/sh$/,$p' "$K8S_NOTIFICATION_BOOTSTRAP" | sed '/^---$/,$d' | sed 's/^    //') "$NOTIFICATION_BOOTSTRAP" \
   || fail "Kubernetes notification bootstrap script must exactly match the Compose notification bootstrap script"
 grep -Fq '[(.config.subjects | sort), .config.storage, .config.retention, .config.max_age]' "$BOOTSTRAP" || fail "bootstrap must validate storage, retention and max age"
 grep -Fq -- '--argjson max_age "$max_age"' "$BOOTSTRAP" || fail "bootstrap must validate per-stream max age"
+sh -n "$BOOTSTRAP" || fail "Compose bootstrap must be valid POSIX shell"
 if ! awk '
   $1 == "stream" {
     for (i = 3; i <= NF; i++) {

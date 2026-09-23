@@ -54,7 +54,7 @@ stream social_events social.friend_request social.friend_accepted social.friend_
 stream role_events role.created role.updated role.deleted role.assigned role.revoked role.chat_override_set role.chat_override_removed role.voice_override_set role.voice_override_removed
 stream voice_events voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined
 stream matchmaking_events mm.search_started mm.search_cancelled mm.search_nudge mm.search_timeout mm.match_found mm.match_completed mm.rating_submitted mm.player_banned
-stream analytics_events analytics.>
+stream analytics_events 'analytics.>'
 stream_with_max_age user_profile_projection 0 user.search_profile_projection
 consumer message_events rt_realtime1_msg 'message.>' _INBOX.voice.realtime1.message
 consumer chat_events rt_realtime1_chat 'chat.>' _INBOX.voice.realtime1.chat
