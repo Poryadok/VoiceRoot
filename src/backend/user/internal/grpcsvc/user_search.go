@@ -2,6 +2,7 @@ package grpcsvc
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/google/uuid"
@@ -169,7 +170,7 @@ func (s *UserGRPC) mayDiscoverProfile(ctx context.Context, privacyStore *store.P
 
 func (s *UserGRPC) pairwiseBlocked(ctx context.Context, viewer, other uuid.UUID) (bool, error) {
 	if s.Blocks == nil {
-		return false, nil
+		return false, errors.New("account block checker unavailable")
 	}
 	return s.Blocks.AccountPairBlocked(ctx, viewer, other)
 }

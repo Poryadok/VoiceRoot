@@ -11,7 +11,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 
 	"voice/backend/pkg/integrationtest"
 	"voice/backend/pkg/privacy"
@@ -194,7 +196,10 @@ func TestSearchProfiles_GuestAndDependencyFailuresFailClosed(t *testing.T) {
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
 	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), privacyStore, rdb,
-		func(s *UserGRPC) { s.SocialGraph = searchPrivacyGraph{err: errors.New("social unavailable")} },
+		func(s *UserGRPC) {
+			s.SocialGraph = searchPrivacyGraph{err: errors.New("social unavailable")}
+			s.Blocks = &testBlockChecker{}
+		},
 	)
 
 	t.Run("guest uses canonical audience only", func(t *testing.T) {
@@ -216,6 +221,17 @@ func TestSearchProfiles_GuestAndDependencyFailuresFailClosed(t *testing.T) {
 		resp, err := cli.SearchProfiles(withUserAuthCtx(ctx, viewerAccount, viewerProfile), &userv1.SearchProfilesRequest{Query: "fofdependency"})
 		require.NoError(t, err)
 		require.NotContains(t, collectProfileIDs(resp.GetProfileList().GetProfiles()), fofRestrictedProfile.String())
+	})
+
+	t.Run("missing block checker denies discovery", func(t *testing.T) {
+		withoutBlocks := startUserPrivacyTestServer(t, store.NewProfileStore(pool), privacyStore, rdb,
+			func(s *UserGRPC) {
+				s.SocialGraph = searchPrivacyGraph{err: errors.New("social unavailable")}
+				s.Blocks = nil
+			},
+		)
+		_, err := withoutBlocks.SearchProfiles(withUserAuthCtx(ctx, viewerAccount, viewerProfile), &userv1.SearchProfilesRequest{Query: "guestopen"})
+		require.Equal(t, codes.Internal, status.Code(err))
 	})
 }
 
@@ -258,7 +274,9 @@ func TestSearchProfiles_PrivacyFilteringFillsCursorPage(t *testing.T) {
 	t.Cleanup(mr.Close)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
-	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), privacyStore, rdb)
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), privacyStore, rdb,
+		func(s *UserGRPC) { s.Blocks = &testBlockChecker{} },
+	)
 
 	resp, err := cli.SearchProfiles(withUserAuthCtx(ctx, viewerAccount, viewerProfile), &userv1.SearchProfilesRequest{
 		Query: "pageprivacy",
@@ -297,7 +315,9 @@ func TestSearchProfiles_CursorPreservesVerifiedRankingAfterPrivacyFiltering(t *t
 	t.Cleanup(mr.Close)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
-	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), privacyStore, rdb)
+	cli := startUserPrivacyTestServer(t, store.NewProfileStore(pool), privacyStore, rdb,
+		func(s *UserGRPC) { s.Blocks = &testBlockChecker{} },
+	)
 
 	first, err := cli.SearchProfiles(withUserAuthCtx(ctx, viewerAccount, viewerProfile), &userv1.SearchProfilesRequest{
 		Query: "cursor",
