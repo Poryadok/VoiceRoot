@@ -73,7 +73,7 @@ func TestJetStreamPublisher_DMPeerDeletedHasOnlySurvivorPayloadAndStableMsgID(t 
 	require.NotContains(t, first.Data, []byte(deletedID.String()))
 }
 
-func TestJetStreamPublisher_ExistingChatStreamGainsDMPeerDeletedSubject(t *testing.T) {
+func TestJetStreamPublisher_ExistingChatStreamMissingDMPeerDeletedSubjectIsRejected(t *testing.T) {
 	server := startJSTestServer(t)
 	nc, err := nats.Connect(server.ClientURL())
 	require.NoError(t, err)
@@ -90,9 +90,9 @@ func TestJetStreamPublisher_ExistingChatStreamGainsDMPeerDeletedSubject(t *testi
 	pub, err := NewJetStreamPublisher(server.ClientURL())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = pub.Close() })
-	require.NoError(t, pub.PublishDMPeerDeleted(context.Background(), uuid.NewString(), uuid.New(), uuid.New()))
+	require.Error(t, pub.PublishDMPeerDeleted(context.Background(), uuid.NewString(), uuid.New(), uuid.New()))
 
 	info, err := js.StreamInfo(streamName)
 	require.NoError(t, err)
-	require.Contains(t, info.Config.Subjects, subjectDMPeerDeleted)
+	require.NotContains(t, info.Config.Subjects, subjectDMPeerDeleted)
 }
