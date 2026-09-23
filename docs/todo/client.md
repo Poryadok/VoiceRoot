@@ -22,10 +22,14 @@ _Пока пусто — критичные клиентские блокеры 
 
 ### Guest & onboarding live
 
-- [ ] **[A1] Session-bound email verification recovery proof** — on reload,
+- [x] **[A1] Session-bound email verification recovery** — on reload,
   call `GET /api/v1/auth/verification-status`; resume `EMAIL_PENDING`, show
   bounded `PROMOTION_PENDING` retry, and persist a replacement `REGULAR`
   session before routing. Never resend email or submit it with verification.
+  Evidence: `auth_providers.dart` (`restore`, `resumeEmailVerificationPromotion`);
+  `auth_controller_test.dart` (restore/login recovery without resend or OTP
+  replay); `a1_pending_email_reentry_e2e_live_test.dart` (logout/login and
+  promotion retry). Shipped in #425/#457/#458/#460.
 - [x] **Onboarding coach-marks E2E** — `onboarding_coach_e2e_live_test` (spaces/MM + invite deep link); guest: `guest_onboarding_e2e_live_test`; widget-якоря: `guest_onboarding_anchor_keys_test` / `onboarding_overlay_test`.
 
 ### Flutter delivery
@@ -41,7 +45,7 @@ _Пока пусто — критичные клиентские блокеры 
 
 ### Auth UI (REST есть, экранов нет)
 
-- [ ] **AuthScreen: email registration + OTP** — email is the alpha default in [auth-and-contacts.md](../features/auth-and-contacts.md), but `auth_screen.dart` currently only submits registration and has no pending-email verification UI. The product contract still needs an owner decision for the initial OTP send, dismissing and re-entering the pending state, reload recovery, and login recovery; do not infer those transitions from the backend API.
+- [x] **AuthScreen: email registration + OTP** — email is the alpha default in [auth-and-contacts.md](../features/auth-and-contacts.md); `auth_screen.dart` resumes authoritative pending-email status after registration, login, and reload, and supplies verify/resend, bounded promotion retry, and logout. The initial authenticated send remains owned by Auth and is never replayed by recovery.
 - [x] **Auth UI: password-reset** — `PasswordResetScreen` (email OTP → new password); forgot-password on `AuthScreen`; `VoiceAuthClient.sendPasswordResetOtp` / `resetPassword` (**Batch 30a**). **Sessions/revoke UI shipped** (`ActiveSessionsScreen`, Security settings, **Batch 29b**).
 - [x] **Auth UI: delete-account** — `SecuritySettingsScreen` confirm+password → `POST /api/v1/auth/delete-account`; guest blocked; logout on success (**Batch 28b**). Restore-account UI deferred.
 - [ ] **Verification OAuth callback and client resume contract** — Settings now filters linked sources by the selected active `profile_id` and offers Twitch/YouTube link plus unlink, but define the HTTPS callback owner; allowed redirect URI for Web/Windows/mobile; account/profile/provider-bound state; PKCE; one-time result lifetime; and the Settings → Verification return route. Specify success, cancel, denied, error, provider-unavailable and reload states. Authorization code and provider tokens must never reach a client through a custom-scheme URL; after callback the client rereads authoritative linked-account/verification state. DoD: wrong state/account/provider/redirect fail closed; callback replay is not applied; Web and Windows resume are tested. This records a contract gap, not a resolved OAuth design; see [verification.md](../features/verification.md).
@@ -105,7 +109,10 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 - [ ] **Stickers / GIF / voice-note composer** — нет UI (и нет backend packs). См. [backend.md](backend.md) § High Chat; решение спеки — [product-roadmap.md](product-roadmap.md).
 - [x] **Message requests inbox UI** — virtual «Запросы» folder in rail/drawer (visible when pending > 0, unread badge); removed middle-column segmented toggle (§1.3 tombstone); accept/decline on list rows; `notificationTypeMessageRequest` settings toggle — **Batch 22b** (backend bucketing Batch 21a).
 - [x] **Кастомные папки чатов** — All/DMs/Groups + custom; REST folders + rail/drawer UI shipped (parallel/client); **pin/reorder UI** in list ctx + custom-folder drag reorder shipped (Batch 21b); edit-folders management UI shipped (**Batch 25b**).
-- [ ] **In-chat search: next/prev highlight** — [search.md](../features/search.md).
+- [x] **In-chat search: next/prev highlight** — `in_chat_search.dart` `_step`
+  wraps active selection in both directions and renders the active-hit and
+  snippet highlight keys; `in_chat_search_test.dart` covers next/previous
+  selection and snippet highlighting. Contract: [search.md](../features/search.md).
 - [x] **Favorites / contacts UI** — Social panel Contacts + Favorites tabs; `VoiceFriendsClient` list/add/set favorite; star toggle on friends/contacts (`social_panel.dart`, `friends_client.dart`) — **Batch 23b**. **QR add friend UI** — my-code + paste profile link (`qr_add_friend_sheet.dart`) — **Batch 26a**. Phone-book sync is explicitly post-alpha/G3 mobile scope; A1/G1 clients hide it and the backend rejects direct calls (`phone_contact_sync_unavailable`).
 - [ ] **QR add-friend — live camera scanner** — Batch 26a ships paste field; l10n implies camera scan. Add `mobile_scanner` (or similar) or narrow copy to paste-only.
 - [x] **Blocked accounts UI** — Social panel Blocked tab; `VoiceFriendsClient` `listBlocked`/`unblockAccount`; gateway `GET/DELETE /api/v1/friends/blocks` — **Batch 24a**.

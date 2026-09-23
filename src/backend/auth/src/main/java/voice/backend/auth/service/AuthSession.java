@@ -6,4 +6,15 @@ public record AuthSession(
     long expiresInSeconds,
     String accountId,
     String profileId,
-    String accountType) {}
+    String accountType,
+    Boolean emailVerificationRequired) {
+  public AuthSession(
+      String accessToken,
+      String refreshToken,
+      long expiresInSeconds,
+      String accountId,
+      String profileId,
+      String accountType) {
+    this(accessToken, refreshToken, expiresInSeconds, accountId, profileId, accountType, null);
+  }
+}

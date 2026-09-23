@@ -25,6 +25,7 @@ class AuthScreen extends ConsumerStatefulWidget {
   static const Key verificationButtonKey = Key('auth_verify_email');
   static const Key verificationResendButtonKey = Key('auth_resend_email');
   static const Key promotionRetryButtonKey = Key('auth_retry_promotion');
+  static const Key pendingLogoutButtonKey = Key('auth_pending_logout');
 
   static const int minPasswordLength = 8;
 
@@ -71,6 +72,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     if (error != null && mounted) {
       ref.read(authControllerProvider.notifier).setClientError(error);
     }
+  }
+
+  Future<void> _logout() async {
+    await ref.read(authControllerProvider.notifier).logout();
   }
 
   @override
@@ -239,6 +244,12 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                                   child: Text(l10n.guestConvertResend),
                                 ),
                               ],
+                              const SizedBox(height: 8),
+                              TextButton(
+                                key: AuthScreen.pendingLogoutButtonKey,
+                                onPressed: auth.isSubmitting ? null : _logout,
+                                child: Text(l10n.authLogout),
+                              ),
                             ] else ...[
                               Text(
                                 l10n.authTitle,

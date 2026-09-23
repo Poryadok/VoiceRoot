@@ -361,6 +361,18 @@ const AuthSession$json = {
     {'1': 'account_id', '3': 4, '4': 1, '5': 9, '10': 'accountId'},
     {'1': 'profile_id', '3': 5, '4': 1, '5': 9, '10': 'profileId'},
     {'1': 'account_type', '3': 6, '4': 1, '5': 9, '10': 'accountType'},
+    {
+      '1': 'email_verification_required',
+      '3': 7,
+      '4': 1,
+      '5': 8,
+      '9': 0,
+      '10': 'emailVerificationRequired',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_email_verification_required'},
   ],
 };
 
@@ -370,7 +382,8 @@ final $typed_data.Uint8List authSessionDescriptor = $convert.base64Decode(
     'Jlc2hfdG9rZW4YAiABKAlSDHJlZnJlc2hUb2tlbhIsChJleHBpcmVzX2luX3NlY29uZHMYAyAB'
     'KANSEGV4cGlyZXNJblNlY29uZHMSHQoKYWNjb3VudF9pZBgEIAEoCVIJYWNjb3VudElkEh0KCn'
     'Byb2ZpbGVfaWQYBSABKAlSCXByb2ZpbGVJZBIhCgxhY2NvdW50X3R5cGUYBiABKAlSC2FjY291'
-    'bnRUeXBl');
+    'bnRUeXBlEkMKG2VtYWlsX3ZlcmlmaWNhdGlvbl9yZXF1aXJlZBgHIAEoCEgAUhllbWFpbFZlcm'
+    'lmaWNhdGlvblJlcXVpcmVkiAEBQh4KHF9lbWFpbF92ZXJpZmljYXRpb25fcmVxdWlyZWQ=');
 
 @$core.Deprecated('Use registerResponseDescriptor instead')
 const RegisterResponse$json = {

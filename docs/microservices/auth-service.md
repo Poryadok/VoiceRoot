@@ -222,6 +222,12 @@ REST: `POST /api/v1/auth/convert-guest` (Gateway transcoding). Спека UX: [a
 `GetEmailVerificationStatus` and REST `GET /api/v1/auth/verification-status`
 derive the caller only from the restricted session and return typed
 `GUEST`, `EMAIL_PENDING` (`NONE`/`ACTIVE`), `PROMOTION_PENDING`, or `REGULAR`.
+Every issued `AuthSession` (REST and gRPC) carries optional
+`email_verification_required`: present `true` for pending email registration,
+guest conversion, and delayed promotion; present `false` only for an anonymous
+guest with no email or phone; absent for legacy/unknown state. Consumers must
+keep absence distinct from `false` and use the authenticated status endpoint
+to resolve it. `account_type=guest` alone does not distinguish these states.
 Email verification OTP send/verify have no public email identifier. Registration
 and convert issue the restricted session, then send once through that principal.
 OTP is six digits for ten minutes; resend invalidates an old code without

@@ -35,7 +35,8 @@ public final class EmailVerificationStatusService {
         .orElse(false)) {
       return new EmailVerificationStatus("PROMOTION_PENDING", "NONE");
     }
-    if (!accounts.isRegularEmailVerificationPending(account.id())) {
+    if (!accounts.isRegularEmailVerificationPending(account.id())
+        && (account.email() == null || account.email().isBlank())) {
       return new EmailVerificationStatus("GUEST", "NONE");
     }
     boolean active = otpCodes.findLatestValid(account.id(), "email_verify", Instant.now()).isPresent();

@@ -27,6 +27,7 @@ void main() {
         accountId: _returningGuestAccountId,
         activeProfileId: 'guest-prof',
         expiresInSeconds: 900,
+        emailVerificationRequired: false,
       ),
     );
     final guestStorage = InMemoryGuestCredentialsStorage();
@@ -47,6 +48,7 @@ void main() {
                       'expires_in_seconds': 900,
                       'account_id': _returningGuestAccountId,
                       'profile_id': 'guest-prof',
+                      'email_verification_required': false,
                     },
                   }),
                   200,
