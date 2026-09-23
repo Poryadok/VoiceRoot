@@ -488,7 +488,7 @@ void main() {
   );
 
   test(
-    'restore clears a restricted session when verification status is unavailable',
+    'restore retains an unknown legacy guest session while verification status is unavailable',
     () async {
       final storage = InMemoryAuthSessionStorage();
       await storage.write(
@@ -535,11 +535,178 @@ void main() {
       await container.read(authControllerProvider.notifier).restore();
 
       final state = container.read(authControllerProvider);
-      expect(state.session, isNull);
+      expect(state.session?.accessToken, 'restricted-access-new');
       expect(state.isEmailVerificationPending, isFalse);
-      expect(state.isEmailVerificationPromotionPending, isFalse);
-      expect(await storage.read(), isNull);
+      expect(state.isEmailVerificationPromotionPending, isTrue);
+      expect((await storage.read())?.accessToken, 'restricted-access-new');
       expect(statuses, 1);
+    },
+  );
+
+  test(
+    'restore retains a restricted session and blocks OTP when verification status is unavailable',
+    () async {
+      final storage = InMemoryAuthSessionStorage();
+      await storage.write(
+        const AuthSession(
+          accessToken: 'restricted-access',
+          refreshToken: 'restricted-refresh',
+          accountId: 'acc-1',
+          activeProfileId: 'prof-1',
+          expiresInSeconds: 900,
+          accountType: 'guest',
+          emailVerificationRequired: true,
+        ),
+      );
+      var statuses = 0;
+      var sends = 0;
+      var verifies = 0;
+      final mock = MockClient((req) async {
+        switch (req.url.path) {
+          case '/api/v1/auth/refresh':
+            return http.Response(
+              jsonEncode({
+                'session': {
+                  ...(sessionJson()['session'] as Map<String, dynamic>),
+                  'access_token': 'restricted-access-new',
+                  'refresh_token': 'restricted-refresh-new',
+                  'account_type': 'guest',
+                  'email_verification_required': true,
+                },
+              }),
+              200,
+            );
+          case '/api/v1/auth/verification-status':
+            statuses++;
+            return http.Response(
+              jsonEncode({'error': 'auth_unavailable'}),
+              503,
+            );
+          case '/api/v1/auth/otp/send':
+            sends++;
+            return http.Response('', 204);
+          case '/api/v1/auth/otp/verify':
+            verifies++;
+            return http.Response('', 204);
+        }
+        return http.Response('not found', 404);
+      });
+      final container = buildContainer(mock: mock, storage: storage);
+      addTearDown(container.dispose);
+
+      await container.read(authControllerProvider.notifier).restore();
+
+      final state = container.read(authControllerProvider);
+      expect(state.session?.accessToken, 'restricted-access-new');
+      expect(state.isEmailVerificationPending, isFalse);
+      expect(state.isEmailVerificationPromotionPending, isTrue);
+      expect((await storage.read())?.accessToken, 'restricted-access-new');
+      expect(statuses, 1);
+      expect(sends, 0);
+      expect(verifies, 0);
+    },
+  );
+
+  test(
+    'restore clears a restricted session when verification status rejects its token',
+    () async {
+      final storage = InMemoryAuthSessionStorage();
+      await storage.write(
+        const AuthSession(
+          accessToken: 'restricted-access',
+          refreshToken: 'restricted-refresh',
+          accountId: 'acc-1',
+          activeProfileId: 'prof-1',
+          expiresInSeconds: 900,
+          accountType: 'guest',
+          emailVerificationRequired: true,
+        ),
+      );
+      final mock = MockClient((req) async {
+        switch (req.url.path) {
+          case '/api/v1/auth/refresh':
+            return http.Response(
+              jsonEncode({
+                'session': {
+                  ...(sessionJson()['session'] as Map<String, dynamic>),
+                  'access_token': 'restricted-access-new',
+                  'refresh_token': 'restricted-refresh-new',
+                  'account_type': 'guest',
+                  'email_verification_required': true,
+                },
+              }),
+              200,
+            );
+          case '/api/v1/auth/verification-status':
+            return http.Response(jsonEncode({'error': 'invalid_token'}), 401);
+        }
+        return http.Response('not found', 404);
+      });
+      final container = buildContainer(mock: mock, storage: storage);
+      addTearDown(container.dispose);
+
+      await container.read(authControllerProvider.notifier).restore();
+
+      expect(container.read(authControllerProvider).session, isNull);
+      expect(await storage.read(), isNull);
+    },
+  );
+
+  test(
+    'restore blocks an unknown verification status without replaying OTP',
+    () async {
+      final storage = InMemoryAuthSessionStorage();
+      await storage.write(
+        const AuthSession(
+          accessToken: 'restricted-access',
+          refreshToken: 'restricted-refresh',
+          accountId: 'acc-1',
+          activeProfileId: 'prof-1',
+          expiresInSeconds: 900,
+          accountType: 'guest',
+          emailVerificationRequired: true,
+        ),
+      );
+      var sends = 0;
+      var verifies = 0;
+      final mock = MockClient((req) async {
+        switch (req.url.path) {
+          case '/api/v1/auth/refresh':
+            return http.Response(
+              jsonEncode({
+                'session': {
+                  ...(sessionJson()['session'] as Map<String, dynamic>),
+                  'access_token': 'restricted-access-new',
+                  'refresh_token': 'restricted-refresh-new',
+                  'account_type': 'guest',
+                  'email_verification_required': true,
+                },
+              }),
+              200,
+            );
+          case '/api/v1/auth/verification-status':
+            return http.Response(jsonEncode({'state': 'UNEXPECTED'}), 200);
+          case '/api/v1/auth/otp/send':
+            sends++;
+            return http.Response('', 204);
+          case '/api/v1/auth/otp/verify':
+            verifies++;
+            return http.Response('', 204);
+        }
+        return http.Response('not found', 404);
+      });
+      final container = buildContainer(mock: mock, storage: storage);
+      addTearDown(container.dispose);
+
+      await container.read(authControllerProvider.notifier).restore();
+
+      final state = container.read(authControllerProvider);
+      expect(state.session?.accessToken, 'restricted-access-new');
+      expect(state.isEmailVerificationPending, isFalse);
+      expect(state.isEmailVerificationPromotionPending, isTrue);
+      expect((await storage.read())?.accessToken, 'restricted-access-new');
+      expect(sends, 0);
+      expect(verifies, 0);
     },
   );
 
@@ -929,6 +1096,7 @@ void main() {
         activeProfileId: 'prof-1',
         expiresInSeconds: 900,
         accountType: 'guest',
+        emailVerificationRequired: true,
       );
       await storage.write(guest);
       var verifies = 0;
@@ -958,6 +1126,9 @@ void main() {
             }),
             200,
           );
+        }
+        if (req.url.path == '/api/v1/auth/verification-status') {
+          return http.Response(jsonEncode({'state': 'PROMOTION_PENDING'}), 200);
         }
         return http.Response('not found', 404);
       });
@@ -1021,10 +1192,14 @@ void main() {
           activeProfileId: 'prof-1',
           expiresInSeconds: 900,
           accountType: 'guest',
+          emailVerificationRequired: true,
         ),
       );
       var refreshes = 0;
       final mock = MockClient((req) async {
+        if (req.url.path == '/api/v1/auth/verification-status') {
+          return http.Response(jsonEncode({'state': 'PROMOTION_PENDING'}), 200);
+        }
         if (req.url.path != '/api/v1/auth/refresh') {
           return http.Response('not found', 404);
         }
@@ -1034,6 +1209,7 @@ void main() {
             'session': {
               ...(sessionJson()['session'] as Map<String, dynamic>),
               'account_type': refreshes < 2 ? 'guest' : 'regular',
+              'email_verification_required': refreshes < 2 ? true : null,
             },
           }),
           200,

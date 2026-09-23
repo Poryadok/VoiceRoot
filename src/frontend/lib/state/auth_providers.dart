@@ -210,16 +210,36 @@ class AuthController extends StateNotifier<AuthState> {
       case AuthSessionOk(:final session):
         await _persist(session);
         final isGuest = await _resolveIsGuest(session);
-        final verification = isGuest
+        final verificationRequired =
+            isGuest && session.emailVerificationRequired != false;
+        final verification = verificationRequired
             ? await _authClient.getEmailVerificationStatus(session: session)
             : null;
-        if (isGuest && verification is AuthApiFailure) {
-          await _storage.clear();
+        if (verificationRequired && verification is AuthApiFailure) {
+          if (_isDefinitiveAuthRejection(
+            AuthSessionFailure(
+              message: verification.message,
+              errorCode: verification.errorCode,
+              statusCode: verification.statusCode,
+            ),
+          )) {
+            await _storage.clear();
+            state = state.copyWith(
+              clearSession: true,
+              isRestoring: false,
+              clearError: true,
+              clearGuest: true,
+              clearGuestNickname: true,
+              clearEmailVerificationRecoveryState: true,
+            );
+            return;
+          }
           state = state.copyWith(
-            clearSession: true,
+            session: session,
             isRestoring: false,
-            clearGuest: true,
-            clearEmailVerificationRecoveryState: true,
+            isGuest: true,
+            emailVerificationRecoveryState:
+                EmailVerificationRecoveryState.promotionPending,
             errorKey:
                 resolveAuthErrorKey(
                   errorCode: verification.errorCode,
@@ -914,18 +934,38 @@ class AuthController extends StateNotifier<AuthState> {
       case AuthSessionOk(:final session):
         await _persist(session);
         final isGuest = await _resolveIsGuest(session);
-        final verification = recoverEmailVerification && isGuest
+        final verificationRequired =
+            recoverEmailVerification &&
+            isGuest &&
+            session.emailVerificationRequired != false;
+        final verification = verificationRequired
             ? await _authClient.getEmailVerificationStatus(session: session)
             : null;
-        if (recoverEmailVerification &&
-            isGuest &&
-            verification is AuthApiFailure) {
-          await _storage.clear();
+        if (verificationRequired && verification is AuthApiFailure) {
+          if (_isDefinitiveAuthRejection(
+            AuthSessionFailure(
+              message: verification.message,
+              errorCode: verification.errorCode,
+              statusCode: verification.statusCode,
+            ),
+          )) {
+            await _storage.clear();
+            state = state.copyWith(
+              clearSession: true,
+              isSubmitting: false,
+              clearError: true,
+              clearGuest: true,
+              clearGuestNickname: true,
+              clearEmailVerificationRecoveryState: true,
+            );
+            return;
+          }
           state = state.copyWith(
-            clearSession: true,
+            session: session,
             isSubmitting: false,
-            clearGuest: true,
-            clearEmailVerificationRecoveryState: true,
+            isGuest: true,
+            emailVerificationRecoveryState:
+                EmailVerificationRecoveryState.promotionPending,
             errorKey:
                 resolveAuthErrorKey(
                   errorCode: verification.errorCode,

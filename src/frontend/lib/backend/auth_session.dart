@@ -9,6 +9,7 @@ class AuthSession {
     required this.activeProfileId,
     required this.expiresInSeconds,
     this.accountType,
+    this.emailVerificationRequired,
   });
 
   final String accessToken;
@@ -21,6 +22,7 @@ class AuthSession {
 
   /// `regular` or `guest`; mirrors JWT `account_type` when present.
   final String? accountType;
+  final bool? emailVerificationRequired;
 
   String get authorizationHeader => 'Bearer $accessToken';
 
@@ -32,7 +34,8 @@ class AuthSession {
       other.accountId == accountId &&
       other.activeProfileId == activeProfileId &&
       other.expiresInSeconds == expiresInSeconds &&
-      other.accountType == accountType;
+      other.accountType == accountType &&
+      other.emailVerificationRequired == emailVerificationRequired;
 
   @override
   int get hashCode => Object.hash(
@@ -42,6 +45,7 @@ class AuthSession {
     activeProfileId,
     expiresInSeconds,
     accountType,
+    emailVerificationRequired,
   );
 
   Map<String, dynamic> toJson() => {
@@ -51,6 +55,8 @@ class AuthSession {
     'profile_id': activeProfileId,
     'expires_in_seconds': expiresInSeconds,
     if (accountType != null) 'account_type': accountType,
+    if (emailVerificationRequired != null)
+      'email_verification_required': emailVerificationRequired,
   };
 
   factory AuthSession.fromJson(Map<String, dynamic> json) {
@@ -61,6 +67,7 @@ class AuthSession {
       activeProfileId: json['profile_id'] as String,
       expiresInSeconds: (json['expires_in_seconds'] as num).toInt(),
       accountType: json['account_type'] as String?,
+      emailVerificationRequired: json['email_verification_required'] as bool?,
     );
   }
 
@@ -72,6 +79,9 @@ class AuthSession {
       activeProfileId: proto.profileId,
       expiresInSeconds: proto.expiresInSeconds.toInt(),
       accountType: proto.accountType.isEmpty ? null : proto.accountType,
+      emailVerificationRequired: proto.hasEmailVerificationRequired()
+          ? proto.emailVerificationRequired
+          : null,
     );
   }
 

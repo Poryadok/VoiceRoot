@@ -18,6 +18,7 @@ const _guestSession = AuthSession(
   accountId: _guestAccountId,
   activeProfileId: 'guest-prof',
   expiresInSeconds: 900,
+  emailVerificationRequired: false,
 );
 
 void main() {
@@ -62,6 +63,7 @@ void main() {
                     'expires_in_seconds': 900,
                     'account_id': _guestAccountId,
                     'profile_id': 'guest-prof',
+                    'email_verification_required': false,
                   },
                 }),
                 200,
