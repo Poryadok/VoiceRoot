@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+# Runs only on a Linux hosted runner. It proves the real wire path: an
+# unauthenticated app client shares a network namespace with a leaf; the leaf
+# authenticates to a JWT-resolver hub over TLS with its one service credential.
+set -euo pipefail
+
+if [[ "${GITHUB_ACTIONS:-}" != "true" ]]; then
+  echo "SKIP: NATS JWT leaf runtime proof is hosted-only"
+  exit 0
+fi
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+work="$(mktemp -d)"
+network="voice-nats-proof-$RANDOM"
+cleanup() {
+  docker rm -f voice-nats-proof-hub voice-nats-proof-chat >/dev/null 2>&1 || true
+  docker network rm "$network" >/dev/null 2>&1 || true
+  rm -rf "$work"
+}
+trap cleanup EXIT
+
+cat >"$work/acl.yaml" <<'EOF'
+version: 1
+services:
+  analytics: {publish: [proof.analytics], subscribe: [proof.analytics.delivery]}
+  auth: {publish: [proof.auth], subscribe: [proof.auth.delivery]}
+  bot: {publish: [proof.bot], subscribe: [proof.bot.delivery]}
+  chat:
+    publish: [chat.created, '$JS.API.STREAM.INFO.chat_events']
+    subscribe: [proof.chat.delivery]
+  file: {publish: [proof.file], subscribe: [proof.file.delivery]}
+  gateway: {publish: [proof.gateway], subscribe: [proof.gateway.delivery]}
+  matchmaking: {publish: [proof.matchmaking], subscribe: [proof.matchmaking.delivery]}
+  messaging: {publish: [proof.messaging], subscribe: [proof.messaging.delivery]}
+  moderation: {publish: [proof.moderation], subscribe: [proof.moderation.delivery]}
+  notification: {publish: [proof.notification], subscribe: [proof.notification.delivery]}
+  realtime: {publish: [proof.realtime], subscribe: [proof.realtime.delivery]}
+  role: {publish: [proof.role], subscribe: [proof.role.delivery]}
+  search: {publish: [proof.search], subscribe: [proof.search.delivery]}
+  social: {publish: [proof.social], subscribe: [proof.social.delivery]}
+  space: {publish: [proof.space], subscribe: [proof.space.delivery]}
+  story: {publish: [proof.story], subscribe: [proof.story.delivery]}
+  subscription: {publish: [proof.subscription], subscribe: [proof.subscription.delivery]}
+  user: {publish: [proof.user], subscribe: [proof.user.delivery]}
+  voice: {publish: [proof.voice], subscribe: [proof.voice.delivery]}
+bootstrap:
+  publish: ['$JS.API.STREAM.CREATE.chat_events', '$JS.API.STREAM.INFO.chat_events']
+  subscribe: [proof.bootstrap.delivery]
+EOF
+
+(cd "$root/src/backend/pkg" && go run ./cmd/nats-jwt-fixture "$work/acl.yaml" "$work/fixture")
+account="$(tr -d '\r\n' <"$work/fixture/account.public")"
+openssl req -x509 -newkey rsa:2048 -nodes -days 1 -keyout "$work/key.pem" -out "$work/cert.pem" \
+  -subj '/CN=hub' -addext 'subjectAltName=DNS:hub' >/dev/null 2>&1
+
+cat >"$work/hub.conf" <<EOF
+operator: $work/fixture/operator.jwt
+resolver: MEMORY
+resolver_preload: { $account: $work/fixture/account.jwt }
+jetstream { store_dir: "$work/js" }
+leafnodes {
+  listen: 0.0.0.0:7422
+  tls { cert_file: "$work/cert.pem" key_file: "$work/key.pem" ca_file: "$work/cert.pem" handshake_first: true }
+}
+EOF
+cat >"$work/leaf.conf" <<EOF
+listen: 127.0.0.1:4222
+leafnodes {
+  remotes = [{
+    urls: ["nats-leaf://hub:7422"]
+    account: "\$G"
+    credentials: "$work/fixture/creds/chat.creds"
+    tls { ca_file: "$work/cert.pem" server_name: "hub" handshake_first: true }
+  }]
+}
+EOF
+
+docker network create "$network" >/dev/null
+docker run -d --name voice-nats-proof-hub --network "$network" --network-alias hub -v "$work:$work" nats:2.12-alpine -c "$work/hub.conf" >/dev/null
+for _ in $(seq 1 30); do docker logs voice-nats-proof-hub 2>&1 | grep -q 'Server is ready' && break; sleep 1; done
+docker logs voice-nats-proof-hub 2>&1 | grep -q 'Server is ready'
+
+# Only the Job credential may create the stream; this is a real resolver-authenticated request.
+docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
+  nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" req --raw '$JS.API.STREAM.CREATE.chat_events' '{"name":"chat_events","subjects":["chat.created"],"storage":"file","retention":"limits"}' >/dev/null
+
+docker run -d --name voice-nats-proof-chat --network "$network" -v "$work:$work:ro" nats:2.12-alpine -c "$work/leaf.conf" >/dev/null
+sleep 3
+
+# This client has no credentials: its only path is the local leaf namespace.
+docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0 \
+  nats --server nats://127.0.0.1:4222 pub --js chat.created proof >/dev/null
+
+# Neighbouring subjects and all service-side mutation are rejected by the chat identity.
+if docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0 nats --server nats://127.0.0.1:4222 pub user.account_deleted denied >/dev/null 2>&1; then
+  echo 'FAIL: chat leaf published a neighbouring subject' >&2; exit 1
+fi
+if docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0 nats --server nats://127.0.0.1:4222 req --raw '$JS.API.STREAM.CREATE.denied' '{"name":"denied"}' >/dev/null 2>&1; then
+  echo 'FAIL: chat leaf mutated JetStream' >&2; exit 1
+fi
+# The hub has no anonymous client path; direct unauthenticated access fails.
+if docker run --rm --network "$network" natsio/nats-box:0.18.0 nats --server nats://hub:4222 pub chat.created denied >/dev/null 2>&1; then
+  echo 'FAIL: direct hub accepted an unauthenticated client' >&2; exit 1
+fi
+echo 'PASS: hosted JWT resolver + TLS leaf + exact ACL proof'
