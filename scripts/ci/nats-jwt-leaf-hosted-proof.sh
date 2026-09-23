@@ -271,6 +271,16 @@ if docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18
   echo 'FAIL: drifted fixed durable was accepted as the canonical binding' >&2
   exit 1
 fi
+if docker run --rm --network container:voice-nats-proof-chat -v "$root/src/backend/pkg:/repo:ro" -v "$work:$work:ro" golang:1.24-alpine \
+  sh -ec "cd /repo && go run $work/leaf_receive.go ack" >/dev/null 2>&1; then
+  echo 'FAIL: leaf consumed a drifted durable through the canonical target' >&2
+  exit 1
+fi
+docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
+  nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" consumer rm chat_events proof_chat --force >/dev/null
+docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
+  nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" consumer add chat_events proof_chat \
+  --filter chat.created --target _INBOX.voice.chat.proof --ack explicit --ack-wait 1s --deliver new --defaults >/dev/null
 
 # Core publish success alone is not an authorization or persistence proof. The
 # bootstrap-only identity observes the exact JetStream stream state and proves
