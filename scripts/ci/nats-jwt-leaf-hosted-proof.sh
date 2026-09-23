@@ -13,7 +13,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 work="$(mktemp -d)"
 network="voice-nats-proof-$RANDOM"
 cleanup() {
-  docker rm -f voice-nats-proof-hub voice-nats-proof-chat voice-nats-proof-wrong-ca voice-nats-proof-wrong-sni voice-nats-proof-bootstrap-reply voice-nats-proof-receive-one voice-nats-proof-receive-two >/dev/null 2>&1 || true
+  docker rm -f voice-nats-proof-hub voice-nats-proof-chat voice-nats-proof-invalid-jwt voice-nats-proof-wrong-ca voice-nats-proof-wrong-sni voice-nats-proof-bootstrap-reply voice-nats-proof-receive-one voice-nats-proof-receive-two >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
   rm -rf "$work"
 }
@@ -124,6 +124,11 @@ cat >"$work/wrong-sni-leaf.conf" <<EOF
 listen: 127.0.0.1:4222
 leafnodes { remotes = [{ urls: ["nats-leaf://wrong-sni:7422"] account: "\$G" credentials: "$work/fixture/creds/chat.creds" tls { ca_file: "$work/cert.pem"; handshake_first: true } }] }
 EOF
+sed '0,/eyJ/s/eyJ/eyK/' "$work/fixture/creds/chat.creds" >"$work/invalid-chat.creds"
+cat >"$work/invalid-jwt-leaf.conf" <<EOF
+listen: 127.0.0.1:4222
+leafnodes { remotes = [{ urls: ["nats-leaf://hub:7422"] account: "\$G" credentials: "$work/invalid-chat.creds" tls { ca_file: "$work/cert.pem"; handshake_first: true } }] }
+EOF
 
 docker network create "$network" >/dev/null
 docker run -d --name voice-nats-proof-hub --network "$network" --network-alias hub --network-alias wrong-sni -v "$work:$work" nats:2.12-alpine -c "$work/hub.conf" >/dev/null
@@ -166,6 +171,23 @@ if ! grep -Eqi '(certificate|tls|x509).*(name|hostname|verify|failed|error)|tls.
   exit 1
 fi
 docker rm -f voice-nats-proof-wrong-sni >/dev/null
+
+# Only the service JWT is corrupt here: CA and SNI are valid, so the fresh
+# failure must be authentication rather than a transport fallback.
+docker run -d --name voice-nats-proof-invalid-jwt --network "$network" -v "$work:$work:ro" nats:2.12-alpine -c "$work/invalid-jwt-leaf.conf" >/dev/null
+invalid_jwt_before="$(docker logs voice-nats-proof-invalid-jwt 2>&1 || true)"
+for _ in $(seq 1 8); do
+  invalid_jwt_logs="$(docker logs voice-nats-proof-invalid-jwt 2>&1 || true)"
+  invalid_jwt_delta="${invalid_jwt_logs#"$invalid_jwt_before"}"
+  grep -Eqi '(authorization|authentication|jwt|signature).*(denied|invalid|failed|error)|authorization.*violation' <<<"$invalid_jwt_delta" && break
+  sleep 1
+done
+if ! grep -Eqi '(authorization|authentication|jwt|signature).*(denied|invalid|failed|error)|authorization.*violation' <<<"${invalid_jwt_delta:-}"; then
+  echo 'FAIL: invalid-JWT leaf did not report a fresh authentication rejection' >&2
+  printf '%s\n' "${invalid_jwt_delta:-}" >&2
+  exit 1
+fi
+docker rm -f voice-nats-proof-invalid-jwt >/dev/null
 
 # Only the Job credential may create the stream. Its reply subscription is an
 # exact credential-owned subject, never a broad _INBOX wildcard.
