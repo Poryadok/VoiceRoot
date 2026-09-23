@@ -46,7 +46,7 @@ stream story_events story.created story.viewed story.reacted story.expired story
 stream user_events user.account_deleted user.profile_created user.profile_updated user.profile_switched user.verified user.presence_changed user.game_detected user.settings_changed
 stream social_events social.friend_request social.friend_accepted social.friend_removed social.user_blocked social.contacts_synced
 stream role_events role.created role.updated role.deleted role.assigned role.revoked role.chat_override_set role.chat_override_removed role.voice_override_set role.voice_override_removed
-stream voice_events 'voice.>'
+stream voice_events voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined
 stream matchmaking_events mm.search_started mm.search_cancelled mm.search_nudge mm.search_timeout mm.match_found mm.match_completed mm.rating_submitted mm.player_banned
 consumer message_events rt_realtime1_msg 'message.>' _INBOX.voice.realtime1.message
 consumer chat_events rt_realtime1_chat 'chat.>' _INBOX.voice.realtime1.chat

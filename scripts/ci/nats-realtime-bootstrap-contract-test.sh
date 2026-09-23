@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 BOOTSTRAP="${ROOT}/docker/nats/realtime-bootstrap.sh"
 K8S_BOOTSTRAP="${ROOT}/deploy/templates/nats-realtime-bootstrap.yaml"
 COMPOSE="${ROOT}/docker-compose.yml"
+MANIFEST="${ROOT}/deploy/nats/jetstream-publisher-streams.yaml"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 require() { grep -Fqx -- "$1" "$2" || fail "missing exact contract line in ${2#"${ROOT}/"}: $1"; }
@@ -24,7 +25,7 @@ for stream in \
   'stream user_events user.account_deleted user.profile_created user.profile_updated user.profile_switched user.verified user.presence_changed user.game_detected user.settings_changed' \
   'stream social_events social.friend_request social.friend_accepted social.friend_removed social.user_blocked social.contacts_synced' \
   'stream role_events role.created role.updated role.deleted role.assigned role.revoked role.chat_override_set role.chat_override_removed role.voice_override_set role.voice_override_removed' \
-  "stream voice_events 'voice.>'" \
+  'stream voice_events voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined' \
   'stream matchmaking_events mm.search_started mm.search_cancelled mm.search_nudge mm.search_timeout mm.match_found mm.match_completed mm.rating_submitted mm.player_banned'; do
   require "$stream" "$BOOTSTRAP"
 done
@@ -42,7 +43,21 @@ done
 
 require '  nats-realtime-bootstrap:' "$COMPOSE"
 require '        condition: service_completed_successfully' "$COMPOSE"
+require '  - name: voice_events' "$MANIFEST"
+require '    subjects: [voice.call_incoming, voice.call_accepted, voice.call_declined, voice.call_missed, voice.call_ended, voice.state_changed, voice.screen_share_started, voice.screen_share_stopped, voice.call_started, voice.member_joined]' "$MANIFEST"
 grep -Fq '[(.config.subjects | sort), .config.storage, .config.retention, .config.max_age]' "$BOOTSTRAP" || fail "bootstrap must validate storage, retention and max age"
+if ! awk '
+  $1 == "stream" {
+    for (i = 3; i <= NF; i++) {
+      if ($i ~ /[*>]/ || ($i in owners && owners[$i] != $2)) {
+        exit 1
+      }
+      owners[$i] = $2
+    }
+  }
+' "$BOOTSTRAP"; then
+  fail "publisher streams must have disjoint, exact subjects"
+fi
 for manifest in "${ROOT}/deploy/staging/services.yaml" "${ROOT}/deploy/prod/services.yaml"; do
   require '              value: realtime-1' "$manifest"
 done
