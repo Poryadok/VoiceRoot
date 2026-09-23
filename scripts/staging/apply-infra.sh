@@ -43,6 +43,19 @@ if ! kubectl get secret voice-minio-credentials -n "${NS}" >/dev/null 2>&1; then
   exit 1
 fi
 
+for secret in voice-nats-operator voice-nats-hub-tls voice-nats-bootstrap-credentials voice-nats-service-credentials; do
+  if ! kubectl get secret "${secret}" -n "${NS}" >/dev/null 2>&1; then
+    echo "ERROR: NATS activation secret ${secret} missing in ${NS}" >&2
+    exit 1
+  fi
+done
+for key in operator.jwt account.jwt system-account.jwt; do
+  if ! kubectl get secret voice-nats-operator -n "${NS}" -o "jsonpath={.data.${key//./\\.}}" | grep -q .; then
+    echo "ERROR: voice-nats-operator missing required ${key} in ${NS}" >&2
+    exit 1
+  fi
+done
+
 bash "${ROOT}/scripts/staging/patch-app-secrets-database-urls.sh"
 bash "${ROOT}/scripts/staging/patch-gateway-staff-token.sh"
 
@@ -58,6 +71,9 @@ render "${ROOT}/deploy/staging/infra.yaml" | \
       -e "s|__LIVEKIT_API_SECRET__|${LIVEKIT_API_SECRET}|g" | \
   kubectl apply -f -
 
+kubectl rollout status deployment/voice-nats -n "${NS}" --timeout=180s
+sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/network-policy-nats-hub.yaml" | kubectl apply -f -
+
 kubectl delete job voice-nats-realtime-bootstrap -n "${NS}" --ignore-not-found
 sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/nats-realtime-bootstrap.yaml" | kubectl apply -f -
 kubectl wait --for=condition=complete job/voice-nats-realtime-bootstrap -n "${NS}" --timeout=120s
@@ -67,6 +83,9 @@ kubectl wait --for=condition=complete job/voice-nats-notification-bootstrap -n "
 kubectl delete job voice-nats-search-bootstrap -n "${NS}" --ignore-not-found
 sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/nats-search-bootstrap.yaml" | kubectl apply -f -
 kubectl wait --for=condition=complete job/voice-nats-search-bootstrap -n "${NS}" --timeout=120s
+kubectl delete job voice-nats-analytics-chat-bootstrap -n "${NS}" --ignore-not-found
+sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/nats-analytics-chat-bootstrap.yaml" | kubectl apply -f -
+kubectl wait --for=condition=complete job/voice-nats-analytics-chat-bootstrap -n "${NS}" --timeout=120s
 
 sed -e "s|__VOICE_MINIO_IMAGE__|${MINIO_IMAGE}|g" \
     -e "s|__VOICE_MINIO_MC_IMAGE__|${MINIO_MC_IMAGE}|g" \

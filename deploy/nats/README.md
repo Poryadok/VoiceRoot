@@ -1,16 +1,18 @@
 # NATS JWT credential contract
 
-This directory establishes assets only. It does not change `docker-compose.yml`,
-the NATS server arguments, app environment, streams, consumers, or NetworkPolicy.
-The broker therefore remains anonymous until the dedicated JWT activation PR.
+This directory defines the Kubernetes JWT activation contract. It does not
+change `docker-compose.yml`; Compose remains outside this rollout.
 
 `secret-contract.example.yaml` is a placeholder-only Kubernetes interface for
 both `voice-staging` and `voice-prod`: render `__VOICE_NAMESPACE__` to the
 target namespace in the secret manager, never in source control. Values use
 `stringData` and are UTF-8 text; Kubernetes encodes them to `data` on write.
 
-The activation leaf must mount `voice-nats-operator/operator.jwt` and
-`account.jwt` into the NATS pod at `/etc/nats/jwt/` read-only. It must mount one
+The hub must mount `voice-nats-operator/operator.jwt`, `account.jwt`, and
+`system-account.jwt` into the NATS pod at `/etc/nats/jwt/` read-only. Its MEMORY
+resolver preloads distinct `APP` and `SYS` accounts and declares `SYS` as the
+system account. The hub TLS Secret is `voice-nats-hub-tls` with `tls.crt`,
+`tls.key`, and `ca.crt`; its leaf listener is Service port 7422. It must mount one
 `voice-nats-service-credentials/<service>.creds` entry into each matching pod
 at `/var/run/nats/creds/<service>.creds`, read-only with `defaultMode: 0400`.
 No pod receives the shared Secret wholesale and no app pod receives an operator
@@ -34,7 +36,8 @@ prints private material. The final activation supplies the reviewed manifest
 from the canonical publisher/consumer topology rather than granting a default
 per-service namespace.
 
-`bootstrap.creds` is a separate, short-lived provisioning-Job credential. It
+`bootstrap.creds` is a separate, short-lived provisioning-Job credential in
+`voice-nats-bootstrap-credentials`. It
 must be stored and mounted separately from `voice-nats-service-credentials`;
 no application pod or leaf sidecar may receive it.
 

@@ -122,6 +122,9 @@ spec:
     - name: client
       port: 4222
       targetPort: 4222
+    - name: leaf-tls
+      port: 7422
+      targetPort: 7422
     - name: monitor
       port: 8222
       targetPort: 8222
@@ -145,13 +148,48 @@ spec:
       containers:
         - name: nats
           image: nats:2.12-alpine
-          args: ["-js", "-sd", "/data", "-m", "8222", "-n", "voice-prod"]
+          args: ["-c", "/etc/nats/nats.conf"]
+          env:
+            - {name: APP_ACCOUNT_PUBLIC_KEY, valueFrom: {secretKeyRef: {name: voice-nats-operator, key: account.public}}}
+            - {name: SYSTEM_ACCOUNT_PUBLIC_KEY, valueFrom: {secretKeyRef: {name: voice-nats-operator, key: system-account.public}}}
           ports:
             - containerPort: 4222
+            - name: leaf-tls
+              containerPort: 7422
             - containerPort: 8222
           volumeMounts:
             - name: jsdata
               mountPath: /data
+            - name: nats-config
+              mountPath: /etc/nats/nats.conf
+              subPath: nats.conf
+              readOnly: true
+            - name: nats-operator-jwt
+              mountPath: /etc/nats/jwt
+              readOnly: true
+            - name: nats-hub-tls
+              mountPath: /etc/nats/tls
+              readOnly: true
+      volumes:
+        - name: nats-config
+          configMap:
+            name: voice-nats-hub-config
+        - name: nats-operator-jwt
+          secret:
+            secretName: voice-nats-operator
+            defaultMode: 0400
+            items:
+              - {key: operator.jwt, path: operator.jwt}
+              - {key: account.jwt, path: account.jwt}
+              - {key: system-account.jwt, path: system-account.jwt}
+        - name: nats-hub-tls
+          secret:
+            secretName: voice-nats-hub-tls
+            defaultMode: 0400
+            items:
+              - {key: tls.crt, path: tls.crt}
+              - {key: tls.key, path: tls.key}
+              - {key: ca.crt, path: ca.crt}
   volumeClaimTemplates:
     - metadata:
         name: jsdata
@@ -160,6 +198,50 @@ spec:
         resources:
           requests:
             storage: 10Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: voice-nats-leaf-config
+  namespace: voice-prod
+data:
+  leaf.conf: |
+    listen: 127.0.0.1:4222
+    leafnodes {
+      remotes = [{
+        urls: ["nats-leaf://voice-nats:7422"]
+        account: "$G"
+        credentials: $NATS_CREDS
+        tls { ca_file: /etc/nats/tls/ca.crt; handshake_first: true }
+      }]
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: voice-nats-hub-config
+  namespace: voice-prod
+data:
+  nats.conf: |
+    server_name: voice-nats-hub
+    jetstream { store_dir: /data }
+    http: 8222
+    operator: /etc/nats/jwt/operator.jwt
+    resolver: MEMORY
+    resolver_preload: {
+      $APP_ACCOUNT_PUBLIC_KEY: /etc/nats/jwt/account.jwt
+      $SYSTEM_ACCOUNT_PUBLIC_KEY: /etc/nats/jwt/system-account.jwt
+    }
+    system_account: $SYSTEM_ACCOUNT_PUBLIC_KEY
+    leafnodes {
+      listen: 0.0.0.0:7422
+      tls {
+        cert_file: /etc/nats/tls/tls.crt
+        key_file: /etc/nats/tls/tls.key
+        ca_file: /etc/nats/tls/ca.crt
+        handshake_first: true
+      }
+    }
 ---
 apiVersion: v1
 kind: Service

@@ -19,7 +19,6 @@ data:
   POSTGRES_HOST: "voice-postgres"
   POSTGRES_PORT: "5432"
   REDIS_ADDR: "voice-redis:6379"
-  NATS_URL: "nats://voice-nats:4222"
   LIVEKIT_URL: "wss://__LIVEKIT_INGRESS_HOST__"
   GATEWAY_JWT_ISSUER: "voice-auth"
   GATEWAY_JWT_AUDIENCE: "voice-client"
