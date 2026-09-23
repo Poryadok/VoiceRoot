@@ -332,7 +332,16 @@ for denied_js_subject in '$JS.API.>' '$JS.API.CONSUMER.INFO.chat_events.neighbou
   fi
 done
 # The hub has no anonymous client path; direct unauthenticated access fails.
+hub_log_before="$(docker logs voice-nats-proof-hub 2>&1 || true)"
 if docker run --rm --network "$network" natsio/nats-box:0.18.0 nats --server nats://hub:4222 pub chat.created denied >/dev/null 2>&1; then
   echo 'FAIL: direct hub accepted an unauthenticated client' >&2; exit 1
+fi
+sleep 1
+hub_log_delta="$(docker logs voice-nats-proof-hub 2>&1 || true)"
+hub_log_delta="${hub_log_delta#"$hub_log_before"}"
+if ! grep -Eqi '(authorization|authentication).*(violation|denied|failed|required)|authentication.*error' <<<"$hub_log_delta"; then
+  echo 'FAIL: direct unauthenticated hub rejection lacked fresh hub evidence' >&2
+  printf '%s\n' "$hub_log_delta" >&2
+  exit 1
 fi
 echo 'PASS: hosted JWT resolver + TLS leaf + exact ACL proof'
