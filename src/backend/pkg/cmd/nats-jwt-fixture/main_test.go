@@ -29,6 +29,9 @@ func TestGenerateCreatesDistinctServiceCredentialsWithoutBroadJetStreamAPI(t *te
 		if got, want := claims.Pub.Allow, fixtureACL().Services[name].Publish; strings.Join(got, ",") != strings.Join(want, ",") {
 			t.Fatalf("%s publish grants = %v, want %v", name, got, want)
 		}
+		if claims.Permissions.Resp == nil || claims.Permissions.Resp.MaxMsgs != 16 {
+			t.Fatalf("%s must have bounded request/reply permission", name)
+		}
 	}
 	if _, err := os.Stat(filepath.Join(dest, "creds", "bootstrap.creds")); err != nil {
 		t.Fatalf("bootstrap credential missing: %v", err)
@@ -98,6 +101,24 @@ func TestGenerateRejectsWildcardAndBroadJetStreamPermissions(t *testing.T) {
 		mutate(&acl)
 		if err := generate(filepath.Join(t.TempDir(), "fixture"), acl); err == nil {
 			t.Fatal("unsafe or incomplete ACL must be rejected")
+		}
+	}
+}
+
+func TestGeneratePermitsOnlyExactDurableJetStreamAckWildcard(t *testing.T) {
+	acl := fixtureACL()
+	acl.Services["notification"] = serviceACL{
+		Publish:   []string{"$JS.ACK.message_events.notif_msg_v2.>"},
+		Subscribe: []string{"_INBOX.voice.notification.message"},
+	}
+	if err := generate(filepath.Join(t.TempDir(), "fixture"), acl); err != nil {
+		t.Fatalf("fixed durable acknowledgement grant must be allowed: %v", err)
+	}
+	for _, subject := range []string{"$JS.ACK.message_events.>", "$JS.ACK.message_events.notif_msg_v2.extra.>", "$JS.API.CONSUMER.INFO.message_events.>"} {
+		acl := fixtureACL()
+		acl.Services["notification"] = serviceACL{Publish: []string{subject}}
+		if err := generate(filepath.Join(t.TempDir(), "fixture"), acl); err == nil {
+			t.Fatalf("unsafe wildcard %q must be rejected", subject)
 		}
 	}
 }

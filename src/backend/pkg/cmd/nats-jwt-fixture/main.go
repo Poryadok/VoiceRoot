@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/nats-io/jwt/v2"
 	"github.com/nats-io/nkeys"
@@ -90,8 +91,17 @@ func validateGrant(grant serviceACL) error {
 		return errors.New("at least one permission is required")
 	}
 	seen := make(map[string]struct{}, len(grant.Publish)+len(grant.Subscribe))
-	for _, subject := range append(append([]string{}, grant.Publish...), grant.Subscribe...) {
-		if subject == "" || strings.ContainsAny(subject, " \t\r\n>*") || subject == "$JS.API.>" {
+	for _, subject := range grant.Publish {
+		if !safePublishSubject(subject) {
+			return fmt.Errorf("unsafe subject %q", subject)
+		}
+		if _, duplicate := seen[subject]; duplicate {
+			return fmt.Errorf("duplicate subject %q", subject)
+		}
+		seen[subject] = struct{}{}
+	}
+	for _, subject := range grant.Subscribe {
+		if !safeSubscribeSubject(subject) {
 			return fmt.Errorf("unsafe subject %q", subject)
 		}
 		if _, duplicate := seen[subject]; duplicate {
@@ -100,6 +110,28 @@ func validateGrant(grant serviceACL) error {
 		seen[subject] = struct{}{}
 	}
 	return nil
+}
+
+// JetStream acknowledgement subjects contain server-assigned delivery tokens.
+// A fixed stream/durable prefix with a terminal wildcard is the narrowest
+// viable user grant: the client cannot ACK a neighbouring durable or access
+// the JetStream management API.
+func safePublishSubject(subject string) bool {
+	if subject == "" || strings.ContainsAny(subject, " \t\r\n*") || subject == "$JS.API.>" {
+		return false
+	}
+	if !strings.Contains(subject, ">") {
+		return true
+	}
+	if !strings.HasPrefix(subject, "$JS.ACK.") || !strings.HasSuffix(subject, ".>") || strings.Count(subject, ">") != 1 {
+		return false
+	}
+	parts := strings.Split(strings.TrimSuffix(subject, ".>"), ".")
+	return len(parts) == 4 && parts[2] != "" && parts[3] != ""
+}
+
+func safeSubscribeSubject(subject string) bool {
+	return subject != "" && !strings.ContainsAny(subject, " \t\r\n>*") && subject != "$JS.API.>"
 }
 
 func generate(dest string, acl aclDocument) error {
@@ -223,6 +255,10 @@ func writeCredential(path, name string, grant serviceACL, account nkeys.KeyPair)
 func applyGrant(claim *jwt.UserClaims, grant serviceACL) {
 	claim.Pub.Allow = append([]string(nil), grant.Publish...)
 	claim.Sub.Allow = append([]string(nil), grant.Subscribe...)
+	// JetStream INFO, bind and publish operations use an ephemeral reply inbox.
+	// Response permissions permit only replies to a request made by this user,
+	// avoiding a broad `_INBOX.>` subscription grant.
+	claim.Permissions.Resp = &jwt.ResponsePermission{MaxMsgs: 16, Expires: time.Second}
 	if len(claim.Pub.Allow) == 0 {
 		claim.Pub.Deny = []string{">"}
 	}
