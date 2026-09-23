@@ -49,6 +49,24 @@ func TestValidateAccountDeletedDurableAcceptsExactPreprovisionedConsumer(t *test
 	require.NoError(t, validateAccountDeletedDurable(js, durable))
 }
 
+func TestValidateAccountDeletedDurableRejectsDeliveryGroupDrift(t *testing.T) {
+	server := startAccountDeletedJSTestServer(t)
+	nc, err := nats.Connect(server.ClientURL())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = nc.Drain() })
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+	_, err = js.AddStream(&nats.StreamConfig{Name: userEventsStreamName, Subjects: []string{"user.>"}, Storage: nats.MemoryStorage})
+	require.NoError(t, err)
+
+	durable := accountDeletedDurableName("pod-a")
+	config := accountDeletedConsumerConfig(durable)
+	config.DeliverGroup = "unexpected"
+	_, err = js.AddConsumer(userEventsStreamName, config)
+	require.NoError(t, err)
+	require.Error(t, validateAccountDeletedDurable(js, durable))
+}
+
 func provisionAccountDeletedDurable(t *testing.T, js nats.JetStreamContext) {
 	t.Helper()
 	durable := accountDeletedDurableName("bootstrap")

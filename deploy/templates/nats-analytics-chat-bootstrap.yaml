@@ -28,8 +28,8 @@ data:
         if printf '%s' "$info" | jq -e '.error' >/dev/null; then
           printf '%s' "$info" | jq -r '.error.description' | grep -qi 'consumer not found' || { echo "$info" >&2; exit 1; }
         else
-          actual="$(printf '%s' "$info" | jq -c '[.config.filter_subject, .config.deliver_subject, .config.deliver_group, .config.ack_policy, .config.deliver_policy]')"
-          expected="$(jq -cn --arg filter "$filter" --arg target "$target" --arg group "$group" --arg deliver "$deliver" '[ $filter, $target, $group, "explicit", $deliver ]')"
+          actual="$(printf '%s' "$info" | jq -c '[.stream_name, .name, .config.durable_name, .config.filter_subject, .config.deliver_subject, .config.deliver_group, .config.ack_policy, .config.deliver_policy]')"
+          expected="$(jq -cn --arg stream "$stream_name" --arg durable "$durable" --arg filter "$filter" --arg target "$target" --arg group "$group" --arg deliver "$deliver" '[ $stream, $durable, $durable, $filter, $target, $group, "explicit", $deliver ]')"
           [ "$actual" = "$expected" ] || { echo "incompatible consumer $stream_name/$durable" >&2; exit 1; }
           return
         fi

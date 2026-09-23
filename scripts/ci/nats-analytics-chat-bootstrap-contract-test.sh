@@ -28,6 +28,7 @@ for spec in \
 done
 
 grep -Fq 'CONSUMER.INFO.$stream_name.$durable' "$BOOTSTRAP" || fail 'bootstrap must inspect existing consumers'
+grep -Fq '[.stream_name, .name, .config.durable_name,' "$BOOTSTRAP" || fail 'bootstrap must reject consumer identity drift'
 grep -Fq 'incompatible consumer $stream_name/$durable' "$BOOTSTRAP" || fail 'bootstrap must reject durable drift'
 grep -Fq -- '--deliver-group "$group"' "$BOOTSTRAP" || fail 'bootstrap must preserve Analytics queue groups'
 for source in "$ANALYTICS" "$CHAT"; do

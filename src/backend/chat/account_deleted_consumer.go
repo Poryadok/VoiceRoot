@@ -163,6 +163,7 @@ func validateAccountDeletedDurable(js nats.JetStreamContext, durable string) err
 		info.Config.AckPolicy != nats.AckExplicitPolicy ||
 		info.Config.FilterSubject != userAccountDeletedSubject ||
 		len(info.Config.FilterSubjects) != 0 ||
+		info.Config.DeliverGroup != "" ||
 		info.Config.DeliverSubject != accountDeletedDeliverySubject(durable) {
 		return fmt.Errorf("user.account_deleted durable %q has incompatible configuration", durable)
 	}
