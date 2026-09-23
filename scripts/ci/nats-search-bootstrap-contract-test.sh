@@ -32,10 +32,14 @@ done
 for source in \
   "${ROOT}/src/backend/search/internal/indexer/consumer.go" \
   "${ROOT}/src/backend/search/internal/profileprojection/jetstream_consumer.go"; do
-  grep -Fq 'nats.Bind(' "$source" || fail "${source#"${ROOT}/"} must bind its centrally provisioned durable"
+  grep -Fq 'jetstreambind.Bind(' "$source" || fail "${source#"${ROOT}/"} must preflight then bind its centrally provisioned durable"
   ! grep -Fq 'AddConsumer(' "$source" || fail "${source#"${ROOT}/"} must not create a consumer"
   ! grep -Fq 'UpdateConsumer(' "$source" || fail "${source#"${ROOT}/"} must not mutate a consumer"
 done
+grep -Fq 'js.ConsumerInfo(stream, durable)' "${ROOT}/src/backend/search/internal/jetstreambind/preflight.go" \
+  || fail "Search preflight must read the provisioned consumer"
+grep -Fq 'nats.Bind(stream, durable)' "${ROOT}/src/backend/search/internal/jetstreambind/preflight.go" \
+  || fail "Search preflight must bind only after exact validation"
 
 grep -Fq "consumer add user_events search-indexer-user-v1 --filter '>'" "$SMOKE" \
   || fail "Search smoke must prove broad user-filter drift is rejected"

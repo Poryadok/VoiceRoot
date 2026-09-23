@@ -12,6 +12,7 @@ import (
 
 	eventsv1 "voice.app/voice/events/v1"
 	"voice/backend/pkg/natslog"
+	"voice/backend/search/internal/jetstreambind"
 )
 
 const (
@@ -20,12 +21,15 @@ const (
 	// Runtime only binds: it never receives JetStream management authority.
 	jsSubjectMessageEvents = "message.>"
 	jsDurableMessageEvents = "search-indexer-message-v1"
+	jsDeliverMessageEvents = "_INBOX.voice.search.indexer.message"
 	jsStreamUserEvents     = "user_events"
 	jsSubjectUserEvents    = "user.>"
 	jsDurableUserEvents    = "search-indexer-user-v1"
+	jsDeliverUserEvents    = "_INBOX.voice.search.indexer.user"
 	jsStreamChatEvents     = "chat_events"
 	jsSubjectChatEvents    = ">"
 	jsDurableChatEvents    = "search-indexer-chat-v1"
+	jsDeliverChatEvents    = "_INBOX.voice.search.indexer.chat"
 )
 
 var searchConsumerRetryBackoff = []time.Duration{time.Second, 5 * time.Second, 30 * time.Second, 2 * time.Minute}
@@ -75,7 +79,7 @@ func RunMessageEventsConsumer(ctx context.Context, natsURL, instanceID string, i
 		jetStreamConsumeAck(msg, err, jsStreamMessageEvents, metrics, logger)
 	}
 
-	sub, err := subscribeSearchConsumer(js, jsStreamMessageEvents, jsDurableMessageEvents, jsSubjectMessageEvents, handler)
+	sub, err := subscribeSearchConsumer(js, jsStreamMessageEvents, jsDurableMessageEvents, jsSubjectMessageEvents, jsDeliverMessageEvents, handler)
 	if err != nil {
 		return fmt.Errorf("jetstream subscribe message.events: %w", err)
 	}
@@ -95,7 +99,7 @@ func RunMessageEventsConsumer(ctx context.Context, natsURL, instanceID string, i
 
 // RunUserEventsConsumer subscribes to user.events and updates profile projections.
 func RunUserEventsConsumer(ctx context.Context, natsURL, instanceID string, idx *ProfileIndexer, logger *slog.Logger, metrics *ConsumerMetrics, ready chan<- error) error {
-	return runJetStreamConsumer(ctx, natsURL, "search-user", jsStreamUserEvents, jsDurableUserEvents, jsSubjectUserEvents, func(msg *nats.Msg) {
+	return runJetStreamConsumer(ctx, natsURL, "search-user", jsStreamUserEvents, jsDurableUserEvents, jsSubjectUserEvents, jsDeliverUserEvents, func(msg *nats.Msg) {
 		var env eventsv1.UserStreamEvent
 		if err := proto.Unmarshal(msg.Data, &env); err != nil {
 			natslog.LogConsume(logger, msg, slog.LevelWarn, "user event unmarshal failed")
@@ -114,7 +118,7 @@ func RunUserEventsConsumer(ctx context.Context, natsURL, instanceID string, idx 
 
 // RunChatEventsConsumer subscribes to chat.events and updates chat/space projections.
 func RunChatEventsConsumer(ctx context.Context, natsURL, instanceID string, idx *ChatSpaceIndexer, logger *slog.Logger, metrics *ConsumerMetrics, ready chan<- error) error {
-	return runJetStreamConsumer(ctx, natsURL, "search-chat", jsStreamChatEvents, jsDurableChatEvents, jsSubjectChatEvents, func(msg *nats.Msg) {
+	return runJetStreamConsumer(ctx, natsURL, "search-chat", jsStreamChatEvents, jsDurableChatEvents, jsSubjectChatEvents, jsDeliverChatEvents, func(msg *nats.Msg) {
 		var env eventsv1.ChatStreamEvent
 		if err := proto.Unmarshal(msg.Data, &env); err != nil {
 			natslog.LogConsume(logger, msg, slog.LevelWarn, "chat event unmarshal failed")
@@ -131,7 +135,7 @@ func RunChatEventsConsumer(ctx context.Context, natsURL, instanceID string, idx 
 	}, logger, metrics, ready)
 }
 
-func runJetStreamConsumer(ctx context.Context, natsURL, namePrefix, stream, durable, subject string, handler func(*nats.Msg), logger *slog.Logger, metrics *ConsumerMetrics, ready chan<- error) (runErr error) {
+func runJetStreamConsumer(ctx context.Context, natsURL, namePrefix, stream, durable, subject, deliverSubject string, handler func(*nats.Msg), logger *slog.Logger, metrics *ConsumerMetrics, ready chan<- error) (runErr error) {
 	defer func() {
 		if ready != nil {
 			ready <- runErr
@@ -158,7 +162,7 @@ func runJetStreamConsumer(ctx context.Context, natsURL, namePrefix, stream, dura
 		return fmt.Errorf("jetstream: %w", err)
 	}
 
-	sub, err := subscribeSearchConsumer(js, stream, durable, subject, handler)
+	sub, err := subscribeSearchConsumer(js, stream, durable, subject, deliverSubject, handler)
 	if err != nil {
 		return fmt.Errorf("jetstream subscribe %s: %w", stream, err)
 	}
@@ -179,6 +183,6 @@ func runJetStreamConsumer(ctx context.Context, natsURL, namePrefix, stream, dura
 // subscribeSearchConsumer binds a pre-provisioned durable. Missing or drifted
 // consumers fail the service's startup path; Search never creates or updates
 // JetStream consumers at runtime.
-func subscribeSearchConsumer(js nats.JetStreamContext, stream, durable, subject string, handler nats.MsgHandler) (*nats.Subscription, error) {
-	return js.Subscribe(subject, handler, nats.Bind(stream, durable), nats.ManualAck())
+func subscribeSearchConsumer(js nats.JetStreamContext, stream, durable, subject, deliverSubject string, handler nats.MsgHandler) (*nats.Subscription, error) {
+	return jetstreambind.Bind(js, stream, durable, subject, deliverSubject, handler)
 }
