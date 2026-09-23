@@ -39,7 +39,7 @@ analytics.* publishers ──► ingest gRPC ──┤
                               AnalyticsQueryService (staff REST via Gateway)
 ```
 
-Пайплайн JetStream ingest → ClickHouse → staff query API; operational метрики — Prometheus `/metrics`. Каждый source использует service-wide v2 durable/queue; первый controlled cutover создаёт consumer с `DeliverNew`, последующие pod/restart bind-ятся к нему и возобновляют pending backlog. Источник с UUID `event_id` сохраняет его; legacy source получает детерминированный UUID из JetStream stream/sequence. `voice.events_logical` даёт официальным reads один логический ряд на `event_id`, сохраняя raw evidence в `voice.events`. Прямой `AnalyticsIngestService` gRPC принимает запись в память и не является crash-durable transport.
+Пайплайн JetStream ingest → ClickHouse → staff query API; operational метрики — Prometheus `/metrics`. Каждый source использует service-wide v2 durable/queue; deployment bootstrap заранее создаёт exact filtered consumer с `DeliverNew`, а Analytics перед bind проверяет его identity/filter/delivery/ACK contract и не имеет права создавать или изменять JetStream state. Pod/restart bind-ятся к нему и возобновляют pending backlog. Источник с UUID `event_id` сохраняет его; legacy source получает детерминированный UUID из JetStream stream/sequence. `voice.events_logical` даёт официальным reads один логический ряд на `event_id`, сохраняя raw evidence в `voice.events`. Прямой `AnalyticsIngestService` gRPC принимает запись в память и не является crash-durable transport.
 
 ## API (gRPC + REST)
 

@@ -260,6 +260,8 @@ CREATE INDEX quick_access_profile_order_idx ON quick_access_chats (profile_id, s
 
 После account delete успешный новый snapshot не включает DM-строку surviving участника с удалённым peer. Для этого snapshot-only фильтра Chat вызывает User `ResolveAccountIDForProfile` как exact internal caller `chat`: lookup возвращает owner даже для soft-deleted profile и не заменяется public `GetProfile`, который сохраняет visibility semantics для group/privacy/DM creation paths. Затем Chat проверяет lifecycle account через Auth. Ошибка owner или Auth dependency делает page `UNAVAILABLE`, а не доказывает удаление строки. Уже выбранная локально загруженная история восстанавливает terminal state только через `Messaging.GetMessages.dm_peer_state`, не через `ListChats` и не через раскрытие deleted profile.
 
+Chat consumes `user.account_deleted` through one deployment-preprovisioned `chat_account_deleted` durable with an exact `user.account_deleted` filter, explicit ACK and `DeliverAll`. Before bind it rejects an absent or drifted durable; the service never creates or updates JetStream consumers.
+
 ### Timestamp ownership (`chats.last_message_at`)
 
 | Writer | Что обновляет | Статус |

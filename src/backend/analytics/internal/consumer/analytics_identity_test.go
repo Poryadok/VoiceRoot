@@ -25,7 +25,7 @@ func TestHandleAnalyticsMsgUsesJetStreamIdentityForInvalidEnvelopeID(t *testing.
 	require.NoError(t, err)
 
 	const durable = "analytics_v2_identity"
-	require.NoError(t, ensureAnalyticsDurable(js, "analytics_events", "analytics.>", durable, durable))
+	provisionAnalyticsDurable(t, js, "analytics_events", "analytics.>", durable, durable)
 	sub, err := js.QueueSubscribeSync("analytics.>", durable, nats.Bind("analytics_events", durable), nats.ManualAck())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = sub.Unsubscribe() })
