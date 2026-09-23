@@ -20,6 +20,9 @@ for spec in \
   [[ "$(printf '%s' "$info" | jq -r '.config.ack_policy')" == explicit ]]
 done
 
+# Confirm the unchanged bootstrap is idempotent before creating intentional drift.
+compose run --rm nats-search-bootstrap
+
 compose run --rm --no-deps --entrypoint nats nats-search-bootstrap --server nats://nats:4222 consumer rm user_events search-indexer-user-v1 --force
 compose run --rm --no-deps --entrypoint nats nats-search-bootstrap --server nats://nats:4222 consumer add user_events search-indexer-user-v1 --filter '>' --target _INBOX.voice.search.indexer.user --ack explicit --deliver new --defaults
 if compose run --rm nats-search-bootstrap; then

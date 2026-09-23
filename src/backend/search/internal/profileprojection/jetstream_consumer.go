@@ -34,7 +34,7 @@ func RunJetStreamConsumer(ctx context.Context, natsURL string, adapter Checkpoin
 	if natsURL == "" || adapter == nil {
 		return fmt.Errorf("projection consumer requires NATS URL and store")
 	}
-	nc, err := nats.Connect(natsURL, nats.Name("voice-search-user-projection"), nats.RetryOnFailedConnect(true), nats.MaxReconnects(-1))
+	nc, lost, err := jetstreambind.Connect(natsURL, "voice-search-user-projection")
 	if err != nil {
 		return err
 	}
@@ -68,6 +68,5 @@ func RunJetStreamConsumer(ctx context.Context, natsURL string, adapter Checkpoin
 		ready <- nil
 		ready = nil
 	}
-	<-ctx.Done()
-	return nil
+	return jetstreambind.Watch(ctx, lost, js, userProjectionStream, userProjectionDurable, userProjectionSubject, userProjectionDeliver)
 }

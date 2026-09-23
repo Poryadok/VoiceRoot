@@ -30,10 +30,10 @@ done
 for stream in \
   'stream message_events message.sent message.edited message.deleted message.read message.read_receipt_revoked message.reaction_added message.reaction_removed message.mention_added message.pinned message.unpinned message.forwarded message.delivery_ack' \
   'stream user_events user.account_deleted user.profile_created user.profile_updated user.profile_switched user.verified user.presence_changed user.game_detected user.settings_changed' \
-  'stream chat_events chat.created chat.member_changed chat.dm_peer_deleted' \
   'stream user_profile_projection user.search_profile_projection'; do
   require "$stream" "$BOOTSTRAP"
 done
+require 'require_stream_subjects chat_events chat.created chat.member_changed chat.dm_peer_deleted' "$BOOTSTRAP"
 
 for consumer in \
   "consumer message_events search-indexer-message-v1 'message.>' _INBOX.voice.search.indexer.message" \
@@ -54,6 +54,10 @@ grep -Fq 'js.ConsumerInfo(stream, durable)' "${ROOT}/src/backend/search/internal
   || fail "Search preflight must read the provisioned consumer"
 grep -Fq 'nats.Bind(stream, durable)' "${ROOT}/src/backend/search/internal/jetstreambind/preflight.go" \
   || fail "Search preflight must bind only after exact validation"
+grep -Fq 'nats.MaxReconnects(0)' "${ROOT}/src/backend/search/internal/jetstreambind/preflight.go" \
+  || fail "Search must not implicitly reconnect around durable preflight"
+grep -Fq 'func Watch(' "${ROOT}/src/backend/search/internal/jetstreambind/preflight.go" \
+  || fail "Search must continuously revalidate provisioned durables"
 
 grep -Fq "consumer add user_events search-indexer-user-v1 --filter '>'" "$SMOKE" \
   || fail "Search smoke must prove broad user-filter drift is rejected"

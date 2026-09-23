@@ -28,6 +28,21 @@ data:
       nats --server "$nats_url" stream add "$name" --subjects "$subjects" --storage file --retention limits --max-age 7d --defaults
     }
 
+    # chat_events is a shared Chat+Space stream. Its canonical full subject shape
+    # belongs to the central bootstrap; Search only requires its Chat inputs.
+    require_stream_subjects() {
+      name="$1"; shift
+      info="$(nats --server "$nats_url" req --raw "\$JS.API.STREAM.INFO.$name" "" 2>&1)" || { echo "$info" >&2; exit 1; }
+      if printf '%s' "$info" | jq -e '.error' >/dev/null; then
+        echo "$info" >&2; exit 1
+      fi
+      actual="$(printf '%s' "$info" | jq -c '.config.subjects | sort')"
+      for subject in "$@"; do
+        printf '%s' "$actual" | jq -e --arg subject "$subject" 'index($subject) != null' >/dev/null \
+          || { echo "missing required subject $subject in stream $name" >&2; exit 1; }
+      done
+    }
+
     consumer() {
       stream_name="$1"; durable="$2"; filter="$3"; target="$4"
       if info="$(nats --server "$nats_url" req --raw "\$JS.API.CONSUMER.INFO.$stream_name.$durable" "" 2>&1)"; then
@@ -47,7 +62,7 @@ data:
 
     stream message_events message.sent message.edited message.deleted message.read message.read_receipt_revoked message.reaction_added message.reaction_removed message.mention_added message.pinned message.unpinned message.forwarded message.delivery_ack
     stream user_events user.account_deleted user.profile_created user.profile_updated user.profile_switched user.verified user.presence_changed user.game_detected user.settings_changed
-    stream chat_events chat.created chat.member_changed chat.dm_peer_deleted
+    require_stream_subjects chat_events chat.created chat.member_changed chat.dm_peer_deleted
     stream user_profile_projection user.search_profile_projection
 
     consumer message_events search-indexer-message-v1 'message.>' _INBOX.voice.search.indexer.message

@@ -46,13 +46,7 @@ func RunMessageEventsConsumer(ctx context.Context, natsURL, instanceID string, i
 	if idx == nil || strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("message events consumer: missing deps")
 	}
-	nc, err := nats.Connect(natsURL,
-		nats.Name("voice-search-message"),
-		nats.Timeout(10*time.Second),
-		nats.RetryOnFailedConnect(true),
-		nats.MaxReconnects(-1),
-		nats.ReconnectWait(time.Second),
-	)
+	nc, lost, err := jetstreambind.Connect(natsURL, "voice-search-message")
 	if err != nil {
 		return fmt.Errorf("nats connect: %w", err)
 	}
@@ -93,8 +87,7 @@ func RunMessageEventsConsumer(ctx context.Context, natsURL, instanceID string, i
 		}
 	}()
 
-	<-ctx.Done()
-	return ctx.Err()
+	return jetstreambind.Watch(ctx, lost, js, jsStreamMessageEvents, jsDurableMessageEvents, jsSubjectMessageEvents, jsDeliverMessageEvents)
 }
 
 // RunUserEventsConsumer subscribes to user.events and updates profile projections.
@@ -145,13 +138,7 @@ func runJetStreamConsumer(ctx context.Context, natsURL, namePrefix, stream, dura
 	if strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("%s consumer: missing nats url", namePrefix)
 	}
-	nc, err := nats.Connect(natsURL,
-		nats.Name("voice-search-"+namePrefix),
-		nats.Timeout(10*time.Second),
-		nats.RetryOnFailedConnect(true),
-		nats.MaxReconnects(-1),
-		nats.ReconnectWait(time.Second),
-	)
+	nc, lost, err := jetstreambind.Connect(natsURL, "voice-search-"+namePrefix)
 	if err != nil {
 		return fmt.Errorf("nats connect: %w", err)
 	}
@@ -176,8 +163,7 @@ func runJetStreamConsumer(ctx context.Context, natsURL, namePrefix, stream, dura
 		ready = nil
 	}
 
-	<-ctx.Done()
-	return ctx.Err()
+	return jetstreambind.Watch(ctx, lost, js, stream, durable, subject, deliverSubject)
 }
 
 // subscribeSearchConsumer binds a pre-provisioned durable. Missing or drifted

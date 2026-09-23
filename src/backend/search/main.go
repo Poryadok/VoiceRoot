@@ -193,7 +193,7 @@ func main() {
 			messageConsumerReady := make(chan error, 1)
 			go func() {
 				if err := indexer.RunMessageEventsConsumer(rootCtx, natsURL, instanceID, msgIdx, logger, consumerMetrics, messageConsumerReady); err != nil && rootCtx.Err() == nil {
-					logger.Warn("message events consumer stopped", slog.Any("error", err))
+					log.Fatalf("message events consumer stopped: %v", err)
 				}
 			}()
 			requireSearchConsumerReady("message events consumer", messageConsumerReady)
@@ -210,7 +210,7 @@ func main() {
 				userConsumerReady := make(chan error, 1)
 				go func() {
 					if err := indexer.RunUserEventsConsumer(rootCtx, natsURL, instanceID, profileIdx, logger, consumerMetrics, userConsumerReady); err != nil && rootCtx.Err() == nil {
-						logger.Warn("user events consumer stopped", slog.Any("error", err))
+						log.Fatalf("user events consumer stopped: %v", err)
 					}
 				}()
 				requireSearchConsumerReady("user events consumer", userConsumerReady)
@@ -235,7 +235,7 @@ func main() {
 			chatConsumerReady := make(chan error, 1)
 			go func() {
 				if err := indexer.RunChatEventsConsumer(rootCtx, natsURL, instanceID, chatSpaceIdx, logger, consumerMetrics, chatConsumerReady); err != nil && rootCtx.Err() == nil {
-					logger.Warn("chat events consumer stopped", slog.Any("error", err))
+					log.Fatalf("chat events consumer stopped: %v", err)
 				}
 			}()
 			requireSearchConsumerReady("chat events consumer", chatConsumerReady)

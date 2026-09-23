@@ -1,6 +1,7 @@
 package jetstreambind
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -37,6 +38,29 @@ func TestBindRejectsBroadenedDurableBeforeDelivery(t *testing.T) {
 		t.Fatal("broadened durable delivered before bind was rejected")
 	case <-time.After(100 * time.Millisecond):
 	}
+}
+
+func TestWatchRejectsRecreatedBroadenedDurable(t *testing.T) {
+	s := startJetStreamServer(t)
+	nc, err := nats.Connect(s.ClientURL())
+	require.NoError(t, err)
+	t.Cleanup(nc.Close)
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+	_, err = js.AddStream(&nats.StreamConfig{Name: "user_events", Subjects: []string{"user.>"}})
+	require.NoError(t, err)
+	_, err = js.AddConsumer("user_events", &nats.ConsumerConfig{Durable: "search-user-test", DeliverSubject: "_INBOX.voice.search.indexer.user", FilterSubject: "user.>", DeliverPolicy: nats.DeliverNewPolicy, AckPolicy: nats.AckExplicitPolicy})
+	require.NoError(t, err)
+
+	err = js.DeleteConsumer("user_events", "search-user-test")
+	require.NoError(t, err)
+	_, err = js.AddConsumer("user_events", &nats.ConsumerConfig{Durable: "search-user-test", DeliverSubject: "_INBOX.voice.search.indexer.user", FilterSubject: ">", DeliverPolicy: nats.DeliverAllPolicy, AckPolicy: nats.AckExplicitPolicy})
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	err = watch(ctx, make(chan struct{}), js, "user_events", "search-user-test", "user.>", "_INBOX.voice.search.indexer.user", time.Millisecond)
+	require.Error(t, err)
 }
 
 func startJetStreamServer(t *testing.T) *server.Server {
