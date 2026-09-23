@@ -474,8 +474,8 @@ message UnpinTreeNodeRequest {
 | `space.member_joined`   | space_id, profile_id            |
 | `space.member_left`     | space_id, profile_id            |
 | `space.member_banned`   | space_id, account_id, banned_by |
-| `space.voice_room_created`   | space_id, voice_room_id         |
-| `space.voice_room_deleted`   | space_id, voice_room_id         |
+| `voice.room_created`         | reserved; not currently emitted |
+| `voice.room_deleted`         | reserved; not currently emitted |
 | `space.tree_node_upserted`   | space_id, node_id, kind, chat_id?, voice_room_id?, **is_pinned**, **pin_order** |
 | `space.tree_node_removed`    | space_id, node_id               |
 | `space.invite_created`  | space_id, invite_code           |

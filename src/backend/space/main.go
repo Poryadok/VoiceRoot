@@ -115,6 +115,9 @@ func main() {
 			if err != nil {
 				log.Fatalf("nats jetstream publisher: %v", err)
 			}
+			if err := jsPub.Validate(); err != nil {
+				log.Fatalf("nats jetstream bootstrap: %v", err)
+			}
 			defer func() { _ = jsPub.Close() }()
 			jsPub.Logger = logger
 			spaceEvents = jsPub

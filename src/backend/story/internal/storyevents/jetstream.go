@@ -19,25 +19,30 @@ import (
 )
 
 const (
-	streamName                  = "story_events"
-	subjectStoryCreated         = "story.created"
-	subjectStoryViewed          = "story.viewed"
-	subjectStoryReacted         = "story.reacted"
-	subjectStoryExpired         = "story.expired"
+	streamName                   = "story_events"
+	subjectStoryCreated          = "story.created"
+	subjectStoryViewed           = "story.viewed"
+	subjectStoryReacted          = "story.reacted"
+	subjectStoryExpired          = "story.expired"
 	subjectStoryHighlightCreated = "story.highlight_created"
-	subjectStoryLfpCreated      = "story.lfp_created"
-	subjectStoryLfpResponse     = "story.lfp_response"
+	subjectStoryLfpCreated       = "story.lfp_created"
+	subjectStoryLfpResponse      = "story.lfp_response"
 )
 
 // JetStreamPublisher publishes StoryStreamEvent payloads to NATS JetStream.
 type JetStreamPublisher struct {
 	nc *nats.Conn
-	js nats.JetStreamContext
+	js jetStreamClient
 	// Logger emits structured nats_publish lines; optional.
 	Logger *slog.Logger
 
 	ensureOnce sync.Once
 	ensureErr  error
+}
+
+type jetStreamClient interface {
+	StreamInfo(string, ...nats.JSOpt) (*nats.StreamInfo, error)
+	PublishMsg(*nats.Msg, ...nats.PubOpt) (*nats.PubAck, error)
 }
 
 // NewJetStreamPublisher connects to NATS_URL, prepares JetStream handle, and lazily ensures stream story_events
@@ -81,37 +86,33 @@ func (p *JetStreamPublisher) ensureStream() error {
 		return fmt.Errorf("jetstream publisher not initialized")
 	}
 	p.ensureOnce.Do(func() {
-		desired := storyEventStreamSubjects()
 		info, err := p.js.StreamInfo(streamName)
 		if err != nil {
-			_, p.ensureErr = p.js.AddStream(&nats.StreamConfig{
-				Name:      streamName,
-				Subjects:  desired,
-				Retention: nats.LimitsPolicy,
-				MaxAge:    7 * 24 * time.Hour,
-				Storage:   nats.FileStorage,
-			})
+			p.ensureErr = fmt.Errorf("required JetStream stream %q is unavailable: %w", streamName, err)
 			return
 		}
-		existing := make(map[string]struct{}, len(info.Config.Subjects))
-		for _, subject := range info.Config.Subjects {
-			existing[subject] = struct{}{}
-		}
-		merged := append([]string(nil), info.Config.Subjects...)
-		for _, subject := range desired {
-			if _, ok := existing[subject]; ok {
-				continue
-			}
-			merged = append(merged, subject)
-		}
-		if len(merged) == len(info.Config.Subjects) {
-			return
-		}
-		cfg := info.Config
-		cfg.Subjects = merged
-		_, p.ensureErr = p.js.UpdateStream(&cfg)
+		p.ensureErr = validateBootstrappedStream(info)
 	})
 	return p.ensureErr
+}
+
+// Validate verifies the centrally bootstrapped stream before serving traffic.
+func (p *JetStreamPublisher) Validate() error { return p.ensureStream() }
+
+func validateBootstrappedStream(info *nats.StreamInfo) error {
+	if info == nil || info.Config.Name != streamName || info.Config.Retention != nats.LimitsPolicy || info.Config.MaxAge != 7*24*time.Hour || info.Config.Storage != nats.FileStorage || len(info.Config.Subjects) != len(storyEventStreamSubjects()) {
+		return fmt.Errorf("required JetStream stream %q does not match bootstrap definition", streamName)
+	}
+	seen := make(map[string]struct{}, len(info.Config.Subjects))
+	for _, subject := range info.Config.Subjects {
+		seen[subject] = struct{}{}
+	}
+	for _, subject := range storyEventStreamSubjects() {
+		if _, ok := seen[subject]; !ok {
+			return fmt.Errorf("required JetStream stream %q does not match bootstrap definition", streamName)
+		}
+	}
+	return nil
 }
 
 func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, env *eventsv1.StoryStreamEvent) error {

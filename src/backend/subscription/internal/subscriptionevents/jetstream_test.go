@@ -33,10 +33,22 @@ func startJSTestServer(t *testing.T) *server.Server {
 	return s
 }
 
+func bootstrapStream(t *testing.T, url string) {
+	t.Helper()
+	nc, err := nats.Connect(url)
+	require.NoError(t, err)
+	t.Cleanup(nc.Close)
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+	_, err = js.AddStream(&nats.StreamConfig{Name: streamName, Subjects: subscriptionStreamSubjects(), Retention: nats.LimitsPolicy, MaxAge: 7 * 24 * time.Hour, Storage: nats.FileStorage})
+	require.NoError(t, err)
+}
+
 func TestJetStreamPublisher_PlanStartedRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	s := startJSTestServer(t)
 	url := s.ClientURL()
+	bootstrapStream(t, url)
 
 	nc, err := nats.Connect(url)
 	require.NoError(t, err)

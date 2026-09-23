@@ -52,12 +52,24 @@ func startJSTestServer(t *testing.T) *server.Server {
 	return s
 }
 
+func bootstrapStream(t *testing.T, url string) {
+	t.Helper()
+	nc, err := nats.Connect(url)
+	require.NoError(t, err)
+	t.Cleanup(nc.Close)
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+	_, err = js.AddStream(&nats.StreamConfig{Name: streamName, Subjects: spaceEventStreamSubjects(), Retention: nats.LimitsPolicy, MaxAge: 7 * 24 * time.Hour, Storage: nats.FileStorage})
+	require.NoError(t, err)
+}
+
 // TestJetStreamPublisher_SpaceCreatedRoundTrip documents space-service.md:
 // space.created on chat.events stream with space_id and owner_profile_id.
 func TestJetStreamPublisher_SpaceCreatedRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	s := startJSTestServer(t)
 	url := s.ClientURL()
+	bootstrapStream(t, url)
 
 	nc, err := nats.Connect(url)
 	require.NoError(t, err)
@@ -91,6 +103,7 @@ func TestJetStreamPublisher_InviteCreatedRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	s := startJSTestServer(t)
 	url := s.ClientURL()
+	bootstrapStream(t, url)
 
 	nc, err := nats.Connect(url)
 	require.NoError(t, err)
@@ -125,6 +138,7 @@ func TestJetStreamPublisher_TreeNodeUpsertedIncludesPinFields(t *testing.T) {
 	ctx := context.Background()
 	s := startJSTestServer(t)
 	url := s.ClientURL()
+	bootstrapStream(t, url)
 
 	nc, err := nats.Connect(url)
 	require.NoError(t, err)
@@ -160,19 +174,7 @@ func TestJetStreamPublisher_EnsureStreamUpdatesExisting(t *testing.T) {
 	ctx := context.Background()
 	s := startJSTestServer(t)
 	url := s.ClientURL()
-
-	nc, err := nats.Connect(url)
-	require.NoError(t, err)
-	t.Cleanup(nc.Close)
-
-	js, err := nc.JetStream()
-	require.NoError(t, err)
-	_, err = js.AddStream(&nats.StreamConfig{
-		Name:      streamName,
-		Subjects:  []string{"chat.created"},
-		Retention: nats.LimitsPolicy,
-	})
-	require.NoError(t, err)
+	bootstrapStream(t, url)
 
 	pub, err := NewJetStreamPublisher(url)
 	require.NoError(t, err)
@@ -180,6 +182,11 @@ func TestJetStreamPublisher_EnsureStreamUpdatesExisting(t *testing.T) {
 
 	require.NoError(t, pub.PublishSpaceCreated(ctx, "22222222-2222-2222-2222-222222222222", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"))
 
+	nc, err := nats.Connect(url)
+	require.NoError(t, err)
+	t.Cleanup(nc.Close)
+	js, err := nc.JetStream()
+	require.NoError(t, err)
 	info, err := js.StreamInfo(streamName)
 	require.NoError(t, err)
 	require.True(t, streamHasSubject(info, subjectSpaceCreated))
