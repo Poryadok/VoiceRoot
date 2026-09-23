@@ -50,6 +50,7 @@ func TestJetStreamPublisher_DMPeerDeletedHasOnlySurvivorPayloadAndStableMsgID(t 
 	const subject = "chat.dm_peer_deleted"
 	sub, err := nc.SubscribeSync(subject)
 	require.NoError(t, err)
+	require.NoError(t, nc.Flush())
 	t.Cleanup(func() { _ = sub.Unsubscribe() })
 
 	pub, err := NewJetStreamPublisher(server.ClientURL())
