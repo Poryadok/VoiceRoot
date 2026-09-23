@@ -225,7 +225,10 @@ func TestSearchProfiles_GuestAndDependencyFailuresFailClosed(t *testing.T) {
 
 	t.Run("missing block checker denies discovery", func(t *testing.T) {
 		withoutBlocks := startUserPrivacyTestServer(t, store.NewProfileStore(pool), privacyStore, rdb,
-			func(s *UserGRPC) { s.SocialGraph = searchPrivacyGraph{err: errors.New("social unavailable")} },
+			func(s *UserGRPC) {
+				s.SocialGraph = searchPrivacyGraph{err: errors.New("social unavailable")}
+				s.Blocks = nil
+			},
 		)
 		_, err := withoutBlocks.SearchProfiles(withUserAuthCtx(ctx, viewerAccount, viewerProfile), &userv1.SearchProfilesRequest{Query: "guestopen"})
 		require.Equal(t, codes.Internal, status.Code(err))
