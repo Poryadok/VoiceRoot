@@ -156,11 +156,6 @@ func generate(dest string, acl aclDocument) error {
 		return err
 	}
 	opPub, _ := op.PublicKey()
-	opClaim := jwt.NewOperatorClaims(opPub)
-	opJWT, err := opClaim.Encode(op)
-	if err != nil {
-		return err
-	}
 
 	// The NATS system account is deliberately independent from the application
 	// account. JetStream application streams must never run in SYS, and SYS has
@@ -170,6 +165,12 @@ func generate(dest string, acl aclDocument) error {
 		return err
 	}
 	systemAccountPub, _ := systemAccount.PublicKey()
+	opClaim := jwt.NewOperatorClaims(opPub)
+	opClaim.SystemAccount = systemAccountPub
+	opJWT, err := opClaim.Encode(op)
+	if err != nil {
+		return err
+	}
 	systemAccountClaim := jwt.NewAccountClaims(systemAccountPub)
 	systemAccountJWT, err := systemAccountClaim.Encode(op)
 	if err != nil {

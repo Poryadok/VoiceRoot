@@ -78,6 +78,10 @@ done
 bash "${ROOT}/scripts/staging/patch-app-secrets-database-urls.sh"
 bash "${ROOT}/scripts/staging/patch-gateway-staff-token.sh"
 
+# Select the hub before it is created or restarted. An empty selector is safe;
+# applying this after the rollout would leave a direct-hub bypass window.
+sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/network-policy-nats-hub.yaml" | kubectl apply -f -
+
 LIVEKIT_API_KEY="$(kubectl get secret voice-app-secrets -n "${NS}" -o jsonpath='{.data.LIVEKIT_API_KEY}' 2>/dev/null | base64 -d 2>/dev/null || true)"
 LIVEKIT_API_SECRET="$(kubectl get secret voice-app-secrets -n "${NS}" -o jsonpath='{.data.LIVEKIT_API_SECRET}' 2>/dev/null | base64 -d 2>/dev/null || true)"
 if [ -z "${LIVEKIT_API_KEY}" ] || [ -z "${LIVEKIT_API_SECRET}" ]; then
@@ -91,7 +95,6 @@ render "${ROOT}/deploy/staging/infra.yaml" | \
   kubectl apply -f -
 
 kubectl rollout status deployment/voice-nats -n "${NS}" --timeout=180s
-sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/network-policy-nats-hub.yaml" | kubectl apply -f -
 
 kubectl delete job voice-nats-realtime-bootstrap -n "${NS}" --ignore-not-found
 sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/nats-realtime-bootstrap.yaml" | kubectl apply -f -

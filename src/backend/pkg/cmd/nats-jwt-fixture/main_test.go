@@ -72,6 +72,9 @@ func TestGenerateCreatesDistinctServiceCredentialsWithoutBroadJetStreamAPI(t *te
 	if strings.TrimSpace(string(systemPublic)) == accountClaims.Subject {
 		t.Fatal("fixture system and application accounts must be distinct")
 	}
+	if operatorClaims.SystemAccount != strings.TrimSpace(string(systemPublic)) {
+		t.Fatal("fixture operator must declare the distinct system account")
+	}
 	systemJWT, err := os.ReadFile(filepath.Join(dest, "system-account.jwt"))
 	if err != nil {
 		t.Fatal(err)

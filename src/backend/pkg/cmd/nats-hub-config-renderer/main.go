@@ -105,7 +105,7 @@ func render(in configInput) (string, error) {
 		return "", errors.New("hub application account JWT is invalid")
 	}
 	sys, err := jwt.DecodeAccountClaims(strings.TrimSpace(in.SystemJWT))
-	if err != nil || invalidClaims(sys) || verifyJWT(strings.TrimSpace(in.SystemJWT), op.Subject) != nil || sys.Subject != systemPublic || sys.Issuer != op.Subject || sys.Limits.IsJSEnabled() {
+	if err != nil || invalidClaims(sys) || verifyJWT(strings.TrimSpace(in.SystemJWT), op.Subject) != nil || op.SystemAccount != systemPublic || sys.Subject != systemPublic || sys.Issuer != op.Subject || sys.Limits.IsJSEnabled() {
 		return "", errors.New("hub system account JWT is invalid")
 	}
 	if strings.Count(in.Template, "__NATS_APP_RESOLVER_PRELOAD__") != 1 || strings.Count(in.Template, "__NATS_SYS_RESOLVER_PRELOAD__") != 1 || strings.Count(in.Template, "__NATS_SYSTEM_ACCOUNT__") != 1 {

@@ -72,7 +72,14 @@ func validInput(t *testing.T) configInput {
 		t.Fatal(err)
 	}
 	opPublic, _ := op.PublicKey()
-	opJWT, err := jwt.NewOperatorClaims(opPublic).Encode(op)
+	systemKey, err := nkeys.CreateAccount()
+	if err != nil {
+		t.Fatal(err)
+	}
+	systemPublic, _ := systemKey.PublicKey()
+	opClaim := jwt.NewOperatorClaims(opPublic)
+	opClaim.SystemAccount = systemPublic
+	opJWT, err := opClaim.Encode(op)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,11 +94,6 @@ func validInput(t *testing.T) configInput {
 	if err != nil {
 		t.Fatal(err)
 	}
-	systemKey, err := nkeys.CreateAccount()
-	if err != nil {
-		t.Fatal(err)
-	}
-	systemPublic, _ := systemKey.PublicKey()
 	systemJWT, err := jwt.NewAccountClaims(systemPublic).Encode(op)
 	if err != nil {
 		t.Fatal(err)
