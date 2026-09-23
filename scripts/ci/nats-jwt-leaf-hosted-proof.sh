@@ -124,7 +124,7 @@ fi
 
 # This client has no credentials: its only path is the local leaf namespace.
 docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0 \
-  nats --server nats://127.0.0.1:4222 pub --js chat.created proof >/dev/null
+  nats --server nats://127.0.0.1:4222 pub chat.created proof >/dev/null
 
 # Neighbouring subjects and all service-side mutation are rejected by the chat identity.
 if docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0 nats --server nats://127.0.0.1:4222 pub user.account_deleted denied >/dev/null 2>&1; then
