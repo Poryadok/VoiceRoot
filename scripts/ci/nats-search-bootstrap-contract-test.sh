@@ -20,6 +20,8 @@ grep -Fq '  nats-search-bootstrap:' "$COMPOSE" \
   || fail "Compose must define the Search bootstrap service"
 grep -Fq './docker/nats/search-bootstrap.sh:/bootstrap/search-bootstrap.sh:ro' "$COMPOSE" \
   || fail "Compose must mount the Search bootstrap script"
+grep -Fq '      nats-realtime-bootstrap:' "$COMPOSE" \
+  || fail "Search bootstrap must wait for the canonical shared-stream bootstrap"
 grep -Fq '      nats-search-bootstrap:' "$COMPOSE" \
   || fail "Search must wait for its bootstrap service"
 for apply in "$STAGING_APPLY" "$PROD_APPLY"; do

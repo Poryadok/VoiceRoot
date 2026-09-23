@@ -8,6 +8,7 @@ cleanup() { compose down -v --remove-orphans; }
 trap cleanup EXIT
 
 compose up -d --wait nats
+compose run --rm nats-realtime-bootstrap
 compose run --rm nats-search-bootstrap
 for spec in \
   'message_events search-indexer-message-v1 message.>' \
