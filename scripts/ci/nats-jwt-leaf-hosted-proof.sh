@@ -132,19 +132,23 @@ docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0
 # permission violation in only the newly appended log output.
 denied_subject="user.account_deleted"
 leaf_log_before="$(docker logs voice-nats-proof-chat 2>&1 || true)"
+hub_log_before="$(docker logs voice-nats-proof-hub 2>&1 || true)"
 docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0 \
   nats --server nats://127.0.0.1:4222 pub "$denied_subject" denied >/dev/null 2>&1 || true
 for attempt in {1..5}; do
   leaf_logs="$(docker logs voice-nats-proof-chat 2>&1 || true)"
   leaf_log_delta="${leaf_logs#"$leaf_log_before"}"
-  if grep -Eqi 'permission.*(violation|denied)' <<<"$leaf_log_delta" && grep -Fq "$denied_subject" <<<"$leaf_log_delta"; then
+  hub_logs="$(docker logs voice-nats-proof-hub 2>&1 || true)"
+  hub_log_delta="${hub_logs#"$hub_log_before"}"
+  denial_log_delta="$leaf_log_delta"$'\n'"$hub_log_delta"
+  if grep -Eqi 'permission.*(violation|denied)' <<<"$denial_log_delta" && grep -Fq "$denied_subject" <<<"$denial_log_delta"; then
     break
   fi
   sleep 1
 done
-if ! grep -Eqi 'permission.*(violation|denied)' <<<"$leaf_log_delta" || ! grep -Fq "$denied_subject" <<<"$leaf_log_delta"; then
-  echo 'FAIL: chat leaf did not log denial for neighbouring subject' >&2
-  printf '%s\n' "$leaf_log_delta" >&2
+if ! grep -Eqi 'permission.*(violation|denied)' <<<"$denial_log_delta" || ! grep -Fq "$denied_subject" <<<"$denial_log_delta"; then
+  echo 'FAIL: chat leaf or hub did not log denial for neighbouring subject' >&2
+  printf '%s\n' "$denial_log_delta" >&2
   exit 1
 fi
 
