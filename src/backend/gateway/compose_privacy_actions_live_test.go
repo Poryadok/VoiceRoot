@@ -18,7 +18,8 @@ func TestComposePrivacyActions_live(t *testing.T) {
 	}
 	clearLiveComposeAuthRateLimit(t)
 
-	client := &http.Client{Timeout: 90 * time.Second}
+	client := composeLiveObjectClient(90 * time.Second)
+	t.Cleanup(client.CloseIdleConnections)
 	base := liveGatewayBaseURL()
 	n := time.Now().UnixNano()
 

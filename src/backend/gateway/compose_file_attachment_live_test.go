@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"net/http"
 	"testing"
 	"time"
 
@@ -16,7 +15,8 @@ func TestComposeFileAttachment_live(t *testing.T) {
 	}
 	clearLiveComposeAuthRateLimit(t)
 
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := composeLiveObjectClient(60 * time.Second)
+	t.Cleanup(client.CloseIdleConnections)
 	base := liveGatewayBaseURL()
 
 	n := time.Now().UnixNano()
