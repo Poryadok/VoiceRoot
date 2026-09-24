@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"net/http"
 	"testing"
 	"time"
 
@@ -16,7 +15,8 @@ func TestComposeFileAttachment_live(t *testing.T) {
 	}
 	clearLiveComposeAuthRateLimit(t)
 
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := composeLiveObjectClient(60 * time.Second)
+	t.Cleanup(client.CloseIdleConnections)
 	base := liveGatewayBaseURL()
 
 	n := time.Now().UnixNano()
@@ -26,6 +26,9 @@ func TestComposeFileAttachment_live(t *testing.T) {
 		t.Skip("object storage not configured (MinIO/R2); set FILE_R2_* in .env for compose app profile")
 	}
 
+	// The recipient's default allow_files audience includes friends, not strangers.
+	sendComposeFriendInvitation(t, client, base, sessA.AccessToken, sessB.ProfileID)
+	acceptComposeFriendInvitation(t, client, base, sessB.AccessToken, sessA.ProfileID)
 	chatID := createComposeDM(t, client, base, sessA.AccessToken, sessB.ProfileID)
 	fileID, fileType := composeUploadSmallTextFile(t, client, base, sessA.AccessToken, chatID)
 
