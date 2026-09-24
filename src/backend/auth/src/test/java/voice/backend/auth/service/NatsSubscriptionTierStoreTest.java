@@ -14,6 +14,7 @@ import io.nats.client.Dispatcher;
 import io.nats.client.JetStream;
 import io.nats.client.JetStreamManagement;
 import io.nats.client.JetStreamSubscription;
+import io.nats.client.Message;
 import io.nats.client.MessageHandler;
 import io.nats.client.PushSubscribeOptions;
 import io.nats.client.api.AckPolicy;
@@ -23,6 +24,7 @@ import io.nats.client.api.DeliverPolicy;
 import java.io.IOException;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import voice.events.v1.JetstreamEvents;
 
 class NatsSubscriptionTierStoreTest {
   private static final String STREAM = "subscription_events";
@@ -72,6 +74,47 @@ class NatsSubscriptionTierStoreTest {
     assertRejected(STREAM, config("subscription.>", DELIVER, AckPolicy.Explicit, DeliverPolicy.All), "policy");
     assertRejected(STREAM, ConsumerConfiguration.builder(valid).deliverGroup("unexpected").build(), "group");
     assertRejected(STREAM, ConsumerConfiguration.builder(valid).durable("other").build(), "durable");
+  }
+
+  @Test
+  void acknowledgesHandledAndIgnoredEventsButTerminatesMalformedPayloads() throws Exception {
+    Fixture fixture = new Fixture();
+    fixture.consumer(config("subscription.>", DELIVER, AckPolicy.Explicit, DeliverPolicy.New));
+
+    try (NatsSubscriptionTierStore store = new NatsSubscriptionTierStore(fixture.connection)) {
+      Message handled = mock(Message.class);
+      when(handled.getData())
+          .thenReturn(
+              JetstreamEvents.SubscriptionStreamEvent.newBuilder()
+                  .setPlanStarted(
+                      JetstreamEvents.PlanStarted.newBuilder()
+                          .setAccountId("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+                          .setPlan("premium"))
+                  .build()
+                  .toByteArray());
+      store.onMessage(handled);
+      verify(handled).ack();
+      assertThat(
+              store.resolveTier(
+                  java.util.UUID.fromString("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")))
+          .isEqualTo("premium");
+
+      Message ignored = mock(Message.class);
+      when(ignored.getData())
+          .thenReturn(
+              JetstreamEvents.SubscriptionStreamEvent.newBuilder()
+                  .setPaymentFailed(JetstreamEvents.PaymentFailed.newBuilder())
+                  .build()
+                  .toByteArray());
+      store.onMessage(ignored);
+      verify(ignored).ack();
+
+      Message malformed = mock(Message.class);
+      when(malformed.getData()).thenReturn(new byte[] {0x0f});
+      store.onMessage(malformed);
+      verify(malformed).term();
+      verify(malformed, never()).ack();
+    }
   }
 
   private static void assertRejected(String stream, ConsumerConfiguration configuration, String reason)

@@ -110,21 +110,33 @@ public final class NatsSubscriptionTierStore implements SubscriptionTierResolver
   }
 
   void onMessage(io.nats.client.Message msg) {
+    java.util.Optional<SubscriptionEventParser.TierUpdate> update;
     try {
-      SubscriptionEventParser.parseTierUpdate(msg.getData())
-          .ifPresent(
-              update -> {
-                delegate.setTier(update.accountId(), update.tier());
-                log.debug(
-                    "subscription tier updated account={} tier={}",
-                    update.accountId(),
-                    update.tier());
-              });
-    } finally {
+      update = SubscriptionEventParser.parseTierUpdate(msg.getData());
+    } catch (IllegalArgumentException ex) {
       try {
-        msg.ack();
-      } catch (Exception ex) {
-        log.warn("ack subscription.events: {}", ex.getMessage());
+        msg.term();
+      } catch (Exception termEx) {
+        log.warn("term malformed subscription.events: {}", termEx.getMessage());
+      }
+      return;
+    }
+    try {
+      update.ifPresent(
+          tierUpdate -> {
+            delegate.setTier(tierUpdate.accountId(), tierUpdate.tier());
+            log.debug(
+                "subscription tier updated account={} tier={}",
+                tierUpdate.accountId(),
+                tierUpdate.tier());
+          });
+      msg.ack();
+    } catch (Exception ex) {
+      log.warn("process subscription.events: {}", ex.getMessage());
+      try {
+        msg.nak();
+      } catch (Exception nakEx) {
+        log.warn("nak subscription.events: {}", nakEx.getMessage());
       }
     }
   }

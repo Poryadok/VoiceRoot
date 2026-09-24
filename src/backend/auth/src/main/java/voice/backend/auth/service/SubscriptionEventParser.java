@@ -14,7 +14,7 @@ final class SubscriptionEventParser {
 
   static Optional<TierUpdate> parseTierUpdate(byte[] data) {
     if (data == null || data.length == 0) {
-      return Optional.empty();
+      throw new IllegalArgumentException("empty subscription event payload");
     }
     try {
       JetstreamEvents.SubscriptionStreamEvent event =
@@ -39,7 +39,7 @@ final class SubscriptionEventParser {
         default -> Optional.empty();
       };
     } catch (InvalidProtocolBufferException | IllegalArgumentException ex) {
-      return Optional.empty();
+      throw new IllegalArgumentException("invalid subscription event payload", ex);
     }
   }
 
