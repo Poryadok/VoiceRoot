@@ -22,6 +22,7 @@ require (
 	voice.app/voice/calls v0.0.0
 	voice.app/voice/chat v0.0.0
 	voice.app/voice/common v0.0.0
+	voice.app/voice/events v0.0.0
 	voice.app/voice/file v0.0.0
 	voice.app/voice/matchmaking v0.0.0
 	voice.app/voice/messaging v0.0.0
@@ -155,3 +156,5 @@ replace voice.app/voice/subscription => ../voice/pb/voice/subscription
 replace voice.app/voice/file => ../file/pb/voice/file
 
 replace voice.app/voice/analytics => ../analytics/pb/voice/analytics
+
+replace voice.app/voice/events => ../messaging/pb/voice/events

@@ -60,6 +60,7 @@ func NewJetStreamPublisher(natsURL string) (*JetStreamPublisher, error) {
 	}
 	nc, err := nats.Connect(natsURL,
 		nats.Name("voice-messaging-message-events"),
+		nats.CustomInboxPrefix("_INBOX.voice.messaging"),
 		nats.Timeout(10*time.Second),
 		nats.RetryOnFailedConnect(true),
 		nats.MaxReconnects(-1),

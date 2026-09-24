@@ -77,7 +77,7 @@ func main() {
 		svc.ProviderEventKeys = grpcsvc.NewStaticProviderEventHMACKeys("paddle-webhook-secret-v1", []byte(billing.WebhookSecret()))
 		var domainPub *subscriptionevents.JetStreamPublisher
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
-			if pub, err := analyticsevents.NewJetStreamPublisher(natsURL); err == nil {
+			if pub, err := analyticsevents.NewJetStreamPublisher(natsURL, "subscription"); err == nil {
 				pub.HashKey = strings.TrimSpace(os.Getenv("ANALYTICS_ID_HASH_KEY"))
 				svc.Analytics = pub
 				logger.Info("analytics telemetry publisher enabled")

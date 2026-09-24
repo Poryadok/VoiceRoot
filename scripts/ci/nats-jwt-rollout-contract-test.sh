@@ -79,12 +79,30 @@ for job in realtime notification search analytics-chat; do
   require 'voice-nats-bootstrap-credentials' "$template" 'Job-only bootstrap secret missing'
   require 'bootstrap.creds' "$template" 'bootstrap credential key missing'
   require 'NATS_CREDS' "$template" 'bootstrap credential use missing'
-  require 'command nats --creds "$NATS_CREDS" "$@"' "$template" 'bootstrap commands must pass quoted creds'
+  require 'command nats --creds "$NATS_CREDS" --inbox-prefix _INBOX.voice.bootstrap.reply "$@"' "$template" 'bootstrap commands must use scoped reply inbox'
 done
 
 analytics_chat="$root/deploy/templates/nats-analytics-chat-bootstrap.yaml"
 require "consumer user_events chat_account_deleted user.account_deleted" "$analytics_chat" 'Chat account-deleted fixed consumer missing'
 require "consumer user_events chat_account_deleted user.account_deleted _INBOX.voice.chat.chat_account_deleted all ''" "$analytics_chat" 'Chat account-deleted durable contract is not fixed explicit/all'
+
+for file in "$root/deploy/nats/jetstream-publisher-streams.yaml" \
+            "$root/deploy/templates/nats-realtime-bootstrap.yaml" \
+            "$root/deploy/templates/nats-search-bootstrap.yaml" \
+            "$root/docker/nats/realtime-bootstrap.sh" \
+            "$root/docker/nats/search-bootstrap.sh" \
+            "$analytics_chat"; do
+  require 'user.guest_converted' "$file" 'Auth guest conversion stream subject missing'
+  require 'user.account_restored' "$file" 'Auth account restore stream subject missing'
+done
+for file in "$root/deploy/nats/jetstream-publisher-streams.yaml" \
+            "$root/deploy/templates/nats-realtime-bootstrap.yaml" \
+            "$root/deploy/templates/nats-notification-bootstrap.yaml" \
+            "$root/docker/nats/realtime-bootstrap.sh" \
+            "$root/docker/nats/notification-bootstrap.sh" \
+            "$analytics_chat"; do
+  require 'subscription.entitlement_changed' "$file" 'entitlement stream subject missing'
+done
 
 policy="$root/deploy/templates/network-policy-nats-hub.yaml"
 require 'port: 7422' "$policy" 'leaf ingress rule missing'

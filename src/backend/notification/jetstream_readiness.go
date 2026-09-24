@@ -87,6 +87,7 @@ func connectNotificationConsumer(url, name string) (*nats.Conn, <-chan struct{},
 	var once sync.Once
 	nc, err := nats.Connect(url,
 		nats.Name("voice-notification-"+name),
+		nats.CustomInboxPrefix("_INBOX.voice.notification"),
 		nats.Timeout(10*time.Second),
 		nats.MaxReconnects(0),
 		nats.DisconnectErrHandler(func(*nats.Conn, error) { once.Do(func() { close(lost) }) }),

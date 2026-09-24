@@ -254,7 +254,7 @@ jobs:
         run: |
           flutter pub get
           flutter analyze --no-fatal-infos
-          flutter test --reporter expanded
+          flutter test --reporter expanded --concurrency=1
 
   golangci:
     needs: changes
