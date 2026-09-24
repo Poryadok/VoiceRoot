@@ -318,6 +318,22 @@ docker rm -f voice-nats-proof-invalid-jwt >/dev/null
 bootstrap_reply="_INBOX.voice.bootstrap.reply.stream_create"
 docker run -d --name voice-nats-proof-bootstrap-reply --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
   nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" sub --count 1 "$bootstrap_reply" >/dev/null
+# The detached CLI can still be connecting when docker run returns. Observe
+# the exact subscription on the hub before sending the one-shot API request.
+bootstrap_subscribed=0
+for _ in $(seq 1 30); do
+  if docker exec voice-nats-proof-hub wget -qO- 'http://127.0.0.1:8222/subsz?subs=1' | \
+    jq -e --arg subject "$bootstrap_reply" 'any(.subscriptions_list[]?; .subject == $subject)' >/dev/null; then
+    bootstrap_subscribed=1
+    break
+  fi
+  sleep 1
+done
+if [[ "$bootstrap_subscribed" != 1 ]]; then
+  echo 'FAIL: bootstrap reply subscription was not registered on the hub' >&2
+  docker logs voice-nats-proof-bootstrap-reply >&2 || true
+  exit 1
+fi
 docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
   nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" --inbox-prefix _INBOX.voice.bootstrap.reply pub --reply "$bootstrap_reply" '$JS.API.STREAM.CREATE.chat_events' '{"name":"chat_events","subjects":["chat.created"],"storage":"file","retention":"limits"}' >/dev/null
 docker wait voice-nats-proof-bootstrap-reply >/dev/null
