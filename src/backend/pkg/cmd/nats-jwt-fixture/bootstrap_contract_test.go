@@ -174,3 +174,19 @@ func TestAuthComposeWaitsForCentralTierBootstrap(t *testing.T) {
 		t.Error("Compose Auth can start before auth_subscription_tier is preprovisioned")
 	}
 }
+
+func TestBotComposeWaitsForCentralMessageBootstrap(t *testing.T) {
+	root := filepath.Join("..", "..", "..", "..", "..")
+	contents, err := os.ReadFile(filepath.Join(root, "docker-compose.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	block := strings.SplitN(string(contents), "\n  bot:\n", 2)
+	if len(block) != 2 {
+		t.Fatal("Bot Compose service missing")
+	}
+	service := strings.SplitN(block[1], "\n  story:\n", 2)[0]
+	if !strings.Contains(service, "      nats-analytics-chat-bootstrap:\n        condition: service_completed_successfully") {
+		t.Error("Compose Bot can start before bot_message_events is preprovisioned")
+	}
+}
