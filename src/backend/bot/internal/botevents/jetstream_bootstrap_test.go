@@ -30,3 +30,11 @@ func TestPublisherFailsClosedWhenStreamIsUnavailable(t *testing.T) {
 	publisher := &JetStreamPublisher{js: unavailableJetStream{}}
 	require.Error(t, publisher.PublishBotRegistered(t.Context(), "bot", "owner"))
 }
+
+func TestBotPublisherReplyInboxUsesScopedPrefix(t *testing.T) {
+	options := nats.GetDefaultOptions()
+	for _, option := range botNatsOptions() {
+		require.NoError(t, option(&options))
+	}
+	require.Equal(t, "_INBOX.voice.bot", options.InboxPrefix)
+}
