@@ -62,7 +62,7 @@ func TestSpaceEntitlementDurableBindAndRedelivery(t *testing.T) {
 	require.Eventually(t, func() bool { return store.calls.Load() >= 2 }, 5*time.Second, 10*time.Millisecond, "transient failure must NAK and redeliver")
 	require.Eventually(t, func() bool {
 		info, err := js.ConsumerInfo(streamName, defaultDurable)
-		return err == nil && info.AckFloor.Consumer == 1
+		return err == nil && info.AckFloor.Stream == 1 && info.NumAckPending == 0
 	}, 5*time.Second, 10*time.Millisecond, "successful retry must ACK")
 	c.Close()
 	require.NoError(t, js.DeleteConsumer(streamName, defaultDurable))
