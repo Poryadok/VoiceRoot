@@ -85,12 +85,12 @@ func main() {
 			defer pub.Close()
 			logger.Info("bot.events publisher enabled")
 
-			msgHandler := &consumer.MessageHandler{Store: st, Client: http.DefaultClient}
-			go func() {
-				if err := consumer.RunMessageEventsConsumer(context.Background(), msgHandler, natsURL, logger); err != nil && logger != nil {
-					logger.Warn("bot message consumer stopped", slog.String("error", err.Error()))
-				}
-			}()
+			msgHandler := &consumer.MessageHandler{Store: st, Client: http.DefaultClient, Logger: logger}
+			stopConsumer, err := consumer.StartMessageEventsConsumer(context.Background(), msgHandler, natsURL, logger)
+			if err != nil {
+				log.Fatalf("bot message consumer bind: %v", err)
+			}
+			defer stopConsumer()
 			logger.Info("bot message consumer enabled")
 		}
 		grpcSrv = grpc.NewServer(

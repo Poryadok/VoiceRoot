@@ -35,7 +35,7 @@ func migrationSQL(t *testing.T) string {
 	_, file, _, _ := runtime.Caller(0)
 	dir := filepath.Join(filepath.Dir(file), "..", "..", "..", "migrations", "bot_db")
 	var b strings.Builder
-	for _, name := range []string{"000001_init.up.sql", "000002_bot_presence.up.sql"} {
+	for _, name := range []string{"000001_init.up.sql", "000002_bot_presence.up.sql", "000003_message_delivery_outbox.up.sql"} {
 		raw, err := os.ReadFile(filepath.Join(dir, name))
 		require.NoError(t, err)
 		b.Write(raw)

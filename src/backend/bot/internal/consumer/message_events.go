@@ -2,9 +2,11 @@ package consumer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -21,6 +23,8 @@ import (
 const (
 	jsStreamMessageEvents = "message_events"
 	subjectMessageSent    = "message.sent"
+	messageDurable        = "bot_message_events"
+	messageDeliverSubject = "_INBOX.voice.bot.bot_message_events"
 )
 
 // MessageHandler delivers inbound chat messages to installed bots.
@@ -48,84 +52,133 @@ func (h *MessageHandler) HandleMessageSent(ctx context.Context, data []byte) err
 	if err != nil {
 		return nil
 	}
-	bots, err := h.Store.ListLiveBotsForChat(ctx, chatID)
+	messageID, err := uuid.Parse(strings.TrimSpace(ms.GetMessageId()))
 	if err != nil {
-		return err
+		return nil
 	}
 	payload := map[string]any{
-		"type":                "message",
-		"chat_id":             ms.GetChatId(),
-		"message_id":          ms.GetMessageId(),
-		"sender_profile_id":   ms.GetSenderProfileId(),
-		"thread_parent_id":    ms.GetThreadParentId(),
+		"type":              "message",
+		"chat_id":           ms.GetChatId(),
+		"message_id":        ms.GetMessageId(),
+		"sender_profile_id": ms.GetSenderProfileId(),
+		"thread_parent_id":  ms.GetThreadParentId(),
 	}
-	for _, bot := range bots {
-		if bot.ActorProfileID.String() == strings.TrimSpace(ms.GetSenderProfileId()) {
-			continue
+	return h.Store.QueueMessageRecipients(ctx, chatID, messageID, ms.GetSenderProfileId(), payload)
+}
+
+// ProcessNext advances one recipient without holding up other recipients.
+func (h *MessageHandler) ProcessNext(ctx context.Context) (bool, error) {
+	d, err := h.Store.ClaimDueMessageDelivery(ctx)
+	if err != nil || d == nil {
+		return false, err
+	}
+	err = h.Store.DeliverMessage(ctx, d, func(url, secret string) error {
+		options := make(map[string]any, len(d.Payload)+1)
+		for k, v := range d.Payload {
+			options[k] = v
 		}
-		if bot.IsPollingMode {
-			_, _ = h.Store.EnqueueEvent(ctx, bot.ID, "message", payload, "")
-			continue
-		}
-		url := strings.TrimSpace(ptrStr(bot.WebhookURL))
-		if url == "" {
-			continue
-		}
-		whPayload := webhook.InteractionPayload{
-			Type:             "message",
-			ChatID:           ms.GetChatId(),
-			InvokerProfileID: ms.GetSenderProfileId(),
-			Options:          payload,
-		}
+		options["delivery_id"] = d.ID.String()
+		p := webhook.InteractionPayload{Type: "message", ChatID: d.ChatID.String(), InvokerProfileID: fmt.Sprint(d.Payload["sender_profile_id"]), Options: options}
 		timeout := h.Timeout
 		if timeout <= 0 {
 			timeout = dispatch.DefaultTimeout()
 		}
-		_, err := webhook.DeliverPOST(ctx, h.Client, url, bot.WebhookSecret, whPayload, timeout)
-		if err != nil && h.Logger != nil {
-			h.Logger.Warn("bot message webhook failed",
-				slog.String("bot_id", bot.ID.String()),
-				slog.String("chat_id", ms.GetChatId()),
-				slog.Any("error", err))
+		// Finish the HTTP attempt well before the database lease expires.
+		attemptCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
+		_, postErr := webhook.DeliverPOST(attemptCtx, h.Client, url, secret, p, timeout)
+		cancel()
+		return postErr
+	})
+	if err != nil {
+		if h.Logger != nil {
+			h.Logger.Warn("bot message delivery failed", slog.String("bot_id", d.BotID.String()), slog.Any("error", err))
 		}
+		if webhook.IsPermanentDeliveryError(err) {
+			return true, errors.Join(err, h.Store.FailMessageDelivery(ctx, d.ID))
+		}
+		return true, errors.Join(err, h.Store.RetryMessageDelivery(ctx, d.ID, d.Attempts))
 	}
-	return nil
+	return true, nil
 }
 
-func ptrStr(p *string) string {
-	if p == nil {
-		return ""
-	}
-	return *p
-}
-
-// RunMessageEventsConsumer subscribes to message_events and delivers to bots.
-func RunMessageEventsConsumer(ctx context.Context, h *MessageHandler, natsURL string, logger *slog.Logger) error {
+// StartMessageEventsConsumer validates and binds the centrally provisioned durable.
+func StartMessageEventsConsumer(ctx context.Context, h *MessageHandler, natsURL string, logger *slog.Logger) (func(), error) {
 	if h == nil || h.Store == nil {
-		return fmt.Errorf("message handler not configured")
+		return nil, fmt.Errorf("message handler not configured")
 	}
 	if strings.TrimSpace(natsURL) == "" {
-		return fmt.Errorf("empty NATS URL")
+		return nil, fmt.Errorf("empty NATS URL")
 	}
-	nc, err := nats.Connect(natsURL, nats.Name("voice-bot-message-events"))
+	opts := []nats.Option{nats.Name("voice-bot-message-events"), nats.CustomInboxPrefix("_INBOX.voice.bot")}
+	if creds := strings.TrimSpace(os.Getenv("BOT_NATS_CREDS_FILE")); creds != "" {
+		opts = append(opts, nats.UserCredentials(creds))
+	}
+	nc, err := nats.Connect(natsURL, opts...)
 	if err != nil {
-		return fmt.Errorf("nats connect: %w", err)
+		return nil, fmt.Errorf("nats connect: %w", err)
 	}
-	defer func() { _ = nc.Drain() }()
 	js, err := nc.JetStream()
 	if err != nil {
-		return fmt.Errorf("jetstream: %w", err)
+		nc.Close()
+		return nil, fmt.Errorf("jetstream: %w", err)
 	}
-	durable := "bot_message_events"
+	info, err := js.ConsumerInfo(jsStreamMessageEvents, messageDurable)
+	if err != nil {
+		nc.Close()
+		return nil, fmt.Errorf("consumer info: %w", err)
+	}
+	if err := validateMessageConsumer(info); err != nil {
+		nc.Close()
+		return nil, err
+	}
 	_, err = js.Subscribe(subjectMessageSent, func(msg *nats.Msg) {
-		if err := h.HandleMessageSent(ctx, msg.Data); err != nil && logger != nil {
-			logger.Warn("bot message consumer handler failed", slog.Any("error", err))
+		if err := h.HandleMessageSent(ctx, msg.Data); err != nil {
+			if logger != nil {
+				logger.Warn("bot message consumer handler failed", slog.Any("error", err))
+			}
+			_ = msg.Nak()
+			return
 		}
 		_ = msg.Ack()
-	}, nats.Durable(durable), nats.ManualAck(), nats.Bind(jsStreamMessageEvents, durable))
+	}, nats.ManualAck(), nats.Bind(jsStreamMessageEvents, messageDurable))
 	if err != nil {
-		return fmt.Errorf("subscribe: %w", err)
+		nc.Close()
+		return nil, fmt.Errorf("subscribe: %w", err)
 	}
-	<-ctx.Done()
-	return ctx.Err()
+	workerCtx, cancel := context.WithCancel(ctx)
+	for i := 0; i < 4; i++ {
+		go runMessageOutboxWorker(workerCtx, h, logger)
+	}
+	return func() { cancel(); _ = nc.Drain() }, nil
+}
+
+func runMessageOutboxWorker(ctx context.Context, h *MessageHandler, logger *slog.Logger) {
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+		for i := 0; i < 32; i++ {
+			worked, err := h.ProcessNext(ctx)
+			if err != nil && logger != nil {
+				logger.Warn("bot message outbox failed", slog.Any("error", err))
+			}
+			if !worked || ctx.Err() != nil {
+				break
+			}
+		}
+	}
+}
+
+func validateMessageConsumer(info *nats.ConsumerInfo) error {
+	if info == nil || info.Stream != jsStreamMessageEvents || info.Name != messageDurable ||
+		info.Config.Durable != messageDurable || info.Config.FilterSubject != subjectMessageSent ||
+		info.Config.DeliverSubject != messageDeliverSubject || info.Config.DeliverPolicy != nats.DeliverAllPolicy ||
+		info.Config.AckPolicy != nats.AckExplicitPolicy {
+		return fmt.Errorf("bot message durable configuration mismatch")
+	}
+	return nil
 }

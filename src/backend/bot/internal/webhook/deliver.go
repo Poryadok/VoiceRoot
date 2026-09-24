@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -42,6 +43,18 @@ type InteractionResponse struct {
 	Content   string `json:"content"`
 	Ephemeral bool   `json:"ephemeral"`
 	Deferred  bool   `json:"deferred"`
+}
+
+// PermanentDeliveryError identifies a webhook request the recipient must fix.
+// The durable outbox retains it as failed instead of retrying indefinitely.
+type PermanentDeliveryError struct{ Err error }
+
+func (e *PermanentDeliveryError) Error() string { return e.Err.Error() }
+func (e *PermanentDeliveryError) Unwrap() error { return e.Err }
+
+func IsPermanentDeliveryError(err error) bool {
+	var permanent *PermanentDeliveryError
+	return errors.As(err, &permanent)
 }
 
 func deliveryAttemptsFromEnv() int {
@@ -156,7 +169,7 @@ func DeliverAutocompletePOST(ctx context.Context, client *http.Client, url, secr
 func deliverAutocompleteOnce(ctx context.Context, client *http.Client, url, secret string, ts int64, body []byte) ([]AutocompleteChoice, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimSpace(url), bytes.NewReader(body))
 	if err != nil {
-		return nil, err
+		return nil, &PermanentDeliveryError{Err: err}
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(HeaderTimestamp, fmt.Sprintf("%d", ts))
@@ -174,14 +187,17 @@ func deliverAutocompleteOnce(ctx context.Context, client *http.Client, url, secr
 		return nil, fmt.Errorf("webhook status %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("webhook status %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusRequestTimeout {
+			return nil, fmt.Errorf("webhook status %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+		}
+		return nil, &PermanentDeliveryError{Err: fmt.Errorf("webhook status %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))}
 	}
 	var out AutocompleteResponse
 	if len(strings.TrimSpace(string(raw))) == 0 {
 		return nil, nil
 	}
 	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil, err
+		return nil, &PermanentDeliveryError{Err: err}
 	}
 	return out.Choices, nil
 }
@@ -189,7 +205,7 @@ func deliverAutocompleteOnce(ctx context.Context, client *http.Client, url, secr
 func deliverOnce(ctx context.Context, client *http.Client, url, secret string, ts int64, body []byte) (InteractionResponse, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimSpace(url), bytes.NewReader(body))
 	if err != nil {
-		return InteractionResponse{}, err
+		return InteractionResponse{}, &PermanentDeliveryError{Err: err}
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(HeaderTimestamp, fmt.Sprintf("%d", ts))
@@ -207,22 +223,21 @@ func deliverOnce(ctx context.Context, client *http.Client, url, secret string, t
 		return InteractionResponse{}, fmt.Errorf("webhook status %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return InteractionResponse{}, fmt.Errorf("webhook status %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusRequestTimeout {
+			return InteractionResponse{}, fmt.Errorf("webhook status %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+		}
+		return InteractionResponse{}, &PermanentDeliveryError{Err: fmt.Errorf("webhook status %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))}
 	}
 	var out InteractionResponse
 	if len(strings.TrimSpace(string(raw))) == 0 {
 		return out, nil
 	}
 	if err := json.Unmarshal(raw, &out); err != nil {
-		return InteractionResponse{}, err
+		return InteractionResponse{}, &PermanentDeliveryError{Err: err}
 	}
 	return out, nil
 }
 
 func isRetryableWebhookError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := err.Error()
-	return strings.Contains(msg, "webhook status 5")
+	return err != nil && !IsPermanentDeliveryError(err)
 }
