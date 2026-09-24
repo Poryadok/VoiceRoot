@@ -10,6 +10,7 @@ import (
 func natsConnectOptions(name string) []nats.Option {
 	return []nats.Option{
 		nats.Name(name),
+		nats.CustomInboxPrefix("_INBOX.voice.realtime"),
 		nats.Timeout(runtimeconfig.NATSConnectTimeoutFromEnv()),
 		nats.RetryOnFailedConnect(true),
 		nats.MaxReconnects(-1),
