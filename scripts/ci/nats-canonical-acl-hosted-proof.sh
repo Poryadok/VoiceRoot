@@ -40,6 +40,12 @@ for key in operator.jwt account.jwt system-account.jwt account.public system-acc
   extract_secret_key voice-nats-operator "$key" "$work/fixture/$key"
 done
 extract_secret_key voice-nats-bootstrap-credentials bootstrap.creds "$work/fixture/creds/bootstrap.creds"
+bootstrap_jwt_bytes="$(awk '/^-----BEGIN NATS USER JWT-----$/{getline; print length($0); exit}' "$work/fixture/creds/bootstrap.creds")"
+if [[ ! "$bootstrap_jwt_bytes" =~ ^[0-9]+$ ]] || (( bootstrap_jwt_bytes == 0 || bootstrap_jwt_bytes + 2048 >= 32768 )); then
+  echo 'FAIL: canonical bootstrap JWT leaves insufficient CONNECT-line headroom' >&2
+  exit 1
+fi
+echo "NATS bootstrap JWT bytes: $bootstrap_jwt_bytes"
 for service in analytics auth bot chat file gateway matchmaking messaging moderation notification realtime role search social space story subscription user voice; do
   extract_secret_key voice-nats-service-credentials "$service.creds" "$work/fixture/creds/$service.creds"
 done

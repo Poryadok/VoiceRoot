@@ -205,5 +205,9 @@ func TestHubAcceptsCanonicalJWTControlLine(t *testing.T) {
 		if !strings.Contains(string(contents), "max_control_line: 32768") {
 			t.Errorf("%s does not admit the exact canonical bootstrap JWT CONNECT line", path)
 		}
+		if path == "scripts/ci/nats-canonical-acl-hosted-proof.sh" &&
+			!strings.Contains(string(contents), "bootstrap_jwt_bytes") {
+			t.Error("hosted proof must measure the bootstrap JWT length without printing the JWT")
+		}
 	}
 }
