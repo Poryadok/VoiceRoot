@@ -29,14 +29,36 @@ cd src/backend/pkg
 go run ./cmd/nats-jwt-fixture C:\temp\voice-nats-acl.yaml C:\temp\voice-nats-fixture
 ```
 
-The ACL manifest is mandatory: it must enumerate every service plus the
-Job-only bootstrap identity and use exact Core and JetStream subjects. The
-generator rejects wildcards, `$JS.API.>`, duplicate subjects, and incomplete
-service sets. It emits a disposable operator JWT, account JWT, distinct
-service and bootstrap `.creds` files, and seed-free `acl-intent.yaml`; it never
-prints private material. The final activation supplies the reviewed manifest
-from the canonical publisher/consumer topology rather than granting a default
-per-service namespace.
+The reviewed policy is [`acl-intent.yaml`](acl-intent.yaml). It enumerates all
+19 services and the Job-only bootstrap identity with exact event, consumer,
+pull and ACK permissions. Service users cannot create, update or delete
+JetStream state. Reply inbox subscriptions use scoped service prefixes, never
+`_INBOX.>` or `$JS.API.>`. The disposable fixture command above is for proof
+only; its signing seeds are discarded.
+
+For staging or production issuance, use the separate Linux-only issuer with a
+fresh absolute destination and external TLS certificate/key/CA PEM files. The
+certificate must chain to that CA and contain an exact `voice-nats` DNS SAN.
+Run this in a trusted Linux environment with a protected parent directory:
+
+```bash
+cd src/backend/pkg
+go run ./cmd/nats-jwt-issuer --namespace voice-staging \
+  --tls-cert /secure/voice-nats.crt --tls-key /secure/voice-nats.key \
+  --tls-ca /secure/ca.crt ../../../deploy/nats/acl-intent.yaml \
+  /secure/fresh-nats-issue
+```
+
+The destination must not exist. Output files are mode `0600`, directories
+`0700`. `secrets.json` is the staging restore contract: a Kubernetes `List`
+with exactly four Opaque Secrets in the target namespace, using base64 `data`
+and the keys listed in `secret-contract.example.yaml`. Individual Secret YAML
+manifests are also emitted. `signing-seeds/{operator,app-account,system-account}.seed`
+must be backed up separately in the secret manager for rotation; they are not
+part of the Kubernetes List. Never commit or print the destination. The issuer
+fails if the destination exists or if Linux permissions, ACL, or TLS validation
+fail. Staging restore transports only gzip+base64 of `secrets.json` via secret
+stdin; the hosted proof reports its byte count against the 48 KiB limit.
 
 `bootstrap.creds` is a separate, short-lived provisioning-Job credential in
 `voice-nats-bootstrap-credentials`. It
@@ -59,9 +81,10 @@ under `/etc/nats/jwt/`, consistent with the Secret contract above; no app or
 sidecar gets them, and no seed is represented in the template.
 
 The hub alone owns fixed, centrally pre-provisioned JetStream consumers. The
-activation review must supply exact per-service publish, subscribe, consumer,
-ACK and stream-owner grants, prove denial for neighboring Core and JetStream
-subjects, and prohibit both dynamic consumer creation and `$JS.API.>`. Rotate a
-service credential by replacing its external Secret key and restarting only that
-service's sidecar; rotate account/operator material through its separate
-rehearsed broker rollout.
+four bootstrap Jobs own 40 durables. A preexisting durable with a different
+filter, delivery subject, policy, group, or push/pull mode fails bootstrap and
+requires an explicit migration before the application is started. Auth's old
+random-target `auth_subscription_tier` cannot overlap the new no-group push
+binding during a rolling start. Rotate a service credential by replacing its
+external Secret key and restarting only that service's sidecar; rotate
+account/operator material through its separate rehearsed broker rollout.

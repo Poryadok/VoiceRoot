@@ -1,0 +1,352 @@
+# Reviewed APP account permission intent. Issue fresh user JWTs from this policy;
+# never deploy the disposable credentials emitted by nats-jwt-fixture.
+version: 1
+services:
+  analytics:
+    publish:
+      - $JS.API.CONSUMER.INFO.message_events.analytics_v2_msg
+      - $JS.API.CONSUMER.INFO.user_events.analytics_v2_user
+      - $JS.API.CONSUMER.INFO.chat_events.analytics_v2_chat
+      - $JS.API.CONSUMER.INFO.matchmaking_events.analytics_v2_mm
+      - $JS.API.CONSUMER.INFO.voice_events.analytics_v2_voice
+      - $JS.API.CONSUMER.INFO.story_events.analytics_v2_story
+      - $JS.API.CONSUMER.INFO.bot_events.analytics_v2_bot
+      - $JS.API.CONSUMER.INFO.social_events.analytics_v2_social
+      - $JS.API.CONSUMER.INFO.role_events.analytics_v2_role
+      - $JS.API.CONSUMER.INFO.file_events.analytics_v2_file
+      - $JS.API.CONSUMER.INFO.subscription_events.analytics_v2_subscription
+      - $JS.API.CONSUMER.INFO.moderation_events.analytics_v2_moderation
+      - $JS.API.CONSUMER.INFO.analytics_events.analytics_v2_telemetry
+      - $JS.ACK.message_events.analytics_v2_msg.>
+      - $JS.ACK.user_events.analytics_v2_user.>
+      - $JS.ACK.chat_events.analytics_v2_chat.>
+      - $JS.ACK.matchmaking_events.analytics_v2_mm.>
+      - $JS.ACK.voice_events.analytics_v2_voice.>
+      - $JS.ACK.story_events.analytics_v2_story.>
+      - $JS.ACK.bot_events.analytics_v2_bot.>
+      - $JS.ACK.social_events.analytics_v2_social.>
+      - $JS.ACK.role_events.analytics_v2_role.>
+      - $JS.ACK.file_events.analytics_v2_file.>
+      - $JS.ACK.subscription_events.analytics_v2_subscription.>
+      - $JS.ACK.moderation_events.analytics_v2_moderation.>
+      - $JS.ACK.analytics_events.analytics_v2_telemetry.>
+    subscribe:
+      - _INBOX.voice.analytics.>
+      - _INBOX.voice.analytics.analytics_v2_msg
+      - _INBOX.voice.analytics.analytics_v2_user
+      - _INBOX.voice.analytics.analytics_v2_chat
+      - _INBOX.voice.analytics.analytics_v2_mm
+      - _INBOX.voice.analytics.analytics_v2_voice
+      - _INBOX.voice.analytics.analytics_v2_story
+      - _INBOX.voice.analytics.analytics_v2_bot
+      - _INBOX.voice.analytics.analytics_v2_social
+      - _INBOX.voice.analytics.analytics_v2_role
+      - _INBOX.voice.analytics.analytics_v2_file
+      - _INBOX.voice.analytics.analytics_v2_subscription
+      - _INBOX.voice.analytics.analytics_v2_moderation
+      - _INBOX.voice.analytics.analytics_v2_telemetry
+  auth:
+    publish: [user.guest_converted, user.account_deleted, user.account_restored, $JS.API.CONSUMER.INFO.subscription_events.auth_subscription_tier, $JS.ACK.subscription_events.auth_subscription_tier.>]
+    subscribe: [_INBOX.voice.auth.requests.>, _INBOX.voice.auth.subscription_tier]
+  bot:
+    publish:
+      - bot.registered
+      - bot.command_executed
+      - bot.webhook_delivered
+      - bot.webhook_failed
+      - $JS.API.STREAM.INFO.bot_events
+      - $JS.API.CONSUMER.INFO.message_events.bot_message_events
+      - $JS.ACK.message_events.bot_message_events.>
+    subscribe: [_INBOX.voice.bot.>, _INBOX.voice.bot.bot_message_events]
+  chat:
+    publish:
+      - chat.created
+      - chat.member_changed
+      - chat.dm_peer_deleted
+      - $JS.API.STREAM.INFO.chat_events
+      - $JS.API.CONSUMER.INFO.user_events.chat_account_deleted
+      - $JS.API.CONSUMER.INFO.message_events.chat_message_activity
+      - $JS.ACK.user_events.chat_account_deleted.>
+      - $JS.ACK.message_events.chat_message_activity.>
+    subscribe: [_INBOX.voice.chat.>, _INBOX.voice.chat.chat_account_deleted, _INBOX.voice.chat.chat_message_activity]
+  file:
+    publish:
+      - file.uploaded
+      - file.processed
+      - file.scan_infected
+      - file.expired
+      - file.downloaded
+      - $JS.API.STREAM.INFO.file_events
+    subscribe: [_INBOX.voice.file.>]
+  gateway:
+    publish: [analytics.gateway.request]
+    subscribe: [_INBOX.voice.gateway.>]
+  matchmaking:
+    publish:
+      - mm.search_started
+      - mm.search_cancelled
+      - mm.search_nudge
+      - mm.search_timeout
+      - mm.match_found
+      - mm.match_completed
+      - mm.rating_submitted
+      - mm.player_banned
+      - $JS.API.STREAM.INFO.matchmaking_events
+      - $JS.API.CONSUMER.INFO.story_events.matchmaking_story_lfp_v2
+      - $JS.ACK.story_events.matchmaking_story_lfp_v2.>
+    subscribe: [_INBOX.voice.matchmaking.>, _INBOX.voice.matchmaking.matchmaking_story_lfp_v2]
+  messaging:
+    publish:
+      - message.sent
+      - message.edited
+      - message.deleted
+      - message.read
+      - message.read_receipt_revoked
+      - message.reaction_added
+      - message.reaction_removed
+      - message.mention_added
+      - message.pinned
+      - message.unpinned
+      - message.forwarded
+      - message.delivery_ack
+      - $JS.API.STREAM.INFO.message_events
+      - $JS.API.CONSUMER.INFO.message_events.messaging_delivery_ack
+      - $JS.API.CONSUMER.INFO.user_events.messaging_receipt_privacy
+      - $JS.ACK.message_events.messaging_delivery_ack.>
+      - $JS.ACK.user_events.messaging_receipt_privacy.>
+    subscribe: [_INBOX.voice.messaging.>, _INBOX.voice.messaging.messaging_delivery_ack, _INBOX.voice.messaging.messaging_receipt_privacy]
+  moderation:
+    publish:
+      - moderation.report_created
+      - moderation.sanction_applied
+      - moderation.appeal_submitted
+      - $JS.API.STREAM.INFO.moderation_events
+    subscribe: [_INBOX.voice.moderation.>]
+  notification:
+    publish:
+      - analytics.notification.push_sent
+      - $JS.API.CONSUMER.INFO.message_events.notif_msg_v2
+      - $JS.API.CONSUMER.INFO.matchmaking_events.notif_mm
+      - $JS.API.CONSUMER.INFO.voice_events.notif_voice
+      - $JS.API.CONSUMER.INFO.story_events.notif_story
+      - $JS.API.CONSUMER.INFO.social_events.notif_social
+      - $JS.API.CONSUMER.INFO.subscription_events.notif_subscription
+      - $JS.API.CONSUMER.INFO.moderation_events.notif_mod
+      - $JS.ACK.message_events.notif_msg_v2.>
+      - $JS.ACK.matchmaking_events.notif_mm.>
+      - $JS.ACK.voice_events.notif_voice.>
+      - $JS.ACK.story_events.notif_story.>
+      - $JS.ACK.social_events.notif_social.>
+      - $JS.ACK.subscription_events.notif_subscription.>
+      - $JS.ACK.moderation_events.notif_mod.>
+    subscribe:
+      - _INBOX.voice.notification.>
+      - _INBOX.voice.notification.message
+      - _INBOX.voice.notification.matchmaking
+      - _INBOX.voice.notification.voice
+      - _INBOX.voice.notification.story
+      - _INBOX.voice.notification.social
+      - _INBOX.voice.notification.subscription
+      - _INBOX.voice.notification.moderation
+  realtime:
+    publish:
+      - message.delivery_ack
+      - $JS.API.STREAM.INFO.message_events
+      - $JS.API.CONSUMER.INFO.message_events.rt_realtime1_msg
+      - $JS.API.CONSUMER.INFO.chat_events.rt_realtime1_chat
+      - $JS.API.CONSUMER.INFO.user_events.rt_realtime1_user
+      - $JS.API.CONSUMER.INFO.social_events.rt_realtime1_social
+      - $JS.API.CONSUMER.INFO.role_events.rt_realtime1_role
+      - $JS.API.CONSUMER.INFO.voice_events.rt_realtime1_voice
+      - $JS.API.CONSUMER.INFO.matchmaking_events.rt_realtime1_matchmaking
+      - $JS.ACK.message_events.rt_realtime1_msg.>
+      - $JS.ACK.chat_events.rt_realtime1_chat.>
+      - $JS.ACK.user_events.rt_realtime1_user.>
+      - $JS.ACK.social_events.rt_realtime1_social.>
+      - $JS.ACK.role_events.rt_realtime1_role.>
+      - $JS.ACK.voice_events.rt_realtime1_voice.>
+      - $JS.ACK.matchmaking_events.rt_realtime1_matchmaking.>
+    subscribe:
+      - _INBOX.voice.realtime.>
+      - _INBOX.voice.realtime1.message
+      - _INBOX.voice.realtime1.chat
+      - _INBOX.voice.realtime1.user
+      - _INBOX.voice.realtime1.social
+      - _INBOX.voice.realtime1.role
+      - _INBOX.voice.realtime1.voice
+      - _INBOX.voice.realtime1.matchmaking
+  role:
+    publish: [role.created, role.updated, role.deleted, role.assigned, role.revoked, role.chat_override_set, role.chat_override_removed, role.voice_override_set, role.voice_override_removed, $JS.API.STREAM.INFO.role_events]
+    subscribe: [_INBOX.voice.role.>]
+  search:
+    publish:
+      - analytics.search.query
+      - $JS.API.CONSUMER.INFO.message_events.search-indexer-message-v1
+      - $JS.API.CONSUMER.INFO.user_events.search-indexer-user-v1
+      - $JS.API.CONSUMER.INFO.chat_events.search-indexer-chat-v1
+      - $JS.API.CONSUMER.INFO.user_profile_projection.search-user-profile-projection-v1
+      - $JS.ACK.message_events.search-indexer-message-v1.>
+      - $JS.ACK.user_events.search-indexer-user-v1.>
+      - $JS.ACK.chat_events.search-indexer-chat-v1.>
+      - $JS.ACK.user_profile_projection.search-user-profile-projection-v1.>
+    subscribe:
+      - _INBOX.voice.search.>
+      - _INBOX.voice.search.indexer.message
+      - _INBOX.voice.search.indexer.user
+      - _INBOX.voice.search.indexer.chat
+      - _INBOX.voice.search.user-projection
+  social:
+    publish: [social.friend_request, social.friend_accepted, social.friend_removed, social.user_blocked, social.contacts_synced, $JS.API.STREAM.INFO.social_events]
+    subscribe: [_INBOX.voice.social.>]
+  space:
+    publish:
+      - space.tree_changed
+      - space.created
+      - space.invite_created
+      - space.member_joined
+      - space.member_left
+      - space.updated
+      - space.deleted
+      - voice.room_created
+      - voice.room_deleted
+      - $JS.API.STREAM.INFO.chat_events
+      - $JS.API.CONSUMER.INFO.subscription_events.space_subscription_entitlement
+      - $JS.ACK.subscription_events.space_subscription_entitlement.>
+    subscribe: [_INBOX.voice.space.>, _INBOX.voice.space.space_subscription_entitlement]
+  story:
+    publish: [story.created, story.viewed, story.reacted, story.expired, story.highlight_created, story.lfp_created, story.lfp_response, $JS.API.STREAM.INFO.story_events]
+    subscribe: [_INBOX.voice.story.>]
+  subscription:
+    publish: [subscription.plan_started, subscription.plan_cancelled, subscription.plan_expired, subscription.downgrade, subscription.payment_success, subscription.payment_failed, subscription.space_pro_started, subscription.space_pro_expired, subscription.grace_reminder, subscription.entitlement_changed, analytics.subscription.payment_success, analytics.subscription.payment_failed, $JS.API.STREAM.INFO.subscription_events]
+    subscribe: [_INBOX.voice.subscription.>]
+  user:
+    publish:
+      - user.account_deleted
+      - user.profile_created
+      - user.profile_updated
+      - user.profile_switched
+      - user.verified
+      - user.presence_changed
+      - user.game_detected
+      - user.settings_changed
+      - user.search_profile_projection
+      - $JS.API.STREAM.INFO.user_events
+      - $JS.API.STREAM.INFO.user_profile_projection
+      - $JS.API.CONSUMER.INFO.user_events.user-account-deletion-v1
+      - $JS.API.CONSUMER.MSG.NEXT.user_events.user-account-deletion-v1
+      - $JS.ACK.user_events.user-account-deletion-v1.>
+    subscribe: [_INBOX.voice.user.>]
+  voice:
+    publish: [voice.call_incoming, voice.call_accepted, voice.call_declined, voice.call_missed, voice.call_ended, voice.state_changed, voice.screen_share_started, voice.screen_share_stopped, voice.call_started, voice.member_joined, $JS.API.STREAM.INFO.voice_events]
+    subscribe: [_INBOX.voice.voice.>]
+bootstrap:
+  publish:
+    - $JS.API.STREAM.INFO.message_events
+    - $JS.API.STREAM.INFO.chat_events
+    - $JS.API.STREAM.INFO.file_events
+    - $JS.API.STREAM.INFO.moderation_events
+    - $JS.API.STREAM.INFO.bot_events
+    - $JS.API.STREAM.INFO.subscription_events
+    - $JS.API.STREAM.INFO.story_events
+    - $JS.API.STREAM.INFO.user_events
+    - $JS.API.STREAM.INFO.social_events
+    - $JS.API.STREAM.INFO.role_events
+    - $JS.API.STREAM.INFO.voice_events
+    - $JS.API.STREAM.INFO.matchmaking_events
+    - $JS.API.STREAM.INFO.analytics_events
+    - $JS.API.STREAM.INFO.user_profile_projection
+    - $JS.API.STREAM.CREATE.message_events
+    - $JS.API.STREAM.CREATE.chat_events
+    - $JS.API.STREAM.CREATE.file_events
+    - $JS.API.STREAM.CREATE.moderation_events
+    - $JS.API.STREAM.CREATE.bot_events
+    - $JS.API.STREAM.CREATE.subscription_events
+    - $JS.API.STREAM.CREATE.story_events
+    - $JS.API.STREAM.CREATE.user_events
+    - $JS.API.STREAM.CREATE.social_events
+    - $JS.API.STREAM.CREATE.role_events
+    - $JS.API.STREAM.CREATE.voice_events
+    - $JS.API.STREAM.CREATE.matchmaking_events
+    - $JS.API.STREAM.CREATE.analytics_events
+    - $JS.API.STREAM.CREATE.user_profile_projection
+    - $JS.API.CONSUMER.INFO.message_events.chat_message_activity
+    - $JS.API.CONSUMER.CREATE.message_events.chat_message_activity
+    - $JS.API.CONSUMER.INFO.message_events.rt_realtime1_msg
+    - $JS.API.CONSUMER.CREATE.message_events.rt_realtime1_msg
+    - $JS.API.CONSUMER.INFO.chat_events.rt_realtime1_chat
+    - $JS.API.CONSUMER.CREATE.chat_events.rt_realtime1_chat
+    - $JS.API.CONSUMER.INFO.user_events.rt_realtime1_user
+    - $JS.API.CONSUMER.CREATE.user_events.rt_realtime1_user
+    - $JS.API.CONSUMER.INFO.social_events.rt_realtime1_social
+    - $JS.API.CONSUMER.CREATE.social_events.rt_realtime1_social
+    - $JS.API.CONSUMER.INFO.role_events.rt_realtime1_role
+    - $JS.API.CONSUMER.CREATE.role_events.rt_realtime1_role
+    - $JS.API.CONSUMER.INFO.voice_events.rt_realtime1_voice
+    - $JS.API.CONSUMER.CREATE.voice_events.rt_realtime1_voice
+    - $JS.API.CONSUMER.INFO.matchmaking_events.rt_realtime1_matchmaking
+    - $JS.API.CONSUMER.CREATE.matchmaking_events.rt_realtime1_matchmaking
+    - $JS.API.CONSUMER.INFO.message_events.notif_msg_v2
+    - $JS.API.CONSUMER.CREATE.message_events.notif_msg_v2
+    - $JS.API.CONSUMER.INFO.matchmaking_events.notif_mm
+    - $JS.API.CONSUMER.CREATE.matchmaking_events.notif_mm
+    - $JS.API.CONSUMER.INFO.voice_events.notif_voice
+    - $JS.API.CONSUMER.CREATE.voice_events.notif_voice
+    - $JS.API.CONSUMER.INFO.story_events.notif_story
+    - $JS.API.CONSUMER.CREATE.story_events.notif_story
+    - $JS.API.CONSUMER.INFO.social_events.notif_social
+    - $JS.API.CONSUMER.CREATE.social_events.notif_social
+    - $JS.API.CONSUMER.INFO.subscription_events.notif_subscription
+    - $JS.API.CONSUMER.CREATE.subscription_events.notif_subscription
+    - $JS.API.CONSUMER.INFO.moderation_events.notif_mod
+    - $JS.API.CONSUMER.CREATE.moderation_events.notif_mod
+    - $JS.API.CONSUMER.INFO.message_events.search-indexer-message-v1
+    - $JS.API.CONSUMER.CREATE.message_events.search-indexer-message-v1
+    - $JS.API.CONSUMER.INFO.user_events.search-indexer-user-v1
+    - $JS.API.CONSUMER.CREATE.user_events.search-indexer-user-v1
+    - $JS.API.CONSUMER.INFO.chat_events.search-indexer-chat-v1
+    - $JS.API.CONSUMER.CREATE.chat_events.search-indexer-chat-v1
+    - $JS.API.CONSUMER.INFO.user_profile_projection.search-user-profile-projection-v1
+    - $JS.API.CONSUMER.CREATE.user_profile_projection.search-user-profile-projection-v1
+    - $JS.API.CONSUMER.INFO.message_events.analytics_v2_msg
+    - $JS.API.CONSUMER.CREATE.message_events.analytics_v2_msg
+    - $JS.API.CONSUMER.INFO.user_events.analytics_v2_user
+    - $JS.API.CONSUMER.CREATE.user_events.analytics_v2_user
+    - $JS.API.CONSUMER.INFO.chat_events.analytics_v2_chat
+    - $JS.API.CONSUMER.CREATE.chat_events.analytics_v2_chat
+    - $JS.API.CONSUMER.INFO.matchmaking_events.analytics_v2_mm
+    - $JS.API.CONSUMER.CREATE.matchmaking_events.analytics_v2_mm
+    - $JS.API.CONSUMER.INFO.voice_events.analytics_v2_voice
+    - $JS.API.CONSUMER.CREATE.voice_events.analytics_v2_voice
+    - $JS.API.CONSUMER.INFO.story_events.analytics_v2_story
+    - $JS.API.CONSUMER.CREATE.story_events.analytics_v2_story
+    - $JS.API.CONSUMER.INFO.bot_events.analytics_v2_bot
+    - $JS.API.CONSUMER.CREATE.bot_events.analytics_v2_bot
+    - $JS.API.CONSUMER.INFO.social_events.analytics_v2_social
+    - $JS.API.CONSUMER.CREATE.social_events.analytics_v2_social
+    - $JS.API.CONSUMER.INFO.role_events.analytics_v2_role
+    - $JS.API.CONSUMER.CREATE.role_events.analytics_v2_role
+    - $JS.API.CONSUMER.INFO.file_events.analytics_v2_file
+    - $JS.API.CONSUMER.CREATE.file_events.analytics_v2_file
+    - $JS.API.CONSUMER.INFO.subscription_events.analytics_v2_subscription
+    - $JS.API.CONSUMER.CREATE.subscription_events.analytics_v2_subscription
+    - $JS.API.CONSUMER.INFO.moderation_events.analytics_v2_moderation
+    - $JS.API.CONSUMER.CREATE.moderation_events.analytics_v2_moderation
+    - $JS.API.CONSUMER.INFO.analytics_events.analytics_v2_telemetry
+    - $JS.API.CONSUMER.CREATE.analytics_events.analytics_v2_telemetry
+    - $JS.API.CONSUMER.INFO.user_events.chat_account_deleted
+    - $JS.API.CONSUMER.CREATE.user_events.chat_account_deleted
+    - $JS.API.CONSUMER.INFO.message_events.messaging_delivery_ack
+    - $JS.API.CONSUMER.CREATE.message_events.messaging_delivery_ack
+    - $JS.API.CONSUMER.INFO.user_events.messaging_receipt_privacy
+    - $JS.API.CONSUMER.CREATE.user_events.messaging_receipt_privacy
+    - $JS.API.CONSUMER.INFO.message_events.bot_message_events
+    - $JS.API.CONSUMER.CREATE.message_events.bot_message_events
+    - $JS.API.CONSUMER.INFO.story_events.matchmaking_story_lfp_v2
+    - $JS.API.CONSUMER.CREATE.story_events.matchmaking_story_lfp_v2
+    - $JS.API.CONSUMER.INFO.subscription_events.space_subscription_entitlement
+    - $JS.API.CONSUMER.CREATE.subscription_events.space_subscription_entitlement
+    - $JS.API.CONSUMER.INFO.user_events.user-account-deletion-v1
+    - $JS.API.CONSUMER.CREATE.user_events.user-account-deletion-v1
+    - $JS.API.CONSUMER.INFO.subscription_events.auth_subscription_tier
+    - $JS.API.CONSUMER.CREATE.subscription_events.auth_subscription_tier
+  subscribe: [_INBOX.voice.bootstrap.reply.>]

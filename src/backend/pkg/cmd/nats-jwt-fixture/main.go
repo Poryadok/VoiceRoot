@@ -80,6 +80,21 @@ func validateACL(acl aclDocument) error {
 		if err := validateGrant(grant); err != nil {
 			return fmt.Errorf("ACL service %s: %w", name, err)
 		}
+		for _, subject := range grant.Publish {
+			if strings.HasPrefix(subject, "$JS.API.STREAM.CREATE.") ||
+				strings.HasPrefix(subject, "$JS.API.STREAM.UPDATE.") ||
+				strings.HasPrefix(subject, "$JS.API.STREAM.DELETE.") ||
+				strings.HasPrefix(subject, "$JS.API.CONSUMER.CREATE.") ||
+				strings.HasPrefix(subject, "$JS.API.CONSUMER.DURABLE.CREATE.") ||
+				strings.HasPrefix(subject, "$JS.API.CONSUMER.DELETE.") {
+				return fmt.Errorf("ACL service %s may not mutate JetStream: %s", name, subject)
+			}
+		}
+		for _, subject := range grant.Subscribe {
+			if strings.HasPrefix(subject, "_INBOX.voice.") && strings.HasSuffix(subject, ".>") && subject != "_INBOX.voice."+name+".>" && !(name == "auth" && subject == "_INBOX.voice.auth.requests.>") {
+				return fmt.Errorf("ACL service %s may not subscribe to another reply inbox: %s", name, subject)
+			}
+		}
 	}
 	if err := validateGrant(acl.Bootstrap); err != nil {
 		return fmt.Errorf("ACL bootstrap: %w", err)
@@ -134,6 +149,11 @@ func safePublishSubject(subject string) bool {
 func safeSubscribeSubject(subject string) bool {
 	if strings.HasPrefix(subject, "_INBOX.voice.bootstrap.reply.") && strings.HasSuffix(subject, ".>") && strings.Count(subject, ">") == 1 {
 		return true
+	}
+	if strings.HasPrefix(subject, "_INBOX.voice.") && strings.HasSuffix(subject, ".>") && strings.Count(subject, ">") == 1 {
+		parts := strings.Split(subject, ".")
+		return (len(parts) == 4 && parts[2] != "" && parts[2] != "bootstrap") ||
+			(len(parts) == 5 && parts[2] == "auth" && parts[3] == "requests")
 	}
 	return subject != "" && !strings.ContainsAny(subject, " \t\r\n>*") && subject != "$JS.API.>"
 }
