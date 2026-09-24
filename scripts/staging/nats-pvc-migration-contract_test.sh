@@ -45,7 +45,13 @@ for bootstrap in notification search analytics-chat; do
   grep -Fq "deploy/templates/nats-${bootstrap}-bootstrap.yaml" "${APPLY}" || fail "accepted infra activation must apply ${bootstrap} bootstrap"
   grep -Fq "kubectl wait --for=condition=complete job/voice-nats-${bootstrap}-bootstrap" "${APPLY}" || fail "accepted infra activation must wait for ${bootstrap} bootstrap"
 done
-awk '/if \[ "\$\{VOICE_NATS_BOOTSTRAP_AFTER_ACCEPTANCE:-false\}" = true \]; then/{activation=1} activation && /deploy\/templates\/nats-realtime-bootstrap.yaml/{central=1} activation && /fi$/{exit !(central)} END{if (!central) exit 1}' "${APPLY}" || fail 'central bootstrap must remain behind the migration-acceptance gate'
+activation_line="$(grep -nF 'if [ "${VOICE_NATS_BOOTSTRAP_AFTER_ACCEPTANCE:-false}" = true ]; then' "${APPLY}" | cut -d: -f1)"
+activation_else_line="$(awk -v start="${activation_line}" 'NR > start && /^else$/ { print NR; exit }' "${APPLY}")"
+[ -n "${activation_line}" ] && [ -n "${activation_else_line}" ] || fail 'migration-acceptance activation branch must be explicit'
+for bootstrap in realtime notification search analytics-chat; do
+  bootstrap_line="$(grep -nF "deploy/templates/nats-${bootstrap}-bootstrap.yaml" "${APPLY}" | cut -d: -f1)"
+  [ -n "${bootstrap_line}" ] && [ "${bootstrap_line}" -gt "${activation_line}" ] && [ "${bootstrap_line}" -lt "${activation_else_line}" ] || fail "${bootstrap} bootstrap must remain behind the migration-acceptance gate"
+done
 grep -Fq 'cutover' "${MIGRATE}" || fail 'migration tool must provide a separately gated cutover'
 grep -Fq 'source-census.tsv' "${GUARD}" || fail 'guard must validate source census identity, not only decision row count'
 awk '/kubectl (apply|create|delete|patch|rollout)/{if (!mutation) mutation=NR} /source_context=/{context=NR} /NATS_TARGET_CONTEXT.*source_context/{matchline=NR} END{exit !(context && matchline && mutation && context < mutation && matchline < mutation)}' "${MIGRATE}" || fail 'rollback context validation must precede every kubectl mutation'
