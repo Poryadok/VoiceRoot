@@ -249,6 +249,7 @@ func generate(dest string, acl aclDocument) error {
 	}
 	proofNoAck := acl.Services["chat"]
 	proofNoAck.Publish = withoutExactAck(proofNoAck.Publish, "$JS.ACK.chat_events.proof_chat.>")
+	proofNoAck.Subscribe = []string{"_INBOX.voice.chat.noack"}
 	// This adversarial credential must not inherit bounded response permissions:
 	// an ACK is a response to a delivered message and would otherwise mask the
 	// intentionally omitted exact ACK publish grant.

@@ -32,12 +32,16 @@ import (
 func main() {
   options := []nats.Option{}
   endpoint := "nats://127.0.0.1:4222"
+  deliverySubject := "_INBOX.voice.chat.proof"
   if len(os.Args) >= 5 && (os.Args[1] == "direct-noack" || os.Args[1] == "direct-receive" || os.Args[1] == "direct-deny") {
     endpoint = os.Args[3]
     // The fixture exposes its authenticated hub CLIENT listener on plaintext
     // 4222. TLS is deliberately restricted to the 7422 leaf listener, so a
     // direct CLIENT probe must not add a TLS option to this endpoint.
     options = append(options, nats.UserCredentials(os.Args[4]))
+    if os.Args[1] != "direct-deny" {
+      deliverySubject = "_INBOX.voice.chat.noack"
+    }
   }
   asyncErr := make(chan error, 1)
   options = append(options, nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) { select { case asyncErr <- err: default: } }))
@@ -50,7 +54,7 @@ func main() {
     select { case err := <-asyncErr: fmt.Printf("publish_denied=%v\n", err); case <-time.After(2*time.Second): panic("missing publish permission denial") }
     return
   }
-  sub, err := nc.SubscribeSync("_INBOX.voice.chat.proof")
+  sub, err := nc.SubscribeSync(deliverySubject)
   if err != nil { panic(err) }
   if err := nc.Flush(); err != nil { panic(err) }
   mode := "receive"
@@ -333,6 +337,13 @@ create_proof_consumer() {
     '{"stream_name":"chat_events","config":{"name":"proof_chat","durable_name":"proof_chat","deliver_subject":"_INBOX.voice.chat.proof","deliver_policy":"new","ack_policy":"explicit","ack_wait":1000000000,"max_deliver":-1,"filter_subject":"chat.created"}}' | \
     jq -e '(.error | not) and .config.name == "proof_chat" and .config.ack_wait == 1000000000 and .config.max_deliver == -1' >/dev/null
 }
+create_noack_proof_consumer() {
+  docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
+    nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" --inbox-prefix _INBOX.voice.bootstrap.reply \
+    req --raw '$JS.API.CONSUMER.CREATE.chat_events.proof_chat_noack' \
+    '{"stream_name":"chat_events","config":{"name":"proof_chat_noack","durable_name":"proof_chat_noack","deliver_subject":"_INBOX.voice.chat.noack","deliver_policy":"new","ack_policy":"explicit","ack_wait":1000000000,"max_deliver":-1,"filter_subject":"chat.created"}}' | \
+    jq -e '(.error | not) and .config.name == "proof_chat_noack" and .config.deliver_subject == "_INBOX.voice.chat.noack" and .config.ack_wait == 1000000000 and .config.max_deliver == -1' >/dev/null
+}
 create_proof_consumer
 proof_consumer="$(docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
   nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" --inbox-prefix _INBOX.voice.bootstrap.reply consumer info chat_events proof_chat --json)"
@@ -462,7 +473,10 @@ done
 # The no-ACK identity connects directly as an authenticated hub CLIENT. Leaf
 # ACK subjects are exempt from leaf publish checks, so this is the enforceable
 # JWT permission boundary for an exact ACK publish denial.
+create_noack_proof_consumer
 hub_log_before="$(docker logs voice-nats-proof-hub 2>&1 || true)"
+noack_state_before="$(docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" --inbox-prefix _INBOX.voice.bootstrap.reply consumer info chat_events proof_chat_noack --json)"
+noack_ack_floor_before="$(jq -r '.ack_floor.stream_seq' <<<"$noack_state_before")"
 docker run -d --name voice-nats-proof-noack-receive-one --network "$network" \
   -v "$work/receiver:/receiver" -v "$work:$work:ro" alpine:3.22 /receiver/leaf-receive direct-noack /receiver/noack-receive-one.ready nats://hub:4222 "$work/fixture/creds/chat-noack.creds" >/dev/null
 if ! wait_for_file "$work/receiver/noack-receive-one.ready" 'no-ACK chat leaf receiver'; then
@@ -479,14 +493,15 @@ if ! grep -Fqx 'stream=chat_events sequence=3 delivered=1 ack=false' <<<"$noack_
   exit 1
 fi
 noack_ack_subject="$(sed -n 's/^ack_subject=//p' <<<"$noack_receive_one")"
-if [[ ! "$noack_ack_subject" =~ ^\$JS\.ACK\.chat_events\.proof_chat\.[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || ! grep -Eq '^ack_error=.+$' <<<"$noack_receive_one"; then
+if [[ ! "$noack_ack_subject" =~ ^\$JS\.ACK\.chat_events\.proof_chat_noack\.[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || ! grep -Fq "$noack_ack_subject" <<<"$noack_receive_one" || ! grep -Eq '^ack_error=.+$' <<<"$noack_receive_one"; then
   echo 'FAIL: direct no-ACK identity did not expose its exact proof ACK subject' >&2
   printf '%s\n' "$noack_receive_one" >&2
   exit 1
 fi
-noack_state="$(docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" --inbox-prefix _INBOX.voice.bootstrap.reply consumer info chat_events proof_chat --json)"
-if ! jq -e '.ack_floor.stream_seq == 2 and .num_ack_pending == 1' <<<"$noack_state" >/dev/null; then
+noack_state="$(docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" --inbox-prefix _INBOX.voice.bootstrap.reply consumer info chat_events proof_chat_noack --json)"
+if ! jq -e --argjson floor "$noack_ack_floor_before" '.ack_floor.stream_seq == $floor and .num_ack_pending == 1' <<<"$noack_state" >/dev/null; then
   echo 'FAIL: direct no-ACK publish advanced the consumer acknowledgement floor' >&2
+  printf 'before=%s\nafter=%s\n' "$noack_state_before" "$noack_state" >&2
   exit 1
 fi
 for attempt in {1..5}; do

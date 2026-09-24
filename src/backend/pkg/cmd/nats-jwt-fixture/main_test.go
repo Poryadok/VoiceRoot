@@ -43,6 +43,9 @@ func TestGenerateCreatesDistinctServiceCredentialsWithoutBroadJetStreamAPI(t *te
 	if noAck.Resp != nil {
 		t.Fatal("chat-noack credential must not inherit response permission that could mask ACK denial")
 	}
+	if got, want := strings.Join(noAck.Sub.Allow, ","), "_INBOX.voice.chat.noack"; got != want {
+		t.Fatalf("chat-noack credential subscriptions = %q, want %q", got, want)
+	}
 	operatorJWT, err := os.ReadFile(filepath.Join(dest, "operator.jwt"))
 	if err != nil {
 		t.Fatal(err)
