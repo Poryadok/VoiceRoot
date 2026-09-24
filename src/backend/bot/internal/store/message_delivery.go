@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,15 +13,12 @@ import (
 
 // MessageDelivery is a durable recipient intent, independent of other bots.
 type MessageDelivery struct {
-	ID            uuid.UUID
-	BotID         uuid.UUID
-	MessageID     uuid.UUID
-	ChatID        uuid.UUID
-	Payload       map[string]any
-	IsPollingMode bool
-	WebhookURL    *string
-	WebhookSecret *string
-	Attempts      int
+	ID        uuid.UUID
+	BotID     uuid.UUID
+	MessageID uuid.UUID
+	ChatID    uuid.UUID
+	Payload   map[string]any
+	Attempts  int
 }
 
 // QueueMessageRecipients commits the complete recipient set before NATS ACK.
@@ -32,8 +30,8 @@ func (s *BotStore) QueueMessageRecipients(ctx context.Context, chatID, messageID
 	}
 	_, err = s.Pool.Exec(ctx, `
 INSERT INTO bot_message_deliveries
-    (id, bot_id, message_id, chat_id, payload, is_polling_mode, webhook_url, webhook_secret)
-SELECT gen_random_uuid(), b.id, $2, $1, $4::jsonb, b.is_polling_mode, b.webhook_url, b.webhook_secret
+    (id, bot_id, message_id, chat_id, payload)
+SELECT gen_random_uuid(), b.id, $2, $1, $4::jsonb
 FROM bots b JOIN bot_chat_whitelist w ON w.bot_id = b.id
 WHERE w.chat_id = $1 AND w.enabled AND b.status = 'live'
   AND b.actor_profile_id::text <> $3
@@ -57,10 +55,8 @@ WITH due AS (
 UPDATE bot_message_deliveries d
 SET claimed_until = now() + interval '2 minutes', attempts = attempts + 1
 FROM due WHERE d.id = due.id
-RETURNING d.id, d.bot_id, d.message_id, d.chat_id, d.payload, d.is_polling_mode,
-          d.webhook_url, d.webhook_secret, d.attempts`).Scan(
-		&d.ID, &d.BotID, &d.MessageID, &d.ChatID, &raw, &d.IsPollingMode,
-		&d.WebhookURL, &d.WebhookSecret, &d.Attempts)
+RETURNING d.id, d.bot_id, d.message_id, d.chat_id, d.payload, d.attempts`).Scan(
+		&d.ID, &d.BotID, &d.MessageID, &d.ChatID, &raw, &d.Attempts)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -73,23 +69,46 @@ RETURNING d.id, d.bot_id, d.message_id, d.chat_id, d.payload, d.is_polling_mode,
 	return &d, nil
 }
 
-// CompletePollingMessage atomically creates the visible event and receipt.
-func (s *BotStore) CompletePollingMessage(ctx context.Context, d *MessageDelivery) error {
+// DeliverMessage serializes current authorization and destination changes with
+// delivery. Revocation and secret/URL rotation wait until this transaction ends.
+func (s *BotStore) DeliverMessage(ctx context.Context, d *MessageDelivery, post func(string, string) error) error {
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	raw, err := json.Marshal(d.Payload)
+	var polling bool
+	var url *string
+	var secret string
+	err = tx.QueryRow(ctx, `
+SELECT b.is_polling_mode, b.webhook_url, b.webhook_secret
+FROM bots b JOIN bot_chat_whitelist w ON w.bot_id = b.id
+WHERE b.id = $1 AND w.chat_id = $2 AND w.enabled AND b.status = 'live'
+FOR SHARE OF b, w`, d.BotID, d.ChatID).Scan(&polling, &url, &secret)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !polling && strings.TrimSpace(ptrValue(url)) == "") {
+		_, err = tx.Exec(ctx, `UPDATE bot_message_deliveries SET status = 'canceled', claimed_until = NULL WHERE id = $1`, d.ID)
+		if err != nil {
+			return err
+		}
+		return tx.Commit(ctx)
+	}
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, `
+	if polling {
+		raw, err := json.Marshal(d.Payload)
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, `
 INSERT INTO bot_event_log (id, bot_id, event_type, payload, delivery_status, interaction_token, source_message_id)
 VALUES ($1, $2, 'message', $3::jsonb, 'pending', '', $4)
 ON CONFLICT (bot_id, source_message_id) WHERE source_message_id IS NOT NULL DO NOTHING`,
-		uuid.New(), d.BotID, string(raw), d.MessageID)
-	if err != nil {
+			uuid.New(), d.BotID, string(raw), d.MessageID)
+		if err != nil {
+			return err
+		}
+	} else if err := post(strings.TrimSpace(ptrValue(url)), secret); err != nil {
 		return err
 	}
 	if _, err = tx.Exec(ctx, `UPDATE bot_message_deliveries SET status = 'delivered', claimed_until = NULL, delivered_at = now() WHERE id = $1`, d.ID); err != nil {
@@ -98,8 +117,15 @@ ON CONFLICT (bot_id, source_message_id) WHERE source_message_id IS NOT NULL DO N
 	return tx.Commit(ctx)
 }
 
-func (s *BotStore) CompleteWebhookMessage(ctx context.Context, id uuid.UUID) error {
-	_, err := s.Pool.Exec(ctx, `UPDATE bot_message_deliveries SET status = 'delivered', claimed_until = NULL, delivered_at = now() WHERE id = $1`, id)
+func ptrValue(v *string) string {
+	if v == nil {
+		return ""
+	}
+	return *v
+}
+
+func (s *BotStore) FailMessageDelivery(ctx context.Context, id uuid.UUID) error {
+	_, err := s.Pool.Exec(ctx, `UPDATE bot_message_deliveries SET status = 'failed', claimed_until = NULL WHERE id = $1`, id)
 	return err
 }
 

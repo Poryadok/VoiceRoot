@@ -72,9 +72,7 @@ func (h *MessageHandler) ProcessNext(ctx context.Context) (bool, error) {
 	if err != nil || d == nil {
 		return false, err
 	}
-	if d.IsPollingMode {
-		err = h.Store.CompletePollingMessage(ctx, d)
-	} else {
+	err = h.Store.DeliverMessage(ctx, d, func(url, secret string) error {
 		options := make(map[string]any, len(d.Payload)+1)
 		for k, v := range d.Payload {
 			options[k] = v
@@ -87,26 +85,20 @@ func (h *MessageHandler) ProcessNext(ctx context.Context) (bool, error) {
 		}
 		// Finish the HTTP attempt well before the database lease expires.
 		attemptCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
-		_, err = webhook.DeliverPOST(attemptCtx, h.Client, ptrStr(d.WebhookURL), ptrStr(d.WebhookSecret), p, timeout)
+		_, postErr := webhook.DeliverPOST(attemptCtx, h.Client, url, secret, p, timeout)
 		cancel()
-		if err == nil {
-			err = h.Store.CompleteWebhookMessage(ctx, d.ID)
-		}
-	}
+		return postErr
+	})
 	if err != nil {
 		if h.Logger != nil {
 			h.Logger.Warn("bot message delivery failed", slog.String("bot_id", d.BotID.String()), slog.Any("error", err))
 		}
+		if webhook.IsPermanentDeliveryError(err) {
+			return true, errors.Join(err, h.Store.FailMessageDelivery(ctx, d.ID))
+		}
 		return true, errors.Join(err, h.Store.RetryMessageDelivery(ctx, d.ID, d.Attempts))
 	}
 	return true, nil
-}
-
-func ptrStr(p *string) string {
-	if p == nil {
-		return ""
-	}
-	return *p
 }
 
 // StartMessageEventsConsumer validates and binds the centrally provisioned durable.
@@ -154,27 +146,31 @@ func StartMessageEventsConsumer(ctx context.Context, h *MessageHandler, natsURL 
 		return nil, fmt.Errorf("subscribe: %w", err)
 	}
 	workerCtx, cancel := context.WithCancel(ctx)
-	go func() {
-		ticker := time.NewTicker(250 * time.Millisecond)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-workerCtx.Done():
-				return
-			case <-ticker.C:
+	for i := 0; i < 4; i++ {
+		go runMessageOutboxWorker(workerCtx, h, logger)
+	}
+	return func() { cancel(); _ = nc.Drain() }, nil
+}
+
+func runMessageOutboxWorker(ctx context.Context, h *MessageHandler, logger *slog.Logger) {
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+		for i := 0; i < 32; i++ {
+			worked, err := h.ProcessNext(ctx)
+			if err != nil && logger != nil {
+				logger.Warn("bot message outbox failed", slog.Any("error", err))
 			}
-			for i := 0; i < 32; i++ {
-				worked, err := h.ProcessNext(workerCtx)
-				if err != nil && logger != nil {
-					logger.Warn("bot message outbox failed", slog.Any("error", err))
-				}
-				if !worked || workerCtx.Err() != nil {
-					break
-				}
+			if !worked || ctx.Err() != nil {
+				break
 			}
 		}
-	}()
-	return func() { cancel(); _ = nc.Drain() }, nil
+	}
 }
 
 func validateMessageConsumer(info *nats.ConsumerInfo) error {

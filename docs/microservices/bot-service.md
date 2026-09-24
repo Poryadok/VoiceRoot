@@ -181,8 +181,7 @@ bot_message_deliveries
 ├── id (UUID; stable webhook delivery ID)
 ├── bot_id (FK), message_id (UUID; unique pair)
 ├── chat_id, payload (jsonb)
-├── is_polling_mode, webhook_url, webhook_secret (recipient snapshot)
-├── status (pending | delivered), attempts, next_attempt_at, claimed_until
+├── status (pending | delivered | canceled | failed), attempts, next_attempt_at, claimed_until
 └── created_at, delivered_at
 ```
 
@@ -214,6 +213,14 @@ delivers recipients independently: polling inserts the visible event and marks
 the intent delivered in one transaction; webhook sends a signed POST, then
 marks the intent delivered. Failed recipients remain pending with retry
 backoff, so another bot's polling failure cannot block a healthy webhook.
+Four workers claim recipients independently, so one slow webhook cannot hold
+the delivery queue. Before delivery, Bot locks the current bot and chat
+whitelist rows through the POST or polling write. A disable/uninstall/URL or
+secret rotation therefore commits either before delivery authorization is read
+or after the in-progress delivery completes; pending revoked recipients are
+canceled, and retries use the current URL and secret. Non-retryable webhook
+responses (4xx, malformed response, invalid URL) leave a durable `failed` row
+for diagnosis rather than looping forever. Transient failures remain pending.
 Replay after a completed delivery is inert. Webhook payload
 `options.delivery_id` is stable across retries; receivers should deduplicate
 that ID for an ambiguous HTTP response (remote success before local receipt).
