@@ -117,6 +117,18 @@ spec:
       port: 8222
       targetPort: 8222
 ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: voice-nats-jsdata
+  namespace: voice-staging
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: __NATS_STORAGE_CLASS__
+  resources:
+    requests:
+      storage: __NATS_STORAGE_SIZE__
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -195,7 +207,8 @@ spec:
             timeoutSeconds: 3
       volumes:
         - name: jsdata
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: voice-nats-jsdata
         - name: nats-rendered-config
           emptyDir: {medium: Memory, sizeLimit: 1Mi}
         - name: nats-config-template
