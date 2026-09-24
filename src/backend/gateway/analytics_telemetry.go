@@ -28,7 +28,7 @@ func gatewayAnalyticsFromEnv() gatewayAnalyticsTelemetry {
 	if natsURL == "" || rate <= 0 {
 		return gatewayAnalyticsTelemetry{sampleRate: rate}
 	}
-	pub, err := analyticsevents.NewJetStreamPublisher(natsURL)
+	pub, err := analyticsevents.NewJetStreamPublisher(natsURL, "gateway")
 	if err != nil {
 		return gatewayAnalyticsTelemetry{sampleRate: rate}
 	}

@@ -10,6 +10,22 @@ import (
 	"voice/backend/pkg/analyticshash"
 )
 
+func TestAnalyticsPublisherUsesCallerInbox(t *testing.T) {
+	for _, service := range []string{"gateway", "moderation", "notification", "search", "subscription"} {
+		t.Run(service, func(t *testing.T) {
+			opts, err := publisherNATSOptions(service)
+			require.NoError(t, err)
+			var connOpts nats.Options
+			for _, opt := range opts {
+				require.NoError(t, opt(&connOpts))
+			}
+			require.Equal(t, "_INBOX.voice."+service, connOpts.InboxPrefix)
+		})
+	}
+	_, err := publisherNATSOptions("analytics")
+	require.Error(t, err)
+}
+
 func TestAnalyticsEventFromAccountNoPIIInProps(t *testing.T) {
 	props := map[string]any{
 		"provider_event_id": "evt-1",
