@@ -56,6 +56,7 @@ system_account_jwt="$(tr -d '\r\n' <"$work/fixture/system-account.jwt")"
 
 cat >"$work/hub.conf" <<EOF
 operator: $work/fixture/operator.jwt
+max_control_line: 32768
 resolver: MEMORY
 resolver_preload: { $account: "$account_jwt", $system_account: "$system_account_jwt" }
 system_account: $system_account

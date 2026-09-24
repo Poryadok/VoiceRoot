@@ -235,9 +235,13 @@ func TestCanonicalACLHasScopedRuntimeAndBootstrapGrants(t *testing.T) {
 		}
 		for _, subject := range grant.Subscribe {
 			if strings.HasPrefix(subject, "_INBOX.") && strings.HasSuffix(subject, ".>") {
-				if subject != "_INBOX.voice."+service+".>" && !(service == "auth" && subject == "_INBOX.voice.auth.requests.>") {
-					t.Errorf("%s has cross-service reply inbox %s", service, subject)
+				if subject == "_INBOX.voice."+service+".>" {
+					continue
 				}
+				if service == "auth" && subject == "_INBOX.voice.auth.requests.>" {
+					continue
+				}
+				t.Errorf("%s has cross-service reply inbox %s", service, subject)
 			}
 		}
 	}

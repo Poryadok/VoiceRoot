@@ -81,19 +81,25 @@ func validateACL(acl aclDocument) error {
 			return fmt.Errorf("ACL service %s: %w", name, err)
 		}
 		for _, subject := range grant.Publish {
-			if strings.HasPrefix(subject, "$JS.API.") &&
-				!(strings.HasPrefix(subject, "$JS.API.STREAM.INFO.") ||
-					strings.HasPrefix(subject, "$JS.API.CONSUMER.INFO.") ||
-					strings.HasPrefix(subject, "$JS.API.CONSUMER.MSG.NEXT.")) {
+			if !strings.HasPrefix(subject, "$JS.API.") {
+				continue
+			}
+			switch {
+			case strings.HasPrefix(subject, "$JS.API.STREAM.INFO."),
+				strings.HasPrefix(subject, "$JS.API.CONSUMER.INFO."),
+				strings.HasPrefix(subject, "$JS.API.CONSUMER.MSG.NEXT."):
+			default:
 				return fmt.Errorf("ACL service %s has unreviewed JetStream API grant: %s", name, subject)
 			}
 		}
 		for _, subject := range grant.Subscribe {
-			if strings.HasPrefix(subject, "_INBOX.") &&
-				!strings.HasPrefix(subject, "_INBOX.voice."+name+".") &&
-				!(name == "realtime" && strings.HasPrefix(subject, "_INBOX.voice.realtime1.")) {
-				return fmt.Errorf("ACL service %s may not subscribe to another inbox: %s", name, subject)
+			if !strings.HasPrefix(subject, "_INBOX.") || strings.HasPrefix(subject, "_INBOX.voice."+name+".") {
+				continue
 			}
+			if name == "realtime" && strings.HasPrefix(subject, "_INBOX.voice.realtime1.") {
+				continue
+			}
+			return fmt.Errorf("ACL service %s may not subscribe to another inbox: %s", name, subject)
 		}
 	}
 	if err := validateGrant(acl.Bootstrap); err != nil {

@@ -27,6 +27,9 @@ func TestIssueWritesProtectedFourSecretRestoreList(t *testing.T) {
 		t.Skip("0600 issuance requires Linux")
 	}
 	parent := t.TempDir()
+	if err := os.Chmod(parent, 0700); err != nil {
+		t.Fatal(err)
+	}
 	cert, key, ca := testTLS(t, parent, "voice-nats")
 	dest := filepath.Join(parent, "issued")
 	if err := issue(canonicalACL(), dest, "voice-staging", cert, key, ca); err != nil {

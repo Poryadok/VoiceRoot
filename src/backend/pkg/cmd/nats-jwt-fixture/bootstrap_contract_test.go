@@ -190,3 +190,20 @@ func TestBotComposeWaitsForCentralMessageBootstrap(t *testing.T) {
 		t.Error("Compose Bot can start before bot_message_events is preprovisioned")
 	}
 }
+
+func TestHubAcceptsCanonicalJWTControlLine(t *testing.T) {
+	root := filepath.Join("..", "..", "..", "..", "..")
+	for _, path := range []string{
+		"deploy/staging/infra.yaml",
+		"deploy/prod/infra.yaml",
+		"scripts/ci/nats-canonical-acl-hosted-proof.sh",
+	} {
+		contents, err := os.ReadFile(filepath.Join(root, path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(contents), "max_control_line: 32768") {
+			t.Errorf("%s does not admit the exact canonical bootstrap JWT CONNECT line", path)
+		}
+	}
+}
