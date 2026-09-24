@@ -50,7 +50,14 @@ func (r *Runner) Start(ctx context.Context, natsURL, _ string) error {
 	if url == "" {
 		return fmt.Errorf("analytics consumer: missing NATS_URL")
 	}
-	nc, err := nats.Connect(url, nats.Name("voice-analytics"), nats.Timeout(10*time.Second), nats.RetryOnFailedConnect(true), nats.MaxReconnects(-1), nats.ReconnectWait(time.Second))
+	nc, err := nats.Connect(url,
+		nats.Name("voice-analytics"),
+		nats.CustomInboxPrefix("_INBOX.voice.analytics"),
+		nats.Timeout(10*time.Second),
+		nats.RetryOnFailedConnect(true),
+		nats.MaxReconnects(-1),
+		nats.ReconnectWait(time.Second),
+	)
 	if err != nil {
 		return fmt.Errorf("nats connect: %w", err)
 	}
@@ -64,7 +71,7 @@ func (r *Runner) Start(ctx context.Context, natsURL, _ string) error {
 		handler               func(*nats.Msg) error
 	}
 	specs := []subSpec{
-		{"message_events", ">", "msg", r.wrapProto(r.handleMessageProto)}, {"user_events", "user.>", "user", r.wrapProto(r.handleUserProto)}, {"chat_events", ">", "chat", r.wrapProto(r.handleChatProto)}, {"matchmaking_events", "mm.>", "mm", r.wrapProto(r.handleMatchmakingProto)}, {"voice_events", "voice.>", "voice", r.wrapProto(r.handleVoiceProto)}, {"story_events", "story.>", "story", r.wrapProto(r.handleStoryProto)}, {"bot_events", "bot.>", "bot", r.wrapProto(r.handleBotProto)}, {"social_events", "social.>", "social", r.wrapProto(r.handleSocialProto)}, {"role_events", "role.>", "role", r.handleRoleMsg}, {"file_events", "file.>", "file", r.wrapProto(r.handleFileProto)}, {"subscription_events", "subscription.>", "subscription", r.wrapProto(r.handleSubscriptionProto)}, {"moderation_events", "moderation.>", "moderation", r.wrapProto(r.handleModerationProto)}, {"analytics_events", "analytics.>", "telemetry", r.handleAnalyticsMsg},
+		{"message_events", "message.>", "msg", r.wrapProto(r.handleMessageProto)}, {"user_events", "user.>", "user", r.wrapProto(r.handleUserProto)}, {"chat_events", ">", "chat", r.wrapProto(r.handleChatProto)}, {"matchmaking_events", "mm.>", "mm", r.wrapProto(r.handleMatchmakingProto)}, {"voice_events", "voice.>", "voice", r.wrapProto(r.handleVoiceProto)}, {"story_events", "story.>", "story", r.wrapProto(r.handleStoryProto)}, {"bot_events", "bot.>", "bot", r.wrapProto(r.handleBotProto)}, {"social_events", "social.>", "social", r.wrapProto(r.handleSocialProto)}, {"role_events", "role.>", "role", r.handleRoleMsg}, {"file_events", "file.>", "file", r.wrapProto(r.handleFileProto)}, {"subscription_events", "subscription.>", "subscription", r.wrapProto(r.handleSubscriptionProto)}, {"moderation_events", "moderation.>", "moderation", r.wrapProto(r.handleModerationProto)}, {"analytics_events", "analytics.>", "telemetry", r.handleAnalyticsMsg},
 	}
 	for _, spec := range specs {
 		spec := spec
