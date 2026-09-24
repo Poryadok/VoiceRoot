@@ -214,7 +214,7 @@ func main() {
 			jsPub.Logger = logger
 			chatEvents = jsPub
 			go func() {
-				if err := runMessageActivityConsumer(runCtx, natsURL, os.Getenv("HOSTNAME"), dmStore, logger); err != nil && !errors.Is(err, context.Canceled) {
+				if err := runMessageActivityConsumer(runCtx, natsURL, dmStore, logger); err != nil && !errors.Is(err, context.Canceled) {
 					logger.Error("message activity consumer stopped", slog.String("error", err.Error()))
 				}
 			}()
