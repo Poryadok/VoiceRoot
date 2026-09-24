@@ -322,6 +322,7 @@ staging-app-secrets-test:
 	$(BASH) "$(ROOT)/scripts/staging/ensure-app-secrets-dry-run_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/ensure-minio-credentials_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/restore-principal-secrets_test.sh"
+	$(BASH) "$(ROOT)/scripts/staging/restore-nats-secrets_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/ensure-user-search-projection-secret_test.sh"
 
 .PHONY: voice-db-runtime-provisioning-contract-test

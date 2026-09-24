@@ -27,7 +27,7 @@ streams:
     max_age: 168h
     storage: file
   - name: subscription_events
-    subjects: [subscription.plan_started, subscription.plan_cancelled, subscription.plan_expired, subscription.downgrade, subscription.payment_success, subscription.payment_failed, subscription.space_pro_started, subscription.space_pro_expired, subscription.grace_reminder]
+    subjects: [subscription.plan_started, subscription.plan_cancelled, subscription.plan_expired, subscription.downgrade, subscription.payment_success, subscription.payment_failed, subscription.space_pro_started, subscription.space_pro_expired, subscription.grace_reminder, subscription.entitlement_changed]
     retention: limits
     max_age: 168h
     storage: file
@@ -37,7 +37,7 @@ streams:
     max_age: 168h
     storage: file
   - name: user_events
-    subjects: [user.account_deleted, user.profile_created, user.profile_updated, user.profile_switched, user.verified, user.presence_changed, user.game_detected, user.settings_changed]
+    subjects: [user.account_deleted, user.account_restored, user.guest_converted, user.profile_created, user.profile_updated, user.profile_switched, user.verified, user.presence_changed, user.game_detected, user.settings_changed]
     retention: limits
     max_age: 168h
     storage: file

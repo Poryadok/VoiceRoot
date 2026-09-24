@@ -7,6 +7,8 @@ change `docker-compose.yml`; Compose remains outside this rollout.
 both `voice-staging` and `voice-prod`: render `__VOICE_NAMESPACE__` to the
 target namespace in the secret manager, never in source control. Values use
 `stringData` and are UTF-8 text; Kubernetes encodes them to `data` on write.
+The exact required keys, TLS SAN, and staging delivery bundle are specified in
+[`docs/DEPLOYMENT.md`](../../docs/DEPLOYMENT.md#nats-jwt-and-leaf-activation).
 
 The non-root renderer init container receives `voice-nats-operator/operator.jwt`,
 `account.jwt`, `system-account.jwt`, `account.public`, and

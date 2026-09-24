@@ -18,16 +18,17 @@ import (
 )
 
 const (
-	streamName             = "subscription_events"
-	subjectPlanStarted     = "subscription.plan_started"
-	subjectPlanCancelled   = "subscription.plan_cancelled"
-	subjectPlanExpired     = "subscription.plan_expired"
-	subjectDowngrade       = "subscription.downgrade"
-	subjectPaymentSuccess  = "subscription.payment_success"
-	subjectPaymentFailed   = "subscription.payment_failed"
-	subjectSpaceProStarted = "subscription.space_pro_started"
-	subjectSpaceProExpired = "subscription.space_pro_expired"
-	subjectGraceReminder   = "subscription.grace_reminder"
+	streamName                = "subscription_events"
+	subjectPlanStarted        = "subscription.plan_started"
+	subjectPlanCancelled      = "subscription.plan_cancelled"
+	subjectPlanExpired        = "subscription.plan_expired"
+	subjectDowngrade          = "subscription.downgrade"
+	subjectPaymentSuccess     = "subscription.payment_success"
+	subjectPaymentFailed      = "subscription.payment_failed"
+	subjectSpaceProStarted    = "subscription.space_pro_started"
+	subjectSpaceProExpired    = "subscription.space_pro_expired"
+	subjectGraceReminder      = "subscription.grace_reminder"
+	subjectEntitlementChanged = "subscription.entitlement_changed"
 )
 
 // Publisher publishes subscription.events domain payloads.
@@ -94,6 +95,7 @@ func subscriptionStreamSubjects() []string {
 		subjectSpaceProStarted,
 		subjectSpaceProExpired,
 		subjectGraceReminder,
+		subjectEntitlementChanged,
 	}
 }
 
