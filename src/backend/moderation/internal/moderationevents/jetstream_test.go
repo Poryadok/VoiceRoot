@@ -56,6 +56,7 @@ func TestJetStreamPublisher_SanctionAppliedRoundTrip(t *testing.T) {
 	pub, err := NewJetStreamPublisher(url)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = pub.Close() })
+	require.Regexp(t, `^_INBOX\.voice\.moderation\.`, pub.nc.NewRespInbox())
 
 	const (
 		sanctionID = "33333333-3333-4333-8333-333333333333"

@@ -97,7 +97,7 @@ func main() {
 			}
 		}
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
-			if pub, err := analyticsevents.NewJetStreamPublisher(natsURL); err == nil {
+			if pub, err := analyticsevents.NewJetStreamPublisher(natsURL, "moderation"); err == nil {
 				svc.Analytics = pub
 				defer pub.Close()
 			} else {

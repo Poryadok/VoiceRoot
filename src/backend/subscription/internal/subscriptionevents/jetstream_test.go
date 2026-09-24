@@ -61,6 +61,7 @@ func TestJetStreamPublisher_PlanStartedRoundTrip(t *testing.T) {
 	pub, err := NewJetStreamPublisher(url)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = pub.Close() })
+	require.Regexp(t, `^_INBOX\.voice\.subscription\.`, pub.nc.NewRespInbox())
 
 	const accountID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 	require.NoError(t, pub.PublishPlanStarted(ctx, accountID, "premium"))
