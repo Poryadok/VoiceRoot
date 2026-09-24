@@ -27,6 +27,18 @@ fail() {
   exit 1
 }
 
+# The full-live workflow must configure the same local avatar store as CI.
+for setting in \
+  'USER_R2_ENDPOINT=http://host.docker.internal:9000' \
+  'USER_R2_REGION=us-east-1' \
+  'USER_R2_ACCESS_KEY_ID=voice-minio' \
+  'USER_R2_SECRET_ACCESS_KEY=voice-minio-dev' \
+  'USER_R2_BUCKET=voice-dev-avatars' \
+  'USER_R2_PUBLIC_BASE_URL=http://127.0.0.1:9000/voice-dev-avatars'; do
+  grep -F -- "${setting}" "${ROOT}/.github/workflows/compose-e2e-live.yml" >/dev/null ||
+    fail "full-live workflow is missing avatar store setting ${setting%%=*}"
+done
+
 for go_status in 0 17; do
   for flutter_status in 0 23; do
     case_dir="${scratch}/${go_status}-${flutter_status}"
