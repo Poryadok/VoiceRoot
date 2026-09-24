@@ -191,6 +191,34 @@ func TestBotComposeWaitsForCentralMessageBootstrap(t *testing.T) {
 	}
 }
 
+func TestBindOnlyComposeServicesWaitForCentralConsumers(t *testing.T) {
+	root := filepath.Join("..", "..", "..", "..", "..")
+	contents, err := os.ReadFile(filepath.Join(root, "docker-compose.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for service, next := range map[string]string{
+		"auth":        "social-principal-init",
+		"bot":         "story",
+		"chat":        "messaging",
+		"messaging":   "file",
+		"matchmaking": "search",
+		"space":       "role",
+		"user":        "compose-db-init",
+	} {
+		start := "\n  " + service + ":\n"
+		parts := strings.SplitN(string(contents), start, 2)
+		if len(parts) != 2 {
+			t.Errorf("Compose service %s missing", service)
+			continue
+		}
+		block := strings.SplitN(parts[1], "\n  "+next+":\n", 2)[0]
+		if !strings.Contains(block, "      nats-analytics-chat-bootstrap:\n        condition: service_completed_successfully") {
+			t.Errorf("Compose %s can start before its fixed NATS consumer is preprovisioned", service)
+		}
+	}
+}
+
 func TestHubAcceptsCanonicalJWTControlLine(t *testing.T) {
 	root := filepath.Join("..", "..", "..", "..", "..")
 	for _, path := range []string{

@@ -473,6 +473,8 @@ services:
         condition: service_healthy
       nats-realtime-bootstrap:
         condition: service_completed_successfully
+      nats-analytics-chat-bootstrap:
+        condition: service_completed_successfully
       social:
         condition: service_healthy
       user:
@@ -513,6 +515,8 @@ services:
       nats:
         condition: service_healthy
       nats-realtime-bootstrap:
+        condition: service_completed_successfully
+      nats-analytics-chat-bootstrap:
         condition: service_completed_successfully
       chat:
         condition: service_healthy
@@ -630,6 +634,8 @@ services:
       nats:
         condition: service_started
       nats-realtime-bootstrap:
+        condition: service_completed_successfully
+      nats-analytics-chat-bootstrap:
         condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
@@ -997,6 +1003,8 @@ services:
       nats:
         condition: service_healthy
       nats-realtime-bootstrap:
+        condition: service_completed_successfully
+      nats-analytics-chat-bootstrap:
         condition: service_completed_successfully
       role:
         condition: service_healthy
