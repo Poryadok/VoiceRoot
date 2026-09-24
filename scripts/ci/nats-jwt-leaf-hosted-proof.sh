@@ -380,8 +380,9 @@ fi
 docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
   nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" --inbox-prefix _INBOX.voice.bootstrap.reply consumer rm chat_events proof_chat --force >/dev/null
 docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
-  nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" --inbox-prefix _INBOX.voice.bootstrap.reply consumer add chat_events proof_chat \
-  --filter chat.created --target _INBOX.voice.chat.drift --ack explicit --deliver new --defaults >/dev/null
+  nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" --inbox-prefix _INBOX.voice.bootstrap.reply \
+  req --raw '$JS.API.CONSUMER.CREATE.chat_events.proof_chat' \
+  '{"stream_name":"chat_events","config":{"name":"proof_chat","durable_name":"proof_chat","deliver_subject":"_INBOX.voice.chat.drift","deliver_policy":"new","ack_policy":"explicit","ack_wait":1000000000,"max_deliver":-1,"filter_subject":"chat.created"}}' | jq -e '(.error | not) and .config.deliver_subject == "_INBOX.voice.chat.drift"' >/dev/null
 if docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
   nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" --inbox-prefix _INBOX.voice.bootstrap.reply consumer info chat_events proof_chat --json | \
   jq -e '.config.deliver_subject == "_INBOX.voice.chat.proof"' >/dev/null; then
