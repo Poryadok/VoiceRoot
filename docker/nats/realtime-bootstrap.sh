@@ -9,6 +9,15 @@ stream() {
   name="$1"; shift
   stream_with_max_age "$name" 604800000000000 "$@"
 }
+max_age_to_cli() {
+  max_age="$1"
+  case "$max_age" in
+    0) printf '0s' ;;
+    ''|*[!0-9]*) return 1 ;;
+    *) printf '%ss' "$((max_age / 1000000000))" ;;
+  esac
+}
+
 stream_with_max_age() {
   name="$1"; max_age="$2"; shift 2
   subjects="$(IFS=,; echo "$*")"
@@ -25,8 +34,7 @@ stream_with_max_age() {
   else
     echo "$info" >&2; exit 1
   fi
-  max_age_cli=7d
-  [ "$max_age" = 0 ] && max_age_cli=0s
+  max_age_cli="$(max_age_to_cli "$max_age")"
   nats --server "$nats_url" stream add "$name" --subjects "$subjects" --storage file --retention limits --max-age "$max_age_cli" --defaults
 }
 consumer() {
@@ -63,6 +71,7 @@ stream file_events file.uploaded file.processed file.scan_infected file.expired 
 stream moderation_events moderation.report_created moderation.sanction_applied moderation.appeal_submitted
 stream bot_events bot.registered bot.command_executed bot.webhook_delivered bot.webhook_failed
 stream subscription_events subscription.plan_started subscription.plan_cancelled subscription.plan_expired subscription.downgrade subscription.payment_success subscription.payment_failed subscription.space_pro_started subscription.space_pro_expired subscription.grace_reminder subscription.entitlement_changed
+stream_with_max_age subscription_auth_quarantine 34560000000000000 subscription.auth_quarantined
 stream story_events story.created story.viewed story.reacted story.expired story.highlight_created story.lfp_created story.lfp_response
 stream user_events user.account_deleted user.account_restored user.guest_converted user.profile_created user.profile_updated user.profile_switched user.verified user.presence_changed user.game_detected user.settings_changed
 stream social_events social.friend_request social.friend_accepted social.friend_removed social.user_blocked social.contacts_synced

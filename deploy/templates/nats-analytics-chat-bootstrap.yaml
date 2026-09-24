@@ -16,6 +16,11 @@ data:
 
     stream() {
       name="$1"; shift
+      stream_with_max_age "$name" 604800000000000 "$@"
+    }
+
+    stream_with_max_age() {
+      name="$1"; max_age="$2"; shift 2
       expected="$(printf '%s\n' "$@" | jq -R . | jq -sc 'sort')"
       info="$(nats --server "$nats_url" req --raw "\$JS.API.STREAM.INFO.$name" "")"
       if printf '%s' "$info" | jq -e '.error' >/dev/null; then
@@ -23,7 +28,7 @@ data:
         echo "$info" >&2; exit 1
       fi
       actual="$(printf '%s' "$info" | jq -c '[(.config.subjects | sort), .config.storage, .config.retention, .config.max_age]')"
-      expected_config="$(jq -cn --argjson subjects "$expected" '[ $subjects, "file", "limits", 604800000000000 ]')"
+      expected_config="$(jq -cn --argjson subjects "$expected" --argjson max_age "$max_age" '[ $subjects, "file", "limits", $max_age ]')"
       if [ "$actual" != "$expected_config" ]; then
         # Subjects are public topology, not credential material. Keep the
         # fail-closed check diagnosable when an independently bootstrapped
@@ -35,19 +40,20 @@ data:
 
     consumer() {
       stream_name="$1"; durable="$2"; filter="$3"; target="$4"; deliver="$5"; group="$6"
+      max_deliver="${7:--1}"; backoff="${8:-[]}"
       if info="$(nats --server "$nats_url" req --raw "\$JS.API.CONSUMER.INFO.$stream_name.$durable" "" 2>&1)"; then
         if printf '%s' "$info" | jq -e '.error' >/dev/null; then
           printf '%s' "$info" | jq -r '.error.description' | grep -qi 'consumer not found' || { echo "$info" >&2; exit 1; }
         else
-          actual="$(printf '%s' "$info" | jq -c '[.stream_name, .name, .config.durable_name, .config.filter_subject, .config.deliver_subject, (.config.deliver_group // ""), .config.ack_policy, .config.deliver_policy]')"
-          expected="$(jq -cn --arg stream "$stream_name" --arg durable "$durable" --arg filter "$filter" --arg target "$target" --arg group "$group" --arg deliver "$deliver" '[ $stream, $durable, $durable, $filter, $target, $group, "explicit", $deliver ]')"
+          actual="$(printf '%s' "$info" | jq -c '[.stream_name, .name, .config.durable_name, .config.filter_subject, .config.deliver_subject, (.config.deliver_group // ""), .config.ack_policy, .config.deliver_policy, (.config.max_deliver // -1), (.config.backoff // [])]')"
+          expected="$(jq -cn --arg stream "$stream_name" --arg durable "$durable" --arg filter "$filter" --arg target "$target" --arg group "$group" --arg deliver "$deliver" --argjson max_deliver "$max_deliver" --argjson backoff "$backoff" '[ $stream, $durable, $durable, $filter, $target, $group, "explicit", $deliver, $max_deliver, $backoff ]')"
           [ "$actual" = "$expected" ] || { echo "incompatible consumer $stream_name/$durable" >&2; exit 1; }
           return
         fi
       else
         echo "$info" >&2; exit 1
       fi
-      payload="$(jq -cn --arg stream "$stream_name" --arg durable "$durable" --arg filter "$filter" --arg target "$target" --arg group "$group" --arg deliver "$deliver" '{stream_name: $stream, action: "create", config: {name: $durable, durable_name: $durable, filter_subject: $filter, deliver_subject: $target, deliver_group: $group, deliver_policy: $deliver, ack_policy: "explicit"}}')"
+      payload="$(jq -cn --arg stream "$stream_name" --arg durable "$durable" --arg filter "$filter" --arg target "$target" --arg group "$group" --arg deliver "$deliver" --argjson max_deliver "$max_deliver" --argjson backoff "$backoff" '{stream_name: $stream, action: "create", config: {name: $durable, durable_name: $durable, filter_subject: $filter, deliver_subject: $target, deliver_group: $group, deliver_policy: $deliver, ack_policy: "explicit", max_deliver: $max_deliver, backoff: $backoff}}')"
       result="$(nats --server "$nats_url" req --raw "\$JS.API.CONSUMER.CREATE.$stream_name.$durable" "$payload" 2>&1)" || { echo "$result" >&2; exit 1; }
       printf '%s' "$result" | jq -e --arg durable "$durable" '(.error | not) and .config.durable_name == $durable' >/dev/null || { echo "$result" >&2; exit 1; }
     }
@@ -104,6 +110,7 @@ data:
     stream role_events role.created role.updated role.deleted role.assigned role.revoked role.chat_override_set role.chat_override_removed role.voice_override_set role.voice_override_removed
     stream file_events file.uploaded file.processed file.scan_infected file.expired file.downloaded
     stream subscription_events subscription.plan_started subscription.plan_cancelled subscription.plan_expired subscription.downgrade subscription.payment_success subscription.payment_failed subscription.space_pro_started subscription.space_pro_expired subscription.grace_reminder subscription.entitlement_changed
+    stream_with_max_age subscription_auth_quarantine 34560000000000000 subscription.auth_quarantined
     stream moderation_events moderation.report_created moderation.sanction_applied moderation.appeal_submitted
     stream analytics_events 'analytics.>'
 
@@ -128,7 +135,7 @@ data:
     consumer_filters story_events matchmaking_story_lfp_v2 _INBOX.voice.matchmaking.matchmaking_story_lfp_v2 all story.lfp_created story.lfp_response
     consumer_filters subscription_events space_subscription_entitlement _INBOX.voice.space.space_subscription_entitlement new subscription.space_pro_started subscription.space_pro_expired
     pull_consumer user_events user-account-deletion-v1 user.account_deleted all
-    consumer subscription_events auth_subscription_tier 'subscription.>' _INBOX.voice.auth.subscription_tier new ''
+    consumer subscription_events auth_subscription_tier 'subscription.>' _INBOX.voice.auth.subscription_tier new '' 5 '[1000000000,5000000000,30000000000,120000000000,300000000000]'
 ---
 apiVersion: batch/v1
 kind: Job

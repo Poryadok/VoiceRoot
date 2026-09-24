@@ -37,6 +37,7 @@ for stream in \
   'stream moderation_events moderation.report_created moderation.sanction_applied moderation.appeal_submitted' \
   'stream bot_events bot.registered bot.command_executed bot.webhook_delivered bot.webhook_failed' \
   'stream subscription_events subscription.plan_started subscription.plan_cancelled subscription.plan_expired subscription.downgrade subscription.payment_success subscription.payment_failed subscription.space_pro_started subscription.space_pro_expired subscription.grace_reminder subscription.entitlement_changed' \
+  'stream_with_max_age subscription_auth_quarantine 34560000000000000 subscription.auth_quarantined' \
   'stream story_events story.created story.viewed story.reacted story.expired story.highlight_created story.lfp_created story.lfp_response' \
   'stream user_events user.account_deleted user.account_restored user.guest_converted user.profile_created user.profile_updated user.profile_switched user.verified user.presence_changed user.game_detected user.settings_changed' \
   'stream social_events social.friend_request social.friend_accepted social.friend_removed social.user_blocked social.contacts_synced' \
@@ -71,6 +72,15 @@ cmp <(sed -n '/^    #!\/bin\/sh$/,$p' "$K8S_NOTIFICATION_BOOTSTRAP" | sed '/^---
   || fail "Kubernetes notification bootstrap script must exactly match the Compose notification bootstrap script"
 grep -Fq '[(.config.subjects | sort), .config.storage, .config.retention, .config.max_age]' "$BOOTSTRAP" || fail "bootstrap must validate storage, retention and max age"
 grep -Fq -- '--argjson max_age "$max_age"' "$BOOTSTRAP" || fail "bootstrap must validate per-stream max age"
+grep -Fq 'max_age_cli="$(max_age_to_cli "$max_age")"' "$BOOTSTRAP" || fail "bootstrap must create streams using their configured max age"
+max_age_helper="$(mktemp)"
+trap 'rm -f "$max_age_helper"' EXIT
+awk '/^max_age_to_cli\(\)/,/^}/' "$BOOTSTRAP" > "$max_age_helper"
+[[ -s "$max_age_helper" ]] || fail "bootstrap must expose its max-age conversion for runtime contract checks"
+# shellcheck disable=SC1090
+source "$max_age_helper"
+[[ "$(max_age_to_cli 34560000000000000)" == 34560000s ]] || fail "400d max age must be emitted as 34560000s"
+[[ "$(max_age_to_cli 0)" == 0s ]] || fail "unbounded max age must be emitted as 0s"
 sh -n "$BOOTSTRAP" || fail "Compose bootstrap must be valid POSIX shell"
 if ! awk '
   $1 == "stream" {

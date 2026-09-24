@@ -14,7 +14,7 @@ final class SubscriptionEventParser {
 
   static Optional<TierUpdate> parseTierUpdate(byte[] data) {
     if (data == null || data.length == 0) {
-      return Optional.empty();
+      throw new IllegalArgumentException("empty subscription event payload");
     }
     try {
       JetstreamEvents.SubscriptionStreamEvent event =
@@ -35,11 +35,15 @@ final class SubscriptionEventParser {
               };
           yield Optional.of(new TierUpdate(UUID.fromString(accountId), "free"));
         }
-        // payment_failed → grace_period: entitlements stay active (subscription.md)
-        default -> Optional.empty();
+        // These known events do not change personal Auth tier; do not treat new
+        // or unsupported payload arms as successful no-ops.
+        case PAYMENT_SUCCESS, PAYMENT_FAILED, SPACE_PRO_STARTED, SPACE_PRO_EXPIRED, GRACE_REMINDER ->
+            Optional.empty();
+        default -> throw new IllegalArgumentException(
+            "unsupported subscription event payload: " + event.getPayloadCase());
       };
     } catch (InvalidProtocolBufferException | IllegalArgumentException ex) {
-      return Optional.empty();
+      throw new IllegalArgumentException("invalid subscription event payload", ex);
     }
   }
 

@@ -92,7 +92,7 @@ public class AuthBeans {
   SubscriptionTierResolver subscriptionTierResolver(AuthProperties properties) {
     String natsUrl = properties.getNats().getUrl();
     if (natsUrl != null && !natsUrl.isBlank()) {
-      return new NatsSubscriptionTierStore(natsUrl);
+      return new NatsSubscriptionTierStore(natsUrl, properties.getNats().getCredsFile());
     }
     return new InMemorySubscriptionTierStore();
   }
