@@ -48,7 +48,7 @@ func verify(info *nats.ConsumerInfo, stream, durable, subject, deliverSubject st
 func Connect(url, name string) (*nats.Conn, <-chan struct{}, error) {
 	lost := make(chan struct{})
 	var once sync.Once
-	nc, err := nats.Connect(url, nats.Name(name), nats.Timeout(10*time.Second), nats.RetryOnFailedConnect(true), nats.MaxReconnects(0),
+	nc, err := nats.Connect(url, nats.Name(name), nats.CustomInboxPrefix("_INBOX.voice.search"), nats.Timeout(10*time.Second), nats.RetryOnFailedConnect(true), nats.MaxReconnects(0),
 		nats.DisconnectErrHandler(func(*nats.Conn, error) { once.Do(func() { close(lost) }) }),
 		nats.ClosedHandler(func(*nats.Conn) { once.Do(func() { close(lost) }) }),
 	)
