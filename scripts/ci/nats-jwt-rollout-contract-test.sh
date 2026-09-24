@@ -89,6 +89,8 @@ require "consumer user_events chat_account_deleted user.account_deleted _INBOX.v
 for file in "$root/deploy/nats/jetstream-publisher-streams.yaml" \
             "$root/deploy/templates/nats-realtime-bootstrap.yaml" \
             "$root/deploy/templates/nats-search-bootstrap.yaml" \
+            "$root/docker/nats/realtime-bootstrap.sh" \
+            "$root/docker/nats/search-bootstrap.sh" \
             "$analytics_chat"; do
   require 'user.guest_converted' "$file" 'Auth guest conversion stream subject missing'
   require 'user.account_restored' "$file" 'Auth account restore stream subject missing'
@@ -96,6 +98,8 @@ done
 for file in "$root/deploy/nats/jetstream-publisher-streams.yaml" \
             "$root/deploy/templates/nats-realtime-bootstrap.yaml" \
             "$root/deploy/templates/nats-notification-bootstrap.yaml" \
+            "$root/docker/nats/realtime-bootstrap.sh" \
+            "$root/docker/nats/notification-bootstrap.sh" \
             "$analytics_chat"; do
   require 'subscription.entitlement_changed' "$file" 'entitlement stream subject missing'
 done
