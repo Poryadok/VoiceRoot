@@ -83,6 +83,7 @@ check_if "$(or_true "${RUN_FLUTTER}" "${PROTOS}" "${GLOBAL}")" flutter-device-dr
 check_if "$(or_true "${RUN_WEB}" "${RUN_FLUTTER}" "${GLOBAL}")" web
 check_if "$(or_true "${RUN_GO}" "${GLOBAL}")" golangci
 check_if "$(or_true "${RUN_PKG}" "${GLOBAL}")" backend-go-pkg
+check_if "$(or_true "${RUN_PKG}" "${COMPOSE}" "${GLOBAL}")" nats-hub-config-renderer-image
 check_if "$(or_true "${RUN_GO}" "${GLOBAL}")" backend-go
 check_if "$(or_true "${RUN_GO}" "${GLOBAL}")" backend-go-integration-pr
 check_if "$(or_true "${RUN_AUTH}" "${FILTER_AUTH}" "${GLOBAL}")" backend-auth

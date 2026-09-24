@@ -321,6 +321,51 @@ jobs:
         working-directory: src/backend/pkg
         run: go test ./...
 
+  nats-hub-config-renderer-image:
+    needs: changes
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      ((github.event_name == 'pull_request' &&
+        (needs.changes.outputs.run_pkg == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.compose == 'true')) ||
+       (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.code == 'true'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v4
+      - name: Image base (lowercase)
+        id: image
+        run: echo "base=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+      - name: Build renderer image (PR verify)
+        if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./src/backend/pkg/cmd/nats-hub-config-renderer/Dockerfile
+          push: false
+          cache-from: type=gha,scope=nats-hub-config-renderer
+          cache-to: type=gha,scope=nats-hub-config-renderer,mode=max,ignore-error=true
+      - name: Log in to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push renderer image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./src/backend/pkg/cmd/nats-hub-config-renderer/Dockerfile
+          push: true
+          tags: ${{ steps.image.outputs.base }}/nats-hub-config-renderer:${{ github.sha }}
+          cache-from: type=gha,scope=nats-hub-config-renderer
+          cache-to: type=gha,scope=nats-hub-config-renderer,mode=max,ignore-error=true
+
   backend-go:
     needs: [changes, backend-go-pkg]
     if: >-
@@ -503,7 +548,7 @@ jobs:
           bash scripts/ci/promote-ghcr-images.sh "${{ matrix.service }}"
 
   staging-stack-lock:
-    needs: [changes, staging-images-push, staging-images-promote]
+    needs: [changes, staging-images-push, staging-images-promote, nats-hub-config-renderer-image]
     if: >-
       always() &&
       needs.changes.result == 'success' &&
@@ -511,6 +556,8 @@ jobs:
       needs.staging-images-push.result != 'cancelled' &&
       needs.staging-images-promote.result != 'failure' &&
       needs.staging-images-promote.result != 'cancelled' &&
+      needs.nats-hub-config-renderer-image.result != 'failure' &&
+      needs.nats-hub-config-renderer-image.result != 'cancelled' &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/master' &&
       needs.changes.outputs.code == 'true'
@@ -1057,6 +1104,7 @@ jobs:
       - web
       - golangci
       - backend-go-pkg
+      - nats-hub-config-renderer-image
       - backend-go
       - backend-go-integration-pr
       - backend-auth
@@ -1092,6 +1140,7 @@ jobs:
           JOB_WEB: ${{ needs.web.result }}
           JOB_GOLANGCI: ${{ needs.golangci.result }}
           JOB_BACKEND_GO_PKG: ${{ needs.backend-go-pkg.result }}
+          JOB_NATS_HUB_CONFIG_RENDERER_IMAGE: ${{ needs.nats-hub-config-renderer-image.result }}
           JOB_BACKEND_GO: ${{ needs.backend-go.result }}
           JOB_BACKEND_GO_INTEGRATION_PR: ${{ needs.backend-go-integration-pr.result }}
           JOB_BACKEND_AUTH: ${{ needs.backend-auth.result }}

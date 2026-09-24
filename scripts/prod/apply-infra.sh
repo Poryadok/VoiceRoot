@@ -51,10 +51,61 @@ if ! kubectl get secret voice-minio-credentials -n "${NS}" >/dev/null 2>&1; then
   exit 1
 fi
 
+for secret in voice-nats-operator voice-nats-hub-tls voice-nats-bootstrap-credentials voice-nats-service-credentials; do
+  if ! kubectl get secret "${secret}" -n "${NS}" >/dev/null 2>&1; then
+    echo "ERROR: NATS activation secret ${secret} missing in ${NS}" >&2
+    exit 1
+  fi
+done
+for key in operator.jwt account.jwt system-account.jwt account.public system-account.public; do
+  if ! kubectl get secret voice-nats-operator -n "${NS}" -o "jsonpath={.data.${key//./\\.}}" | grep -q .; then
+    echo "ERROR: voice-nats-operator missing required ${key} in ${NS}" >&2
+    exit 1
+  fi
+done
+for key in tls.crt tls.key ca.crt; do
+  if ! kubectl get secret voice-nats-hub-tls -n "${NS}" -o "jsonpath={.data.${key//./\\.}}" | grep -q .; then
+    echo "ERROR: voice-nats-hub-tls missing required ${key} in ${NS}" >&2
+    exit 1
+  fi
+done
+for key in bootstrap.creds; do
+  if ! kubectl get secret voice-nats-bootstrap-credentials -n "${NS}" -o "jsonpath={.data.${key//./\\.}}" | grep -q .; then
+    echo "ERROR: voice-nats-bootstrap-credentials missing required ${key} in ${NS}" >&2
+    exit 1
+  fi
+done
+for service in auth analytics bot chat file matchmaking messaging moderation notification realtime role search social space story subscription user voice; do
+  key="${service}.creds"
+  if ! kubectl get secret voice-nats-service-credentials -n "${NS}" -o "jsonpath={.data.${key//./\\.}}" | grep -q .; then
+    echo "ERROR: voice-nats-service-credentials missing required ${key} in ${NS}" >&2
+    exit 1
+  fi
+done
+
+verify_nats_hub_tls() (
+  umask 077
+  cert_file="$(mktemp)"
+  ca_file="$(mktemp)"
+  trap 'rm -f "${cert_file}" "${ca_file}"' EXIT
+  kubectl get secret voice-nats-hub-tls -n "${NS}" -o jsonpath='{.data.tls\.crt}' | base64 -d >"${cert_file}" 2>/dev/null
+  kubectl get secret voice-nats-hub-tls -n "${NS}" -o jsonpath='{.data.ca\.crt}' | base64 -d >"${ca_file}" 2>/dev/null
+  openssl verify -CAfile "${ca_file}" "${cert_file}" >/dev/null 2>&1 && \
+    openssl x509 -in "${cert_file}" -noout -checkhost voice-nats >/dev/null 2>&1 || {
+      echo "ERROR: voice-nats-hub-tls must form a trusted chain and include DNS SAN voice-nats" >&2
+      exit 1
+    }
+)
+verify_nats_hub_tls
+
 bash "${ROOT}/scripts/staging/patch-app-secrets-database-urls.sh"
 if [ -n "${STAGING_STAFF_TOKEN:-}" ]; then
   bash "${ROOT}/scripts/staging/patch-gateway-staff-token.sh"
 fi
+
+# Select the hub before it is created or restarted. An empty selector is safe;
+# applying this after the rollout would leave a direct-hub bypass window.
+sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/network-policy-nats-hub.yaml" | kubectl apply -f -
 
 LIVEKIT_API_KEY="$(kubectl get secret voice-app-secrets -n "${NS}" -o jsonpath='{.data.LIVEKIT_API_KEY}' 2>/dev/null | base64 -d 2>/dev/null || true)"
 LIVEKIT_API_SECRET="$(kubectl get secret voice-app-secrets -n "${NS}" -o jsonpath='{.data.LIVEKIT_API_SECRET}' 2>/dev/null | base64 -d 2>/dev/null || true)"
@@ -75,6 +126,8 @@ kubectl create secret generic voice-livekit-config -n "${NS}" \
 
 render "${MANIFEST_DIR}/infra.yaml" | kubectl apply -f -
 
+kubectl rollout status statefulset/voice-nats -n "${NS}" --timeout=180s
+
 kubectl delete job voice-nats-realtime-bootstrap -n "${NS}" --ignore-not-found
 sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/nats-realtime-bootstrap.yaml" | kubectl apply -f -
 kubectl wait --for=condition=complete job/voice-nats-realtime-bootstrap -n "${NS}" --timeout=120s
@@ -84,6 +137,9 @@ kubectl wait --for=condition=complete job/voice-nats-notification-bootstrap -n "
 kubectl delete job voice-nats-search-bootstrap -n "${NS}" --ignore-not-found
 sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/nats-search-bootstrap.yaml" | kubectl apply -f -
 kubectl wait --for=condition=complete job/voice-nats-search-bootstrap -n "${NS}" --timeout=120s
+kubectl delete job voice-nats-analytics-chat-bootstrap -n "${NS}" --ignore-not-found
+sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/nats-analytics-chat-bootstrap.yaml" | kubectl apply -f -
+kubectl wait --for=condition=complete job/voice-nats-analytics-chat-bootstrap -n "${NS}" --timeout=120s
 
 sed -e "s|__VOICE_MINIO_IMAGE__|${MINIO_IMAGE}|g" \
     -e "s|__VOICE_MINIO_MC_IMAGE__|${MINIO_MC_IMAGE}|g" \

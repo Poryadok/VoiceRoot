@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 BOOTSTRAP="${ROOT}/deploy/templates/nats-analytics-chat-bootstrap.yaml"
+COMPOSE_BOOTSTRAP="${ROOT}/docker/nats/analytics-chat-bootstrap.sh"
+COMPOSE="${ROOT}/docker-compose.yml"
 ANALYTICS="${ROOT}/src/backend/analytics/internal/consumer/runner.go"
 CHAT="${ROOT}/src/backend/chat/account_deleted_consumer.go"
 
@@ -31,6 +33,12 @@ grep -Fq 'CONSUMER.INFO.$stream_name.$durable' "$BOOTSTRAP" || fail 'bootstrap m
 grep -Fq '[.stream_name, .name, .config.durable_name,' "$BOOTSTRAP" || fail 'bootstrap must reject consumer identity drift'
 grep -Fq 'incompatible consumer $stream_name/$durable' "$BOOTSTRAP" || fail 'bootstrap must reject durable drift'
 grep -Fq -- '--deliver-group "$group"' "$BOOTSTRAP" || fail 'bootstrap must preserve Analytics queue groups'
+grep -Fq 'nats-analytics-chat-bootstrap:' "$COMPOSE" || fail 'Compose must run the Analytics/Chat bootstrap'
+grep -Fq './deploy/templates/nats-analytics-chat-bootstrap.yaml:/bootstrap/nats-analytics-chat-bootstrap.yaml:ro' "$COMPOSE" || fail 'Compose must mount the canonical Analytics/Chat bootstrap template read-only'
+grep -Fq 'NATS_ANALYTICS_CHAT_BOOTSTRAP_TEMPLATE' "$COMPOSE_BOOTSTRAP" || fail 'Compose bootstrap must require the canonical template'
+grep -Fq 'sed -n' "$COMPOSE_BOOTSTRAP" || fail 'Compose bootstrap must extract the canonical ConfigMap script'
+grep -Fq 'mktemp' "$COMPOSE_BOOTSTRAP" || fail 'Compose bootstrap must materialize the extracted script before NATS request/reply calls'
+grep -Fq '/bin/sh "$script" </dev/null' "$COMPOSE_BOOTSTRAP" || fail 'Compose bootstrap must keep NATS request/reply stdin away from shell source'
 for source in "$ANALYTICS" "$CHAT"; do
   ! grep -Fq 'AddConsumer(' "$source" || fail "${source#"${ROOT}/"} must not create consumers"
   ! grep -Fq 'UpdateConsumer(' "$source" || fail "${source#"${ROOT}/"} must not update consumers"

@@ -42,7 +42,7 @@ spec:
             - {name: AUTH_OAUTH_ADMIN_ENABLED, valueFrom: {configMapKeyRef: {name: voice-app-config, key: AUTH_OAUTH_ADMIN_ENABLED}}}
             - {name: AUTH_OAUTH_ADMIN_CLIENT_ID, valueFrom: {configMapKeyRef: {name: voice-app-config, key: AUTH_OAUTH_ADMIN_CLIENT_ID}}}
             - {name: AUTH_OAUTH_ADMIN_REDIRECT_URIS, valueFrom: {configMapKeyRef: {name: voice-app-config, key: AUTH_OAUTH_ADMIN_REDIRECT_URIS}}}
-            - {name: AUTH_NATS_URL, value: "nats://voice-nats:4222"}
+            - {name: AUTH_NATS_URL, value: "nats://127.0.0.1:4222"}
             - {name: USER_GRPC_ADDR, value: "voice-user:9090"}
             - {name: AUTH_RESEND_API_KEY, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: AUTH_RESEND_API_KEY, optional: true}}}
             - {name: AUTH_RESEND_FROM, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: AUTH_RESEND_FROM, optional: true}}}
@@ -52,9 +52,23 @@ spec:
             - {name: jwt-key, mountPath: /run/jwt.pem, subPath: jwt.pem, readOnly: true}
           startupProbe: {httpGet: {path: /health, port: http}, periodSeconds: 10, failureThreshold: 60}
           readinessProbe: {httpGet: {path: /health, port: http}, periodSeconds: 5, failureThreshold: 6}
+        - name: nats-leaf
+          image: nats:2.12-alpine
+          args: ["-c", "/etc/nats/leaf.conf"]
+          env: [{name: NATS_CREDS, value: "/var/run/nats/creds/auth.creds"}]
+          volumeMounts:
+            - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
+            - {name: nats-service-creds, mountPath: /var/run/nats/creds/auth.creds, subPath: auth.creds, readOnly: true}
+            - {name: nats-hub-tls, mountPath: /etc/nats/tls/ca.crt, subPath: ca.crt, readOnly: true}
       volumes:
         - name: jwt-key
           secret: {secretName: voice-app-secrets, items: [{key: AUTH_JWT_PRIVATE_KEY, path: jwt.pem}]}
+        - name: nats-leaf-config
+          configMap: {name: voice-nats-leaf-config}
+        - name: nats-service-creds
+          secret: {secretName: voice-nats-service-credentials, defaultMode: 0400, items: [{key: auth.creds, path: auth.creds}]}
+        - name: nats-hub-tls
+          secret: {secretName: voice-nats-hub-tls, items: [{key: ca.crt, path: ca.crt}]}
 ---
 apiVersion: v1
 kind: Service
@@ -101,12 +115,21 @@ spec:
             - {name: SPACE_PRINCIPAL_GRPC_ADDR, value: "voice-space:9091"}
             - {name: SPACE_PRINCIPAL_TLS_CA_FILE, value: "/etc/voice/principal/ca/ca.crt"}
             - {name: SPACE_PRINCIPAL_TLS_SERVER_NAME, value: "voice-space"}
+            - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
           volumeMounts:
             - {name: principal-tls, mountPath: /etc/voice/principal/tls, readOnly: true}
             - {name: principal-ca, mountPath: /etc/voice/principal/ca, readOnly: true}
             - {name: principal-signing, mountPath: /etc/voice/principal/keys, readOnly: true}
+        - name: nats-leaf
+          image: nats:2.12-alpine
+          args: ["-c", "/etc/nats/leaf.conf"]
+          env: [{name: NATS_CREDS, value: "/var/run/nats/creds/social.creds"}]
+          volumeMounts:
+            - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
+            - {name: nats-service-creds, mountPath: /var/run/nats/creds/social.creds, subPath: social.creds, readOnly: true}
+            - {name: nats-hub-tls, mountPath: /etc/nats/tls/ca.crt, subPath: ca.crt, readOnly: true}
       volumes:
         - name: principal-tls
           secret: {secretName: voice-social-principal-tls}
@@ -118,6 +141,12 @@ spec:
             items:
               - {key: current.pem, path: current.pem}
               - {key: next.pem, path: next.pem}
+        - name: nats-leaf-config
+          configMap: {name: voice-nats-leaf-config}
+        - name: nats-service-creds
+          secret: {secretName: voice-nats-service-credentials, defaultMode: 0400, items: [{key: social.creds, path: social.creds}]}
+        - name: nats-hub-tls
+          secret: {secretName: voice-nats-hub-tls, items: [{key: ca.crt, path: ca.crt}]}
 ---
 apiVersion: v1
 kind: Service
@@ -179,12 +208,21 @@ spec:
             - {name: USER_R2_SECRET_ACCESS_KEY, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_R2_SECRET_ACCESS_KEY}}}
             - {name: USER_R2_BUCKET, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_R2_BUCKET}}}
             - {name: USER_R2_PUBLIC_BASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_R2_PUBLIC_BASE_URL}}}
+            - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
           volumeMounts:
             - {name: principal-tls, mountPath: /etc/voice/principal/tls, readOnly: true}
             - {name: file-principal-tls, mountPath: /etc/voice/file-principal/tls, readOnly: true}
             - {name: principal-ca, mountPath: /etc/voice/principal/ca, readOnly: true}
+        - name: nats-leaf
+          image: nats:2.12-alpine
+          args: ["-c", "/etc/nats/leaf.conf"]
+          env: [{name: NATS_CREDS, value: "/var/run/nats/creds/user.creds"}]
+          volumeMounts:
+            - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
+            - {name: nats-service-creds, mountPath: /var/run/nats/creds/user.creds, subPath: user.creds, readOnly: true}
+            - {name: nats-hub-tls, mountPath: /etc/nats/tls/ca.crt, subPath: ca.crt, readOnly: true}
       volumes:
         - name: principal-tls
           secret: {secretName: voice-user-principal-tls}
@@ -192,6 +230,12 @@ spec:
           secret: {secretName: voice-user-file-principal-tls}
         - name: principal-ca
           secret: {secretName: voice-principal-ca}
+        - name: nats-leaf-config
+          configMap: {name: voice-nats-leaf-config}
+        - name: nats-service-creds
+          secret: {secretName: voice-nats-service-credentials, defaultMode: 0400, items: [{key: user.creds, path: user.creds}]}
+        - name: nats-hub-tls
+          secret: {secretName: voice-nats-hub-tls, items: [{key: ca.crt, path: ca.crt}]}
 ---
 apiVersion: v1
 kind: Service
@@ -227,8 +271,24 @@ spec:
           env:
             - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: ROLE_DATABASE_URL}}}
             - {name: ROLE_GRPC_LISTEN, value: ":9090"}
+            - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+        - name: nats-leaf
+          image: nats:2.12-alpine
+          args: ["-c", "/etc/nats/leaf.conf"]
+          env: [{name: NATS_CREDS, value: "/var/run/nats/creds/role.creds"}]
+          volumeMounts:
+            - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
+            - {name: nats-service-creds, mountPath: /var/run/nats/creds/role.creds, subPath: role.creds, readOnly: true}
+            - {name: nats-hub-tls, mountPath: /etc/nats/tls/ca.crt, subPath: ca.crt, readOnly: true}
+      volumes:
+        - name: nats-leaf-config
+          configMap: {name: voice-nats-leaf-config}
+        - name: nats-service-creds
+          secret: {secretName: voice-nats-service-credentials, defaultMode: 0400, items: [{key: role.creds, path: role.creds}]}
+        - name: nats-hub-tls
+          secret: {secretName: voice-nats-hub-tls, items: [{key: ca.crt, path: ca.crt}]}
 ---
 apiVersion: v1
 kind: Service
@@ -273,16 +333,31 @@ spec:
             - {name: S2S_JWKS_REFRESH_AFTER, value: "30s"}
             - {name: S2S_JWKS_HARD_EXPIRY, value: "2m"}
             - {name: S2S_UNKNOWN_KID_COOLDOWN, value: "5s"}
+            - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
           volumeMounts:
             - {name: principal-tls, mountPath: /etc/voice/principal/tls, readOnly: true}
             - {name: principal-ca, mountPath: /etc/voice/principal/ca, readOnly: true}
+        - name: nats-leaf
+          image: nats:2.12-alpine
+          args: ["-c", "/etc/nats/leaf.conf"]
+          env: [{name: NATS_CREDS, value: "/var/run/nats/creds/space.creds"}]
+          volumeMounts:
+            - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
+            - {name: nats-service-creds, mountPath: /var/run/nats/creds/space.creds, subPath: space.creds, readOnly: true}
+            - {name: nats-hub-tls, mountPath: /etc/nats/tls/ca.crt, subPath: ca.crt, readOnly: true}
       volumes:
         - name: principal-tls
           secret: {secretName: voice-space-principal-tls}
         - name: principal-ca
           secret: {secretName: voice-principal-ca}
+        - name: nats-leaf-config
+          configMap: {name: voice-nats-leaf-config}
+        - name: nats-service-creds
+          secret: {secretName: voice-nats-service-credentials, defaultMode: 0400, items: [{key: space.creds, path: space.creds}]}
+        - name: nats-hub-tls
+          secret: {secretName: voice-nats-hub-tls, items: [{key: ca.crt, path: ca.crt}]}
 ---
 apiVersion: v1
 kind: Service
@@ -319,8 +394,24 @@ spec:
             - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: CHAT_DATABASE_URL}}}
             - {name: SPACE_DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: SPACE_DATABASE_URL}}}
             - {name: CHAT_GRPC_LISTEN, value: ":9090"}
+            - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+        - name: nats-leaf
+          image: nats:2.12-alpine
+          args: ["-c", "/etc/nats/leaf.conf"]
+          env: [{name: NATS_CREDS, value: "/var/run/nats/creds/chat.creds"}]
+          volumeMounts:
+            - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
+            - {name: nats-service-creds, mountPath: /var/run/nats/creds/chat.creds, subPath: chat.creds, readOnly: true}
+            - {name: nats-hub-tls, mountPath: /etc/nats/tls/ca.crt, subPath: ca.crt, readOnly: true}
+      volumes:
+        - name: nats-leaf-config
+          configMap: {name: voice-nats-leaf-config}
+        - name: nats-service-creds
+          secret: {secretName: voice-nats-service-credentials, defaultMode: 0400, items: [{key: chat.creds, path: chat.creds}]}
+        - name: nats-hub-tls
+          secret: {secretName: voice-nats-hub-tls, items: [{key: ca.crt, path: ca.crt}]}
 ---
 apiVersion: v1
 kind: Service
@@ -369,12 +460,21 @@ spec:
             - {name: FILE_R2_ACCESS_KEY_ID, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: FILE_R2_ACCESS_KEY_ID}}}
             - {name: FILE_R2_SECRET_ACCESS_KEY, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: FILE_R2_SECRET_ACCESS_KEY}}}
             - {name: FILE_R2_BUCKET, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: FILE_R2_BUCKET}}}
+            - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
           volumeMounts:
             - {name: file-principal-signing, mountPath: /etc/voice/file-principal/keys, readOnly: true}
             - {name: file-principal-tls, mountPath: /etc/voice/file-principal/tls, readOnly: true}
             - {name: principal-ca, mountPath: /etc/voice/file-principal/ca, readOnly: true}
+        - name: nats-leaf
+          image: nats:2.12-alpine
+          args: ["-c", "/etc/nats/leaf.conf"]
+          env: [{name: NATS_CREDS, value: "/var/run/nats/creds/file.creds"}]
+          volumeMounts:
+            - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
+            - {name: nats-service-creds, mountPath: /var/run/nats/creds/file.creds, subPath: file.creds, readOnly: true}
+            - {name: nats-hub-tls, mountPath: /etc/nats/tls/ca.crt, subPath: ca.crt, readOnly: true}
       volumes:
         - name: file-principal-signing
           secret:
@@ -384,6 +484,12 @@ spec:
           secret: {secretName: voice-file-principal-tls}
         - name: principal-ca
           secret: {secretName: voice-principal-ca}
+        - name: nats-leaf-config
+          configMap: {name: voice-nats-leaf-config}
+        - name: nats-service-creds
+          secret: {secretName: voice-nats-service-credentials, defaultMode: 0400, items: [{key: file.creds, path: file.creds}]}
+        - name: nats-hub-tls
+          secret: {secretName: voice-nats-hub-tls, items: [{key: ca.crt, path: ca.crt}]}
 ---
 apiVersion: v1
 kind: Service
@@ -421,8 +527,24 @@ spec:
             - {name: CHAT_DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: CHAT_DATABASE_URL}}}
             - {name: SPACE_DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: SPACE_DATABASE_URL}}}
             - {name: MESSAGING_GRPC_LISTEN, value: ":9090"}
+            - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+        - name: nats-leaf
+          image: nats:2.12-alpine
+          args: ["-c", "/etc/nats/leaf.conf"]
+          env: [{name: NATS_CREDS, value: "/var/run/nats/creds/messaging.creds"}]
+          volumeMounts:
+            - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
+            - {name: nats-service-creds, mountPath: /var/run/nats/creds/messaging.creds, subPath: messaging.creds, readOnly: true}
+            - {name: nats-hub-tls, mountPath: /etc/nats/tls/ca.crt, subPath: ca.crt, readOnly: true}
+      volumes:
+        - name: nats-leaf-config
+          configMap: {name: voice-nats-leaf-config}
+        - name: nats-service-creds
+          secret: {secretName: voice-nats-service-credentials, defaultMode: 0400, items: [{key: messaging.creds, path: messaging.creds}]}
+        - name: nats-hub-tls
+          secret: {secretName: voice-nats-hub-tls, items: [{key: ca.crt, path: ca.crt}]}
 ---
 apiVersion: v1
 kind: Service
@@ -466,12 +588,28 @@ spec:
             - {name: LIVEKIT_URL, valueFrom: {configMapKeyRef: {name: voice-app-config, key: LIVEKIT_URL}}}
             - {name: LIVEKIT_API_KEY, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: LIVEKIT_API_KEY}}}
             - {name: LIVEKIT_API_SECRET, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: LIVEKIT_API_SECRET}}}
+            - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe:
             httpGet:
               path: /ready
               port: 8080
             periodSeconds: 5
+        - name: nats-leaf
+          image: nats:2.12-alpine
+          args: ["-c", "/etc/nats/leaf.conf"]
+          env: [{name: NATS_CREDS, value: "/var/run/nats/creds/voice.creds"}]
+          volumeMounts:
+            - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
+            - {name: nats-service-creds, mountPath: /var/run/nats/creds/voice.creds, subPath: voice.creds, readOnly: true}
+            - {name: nats-hub-tls, mountPath: /etc/nats/tls/ca.crt, subPath: ca.crt, readOnly: true}
+      volumes:
+        - name: nats-leaf-config
+          configMap: {name: voice-nats-leaf-config}
+        - name: nats-service-creds
+          secret: {secretName: voice-nats-service-credentials, defaultMode: 0400, items: [{key: voice.creds, path: voice.creds}]}
+        - name: nats-hub-tls
+          secret: {secretName: voice-nats-hub-tls, items: [{key: ca.crt, path: ca.crt}]}
 ---
 apiVersion: v1
 kind: Service
@@ -508,8 +646,24 @@ spec:
             - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: MATCHMAKING_DATABASE_URL}}}
             - {name: MATCHMAKING_GRPC_LISTEN, value: ":9090"}
             - {name: MATCHMAKING_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
+            - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+        - name: nats-leaf
+          image: nats:2.12-alpine
+          args: ["-c", "/etc/nats/leaf.conf"]
+          env: [{name: NATS_CREDS, value: "/var/run/nats/creds/matchmaking.creds"}]
+          volumeMounts:
+            - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
+            - {name: nats-service-creds, mountPath: /var/run/nats/creds/matchmaking.creds, subPath: matchmaking.creds, readOnly: true}
+            - {name: nats-hub-tls, mountPath: /etc/nats/tls/ca.crt, subPath: ca.crt, readOnly: true}
+      volumes:
+        - name: nats-leaf-config
+          configMap: {name: voice-nats-leaf-config}
+        - name: nats-service-creds
+          secret: {secretName: voice-nats-service-credentials, defaultMode: 0400, items: [{key: matchmaking.creds, path: matchmaking.creds}]}
+        - name: nats-hub-tls
+          secret: {secretName: voice-nats-hub-tls, items: [{key: ca.crt, path: ca.crt}]}
 ---
 apiVersion: v1
 kind: Service
@@ -554,12 +708,21 @@ spec:
             - {name: SEARCH_PRINCIPAL_JWKS_LISTEN, value: ":8443"}
             - {name: SEARCH_PRINCIPAL_JWKS_TLS_CERT_FILE, value: "/etc/voice/search-projection/tls/tls.crt"}
             - {name: SEARCH_PRINCIPAL_JWKS_TLS_KEY_FILE, value: "/etc/voice/search-projection/tls/tls.key"}
+            - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
           volumeMounts:
             - {name: search-principal-signing, mountPath: /etc/voice/search-projection/keys, readOnly: true}
             - {name: search-principal-tls, mountPath: /etc/voice/search-projection/tls, readOnly: true}
             - {name: principal-ca, mountPath: /etc/voice/search-projection/ca, readOnly: true}
+        - name: nats-leaf
+          image: nats:2.12-alpine
+          args: ["-c", "/etc/nats/leaf.conf"]
+          env: [{name: NATS_CREDS, value: "/var/run/nats/creds/search.creds"}]
+          volumeMounts:
+            - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
+            - {name: nats-service-creds, mountPath: /var/run/nats/creds/search.creds, subPath: search.creds, readOnly: true}
+            - {name: nats-hub-tls, mountPath: /etc/nats/tls/ca.crt, subPath: ca.crt, readOnly: true}
       volumes:
         - name: search-principal-signing
           secret: {secretName: voice-search-principal-signing, items: [{key: current.pem, path: current.pem}, {key: next.pem, path: next.pem}]}
@@ -567,6 +730,12 @@ spec:
           secret: {secretName: voice-search-principal-tls}
         - name: principal-ca
           secret: {secretName: voice-principal-ca}
+        - name: nats-leaf-config
+          configMap: {name: voice-nats-leaf-config}
+        - name: nats-service-creds
+          secret: {secretName: voice-nats-service-credentials, defaultMode: 0400, items: [{key: search.creds, path: search.creds}]}
+        - name: nats-hub-tls
+          secret: {secretName: voice-nats-hub-tls, items: [{key: ca.crt, path: ca.crt}]}
 ---
 apiVersion: v1
 kind: Service
@@ -615,9 +784,24 @@ spec:
             - {name: USER_GRPC_ADDR, value: "voice-user:9090"}
             - {name: CHAT_GRPC_ADDR, value: "voice-chat:9090"}
             - {name: MESSAGING_GRPC_ADDR, value: "voice-messaging:9090"}
-            - {name: NATS_URL, valueFrom: {configMapKeyRef: {name: voice-app-config, key: NATS_URL}}}
+            - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+        - name: nats-leaf
+          image: nats:2.12-alpine
+          args: ["-c", "/etc/nats/leaf.conf"]
+          env: [{name: NATS_CREDS, value: "/var/run/nats/creds/notification.creds"}]
+          volumeMounts:
+            - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
+            - {name: nats-service-creds, mountPath: /var/run/nats/creds/notification.creds, subPath: notification.creds, readOnly: true}
+            - {name: nats-hub-tls, mountPath: /etc/nats/tls/ca.crt, subPath: ca.crt, readOnly: true}
+      volumes:
+        - name: nats-leaf-config
+          configMap: {name: voice-nats-leaf-config}
+        - name: nats-service-creds
+          secret: {secretName: voice-nats-service-credentials, defaultMode: 0400, items: [{key: notification.creds, path: notification.creds}]}
+        - name: nats-hub-tls
+          secret: {secretName: voice-nats-hub-tls, items: [{key: ca.crt, path: ca.crt}]}
 ---
 apiVersion: v1
 kind: Service
@@ -656,8 +840,24 @@ spec:
             - {name: REALTIME_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
             - name: REALTIME_INSTANCE_ID
               value: realtime-1
+            - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 5}
+        - name: nats-leaf
+          image: nats:2.12-alpine
+          args: ["-c", "/etc/nats/leaf.conf"]
+          env: [{name: NATS_CREDS, value: "/var/run/nats/creds/realtime.creds"}]
+          volumeMounts:
+            - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
+            - {name: nats-service-creds, mountPath: /var/run/nats/creds/realtime.creds, subPath: realtime.creds, readOnly: true}
+            - {name: nats-hub-tls, mountPath: /etc/nats/tls/ca.crt, subPath: ca.crt, readOnly: true}
+      volumes:
+        - name: nats-leaf-config
+          configMap: {name: voice-nats-leaf-config}
+        - name: nats-service-creds
+          secret: {secretName: voice-nats-service-credentials, defaultMode: 0400, items: [{key: realtime.creds, path: realtime.creds}]}
+        - name: nats-hub-tls
+          secret: {secretName: voice-nats-hub-tls, items: [{key: ca.crt, path: ca.crt}]}
 ---
 apiVersion: v1
 kind: Service
@@ -700,8 +900,24 @@ spec:
             - {name: ROLE_GRPC_ADDR, value: "voice-role:9090"}
             - {name: USER_GRPC_ADDR, value: "voice-user:9090"}
             - {name: SPACE_GRPC_ADDR, value: "voice-space:9090"}
+            - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+        - name: nats-leaf
+          image: nats:2.12-alpine
+          args: ["-c", "/etc/nats/leaf.conf"]
+          env: [{name: NATS_CREDS, value: "/var/run/nats/creds/bot.creds"}]
+          volumeMounts:
+            - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
+            - {name: nats-service-creds, mountPath: /var/run/nats/creds/bot.creds, subPath: bot.creds, readOnly: true}
+            - {name: nats-hub-tls, mountPath: /etc/nats/tls/ca.crt, subPath: ca.crt, readOnly: true}
+      volumes:
+        - name: nats-leaf-config
+          configMap: {name: voice-nats-leaf-config}
+        - name: nats-service-creds
+          secret: {secretName: voice-nats-service-credentials, defaultMode: 0400, items: [{key: bot.creds, path: bot.creds}]}
+        - name: nats-hub-tls
+          secret: {secretName: voice-nats-hub-tls, items: [{key: ca.crt, path: ca.crt}]}
 ---
 apiVersion: v1
 kind: Service
@@ -739,8 +955,24 @@ spec:
             - {name: SUBSCRIPTION_GRPC_LISTEN, value: ":9090"}
             - {name: VOICE_ENV, value: "production"}
             - {name: PADDLE_WEBHOOK_SECRET, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: PADDLE_WEBHOOK_SECRET}}}
+            - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+        - name: nats-leaf
+          image: nats:2.12-alpine
+          args: ["-c", "/etc/nats/leaf.conf"]
+          env: [{name: NATS_CREDS, value: "/var/run/nats/creds/subscription.creds"}]
+          volumeMounts:
+            - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
+            - {name: nats-service-creds, mountPath: /var/run/nats/creds/subscription.creds, subPath: subscription.creds, readOnly: true}
+            - {name: nats-hub-tls, mountPath: /etc/nats/tls/ca.crt, subPath: ca.crt, readOnly: true}
+      volumes:
+        - name: nats-leaf-config
+          configMap: {name: voice-nats-leaf-config}
+        - name: nats-service-creds
+          secret: {secretName: voice-nats-service-credentials, defaultMode: 0400, items: [{key: subscription.creds, path: subscription.creds}]}
+        - name: nats-hub-tls
+          secret: {secretName: voice-nats-hub-tls, items: [{key: ca.crt, path: ca.crt}]}
 ---
 apiVersion: v1
 kind: Service
@@ -776,8 +1008,24 @@ spec:
           env:
             - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: MODERATION_DATABASE_URL}}}
             - {name: MODERATION_GRPC_LISTEN, value: ":9090"}
+            - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+        - name: nats-leaf
+          image: nats:2.12-alpine
+          args: ["-c", "/etc/nats/leaf.conf"]
+          env: [{name: NATS_CREDS, value: "/var/run/nats/creds/moderation.creds"}]
+          volumeMounts:
+            - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
+            - {name: nats-service-creds, mountPath: /var/run/nats/creds/moderation.creds, subPath: moderation.creds, readOnly: true}
+            - {name: nats-hub-tls, mountPath: /etc/nats/tls/ca.crt, subPath: ca.crt, readOnly: true}
+      volumes:
+        - name: nats-leaf-config
+          configMap: {name: voice-nats-leaf-config}
+        - name: nats-service-creds
+          secret: {secretName: voice-nats-service-credentials, defaultMode: 0400, items: [{key: moderation.creds, path: moderation.creds}]}
+        - name: nats-hub-tls
+          secret: {secretName: voice-nats-hub-tls, items: [{key: ca.crt, path: ca.crt}]}
 ---
 apiVersion: v1
 kind: Service
@@ -813,8 +1061,24 @@ spec:
           env:
             - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: STORY_DATABASE_URL}}}
             - {name: STORY_GRPC_LISTEN, value: ":9090"}
+            - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+        - name: nats-leaf
+          image: nats:2.12-alpine
+          args: ["-c", "/etc/nats/leaf.conf"]
+          env: [{name: NATS_CREDS, value: "/var/run/nats/creds/story.creds"}]
+          volumeMounts:
+            - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
+            - {name: nats-service-creds, mountPath: /var/run/nats/creds/story.creds, subPath: story.creds, readOnly: true}
+            - {name: nats-hub-tls, mountPath: /etc/nats/tls/ca.crt, subPath: ca.crt, readOnly: true}
+      volumes:
+        - name: nats-leaf-config
+          configMap: {name: voice-nats-leaf-config}
+        - name: nats-service-creds
+          secret: {secretName: voice-nats-service-credentials, defaultMode: 0400, items: [{key: story.creds, path: story.creds}]}
+        - name: nats-hub-tls
+          secret: {secretName: voice-nats-hub-tls, items: [{key: ca.crt, path: ca.crt}]}
 ---
 apiVersion: v1
 kind: Service
@@ -850,12 +1114,27 @@ spec:
           env:
             - {name: LISTEN_ADDR, value: ":8080"}
             - {name: ANALYTICS_GRPC_LISTEN, value: ":9090"}
-            - {name: NATS_URL, value: "nats://voice-nats:4222"}
+            - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
             - {name: ANALYTICS_REQUIRE_PERSISTENCE, value: "true"}
             - {name: CLICKHOUSE_DSN, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: CLICKHOUSE_DSN}}}
             - {name: ANALYTICS_ID_HASH_KEY, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: ANALYTICS_ID_HASH_KEY}}}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+        - name: nats-leaf
+          image: nats:2.12-alpine
+          args: ["-c", "/etc/nats/leaf.conf"]
+          env: [{name: NATS_CREDS, value: "/var/run/nats/creds/analytics.creds"}]
+          volumeMounts:
+            - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
+            - {name: nats-service-creds, mountPath: /var/run/nats/creds/analytics.creds, subPath: analytics.creds, readOnly: true}
+            - {name: nats-hub-tls, mountPath: /etc/nats/tls/ca.crt, subPath: ca.crt, readOnly: true}
+      volumes:
+        - name: nats-leaf-config
+          configMap: {name: voice-nats-leaf-config}
+        - name: nats-service-creds
+          secret: {secretName: voice-nats-service-credentials, defaultMode: 0400, items: [{key: analytics.creds, path: analytics.creds}]}
+        - name: nats-hub-tls
+          secret: {secretName: voice-nats-hub-tls, items: [{key: ca.crt, path: ca.crt}]}
 ---
 apiVersion: v1
 kind: Service

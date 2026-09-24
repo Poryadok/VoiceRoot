@@ -10,6 +10,10 @@ data:
 
     nats_url="${NATS_URL:?NATS_URL is required}"
 
+    nats() {
+      if [ -n "${NATS_CREDS:-}" ]; then command nats --creds "$NATS_CREDS" "$@"; else command nats "$@"; fi
+    }
+
     stream() {
       name="$1"; shift
       expected="$(printf '%s\n' "$@" | jq -R . | jq -sc 'sort')"
@@ -19,7 +23,13 @@ data:
         echo "$info" >&2; exit 1
       fi
       actual="$(printf '%s' "$info" | jq -c '.config.subjects | sort')"
-      [ "$actual" = "$expected" ] || { echo "incompatible subjects for stream $name" >&2; exit 1; }
+      if [ "$actual" != "$expected" ]; then
+        # Subjects are public topology, not credential material. Keep the
+        # fail-closed check diagnosable when an independently bootstrapped
+        # central stream drifts from this exact contract.
+        printf 'incompatible subjects for stream %s: expected=%s actual=%s\n' "$name" "$expected" "$actual" >&2
+        exit 1
+      fi
     }
 
     consumer() {
@@ -90,8 +100,12 @@ spec:
           command: ["/bin/sh", "/config/bootstrap.sh"]
           env:
             - {name: NATS_URL, value: "nats://voice-nats:4222"}
+            - {name: NATS_CREDS, value: "/var/run/nats/bootstrap/bootstrap.creds"}
           volumeMounts:
             - {name: config, mountPath: /config, readOnly: true}
+            - {name: nats-bootstrap-creds, mountPath: /var/run/nats/bootstrap/bootstrap.creds, subPath: bootstrap.creds, readOnly: true}
       volumes:
         - name: config
           configMap: {name: voice-nats-analytics-chat-bootstrap, defaultMode: 0555}
+        - name: nats-bootstrap-creds
+          secret: {secretName: voice-nats-bootstrap-credentials, defaultMode: 0400, items: [{key: bootstrap.creds, path: bootstrap.creds}]}

@@ -35,6 +35,9 @@ mapfile -t ALL_NAMES < <(jq -r '.images[].name' "${CATALOG}")
   fi
   echo "  ${name}: ${tag}"
   done
+  # The hub renderer is not a service-module image, so it has a dedicated CI
+  # build/push job. It is nevertheless required by the NATS infra manifest.
+  echo "  nats-hub-config-renderer: ${HEAD_TAG}"
 } >"${OUT}"
 
 echo "Wrote stack lock: ${OUT}"

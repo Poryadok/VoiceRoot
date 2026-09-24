@@ -1,0 +1,28 @@
+# The hub has no plaintext client ingress from application pods. Leaf sidecars
+# may use TLS on 7422; only the labelled provisioning Jobs may use 4222.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: voice-nats-hub-ingress
+  namespace: __NAMESPACE__
+spec:
+  podSelector:
+    matchLabels: {app: voice-nats}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values: [voice-auth, voice-analytics, voice-bot, voice-chat, voice-file, voice-matchmaking, voice-messaging, voice-moderation, voice-notification, voice-realtime, voice-role, voice-search, voice-social, voice-space, voice-story, voice-subscription, voice-user, voice-voice]
+      ports:
+        - {protocol: TCP, port: 7422}
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values: [voice-nats-realtime-bootstrap, voice-nats-notification-bootstrap, voice-nats-search-bootstrap, voice-nats-analytics-chat-bootstrap]
+      ports:
+        - {protocol: TCP, port: 4222}

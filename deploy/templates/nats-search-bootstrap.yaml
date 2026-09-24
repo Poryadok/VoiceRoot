@@ -10,6 +10,10 @@ data:
 
     nats_url="${NATS_URL:?NATS_URL is required}"
 
+    nats() {
+      if [ -n "${NATS_CREDS:-}" ]; then command nats --creds "$NATS_CREDS" "$@"; else command nats "$@"; fi
+    }
+
     stream() {
       name="$1"; shift
       subjects="$(IFS=,; echo "$*")"
@@ -88,8 +92,12 @@ spec:
           command: ["/bin/sh", "/config/bootstrap.sh"]
           env:
             - {name: NATS_URL, value: "nats://voice-nats:4222"}
+            - {name: NATS_CREDS, value: "/var/run/nats/bootstrap/bootstrap.creds"}
           volumeMounts:
             - {name: config, mountPath: /config, readOnly: true}
+            - {name: nats-bootstrap-creds, mountPath: /var/run/nats/bootstrap/bootstrap.creds, subPath: bootstrap.creds, readOnly: true}
       volumes:
         - name: config
           configMap: {name: voice-nats-search-bootstrap, defaultMode: 0555}
+        - name: nats-bootstrap-creds
+          secret: {secretName: voice-nats-bootstrap-credentials, defaultMode: 0400, items: [{key: bootstrap.creds, path: bootstrap.creds}]}

@@ -3,6 +3,10 @@ set -eu
 
 nats_url="${NATS_URL:?NATS_URL is required}"
 
+nats() {
+  if [ -n "${NATS_CREDS:-}" ]; then command nats --creds "$NATS_CREDS" "$@"; else command nats "$@"; fi
+}
+
 stream() {
   name="$1"; shift
   expected="$(printf '%s\n' "$@" | jq -R . | jq -sc 'sort')"

@@ -63,6 +63,21 @@ services:
       nats:
         condition: service_healthy
 
+  nats-analytics-chat-bootstrap:
+    image: natsio/nats-box:0.18.0
+    environment:
+      NATS_URL: nats://nats:4222
+      NATS_ANALYTICS_CHAT_BOOTSTRAP_TEMPLATE: /bootstrap/nats-analytics-chat-bootstrap.yaml
+    volumes:
+      - ./docker/nats/analytics-chat-bootstrap.sh:/bootstrap/analytics-chat-bootstrap.sh:ro
+      - ./deploy/templates/nats-analytics-chat-bootstrap.yaml:/bootstrap/nats-analytics-chat-bootstrap.yaml:ro
+    command: ["/bin/sh", "/bootstrap/analytics-chat-bootstrap.sh"]
+    depends_on:
+      nats:
+        condition: service_healthy
+      nats-realtime-bootstrap:
+        condition: service_completed_successfully
+
   nats-notification-bootstrap:
     image: natsio/nats-box:0.18.0
     environment:
@@ -392,6 +407,8 @@ services:
       nats:
         condition: service_healthy
       nats-realtime-bootstrap:
+        condition: service_completed_successfully
+      nats-analytics-chat-bootstrap:
         condition: service_completed_successfully
       social:
         condition: service_healthy
@@ -800,6 +817,8 @@ services:
         condition: service_healthy
       nats-realtime-bootstrap:
         condition: service_completed_successfully
+      nats-analytics-chat-bootstrap:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       interval: 5s
@@ -910,7 +929,7 @@ services:
       REALTIME_REDIS_ADDR: redis:6379
       REALTIME_SESSION_EPOCH_STRICT: "true"
       NATS_URL: nats://nats:4222
-      REALTIME_INSTANCE_ID: ${REALTIME_INSTANCE_ID:-compose-local}
+      REALTIME_INSTANCE_ID: ${REALTIME_INSTANCE_ID:-realtime-1}
       REALTIME_JWKS_URL: http://auth:8080/api/v1/auth/.well-known/jwks.json
       REALTIME_JWT_ISSUER: voice-auth
       REALTIME_JWT_AUDIENCE: voice-client

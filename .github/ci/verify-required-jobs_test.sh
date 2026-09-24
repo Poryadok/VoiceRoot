@@ -16,7 +16,7 @@ run_gate() {
   local out
   out="$(mktemp)"
   set +e
-  env "$@" bash "${SCRIPT}" pull_request true auto >"${out}" 2>&1
+  env JOB_NATS_HUB_CONFIG_RENDERER_IMAGE=success "$@" bash "${SCRIPT}" pull_request true auto >"${out}" 2>&1
   local rc=$?
   set -e
   if [[ "${rc}" -ne "${expect_rc}" ]]; then
@@ -36,6 +36,7 @@ all_jobs_success() {
   JOB_WEB=success
   JOB_GOLANGCI=success
   JOB_BACKEND_GO_PKG=success
+  JOB_NATS_HUB_CONFIG_RENDERER_IMAGE=success
   JOB_BACKEND_GO=success
   JOB_BACKEND_GO_INTEGRATION_PR=success
   JOB_BACKEND_AUTH=success
@@ -83,6 +84,13 @@ run_gate 1 \
   JOB_BACKEND_GO_INTEGRATION_PR="${JOB_BACKEND_GO_INTEGRATION_PR}" \
   JOB_BACKEND_AUTH="${JOB_BACKEND_AUTH}" JOB_DEVELOPER_PORTAL="${JOB_DEVELOPER_PORTAL}" \
   JOB_ADMIN="${JOB_ADMIN}"
+
+echo "== package rollout with skipped renderer image fails =="
+all_jobs_success
+run_gate 1 \
+  RUN_PKG=true \
+  JOB_GOLANGCI=success JOB_BACKEND_GO_PKG=success \
+  JOB_NATS_HUB_CONFIG_RENDERER_IMAGE=skipped
 
 echo "== GLOBAL without RUN_GO still requires Go jobs (defense in depth) =="
 all_jobs_success
