@@ -266,6 +266,7 @@ services:
 bootstrap:
   no_response: true
   publish:
+    - $JS.API.INFO
     - $JS.API.STREAM.INFO.message_events
     - $JS.API.STREAM.INFO.chat_events
     - $JS.API.STREAM.INFO.file_events

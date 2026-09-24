@@ -39,7 +39,7 @@ data:
         if printf '%s' "$info" | jq -e '.error' >/dev/null; then
           printf '%s' "$info" | jq -r '.error.description' | grep -qi 'consumer not found' || { echo "$info" >&2; exit 1; }
         else
-          actual="$(printf '%s' "$info" | jq -c '[.stream_name, .name, .config.durable_name, .config.filter_subject, .config.deliver_subject, .config.deliver_group, .config.ack_policy, .config.deliver_policy]')"
+          actual="$(printf '%s' "$info" | jq -c '[.stream_name, .name, .config.durable_name, .config.filter_subject, .config.deliver_subject, (.config.deliver_group // ""), .config.ack_policy, .config.deliver_policy]')"
           expected="$(jq -cn --arg stream "$stream_name" --arg durable "$durable" --arg filter "$filter" --arg target "$target" --arg group "$group" --arg deliver "$deliver" '[ $stream, $durable, $durable, $filter, $target, $group, "explicit", $deliver ]')"
           [ "$actual" = "$expected" ] || { echo "incompatible consumer $stream_name/$durable" >&2; exit 1; }
           return
@@ -47,11 +47,9 @@ data:
       else
         echo "$info" >&2; exit 1
       fi
-      if [ -n "$group" ]; then
-        nats --server "$nats_url" consumer add "$stream_name" "$durable" --filter "$filter" --target "$target" --deliver-group "$group" --ack explicit --deliver "$deliver" --defaults
-      else
-        nats --server "$nats_url" consumer add "$stream_name" "$durable" --filter "$filter" --target "$target" --ack explicit --deliver "$deliver" --defaults
-      fi
+      payload="$(jq -cn --arg stream "$stream_name" --arg durable "$durable" --arg filter "$filter" --arg target "$target" --arg group "$group" --arg deliver "$deliver" '{stream_name: $stream, action: "create", config: {name: $durable, durable_name: $durable, filter_subject: $filter, deliver_subject: $target, deliver_group: $group, deliver_policy: $deliver, ack_policy: "explicit"}}')"
+      result="$(nats --server "$nats_url" req --raw "\$JS.API.CONSUMER.CREATE.$stream_name.$durable" "$payload")"
+      printf '%s' "$result" | jq -e --arg durable "$durable" '(.error | not) and .config.durable_name == $durable' >/dev/null || { echo "$result" >&2; exit 1; }
     }
 
     # Multi-filter push consumers use the JetStream API directly because the
@@ -71,7 +69,7 @@ data:
       else
         echo "$info" >&2; exit 1
       fi
-      payload="$(jq -cn --arg stream "$stream_name" --arg durable "$durable" --arg target "$target" --arg deliver "$deliver" --argjson filters "$filters" '{stream_name: $stream, config: {name: $durable, durable_name: $durable, filter_subjects: $filters, deliver_subject: $target, deliver_policy: $deliver, ack_policy: "explicit"}}')"
+      payload="$(jq -cn --arg stream "$stream_name" --arg durable "$durable" --arg target "$target" --arg deliver "$deliver" --argjson filters "$filters" '{stream_name: $stream, action: "create", config: {name: $durable, durable_name: $durable, filter_subjects: $filters, deliver_subject: $target, deliver_policy: $deliver, ack_policy: "explicit"}}')"
       result="$(nats --server "$nats_url" req --raw "\$JS.API.CONSUMER.CREATE.$stream_name.$durable" "$payload")"
       printf '%s' "$result" | jq -e '(.error | not) and .config.durable_name != null' >/dev/null || { echo "$result" >&2; exit 1; }
     }
@@ -90,7 +88,7 @@ data:
       else
         echo "$info" >&2; exit 1
       fi
-      payload="$(jq -cn --arg stream "$stream_name" --arg durable "$durable" --arg filter "$filter" --arg deliver "$deliver" '{stream_name: $stream, config: {name: $durable, durable_name: $durable, filter_subject: $filter, deliver_policy: $deliver, ack_policy: "explicit"}}')"
+      payload="$(jq -cn --arg stream "$stream_name" --arg durable "$durable" --arg filter "$filter" --arg deliver "$deliver" '{stream_name: $stream, action: "create", config: {name: $durable, durable_name: $durable, filter_subject: $filter, deliver_policy: $deliver, ack_policy: "explicit"}}')"
       result="$(nats --server "$nats_url" req --raw "\$JS.API.CONSUMER.CREATE.$stream_name.$durable" "$payload")"
       printf '%s' "$result" | jq -e '(.error | not) and .config.durable_name != null' >/dev/null || { echo "$result" >&2; exit 1; }
     }

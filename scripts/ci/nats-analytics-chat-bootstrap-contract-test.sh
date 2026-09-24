@@ -32,7 +32,7 @@ done
 grep -Fq 'CONSUMER.INFO.$stream_name.$durable' "$BOOTSTRAP" || fail 'bootstrap must inspect existing consumers'
 grep -Fq '[.stream_name, .name, .config.durable_name,' "$BOOTSTRAP" || fail 'bootstrap must reject consumer identity drift'
 grep -Fq 'incompatible consumer $stream_name/$durable' "$BOOTSTRAP" || fail 'bootstrap must reject durable drift'
-grep -Fq -- '--deliver-group "$group"' "$BOOTSTRAP" || fail 'bootstrap must preserve Analytics queue groups'
+grep -Fq 'deliver_group: $group' "$BOOTSTRAP" || fail 'bootstrap must preserve Analytics queue groups in exact CREATE payload'
 grep -Fq 'nats-analytics-chat-bootstrap:' "$COMPOSE" || fail 'Compose must run the Analytics/Chat bootstrap'
 grep -Fq './deploy/templates/nats-analytics-chat-bootstrap.yaml:/bootstrap/nats-analytics-chat-bootstrap.yaml:ro' "$COMPOSE" || fail 'Compose must mount the canonical Analytics/Chat bootstrap template read-only'
 grep -Fq 'NATS_ANALYTICS_CHAT_BOOTSTRAP_TEMPLATE' "$COMPOSE_BOOTSTRAP" || fail 'Compose bootstrap must require the canonical template'

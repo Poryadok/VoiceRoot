@@ -279,6 +279,7 @@ func TestCanonicalACLHasScopedRuntimeAndBootstrapGrants(t *testing.T) {
 		}
 	}
 	for _, subject := range []string{
+		"$JS.API.INFO",
 		"$JS.API.STREAM.CREATE.message_events",
 		"$JS.API.CONSUMER.INFO.message_events.chat_message_activity",
 		"$JS.API.CONSUMER.CREATE.message_events.chat_message_activity",

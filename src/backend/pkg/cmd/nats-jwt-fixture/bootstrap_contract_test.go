@@ -239,3 +239,28 @@ func TestHubAcceptsCanonicalJWTControlLine(t *testing.T) {
 		}
 	}
 }
+
+func TestCentralBootstrapUsesExactConsumerCreateAPI(t *testing.T) {
+	root := filepath.Join("..", "..", "..", "..", "..")
+	for _, path := range []string{
+		"deploy/templates/nats-realtime-bootstrap.yaml",
+		"deploy/templates/nats-notification-bootstrap.yaml",
+		"deploy/templates/nats-search-bootstrap.yaml",
+		"deploy/templates/nats-analytics-chat-bootstrap.yaml",
+		"docker/nats/realtime-bootstrap.sh",
+		"docker/nats/notification-bootstrap.sh",
+		"docker/nats/search-bootstrap.sh",
+	} {
+		contents, err := os.ReadFile(filepath.Join(root, path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(contents)
+		if strings.Contains(text, "consumer add") {
+			t.Errorf("%s uses CLI filter-suffixed consumer CREATE instead of exact Job grant", path)
+		}
+		if !strings.Contains(text, "\\$JS.API.CONSUMER.CREATE.$stream_name.$durable") || !strings.Contains(text, `action: "create"`) {
+			t.Errorf("%s lacks exact create-only JetStream request", path)
+		}
+	}
+}

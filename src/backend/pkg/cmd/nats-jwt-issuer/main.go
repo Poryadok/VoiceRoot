@@ -202,7 +202,8 @@ func validGrant(g grant, owner string, bootstrap bool) bool {
 			return false
 		}
 		if strings.HasPrefix(subject, "$JS.API.") {
-			allowed := strings.HasPrefix(subject, "$JS.API.STREAM.INFO.") ||
+			allowed := bootstrap && subject == "$JS.API.INFO" ||
+				strings.HasPrefix(subject, "$JS.API.STREAM.INFO.") ||
 				strings.HasPrefix(subject, "$JS.API.CONSUMER.INFO.") ||
 				bootstrap && (strings.HasPrefix(subject, "$JS.API.STREAM.CREATE.") || strings.HasPrefix(subject, "$JS.API.CONSUMER.CREATE.")) ||
 				!bootstrap && strings.HasPrefix(subject, "$JS.API.CONSUMER.MSG.NEXT.")
@@ -218,7 +219,9 @@ func validGrant(g grant, owner string, bootstrap bool) bool {
 		}
 		if strings.HasPrefix(subject, "_INBOX.") {
 			prefix := "_INBOX.voice." + owner + "."
-			if !strings.HasPrefix(subject, prefix) && !(owner == "realtime" && strings.HasPrefix(subject, "_INBOX.voice.realtime1.")) {
+			allowed := strings.HasPrefix(subject, prefix) ||
+				owner == "realtime" && strings.HasPrefix(subject, "_INBOX.voice.realtime1.")
+			if !allowed {
 				return false
 			}
 		}

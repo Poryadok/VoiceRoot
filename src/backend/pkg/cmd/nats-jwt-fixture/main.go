@@ -106,12 +106,17 @@ func validateACL(acl aclDocument) error {
 		return fmt.Errorf("ACL bootstrap: %w", err)
 	}
 	for _, subject := range acl.Bootstrap.Publish {
-		if strings.HasPrefix(subject, "$JS.API.") &&
-			!strings.HasPrefix(subject, "$JS.API.STREAM.INFO.") &&
-			!strings.HasPrefix(subject, "$JS.API.STREAM.CREATE.") &&
-			!strings.HasPrefix(subject, "$JS.API.CONSUMER.INFO.") &&
-			!strings.HasPrefix(subject, "$JS.API.CONSUMER.CREATE.") &&
-			!strings.HasPrefix(subject, "$JS.API.CONSUMER.DELETE.") {
+		if !strings.HasPrefix(subject, "$JS.API.") {
+			continue
+		}
+		switch {
+		case subject == "$JS.API.INFO",
+			strings.HasPrefix(subject, "$JS.API.STREAM.INFO."),
+			strings.HasPrefix(subject, "$JS.API.STREAM.CREATE."),
+			strings.HasPrefix(subject, "$JS.API.CONSUMER.INFO."),
+			strings.HasPrefix(subject, "$JS.API.CONSUMER.CREATE."),
+			strings.HasPrefix(subject, "$JS.API.CONSUMER.DELETE."):
+		default:
 			return fmt.Errorf("ACL bootstrap has unreviewed JetStream API grant: %s", subject)
 		}
 	}
