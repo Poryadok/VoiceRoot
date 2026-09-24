@@ -261,6 +261,19 @@ func TestCanonicalACLHasScopedRuntimeAndBootstrapGrants(t *testing.T) {
 			}
 		}
 	}
+	for service, subjects := range map[string][]string{
+		"gateway":      {"analytics.gateway.request"},
+		"moderation":   {"analytics.moderation.report_created", "analytics.moderation.sanction_applied"},
+		"notification": {"analytics.notification.push_sent"},
+		"search":       {"analytics.search.query"},
+		"subscription": {"analytics.subscription.payment_success", "analytics.subscription.payment_failed"},
+	} {
+		for _, subject := range append(subjects, "$JS.API.STREAM.INFO.analytics_events") {
+			if !slices.Contains(acl.Services[service].Publish, subject) {
+				t.Errorf("%s missing analytics publisher grant %s", service, subject)
+			}
+		}
+	}
 	for _, subject := range []string{
 		"$JS.API.STREAM.CREATE.message_events",
 		"$JS.API.CONSUMER.INFO.message_events.chat_message_activity",

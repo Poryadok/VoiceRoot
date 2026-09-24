@@ -85,7 +85,7 @@ services:
     subscribe: [_INBOX.voice.file.>]
   gateway:
     no_response: true
-    publish: [analytics.gateway.request]
+    publish: [analytics.gateway.request, $JS.API.STREAM.INFO.analytics_events]
     subscribe: [_INBOX.voice.gateway.>]
   matchmaking:
     no_response: true
@@ -129,12 +129,16 @@ services:
       - moderation.report_created
       - moderation.sanction_applied
       - moderation.appeal_submitted
+      - analytics.moderation.report_created
+      - analytics.moderation.sanction_applied
       - $JS.API.STREAM.INFO.moderation_events
+      - $JS.API.STREAM.INFO.analytics_events
     subscribe: [_INBOX.voice.moderation.>]
   notification:
     no_response: true
     publish:
       - analytics.notification.push_sent
+      - $JS.API.STREAM.INFO.analytics_events
       - $JS.API.CONSUMER.INFO.message_events.notif_msg_v2
       - $JS.API.CONSUMER.INFO.matchmaking_events.notif_mm
       - $JS.API.CONSUMER.INFO.voice_events.notif_voice
@@ -194,6 +198,7 @@ services:
     no_response: true
     publish:
       - analytics.search.query
+      - $JS.API.STREAM.INFO.analytics_events
       - $JS.API.CONSUMER.INFO.message_events.search-indexer-message-v1
       - $JS.API.CONSUMER.INFO.user_events.search-indexer-user-v1
       - $JS.API.CONSUMER.INFO.chat_events.search-indexer-chat-v1
@@ -234,7 +239,7 @@ services:
     subscribe: [_INBOX.voice.story.>]
   subscription:
     no_response: true
-    publish: [subscription.plan_started, subscription.plan_cancelled, subscription.plan_expired, subscription.downgrade, subscription.payment_success, subscription.payment_failed, subscription.space_pro_started, subscription.space_pro_expired, subscription.grace_reminder, subscription.entitlement_changed, analytics.subscription.payment_success, analytics.subscription.payment_failed, $JS.API.STREAM.INFO.subscription_events]
+    publish: [subscription.plan_started, subscription.plan_cancelled, subscription.plan_expired, subscription.downgrade, subscription.payment_success, subscription.payment_failed, subscription.space_pro_started, subscription.space_pro_expired, subscription.grace_reminder, subscription.entitlement_changed, analytics.subscription.payment_success, analytics.subscription.payment_failed, $JS.API.STREAM.INFO.subscription_events, $JS.API.STREAM.INFO.analytics_events]
     subscribe: [_INBOX.voice.subscription.>]
   user:
     no_response: true
