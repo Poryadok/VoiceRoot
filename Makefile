@@ -292,6 +292,7 @@ ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test bu
 	$(BASH) "$(ROOT)/scripts/ci/ci-script-tests-reachability_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/e2e-manifest_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/compose-e2e-smoke_test.sh"
+	$(BASH) "$(ROOT)/scripts/ci/compose-e2e-live_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/compose-nats-jetstream-check_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/nats-jwt-rollout-contract-test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/nats-jwt-leaf-hosted-proof.sh"

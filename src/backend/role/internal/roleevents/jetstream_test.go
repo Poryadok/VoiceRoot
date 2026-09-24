@@ -58,6 +58,8 @@ func TestJetStreamPublisher_OverrideRemovalRoundTrip(t *testing.T) {
 	pub, err := NewJetStreamPublisher(s.ClientURL())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = pub.Close() })
+	require.Regexp(t, `^_INBOX\.voice\.role\.`, pub.nc.NewInbox())
+	require.Regexp(t, `^_INBOX\.voice\.role\.`, pub.nc.NewRespInbox())
 
 	const spaceID = "11111111-1111-1111-1111-111111111111"
 	const roleID = "22222222-2222-2222-2222-222222222222"
