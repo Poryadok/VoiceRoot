@@ -3,6 +3,7 @@ package messageevents
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,6 +16,36 @@ import (
 	eventsv1 "voice.app/voice/events/v1"
 	"voice/backend/pkg/correlation"
 )
+
+func TestJetStreamPublisherWorksWithMessagingScopedReplyInbox(t *testing.T) {
+	s, err := server.NewServer(&server.Options{
+		Host: "127.0.0.1", Port: -1, NoLog: true, NoSigs: true, JetStream: true, StoreDir: t.TempDir(),
+		Users: []*server.User{
+			{Username: "admin", Password: "admin"},
+			{Username: "messaging", Password: "messaging", Permissions: &server.Permissions{
+				Publish:   &server.SubjectPermission{Allow: []string{"$JS.API.STREAM.INFO.message_events", subjectMessageSent}},
+				Subscribe: &server.SubjectPermission{Allow: []string{"_INBOX.voice.messaging.>"}},
+			}},
+		},
+	})
+	require.NoError(t, err)
+	go s.Start()
+	require.True(t, s.ReadyForConnections(5*time.Second))
+	t.Cleanup(s.Shutdown)
+	admin, err := nats.Connect(s.ClientURL(), nats.UserInfo("admin", "admin"))
+	require.NoError(t, err)
+	t.Cleanup(admin.Close)
+	js, err := admin.JetStream()
+	require.NoError(t, err)
+	_, err = js.AddStream(&nats.StreamConfig{Name: streamName, Subjects: messageEventStreamSubjects(), Retention: nats.LimitsPolicy, MaxAge: 7 * 24 * time.Hour, Storage: nats.FileStorage})
+	require.NoError(t, err)
+	url := "nats://messaging:messaging@" + strings.TrimPrefix(s.ClientURL(), "nats://")
+	pub, err := NewJetStreamPublisher(url)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = pub.Close() })
+	require.Equal(t, "_INBOX.voice.messaging", pub.nc.Opts.InboxPrefix)
+	require.NoError(t, pub.PublishMessageSent(context.Background(), "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222", "33333333-3333-3333-3333-333333333333", false, "", false, "photo", true))
+}
 
 func startJSTestServer(t *testing.T) *server.Server {
 	t.Helper()
