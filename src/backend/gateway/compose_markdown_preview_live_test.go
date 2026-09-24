@@ -27,7 +27,24 @@ func TestComposeMarkdownPreview_live(t *testing.T) {
 	msgID := sendComposeMessage(t, client, base, sessA.AccessToken, chatID, body)
 	getComposeMessagesContains(t, client, base, sessB.AccessToken, chatID, msgID, body)
 
+	requests := listComposeChats(t, client, base, sessB.AccessToken, "requests")
+	require.True(t, composeChatListContains(requests, chatID), "stranger DM must appear in requests inbox")
+	var requestPreview string
+	for _, item := range requests {
+		if item.ChatID == chatID {
+			requestPreview = item.LastPreview
+			break
+		}
+	}
+	require.Equal(t, "bold preview", requestPreview, "stranger DM request must show stripped markdown preview")
+	require.False(t, composeChatListContains(listComposeChats(t, client, base, sessB.AccessToken, "main"), chatID),
+		"stranger DM must stay out of main inbox before Accept")
+	acceptComposeDMRequest(t, client, base, sessB.AccessToken, chatID)
+	require.False(t, composeChatListContains(listComposeChats(t, client, base, sessB.AccessToken, "requests"), chatID),
+		"accepted DM must leave requests inbox")
+
 	list := listComposeChats(t, client, base, sessB.AccessToken, "main")
+	require.True(t, composeChatListContains(list, chatID), "accepted DM must appear in main inbox")
 	var preview string
 	for _, item := range list {
 		if item.ChatID == chatID {

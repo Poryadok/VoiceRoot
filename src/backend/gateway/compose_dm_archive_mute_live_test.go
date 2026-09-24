@@ -28,6 +28,15 @@ func TestComposeDMArchiveMute_live(t *testing.T) {
 
 	dmID := createComposeDMBetween(t, client, base, a, b)
 	sendComposeMessage(t, client, base, a.AccessToken, dmID, "before-archive")
+	require.False(t, composeChatListContains(listComposeChats(t, client, base, b.AccessToken, "main"), dmID),
+		"stranger DM must stay out of recipient's main inbox before Accept")
+	require.True(t, composeChatListContains(listComposeChats(t, client, base, b.AccessToken, "requests"), dmID),
+		"stranger DM must appear in recipient's requests inbox")
+	acceptComposeDMRequest(t, client, base, b.AccessToken, dmID)
+	require.False(t, composeChatListContains(listComposeChats(t, client, base, b.AccessToken, "requests"), dmID),
+		"accepted DM must leave recipient's requests inbox")
+	require.True(t, composeChatListContains(listComposeChats(t, client, base, b.AccessToken, "main"), dmID),
+		"accepted DM must appear in recipient's main inbox")
 
 	listA := listComposeChats(t, client, base, a.AccessToken, "")
 	require.True(t, composeChatListContains(listA, dmID))
@@ -39,8 +48,10 @@ func TestComposeDMArchiveMute_live(t *testing.T) {
 	listArchive := listComposeChats(t, client, base, a.AccessToken, "archive")
 	require.True(t, composeChatListContains(listArchive, dmID), "archived DM must appear in archive inbox")
 
-	listB := listComposeChats(t, client, base, b.AccessToken, "")
-	require.True(t, composeChatListContains(listB, dmID), "peer must still see the DM")
+	listB := listComposeChats(t, client, base, b.AccessToken, "main")
+	require.True(t, composeChatListContains(listB, dmID), "peer must still see the accepted DM in main")
+	require.False(t, composeChatListContains(listComposeChats(t, client, base, b.AccessToken, "archive"), dmID),
+		"archiving caller's DM must not archive peer's DM")
 
 	composeArchiveChat(t, client, base, a.AccessToken, dmID, false)
 	listA = listComposeChats(t, client, base, a.AccessToken, "")
