@@ -23,8 +23,9 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
-          cache-key: flutter-${{ runner.os }}-${{ hashFiles('src/frontend/pubspec.lock') }}
-          cache-path: ~/.pub-cache
+
+      - name: Verify Flutter SDK
+        run: flutter --version
 
       - name: Compose app up
         run: make compose-app-up
