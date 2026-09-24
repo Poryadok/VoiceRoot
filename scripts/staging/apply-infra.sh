@@ -129,11 +129,20 @@ if [ "${VOICE_NATS_BOOTSTRAP_AFTER_ACCEPTANCE:-false}" = true ]; then
   VOICE_NATS_STORAGE_CLASS="${NATS_STORAGE_CLASS}" \
   VOICE_NATS_STORAGE_SIZE="${NATS_STORAGE_SIZE}" \
     bash "${ROOT}/scripts/staging/guard-nats-pvc-migration.sh" --acceptance
-  for item in realtime notification search analytics-chat; do
-    kubectl delete job "voice-nats-${item}-bootstrap" -n "${NS}" --ignore-not-found
-    sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/nats-${item}-bootstrap.yaml" | kubectl apply -f -
-    kubectl wait --for=condition=complete "job/voice-nats-${item}-bootstrap" -n "${NS}" --timeout=120s
-  done
+  # Keep the central realtime stream bootstrap in the accepted activation
+  # path. It is intentionally not created while the candidate is unaccepted.
+  kubectl delete job voice-nats-realtime-bootstrap -n "${NS}" --ignore-not-found
+  sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/nats-realtime-bootstrap.yaml" | kubectl apply -f -
+  kubectl wait --for=condition=complete job/voice-nats-realtime-bootstrap -n "${NS}" --timeout=120s
+  kubectl delete job voice-nats-notification-bootstrap -n "${NS}" --ignore-not-found
+  sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/nats-notification-bootstrap.yaml" | kubectl apply -f -
+  kubectl wait --for=condition=complete job/voice-nats-notification-bootstrap -n "${NS}" --timeout=120s
+  kubectl delete job voice-nats-search-bootstrap -n "${NS}" --ignore-not-found
+  sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/nats-search-bootstrap.yaml" | kubectl apply -f -
+  kubectl wait --for=condition=complete job/voice-nats-search-bootstrap -n "${NS}" --timeout=120s
+  kubectl delete job voice-nats-analytics-chat-bootstrap -n "${NS}" --ignore-not-found
+  sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/nats-analytics-chat-bootstrap.yaml" | kubectl apply -f -
+  kubectl wait --for=condition=complete job/voice-nats-analytics-chat-bootstrap -n "${NS}" --timeout=120s
 else
   echo 'NATS bootstrap jobs deferred: candidate must be restored and accepted before bootstrap.'
 fi

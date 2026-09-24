@@ -39,6 +39,13 @@ grep -Fq 'claimName: voice-nats-jsdata' "${tmp}/infra-rendered.yaml" || fail 'ca
 awk '/^kind: Deployment$/{deployment=1} deployment && /^  name: voice-nats$/{source=1} /^---$/{deployment=0} END{exit source}' "${tmp}/infra-safe.yaml" || fail 'infra apply input must omit the original emptyDir source Deployment'
 grep -Fq 'name: voice-nats-pvc-candidate' "${tmp}/infra-safe.yaml" || fail 'infra apply input must retain candidate resources'
 grep -Fq 'filter-staging-infra-source-nats.sh' "${APPLY}" || fail 'apply must filter the source Deployment to preserve its live emptyDir'
+grep -Fq 'deploy/templates/nats-realtime-bootstrap.yaml' "${APPLY}" || fail 'accepted infra activation must apply the central NATS bootstrap'
+grep -Fq 'kubectl wait --for=condition=complete job/voice-nats-realtime-bootstrap' "${APPLY}" || fail 'accepted infra activation must wait for central NATS bootstrap'
+for bootstrap in notification search analytics-chat; do
+  grep -Fq "deploy/templates/nats-${bootstrap}-bootstrap.yaml" "${APPLY}" || fail "accepted infra activation must apply ${bootstrap} bootstrap"
+  grep -Fq "kubectl wait --for=condition=complete job/voice-nats-${bootstrap}-bootstrap" "${APPLY}" || fail "accepted infra activation must wait for ${bootstrap} bootstrap"
+done
+awk '/if \[ "\$\{VOICE_NATS_BOOTSTRAP_AFTER_ACCEPTANCE:-false\}" = true \]; then/{activation=1} activation && /deploy\/templates\/nats-realtime-bootstrap.yaml/{central=1} activation && /fi$/{exit !(central)} END{if (!central) exit 1}' "${APPLY}" || fail 'central bootstrap must remain behind the migration-acceptance gate'
 grep -Fq 'cutover' "${MIGRATE}" || fail 'migration tool must provide a separately gated cutover'
 grep -Fq 'source-census.tsv' "${GUARD}" || fail 'guard must validate source census identity, not only decision row count'
 awk '/kubectl (apply|create|delete|patch|rollout)/{if (!mutation) mutation=NR} /source_context=/{context=NR} /NATS_TARGET_CONTEXT.*source_context/{matchline=NR} END{exit !(context && matchline && mutation && context < mutation && matchline < mutation)}' "${MIGRATE}" || fail 'rollback context validation must precede every kubectl mutation'
