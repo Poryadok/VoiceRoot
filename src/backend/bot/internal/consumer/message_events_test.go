@@ -163,6 +163,41 @@ func TestPendingMessageDeliveryDoesNotReviveAfterUninstallAndReinstall(t *testin
 	require.Nil(t, delivery)
 }
 
+func TestPendingMessageDeliveryDoesNotReviveAfterInstallWhitelistReplacement(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	st := startBotStore(t)
+	owner, chatID, spaceID := uuid.New(), uuid.New(), uuid.New()
+	bot, _, err := st.CreateBot(ctx, owner, "WhitelistBot", "", `[]`, uuid.New())
+	require.NoError(t, err)
+	_, err = st.InstallInSpace(ctx, bot.ID, spaceID, owner, []uuid.UUID{chatID})
+	require.NoError(t, err)
+	_, err = st.Pool.Exec(ctx, `UPDATE bots SET webhook_url = 'https://bot.invalid/hook' WHERE id = $1`, bot.ID)
+	require.NoError(t, err)
+	messageID := uuid.New()
+	require.NoError(t, st.QueueMessageRecipients(ctx, chatID, messageID, uuid.NewString(), map[string]any{"message_id": messageID.String()}))
+	delivery, err := st.ClaimDueMessageDelivery(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, delivery)
+
+	_, err = st.InstallInSpace(ctx, bot.ID, spaceID, owner, nil)
+	require.NoError(t, err)
+	_, err = st.InstallInSpace(ctx, bot.ID, spaceID, owner, []uuid.UUID{chatID})
+	require.NoError(t, err)
+	posted := false
+	require.NoError(t, st.DeliverMessage(ctx, delivery, func(string, string) error {
+		posted = true
+		return nil
+	}))
+	require.False(t, posted)
+
+	var status string
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT status FROM bot_message_deliveries WHERE bot_id = $1 AND message_id = $2`, bot.ID, messageID).Scan(&status))
+	require.Equal(t, "canceled", status)
+}
+
 func TestHandleMessageSent_PollingFailureDoesNotStarveWebhook(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
@@ -381,7 +416,7 @@ func TestQueuedPollingMessageIsCanceledAfterChatDisable(t *testing.T) {
 	require.NoError(t, st.SetChatEnabled(ctx, bot.ID, chatID, spaceID, owner, false))
 	worked, err := h.ProcessNext(ctx)
 	require.NoError(t, err)
-	require.True(t, worked)
+	require.False(t, worked)
 	ids, _, _, err := st.ListPendingEvents(ctx, bot.ID, 10)
 	require.NoError(t, err)
 	require.Empty(t, ids)

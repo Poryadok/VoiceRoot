@@ -316,6 +316,11 @@ func (s *BotStore) InstallInSpace(ctx context.Context, botID, spaceID, installer
 		return uuid.Nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	// Lock the bot first to serialize installation changes with delivery and revocation.
+	var lockedBotID uuid.UUID
+	if err := tx.QueryRow(ctx, `SELECT id FROM bots WHERE id = $1 FOR UPDATE`, botID).Scan(&lockedBotID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, err
+	}
 	installID := uuid.New()
 	_, err = tx.Exec(ctx, `
 INSERT INTO bot_space_installations (id, bot_id, space_id, installed_by_profile_id)
@@ -325,9 +330,36 @@ ON CONFLICT (bot_id, space_id) DO UPDATE SET installed_by_profile_id = EXCLUDED.
 	if err != nil {
 		return uuid.Nil, err
 	}
-	_, err = tx.Exec(ctx, `DELETE FROM bot_chat_whitelist WHERE bot_id = $1 AND space_id = $2`, botID, spaceID)
+	rows, err := tx.Query(ctx, `DELETE FROM bot_chat_whitelist WHERE bot_id = $1 AND space_id = $2 RETURNING chat_id`, botID, spaceID)
 	if err != nil {
 		return uuid.Nil, err
+	}
+	requestedChats := make(map[uuid.UUID]struct{}, len(chats))
+	for _, chatID := range chats {
+		requestedChats[chatID] = struct{}{}
+	}
+	var removedChatIDs []uuid.UUID
+	for rows.Next() {
+		var chatID uuid.UUID
+		if err := rows.Scan(&chatID); err != nil {
+			rows.Close()
+			return uuid.Nil, err
+		}
+		if _, keep := requestedChats[chatID]; !keep {
+			removedChatIDs = append(removedChatIDs, chatID)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return uuid.Nil, err
+	}
+	rows.Close()
+	if len(removedChatIDs) > 0 {
+		if _, err := tx.Exec(ctx, `
+UPDATE bot_message_deliveries SET status = 'canceled', claimed_until = NULL
+WHERE bot_id = $1 AND chat_id = ANY($2) AND status = 'pending'`, botID, removedChatIDs); err != nil {
+			return uuid.Nil, err
+		}
 	}
 	for _, chatID := range chats {
 		_, err = tx.Exec(ctx, `
@@ -368,6 +400,11 @@ func (s *BotStore) UninstallFromSpace(ctx context.Context, botID, spaceID uuid.U
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	// Keep the same bot-first lock order as InstallInSpace and DeliverMessage.
+	var lockedBotID uuid.UUID
+	if err := tx.QueryRow(ctx, `SELECT id FROM bots WHERE id = $1 FOR UPDATE`, botID).Scan(&lockedBotID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
 	rows, err := tx.Query(ctx, `DELETE FROM bot_chat_whitelist WHERE bot_id = $1 AND space_id = $2 RETURNING chat_id`, botID, spaceID)
 	if err != nil {
 		return err
