@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"math/big"
@@ -16,6 +17,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/nats-io/jwt/v2"
+	"github.com/nats-io/nkeys"
 )
 
 func TestIssueWritesProtectedFourSecretRestoreList(t *testing.T) {
@@ -65,6 +69,7 @@ func TestIssueWritesProtectedFourSecretRestoreList(t *testing.T) {
 		"voice-nats-service-credentials":   {"analytics.creds", "auth.creds", "bot.creds", "chat.creds", "file.creds", "gateway.creds", "matchmaking.creds", "messaging.creds", "moderation.creds", "notification.creds", "realtime.creds", "role.creds", "search.creds", "social.creds", "space.creds", "story.creds", "subscription.creds", "user.creds", "voice.creds"},
 		"voice-nats-hub-tls":               {"tls.crt", "tls.key", "ca.crt"},
 	}
+	secretData := map[string]map[string]string{}
 	for _, item := range list.Items {
 		if item.Metadata.Namespace != "voice-staging" || item.Type != "Opaque" {
 			t.Errorf("%s has wrong namespace/type", item.Metadata.Name)
@@ -74,6 +79,7 @@ func TestIssueWritesProtectedFourSecretRestoreList(t *testing.T) {
 			t.Errorf("unexpected secret %s", item.Metadata.Name)
 			continue
 		}
+		secretData[item.Metadata.Name] = item.Data
 		if len(item.Data) != len(keys) {
 			t.Errorf("%s has %d keys, want %d", item.Metadata.Name, len(item.Data), len(keys))
 		}
@@ -87,9 +93,72 @@ func TestIssueWritesProtectedFourSecretRestoreList(t *testing.T) {
 	if len(expected) != 0 {
 		t.Errorf("missing Secrets: %v", expected)
 	}
+	acl, err := readPolicy(canonicalACL())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range serviceNames {
+		contents, err := base64.StdEncoding.DecodeString(secretData["voice-nats-service-credentials"][name+".creds"])
+		if err != nil {
+			t.Fatal(err)
+		}
+		claims, err := jwt.DecodeUserClaims(credentialJWT(t, string(contents)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Equal(claims.Pub.Allow, acl.Services[name].Publish) || !slices.Equal(claims.Sub.Allow, acl.Services[name].Subscribe) {
+			t.Errorf("%s JWT permissions differ from reviewed ACL", name)
+		}
+	}
+	for _, tc := range []struct{ seed, jwtKey string }{{"operator.seed", "operator.jwt"}, {"app-account.seed", "account.jwt"}, {"system-account.seed", "system-account.jwt"}} {
+		seed, err := os.ReadFile(filepath.Join(dest, "signing-seeds", tc.seed))
+		if err != nil {
+			t.Fatal(err)
+		}
+		pair, err := nkeys.FromSeed([]byte(strings.TrimSpace(string(seed))))
+		if err != nil {
+			t.Fatal(err)
+		}
+		public, err := pair.PublicKey()
+		if err != nil {
+			t.Fatal(err)
+		}
+		encoded, err := base64.StdEncoding.DecodeString(secretData["voice-nats-operator"][tc.jwtKey])
+		if err != nil {
+			t.Fatal(err)
+		}
+		var subject string
+		if tc.seed == "operator.seed" {
+			claims, err := jwt.DecodeOperatorClaims(string(encoded))
+			if err != nil {
+				t.Fatal(err)
+			}
+			subject = claims.Subject
+		} else {
+			claims, err := jwt.DecodeAccountClaims(string(encoded))
+			if err != nil {
+				t.Fatal(err)
+			}
+			subject = claims.Subject
+		}
+		if public != subject {
+			t.Errorf("%s does not sign its exported JWT", tc.seed)
+		}
+	}
 	if err := issue(canonicalACL(), dest, "voice-staging", cert, key, ca); err == nil {
 		t.Fatal("issuer overwrote an existing destination")
 	}
+}
+
+func credentialJWT(t *testing.T, creds string) string {
+	t.Helper()
+	const begin = "-----BEGIN NATS USER JWT-----\n"
+	const end = "\n------END NATS USER JWT------"
+	start, stop := strings.Index(creds, begin), strings.Index(creds, end)
+	if start < 0 || stop <= start {
+		t.Fatal("invalid .creds format")
+	}
+	return creds[start+len(begin) : stop]
 }
 
 func TestIssueRejectsInvalidTLSAndACLWithoutOutput(t *testing.T) {
@@ -128,8 +197,11 @@ func TestPolicyRejectsServiceMutationAndBroadInbox(t *testing.T) {
 	}
 	for _, tc := range []struct{ old, replacement string }{
 		{"$JS.API.CONSUMER.INFO.message_events.chat_message_activity", "$JS.API.CONSUMER.CREATE.message_events.chat_message_activity"},
+		{"$JS.API.CONSUMER.INFO.message_events.chat_message_activity", "$JS.API.STREAM.PURGE.message_events"},
+		{"$JS.API.CONSUMER.INFO.message_events.chat_message_activity", "$JS.API.CONSUMER.PAUSE.message_events.chat_message_activity"},
 		{"_INBOX.voice.chat.>", "_INBOX.>"},
 		{"_INBOX.voice.chat.>", "_INBOX.voice.messaging.>"},
+		{"_INBOX.voice.chat.chat_message_activity", "_INBOX.voice.messaging.foreign"},
 	} {
 		contents := strings.Replace(string(base), tc.old, tc.replacement, 1)
 		path := filepath.Join(t.TempDir(), "unsafe.yaml")
@@ -139,6 +211,25 @@ func TestPolicyRejectsServiceMutationAndBroadInbox(t *testing.T) {
 		if _, err := readPolicy(path); err == nil {
 			t.Errorf("unsafe ACL grant %q accepted", tc.replacement)
 		}
+	}
+}
+
+func TestIssueRejectsUnsafeParentMode(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("issuer is intentionally Linux-only")
+	}
+	parent := t.TempDir()
+	cert, key, ca := testTLS(t, parent, "voice-nats")
+	if err := os.Chmod(parent, 0755); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(parent, 0700)
+	dest := filepath.Join(parent, "issued")
+	if err := issue(canonicalACL(), dest, "voice-staging", cert, key, ca); err == nil {
+		t.Fatal("issuer accepted group/world-readable parent")
+	}
+	if _, err := os.Stat(dest); !os.IsNotExist(err) {
+		t.Errorf("failed issuance left output: %v", err)
 	}
 }
 

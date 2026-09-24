@@ -3,6 +3,7 @@
 version: 1
 services:
   analytics:
+    no_response: true
     publish:
       - $JS.API.CONSUMER.INFO.message_events.analytics_v2_msg
       - $JS.API.CONSUMER.INFO.user_events.analytics_v2_user
@@ -46,9 +47,11 @@ services:
       - _INBOX.voice.analytics.analytics_v2_moderation
       - _INBOX.voice.analytics.analytics_v2_telemetry
   auth:
+    no_response: true
     publish: [user.guest_converted, user.account_deleted, user.account_restored, $JS.API.CONSUMER.INFO.subscription_events.auth_subscription_tier, $JS.ACK.subscription_events.auth_subscription_tier.>]
     subscribe: [_INBOX.voice.auth.requests.>, _INBOX.voice.auth.subscription_tier]
   bot:
+    no_response: true
     publish:
       - bot.registered
       - bot.command_executed
@@ -59,6 +62,7 @@ services:
       - $JS.ACK.message_events.bot_message_events.>
     subscribe: [_INBOX.voice.bot.>, _INBOX.voice.bot.bot_message_events]
   chat:
+    no_response: true
     publish:
       - chat.created
       - chat.member_changed
@@ -70,6 +74,7 @@ services:
       - $JS.ACK.message_events.chat_message_activity.>
     subscribe: [_INBOX.voice.chat.>, _INBOX.voice.chat.chat_account_deleted, _INBOX.voice.chat.chat_message_activity]
   file:
+    no_response: true
     publish:
       - file.uploaded
       - file.processed
@@ -79,9 +84,11 @@ services:
       - $JS.API.STREAM.INFO.file_events
     subscribe: [_INBOX.voice.file.>]
   gateway:
+    no_response: true
     publish: [analytics.gateway.request]
     subscribe: [_INBOX.voice.gateway.>]
   matchmaking:
+    no_response: true
     publish:
       - mm.search_started
       - mm.search_cancelled
@@ -96,6 +103,7 @@ services:
       - $JS.ACK.story_events.matchmaking_story_lfp_v2.>
     subscribe: [_INBOX.voice.matchmaking.>, _INBOX.voice.matchmaking.matchmaking_story_lfp_v2]
   messaging:
+    no_response: true
     publish:
       - message.sent
       - message.edited
@@ -116,6 +124,7 @@ services:
       - $JS.ACK.user_events.messaging_receipt_privacy.>
     subscribe: [_INBOX.voice.messaging.>, _INBOX.voice.messaging.messaging_delivery_ack, _INBOX.voice.messaging.messaging_receipt_privacy]
   moderation:
+    no_response: true
     publish:
       - moderation.report_created
       - moderation.sanction_applied
@@ -123,6 +132,7 @@ services:
       - $JS.API.STREAM.INFO.moderation_events
     subscribe: [_INBOX.voice.moderation.>]
   notification:
+    no_response: true
     publish:
       - analytics.notification.push_sent
       - $JS.API.CONSUMER.INFO.message_events.notif_msg_v2
@@ -149,6 +159,7 @@ services:
       - _INBOX.voice.notification.subscription
       - _INBOX.voice.notification.moderation
   realtime:
+    no_response: true
     publish:
       - message.delivery_ack
       - $JS.API.STREAM.INFO.message_events
@@ -176,9 +187,11 @@ services:
       - _INBOX.voice.realtime1.voice
       - _INBOX.voice.realtime1.matchmaking
   role:
+    no_response: true
     publish: [role.created, role.updated, role.deleted, role.assigned, role.revoked, role.chat_override_set, role.chat_override_removed, role.voice_override_set, role.voice_override_removed, $JS.API.STREAM.INFO.role_events]
     subscribe: [_INBOX.voice.role.>]
   search:
+    no_response: true
     publish:
       - analytics.search.query
       - $JS.API.CONSUMER.INFO.message_events.search-indexer-message-v1
@@ -196,9 +209,11 @@ services:
       - _INBOX.voice.search.indexer.chat
       - _INBOX.voice.search.user-projection
   social:
+    no_response: true
     publish: [social.friend_request, social.friend_accepted, social.friend_removed, social.user_blocked, social.contacts_synced, $JS.API.STREAM.INFO.social_events]
     subscribe: [_INBOX.voice.social.>]
   space:
+    no_response: true
     publish:
       - space.tree_changed
       - space.created
@@ -214,12 +229,15 @@ services:
       - $JS.ACK.subscription_events.space_subscription_entitlement.>
     subscribe: [_INBOX.voice.space.>, _INBOX.voice.space.space_subscription_entitlement]
   story:
+    no_response: true
     publish: [story.created, story.viewed, story.reacted, story.expired, story.highlight_created, story.lfp_created, story.lfp_response, $JS.API.STREAM.INFO.story_events]
     subscribe: [_INBOX.voice.story.>]
   subscription:
+    no_response: true
     publish: [subscription.plan_started, subscription.plan_cancelled, subscription.plan_expired, subscription.downgrade, subscription.payment_success, subscription.payment_failed, subscription.space_pro_started, subscription.space_pro_expired, subscription.grace_reminder, subscription.entitlement_changed, analytics.subscription.payment_success, analytics.subscription.payment_failed, $JS.API.STREAM.INFO.subscription_events]
     subscribe: [_INBOX.voice.subscription.>]
   user:
+    no_response: true
     publish:
       - user.account_deleted
       - user.profile_created
@@ -237,9 +255,11 @@ services:
       - $JS.ACK.user_events.user-account-deletion-v1.>
     subscribe: [_INBOX.voice.user.>]
   voice:
+    no_response: true
     publish: [voice.call_incoming, voice.call_accepted, voice.call_declined, voice.call_missed, voice.call_ended, voice.state_changed, voice.screen_share_started, voice.screen_share_stopped, voice.call_started, voice.member_joined, $JS.API.STREAM.INFO.voice_events]
     subscribe: [_INBOX.voice.voice.>]
 bootstrap:
+  no_response: true
   publish:
     - $JS.API.STREAM.INFO.message_events
     - $JS.API.STREAM.INFO.chat_events

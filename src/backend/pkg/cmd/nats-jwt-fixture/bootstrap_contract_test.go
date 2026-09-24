@@ -25,6 +25,12 @@ func TestCentralBootstrapPreprovisionsEveryFixedConsumer(t *testing.T) {
 		if err := yaml.Unmarshal(contents, &config); err != nil {
 			t.Fatal(err)
 		}
+		if !strings.Contains(config.Data["bootstrap.sh"], "nats --creds \"$NATS_CREDS\" --inbox-prefix _INBOX.voice.bootstrap.reply") {
+			t.Errorf("%s Job does not use scoped request/reply inbox", job)
+		}
+		if job == "analytics-chat" && !strings.Contains(config.Data["bootstrap.sh"], "[(.config.subjects | sort), .config.storage, .config.retention, .config.max_age]") {
+			t.Error("Analytics/Chat Job does not reject stream storage, retention, or age drift")
+		}
 		for _, line := range strings.Split(config.Data["bootstrap.sh"], "\n") {
 			line = strings.TrimSpace(line)
 			if strings.HasPrefix(line, "consumer ") || strings.HasPrefix(line, "consumer_filters ") || strings.HasPrefix(line, "pull_consumer ") {
@@ -151,4 +157,20 @@ func contains(subjects []string, subject string) bool {
 		}
 	}
 	return false
+}
+
+func TestAuthComposeWaitsForCentralTierBootstrap(t *testing.T) {
+	root := filepath.Join("..", "..", "..", "..", "..")
+	contents, err := os.ReadFile(filepath.Join(root, "docker-compose.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	block := strings.SplitN(string(contents), "\n  auth:\n", 2)
+	if len(block) != 2 {
+		t.Fatal("Auth Compose service missing")
+	}
+	service := strings.SplitN(block[1], "\n  social-principal-init:\n", 2)[0]
+	if !strings.Contains(service, "      nats-analytics-chat-bootstrap:\n        condition: service_completed_successfully") {
+		t.Error("Compose Auth can start before auth_subscription_tier is preprovisioned")
+	}
 }

@@ -583,6 +583,9 @@ The reviewed grants and issuer contract are in
 trusted Linux host from the exact release SHA; the issuer writes a protected
 four-Secret `secrets.json` restore List plus a separate operator/APP/SYS seed
 backup. The disposable fixture is not staging or production issuance material.
+Do not issue or store this material under the shared staging `pmd` UID;
+perform issuance on an isolated trusted Linux runner and transport the restore
+List by secret-manager stdin, with signing seeds backed up separately.
 
 Staging and production use an operator-signed APP account for JetStream and a
 distinct SYS account with no JetStream entitlement. The hub resolves both JWTs

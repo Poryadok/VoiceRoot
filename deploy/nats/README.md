@@ -39,7 +39,12 @@ only; its signing seeds are discarded.
 For staging or production issuance, use the separate Linux-only issuer with a
 fresh absolute destination and external TLS certificate/key/CA PEM files. The
 certificate must chain to that CA and contain an exact `voice-nats` DNS SAN.
-Run this in a trusted Linux environment with a protected parent directory:
+Run this on an isolated trusted Linux host/runner with a protected parent
+directory. The shared staging `pmd` host is not an issuance location because
+its UID also holds SSH and Kubernetes credentials; do not copy output or
+signing seeds into `/home/pmd`. Prefer an ephemeral private filesystem,
+transfer the `secrets.json` restore bundle through the approved secret-manager
+stdin path, and separately back up the three signing seeds there:
 
 ```bash
 cd src/backend/pkg

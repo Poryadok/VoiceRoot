@@ -220,6 +220,9 @@ func TestCanonicalACLHasScopedRuntimeAndBootstrapGrants(t *testing.T) {
 		t.Fatal(err)
 	}
 	for service, grant := range acl.Services {
+		if !grant.NoResponse {
+			t.Errorf("%s may use bounded response permission to bypass exact ACK grant", service)
+		}
 		for _, subject := range grant.Publish {
 			if strings.HasPrefix(subject, "$JS.API.CONSUMER.CREATE.") ||
 				strings.HasPrefix(subject, "$JS.API.CONSUMER.DURABLE.CREATE.") ||
@@ -231,10 +234,15 @@ func TestCanonicalACLHasScopedRuntimeAndBootstrapGrants(t *testing.T) {
 			}
 		}
 		for _, subject := range grant.Subscribe {
-			if strings.HasPrefix(subject, "_INBOX.") && strings.HasSuffix(subject, ".>") && subject != "_INBOX.voice."+service+".>" && !(service == "auth" && subject == "_INBOX.voice.auth.requests.>") {
-				t.Errorf("%s has cross-service reply inbox %s", service, subject)
+			if strings.HasPrefix(subject, "_INBOX.") && strings.HasSuffix(subject, ".>") {
+				if subject != "_INBOX.voice."+service+".>" && !(service == "auth" && subject == "_INBOX.voice.auth.requests.>") {
+					t.Errorf("%s has cross-service reply inbox %s", service, subject)
+				}
 			}
 		}
+	}
+	if !acl.Bootstrap.NoResponse {
+		t.Error("bootstrap must not inherit response publish permission")
 	}
 	if !slices.Contains(acl.Services["auth"].Subscribe, "_INBOX.voice.auth.requests.>") || slices.Contains(acl.Services["auth"].Subscribe, "_INBOX.voice.auth.>") {
 		t.Error("Auth reply inbox must be scoped to its JNATS requests prefix")
@@ -260,6 +268,27 @@ func TestCanonicalACLHasScopedRuntimeAndBootstrapGrants(t *testing.T) {
 	} {
 		if !slices.Contains(acl.Bootstrap.Publish, subject) {
 			t.Errorf("bootstrap missing grant %s", subject)
+		}
+	}
+}
+
+func TestCanonicalJWTDoesNotUseResponsePermission(t *testing.T) {
+	path := filepath.Join("..", "..", "..", "..", "..", "deploy", "nats", "acl-intent.yaml")
+	acl, err := loadACL(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(t.TempDir(), "fixture")
+	if err := generate(dest, acl); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range append(append([]string{}, serviceNames...), "bootstrap") {
+		claims, err := jwt.DecodeUserClaims(credsJWT(t, mustRead(t, filepath.Join(dest, "creds", name+".creds"))))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if claims.Resp != nil {
+			t.Errorf("%s JWT grants response permission", name)
 		}
 	}
 }

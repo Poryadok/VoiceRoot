@@ -4,7 +4,7 @@ set -eu
 nats_url="${NATS_URL:?NATS_URL is required}"
 
 nats() {
-  if [ -n "${NATS_CREDS:-}" ]; then command nats --creds "$NATS_CREDS" "$@"; else command nats "$@"; fi
+  if [ -n "${NATS_CREDS:-}" ]; then command nats --creds "$NATS_CREDS" --inbox-prefix _INBOX.voice.bootstrap.reply "$@"; else command nats "$@"; fi
 }
 
 stream() {

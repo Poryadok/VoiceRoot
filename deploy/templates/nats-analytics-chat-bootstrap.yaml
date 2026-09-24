@@ -11,7 +11,7 @@ data:
     nats_url="${NATS_URL:?NATS_URL is required}"
 
     nats() {
-      if [ -n "${NATS_CREDS:-}" ]; then command nats --creds "$NATS_CREDS" "$@"; else command nats "$@"; fi
+      if [ -n "${NATS_CREDS:-}" ]; then command nats --creds "$NATS_CREDS" --inbox-prefix _INBOX.voice.bootstrap.reply "$@"; else command nats "$@"; fi
     }
 
     stream() {
@@ -22,12 +22,13 @@ data:
         printf '%s' "$info" | jq -r '.error.description' | grep -qi 'stream not found' && { echo "required central stream not found: $name" >&2; exit 1; }
         echo "$info" >&2; exit 1
       fi
-      actual="$(printf '%s' "$info" | jq -c '.config.subjects | sort')"
-      if [ "$actual" != "$expected" ]; then
+      actual="$(printf '%s' "$info" | jq -c '[(.config.subjects | sort), .config.storage, .config.retention, .config.max_age]')"
+      expected_config="$(jq -cn --argjson subjects "$expected" '[ $subjects, "file", "limits", 604800000000000 ]')"
+      if [ "$actual" != "$expected_config" ]; then
         # Subjects are public topology, not credential material. Keep the
         # fail-closed check diagnosable when an independently bootstrapped
         # central stream drifts from this exact contract.
-        printf 'incompatible subjects for stream %s: expected=%s actual=%s\n' "$name" "$expected" "$actual" >&2
+        printf 'incompatible configuration for stream %s: expected=%s actual=%s\n' "$name" "$expected_config" "$actual" >&2
         exit 1
       fi
     }

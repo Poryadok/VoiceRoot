@@ -285,6 +285,8 @@ services:
         condition: service_healthy
       nats:
         condition: service_started
+      nats-analytics-chat-bootstrap:
+        condition: service_completed_successfully
       verification-stub:
         condition: service_healthy
     healthcheck:

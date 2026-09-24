@@ -12,7 +12,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/user"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"slices"
 	"strings"
@@ -67,7 +69,7 @@ func main() {
 	fmt.Println("NATS JWT Secrets issued in protected destination")
 }
 
-func issue(aclPath, dest, namespace, certPath, keyPath, caPath string) error {
+func issue(aclPath, dest, namespace, certPath, keyPath, caPath string) (resultErr error) {
 	if runtime.GOOS != "linux" {
 		return errors.New("issuer requires Linux filesystem permissions")
 	}
@@ -76,6 +78,9 @@ func issue(aclPath, dest, namespace, certPath, keyPath, caPath string) error {
 	}
 	if !filepath.IsAbs(dest) || filepath.Clean(dest) != dest {
 		return errors.New("destination must be a clean absolute path")
+	}
+	if err := validateIssuanceParent(filepath.Dir(dest)); err != nil {
+		return err
 	}
 	if _, err := os.Lstat(dest); err == nil || !errors.Is(err, os.ErrNotExist) {
 		return errors.New("destination already exists or cannot be checked")
@@ -92,7 +97,7 @@ func issue(aclPath, dest, namespace, certPath, keyPath, caPath string) error {
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(staging)
+	defer func() { resultErr = errors.Join(resultErr, os.RemoveAll(staging)) }()
 	if err := os.Chmod(staging, 0700); err != nil {
 		return err
 	}
@@ -127,6 +132,33 @@ func issue(aclPath, dest, namespace, certPath, keyPath, caPath string) error {
 	return os.Rename(staging, dest)
 }
 
+func validateIssuanceParent(parent string) error {
+	if os.Geteuid() == 0 {
+		return errors.New("issuer must run as a dedicated non-root user")
+	}
+	identity, err := user.Current()
+	if err != nil || identity.Username == "pmd" {
+		return errors.New("issuer identity is unavailable or shared with staging workloads")
+	}
+	clean := filepath.Clean(parent)
+	if clean == "/home/pmd" || strings.HasPrefix(clean, "/home/pmd/") {
+		return errors.New("shared staging home is not an issuance location")
+	}
+	info, err := os.Stat(clean)
+	if err != nil || !info.IsDir() || info.Mode().Perm() != 0700 {
+		return errors.New("issuance parent must exist with mode 0700")
+	}
+	stat := reflect.ValueOf(info.Sys())
+	if stat.Kind() != reflect.Pointer || stat.IsNil() {
+		return errors.New("issuance parent ownership is unavailable")
+	}
+	uid := stat.Elem().FieldByName("Uid")
+	if !uid.IsValid() || !uid.CanUint() || uid.Uint() != uint64(os.Geteuid()) {
+		return errors.New("issuance parent must belong to the issuer identity")
+	}
+	return nil
+}
+
 func readPolicy(path string) (policy, error) {
 	contents, err := os.ReadFile(path)
 	if err != nil {
@@ -158,7 +190,7 @@ func readPolicy(path string) (policy, error) {
 }
 
 func validGrant(g grant, owner string, bootstrap bool) bool {
-	if len(g.Publish)+len(g.Subscribe) == 0 {
+	if len(g.Publish)+len(g.Subscribe) == 0 || !g.NoResponse {
 		return false
 	}
 	seen := map[string]bool{}
@@ -169,14 +201,26 @@ func validGrant(g grant, owner string, bootstrap bool) bool {
 		if strings.Contains(subject, ">") && !validAck(subject) {
 			return false
 		}
-		if !bootstrap && (strings.HasPrefix(subject, "$JS.API.STREAM.CREATE.") || strings.HasPrefix(subject, "$JS.API.STREAM.UPDATE.") || strings.HasPrefix(subject, "$JS.API.STREAM.DELETE.") || strings.HasPrefix(subject, "$JS.API.CONSUMER.CREATE.") || strings.HasPrefix(subject, "$JS.API.CONSUMER.DURABLE.CREATE.") || strings.HasPrefix(subject, "$JS.API.CONSUMER.DELETE.")) {
-			return false
+		if strings.HasPrefix(subject, "$JS.API.") {
+			allowed := strings.HasPrefix(subject, "$JS.API.STREAM.INFO.") ||
+				strings.HasPrefix(subject, "$JS.API.CONSUMER.INFO.") ||
+				bootstrap && (strings.HasPrefix(subject, "$JS.API.STREAM.CREATE.") || strings.HasPrefix(subject, "$JS.API.CONSUMER.CREATE.")) ||
+				!bootstrap && strings.HasPrefix(subject, "$JS.API.CONSUMER.MSG.NEXT.")
+			if !allowed {
+				return false
+			}
 		}
 		seen[subject] = true
 	}
 	for _, subject := range g.Subscribe {
 		if seen[subject] || subject == "" || strings.ContainsAny(subject, " \t\r\n*") {
 			return false
+		}
+		if strings.HasPrefix(subject, "_INBOX.") {
+			prefix := "_INBOX.voice." + owner + "."
+			if !strings.HasPrefix(subject, prefix) && !(owner == "realtime" && strings.HasPrefix(subject, "_INBOX.voice.realtime1.")) {
+				return false
+			}
 		}
 		if strings.Contains(subject, ">") {
 			allowed := subject == "_INBOX.voice."+owner+".>" || owner == "auth" && subject == "_INBOX.voice.auth.requests.>" || bootstrap && subject == "_INBOX.voice.bootstrap.reply.>"
