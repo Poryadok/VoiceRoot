@@ -3,16 +3,15 @@ package voice.backend.auth.service;
 import io.nats.client.Connection;
 import io.nats.client.Dispatcher;
 import io.nats.client.JetStream;
-import io.nats.client.JetStreamApiException;
 import io.nats.client.JetStreamManagement;
 import io.nats.client.JetStreamSubscription;
 import io.nats.client.Nats;
 import io.nats.client.Options;
 import io.nats.client.PushSubscribeOptions;
-import io.nats.client.api.RetentionPolicy;
-import io.nats.client.api.StorageType;
-import io.nats.client.api.StreamConfiguration;
-import java.io.IOException;
+import io.nats.client.api.AckPolicy;
+import io.nats.client.api.ConsumerConfiguration;
+import io.nats.client.api.ConsumerInfo;
+import io.nats.client.api.DeliverPolicy;
 import java.time.Duration;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -29,69 +28,85 @@ public final class NatsSubscriptionTierStore implements SubscriptionTierResolver
   private static final String STREAM = "subscription_events";
   private static final String SUBJECT = "subscription.>";
   private static final String DURABLE = "auth_subscription_tier";
+  private static final String DELIVER = "_INBOX.voice.auth.subscription_tier";
 
   private final InMemorySubscriptionTierStore delegate = new InMemorySubscriptionTierStore();
   private final Connection connection;
   private final JetStreamSubscription subscription;
 
-  public NatsSubscriptionTierStore(String natsUrl) {
+  public NatsSubscriptionTierStore(String natsUrl, String credentialsFile) {
+    this(connect(natsUrl, credentialsFile));
+  }
+
+  private static Connection connect(String natsUrl, String credentialsFile) {
     try {
-      this.connection =
-          Nats.connect(
-              new Options.Builder()
-                  .server(natsUrl)
-                  .connectionName("voice-auth-subscription-tier")
-                  .maxReconnects(-1)
-                  .reconnectWait(Duration.ofSeconds(1))
-                  .build());
-      ensureStream(connection);
-      JetStream js = connection.jetStream();
-      Dispatcher dispatcher = connection.createDispatcher();
-      PushSubscribeOptions opts =
-          PushSubscribeOptions.builder().stream(STREAM).durable(DURABLE).build();
-      this.subscription = js.subscribe(SUBJECT, dispatcher, this::onMessage, false, opts);
-      log.info("subscription.events tier consumer started on {}", SUBJECT);
+      Options.Builder options = new Options.Builder()
+              .server(natsUrl)
+              .connectionName("voice-auth-subscription-tier")
+              .inboxPrefix("_INBOX.voice.auth.requests")
+              .maxReconnects(-1)
+              .reconnectWait(Duration.ofSeconds(1));
+      if (credentialsFile != null && !credentialsFile.isBlank()) {
+        options.credentialPath(credentialsFile);
+      }
+      return Nats.connect(options.build());
     } catch (Exception ex) {
       throw new IllegalStateException("connect subscription.events consumer", ex);
     }
   }
 
-  private static void ensureStream(Connection connection) throws IOException, JetStreamApiException {
-    JetStreamManagement jsm = connection.jetStreamManagement();
+  NatsSubscriptionTierStore(Connection connection) {
+    this.connection = connection;
     try {
-      jsm.getStreamInfo(STREAM);
-    } catch (JetStreamApiException ex) {
-      if (!isStreamNotFound(ex)) {
-        throw ex;
+      JetStreamManagement jsm = connection.jetStreamManagement();
+      validateConsumer(jsm.getConsumerInfo(STREAM, DURABLE));
+      JetStream js = connection.jetStream();
+      Dispatcher dispatcher = connection.createDispatcher();
+      PushSubscribeOptions opts =
+          PushSubscribeOptions.builder()
+              .stream(STREAM)
+              .durable(DURABLE)
+              .deliverSubject(DELIVER)
+              .bind(true)
+              .build();
+      this.subscription = js.subscribe(SUBJECT, dispatcher, this::onMessage, false, opts);
+      log.info("subscription.events tier consumer started on {}", SUBJECT);
+    } catch (Exception ex) {
+      try {
+        connection.close();
+      } catch (Exception closeEx) {
+        ex.addSuppressed(closeEx);
       }
-      jsm.addStream(
-          StreamConfiguration.builder()
-              .name(STREAM)
-              .subjects(streamSubjects())
-              .retentionPolicy(RetentionPolicy.Limits)
-              .maxAge(Duration.ofDays(7))
-              .storageType(StorageType.File)
-              .build());
+      throw new IllegalStateException("connect subscription.events consumer", ex);
     }
   }
 
-  private static boolean isStreamNotFound(JetStreamApiException ex) {
-    int code = ex.getApiErrorCode();
-    return code == 404 || code == 10059;
-  }
-
-  /** Matches subscription service JetStream subjects for cross-service compatibility. */
-  private static String[] streamSubjects() {
-    return new String[] {
-      "subscription.plan_started",
-      "subscription.plan_cancelled",
-      "subscription.plan_expired",
-      "subscription.downgrade",
-      "subscription.payment_success",
-      "subscription.payment_failed",
-      "subscription.space_pro_started",
-      "subscription.space_pro_expired",
-    };
+  private static void validateConsumer(ConsumerInfo info) {
+    if (info == null || !STREAM.equals(info.getStreamName())) {
+      throw new IllegalStateException("subscription tier consumer stream mismatch");
+    }
+    if (!DURABLE.equals(info.getName())) {
+      throw new IllegalStateException("subscription tier consumer durable mismatch");
+    }
+    ConsumerConfiguration config = info.getConsumerConfiguration();
+    if (config == null || !DURABLE.equals(config.getDurable())) {
+      throw new IllegalStateException("subscription tier consumer durable config mismatch");
+    }
+    if (!java.util.List.of(SUBJECT).equals(config.getFilterSubjects())) {
+      throw new IllegalStateException("subscription tier consumer filter mismatch");
+    }
+    if (!DELIVER.equals(config.getDeliverSubject())) {
+      throw new IllegalStateException("subscription tier consumer deliver subject mismatch");
+    }
+    if (config.getDeliverGroup() != null && !config.getDeliverGroup().isEmpty()) {
+      throw new IllegalStateException("subscription tier consumer deliver group mismatch");
+    }
+    if (config.getAckPolicy() != AckPolicy.Explicit) {
+      throw new IllegalStateException("subscription tier consumer ack policy mismatch");
+    }
+    if (config.getDeliverPolicy() != DeliverPolicy.New) {
+      throw new IllegalStateException("subscription tier consumer deliver policy mismatch");
+    }
   }
 
   void onMessage(io.nats.client.Message msg) {

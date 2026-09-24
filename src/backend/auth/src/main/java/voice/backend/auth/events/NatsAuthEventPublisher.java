@@ -28,10 +28,10 @@ public class NatsAuthEventPublisher
         throw new IllegalArgumentException("AUTH_NATS_URL is required");
       }
       Options.Builder options = new Options.Builder().server(natsUrl)
-          .connectionName("voice-auth-events").maxReconnects(-1)
+          .connectionName("voice-auth-events")
+          .inboxPrefix("_INBOX.voice.auth.requests")
+          .maxReconnects(-1)
           .reconnectWait(Duration.ofSeconds(1));
-      // Anonymous brokers remain the current compatibility mode. A future
-      // JWT identity foundation can opt in without changing this publisher.
       if (credentialsFile != null && !credentialsFile.isBlank()) {
         options.credentialPath(credentialsFile);
       }

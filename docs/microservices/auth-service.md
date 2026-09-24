@@ -33,6 +33,16 @@ Auth creates its durable consumer before a protected one-watermark snapshot,
 applies `INACTIVE` tombstones, then drains queued events. The current optional
 in-memory NATS tier store is not an authority/restore path. Full replay and RED
 contract: [subscription-lifecycle-convergence-exec-plan.md](../testing/subscription-lifecycle-convergence-exec-plan.md).
+
+When `auth.nats.url` is configured, the optional tier cache attaches only to a
+centrally provisioned JetStream push consumer: stream `subscription_events`,
+durable `auth_subscription_tier`, filter `subscription.>`, delivery subject
+`_INBOX.voice.auth.subscription_tier`, no delivery group, explicit ACK, and
+deliver-new. Auth fails startup if the consumer is absent or incompatible; it
+does not create streams or consumers. An optional `auth.nats.creds-file` applies
+to both Auth NATS connections for direct authenticated NATS deployments; the
+staging pod-local leaf connection remains anonymous and does not mount app
+credentials. Request replies use `_INBOX.voice.auth.requests.>`.
 - OTP throttling в Auth-owned Redis: `auth:otp:send:<account_id>` резервируется
   одним `SET NX PX` до создания/отправки кода; `auth:otp:verify:<account_id>`
   ведёт атомарное admission до сравнения кода в Redis sorted-set sliding window
