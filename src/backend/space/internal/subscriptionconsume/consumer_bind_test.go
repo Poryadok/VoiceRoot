@@ -13,9 +13,15 @@ func TestSpaceEntitlementDurableConfig(t *testing.T) {
 		DeliverSubject: spaceDeliverySubject, DeliverPolicy: nats.DeliverNewPolicy, AckPolicy: nats.AckExplicitPolicy,
 	}}
 	require.NoError(t, validateSpaceDurable(valid))
+	canonical := *valid
+	canonical.Config.FilterSubjects = []string{subjectSpaceProExpired, subjectSpaceProStarted}
+	require.NoError(t, validateSpaceDurable(&canonical), "NATS may return filter_subjects in canonical order")
 	invalid := *valid
 	invalid.Config.FilterSubjects = []string{subjectSpaceProStarted, "subscription.user_premium_started"}
 	require.Error(t, validateSpaceDurable(&invalid))
+	invalid = *valid
+	invalid.Config.FilterSubjects = []string{subjectSpaceProStarted, subjectSpaceProStarted}
+	require.Error(t, validateSpaceDurable(&invalid), "duplicate filter must not replace the expired subject")
 	invalid = *valid
 	invalid.Config.FilterSubjects = nil
 	invalid.Config.FilterSubject = "subscription.>"
