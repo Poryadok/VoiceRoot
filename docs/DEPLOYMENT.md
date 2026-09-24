@@ -612,6 +612,18 @@ state-preserving migration of the eight existing stream messages before
 cutover. Do not silently increase the limit, discard consumer state, or start
 the JWT hub on empty storage.
 
+When the owner explicitly authorizes a destructive staging reset, the manual
+`Staging deploy` workflow supports a separate clean-install path. It verifies
+the requested NATS storage class, image, and operator-confirmed capacity before deleting only the dedicated
+`voice-staging` namespace, then recreates that namespace, restores its Secrets,
+starts the PVC-backed NATS candidate as the primary hub, and recreates the
+current streams and fixed durables before app rollout. This path intentionally
+discards every Voice resource and PVC in that namespace, including old NATS
+streams, messages and consumers; it does not delete cluster resources, nodes or
+any other namespace. The opt-in is manual-only, defaults to false, and requires
+a full deploy from `master` using the exact workflow SHA and runs the HTTP smoke. Ordinary full
+deployments remain behind the state-preserving migration gate above.
+
 For each target namespace (`voice-staging` or `voice-prod`), the secret manager
 must create `voice-nats-operator` with UTF-8 `operator.jwt`, `account.jwt`,
 `system-account.jwt`, `account.public`, and `system-account.public`; the hub

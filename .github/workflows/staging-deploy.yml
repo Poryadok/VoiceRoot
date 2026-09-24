@@ -25,6 +25,31 @@ on:
         required: false
         type: string
         default: "false"
+      wipe_voice_staging_data:
+        description: "Delete and recreate only the voice-staging namespace before a full deploy"
+        required: false
+        type: boolean
+        default: false
+      nats_storage_class:
+        description: "NATS PVC storage class"
+        required: false
+        type: string
+        default: local-path
+      nats_storage_size:
+        description: "NATS PVC requested capacity"
+        required: false
+        type: string
+        default: 20Gi
+      nats_capacity_confirmed:
+        description: "Confirm reviewed node capacity is sufficient for the requested NATS PVC"
+        required: false
+        type: boolean
+        default: false
+      run_smoke:
+        description: "Run the staging HTTP smoke after deployment"
+        required: false
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       image_tag:
@@ -44,6 +69,31 @@ on:
       needs_user_space_rollout:
         required: false
         default: "false"
+      wipe_voice_staging_data:
+        description: "Delete and recreate only the voice-staging namespace before a full deploy"
+        required: false
+        type: boolean
+        default: false
+      nats_storage_class:
+        description: "NATS PVC storage class"
+        required: false
+        type: string
+        default: local-path
+      nats_storage_size:
+        description: "NATS PVC requested capacity"
+        required: false
+        type: string
+        default: 20Gi
+      nats_capacity_confirmed:
+        description: "Confirm reviewed node capacity is sufficient for the requested NATS PVC"
+        required: false
+        type: boolean
+        default: false
+      run_smoke:
+        description: "Run the staging HTTP smoke after deployment"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -94,6 +144,37 @@ jobs:
           fi
           bash scripts/staging/verify-staging-images.sh
 
+      - name: Preflight staging NATS storage
+        if: inputs.deploy_mode == 'full' || inputs.wipe_voice_staging_data
+        env:
+          VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
+          VOICE_NATS_STORAGE_CLASS: ${{ inputs.nats_storage_class }}
+          VOICE_NATS_STORAGE_SIZE: ${{ inputs.nats_storage_size }}
+          WIPE_VOICE_STAGING_DATA: ${{ inputs.wipe_voice_staging_data }}
+          NATS_CAPACITY_CONFIRMED: ${{ inputs.nats_capacity_confirmed }}
+          DEPLOY_MODE: ${{ inputs.deploy_mode }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          set -euo pipefail
+          if [ "${WIPE_VOICE_STAGING_DATA}" = "true" ]; then
+            [ "${DEPLOY_MODE}" = "full" ] || { echo 'ERROR: clean install requires deploy_mode=full' >&2; exit 1; }
+            [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ] || { echo 'ERROR: clean install is manual-dispatch only' >&2; exit 1; }
+            [ "${GITHUB_REF}" = "refs/heads/master" ] || { echo 'ERROR: clean install must run from master' >&2; exit 1; }
+            [ "${IMAGE_TAG}" = "${GITHUB_SHA}" ] || { echo 'ERROR: clean install image_tag must equal the master workflow SHA' >&2; exit 1; }
+            [ "${{ inputs.run_smoke }}" = "true" ] || { echo 'ERROR: clean install requires the staging HTTP smoke' >&2; exit 1; }
+            [ "${NATS_CAPACITY_CONFIRMED}" = "true" ] || { echo 'ERROR: clean install requires explicit NATS PVC capacity confirmation' >&2; exit 1; }
+          fi
+          bash scripts/staging/preflight-nats-pvc.sh
+
+      - name: Recreate Voice staging namespace (destructive)
+        if: github.event_name == 'workflow_dispatch' && inputs.wipe_voice_staging_data && inputs.deploy_mode == 'full'
+        env:
+          VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
+          VOICE_NATS_STORAGE_CLASS: ${{ inputs.nats_storage_class }}
+          VOICE_NATS_STORAGE_SIZE: ${{ inputs.nats_storage_size }}
+          VOICE_STAGING_WIPE_APPROVED: ${{ inputs.wipe_voice_staging_data }}
+        run: bash scripts/staging/reset-voice-staging-namespace.sh
+
       - name: Ensure MinIO credentials
         env:
           VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
@@ -135,6 +216,9 @@ jobs:
           GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
           NOTIFICATIONS_ENABLED: ${{ vars.STAGING_ALERTMANAGER_NOTIFICATIONS_ENABLED }}
           DEPLOY_MODE: ${{ inputs.deploy_mode }}
+          VOICE_NATS_STORAGE_CLASS: ${{ inputs.nats_storage_class }}
+          VOICE_NATS_STORAGE_SIZE: ${{ inputs.nats_storage_size }}
+          VOICE_NATS_FRESH_INSTALL: ${{ inputs.wipe_voice_staging_data }}
           NEEDS_FULL_ROLLOUT: ${{ inputs.needs_full_rollout }}
           NEEDS_USER_SPACE_ROLLOUT: ${{ inputs.needs_user_space_rollout }}
         run: |
@@ -165,7 +249,7 @@ jobs:
           bash scripts/staging/render-and-apply.sh
 
       - name: Staging smoke (optional)
-        if: vars.STAGING_SMOKE_ENABLED == 'true'
+        if: vars.STAGING_SMOKE_ENABLED == 'true' || inputs.run_smoke
         env:
           VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
           VOICE_GATEWAY_INGRESS_HOST: ${{ vars.VOICE_GATEWAY_INGRESS_HOST }}
