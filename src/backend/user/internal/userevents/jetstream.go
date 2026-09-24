@@ -29,7 +29,19 @@ const (
 	subjectPresenceChanged = "user.presence_changed"
 	subjectGameDetected    = "user.game_detected"
 	subjectSettingsChanged = "user.settings_changed"
+	accountDeletionDurable = "user-account-deletion-v1"
 )
+
+func validateAccountDeletionDurable(info *nats.ConsumerInfo) error {
+	if info == nil || info.Stream != streamName || info.Name != accountDeletionDurable ||
+		info.Config.Durable != accountDeletionDurable || info.Config.FilterSubject != subjectAccountDeleted ||
+		len(info.Config.FilterSubjects) != 0 || info.Config.DeliverSubject != "" ||
+		info.Config.DeliverGroup != "" || info.Config.DeliverPolicy != nats.DeliverAllPolicy ||
+		info.Config.AckPolicy != nats.AckExplicitPolicy {
+		return fmt.Errorf("account deletion durable %q has incompatible configuration", accountDeletionDurable)
+	}
+	return nil
+}
 
 // JetStreamPublisher publishes UserStreamEvent payloads to NATS JetStream.
 type JetStreamPublisher struct {
@@ -83,7 +95,14 @@ func (c *AccountDeletionConsumer) Start() error {
 			return fmt.Errorf("account deletion consumer not initialized")
 		}
 		bind = func() (*nats.Subscription, error) {
-			return c.js.PullSubscribe(subjectAccountDeleted, "user-account-deletion-v1", nats.BindStream(streamName))
+			info, err := c.js.ConsumerInfo(streamName, accountDeletionDurable)
+			if err != nil {
+				return nil, fmt.Errorf("inspect account deletion durable: %w", err)
+			}
+			if err := validateAccountDeletionDurable(info); err != nil {
+				return nil, err
+			}
+			return c.js.PullSubscribe(subjectAccountDeleted, accountDeletionDurable, nats.Bind(streamName, accountDeletionDurable))
 		}
 	}
 	sub, err := bind()

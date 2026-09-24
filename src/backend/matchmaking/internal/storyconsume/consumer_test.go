@@ -2,19 +2,27 @@ package storyconsume
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"voice/backend/matchmaking/internal/store"
 	eventsv1 "voice.app/voice/events/v1"
+	"voice/backend/matchmaking/internal/store"
 )
 
-func TestStoryLfpJetStreamSubjectMatchesPublisher(t *testing.T) {
+func TestStoryLfpJetStreamSubjectsMatchPublisher(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, "story.>", jsSubjectStoryLfp)
+	require.Equal(t, "story.lfp_created", subjectStoryLfpCreated)
+	require.Equal(t, "story.lfp_response", subjectStoryLfpResponse)
 	require.Equal(t, "matchmaking_story_lfp_v2", defaultDurable)
+}
+
+func TestApplyStoryEvent_InvalidIDIsPermanent(t *testing.T) {
+	err := ApplyStoryEvent(&store.LfpStore{}, &eventsv1.StoryStreamEvent{Payload: &eventsv1.StoryStreamEvent_StoryLfpCreated{StoryLfpCreated: &eventsv1.StoryLfpCreated{StoryId: "not-a-uuid", AuthorProfileId: uuid.NewString()}}})
+	require.Error(t, err)
+	require.True(t, errors.Is(err, errInvalidStoryEvent))
 }
 
 func TestApplyStoryEvent_LfpCreatedAndJoinResponse(t *testing.T) {
