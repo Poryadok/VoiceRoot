@@ -508,13 +508,13 @@ for attempt in {1..5}; do
   hub_logs="$(docker logs voice-nats-proof-hub 2>&1 || true)"
   hub_log_delta="${hub_logs#"$hub_log_before"}"
   noack_denial_log_delta="$hub_log_delta"
-  if grep -Fq "$noack_ack_subject" <<<"$noack_denial_log_delta" && grep -Eqi 'permission.*(violation|denied)' <<<"$noack_denial_log_delta"; then
+  if grep -Fq "$noack_ack_subject" <<<"$noack_denial_log_delta" && grep -Eqi '(permission.*(violation|denied)|publish[[:space:]]+violation)' <<<"$noack_denial_log_delta"; then
     break
   fi
   sleep 1
 done
-if ! grep -Fq "$noack_ack_subject" <<<"${noack_denial_log_delta:-}" || ! grep -Eqi 'permission.*(violation|denied)' <<<"${noack_denial_log_delta:-}"; then
-  echo 'FAIL: no-ACK AckSync denial lacked fresh broker evidence for the exact ACK subject' >&2
+if ! grep -Fq "$noack_ack_subject" <<<"${noack_denial_log_delta:-}" || ! grep -Eqi '(permission.*(violation|denied)|publish[[:space:]]+violation)' <<<"${noack_denial_log_delta:-}"; then
+  echo 'FAIL: no-ACK publish denial lacked fresh broker evidence for the exact ACK subject' >&2
   printf '%s\n' "${noack_denial_log_delta:-}" >&2
   exit 1
 fi
