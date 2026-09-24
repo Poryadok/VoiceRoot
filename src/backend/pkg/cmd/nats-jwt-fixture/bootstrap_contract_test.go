@@ -57,7 +57,7 @@ func TestCentralBootstrapPreprovisionsEveryFixedConsumer(t *testing.T) {
 		"consumer_filters story_events matchmaking_story_lfp_v2 _INBOX.voice.matchmaking.matchmaking_story_lfp_v2 all story.lfp_created story.lfp_response",
 		"consumer_filters subscription_events space_subscription_entitlement _INBOX.voice.space.space_subscription_entitlement new subscription.space_pro_started subscription.space_pro_expired",
 		"pull_consumer user_events user-account-deletion-v1 user.account_deleted all",
-		"consumer subscription_events auth_subscription_tier 'subscription.>' _INBOX.voice.auth.subscription_tier new ''",
+		"consumer subscription_events auth_subscription_tier 'subscription.>' _INBOX.voice.auth.subscription_tier new '' 5 '[1000000000,5000000000,30000000000,120000000000,300000000000]'",
 	} {
 		if !strings.Contains(all, "\n"+line+"\n") {
 			t.Errorf("missing exact consumer contract: %s", line)
